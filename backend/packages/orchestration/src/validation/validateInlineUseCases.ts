@@ -33,9 +33,11 @@ import type { RegistrationProblem } from './validateRegistrations.js'
  */
 export function inlineUseCaseProblems(useCase: InlineUseCaseDefinition): RegistrationProblem[] {
   const problems: RegistrationProblem[] = []
-  const subject = `Inline use case "${useCase.useCaseId}"`
+  // How each message OPENS, not a `RegistrationWarning.subject`: that field is a machine-readable
+  // id, and the two must not answer to one name in a file where a new check could reach for either.
+  const label = `Inline use case "${useCase.useCaseId}"`
   const bad = (code: string, message: string): void => {
-    problems.push({ severity: 'error', code: `use_case_${code}`, message: `${subject} ${message}` })
+    problems.push({ severity: 'error', code: `use_case_${code}`, message: `${label} ${message}` })
   }
   if (!isNamespacedId(useCase.useCaseId)) {
     bad(

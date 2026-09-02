@@ -107,9 +107,9 @@ const _authoringVocabulary:
       judge: JudgeDefinition
       resolver: StepCompletionResolver
       // What `escalateRegistrationWarning` is handed. A deployment writing that predicate names it,
-      // so it belongs to this surface exactly as the registration shapes above do. BOTH halves of
-      // the union: the predicate takes the warn half (the one carrying `subject`), and a
-      // deployment that collects problems itself sees the whole union.
+      // so it belongs to this surface exactly as the registration shapes above do. The predicate
+      // takes the WARN half (the one carrying `subject`), and a deployment that collects problems
+      // itself sees the whole union, whose error branch stays unexported.
       registrationProblem: RegistrationProblem
       registrationWarning: RegistrationWarning
     }

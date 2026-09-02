@@ -241,9 +241,10 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   `RegistrationWarning`, which carries a required SINGULAR `subject`: the escalation unit is the
   problem, so a warning about N ids is N warnings and a deployment mixing the two fragment tiers can
   escalate per id ([ADR 0063](../../docs/adr/0063-registration-warning-subjects.md)). Two sections live beside
-  it: `validateToolServers.ts` (a kind's declared MCP servers, their per-dispatch budget, and the
-  credential rules, which are the sharpest here because a tool-server declaration names both the key
-  it wants and the endpoint that key is sent to) and `validateBinaryGenerators.ts`, the one section
+  it: `validateToolServers.ts` (what a KIND declares, per kind: unregistered ids and the
+  per-dispatch budget; plus each DEFINITION once across every kind that shares it, whose credential
+  rules are the sharpest here because a tool-server declaration names both the key it wants and the
+  endpoint that key is sent to) and `validateBinaryGenerators.ts`, the one section
   with a rule spanning DEFINITIONS: two integrations may share an injected variable only when they
   look the value up under the same key, and different keys behind one name is refused here rather
   than arbitrated at dispatch.

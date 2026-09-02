@@ -42,7 +42,7 @@ import {
   isValidResultViewId,
   RESULT_VIEW_ID_SET,
 } from '@cat-factory/contracts'
-import { checkKindToolServers } from './validateToolServers.js'
+import { checkKindToolServers, checkToolServerDefinitions } from './validateToolServers.js'
 
 // ---------------------------------------------------------------------------
 // Boot-time validation of the deployment's registered extensions (agent kinds, gates,
@@ -77,14 +77,45 @@ const BUILT_IN_HELPER_KINDS: ReadonlySet<string> = new Set([
  * is ever handed to deployment code and only the warn half therefore owes it a machine-readable
  * {@link RegistrationWarning.subject}.
  */
-export type RegistrationProblem = RegistrationError | RegistrationWarning
+export type RegistrationProblem = RegistrationErrorProblem | RegistrationWarning
 
-/** A registration fault fully knowable at boot. Aborts boot; never reaches a deployment predicate. */
-export interface RegistrationError {
+/**
+ * A registration fault fully knowable at boot. Aborts boot; never reaches a deployment predicate.
+ *
+ * Named `…Problem` rather than `RegistrationError` because it is a VALUE this validator collects,
+ * never something thrown. The facades already publish a `BinaryStoreRegistrationError` that IS a
+ * throwable class, so the shorter name invited `catch (e) { if (e instanceof RegistrationError) }`
+ * against an interface with no runtime value at all.
+ */
+export interface RegistrationErrorProblem {
   severity: 'error'
   code: string
   message: string
 }
+
+/**
+ * Every `warn`-severity code this validator can produce.
+ *
+ * CLOSED, and it is the test that needs it closed: `subject` being required and singular is stated
+ * by the type, but that the id it carries is the id the MESSAGE names is a relation no type can
+ * state, so `extension-registries.warnings.test.ts` provokes each code in this list and asserts the
+ * relation over what comes back. While `code` was a `string`, a warning added later contributed
+ * zero rows to that test and passed it in silence.
+ */
+export const REGISTRATION_WARN_CODES = [
+  'skills_without_container',
+  'postops_without_structured_output',
+  'task_type_unknown_fragment',
+  'tool_servers_without_container',
+  'too_many_tool_servers',
+  'tool_servers_over_byte_budget',
+  'tool_server_unservable',
+  'oauth_header_collision',
+  'unused_credential_env_name',
+] as const
+
+/** One of {@link REGISTRATION_WARN_CODES}. */
+export type RegistrationWarnCode = (typeof REGISTRATION_WARN_CODES)[number]
 
 /**
  * A registration fault boot can see but not judge, so the platform reports it and a deployment
@@ -95,16 +126,24 @@ export interface RegistrationError {
  * and a warning naming several ids in its prose hands a deployment a decision it cannot make: the
  * `task_type_unknown_fragment` batch covered a code-tier typo and a legitimately late-bound
  * `src:<sourceId>:<slug>` id together, and the deployment mixing the two (which
- * `backend/docs/reusable-operations.md` sanctions) could only escalate both or neither. So a warning about N things is N warnings, one subject each, and the
- * type is what makes the batch unrepresentable rather than a convention to remember (ADR 0063).
+ * `backend/docs/reusable-operations.md` sanctions) could only escalate both or neither. So a
+ * warning about N things is N warnings, one subject each, and the type is what makes the batch
+ * unrepresentable rather than a convention to remember (ADR 0063).
  *
- * What the id NAMES is fixed per `code` (an agent kind, a tool-server id, a credential key, a
- * fragment id), since a predicate reads `code` before it reads `subject`; each producer says which
- * at its emit site. It is the same id the `message` interpolates, so a reader loses nothing.
+ * What the id NAMES is fixed per `code` (an agent kind, a tool-server id, a fragment id), since a
+ * predicate reads `code` before it reads `subject`; each producer says which at its emit site. It
+ * is the same id the `message` interpolates, so a reader loses nothing. It also IDENTIFIES one
+ * registration, which is why neither credential warning carries the credential key it is about: a
+ * key is a store lookup name several servers may share, so it would have made two defects
+ * indistinguishable by the field a predicate reads.
+ *
+ * A subject is never blank, and the producers are what keep it so: a declaration whose id is empty
+ * cannot be a late-bound tenant-tier reference (no tier resolves an empty id), so it is reported as
+ * the ERROR it is rather than as a warning with nothing to name.
  */
 export interface RegistrationWarning {
   severity: 'warn'
-  code: string
+  code: RegistrationWarnCode
   message: string
   subject: string
 }
@@ -252,10 +291,16 @@ export interface ValidateRegistrationsOptions {
    * **It is called once per WARNING, and a warning names one `subject`**, so the predicate can be
    * finer than the deployment: a mixed `defaultFragmentIds` array (code-registered standards beside
    * a `src:<sourceId>:<slug>` reference, which the reusable-operations guide sanctions) is
-   * escalated per id, `(p) => p.code === 'task_type_unknown_fragment' && isCodeTier(p.subject)`,
-   * failing boot on the typo while the late-bound id stays a warn. While a warning could name
-   * several ids that was unexpressible, and the only two dispositions available were both wrong
-   * (ADR 0063).
+   * escalated per id, by testing the namespace THIS deployment registers its own standards under:
+   *
+   *     (p) => p.code === 'task_type_unknown_fragment' && p.subject.startsWith('acme.')
+   *
+   * which fails boot on the typo while the late-bound id stays a warn. Test that namespace
+   * POSITIVELY: `!p.subject.startsWith('src:')` reads as the same rule and is not one, because a
+   * hand-authored account-tier row and a repo-sourced file pinning its own frontmatter `id` both
+   * carry a plain slug, so it escalates exactly the tenant-tier references it means to spare.
+   * While a warning could name several ids none of this was expressible, and the only two
+   * dispositions available were both wrong (ADR 0063).
    *
    * Escalated problems are collected and thrown TOGETHER with the genuine errors, so a boot failure
    * still names every problem at once. A predicate that throws is a bug in the predicate and
@@ -683,12 +728,17 @@ function checkPipelineVariantSelections(opts: ValidateRegistrationsOptions): Reg
  * it, which is a floor holding rather than the "refused at declaration" layer doing its job.
  */
 function checkAgentCapabilities(registry: AgentKindRegistry): RegistrationProblem[] {
-  return registry
-    .kindsWithCapabilities()
-    .flatMap((kind) => [
+  const kinds = registry.kindsWithCapabilities()
+  return [
+    ...kinds.flatMap((kind) => [
       ...checkKindSkills(kind, registry),
       ...checkKindToolServers(kind, registry),
-    ])
+    ]),
+    // What a DEFINITION says, once for the whole registry rather than once per kind that declares
+    // it. A shared tool server is one registration and one edit, so reporting it per kind reported
+    // one defect as several, all carrying the same `subject`.
+    ...checkToolServerDefinitions(kinds, registry),
+  ]
 }
 
 /**
@@ -850,14 +900,22 @@ function checkPipelineRetirements(opts: ValidateRegistrationsOptions): Registrat
  * than asserting the typo it cannot distinguish. Run-time behaviour is unchanged either way: an
  * id that resolves against nothing is skipped when bodies are composed.
  *
- * ONE warning PER ID, which is what lets a deployment act on it at all. The platform cannot tell
- * the two causes apart, but the deployment can, per id: a declaration mixing three code-registered
- * standards with one `src:<sourceId>:<slug>` reference is exactly what the reusable-operations
- * guide sanctions, and while these arrived as one batched problem such a deployment could only
- * escalate the whole batch (failing boot on its legitimate late-bound id) or none of it (leaving
- * the typo at warn forever). The cost is that the two-cause paragraph repeats per id in the log,
- * which is the granularity `fragments.dropped_from_run` already reports at RUN time, per fragment,
- * for the same reason: five short standards are five defects, not one (ADR 0063).
+ * ONE warning PER DISTINCT ID, which is what lets a deployment act on it at all. The platform
+ * cannot tell the two causes apart, but the deployment can, per id: a declaration mixing three
+ * code-registered standards with one `src:<sourceId>:<slug>` reference is exactly what the
+ * reusable-operations guide sanctions, and while these arrived as one batched problem such a
+ * deployment could only escalate the whole batch (failing boot on its legitimate late-bound id) or
+ * none of it (leaving the typo at warn forever). The cost is that the two-cause paragraph repeats
+ * per id in the log, which is the granularity `fragments.dropped_from_run` already reports at RUN
+ * time, per fragment, for the same reason: five short standards are five defects, not one (ADR
+ * 0063).
+ *
+ * DISTINCT, because the escalation unit is the id and a repeated id is one defect mentioned twice.
+ * Naming one standard in several conditional rules is ordinary authoring and the caller hands them
+ * here as one flattened list, so without this a shared id called the deployment's predicate once
+ * per mention and the boot failure counted mentions. The dedupe is per CALL, which is per
+ * DECLARATION: an id named in both `defaultFragmentIds` and `conditionalFragmentIds` is two entries
+ * to go edit, and each warning names the key it lives under.
  */
 function checkTaskTypeFragments(
   taskType: CustomTaskType,
@@ -867,10 +925,27 @@ function checkTaskTypeFragments(
   /** Which declaration the ids came from, so the message names the key the reader must go edit. */
   declaredBy: 'defaultFragmentIds' | 'conditionalFragmentIds' = 'defaultFragmentIds',
 ): RegistrationProblem[] {
-  return ids
-    .filter((id) => !pool.has(id))
-    .map((id) => ({
-      severity: 'warn' as const,
+  const problems: RegistrationProblem[] = []
+  for (const id of new Set(ids)) {
+    if (pool.has(id)) continue
+    // A BLANK entry is the one unresolved id boot can judge, so it is an error rather than a
+    // warning: no tier resolves an empty id, which removes the tenant-tier cause the warning below
+    // exists for. It is also the only way a warning could ever carry an empty `subject`, which is a
+    // predicate handed nothing to test and a log field with nothing in it.
+    if (id.trim() === '') {
+      problems.push({
+        severity: 'error',
+        code: 'task_type_blank_fragment_id',
+        message:
+          `Custom task type "${taskType.taskType}" declares a blank ${declaredBy} entry. Unlike ` +
+          `an id the pool does not resolve, this one cannot be an account/workspace-tier reference ` +
+          `that merges at run time: no fragment has a blank id at any tier. Remove the entry, or ` +
+          `give it the id it was meant to carry.`,
+      })
+      continue
+    }
+    problems.push({
+      severity: 'warn',
       code: 'task_type_unknown_fragment',
       // The unresolved FRAGMENT ID: what a deployment's predicate tests the tier of.
       subject: id,
@@ -881,7 +956,9 @@ function checkTaskTypeFragments(
         `account/workspace-tier fragment, which merges per workspace at run time and is invisible ` +
         `here. Check the id against what the deployment passes to ` +
         `promptFragmentRegistry.registerAll().`,
-    }))
+    })
+  }
+  return problems
 }
 
 /**
@@ -989,7 +1066,7 @@ function checkConditionalFragments(
  * question went unasked for the gate config form, which rendered through the same component for a
  * release with none of these checks behind it.
  */
-type DescriptorFormSubject = 'task_type' | 'initiative_preset' | 'gate' | 'use_case'
+type DescriptorFormSurface = 'task_type' | 'initiative_preset' | 'gate' | 'use_case'
 
 /**
  * A descriptor-driven FORM that structurally cannot be filled, plus the one grouping fault that has
@@ -1005,14 +1082,19 @@ type DescriptorFormSubject = 'task_type' | 'initiative_preset' | 'gate' | 'use_c
  * Takes a plain FIELD LIST, because every surface that declares a form draws on one vocabulary
  * (`contracts/src/form-fields.ts`) and renders through one component: a custom task type's per-case
  * form, an initiative preset's create form and a registered gate's per-step config form fail these
- * ways identically, so they are checked by one function under their own {@link DescriptorFormSubject}
+ * ways identically, so they are checked by one function under their own {@link DescriptorFormSurface}
  * prefixes rather than by a copy each. A surface reaching that component without reaching this
  * checker is the gap to look for.
  */
 function descriptorFormProblems(
   fields: readonly DescriptorField[],
-  codePrefix: DescriptorFormSubject,
-  subject: string,
+  codePrefix: DescriptorFormSurface,
+  /**
+   * How the message OPENS, e.g. `Gate "ci"`. Prose, deliberately not called a subject: a
+   * `RegistrationWarning.subject` is a machine-readable ID, and while both fields carried the same
+   * name the nearest value in scope for a new warn-severity check added here was this label.
+   */
+  label: string,
 ): RegistrationProblem[] {
   const problems: RegistrationProblem[] = []
   const seen = new Set<string>()
@@ -1021,7 +1103,7 @@ function descriptorFormProblems(
     problems.push({
       severity: 'error',
       code: `${codePrefix}_${code}`,
-      message: `${subject} ${message}`,
+      message: `${label} ${message}`,
     })
   }
   for (const field of fields) {
@@ -1039,7 +1121,7 @@ function descriptorFormProblems(
         `gates field "${field.key}" on "${field.showWhen.key}", which it does not declare, so the field never shows.`,
       )
     }
-    problems.push(...defaultOutsideOptions(field, codePrefix, subject))
+    problems.push(...defaultOutsideOptions(field, codePrefix, label))
   }
   // A `section` a filled form can be made to caption TWICE. Presentation rather than fillability,
   // and an error all the same: the renderer preserves declaration order, so the caption renders
@@ -1074,8 +1156,9 @@ function descriptorFormProblems(
  */
 function defaultOutsideOptions(
   field: DescriptorField,
-  codePrefix: DescriptorFormSubject,
-  subject: string,
+  codePrefix: DescriptorFormSurface,
+  /** The message's opening prose, as in {@link descriptorFormProblems}. */
+  label: string,
 ): RegistrationProblem[] {
   const options = new Set((field.options ?? []).map((option) => option.value))
   if (options.size === 0) return []
@@ -1091,7 +1174,7 @@ function defaultOutsideOptions(
       severity: 'error' as const,
       code: `${codePrefix}_field_default_outside_options`,
       message:
-        `${subject} defaults field "${field.key}" to "${value}", which is not one of its ` +
+        `${label} defaults field "${field.key}" to "${value}", which is not one of its ` +
         `options, so every creation of it is refused for a value the caller never sent.`,
     }))
 }

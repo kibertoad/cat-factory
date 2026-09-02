@@ -274,10 +274,11 @@ const _authoringVocabulary:
       judge: JudgeDefinition
       resolver: StepCompletionResolver
       // The BOOT-VALIDATION half: a deployment writing an `escalateRegistrationWarning` predicate
-      // names what it is handed, which is the WARN branch (the one carrying `subject`). Both halves
-      // of the union belong here, since a deployment that collects problems itself sees the whole
-      // one. Imported from the FACADE, so dropping either re-export fails this file rather than
-      // only a consumer's build.
+      // names what it is handed, which is the WARN branch (the one carrying `subject`). The UNION
+      // belongs here too, since a deployment collecting problems itself sees the whole one; its
+      // error branch is deliberately not exported, and narrowing on `severity` still names it.
+      // Imported from the FACADE, so dropping either re-export fails this file rather than only a
+      // consumer's build.
       registrationProblem: RegistrationProblem
       registrationWarning: RegistrationWarning
       // The PIPELINE authoring half: a deployment replacing a shipped preset writes its steps by

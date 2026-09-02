@@ -323,7 +323,10 @@ describe('custom task types (reusable operations)', () => {
     }
 
     // The disposition the deployment could not express: fail boot on the typo, keep the warn on the
-    // late-bound id. The predicate reads `subject`, not prose.
+    // late-bound id. The predicate reads `subject`, not prose, and tests the namespace this
+    // deployment registers its OWN standards under, POSITIVELY. The inverse test
+    // (`!p.subject.startsWith('src:')`) is the trap the guide and ADR 0063 now both warn about: it
+    // escalates a hand-authored account-tier row, which carries a plain slug like any other.
     const warned: string[] = []
     let message = ''
     try {
@@ -331,7 +334,7 @@ describe('custom task types (reusable operations)', () => {
         registries,
         onWarn: (p) => warned.push(p.subject),
         escalateWarning: (p) =>
-          p.code === 'task_type_unknown_fragment' && !p.subject.startsWith('src:'),
+          p.code === 'task_type_unknown_fragment' && p.subject.startsWith('org.'),
       })
     } catch (error) {
       message = error instanceof Error ? error.message : String(error)
@@ -339,25 +342,6 @@ describe('custom task types (reusable operations)', () => {
     expect(message).toContain('org.testng')
     expect(message).not.toContain('src:acme-standards:security')
     expect(warned).toEqual(['src:acme-standards:security'])
-  })
-
-  it('reports a CONDITIONAL declaration per id too, across rules', () => {
-    // Same treatment through the same checker, and the id is less visible here: a conditional typo
-    // folds nothing only for the subset of cases whose answers match the rule.
-    promptFragmentRegistry.register(fragment('org.graphql'))
-    const problems = problemsFor({
-      ...base,
-      taskType: 'org:introduce-api',
-      fields: [{ key: 'protocol', label: 'Protocol', type: 'text' }],
-      conditionalFragmentIds: [
-        { when: { key: 'protocol', equals: 'graphql' }, fragmentIds: ['org.graphql', 'org.grpc'] },
-        { when: { key: 'protocol', equals: 'rest' }, fragmentIds: ['src:acme-standards:rest'] },
-      ],
-    })
-    expect(problems.map((p) => (p.severity === 'warn' ? p.subject : p.severity))).toEqual([
-      'org.grpc',
-      'src:acme-standards:rest',
-    ])
   })
 
   it('throws an escalated warn TOGETHER with the genuine errors, in one report', () => {

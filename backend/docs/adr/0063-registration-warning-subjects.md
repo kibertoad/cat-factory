@@ -39,9 +39,9 @@ shape rather than the check:
   offending ids existed solely interpolated into prose, so a predicate could not act on them at all
   without parsing English, and the batching meant one problem covered both anyway.
 
-Every other warning the validator produces already names exactly one subject (an agent kind, a
-tool-server id, a credential key) and names it only in prose, so the class was nine warnings wide
-and nothing could act on any of them by data.
+Every other warning the validator produces already names exactly one subject (an agent kind or a
+tool-server id) and names it only in prose, so the class was nine warnings wide and nothing could
+act on any of them by data.
 
 The report that surfaced this arrived as a consumer's second-round gap report (their finding G6),
 measured against `main` at `b12617072` and re-verified against HEAD. Their workaround was an
@@ -53,15 +53,15 @@ boot had already computed.
 **`RegistrationProblem` is a UNION, and its warn branch carries a required, singular `subject`.**
 
 ```ts
-export type RegistrationProblem = RegistrationError | RegistrationWarning
-export interface RegistrationError {
+export type RegistrationProblem = RegistrationErrorProblem | RegistrationWarning
+export interface RegistrationErrorProblem {
   severity: 'error'
   code: string
   message: string
 }
 export interface RegistrationWarning {
   severity: 'warn'
-  code: string
+  code: RegistrationWarnCode
   message: string
   subject: string
 }
@@ -69,16 +69,31 @@ export interface RegistrationWarning {
 
 `escalateWarning` and `onWarn` take `RegistrationWarning`, since a warning is all either ever sees.
 The union member meaning is fixed per `code` and stated at each emit site; it is always the same id
-the `message` interpolates.
+the `message` interpolates, and it always identifies ONE registration (which is why neither
+credential warning names the credential key: a key is a store lookup name several tool servers may
+legitimately share, so as a subject it made two defects indistinguishable by the one field a
+predicate reads). `RegistrationWarnCode` is a closed union for the test's sake, below.
 
-**`task_type_unknown_fragment` reports one warning PER UNRESOLVED ID**, for `defaultFragmentIds` and
-`conditionalFragmentIds` alike (they already share one checker). A mixed declaration therefore gets
-a per-id disposition:
+**`task_type_unknown_fragment` reports one warning PER DISTINCT UNRESOLVED ID**, for
+`defaultFragmentIds` and `conditionalFragmentIds` alike (they already share one checker). A mixed
+declaration therefore gets a per-id disposition, written as a POSITIVE test of the namespace the
+deployment registers its own standards under:
 
 ```ts
 escalateRegistrationWarning: (p) =>
-  p.code === 'task_type_unknown_fragment' && !p.subject.startsWith('src:'),
+  p.code === 'task_type_unknown_fragment' && p.subject.startsWith('acme.'),
 ```
+
+**Per DISTINCT id**, because the escalation unit is the id: naming one shared standard in several
+conditional rules is ordinary authoring, and the checker receives those rules as one flattened list,
+so a repeat would call the deployment's predicate once per mention and report a boot failure
+counting mentions. The same rule retires the other duplicate the audit found: a tool-server
+definition attached to three kinds is ONE registration and one edit, so the definition checks run
+once over the registry, naming every kind the server is declared for, rather than once per kind.
+
+**A BLANK declared id is an error, not a warning.** No tier resolves an empty id, so the tenant-tier
+cause that makes this class a warning cannot apply, and it was the one way a warning could have
+carried an empty `subject`: a predicate handed nothing to test.
 
 **The platform severity does not move.** Both halves of that mixed declaration are still `warn` by
 default, because boot still cannot tell which cause either one has. What changed is that the
@@ -110,6 +125,14 @@ than only a consumer's build.
   built-in (ADR 0006, `FragmentSourceService.syncEntry`). Erroring on "matches no known late-bound
   shape" would therefore fail boot on exactly the tenant-tier reference deployments are told to use,
   which is the constraint the report itself named as binding.
+- **Which is why every example predicate tests the deployment's OWN namespace, positively.** The
+  first drafts of this ADR, the guide and the `start()` JSDoc all showed
+  `!p.subject.startsWith('src:')`, which is the refused rule wearing the deployment's clothes: it
+  has the same blind spot on the same two tenant-tier shapes, and a deployment copying it out of the
+  docs fails boot on a configuration that resolves correctly at run time. What a deployment knows
+  that the platform does not is which ids IT registers in code, and the honest expression of that is
+  a positive test of its own prefix. Refusing to build the unsound rule into the platform while
+  recommending it to consumers would have been the same defect, one layer out.
 - **Prose is not an interface.** A deployment could have regex'd the message, and the fact that this
   was the only available move is what made it a gap rather than an inconvenience: the message is
   written for a human reader and is rewritten whenever the explanation improves.
@@ -130,7 +153,10 @@ than only a consumer's build.
 - **Internal break** (pre-1.0, no shim): `RegistrationProblem` is a union, so a consumer
   constructing one by hand, or reading `problem.subject` off the union without narrowing on
   `severity`, must narrow first. A PREDICATE written against ADR 0044's signature is unaffected: its
-  parameter is narrowed, not widened, and every field it could have read is still there.
+  parameter is narrowed, not widened, and every field it could have read is still there. The facades
+  export the union and its WARN branch only: nothing a deployment writes names the error branch, and
+  `RegistrationErrorProblem` sitting beside the throwable `BinaryStoreRegistrationError` they
+  already export would read as a second error class to `catch`.
 - The boot log gains one line per unresolved fragment id where it previously emitted one per
   declaration.
 - The remaining eight warnings now carry a machine-readable subject as well, so a deployment can
@@ -140,4 +166,13 @@ than only a consumer's build.
 - What no type can state is that `subject` is the id the MESSAGE names. A warning whose prose points
   at one registration while its subject points at another would silently escalate the wrong one, so
   that relation is asserted over every warning a deliberately misconfigured registry produces,
-  rather than pinned to a count that would fail on every ordinary addition.
+  rather than pinned to a count that would fail on every ordinary addition. **`RegistrationWarnCode`
+  is closed for that test's sake**: the fixture is graded against the code list itself, so a code no
+  fixture provokes fails the test instead of contributing zero rows and passing in silence, which is
+  what a `string` code did. The first version of this assertion covered six of the nine codes and
+  provoked the one that VIOLATED the relation with a fixture where the credential's key and its
+  `envName` were the same string, so it passed by coincidence.
+- `logRegistrationWarning` is the one seam that turns `subject` into a structured log field on all
+  three facades, and it exists because the three hand-copied arrows had already drifted. It is
+  asserted on directly (a recording logger, `code` and `subject` as fields), since a facade-shaped
+  regression in it would otherwise pass every test here.

@@ -393,11 +393,16 @@ export interface StartOptions {
    *       escalateRegistrationWarning: (p) => p.code === 'task_type_unknown_fragment',
    *     })
    *
-   * A declaration that MIXES the two tiers (code-registered standards beside a
-   * `src:<sourceId>:<slug>` reference) is escalated per id, because a warning names ONE `subject`:
+   * A declaration that MIXES the two tiers (code-registered standards beside a tenant-tier
+   * reference) is escalated per id, because a warning names ONE `subject`. Test the namespace your
+   * own code-registered ids live under, POSITIVELY:
    *
    *     escalateRegistrationWarning: (p) =>
-   *       p.code === 'task_type_unknown_fragment' && !p.subject.startsWith('src:'),
+   *       p.code === 'task_type_unknown_fragment' && p.subject.startsWith('acme.'),
+   *
+   * The inverse (`!p.subject.startsWith('src:')`) reads as the same rule and is not one: a
+   * hand-authored account-tier row and a repo-sourced file pinning its own frontmatter `id` both
+   * carry a plain slug, so it fails boot on exactly the tenant-tier reference it means to spare.
    *
    * Escalated problems join the aggregated boot failure rather than producing a second one.
    */
