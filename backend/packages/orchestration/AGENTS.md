@@ -226,8 +226,15 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   frames, events, the durable driver); `MonorepoBootstrapController` + `monorepoSurvey.ts` own the
   monorepo flow's decisions (pre-flight, the checkout-free survey of both repositories, the human
   adoption review), and `MonorepoAdoptionAdvisorService` is the inline model behind its
-  suggestion. A monorepo run is TWO durable drives with a park between them, so it carries a
-  `driveId` distinct from its run id: [`monorepo-service-bootstrap.md`](../../../docs/initiatives/monorepo-service-bootstrap.md).
+  suggestion. The survey is a BOUNDED TOOL LOOP: `MonorepoSurveySession` seeds an opening context
+  and then serves the model's own `list`/`read` calls as the `MonorepoAdoptionExplorer`, budgeting
+  and recording each one, so the plan is checked against a transcript of what was actually fetched
+  (re-read off the session AFTER `advise`, never returned with the plan). Two traps: every read
+  that FAILS is recorded `unreadable` rather than skipped (a blinded sibling probe reporting "no
+  siblings" is the strongest claim the seed makes, and the opposite of what happened), and
+  `listJobs` withholds that transcript with `reads: null` once a run is past review, because the
+  list feeds every workspace snapshot. A monorepo run is TWO durable drives with a park between
+  them, so it carries a `driveId` distinct from its run id: [`monorepo-service-bootstrap.md`](../../../docs/initiatives/monorepo-service-bootstrap.md).
 - `pipelines/`, `board/`, `boardScan/`, `requirements/`,
   `notifications/`, `releaseHealth/`, `review/`, `estimation/`, `kaizen/`, `sandbox/`,
   `recurring/`, `settings/`, …: the other module services. In `review/`, EVERY write to a review

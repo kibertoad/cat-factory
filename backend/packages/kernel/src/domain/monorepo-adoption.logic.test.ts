@@ -3,6 +3,8 @@ import {
   adoptionSourceSchema,
   MAX_ADOPTION_DROP_LINES,
   type AdoptionPlan,
+  type AdoptionRead,
+  type AdoptionSurvey,
 } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
 import { ValidationError } from './errors.js'
@@ -19,11 +21,26 @@ import {
   resolveAdoptionReview,
 } from './monorepo-adoption.logic.js'
 
-const SURVEY = {
-  monorepoPaths: ['package.json', 'services/billing/package.json'],
-  templatePaths: ['jest.config.js'],
-  unreadablePaths: [],
-  siblingService: 'services/billing',
+/** One transcript entry, defaulting to a successful read (the case most assertions want). */
+function read(path: string, overrides: Partial<AdoptionRead> = {}): AdoptionRead {
+  return { path, origin: 'seed', outcome: 'read', chars: path.length, note: null, ...overrides }
+}
+
+const SURVEY: AdoptionSurvey = {
+  reads: [
+    read('monorepo:package.json'),
+    read('monorepo:services/billing/package.json'),
+    read('template:jest.config.js'),
+  ],
+  siblingServices: ['services/billing'],
+  exploration: {
+    calls: 2,
+    maxCalls: 24,
+    chars: 40,
+    maxChars: 54_000,
+    exhausted: null,
+    recordsDropped: 0,
+  },
 }
 
 function decision(overrides: Record<string, unknown> = {}) {
@@ -242,11 +259,17 @@ describe('parseAdoptionDecisions drop reporting', () => {
     // A reply whose every entry is invalid never accumulates a kept decision, so the DECISION cap
     // never fires; without a second cap the wall it exists to prevent arrives through the drop
     // list, which is persisted whole on the plan and rendered to the reviewer.
-    const survey = {
-      monorepoPaths: ['package.json'],
-      templatePaths: [],
-      unreadablePaths: [],
-      siblingService: null,
+    const survey: AdoptionSurvey = {
+      reads: [read('monorepo:package.json')],
+      siblingServices: [],
+      exploration: {
+        calls: 0,
+        maxCalls: 24,
+        chars: 0,
+        maxChars: 54_000,
+        exhausted: null,
+        recordsDropped: 0,
+      },
     }
     const decisions = Array.from({ length: 300 }, (_, index) => ({
       id: `d${index}`,

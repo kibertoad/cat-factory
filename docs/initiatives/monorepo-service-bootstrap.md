@@ -42,45 +42,105 @@ unrepresentable for no reason.
 
 ### D2: The survey is INLINE, not a container
 
-**Decision: the platform computes the inventory through the checkout-free `RepoFiles` port and
-one inline model call judges it. No container, no clone, no runner image change.**
+**Decision: the platform reads through the checkout-free `RepoFiles` port and one inline model
+call judges what it finds. No container, no clone, no runner image change.**
 
-Considered and rejected: an explore-mode container agent that greps the monorepo. It would have
-cost a dispatch, a clone and an image bump for a read whose useful subset is small and
-enumerable: the root manifests, the CI workflows, and one existing sibling service.
+Considered and rejected: an explore-mode container agent that greps the monorepo. The cost is
+what rules it out: a clone of a large monorepo is minutes, plus a runner-image bump, for a read
+that is mostly `list` and `read`. What a container would genuinely buy is `grep` over the whole
+tree, which matters for "which services depend on `@acme/service-base`"; that is a real gap and
+it is not worth a clone yet.
 
-The split is also what makes the review worth doing. The platform COMPUTES what was read; the
-model only JUDGES it, and every recommendation must cite a path the survey actually produced
-(`parseAdoptionDecisions` drops the ones that do not, and the plan reports the drops). A
-container agent's claims about "the monorepo's convention" would be unfalsifiable at review
-time, which is precisely the failure this feature exists to avoid.
+The first cut also argued that a container agent's claims would be "unfalsifiable at review
+time". That argument was wrong and is withdrawn: nothing stops the platform verifying a
+container agent's cited paths afterwards, exactly as `parseAdoptionDecisions` does now. The
+falsifiability comes from checking citations against a record of reads, not from the platform
+choosing the reads. See D10, which is what that correction led to.
 
-What the survey reads, per side, is therefore load-bearing and worth stating: the root
-convention files (by intersection with a real listing, so naming a file no repository has costs
-nothing), up to two CI workflows, and one existing sibling service. Two rules keep the sibling
-honest, and both are corrections to the first cut. It is chosen by PROBING candidates rather
-than taking the alphabetically first directory (`.github` sorts below every letter, so a
-root-level target reported a workflows folder as "what a service here looks like"), and a
-candidate qualifies only by holding a convention file of its own; when none does, the plan says
-`siblingService: null` rather than naming a guess. Each side also contributes its own directory
-LISTING as a citable entry, off a listing the survey already fetched: no root manifest states
-where a service puts its code, its tests or its entry point, so without it `source-layout` was
-an area the model was asked to judge with no evidence it could cite, and the honest answer would
-have been `template` on every monorepo.
+The survey's model call is the platform's second billable call that no run start gates, so it
+takes the same `isOverBudget` safeguard `BugHuntService` does, and reports an exhausted budget as
+its OWN unavailable reason: "no model configured" and "over budget" send an operator to different
+places. A longer loop makes that guard more valuable, not less.
 
-The aggregate prompt budget is RESERVED PER SIDE for the same reason. Spent in key order it was
-not a bound at all but a handover to whichever side sorts first, and `monorepo:` sorts before
-`template:` for every key: a large monorepo spent the whole allowance and the template landed
-entirely in `omitted`, on exactly the repositories this feature targets.
+### D10: The read is a BOUNDED TOOL LOOP, not a declared file list
 
-Cost: the survey sees a bounded set. A convention expressed only in a file the inventory does
-not name is invisible to it. That is stated to the reviewer rather than hidden: `AdoptionSurvey`
-lists what was read and, separately, what could not be.
+**Decision: the platform seeds an opening context and the MODEL chooses what else to read,
+through `list`/`read` tools bound per side over the same `RepoFiles`. The platform keeps the
+budget and the transcript.** ([#2171](https://github.com/kibertoad/cat-factory/issues/2171))
 
-The survey's model call is also the platform's second billable call that no run start gates, so
-it takes the same `isOverBudget` safeguard `BugHuntService` does, and reports an exhausted
-budget as its OWN unavailable reason: "no model configured" and "over budget" send an operator
-to different places.
+The first cut read a DECLARED list: the root convention files, up to two CI workflows, and one
+probed sibling service. That list was the bug, not its contents. What the survey could not see
+was decided before it looked, and the two findings the first slice's review produced were both
+symptoms of that rather than of the shape: an alphabetically chosen sibling landing on `.github`,
+and `source-layout` being one of twelve areas the model was asked to judge with no evidence it
+could legitimately cite. Four things a declared list structurally cannot reach:
+
+- **what a shared internal package OBLIGES.** The sibling's manifest gives the dependency NAME;
+  `packages/service-base/` is on no declared path, so what adopting it entails, which is the whole
+  decision for `observability` and `runtime-config`, was invisible.
+- **heterogeneity.** One sibling is a sample of size one. A six-year-old Java service beside three
+  new TypeScript ones has no house convention, and `siblingService` being a single nullable path
+  meant the plan had no shape in which to say "the siblings disagree, you pick", precisely the
+  case where the human review is worth the most.
+- **depth.** Nothing below a sibling's top level, so `src/domain|app|infra` versus
+  `src/services|utils` was undecidable.
+- **enforcement.** CI capped at two workflow files, so what a new directory is actually REQUIRED
+  to satisfy (a path filter, a `CODEOWNERS` entry, a required check) was likely in one of the
+  twenty-eight nobody read.
+
+**What the platform still owns is the BOOKKEEPING, and that is what keeps the review worth
+doing.** Every read, seeded or model-chosen, is budgeted, secret-scrubbed and appended to ONE
+transcript by `MonorepoSurveySession`, which is also the `MonorepoAdoptionExplorer` the advisor
+explores through. The transcript is read back off the SESSION after the advisor returns, never
+returned with the plan, so an advisor cannot claim a read it did not make.
+`parseAdoptionDecisions` is unchanged and gets strictly stronger: it drops a citation naming
+anything the transcript does not hold as READ, and the transcript is now a record of what
+happened rather than a prediction.
+
+The bounds are a call ceiling (24 model reads), a content ceiling (54 000 characters for the
+loop, on top of the seed's own 36 000) and a structural step cap. The seed's number is a TOTAL
+split into an equal reservation per side, so a run with no template reserves all of it for the
+monorepo and a run with one gives each side half; whatever a side leaves unspent carries to the
+next, which makes the reservation a floor rather than a cap. Every body is capped at 6 000
+characters on its own, a directory listing as much as a file: uncapped, one listing of a
+generated directory is wider than the whole loop budget, and the only answer a charge has to that
+is to refuse it and latch `exhausted`.
+
+Exhausting a budget is ANSWERED to the model rather than thrown, so the loop still ends in a plan
+that names the areas it ran short on, and it is reported on `AdoptionSurvey.exploration.exhausted`
+so the reviewer can tell a thin read from a thin reading. The transcript ARRAY has a cap of its
+own (96 rows, since one model turn can emit any number of tool calls), and what that cap cut rides
+on `exploration.recordsDropped`: the gap between `calls` and the array's length cannot state it,
+because the seed adds rows without adding calls and a call answered from what was already read
+adds a call without a row.
+
+The seed is deliberately STRUCTURE-FIRST: each side's root listing and the convention files it
+really holds, whichever CI declaration the repository's provider uses (`.github/workflows` and
+`.circleci` LISTED rather than sampled, `.gitlab-ci.yml` read, each gated on the root listing
+actually holding it), and the listing of every sibling that holds a convention file of its own.
+Naming every provider matters as much here as the cross-ecosystem convention list does: a
+GitLab-hosted monorepo has no `.github` at all, so a GitHub-only seed leaves the `ci` area with
+nothing citable on a deployment shape the platform supports as first-class. Listings are cheap,
+they are the only evidence either side offers about layout, and a listing is a menu the model
+picks from rather than a guess the platform makes on its behalf. The cheap case stays cheap:
+nothing spends a model call rediscovering `package.json`, and a body the reservation could not
+fit is HELD rather than dropped, so the model taking the prompt's invitation to ask for it is
+answered from memory instead of a second contents-API round trip.
+
+The transcript is reviewer detail, so it rides the SINGLE-JOB read and not the list: `listJobs`
+feeds every workspace snapshot with every bootstrap run the workspace has ever made, and the only
+surface that renders the transcript is the review a parked run waits on. A settled run therefore
+sends `reads: null`, which says "not carried here" where `[]` would say "this survey read
+nothing".
+
+Latency was the open question and the answer is that it is free here. The survey ends in a human
+wait of hours or days, so a handful of extra round trips costs nothing a reviewer will notice.
+Cost is not free, and that is what the ceilings are for.
+
+No fallback to the declared read. A second code path is debt, and the failure it would guard
+against (a loop that errors mid-way) already has an honest answer: the run parks with
+`analysis_unusable` and the transcript of whatever was read before it died, which is exactly the
+`unavailable` plan D6 exists for.
 
 ### D3: The apply phase is an ORDINARY coding job
 
@@ -221,6 +281,12 @@ PR merged.
       port, the survey reader, `MonorepoBootstrapController`, `BootstrapService`'s three moves
       (survey → park → apply), the container dispatch, both runtimes' drive keys and stores, the
       conformance group, and the SPA (target picker + review modal).
+- [x] **Slice 2, the survey stops guessing what to read.** The `MonorepoAdoptionExplorer` port,
+      `MonorepoSurveySession` (seed + budget + transcript + secret scrub), the
+      `monorepoExplorationTools` tool set, the advisor's loop, `AdoptionSurvey` as a transcript
+      with `siblingServices` and `exploration`, the SPA's "what the survey read" disclosure, and
+      three conformance assertions (the call budget is enforced, exhaustion is reported, a plan
+      cites nothing outside the transcript). See D10.
 
 ## Gotchas the first slice surfaced
 
@@ -263,6 +329,32 @@ PR merged.
   overflow COUNTED, because "the reply was mostly invention" and "the reply proposed little"
   need opposite reactions.
 
+## Gotchas the second slice surfaced
+
+- **The plan must be checked against the transcript the loop LEFT, not the snapshot it was
+  handed.** `AdoptionSurvey` is a value, so the controller holds the opening context by
+  reference; parsing against that copy dropped every model-fetched citation as invention while
+  the run still looked healthy. The session is re-read after `advise` returns, and the conformance
+  group pins it by having its fake advisor cite a file the seed deliberately does not carry.
+- **A tool result must never throw.** A `RepoFiles` failure inside `execute` aborts the whole
+  generation, so one unreadable file turns into a survey that produced no plan at all. Every read
+  answers with an OUTCOME (`read` / `absent` / `unreadable` / `refused`) plus the sentence that
+  says which, because those need three different next moves from the model and an empty string
+  reads as the first whichever one happened.
+- **A loop stopped by the step cap ends ON a tool call**, so `result.text` is empty and thirty
+  round trips report `analysis_unusable`. The final step withdraws the tools (`prepareStep` →
+  `toolChoice: 'none'`) so it is spent on the reply. Budget exhaustion is likewise ANSWERED, not
+  thrown: the model has to be able to say which areas it ran short on.
+- **A refused call still costs a call.** Counting only successful reads let a model emitting
+  nonsense paths loop until the step cap fired, having read nothing.
+- **Scrubbing moved to READ time.** The old shape scrubbed in the controller, at compose time,
+  which the exploration half has no equivalent of: a credential would have reached the model
+  through the new path while the old one stayed clean.
+- **valibot cannot describe a tool.** It implements Standard Schema but not its JSON Schema
+  conversion, which is what the AI SDK needs to send a tool definition to a provider, so a valibot
+  `inputSchema` fails at CALL time rather than at build time. The tools use `jsonSchema()` with an
+  explicit `validate`.
+
 ## Not in this slice
 
 - **Starting a monorepo bootstrap from `/api/v1`.** The public surface's
@@ -275,10 +367,12 @@ PR merged.
   surveyed as empty; the apply phase still clones it with the installation token.
 - **A second reviewer, or a review that can be revised after approval.** Approval is one act by
   one person; changing your mind means retrying the run.
-- **Letting the model choose what to read** ([#2171](https://github.com/kibertoad/cat-factory/issues/2171)).
-  D2's read is DECLARED, so what the survey cannot see is decided before it looks, and the two
-  findings this slice fixed there (an alphabetical sibling landing on `.github`, `source-layout`
-  having no citable evidence at all) were symptoms of that rather than of the shape. A bounded tool
-  loop over the same `RepoFiles` port would keep every property D2 argues for while deriving the
-  read set from the repository: the issue holds the four gaps a declared list structurally cannot
-  close, and what it would cost.
+- **Grep over the whole tree.** The loop reaches any path it can NAME, which is what closes the
+  four gaps in D10, but "which of the forty services depend on `@acme/service-base`" is a search,
+  not a read, and neither `RepoFiles` nor the tools expose one. That is the one thing a container
+  agent still buys, and it is not worth a clone and an image bump yet. A provider-side code-search
+  API would close it without either.
+- **Benchmarking how well the budget is actually spent.** A model that burns 24 calls listing
+  directories produces a worse plan than the declared read did. The ceilings bound the cost, the
+  transcript makes the spend visible, and `/benchmark` against a couple of real monorepo shapes is
+  what would turn that from visible into tuned.

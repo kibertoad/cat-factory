@@ -85,6 +85,45 @@ const remaining = computed(() => decisions.value.filter((d) => !touched.value.ha
 // finish a monorepo bootstrap at all.
 const canSubmit = computed(() => remaining.value === 0)
 
+/**
+ * What the survey actually read, for the disclosure beside the plan.
+ *
+ * Shown at all because the evidence set is no longer something the platform declared in advance:
+ * the model chose most of it, so "what was this suggestion built from" is a question only the
+ * transcript answers. Split by ORIGIN, because a reviewer weighing a thin plan needs to know
+ * whether the read was thin or the reading was.
+ *
+ * `reads` is nullable because the list projection withholds the transcript once a run is past its
+ * review, and this modal opens only for a run that is still awaiting one, which is exactly the
+ * case the projection keeps. So the fallback below is unreachable rather than a silent default.
+ */
+const surveyReads = computed(() => plan.value?.survey.reads ?? [])
+const readSummary = computed(() => ({
+  read: surveyReads.value.filter((entry) => entry.outcome === 'read').length,
+  byModel: surveyReads.value.filter((entry) => entry.origin === 'model' && entry.outcome === 'read')
+    .length,
+  missed: surveyReads.value.filter((entry) => entry.outcome !== 'read').length,
+}))
+
+/**
+ * How many reads the transcript could not hold.
+ *
+ * The summary above counts the ARRAY, which is capped, so a survey that made 140 reads and kept
+ * 96 would otherwise read as a survey that made 96. Shown for the same reason `exhausted` is: a
+ * record with a missing tail and a complete one lead a reviewer to opposite conclusions about how
+ * much of the monorepo this suggestion was built from.
+ */
+const recordsDropped = computed(() => plan.value?.survey.exploration.recordsDropped ?? 0)
+
+/**
+ * Which budget the exploration ran out of, or null when it did not.
+ *
+ * Surfaced rather than left in the transcript: a survey that stopped because the model had seen
+ * enough and one that stopped at a ceiling look identical in a list of paths, and only the second
+ * means the plan may be missing areas nobody decided not to look at.
+ */
+const exhausted = computed(() => plan.value?.survey.exploration.exhausted ?? null)
+
 /** The monorepo this service is landing in, for the header line. */
 const target = computed(() => {
   const monorepo = props.job.monorepo
@@ -158,6 +197,55 @@ watch(open, (isOpen) => {
           <p v-if="plan?.unavailableDetail" class="pl-6 text-xs text-slate-400">
             {{ plan.unavailableDetail }}
           </p>
+        </div>
+
+        <!-- What the survey read, on BOTH paths. The model chose most of the evidence set, so
+             "what was this built from" is a question only the transcript answers, and an
+             exhausted budget is called out rather than left for someone to infer from a short
+             list: it is the difference between a thin read and a thin reading. -->
+        <div v-if="surveyReads.length" class="space-y-2 text-xs">
+          <p class="text-slate-400">
+            {{
+              t('bootstrap.adoption.survey.summary', {
+                read: readSummary.read,
+                byModel: readSummary.byModel,
+              })
+            }}
+          </p>
+          <p v-if="readSummary.missed > 0" class="text-slate-500">
+            {{ t('bootstrap.adoption.survey.missed', { count: readSummary.missed }) }}
+          </p>
+          <p v-if="exhausted" class="text-amber-300/90">
+            {{ t(`bootstrap.adoption.survey.exhausted.${exhausted}`) }}
+          </p>
+          <p v-if="recordsDropped > 0" class="text-amber-300/90">
+            {{ t('bootstrap.adoption.survey.truncated', { count: recordsDropped }) }}
+          </p>
+          <details>
+            <summary class="cursor-pointer text-slate-500 hover:text-slate-300">
+              {{ t('bootstrap.adoption.survey.show') }}
+            </summary>
+            <ul class="mt-2 space-y-1">
+              <!-- Keyed by POSITION: the transcript is append-only and rendered in order, and
+                   the same path legitimately appears twice (a body refused by the seed and then
+                   served to the model, a path the model retried). Keying on the path patched
+                   those two rows against each other and rendered a note beside the wrong one. -->
+              <li
+                v-for="(entry, index) in surveyReads"
+                :key="index"
+                class="flex items-baseline gap-2"
+              >
+                <span
+                  class="shrink-0 font-mono text-[10px] uppercase"
+                  :class="entry.outcome === 'read' ? 'text-slate-500' : 'text-amber-400/80'"
+                >
+                  {{ t(`bootstrap.adoption.survey.outcome.${entry.outcome}`) }}
+                </span>
+                <span class="font-mono text-slate-400">{{ entry.path }}</span>
+                <span v-if="entry.note" class="text-slate-600">{{ entry.note }}</span>
+              </li>
+            </ul>
+          </details>
         </div>
 
         <!-- The reviewer's own instructions, on BOTH paths. With no suggestion to answer this is

@@ -1,4 +1,4 @@
-import { generateText } from 'ai'
+import { generateText, stepCountIs } from 'ai'
 import type {
   Logger,
   ModelProvider,
@@ -16,19 +16,21 @@ import {
 import {
   catFactoryObservability,
   MONOREPO_ADOPTION_AGENT_KIND,
-  MONOREPO_ADOPTION_SYSTEM_PROMPT,
+  monorepoAdoptionSystemPrompt,
+  monorepoExplorationTools,
   renderMonorepoAdoptionPrompt,
 } from '@cat-factory/agents'
 import { type InlineBlockModelDeps, resolveInlineBlockModelRef } from '../../inlineBlockModel.js'
 
 // ---------------------------------------------------------------------------
 // The default {@link MonorepoAdoptionAdvisor}: the INLINE LLM call behind a monorepo
-// bootstrap's adoption suggestion.
+// bootstrap's adoption suggestion, run as a bounded TOOL LOOP over the survey's explorer.
 //
-// Structurally the `BugHuntAssessorService` twin (resolve the model, run `generateText`, hand
-// back the extracted JSON for the caller's parser), and for the same reason: the survey itself
-// is deterministic, so the model contributes exactly one thing (a judgement over files the
-// platform read) and everything downstream of it is validated code.
+// Structurally the `BugHuntAssessorService` twin (resolve the model, generate, hand back the
+// extracted JSON for the caller's parser), with one difference that is the whole point: the
+// evidence set is not rendered in advance. The platform seeds the opening context and owns every
+// budget, and the model chooses what else to read, so a recommendation cites what was actually
+// fetched rather than what the platform predicted it would need.
 //
 // A survey has NO BLOCK, like a hunt: it runs before the service exists, so nothing pins a
 // model and the workspace's default preset supplies both the model and the route order.
@@ -70,6 +72,27 @@ const TEMPERATURE = 0
  */
 const MAX_OUTPUT_TOKENS = 8_000
 
+/**
+ * How many model round trips the loop may take, above the explorer's own call budget.
+ *
+ * A structural backstop rather than the real bound: the explorer refuses reads past its call
+ * ceiling and TELLS the model so, which is what makes an exhausted survey produce a plan that
+ * names the areas it ran short on. This only stops a model that keeps calling tools after being
+ * told to stop. Sized for the worst case of one tool call per turn, plus the turns that read the
+ * refusals and answer.
+ */
+const MAX_LOOP_STEPS = 30
+
+/**
+ * The last step is answer-only.
+ *
+ * Without it a loop stopped by {@link MAX_LOOP_STEPS} ends ON a tool call, so `result.text` is
+ * empty and the whole survey reports `analysis_unusable` after paying for thirty round trips.
+ * Withdrawing the tools for the final step instead forces the model to spend it on the reply it
+ * was asked for.
+ */
+const FINAL_STEP = MAX_LOOP_STEPS - 1
+
 export class MonorepoAdoptionAdvisorService implements MonorepoAdoptionAdvisor {
   constructor(private readonly deps: MonorepoAdoptionAdvisorServiceDeps) {}
 
@@ -83,15 +106,23 @@ export class MonorepoAdoptionAdvisorService implements MonorepoAdoptionAdvisor {
     try {
       const result = await generateText({
         model: modelProvider.resolve(ref),
-        system: MONOREPO_ADOPTION_SYSTEM_PROMPT,
+        // The SAME sides the tool set is built from, so the prompt cannot promise a repository
+        // the model has no tool for.
+        system: monorepoAdoptionSystemPrompt(subject.explorer.sides),
         prompt: renderMonorepoAdoptionPrompt({
           directory: subject.directory,
           instructions: subject.instructions,
           survey: subject.survey,
           files: subject.files,
         }),
+        tools: monorepoExplorationTools(subject.explorer),
+        stopWhen: stepCountIs(MAX_LOOP_STEPS),
+        prepareStep: ({ stepNumber }) =>
+          stepNumber >= FINAL_STEP ? { toolChoice: 'none' as const } : {},
         temperature: TEMPERATURE,
         maxOutputTokens: MAX_OUTPUT_TOKENS,
+        // ONE tag for the whole loop, so every step's call is filed under this kind and the
+        // per-call metrics roll up as one survey rather than as N of them.
         providerOptions: catFactoryObservability({
           agentKind: MONOREPO_ADOPTION_AGENT_KIND,
           workspaceId: subject.workspaceId,
@@ -122,7 +153,7 @@ export class MonorepoAdoptionAdvisorService implements MonorepoAdoptionAdvisor {
     this.deps.logger?.warn(message, {
       workspaceId: subject.workspaceId,
       directory: subject.directory,
-      surveyedFiles: Object.keys(subject.files).length,
+      seededFiles: Object.keys(subject.files).length,
     })
     return new ValidationError(message)
   }

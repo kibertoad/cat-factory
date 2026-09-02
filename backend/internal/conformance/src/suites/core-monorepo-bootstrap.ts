@@ -1,3 +1,4 @@
+import type { AdoptionRead } from '@cat-factory/contracts'
 import type {
   AdoptionPlan,
   BootstrapJob,
@@ -19,39 +20,55 @@ import type { ConformanceHarness } from '../harness.js'
 // mismatch in either stores a plan as the TEXT of a plan, which reads back as a parked run whose
 // reviewer is shown nothing, on one runtime only. Everything below rides a real store on both.
 
+/**
+ * The transcript a SINGLE-JOB read always carries.
+ *
+ * `reads` is nullable because the LIST projection withholds it once a run is past review, so a
+ * facade that dropped it here too would leave every assertion below quietly passing over an empty
+ * array. Asserted rather than defaulted.
+ */
+function transcript(plan: AdoptionPlan): AdoptionRead[] {
+  expect(plan.survey.reads).not.toBeNull()
+  return plan.survey.reads ?? []
+}
+
 /** One decision the fake advisor proposes, so the suite can name it in a review. */
 const DECISION_ID = 'test-runner'
 
+/** A file the SEED never bodies, so citing it proves the model's own read reached the plan. */
+const EXPLORED_PATH = 'services/billing/package.json'
+
+/** One decision, evidenced by whatever key the advisor was actually given for its read. */
+function decision(evidence: string[]) {
+  return {
+    id: DECISION_ID,
+    area: 'testing',
+    title: 'Test runner',
+    monorepoPractice: 'vitest, configured at the root',
+    templatePractice: 'jest, configured per package',
+    recommended: 'monorepo',
+    rationale: 'The monorepo runs one test runner for every package.',
+    evidence,
+  }
+}
+
 /**
- * A deterministic advisor: proposes one decision, evidenced by a file the survey really read.
+ * A deterministic advisor that EXPLORES before it judges: it reads one file the opening context
+ * does not carry, and cites the key that read gave it.
  *
- * The evidence is picked from the survey it is handed rather than hard-coded, because the
- * platform DROPS a recommendation citing nothing the survey read, and a fake citing a fixed
- * path would silently exercise the drop path instead of the plan path the assertions are about.
+ * The evidence comes from the explorer rather than being hard-coded, because the platform DROPS
+ * a recommendation citing anything the transcript does not hold as read. That is what makes this
+ * fake the right shape: it exercises the whole loop the real advisor runs (fetch, get a citable
+ * key back, cite it) without a model, and it fails if the plan is checked against the OPENING
+ * snapshot rather than against the transcript the read landed on.
  */
 function fakeAdvisor(calls?: { count: number }): MonorepoAdoptionAdvisor {
   return {
     enabled: true,
-    async advise({ survey }) {
+    async advise({ explorer }) {
       if (calls) calls.count += 1
-      const cited = survey.monorepoPaths[0]
-      return {
-        model: 'fake:advisor',
-        plan: {
-          decisions: [
-            {
-              id: DECISION_ID,
-              area: 'testing',
-              title: 'Test runner',
-              monorepoPractice: 'vitest, configured at the root',
-              templatePractice: 'jest, configured per package',
-              recommended: 'monorepo',
-              rationale: 'The monorepo runs one test runner for every package.',
-              evidence: cited ? [`monorepo:${cited}`] : [],
-            },
-          ],
-        },
-      }
+      const read = await explorer.explore({ side: 'monorepo', kind: 'read', path: EXPLORED_PATH })
+      return { model: 'fake:advisor', plan: { decisions: [decision(read.key ? [read.key] : [])] } }
     },
   }
 }
@@ -107,12 +124,15 @@ function fakeRepoFiles(files: Record<string, string>, bodies?: Map<number, strin
   } as unknown as RepoFiles
 }
 
-/** The monorepo the suite bootstraps into: root conventions plus one existing sibling service. */
+/** The monorepo the suite bootstraps into: root conventions plus two existing sibling services. */
 const MONOREPO_FILES: Record<string, string> = {
   'package.json': '{"name":"acme","workspaces":["services/*"]}',
   'pnpm-workspace.yaml': "packages:\n  - 'services/*'\n",
   'vitest.config.ts': 'export default {}',
-  'services/billing/package.json': '{"name":"@acme/billing"}',
+  '.github/workflows/ci.yml': 'name: ci',
+  [EXPLORED_PATH]: '{"name":"@acme/billing"}',
+  'services/billing/src/index.ts': 'export {}',
+  'services/inventory/pom.xml': '<project/>',
 }
 
 /** The reference template: the same areas, answered differently. */
@@ -121,96 +141,107 @@ const TEMPLATE_FILES: Record<string, string> = {
   'jest.config.js': 'module.exports = {}',
 }
 
-export function defineMonorepoBootstrapConformance(harness: ConformanceHarness): void {
-  describe('monorepo service bootstrap', () => {
-    /**
-     * A workspace with `acme/platform` projected as a linked repo, plus a `RepoFiles` resolver
-     * that answers for it and for the reference template. `linkFrameRepo` is what puts the repo
-     * in the projection on each facade's OWN stores, which is what makes the target resolution
-     * below a real cross-runtime read rather than a fixture.
-     */
-    async function setup(
-      options: { advisor?: MonorepoAdoptionAdvisor; prBodies?: Map<number, string> } = {},
-    ) {
-      // The bootstrapper both RESOLVES the target repo (the workspace's projection, scoped) and
-      // dispatches the apply container, so the suite supplies one fake pre-loaded with the
-      // monorepo `acme/platform` at id 777 and nothing else.
-      const bootstrapper = new FakeRepoBootstrapper()
-      bootstrapper.monorepoRepos.set(777, {
-        owner: 'acme',
-        name: 'platform',
-        installationId: 4242,
-        defaultBranch: 'main',
-      })
-      const app = harness.makeApp(
-        {},
-        {
-          repoBootstrapper: bootstrapper,
-          ...(options.advisor ? { monorepoAdoptionAdvisor: options.advisor } : {}),
-          resolveRepoFilesForCoords: async (_workspaceId, coords) => {
-            const files =
-              coords.repo === 'platform'
-                ? MONOREPO_FILES
-                : coords.repo === 'service-template'
-                  ? TEMPLATE_FILES
-                  : null
-            if (!files) return null
-            return {
-              repo: fakeRepoFiles(files, options.prBodies),
-              baseBranch: 'main',
-              repoId: coords.repo,
-              owner: coords.owner,
-              name: coords.repo,
-            }
-          },
-        },
-      )
-      const { workspace } = await app.createWorkspace()
-      // A throwaway frame is the vehicle: `linkFrameRepo` writes the workspace's installation
-      // AND the repo projection row, which is what a monorepo target must resolve against.
-      const frame = await app.call<{ id: string }>('POST', `/workspaces/${workspace.id}/blocks`, {
-        title: 'platform',
-        type: 'service',
-        position: { x: 10, y: 10 },
-      })
-      await app.linkFrameRepo({
-        workspaceId: workspace.id,
-        frameBlockId: frame.body.id,
-        installationId: 4242,
-        githubId: 777,
-        owner: 'acme',
-        name: 'platform',
-      })
-      const architecture = await app.call<{ id: string }>(
-        'POST',
-        `/workspaces/${workspace.id}/bootstrap/reference-architectures`,
-        {
-          name: 'Service template',
-          repoOwner: 'acme',
-          repoName: 'service-template',
-          defaultInstructions: 'Follow the template.',
-        },
-      )
-      return { app, wsId: workspace.id, architectureId: architecture.body.id, bootstrapper }
-    }
+// The fixtures and the two groups below are module-level rather than nested in the exported
+// suite: the group outgrew oxlint's per-function budget, and a `describe` body is the one place
+// where "extract a collaborator" means hoisting the arrange helpers and splitting the assertions
+// by what they are about. The split is the flow's own seam: what the SURVEY produces, and what
+// the human REVIEW does with it.
 
-    /** Start a monorepo bootstrap at `services/payments`. */
-    function start(
-      app: Awaited<ReturnType<typeof setup>>['app'],
-      wsId: string,
-      architectureId: string,
-      directory = 'services/payments',
-    ) {
-      return app.call<BootstrapJob>('POST', `/workspaces/${wsId}/bootstrap/jobs`, {
-        repoName: 'payments',
-        referenceArchitectureId: architectureId,
-        instructions: 'A payments service.',
-        monorepo: { repoGithubId: 777, directory },
-      })
-    }
+/**
+ * A workspace with `acme/platform` projected as a linked repo, plus a `RepoFiles` resolver
+ * that answers for it and for the reference template. `linkFrameRepo` is what puts the repo
+ * in the projection on each facade's OWN stores, which is what makes the target resolution
+ * below a real cross-runtime read rather than a fixture.
+ */
+async function setup(
+  harness: ConformanceHarness,
+  options: { advisor?: MonorepoAdoptionAdvisor; prBodies?: Map<number, string> } = {},
+) {
+  // The bootstrapper both RESOLVES the target repo (the workspace's projection, scoped) and
+  // dispatches the apply container, so the suite supplies one fake pre-loaded with the
+  // monorepo `acme/platform` at id 777 and nothing else.
+  const bootstrapper = new FakeRepoBootstrapper()
+  bootstrapper.monorepoRepos.set(777, {
+    owner: 'acme',
+    name: 'platform',
+    installationId: 4242,
+    defaultBranch: 'main',
+  })
+  const app = harness.makeApp(
+    {},
+    {
+      repoBootstrapper: bootstrapper,
+      ...(options.advisor ? { monorepoAdoptionAdvisor: options.advisor } : {}),
+      resolveRepoFilesForCoords: async (_workspaceId, coords) => {
+        const files =
+          coords.repo === 'platform'
+            ? MONOREPO_FILES
+            : coords.repo === 'service-template'
+              ? TEMPLATE_FILES
+              : null
+        if (!files) return null
+        return {
+          repo: fakeRepoFiles(files, options.prBodies),
+          baseBranch: 'main',
+          repoId: coords.repo,
+          owner: coords.owner,
+          name: coords.repo,
+        }
+      },
+    },
+  )
+  const { workspace } = await app.createWorkspace()
+  // A throwaway frame is the vehicle: `linkFrameRepo` writes the workspace's installation
+  // AND the repo projection row, which is what a monorepo target must resolve against.
+  const frame = await app.call<{ id: string }>('POST', `/workspaces/${workspace.id}/blocks`, {
+    title: 'platform',
+    type: 'service',
+    position: { x: 10, y: 10 },
+  })
+  await app.linkFrameRepo({
+    workspaceId: workspace.id,
+    frameBlockId: frame.body.id,
+    installationId: 4242,
+    githubId: 777,
+    owner: 'acme',
+    name: 'platform',
+  })
+  const architecture = await app.call<{ id: string }>(
+    'POST',
+    `/workspaces/${workspace.id}/bootstrap/reference-architectures`,
+    {
+      name: 'Service template',
+      repoOwner: 'acme',
+      repoName: 'service-template',
+      defaultInstructions: 'Follow the template.',
+    },
+  )
+  return { app, wsId: workspace.id, architectureId: architecture.body.id, bootstrapper }
+}
 
+/** Start a monorepo bootstrap at `services/payments`. */
+function start(
+  app: Awaited<ReturnType<typeof setup>>['app'],
+  wsId: string,
+  architectureId: string,
+  directory = 'services/payments',
+) {
+  return app.call<BootstrapJob>('POST', `/workspaces/${wsId}/bootstrap/jobs`, {
+    repoName: 'payments',
+    referenceArchitectureId: architectureId,
+    instructions: 'A payments service.',
+    monorepo: { repoGithubId: 777, directory },
+  })
+}
+
+/**
+ * What the survey produces: the read it performs, the budget it answers to, and the transcript
+ * the plan is checked against.
+ */
+function defineSurveyGroup(harness: ConformanceHarness): void {
+  describe('the adoption survey', () => {
     it('surveys both repositories and parks the run on a human adoption review', async () => {
-      const { app, wsId, architectureId } = await setup({ advisor: fakeAdvisor() })
+      const { app, wsId, architectureId } = await setup(harness, { advisor: fakeAdvisor() })
 
       const started = await start(app, wsId, architectureId)
       expect(started.status).toBe(201)
@@ -241,19 +272,130 @@ export function defineMonorepoBootstrapConformance(harness: ConformanceHarness):
       expect(plan.model).toBe('fake:advisor')
       expect(plan.decisions).toHaveLength(1)
       expect(plan.decisions[0]).toMatchObject({ id: DECISION_ID, recommended: 'monorepo' })
-      // The survey read the monorepo's root config AND the existing sibling service, which is
-      // the read a root-only survey cannot make and the plan is materially weaker without.
-      expect(plan.survey.siblingService).toBe('services/billing')
-      expect(plan.survey.monorepoPaths).toContain('package.json')
-      expect(plan.survey.monorepoPaths).toContain('services/billing/package.json')
-      expect(plan.survey.templatePaths).toContain('jest.config.js')
+      // The survey's SEED read the monorepo's root config and offered EVERY sibling that holds a
+      // convention file of its own, which is the read a root-only survey cannot make and what
+      // makes a monorepo whose services disagree representable at all.
+      expect(plan.survey.siblingServices).toEqual(['services/billing', 'services/inventory'])
+      const rows = transcript(plan)
+      const read = (path: string) => rows.find((entry) => entry.path === path)
+      expect(read('monorepo:package.json')).toMatchObject({ origin: 'seed', outcome: 'read' })
+      expect(read('template:jest.config.js')).toMatchObject({ origin: 'seed', outcome: 'read' })
+      // …and the transcript records what the MODEL went and fetched beside it, which is the whole
+      // point: the evidence set is what was read, not what the platform predicted it would need.
+      // A plan checked against the OPENING snapshot would drop this decision as invention.
+      expect(read(`monorepo:${EXPLORED_PATH}`)).toMatchObject({ origin: 'model', outcome: 'read' })
+      expect(plan.decisions[0]?.evidence).toEqual([`monorepo:${EXPLORED_PATH}`])
+      expect(plan.survey.exploration).toMatchObject({ calls: 1, exhausted: null })
       // Nothing has been written to the monorepo: a parked run has produced no pull request.
       expect(parked.body.prUrl).toBeNull()
       expect(parked.body.adoptionReview).toBeNull()
     })
 
+    it('bounds the model’s reads, and REPORTS the ceiling rather than ending quietly', async () => {
+      // The loop is several vendor round trips where the declared read was one, so the ceiling is
+      // the whole cost story. It also has to reach the MODEL and the plan: a survey that stopped
+      // because it ran out of budget and one that stopped because the model had seen enough
+      // produce the same-looking transcript, and only the first means the plan is missing areas
+      // nobody decided not to look at.
+      const refusals: string[] = []
+      const { app, wsId, architectureId } = await setup(harness, {
+        advisor: {
+          enabled: true,
+          async advise({ explorer, survey }) {
+            for (let i = 0; i <= survey.exploration.maxCalls; i++) {
+              const answer = await explorer.explore({
+                side: 'monorepo',
+                kind: 'read',
+                path: `services/billing/probe-${i}.json`,
+              })
+              if (answer.outcome === 'refused') refusals.push(answer.note ?? '')
+            }
+            const kept = await explorer.explore({
+              side: 'monorepo',
+              kind: 'read',
+              path: EXPLORED_PATH,
+            })
+            return {
+              model: 'fake:advisor',
+              plan: { decisions: [decision(kept.key ? [kept.key] : [])] },
+            }
+          },
+        },
+      })
+      const started = await start(app, wsId, architectureId)
+      await app.driveBootstrap(wsId, started.body.id)
+
+      const parked = await app.call<BootstrapJob>(
+        'GET',
+        `/workspaces/${wsId}/bootstrap/jobs/${started.body.id}`,
+      )
+      const plan = parked.body.adoptionPlan as AdoptionPlan
+      // The refusal is STATED to the model, not thrown at it: the loop still has to end in a
+      // plan, and a model that is told what it has left can name the areas it ran short on.
+      expect(refusals.length).toBeGreaterThan(0)
+      expect(refusals[0]).toContain('exploration budget is spent')
+      expect(plan.survey.exploration.exhausted).toBe('calls')
+      expect(plan.survey.exploration.calls).toBeGreaterThan(plan.survey.exploration.maxCalls)
+      // Past the ceiling nothing further is fetched, so the decision the advisor tried to
+      // evidence afterwards cites nothing and the plan says so rather than carrying it.
+      expect(plan.status).toBe('unavailable')
+      expect(plan.unavailableReason).toBe('analysis_unusable')
+      expect(plan.droppedUnevidenced.join(' ')).toContain('cited no file the survey actually read')
+    })
+
+    it('drops a recommendation citing anything outside the recorded transcript', async () => {
+      // The transcript is what makes the suggestion checkable rather than an assertion, and the
+      // check has to hold against a path the model NEVER asked for as much as against one it was
+      // told did not exist. Both are the model reasoning from a file it did not see.
+      const { app, wsId, architectureId } = await setup(harness, {
+        advisor: {
+          enabled: true,
+          async advise({ explorer }) {
+            const absent = await explorer.explore({
+              side: 'monorepo',
+              kind: 'read',
+              path: 'services/billing/never-existed.json',
+            })
+            expect(absent.outcome).toBe('absent')
+            return {
+              model: 'fake:advisor',
+              plan: {
+                decisions: [
+                  { ...decision(['monorepo:invented/house-style.yaml']), id: 'invented' },
+                  { ...decision(['monorepo:services/billing/never-existed.json']), id: 'absent' },
+                ],
+              },
+            }
+          },
+        },
+      })
+      const started = await start(app, wsId, architectureId)
+      await app.driveBootstrap(wsId, started.body.id)
+
+      const parked = await app.call<BootstrapJob>(
+        'GET',
+        `/workspaces/${wsId}/bootstrap/jobs/${started.body.id}`,
+      )
+      const plan = parked.body.adoptionPlan as AdoptionPlan
+      expect(plan.decisions).toEqual([])
+      expect(plan.unavailableReason).toBe('analysis_unusable')
+      // A read that came back ABSENT is on the transcript precisely because there was nothing
+      // behind it, so it is recorded and still not citable.
+      expect(
+        transcript(plan).find(
+          (entry) => entry.path === 'monorepo:services/billing/never-existed.json',
+        ),
+      ).toMatchObject({ origin: 'model', outcome: 'absent' })
+      expect(plan.droppedUnevidenced).toHaveLength(2)
+    })
+  })
+}
+
+/** What the human review does with the plan, and what the apply phase does with the review. */
+function defineReviewGroup(harness: ConformanceHarness): void {
+  describe('the adoption review', () => {
     it('refuses a review that leaves a decision unanswered, and one for a run that is not parked', async () => {
-      const { app, wsId, architectureId } = await setup({ advisor: fakeAdvisor() })
+      const { app, wsId, architectureId } = await setup(harness, { advisor: fakeAdvisor() })
       const started = await start(app, wsId, architectureId)
 
       // Before the survey has parked it, there is no plan to answer.
@@ -296,7 +438,7 @@ export function defineMonorepoBootstrapConformance(harness: ConformanceHarness):
     })
 
     it('applies the settled review, opens a pull request, and pins the service to its directory', async () => {
-      const { app, wsId, architectureId } = await setup({ advisor: fakeAdvisor() })
+      const { app, wsId, architectureId } = await setup(harness, { advisor: fakeAdvisor() })
       const started = await start(app, wsId, architectureId)
       await app.driveBootstrap(wsId, started.body.id)
 
@@ -343,6 +485,18 @@ export function defineMonorepoBootstrapConformance(harness: ConformanceHarness):
       const service = catalog.body.find((s) => s.frameBlockId === done.body.blockId)
       expect(service?.repoGithubId).toBe(777)
       expect(service?.directory).toBe('services/payments')
+
+      // The transcript rides the SINGLE-JOB read and not the list, which is what every workspace
+      // snapshot carries for every bootstrap run the workspace has ever made. Withheld as `null`
+      // rather than `[]`, because a survey that read nothing is a different fact and the only
+      // surface that renders the transcript is the review this run is already past.
+      expect(transcript(done.body.adoptionPlan as AdoptionPlan).length).toBeGreaterThan(0)
+      const listed = await app.call<BootstrapJob[]>('GET', `/workspaces/${wsId}/bootstrap/jobs`)
+      const row = listed.body.find((job) => job.id === started.body.id)
+      expect(row?.adoptionPlan?.survey.reads).toBeNull()
+      // Everything a card DOES render survives the trim.
+      expect(row?.adoptionPlan?.decisions).toHaveLength(1)
+      expect(row?.adoptionPlan?.survey.siblingServices.length).toBeGreaterThan(0)
     })
 
     it('parks with a stated reason when no model is wired, instead of an empty plan', async () => {
@@ -353,7 +507,7 @@ export function defineMonorepoBootstrapConformance(harness: ConformanceHarness):
       // A DISABLED advisor is what an unwired deployment produces (`createCore` builds one from
       // the model dependencies, and it reports `enabled: false` with no provider), so injecting
       // one is how this drives the unwired path on a harness that does have a fake model.
-      const { app, wsId, architectureId } = await setup({
+      const { app, wsId, architectureId } = await setup(harness, {
         advisor: {
           enabled: false,
           advise: () => {
@@ -405,7 +559,9 @@ export function defineMonorepoBootstrapConformance(harness: ConformanceHarness):
       // monorepo flag is the thing `resolveRepoTarget` reads to scope every agent working on this
       // repository, so writing it before the refusal would silently re-point every service
       // already pinned there.
-      const { app, wsId, architectureId, bootstrapper } = await setup({ advisor: fakeAdvisor() })
+      const { app, wsId, architectureId, bootstrapper } = await setup(harness, {
+        advisor: fakeAdvisor(),
+      })
       const refused = await start(app, wsId, architectureId, 'services/billing')
       expect(refused.status).toBe(409)
       expect(
@@ -422,7 +578,7 @@ export function defineMonorepoBootstrapConformance(harness: ConformanceHarness):
       // guard is an atomic claim taken BEFORE the call, which only a real store can decide, so it
       // is pinned here rather than in a unit test with an in-memory repository.
       const calls = { count: 0 }
-      const { app, wsId, architectureId } = await setup({ advisor: fakeAdvisor(calls) })
+      const { app, wsId, architectureId } = await setup(harness, { advisor: fakeAdvisor(calls) })
       const started = await start(app, wsId, architectureId)
 
       await Promise.all([
@@ -447,7 +603,7 @@ export function defineMonorepoBootstrapConformance(harness: ConformanceHarness):
       // this pins is that the splice preserves the agent's prose on both sides of it.
       // 7 is the number the fake bootstrapper's `prUrl` carries.
       const bodies = new Map<number, string>([[7, 'Agent prose.\n\nWhat this adds and why.']])
-      const { app, wsId, architectureId } = await setup({
+      const { app, wsId, architectureId } = await setup(harness, {
         advisor: fakeAdvisor(),
         prBodies: bodies,
       })
@@ -475,7 +631,7 @@ export function defineMonorepoBootstrapConformance(harness: ConformanceHarness):
     it('refuses a target repository this workspace has not linked', async () => {
       // The projection is what scopes a monorepo target. Without this, the endpoint would be a
       // way to open a pull request against any repository the deployment's credential reaches.
-      const { app, wsId, architectureId } = await setup({ advisor: fakeAdvisor() })
+      const { app, wsId, architectureId } = await setup(harness, { advisor: fakeAdvisor() })
       const refused = await app.call('POST', `/workspaces/${wsId}/bootstrap/jobs`, {
         repoName: 'payments',
         referenceArchitectureId: architectureId,
@@ -484,5 +640,12 @@ export function defineMonorepoBootstrapConformance(harness: ConformanceHarness):
       })
       expect(refused.status).toBe(404)
     })
+  })
+}
+
+export function defineMonorepoBootstrapConformance(harness: ConformanceHarness): void {
+  describe('monorepo service bootstrap', () => {
+    defineSurveyGroup(harness)
+    defineReviewGroup(harness)
   })
 }
