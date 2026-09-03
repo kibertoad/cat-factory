@@ -50,13 +50,30 @@ const EMPTY_TRAJECTORY: RunToolCallTrajectory = Object.freeze({
 const ui = useUiStore()
 const execution = useExecutionStore()
 const board = useBoardStore()
+const agentRuns = useAgentRunsStore()
 const observability = useObservabilityStore()
 const { t, d } = useI18n()
 
 const executionId = computed(() => ui.observabilityInstanceId)
 const open = computed(() => !!executionId.value)
 const instance = computed(() => execution.getInstance(executionId.value ?? undefined))
-const block = computed(() => (instance.value ? board.getBlock(instance.value.blockId) : undefined))
+// The panel is opened over an AGENT RUN, and a repo bootstrap is one: it has no execution row,
+// so everything below that reads `instance` answers nothing for it. Its own run supplies the two
+// things the panel states about a run rather than about its calls: whose work this was, and what
+// it failed on. The four telemetry reads need none of it: they are keyed by the run id alone.
+const bootstrap = computed(() => agentRuns.bootstrapById(executionId.value))
+const blockId = computed(() => instance.value?.blockId ?? bootstrap.value?.blockId ?? null)
+const block = computed(() => (blockId.value ? board.getBlock(blockId.value) : undefined))
+/**
+ * The line under the title. An execution names its pipeline; a bootstrap names itself, because
+ * "which pipeline" has no answer for it and an empty subtitle on a panel opened from a service
+ * card reads as a panel that failed to load rather than as a run of a different kind.
+ */
+const runSubtitle = computed(() =>
+  instance.value ? instance.value.pipelineName : bootstrap.value ? t('bootstrap.steps.title') : '',
+)
+/** The structured failure the pinned summary speaks from, whichever kind of run this is. */
+const runFailure = computed(() => instance.value?.failure ?? bootstrap.value?.failure ?? null)
 
 const calls = computed<LlmCallMetric[]>(() =>
   executionId.value ? observability.callsFor(executionId.value) : [],
@@ -201,7 +218,7 @@ const visibleCalls = computed(() => filterCallsByOutcome(calls.value, callFilter
  */
 const failureEvidence = computed(() =>
   deriveRunFailureEvidence({
-    failure: instance.value?.failure ?? null,
+    failure: runFailure.value,
     calls: calls.value,
     callsAnswer: sinkAnswer({
       loading: loading.value,
@@ -473,7 +490,7 @@ function exportJson() {
               {{ t('observability.modelActivity') }}
             </h1>
             <p v-if="block" class="truncate text-xs text-slate-500">
-              {{ block.title }} · {{ instance?.pipelineName }}
+              {{ block.title }} · {{ runSubtitle }}
             </p>
           </div>
           <div class="ms-auto flex items-center gap-1.5">

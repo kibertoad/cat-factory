@@ -413,7 +413,8 @@
       "retrying": "Ponawianie…",
       "history": {
         "previousErrors": "{count} poprzedni błąd | {count} poprzednie błędy | {count} poprzednich błędów"
-      }
+      },
+      "resumeBootstrap": "Wznów od: {step}"
     },
     "stop": {
       "label": "Zatrzymaj",
@@ -7098,6 +7099,23 @@
         "approved": "Decyzje zatwierdzone",
         "approvedDesc": "Agent zapisuje {directory} i otworzy pull request.",
         "failed": "Nie udało się wysłać przeglądu"
+      }
+    },
+    "steps": {
+      "title": "Kroki bootstrapu",
+      "name": {
+        "scaffold": "Utworzenie szkieletu repozytorium",
+        "survey": "Analiza monorepo i szablonu",
+        "review": "Twoje decyzje o tym, co przejąć",
+        "apply": "Napisanie usługi i otwarcie pull requesta"
+      },
+      "state": {
+        "pending": "Nierozpoczęty",
+        "running": "W toku",
+        "awaiting_review": "Czeka na Ciebie",
+        "done": "Gotowe",
+        "failed": "Niepowodzenie",
+        "unknown": "Stan nieczytelny"
       }
     }
   },

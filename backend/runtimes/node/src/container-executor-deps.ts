@@ -505,6 +505,17 @@ export function buildNodeContainerExecutor(deps: NodeContainerExecutorDeps): Age
  * through the same shared runner seam the container executor uses, so on Node it runs
  * against the self-hosted pool and on local against the per-job Docker container.
  */
+/**
+ * What a bootstrap dispatch records, beside what it does: the provided-context snapshot and the
+ * two destinations a poll's drained tool calls reach. Spelled off the bootstrapper's own
+ * constructor so adding a sink there fails to compile here rather than silently going unwired
+ * on a facade.
+ */
+export type BootstrapObservabilityDeps = Pick<
+  ConstructorParameters<typeof ContainerRepoBootstrapper>[0],
+  'agentContextObservability' | 'recordToolCalls' | 'toolBodyGate' | 'llmTraceSink'
+>
+
 export function selectNodeRepoBootstrapper(deps: {
   env: NodeJS.ProcessEnv
   config: AppConfig
@@ -520,6 +531,13 @@ export function selectNodeRepoBootstrapper(deps: {
   githubClient: GitHubClient | undefined
   mintInstallationToken: MintInstallationToken | undefined
   resolvePackageRegistries?: (workspaceId: string) => Promise<JobPackageRegistrySpec[]>
+  /**
+   * The same telemetry sinks the container EXECUTOR files through, so a bootstrap run's
+   * provided context and tool-call trajectory are readable exactly like an execution's. Built
+   * once by the composition root and handed to both, which is what keeps the executor's body
+   * gate and this one from being two different answers to the same question.
+   */
+  observability?: BootstrapObservabilityDeps
 }): ContainerRepoBootstrapper | undefined {
   const publicUrl = deps.env.PUBLIC_URL?.trim()
   const sessionSecret = deps.config.auth.sessionSecret
@@ -549,6 +567,7 @@ export function selectNodeRepoBootstrapper(deps: {
     ...(deps.resolvePackageRegistries
       ? { resolvePackageRegistries: deps.resolvePackageRegistries }
       : {}),
+    ...deps.observability,
   })
 }
 

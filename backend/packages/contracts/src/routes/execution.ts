@@ -181,6 +181,13 @@ export const getWorkspaceUsageContract = defineApiContract({
 })
 
 // ---- run observability ----------------------------------------------------
+//
+// `executionId` on THESE six is the AGENT RUN id, not necessarily an execution's: the four
+// telemetry sinks are keyed by the run, and a repo-bootstrap run has no execution row at all
+// (its run id is its own). The board opens the same observability panel over a bootstrap, so
+// these must stay resolvable from the telemetry stores alone: resolving an execution first
+// would 404 every bootstrap while its rows sat in the store under exactly the id asked for.
+// Pinned by the bootstrap conformance group, which drives a real bootstrap and reads all five.
 
 export const getExecutionLlmMetricsContract = defineApiContract({
   method: 'get',

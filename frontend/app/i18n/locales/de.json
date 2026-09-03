@@ -3195,7 +3195,8 @@
       "retrying": "Wird wiederholt…",
       "history": {
         "previousErrors": "{count} vorheriger Fehler | {count} vorherige Fehler"
-      }
+      },
+      "resumeBootstrap": "Fortsetzen ab: {step}"
     },
     "stop": {
       "label": "Stoppen",
@@ -5228,6 +5229,23 @@
         "approved": "Entscheidungen freigegeben",
         "approvedDesc": "Der Agent schreibt jetzt {directory} und öffnet einen Pull Request.",
         "failed": "Prüfung konnte nicht abgeschickt werden"
+      }
+    },
+    "steps": {
+      "title": "Bootstrap-Schritte",
+      "name": {
+        "scaffold": "Repository aufsetzen",
+        "survey": "Monorepo und Vorlage untersuchen",
+        "review": "Deine Übernahme-Entscheidungen",
+        "apply": "Service schreiben und Pull Request öffnen"
+      },
+      "state": {
+        "pending": "Nicht begonnen",
+        "running": "Läuft",
+        "awaiting_review": "Wartet auf dich",
+        "done": "Fertig",
+        "failed": "Fehlgeschlagen",
+        "unknown": "Status nicht lesbar"
       }
     }
   },

@@ -122,10 +122,13 @@ export class MonorepoAdoptionAdvisorService implements MonorepoAdoptionAdvisor {
         temperature: TEMPERATURE,
         maxOutputTokens: MAX_OUTPUT_TOKENS,
         // ONE tag for the whole loop, so every step's call is filed under this kind and the
-        // per-call metrics roll up as one survey rather than as N of them.
+        // per-call metrics roll up as one survey rather than as N of them. `executionId` is the
+        // bootstrap RUN: without it the loop's rows land in the store and outside every
+        // run-scoped read, which is a survey that shows as having spent nothing.
         providerOptions: catFactoryObservability({
           agentKind: MONOREPO_ADOPTION_AGENT_KIND,
           workspaceId: subject.workspaceId,
+          executionId: subject.runId,
         }),
       })
       text = result.text

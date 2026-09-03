@@ -464,6 +464,10 @@
         "@previousErrors": {
           "description": "Count-based tally of a run's earlier failed attempts, rendered as e.g. '3 previous errors' (count is always >= 1). Provide ALL plural forms your language needs (English has 2; Polish/Ukrainian need 3 - one/few/many - via the custom pluralRules in i18n.config.ts)."
         }
+      },
+      "resumeBootstrap": "Resume from: {step}",
+      "@resumeBootstrap": {
+        "description": "Retry label for a multi-step (monorepo) bootstrap, which resumes at the step the run reached rather than starting over. {step} is one of the bootstrap.steps.name values."
       }
     },
     "stop": {
@@ -7419,6 +7423,26 @@
         "approvedDesc": "The agent is now writing {directory} and will open a pull request.",
         "failed": "Could not submit the review"
       }
+    },
+    "steps": {
+      "title": "Bootstrap steps",
+      "name": {
+        "scaffold": "Scaffold the repository",
+        "survey": "Survey the monorepo and the template",
+        "review": "Your adoption decisions",
+        "apply": "Write the service and open the pull request"
+      },
+      "state": {
+        "pending": "Not started",
+        "running": "Running",
+        "awaiting_review": "Waiting for you",
+        "done": "Done",
+        "failed": "Failed",
+        "unknown": "State unreadable"
+      }
+    },
+    "@steps": {
+      "description": "The moves a bootstrap run is made of. A new-repo bootstrap is only `scaffold`; a monorepo bootstrap is survey → your decisions → apply. `state.unknown` is for a stored run status this build no longer defines."
     }
   },
   "initiative": {

@@ -257,21 +257,24 @@ export interface WorkerContainerAssemblyInput {
  * Grouped out of {@link buildWorkerCoreDependencies} so that assembler stays within the
  * per-function line budget; every entry is spread straight back into the same literal.
  */
-function selectWorkerDurableJobDeps(args: {
-  env: Env
-  config: AppConfig
-  db: D1Database
-  clock: WorkerContainerAssemblyInput['clock']
-  idGenerator: WorkerContainerAssemblyInput['idGenerator']
-  resolveTransport: WorkerContainerAssemblyInput['resolveTransport']
-}): Partial<CoreDependencies> {
-  const { env, config, db, clock, idGenerator, resolveTransport } = args
+function selectWorkerDurableJobDeps(
+  input: WorkerContainerAssemblyInput,
+): Partial<CoreDependencies> {
+  const { env, config, db, clock, idGenerator, resolveTransport, agentContextObservability } = input
   return {
     // Repo-bootstrap repositories are wired unconditionally (reference-architecture
     // CRUD is always available); the run path additionally needs the bootstrapper.
     referenceArchitectureRepository: new D1ReferenceArchitectureRepository({ db }),
     bootstrapJobRepository: new D1BootstrapJobRepository({ db }),
-    repoBootstrapper: selectRepoBootstrapper(env, config, db, clock, idGenerator, resolveTransport),
+    repoBootstrapper: selectRepoBootstrapper({
+      env,
+      config,
+      db,
+      clock,
+      idGenerator,
+      resolveTransport,
+      agentContextObservability,
+    }),
     // Durably drive each bootstrap run's poll loop when the Workflows binding is
     // present (mirrors the execution driver); without it a run still dispatches.
     bootstrapRunner: env.BOOTSTRAP_WORKFLOW
@@ -557,7 +560,6 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     cloudflareModelsEnabled,
     registries,
     provisioningLogRepository,
-    resolveTransport,
     subscriptions,
     testSecretsService,
     validationConfigService,
@@ -686,7 +688,7 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     dynamicModelPricesFor: openRouterCatalog
       ? (ws) => openRouterCatalog.capabilitiesFor(ws)
       : undefined,
-    ...selectWorkerDurableJobDeps({ env, config, db, clock, idGenerator, resolveTransport }),
+    ...selectWorkerDurableJobDeps(input),
     ...selectGitHubDeps(env, config, db, clock, idGenerator, caches.repoFiles),
     ...selectMergeLifecycleDeps({
       env,

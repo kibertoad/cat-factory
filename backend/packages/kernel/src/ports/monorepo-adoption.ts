@@ -66,6 +66,16 @@ export interface MonorepoAdoptionExplorer {
 /** The two sides a survey read, rendered for the model, plus the workspace whose model to use. */
 export interface MonorepoAdoptionSubject {
   workspaceId: string
+  /**
+   * The bootstrap RUN this survey belongs to, so its model calls file under the run every
+   * run-scoped observability read asks for.
+   *
+   * Required rather than optional: an inline caller on a run path that omits it puts its rows in
+   * the store and out of every read that could find them, which renders as a step that spent
+   * nothing. The survey is half of what a monorepo bootstrap costs, so that half would be the
+   * half nobody can inspect.
+   */
+  runId: string
   /** The new service's subdirectory in the monorepo (e.g. `services/billing`). */
   directory: string
   /** What the run is bootstrapping, in the operator's own words (the composed instructions). */

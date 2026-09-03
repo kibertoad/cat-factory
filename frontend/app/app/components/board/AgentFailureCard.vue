@@ -7,6 +7,7 @@
 import type { ConflictReason, EnvironmentFailureReason } from '@cat-factory/contracts'
 import type { AgentRunSummary } from '~/stores/agentRuns'
 import FailureDetail from '~/components/board/FailureDetail.vue'
+import BootstrapRunSteps from '~/components/bootstrap/BootstrapRunSteps.vue'
 
 const props = withDefaults(
   defineProps<{ run: AgentRunSummary; variant?: 'compact' | 'expanded' }>(),
@@ -92,9 +93,29 @@ const title = computed(() => {
     ? t('board.failure.bootstrapFailed')
     : t('board.failure.runFailed')
 })
-const retryLabel = computed(() =>
-  props.run.kind === 'bootstrap' ? t('board.failure.retryBootstrap') : t('board.failure.retryRun'),
+// A MULTI-STEP bootstrap (the monorepo flow) is not retried from the top: the service resumes
+// from the step the run reached, keeping the survey's paid-for reads and, past the review, the
+// decisions a human already gave. So the button says which step it re-enters at, from the SAME
+// rule the service branches on, rather than "retry", which invites the reviewer to expect to be
+// asked for their decisions again. A single-step run has nothing to resume and keeps "retry".
+const { resumeStep } = useBootstrapRunSteps(() =>
+  props.run.kind === 'bootstrap' ? props.run.runId : null,
 )
+const retryLabel = computed(() => {
+  if (props.run.kind !== 'bootstrap') return t('board.failure.retryRun')
+  const step = resumeStep.value
+  return step
+    ? t('board.failure.resumeBootstrap', { step: t(`bootstrap.steps.name.${step}`) })
+    : t('board.failure.retryBootstrap')
+})
+
+// The run's own observability panel. Offered here because a failed BOOTSTRAP has no step surface
+// to reach it from (a task run's steps each carry their own "Model activity" control), and what
+// a bootstrap failed on is exactly the question its model calls, provided context and tool-call
+// trajectory answer.
+function inspectRun() {
+  ui.openObservability(props.run.runId)
+}
 
 const retrying = ref(false)
 async function retry() {
@@ -159,6 +180,14 @@ async function retry() {
       }}
     </p>
 
+    <!-- Which of the run's steps it got to. Renders for a multi-step (monorepo) bootstrap only;
+         see BootstrapRunSteps. -->
+    <BootstrapRunSteps
+      v-if="!compact && run.kind === 'bootstrap'"
+      :run-id="run.runId"
+      class="mt-2"
+    />
+
     <FailureDetail
       v-if="!compact && failure"
       :detail="failure.detail"
@@ -182,6 +211,18 @@ async function retry() {
           :class="[compact ? 'h-3 w-3' : 'h-3.5 w-3.5', { 'animate-spin': retrying }]"
         />
         {{ retrying ? t('board.failure.retrying') : compact ? t('common.retry') : retryLabel }}
+      </button>
+
+      <button
+        v-if="run.kind === 'bootstrap'"
+        type="button"
+        class="nodrag flex items-center gap-1 rounded-md bg-rose-900/20 text-rose-300 hover:bg-rose-900/50"
+        :class="compact ? 'px-2 py-0.5 text-[10px]' : 'px-2 py-1 text-[11px]'"
+        data-testid="agent-failure-inspect"
+        @click.stop="inspectRun"
+      >
+        <UIcon name="i-lucide-activity" :class="compact ? 'h-3 w-3' : 'h-3.5 w-3.5'" />
+        {{ t('observability.modelActivity') }}
       </button>
 
       <!-- Environment provisioning failures are almost always a deploy-backend / provider-config

@@ -413,7 +413,8 @@
       "retrying": "再試行中…",
       "history": {
         "previousErrors": "以前のエラー {count} 件 | 以前のエラー {count} 件"
-      }
+      },
+      "resumeBootstrap": "再開: {step}"
     },
     "stop": {
       "label": "停止",
@@ -7098,6 +7099,23 @@
         "approved": "判断を承認しました",
         "approvedDesc": "エージェントが {directory} を作成し、プルリクエストを開きます。",
         "failed": "レビューを送信できませんでした"
+      }
+    },
+    "steps": {
+      "title": "ブートストラップの手順",
+      "name": {
+        "scaffold": "リポジトリの雛形を作成",
+        "survey": "モノレポとテンプレートを調査",
+        "review": "採用方針の決定",
+        "apply": "サービスを作成してプルリクエストを開く"
+      },
+      "state": {
+        "pending": "未着手",
+        "running": "実行中",
+        "awaiting_review": "あなたの対応待ち",
+        "done": "完了",
+        "failed": "失敗",
+        "unknown": "状態を判別できません"
       }
     }
   },

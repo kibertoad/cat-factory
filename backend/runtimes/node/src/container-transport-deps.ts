@@ -30,7 +30,9 @@ import {
 import type { CoreDependencies } from '@cat-factory/orchestration'
 import {
   buildNodeResolveTransport,
+  buildTraceSink,
   selectNodeRepoBootstrapper,
+  type BootstrapObservabilityDeps,
   withProvisioningLog,
 } from './container-executor-deps.js'
 import type { DrizzleDb } from './db/client.js'
@@ -167,6 +169,32 @@ export function buildNodeTransportDeploy(input: NodeTransportDeployInput) {
   return { resolveTransport, baseDeployMint, deployDeps }
 }
 
+/**
+ * The bootstrap dispatch's telemetry sinks, read off the run-services bundle the container
+ * executor takes them from.
+ *
+ * A named builder rather than an object literal at the composition root, so the two dispatches
+ * demonstrably record through the SAME sinks: a bootstrap's provided context and tool-call
+ * trajectory are read by the same panel, through the same body gate, as an execution step's.
+ */
+export function bootstrapObservabilityFrom(
+  runServices: {
+    agentContextObservability: BootstrapObservabilityDeps['agentContextObservability']
+    executorTelemetry: {
+      recordToolCalls: BootstrapObservabilityDeps['recordToolCalls']
+      toolBodyGate: BootstrapObservabilityDeps['toolBodyGate']
+    }
+  },
+  config: AppConfig,
+): BootstrapObservabilityDeps {
+  return {
+    agentContextObservability: runServices.agentContextObservability,
+    recordToolCalls: runServices.executorTelemetry.recordToolCalls,
+    toolBodyGate: runServices.executorTelemetry.toolBodyGate,
+    llmTraceSink: buildTraceSink(config),
+  }
+}
+
 /** Inputs {@link buildNodeBootstrapper} needs from the composition root. */
 export interface NodeBootstrapperInput {
   env: NodeJS.ProcessEnv
@@ -180,6 +208,8 @@ export interface NodeBootstrapperInput {
   mintInstallationToken?: DispatchTokenMintDependencies['mint']
   resolvePackageRegistries?: (workspaceId: string) => Promise<JobPackageRegistrySpec[]>
   caches?: AppCaches
+  /** The telemetry sinks a bootstrap dispatch records through; see the type's own doc. */
+  observability?: BootstrapObservabilityDeps
 }
 
 /**
@@ -203,6 +233,7 @@ export function buildNodeBootstrapper(input: NodeBootstrapperInput) {
     mintInstallationToken,
     resolvePackageRegistries,
     caches,
+    observability,
   } = input
 
   const bootstrapJobRepository = sourced(
@@ -229,6 +260,7 @@ export function buildNodeBootstrapper(input: NodeBootstrapperInput) {
     githubClient,
     mintInstallationToken: bootstrapMintInstallationToken,
     ...(resolvePackageRegistries ? { resolvePackageRegistries } : {}),
+    ...(observability ? { observability } : {}),
   })
 
   return { bootstrapJobRepository, bootstrapMintInstallationToken, repoBootstrapper }

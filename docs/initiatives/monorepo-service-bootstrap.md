@@ -274,6 +274,59 @@ through `hostMarkdown` and the caller scrubs secrets at compose time, because a 
 reading "fixes #412" would otherwise close an unrelated issue on the monorepo when the bootstrap
 PR merged.
 
+### D11: The run's STEPS are derived, and a retry resumes at the one it reached
+
+**Decision: `bootstrapRunSteps` / `bootstrapResumeStep` in `@cat-factory/contracts`, derived from
+the run row, with `BootstrapService.retry` branching on the same function the board reads.**
+
+A monorepo run is three moves around a human decision, and the board rendered it as one
+"bootstrapping…" bar. That bar cannot say which move a stopped run got to, and the control under
+it said "Retry bootstrap", which reads as "start over" and is not what the service does: a retry
+carries the settled review forward and re-enters at the phase reached (D4's own consequence). A
+reviewer offered "retry" after their decisions were recorded had no reason to expect those
+decisions to survive it.
+
+Derived, not stored: `phase`, the recorded plan and `awaiting_review` already say where the run
+is, and a stored cursor would be a fourth thing to keep in step with those three. It lives in
+contracts rather than kernel because the SPA and the backend both have to AGREE about the answer:
+the board names the step the button resumes from and the service branches on it, and stated twice
+they drift.
+
+Two questions, deliberately not one. `bootstrapReachedStep` is where the run GOT to;
+`bootstrapResumeStep` is where a retry RE-ENTERS, and they differ on exactly one case: a run
+parked on an `unavailable` plan reached the review, but a retry drops a non-ready plan (D6) so a
+fixed deployment can produce a real suggestion, so it resumes at the survey. Collapsing them
+would promise a reviewer that a pending decision is what the run picks up from, while the
+suggestion behind it is about to be recomputed.
+
+A new-repo bootstrap derives a single `scaffold` step. The SPA renders no list for it and keeps
+saying "retry": one move has no progress to resume, and a one-row checklist restates the banner
+above it.
+
+### D12: A bootstrap files its telemetry under the RUN, so it is inspectable like any other run
+
+**Decision: the session token, the job body's `executionId`, the provided-context snapshot and
+the drained tool-call trajectory all carry `request.jobId`; the drive id addresses the container
+and nothing else.**
+
+A bootstrap is already a first-class agent run (one `agent_runs` table, one retry surface, one
+stop surface). It was not an inspectable one: it filed no context snapshot and drained no
+trajectory, and the apply phase's model calls were keyed on its DRIVE id, which is the one id no
+run-scoped read asks for. So the run that most needs explaining when it goes wrong (nothing has
+been written, and the only artefact is a failure message) was the one with the least recorded
+about it, and its more expensive half was recorded where nobody looks.
+
+The survey is the other half, and it is an INLINE caller on a run path: it now tags its whole
+loop with the run, so its spend rolls up beside the apply's rather than sitting in the store
+outside every read that could find it. Both file under kinds that name what ran
+(`repo-bootstrapper`, `monorepo-adoption-advisor`) rather than under `architect`, whose routing
+the container still follows for its MODEL.
+
+The reads themselves needed no new endpoint: the four sinks are keyed by the run, so the panel
+the board opens over a bootstrap is the same panel over the same routes. What that costs is a
+standing constraint, now pinned by the bootstrap conformance group: those routes may never gate
+on an execution row existing.
+
 ## Slices
 
 - [x] **Slice 1, the flow end to end.** Contracts (`monorepo` target, adoption plan/review,
@@ -287,6 +340,11 @@ PR merged.
       with `siblingServices` and `exploration`, the SPA's "what the survey read" disclosure, and
       three conformance assertions (the call budget is enforced, exhaustion is reported, a plan
       cites nothing outside the transcript). See D10.
+- [x] **Slice 3, the run is legible.** The derived step model plus the resume rule both sides
+      read (D11), the board's step list on the in-progress, parked and failed cards, the retry
+      control that names the step it resumes from, and the telemetry a bootstrap run had not been
+      filing: the provided-context snapshot per dispatch, the tool-call trajectory per poll, and
+      every sink keyed on the RUN rather than the drive (D12).
 
 ## Gotchas the first slice surfaced
 

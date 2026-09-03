@@ -413,7 +413,8 @@
       "retrying": "Nouvelle tentative…",
       "history": {
         "previousErrors": "{count} erreur précédente | {count} erreurs précédentes"
-      }
+      },
+      "resumeBootstrap": "Reprendre à : {step}"
     },
     "stop": {
       "label": "Arrêter",
@@ -7098,6 +7099,23 @@
         "approved": "Décisions approuvées",
         "approvedDesc": "L’agent écrit {directory} et ouvrira une pull request.",
         "failed": "Impossible d’envoyer la revue"
+      }
+    },
+    "steps": {
+      "title": "Étapes du bootstrap",
+      "name": {
+        "scaffold": "Créer la structure du dépôt",
+        "survey": "Analyser le monorepo et le modèle",
+        "review": "Vos décisions d'adoption",
+        "apply": "Écrire le service et ouvrir la pull request"
+      },
+      "state": {
+        "pending": "Pas commencé",
+        "running": "En cours",
+        "awaiting_review": "En attente de vous",
+        "done": "Terminé",
+        "failed": "En échec",
+        "unknown": "État illisible"
       }
     }
   },

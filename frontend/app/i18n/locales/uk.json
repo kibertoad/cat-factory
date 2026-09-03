@@ -413,7 +413,8 @@
       "retrying": "Повторення…",
       "history": {
         "previousErrors": "{count} попередня помилка | {count} попередні помилки | {count} попередніх помилок"
-      }
+      },
+      "resumeBootstrap": "Продовжити з: {step}"
     },
     "stop": {
       "label": "Зупинити",
@@ -7098,6 +7099,23 @@
         "approved": "Рішення затверджено",
         "approvedDesc": "Агент записує {directory} і відкриє pull request.",
         "failed": "Не вдалося надіслати перегляд"
+      }
+    },
+    "steps": {
+      "title": "Кроки bootstrap",
+      "name": {
+        "scaffold": "Створити каркас репозиторію",
+        "survey": "Дослідити монорепозиторій і шаблон",
+        "review": "Ваші рішення щодо запозичень",
+        "apply": "Написати сервіс і відкрити pull request"
+      },
+      "state": {
+        "pending": "Не почато",
+        "running": "Виконується",
+        "awaiting_review": "Очікує на вас",
+        "done": "Готово",
+        "failed": "Помилка",
+        "unknown": "Стан не вдалося прочитати"
       }
     }
   },

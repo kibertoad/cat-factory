@@ -90,6 +90,7 @@ function fakeExplorer(files: Record<string, string>): {
 
 const SUBJECT_BASE = {
   workspaceId: 'ws_1',
+  runId: 'boot_1',
   directory: 'services/payments',
   instructions: 'A payments service.',
   survey: {
@@ -200,5 +201,19 @@ describe('MonorepoAdoptionAdvisorService', () => {
     // stale against a namespace rename it would then silently pass.
     const kinds = seen.map((options) => readInlineObservabilityContext(options).agentKind)
     expect(kinds).toEqual(['monorepo-adoption-advisor', 'monorepo-adoption-advisor'])
+  })
+
+  it('files every step under the bootstrap RUN, so the survey is readable from the run', async () => {
+    // Untagged, the loop's rows are in the telemetry store and outside every run-scoped read,
+    // which renders as a survey phase that spent nothing, on the run whose other half (the
+    // apply container) reports its spend fine, so the discrepancy reads as a missing phase.
+    const { provider, seen } = scriptedProvider([
+      { tool: 'read_monorepo_file', path: 'services/billing/package.json' },
+      { text: PLAN },
+    ])
+    const { explorer } = fakeExplorer({ 'services/billing/package.json': '{}' })
+    await advisorFor(provider).advise(subjectWith(explorer))
+    const runs = seen.map((options) => readInlineObservabilityContext(options).executionId)
+    expect(runs).toEqual(['boot_1', 'boot_1'])
   })
 })

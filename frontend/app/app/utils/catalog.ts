@@ -636,6 +636,30 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
       'Re-examines a single challenged PR-review finding against the full source, then upholds ' +
       '(strengthening it) or retracts it with a justification. Configurable separately from the reviewer.',
   },
+  // The two agent kinds a REPO BOOTSTRAP run files its telemetry under. Neither is placeable
+  // and neither is a model-routing key (the bootstrapper runs on the `architect` routing, the
+  // advisor on the workspace default): they are here so the observability panel a bootstrap run
+  // opens names what actually ran. Without them both roll up as the generic "Agent" fallback,
+  // which puts the survey's model calls and the apply container's under one unnamed heading on
+  // the one panel whose job is telling them apart.
+  'repo-bootstrapper': {
+    kind: 'repo-bootstrapper',
+    tier: 'advanced',
+    label: 'Repo Bootstrapper',
+    icon: 'i-lucide-package-plus',
+    color: '#f59e0b',
+    description:
+      'Scaffolds a new repository from a reference architecture, or writes a new service into a monorepo and opens the pull request.',
+  },
+  'monorepo-adoption-advisor': {
+    kind: 'monorepo-adoption-advisor',
+    tier: 'advanced',
+    label: 'Adoption Advisor',
+    icon: 'i-lucide-scale',
+    color: '#f59e0b',
+    description:
+      'Reads a monorepo and the reference template and proposes what a new service should adopt from each. Its suggestion is the one a human settles before anything is written.',
+  },
   // The Initiative Planning pipeline's steps. Only runnable on an initiative
   // block (pl_initiative — enforced by the engine), so they are display-metadata
   // system kinds, never palette archetypes. The analyst runs FIRST, ahead of the

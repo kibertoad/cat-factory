@@ -291,6 +291,33 @@ function defineSurveyGroup(harness: ConformanceHarness): void {
       expect(parked.body.adoptionReview).toBeNull()
     })
 
+    it('answers the run-observability reads for a bootstrap run, like any other agent run', async () => {
+      // A bootstrap is inspected through the SAME panel as an execution, which reads these five
+      // workspace-scoped routes. They are keyed by the AGENT RUN, and a bootstrap deliberately
+      // has no execution row, so a reader that resolved one first would 404 every bootstrap
+      // while its rows sat in the telemetry store under exactly this id. Asserted on both
+      // facades because the sinks and their absence are per-facade wiring.
+      const { app, wsId, architectureId } = await setup(harness, { advisor: fakeAdvisor() })
+      const started = await start(app, wsId, architectureId)
+      await app.driveBootstrap(wsId, started.body.id)
+      const runId = started.body.id
+      const reads = [
+        'llm-metrics',
+        'agent-context',
+        'search-queries',
+        'tool-calls',
+        'tool-call-failures',
+      ]
+      for (const read of reads) {
+        const answer = await app.call<{ executionId: string }>(
+          'GET',
+          `/workspaces/${wsId}/executions/${runId}/${read}`,
+        )
+        expect(answer.status, read).toBe(200)
+        expect(answer.body.executionId, read).toBe(runId)
+      }
+    })
+
     it('bounds the model’s reads, and REPORTS the ceiling rather than ending quietly', async () => {
       // The loop is several vendor round trips where the declared read was one, so the ceiling is
       // the whole cost story. It also has to reach the MODEL and the plan: a survey that stopped

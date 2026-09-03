@@ -413,7 +413,8 @@
       "retrying": "Yeniden deneniyor…",
       "history": {
         "previousErrors": "{count} önceki hata | {count} önceki hata"
-      }
+      },
+      "resumeBootstrap": "Şuradan devam et: {step}"
     },
     "stop": {
       "label": "Durdur",
@@ -7098,6 +7099,23 @@
         "approved": "Kararlar onaylandı",
         "approvedDesc": "Ajan şimdi {directory} dizinini yazıyor ve bir pull request açacak.",
         "failed": "İnceleme gönderilemedi"
+      }
+    },
+    "steps": {
+      "title": "Bootstrap adımları",
+      "name": {
+        "scaffold": "Depo iskeletini oluştur",
+        "survey": "Monorepo ve şablonu incele",
+        "review": "Neyin benimseneceğine dair kararların",
+        "apply": "Servisi yaz ve pull request aç"
+      },
+      "state": {
+        "pending": "Başlamadı",
+        "running": "Çalışıyor",
+        "awaiting_review": "Seni bekliyor",
+        "done": "Tamam",
+        "failed": "Başarısız",
+        "unknown": "Durum okunamıyor"
       }
     }
   },

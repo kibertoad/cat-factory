@@ -65,7 +65,10 @@ import type { Env } from './env'
 import { requireTelemetryDb } from './env'
 import { ContainerAgentExecutor, type ResolveRunnerTransport } from './ai/ContainerAgentExecutor'
 import type { AccountSettingsService } from '@cat-factory/integrations'
-import type { JobPackageRegistrySpec } from '@cat-factory/server'
+import type {
+  ContainerRepoBootstrapperDependencies,
+  JobPackageRegistrySpec,
+} from '@cat-factory/server'
 import { CloudflareContainerTransport } from './containers/CloudflareContainerTransport'
 import {
   agentContainerNamespace,
@@ -163,6 +166,46 @@ export interface WorkerExecutorDeps {
    * chain plus the description the credential checklist renders.
    */
   resolveToolSecrets: ToolSecretResolver
+}
+
+/**
+ * The three things a drained poll window reaches, built ONCE per facade: the trajectory store,
+ * the double body gate, and the external trace sink.
+ *
+ * Shared by the container executor and the repo bootstrapper rather than built at each, because
+ * the gate is a DECISION about what a deployment may keep: two constructions of it are two
+ * places for a deployment switch to be read differently, and the one that drifts is the one
+ * nobody looks at.
+ */
+export function buildToolTrajectorySinks(args: {
+  env: Env
+  config: AppConfig
+  db: D1Database
+  clock: Clock
+}): {
+  recordToolCalls: NonNullable<ContainerRepoBootstrapperDependencies['recordToolCalls']>
+  toolBodyGate: StoreAgentContextGate
+  llmTraceSink: ContainerRepoBootstrapperDependencies['llmTraceSink']
+} {
+  const { env, config, db, clock } = args
+  // Persist the tool calls each poll drains as trajectory rows: what the agent DID, beside
+  // the per-call cost rows. Built from the same telemetry DB: a stateless writer whose capture
+  // gate needs the settings repository. Absent settings would open the body gate, and a tool
+  // call's arguments are as model-authored as a prompt is.
+  const recordToolCalls = makeToolCallRecorder(
+    new ToolCallObservabilityService({
+      agentToolCallRepository: new D1AgentToolCallRepository({ db: requireTelemetryDb(env) }),
+      clock,
+    }),
+    logger,
+  )
+  // The double gate on those calls' captured bodies, composed HERE (the facade is what knows the
+  // deployment switch) and applied once per drain, so the store and any external trace sink see
+  // the same decision. `false` short-circuits the settings read entirely.
+  const toolBodyGate: StoreAgentContextGate = config.observability.recordPrompts
+    ? createStoreAgentContextGate({ repository: new D1WorkspaceSettingsRepository({ db }) })
+    : () => Promise.resolve(false)
+  return { recordToolCalls, toolBodyGate, llmTraceSink: buildTraceSink(config) }
 }
 
 /**
@@ -436,23 +479,10 @@ function buildContainerExecutor(deps: WorkerExecutorDeps): AgentExecutor | null 
       logger,
     }),
   )
-  // Persist the tool calls each poll drains as trajectory rows — what the agent DID, beside
-  // the per-call cost rows above. Built here from the same telemetry DB for the same reason:
-  // a stateless writer whose capture gate needs the settings repository. Absent settings would
-  // open the body gate, and a tool call's arguments are as model-authored as a prompt is.
-  const recordToolCalls = makeToolCallRecorder(
-    new ToolCallObservabilityService({
-      agentToolCallRepository: new D1AgentToolCallRepository({ db: requireTelemetryDb(env) }),
-      clock,
-    }),
-    logger,
-  )
-  // The double gate on those calls' captured bodies, composed HERE (the facade is what knows the
-  // deployment switch) and applied once per drain, so the store and any external trace sink see
-  // the same decision. `false` short-circuits the settings read entirely.
-  const toolBodyGate: StoreAgentContextGate = config.observability.recordPrompts
-    ? createStoreAgentContextGate({ repository: new D1WorkspaceSettingsRepository({ db }) })
-    : () => Promise.resolve(false)
+  // The trajectory drain's sinks and body gate, built by the shared builder below, because the
+  // repo bootstrapper drains through the same three and two constructions is how one deployment
+  // ends up storing a bootstrap's tool-call bodies its executor would have withheld.
+  const { recordToolCalls, toolBodyGate } = buildToolTrajectorySinks({ env, config, db, clock })
   // Modeled subscription quota-cycle provider (usage-and-quota-tracking, Part B): folds a
   // finished subscription run's tokens into rolling windows (real vendor reads land in B2,
   // so its adapter registry is empty today — every vendor reports modeled).
