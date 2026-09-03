@@ -388,7 +388,28 @@ PR merged.
 - **Three verdicts, not a nullable.** `not_found` is the entry to fix, `not_connected` is a
   workspace to bind, `unreadable` is the provider being down and NOBODY's configuration. Collapsed
   into one, an outage tells an operator to go and correct a value that is already right, which is
-  the misattribution the 503-with-a-reason rule exists to prevent.
+  the misattribution the 503-with-a-reason rule exists to prevent. The verdict is produced ONCE, by
+  a probe both the pre-flight and the dispatch share: they used to ask the same question with
+  different code, so the same rate limit read as an outage at run start and as a wrong entry at
+  dispatch.
+- **`not_connected` also covers a connection on ANOTHER provider.** The bootstrapper holds one
+  client and is told which provider it speaks (`engineVcsProvider`), so a GitLab-connected
+  workspace on a facade whose bootstrap path is the GitHub App is refused rather than probed with
+  the wrong credential: probing answers 404, which would report a correct entry as the wrong
+  repository. Same disposition, and same reasoning, as `makeResolveRepoFilesForCoords`.
+- **READABLE is not GRANTED, and no read on the port separates them cheaply.** `repository_ids`
+  may only name repositories the installation holds, while a PUBLIC repository reads through the
+  API without being one, so such a template pre-flights `reachable` and its scoped mint is refused
+  with a 422. `getRepoById` looks like the discriminator and is not: the GitLab adapter answers it
+  from a bounded project listing, so a null there would refuse working setups. What is done
+  instead is to make the mint's refusal name the repository to grant, and to say so where the
+  verdict is defined. Dropping the leg was the other candidate and is worse: it hands the harness
+  a credential for a repo the job body still tells it to clone.
+- **The survey degrades rather than throwing, including when the BOOTSTRAPPER is the thing that is
+  gone.** It runs behind an atomic claim, so a throw after the claim writes no plan and leaves the
+  run `running` with nothing to settle until the claim goes stale. A deployment that lost its
+  container wiring mid-run therefore gets an `unreadable` template note saying exactly that, and a
+  reviewer who can still make every decision unaided.
 - **The new-repo path never scoped its token to the template it clones.** `repoIds` held the target
   alone and the clone URL assumed `main`, so a PRIVATE template was uncloneable and one on any other
   default branch was cloned at a ref that does not exist, both surfacing as a bare git error. The

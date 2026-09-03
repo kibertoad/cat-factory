@@ -56,9 +56,11 @@ function makeBootstrapper(
   client: GitHubClient,
   transport: RunnerTransport,
   mint: MintSpy = makeMint(),
+  /** The installation the workspace resolves to, or a read that fails outright. */
+  installation: () => Promise<GitHubInstallation | null> = async () => INSTALLATION,
 ): ContainerRepoBootstrapper {
   const installationRepository = {
-    getByWorkspace: vi.fn(async () => INSTALLATION),
+    getByWorkspace: vi.fn(installation),
   } as unknown as GitHubInstallationRepository
   const sessionService = {
     mint: vi.fn(async () => 'session-token'),
@@ -69,6 +71,8 @@ function makeBootstrapper(
     bootstrapJobRepository: {} as never,
     repoRepository: {} as never,
     githubClient: client,
+    // Every test here drives the GitHub-App shape, which is what the two hosted facades wire.
+    clientProvider: 'github',
     mintInstallationToken: mint,
     sessionService,
     model: { provider: 'workers-ai', model: '@cf/test' },
@@ -314,6 +318,38 @@ describe('ContainerRepoBootstrapper.resolveReferenceRepo', () => {
     const outage = await down.resolveReferenceRepo('ws_1', TEMPLATE)
     expect(outage.status).toBe('unreadable')
   })
+
+  it('reports a failed INSTALLATION read as unreadable rather than throwing', async () => {
+    // The contract two callers lean on: the survey parks with what it knows, and the pre-flight
+    // owes a 503. On a mothership-mode node this read is an RPC to a second process, so a throw
+    // from here would arrive as a 500 about somebody's own reference architecture, and, in the
+    // survey, would arrive after the claim was taken, leaving the run parked on nothing.
+    const bootstrapper = makeBootstrapper(fakeClient(), {} as RunnerTransport, makeMint(), () => {
+      throw new Error('persistence RPC unreachable')
+    })
+
+    const access = await bootstrapper.resolveReferenceRepo('ws_1', TEMPLATE)
+    expect(access.status).toBe('unreadable')
+    if (access.status !== 'unreadable') return
+    expect(access.detail).toContain('persistence RPC unreachable')
+  })
+
+  it('refuses a connection on ANOTHER provider instead of probing it with this client', async () => {
+    // A GitLab-connected workspace on a facade whose bootstrap path is the GitHub App. Reading
+    // its installation id through the App client answers 404, and reporting THAT as `not_found`
+    // tells the operator their reference architecture names the wrong repository when the entry
+    // is fine and the deployment simply does not reach their provider from here.
+    const client = fakeClient()
+    const bootstrapper = makeBootstrapper(client, {} as RunnerTransport, makeMint(), async () => ({
+      ...INSTALLATION,
+      provider: 'gitlab',
+    }))
+
+    expect(await bootstrapper.resolveReferenceRepo('ws_1', TEMPLATE)).toEqual({
+      status: 'not_connected',
+    })
+    expect(client.getRepo).not.toHaveBeenCalled()
+  })
 })
 
 describe('ContainerRepoBootstrapper reference-template dispatch', () => {
@@ -343,7 +379,47 @@ describe('ContainerRepoBootstrapper reference-template dispatch', () => {
     expect(body.repo).toMatchObject({ name: 'service-template', baseBranch: 'trunk' })
   })
 
-  it('refuses before dispatch when the template cannot be read, naming it', async () => {
+  it('asks for the template ONCE in the token scope when it is the run’s own target', async () => {
+    // `repository_ids` is a set, and a reference architecture naming the repository the run is
+    // bootstrapping is a legitimate configuration (a template adapted in place). The hand-built
+    // array asked GitHub for the same id twice; the shared scope builder is what dedupes it.
+    const mint = makeMint()
+    const dispatch = vi.fn(async () => undefined)
+    const client = fakeClient({
+      getRepo: vi.fn(async () => ({ defaultBranch: 'main', githubId: 1 })),
+    } as unknown as Partial<GitHubClient>)
+    const bootstrapper = makeBootstrapper(client, { dispatch } as unknown as RunnerTransport, mint)
+
+    await bootstrapper.startBootstrap(REFERENCE_REQUEST)
+    expect(mint.mock.calls[0]?.[1]?.repoIds).toEqual(['1'])
+  })
+
+  it('names the template when the SCOPED mint is refused', async () => {
+    // The one failure this component cannot pre-flight away: a public template reads fine through
+    // the API without the App having been granted it, and a token cannot be scoped to a
+    // repository the installation does not hold, so GitHub refuses the mint. Left bare, that
+    // arrives as `Failed to mint installation token for 99 (HTTP 422)`, naming neither the
+    // template nor what to grant.
+    const mint = vi.fn<MintInstallationToken>(async () => {
+      throw new Error('Failed to mint installation token for 99 (HTTP 422)')
+    })
+    const dispatch = vi.fn(async () => undefined)
+    const client = fakeClient({
+      getRepo: vi.fn(async (_id: number, ref: { repo: string }) =>
+        ref.repo === 'service-template'
+          ? { defaultBranch: 'trunk', githubId: 55 }
+          : { defaultBranch: 'main', githubId: 1 },
+      ),
+    } as unknown as Partial<GitHubClient>)
+    const bootstrapper = makeBootstrapper(client, { dispatch } as unknown as RunnerTransport, mint)
+
+    await expect(bootstrapper.startBootstrap(REFERENCE_REQUEST)).rejects.toThrow(
+      /grant the App access to acme\/service-template/i,
+    )
+    expect(dispatch).not.toHaveBeenCalled()
+  })
+
+  it('refuses before dispatch when the template is not THERE, naming it and the fix', async () => {
     // The run is pre-flighted at start, but an apply dispatch can be days later. A swallowed
     // failure here scoped the token to the monorepo alone and left the harness reporting a bare
     // clone error about a sibling checkout nobody had named.
@@ -359,8 +435,31 @@ describe('ContainerRepoBootstrapper reference-template dispatch', () => {
     const bootstrapper = makeBootstrapper(client, { dispatch } as unknown as RunnerTransport)
 
     await expect(bootstrapper.startBootstrap(MONOREPO_REQUEST)).rejects.toThrow(
-      /reference template acme\/service-template cannot be read/i,
+      /reference template acme\/service-template cannot be seen/i,
     )
+    expect(dispatch).not.toHaveBeenCalled()
+  })
+
+  it('refuses a TRANSIENT template failure as one, keeping the provider error as the cause', async () => {
+    // Same refusal, opposite advice. Collapsed into "point the reference architecture at a
+    // repository this workspace can reach", a rate limit sends someone to correct an entry that
+    // is already right, and the run is recorded failed as a pre-flight nobody can retry into
+    // success. The provider error stays bound as `cause` so a log describer can still see which
+    // of the two it was.
+    const dispatch = vi.fn(async () => undefined)
+    const outage = new VcsApiError('github', 403, 'GitHub GET /repos/acme/service-template → 403')
+    const client = fakeClient({
+      getRepo: vi.fn(async (_id: number, ref: { repo: string }) => {
+        if (ref.repo === 'service-template') throw outage
+        return { defaultBranch: 'main', githubId: 1 }
+      }),
+    } as unknown as Partial<GitHubClient>)
+    const bootstrapper = makeBootstrapper(client, { dispatch } as unknown as RunnerTransport)
+
+    await expect(bootstrapper.startBootstrap(MONOREPO_REQUEST)).rejects.toMatchObject({
+      message: expect.stringMatching(/could not be read just now/i),
+      cause: outage,
+    })
     expect(dispatch).not.toHaveBeenCalled()
   })
 })

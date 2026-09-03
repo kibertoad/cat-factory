@@ -78,6 +78,10 @@ export function selectRepoBootstrapper(
     bootstrapJobRepository: new D1BootstrapJobRepository({ db }),
     repoRepository: new D1RepoProjectionRepository({ db }),
     githubClient,
+    // The client above is the GitHub App's, and this whole builder is gated on the App being
+    // configured, so the provider it speaks is not in doubt. Stated anyway: it is what refuses a
+    // workspace connected to another provider instead of probing it with the wrong credential.
+    clientProvider: 'github',
     // Narrowed to the one repo being scaffolded (see the shared builder).
     mintInstallationToken: workerDispatchTokenMint(registry),
     sessionService: new ContainerSessionService({ secret: env.AUTH_SESSION_SECRET }),

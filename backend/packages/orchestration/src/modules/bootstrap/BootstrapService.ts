@@ -199,6 +199,21 @@ function exhaustiveReferenceVerdict(access: never): never {
   throw new Error(`Unhandled reference-repository verdict: ${JSON.stringify(access)}`)
 }
 
+/**
+ * The refusal for a workspace with no source-control connection to bootstrap through.
+ *
+ * ONE sentence, two raisers: the connection gate every run passes, and the reference-template
+ * verdict that reports the same absence (a retry reaches the second without the first, since it
+ * resolves the architecture rather than re-asking about the connection). Two literal copies of
+ * one user-facing sentence in one file drift the moment either is reworded.
+ */
+function notConnected(): ConflictError {
+  return new ConflictError(
+    'Workspace is not connected to GitHub. Install the GitHub App for this workspace before bootstrapping a repository.',
+    'github_not_connected',
+  )
+}
+
 /** Join the reference architecture's default instructions with per-run extras. */
 function composeInstructions(defaults: string, extra: string): string {
   return [defaults.trim(), extra.trim()].filter((part) => part.length > 0).join('\n\n')
@@ -366,10 +381,7 @@ export class BootstrapService {
     // so an unconnected workspace fails fast with a clear 409 instead of leaving a
     // job that immediately fails deep inside the container run.
     if (!(await bootstrapper.isWorkspaceConnected(workspaceId))) {
-      throw new ConflictError(
-        'Workspace is not connected to GitHub. Install the GitHub App for this workspace before bootstrapping a repository.',
-        'github_not_connected',
-      )
+      throw notConnected()
     }
 
     // A reference architecture is optional: when supplied the run clones and adapts
@@ -513,8 +525,11 @@ export class BootstrapService {
    * provider whether that repository is there: a monorepo run answered by surveying the template
    * as unread (which reads to a reviewer as a template with no opinion, not as a template nobody
    * opened), and a new-repo run answered several minutes later with a clone failure, both with a
-   * job row and a board card already left behind. It is resolved through the BOOTSTRAPPER, so
-   * what is pre-flighted is exactly the reach the clone will have.
+   * job row and a board card already left behind. It is resolved through the BOOTSTRAPPER, so the
+   * connection and the client asked here are the ones the clone credential is minted from. Not
+   * the same question as the clone's, though: this asks whether the template can be READ, and a
+   * public repository the App was never granted answers yes to that and no to a scoped clone
+   * token, which is refused at dispatch instead (see `ReferenceRepoAccess`).
    *
    * Three verdicts, three refusals, because they need three different next moves and only one of
    * them is about this run's inputs. Each carries the architecture's id and name, so the launch
@@ -539,10 +554,7 @@ export class BootstrapService {
       case 'reachable':
         return
       case 'not_connected':
-        throw new ConflictError(
-          'Workspace is not connected to GitHub. Install the GitHub App for this workspace before bootstrapping a repository.',
-          'github_not_connected',
-        )
+        throw notConnected()
       case 'not_found':
         throw new ValidationError(
           `The reference architecture "${reference.name}" points at ${repo}, which this workspace's source-control connection cannot see. Either it names the wrong repository, or the connection has not been granted access to it. Correct the reference architecture (or grant it access) and launch again: nothing has been created.`,
@@ -966,10 +978,13 @@ export class BootstrapService {
       return { state: 'running' }
     }
     // Read AFTER the short-circuit and the claim, never at the top: a run that is already parked
-    // needs nothing from the bootstrapper, and throwing there would turn a deployment that lost
-    // its container wiring into a driver that can no longer even report a settled park.
-    const bootstrapper = this.deps.repoBootstrapper
-    if (!bootstrapper) throw new Error('Repository bootstrapping is not configured')
+    // needs nothing from the bootstrapper. Absent, it is passed on as absent rather than thrown
+    // on, and for the same reason every other missing dependency in this phase parks instead of
+    // failing: the claim has already been taken, so a throw here burns it and writes no plan, and
+    // the run sits `running` with nothing for a human to settle until the claim goes stale. The
+    // survey needs it for the TEMPLATE side alone, which is how it degrades: the note says the
+    // template was not read and the decisions stay the reviewer's to make.
+    const bootstrapper = this.deps.repoBootstrapper ?? null
     const reference = record.referenceArchitectureId
       ? await this.deps.referenceArchitectureRepository.get(
           workspaceId,

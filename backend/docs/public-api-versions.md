@@ -123,3 +123,23 @@ the later angles were still fishing is being told what is left).
 Additive throughout: a new enum member on two existing unions and two new optional payload fields.
 The SDKs tolerate an unknown enum value and ignore unknown fields by design, so a consumer built
 against 1.66.0 keeps parsing.
+
+## 1.68.0
+
+`POST /api/v1/repos/bootstrap` gains two refusals, both about the reference architecture a creation
+names: `422` with `details.reason: reference_repo_not_found` when the workspace's source-control
+connection cannot see that repository, and `503` with `reference_repo_unreadable` when the probe
+itself failed. Each carries `details.referenceArchitectureId` and `details.repo`.
+
+Additive in shape (two new `details.reason` values on statuses this surface already answers), and
+a change of BEHAVIOUR a caller has to notice, which is why it is written down rather than left to
+the spec: the template is now checked before anything is recorded, so a refusal about it arrives as
+an HTTP error instead of a `failed` creation in the `201`. A caller that only branches on the
+creation body sees an exception where it used to see a job it could read `failureKind` off. Nothing
+that used to succeed now fails: the same runs previously failed several minutes later inside the
+container, with a job row and a board card left behind.
+
+A template the connection can READ but the App was never granted still passes the check and fails
+at dispatch, as a `failed` creation whose message names the repository to grant. A public
+repository is the case that reaches it: `repository_ids` may only name repositories an installation
+holds, and reading one proves nothing about that.

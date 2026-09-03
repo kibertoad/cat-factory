@@ -1195,6 +1195,21 @@ target repository already has content), `failed` with the reason already filled 
 state can arrive in the 201 itself, and a caller that treats a `failed` creation as impossible skips
 the branch it will actually hit first.
 
+**Two refusals arrive as HTTP errors instead, and both are about the REFERENCE ARCHITECTURE**, which
+is checked against the workspace's source-control connection before anything is recorded. There is
+no run to report a `failed` creation for, which is the point of checking that early:
+
+- `422` `details.reason: reference_repo_not_found`: the connection cannot see the repository the
+  entry names. Either it names the wrong one or the App has not been granted it; both are fixed by
+  editing the reference architecture (or widening the grant) and creating again.
+- `503` `details.reason: reference_repo_unreadable`: the probe itself failed, so reachability is
+  unknown. Nothing is misconfigured and no edit helps: retry.
+
+Both carry `details.referenceArchitectureId` and `details.repo` (`owner/name`), so a caller can name
+the entry rather than the request. A template the connection can READ but the App was never granted
+(a public repository is the reachable case) passes this check and fails at dispatch instead, as a
+`failed` creation whose message names the repository to grant.
+
 **Poll until `status` is `succeeded` or `failed`.** On a failure, read `failureKind` before deciding
 to retry: a `preflight` refusal (the target repository already has content, nothing is connected)
 cannot be retried into success, where an `evicted` container can. `harness_shutdown` sits with the

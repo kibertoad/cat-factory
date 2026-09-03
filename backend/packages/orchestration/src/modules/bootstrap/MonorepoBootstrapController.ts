@@ -134,6 +134,31 @@ function describeUnknownTemplateVerdict(access: never): string {
   return `it was not surveyed (${JSON.stringify(access)})`
 }
 
+/**
+ * The template's reachability, or the STATED outage of the component that answers it.
+ *
+ * An unwired bootstrapper is not a reachable template and not an unreachable one either: nothing
+ * asked. It is reported as `unreadable` with that as the detail, because the alternative for a
+ * best-effort seam is to fall through to nothing, and an omitted template note reads to a
+ * reviewer exactly like a template that had no opinion.
+ */
+async function resolveTemplateAccess(
+  bootstrapper: RepoBootstrapper | null,
+  workspaceId: string,
+  reference: ReferenceArchitectureRecord,
+): Promise<ReferenceRepoAccess> {
+  if (!bootstrapper) {
+    return {
+      status: 'unreadable',
+      detail: 'repository bootstrapping is not configured on this deployment',
+    }
+  }
+  return await bootstrapper.resolveReferenceRepo(workspaceId, {
+    owner: reference.repoOwner,
+    name: reference.repoName,
+  })
+}
+
 /** A resolved monorepo target plus what the survey will need to read it. */
 export interface ResolvedMonorepoTarget {
   ref: MonorepoBootstrapRef
@@ -243,9 +268,14 @@ export class MonorepoBootstrapController {
    * becomes a plan recorded `unavailable` with the cause, because the run parks either way and a
    * reviewer who is shown nothing must be told whether that means "the two agree" or "the
    * analysis never ran".
+   *
+   * `bootstrapper` is nullable for that same contract. It is needed for the TEMPLATE side alone,
+   * and a deployment that lost its container wiring between starting this run and driving it must
+   * still reach a park a human can settle: the caller has already taken the survey claim, so a
+   * throw from here writes no plan and leaves the run `running` on nothing.
    */
   async buildAdoptionPlan(
-    bootstrapper: RepoBootstrapper,
+    bootstrapper: RepoBootstrapper | null,
     workspaceId: string,
     record: BootstrapJobRecord,
     reference: ReferenceArchitectureRecord | null,
@@ -272,10 +302,7 @@ export class MonorepoBootstrapController {
     // its queue) the transcript SAYS so, because "the template ships nothing for this area" and
     // "nobody looked at the template" lead a reviewer to opposite conclusions.
     const templateAccess = reference
-      ? await bootstrapper.resolveReferenceRepo(workspaceId, {
-          owner: reference.repoOwner,
-          name: reference.repoName,
-        })
+      ? await resolveTemplateAccess(bootstrapper, workspaceId, reference)
       : null
     const templateSide =
       templateAccess?.status === 'reachable'

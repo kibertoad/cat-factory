@@ -64,6 +64,7 @@ import {
   ENV_VARS_ANCHORS,
   SITE_DOCS,
   buildDispatchTokenMint,
+  engineVcsProvider,
   ensureWorkBranchViaRest,
   logger,
   noRunnerBackendAvailableError,
@@ -539,6 +540,10 @@ export function selectNodeRepoBootstrapper(deps: {
     repoRepository: deps.repoRepository,
     ...(deps.repoProjectionCache ? { repoProjectionCache: deps.repoProjectionCache } : {}),
     githubClient: deps.githubClient,
+    // Which provider that client speaks, derived through the SAME rule the clone URL and the
+    // engine's own client follow (`engineVcsProvider`), so the bootstrapper cannot end up asking
+    // a GitHub client about a GitLab workspace's template and reporting its 404 as a wrong entry.
+    clientProvider: engineVcsProvider(deps.config),
     mintInstallationToken: deps.mintInstallationToken,
     sessionService: new ContainerSessionService({ secret: sessionSecret }),
     model: resolveAgentConfig(deps.config.agents.routing, 'architect').ref,

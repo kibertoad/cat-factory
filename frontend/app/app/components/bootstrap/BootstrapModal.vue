@@ -4,10 +4,11 @@
 // adapt it (in a sandbox container) — either by cloning a chosen reference
 // architecture, or from scratch following a freeform prompt. The modal pairs the
 // launch form with the managed base list.
-import type { BootstrapReferenceReason } from '@cat-factory/contracts'
 import type { BootstrapStatus, FrameRepoType, ReferenceArchitecture } from '~/types/domain'
-import { apiErrorEnvelope } from '~/composables/api/errors'
 import {
+  type ReferenceRefusal,
+  referenceRefusalOf,
+  referenceRefusalSurvivesSave,
   serviceDirectoryLeaf,
   serviceDirectoryParent,
 } from '~/components/bootstrap/BootstrapModal.logic'
@@ -208,29 +209,9 @@ const selectedArch = computed(() =>
 // it records anything, so this refusal costs the user nothing except a correction: the run does
 // not exist, the board has no card, and every other field of this form is still filled in. That
 // is what the alert is for. A toast would say the same words and then disappear, leaving the
-// person to work out which of the two repositories in this dialog was the problem.
-interface ReferenceRefusal {
-  reason: BootstrapReferenceReason
-  /** The entry that named the repository, so the fix opens the right one of several. */
-  architectureId: string | null
-  /** `owner/name` as the entry spells it. */
-  repo: string | null
-}
-
+// person to work out which of the two repositories in this dialog was the problem. Reading it off
+// the wire, and deciding when a save makes it stale, are in `BootstrapModal.logic.ts`.
 const referenceRefusal = ref<ReferenceRefusal | null>(null)
-
-/** The refusal a failed launch carries, or null when it failed for anything else. */
-function referenceRefusalOf(error: unknown): ReferenceRefusal | null {
-  const details = (apiErrorEnvelope(error)?.details ?? {}) as Record<string, unknown>
-  const reason = details.reason
-  if (reason !== 'reference_repo_not_found' && reason !== 'reference_repo_unreadable') return null
-  return {
-    reason,
-    architectureId:
-      typeof details.referenceArchitectureId === 'string' ? details.referenceArchitectureId : null,
-    repo: typeof details.repo === 'string' ? details.repo : null,
-  }
-}
 
 const referenceRefusalMessage = computed(() => {
   const refusal = referenceRefusal.value
@@ -260,7 +241,8 @@ function editRefusedArchitecture() {
 // A refusal is about ONE entry as it was, so picking a different reference architecture makes it
 // stale, and a stale error banner reads as a live one. Reopening the dialog clears it for the same
 // reason: the form deliberately keeps its fields across opens, but a refusal is not a field, it is
-// a claim about a check that has not been made again. Saving an edit clears it too (`saveArch`).
+// a claim about a check that has not been made again. Saving the refused entry clears it too
+// (`saveArch`), and saving any other one deliberately does not.
 watch([open, selectedArchId], () => {
   referenceRefusal.value = null
 })
@@ -532,11 +514,12 @@ async function saveArch() {
       description: archForm.value.description.trim(),
       defaultInstructions: archForm.value.defaultInstructions.trim(),
     }
-    if (archForm.value.id) await bootstrap.updateArchitecture(archForm.value.id, body)
+    const editedId = archForm.value.id
+    if (editedId) await bootstrap.updateArchitecture(editedId, body)
     else await bootstrap.createArchitecture(body)
-    // The entry the refusal named has been rewritten, so the refusal no longer describes it.
-    // Whether the new value is reachable is the next launch's question, not this save's.
-    referenceRefusal.value = null
+    if (!referenceRefusalSurvivesSave(editedId, referenceRefusal.value)) {
+      referenceRefusal.value = null
+    }
     showArchForm.value = false
     archForm.value = blankForm()
     archRepoSlug.value = undefined

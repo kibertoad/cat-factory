@@ -25,8 +25,15 @@ the entry and retrying is the way out with every other value of the run intact.
 
 Two clone bugs fall out of resolving the template properly: a new-repo run scoped its job token to
 the target alone, so a PRIVATE template was uncloneable, and it assumed the template's default
-branch was `main`. Both surfaced as bare git errors.
+branch was `main`. Both surfaced as bare git errors. The scope goes through the shared
+`jobTokenRepoIds`, so a template that IS the run's own target is asked for once rather than twice,
+and a mint GitHub refuses (`repository_ids` may only name repositories the installation holds,
+which reading a public repository does not prove) is reported naming the repository to grant.
 
-Behaviour change worth noting on `POST /api/v1/bootstraps`: it delegates to the same service
-method, so it gains the same refusal. A request that used to be accepted and then fail its run is
-now refused synchronously.
+The bootstrapper is also told which provider its client speaks, so a workspace connected to
+another one is refused as unconnected rather than probed with the wrong credential and reported as
+a reference architecture naming the wrong repository.
+
+Behaviour change worth noting on `POST /api/v1/repos/bootstrap`: it delegates to the same service
+method, so it gains the same refusals, as a 422/503 rather than a `failed` creation in the 201.
+The public surface version moves to 1.68.0 and `backend/docs/public-api.md` documents both.

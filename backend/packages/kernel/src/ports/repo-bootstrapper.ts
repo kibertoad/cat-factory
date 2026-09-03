@@ -127,12 +127,19 @@ export interface MonorepoTargetRepo {
  * failed probe is the provider being down. Collapsing them would report an outage as a typo.
  *
  * It lives on this port for the reason {@link RepoBootstrapper.resolveMonorepoTarget} does, plus
- * one of its own: this component is what CLONES the template at apply time, so resolving it here
- * makes the pre-flight and the clone agree by construction. Resolving it through the workspace's
- * repo PROJECTION instead is what they used to disagree about: a template is named by owner and
- * name in a reference-architecture record and is not, in general, a repo the board has linked, so
- * the survey reported "nobody looked at the template" for a repository the apply phase then went
- * on to clone perfectly well.
+ * one of its own: this component is what CLONES the template at apply time, so it asks the same
+ * connection, through the same client, that the clone credential is minted from. Resolving it
+ * through the workspace's repo PROJECTION instead is what they used to disagree about: a template
+ * is named by owner and name in a reference-architecture record and is not, in general, a repo the
+ * board has linked, so the survey reported "nobody looked at the template" for a repository the
+ * apply phase then went on to clone perfectly well.
+ *
+ * `reachable` is READABILITY, which is what a survey needs and one step short of what a clone
+ * needs. A PUBLIC repository reads through the provider's API without the App having been granted
+ * it, and a token scoped to the repos a run resolved cannot cover one it was not granted, so such
+ * a template passes here and is refused at DISPATCH, where the message names the repository to
+ * grant. There is no read on this port that separates the two cheaply on every provider, and
+ * guessing would refuse working setups.
  */
 export type ReferenceRepoAccess =
   | {
@@ -142,7 +149,12 @@ export type ReferenceRepoAccess =
       /** The branch the template is read at. */
       defaultBranch: string
     }
-  /** No VCS connection on this workspace, so nothing can be read or cloned. */
+  /**
+   * No VCS connection this bootstrapper can read the template through: none on the workspace, a
+   * tombstoned one, or one on ANOTHER provider than the client serving this deployment's engine
+   * (a GitLab-connected workspace on a facade whose bootstrap path is the GitHub App). All three
+   * are the same next move for the operator, and none of them is about the entry.
+   */
   | { status: 'not_connected' }
   /** The provider answered: this workspace's credential cannot see that repository. */
   | { status: 'not_found' }
@@ -192,9 +204,11 @@ export interface RepoBootstrapper {
    * run that names a reference architecture takes before anything is recorded, and the reader the
    * monorepo survey reads the template side with.
    *
-   * Never throws for a repository it merely cannot reach: the caller turns each verdict into its
-   * own refusal, and a thrown provider error would arrive as a 500 telling the operator to file a
-   * platform bug about their own typo.
+   * NEVER THROWS, for anything: not for a repository it cannot reach, and not for the repository
+   * or connection read it takes to get there. The caller turns each verdict into its own refusal,
+   * and a thrown provider error would arrive as a 500 telling the operator to file a platform bug
+   * about their own typo, while a thrown STORE error would strand the survey phase, whose whole
+   * contract is that it parks with what it knows rather than failing the run.
    */
   resolveReferenceRepo(
     workspaceId: string,
