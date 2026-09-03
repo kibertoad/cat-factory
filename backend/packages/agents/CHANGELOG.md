@@ -1,5 +1,70 @@
 # @cat-factory/agents
 
+## 0.154.0
+
+### Minor Changes
+
+- e7e1f8c: Bug fishing expeditions: hunt a codebase for the defects nobody has reported yet
+  
+  Every defect flow the platform had started from a REPORT: `bug-investigator` triages one,
+  `pl_bugfix` fixes one, `bug-hunt` picks one off a tracker board. Nothing looked for the defects
+  nobody has hit, and those are the ones that surface as an incident rather than as a ticket.
+  
+  A new `bug-fishing` task type runs the new read-only `bug-fisher` agent over a service's codebase
+  once per ANGLE — logic and control flow, failure handling, boundary conditions, concurrency and
+  idempotency, state and resource lifecycle, interface contracts, footguns, and conformance with the
+  supplied product requirements. One pass told to find everything returns the shallow half of
+  everything; a pass told to think only about concurrency reads the same files with a question that
+  makes the race visible, and each angle is its own dispatch with a fresh context, so one angle's
+  reading never lands on another's transcript. Nothing is written and no pull request is opened.
+  
+  Triage does not wait for the hunt. A finished angle's findings are final the moment they land, so
+  the expedition window offers them while later angles are still fishing, and each finding a human
+  MARKS spawns its own bug-fix task — carrying the finding's evidence and reproduction — on the
+  pipeline the board configures for spawned fixes (`bugFishingFixPipelineId`, defaulting to the
+  built-in bug-fix preset, overridable per batch). The spawned task links back through the new
+  `Block.expeditionId`.
+  
+  Refusals are deliberately loud rather than convenient. A pass that crashes settles THAT angle as
+  failed carrying its reason, and so does one that answers unusably (no `result.custom`, or a blob
+  the schema rejects), because a phase that silently reported nothing is indistinguishable from one
+  that honestly found nothing — and which angles came back empty is the whole thing a human reads.
+  A mark whose fix task cannot be created — a pipeline that no longer exists, or one that cannot be
+  started on a one-off task — fails with the pipeline named instead of answering 200 and leaving
+  somebody waiting for a task that will never appear. Dismissing an id the expedition does not carry
+  is refused rather than quietly accepted. And an expedition that caught nothing still parks and
+  says so.
+  
+  Marking is safe against two people at once. Creating the task and recording it after would let two
+  markings of one finding each file the same bug and start a run for it, so the finding's spawn
+  record is taken as a `pending` CLAIM under the run's compare-and-swap, carrying the block id it is
+  about to create, and settled to `spawned` or `failed` behind the work. The consequence for anyone
+  reading the state: whether a finding is being fixed is its spawn's `status`, not the record being
+  present. A spawned fix is also created the way the create form would have created it — with the
+  service's standing standards and the marking user as its creator — so it is held to the same
+  standards as the identical bug filed by hand, and the notifications its run raises reach somebody.
+  
+  The pre-dispatch input gate learned about the type: a bug-fishing task legitimately carries no
+  description, because its input is the codebase, so `description_missing` no longer parks one at
+  step 0.
+  
+  Public API: `taskType` gains `bug-fishing` and `NotificationType` gains `bug_fishing_triage`,
+  with two new optional notification-payload fields (`phaseCount`, `untriagedFindingCount`). Both are
+  additive enum members the SDKs already tolerate; the spec is `1.67.0`.
+  
+  Internal break: `workspace_settings` and `blocks` each gain a column, and
+  `ExecutionServiceDependencies` gains an optional `serviceRepository` plus an optional
+  `promptFragmentSource` (the pool a newly created task's default fragments come from, so a spawned
+  fix reads the same one the create form does). Both facades ship the migration.
+
+### Patch Changes
+
+- Updated dependencies [e7e1f8c]
+- Updated dependencies [a1802d9]
+  - @cat-factory/contracts@0.344.0
+  - @cat-factory/kernel@0.333.0
+  - @cat-factory/prompt-fragments@1.1.27
+
 ## 0.153.1
 
 ### Patch Changes
