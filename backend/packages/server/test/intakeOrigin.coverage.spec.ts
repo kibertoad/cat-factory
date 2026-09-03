@@ -90,6 +90,13 @@ const IN_APP: Record<string, string> = {
     "would resolve no issues and post nothing. Propagating the initiative run's own origin would " +
     'cost a repository read per spawned item on the ticker path (the no-N+1 rule) to change ' +
     'nothing observable. Revisit if initiative children ever gain a ticket.',
+  'orchestration:modules/execution/BugFishingController.ts':
+    'the bug-fix task a MARKED bug-fishing finding spawns. Two reasons, and the first is the ' +
+    'one that decides it: the mark is an in-app act, a signed-in person pressing Fix in the ' +
+    'expedition window on their own board, so the app they are looking at is exactly where a ' +
+    'park should ask them. The second is that it has nowhere else to go anyway — the block is ' +
+    'minted from a finding the agent wrote and carries no linked ticket, so a writeback would ' +
+    'resolve no issues and post nothing, the same dead end the initiative child hits.',
   'orchestration:modules/execution/PostMergeBoardController.ts':
     "the dependent-task cascade after a merge. The dependency edge was authored on somebody's " +
     'board and the follow-on run belongs to that board, so its park raises the in-app review card ' +
