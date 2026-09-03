@@ -16,9 +16,13 @@ import type {
   Clock,
   ExecutionRepository,
   IdGenerator,
+  PipelineRepository,
+  ServiceRepository,
   WorkRunner,
+  WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
 import type { AgentExecutor } from '@cat-factory/kernel'
+import { noopLogger } from '@cat-factory/kernel'
 import type { AgentContextBuilder } from './AgentContextBuilder.js'
 import type { Block } from '@cat-factory/contracts'
 import type { ExecutionServiceDependencies, ResolvedRunRiskPolicy } from './ExecutionService.js'
@@ -34,6 +38,8 @@ import { BinaryCandidateController } from './BinaryCandidateController.js'
 import { ForkDecisionController } from './ForkDecisionController.js'
 import { InputGateController } from './InputGateController.js'
 import { PrReviewController } from './PrReviewController.js'
+import { BugFishingController } from './BugFishingController.js'
+import { createTaskTypeCreationDefaults } from '../board/taskTypeCreationDefaults.js'
 import { InitiativeInterviewController } from './InitiativeInterviewController.js'
 import { DocInterviewController } from './DocInterviewController.js'
 import { buildBrainstormKind, buildClarityKind, buildRequirementsKind } from './review-kinds.js'
@@ -79,6 +85,28 @@ export interface GateWindowControllerDeps {
   issueWriteback: ExecutionServiceDependencies['issueWriteback']
   /** Facade logger for that best-effort echo. */
   logger: ExecutionServiceDependencies['logger']
+  /** Pipeline catalog — a bug-fishing spawn validates its fix pipeline against it. */
+  pipelineRepository: PipelineRepository
+  /** Workspace settings — where the board's default fix pipeline for spawned tasks lives. */
+  workspaceSettingsRepository: WorkspaceSettingsRepository | undefined
+  /** Service rows, so a spawned fix task lands in the same service the expedition fished. */
+  serviceRepository: ServiceRepository | undefined
+  /**
+   * The two halves of "which best-practice fragments does a NEW task of this type start with",
+   * so a bug-fishing spawn can create its fix task through the same rule the create form applies.
+   * The registry supplies a custom type's standing context, the source the per-type defaults.
+   */
+  taskTypeRegistry: ExecutionServiceDependencies['taskTypeRegistry']
+  promptFragmentSource: ExecutionServiceDependencies['promptFragmentSource']
+  /** Board fan-out, so a spawned fix task appears on open boards without a refresh. */
+  events: ExecutionServiceDependencies['executionEventPublisher']
+  /** Bound `ExecutionService.start` — a spawned fix starts through the real entry point. */
+  start: (
+    workspaceId: string,
+    blockId: string,
+    pipelineId: string,
+    opts: { initiatedBy: string | null },
+  ) => Promise<unknown>
 }
 
 /**
@@ -222,6 +250,31 @@ export function buildGateWindowControllers(deps: GateWindowControllerDeps) {
     clock,
     notificationService,
   })
+  const bugFishingController = new BugFishingController({
+    executionRepository,
+    blockRepository,
+    pipelineRepository: deps.pipelineRepository,
+    // Built here rather than injected, so the spawn path reads the rule from the SAME factory
+    // `BoardService` builds its own from: the seam is the rule, and a second implementation of
+    // "what does a new bug task get" is what would let the two answers drift apart.
+    taskTypeDefaults: createTaskTypeCreationDefaults({
+      ...(deps.taskTypeRegistry ? { taskTypeRegistry: deps.taskTypeRegistry } : {}),
+      ...(deps.promptFragmentSource ? { promptFragmentSource: deps.promptFragmentSource } : {}),
+      logger: logger ?? noopLogger,
+    }),
+    ...(deps.workspaceSettingsRepository
+      ? { workspaceSettingsRepository: deps.workspaceSettingsRepository }
+      : {}),
+    stateMachine,
+    stepGraph,
+    idGenerator,
+    clock,
+    notificationService,
+    start: deps.start,
+    ...(deps.serviceRepository ? { serviceRepository: deps.serviceRepository } : {}),
+    ...(deps.events ? { events: deps.events } : {}),
+    ...(logger ? { logger } : {}),
+  })
   const binaryCandidateController = new BinaryCandidateController({
     blockRepository,
     executionRepository,
@@ -240,6 +293,7 @@ export function buildGateWindowControllers(deps: GateWindowControllerDeps) {
     reviewGate,
     forkDecisionController,
     prReviewController,
+    bugFishingController,
     binaryCandidateController,
   }
 }

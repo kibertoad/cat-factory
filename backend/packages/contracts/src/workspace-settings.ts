@@ -317,6 +317,23 @@ export const workspaceSettingsSchema = v.object({
    */
   allowInitiatorPat: v.boolean(),
   /**
+   * The pipeline a bug-fix task spawned from a BUG-FISHING EXPEDITION finding runs, when the
+   * person marking the finding names none. Null ⇒ the built-in bug-fix preset (`pl_bugfix`),
+   * which is what every workspace gets until it sets one.
+   *
+   * A board-level setting rather than a per-expedition field because it is a property of how
+   * this team fixes bugs, not of the hunt that found them: a workspace whose bug work goes
+   * through a leaner (or a stricter) preset wants every spawned fix on it, including the ones
+   * spawned months from now by a recurring expedition nobody re-configures. The marking request
+   * can still override it per batch, and the expedition records which pipeline each spawn
+   * actually took, so a later change here never rewrites history.
+   *
+   * Held as a bare pipeline id and resolved at SPAWN time, so a workspace that deletes the
+   * pipeline it named gets a refusal naming the missing pipeline rather than a silent fallback
+   * onto a preset nobody chose.
+   */
+  bugFishingFixPipelineId: v.nullable(v.string()),
+  /**
    * The workspace's custom metadata values, keyed by the field keys a deployment declares
    * in code. `{}` when nothing has been filled in. See {@link workspaceMetadataSchema}.
    */
@@ -357,6 +374,12 @@ export const updateWorkspaceSettingsSchema = v.object({
   defaultProvisionType: v.optional(v.nullable(provisionTypeSchema)),
   defaultProvisionManifestId: v.optional(v.nullable(manifestIdSchema)),
   allowInitiatorPat: v.optional(v.boolean()),
+  /**
+   * The pipeline spawned bug-fix tasks run (see the settings field). An empty string clears the
+   * selection back to the built-in bug-fix preset, matching how every other pinned-pipeline
+   * field on the platform is cleared.
+   */
+  bugFishingFixPipelineId: v.optional(v.nullable(v.pipe(v.string(), v.trim(), v.maxLength(200)))),
   /**
    * Replace the whole metadata bag. Whole-bag rather than per-key because the editor
    * renders every declared field at once, so a save states the complete intent — and a

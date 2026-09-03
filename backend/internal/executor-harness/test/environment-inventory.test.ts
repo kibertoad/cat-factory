@@ -12,7 +12,7 @@ import {
   type ProbeRunner,
 } from '../src/environment-inventory.js'
 import type { Logger } from '../src/logger.js'
-import type { DockerWorkload } from '../src/docker-capability.js'
+import type { ContainerEgress, DockerWorkload } from '../src/docker-capability.js'
 import { DEFAULT_HARNESS_PORT, harnessListenPort } from '../src/harness-port.js'
 
 // The block the harness appends to every agent's system prompt: what this machine HAS, so no
@@ -41,7 +41,10 @@ const RAN = (output: string): ProbeResult => ({ outcome: 'ran', exitCode: 0, out
  * to close. `ranAContainer` is the neutral one, used wherever the case under test is about the
  * REACHABILITY probe and not about what the daemon can then do.
  */
-const ranAContainer = async (): Promise<DockerWorkload> => ({ status: 'usable' })
+const ranAContainer = async (): Promise<DockerWorkload> => ({
+  status: 'usable',
+  egress: { status: 'reachable' },
+})
 const ranNothing = async (): Promise<DockerWorkload> => ({
   status: 'unusable',
   detail: 'failed to mount overlay: invalid argument',
@@ -173,7 +176,11 @@ describe('probing the machine', () => {
       }),
       noDaemon,
     )
-    expect(inventory.dockerDaemon).toEqual({ status: 'usable', server: '28.0.1' })
+    expect(inventory.dockerDaemon).toEqual({
+      status: 'usable',
+      server: '28.0.1',
+      egress: { status: 'reachable' },
+    })
   })
 
   it('does not read a trimmed probe list as an absent daemon', async () => {
@@ -286,7 +293,11 @@ describe('a daemon that is still coming up', () => {
       workload: ranAContainer,
       sleep: async () => {},
     })
-    expect(inventory.dockerDaemon).toEqual({ status: 'usable', server: '28.0.1' })
+    expect(inventory.dockerDaemon).toEqual({
+      status: 'usable',
+      server: '28.0.1',
+      egress: { status: 'reachable' },
+    })
   })
 
   it('keeps a plain ABSENCE where no daemon was ever coming', async () => {
@@ -368,7 +379,9 @@ describe('rendering the inventory', () => {
   })
 
   it('says what a reachable daemon means and what an unreachable one means', () => {
-    const up = renderEnvironmentInventory(inventory([], { status: 'usable', server: '28.0.1' }))
+    const up = renderEnvironmentInventory(
+      inventory([], { status: 'usable', server: '28.0.1', egress: { status: 'reachable' } }),
+    )
     expect(up).toContain('A Docker daemon is reachable (server 28.0.1)')
     expect(up).toContain('`docker build`, `docker run` and `docker compose up` work here')
 
@@ -383,6 +396,73 @@ describe('rendering the inventory', () => {
     )
     expect(unsure).toContain('could not be determined (the probe timed out)')
     expect(unsure).not.toContain('NO Docker daemon')
+  })
+
+  it('states what a container started HERE can reach, which running one does not settle', () => {
+    // Issue #2174. Loading and running the platform's own image needs no network, so `usable` was
+    // reached identically on a daemon whose nested containers were cut off, and the line above
+    // then told the agent `docker build` works here. Each of the three egress answers gets its own
+    // advice; the `usable` verdict on the daemon does not change, because it is a different fact.
+    const line = (egress: ContainerEgress): string =>
+      renderEnvironmentInventory(inventory([], { status: 'usable', server: '29.7.2', egress }))
+
+    expect(line({ status: 'reachable' })).toContain('also reaches the network')
+
+    const cut = line({ status: 'blocked', detail: 'it has no route out at all' })
+    expect(cut).toContain('could reach NOTHING the platform tried')
+    expect(cut).toContain('it has no route out at all')
+    // Precise about WHICH commands break. "Docker has no network" is false here: the daemon still
+    // pulls base images, so an agent that believed it would skip work it could have done.
+    expect(cut).toContain('pulls base images')
+    expect(cut).toContain('`RUN`')
+    // And the check aimed at two PUBLIC addresses, so it is evidence about those and not about a
+    // mirror inside this network. A deployment that runs one and no public egress would otherwise
+    // be told to stop trying on a `docker build` that works there.
+    expect(cut).toContain('fetches from the public internet')
+    expect(cut).toContain('mirror inside this network')
+    // And about the SHAPE of the failure, which is the part that costs the run. npm surfaces
+    // `EAI_AGAIN` only once its retry backoff gives up, so a build with no route reads as a hang
+    // and the natural response (wait longer, then retry) is the wrong one twice over.
+    expect(cut).toContain('EAI_AGAIN')
+    expect(cut).toContain('Do not wait it out and do not retry')
+
+    const unsure = line({
+      status: 'undetermined',
+      reason: 'the egress check did not run',
+      recheck: true,
+    })
+    expect(unsure).toContain('was NOT established (the egress check did not run)')
+    expect(unsure).not.toContain('could reach NOTHING')
+  })
+
+  it('does not claim `docker build` works in the same breath as saying it cannot fetch', () => {
+    // The bug this whole file exists to stop, in its subtlest form. The `usable` line opened with
+    // the full command list and only then said a container has no network, so an agent reading a
+    // block that also tells it not to re-check anything had already been told, as fact, that
+    // `docker build` works here. Which commands may be claimed is the EGRESS verdict's business.
+    const build = '`docker build`'
+    const blocked = renderEnvironmentInventory(
+      inventory([], {
+        status: 'usable',
+        server: '29.7.2',
+        egress: { status: 'blocked', detail: 'no route' },
+      }),
+    )
+    expect(blocked).toContain(
+      '`docker run` and `docker compose up` of images that are already built',
+    )
+    expect(blocked.split('.')[1]).not.toContain(build)
+
+    // Where egress was measured or was never settled, the claim stands: the daemon ran a
+    // container, and an unmeasured network is not a reason to talk an agent out of trying.
+    for (const egress of [
+      { status: 'reachable' as const },
+      { status: 'undetermined' as const, reason: 'the check timed out', recheck: true },
+    ]) {
+      expect(
+        renderEnvironmentInventory(inventory([], { status: 'usable', server: '29.7.2', egress })),
+      ).toContain('`docker build`, `docker run` and `docker compose up` work here')
+    }
   })
 
   it('claims the commands work ONLY where a container was actually run', () => {

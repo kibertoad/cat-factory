@@ -52,6 +52,10 @@ import { onCallAssessmentSchema, releaseSignalSchema } from './release.js'
 //                          human to SELECT which of the sliced, prioritized findings to act on.
 //                          Informational + a deep-link to the parked task (where the PR-review
 //                          window lists the findings grouped by slice); `act` just marks it read.
+//   - `bug_fishing_triage` — a bug-fishing expedition finished every angle and parked for a
+//                          human to finish triaging what it caught. Informational + a deep-link
+//                          to the parked task (where the expedition window lists the findings by
+//                          phase and marks the ones to fix); `act` just marks it read.
 //   - `initiative`       — the initiative execution loop needs a human: a spawned task was
 //                          blocked (its phase is halted until it is retried/skipped), or the
 //                          initiative finished (every planned task resolved). Informational +
@@ -122,6 +126,7 @@ export const notificationTypeSchema = v.picklist([
   'fork_decision_pending',
   'judge_review',
   'pr_review_ready',
+  'bug_fishing_triage',
   'initiative',
   'platform_health',
   'infra_unreachable',
@@ -161,6 +166,7 @@ export const REVIEW_WAIT_NOTIFICATION_TYPES = [
   'fork_decision_pending',
   'judge_review',
   'pr_review_ready',
+  'bug_fishing_triage',
 ] as const satisfies readonly NotificationType[]
 
 export type ReviewWaitNotificationType = (typeof REVIEW_WAIT_NOTIFICATION_TYPES)[number]
@@ -267,6 +273,17 @@ export const notificationPayloadSchema = v.object({
   forkCount: v.optional(v.number()),
   /** Number of cohesive slices the PR was grouped into, on a `pr_review_ready`. */
   sliceCount: v.optional(v.number()),
+  /** Number of angles the expedition fished, on a `bug_fishing_triage`. */
+  phaseCount: v.optional(v.number()),
+  /**
+   * How many of the expedition's findings still have no decision, on a `bug_fishing_triage` —
+   * neither marked for a fix nor dismissed.
+   *
+   * Deliberately not the total: a human who already triaged half the catch while the later
+   * angles were still fishing is being told what is left, and a total would keep asking them to
+   * look at decisions they have made.
+   */
+  untriagedFindingCount: v.optional(v.number()),
   /** The `on-call` agent's assessment, on a `release_regression`. */
   onCallAssessment: v.optional(onCallAssessmentSchema),
   /** The monitors/SLOs that regressed, on a `release_regression`. */

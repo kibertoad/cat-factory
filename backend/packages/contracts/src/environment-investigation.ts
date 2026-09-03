@@ -334,8 +334,22 @@ export const environmentInvestigationConfigSchema: v.GenericSchema<
  * the deployer's next verdict and is nowhere in here on purpose.
  */
 export interface EnvironmentInvestigationAttempt {
-  /** 1-based round number. */
+  /**
+   * 1-based ordinal in this log. It matches `attempts` on a run that never loops back to the
+   * deployer, and diverges from it after one: the counter is re-armed for each provisioning cycle
+   * (`restartEnvironmentInvestigationState`) while these rows survive the whole run, being what
+   * the verification report reduces.
+   */
   attempt: number
+  /**
+   * The 0-based provisioning CYCLE this round ran in. A loop-back to the deployer re-arms the
+   * budget and opens a new cycle (`restartEnvironmentInvestigationState`) while these rows
+   * survive the whole run, so the marker is what tells a reader which rounds were counted
+   * against the LIVE budget, and what scopes a read of the last verdict to the environment now
+   * under investigation rather than the one a re-provision superseded. Absent on a row written
+   * before the field existed, which reads as cycle 0.
+   */
+  cycle?: number | null | undefined
   /** Epoch ms when the round settled. */
   at: number
   outcome: 'reported' | 'remediated' | 'failed'
@@ -368,6 +382,7 @@ export const environmentInvestigationAttemptSchema: v.GenericSchema<
   EnvironmentInvestigationAttempt
 > = v.object({
   attempt: v.number(),
+  cycle: v.optional(v.nullable(v.number())),
   at: v.number(),
   outcome: v.picklist(['reported', 'remediated', 'failed']),
   reason: v.optional(v.nullable(v.string())),
@@ -379,8 +394,16 @@ export const environmentInvestigationAttemptSchema: v.GenericSchema<
 })
 
 /**
- * How many readiness-ceiling extensions a `wait` verdict may win, across the whole step. One: a
- * second would let a model postpone a run indefinitely, one ceiling at a time.
+ * How many readiness-ceiling extensions a `wait` verdict may win on a `deployer` step, counted
+ * over the whole RUN. One: a second would let a model postpone a run indefinitely, one ceiling at
+ * a time.
+ *
+ * Deliberately NOT re-armed per provisioning cycle, unlike the round budgets beside it. A cycle
+ * is not always started by a person or a gate: `StepGraph.rerunProducerThrough` resets every step
+ * from a producer through its companion and judge, and the judge loop and the below-threshold
+ * companion loop both drive it with no human in the loop. A per-cycle bound would therefore hand
+ * the model a fresh extension on each automatic rework round, which is the outcome this bound
+ * exists to prevent.
  */
 export const MAX_ENVIRONMENT_WAIT_EXTENSIONS = 1
 
@@ -401,10 +424,32 @@ export interface EnvironmentInvestigationState {
   frameId: string
   /** The environment the rounds are about, when one was recorded before the failure. */
   environmentId?: string | null | undefined
-  /** Readiness-ceiling extensions already granted; see {@link MAX_ENVIRONMENT_WAIT_EXTENSIONS}. */
+  /**
+   * Readiness-ceiling extensions granted over the whole run, never re-armed by a loop-back; see
+   * {@link MAX_ENVIRONMENT_WAIT_EXTENSIONS}. It is both the bound's counter and the run's only
+   * record that a `wait` was granted, a remedy that otherwise leaves no trace: the bring-up
+   * simply runs past the configured ceiling.
+   */
   waitExtensions?: number | null | undefined
-  /** Per-round history; see {@link environmentInvestigationAttemptSchema}. */
+  /**
+   * The 0-based provisioning cycle now running, bumped by `restartEnvironmentInvestigationState`
+   * and stamped onto each round; see {@link EnvironmentInvestigationAttempt.cycle}.
+   */
+  cycle?: number | null | undefined
+  /**
+   * Per-round history, newest last, CAPPED at {@link MAX_ENVIRONMENT_INVESTIGATION_ATTEMPT_LOG}.
+   * The log survives the whole run (the verification report reduces it) while the state rides the
+   * run's `detail` JSON, re-serialized on every step write, so an uncapped log would grow with
+   * every loop-back for the rest of the run. A round carries a 4000-character verdict summary and
+   * up to {@link MAX_EVIDENCE_ITEMS} cited facts, so the rows are not small.
+   */
   attemptLog?: EnvironmentInvestigationAttempt[] | null | undefined
+  /**
+   * How many of the oldest rounds the {@link attemptLog} cap has dropped. Recorded rather than
+   * silently truncated: the report reduces the surviving rows, so a dropped one would otherwise
+   * turn into a round that reads as never having run.
+   */
+  droppedAttempts?: number | null | undefined
 }
 
 export const environmentInvestigationStateSchema: v.GenericSchema<
@@ -416,5 +461,14 @@ export const environmentInvestigationStateSchema: v.GenericSchema<
   frameId: v.string(),
   environmentId: v.optional(v.nullable(v.string())),
   waitExtensions: v.optional(v.nullable(v.number())),
+  cycle: v.optional(v.nullable(v.number())),
   attemptLog: v.optional(v.nullable(v.array(environmentInvestigationAttemptSchema))),
+  droppedAttempts: v.optional(v.nullable(v.number())),
 })
+
+/**
+ * How many investigation rounds the run-long attempt log keeps. Four times the per-cycle ceiling
+ * of 5, so only a run that looped its deployer back several times over reaches it, and what it
+ * then drops is the oldest cycle rather than the one a reader is looking at.
+ */
+export const MAX_ENVIRONMENT_INVESTIGATION_ATTEMPT_LOG = 20

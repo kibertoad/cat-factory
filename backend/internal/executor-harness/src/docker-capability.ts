@@ -5,14 +5,19 @@ import {
   spawnDockerCommand,
 } from './docker-command.js'
 import {
+  buildEgressCommand,
   buildProbeArchive,
+  EGRESS_DNS_MARKER,
+  EGRESS_TCP_MARKER,
+  type EgressTarget,
+  parseEgressTarget,
   payloadArchitecture,
   PROBE_COMMAND,
   PROBE_IMAGE_TAG,
   PROBE_SENTINEL,
 } from './docker-probe-image.js'
 import { log, type Logger } from './logger.js'
-import { redactSecrets } from './redact.js'
+import { scrubbedExcerpt } from './redact.js'
 
 // ---------------------------------------------------------------------------
 // Whether this machine's Docker daemon can RUN A CONTAINER, as opposed to merely answering.
@@ -46,11 +51,60 @@ import { redactSecrets } from './redact.js'
 // load-bearing one level up: `resolveDockerVerdict` needs the cheap fact this check establishes
 // on its way past (a daemon is answering RIGHT NOW) to keep a warm container out of a stale boot
 // record's refusal, and only the check knows whether it ever got that far.
+//
+// `usable` then carries a SECOND fact, because running a container and reaching the network from
+// inside one are different things and only the first of them was ever measured. A local image
+// loads and runs with no network at all, so a daemon whose nested containers are cut off passes
+// this check exactly as a working one does: the published image ran its daemon with
+// `--iptables=false` and every `docker build` that fetched a dependency was guaranteed to fail,
+// while the harness reported `usable` and told each agent that `docker build` works here (issue
+// #2174). It is a separate field rather than a fourth status because it answers a separate
+// question, with its own three outcomes and its own way of being undeterminable, and because the
+// two have different consequences: no egress is a constraint to plan around, where an unusable
+// daemon is a prohibition.
 // ---------------------------------------------------------------------------
+
+/**
+ * What a NESTED container could reach, measured from inside one.
+ *
+ * Measured there and nowhere else, which is the whole point. The harness container's own network
+ * is fine in both cases: it resolves and fetches normally, and the daemon pulls images
+ * successfully, so every check one layer out reports a working network over a daemon whose
+ * containers have none.
+ *
+ * `reachable` needs BOTH halves. A route with no DNS is not a network an agent can use: nothing
+ * it installs is fetched by address, so `blocked` is the honest verdict and the detail names DNS
+ * as the half to fix. The reverse (a name resolved, the configured address refused) is
+ * `undetermined` instead of `blocked`, because a resolved name proves a path out exists and the
+ * likeliest cause is that this deployment filters the address the check was pointed at.
+ */
+export type ContainerEgress =
+  /** A container opened a TCP connection out AND resolved a public name. */
+  | { status: 'reachable' }
+  /** It could not get out. `detail` names how far it got, since the two have different fixes. */
+  | { status: 'blocked'; detail: string }
+  /** The check could not be carried out, or could not be read as evidence about the network. */
+  | {
+      status: 'undetermined'
+      reason: string
+      /**
+       * Whether asking again could give a different answer.
+       *
+       * Load-bearing, because the probe re-measures an undetermined egress and re-measuring
+       * means two container starts plus an image load, per job, on the critical path ahead of
+       * the clone. Most of the ways to land here cannot change while this container lives: a
+       * rejected `HARNESS_DOCKER_EGRESS_TARGET`, a payload with no `nc` applet, an address this
+       * deployment filters. Latching those is not a stale verdict, it is the same measurement
+       * with the same inputs; re-running it forever costs every job about forty seconds for a
+       * value that is settled. Only a genuinely transient failure (a timeout, a cancelled job,
+       * a daemon that could not attach the bridge yet) is worth asking about again.
+       */
+      recheck: boolean
+    }
 
 /** What one measurement concluded. See the three answers above; nothing collapses them. */
 export type DockerWorkload =
-  | { status: 'usable' }
+  | { status: 'usable'; egress: ContainerEgress }
   | { status: 'unusable'; detail: string }
   | {
       status: 'unknown'
@@ -68,6 +122,25 @@ export type DockerWorkload =
  * `LOCAL_NATIVE_AGENTS` the harness runs on a developer's machine that never saw this image.
  */
 const PAYLOAD_PATH = process.env.HARNESS_DOCKER_PROBE_BINARY?.trim() || '/bin/busybox'
+
+/**
+ * Where the egress check aims, overridable for a deployment whose network permits something else.
+ *
+ * A raw IPv4 address rather than a name, so the connect answers a question about ROUTING alone:
+ * pointing it at a hostname would make every verdict depend on DNS, which is the other half and
+ * is measured separately. `1.1.1.1:443` is an anycast address that answers TLS from everywhere
+ * and belongs to no API this repo calls; the name is npm's because npm is what the outage
+ * actually broke. Neither is validated here (see `parseEgressTarget`), so a rejected setting is
+ * reported rather than replaced.
+ *
+ * Both defaults aim at the PUBLIC internet, and a deployment that deliberately has none should
+ * point these at what it does run (an internal registry mirror and its own DNS zone). Left at
+ * the defaults there, the measurement is honest but narrow: it establishes that a container
+ * cannot reach these two, which is why the prompt built from a `blocked` verdict says which
+ * targets were tried rather than that nothing at all is reachable.
+ */
+const EGRESS_TARGET = process.env.HARNESS_DOCKER_EGRESS_TARGET?.trim() || '1.1.1.1:443'
+const EGRESS_DNS_NAME = process.env.HARNESS_DOCKER_EGRESS_DNS_NAME?.trim() || 'registry.npmjs.org'
 
 /**
  * The ceiling on ONE WHOLE measurement, shared out across the docker commands it makes: each
@@ -90,6 +163,20 @@ const WORKLOAD_BUDGET_MS = 20_000
 
 /** The floor on one command's share of the budget, so an exhausted budget still gets an answer. */
 const MIN_COMMAND_MS = 1_000
+
+/**
+ * The ceiling on the egress container, which gets its OWN budget rather than a share of the one
+ * above.
+ *
+ * The argument for a single shared budget is that a per-command ceiling multiplies on a WEDGED
+ * daemon, and that argument does not reach here: this container is started only after another one
+ * has already run to completion, so the daemon is known to work by the time it is spawned. What
+ * it does have to allow for is a check that is SUPPOSED to be slow in the failing case, since a
+ * blocked route is silent rather than refused and both in-container timeouts have to expire.
+ * Taking that out of the workload budget would have starved the step this whole module exists
+ * for; leaving it unbounded would hand a wedged network the whole job.
+ */
+const EGRESS_BUDGET_MS = 20_000
 
 /**
  * The ceiling on removing the probe image again.
@@ -136,6 +223,8 @@ export interface DockerWorkloadDeps {
   runDocker: DockerCommandRunner
   /** This process's architecture, as `process.arch` spells it: the PAYLOAD's, never the daemon's. */
   arch: string
+  /** Where the egress container aims, as configured. Validated at use, never here. */
+  egress: { target: string; dnsName: string }
   logger?: Logger
   archives?: ProbeArchiveMemo
 }
@@ -145,6 +234,7 @@ const realDeps: DockerWorkloadDeps = {
   payloadPath: PAYLOAD_PATH,
   runDocker: spawnDockerCommand,
   arch: process.arch,
+  egress: { target: EGRESS_TARGET, dnsName: EGRESS_DNS_NAME },
   archives: oneSlotArchiveMemo(),
 }
 
@@ -213,7 +303,7 @@ async function measure(
   const daemonArch = asked.stdout.trim()
   if (!/^[a-z0-9_]+$/.test(daemonArch)) {
     return undeterminable(
-      `the Docker daemon did not name an architecture the platform can build an image for (${redactSecrets(daemonArch).slice(0, 40) || 'it answered nothing'})`,
+      `the Docker daemon did not name an architecture the platform can build an image for (${scrubbedExcerpt(daemonArch, 40) || 'it answered nothing'})`,
       true,
     )
   }
@@ -252,10 +342,147 @@ async function measure(
     PROBE_IMAGE_TAG,
     ...PROBE_COMMAND,
   ])
-  // Before the verdict, and whatever the verdict is: the probe image is the platform's, and an
-  // agent that runs `docker images` should not have to wonder whose it is.
+  // A daemon that ran that container has answered the first question, and only then is there a
+  // second one worth asking. An `unusable` daemon cannot run the egress container either, and a
+  // check that could not be carried out has nothing to measure egress against.
+  const verdict = classifyRun(run)
+  const measured: DockerWorkload =
+    verdict.status === 'usable'
+      ? { status: 'usable', egress: await measureEgress(deps, signal) }
+      : verdict
+  // After both runs, whatever the verdict is: the probe image is the platform's, and an agent
+  // that runs `docker images` should not have to wonder whose it is.
   await removeProbeImage(deps)
-  return classifyRun(run)
+  return measured
+}
+
+/**
+ * Run the second container and read what it reached.
+ *
+ * On the DEFAULT network, deliberately, which is the one thing that separates it from the marker
+ * run above (`--network none`). What an agent's own `docker build` and `docker run` get is the
+ * bridge, and the bridge is exactly what a daemon started with `--iptables=false` fails to NAT.
+ *
+ * Never concludes anything about the DAEMON. Every failure here is either evidence about the
+ * network or evidence about this check, and the caller has already established that the daemon
+ * runs containers.
+ */
+async function measureEgress(
+  deps: DockerWorkloadDeps,
+  signal?: AbortSignal,
+): Promise<ContainerEgress> {
+  const setting = parseEgressTarget(deps.egress.target, deps.egress.dnsName)
+  // A rejected setting is read from this container's own environment, so it answers the same way
+  // on every job: latched rather than re-measured, which would otherwise spend two container
+  // starts per job re-reading one unchanged string.
+  if ('invalid' in setting) {
+    return { status: 'undetermined', reason: setting.invalid, recheck: false }
+  }
+  const run = await deps.runDocker(
+    ['run', '--rm', '--pull', 'never', PROBE_IMAGE_TAG, ...buildEgressCommand(setting.target)],
+    {
+      ...(signal ? { signal } : {}),
+      timeoutMs: EGRESS_BUDGET_MS,
+      ...(deps.logger ? { logger: deps.logger } : {}),
+    },
+  )
+  return classifyEgress(run, setting.target)
+}
+
+/**
+ * What the egress container's output proves, over the four combinations its two markers can
+ * carry.
+ *
+ * Read off the STATUS each command printed rather than off the run's own exit code, because the
+ * two failures that look alike from outside need opposite answers: a refused connection is
+ * evidence about the network, and a 126/127 is busybox saying the image has no such applet, which
+ * is evidence about the platform's own payload and may never be reported as a network that is not
+ * there.
+ */
+function classifyEgress(run: CommandOutcome, target: EgressTarget): ContainerEgress {
+  const where = `${target.host}:${target.port}`
+  if (run.outcome === 'failed') {
+    return {
+      status: 'undetermined',
+      reason: `the platform's egress check did not run (${run.reason})`,
+      // A spawn failure or a timeout is about this attempt and not about the container.
+      recheck: true,
+    }
+  }
+  const tcp = readMarker(run.stdout, EGRESS_TCP_MARKER)
+  const dns = readMarker(run.stdout, EGRESS_DNS_MARKER)
+  if (tcp === undefined || dns === undefined) {
+    // Nothing was measured, and the two ways to get here need different words. `docker run`
+    // failing at the DAEMON level (125, or its own "no such image") means the container never
+    // started, so the network was not the thing that did not answer; a container that started
+    // and printed something unrecognisable is the platform's own payload misbehaving. Reporting
+    // the first as "printed no verdict" tells an operator to go looking at the check's output
+    // for a container that produced none.
+    const refused =
+      platformSideRunFailure(run) ?? (run.code === 125 ? daemonRefusedEgressRun : undefined)
+    return refused
+      ? {
+          status: 'undetermined',
+          reason: `the platform's egress container did not start (${refused}: ${describeOutcome(run)})`,
+          // The daemon just ran the marker container, so a bridge it could not attach now is
+          // the sort of thing that can differ on the next job.
+          recheck: true,
+        }
+      : {
+          status: 'undetermined',
+          reason: `the platform's egress check printed no verdict (${describeOutcome(run)})`,
+          // Same image, same argv, same output: asking again re-reads the same non-answer.
+          recheck: false,
+        }
+  }
+  if ([tcp, dns].some((code) => code === 126 || code === 127)) {
+    return {
+      status: 'undetermined',
+      reason:
+        "the platform's egress check could not run inside its own probe container (the payload " +
+        'has no `nc` or `nslookup` applet)',
+      // A fact about the image this repo builds, which does not change under a running container.
+      recheck: false,
+    }
+  }
+  if (tcp === 0 && dns === 0) return { status: 'reachable' }
+  if (tcp === 0) {
+    return {
+      status: 'blocked',
+      detail: `a container reached ${where} but could not resolve ${target.dnsName}: the route out works and DNS does not`,
+    }
+  }
+  if (dns === 0) {
+    // A resolved name proves a path out of the container exists, so the connect failing is far
+    // more likely to be about the ADDRESS than about the network. Saying "blocked" here would
+    // condemn a working sandbox over a target it happens to filter.
+    return {
+      status: 'undetermined',
+      reason:
+        `a container resolved ${target.dnsName} but could not connect to ${where}, so this ` +
+        'deployment probably filters that address; point HARNESS_DOCKER_EGRESS_TARGET at one it permits',
+      // A filtered address is a standing property of the network this container sits in.
+      recheck: false,
+    }
+  }
+  return {
+    status: 'blocked',
+    detail: `a container could reach neither ${where} nor ${target.dnsName}, the two the platform is configured to try`,
+  }
+}
+
+/** What a 125 from the egress run means, kept beside the other platform-side run messages. */
+const daemonRefusedEgressRun = 'the daemon refused to create or start it'
+
+/**
+ * The exit status printed after `marker`, or undefined when the container never printed one.
+ *
+ * The LAST occurrence wins, so a marker that somehow reached the stream twice is read at its
+ * final value rather than at whichever came first.
+ */
+function readMarker(stdout: string, marker: string): number | undefined {
+  const status = [...stdout.matchAll(new RegExp(`${marker}(\\d{1,3})`, 'g'))].pop()?.[1]
+  return status === undefined ? undefined : Number(status)
 }
 
 /**
@@ -268,8 +495,15 @@ async function measure(
  * container had to be created and started to produce them. 125 covers both the daemon refusing to
  * create the container (the verdict this whole module exists for) and the tag not being there to
  * run, which is our own load, so that one is split by what docker SAID.
+ *
+ * Its own return type, and not {@link DockerWorkload}: what the marker run establishes is a
+ * daemon that runs containers, which is the first half of a `usable` verdict and not the whole
+ * of one. Naming the intermediate is what stops it being returned as a finished answer with the
+ * egress half silently absent.
  */
-function classifyRun(run: CommandOutcome): DockerWorkload {
+type RunVerdict = { status: 'usable' } | Exclude<DockerWorkload, { status: 'usable' }>
+
+function classifyRun(run: CommandOutcome): RunVerdict {
   if (run.outcome === 'failed') {
     return undeterminable(`the platform's container check did not run (${run.reason})`, true)
   }
@@ -397,8 +631,7 @@ function describeThrown(err: unknown): string {
 }
 
 function bounded(text: string): string {
-  const scrubbed = redactSecrets(text)
-  return scrubbed.length > DETAIL_CHARS ? `${scrubbed.slice(0, DETAIL_CHARS)}…` : scrubbed
+  return scrubbedExcerpt(text, DETAIL_CHARS)
 }
 
 /**
@@ -429,6 +662,17 @@ interface Measurement {
  * the whole container into saying so. Re-measuring a negative is cheap; a daemon that cannot
  * mount fails at once.
  *
+ * A `usable` verdict whose EGRESS could not be determined is re-measured on the same rule and for
+ * the same reason. Whether the bridge is NATed is settled once and for the daemon's life, so a
+ * measured `reachable` or `blocked` is kept; a check that timed out measured nothing, and latching
+ * that would leave the container permanently unable to say which of the two it is.
+ *
+ * But only where asking again could ANSWER differently, which is what `ContainerEgress.recheck`
+ * carries. Most ways to reach `undetermined` are standing facts about this container: a rejected
+ * target setting, a payload with no `nc`, an address the deployment filters. Re-running the whole
+ * measurement on those never converges, and it is not cheap: it is `docker version`, the archive,
+ * `docker load`, two container starts and an `image rm`, per job, ahead of the clone.
+ *
  * Concurrent callers share one in-flight measurement rather than each starting a container, and
  * the measurement is cancelled when the LAST of them has abandoned it. Neither half is optional:
  * one job's abort may not kill a measurement a sibling job is still waiting on (the local native
@@ -455,7 +699,7 @@ export function createDockerWorkloadProbe(
     return measurement
   }
   const probe = (async (signal?: AbortSignal): Promise<DockerWorkload> => {
-    if (latest?.status === 'usable') return latest
+    if (latest?.status === 'usable' && !isWorthReMeasuring(latest.egress)) return latest
     const measurement = (inFlight ??= begin())
     measurement.waiters += 1
     const watch = signal ? watchAbandonment(signal) : undefined
@@ -471,6 +715,11 @@ export function createDockerWorkloadProbe(
   }) as DockerWorkloadProbe
   probe.last = () => latest
   return probe
+}
+
+/** Whether a kept verdict's egress half is one that asking again could still settle. */
+function isWorthReMeasuring(egress: ContainerEgress): boolean {
+  return egress.status === 'undetermined' && egress.recheck
 }
 
 /**

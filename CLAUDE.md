@@ -731,20 +731,22 @@ names an input no model could have acted on either. Doc:
 [`pre-dispatch-input-gate.md`](./docs/initiatives/pre-dispatch-input-gate.md).
 
 **Requirements review**: an inline iterative loop (review → answer → incorporate → re-review) settling the
-PRODUCT layer only, its findings sorted into the two groups that decide WHO answers. Traps: a parked run
-waits indefinitely by design (never a timeout); the reviewer must be TOLD what system the work is about, and
-a derived subject never displaces it. Doc: [`requirements-review.md`](./backend/docs/requirements-review.md).
+PRODUCT layer only, its findings sorted into the two groups that decide WHO answers. Trap: the reviewer
+must be TOLD what system the work is about; a derived subject never displaces it. [`requirements-review.md`](./backend/docs/requirements-review.md).
 
 **Inbound tracker webhooks**: HMAC over the RAW body before any parse, ack 202, hand off through
-`gateways.trackerWebhook`; unconfigured FAILS CLOSED. Traps: push never replaces the `bug-intake`
-reconciliation sweep; ticket-comment replies route through the SAME service methods the SPA calls; the
-per-ticket match is a VERDICT (`unconfirmed` fires `queue` and withholds `per-ticket`), never a boolean.
-Doc: [ADR 0032](./backend/docs/adr/0032-tracker-webhook-intake.md).
+`gateways.trackerWebhook`; unconfigured FAILS CLOSED. Trap: the per-ticket match is a VERDICT
+(`unconfirmed` fires `queue` and withholds `per-ticket`), never a boolean. [ADR 0032](./backend/docs/adr/0032-tracker-webhook-intake.md).
 
 **Bug hunt**: scan a tracker board's open unassigned bugs, rate impact against complexity, adopt one onto
-`pl_bugfix`; persists NOTHING. Traps: one vendor call per scan is a hard requirement, and the rating
-takes `isOverBudget`, being the platform's first billable call no run start gates; any future
-un-run-scoped LLM call owes the same guard. Doc: [`bug-hunt.md`](./backend/docs/bug-hunt.md).
+`pl_bugfix`; persists NOTHING. Trap: the rating takes `isOverBudget`, being the platform's first billable
+call no run start gates, and any future un-run-scoped LLM call owes it too. [`bug-hunt.md`](./backend/docs/bug-hunt.md).
+
+**Bug fishing expedition**: a read-only hunt for the defects nobody reported. ONE `bug-fisher` step,
+dispatched once per ANGLE, each pass reading the same tree with a different question; a human MARKS what
+to fix and each mark spawns its own task on the board's `bugFishingFixPipelineId`. Trap: marking is
+accepted MID-hunt, so the state survives `resetStepForRerun` (the loop re-arms one step) and every
+reduction is over the ACCUMULATED catch. Doc: [`bug-fishing-expedition.md`](./docs/initiatives/bug-fishing-expedition.md).
 
 **Implementation-fork decision**: an optional two-phase `coder` step that proposes materially different
 implementations and parks for a human BETWEEN two dispatches on the same step (a container job can't
@@ -755,12 +757,9 @@ pause mid-run). Rides `step.forkDecision`; primary repo only. Doc:
 NEVER a gate; an install is SETUP, so every failure becomes a prompt NOTE and the run continues. Doc:
 [`agent-dependency-prepopulation.md`](./docs/initiatives/agent-dependency-prepopulation.md).
 
-**Foundational services**: a tiered (builtin ⊕ account ⊕ workspace) catalog of the shared capabilities
-an org already runs, injected as `.cat-context/` files; supplied by upload, a linked repo or an IMPORTED
-developer portal. Traps: catalog and CONTRACTS are two separate reads and that split IS the feature; the
-code-registered `builtin` tier holds no rows; "no declaration"/"empty"/"unknown id" need different
-reactions, with `operationsAreIndexable` the one place the fourth (unparseable format) lives; a TRIAGE
-kind reads the estate under `service-estate`, NEVER the design trait. Docs: [ADR 0031](./backend/docs/adr/0031-foundational-services.md), [import](./backend/docs/service-catalog-import.md).
+**Foundational services**: a tiered (builtin ⊕ account ⊕ workspace) catalog of the shared capabilities an
+org already runs, injected as `.cat-context/` files; supplied by upload, a linked repo or an IMPORTED
+developer portal. Trap: catalog and CONTRACTS are two separate reads and that split IS the feature. Docs: [ADR 0031](./backend/docs/adr/0031-foundational-services.md), [import](./backend/docs/service-catalog-import.md).
 
 **Binary-output steps**: a `binary-output`-trait kind generates artifacts, stored through a foundational
 service its step SELECTS; what MAKES them is `BinaryGeneratorRegistry`, read only via `BinaryGeneratorSource`

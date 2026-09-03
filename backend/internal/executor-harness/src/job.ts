@@ -965,6 +965,16 @@ export interface InfraSetupRecord {
    * ran and could not tell; ABSENT means nothing was measured at all.
    */
   dockerWorkload?: 'usable' | 'unusable' | 'undetermined'
+  /**
+   * What a container started ON that daemon could REACH, when the platform measured it.
+   *
+   * The fourth diagnosis, and the one `dockerWorkload: 'usable'` structurally cannot carry: a
+   * rootless daemon started with `--iptables=false` installs no MASQUERADE rule for its bridge,
+   * so it runs containers perfectly and none of them has a route out. The stack comes up and
+   * every `docker build` that fetches a dependency fails, slowly. Present only alongside
+   * `usable`, which is the one verdict with an egress half; absent means nothing measured it.
+   */
+  dockerEgress?: 'reachable' | 'blocked' | 'undetermined'
   /** The repo-relative compose file that was stood up. */
   composePath?: string
   /** Epoch ms the stand-up attempt finished. */

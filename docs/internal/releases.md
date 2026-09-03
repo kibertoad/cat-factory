@@ -46,7 +46,9 @@ A folder is not wired up by existing (two packages once published as empty shell
 
 - **Full publish contract in `package.json`**, copied from `packages/gates`: `"files": ["dist"]`,
   `main`/`types`/`exports` at `./dist`, `publishConfig.access: "public"`, a `build` script, and a
-  mandatory **`"prepublishOnly": "pnpm run build"`** hook.
+  mandatory **`"prepublishOnly": "pnpm run build"`** hook. Every concrete path `files` names is
+  asserted to publish content, so a payload directory no entry point points at (a migrations tree,
+  a source directory) is covered by landing it in that list.
 - **Register it in `backend/tsconfig.build.json`** `references`. A package reachable only
   transitively drops out the moment that reference goes away.
 - **Add a changeset** and **a row in README.md's repository-layout tables** (CI guards both).
@@ -78,13 +80,19 @@ burn the number harder rather than free it.
 | `@cat-factory/prompt-fragments` | `1.0.0` | no `dist/`; superseded by 1.0.1                                                                                                                                   |
 | `@cat-factory/contracts`        | `1.0.0` | no `dist/`                                                                                                                                                        |
 | `@cat-factory/worker`           | `1.0.0` | no `dist/`, migrations only                                                                                                                                       |
-| `@cat-factory/app`              | `1.0.0` | a real but 2026-06-17-era snapshot: it publishes source, so the missing build cost it nothing                                                                     |
+| `@cat-factory/app`              | `1.0.0` | 95 of the ~900 files a release ships, `i18n/` among the missing: it publishes source, so the unbuilt `dist/` cost it nothing and the short payload is what did    |
 | `@cat-factory/core`             | `1.0.0` | no `dist/`, and it is still that name's only version and its `latest`. The package was split up afterwards, so nothing here produces it and nothing depends on it |
 
 `scripts/check-release-versions.mjs` (the "Guard release versions" step in `repo-guards`) fails the
 Release PR when a version it introduces is already on the registry, so the next one of these
 surfaces before anything publishes rather than as a consumer's broken install. Detection lives in
 `release-versions.mjs`, with fixtures in `release-versions.test.mjs`.
+
+The `app` row is also why `check-publish-integrity.mjs` asserts the `files` PAYLOAD and not only the
+entry points. For a `files: ["dist"]` package the entry-point pass is strictly stronger, since
+`main: ./dist/index.js` fails the moment `dist/` is unbuilt; `@cat-factory/app` publishes source, so
+`main` resolves to a config file and the two directories that are the package were covered by
+nothing. Detection lives in `publish-payload.mjs`, with fixtures in `publish-payload.test.mjs`.
 
 ## Related
 

@@ -123,6 +123,7 @@ export const BLOCK_LEVEL_RUNS_PIPELINES: Record<BlockLevel, boolean> = {
 export const BUILTIN_TASK_TYPES = [
   'feature',
   'bug',
+  'bug-fishing',
   'document',
   'spike',
   'review',
@@ -134,6 +135,7 @@ export const BUILTIN_TASK_TYPES = [
 export const BUILTIN_CREATE_TASK_TYPES = [
   'feature',
   'bug',
+  'bug-fishing',
   'document',
   'spike',
   'review',
@@ -145,7 +147,10 @@ export const BUILTIN_CREATE_TASK_TYPES = [
  * The kind of work a task represents, chosen by the human at creation. Drives the
  * task card's icon/badge, per-type creation fields, and (optionally) the per-service
  * running-task limit's bucketing. `review` is a deep-review of an EXISTING open pull
- * request (see {@link taskTypeFieldsSchema}'s `prNumber`/`prUrl`); `media` produces BINARY
+ * request (see {@link taskTypeFieldsSchema}'s `prNumber`/`prUrl`); `bug-fishing` is a
+ * multi-angle read-only hunt through the service's codebase for latent defects, whose
+ * findings a human marks to spawn their own bug-fix tasks (see `bugFishing.ts`);
+ * `media` produces BINARY
  * deliverables (images, 3D models, audio) rather than code or prose, through the generative
  * integrations its step selects; `recurring` is
  * special: such tasks are NOT created through `addTask` — they are the reused on-board
@@ -317,6 +322,27 @@ export const taskTypeFieldsSchema = v.object({
       v.maxLength(MAX_REVIEW_SKILLS),
     ),
   ),
+
+  // --- Bug-fishing-expedition fields ----------------------------------------
+  /**
+   * Bug fishing: which ANGLES the expedition fishes, as {@link BUG_FISHING_PHASE_IDS} members
+   * in the order the creator picked. Absent or empty ⇒ every shipped angle, which is the
+   * intended default: an expedition exists to cover ground nobody thought to look at, so
+   * narrowing it is the deliberate act.
+   *
+   * Ids are held as bare strings rather than the picklist so an expedition created against a
+   * later build's angle list does not fail to parse on an older one; the engine drops an id it
+   * does not recognise when it plans the phases, and says so in the plan.
+   */
+  fishingPhaseIds: v.optional(
+    v.pipe(v.array(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(60))), v.maxLength(32)),
+  ),
+  /**
+   * Bug fishing: where to concentrate — subsystems, directories, or the kind of defect that has
+   * been costing this team. Folded into every phase's prompt, so it narrows the hunt without
+   * changing which angles run.
+   */
+  fishingFocus: v.optional(v.pipe(v.string(), v.maxLength(4000))),
 
   // --- Custom-task-type fields ----------------------------------------------
   /**

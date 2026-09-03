@@ -10,6 +10,11 @@ import type {
   FrameRepoType,
   ReferenceArchitecture,
 } from '~/types/domain'
+import {
+  serviceDirectoryLeaf,
+  serviceDirectoryParent,
+} from '~/components/bootstrap/BootstrapModal.logic'
+import RepoTreeBrowser from '~/components/github/RepoTreeBrowser.vue'
 import VcsConnectSurfaces from '~/components/vcs/VcsConnectSurfaces.vue'
 import { appInstallationManageUrl, newRepoUrl, VCS_PROVIDER_LABELS } from '~/utils/vcs'
 
@@ -153,19 +158,42 @@ const monorepoRepoItems = computed(() =>
   github.repos.map((r) => ({ label: `${r.owner}/${r.name}`, value: r.githubId })),
 )
 
-// Mirrors the backend's `normalizeServiceDirectory`: the path becomes an agent's working
-// directory, so a value that could escape the checkout is refused here rather than at the API.
+// `repoPathSegments` is the backend's `normalizeServiceDirectory` reduction: the path becomes
+// an agent's working directory, so a value that could escape the checkout is refused here
+// rather than at the API.
+const directorySegments = computed(() => repoPathSegments(monorepoDirectory.value))
 const directoryError = computed<string | undefined>(() => {
-  const value = monorepoDirectory.value.trim()
-  if (!value) return undefined
-  const segments = value
-    .replace(/\\/g, '/')
-    .split('/')
-    .filter((s) => s && s !== '.')
-  if (!segments.length) return t('bootstrap.monorepo.directory.error.empty')
-  if (segments.some((s) => s === '..')) return t('bootstrap.monorepo.directory.error.escapes')
+  if (!monorepoDirectory.value.trim()) return undefined
+  if (!directorySegments.value.length) return t('bootstrap.monorepo.directory.error.empty')
+  if (directorySegments.value.some((seg) => seg === '..')) {
+    return t('bootstrap.monorepo.directory.error.escapes')
+  }
   return undefined
 })
+
+// ---- exploring the monorepo for the directory's home -----------------------
+// The target must NOT exist, so nothing in the tree can BE it: the tree picks the enclosing
+// folder and hands back that folder plus the leaf (see `BootstrapModal.logic`, which owns the
+// two readings of the typed value).
+const directoryLeaf = computed(() => serviceDirectoryLeaf(monorepoDirectory.value, repoName.value))
+const browsingDirectory = ref(false)
+// The folder the tree opens at, captured when the browser is OPENED rather than read live off
+// the field: as a computed it would re-navigate the listing on every keystroke in the input.
+const directoryBrowseStart = ref('')
+
+function toggleDirectoryBrowse() {
+  if (!browsingDirectory.value) {
+    directoryBrowseStart.value = serviceDirectoryParent(monorepoDirectory.value)
+  }
+  browsingDirectory.value = !browsingDirectory.value
+}
+
+/** The tree emits the composed path: the folder it was standing in plus the leaf it was given. */
+function placeDirectory(path: string | undefined) {
+  if (!path) return
+  monorepoDirectory.value = path
+  browsingDirectory.value = false
+}
 
 // Landing in a monorepo needs no NEW repository, so the repo name is the SERVICE's name (and
 // seeds the directory's leaf); the create-repo affordances below are for the other target.
@@ -378,6 +406,7 @@ async function launch() {
       description.value = ''
       instructions.value = ''
       monorepoDirectory.value = ''
+      browsingDirectory.value = false
       // Reset the repo role too, so a later bootstrap doesn't silently inherit this one's type.
       selectedType.value = 'service'
       // And the delivery, which has to reset the ANSWERED flag with it: leaving that set disarms
@@ -613,11 +642,49 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
               required
               :error="directoryError"
             >
-              <UInput
-                v-model="monorepoDirectory"
-                :placeholder="t('bootstrap.monorepo.directory.placeholder')"
-                class="w-full"
-              />
+              <div class="space-y-2">
+                <div class="flex items-center gap-2">
+                  <UInput
+                    v-model="monorepoDirectory"
+                    :placeholder="t('bootstrap.monorepo.directory.placeholder')"
+                    class="flex-1"
+                  />
+                  <UButton
+                    v-if="monorepoRepoId !== undefined"
+                    variant="soft"
+                    color="neutral"
+                    icon="i-lucide-folder-search"
+                    :title="t('bootstrap.monorepo.directory.browse')"
+                    :aria-label="t('bootstrap.monorepo.directory.browse')"
+                    data-testid="bootstrap-directory-browse"
+                    @click="toggleDirectoryBrowse()"
+                  />
+                </div>
+
+                <!-- The tree answers WHERE, never WHAT: with no name to place yet it could
+                     decide nothing, so say that instead of listing a repo for nothing. -->
+                <div
+                  v-if="browsingDirectory && monorepoRepoId !== undefined"
+                  class="rounded-md border border-slate-800 bg-slate-900/40 p-2"
+                >
+                  <p class="mb-2 text-xs text-slate-400">
+                    {{
+                      directoryLeaf
+                        ? t('bootstrap.monorepo.directory.browseHint')
+                        : t('bootstrap.monorepo.directory.browseNeedsName')
+                    }}
+                  </p>
+                  <RepoTreeBrowser
+                    v-if="directoryLeaf"
+                    :repo-github-id="monorepoRepoId"
+                    mode="dir"
+                    :new-dir-name="directoryLeaf"
+                    :model-value="monorepoDirectory"
+                    :start-path="directoryBrowseStart"
+                    @update:model-value="placeDirectory"
+                  />
+                </div>
+              </div>
             </UFormField>
           </template>
 

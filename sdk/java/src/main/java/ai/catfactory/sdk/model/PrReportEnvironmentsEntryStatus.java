@@ -17,6 +17,7 @@ public enum PrReportEnvironmentsEntryStatus {
     READY("ready"),
     FAILED("failed"),
     SKIPPED("skipped"),
+    UNSETTLED("unsettled"),
 
     /**
      * A value this SDK release does not know.

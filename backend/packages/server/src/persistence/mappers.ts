@@ -94,6 +94,8 @@ export interface BlockRow {
   epic_id?: string | null
   /** Task-level: membership link to an `initiative`-level block (loop-spawned tasks). */
   initiative_id?: string | null
+  /** Task-level: the BUG-FISHING expedition block whose finding spawned this fix task. */
+  expedition_id?: string | null
   /** Task-level: preceding-task auto-start toggle (0/1); null ⇒ off. */
   auto_start_dependents?: number | null
   confidence: number | null
@@ -483,6 +485,11 @@ const blockFields: FieldMapper<Block, BlockPatch>[] = [
   optField('epicId', { clearOnEmpty: true }),
   // Initiative membership (loop-spawned tasks); empty/null detaches.
   optField('initiativeId', { clearOnEmpty: true }),
+  // Bug-fishing-expedition provenance: which expedition's finding spawned this fix task. Written
+  // once at the spawn and never cleared by an ordinary edit (it records where the work came from
+  // rather than a current relationship), so it takes the plain optional field rather than the
+  // `clearOnEmpty` form its two membership neighbours above use.
+  optField('expeditionId'),
   optBoolIntField('autoStartDependents'),
   optField('confidence'),
   // The declared module; an empty string detaches the task from it, like `epicId`/`initiativeId`

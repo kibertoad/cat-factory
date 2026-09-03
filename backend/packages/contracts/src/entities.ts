@@ -258,6 +258,21 @@ export const blockSchema = v.object({
    */
   initiativeId: v.optional(v.nullable(v.string())),
   /**
+   * Membership link to the BUG-FISHING EXPEDITION task whose finding caused this task to
+   * exist, INDEPENDENT of `parentId` (which stays the enclosing service frame, so a spawned
+   * fix runs against the same repo the expedition fished).
+   *
+   * Written once, when a human marks a finding and the platform spawns the fix task; never
+   * cleared, because it records where the work came from rather than a current relationship.
+   * The other direction lives on the expedition's own step state
+   * (`step.bugFishing.findings[].spawn`), and that side is written FIRST, as a `pending` claim
+   * carrying the id this block is about to be created with: spawning is an external side effect
+   * two markings can enter at once, so the claim is what makes exactly one of them win. Which is
+   * why the finding's own record is read through its status rather than its presence.
+   * Absent/null ⇒ not spawned by an expedition. Only meaningful on `task`-level blocks.
+   */
+  expeditionId: v.optional(v.nullable(v.string())),
+  /**
    * Preceding-task toggle: when this task's PR merges (it reaches `done`), the
    * engine automatically starts every task that `dependsOn` it and whose other
    * dependencies are also done. Off/absent ⇒ dependents wait for a manual start.

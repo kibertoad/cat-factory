@@ -14,6 +14,10 @@
 // from ANY parent folder (the monorepo add flow); in `file` mode it accumulates
 // context-document files from anywhere in the tree — navigating away never drops
 // earlier picks.
+//
+// `dir` mode also PLACES a directory that does not exist yet (`newDirName`: the bootstrap
+// service-directory field). Nothing in the tree can be the target then, so the pick is the
+// folder the caller is standing in and the emitted value is that folder plus the new name.
 import type { RepoTreeEntry } from '~/types/domain'
 
 const props = withDefaults(
@@ -30,8 +34,23 @@ const props = withDefaults(
     selectedPaths?: string[]
     /** `multiple`: paths already chosen elsewhere — listed but not selectable. */
     addedPaths?: string[]
+    /**
+     * `dir`, single-select: the name of a directory that DOES NOT EXIST YET, which this
+     * browser is choosing a home for. Picking a folder then emits `<folder>/<newDirName>`
+     * (the repo root included, so the footer is offered there too), and a listing that
+     * already holds the name says so and offers nothing: "the target must not exist" is the
+     * one half of the API's refusal the listing in front of the user can answer first.
+     */
+    newDirName?: string
   }>(),
-  { mode: 'dir', startPath: '', multiple: false, selectedPaths: () => [], addedPaths: () => [] },
+  {
+    mode: 'dir',
+    startPath: '',
+    multiple: false,
+    selectedPaths: () => [],
+    addedPaths: () => [],
+    newDirName: '',
+  },
 )
 const emit = defineEmits<{
   'update:modelValue': [string | undefined]
@@ -49,11 +68,38 @@ const loading = ref(false)
 
 const selectedSet = computed(() => new Set(props.selectedPaths.map(normalizeRepoPath)))
 const addedSet = computed(() => new Set(props.addedPaths.map(normalizeRepoPath)))
+// Placing a new directory is single-target by construction: a cart of not-yet-existing
+// siblings has no caller, and the pick copy below reads as one target.
+const placingNewDir = computed(() => props.mode === 'dir' && !props.multiple && !!props.newDirName)
+
+/** What a pick on `folder` yields: the new directory's path, or the folder itself. */
+function pickedPathFor(folder: string): string {
+  return placingNewDir.value ? joinRepoPath(folder, props.newDirName) : folder
+}
+
 function isAdded(path: string): boolean {
   return props.multiple && addedSet.value.has(normalizeRepoPath(path))
 }
 function isPicked(path: string): boolean {
-  return props.multiple ? selectedSet.value.has(normalizeRepoPath(path)) : props.modelValue === path
+  if (props.multiple) return selectedSet.value.has(normalizeRepoPath(path))
+  return normalizeRepoPath(props.modelValue ?? '') === normalizeRepoPath(pickedPathFor(path))
+}
+
+// The CURRENT listing already holds the name, so the new directory cannot go here. Only the
+// folder the browser has actually LISTED can be judged: answering for a child would mean
+// listing every one of them, so navigating in IS how you ask about a child. `loading` is part
+// of that reading, because `browseTo` moves `currentPath` before its fetch settles and the
+// entries still in hand are the folder the user has already left.
+const nameTakenHere = computed(
+  () =>
+    placingNewDir.value &&
+    !loading.value &&
+    treeEntries.value.some((e) => e.name === props.newDirName),
+)
+
+/** The listed entry that IS the clash, flagged in place so the reason sits where the eye is. */
+function clashes(entry: RepoTreeEntry): boolean {
+  return placingNewDir.value && entry.name === props.newDirName
 }
 
 const dirEntries = computed(() => treeEntries.value.filter((e) => e.type === 'dir'))
@@ -106,7 +152,7 @@ function pick(path: string) {
     if (addedSet.value.has(normalizeRepoPath(path))) return
     emit('toggle', path)
   } else {
-    emit('update:modelValue', path)
+    emit('update:modelValue', pickedPathFor(path))
   }
 }
 
@@ -169,14 +215,21 @@ watch(
             <span class="truncate">{{ entry.name }}</span>
           </button>
           <span
-            v-if="mode === 'dir' && isAdded(entry.path)"
+            v-if="clashes(entry)"
+            class="flex shrink-0 items-center gap-1 text-xs text-amber-400"
+          >
+            <UIcon name="i-lucide-circle-alert" class="h-3.5 w-3.5" />
+            {{ t('github.repoTree.exists') }}
+          </span>
+          <span
+            v-else-if="mode === 'dir' && isAdded(entry.path)"
             class="flex shrink-0 items-center gap-1 text-xs text-slate-500"
           >
             <UIcon name="i-lucide-check" class="h-3.5 w-3.5" />
             {{ t('github.repoTree.added') }}
           </span>
           <UButton
-            v-else-if="mode === 'dir'"
+            v-else-if="mode === 'dir' && !placingNewDir"
             size="xs"
             variant="soft"
             :color="isPicked(entry.path) ? 'primary' : 'neutral'"
@@ -257,9 +310,39 @@ watch(
       </ul>
     </div>
 
+    <!-- placing a new directory: the pick is a LOCATION, so the repo root is a valid answer
+         (unlike a plain dir pick, where the root means "the whole repo") and the target path
+         is spelled out beside the button rather than left to be inferred from the crumbs -->
+    <div v-if="placingNewDir" class="mt-2 flex items-center justify-between gap-2">
+      <p
+        class="min-w-0 truncate text-xs"
+        :class="nameTakenHere ? 'text-amber-400' : 'text-slate-400'"
+      >
+        <template v-if="nameTakenHere">
+          {{ t('github.repoTree.nameTaken', { name: newDirName }) }}
+        </template>
+        <template v-else>
+          {{ t('github.repoTree.newDirTarget') }}
+          <code class="text-slate-200">{{ pickedPathFor(currentPath) }}</code>
+        </template>
+      </p>
+      <UButton
+        size="xs"
+        variant="soft"
+        :color="isPicked(currentPath) ? 'primary' : 'neutral'"
+        :disabled="loading || nameTakenHere"
+        data-testid="repo-tree-create-here"
+        @click="pick(currentPath)"
+      >
+        {{
+          isPicked(currentPath) ? t('github.repoTree.selected') : t('github.repoTree.createHere')
+        }}
+      </UButton>
+    </div>
+
     <!-- dir mode: pin the current folder without descending into a child -->
     <div
-      v-if="mode === 'dir' && currentPath && !isAdded(currentPath)"
+      v-else-if="mode === 'dir' && currentPath && !isAdded(currentPath)"
       class="mt-2 flex justify-end"
     >
       <UButton

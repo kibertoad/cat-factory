@@ -45,6 +45,10 @@ const WINDOWS: Record<string, { drafts: Disposition; why: string }> = {
     drafts: 'confirm',
     why: 'per-item replies + the redo comment; a reply resolves an item and the redo starts a pass',
   },
+  'bugFishing/BugFishingWindow.vue': {
+    drafts: 'none',
+    why: 'every mark and dismiss commits on click; the fix-pipeline picker and the show-triaged toggle only shape what the NEXT click does',
+  },
   'clarity/ClarityReviewWindow.vue': {
     drafts: 'flush',
     why: 'per-finding answers, each recorded on its own',
@@ -112,7 +116,16 @@ const WINDOWS: Record<string, { drafts: Disposition; why: string }> = {
  * planning window's `v-model:answer="drafts[q.key]"` sat unnoticed in a 'none' row precisely because
  * it looked enough like the lightbox pair to pass a shape test.
  */
-const VIEW_STATE_BINDINGS = ['v-model:open="lightboxOpen"', 'v-model:index="lightboxIndex"']
+const VIEW_STATE_BINDINGS = [
+  'v-model:open="lightboxOpen"',
+  'v-model:index="lightboxIndex"',
+  // The bug-fishing window's two controls. Neither holds unsubmitted work: marking and dismissing
+  // a finding each commit on click, so the picker only decides which pipeline the NEXT mark runs
+  // and the toggle only decides which rows are listed. Losing either on close loses a selection,
+  // not something the user wrote.
+  'v-model="pipelineOverride"',
+  'v-model="showTriaged"',
+]
 
 /** Every component that mounts the shell, keyed by its path relative to `app/components`. */
 function findConsumers(): Map<string, string> {
@@ -167,9 +180,18 @@ function stateBindings(source: string): string[] {
   return [...source.matchAll(pattern)].map((match) => match[0])
 }
 
-/** A native form control, which holds typed input whether or not it carries a `v-model`. */
+/**
+ * A native form control, which holds typed input whether or not it carries a `v-model`.
+ *
+ * Checkboxes and radios are deliberately excluded: they hold a CHOICE, not typed input, so one
+ * left unsubmitted is a control the user can re-make in a click rather than something they wrote
+ * and would lose. The exclusion costs nothing, because this predicate is only the fallback for a
+ * control carrying no `v-model` at all — a toggle anybody reads is bound, and a binding is
+ * unknown to {@link VIEW_STATE_BINDINGS} until someone classifies it.
+ */
 function hasNativeControl(source: string): boolean {
-  return /<(?:input|textarea|select)\b/.test(source)
+  const controls = source.match(/<(?:input|textarea|select)\b[^>]*>/g) ?? []
+  return controls.some((tag) => !/type="(?:checkbox|radio)"/.test(tag))
 }
 
 /** What makes this window suspect for a 'none' row, or `null` when nothing does. */

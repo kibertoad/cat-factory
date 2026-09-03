@@ -9,7 +9,7 @@
 //     by external-tool URL resolvers); present only where any are declared.
 // The latter three are body-only section components rendered in tabs here (no longer
 // standalone modals).
-import { reactive, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { useReactiveSlots } from '@modular-vue/runtime'
 import type { InputGateMode, ReviewFrictionMode, TaskLimitMode } from '~/types/domain'
 import RiskPolicyPanel from '~/components/settings/RiskPolicyPanel.vue'
@@ -22,12 +22,15 @@ import WorkspaceMembersSettings from '~/components/layout/WorkspaceMembersSettin
 import WorkspaceMetadataSettings from '~/components/settings/WorkspaceMetadataSettings.vue'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import type { AppSlots } from '~/modular/slots'
+import { usePipelinesStore } from '~/stores/pipelines'
+import { pipelineAllowedForTaskType } from '~/utils/pipeline'
 
 const { t, te } = useI18n()
 const ui = useUiStore()
 const store = useWorkspaceSettingsStore()
 const workspace = useWorkspaceStore()
 const access = useWorkspaceAccess()
+const pipelines = usePipelinesStore()
 const toast = useToast()
 const { present } = usePipelineErrorToast()
 const slots = useReactiveSlots<AppSlots>()
@@ -182,6 +185,22 @@ const REVIEW_FRICTION_MODES = computed<{ value: ReviewFrictionMode; label: strin
   { value: 'enforce', label: t('settings.workspaceSettings.reviewFriction.modes.enforce') },
 ])
 
+/**
+ * The pipelines a bug-fishing expedition's spawned fix task may run, plus the "use the built-in
+ * bug-fix preset" row that clears the pin.
+ *
+ * Narrowed by the same predicate the create form uses for a `bug` task, because a spawned fix IS
+ * one — a board that could pin a document-authoring preset here would spawn tasks that author a
+ * document instead of fixing the defect they were spawned for. The clearing row carries the empty
+ * string rather than being absent, so "no board default" is a value someone can choose back to.
+ */
+const fixPipelineOptions = computed<{ value: string; label: string }[]>(() => [
+  { value: '', label: t('settings.workspaceSettings.bugFishing.builtInDefault') },
+  ...pipelines.pipelines
+    .filter((p) => pipelineAllowedForTaskType(p, 'bug'))
+    .map((p) => ({ value: p.id, label: p.name })),
+])
+
 /** The localized "Max {type} tasks" label for a per-type running-task limit input. */
 function maxTaskTypeLabel(type: LimitTaskType): string {
   const key = TASK_TYPE_KEYS[type]
@@ -203,6 +222,8 @@ const draft = reactive({
   doneLaneRetentionDays: 14 as number,
   kaizenEnabled: true,
   allowInitiatorPat: true,
+  // '' means "no board default", which resolves to the built-in bug-fix preset at spawn time.
+  bugFishingFixPipelineId: '',
   inputGateMode: 'standard' as InputGateMode,
   reviewFrictionMode: 'off' as ReviewFrictionMode,
   reviewFrictionWarnCount: 3,
@@ -230,6 +251,7 @@ function hydrate() {
   draft.doneLaneRetentionDays = s.doneLaneRetentionDays ?? 14
   draft.kaizenEnabled = s.kaizenEnabled
   draft.allowInitiatorPat = s.allowInitiatorPat
+  draft.bugFishingFixPipelineId = s.bugFishingFixPipelineId ?? ''
   draft.inputGateMode = s.inputGateMode
   draft.reviewFrictionMode = s.reviewFrictionMode
   draft.reviewFrictionWarnCount = s.reviewFrictionWarnCount
@@ -290,6 +312,9 @@ async function save() {
       doneLaneRetentionDays: draft.doneLaneRetentionEnabled ? draft.doneLaneRetentionDays : null,
       kaizenEnabled: draft.kaizenEnabled,
       allowInitiatorPat: draft.allowInitiatorPat,
+      // The empty string clears the pin back to the built-in preset (the backend trims it to null),
+      // which is how every other pinned-pipeline field on the platform is cleared.
+      bugFishingFixPipelineId: draft.bugFishingFixPipelineId,
       inputGateMode: draft.inputGateMode,
       reviewFrictionMode: draft.reviewFrictionMode,
       reviewFrictionWarnCount: draft.reviewFrictionWarnCount,
@@ -628,6 +653,26 @@ async function save() {
               <p v-if="draft.allowInitiatorPat" class="text-[11px] text-slate-500">
                 {{ t('settings.workspaceSettings.runCredential.accountFloorNote') }}
               </p>
+            </section>
+
+            <!-- Bug-fishing expedition: the pipeline a MARKED finding's spawned fix task runs.
+                 It is a property of how this team fixes bugs rather than of any one hunt, which
+                 is why it is a board setting and not a field on the expedition. -->
+            <section class="space-y-2">
+              <h3 class="text-sm font-semibold text-slate-200">
+                {{ t('settings.workspaceSettings.bugFishing.heading') }}
+              </h3>
+              <p class="text-[11px] text-slate-400">
+                {{ t('settings.workspaceSettings.bugFishing.body') }}
+              </p>
+              <USelectMenu
+                v-model="draft.bugFishingFixPipelineId"
+                :items="fixPipelineOptions"
+                value-key="value"
+                size="sm"
+                class="max-w-md"
+                data-testid="workspace-settings-bug-fishing-pipeline"
+              />
             </section>
 
             <!-- Kaizen agent -->

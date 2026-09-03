@@ -45,6 +45,7 @@ export const RESULT_VIEW_IDS = [
   'binary-candidates',
   'judge',
   'pr-review',
+  'bug-fishing',
   'ralph-loop',
 ] as const
 

@@ -277,6 +277,7 @@ describe('resolveFixerCompletion', () => {
     expect(s.deployFix?.attemptLog).toEqual([
       {
         attempt: 1,
+        cycle: 0,
         at: 1_700_000_000_000,
         outcome: 'completed',
         reason: 'manifest_invalid',

@@ -367,6 +367,15 @@ export {
   isReadOnlyAgentKind,
 } from './agents/kinds/read-only.js'
 export {
+  BUG_FISHER_KIND,
+  BUG_FISHER_AGENT_KINDS,
+  BUG_FISHER_SYSTEM_PROMPT,
+  bugFishing,
+  type BugFishingOutput,
+  renderBugFishingPhaseBrief,
+  registerBugFisherAgent,
+} from './agents/kinds/bug-fisher.js'
+export {
   BUG_INVESTIGATOR_KIND,
   BUG_INVESTIGATOR_AGENT_KINDS,
   bugInvestigation,

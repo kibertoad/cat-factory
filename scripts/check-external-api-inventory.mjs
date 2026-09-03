@@ -341,7 +341,10 @@ const CLASSIFICATION = [
     path: 'backend/internal/executor-harness/src/',
     kind: 'internal',
     reason:
-      'job-local: artifact downloads from a URL the backend supplied, and localhost readiness probes',
+      'job-local: artifact downloads from a URL the backend supplied, localhost readiness probes, ' +
+      'and a raw TCP connect plus DNS lookup used only as a reachability oracle for the container ' +
+      "check (no vendor API, no path, nothing a vendor page can invalidate; the deployment's own " +
+      'HARNESS_DOCKER_EGRESS_TARGET overrides where it aims)',
   },
   {
     path: 'backend/internal/sdk-smoketest/',

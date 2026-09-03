@@ -1,7 +1,7 @@
 #!/bin/sh
-# Container entrypoint. Starts a rootless Docker daemon — used by the Tester's local-mode
-# infra stand-up (`docker compose up` for the service's dependencies) — RECORDS whether it
-# actually came up where the harness can read it, and execs the harness HTTP server.
+# Container entrypoint. Starts a rootless Docker daemon (used by the Tester's local-mode infra
+# stand-up, `docker compose up` for the service's dependencies), RECORDS whether it actually came
+# up where the harness can read it, and execs the harness HTTP server.
 #
 # Rootless is mandatory: Cloudflare Containers (and most managed runners) run without root
 # or privileged mode, so the daemon runs under the unprivileged `harness` user via
@@ -16,8 +16,10 @@
 # cannot work, and reports it on GET /health, instead of leaving each agent to discover an
 # absent daemon for itself.
 #
-# The readiness WAIT runs in the background and the harness is exec'd immediately, so a
-# daemon that hangs costs a Tester its infra and never costs the container its boot window.
+# The daemon START and the readiness WAIT both run in the background and the harness is exec'd
+# immediately, so a daemon that hangs costs a Tester its infra and never costs the container its
+# boot window. That matters more now than it did: the rootless path picks its daemon on evidence
+# and may have to abandon one and start another, which is two waits sharing ONE budget.
 #
 # What is recorded here is a BOOT verdict, and it is written once. A container outlives its boot
 # (a warm pool serves many jobs from one), so a sidecar that needed longer than the wait allows
@@ -28,13 +30,34 @@
 # knows whether a daemon answers NOW, and only this file knows WHY one never did.
 set -eu
 
-# Where the verdict is recorded. Mirrors `DOCKER_STATUS_FILE` in src/docker-status.ts — the
+# Where the verdict is recorded. Mirrors `DOCKER_STATUS_FILE` in src/docker-status.ts: the
 # two halves of one contract, so change them together (the acceptance suite reads it).
 DOCKER_STATUS_FILE="${HARNESS_DOCKER_STATUS_FILE:-/tmp/harness-docker-status.json}"
-# How long a started daemon may take to answer before it counts as unavailable. Only a HUNG
-# daemon pays this in full: the wait ends early both when the socket answers and when the
-# daemon process is gone, which is what a packaging or sandbox failure looks like.
+# How long this container may spend GETTING a daemon to answer, in total. Only a HUNG daemon
+# pays it in full: the wait ends early both when the socket answers and when the daemon process
+# is gone, which is what a packaging or sandbox failure looks like.
+#
+# One budget for the whole sequence, not one per arm. The rootless path below may start a second
+# daemon after the first exits, and charging each of them the full ceiling would double the
+# window in which a job reads no verdict and attempts compose against a daemon mid-swap.
 DOCKER_READY_TIMEOUT_SECONDS="${HARNESS_DOCKER_READY_TIMEOUT_SECONDS:-60}"
+# What the fallback arm gets when the first arm consumed the budget before dying. A floor rather
+# than a share, because a fallback given nothing is not an attempt: it records a failure it never
+# tried for. It is the only thing that can push the sequence past the budget above, and only in
+# the pathological case where a daemon takes the whole window to exit.
+DOCKER_FALLBACK_MIN_SECONDS=10
+# How long an abandoned daemon may take to die before its replacement is started anyway.
+DOCKER_STOP_TIMEOUT_SECONDS=10
+# The rootless daemon's own log. Named once because BOTH arms below write to it, and the failure
+# detail recorded for a total failure is its tail.
+DOCKERD_LOG=/tmp/dockerd.log
+# Where a rootless arm keeps its image store. Per ARM, like the rootlesskit state directory
+# below, and for the same reason: an arm whose launcher exited may have left a real `dockerd`
+# behind it, and that survivor holds an exclusive lock on its data root and a live pid file. A
+# shared one would make the fallback fail with `pid file found` or a lock error, which has
+# nothing to do with why the fallback was started and leaves the container with NO daemon where
+# the crippled one would have served.
+DOCKER_DATA_ROOT_BASE="${HOME:-/home/harness}/.local/share/docker"
 
 # Escape a value for embedding in a JSON string: flatten every control character a log tail
 # carries, bound the length, and only THEN escape backslashes and quotes (in that order, since
@@ -103,10 +126,25 @@ process_alive() {
 }
 
 # Wait for the daemon, ending early on either outcome that is already decided. $1 is the pid
-# to watch (empty for an external daemon, which this container did not start).
+# to watch (empty for an external daemon, which this container did not start); $2 is how many
+# seconds it may take. The ceiling is a PARAMETER because the rootless path below spends it
+# across two daemons out of one budget.
+#
+# THREE answers, and the split is what the fallback below is decided on:
+#
+#   0  the daemon is serving.
+#   1  its process is GONE without ever serving. A DECIDED negative about this daemon, and the
+#        shape a sandbox that refuses the daemon's flags produces: dockerd exits at once with
+#        the reason on its log.
+#   2  the ceiling expired with the process still alive. That is a fact about the CLOCK and
+#        about nothing else: a slow start and a wedged one look identical from here, so it may
+#        never be read as evidence about why the daemon has not answered.
+#
+# `DOCKER_WAITED` is left holding the seconds spent, because the caller shares one budget across
+# both arms and cannot re-derive it.
 await_docker() {
-  waited=0
-  while [ "$waited" -lt "$DOCKER_READY_TIMEOUT_SECONDS" ]; do
+  DOCKER_WAITED=0
+  while [ "$DOCKER_WAITED" -lt "$2" ]; do
     if docker_serving; then return 0; fi
     if [ -n "${1:-}" ] && ! process_alive "$1"; then
       # A launcher that forks the real daemon and exits looks identical to one that died, so
@@ -115,50 +153,189 @@ await_docker() {
       return 1
     fi
     sleep 1
-    waited=$((waited + 1))
+    DOCKER_WAITED=$((DOCKER_WAITED + 1))
   done
-  return 1
+  if docker_serving; then return 0; fi
+  return 2
 }
 
-# The background half: wait for the daemon named by $1 (a pid, or empty for an external one)
-# and overwrite the `probing` status with the verdict. $2 is the source vocabulary word.
-probe_docker() {
-  if await_docker "$1"; then
-    write_docker_status true "$2" serving ''
-    echo "entrypoint: docker daemon (${2}) is serving on ${DOCKER_HOST}" >&2
+# The background half for a daemon this container did NOT start: wait for it, and overwrite the
+# `probing` status with the verdict.
+probe_external_docker() {
+  if await_docker '' "$DOCKER_READY_TIMEOUT_SECONDS"; then
+    write_docker_status true external serving ''
+    echo "entrypoint: docker daemon (external) is serving on ${DOCKER_HOST}" >&2
+    return 0
+  fi
+  # An external daemon leaves no log in this container, so the detail is the one fact this
+  # container actually holds.
+  detail="the external daemon at ${DOCKER_HOST} did not answer within ${DOCKER_READY_TIMEOUT_SECONDS}s"
+  write_docker_status false external unreachable "$detail"
+  echo "entrypoint: docker daemon (external) did not serve within ${DOCKER_READY_TIMEOUT_SECONDS}s;" \
+    "local infra is unavailable in this container. detail: ${detail}" >&2
+}
+
+# Start `dockerd-rootless.sh` in the background with the flags given, and record its pid in
+# ROOTLESS_DAEMON_PID. $1 names the ARM, and EVERY piece of exclusive state the daemon takes is
+# keyed on it: rootlesskit's state directory, the image store and the pid file.
+#
+# All three, not just the first. A daemon that had to be abandoned can leave a lock, a detached
+# network namespace, a flock on its data root or a live pid file behind, and each of those makes
+# the REPLACEMENT fail for a reason that has nothing to do with why it was started. That failure
+# is the worst outcome this script has: both arms then record `failed` and the container ends up
+# with no daemon at all, where before any of this it had a working (crippled) one.
+#
+# The one thing that CANNOT be per-arm is the socket, because DOCKER_HOST names it and every
+# client in this container is already pointed there. dockerd unlinks a socket path it finds and
+# binds its own, so the last arm to start is the one clients reach.
+#
+# The log is shared and APPENDED to, never truncated per arm. A total failure's tail is then the
+# last arm's, which is the one whose failure is being explained, while a human reading the whole
+# file still sees why the first arm was abandoned.
+start_rootless_daemon() {
+  arm="$1"
+  shift
+  DOCKERD_ROOTLESS_ROOTLESSKIT_STATE_DIR="${XDG_RUNTIME_DIR}/dockerd-rootless-${arm}" \
+    dockerd-rootless.sh \
+    --data-root "${DOCKER_DATA_ROOT_BASE}-${arm}" \
+    --pidfile "${XDG_RUNTIME_DIR}/docker-${arm}.pid" \
+    "$@" >>"$DOCKERD_LOG" 2>&1 &
+  ROOTLESS_DAEMON_PID=$!
+}
+
+# Stop a daemon that did not serve, and WAIT for it to be gone before another takes its place.
+# $1 is the launcher pid, $2 the arm, so the state that outlives the process goes with it.
+#
+# The wait AFTER `kill -9` is the half that is easy to leave out, and it is not a formality:
+# SIGKILL is not propagated, so a launcher that had already forked the real `dockerd` dies while
+# its child runs on. Returning the moment the parent is reaped would start the replacement
+# against a predecessor still holding the socket. What makes that survivable rather than fatal
+# is the per-arm state above; this wait is what keeps it from being routine.
+#
+# `DOCKER_STOP_WAITED` is left holding the seconds spent, for the caller's shared budget.
+stop_rootless_daemon() {
+  kill "$1" 2>/dev/null || true
+  DOCKER_STOP_WAITED=0
+  while [ "$DOCKER_STOP_WAITED" -lt "$DOCKER_STOP_TIMEOUT_SECONDS" ] && process_alive "$1"; do
+    sleep 1
+    DOCKER_STOP_WAITED=$((DOCKER_STOP_WAITED + 1))
+  done
+  if process_alive "$1"; then
+    kill -9 "$1" 2>/dev/null || true
+    while [ "$DOCKER_STOP_WAITED" -lt "$DOCKER_STOP_TIMEOUT_SECONDS" ] && process_alive "$1"; do
+      sleep 1
+      DOCKER_STOP_WAITED=$((DOCKER_STOP_WAITED + 1))
+    done
+  fi
+  rm -f "${XDG_RUNTIME_DIR}/docker.sock" "${XDG_RUNTIME_DIR}/docker-${2}.pid" 2>/dev/null || true
+}
+
+# Start the rootless daemon, preferring the one whose NESTED containers have a network.
+#
+# `--iptables=false` arrived when the daemon could not start at all without it, and it does fix
+# that: a sandbox like Cloudflare Containers gives the daemon no way to install its firewall
+# rules, and a daemon that cannot install them refuses to start. What went unnoticed is what the
+# flag costs once the daemon DOES start. The rule it drops is the MASQUERADE for the bridge, so
+# traffic from a nested container on 172.17.0.0/16 is never NATed onto the daemon's own
+# interface: a nested container gets no egress whatsoever, no DNS and no raw IP either. The
+# daemon's own `docker pull` keeps working, which is most of why this stayed hidden, and the cost
+# lands on the one thing agents do constantly. A `docker build` whose `RUN npm ci` cannot reach
+# the registry spends about seven minutes inside npm's retry backoff before failing, and from
+# outside that reads as a hang rather than as a network that was never there (issue #2173).
+#
+# So the flag is a FALLBACK and not a premise. Try the daemon that manages its own rules, and
+# start the crippled one only on the EVIDENCE that the first did not serve. A sandbox that
+# genuinely cannot do iptables ends up exactly where it was; a privileged Docker or Podman host,
+# which is what local mode runs on, gets working nested networking.
+#
+# Both arms record the same `available: true`, because both serve. What separates them is the
+# `reason` word and the detail, and that is the half no measurement can supply: "this daemon
+# installs no NAT rule" is a CAUSE, while the harness's own probe (src/docker-capability.ts)
+# measures the consequence from inside a nested container without ever learning why.
+#
+# The fallback is taken on the first arm's DEATH and on nothing else, which is the one piece of
+# evidence that is actually about its flags: a sandbox with no iptables binary and no NAT module
+# does not slow the daemon down, it makes `dockerd` exit at once with the reason on its log. A
+# first arm that is merely SLOW keeps the rest of the budget, because a clock says nothing about
+# firewall rules: swapping on a timeout would take a capable daemon away from a cold sandbox and
+# leave every nested container in it with no egress for the container's whole life, on a guess.
+# A first arm that never answers at all is recorded as a failure and LEFT RUNNING, so a daemon
+# that comes up late is still found by `resolveDockerVerdict`'s live re-probe, with its NAT.
+rootless_log_tail() {
+  tail -c 2000 "$DOCKERD_LOG" 2>/dev/null || true
+}
+
+start_rootless_docker() {
+  : >"$DOCKERD_LOG" 2>/dev/null || true
+  start_rootless_daemon iptables
+  await_docker "$ROOTLESS_DAEMON_PID" "$DOCKER_READY_TIMEOUT_SECONDS" && arm_verdict=0 ||
+    arm_verdict=$?
+  if [ "$arm_verdict" -eq 0 ]; then
+    write_docker_status true rootless serving \
+      'the daemon manages its own firewall rules, so nested containers are NATed and have egress'
+    echo "entrypoint: docker daemon (rootless, with iptables) is serving on ${DOCKER_HOST}" >&2
     return 0
   fi
   # The daemon's OWN log tail is the only thing that separates the causes worth separating (a
-  # missing binary, a sandbox that forbids user namespaces, a slow start), so it rides into
-  # the status file rather than staying in a file nobody reads. An external daemon has no such
-  # log here, so it gets the one fact this container actually holds.
-  if [ "$2" = external ]; then
-    detail="the external daemon at ${DOCKER_HOST} did not answer within ${DOCKER_READY_TIMEOUT_SECONDS}s"
-    write_docker_status false external unreachable "$detail"
-  else
-    detail="$(tail -c 2000 /tmp/dockerd.log 2>/dev/null || true)"
-    write_docker_status false rootless failed "$detail"
+  # missing binary, a sandbox that forbids user namespaces, a slow start), so it rides into the
+  # status file and into the fallback's stderr line rather than staying in a file nobody reads.
+  detail="$(rootless_log_tail)"
+  if [ "$arm_verdict" -eq 2 ]; then
+    # Its OWN reason word, not `failed`. A daemon still starting and two daemons that both
+    # exited are opposite situations with opposite next steps, and the reader reports this
+    # verbatim rather than branching on it, so the entrypoint can say which one this is.
+    write_docker_status false rootless still-starting \
+      "the daemon that manages its own firewall rules had not answered after ${DOCKER_READY_TIMEOUT_SECONDS}s and is still running, so nothing in this container knows why yet. its log so far: ${detail}"
+    echo "entrypoint: the rootless daemon had not answered after" \
+      "${DOCKER_READY_TIMEOUT_SECONDS}s and is still running, so nothing here knows why;" \
+      "local infra is unavailable in this container until it answers. detail: ${detail}" >&2
+    return 0
   fi
-  echo "entrypoint: docker daemon (${2}) did not serve within ${DOCKER_READY_TIMEOUT_SECONDS}s;" \
+  echo "entrypoint: the rootless daemon EXITED without serving on its own firewall rules;" \
+    "retrying with --iptables=false, which leaves nested containers with no egress." \
+    "detail: ${detail}" >&2
+  spent=$DOCKER_WAITED
+  stop_rootless_daemon "$ROOTLESS_DAEMON_PID" iptables
+  spent=$((spent + DOCKER_STOP_WAITED))
+  fallback_seconds=$((DOCKER_READY_TIMEOUT_SECONDS - spent))
+  if [ "$fallback_seconds" -lt "$DOCKER_FALLBACK_MIN_SECONDS" ]; then
+    fallback_seconds=$DOCKER_FALLBACK_MIN_SECONDS
+  fi
+  start_rootless_daemon no-iptables --iptables=false
+  if await_docker "$ROOTLESS_DAEMON_PID" "$fallback_seconds"; then
+    # What is claimed here is only what was OBSERVED: the first daemon exited and this one
+    # serves. WHY the first exited is in the log tail above and nowhere else, so this says what
+    # the flag COSTS (which is measurable, and is the fact an agent needs) rather than naming a
+    # cause nothing here established.
+    write_docker_status true rootless serving-without-nat \
+      'the daemon that manages its own firewall rules exited without serving, so this one runs with --iptables=false: it installs no MASQUERADE rule for its bridge, and a NESTED container therefore has no egress at all'
+    echo "entrypoint: docker daemon (rootless, --iptables=false) is serving on ${DOCKER_HOST};" \
+      "nested containers have NO egress" >&2
+    return 0
+  fi
+  detail="$(rootless_log_tail)"
+  write_docker_status false rootless failed "$detail"
+  echo "entrypoint: docker daemon (rootless) did not serve on either arm;" \
     "local infra is unavailable in this container. detail: ${detail}" >&2
 }
 
 # A self-hosted pool may point the harness at an external/sidecar Docker daemon instead of the
-# in-container one: honour DOCKER_HOST and skip the rootless daemon. It is still PROBED — a
-# wired-but-unreachable sidecar and a working one are opposite facts.
+# in-container one: honour DOCKER_HOST and skip the rootless daemon. It is still PROBED, because
+# a wired-but-unreachable sidecar and a working one are opposite facts.
 if [ -n "${DOCKER_HOST:-}" ]; then
   echo "entrypoint: using external DOCKER_HOST=${DOCKER_HOST}; not starting rootless dockerd" >&2
   write_docker_status null external probing ''
-  probe_docker '' external &
+  probe_external_docker &
 elif command -v dockerd-rootless.sh >/dev/null 2>&1 && command -v dockerd >/dev/null 2>&1; then
   export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/home/harness/.docker/run}"
   export DOCKER_HOST="unix://${XDG_RUNTIME_DIR}/docker.sock"
   mkdir -p "${XDG_RUNTIME_DIR}"
   write_docker_status null rootless probing ''
-  # iptables is unavailable in many sandboxes (Cloudflare Containers); the daemon still works
-  # for compose with the host/bridge networking the Tester relies on.
-  dockerd-rootless.sh --iptables=false >/tmp/dockerd.log 2>&1 &
-  probe_docker "$!" rootless &
+  # Started INSIDE the background half, unlike the version before it, because the daemon this
+  # container ends up with is now a choice made on evidence rather than a single fixed command
+  # line: `start_rootless_docker` may have to abandon one daemon and start another, and none of
+  # that may sit between this script and the `exec` below.
+  start_rootless_docker &
 else
   # Not a runtime failure but a missing PART: this branch is what the image looked like to
   # every job for months, and naming it is the difference between a Tester that says why it

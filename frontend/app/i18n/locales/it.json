@@ -1175,6 +1175,11 @@
         "ageToggle": "Nascondi anche le attività completate da tempo",
         "days": "Conserva (giorni)",
         "hidesOnlyHint": "Non viene eliminato nulla. Le attività senza data di completamento registrata non vengono mai nascoste per anzianità."
+      },
+      "bugFishing": {
+        "heading": "Pipeline di correzione della pesca di bug",
+        "body": "La pipeline con cui viene eseguita un'attività di correzione quando contrassegna un rilievo di una pesca di bug. Ogni rilievo contrassegnato diventa una sua attività su questa pipeline; chi contrassegna può cambiare la scelta per un singolo lotto.",
+        "builtInDefault": "Usa il preset di correzione integrato"
       }
     },
     "localModelEndpoints": {
@@ -2533,7 +2538,8 @@
         "budget_paused": "Segna come letto",
         "budget_threshold": "Segna come letto",
         "key_drift": "Elimina credenziali obsolete",
-        "merge_tag_request": "Registra l’impegno"
+        "merge_tag_request": "Registra l’impegno",
+        "bug_fishing_triage": "Segna come letto"
       },
       "failingRun": "{kind} · {at}",
       "failingRunsMore": "altre {count} non mostrate",
@@ -2999,7 +3005,8 @@
         "media": "Media",
         "recurring": "Ricorrente",
         "review": "Revisione",
-        "ralph": "Ciclo Ralph"
+        "ralph": "Ciclo Ralph",
+        "bugFishing": "Pesca di bug"
       },
       "recurringWithFrame": "Un'attività ricorrente esegue una pipeline a cadenza regolare. Continua per impostare la pianificazione e il prompt.",
       "recurringNoFrame": "Un'attività ricorrente deve risiedere su un servizio. Aggiungila da un frame di servizio (o da un modulo al suo interno).",
@@ -3114,7 +3121,18 @@
         "prNotFound": "La pull request n. {number} non è stata trovata nel repository di questo servizio. Controlla il numero, oppure collega il servizio al repository in cui si trova la pull request.",
         "prRepoMismatch": "Quella pull request si trova in un altro repository. Questo servizio revisiona {repo}, quindi crea l'attività di revisione sotto il servizio collegato al repository della pull request."
       },
-      "contextFailed": "Attività non creata: {count} allegato non leggibile | Attività non creata: {count} allegati non leggibili"
+      "contextFailed": "Attività non creata: {count} allegato non leggibile | Attività non creata: {count} allegati non leggibili",
+      "bugFishingFields": {
+        "angles": {
+          "label": "Angolazioni da esplorare",
+          "hint": "Ogni angolazione è un passaggio a sé sul codice, con una domanda diversa. Lasci tutte le caselle vuote per esplorarle tutte.",
+          "allSelected": "Verranno esplorate tutte le angolazioni."
+        },
+        "focus": {
+          "label": "Dove concentrarsi",
+          "placeholder": "Sottosistemi, cartelle o il tipo di difetto che sta costando più tempo a questo team"
+        }
+      }
     },
     "recurring": {
       "title": "Aggiungi una pipeline ricorrente",
@@ -3700,6 +3718,10 @@
       "selected": "Selezionata",
       "added": "Aggiunto",
       "useThisFolder": "Usa questa cartella",
+      "createHere": "Crea qui",
+      "newDirTarget": "Nuova cartella:",
+      "nameTaken": "{name} esiste già qui. Scegli un’altra cartella o cambia il nome sopra.",
+      "exists": "Esiste",
       "errors": {
         "listDirectory": "Impossibile elencare la directory"
       },
@@ -5147,8 +5169,11 @@
       },
       "directory": {
         "label": "Cartella del servizio",
-        "description": "Dove vive il servizio, rispetto alla radice del repository. Non deve ancora esistere.",
+        "description": "Dove vive il servizio, rispetto alla radice del repo. L’esecuzione la crea, quindi non deve ancora esistere.",
         "placeholder": "services/payments",
+        "browse": "Esplora il repository",
+        "browseHint": "Apri la cartella in cui il servizio deve stare. Il nome indicato sopra viene creato al suo interno, quindi non c’è nulla da scegliere nell’albero.",
+        "browseNeedsName": "Indica prima una cartella sopra (o il nome del servizio sotto). Esplorare decide dove va quel nome, non come si chiama.",
         "error": {
           "empty": "Indica una cartella dentro il repository.",
           "escapes": "La cartella deve restare dentro il repository."
@@ -6123,7 +6148,11 @@
         "kaizen_entry_not_settled": "La voce Kaizen non è ancora stata valutata",
         "bootstrap_not_awaiting_review": "Questo bootstrap non attende una revisione",
         "adoption_plan_unavailable": "Non c’è alcun piano da approvare",
-        "monorepo_directory_taken": "Quella cartella esiste già"
+        "monorepo_directory_taken": "Quella cartella esiste già",
+        "no_expedition": "Questa esecuzione non contiene una pesca di bug",
+        "not_awaiting_triage": "Questa spedizione non è in attesa di triage",
+        "already_addressed": "Alcuni rilievi hanno già un'attività di correzione",
+        "no_host_frame": "Questa spedizione non si trova sotto un servizio"
       },
       "description": {
         "dependencies_unmet": "Questa attività dipende da altre non ancora completate. Completale o sbloccale, poi avviala di nuovo.",
@@ -6168,7 +6197,11 @@
         "kaizen_entry_not_settled": "La sua valutazione è ancora in coda o in corso, quindi non ci sono raccomandazioni da confermare. Riprova quando sarà terminata.",
         "bootstrap_not_awaiting_review": "L'esecuzione è andata avanti da quando questa revisione è stata aperta. Ricarica la lavagna.",
         "adoption_plan_unavailable": "L'analisi non è riuscita a produrne uno, quindi non ci sono decisioni da inviare.",
-        "monorepo_directory_taken": "Un bootstrap crea un nuovo servizio. Scegli una cartella che non esiste ancora, o importa quella esistente come servizio."
+        "monorepo_directory_taken": "Un bootstrap crea un nuovo servizio. Scegli una cartella che non esiste ancora, o importa quella esistente come servizio.",
+        "no_expedition": "L'esecuzione che sta guardando non porta alcuno stato di spedizione, quindi non c'è nulla da valutare. Ricarichi l'esecuzione e riprovi.",
+        "not_awaiting_triage": "O sta ancora esplorando un'altra angolazione o è già stata conclusa. Ricarichi l'esecuzione per vedere a che punto è.",
+        "already_addressed": "Un'attività di correzione era già stata creata per essi, quindi non è stato creato nulla di nuovo. Apra il rilievo per raggiungere l'attività esistente.",
+        "no_host_frame": "Un'attività di correzione ha bisogno di un servizio in cui vivere e di un repository da correggere. Sposti l'attività della spedizione sotto un frame di servizio e riprovi."
       },
       "action": {
         "connectGitHub": "Collega GitHub",
@@ -8311,6 +8344,70 @@
       "importFailed": "Non è stato possibile importare il catalogo dei servizi",
       "disconnected": "Catalogo dei servizi scollegato",
       "disconnectFailed": "Non è stato possibile scollegare il catalogo dei servizi"
+    }
+  },
+  "bugFishing": {
+    "title": "Spedizione di pesca di bug",
+    "titleWithBlock": "Pesca di bug: {title}",
+    "subtitle": "Contrassegni i rilievi da correggere: ognuno diventa una sua attività di correzione.",
+    "stillFishing": "Pesca ancora in corso — sono arrivate {done} angolazioni su {total}. Tutto quanto sotto è già gestibile.",
+    "counts": "{untriaged} da valutare, {spawned} inviati alla correzione",
+    "showTriaged": "Mostra i decisi",
+    "phases": {
+      "heading": "Angolazioni",
+      "all": "Tutto il pescato ({count})",
+      "found": "{count} trovati",
+      "failedNote": "Questa angolazione non è stata completata: {reason}",
+      "status": {
+        "pending": "In coda",
+        "fishing": "Pesca in corso…",
+        "completed": "Completata",
+        "failed": "Fallita"
+      }
+    },
+    "fixPipeline": {
+      "label": "Le correzioni vengono eseguite su",
+      "boardDefault": "Il valore predefinito della board",
+      "hint": "I rilievi che contrassegnerà da ora in poi verranno eseguiti su {pipeline}."
+    },
+    "empty": {
+      "nothingCaught": "Finora questa spedizione non ha trovato nulla.",
+      "allTriaged": "Su ogni rilievo è stata presa una decisione."
+    },
+    "finding": {
+      "failureScenario": "Come si manifesta",
+      "evidence": "Prove citate dalla spedizione",
+      "suggestedFix": "Correzione suggerita",
+      "fixThis": "Correggi",
+      "dismiss": "Scarta",
+      "spawned": "Un'attività di correzione è in esecuzione su {pipeline}",
+      "spawning": "Creazione dell'attività di correzione…",
+      "spawnFailed": "Non è stato possibile creare l'attività di correzione: {reason} Contrassegnalo di nuovo per riprovare.",
+      "openTask": "Apri l'attività"
+    },
+    "severity": {
+      "critical": "Critica",
+      "high": "Alta",
+      "medium": "Media",
+      "low": "Bassa"
+    },
+    "kind": {
+      "bug": "Bug",
+      "logic-gap": "Lacuna logica",
+      "edge-case": "Caso limite",
+      "footgun": "Trappola",
+      "requirement-gap": "Lacuna nei requisiti",
+      "other": "Altro"
+    },
+    "confidence": {
+      "high": "Confidenza alta",
+      "medium": "Confidenza media",
+      "low": "Confidenza bassa"
+    },
+    "footer": {
+      "parked": "Tutte le angolazioni sono state esplorate.",
+      "parkedWithUntriaged": "Restano {count} rilievi senza decisione.",
+      "finish": "Concludi il triage"
     }
   }
 }

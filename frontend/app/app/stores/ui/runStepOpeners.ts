@@ -136,6 +136,27 @@ export function createRunStepOpeners(deps: RunStepOpenerDeps) {
     )
   }
 
+  // Open the BUG-FISHING expedition window for a run's `bug-fisher` step (from the
+  // `bug_fishing_triage` notification / the step). Resolves the step index from the run when not
+  // given, preferring the step parked awaiting triage.
+  function openBugFishing(instanceId: string, stepIndex: number | null = null) {
+    withStep(
+      instanceId,
+      stepIndex,
+      (instance) => {
+        const awaiting = indexOf(
+          instance,
+          (s) => s.agentKind === 'bug-fisher' && s.bugFishing?.status === 'awaiting_triage',
+        )
+        if (awaiting >= 0) return awaiting
+        const current = instance.steps[instance.currentStep]
+        if (current?.agentKind === 'bug-fisher' && current.bugFishing) return instance.currentStep
+        return indexOf(instance, (s) => s.agentKind === 'bug-fisher' && !!s.bugFishing)
+      },
+      (instance, idx) => deps.setResultView('bug-fishing', instance, idx),
+    )
+  }
+
   // Open the Tester's result window for a run, where the screenshots and per-area outcomes it
   // captured are rendered. The entry point is the `test-evidence` deep link the engine puts in
   // every PR verification report's environment-lifecycle section, so the caller only ever knows
@@ -161,5 +182,12 @@ export function createRunStepOpeners(deps: RunStepOpenerDeps) {
     )
   }
 
-  return { openFollowUps, openForkDecision, openBinaryCandidates, openPrReview, openTestEvidence }
+  return {
+    openFollowUps,
+    openForkDecision,
+    openBinaryCandidates,
+    openPrReview,
+    openBugFishing,
+    openTestEvidence,
+  }
 }

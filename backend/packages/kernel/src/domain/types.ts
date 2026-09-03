@@ -407,6 +407,23 @@ export type {
   PrReviewChallengeOutput,
   ResolvePrReviewInput,
   ChallengePrReviewFindingInput,
+  // Bug-fishing expedition shapes: the planned angles, the per-phase catch, and the bug-fix
+  // task each MARKED finding spawns. See `bugFishing.ts` in contracts.
+  BugFishingPhaseId,
+  BugFishingPhaseDescriptor,
+  BugFishingSeverity,
+  BugFishingFindingKind,
+  BugFishingConfidence,
+  BugFishingPhaseStatus,
+  BugFishingPhase,
+  BugFishingSpawn,
+  BugFishingSpawnStatus,
+  BugFishingFinding,
+  BugFishingStatus,
+  BugFishingStepState,
+  BugFishingAgentOutput,
+  AddressBugFishingFindingsInput,
+  ResolveBugFishingInput,
   // Clarity-review (bug-report triage reviewer agent) shapes — reuse the requirements
   // review item/status shapes, differ only in subject + the persisted document field.
   ClarityReviewItem,
@@ -533,6 +550,11 @@ export type {
   PrReportReproductionPhase,
   PrReportEnvironment,
   PrReportEnvironments,
+  // What the platform TRIED about a frame whose provision failed: the deploy-fixer's repair
+  // rounds and the environment investigation's verdicts, as decisions rather than prose.
+  PrReportEnvironmentRemediation,
+  PrReportDeployFix,
+  PrReportEnvironmentInvestigation,
   // The environment-lifecycle proof: the dated up/down timeline plus the evidence captured
   // from the environment while it was live.
   PrReportEnvironmentTimeline,

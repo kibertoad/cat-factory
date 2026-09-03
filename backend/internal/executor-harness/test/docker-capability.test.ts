@@ -10,6 +10,9 @@ import {
 import type { CommandOutcome } from '../src/docker-command.js'
 import {
   buildProbeArchive,
+  EGRESS_DNS_MARKER,
+  EGRESS_TCP_MARKER,
+  parseEgressTarget,
   payloadArchitecture,
   PROBE_IMAGE_TAG,
   PROBE_SENTINEL,
@@ -70,19 +73,46 @@ const RAN_PROBE: CommandOutcome = {
   stderr: '',
 }
 
+/** What the egress container prints when both observations came back with exit status $1/$2. */
+function EGRESS(tcp: number, dns: number): CommandOutcome {
+  return {
+    outcome: 'ran',
+    code: tcp === 0 && dns === 0 ? 0 : 1,
+    stdout: `${EGRESS_TCP_MARKER}${tcp}\n${EGRESS_DNS_MARKER}${dns}\n`,
+    stderr: '',
+  }
+}
+
+/** A container that reached everything: the answer every case not about egress wants. */
+const EGRESS_OK = EGRESS(0, 0)
+
+/** Which docker command a set of argv is, including the TWO runs, which differ by network. */
+type Step = 'version' | 'load' | 'run' | 'egress' | 'image'
+
+function stepOf(args: string[]): Step {
+  if (args[0] !== 'run') return args[0] as Step
+  // Told apart by the argv the egress run OWNS: the shell script that prints its two markers.
+  // Not by `--network none`, which belongs to the OTHER run and is the thing several cases here
+  // assert about it. A heuristic reading that flag would silently swap the two the moment
+  // someone wrote `--network=none`, and every assertion below would pass against the wrong
+  // container while the suite still went green.
+  return args.some((arg) => arg.includes(EGRESS_TCP_MARKER)) ? 'egress' : 'run'
+}
+
 /**
  * A runner that answers per docker subcommand, so a case states only the step it is about.
  * Anything unstated is a clean success, and `version` always names an architecture matching the
  * `x64` payload the deps below declare.
  */
 function runner(
-  table: Partial<Record<'version' | 'load' | 'run' | 'image', CommandOutcome>> = {},
+  table: Partial<Record<Step, CommandOutcome>> = {},
 ): DockerWorkloadDeps['runDocker'] {
   return async (args) => {
-    const step = args[0] as 'version' | 'load' | 'run' | 'image'
+    const step = stepOf(args)
     if (table[step]) return table[step] as CommandOutcome
     if (step === 'version') return ARCH_ANSWER
     if (step === 'run') return RAN_PROBE
+    if (step === 'egress') return EGRESS_OK
     return RAN_CLEAN
   }
 }
@@ -94,6 +124,7 @@ function deps(overrides: Partial<DockerWorkloadDeps> = {}): DockerWorkloadDeps {
     payloadPath: '/bin/busybox',
     runDocker: runner(),
     arch: 'x64',
+    egress: { target: '203.0.113.9:443', dnsName: 'registry.example.com' },
     logger: silentLogger,
     ...overrides,
   }
@@ -159,13 +190,16 @@ describe('the probe image', () => {
 
 describe('measuring what the daemon can do', () => {
   it('calls a daemon that ran the container and printed the marker USABLE', async () => {
-    expect(await measureDockerWorkload(deps())).toEqual({ status: 'usable' })
+    expect(await measureDockerWorkload(deps())).toEqual({
+      status: 'usable',
+      egress: { status: 'reachable' },
+    })
   })
 
   it('runs the container with no network and no route to a registry', async () => {
     const runDocker = vi.fn(runner())
     await measureDockerWorkload(deps({ runDocker }))
-    const run = runDocker.mock.calls.map((call) => call[0]).find((args) => args[0] === 'run')
+    const run = runDocker.mock.calls.map((call) => call[0]).find((args) => stepOf(args) === 'run')
     expect(run).toContain('--network')
     expect(run).toContain('none')
     // Without this, a load that silently produced no image sends the check to a registry, and the
@@ -232,7 +266,7 @@ describe('measuring what the daemon can do', () => {
       }),
     )
     // The cleanup is not the verdict: the container ran.
-    expect(verdict).toEqual({ status: 'usable' })
+    expect(verdict).toEqual({ status: 'usable', egress: { status: 'reachable' } })
     expect(warnings.map((w) => w.msg)).toContainEqual(
       'docker capability: the probe image could not be removed',
     )
@@ -243,7 +277,10 @@ describe('measuring what the daemon can do', () => {
     const seen: (AbortSignal | undefined)[] = []
     const runDocker: DockerWorkloadDeps['runDocker'] = async (args, opts) => {
       if (args[0] === 'image') seen.push(opts.signal)
-      return args[0] === 'version' ? ARCH_ANSWER : args[0] === 'run' ? RAN_PROBE : RAN_CLEAN
+      const step = stepOf(args)
+      if (step === 'version') return ARCH_ANSWER
+      if (step === 'run') return RAN_PROBE
+      return step === 'egress' ? EGRESS_OK : RAN_CLEAN
     }
     const cancelled = new AbortController()
     await measureDockerWorkload(deps({ runDocker }), cancelled.signal)
@@ -422,11 +459,10 @@ describe('which daemon the image is built for', () => {
     const loaded: Buffer[] = []
     const runDocker: DockerWorkloadDeps['runDocker'] = async (args, opts) => {
       if (args[0] === 'load' && opts.stdin) loaded.push(opts.stdin)
-      return args[0] === 'version'
-        ? { outcome: 'ran', code: 0, stdout: 'arm64', stderr: '' }
-        : args[0] === 'run'
-          ? RAN_PROBE
-          : RAN_CLEAN
+      const step = stepOf(args)
+      if (step === 'version') return { outcome: 'ran', code: 0, stdout: 'arm64', stderr: '' }
+      if (step === 'run') return RAN_PROBE
+      return step === 'egress' ? EGRESS_OK : RAN_CLEAN
     }
     await measureDockerWorkload(deps({ runDocker, arch: 'arm64' }))
     const config = readTar(loaded[0] as Buffer).find((e) => e.name === 'config.json')
@@ -497,34 +533,229 @@ describe('what a check that could not be carried out still knows', () => {
   })
 })
 
+describe('whether a container started here can reach the network', () => {
+  // The half a local workload check structurally cannot see (issue #2174). Loading and running an
+  // image the platform built needs no network, so a daemon whose nested containers are cut off
+  // passes the marker run exactly as a working one does, and the harness said `usable` while every
+  // `docker build` that fetched a dependency was guaranteed to fail. The rules below are what stop
+  // this becoming the mirror-image lie: only a measurement from INSIDE a container may conclude
+  // anything, and a check that could not be carried out concludes nothing.
+
+  const egressOf = async (
+    outcome: CommandOutcome,
+    overrides: Partial<DockerWorkloadDeps> = {},
+  ): Promise<unknown> => {
+    const verdict = await measureDockerWorkload(
+      deps({ runDocker: runner({ egress: outcome }), ...overrides }),
+    )
+    return verdict.status === 'usable' ? verdict.egress : verdict
+  }
+
+  it('runs the egress container on the DEFAULT network, unlike the marker run', async () => {
+    // The two need opposite networking, which is why they cannot be one container: the marker run
+    // is pinned to `--network none` so it answers about the daemon alone, and the bridge is
+    // exactly what a daemon started with `--iptables=false` fails to NAT.
+    const runDocker = vi.fn(runner())
+    await measureDockerWorkload(deps({ runDocker }))
+    const runs = runDocker.mock.calls.map((call) => call[0]).filter((args) => args[0] === 'run')
+    expect(runs).toHaveLength(2)
+    expect(runs[1]).not.toContain('--network')
+    expect(runs[1]).toContain('--pull')
+    expect(runs[1]).toContain('never')
+    expect(runs[1]?.join(' ')).toContain('203.0.113.9 443')
+    expect(runs[1]?.join(' ')).toContain('registry.example.com')
+  })
+
+  it('calls a container that connected AND resolved REACHABLE', async () => {
+    expect(await egressOf(EGRESS(0, 0))).toEqual({ status: 'reachable' })
+  })
+
+  it('calls a container that reached neither BLOCKED, and names what it tried', async () => {
+    // Names the two addresses rather than claiming there is no route at all. The check aims at
+    // the public internet by default, and a deployment that deliberately has none but runs an
+    // internal mirror would otherwise read a confident "no route" about a `docker build` that
+    // works there. What was measured is that these two are unreachable, and that is what it says.
+    expect(await egressOf(EGRESS(1, 1))).toMatchObject({
+      status: 'blocked',
+      detail: expect.stringContaining('203.0.113.9:443'),
+    })
+    expect((await egressOf(EGRESS(1, 1))) as { detail: string }).toMatchObject({
+      detail: expect.stringContaining('registry.example.com'),
+    })
+  })
+
+  it('separates a daemon that refused the egress container from one that printed nothing', async () => {
+    // Both leave the two markers unread, and they need different words: a 125 means the container
+    // never started, so nothing measured the network, where a container that started and printed
+    // something unrecognisable is the platform's own payload misbehaving. Sending an operator to
+    // read the check's output for a container that produced none is the wrong errand.
+    expect(
+      await egressOf({ outcome: 'ran', code: 125, stdout: '', stderr: 'network bridge not found' }),
+    ).toMatchObject({
+      status: 'undetermined',
+      reason: expect.stringContaining('did not start'),
+    })
+  })
+
+  it('calls a working route with broken DNS blocked, and names DNS as the half to fix', async () => {
+    // Not `reachable`: nothing an agent installs is fetched by address, so a build that fetches
+    // anything fails here exactly as it does with no route. The two have different fixes, so the
+    // detail has to say which one this is.
+    const verdict = await egressOf(EGRESS(0, 1))
+    expect(verdict).toMatchObject({ status: 'blocked' })
+    expect((verdict as { detail: string }).detail).toContain('DNS does not')
+  })
+
+  it('will not condemn a container that resolved but could not reach the configured address', async () => {
+    // A resolved name proves a path out exists, so the connect failing is about the ADDRESS far
+    // more often than about the network: a deployment that filters egress to everything but its
+    // own mirrors is the ordinary case. Reporting `blocked` there would have the platform tell an
+    // agent to stop trying on evidence that says nothing of the kind.
+    expect(await egressOf(EGRESS(1, 0))).toMatchObject({
+      status: 'undetermined',
+      reason: expect.stringContaining('HARNESS_DOCKER_EGRESS_TARGET'),
+    })
+  })
+
+  it("reads a missing applet as the platform's own gap, never as an absent network", async () => {
+    // busybox exits 127 for an applet it was not built with. That is a fact about the image this
+    // repo assembles, and reporting it as no egress would be this module condemning a working
+    // sandbox over its own payload: the same asymmetry the daemon verdict is built on.
+    expect(await egressOf(EGRESS(127, 127))).toMatchObject({
+      status: 'undetermined',
+      reason: expect.stringContaining('probe container'),
+    })
+  })
+
+  it('says it could not tell when the container printed no verdict at all', async () => {
+    expect(
+      await egressOf({ outcome: 'ran', code: 0, stdout: 'hello\n', stderr: '' }),
+    ).toMatchObject({
+      status: 'undetermined',
+      reason: expect.stringContaining('printed no verdict'),
+    })
+  })
+
+  it('says it could not tell when the egress container never ran', async () => {
+    expect(
+      await egressOf({ outcome: 'failed', reason: '`docker run` did not answer within 20s' }),
+    ).toMatchObject({ status: 'undetermined', reason: expect.stringContaining('did not answer') })
+  })
+
+  it('does not measure egress at all on a daemon that could not run the container', async () => {
+    // There is nothing to measure it ON, and asking would spend a second container start to
+    // rediscover the verdict already reached.
+    const runDocker = vi.fn(
+      runner({ run: { outcome: 'ran', code: 125, stdout: '', stderr: 'cannot mount' } }),
+    )
+    const verdict = await measureDockerWorkload(deps({ runDocker }))
+    expect(verdict.status).toBe('unusable')
+    expect(runDocker.mock.calls.map((call) => stepOf(call[0]))).not.toContain('egress')
+  })
+
+  it('reports a misconfigured target rather than quietly using the default', async () => {
+    // An operator who pointed this at an address their network permits is entitled to find out
+    // that it was rejected, and a target that is quietly wrong produces a confident `blocked`
+    // about a daemon that is fine.
+    const runDocker = vi.fn(runner())
+    const verdict = await measureDockerWorkload(
+      deps({
+        runDocker,
+        egress: { target: 'proxy.internal:443', dnsName: 'registry.example.com' },
+      }),
+    )
+    expect(verdict).toMatchObject({
+      status: 'usable',
+      egress: { status: 'undetermined', reason: expect.stringContaining('IPv4:port') },
+    })
+    expect(runDocker.mock.calls.map((call) => stepOf(call[0]))).not.toContain('egress')
+  })
+
+  it('refuses every target shape that could not be evidence, or could not be safely run', async () => {
+    // The host and the name are interpolated into a `sh -c` script inside the probe container,
+    // so anything that is not an address and a hostname is refused before it gets there. A NAME
+    // is refused for a second reason that is not about safety at all: a connect that has to
+    // resolve first cannot separate a broken route from broken DNS, which is the whole split.
+    for (const bad of [
+      'registry.example.com:443',
+      '1.1.1.1',
+      '1.1.1.1:0',
+      '1.1.1.1:99999',
+      '1.1.1.1:443:443',
+      '1.1.1.1:$(id)',
+      '999.1.1.1:443',
+    ]) {
+      expect(parseEgressTarget(bad, 'registry.example.com'), bad).toHaveProperty('invalid')
+    }
+    for (const bad of ['not a host', 'localhost', 'registry.example.com; id', '']) {
+      expect(parseEgressTarget('1.1.1.1:443', bad), bad).toHaveProperty('invalid')
+    }
+    expect(parseEgressTarget('1.1.1.1:443', 'registry.npmjs.org')).toEqual({
+      target: { host: '1.1.1.1', port: 443, dnsName: 'registry.npmjs.org' },
+    })
+  })
+})
+
 describe('what one measurement is allowed to cost', () => {
   it('shares ONE budget out across its commands rather than one ceiling each', async () => {
     // Three commands at a per-command ceiling multiply into a minute and a half of dead time on a
     // wedged daemon, on the critical path ahead of the clone. The budget is for the whole pass, so
     // each command asks for what is left of it.
-    const budgets: number[] = []
+    const budgets = new Map<Step, number>()
     const runDocker: DockerWorkloadDeps['runDocker'] = async (args, opts) => {
-      if (args[0] !== 'image') budgets.push(opts.timeoutMs)
-      return args[0] === 'version' ? ARCH_ANSWER : args[0] === 'run' ? RAN_PROBE : RAN_CLEAN
+      const step = stepOf(args)
+      budgets.set(step, opts.timeoutMs)
+      if (step === 'version') return ARCH_ANSWER
+      if (step === 'run') return RAN_PROBE
+      return step === 'egress' ? EGRESS_OK : RAN_CLEAN
     }
     await measureDockerWorkload(deps({ runDocker }))
-    expect(budgets).toHaveLength(3)
-    for (const [index, budget] of budgets.entries()) {
+    const shared = (['version', 'load', 'run'] as const).map((step) => budgets.get(step) as number)
+    expect(shared).toHaveLength(3)
+    for (const [index, budget] of shared.entries()) {
       expect(budget).toBeGreaterThan(0)
-      expect(budget).toBeLessThanOrEqual(budgets[0] as number)
-      if (index > 0) expect(budget).toBeLessThanOrEqual(budgets[index - 1] as number)
+      expect(budget).toBeLessThanOrEqual(shared[0] as number)
+      if (index > 0) expect(budget).toBeLessThanOrEqual(shared[index - 1] as number)
     }
+  })
+
+  it('gives the egress container its OWN budget rather than what is left of that one', async () => {
+    // The argument for sharing is that per-command ceilings multiply on a WEDGED daemon, and it
+    // does not reach the egress run: by then another container has already run to completion, so
+    // the daemon is known to work. What that step DOES need is room to be slow in the failing
+    // case, since a blocked route expires two in-container timeouts rather than being refused.
+    // Taking that out of the shared budget would starve the step this whole check exists for.
+    const budgets = new Map<Step, number>()
+    const slow: DockerWorkloadDeps['runDocker'] = async (args, opts) => {
+      const step = stepOf(args)
+      budgets.set(step, opts.timeoutMs)
+      if (step === 'version') {
+        // Spend some of the shared budget, so the run that follows visibly has less of it left.
+        await new Promise((resolve) => setTimeout(resolve, 50))
+        return ARCH_ANSWER
+      }
+      if (step === 'run') return RAN_PROBE
+      return step === 'egress' ? EGRESS_OK : RAN_CLEAN
+    }
+    await measureDockerWorkload(deps({ runDocker: slow }))
+    expect(budgets.get('run')).toBeLessThan(budgets.get('version') as number)
+    expect(budgets.get('egress')).toBeGreaterThan(budgets.get('run') as number)
   })
 
   it('hands the caller signal to every command it makes on the job path', async () => {
     const cancelled = new AbortController()
     const seen: (AbortSignal | undefined)[] = []
     const runDocker: DockerWorkloadDeps['runDocker'] = async (args, opts) => {
-      if (args[0] !== 'image') seen.push(opts.signal)
-      return args[0] === 'version' ? ARCH_ANSWER : args[0] === 'run' ? RAN_PROBE : RAN_CLEAN
+      const step = stepOf(args)
+      if (step !== 'image') seen.push(opts.signal)
+      if (step === 'version') return ARCH_ANSWER
+      if (step === 'run') return RAN_PROBE
+      return step === 'egress' ? EGRESS_OK : RAN_CLEAN
     }
     await measureDockerWorkload(deps({ runDocker }), cancelled.signal)
-    expect(seen).toEqual([cancelled.signal, cancelled.signal, cancelled.signal])
+    // Four, and the fourth is the egress container: it is a container start like any other, so a
+    // job abandoned while it runs must stop paying for it too.
+    expect(seen).toEqual(Array.from({ length: 4 }, () => cancelled.signal))
   })
 
   it('reads the payload once per container rather than per measurement', async () => {
@@ -567,15 +798,81 @@ describe('measuring at most once per container', () => {
     const working = createDockerWorkloadProbe(
       deps({
         runDocker: async (args) => {
-          if (args[0] === 'run') succeeded += 1
-          if (args[0] === 'version') return ARCH_ANSWER
-          return args[0] === 'run' ? RAN_PROBE : RAN_CLEAN
+          const step = stepOf(args)
+          if (step === 'run') succeeded += 1
+          if (step === 'version') return ARCH_ANSWER
+          if (step === 'run') return RAN_PROBE
+          return step === 'egress' ? EGRESS_OK : RAN_CLEAN
         },
       }),
     )
     await working()
     await working()
     expect(succeeded).toBe(1)
+  })
+
+  /** Count the egress containers a probe starts while answering `calls` times over. */
+  const egressRunsOver = async (
+    calls: number,
+    answers: (nth: number) => CommandOutcome,
+  ): Promise<{ runs: number; last: unknown }> => {
+    let runs = 0
+    const probe = createDockerWorkloadProbe(
+      deps({
+        runDocker: async (args) => {
+          const step = stepOf(args)
+          if (step === 'version') return ARCH_ANSWER
+          if (step === 'run') return RAN_PROBE
+          if (step !== 'egress') return RAN_CLEAN
+          runs += 1
+          return answers(runs)
+        },
+      }),
+    )
+    let last: unknown
+    for (let i = 0; i < calls; i += 1) last = await probe()
+    return { runs, last }
+  }
+
+  it('re-measures a usable daemon whose EGRESS could still answer differently', async () => {
+    // Whether the bridge is NATed is settled for the daemon's life, so a measured `reachable` or
+    // `blocked` is kept with the verdict. A check that TIMED OUT measured nothing, and latching
+    // that would leave the container permanently unable to say which of the two it is, which is
+    // the same rule the negative verdict above is kept under.
+    const timedOut: CommandOutcome = {
+      outcome: 'failed',
+      reason: '`docker run` did not answer within 20s',
+    }
+    const { runs, last } = await egressRunsOver(3, (nth) => (nth === 1 ? timedOut : EGRESS(1, 1)))
+    expect(last).toMatchObject({ egress: { status: 'blocked' } })
+    expect(runs).toBe(2)
+  })
+
+  it('latches an undetermined egress whose cause cannot change under a running container', async () => {
+    // The other half of the same rule, and the one that costs real time when it is missing. A
+    // payload with no `nc` applet, a rejected target setting and an address this deployment
+    // filters all answer identically on every job, so re-measuring never converges, and
+    // re-measuring is `docker version`, the archive, `docker load`, TWO container starts and an
+    // `image rm`, per job, on the critical path ahead of the clone.
+    const { runs, last } = await egressRunsOver(3, () => EGRESS(127, 127))
+    expect(last).toMatchObject({ egress: { status: 'undetermined', recheck: false } })
+    expect(runs).toBe(1)
+  })
+
+  it('latches a rejected target setting without starting a container to re-read it', async () => {
+    let measurements = 0
+    const probe = createDockerWorkloadProbe(
+      deps({
+        runDocker: async (args) => {
+          if (stepOf(args) === 'version') measurements += 1
+          return stepOf(args) === 'version' ? ARCH_ANSWER : RAN_PROBE
+        },
+        egress: { target: 'proxy.internal:443', dnsName: 'registry.example.com' },
+      }),
+    )
+    await probe()
+    await probe()
+    expect(measurements).toBe(1)
   })
 
   it('shares one measurement between concurrent callers', async () => {
@@ -585,10 +882,12 @@ describe('measuring at most once per container', () => {
     const probe = createDockerWorkloadProbe(
       deps({
         runDocker: async (args) => {
-          if (args[0] === 'version') return ARCH_ANSWER
-          if (args[0] === 'run') started += 1
+          const step = stepOf(args)
+          if (step === 'version') return ARCH_ANSWER
+          if (step === 'run') started += 1
           await new Promise((resolve) => setTimeout(resolve, 5))
-          return args[0] === 'run' ? RAN_PROBE : RAN_CLEAN
+          if (step === 'run') return RAN_PROBE
+          return step === 'egress' ? EGRESS_OK : RAN_CLEAN
         },
       }),
     )
@@ -655,6 +954,9 @@ describe('measuring at most once per container', () => {
     expect(runDocker).not.toHaveBeenCalled()
 
     await probe()
-    expect(reportedDockerWorkload(probe)).toEqual({ status: 'usable' })
+    expect(reportedDockerWorkload(probe)).toEqual({
+      status: 'usable',
+      egress: { status: 'reachable' },
+    })
   })
 })

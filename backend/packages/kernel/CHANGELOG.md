@@ -1,5 +1,245 @@
 # @cat-factory/kernel
 
+## 0.333.0
+
+### Minor Changes
+
+- e7e1f8c: Bug fishing expeditions: hunt a codebase for the defects nobody has reported yet
+  
+  Every defect flow the platform had started from a REPORT: `bug-investigator` triages one,
+  `pl_bugfix` fixes one, `bug-hunt` picks one off a tracker board. Nothing looked for the defects
+  nobody has hit, and those are the ones that surface as an incident rather than as a ticket.
+  
+  A new `bug-fishing` task type runs the new read-only `bug-fisher` agent over a service's codebase
+  once per ANGLE — logic and control flow, failure handling, boundary conditions, concurrency and
+  idempotency, state and resource lifecycle, interface contracts, footguns, and conformance with the
+  supplied product requirements. One pass told to find everything returns the shallow half of
+  everything; a pass told to think only about concurrency reads the same files with a question that
+  makes the race visible, and each angle is its own dispatch with a fresh context, so one angle's
+  reading never lands on another's transcript. Nothing is written and no pull request is opened.
+  
+  Triage does not wait for the hunt. A finished angle's findings are final the moment they land, so
+  the expedition window offers them while later angles are still fishing, and each finding a human
+  MARKS spawns its own bug-fix task — carrying the finding's evidence and reproduction — on the
+  pipeline the board configures for spawned fixes (`bugFishingFixPipelineId`, defaulting to the
+  built-in bug-fix preset, overridable per batch). The spawned task links back through the new
+  `Block.expeditionId`.
+  
+  Refusals are deliberately loud rather than convenient. A pass that crashes settles THAT angle as
+  failed carrying its reason, and so does one that answers unusably (no `result.custom`, or a blob
+  the schema rejects), because a phase that silently reported nothing is indistinguishable from one
+  that honestly found nothing — and which angles came back empty is the whole thing a human reads.
+  A mark whose fix task cannot be created — a pipeline that no longer exists, or one that cannot be
+  started on a one-off task — fails with the pipeline named instead of answering 200 and leaving
+  somebody waiting for a task that will never appear. Dismissing an id the expedition does not carry
+  is refused rather than quietly accepted. And an expedition that caught nothing still parks and
+  says so.
+  
+  Marking is safe against two people at once. Creating the task and recording it after would let two
+  markings of one finding each file the same bug and start a run for it, so the finding's spawn
+  record is taken as a `pending` CLAIM under the run's compare-and-swap, carrying the block id it is
+  about to create, and settled to `spawned` or `failed` behind the work. The consequence for anyone
+  reading the state: whether a finding is being fixed is its spawn's `status`, not the record being
+  present. A spawned fix is also created the way the create form would have created it — with the
+  service's standing standards and the marking user as its creator — so it is held to the same
+  standards as the identical bug filed by hand, and the notifications its run raises reach somebody.
+  
+  The pre-dispatch input gate learned about the type: a bug-fishing task legitimately carries no
+  description, because its input is the codebase, so `description_missing` no longer parks one at
+  step 0.
+  
+  Public API: `taskType` gains `bug-fishing` and `NotificationType` gains `bug_fishing_triage`,
+  with two new optional notification-payload fields (`phaseCount`, `untriagedFindingCount`). Both are
+  additive enum members the SDKs already tolerate; the spec is `1.67.0`.
+  
+  Internal break: `workspace_settings` and `blocks` each gain a column, and
+  `ExecutionServiceDependencies` gains an optional `serviceRepository` plus an optional
+  `promptFragmentSource` (the pool a newly created task's default fragments come from, so a spawned
+  fix reads the same one the create form does). Both facades ship the migration.
+- a1802d9: Report what the platform tried about a failed environment, instead of reporting only that it failed
+  
+  Both remediation loops a `deployer` step can run recorded everything on the step and nothing
+  reduced either into the verification report. So a run whose environment failed, was diagnosed as a
+  provider fault, was restarted in place and then came up served byte-for-byte what a run with no
+  remediation loop wired at all serves. Nothing outside the backend could establish that the loop
+  had run: a headless suite reading the report, the one provider-neutral surface it has, had no
+  observable to assert on, which made the feature unfalsifiable from outside the deployment.
+  
+  `environments.entries[].remediation` now carries the DECISIONS, per frame. `deployFix` counts the
+  `deploy-fixer`'s repair rounds against the cause it was dispatched for and splits the rounds whose
+  job FINISHED from the ones that died having changed nothing in the checkout, because a bare round
+  count reads as the first. `investigation` carries the layer the last verdict blamed, the action it
+  asked for, every action the engine actually RAN, why a requested action was withheld, the
+  investigation's own failure when a round produced no verdict, and how many readiness-ceiling
+  extensions a `wait` verdict won: a granted `wait` is the one remedy that otherwise leaves no trace
+  anywhere, since the bring-up simply runs past the configured ceiling and the timeline beside it
+  cannot be reconciled without it. The investigator's summary paragraph and cited evidence stay on
+  the run's own record.
+  
+  Three absences stay distinct: no `remediation` means neither loop ran, a null `faultLayer` means no
+  round produced a verdict (never the `unknown` LAYER, which is a verdict reached on evidence that did
+  not settle the question), and an empty `ranActions` means nothing ran, with `withheld` saying why.
+  There is no field for whether the remedy WORKED, on purpose: that is the deployer's next verdict,
+  which `entries[].status` already states. `@cat-factory/acceptance-kit` gains
+  `checkEnvironmentRemediation`, the reduction that asserts the loop ran and settled on a fault layer.
+  
+  Fixes a defect the new section would otherwise have under-reported, and one bug beside it. A
+  loop-back to a `deployer` step (the `human-test` gate rebuilding the environment a person is
+  testing) dropped the whole of `step.deployFix`, so a frame whose deployment files the fixer had
+  machine-edited reported as one nothing was ever attempted on; and `step.environmentInvestigation`
+  had no reset at all, so the looped-back step carried a SPENT budget into its next failure, refused
+  the first round of the new cycle as "the budget is spent", and explained the terminal failure with
+  the verdict about the environment the re-provision had already superseded. The counters of both are
+  now re-armed per provisioning CYCLE and the attempt logs survive the RUN, which is what the report
+  reduces.
+  
+  Splitting those two lifetimes is what every remaining decision here follows from. Each attempt row
+  carries the CYCLE that ran it, so a read scopes itself explicitly instead of taking whichever
+  half is nearer: the live budget and the last verdict are read within the CURRENT cycle (a verdict
+  from a superseded cycle diagnoses an environment the re-provision destroyed), while the report
+  reduces the whole log and states `cycles` beside `attempts` rather than printing a run-long count
+  against a per-cycle budget. `waitExtensions` is the one counter that stays RUN-long: a cycle is
+  not always started by a person or a gate, since `rerunProducerThrough` is driven by the judge loop
+  and the below-threshold companion loop too, and a per-cycle bound would hand the model a fresh
+  readiness ceiling on every automatic rework round. Both logs are now capped and count what they
+  drop, since they live in the run's compare-and-swapped JSON blob.
+  
+  Internal break: an attempt log's `attempt` is now its ordinal in that run-long log rather than a
+  copy of the live cycle counter, and each row carries a `cycle`. The two ordinals are identical on
+  any run that never loops back to its deployer, and only a stored step carries the fields.
+  
+  Additive on `/api/v1` (spec `info.version` 1.66.0): new optional and required fields on a response
+  object introduced in the same release, plus a fourth `entries[].status` value, `unsettled`, for the
+  frame whose recorded outcome a remediation loop cleared to re-provision it. The clients ignore
+  unknown fields and tolerate unknown enum values, so a consumer built against 1.65.0 keeps parsing.
+
+### Patch Changes
+
+- Updated dependencies [e7e1f8c]
+- Updated dependencies [a1802d9]
+  - @cat-factory/contracts@0.344.0
+
+## 0.332.0
+
+### Minor Changes
+
+- 3b11b10: Give the runner image's nested containers a network again, and measure it before claiming one
+  
+  The image started its rootless daemon with `--iptables=false` unconditionally. That flag arrived
+  because the daemon could not start at all without it in a sandbox like Cloudflare Containers, and
+  it did fix that. What went unnoticed is what it costs once the daemon DOES start: the rule it
+  drops is the MASQUERADE for the bridge, so traffic from a nested container is never NATed and the
+  container has no egress whatsoever, no DNS and no raw IP either. The daemon's own `docker pull`
+  keeps working, which is most of why it stayed hidden, and the cost lands on the thing agents do
+  constantly. On the run that exposed this, a coder's first `docker build` spent 426s inside
+  `RUN npm ci` before failing, and from outside it read as a hang: the heartbeat stayed fresh,
+  `lastActivityAt` moved, and nothing was logged between the job starting and the failure.
+  
+  The flag is now a fallback rather than a premise. The entrypoint starts the daemon that manages
+  its own firewall rules and only starts the crippled one when the first one EXITS without serving,
+  which is the one piece of evidence that is actually about its flags: a sandbox with no iptables
+  binary and no NAT module does not slow the daemon down, it makes `dockerd` exit at once. A first
+  arm that is merely slow keeps the rest of the readiness budget, because a clock says nothing about
+  firewall rules and swapping there would take a capable daemon away from a cold sandbox for the
+  container's whole life; a first arm that never answers is recorded as undecided and LEFT RUNNING,
+  so `resolveDockerVerdict`'s live re-probe can still find it, with its NAT. A sandbox that genuinely
+  cannot do iptables ends up exactly where it was; a privileged Docker or Podman host, which is what
+  local mode runs on, gets working nested networking.
+  
+  Each arm gets its OWN rootlesskit state directory, image store and pid file, and the abandon path
+  waits for the process to be gone after `kill -9` rather than returning the moment the parent is
+  reaped. Both matter for the same reason: SIGKILL is not propagated, so a launcher that had already
+  forked the real `dockerd` dies while its child holds a lock on the shared data root and a live pid
+  file, and the replacement then fails for a reason that has nothing to do with why it was started.
+  That is the worst outcome available here, since both arms record `failed` and the container ends up
+  with no daemon at all where before it had a working crippled one. The two arms record different
+  `reason` words, and the fallback's detail states only what was OBSERVED (the first daemon exited)
+  rather than naming iptables as the cause, which nothing in the entrypoint measures; the real cause
+  is the daemon's own log tail, which now rides the stderr line announcing the switch.
+  
+  The other half is that nothing could see this. The container check runs a container, which is
+  strictly better than asking the daemon about itself, and it still cannot see a daemon whose
+  containers have no network, because loading and running a local image needs none: the harness
+  reported `dockerDaemon: "usable"` on every published image and told each agent, as stated fact, in
+  a block that also says not to spend turns re-checking it, that `docker build` works there. So a
+  `usable` verdict now carries what a SECOND container, on the default network, could reach:
+  `reachable`, `blocked` (with a detail separating no route at all from a route with broken DNS) or
+  `undetermined`. It rides `GET /health`, the agent's environment inventory and the Tester step's
+  own `infraSetup.dockerEgress`, so the record a human reads no longer shows the same
+  undifferentiated `usable` for a daemon whose containers cannot fetch anything. Which commands the
+  inventory claims now comes FROM that verdict rather than being stated and then retracted one
+  sentence later, and the `blocked` wording is precise about which break, since the daemon does still
+  pull base images and only the `RUN` lines that fetch from the public internet fail.
+  
+  Same asymmetry as the daemon verdict: a busybox without the applet, an unreadable target setting, a
+  container that printed nothing and a daemon that refused to start the egress container at all are
+  facts about the platform's own check and are never reported as an absent network, and a name that
+  resolved while the configured address was refused is undetermined rather than blocked, because a
+  deployment that filters that address is likelier than one with no route. An undetermined verdict
+  now says whether asking again could ANSWER differently: a timeout is re-measured, while a rejected
+  setting, a payload with no `nc` and a filtered address are latched, because re-running two
+  container starts and an image load per job never converges on a cause that cannot change under a
+  running container.
+  
+  The connect probe no longer reads a bare `nc -w` exit status as evidence. busybox documents that
+  flag as the timeout for connects AND FINAL NET READS, so a connect that SUCCEEDED to a peer which
+  expects the client to speak first (every TLS port, the default `1.1.1.1:443` included) hits the
+  alarm and exits non-zero, which is indistinguishable from a refusal. It uses `-z` where the
+  payload's busybox has it and no `-w` where it does not, and wraps both halves in `busybox timeout`.
+  
+  New knobs, all optional: `HARNESS_DOCKER_EGRESS_TARGET` / `HARNESS_DOCKER_EGRESS_DNS_NAME` aim the
+  egress check somewhere a restricted network permits, which is what a deployment with an internal
+  mirror and no public egress should set. `HARNESS_DOCKER_READY_TIMEOUT_SECONDS` keeps its meaning as
+  the budget for the WHOLE sequence rather than gaining a per-arm sibling.
+
+### Patch Changes
+
+- Updated dependencies [3b11b10]
+  - @cat-factory/contracts@0.343.0
+
+## 0.331.0
+
+### Minor Changes
+
+- 9dfd40b: Let the monorepo adoption survey choose what it reads, and record what it read.
+  
+  The survey behind a monorepo bootstrap's adoption suggestion used to read a DECLARED list of
+  files (the root convention files, up to two CI workflows, one probed sibling service) and hand
+  them to one model call to judge. What the survey could not see was therefore decided before it
+  looked. It could see a sibling's dependency on `@acme/service-base` but not what adopting it
+  entails; it could name one sibling but had no shape in which to say the siblings disagree; it
+  saw nothing below a sibling's top level; and it read whichever two CI workflows sorted first,
+  which is unlikely to be the one that will actually gate the pull request.
+  
+  The read is now a bounded tool loop. The platform still seeds an opening context (each side's
+  root listing and convention files, whichever CI declaration the repository's provider uses
+  listed rather than sampled, and the listing of every sibling holding a convention file of its
+  own), and the model then asks for what it needs through `list`/`read` tools bound per side over
+  the same checkout-free `RepoFiles`. It is still inline: no container, no clone, no runner-image
+  change. The prompt is built from the sides that were actually wired, so a run whose reference
+  template the workspace never linked is not told it has tools it does not have.
+  
+  The platform keeps the bookkeeping, which is what keeps the suggestion checkable. Every read,
+  seeded or model-chosen, is budgeted (24 model reads, 54 000 characters for the loop), scrubbed
+  of secrets and appended to one transcript, and a recommendation citing anything that transcript
+  does not hold as read is still dropped and reported. Exhausting a budget is stated to the model
+  so the plan can name the areas it ran short on, and reported on the plan so a reviewer can tell
+  a thin read from a thin reading.
+  
+  `AdoptionSurvey` is now that transcript: `reads` replaces `monorepoPaths`/`templatePaths`/
+  `unreadablePaths`, `siblingServices` replaces the single `siblingService`, and `exploration`
+  carries the budget plus `recordsDropped`, the count of rows the transcript's own cap could not
+  hold. `reads` is nullable: the list projection every workspace snapshot is built from withholds
+  the transcript once a run is past its review, and says so rather than sending an empty array,
+  which is what a survey that read nothing looks like. Internal wire shape, so a plan stored by an
+  older build reads back unusable and the run should be retried; nothing about the review, the park
+  or the pull request changes.
+
+### Patch Changes
+
+- Updated dependencies [9dfd40b]
+  - @cat-factory/contracts@0.342.0
+
 ## 0.330.0
 
 ### Minor Changes

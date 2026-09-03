@@ -18,6 +18,7 @@ import { forkDecisionApi } from './api/forkDecision'
 import { inputGateApi } from './api/inputGate'
 import { judgeApi } from './api/judge'
 import { prReviewApi } from './api/prReview'
+import { bugFishingApi } from './api/bugFishing'
 import { fragmentsApi } from './api/fragments'
 import { foundationalServicesApi } from './api/foundationalServices'
 import { skillsApi } from './api/skills'
@@ -138,6 +139,7 @@ export function useApi() {
     ...inputGateApi(ctx),
     ...judgeApi(ctx),
     ...prReviewApi(ctx),
+    ...bugFishingApi(ctx),
     ...humanTestApi(ctx),
     ...visualConfirmApi(ctx),
     ...humanReviewApi(ctx),

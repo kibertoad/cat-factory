@@ -259,7 +259,8 @@
         "media": "Media",
         "recurring": "Recurring",
         "review": "Review",
-        "ralph": "Ralph loop"
+        "ralph": "Ralph loop",
+        "bugFishing": "Bug fishing"
       },
       "recurringWithFrame": "A recurring task runs a pipeline on a cadence. Continue to set the schedule + prompt.",
       "recurringNoFrame": "A recurring task must live on a service. Add it from a service frame (or a module inside one).",
@@ -383,6 +384,17 @@
       "contextFailed": "Task not created: {count} attachment could not be read | Task not created: {count} attachments could not be read",
       "@contextFailed": {
         "description": "Count-based: how many context attachments (docs/issues) could not be fetched, which is why nothing was created (count is always >= 1). Provide ALL plural forms your language needs (English has 2; Polish/Ukrainian need 3 - one/few/many - via the custom pluralRules in i18n.config.ts)."
+      },
+      "bugFishingFields": {
+        "angles": {
+          "label": "Angles to fish",
+          "hint": "Each angle is its own pass over the codebase, asking a different question. Leave every box clear to fish all of them.",
+          "allSelected": "All angles will be fished."
+        },
+        "focus": {
+          "label": "Where to concentrate",
+          "placeholder": "Subsystems, directories, or the kind of defect that has been costing this team"
+        }
       }
     },
     "recurring": {
@@ -765,7 +777,11 @@
         "kaizen_entry_not_settled": "The Kaizen entry has not been graded yet",
         "bootstrap_not_awaiting_review": "This bootstrap is not waiting for a review",
         "adoption_plan_unavailable": "There is no adoption plan to approve",
-        "monorepo_directory_taken": "That directory already exists"
+        "monorepo_directory_taken": "That directory already exists",
+        "no_expedition": "This run has no bug-fishing expedition",
+        "not_awaiting_triage": "This expedition is not waiting on triage",
+        "already_addressed": "Some findings already have a fix task",
+        "no_host_frame": "This expedition is not under a service"
       },
       "description": {
         "dependencies_unmet": "This task depends on others that aren't finished yet. Complete or unblock them, then start it again.",
@@ -813,7 +829,11 @@
         "kaizen_entry_not_settled": "Its grading is still queued or running, so there are no recommendations to acknowledge. Try again once it finishes.",
         "bootstrap_not_awaiting_review": "The run has moved on since this review was opened. Reload the board to see where it is now.",
         "adoption_plan_unavailable": "The survey could not produce one, so there are no decisions to submit.",
-        "monorepo_directory_taken": "Bootstrapping creates a new service. Pick a directory that does not exist yet, or import the existing one as a service."
+        "monorepo_directory_taken": "Bootstrapping creates a new service. Pick a directory that does not exist yet, or import the existing one as a service.",
+        "no_expedition": "The run you are looking at carries no expedition state, so there is nothing to triage. Refresh the run and try again.",
+        "not_awaiting_triage": "It is either still fishing a later angle or it has already been finished. Refresh the run to see where it is.",
+        "already_addressed": "A fix task was created for them earlier, so nothing was created again. Open the finding to reach the task it already has.",
+        "no_host_frame": "A fix task needs a service to live under and a repository to fix. Move the expedition task under a service frame and try again."
       },
       "action": {
         "connectGitHub": "Connect GitHub",
@@ -2463,7 +2483,8 @@
         "budget_paused": "Mark read",
         "budget_threshold": "Mark read",
         "key_drift": "Drop stale credentials",
-        "merge_tag_request": "Record effort"
+        "merge_tag_request": "Record effort",
+        "bug_fishing_triage": "Mark read"
       },
       "failingRun": "{kind} · {at}",
       "failingRunsMore": "{count} more not shown",
@@ -4066,6 +4087,11 @@
         "ageToggle": "Also hide tasks completed long ago",
         "days": "Keep for (days)",
         "hidesOnlyHint": "Nothing is deleted. Tasks with no recorded completion date are never hidden by age."
+      },
+      "bugFishing": {
+        "heading": "Bug-fishing fix pipeline",
+        "body": "The pipeline a bug-fix task runs when you mark a finding from a bug-fishing expedition. Each marked finding becomes its own task on this pipeline; whoever marks it can override the choice for one batch.",
+        "builtInDefault": "Use the built-in bug-fix preset"
       }
     },
     "localModelEndpoints": {
@@ -4647,6 +4673,10 @@
       "selected": "Selected",
       "added": "Added",
       "useThisFolder": "Use this folder",
+      "createHere": "Create here",
+      "newDirTarget": "New directory:",
+      "nameTaken": "{name} already exists here. Pick another folder, or change the name above.",
+      "exists": "Exists",
       "errors": {
         "listDirectory": "Could not list directory"
       },
@@ -7329,8 +7359,11 @@
       },
       "directory": {
         "label": "Service directory",
-        "description": "Where the service lives, relative to the repository root. It must not exist yet.",
+        "description": "Where the service lives, relative to the repo root. The run creates it, so it must not exist yet.",
         "placeholder": "services/payments",
+        "browse": "Explore the repository",
+        "browseHint": "Open the folder the service should sit in. The name above is created inside it, so there is nothing in the tree to select.",
+        "browseNeedsName": "Name the directory above (or the service below) first. Exploring decides where that name goes, not what it is called.",
         "error": {
           "empty": "Name a directory inside the repository.",
           "escapes": "The directory must stay inside the repository."
@@ -8600,6 +8633,70 @@
       "importFailed": "Could not import the service catalog",
       "disconnected": "Service catalog disconnected",
       "disconnectFailed": "Could not disconnect the service catalog"
+    }
+  },
+  "bugFishing": {
+    "title": "Bug fishing expedition",
+    "titleWithBlock": "Bug fishing: {title}",
+    "subtitle": "Mark the findings worth fixing — each one becomes its own bug-fix task.",
+    "stillFishing": "Still fishing — {done} of {total} angles have landed. Everything below is ready to act on now.",
+    "counts": "{untriaged} to triage, {spawned} sent for a fix",
+    "showTriaged": "Show decided",
+    "phases": {
+      "heading": "Angles",
+      "all": "Everything caught ({count})",
+      "found": "{count} found",
+      "failedNote": "This angle did not complete: {reason}",
+      "status": {
+        "pending": "Queued",
+        "fishing": "Fishing…",
+        "completed": "Done",
+        "failed": "Failed"
+      }
+    },
+    "fixPipeline": {
+      "label": "Fixes run on",
+      "boardDefault": "The board's default",
+      "hint": "Marks you make from now on run on {pipeline}."
+    },
+    "empty": {
+      "nothingCaught": "This expedition has caught nothing so far.",
+      "allTriaged": "Every finding has been decided."
+    },
+    "finding": {
+      "failureScenario": "How it fires",
+      "evidence": "Evidence the expedition cited",
+      "suggestedFix": "Suggested fix",
+      "fixThis": "Fix this",
+      "dismiss": "Dismiss",
+      "spawned": "A fix task is running on {pipeline}",
+      "spawning": "Creating the fix task…",
+      "spawnFailed": "The fix task could not be created: {reason} Mark it again to retry.",
+      "openTask": "Open the task"
+    },
+    "severity": {
+      "critical": "Critical",
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low"
+    },
+    "kind": {
+      "bug": "Bug",
+      "logic-gap": "Logic gap",
+      "edge-case": "Edge case",
+      "footgun": "Footgun",
+      "requirement-gap": "Requirement gap",
+      "other": "Other"
+    },
+    "confidence": {
+      "high": "High confidence",
+      "medium": "Medium confidence",
+      "low": "Low confidence"
+    },
+    "footer": {
+      "parked": "Every angle has been fished.",
+      "parkedWithUntriaged": "{count} finding(s) still undecided.",
+      "finish": "Finish triage"
     }
   }
 }

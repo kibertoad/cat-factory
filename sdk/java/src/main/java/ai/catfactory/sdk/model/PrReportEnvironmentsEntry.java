@@ -12,6 +12,7 @@ import org.jspecify.annotations.Nullable;
  * The {@code PrReportEnvironmentsEntry} wire model.
  * @param error May be absent entirely.
  * @param frameId the {@code frameId} field.
+ * @param remediation May be absent entirely.
  * @param status the {@code status} field.
  * @param url May be absent entirely.
  */
@@ -21,6 +22,9 @@ public record PrReportEnvironmentsEntry(
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("error") @Nullable String error,
 
     @JsonProperty("frameId") String frameId,
+
+    /** May be absent entirely. */
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("remediation") @Nullable PrReportEnvironmentsEntryRemediation remediation,
 
     @JsonProperty("status") PrReportEnvironmentsEntryStatus status,
 
@@ -42,6 +46,7 @@ public record PrReportEnvironmentsEntry(
     public static final class Builder {
         private @Nullable String error;
         private @Nullable String frameId;
+        private @Nullable PrReportEnvironmentsEntryRemediation remediation;
         private @Nullable PrReportEnvironmentsEntryStatus status;
         private @Nullable String url;
 
@@ -54,6 +59,12 @@ public record PrReportEnvironmentsEntry(
         /** Set {@code frameId}. */
         public Builder frameId(@Nullable String frameId) {
             this.frameId = frameId;
+            return this;
+        }
+
+        /** Set {@code remediation}. */
+        public Builder remediation(@Nullable PrReportEnvironmentsEntryRemediation remediation) {
+            this.remediation = remediation;
             return this;
         }
 
@@ -71,7 +82,7 @@ public record PrReportEnvironmentsEntry(
 
         /** Build the {@link PrReportEnvironmentsEntry}. */
         public PrReportEnvironmentsEntry build() {
-            return new PrReportEnvironmentsEntry(error, frameId, status, url);
+            return new PrReportEnvironmentsEntry(error, frameId, remediation, status, url);
         }
     }
 }

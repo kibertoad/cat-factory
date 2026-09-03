@@ -486,6 +486,50 @@ describe('investigate: the budget', () => {
     expect(c.investigate).not.toHaveBeenCalled()
   })
 
+  it('never explains a spent cycle with a SUPERSEDED cycle’s verdict', async () => {
+    // The log survives the whole run while the counter is re-armed per provisioning cycle. Cycle
+    // 1 diagnosed env_1 and restarted it; a loop-back then provisioned env_2, whose own rounds
+    // both threw, so this cycle reached no verdict at all. Walking the whole log back would
+    // explain env_2's terminal failure with evidence about an environment that no longer exists.
+    const c = controller()
+    const s = step({
+      stepOptions: { environmentInvestigation: { maxAttempts: 1 } },
+      environmentInvestigation: {
+        attempts: 1,
+        maxAttempts: 1,
+        frameId: 'frame_1',
+        cycle: 1,
+        attemptLog: [
+          {
+            attempt: 1,
+            cycle: 0,
+            at: 1,
+            outcome: 'remediated',
+            error: TIMEOUT_ERROR,
+            verdict: {
+              faultLayer: 'provider',
+              summary: 'The instance never came back.',
+              evidence: [],
+              action: 'restart',
+              actionRationale: 'r',
+            },
+          },
+          {
+            attempt: 2,
+            cycle: 1,
+            at: 2,
+            outcome: 'failed',
+            error: TIMEOUT_ERROR,
+            failure: 'the provider credentials could not be opened',
+          },
+        ],
+      },
+    } as never)
+
+    expect(await investigate(c, s)).toBeNull()
+    expect(c.investigate).not.toHaveBeenCalled()
+  })
+
   it('passes through with nothing to report when the budget is spent and nothing was concluded', async () => {
     const c = controller()
     const s = step({

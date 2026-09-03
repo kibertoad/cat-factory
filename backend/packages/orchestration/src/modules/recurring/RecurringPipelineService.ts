@@ -138,6 +138,8 @@ const TEMPLATE_DESCRIPTIONS: Record<ScheduleTemplate, string> = {
     'Recurring tech-debt remediation pass: analyse this service for the highest-value technical debt, file a tracking ticket, then implement the fix with tests.',
   'bug-triage':
     'Recurring bug-triage pass: pull one open bug from the configured tracker board, investigate it across the involved services, write a failing reproduction test, fix the reported issue, and drive the fix through review, testing and merge. WHICH board and which bugs qualify is set in this schedule’s issue-intake configuration.',
+  'bug-fishing':
+    'Recurring bug-fishing expedition: read this service’s codebase from a series of different angles — control flow, failure handling, boundary conditions, concurrency, lifecycle, interface contracts, footguns and conformance with the product requirements — and report the genuine defects, logic gaps and footguns each angle turns up. Nothing is changed: each finding you mark spawns its own bug-fix task.',
   custom: '',
 }
 

@@ -119,7 +119,8 @@ describe('describeDockerAbsence', () => {
 })
 
 describe('resolveDockerVerdict', () => {
-  const usable = (): Promise<DockerWorkload> => Promise.resolve({ status: 'usable' })
+  const usable = (): Promise<DockerWorkload> =>
+    Promise.resolve({ status: 'usable', egress: { status: 'reachable' } })
   const unusable = (): Promise<DockerWorkload> =>
     Promise.resolve({ status: 'unusable', detail: 'failed to mount overlay: invalid argument' })
   /** The check could not be carried out, and it never reached a daemon on the way. */

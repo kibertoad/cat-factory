@@ -22,6 +22,7 @@ import type {
   TaskTypeFields,
 } from '~/types/domain'
 import { DOC_KINDS, DOC_KIND_FIELDS } from '~/types/domain'
+import { BUG_FISHING_PHASES } from '@cat-factory/contracts'
 import { resolveComponentRegistry } from '@modular-vue/core'
 import { useReactiveSlots } from '@modular-vue/runtime'
 import type { AppSlots, ResultViewContribution } from '~/modular/slots'
@@ -97,6 +98,11 @@ const TASK_TYPES = computed<{ value: TaskTypeChoice; label: string; icon: string
   const all: { value: TaskTypeChoice; label: string; icon: string }[] = [
     { value: 'feature', label: t('board.addTask.types.feature'), icon: 'i-lucide-sparkles' },
     { value: 'bug', label: t('board.addTask.types.bug'), icon: 'i-lucide-bug' },
+    {
+      value: 'bug-fishing',
+      label: t('board.addTask.types.bugFishing'),
+      icon: 'i-lucide-fish',
+    },
     { value: 'document', label: t('board.addTask.types.document'), icon: 'i-lucide-file-text' },
     { value: 'spike', label: t('board.addTask.types.spike'), icon: 'i-lucide-flask-conical' },
     {
@@ -127,6 +133,11 @@ const isRecurring = computed(() => taskType.value === 'recurring')
 const severity = ref<'low' | 'medium' | 'high' | 'critical' | ''>('')
 const stepsToReproduce = ref('')
 const timeboxHours = ref<number | undefined>(undefined)
+// Bug-fishing expedition: which ANGLES to fish (empty ⇒ every shipped angle, the intended
+// default — an expedition exists to cover ground nobody thought to look at, so narrowing it is
+// the deliberate act) plus an optional focus folded into every angle's prompt.
+const fishingPhaseIds = ref<string[]>([])
+const fishingFocus = ref('')
 // Spike research criteria — folded into the spike agent's prompt (see the backend `spike` kind).
 const spikeResearchQuestion = ref('')
 const spikeSuccessCriteria = ref('')
@@ -284,6 +295,24 @@ function buildCustomTypeFields(): TaskTypeFields | undefined {
   return Object.keys(bag).length ? { custom: bag } : undefined
 }
 
+/**
+ * The bug-fishing expedition's creation fields. Both NARROW a hunt that otherwise covers every
+ * angle, so both are omitted when they narrow nothing: an empty selection and "every angle" are
+ * the same run, and storing the full catalog would freeze today's angle list onto a task that
+ * runs next quarter.
+ *
+ * Its own function rather than another arm of {@link buildTypeFields}, whose per-type chain is at
+ * its complexity ceiling — a budget is a split trigger, not a number to raise.
+ */
+function buildBugFishingFields(): TaskTypeFields | undefined {
+  const f: TaskTypeFields = {}
+  if (fishingPhaseIds.value.length && fishingPhaseIds.value.length < BUG_FISHING_PHASES.length) {
+    f.fishingPhaseIds = [...fishingPhaseIds.value]
+  }
+  if (fishingFocus.value.trim()) f.fishingFocus = fishingFocus.value.trim()
+  return Object.keys(f).length ? f : undefined
+}
+
 function buildTypeFields(): TaskTypeFields | undefined {
   if (taskType.value === 'bug') {
     const f: TaskTypeFields = {}
@@ -291,6 +320,7 @@ function buildTypeFields(): TaskTypeFields | undefined {
     if (stepsToReproduce.value.trim()) f.stepsToReproduce = stepsToReproduce.value.trim()
     return Object.keys(f).length ? f : undefined
   }
+  if (taskType.value === 'bug-fishing') return buildBugFishingFields()
   if (taskType.value === 'spike') {
     const f: TaskTypeFields = {}
     // `v-model.number` on a cleared number input yields '' (not undefined), which would
@@ -420,6 +450,7 @@ const DEFAULT_PIPELINE_FOR_TYPE: Partial<Record<TaskTypeChoice, string>> = {
   document: 'pl_document',
   review: 'pl_review',
   media: 'pl_media',
+  'bug-fishing': 'pl_bug_fishing',
 }
 /**
  * The pipeline a task type opens with: a custom type's registered `defaultPipelineId`, else the
@@ -564,6 +595,8 @@ watch(open, (isOpen) => {
   severity.value = ''
   stepsToReproduce.value = ''
   timeboxHours.value = undefined
+  fishingPhaseIds.value = []
+  fishingFocus.value = ''
   spikeResearchQuestion.value = ''
   spikeSuccessCriteria.value = ''
   spikeOptionsToCompare.value = ''
@@ -1022,6 +1055,53 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
                 :rows="2"
                 autoresize
                 :placeholder="t('board.addTask.stepsToReproducePlaceholder')"
+                class="w-full"
+              />
+            </UFormField>
+          </div>
+
+          <!-- Bug-fishing expedition. Both fields NARROW a hunt that otherwise covers every
+               angle, which is why neither is required and why the angle list is rendered as
+               opt-OUT checkboxes rather than an empty multi-select: leaving it alone has to
+               mean "fish everything", not "fish nothing". -->
+          <div v-else-if="taskType === 'bug-fishing'" class="space-y-3">
+            <UFormField
+              :label="t('board.addTask.bugFishingFields.angles.label')"
+              :hint="t('board.addTask.optional')"
+              :description="t('board.addTask.bugFishingFields.angles.hint')"
+            >
+              <div class="grid gap-1.5 sm:grid-cols-2">
+                <label
+                  v-for="phase in BUG_FISHING_PHASES"
+                  :key="phase.id"
+                  class="flex items-start gap-2 rounded-md px-1.5 py-1 text-[12px] hover:bg-slate-800/40"
+                >
+                  <input
+                    v-model="fishingPhaseIds"
+                    type="checkbox"
+                    :value="phase.id"
+                    class="mt-0.5 accent-sky-500"
+                    :data-testid="`add-task-fishing-angle-${phase.id}`"
+                  />
+                  <span class="min-w-0">
+                    <span class="block text-slate-200">{{ phase.title }}</span>
+                    <span class="block text-[11px] text-slate-500">{{ phase.goal }}</span>
+                  </span>
+                </label>
+              </div>
+              <p v-if="fishingPhaseIds.length === 0" class="mt-1.5 text-[11px] text-slate-500">
+                {{ t('board.addTask.bugFishingFields.angles.allSelected') }}
+              </p>
+            </UFormField>
+            <UFormField
+              :label="t('board.addTask.bugFishingFields.focus.label')"
+              :hint="t('board.addTask.optional')"
+            >
+              <UTextarea
+                v-model="fishingFocus"
+                :rows="2"
+                autoresize
+                :placeholder="t('board.addTask.bugFishingFields.focus.placeholder')"
                 class="w-full"
               />
             </UFormField>

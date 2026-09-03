@@ -13,6 +13,7 @@ import {
   DOCUMENT_PIPELINE_ID,
   RALPH_PIPELINE_ID,
   MEDIA_PIPELINE_ID,
+  BUG_FISHING_PIPELINE_ID,
   SPIKE_PIPELINE_ID,
   defaultPipelineIdForTaskType,
   retiredPipelines,
@@ -550,12 +551,13 @@ describe('seedPipelines — purpose classification is total and matches the engi
 })
 
 describe('defaultPipelineIdForTaskType', () => {
-  it('pins the four types the full build pipeline is wrong for, plus ralph', () => {
+  it('pins the five types the full build pipeline is wrong for, plus ralph', () => {
     expect(defaultPipelineIdForTaskType('document')).toBe(DOCUMENT_PIPELINE_ID)
     expect(defaultPipelineIdForTaskType('spike')).toBe(SPIKE_PIPELINE_ID)
     expect(defaultPipelineIdForTaskType('review')).toBe(REVIEW_PIPELINE_ID)
     expect(defaultPipelineIdForTaskType('ralph')).toBe(RALPH_PIPELINE_ID)
     expect(defaultPipelineIdForTaskType('media')).toBe(MEDIA_PIPELINE_ID)
+    expect(defaultPipelineIdForTaskType('bug-fishing')).toBe(BUG_FISHING_PIPELINE_ID)
   })
 
   it('resolves every pinned default to a pipeline the catalog actually ships', () => {
@@ -568,7 +570,7 @@ describe('defaultPipelineIdForTaskType', () => {
   })
 
   it('leaves every other built-in type to the workspace positional default', () => {
-    const pinned = new Set(['document', 'spike', 'review', 'ralph', 'media'])
+    const pinned = new Set(['document', 'spike', 'review', 'ralph', 'media', 'bug-fishing'])
     for (const taskType of BUILTIN_TASK_TYPES) {
       if (pinned.has(taskType)) continue
       expect(defaultPipelineIdForTaskType(taskType), `${taskType}`).toBeUndefined()
