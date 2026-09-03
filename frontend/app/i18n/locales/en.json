@@ -4673,6 +4673,10 @@
       "selected": "Selected",
       "added": "Added",
       "useThisFolder": "Use this folder",
+      "createHere": "Create here",
+      "newDirTarget": "New directory:",
+      "nameTaken": "{name} already exists here. Pick another folder, or change the name above.",
+      "exists": "Exists",
       "errors": {
         "listDirectory": "Could not list directory"
       },
@@ -7341,8 +7345,11 @@
       },
       "directory": {
         "label": "Service directory",
-        "description": "Where the service lives, relative to the repository root. It must not exist yet.",
+        "description": "Where the service lives, relative to the repo root. The run creates it, so it must not exist yet.",
         "placeholder": "services/payments",
+        "browse": "Explore the repository",
+        "browseHint": "Open the folder the service should sit in. The name above is created inside it, so there is nothing in the tree to select.",
+        "browseNeedsName": "Name the directory above (or the service below) first. Exploring decides where that name goes, not what it is called.",
         "error": {
           "empty": "Name a directory inside the repository.",
           "escapes": "The directory must stay inside the repository."

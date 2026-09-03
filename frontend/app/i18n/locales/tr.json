@@ -4512,6 +4512,10 @@
       "selected": "Seçildi",
       "added": "Eklendi",
       "useThisFolder": "Bu klasörü kullan",
+      "createHere": "Burada oluştur",
+      "newDirTarget": "Yeni dizin:",
+      "nameTaken": "{name} burada zaten var. Başka bir klasör seç ya da yukarıdaki adı değiştir.",
+      "exists": "Var",
       "errors": {
         "listDirectory": "Dizin listelenemedi"
       },
@@ -7021,8 +7025,11 @@
       },
       "directory": {
         "label": "Servis dizini",
-        "description": "Servisin depo köküne göre nerede olduğu. Henüz var olmamalı.",
+        "description": "Servisin depo köküne göre nerede olduğu. Çalıştırma onu oluşturur, bu yüzden henüz var olmamalı.",
         "placeholder": "services/payments",
+        "browse": "Depoyu keşfet",
+        "browseHint": "Servisin yer alacağı klasörü aç. Yukarıdaki ad onun içinde oluşturulur, dolayısıyla ağaçta seçilecek bir şey yok.",
+        "browseNeedsName": "Önce yukarıda bir dizin (ya da aşağıda servis adı) belirt. Keşfetmek bu adın nereye gideceğini belirler, adın ne olduğunu değil.",
         "error": {
           "empty": "Depo içinde bir dizin belirt.",
           "escapes": "Dizin deponun içinde kalmalı."
