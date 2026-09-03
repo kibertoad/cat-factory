@@ -1,5 +1,6 @@
 import type {
   AdoptionPlan,
+  BootstrapDelivery,
   BootstrapFailure,
   BootstrapPhase,
   BootstrapStatus,
@@ -69,6 +70,13 @@ export interface BootstrapJobRecord {
   monorepo: MonorepoBootstrapRef | null
   /** Which half of the monorepo flow the run is in; null on a new-repo run. */
   phase: BootstrapPhase | null
+  /**
+   * How this run delivers its work, resolved at start. Stored rather than re-derived because a
+   * RETRY re-dispatches under it and a finished run is read back to say which shape it took;
+   * a row written before the delivery toggle existed resolves to the target's own default,
+   * which is what that run actually did.
+   */
+  delivery: BootstrapDelivery
   /**
    * The id of the run's CURRENT drive: the durable driver's instance/singleton key, and the
    * container job id when a container is dispatched.

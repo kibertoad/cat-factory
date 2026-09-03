@@ -2,6 +2,7 @@ import { resolveDocTemplate } from '@cat-factory/agents'
 import type {
   AgentFailure,
   Block,
+  BootstrapJob,
   DocumentRecord,
   SourceTask,
   TaskRecord,
@@ -96,6 +97,53 @@ export function defineSourcesConformance(harness: ConformanceHarness): void {
       expect(frameSignals.length).toBeGreaterThan(0)
       expect(frameSignals.every((e) => !e.hasBlock)).toBe(true)
       expect(frameSignals.some((e) => e.reason === 'bootstrap-succeeded')).toBe(true)
+    })
+
+    it('records the delivery a run was started with, and reports what it delivered', async () => {
+      // The delivery is stored on the run rather than re-derived, because a RETRY re-dispatches
+      // under it: a run the user asked to deliver as a pull request must not quietly become a
+      // push to the default branch on its second attempt. It rides the same JSON detail column
+      // on both facades, so a round-trip through the store is what pins it.
+      const app = harness.makeApp()
+      const { workspace } = await app.createWorkspace()
+      const wsId = workspace.id
+
+      const omitted = await app.call<BootstrapJob>('POST', `/workspaces/${wsId}/bootstrap/jobs`, {
+        repoName: 'pushed-service',
+        instructions: 'Scaffold a small HTTP service.',
+      })
+      // A new repository's first commit is reviewed by nobody, so that is the target's default.
+      expect(omitted.body.delivery).toBe('direct_push')
+
+      const asPr = await app.call<BootstrapJob>('POST', `/workspaces/${wsId}/bootstrap/jobs`, {
+        repoName: 'reviewed-service',
+        instructions: 'Scaffold a small HTTP service.',
+        delivery: 'pull_request',
+      })
+      expect(asPr.body.delivery).toBe('pull_request')
+
+      await app.driveBootstrap(wsId, omitted.body.id)
+      await app.driveBootstrap(wsId, asPr.body.id)
+
+      const pushed = await app.call<BootstrapJob>(
+        'GET',
+        `/workspaces/${wsId}/bootstrap/jobs/${omitted.body.id}`,
+      )
+      expect(pushed.body.status).toBe('succeeded')
+      // Nothing was opened for review, and the field says so rather than carrying a branch URL.
+      expect(pushed.body.prUrl).toBeNull()
+      expect(pushed.body.repoUrl).toBeTruthy()
+
+      const reviewed = await app.call<BootstrapJob>(
+        'GET',
+        `/workspaces/${wsId}/bootstrap/jobs/${asPr.body.id}`,
+      )
+      expect(reviewed.body.status).toBe('succeeded')
+      // This run created a repository AND opened a pull request, so both are reported: a
+      // caller links the board frame to the first and sends a person to the second.
+      expect(reviewed.body.prUrl).toContain('/pull/')
+      expect(reviewed.body.repoUrl).toBeTruthy()
+      expect(reviewed.body.delivery).toBe('pull_request')
     })
 
     it('reads a stopped run’s structured failure back off the store', async () => {

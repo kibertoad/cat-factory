@@ -2,6 +2,7 @@ import type {
   AdoptionReviewInput,
   Block,
   BlockType,
+  BootstrapDelivery,
   BootstrapFailure,
   BootstrapFailureKind,
   BootstrapJob,
@@ -26,7 +27,11 @@ import type {
   ReferenceArchitectureRecord,
   ReferenceArchitectureRepository,
 } from '@cat-factory/kernel'
-import type { MonorepoBootstrapLeg, RepoBootstrapper } from '@cat-factory/kernel'
+import type {
+  BootstrapDeliveryPlan,
+  MonorepoBootstrapLeg,
+  RepoBootstrapper,
+} from '@cat-factory/kernel'
 import type { BootstrapRunner } from '@cat-factory/kernel'
 import type { ExecutionEventPublisher } from '@cat-factory/kernel'
 import type { Logger } from '@cat-factory/kernel'
@@ -34,6 +39,7 @@ import {
   assertFound,
   ConflictError,
   getErrorMessage,
+  hostMarkdown,
   isDispatchFailure,
   noopLogger,
   redactSecrets,
@@ -44,7 +50,7 @@ import {
   sameSubtasks,
 } from '@cat-factory/kernel'
 import { registerServiceForFrame, requireWorkspace } from '@cat-factory/kernel'
-import { monorepoBootstrapPrTitle } from '@cat-factory/agents'
+import { bootstrapPrTitle } from '@cat-factory/agents'
 import {
   MonorepoBootstrapController,
   type MonorepoBootstrapDeps,
@@ -149,6 +155,7 @@ function toBootstrapJob(record: BootstrapJobRecord): BootstrapJob {
     failure: record.failure,
     monorepo: record.monorepo,
     phase: record.phase,
+    delivery: record.delivery,
     adoptionPlan: record.adoptionPlan,
     adoptionReview: record.adoptionReview,
     prUrl: record.prUrl,
@@ -190,6 +197,38 @@ function newRunDefaults(
     adoptionReview: null,
     prUrl: null,
   }
+}
+
+/**
+ * The pull-request body a run that has no adoption review to publish opens with.
+ *
+ * Only ever the FALLBACK: the harness lets the agent's own `.cat-pr-description.md` replace it
+ * field-wise, and the PR-description guidance rides every agent pass, so a run whose agent wrote
+ * a briefing publishes that instead. What this owes is one honest sentence for the run whose
+ * agent wrote none, naming where the code came from rather than leaving a reviewer an empty body.
+ * Every hole goes through `hostMarkdown.inline`, which is the rule for a host-rendered surface
+ * regardless of how constrained the value looks from here.
+ */
+function newRepoPrBody(repoName: string, referenceName: string | null): string {
+  const from = referenceName
+    ? `the \`${hostMarkdown.inline(referenceName)}\` reference architecture`
+    : 'a freeform brief'
+  return (
+    `Bootstrapped \`${hostMarkdown.inline(repoName)}\` from ${from}.\n\n` +
+    `This is the repository's first content: review it before merging, because merging is what ` +
+    `makes it the default branch every later run builds on.`
+  )
+}
+
+/**
+ * The delivery a request that named none takes.
+ *
+ * The two targets want opposite answers and that is the whole reason the rule lives here rather
+ * than as a schema default: a repository this run is creating has nobody to review its first
+ * commit, and a monorepo's default branch is the branch every other service is built from.
+ */
+function defaultDelivery(intoMonorepo: boolean): BootstrapDelivery {
+  return intoMonorepo ? 'pull_request' : 'direct_push'
 }
 
 /** Join the reference architecture's default instructions with per-run extras. */
@@ -407,6 +446,7 @@ export class BootstrapService {
       subtasks: null,
       error: null,
       failure: null,
+      delivery: input.delivery ?? defaultDelivery(Boolean(monorepo)),
       ...(monorepo ? { monorepo: monorepo.ref, phase: 'survey' as const } : {}),
       createdAt: now,
       updatedAt: now,
@@ -449,6 +489,7 @@ export class BootstrapService {
           description: input.description,
           private: input.private,
         },
+        delivery: this.deliveryPlan(record),
         instructions,
       })
     } catch (error) {
@@ -568,6 +609,10 @@ export class BootstrapService {
       // re-survey is claimable.
       monorepo: previous.monorepo,
       phase: previous.phase,
+      // A retry re-dispatches the run it is retrying, so it takes the delivery that run was
+      // started with. Falling back to the target's default here would silently move a run the
+      // user asked to deliver as a pull request onto the branch its whole team builds from.
+      delivery: previous.delivery,
       adoptionPlan: previous.adoptionPlan?.status === 'ready' ? previous.adoptionPlan : null,
       adoptionReview: previous.adoptionReview,
       createdAt: now,
@@ -608,6 +653,7 @@ export class BootstrapService {
         containerJobId: record.driveId,
         referenceRepo,
         target: { name: record.repoName, description: '', private: true },
+        delivery: this.deliveryPlan(record),
         instructions: record.instructions,
       })
     } catch (error) {
@@ -740,10 +786,27 @@ export class BootstrapService {
     // and flip the frame to a ready, droppable service.
     const outcome = update.outcome
     if (!outcome) throw new Error('Bootstrap reported done without an outcome')
+    // A `pull_request` run's deliverable is the pull request, so a completed run that opened
+    // none is a FAILURE rather than a success with a null field, exactly as it is on the
+    // monorepo path: the repository exists but holds nothing anybody asked to review, and
+    // marking the frame ready would claim a service whose code is on a branch nobody was told
+    // about. `direct_push` never reports one, and none is expected.
+    if (record.delivery === 'pull_request' && !update.prUrl) {
+      // Reclaim the container first, exactly as the success path below does: the run is over
+      // either way, and a refusal that leaves the instance idling is the same leak.
+      await this.stopContainer(workspaceId, jobId, record.driveId)
+      return await this.failRun(
+        workspaceId,
+        record,
+        'The bootstrap agent finished without opening a pull request, so the new service was ' +
+          'not delivered anywhere a reviewer can find it.',
+      )
+    }
     const patch = {
       status: 'succeeded' as const,
       repoOwner: outcome.owner,
       repoUrl: outcome.repoUrl,
+      prUrl: update.prUrl ?? null,
       updatedAt: this.deps.clock.now(),
     }
     await this.deps.bootstrapJobRepository.update(workspaceId, jobId, patch)
@@ -773,7 +836,9 @@ export class BootstrapService {
       workspaceId,
       record.blockId,
       'ready',
-      `Service bootstrapped from ${outcome.owner}/${outcome.name}. Drop tasks here to implement against it.`,
+      update.prUrl
+        ? `Service bootstrapped into ${outcome.owner}/${outcome.name}. Review and merge the pull request, then drop tasks here.`
+        : `Service bootstrapped from ${outcome.owner}/${outcome.name}. Drop tasks here to implement against it.`,
     )
     // `emitBootstrap` pairs the frame it was handed with the coarse board signal that carries the
     // ready flip to every board mounting this service.
@@ -848,6 +913,40 @@ export class BootstrapService {
   async driveIdOf(workspaceId: string, jobId: string): Promise<string> {
     const record = await this.deps.bootstrapJobRepository.get(workspaceId, jobId)
     return record?.driveId ?? jobId
+  }
+
+  /**
+   * Turn the run's recorded `delivery` into the plan a dispatch acts on: the work branch and
+   * pull-request text, or nothing at all.
+   *
+   * One place, read by both targets, because the two dispatch sites otherwise each decide what a
+   * `pull_request` run means and only one of them is ever exercised by the test you are writing.
+   * `resolved` is the settled adoption review, present only on a monorepo apply; without one the
+   * body is the new-repo fallback, since there is no reviewed decision to publish.
+   */
+  private deliveryPlan(
+    record: BootstrapJobRecord,
+    resolved?: NonNullable<BootstrapJobRecord['adoptionReview']>,
+  ): BootstrapDeliveryPlan {
+    if (record.delivery === 'direct_push') return { mode: 'direct_push' }
+    const directory = record.monorepo?.directory
+    return {
+      mode: 'pull_request',
+      branch: this.monorepo.branchFor(record.id),
+      pr: {
+        title: bootstrapPrTitle(record.repoName, directory),
+        // The HOST rendering (neutralised holes, scrubbed at compose time), never the agent
+        // brief: this string lands on a pull request body, where a reviewer's note reading
+        // "fixes #412" would close an unrelated issue on merge. It is the FALLBACK body; on a
+        // monorepo run the engine also publishes the same decisions as its own marker region
+        // once the pull request exists, because the harness lets an agent-authored description
+        // replace this one.
+        body:
+          resolved && directory
+            ? (redactSecrets(renderAdoptionPrSection(resolved, directory)) ?? '')
+            : newRepoPrBody(record.repoName, record.referenceArchitectureName),
+      },
+    }
   }
 
   // ---- the monorepo flow's three moves ------------------------------------
@@ -995,7 +1094,6 @@ export class BootstrapService {
           record.referenceArchitectureId,
         )
       : null
-    const branch = this.monorepo.branchFor(record.id)
     // `-apply`, not `:apply`: this string becomes a Cloudflare Workflows INSTANCE ID, whose
     // accepted character set is narrower than a run id's and does not include a colon, and a
     // rejected `create` is swallowed by design (a duplicate start is normal), so the failure
@@ -1006,18 +1104,14 @@ export class BootstrapService {
       owner: monorepo.repoOwner,
       name: monorepo.repoName,
       directory: monorepo.directory,
-      branch,
-      pr: {
-        title: monorepoBootstrapPrTitle(record.repoName, monorepo.directory),
-        // The HOST rendering (neutralised holes, scrubbed at compose time), never the agent
-        // brief: this string lands on a pull request body, where a reviewer's note reading
-        // "fixes #412" would close an unrelated issue on merge. It is the FALLBACK body; the
-        // engine also publishes the same decisions as its own marker region once the pull
-        // request exists, because the harness lets an agent-authored description replace this.
-        body: redactSecrets(renderAdoptionPrSection(resolved, monorepo.directory)) ?? '',
-      },
     }
-    const started: MonorepoBootstrapRef = { ...monorepo, branch }
+    const delivery = this.deliveryPlan(record, resolved)
+    // The work branch is a `pull_request` fact, so a `direct_push` run leaves it null rather
+    // than recording a branch nothing ever pushed.
+    const started: MonorepoBootstrapRef = {
+      ...monorepo,
+      branch: delivery.mode === 'pull_request' ? delivery.branch : null,
+    }
     const patch = {
       status: 'running' as const,
       phase: 'apply' as const,
@@ -1043,6 +1137,7 @@ export class BootstrapService {
           : undefined,
         target: { name: record.repoName, description: '', private: true },
         monorepo: leg,
+        delivery,
         // The agent's brief is the run's own instructions PLUS the settled decisions, rendered
         // as instructions rather than as context: an agent told only what the areas are decides
         // them again, which is precisely what the review exists to prevent.
@@ -1101,24 +1196,16 @@ export class BootstrapService {
   ): Promise<BootstrapPollResult> {
     const monorepo = record.monorepo
     await this.stopContainer(workspaceId, record.id, record.driveId)
-    if (!monorepo || !prUrl) {
-      const message =
-        'The bootstrap agent finished without opening a pull request, so the new service was not delivered anywhere.'
-      const patch = {
-        status: 'failed' as const,
-        error: message,
-        failure: this.buildFailure('agent', message, null, record.subtasks),
-        updatedAt: this.deps.clock.now(),
-      }
-      await this.deps.bootstrapJobRepository.update(workspaceId, record.id, patch)
-      const blocked = await this.markFrame(
+    // A `pull_request` run's deliverable IS the pull request; a `direct_push` run's is the
+    // commit on the default branch, and it reports no PR by construction. So the refusal keys
+    // off what the run PROMISED, never off the field being empty, which is the ordinary state
+    // of the other delivery.
+    if (!monorepo || (record.delivery === 'pull_request' && !prUrl)) {
+      return await this.failRun(
         workspaceId,
-        record.blockId,
-        'blocked',
-        `Bootstrap failed: ${message}`,
+        record,
+        'The bootstrap agent finished without opening a pull request, so the new service was not delivered anywhere.',
       )
-      await this.emitBootstrap(workspaceId, toBootstrapJob({ ...record, ...patch }), blocked)
-      return { state: 'failed', error: message }
     }
 
     const patch = {
@@ -1128,12 +1215,15 @@ export class BootstrapService {
       // monorepo run creates none: writing the pull request there would re-scope a released
       // field in place, and an integration that clones `repoUrl` would clone a PR link. `prUrl`
       // is the field this run's deliverable belongs in, and it is projected publicly beside it.
-      prUrl,
+      prUrl: prUrl ?? null,
       updatedAt: this.deps.clock.now(),
     }
     await this.deps.bootstrapJobRepository.update(workspaceId, record.id, patch)
     const review = record.adoptionReview
-    if (review) {
+    // The decisions are published onto the PULL REQUEST, so a direct-push run has nowhere to
+    // put them and skips it. They are not lost: they are on the run record the board renders,
+    // which is where a reviewer of a direct-push run reads them.
+    if (review && prUrl) {
       // Best-effort: the pull request is open, the decisions are on the run record the board
       // renders, and failing the run over a description write would discard a delivered service.
       // The warning is what makes the omission visible rather than silent.
@@ -1161,17 +1251,47 @@ export class BootstrapService {
         // swallow: see above
       }
     }
+    const landed = `Service bootstrapped into ${monorepo.repoOwner}/${monorepo.repoName} at ${monorepo.directory}.`
     const block = await this.markFrame(
       workspaceId,
       record.blockId,
       'ready',
-      `Service bootstrapped into ${monorepo.repoOwner}/${monorepo.repoName} at ${monorepo.directory}. Review and merge the pull request, then drop tasks here.`,
+      prUrl
+        ? `${landed} Review and merge the pull request, then drop tasks here.`
+        : `${landed} It is on the default branch already. Drop tasks here to implement against it.`,
     )
     await this.emitBootstrap(workspaceId, toBootstrapJob({ ...record, ...patch }), block)
     return { state: 'done' }
   }
 
   // ---- helpers ------------------------------------------------------------
+
+  /**
+   * Fail a run that finished without delivering what it promised: record the reason, block the
+   * frame, announce it. Shared by both targets' terminal paths, which raise the SAME condition
+   * (a `pull_request` run that opened none) and were drifting into two copies of it.
+   */
+  private async failRun(
+    workspaceId: string,
+    record: BootstrapJobRecord,
+    message: string,
+  ): Promise<BootstrapPollResult> {
+    const patch = {
+      status: 'failed' as const,
+      error: message,
+      failure: this.buildFailure('agent', message, null, record.subtasks),
+      updatedAt: this.deps.clock.now(),
+    }
+    await this.deps.bootstrapJobRepository.update(workspaceId, record.id, patch)
+    const blocked = await this.markFrame(
+      workspaceId,
+      record.blockId,
+      'blocked',
+      `Bootstrap failed: ${message}`,
+    )
+    await this.emitBootstrap(workspaceId, toBootstrapJob({ ...record, ...patch }), blocked)
+    return { state: 'failed', error: message }
+  }
 
   /** The workspace default fragment ids a new service inherits; empty / never throws. */
   private async defaultServiceFragmentIds(workspaceId: string): Promise<string[]> {

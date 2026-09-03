@@ -416,12 +416,12 @@ export function renderAdoptionPrSection(resolved: ResolvedAdoption, directory: s
 }
 
 /**
- * The default branch name for a monorepo bootstrap's pull request.
+ * The work-branch name a bootstrap opens its pull request from, whichever target it writes to.
  *
  * Derived from the run's own id rather than the service name so two bootstraps of similarly
  * named services can never collide on one branch, and stable per run so a retry of the SAME run
- * resumes its branch instead of opening a second pull request against the monorepo.
+ * resumes its branch instead of opening a second pull request against the target.
  */
-export function monorepoBootstrapBranch(jobId: string): string {
+export function bootstrapWorkBranch(jobId: string): string {
   return `cat-factory/bootstrap-${jobId}`
 }

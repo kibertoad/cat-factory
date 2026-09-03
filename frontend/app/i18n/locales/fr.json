@@ -6922,7 +6922,8 @@
       "title": "Exécutions récentes",
       "fromArch": "depuis {name}",
       "fromScratch": "à partir de zéro",
-      "open": "Ouvrir"
+      "open": "Ouvrir",
+      "openPr": "Pull request"
     },
     "status": {
       "pending": "en attente",
@@ -6974,11 +6975,24 @@
       "label": "Où va le service",
       "newRepo": {
         "label": "Un nouveau dépôt",
-        "description": "Créer un dépôt dédié et pousser le service comme premier commit."
+        "description": "Créer un dépôt dédié et y écrire le service."
       },
       "monorepo": {
         "label": "Un répertoire d’un monorepo existant",
-        "description": "Ajouter le service à un dépôt que vous avez déjà et ouvrir une pull request."
+        "description": "Ajouter le service à un dépôt que vous avez déjà."
+      }
+    },
+    "delivery": {
+      "label": "Comment le travail est livré",
+      "pullRequest": {
+        "label": "Ouvrir une pull request",
+        "descNewRepo": "Pousser une branche et ouvrir une pull request sur le premier commit du dépôt, pour qu’une personne relise l’ossature avant qu’elle ne devienne la branche par défaut. Le dépôt doit déjà avoir un commit.",
+        "descMonorepo": "Pousser une branche et ouvrir une pull request. Rien n’est fusionné à votre place."
+      },
+      "directPush": {
+        "label": "Pousser directement",
+        "descNewRepo": "Écrire le service directement sur la branche par défaut, comme premier commit du dépôt.",
+        "descMonorepo": "Committer sur la branche par défaut pendant que l’agent travaille. Si l’exécution échoue, ce qui a déjà été écrit reste en place."
       }
     },
     "serviceName": {
@@ -6986,7 +7000,7 @@
       "description": "Nomme le service sur le tableau et propose son répertoire."
     },
     "monorepo": {
-      "intro": "Le service est écrit dans un répertoire d’un dépôt existant et livré sous forme de pull request. Rien n’est fusionné à votre place et rien n’est modifié hors du nouveau répertoire.",
+      "intro": "Le service est écrit dans un répertoire d’un dépôt existant, et rien n’est modifié hors de ce répertoire.",
       "repo": {
         "label": "Monorepo",
         "description": "Le dépôt qui hébergera le nouveau service. Il doit déjà être lié à cet espace de travail.",

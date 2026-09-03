@@ -1,5 +1,6 @@
 import type {
   AdoptionPlan,
+  BootstrapDelivery,
   BootstrapJobRecord,
   BootstrapJobRecordPatch,
   BootstrapJobRepository,
@@ -57,6 +58,13 @@ interface BootstrapDetail {
   adoptionPlan: AdoptionPlan | null
   adoptionReview: ResolvedAdoption | null
   prUrl: string | null
+  /**
+   * How the run delivers its work. A row written before the delivery toggle existed carries
+   * none, and `rowToRecord` resolves it from the TARGET rather than defaulting blindly: a
+   * monorepo run of that vintage opened a pull request and a new-repo one force-pushed, which
+   * is what those runs actually did.
+   */
+  delivery: BootstrapDelivery | null
 }
 
 /** The value every absent/garbled detail field falls back to. */
@@ -73,6 +81,7 @@ const EMPTY_DETAIL: BootstrapDetail = {
   adoptionPlan: null,
   adoptionReview: null,
   prUrl: null,
+  delivery: null,
 }
 
 /** Parse the `detail` JSON, tolerating null/garbage (older/blank rows). */
@@ -117,6 +126,10 @@ function rowToRecord(row: AgentRunRow): BootstrapJobRecord {
     adoptionPlan: detail.adoptionPlan,
     adoptionReview: detail.adoptionReview,
     prUrl: detail.prUrl,
+    // A row predating the delivery toggle records what that run DID: a monorepo run opened a
+    // pull request and a new-repo run force-pushed its initial commit, which was the only
+    // behaviour either target had. Historically true, not a guess.
+    delivery: detail.delivery ?? (detail.monorepo ? 'pull_request' : 'direct_push'),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -177,6 +190,7 @@ export class D1BootstrapJobRepository implements BootstrapJobRepository {
       adoptionPlan: record.adoptionPlan,
       adoptionReview: record.adoptionReview,
       prUrl: record.prUrl,
+      delivery: record.delivery,
     }
     // Stamp `service_id` from the materialised service frame (when known) so a shared
     // service's in-flight bootstrap surfaces on every board that mounts it via `listByService`.

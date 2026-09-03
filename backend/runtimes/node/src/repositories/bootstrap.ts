@@ -1,5 +1,6 @@
 import type {
   AdoptionPlan,
+  BootstrapDelivery,
   BootstrapJobRecord,
   BootstrapJobRecordPatch,
   BootstrapJobRepository,
@@ -153,6 +154,7 @@ interface BootstrapDetail {
   adoptionPlan: AdoptionPlan | null
   adoptionReview: ResolvedAdoption | null
   prUrl: string | null
+  delivery: BootstrapDelivery | null
 }
 
 const EMPTY_DETAIL: BootstrapDetail = {
@@ -168,6 +170,7 @@ const EMPTY_DETAIL: BootstrapDetail = {
   adoptionPlan: null,
   adoptionReview: null,
   prUrl: null,
+  delivery: null,
 }
 
 function parseDetail(raw: string): BootstrapDetail {
@@ -210,6 +213,9 @@ function rowToBootstrapJob(row: typeof agentRuns.$inferSelect): BootstrapJobReco
     adoptionPlan: detail.adoptionPlan,
     adoptionReview: detail.adoptionReview,
     prUrl: detail.prUrl,
+    // See the D1 mirror: a row predating the delivery toggle records what that run DID, which
+    // its target alone determined.
+    delivery: detail.delivery ?? (detail.monorepo ? 'pull_request' : 'direct_push'),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -251,6 +257,7 @@ export class DrizzleBootstrapJobRepository implements BootstrapJobRepository {
       adoptionPlan: record.adoptionPlan,
       adoptionReview: record.adoptionReview,
       prUrl: record.prUrl,
+      delivery: record.delivery,
     }
     await this.db.insert(agentRuns).values({
       workspace_id: record.workspaceId,

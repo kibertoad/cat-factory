@@ -5064,7 +5064,8 @@
       "title": "Letzte Läufe",
       "fromArch": "aus {name}",
       "fromScratch": "von Grund auf",
-      "open": "Öffnen"
+      "open": "Öffnen",
+      "openPr": "Pull Request"
     },
     "status": {
       "pending": "ausstehend",
@@ -5112,11 +5113,24 @@
       "label": "Wo der Service entsteht",
       "newRepo": {
         "label": "Ein neues Repository",
-        "description": "Ein eigenes Repository anlegen und den Service als ersten Commit pushen."
+        "description": "Ein eigenes Repository anlegen und den Service hineinschreiben."
       },
       "monorepo": {
         "label": "Ein Verzeichnis in einem bestehenden Monorepo",
-        "description": "Den Service einem vorhandenen Repository hinzufügen und einen Pull Request öffnen."
+        "description": "Den Service einem Repository hinzufügen, das du bereits hast."
+      }
+    },
+    "delivery": {
+      "label": "Wie die Arbeit ankommt",
+      "pullRequest": {
+        "label": "Pull Request öffnen",
+        "descNewRepo": "Einen Branch pushen und einen Pull Request gegen den ersten Commit des Repositories öffnen, damit jemand das Gerüst prüft, bevor es zum Default-Branch wird. Das Repository muss bereits einen Commit haben.",
+        "descMonorepo": "Einen Branch pushen und einen Pull Request öffnen. Es wird nichts für dich gemergt."
+      },
+      "directPush": {
+        "label": "Direkt pushen",
+        "descNewRepo": "Den Service direkt als ersten Commit auf den Default-Branch schreiben.",
+        "descMonorepo": "Während der Agent arbeitet, direkt auf den Default-Branch committen. Bei einem Fehlschlag bleibt liegen, was bereits geschrieben wurde."
       }
     },
     "serviceName": {
@@ -5124,7 +5138,7 @@
       "description": "Benennt den Service auf dem Board und schlägt sein Verzeichnis vor."
     },
     "monorepo": {
-      "intro": "Der Service wird in ein Verzeichnis eines bestehenden Repositories geschrieben und als Pull Request geliefert. Es wird nichts für dich gemergt und nichts außerhalb des neuen Verzeichnisses geändert.",
+      "intro": "Der Service wird in ein Verzeichnis eines bestehenden Repositories geschrieben; außerhalb dieses Verzeichnisses wird nichts geändert.",
       "repo": {
         "label": "Monorepo",
         "description": "Das Repository, in dem der neue Service liegt. Es muss bereits mit diesem Workspace verknüpft sein.",

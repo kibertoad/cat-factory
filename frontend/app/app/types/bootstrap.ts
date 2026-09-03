@@ -18,6 +18,7 @@ export type {
   BootstrapFailure,
   BootstrapJob,
   BootstrapPhase,
+  BootstrapDelivery,
   BootstrapRepoInput,
   MonorepoBootstrapTarget,
   MonorepoBootstrapRef,

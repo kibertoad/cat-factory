@@ -6922,7 +6922,8 @@
       "title": "Son çalıştırmalar",
       "fromArch": "{name} kaynağından",
       "fromScratch": "sıfırdan",
-      "open": "Aç"
+      "open": "Aç",
+      "openPr": "Pull request"
     },
     "status": {
       "pending": "beklemede",
@@ -6974,11 +6975,24 @@
       "label": "Servis nereye gidecek",
       "newRepo": {
         "label": "Yeni bir depo",
-        "description": "Kendine ait bir depo oluştur ve servisi ilk commit olarak gönder."
+        "description": "Kendine ait bir depo oluşturur ve servisi içine yazar."
       },
       "monorepo": {
         "label": "Mevcut bir monorepo içindeki dizin",
-        "description": "Servisi hâlihazırda sahip olduğun bir depoya ekle ve pull request aç."
+        "description": "Servisi hâlihazırda sahip olduğun bir depoya ekler."
+      }
+    },
+    "delivery": {
+      "label": "İş nasıl teslim edilsin",
+      "pullRequest": {
+        "label": "Pull request aç",
+        "descNewRepo": "Bir dal gönderir ve deponun ilk commit’ine karşı pull request açar; böylece iskelet varsayılan dal olmadan önce biri inceler. Deponun zaten bir commit’i olmalıdır.",
+        "descMonorepo": "Bir dal gönderir ve pull request açar. Senin yerine hiçbir şey birleştirilmez."
+      },
+      "directPush": {
+        "label": "Doğrudan gönder",
+        "descNewRepo": "Servisi doğrudan varsayılan dala, deponun ilk commit’i olarak yazar.",
+        "descMonorepo": "Ajan çalışırken varsayılan dala commit atar. Başarısız bir çalıştırma, o ana kadar yazdıklarını geride bırakır."
       }
     },
     "serviceName": {
@@ -6986,7 +7000,7 @@
       "description": "Servisi panoda adlandırır ve dizinini önerir."
     },
     "monorepo": {
-      "intro": "Servis mevcut bir deponun dizinine yazılır ve pull request olarak teslim edilir. Senin yerine hiçbir şey birleştirilmez ve yeni dizinin dışında hiçbir şey değişmez.",
+      "intro": "Servis mevcut bir deponun bir dizinine yazılır ve o dizinin dışında hiçbir şey değiştirilmez.",
       "repo": {
         "label": "Monorepo",
         "description": "Yeni servisin yaşayacağı depo. Bu çalışma alanına önceden bağlanmış olmalı.",

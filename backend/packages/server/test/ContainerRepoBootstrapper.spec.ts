@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type {
+  BootstrapJobRecord,
+  BootstrapJobRepository,
   GitHubClient,
   GitHubInstallation,
   GitHubInstallationRepository,
@@ -32,21 +34,47 @@ const INSTALLATION: GitHubInstallation = {
   deletedAt: null,
 }
 
-/** A GitHubClient that pre-flights cleanly except for the bits a test overrides. */
+/**
+ * A GitHubClient that pre-flights cleanly except for the bits a test overrides.
+ *
+ * The target holds a README, which is what a repository created through either the host's
+ * new-repo page or the platform's own button looks like: boilerplate the bootstrap tolerates,
+ * and the initial commit a pull request is opened against. A test about the EMPTY repository
+ * overrides `listRootEntries` to say so.
+ */
 function fakeClient(overrides: Partial<GitHubClient> = {}): GitHubClient {
   const base = {
     getRepo: vi.fn(async () => ({ defaultBranch: 'main', githubId: 1 })),
     canPush: vi.fn(async () => true),
-    listRootEntries: vi.fn(async () => []),
+    listRootEntries: vi.fn(async () => [{ path: 'README.md', type: 'file' }]),
     listDirectory: vi.fn(async () => []),
     ...overrides,
   }
   return base as unknown as GitHubClient
 }
 
+/**
+ * The stored run a poll reads its target off. Only the fields the poll consults are populated:
+ * whether the run has a monorepo (which decides what a completed run can NAME) and the repo
+ * name a new-repo outcome is built from.
+ */
+function fakeJobRepository(record: Partial<BootstrapJobRecord> = {}): BootstrapJobRepository {
+  return {
+    get: vi.fn(async () => ({
+      id: 'boot_1',
+      workspaceId: 'ws_1',
+      repoName: 'simpler-service3',
+      monorepo: null,
+      delivery: 'direct_push',
+      ...record,
+    })),
+  } as unknown as BootstrapJobRepository
+}
+
 function makeBootstrapper(
   client: GitHubClient,
   transport: RunnerTransport,
+  bootstrapJobRepository: BootstrapJobRepository = fakeJobRepository(),
 ): ContainerRepoBootstrapper {
   const installationRepository = {
     getByWorkspace: vi.fn(async () => INSTALLATION),
@@ -57,7 +85,7 @@ function makeBootstrapper(
   return new ContainerRepoBootstrapper({
     resolveTransport: async () => transport,
     installationRepository,
-    bootstrapJobRepository: {} as never,
+    bootstrapJobRepository,
     repoRepository: {} as never,
     githubClient: client,
     mintInstallationToken: vi.fn(async () => 'gh-token'),
@@ -73,7 +101,18 @@ const REQUEST = {
   // A new-repo run is one drive, so the container job id is the run id.
   containerJobId: 'boot_1',
   target: { name: 'simpler-service3', description: '', private: false },
+  delivery: { mode: 'direct_push' } as const,
   instructions: 'Scaffold a service.',
+}
+
+/** The same run asked to deliver its scaffold as a pull request instead. */
+const PR_REQUEST = {
+  ...REQUEST,
+  delivery: {
+    mode: 'pull_request',
+    branch: 'cat-factory/bootstrap-boot_1',
+    pr: { title: 'Bootstrap simpler-service3', body: 'the fallback body' },
+  } as const,
 }
 
 describe('ContainerRepoBootstrapper pre-flight', () => {
@@ -143,8 +182,22 @@ const MONOREPO_LEG = {
   owner: 'acme',
   name: 'platform',
   directory: 'services/payments',
+}
+
+/** The delivery a monorepo apply takes by default: a work branch and one pull request. */
+const MONOREPO_DELIVERY = {
+  mode: 'pull_request',
   branch: 'cat-factory/bootstrap-boot_1',
   pr: { title: 'Bootstrap payments at services/payments', body: 'the settled decisions' },
+} as const
+
+/** The resolved monorepo a stored run carries, as the poll reads it back. */
+const MONOREPO_REF = {
+  repoGithubId: 777,
+  directory: 'services/payments',
+  repoOwner: 'acme',
+  repoName: 'platform',
+  branch: MONOREPO_DELIVERY.branch,
 }
 
 const MONOREPO_REQUEST = {
@@ -152,6 +205,7 @@ const MONOREPO_REQUEST = {
   containerJobId: 'boot_1:apply',
   referenceRepo: { owner: 'acme', name: 'service-template' },
   monorepo: MONOREPO_LEG,
+  delivery: MONOREPO_DELIVERY,
 }
 
 describe('ContainerRepoBootstrapper monorepo dispatch', () => {
@@ -171,8 +225,8 @@ describe('ContainerRepoBootstrapper monorepo dispatch', () => {
     const { body } = await dispatchMonorepo()
     expect(body.bootstrap).toBeUndefined()
     expect(body.branch).toBe('main')
-    expect(body.newBranch).toBe(MONOREPO_LEG.branch)
-    expect(body.pr).toEqual(MONOREPO_LEG.pr)
+    expect(body.newBranch).toBe(MONOREPO_DELIVERY.branch)
+    expect(body.pr).toEqual(MONOREPO_DELIVERY.pr)
   })
 
   it('scopes the agent to the new subdirectory through the same field every monorepo run uses', async () => {
@@ -235,12 +289,19 @@ describe('ContainerRepoBootstrapper monorepo dispatch', () => {
     expect(dispatch).not.toHaveBeenCalled()
   })
 
-  it('reports the pull request a completed apply opened', async () => {
+  it('reports the pull request a completed apply opened, and NO created repository', async () => {
     const poll = vi.fn(async (): Promise<RunnerJobView> => ({
       state: 'done',
-      result: { prUrl: 'https://github.com/acme/platform/pull/7', branch: MONOREPO_LEG.branch },
+      result: {
+        prUrl: 'https://github.com/acme/platform/pull/7',
+        branch: MONOREPO_DELIVERY.branch,
+      },
     }))
-    const bootstrapper = makeBootstrapper(fakeClient(), { poll } as unknown as RunnerTransport)
+    const bootstrapper = makeBootstrapper(
+      fakeClient(),
+      { poll } as unknown as RunnerTransport,
+      fakeJobRepository({ monorepo: MONOREPO_REF, delivery: 'pull_request' }),
+    )
     const update = await bootstrapper.pollBootstrap({
       workspaceId: 'ws_1',
       jobId: 'boot_1',
@@ -248,5 +309,97 @@ describe('ContainerRepoBootstrapper monorepo dispatch', () => {
     })
     expect(update.state).toBe('done')
     expect(update.prUrl).toBe('https://github.com/acme/platform/pull/7')
+    // The run created no repository, so naming one would name a URL that does not resolve.
+    expect(update.outcome).toBeUndefined()
+  })
+
+  it('omits the branch and the PR together when the run pushes directly', async () => {
+    // The direct-push delivery is the same coding job MINUS the pair: the harness then commits
+    // onto `branch`, the monorepo's own default. A body carrying one of the two and not the
+    // other is the failure this asserts against.
+    const dispatch = vi.fn(async () => undefined)
+    const bootstrapper = makeBootstrapper(fakeClient(), {
+      dispatch,
+    } as unknown as RunnerTransport)
+    await bootstrapper.startBootstrap({
+      ...MONOREPO_REQUEST,
+      delivery: { mode: 'direct_push' } as const,
+    })
+    const [, body] = dispatch.mock.calls[0] as unknown as [unknown, Record<string, unknown>]
+    expect(body.branch).toBe('main')
+    expect(body.newBranch).toBeUndefined()
+    expect(body.pr).toBeUndefined()
+    // Still never a force-push: the monorepo holds other people's services either way.
+    expect(body.bootstrap).toBeUndefined()
+    expect(body.repo).toMatchObject({ serviceDirectory: 'services/payments' })
+  })
+})
+
+describe('ContainerRepoBootstrapper new-repo pull-request delivery', () => {
+  it('dispatches a work-branch coding job against the target, never the force-push spec', async () => {
+    // A branch whose history was reinitialised shares no ancestor with the default branch, so a
+    // pull request cannot be opened from it. This delivery therefore clones the TARGET and
+    // treats the template as a read-only sibling, exactly as the monorepo path does.
+    const dispatch = vi.fn(async () => undefined)
+    const bootstrapper = makeBootstrapper(fakeClient(), {
+      dispatch,
+    } as unknown as RunnerTransport)
+    await bootstrapper.startBootstrap({
+      ...PR_REQUEST,
+      referenceRepo: { owner: 'acme', name: 'service-template' },
+    })
+    const [, body] = dispatch.mock.calls[0] as unknown as [unknown, Record<string, unknown>]
+    expect(body.bootstrap).toBeUndefined()
+    expect(body.repo).toMatchObject({ owner: 'kibertoad', name: 'simpler-service3' })
+    // No service directory: the whole checkout IS the new service.
+    expect(body.repo).not.toHaveProperty('serviceDirectory')
+    expect(body.newBranch).toBe(PR_REQUEST.delivery.branch)
+    expect(body.pr).toEqual(PR_REQUEST.delivery.pr)
+    const references = body.referenceRepos as { repo: Record<string, string> }[]
+    expect(references[0]?.repo).toMatchObject({ owner: 'acme', name: 'service-template' })
+  })
+
+  it('refuses a repository with no commits, naming both ways out', async () => {
+    // `listRootEntries` answers `[]` for a repository that has never been committed to, and a
+    // pull request needs a base commit. Refusing here beats failing deep inside the clone,
+    // where the message would read like an outage.
+    const dispatch = vi.fn(async () => undefined)
+    const bootstrapper = makeBootstrapper(fakeClient({ listRootEntries: vi.fn(async () => []) }), {
+      dispatch,
+    } as unknown as RunnerTransport)
+    await expect(bootstrapper.startBootstrap(PR_REQUEST)).rejects.toThrow(/no commits yet/i)
+    expect(dispatch).not.toHaveBeenCalled()
+  })
+
+  it('accepts the same repository for a direct push, which writes that first commit', async () => {
+    // The floor is a PULL-REQUEST rule, not a bootstrap rule: the delivery whose whole job is to
+    // create the initial commit must not be refused for the repository not having one.
+    const dispatch = vi.fn(async () => undefined)
+    const bootstrapper = makeBootstrapper(fakeClient({ listRootEntries: vi.fn(async () => []) }), {
+      dispatch,
+    } as unknown as RunnerTransport)
+    await bootstrapper.startBootstrap(REQUEST)
+    expect(dispatch).toHaveBeenCalledTimes(1)
+  })
+
+  it('reports the created repository AND the pull request when the run completes', async () => {
+    // Unlike a monorepo run, this one really did create a repository, so a caller gets both:
+    // the repo to link the board frame to, and the pull request to review.
+    const poll = vi.fn(async (): Promise<RunnerJobView> => ({
+      state: 'done',
+      result: { prUrl: 'https://github.com/kibertoad/simpler-service3/pull/1' },
+    }))
+    const bootstrapper = makeBootstrapper(
+      fakeClient(),
+      { poll } as unknown as RunnerTransport,
+      fakeJobRepository({ delivery: 'pull_request' }),
+    )
+    const update = await bootstrapper.pollBootstrap({
+      workspaceId: 'ws_1',
+      jobId: 'boot_1',
+      containerJobId: 'boot_1',
+    })
+    expect(update.prUrl).toBe('https://github.com/kibertoad/simpler-service3/pull/1')
+    expect(update.outcome).toMatchObject({ owner: 'kibertoad', name: 'simpler-service3' })
   })
 })

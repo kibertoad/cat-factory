@@ -18,7 +18,7 @@ import type {
 import {
   ConflictError,
   getErrorMessage,
-  monorepoBootstrapBranch,
+  bootstrapWorkBranch,
   NotFoundError,
   parseAdoptionDecisions,
   PR_ADOPTION_MARKERS,
@@ -204,7 +204,7 @@ export class MonorepoBootstrapController {
 
   /** The branch the apply phase pushes; stable per run so a retry resumes rather than forks. */
   branchFor(jobId: string): string {
-    return monorepoBootstrapBranch(jobId)
+    return bootstrapWorkBranch(jobId)
   }
 
   /**

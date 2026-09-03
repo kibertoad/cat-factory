@@ -105,6 +105,47 @@ const MONOREPO_SYSTEM_PROMPT =
   'file layout, its dependency versions, its lint and test conventions. Leave the new service ' +
   'building and its tests passing.'
 
+/**
+ * The role prompt when filling a NEW repository from a reference template, delivered as a pull
+ * request.
+ *
+ * Distinct from {@link ADAPT_SYSTEM_PROMPT} in what the checkout IS: there the agent works in a
+ * clone OF the template and reshapes it, here it works in the new repository (which holds only
+ * its initial README) with the template read-only beside it. Saying "adapt this in place" to an
+ * agent whose cwd is the empty repository is how a run ends with the template untouched and the
+ * repository still empty.
+ */
+const PR_ADAPT_SYSTEM_PROMPT =
+  'You are a repository bootstrapper. Your working directory is a BRAND-NEW repository, ' +
+  'holding nothing but the initial README/.gitignore/license it was created with, already on a ' +
+  'fresh work branch. A reference architecture (a base/golden-template repository) is checked ' +
+  'out READ-ONLY as a sibling directory beside it: read from it freely, copy what the new ' +
+  'service needs into your working directory, and never write to it. ' +
+  'Adapt what you copy into the new service per the instructions: rename packages/modules, ' +
+  'leave out pieces that do not apply, write the README and metadata for THIS service, and ' +
+  'leave the project building. Make focused, idiomatic changes that match the structure the ' +
+  'template establishes. Do not invent unrelated features. ' +
+  'Your work is delivered as a pull request a person reviews, so it must stand on its own: no ' +
+  'placeholder files you meant to fill in later, and no references to paths that only exist in ' +
+  'the template.'
+
+/**
+ * The role prompt when scaffolding a new repository from scratch, delivered as a pull request.
+ *
+ * Same job as {@link SCAFFOLD_SYSTEM_PROMPT}, said to an agent that is NOT in an empty
+ * directory: the repository already carries its initial commit, which is what the pull request
+ * is opened against.
+ */
+const PR_SCAFFOLD_SYSTEM_PROMPT =
+  'You are a repository bootstrapper. Your working directory is a BRAND-NEW repository, ' +
+  'holding nothing but the initial README/.gitignore/license it was created with, already on a ' +
+  'fresh work branch. Scaffold the service described in the instructions into it: create a ' +
+  'sensible, idiomatic project layout with source files, a README, and the metadata and ' +
+  'build/config files appropriate for the stack, leaving the project building. Keep the scope ' +
+  'to what the instructions describe; do not invent unrelated features. ' +
+  'Your work is delivered as a pull request a person reviews, so it must stand on its own: no ' +
+  'placeholder files you meant to fill in later.'
+
 /** The role prompt when scaffolding a brand-new repository from scratch. */
 const SCAFFOLD_SYSTEM_PROMPT =
   'You are a repository bootstrapper. You are working in an empty directory and ' +
@@ -176,6 +217,12 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
    * Pre-flight the target repo and dispatch the bootstrap container as a
    * background job (returns once accepted, like `/run`). Throws on a pre-flight
    * failure so the run fails fast before a board frame is created.
+   *
+   * THREE dispatch shapes, chosen by the target and the run's delivery. A new repository
+   * delivered by `direct_push` is the original one (adapt a clone, reinitialise, force-push);
+   * everything else is the ordinary coding shape (clone the writable target, template beside it
+   * read-only, work branch, pull request), because the target already holds a history nobody may
+   * reset: the monorepo's, or the initial commit a pull request has to be opened against.
    */
   async startBootstrap(request: BootstrapRepoRequest): Promise<BootstrapJobHandle> {
     const log = logger.child({ jobId: request.jobId, workspaceId: request.workspaceId })
@@ -192,74 +239,23 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
       )
     }
 
-    // A monorepo run has a completely different pre-flight and a completely different push, so
-    // it branches before the new-repo checks below: there is no repository to create, nothing to
-    // be empty, and force-pushing a fresh history would destroy the target.
+    // A monorepo run has a completely different pre-flight, so it branches before the new-repo
+    // checks below: there is no repository to create and nothing to be empty.
     if (request.monorepo) {
       return await this.startMonorepoBootstrap(request, request.monorepo, installation)
     }
 
-    // The target repo is created up front — by the user via GitHub's new-repo page,
-    // or, for privileged-tier orgs (ADR 0005), programmatically via the create-repo
-    // endpoint behind the modal's "Create repository" button. Resolve it under the
-    // installation account to confirm it exists, is reachable by the App, and is
-    // empty — the run pushes the bootstrapped contents as the initial commit.
-    const owner = installation.accountLogin
-    const repoName = request.target.name
-    const ref = { owner, repo: repoName }
-    log.info('bootstrap: pre-flighting target repo', { target: `${owner}/${repoName}` })
+    const target = await this.preflightNewRepoTarget(request, installation, log)
 
-    let target
-    try {
-      target = await this.deps.githubClient.getRepo(installation.installationId, ref)
-    } catch {
-      throw new Error(
-        `Repository ${owner}/${repoName} was not found or is not accessible to the GitHub App. ` +
-          `Create a repository named "${repoName}" under ${owner} (an initial README, .gitignore ` +
-          `or license is fine), make sure the App is installed on it, then run bootstrap again.`,
-      )
-    }
-
-    // The repo being *readable* is not enough: bootstrapping ends in a force-push, so
-    // the installation must have write access. A public repo the App can read but is
-    // not granted (not in the App's selected-repos list, or the App lacks
-    // contents:write) reads fine above but 403s on the container's push — pre-flight
-    // it here so that case fails fast with an actionable message instead of failing
-    // deep inside the run after a board frame has been created.
-    if (!(await this.deps.githubClient.canPush(installation.installationId, ref))) {
-      throw new Error(
-        `The GitHub App can see ${owner}/${repoName} but does not have write access to it, so the ` +
-          `bootstrapped commit cannot be pushed. Grant the App write access to this repository ` +
-          `(GitHub → Settings → Applications → the cat-factory App → Configure → Repository access — ` +
-          `add "${repoName}" or allow all repositories), or, in local mode, use a GitHub PAT that ` +
-          `can push to it. Then run bootstrap again.`,
-      )
-    }
-    // The run replaces the repo's contents with a fresh single-commit history, so
-    // the target must be empty — except that GitHub's create-repo page often
-    // prepopulates a README, .gitignore and/or license. Those are throwaway
-    // boilerplate, so tolerate a repo that holds *only* them (the push force-
-    // overwrites them); reject anything with real content to avoid clobbering work.
-    const rootEntries = await this.deps.githubClient.listRootEntries(
-      installation.installationId,
-      ref,
-    )
-    const realContent = rootEntries.filter((entry) => !isBootstrapBoilerplate(entry))
-    if (realContent.length > 0) {
-      const sample = realContent
-        .map((entry) => entry.path)
-        .slice(0, 5)
-        .join(', ')
-      throw new Error(
-        `Repository ${owner}/${repoName} already has content (${sample}). Bootstrapping replaces ` +
-          `the repository's contents, so it needs an empty repository — or one prepopulated only ` +
-          `with a README, .gitignore, license and/or AGENTS.md.`,
-      )
+    if (request.delivery.mode === 'pull_request') {
+      return await this.startNewRepoPullRequest(request, target, installation, log)
     }
 
     // Scoped to the one repo being bootstrapped: the run clones and force-pushes exactly this
     // target and touches nothing else, so there is no leg to widen for. `target` came from the
     // pre-flight `getRepo` above, which is why this costs no extra read.
+    const owner = installation.accountLogin
+    const repoName = request.target.name
     const ghToken = await this.deps.mintInstallationToken(installation.installationId, {
       executionId: request.containerJobId,
       workspaceId: request.workspaceId,
@@ -269,17 +265,11 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
     // implementation executor forwards it.
     const packageRegistries =
       (await this.deps.resolvePackageRegistries?.(request.workspaceId)) ?? []
-    const sessionToken = await this.deps.sessionService.mint({
-      workspaceId: request.workspaceId,
-      executionId: request.containerJobId,
-      agentKind: 'architect',
-      provider: this.deps.model.provider,
-      model: this.deps.model.model,
-    })
+    const sessionToken = await this.mintSessionToken(request)
 
-    const webBase = (this.deps.webBaseUrl ?? 'https://github.com').replace(/\/+$/, '')
+    const webBase = this.webBase()
     const targetCloneUrl = `${webBase}/${owner}/${repoName}.git`
-    const defaultBranch = target.defaultBranch ?? 'main'
+    const defaultBranch = defaultBranchOf(target)
 
     // With a reference architecture the container clones + adapts it; without one
     // it scaffolds an empty repo from the freeform instructions alone.
@@ -306,12 +296,12 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
       : { owner, name: repoName, baseBranch: defaultBranch, cloneUrl: targetCloneUrl }
 
     // Bootstrap dispatches the generic, manifest-driven `agent` kind in `coding` mode with a
-    // `bootstrap` spec (the divergent force-push to a separate target repo) — the SAME path
+    // `bootstrap` spec (the divergent force-push to a separate target repo): the SAME path
     // every other built-in coding agent takes, with NO bespoke `/bootstrap` harness handler.
     const body = {
       jobId: request.containerJobId,
       // The run's correlation ids, so the container's own lines join to this bootstrap in the
-      // backend's logs — the same fields `buildCommonBody` puts on an execution job. A bootstrap
+      // backend's logs: the same fields `buildCommonBody` puts on an execution job. A bootstrap
       // is a first-class agent run (one `agent_runs` table, one retry surface), so it must not be
       // the one agent-kind dispatch whose container logs cannot be joined to anything. Its run id
       // IS its job id: a bootstrap has no separate execution row, which is exactly what
@@ -330,7 +320,7 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
       // select a subscription harness. The job schema tolerates `harness` (shared
       // HarnessAuthFields), but bootstrap is the one container flow that always uses
       // the deployment's proxyable model rather than a workspace's pooled subscription
-      // token — there is no per-block model selection on a not-yet-existing repo.
+      // token: there is no per-block model selection on a not-yet-existing repo.
       proxyBaseUrl: this.deps.proxyBaseUrl,
       // This backend serves the phase-tagged completions route (see `ContainerAgentExecutor`),
       // so a bootstrap's calls are attributed rather than landing in the unattributed slice.
@@ -340,9 +330,9 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
       ...(packageRegistries.length ? { packageRegistries } : {}),
       repo: repoSpec,
       branch: repoSpec.baseBranch,
-      // Bootstrap always resets history to a single commit and force-pushes (the fresh
-      // history shares no ancestor with the target repo's boilerplate); that is implicit
-      // in the bootstrap flow, so no per-job flags are needed.
+      // This delivery always resets history to a single commit and force-pushes (the fresh
+      // history shares no ancestor with the target repo's boilerplate); that is what the
+      // `bootstrap` spec MEANS to the harness, so no per-job flags are needed.
       bootstrap: {
         target: targetSpec,
         ...(reference ? {} : { fromScratch: true }),
@@ -353,7 +343,7 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
     // Dispatch through the shared transport (keyed by job id), exactly like the
     // implementation executor: it hits the harness `POST /jobs` (kind `agent`), starts the
     // background job and returns once accepted; we then poll via the same transport.
-    // Idempotent per job id — a replayed dispatch re-attaches rather than duplicating.
+    // Idempotent per job id: a replayed dispatch re-attaches rather than duplicating.
     log.info('bootstrap: dispatching container', {
       reference: reference ? `${reference.owner}/${reference.name}` : null,
     })
@@ -374,6 +364,127 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
   }
 
   /**
+   * Pre-flight the pre-created target repository of a NEW-REPO run: it exists, the App can
+   * write to it, and it holds no real content.
+   *
+   * The target repo is created up front: by the user via the host's new-repo page, or, for
+   * privileged-tier orgs (ADR 0005), programmatically via the create-repo endpoint behind the
+   * modal's "Create repository" button.
+   *
+   * The emptiness rule binds under both deliveries, because both WRITE a whole service into the
+   * repository: a force-push would clobber real content and a pull request would propose
+   * deleting it. What differs is the FLOOR: a pull request needs an initial commit to branch
+   * from, so that delivery also refuses a repository with none.
+   */
+  private async preflightNewRepoTarget(
+    request: BootstrapRepoRequest,
+    installation: { installationId: number; accountLogin: string },
+    log: ReturnType<typeof logger.child>,
+  ): Promise<GitHubRepo> {
+    const owner = installation.accountLogin
+    const repoName = request.target.name
+    const ref = { owner, repo: repoName }
+    log.info('bootstrap: pre-flighting target repo', { target: `${owner}/${repoName}` })
+
+    let target: GitHubRepo
+    try {
+      target = await this.deps.githubClient.getRepo(installation.installationId, ref)
+    } catch {
+      throw new Error(
+        `Repository ${owner}/${repoName} was not found or is not accessible to the GitHub App. ` +
+          `Create a repository named "${repoName}" under ${owner} (an initial README, .gitignore ` +
+          `or license is fine), make sure the App is installed on it, then run bootstrap again.`,
+      )
+    }
+
+    // The repo being *readable* is not enough: bootstrapping ends in a push, so the
+    // installation must have write access. A public repo the App can read but is
+    // not granted (not in the App's selected-repos list, or the App lacks
+    // contents:write) reads fine above but 403s on the container's push, so pre-flight
+    // it here: that case then fails fast with an actionable message instead of failing
+    // deep inside the run after a board frame has been created.
+    if (!(await this.deps.githubClient.canPush(installation.installationId, ref))) {
+      throw new Error(
+        `The GitHub App can see ${owner}/${repoName} but does not have write access to it, so the ` +
+          `bootstrapped commit cannot be pushed. Grant the App write access to this repository ` +
+          `(GitHub → Settings → Applications → the cat-factory App → Configure → Repository access: ` +
+          `add "${repoName}" or allow all repositories), or, in local mode, use a GitHub PAT that ` +
+          `can push to it. Then run bootstrap again.`,
+      )
+    }
+    // The run writes a whole repository's worth of content, so the target must be
+    // empty, except that GitHub's create-repo page often prepopulates a README,
+    // .gitignore and/or license. Those are throwaway boilerplate, so tolerate a repo
+    // that holds *only* them; reject anything with real content to avoid clobbering work.
+    const rootEntries = await this.deps.githubClient.listRootEntries(
+      installation.installationId,
+      ref,
+    )
+    const realContent = rootEntries.filter((entry) => !isBootstrapBoilerplate(entry))
+    if (realContent.length > 0) {
+      const sample = realContent
+        .map((entry) => entry.path)
+        .slice(0, 5)
+        .join(', ')
+      throw new Error(
+        `Repository ${owner}/${repoName} already has content (${sample}). Bootstrapping replaces ` +
+          `the repository's contents, so it needs an empty repository, or one prepopulated only ` +
+          `with a README, .gitignore, license and/or AGENTS.md.`,
+      )
+    }
+    // A pull request is opened BETWEEN two commits, so a repository holding none cannot take
+    // one: there is no default branch to clone, to branch from, or to target.
+    // `listRootEntries` answers `[]` for exactly that repository (the contents endpoint 404s
+    // where there is no commit), so an empty listing is the tell. Refused here, naming both
+    // ways out, rather than surfacing later as a clone failure that reads like an outage.
+    if (request.delivery.mode === 'pull_request' && rootEntries.length === 0) {
+      throw new Error(
+        `Repository ${owner}/${repoName} has no commits yet, so there is no branch to open a ` +
+          `pull request against. Either create it with an initial commit (a README is enough), ` +
+          `or bootstrap it with "push directly", which writes the repository's first commit.`,
+      )
+    }
+    return target
+  }
+
+  /**
+   * Dispatch a NEW-REPO run delivered as a pull request: the ordinary coding shape against the
+   * (already-initialised) target repository, with the reference template beside it as a
+   * READ-ONLY sibling checkout.
+   *
+   * Deliberately NOT the `bootstrap` spec, which is the whole reason this path exists
+   * separately: that spec reinitialises history and force-pushes, and a branch whose history
+   * shares no ancestor with the default branch is not something a pull request can be opened
+   * from. Here the target's own initial commit is the base, so the diff a reviewer reads is the
+   * service being added.
+   */
+  private async startNewRepoPullRequest(
+    request: BootstrapRepoRequest,
+    target: GitHubRepo,
+    installation: { installationId: number; accountLogin: string },
+    log: ReturnType<typeof logger.child>,
+  ): Promise<BootstrapJobHandle> {
+    const owner = installation.accountLogin
+    const repoName = request.target.name
+    log.info('bootstrap(new-repo pr): dispatching container', { target: `${owner}/${repoName}` })
+    return await this.dispatchCodingShape(request, installation, log, {
+      repo: {
+        owner,
+        name: repoName,
+        baseBranch: defaultBranchOf(target),
+        cloneUrl: `${this.webBase()}/${owner}/${repoName}.git`,
+      },
+      repoGithubId: target.githubId,
+      systemPrompt: request.referenceRepo ? PR_ADAPT_SYSTEM_PROMPT : PR_SCAFFOLD_SYSTEM_PROMPT,
+      userPrompt:
+        request.instructions ||
+        (request.referenceRepo
+          ? 'Adapt the reference architecture for the new service.'
+          : 'Scaffold a new repository for the service.'),
+    })
+  }
+
+  /**
    * Dispatch a monorepo bootstrap's APPLY phase: an ordinary coding job on the monorepo, with
    * the reference template alongside it as a READ-ONLY sibling checkout.
    *
@@ -388,8 +499,8 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
    *
    * Two pre-flights, both about the monorepo rather than about a new repo: the App must be able
    * to WRITE to it (a read-only grant reads fine and 403s on the push, after a board frame
-   * exists), and the target directory must still be absent at dispatch time, because the orchestration
-   * pre-flighted it before the survey, and a review can be settled days later.
+   * exists), and the target directory must still be absent at dispatch time, because the
+   * orchestration pre-flighted it before the survey and a review can be settled days later.
    */
   private async startMonorepoBootstrap(
     request: BootstrapRepoRequest,
@@ -416,7 +527,7 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
       installation.installationId,
       ref,
       monorepo.directory,
-      defaultBranchOf(target),
+      defaultBranch,
     )
     if (existing.length > 0) {
       throw new Error(
@@ -426,11 +537,53 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
       )
     }
 
-    const webBase = (this.deps.webBaseUrl ?? 'https://github.com').replace(/\/+$/, '')
-    // Scoped to the repos this run touches: the monorepo it pushes to, and the template it
-    // reads. A template outside the installation simply is not cloneable, which the harness
-    // reports as a clone failure rather than silently running without it.
-    const repoIds = [String(target.githubId)]
+    log.info('bootstrap(monorepo): dispatching container', { directory: monorepo.directory })
+    return await this.dispatchCodingShape(request, installation, log, {
+      repo: {
+        owner: monorepo.owner,
+        name: monorepo.name,
+        baseBranch: defaultBranch,
+        cloneUrl: `${this.webBase()}/${monorepo.owner}/${monorepo.name}.git`,
+        serviceDirectory: monorepo.directory,
+      },
+      repoGithubId: target.githubId,
+      systemPrompt: MONOREPO_SYSTEM_PROMPT,
+      userPrompt: request.instructions,
+    })
+  }
+
+  /**
+   * The dispatch both non-force-push shapes share: clone the writable target, fetch the
+   * reference template beside it read-only, and either open a work branch plus a pull request
+   * or commit onto the target's own default branch.
+   *
+   * ONE builder rather than one per target, because the delivery rule is the interesting part
+   * and a second copy of it is a second place for `newBranch` and `pr` to disagree: a body
+   * carrying a branch but no PR pushes work onto a branch nobody is told about.
+   */
+  private async dispatchCodingShape(
+    request: BootstrapRepoRequest,
+    installation: { installationId: number; accountLogin: string },
+    log: ReturnType<typeof logger.child>,
+    spec: {
+      repo: {
+        owner: string
+        name: string
+        baseBranch: string
+        cloneUrl: string
+        serviceDirectory?: string
+      }
+      /** Numeric id of the writable target, for the token's repo scope. */
+      repoGithubId: number
+      systemPrompt: string
+      userPrompt: string
+    },
+  ): Promise<BootstrapJobHandle> {
+    const webBase = this.webBase()
+    // Scoped to the repos this run touches: the one it pushes to, and the template it reads. A
+    // template outside the installation simply is not cloneable, which the harness reports as a
+    // clone failure rather than silently running without it.
+    const repoIds = [String(spec.repoGithubId)]
     const reference = request.referenceRepo
     let referenceRepos: { repo: Record<string, string> }[] = []
     if (reference) {
@@ -457,57 +610,67 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
     })
     const packageRegistries =
       (await this.deps.resolvePackageRegistries?.(request.workspaceId)) ?? []
-    const sessionToken = await this.deps.sessionService.mint({
-      workspaceId: request.workspaceId,
-      executionId: request.containerJobId,
-      agentKind: 'architect',
-      provider: this.deps.model.provider,
-      model: this.deps.model.model,
-    })
+    const sessionToken = await this.mintSessionToken(request)
+
+    // The delivery decides the two fields TOGETHER: with `newBranch` and `pr` the harness pushes
+    // a work branch and opens one pull request; with neither it commits onto `branch`, the
+    // target's own default. Omitting only one of the pair is the bug this single site prevents.
+    const delivery =
+      request.delivery.mode === 'pull_request'
+        ? { newBranch: request.delivery.branch, pr: request.delivery.pr }
+        : {}
 
     const body = {
       jobId: request.containerJobId,
       workspaceId: request.workspaceId,
       executionId: request.containerJobId,
       mode: 'coding',
-      systemPrompt: MONOREPO_SYSTEM_PROMPT,
-      userPrompt: request.instructions,
+      systemPrompt: spec.systemPrompt,
+      userPrompt: spec.userPrompt,
       model: this.deps.model.model,
       proxyBaseUrl: this.deps.proxyBaseUrl,
       proxyPhasePath: true,
       sessionToken,
       ghToken,
       ...(packageRegistries.length ? { packageRegistries } : {}),
-      repo: {
-        owner: monorepo.owner,
-        name: monorepo.name,
-        baseBranch: defaultBranch,
-        cloneUrl: `${webBase}/${monorepo.owner}/${monorepo.name}.git`,
-        serviceDirectory: monorepo.directory,
-      },
-      branch: defaultBranch,
-      newBranch: monorepo.branch,
-      pr: monorepo.pr,
+      repo: spec.repo,
+      branch: spec.repo.baseBranch,
+      ...delivery,
       ...(referenceRepos.length ? { referenceRepos } : {}),
       ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),
     }
 
-    log.info('bootstrap(monorepo): dispatching container', {
-      branch: monorepo.branch,
-      reference: reference ? `${reference.owner}/${reference.name}` : null,
-    })
     await this.jobs.dispatch(
       request.workspaceId,
       { runId: request.jobId, jobId: request.containerJobId },
       body,
       'agent',
     )
-    log.info('bootstrap(monorepo): container accepted job')
+    log.info('bootstrap: container accepted job', {
+      delivery: request.delivery.mode,
+      reference: reference ? `${reference.owner}/${reference.name}` : null,
+    })
     return {
       workspaceId: request.workspaceId,
       jobId: request.jobId,
       containerJobId: request.containerJobId,
     }
+  }
+
+  /** The model-locked LLM-proxy session token a bootstrap container runs under. */
+  private mintSessionToken(request: BootstrapRepoRequest): Promise<string> {
+    return this.deps.sessionService.mint({
+      workspaceId: request.workspaceId,
+      executionId: request.containerJobId,
+      agentKind: 'architect',
+      provider: this.deps.model.provider,
+      model: this.deps.model.model,
+    })
+  }
+
+  /** The host's web base, trailing slashes stripped, for building clone URLs. */
+  private webBase(): string {
+    return (this.deps.webBaseUrl ?? 'https://github.com').replace(/\/+$/, '')
   }
 
   /** Poll a dispatched bootstrap job, mapping the runner job view into an update. */
@@ -550,15 +713,19 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
         detail: view.detail ?? result.error,
       }
     }
-    // A MONOREPO run's product is the pull request, and NOTHING else it could report stands in
-    // for it: there is no repository it created, so building a `repoUrl` here would name one
-    // that does not exist. A `prUrl` is the shape's own tell (the new-repo flow force-pushes a
-    // default branch and never opens one), so it is reported alone, and a completed apply that
-    // opened none reports neither, leaving the ORCHESTRATION to say what that means (it fails
-    // the run: the service was delivered nowhere).
-    if (result.prUrl) return { state: 'done', prUrl: result.prUrl }
-    const outcome = await this.buildOutcome(handle, result.defaultBranch)
-    return { state: 'done', outcome }
+    // What a completed run can NAME is decided by its target, never by whether a `prUrl` came
+    // back. A monorepo run created no repository, so building a `repoUrl` here would name one
+    // that does not exist; a new-repo run created one under either delivery, and under
+    // `pull_request` it has BOTH a repository and a pull request to report. Reading the record
+    // is what tells them apart: `prUrl`'s presence cannot, now that a new-repo run may carry
+    // one. A run that promised a pull request and reports none is left to the ORCHESTRATION to
+    // fail, which is where "delivered nowhere" is a statement about the run rather than about
+    // this poll.
+    const record = await this.requireRecord(handle)
+    const pr = result.prUrl ? { prUrl: result.prUrl } : {}
+    if (record.monorepo) return { state: 'done', ...pr }
+    const outcome = await this.buildOutcome(handle, record.repoName, result.defaultBranch)
+    return { state: 'done', outcome, ...pr }
   }
 
   /**
@@ -612,21 +779,26 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
   /** Construct the success outcome from the installation + the recorded job's repo name. */
   private async buildOutcome(
     handle: BootstrapJobHandle,
+    repoName: string,
     resultDefaultBranch: string | undefined,
   ): Promise<BootstrapRepoOutcome> {
     const installation = await this.deps.installationRepository.getByWorkspace(handle.workspaceId)
     if (!installation)
       throw new Error(`Workspace '${handle.workspaceId}' is not connected to GitHub`)
-    const record = await this.deps.bootstrapJobRepository.get(handle.workspaceId, handle.jobId)
-    if (!record) throw new Error(`Bootstrap job '${handle.jobId}' not found`)
     const owner = installation.accountLogin
-    const webBase = (this.deps.webBaseUrl ?? 'https://github.com').replace(/\/+$/, '')
     return {
-      repoUrl: `${webBase}/${owner}/${record.repoName}`,
+      repoUrl: `${this.webBase()}/${owner}/${repoName}`,
       owner,
-      name: record.repoName,
+      name: repoName,
       defaultBranch: resultDefaultBranch ?? 'main',
     }
+  }
+
+  /** The run's stored row, which a poll addresses only by id. */
+  private async requireRecord(handle: BootstrapJobHandle) {
+    const record = await this.deps.bootstrapJobRepository.get(handle.workspaceId, handle.jobId)
+    if (!record) throw new Error(`Bootstrap job '${handle.jobId}' not found`)
+    return record
   }
 }
 
