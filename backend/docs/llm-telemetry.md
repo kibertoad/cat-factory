@@ -29,7 +29,14 @@ The sinks:
   requirements and clarity reviewers, the tester-quality reviewer, the bug-hunt assessor, the
   document interviewer, Kaizen's own grader). Each composes its prompts at its own call site, so a
   snapshot there is a separate piece of work; a step of one of those kinds reads as "no snapshot
-  available", which is why that message names no cause.
+  available", which is why that message names no cause. A repo BOOTSTRAP files BOTH of its halves:
+  the container dispatch through the same module's second projection (it has no
+  `AgentRunContext` (there is no block, no pipeline and no resolved fragments before the service
+  exists), but it has a composed system prompt, a human's brief and the repositories it was
+  pointed at, which is the whole of what the question means for that run), and the inline
+  monorepo SURVEY from its own service, with the seeded opening context as its files. Half of it
+  would have been worse than neither: the panel would list one snapshot per run with nothing on
+  screen saying the other move filed none, which reads as a survey that was given nothing.
 - **`agent_search_queries`**: one row per web search a container agent PERFORMED.
 - **`agent_tool_calls`**: one row per tool invocation an agent MADE, in the order it made them:
   the TRAJECTORY. Where the snapshot keeps what an agent was given and `llm_call_metrics` what
@@ -39,6 +46,36 @@ The sinks:
 The deployment-level projections (`gate_outcomes`, `platform_run_days`) deliberately live in the
 MAIN store, not here; their rules are in
 [ADR 0048](./adr/0048-platform-operator-observability.md).
+
+## Every sink is keyed by the RUN, and a run is not always an execution
+
+`execution_id` names the AGENT RUN, whichever kind it is: an execution instance, or a repo
+bootstrap, which has no execution row at all and whose run id is its own. Both are read through
+the same workspace-scoped routes and rendered by the same observability panel, so a reader that
+resolved an execution first would 404 every bootstrap while its rows sat in the store under
+exactly the id it was asked for.
+
+**The run is not the DRIVE.** A monorepo bootstrap is driven twice around its human review, and
+its apply phase dispatches under `<runId>-apply` because neither facade's durable driver can
+reuse a terminal key. That drive id addresses the CONTAINER (dispatch, poll, release) and nothing
+else: the session token, the job body's `executionId` and the drained trajectory all carry the
+RUN. Filing on the drive put a monorepo run's second and far more expensive phase where no
+run-scoped read looks, on a run whose survey rows were already under the run id.
+
+The two kinds a bootstrap files under name what actually ran: `repo-bootstrapper` for the
+container that scaffolds or applies, and `monorepo-adoption-advisor` for the inline survey loop.
+Neither is a registry kind and neither is a model-routing key (the container follows
+`architect`'s routing, the survey the workspace default); they exist so the per-kind rollups and
+the panel's grouping distinguish the survey's spend from the apply's. Both strings live in
+contracts (`platform-agent-kinds.ts`), because the SPA's catalog has to name the same two kinds
+the backend stamps: spelled separately, a rename leaves the panel grouping a run's calls under an
+unnamed "Agent" heading with nothing failing.
+
+What the survey does NOT file is a tool-call trajectory. Its reads go through the platform's own
+bounded explorer and land on the run's adoption transcript, which is the record a reviewer checks
+a recommendation against and which outlives the telemetry window; duplicating them as
+`agent_tool_calls` rows would be a second answer to one question. The panel says so where the
+absence would otherwise read as a phase that used no tools.
 
 ## Three producers converge on the ONE `LlmObservabilityService`, and a new one must too
 

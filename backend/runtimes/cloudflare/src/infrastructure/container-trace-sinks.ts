@@ -43,13 +43,24 @@ export function buildOtelSink(otel: OtelConfig): LlmTraceSink | undefined {
   })
 }
 
+// Memoised per config so every wiring site (the core sink slot, the container executor, the
+// repo bootstrapper's trajectory drain) shares ONE instance, as the Node sibling does, where
+// the OTel SDK sink owns batch processors an extra instance would strand. Both sinks are
+// fetch-based here today, which makes the duplicate cheap rather than harmless: a sink that
+// later buffers would leave the bootstrapper's spans in an instance nobody flushes.
+const traceSinkCache = new WeakMap<AppConfig, CoreDependencies['llmTraceSink']>()
+
 /**
  * Compose every enabled external trace destination into the single sink slot: none ⇒
  * undefined, one ⇒ that sink, both ⇒ a fan-out. The observability service then fans every
- * recorded LLM call (+ tool spans) out to whichever are wired.
+ * recorded LLM call (+ tool spans) out to whichever are wired. Memoised per config, so all
+ * wiring sites share one instance.
  */
 export function buildTraceSink(config: AppConfig): CoreDependencies['llmTraceSink'] {
-  return composeTraceSinks([buildLangfuseSink(config.langfuse), buildOtelSink(config.otel)])
+  if (traceSinkCache.has(config)) return traceSinkCache.get(config)
+  const sink = composeTraceSinks([buildLangfuseSink(config.langfuse), buildOtelSink(config.otel)])
+  traceSinkCache.set(config, sink)
+  return sink
 }
 
 export function selectTraceSink(config: AppConfig): Partial<CoreDependencies> {

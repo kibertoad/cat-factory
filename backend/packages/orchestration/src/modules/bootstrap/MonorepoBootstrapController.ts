@@ -276,6 +276,9 @@ export class MonorepoBootstrapController {
     try {
       const { plan, model } = await advisor.advise({
         workspaceId,
+        // The run the survey's model calls are filed under: a bootstrap run IS an agent run, and
+        // its observability reads are keyed by the run id like every other one's.
+        runId: record.id,
         directory: monorepo.directory,
         instructions: record.instructions,
         // The seeded opening context. The bodies are already scrubbed and budgeted by the

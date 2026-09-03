@@ -464,6 +464,10 @@
         "@previousErrors": {
           "description": "Count-based tally of a run's earlier failed attempts, rendered as e.g. '3 previous errors' (count is always >= 1). Provide ALL plural forms your language needs (English has 2; Polish/Ukrainian need 3 - one/few/many - via the custom pluralRules in i18n.config.ts)."
         }
+      },
+      "resumeBootstrap": "Resume from: {step}",
+      "@resumeBootstrap": {
+        "description": "Retry label for a multi-step (monorepo) bootstrap, which resumes at the step the run reached rather than starting over. {step} is one of the bootstrap.steps.name values."
       }
     },
     "stop": {
@@ -1872,7 +1876,8 @@
       "cacheRead": "{tokens} cache read",
       "cacheReadHint": "Input tokens served from the provider's cache (about 0.1x the price of fresh input)",
       "cacheWrite": "{tokens} cache write",
-      "cacheWriteHint": "Input tokens written into the provider's cache (1.25x to 2x the price of fresh input)"
+      "cacheWriteHint": "Input tokens written into the provider's cache (1.25x to 2x the price of fresh input)",
+      "costNoRollup": "Not priced: the estimate is folded from a run's per-step rollup, and this run has none. What its calls consumed is listed below."
     },
     "phase": {
       "title": "Where the tokens went",
@@ -1887,7 +1892,8 @@
       "costHint": "Estimated cost of this phase's tokens at list rates. A dash means this deployment has no rate for the model that ran.",
       "carryCostHint": "How much each phase burdened the turns that came after it: its context counted once for every later turn that had to re-send it. Compare a run's phases with each other; on its own the number means nothing. A phase that runs late carries little however much it spent, so read this column alongside the tokens beside it.",
       "unattributed": "Unattributed",
-      "unattributedHint": "recorded by a channel that reports no phase"
+      "unattributedHint": "recorded by a channel that reports no phase",
+      "noRollup": "This run has no pipeline steps, so there is no per-phase rollup to fold: its model calls are recorded below, but nothing groups or prices them."
     },
     "metricsBar": {
       "calls": "{count} call | {count} calls",
@@ -1995,7 +2001,8 @@
       "result": "Result",
       "dropped": "{chars} characters dropped at capture",
       "truncated": "Showing the first {shown} calls of this run. The counts above are for the whole run; narrow to the failures to see all of them.",
-      "failuresTruncated": "Showing the first {shown} failing calls. The count above is for the whole run."
+      "failuresTruncated": "Showing the first {shown} failing calls. The count above is for the whole run.",
+      "surveyReadsElsewhere": "The survey's own reads are not here: it explores through the platform's bounded reader, and every read it made is recorded on the run's adoption transcript. Below are the tool calls of the container that wrote the service."
     }
   },
   "platformObservability": {
@@ -7440,6 +7447,31 @@
         "approvedDesc": "The agent is now writing {directory} and will open a pull request.",
         "failed": "Could not submit the review"
       }
+    },
+    "steps": {
+      "title": "Bootstrap steps",
+      "name": {
+        "scaffold": "Scaffold the repository",
+        "survey": "Survey the monorepo and the template",
+        "review": "Your adoption decisions",
+        "apply": "Write the service and open the pull request"
+      },
+      "state": {
+        "pending": "Not started",
+        "running": "Running",
+        "awaiting_review": "Waiting for you",
+        "done": "Done",
+        "failed": "Failed",
+        "stopped": "Stopped",
+        "unknown": "State unreadable"
+      }
+    },
+    "@steps": {
+      "description": "The moves a bootstrap run is made of. A new-repo bootstrap is only `scaffold`; a monorepo bootstrap is survey → your decisions → apply. `state.stopped` is a run a person stopped, which is stored as a failure without being one; `state.unknown` is for a stored run status this build no longer defines."
+    },
+    "runKind": "Repo bootstrap",
+    "@runKind": {
+      "description": "The kind of run the observability panel is showing, in the line under its title where a task run names its pipeline instead. Keep it short."
     }
   },
   "initiative": {

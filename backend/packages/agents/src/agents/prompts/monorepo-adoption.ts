@@ -26,9 +26,6 @@ import { FINAL_ANSWER_IN_REPLY } from './shared.js'
 // the second leaves the reviewer something to go and check.
 // ---------------------------------------------------------------------------
 
-/** The inline agent kind a monorepo adoption survey runs under (observability + model scope). */
-export const MONOREPO_ADOPTION_AGENT_KIND = 'monorepo-adoption-advisor'
-
 /**
  * What the model is told it was GIVEN, which has to match what the survey could reach.
  *

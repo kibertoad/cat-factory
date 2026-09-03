@@ -495,15 +495,28 @@ export function buildNodeContainerExecutor(deps: NodeContainerExecutorDeps): Age
 }
 
 /**
+ * What a bootstrap dispatch records, beside what it does: the provided-context snapshot and the
+ * two destinations a poll's drained tool calls reach. Spelled off the bootstrapper's own
+ * constructor so adding a sink there fails to compile here rather than silently going unwired
+ * on a facade.
+ */
+export type BootstrapObservabilityDeps = Pick<
+  ConstructorParameters<typeof ContainerRepoBootstrapper>[0],
+  'agentContextObservability' | 'recordToolCalls' | 'toolBodyGate' | 'llmTraceSink'
+>
+
+/**
  * Build the repo bootstrapper (the "bootstrap repo" container dispatch) when its
- * prerequisites are configured — mirroring the Worker's `selectRepoBootstrapper` and
+ * prerequisites are configured, mirroring the Worker's `selectRepoBootstrapper` and
  * the container-executor prerequisites: a resolvable runner transport, the public URL
  * + session secret backing the LLM proxy, a token source, and a GitHub client.
  * Returns undefined otherwise (the bootstrap module then has no runner and the service
- * reports a clean dispatch failure). Bootstrap is an `architect`-kind run, so it
- * follows that kind's routing. The promoted `ContainerRepoBootstrapper` dispatches
- * through the same shared runner seam the container executor uses, so on Node it runs
- * against the self-hosted pool and on local against the per-job Docker container.
+ * reports a clean dispatch failure). A bootstrap run files its telemetry under its own
+ * `repo-bootstrapper` kind while resolving its MODEL through `architect`'s routing, so a
+ * deployment that pinned a model for its architect keeps getting it here. The promoted
+ * `ContainerRepoBootstrapper` dispatches through the same shared runner seam the container
+ * executor uses, so on Node it runs against the self-hosted pool and on local against the
+ * per-job Docker container.
  */
 export function selectNodeRepoBootstrapper(deps: {
   env: NodeJS.ProcessEnv
@@ -520,6 +533,13 @@ export function selectNodeRepoBootstrapper(deps: {
   githubClient: GitHubClient | undefined
   mintInstallationToken: MintInstallationToken | undefined
   resolvePackageRegistries?: (workspaceId: string) => Promise<JobPackageRegistrySpec[]>
+  /**
+   * The same telemetry sinks the container EXECUTOR files through, so a bootstrap run's
+   * provided context and tool-call trajectory are readable exactly like an execution's. Built
+   * once by the composition root and handed to both, which is what keeps the executor's body
+   * gate and this one from being two different answers to the same question.
+   */
+  observability?: BootstrapObservabilityDeps
 }): ContainerRepoBootstrapper | undefined {
   const publicUrl = deps.env.PUBLIC_URL?.trim()
   const sessionSecret = deps.config.auth.sessionSecret
@@ -549,6 +569,7 @@ export function selectNodeRepoBootstrapper(deps: {
     ...(deps.resolvePackageRegistries
       ? { resolvePackageRegistries: deps.resolvePackageRegistries }
       : {}),
+    ...deps.observability,
   })
 }
 

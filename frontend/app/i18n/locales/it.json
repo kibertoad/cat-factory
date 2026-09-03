@@ -3195,7 +3195,8 @@
       "retrying": "Nuovo tentativo…",
       "history": {
         "previousErrors": "{count} errore precedente | {count} errori precedenti"
-      }
+      },
+      "resumeBootstrap": "Riprendi da: {step}"
     },
     "stop": {
       "label": "Interrompi",
@@ -3814,7 +3815,8 @@
       "cacheRead": "{tokens} letti dalla cache",
       "cacheReadHint": "Token di input serviti dalla cache del provider (circa 0,1 volte il prezzo dell'input fresco)",
       "cacheWrite": "{tokens} scritti nella cache",
-      "cacheWriteHint": "Token di input scritti nella cache del provider (da 1,25 a 2 volte il prezzo dell'input fresco)"
+      "cacheWriteHint": "Token di input scritti nella cache del provider (da 1,25 a 2 volte il prezzo dell'input fresco)",
+      "costNoRollup": "Non valorizzato: la stima si ricava dal riepilogo per step, e questa esecuzione non ne ha. Qui sotto è indicato quanto hanno consumato le sue chiamate."
     },
     "phase": {
       "title": "Dove sono finiti i token",
@@ -3829,7 +3831,8 @@
       "costHint": "Costo stimato dei token di questa fase ai prezzi di listino. Un trattino indica che questa installazione non ha una tariffa per il modello eseguito.",
       "carryCostHint": "Quanto ogni fase ha gravato sui turni successivi: il suo contesto contato una volta per ogni turno che ha dovuto rinviarlo. Confronta tra loro le fasi di un'esecuzione; da solo il numero non significa nulla. Una fase che viene eseguita per ultima trascina poco per quanto abbia speso, quindi leggi questa colonna insieme ai token accanto.",
       "unattributed": "Non attribuito",
-      "unattributedHint": "registrato da un canale che non riporta la fase"
+      "unattributedHint": "registrato da un canale che non riporta la fase",
+      "noRollup": "Questa esecuzione non ha step di pipeline, quindi non esiste un riepilogo per fase: le sue chiamate al modello sono registrate qui sotto, ma nulla le raggruppa né le valorizza."
     },
     "metricsBar": {
       "calls": "{count} chiamata | {count} chiamate",
@@ -3937,7 +3940,8 @@
       "result": "Risultato",
       "dropped": "{chars} caratteri scartati all'acquisizione",
       "truncated": "Sono mostrate le prime {shown} chiamate di questa esecuzione. I conteggi sopra si riferiscono all'intera esecuzione; filtra sui fallimenti per vederli tutti.",
-      "failuresTruncated": "Sono mostrate le prime {shown} chiamate fallite. Il conteggio sopra si riferisce all'intera esecuzione."
+      "failuresTruncated": "Sono mostrate le prime {shown} chiamate fallite. Il conteggio sopra si riferisce all'intera esecuzione.",
+      "surveyReadsElsewhere": "Le letture dell’indagine non sono qui: esplora tramite il lettore limitato della piattaforma e ogni lettura è registrata nella trascrizione di adozione dell’esecuzione. Sotto ci sono le chiamate agli strumenti del container che ha scritto il servizio."
     }
   },
   "platformObservability": {
@@ -5250,7 +5254,26 @@
         "approvedDesc": "L'agente sta scrivendo {directory} e aprirà una pull request.",
         "failed": "Impossibile inviare la revisione"
       }
-    }
+    },
+    "steps": {
+      "title": "Passaggi del bootstrap",
+      "name": {
+        "scaffold": "Creare la struttura del repository",
+        "survey": "Analizzare il monorepo e il template",
+        "review": "Le tue decisioni di adozione",
+        "apply": "Scrivere il servizio e aprire la pull request"
+      },
+      "state": {
+        "pending": "Non iniziato",
+        "running": "In corso",
+        "awaiting_review": "In attesa di te",
+        "done": "Completato",
+        "failed": "Fallito",
+        "stopped": "Interrotto",
+        "unknown": "Stato illeggibile"
+      }
+    },
+    "runKind": "Bootstrap del repository"
   },
   "fragments": {
     "panel": {

@@ -43,6 +43,7 @@ import {
   sameSubtasks,
 } from '@cat-factory/kernel'
 import { registerServiceForFrame, requireWorkspace } from '@cat-factory/kernel'
+import { bootstrapResume } from '@cat-factory/contracts'
 import { defaultDelivery, deliveryPlanFor } from './bootstrapDelivery.js'
 import {
   MonorepoBootstrapController,
@@ -604,9 +605,15 @@ export class BootstrapService {
     }
     await this.deps.bootstrapJobRepository.insert(record)
 
-    // A monorepo retry re-enters at its own phase rather than dispatching: a survey retry
-    // re-runs the reads on the next poll, and an apply retry re-dispatches through the same
-    // path the review's resume uses, so neither has a second copy of the dispatch here.
+    // A monorepo retry re-enters at the step the run REACHED rather than dispatching from the
+    // top: a survey or review resume re-runs the reads on the next poll (a carried ready plan
+    // short-circuits them and re-parks), and an apply resume re-dispatches through the same path
+    // the review's own resume uses, so neither has a second copy of the dispatch here.
+    //
+    // WHICH step that is comes from `bootstrapResume`, the shared rule: the board offers this
+    // retry as "resume from <step>", and a second statement of the rule here is how the button
+    // and the behaviour come to name different steps. Its `apply` answer CARRIES the settled
+    // review, so the re-dispatch reads the state off the rule rather than re-testing for it.
     if (record.monorepo) {
       const frame = previous.blockId
         ? await this.markFrame(
@@ -619,8 +626,9 @@ export class BootstrapService {
       const blockId = frame?.id ?? previous.blockId
       await this.deps.bootstrapJobRepository.update(workspaceId, record.id, { blockId })
       const resumed = { ...record, blockId }
-      if (record.phase === 'apply' && record.adoptionReview) {
-        return await this.dispatchApply(workspaceId, resumed, record.adoptionReview)
+      const resume = bootstrapResume(record)
+      if (resume.step === 'apply') {
+        return await this.dispatchApply(workspaceId, resumed, resume.review)
       }
       await this.deps.bootstrapRunner?.startRun(workspaceId, record.id, record.driveId)
       const job = toBootstrapJob(resumed)

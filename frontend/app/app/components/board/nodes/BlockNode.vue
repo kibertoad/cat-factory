@@ -8,6 +8,7 @@ import ResizeGrips from './ResizeGrips.vue'
 import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
 import AgentStopButton from '~/components/board/AgentStopButton.vue'
 import AdoptionReviewModal from '~/components/bootstrap/AdoptionReviewModal.vue'
+import BootstrapRunSteps from '~/components/bootstrap/BootstrapRunSteps.vue'
 import { useBlockDrag } from '~/composables/useBlockDrag'
 import { useFrameStacking } from '~/composables/useFrameStacking'
 import { useViewport } from '~/composables/useViewport'
@@ -346,7 +347,21 @@ const ITEM_ICON: Record<string, string> = {
             <span>{{ item.label }}</span>
           </li>
         </ul>
-        <div v-if="run" class="mt-2 flex justify-end">
+        <!-- Which of the run's own steps it is on. A monorepo bootstrap is three moves around a
+             human decision, and the bar above reports only the current container's todo list, so
+             without this the card cannot say whether the survey, the review or the write is what
+             is happening. Renders nothing for a one-step new-repo run. -->
+        <BootstrapRunSteps v-if="run" :run-id="run.runId" class="mt-2" />
+        <div v-if="run" class="mt-2 flex items-center justify-end gap-1.5">
+          <UButton
+            size="xs"
+            color="neutral"
+            variant="ghost"
+            icon="i-lucide-activity"
+            @click.stop="ui.openObservability(run.runId)"
+          >
+            {{ t('observability.modelActivity') }}
+          </UButton>
           <AgentStopButton :run-id="run.runId" :kind="run.kind" size="xs" variant="ghost" />
         </div>
       </div>
@@ -359,6 +374,7 @@ const ITEM_ICON: Record<string, string> = {
           <UIcon name="i-lucide-user-check" class="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
           <p class="text-xs text-amber-200/90">{{ t('bootstrap.adoption.cardPrompt') }}</p>
         </div>
+        <BootstrapRunSteps :run-id="awaitingReview.id" />
         <div class="flex justify-end">
           <UButton size="xs" color="warning" variant="subtle" @click.stop="reviewOpen = true">
             {{ t('bootstrap.adoption.cardAction') }}

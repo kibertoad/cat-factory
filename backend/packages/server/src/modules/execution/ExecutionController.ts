@@ -303,6 +303,11 @@ function registerExecutionTelemetryRoutes(app: Hono<AppEnv>): void {
   // LLM observability for a run: the full per-call detail (prompts, responses,
   // token usage, output-limit headroom, transport-vs-execution latency) behind the
   // board's step rollups. Empty when the observability sink is not wired.
+  //
+  // This and the five reads below take an AGENT RUN id (see the contract file): they answer off
+  // the telemetry stores, which are keyed by the run, so a repo-bootstrap run (which has no
+  // execution row) is inspectable through exactly these routes. Do not add an execution
+  // existence guard here; the workspace scope is already applied by each store.
   buildHonoRoute(app, getExecutionLlmMetricsContract, async (c) => {
     const executionId = c.req.valid('param').executionId
     const observability = c.get('container').llmObservability

@@ -1,4 +1,6 @@
 import type {
+  AgentContextRecorder,
+  AgentJobHandle,
   BootstrapDeliveryPlan,
   BootstrapJobHandle,
   BootstrapJobRepository,
@@ -18,13 +20,16 @@ import type {
 } from '@cat-factory/kernel'
 import { failureKindFromHarnessCause, runBestEffort } from '@cat-factory/kernel'
 import { isProxyableProvider } from '@cat-factory/agents'
+import { bootstrapStepIds, REPO_BOOTSTRAP_AGENT_KIND } from '@cat-factory/contracts'
 import type { ContainerSessionService } from '../containers/ContainerSessionService.js'
+import { recordBootstrapContextSnapshot } from './agentContextRecord.js'
+import { drainToolCalls, type ToolTrajectoryDeps } from './toolTrajectory.js'
 import type { JobPackageRegistrySpec } from './ContainerAgentExecutor.js'
 import type { MintInstallationToken } from './repoTargeting.js'
 import { RunnerJobClient, type ResolveRunnerTransport } from './RunnerJobClient.js'
 import { logger } from '../observability/logger.js'
 
-export interface ContainerRepoBootstrapperDependencies {
+export interface ContainerRepoBootstrapperDependencies extends ToolTrajectoryDeps {
   /**
    * Resolve which runner backend (Cloudflare container or self-hosted pool) a
    * bootstrap job dispatches to — the same seam the implementation executor rides.
@@ -60,6 +65,12 @@ export interface ContainerRepoBootstrapperDependencies {
   githubApiBase?: string
   /** Web base for building the created repo's URL (defaults to github.com). */
   webBaseUrl?: string
+  /**
+   * Records the complete context each bootstrap dispatch handed its agent (best-effort, gated
+   * inside the recorder). Absent ⇒ a bootstrap's "Provided context" tab is empty, which is the
+   * shape every other agent run's would have if its executor skipped this call.
+   */
+  agentContextObservability?: AgentContextRecorder
   /**
    * Resolve the workspace's private package-registry entries for the bootstrap
    * container (the scaffolder installs dependencies too). Same seam as
@@ -287,7 +298,7 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
     // architecture and 404s on a private one, with nothing in the failure naming the cause.
     // `target` came from the pre-flight `getRepo` above, which is why it costs no extra read.
     const ghToken = await this.deps.mintInstallationToken(installation.installationId, {
-      executionId: request.containerJobId,
+      executionId: request.jobId,
       workspaceId: request.workspaceId,
       repoIds: [String(target.githubId), ...(reference?.githubId ? [reference.githubId] : [])],
     })
@@ -321,12 +332,12 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
       jobId: request.containerJobId,
       // The run's correlation ids, so the container's own lines join to this bootstrap in the
       // backend's logs: the same fields `buildCommonBody` puts on an execution job. A bootstrap
-      // is a first-class agent run (one `agent_runs` table, one retry surface), so it must not be
-      // the one agent-kind dispatch whose container logs cannot be joined to anything. Its run id
-      // IS its job id: a bootstrap has no separate execution row, which is exactly what
-      // `sessionService.mint` above is told.
+      // is a first-class agent run (one `agent_runs` table, one retry surface, one observability
+      // panel), so it must not be the one agent-kind dispatch whose container logs cannot be
+      // joined to anything. The id is the RUN's, matching the session token above: a bootstrap
+      // has no separate execution row, so its run id is what every run-scoped read is keyed by.
       workspaceId: request.workspaceId,
-      executionId: request.containerJobId,
+      executionId: request.jobId,
       mode: 'coding',
       systemPrompt: reference ? ADAPT_SYSTEM_PROMPT : SCAFFOLD_SYSTEM_PROMPT,
       userPrompt:
@@ -375,6 +386,7 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
       'agent',
     )
     log.info('bootstrap: container accepted job')
+    await this.recordDispatchContext(request, body, log)
     return {
       workspaceId: request.workspaceId,
       jobId: request.jobId,
@@ -625,7 +637,7 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
       : []
 
     const ghToken = await this.deps.mintInstallationToken(installation.installationId, {
-      executionId: request.containerJobId,
+      executionId: request.jobId,
       workspaceId: request.workspaceId,
       repoIds,
     })
@@ -644,7 +656,8 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
     const body = {
       jobId: request.containerJobId,
       workspaceId: request.workspaceId,
-      executionId: request.containerJobId,
+      // The RUN, not this phase's drive id: see the session mint above.
+      executionId: request.jobId,
       mode: 'coding',
       systemPrompt: spec.systemPrompt,
       userPrompt: spec.userPrompt,
@@ -676,6 +689,7 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
         request.delivery.mode === 'pull_request' ? request.delivery.branch : spec.repo.baseBranch,
       reference: reference ? `${reference.owner}/${reference.name}` : null,
     })
+    await this.recordDispatchContext(request, body, log)
     return {
       workspaceId: request.workspaceId,
       jobId: request.jobId,
@@ -726,12 +740,18 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
     }
   }
 
-  /** The model-locked LLM-proxy session token a bootstrap container runs under. */
+  /**
+   * The model-locked LLM-proxy session token a bootstrap container runs under.
+   *
+   * Keyed on the RUN, never on the drive: a monorepo run's apply phase is dispatched under its
+   * own container job id, so minting on that id files the apply's model calls under a key no
+   * run-scoped read asks for, and the run reports only what its survey spent.
+   */
   private mintSessionToken(request: BootstrapRepoRequest): Promise<string> {
     return this.deps.sessionService.mint({
       workspaceId: request.workspaceId,
-      executionId: request.containerJobId,
-      agentKind: 'architect',
+      executionId: request.jobId,
+      agentKind: REPO_BOOTSTRAP_AGENT_KIND,
       provider: this.deps.model.provider,
       model: this.deps.model.model,
     })
@@ -748,6 +768,18 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
       runId: handle.jobId,
       jobId: handle.containerJobId,
     })
+    // The tool calls the harness drained on this poll, to the same two destinations an
+    // execution step's go to. Filed under the RUN (`runId`) and grouped by the container job,
+    // so a monorepo run's apply trajectory reads under the run a person opened. Isolated +
+    // best-effort inside `drainToolCalls`: it can never affect this poll's verdict.
+    // Correlated by the same two ids every other line about this run carries, so a drain that
+    // warns (an image too old to number its calls) names the run it was about.
+    await drainToolCalls(
+      this.deps,
+      this.jobHandle(handle),
+      view.spans,
+      logger.child({ jobId: handle.jobId, workspaceId: handle.workspaceId }),
+    )
 
     if (view.state === 'running') {
       return view.progress ? { state: 'running', subtasks: view.progress } : { state: 'running' }
@@ -795,6 +827,55 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
     if (record.monorepo) return { state: 'done', ...pr }
     const outcome = await this.buildOutcome(handle, record.repoName, result.defaultBranch)
     return { state: 'done', outcome, ...pr }
+  }
+
+  /**
+   * The dispatched container job as an {@link AgentJobHandle}, the shape the shared trajectory
+   * drain speaks. `runId` is the bootstrap RUN and `jobId` the container job it dispatched,
+   * which is the same split every execution step's handle carries.
+   */
+  private jobHandle(handle: BootstrapJobHandle): AgentJobHandle {
+    return {
+      jobId: handle.containerJobId,
+      runId: handle.jobId,
+      workspaceId: handle.workspaceId,
+      agentKind: REPO_BOOTSTRAP_AGENT_KIND,
+      model: this.resolvedModel(),
+      provider: this.deps.model.provider,
+    }
+  }
+
+  /**
+   * The resolved model as every OTHER producer writes it: `provider:model`, which is the format
+   * `AgentJobHandle.model` and `agentContextSnapshotSchema.model` both document. A bare model id
+   * renders beside prefixed ones on the same panel and gives nothing to a reader that splits the
+   * field to recover the provider.
+   */
+  private resolvedModel(): string {
+    return `${this.deps.model.provider}:${this.deps.model.model}`
+  }
+
+  /**
+   * File what this dispatch handed the agent, so a bootstrap's Provided-context tab answers the
+   * same question every other agent run's does.
+   *
+   * AWAITED for the reason `recordAgentContextSnapshot` states: it runs after the container has
+   * already been accepted, so it delays nothing but the handle's return, and an un-awaited insert
+   * is dropped outright on the Worker, where this runs inside a Workflow step.
+   */
+  private async recordDispatchContext(
+    request: BootstrapRepoRequest,
+    body: Record<string, unknown>,
+    log: typeof logger,
+  ): Promise<void> {
+    await recordBootstrapContextSnapshot(this.deps.agentContextObservability, log, {
+      body,
+      model: this.resolvedModel(),
+      agentKind: REPO_BOOTSTRAP_AGENT_KIND,
+      workspaceId: request.workspaceId,
+      executionId: request.jobId,
+      stepIndex: dispatchStepIndex(request),
+    })
   }
 
   /**
@@ -893,6 +974,19 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
     if (!record) throw new Error(`Bootstrap job '${handle.jobId}' not found`)
     return record
   }
+}
+
+/**
+ * Which of the RUN's own steps this dispatch is, numbered exactly as the board numbers them.
+ *
+ * The container dispatch is always the run's LAST move: a new-repo run is only `scaffold`, and a
+ * monorepo run's apply follows the survey and the human review. So it is read off the end of the
+ * shared `bootstrapStepIds` list rather than by searching it for a step NAME, which cannot
+ * answer `-1`. A snapshot filed at a step the run never had is a row every step-scoped read
+ * silently drops.
+ */
+function dispatchStepIndex(request: BootstrapRepoRequest): number {
+  return bootstrapStepIds({ monorepo: request.monorepo ?? null }).length - 1
 }
 
 /** A repo's default branch, or the conventional fallback when the provider reported none. */

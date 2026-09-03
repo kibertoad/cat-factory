@@ -441,7 +441,6 @@ export {
   renderBugHuntPrompt,
 } from './agents/prompts/bug-hunt.js'
 export {
-  MONOREPO_ADOPTION_AGENT_KIND,
   bootstrapPrTitle,
   monorepoAdoptionSystemPrompt,
   renderMonorepoAdoptionPrompt,
