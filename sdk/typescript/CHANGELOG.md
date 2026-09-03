@@ -1,5 +1,118 @@
 # @cat-factory/sdk
 
+## 0.51.0
+
+### Minor Changes
+
+- e7e1f8c: Bug fishing expeditions: hunt a codebase for the defects nobody has reported yet
+  
+  Every defect flow the platform had started from a REPORT: `bug-investigator` triages one,
+  `pl_bugfix` fixes one, `bug-hunt` picks one off a tracker board. Nothing looked for the defects
+  nobody has hit, and those are the ones that surface as an incident rather than as a ticket.
+  
+  A new `bug-fishing` task type runs the new read-only `bug-fisher` agent over a service's codebase
+  once per ANGLE — logic and control flow, failure handling, boundary conditions, concurrency and
+  idempotency, state and resource lifecycle, interface contracts, footguns, and conformance with the
+  supplied product requirements. One pass told to find everything returns the shallow half of
+  everything; a pass told to think only about concurrency reads the same files with a question that
+  makes the race visible, and each angle is its own dispatch with a fresh context, so one angle's
+  reading never lands on another's transcript. Nothing is written and no pull request is opened.
+  
+  Triage does not wait for the hunt. A finished angle's findings are final the moment they land, so
+  the expedition window offers them while later angles are still fishing, and each finding a human
+  MARKS spawns its own bug-fix task — carrying the finding's evidence and reproduction — on the
+  pipeline the board configures for spawned fixes (`bugFishingFixPipelineId`, defaulting to the
+  built-in bug-fix preset, overridable per batch). The spawned task links back through the new
+  `Block.expeditionId`.
+  
+  Refusals are deliberately loud rather than convenient. A pass that crashes settles THAT angle as
+  failed carrying its reason, and so does one that answers unusably (no `result.custom`, or a blob
+  the schema rejects), because a phase that silently reported nothing is indistinguishable from one
+  that honestly found nothing — and which angles came back empty is the whole thing a human reads.
+  A mark whose fix task cannot be created — a pipeline that no longer exists, or one that cannot be
+  started on a one-off task — fails with the pipeline named instead of answering 200 and leaving
+  somebody waiting for a task that will never appear. Dismissing an id the expedition does not carry
+  is refused rather than quietly accepted. And an expedition that caught nothing still parks and
+  says so.
+  
+  Marking is safe against two people at once. Creating the task and recording it after would let two
+  markings of one finding each file the same bug and start a run for it, so the finding's spawn
+  record is taken as a `pending` CLAIM under the run's compare-and-swap, carrying the block id it is
+  about to create, and settled to `spawned` or `failed` behind the work. The consequence for anyone
+  reading the state: whether a finding is being fixed is its spawn's `status`, not the record being
+  present. A spawned fix is also created the way the create form would have created it — with the
+  service's standing standards and the marking user as its creator — so it is held to the same
+  standards as the identical bug filed by hand, and the notifications its run raises reach somebody.
+  
+  The pre-dispatch input gate learned about the type: a bug-fishing task legitimately carries no
+  description, because its input is the codebase, so `description_missing` no longer parks one at
+  step 0.
+  
+  Public API: `taskType` gains `bug-fishing` and `NotificationType` gains `bug_fishing_triage`,
+  with two new optional notification-payload fields (`phaseCount`, `untriagedFindingCount`). Both are
+  additive enum members the SDKs already tolerate; the spec is `1.67.0`.
+  
+  Internal break: `workspace_settings` and `blocks` each gain a column, and
+  `ExecutionServiceDependencies` gains an optional `serviceRepository` plus an optional
+  `promptFragmentSource` (the pool a newly created task's default fragments come from, so a spawned
+  fix reads the same one the create form does). Both facades ship the migration.
+- a1802d9: Report what the platform tried about a failed environment, instead of reporting only that it failed
+  
+  Both remediation loops a `deployer` step can run recorded everything on the step and nothing
+  reduced either into the verification report. So a run whose environment failed, was diagnosed as a
+  provider fault, was restarted in place and then came up served byte-for-byte what a run with no
+  remediation loop wired at all serves. Nothing outside the backend could establish that the loop
+  had run: a headless suite reading the report, the one provider-neutral surface it has, had no
+  observable to assert on, which made the feature unfalsifiable from outside the deployment.
+  
+  `environments.entries[].remediation` now carries the DECISIONS, per frame. `deployFix` counts the
+  `deploy-fixer`'s repair rounds against the cause it was dispatched for and splits the rounds whose
+  job FINISHED from the ones that died having changed nothing in the checkout, because a bare round
+  count reads as the first. `investigation` carries the layer the last verdict blamed, the action it
+  asked for, every action the engine actually RAN, why a requested action was withheld, the
+  investigation's own failure when a round produced no verdict, and how many readiness-ceiling
+  extensions a `wait` verdict won: a granted `wait` is the one remedy that otherwise leaves no trace
+  anywhere, since the bring-up simply runs past the configured ceiling and the timeline beside it
+  cannot be reconciled without it. The investigator's summary paragraph and cited evidence stay on
+  the run's own record.
+  
+  Three absences stay distinct: no `remediation` means neither loop ran, a null `faultLayer` means no
+  round produced a verdict (never the `unknown` LAYER, which is a verdict reached on evidence that did
+  not settle the question), and an empty `ranActions` means nothing ran, with `withheld` saying why.
+  There is no field for whether the remedy WORKED, on purpose: that is the deployer's next verdict,
+  which `entries[].status` already states. `@cat-factory/acceptance-kit` gains
+  `checkEnvironmentRemediation`, the reduction that asserts the loop ran and settled on a fault layer.
+  
+  Fixes a defect the new section would otherwise have under-reported, and one bug beside it. A
+  loop-back to a `deployer` step (the `human-test` gate rebuilding the environment a person is
+  testing) dropped the whole of `step.deployFix`, so a frame whose deployment files the fixer had
+  machine-edited reported as one nothing was ever attempted on; and `step.environmentInvestigation`
+  had no reset at all, so the looped-back step carried a SPENT budget into its next failure, refused
+  the first round of the new cycle as "the budget is spent", and explained the terminal failure with
+  the verdict about the environment the re-provision had already superseded. The counters of both are
+  now re-armed per provisioning CYCLE and the attempt logs survive the RUN, which is what the report
+  reduces.
+  
+  Splitting those two lifetimes is what every remaining decision here follows from. Each attempt row
+  carries the CYCLE that ran it, so a read scopes itself explicitly instead of taking whichever
+  half is nearer: the live budget and the last verdict are read within the CURRENT cycle (a verdict
+  from a superseded cycle diagnoses an environment the re-provision destroyed), while the report
+  reduces the whole log and states `cycles` beside `attempts` rather than printing a run-long count
+  against a per-cycle budget. `waitExtensions` is the one counter that stays RUN-long: a cycle is
+  not always started by a person or a gate, since `rerunProducerThrough` is driven by the judge loop
+  and the below-threshold companion loop too, and a per-cycle bound would hand the model a fresh
+  readiness ceiling on every automatic rework round. Both logs are now capped and count what they
+  drop, since they live in the run's compare-and-swapped JSON blob.
+  
+  Internal break: an attempt log's `attempt` is now its ordinal in that run-long log rather than a
+  copy of the live cycle counter, and each row carries a `cycle`. The two ordinals are identical on
+  any run that never loops back to its deployer, and only a stored step carries the fields.
+  
+  Additive on `/api/v1` (spec `info.version` 1.66.0): new optional and required fields on a response
+  object introduced in the same release, plus a fourth `entries[].status` value, `unsettled`, for the
+  frame whose recorded outcome a remediation loop cleared to re-provision it. The clients ignore
+  unknown fields and tolerate unknown enum values, so a consumer built against 1.65.0 keeps parsing.
+
 ## 0.50.0
 
 ### Minor Changes
