@@ -11,6 +11,7 @@ import type {
   ReferenceArchitecture,
 } from '~/types/domain'
 import {
+  defaultBootstrapDelivery,
   serviceDirectoryLeaf,
   serviceDirectoryParent,
 } from '~/components/bootstrap/BootstrapModal.logic'
@@ -116,18 +117,14 @@ const intoMonorepo = computed(() => target.value === 'monorepo')
 // want opposite defaults (a repository being created has nobody to review its first commit; a
 // monorepo's default branch is the branch every other service builds from), which is exactly why
 // this is a control and not a constant.
-/** The delivery a target takes when nobody has said otherwise; mirrors the backend's own rule. */
-function defaultDelivery(into: boolean): BootstrapDelivery {
-  return into ? 'pull_request' : 'direct_push'
-}
-const delivery = ref<BootstrapDelivery>(defaultDelivery(false))
+const delivery = ref<BootstrapDelivery>(defaultBootstrapDelivery(false))
 // Whether the person has answered this question themselves. Until they have, switching target
 // re-defaults; once they have, their answer stands, because re-defaulting over an explicit
 // choice is how a run they asked to review lands unreviewed. Cleared after a launch, so the
 // answer binds the run it was given for rather than every later one (see `launch`).
 const deliveryTouched = ref(false)
 watch(intoMonorepo, (into) => {
-  if (!deliveryTouched.value) delivery.value = defaultDelivery(into)
+  if (!deliveryTouched.value) delivery.value = defaultBootstrapDelivery(into)
 })
 function chooseDelivery(value: BootstrapDelivery) {
   deliveryTouched.value = true
@@ -414,7 +411,7 @@ async function launch() {
       // monorepo would go on governing the next bootstrap, into a different repository, without
       // the person having been asked about that one. Back to the current target's own default.
       deliveryTouched.value = false
-      delivery.value = defaultDelivery(intoMonorepo.value)
+      delivery.value = defaultBootstrapDelivery(intoMonorepo.value)
       // The provisional frame arrived (bootstrap() refreshed the board). Re-home it to
       // free space so it never overlaps an existing service — the backend places it on a
       // fixed diagonal stagger that can land on top of a large neighbour — then centre the

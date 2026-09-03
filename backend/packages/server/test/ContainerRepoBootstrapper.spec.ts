@@ -9,6 +9,7 @@ import type {
   RunnerTransport,
 } from '@cat-factory/kernel'
 import { ContainerRepoBootstrapper } from '../src/agents/ContainerRepoBootstrapper.js'
+import type { MintInstallationToken } from '../src/agents/repoTargeting.js'
 import type { ContainerSessionService } from '../src/containers/ContainerSessionService.js'
 
 // The bootstrap pre-flight gates a force-push run: the target must exist, be empty,
@@ -75,6 +76,8 @@ function makeBootstrapper(
   client: GitHubClient,
   transport: RunnerTransport,
   bootstrapJobRepository: BootstrapJobRepository = fakeJobRepository(),
+  /** Injectable so a test can assert WHICH repos the run's token was scoped to. */
+  mintInstallationToken: MintInstallationToken = vi.fn(async () => 'gh-token'),
 ): ContainerRepoBootstrapper {
   const installationRepository = {
     getByWorkspace: vi.fn(async () => INSTALLATION),
@@ -88,11 +91,25 @@ function makeBootstrapper(
     bootstrapJobRepository,
     repoRepository: {} as never,
     githubClient: client,
-    mintInstallationToken: vi.fn(async () => 'gh-token'),
+    mintInstallationToken,
     sessionService,
     model: { provider: 'workers-ai', model: '@cf/test' },
     proxyBaseUrl: 'https://proxy.example/v1',
   })
+}
+
+/**
+ * A client that answers a DISTINCT numeric id per repository, so a test can tell the push target
+ * and the reference template apart in one token scope, and reports a non-conventional default
+ * branch so a hard-coded `main` cannot pass for a read of the real one.
+ */
+function idPerRepoClient(): GitHubClient {
+  return fakeClient({
+    getRepo: vi.fn(async (_installationId: number, ref: { owner: string; repo: string }) => ({
+      defaultBranch: 'trunk',
+      githubId: ref.repo === 'service-template' ? 77 : 1,
+    })),
+  } as unknown as Partial<GitHubClient>)
 }
 
 const REQUEST = {
@@ -401,5 +418,105 @@ describe('ContainerRepoBootstrapper new-repo pull-request delivery', () => {
     })
     expect(update.prUrl).toBe('https://github.com/kibertoad/simpler-service3/pull/1')
     expect(update.outcome).toMatchObject({ owner: 'kibertoad', name: 'simpler-service3' })
+  })
+})
+
+describe('ContainerRepoBootstrapper token scope and reported branch', () => {
+  it('scopes the token to the template it CLONES under the force-push delivery too', async () => {
+    // That delivery pushes only the target, so the scope read as "just the target" for a long
+    // time. But it also CLONES the reference template on the same token, so a scope without the
+    // template works for a public reference architecture and 404s on a private one, under one
+    // delivery and not the other.
+    const mint = vi.fn(async () => 'gh-token')
+    const bootstrapper = makeBootstrapper(
+      idPerRepoClient(),
+      { dispatch: vi.fn(async () => undefined) } as unknown as RunnerTransport,
+      fakeJobRepository(),
+      mint,
+    )
+    await bootstrapper.startBootstrap({
+      ...REQUEST,
+      referenceRepo: { owner: 'acme', name: 'service-template' },
+    })
+    expect(mint).toHaveBeenCalledWith(99, expect.objectContaining({ repoIds: ['1', '77'] }))
+  })
+
+  it('clones the template at ITS default branch, not an assumed `main`', async () => {
+    const dispatch = vi.fn(async () => undefined)
+    const bootstrapper = makeBootstrapper(idPerRepoClient(), {
+      dispatch,
+    } as unknown as RunnerTransport)
+    await bootstrapper.startBootstrap({
+      ...REQUEST,
+      referenceRepo: { owner: 'acme', name: 'service-template' },
+    })
+    const [, body] = dispatch.mock.calls[0] as unknown as [unknown, Record<string, unknown>]
+    expect(body.repo).toMatchObject({ name: 'service-template', baseBranch: 'trunk' })
+  })
+
+  it('reports the real default branch of the target when the harness reported none', async () => {
+    // Only the force-push `bootstrap` spec echoes a branch back (it created the one it pushed).
+    // The coding shape a `pull_request` run takes reports none, so the outcome READS it: a
+    // repository whose default is `trunk` must not be recorded as `main`, which is a ref that
+    // does not exist there.
+    const poll = vi.fn(async (): Promise<RunnerJobView> => ({
+      state: 'done',
+      result: { prUrl: 'https://github.com/kibertoad/simpler-service3/pull/1' },
+    }))
+    const bootstrapper = makeBootstrapper(
+      idPerRepoClient(),
+      { poll } as unknown as RunnerTransport,
+      fakeJobRepository({ delivery: 'pull_request' }),
+    )
+    const update = await bootstrapper.pollBootstrap({
+      workspaceId: 'ws_1',
+      jobId: 'boot_1',
+      containerJobId: 'boot_1',
+    })
+    expect(update.outcome?.defaultBranch).toBe('trunk')
+  })
+})
+
+describe('the monorepo role prompt', () => {
+  /** The system prompt a monorepo apply dispatches under the given delivery. */
+  async function promptFor(mode: 'pull_request' | 'direct_push'): Promise<string> {
+    const dispatch = vi.fn(async () => undefined)
+    const bootstrapper = makeBootstrapper(fakeClient(), {
+      dispatch,
+    } as unknown as RunnerTransport)
+    await bootstrapper.startBootstrap({
+      ...MONOREPO_REQUEST,
+      delivery: mode === 'pull_request' ? MONOREPO_DELIVERY : ({ mode: 'direct_push' } as const),
+    })
+    const [, body] = dispatch.mock.calls[0] as unknown as [unknown, Record<string, unknown>]
+    return body.systemPrompt as string
+  }
+
+  it('tells a direct-push run it is on the SHARED branch, and where a deviation goes', async () => {
+    // Both sentences change what the agent does. "Already on a fresh work branch" is the licence
+    // to commit loosely, and this delivery checkpoints every commit onto the branch every other
+    // service is built from. And a caveat routed to a pull request description is LOST on a run
+    // that opens no pull request.
+    const prompt = await promptFor('direct_push')
+    expect(prompt).toMatch(/OWN DEFAULT BRANCH/)
+    expect(prompt).not.toMatch(/fresh work branch/)
+    expect(prompt).toMatch(/commit message/)
+    expect(prompt).not.toMatch(/pull request description/)
+  })
+
+  it('tells a pull-request run it is on a work branch, and to note deviations on the PR', async () => {
+    const prompt = await promptFor('pull_request')
+    expect(prompt).toMatch(/fresh work branch/)
+    expect(prompt).toMatch(/pull request description/)
+    expect(prompt).not.toMatch(/DEFAULT BRANCH/)
+  })
+
+  it('keeps the rules that are not about delivery under both', async () => {
+    // The scoping rules are the point of this prompt and neither delivery relaxes them.
+    for (const prompt of [await promptFor('pull_request'), await promptFor('direct_push')]) {
+      expect(prompt).toMatch(/READ-ONLY as a sibling directory/)
+      expect(prompt).toMatch(/touch NOTHING else in the/)
+      expect(prompt).toMatch(/adoption decisions a human has already reviewed/)
+    }
   })
 })

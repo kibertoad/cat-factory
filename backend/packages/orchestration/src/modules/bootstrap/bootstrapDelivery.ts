@@ -68,8 +68,7 @@ export function deliveryPlanFor(
       body:
         resolved && directory
           ? (redactSecrets(renderAdoptionPrSection(resolved, directory)) ?? '')
-          : (redactSecrets(newRepoPrBody(record.repoName, record.referenceArchitectureName)) ??
-            ''),
+          : (redactSecrets(newRepoPrBody(record.repoName, record.referenceArchitectureName)) ?? ''),
     },
   }
 }

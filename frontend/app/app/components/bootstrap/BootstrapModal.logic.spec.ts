@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  defaultBootstrapDelivery,
   serviceDirectoryLeaf,
   serviceDirectoryParent,
 } from '~/components/bootstrap/BootstrapModal.logic'
@@ -39,5 +40,15 @@ describe('serviceDirectoryParent', () => {
   it('is the repo root for a bare name', () => {
     expect(serviceDirectoryParent('billing')).toBe('')
     expect(serviceDirectoryParent('')).toBe('')
+  })
+})
+
+describe('defaultBootstrapDelivery', () => {
+  it('reviews a monorepo and pushes a repository being created', () => {
+    // The form has to SHOW the default it is about to send, and the two targets want opposite
+    // ones, so a constant would render the wrong answer for one of them and ask the person to
+    // correct a choice they never made. Same rule the backend applies to a request naming none.
+    expect(defaultBootstrapDelivery(true)).toBe('pull_request')
+    expect(defaultBootstrapDelivery(false)).toBe('direct_push')
   })
 })

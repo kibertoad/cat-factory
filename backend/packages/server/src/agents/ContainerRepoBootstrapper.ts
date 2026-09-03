@@ -100,7 +100,7 @@ function monorepoSystemPrompt(delivery: BootstrapDeliveryPlan['mode']): string {
   const checkout =
     delivery === 'pull_request'
       ? 'Your working directory is the monorepo checkout, already on a fresh work branch. '
-      : 'Your working directory is the monorepo checkout, on the monorepo\'s OWN DEFAULT BRANCH: ' +
+      : "Your working directory is the monorepo checkout, on the monorepo's OWN DEFAULT BRANCH: " +
         'every commit you make is pushed to the branch every other service in it is built from, ' +
         'as you make it. So commit only work you would be willing to merge, keep the tree ' +
         'building at every commit, and never rewrite, revert or force-push history that was ' +
@@ -607,7 +607,10 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
     // template outside the installation simply is not cloneable, which the harness reports as a
     // clone failure rather than silently running without it.
     const reference = await this.resolveReferenceTemplate(request, installation.installationId, log)
-    const repoIds = [String(spec.repoGithubId), ...(reference?.githubId ? [reference.githubId] : [])]
+    const repoIds = [
+      String(spec.repoGithubId),
+      ...(reference?.githubId ? [reference.githubId] : []),
+    ]
     const referenceRepos = reference
       ? [
           {

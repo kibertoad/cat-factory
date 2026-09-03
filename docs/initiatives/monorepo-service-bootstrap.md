@@ -375,10 +375,21 @@ read-only. `ContainerRepoBootstrapper.dispatchCodingShape` is that one builder, 
 what keeps `newBranch` and `pr` from ever being set apart: a body carrying a branch and no pull
 request pushes work onto a branch nobody is told about.
 
-**Not on `/api/v1` yet.** The public bootstrap body has no `monorepo` target either, and the
-narrower shape is deliberate there; `delivery` joins it as an additive optional field whenever the
-monorepo half does. A public reader already SEES the difference, because `prUrl` is projected
-beside `repoUrl` and is now populated for a new-repo run that opened one.
+**Not on `/api/v1` as an INPUT; projected as an OUTPUT.** The public bootstrap body has no
+`monorepo` target either, and the narrower shape is deliberate there; `delivery` joins it as an
+additive optional field whenever the monorepo half does. The READ carries it from spec 1.68.0,
+because it had to: `prUrl` beside `repoUrl` was documented as mutually exclusive and as the way to
+tell the two run shapes apart, and a new-repo run that opens a pull request sets both. `repoUrl`
+still discriminates the TARGET; `delivery` is what discriminates the delivery, from the first poll
+rather than at the end.
+
+**A `pull_request` run does NOT trigger the initial blueprint mapping.** That run has written
+nothing to the default branch, which is what the mapper clones, so mapping it would spend a real
+agent run reading the repository's initial README, commit that empty map to `blueprints/` and
+project it onto the board, where the wrong projection would outlive the merge. The frame still goes
+`ready` (nothing watches the pull request, so a status withheld until the merge would misreport a
+live service forever); what it carries is a description naming both outstanding moves, and the
+inspector's "map service" action is the way in once the pull request has landed.
 
 ## Gotchas the second slice surfaced
 

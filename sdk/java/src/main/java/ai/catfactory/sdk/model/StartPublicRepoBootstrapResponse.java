@@ -10,6 +10,7 @@ import org.jspecify.annotations.Nullable;
 /**
  * The {@code StartPublicRepoBootstrapResponse} wire model.
  * @param createdAt the {@code createdAt} field.
+ * @param delivery the {@code delivery} field.
  * @param error Always present; {@code null} when the server has no value for it.
  * @param failureDetail Always present; {@code null} when the server has no value for it.
  * @param failureHint Always present; {@code null} when the server has no value for it.
@@ -27,6 +28,8 @@ import org.jspecify.annotations.Nullable;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record StartPublicRepoBootstrapResponse(
     @JsonProperty("createdAt") Double createdAt,
+
+    @JsonProperty("delivery") StartPublicRepoBootstrapResponseDelivery delivery,
 
     /** Always present; {@code null} when the server has no value for it. */
     @JsonProperty("error") @Nullable String error,
@@ -77,6 +80,7 @@ public record StartPublicRepoBootstrapResponse(
      */
     public static final class Builder {
         private @Nullable Double createdAt;
+        private @Nullable StartPublicRepoBootstrapResponseDelivery delivery;
         private @Nullable String error;
         private @Nullable String failureDetail;
         private @Nullable String failureHint;
@@ -94,6 +98,12 @@ public record StartPublicRepoBootstrapResponse(
         /** Set {@code createdAt}. */
         public Builder createdAt(@Nullable Double createdAt) {
             this.createdAt = createdAt;
+            return this;
+        }
+
+        /** Set {@code delivery}. */
+        public Builder delivery(@Nullable StartPublicRepoBootstrapResponseDelivery delivery) {
+            this.delivery = delivery;
             return this;
         }
 
@@ -177,7 +187,7 @@ public record StartPublicRepoBootstrapResponse(
 
         /** Build the {@link StartPublicRepoBootstrapResponse}. */
         public StartPublicRepoBootstrapResponse build() {
-            return new StartPublicRepoBootstrapResponse(createdAt, error, failureDetail, failureHint, failureKind, jobId, prUrl, progress, repoName, repoOwner, repoUrl, serviceId, status, updatedAt);
+            return new StartPublicRepoBootstrapResponse(createdAt, delivery, error, failureDetail, failureHint, failureKind, jobId, prUrl, progress, repoName, repoOwner, repoUrl, serviceId, status, updatedAt);
         }
     }
 }

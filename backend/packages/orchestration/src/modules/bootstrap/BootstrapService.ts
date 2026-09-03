@@ -2,7 +2,6 @@ import type {
   AdoptionReviewInput,
   Block,
   BlockType,
-  BootstrapDelivery,
   BootstrapFailure,
   BootstrapFailureKind,
   BootstrapJob,
@@ -192,6 +191,17 @@ function newRunDefaults(
     prUrl: null,
   }
 }
+
+/**
+ * What a `pull_request` run that finished without opening one is failed with.
+ *
+ * One string for one condition, raised from both targets' terminal paths: the work is on a branch
+ * whose name the person who started the run was never told, so there is nothing for them to review
+ * and nothing on the default branch either.
+ */
+const UNDELIVERED_MESSAGE =
+  'The bootstrap agent finished without opening a pull request, so the new service was not ' +
+  'delivered anywhere a reviewer can find it.'
 
 /** Join the reference architecture's default instructions with per-run extras. */
 function composeInstructions(defaults: string, extra: string): string {
@@ -751,9 +761,9 @@ export class BootstrapService {
       return { state: 'failed', error: message }
     }
 
-    // Done on a MONOREPO run: the deliverable is a pull request against a repository that
-    // already exists, so there is no repo to create, project or name: the frame is bound to the
-    // monorepo it was pre-flighted against, pinned to its directory.
+    // Done on a MONOREPO run: whatever it delivered landed in a repository that already exists,
+    // so there is no repo to create, project or name: the frame is bound to the monorepo it was
+    // pre-flighted against, pinned to its directory.
     if (record.monorepo) return await this.finishMonorepoApply(workspaceId, record, update.prUrl)
 
     // Done: record the repo, link it to the frame (so dropped tasks target it),
@@ -769,12 +779,7 @@ export class BootstrapService {
       // Reclaim the container first, exactly as the success path below does: the run is over
       // either way, and a refusal that leaves the instance idling is the same leak.
       await this.stopContainer(workspaceId, jobId, record.driveId)
-      return await this.failRun(
-        workspaceId,
-        record,
-        'The bootstrap agent finished without opening a pull request, so the new service was ' +
-          'not delivered anywhere a reviewer can find it.',
-      )
+      return await this.failRun(workspaceId, record, UNDELIVERED_MESSAGE)
     }
     const patch = {
       status: 'succeeded' as const,
@@ -1156,11 +1161,7 @@ export class BootstrapService {
     // off what the run PROMISED, never off the field being empty, which is the ordinary state
     // of the other delivery.
     if (!monorepo || (record.delivery === 'pull_request' && !prUrl)) {
-      return await this.failRun(
-        workspaceId,
-        record,
-        'The bootstrap agent finished without opening a pull request, so the new service was not delivered anywhere.',
-      )
+      return await this.failRun(workspaceId, record, UNDELIVERED_MESSAGE)
     }
 
     const patch = {
@@ -1190,8 +1191,8 @@ export class BootstrapService {
       )
     }
     if (record.blockId) {
-      // Best-effort, as on the new-repo path: the pull request is open either way, and a
-      // linkage failure must not report the run as failed. The `directory` is what makes the
+      // Best-effort, as on the new-repo path: the service is written either way, and a linkage
+      // failure must not report the run as failed. The `directory` is what makes the
       // linkage a monorepo one: `resolveRepoTarget` scopes every agent working on this service
       // to that subtree, and the repo's monorepo flag was set at pre-flight so it is honoured.
       try {
@@ -1264,7 +1265,7 @@ export class BootstrapService {
    * A monorepo run's frame carries its `directory` from the start, while the repo binding waits
    * for the run to succeed exactly as the new-repo path's does: the directory is a fact the
    * pre-flight already settled (and what the board card is about), whereas the linkage is a
-   * claim that there is code there, which is only true once the pull request exists.
+   * claim that there is code there, which is only true once the run has delivered.
    */
   private async createServiceFrame(
     workspaceId: string,
