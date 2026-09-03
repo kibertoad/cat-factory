@@ -142,7 +142,7 @@ export {
   describeAdoptionSource,
   isAdoptionArea,
   isAdoptionSource,
-  monorepoBootstrapBranch,
+  bootstrapWorkBranch,
   parseAdoptionDecisions,
   renderAdoptionBrief,
   renderAdoptionPrSection,

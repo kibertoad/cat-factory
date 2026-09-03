@@ -14,7 +14,7 @@ import {
   isAdoptionArea,
   isAdoptionSource,
   MAX_ADOPTION_DECISIONS,
-  monorepoBootstrapBranch,
+  bootstrapWorkBranch,
   parseAdoptionDecisions,
   renderAdoptionBrief,
   renderAdoptionPrSection,
@@ -386,11 +386,11 @@ describe('the closed vocabularies', () => {
   })
 })
 
-describe('monorepoBootstrapBranch', () => {
+describe('bootstrapWorkBranch', () => {
   it('derives the branch from the RUN, so two similarly named services cannot collide', () => {
-    expect(monorepoBootstrapBranch('boot_1')).not.toBe(monorepoBootstrapBranch('boot_2'))
+    expect(bootstrapWorkBranch('boot_1')).not.toBe(bootstrapWorkBranch('boot_2'))
     // Stable per run, so a retry resumes its branch instead of opening a second pull request.
-    expect(monorepoBootstrapBranch('boot_1')).toBe(monorepoBootstrapBranch('boot_1'))
-    expect(monorepoBootstrapBranch('boot_1')).toContain('boot_1')
+    expect(bootstrapWorkBranch('boot_1')).toBe(bootstrapWorkBranch('boot_1'))
+    expect(bootstrapWorkBranch('boot_1')).toContain('boot_1')
   })
 })

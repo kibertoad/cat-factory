@@ -233,7 +233,9 @@ export function renderMonorepoAdoptionPrompt(input: {
 }
 
 /**
- * The pull-request TITLE a monorepo bootstrap opens its change with.
+ * The pull-request TITLE a bootstrap opens its change with. `directory` is the monorepo
+ * subdirectory the service lands in, and is absent for a run bootstrapping a repository of its
+ * own, where naming a path would name one that is the whole checkout.
  *
  * The body is not composed here. The reviewed decisions land on the pull request as an
  * engine-owned marker region (kernel's `renderAdoptionPrSection` + `spliceManagedSection`),
@@ -241,6 +243,6 @@ export function renderMonorepoAdoptionPrompt(input: {
  * body field-wise and asks the agent for one whenever the target repository ships a PR template.
  * The narrative is the agent's; the decisions are the human's, and only a region keeps both.
  */
-export function monorepoBootstrapPrTitle(serviceName: string, directory: string): string {
-  return `Bootstrap ${serviceName} at ${directory}`
+export function bootstrapPrTitle(serviceName: string, directory?: string): string {
+  return directory ? `Bootstrap ${serviceName} at ${directory}` : `Bootstrap ${serviceName}`
 }

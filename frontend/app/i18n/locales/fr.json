@@ -4516,6 +4516,10 @@
       "selected": "Sélectionné",
       "added": "Ajouté",
       "useThisFolder": "Utiliser ce dossier",
+      "createHere": "Créer ici",
+      "newDirTarget": "Nouveau répertoire :",
+      "nameTaken": "{name} existe déjà ici. Choisissez un autre dossier ou changez le nom au-dessus.",
+      "exists": "Existe",
       "errors": {
         "listDirectory": "Impossible de lister le répertoire"
       },
@@ -6952,7 +6956,8 @@
       "title": "Exécutions récentes",
       "fromArch": "depuis {name}",
       "fromScratch": "à partir de zéro",
-      "open": "Ouvrir"
+      "open": "Ouvrir",
+      "openPr": "Pull request"
     },
     "status": {
       "pending": "en attente",
@@ -7004,11 +7009,24 @@
       "label": "Où va le service",
       "newRepo": {
         "label": "Un nouveau dépôt",
-        "description": "Créer un dépôt dédié et pousser le service comme premier commit."
+        "description": "Créer un dépôt dédié et y écrire le service."
       },
       "monorepo": {
         "label": "Un répertoire d’un monorepo existant",
-        "description": "Ajouter le service à un dépôt que vous avez déjà et ouvrir une pull request."
+        "description": "Ajouter le service à un dépôt que vous avez déjà."
+      }
+    },
+    "delivery": {
+      "label": "Comment le travail est livré",
+      "pullRequest": {
+        "label": "Ouvrir une pull request",
+        "descNewRepo": "Pousser une branche et ouvrir une pull request sur le premier commit du dépôt, pour qu’une personne relise l’ossature avant qu’elle ne devienne la branche par défaut. Le dépôt doit déjà avoir un commit.",
+        "descMonorepo": "Pousser une branche et ouvrir une pull request. Rien n’est fusionné à votre place."
+      },
+      "directPush": {
+        "label": "Pousser directement",
+        "descNewRepo": "Écrire le service directement sur la branche par défaut, comme premier commit du dépôt.",
+        "descMonorepo": "Committer sur la branche par défaut pendant que l’agent travaille. Si l’exécution échoue, ce qui a déjà été écrit reste en place."
       }
     },
     "serviceName": {
@@ -7016,7 +7034,7 @@
       "description": "Nomme le service sur le tableau et propose son répertoire."
     },
     "monorepo": {
-      "intro": "Le service est écrit dans un répertoire d’un dépôt existant et livré sous forme de pull request. Rien n’est fusionné à votre place et rien n’est modifié hors du nouveau répertoire.",
+      "intro": "Le service est écrit dans un répertoire d’un dépôt existant, et rien n’est modifié hors de ce répertoire.",
       "repo": {
         "label": "Monorepo",
         "description": "Le dépôt qui hébergera le nouveau service. Il doit déjà être lié à cet espace de travail.",
@@ -7025,8 +7043,11 @@
       },
       "directory": {
         "label": "Répertoire du service",
-        "description": "Où vit le service, relativement à la racine du dépôt. Il ne doit pas encore exister.",
+        "description": "Où vit le service, relativement à la racine du dépôt. L’exécution le crée, il ne doit donc pas encore exister.",
         "placeholder": "services/payments",
+        "browse": "Explorer le dépôt",
+        "browseHint": "Ouvrez le dossier où le service doit se trouver. Le nom saisi au-dessus y est créé, il n’y a donc rien à sélectionner dans l’arborescence.",
+        "browseNeedsName": "Indiquez d’abord un répertoire au-dessus (ou le nom du service en dessous). L’exploration décide où va ce nom, pas comment il s’appelle.",
         "error": {
           "empty": "Indiquez un répertoire à l’intérieur du dépôt.",
           "escapes": "Le répertoire doit rester à l’intérieur du dépôt."

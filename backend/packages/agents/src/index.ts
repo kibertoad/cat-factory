@@ -441,8 +441,8 @@ export {
   renderBugHuntPrompt,
 } from './agents/prompts/bug-hunt.js'
 export {
+  bootstrapPrTitle,
   monorepoAdoptionSystemPrompt,
-  monorepoBootstrapPrTitle,
   renderMonorepoAdoptionPrompt,
   renderSurveyFile,
 } from './agents/prompts/monorepo-adoption.js'

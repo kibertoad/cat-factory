@@ -20,6 +20,7 @@ function job(id: string, over: Partial<BootstrapJob> = {}): BootstrapJob {
     failure: null,
     monorepo: null,
     phase: null,
+    delivery: 'direct_push',
     adoptionPlan: null,
     adoptionReview: null,
     prUrl: null,

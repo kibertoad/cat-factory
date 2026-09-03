@@ -4,7 +4,18 @@
 // adapt it (in a sandbox container) — either by cloning a chosen reference
 // architecture, or from scratch following a freeform prompt. The modal pairs the
 // launch form with the managed base list.
-import type { BootstrapStatus, FrameRepoType, ReferenceArchitecture } from '~/types/domain'
+import type {
+  BootstrapDelivery,
+  BootstrapStatus,
+  FrameRepoType,
+  ReferenceArchitecture,
+} from '~/types/domain'
+import {
+  defaultBootstrapDelivery,
+  serviceDirectoryLeaf,
+  serviceDirectoryParent,
+} from '~/components/bootstrap/BootstrapModal.logic'
+import RepoTreeBrowser from '~/components/github/RepoTreeBrowser.vue'
 import VcsConnectSurfaces from '~/components/vcs/VcsConnectSurfaces.vue'
 import { appInstallationManageUrl, newRepoUrl, VCS_PROVIDER_LABELS } from '~/utils/vcs'
 
@@ -100,6 +111,42 @@ const targetItems = computed(() => [
 ])
 const intoMonorepo = computed(() => target.value === 'monorepo')
 
+// ---- how the work LANDS ----------------------------------------------------
+// A third axis, orthogonal to both of the above: the same service, written the same way, either
+// arrives as a pull request somebody reviews or straight on the default branch. The two targets
+// want opposite defaults (a repository being created has nobody to review its first commit; a
+// monorepo's default branch is the branch every other service builds from), which is exactly why
+// this is a control and not a constant.
+const delivery = ref<BootstrapDelivery>(defaultBootstrapDelivery(false))
+// Whether the person has answered this question themselves. Until they have, switching target
+// re-defaults; once they have, their answer stands, because re-defaulting over an explicit
+// choice is how a run they asked to review lands unreviewed. Cleared after a launch, so the
+// answer binds the run it was given for rather than every later one (see `launch`).
+const deliveryTouched = ref(false)
+watch(intoMonorepo, (into) => {
+  if (!deliveryTouched.value) delivery.value = defaultBootstrapDelivery(into)
+})
+function chooseDelivery(value: BootstrapDelivery) {
+  deliveryTouched.value = true
+  delivery.value = value
+}
+const deliveryItems = computed(() => [
+  {
+    label: t('bootstrap.delivery.pullRequest.label'),
+    value: 'pull_request' as const,
+    description: intoMonorepo.value
+      ? t('bootstrap.delivery.pullRequest.descMonorepo')
+      : t('bootstrap.delivery.pullRequest.descNewRepo'),
+  },
+  {
+    label: t('bootstrap.delivery.directPush.label'),
+    value: 'direct_push' as const,
+    description: intoMonorepo.value
+      ? t('bootstrap.delivery.directPush.descMonorepo')
+      : t('bootstrap.delivery.directPush.descNewRepo'),
+  },
+])
+
 /** The projected repo the new service lands in, by numeric id. */
 const monorepoRepoId = ref<number | undefined>(undefined)
 const monorepoDirectory = ref('')
@@ -108,19 +155,42 @@ const monorepoRepoItems = computed(() =>
   github.repos.map((r) => ({ label: `${r.owner}/${r.name}`, value: r.githubId })),
 )
 
-// Mirrors the backend's `normalizeServiceDirectory`: the path becomes an agent's working
-// directory, so a value that could escape the checkout is refused here rather than at the API.
+// `repoPathSegments` is the backend's `normalizeServiceDirectory` reduction: the path becomes
+// an agent's working directory, so a value that could escape the checkout is refused here
+// rather than at the API.
+const directorySegments = computed(() => repoPathSegments(monorepoDirectory.value))
 const directoryError = computed<string | undefined>(() => {
-  const value = monorepoDirectory.value.trim()
-  if (!value) return undefined
-  const segments = value
-    .replace(/\\/g, '/')
-    .split('/')
-    .filter((s) => s && s !== '.')
-  if (!segments.length) return t('bootstrap.monorepo.directory.error.empty')
-  if (segments.some((s) => s === '..')) return t('bootstrap.monorepo.directory.error.escapes')
+  if (!monorepoDirectory.value.trim()) return undefined
+  if (!directorySegments.value.length) return t('bootstrap.monorepo.directory.error.empty')
+  if (directorySegments.value.some((seg) => seg === '..')) {
+    return t('bootstrap.monorepo.directory.error.escapes')
+  }
   return undefined
 })
+
+// ---- exploring the monorepo for the directory's home -----------------------
+// The target must NOT exist, so nothing in the tree can BE it: the tree picks the enclosing
+// folder and hands back that folder plus the leaf (see `BootstrapModal.logic`, which owns the
+// two readings of the typed value).
+const directoryLeaf = computed(() => serviceDirectoryLeaf(monorepoDirectory.value, repoName.value))
+const browsingDirectory = ref(false)
+// The folder the tree opens at, captured when the browser is OPENED rather than read live off
+// the field: as a computed it would re-navigate the listing on every keystroke in the input.
+const directoryBrowseStart = ref('')
+
+function toggleDirectoryBrowse() {
+  if (!browsingDirectory.value) {
+    directoryBrowseStart.value = serviceDirectoryParent(monorepoDirectory.value)
+  }
+  browsingDirectory.value = !browsingDirectory.value
+}
+
+/** The tree emits the composed path: the folder it was standing in plus the leaf it was given. */
+function placeDirectory(path: string | undefined) {
+  if (!path) return
+  monorepoDirectory.value = path
+  browsingDirectory.value = false
+}
 
 // Landing in a monorepo needs no NEW repository, so the repo name is the SERVICE's name (and
 // seeds the directory's leaf); the create-repo affordances below are for the other target.
@@ -295,6 +365,7 @@ async function launch() {
       private: isPrivate.value,
       instructions: instructions.value.trim(),
       type: selectedType.value,
+      delivery: delivery.value,
       ...(intoMonorepo.value && monorepoRepoId.value
         ? {
             monorepo: {
@@ -332,8 +403,15 @@ async function launch() {
       description.value = ''
       instructions.value = ''
       monorepoDirectory.value = ''
+      browsingDirectory.value = false
       // Reset the repo role too, so a later bootstrap doesn't silently inherit this one's type.
       selectedType.value = 'service'
+      // And the delivery, which has to reset the ANSWERED flag with it: leaving that set disarms
+      // the per-target default for good, so a "push directly" picked deliberately for one
+      // monorepo would go on governing the next bootstrap, into a different repository, without
+      // the person having been asked about that one. Back to the current target's own default.
+      deliveryTouched.value = false
+      delivery.value = defaultBootstrapDelivery(intoMonorepo.value)
       // The provisional frame arrived (bootstrap() refreshed the board). Re-home it to
       // free space so it never overlaps an existing service — the backend places it on a
       // fixed diagonal stagger that can land on top of a large neighbour — then centre the
@@ -524,6 +602,17 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
             <URadioGroup v-model="target" :items="targetItems" />
           </UFormField>
 
+          <!-- Where the service goes and how it gets there are two questions, and the second
+               has no answer that is right for both targets. Its descriptions therefore change
+               with the target rather than the control being duplicated per target. -->
+          <UFormField :label="t('bootstrap.delivery.label')" required>
+            <URadioGroup
+              :model-value="delivery"
+              :items="deliveryItems"
+              @update:model-value="chooseDelivery($event as BootstrapDelivery)"
+            />
+          </UFormField>
+
           <!-- Landing in an existing monorepo: pick the repository and the subdirectory. The
                run surveys the monorepo's conventions against the template's and PARKS for a
                human adoption review before it writes anything. -->
@@ -550,11 +639,49 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
               required
               :error="directoryError"
             >
-              <UInput
-                v-model="monorepoDirectory"
-                :placeholder="t('bootstrap.monorepo.directory.placeholder')"
-                class="w-full"
-              />
+              <div class="space-y-2">
+                <div class="flex items-center gap-2">
+                  <UInput
+                    v-model="monorepoDirectory"
+                    :placeholder="t('bootstrap.monorepo.directory.placeholder')"
+                    class="flex-1"
+                  />
+                  <UButton
+                    v-if="monorepoRepoId !== undefined"
+                    variant="soft"
+                    color="neutral"
+                    icon="i-lucide-folder-search"
+                    :title="t('bootstrap.monorepo.directory.browse')"
+                    :aria-label="t('bootstrap.monorepo.directory.browse')"
+                    data-testid="bootstrap-directory-browse"
+                    @click="toggleDirectoryBrowse()"
+                  />
+                </div>
+
+                <!-- The tree answers WHERE, never WHAT: with no name to place yet it could
+                     decide nothing, so say that instead of listing a repo for nothing. -->
+                <div
+                  v-if="browsingDirectory && monorepoRepoId !== undefined"
+                  class="rounded-md border border-slate-800 bg-slate-900/40 p-2"
+                >
+                  <p class="mb-2 text-xs text-slate-400">
+                    {{
+                      directoryLeaf
+                        ? t('bootstrap.monorepo.directory.browseHint')
+                        : t('bootstrap.monorepo.directory.browseNeedsName')
+                    }}
+                  </p>
+                  <RepoTreeBrowser
+                    v-if="directoryLeaf"
+                    :repo-github-id="monorepoRepoId"
+                    mode="dir"
+                    :new-dir-name="directoryLeaf"
+                    :model-value="monorepoDirectory"
+                    :start-path="directoryBrowseStart"
+                    @update:model-value="placeDirectory"
+                  />
+                </div>
+              </div>
             </UFormField>
           </template>
 
@@ -732,6 +859,18 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
                 class="text-[11px] text-indigo-400 hover:underline"
               >
                 {{ t('bootstrap.recent.open') }}
+              </ULink>
+              <!-- The deliverable of a `pull_request` run, and the only thing it produced that
+                   the user still has to act on. A monorepo run has no `repoUrl` at all, so
+                   without this the run's whole output is unreachable from the list that
+                   offered the choice. -->
+              <ULink
+                v-if="job.prUrl"
+                :to="job.prUrl"
+                target="_blank"
+                class="text-[11px] text-indigo-400 hover:underline"
+              >
+                {{ t('bootstrap.recent.openPr') }}
               </ULink>
               <UBadge :color="statusColor[job.status]" variant="subtle" size="sm">
                 {{ statusLabel[job.status] }}

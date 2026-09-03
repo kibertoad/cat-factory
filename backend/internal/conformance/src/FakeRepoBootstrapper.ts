@@ -32,7 +32,10 @@ export class FakeRepoBootstrapper implements RepoBootstrapper {
   progressScript: StepSubtasks[] = []
   /** Whether the workspace reports as connected (the pre-flight check); on by default. */
   connected = true
-  /** Report a completed MONOREPO apply with no pull request (the "delivered nowhere" case). */
+  /**
+   * Report a completed `pull_request` run with no pull request (the "delivered nowhere" case).
+   * Ignored by a `direct_push` run, which never reports one.
+   */
   omitPrUrl = false
   /**
    * The repos this workspace projects, by numeric id: what a monorepo target may name. Empty by
@@ -92,21 +95,25 @@ export class FakeRepoBootstrapper implements RepoBootstrapper {
       return { state: 'running', subtasks: this.progressScript[n]! }
     }
     const request = this.requests.get(handle.containerJobId)
-    // A monorepo run's product is a pull request, so the fake reports one rather than a created
-    // repository: the orchestration FAILS a completed monorepo apply that reports none, and a
-    // fake that always answered with an outcome could never exercise either side of that.
-    if (request?.monorepo) {
-      return {
-        state: 'done',
-        outcome: this.outcomeFor(handle.containerJobId),
-        ...(this.omitPrUrl
-          ? {}
-          : {
-              prUrl: `https://github.com/${request.monorepo.owner}/${request.monorepo.name}/pull/7`,
-            }),
-      }
-    }
-    return { state: 'done', outcome: this.outcomeFor(handle.containerJobId) }
+    // A `pull_request` run's product is the pull request, so the fake reports one: the
+    // orchestration FAILS a completed run of that delivery which reports none, and a fake that
+    // never answered with a PR could not exercise either side of that. A `direct_push` run
+    // reports none, which is the ordinary state of that delivery rather than a failure.
+    const pr =
+      request?.delivery.mode === 'pull_request' && !this.omitPrUrl
+        ? { prUrl: this.prUrlFor(request) }
+        : {}
+    // A monorepo run created no repository, so it names none; every other run did.
+    if (request?.monorepo) return { state: 'done', ...pr }
+    return { state: 'done', outcome: this.outcomeFor(handle.containerJobId), ...pr }
+  }
+
+  /** The pull request the fake reports, on whichever repository the run wrote to. */
+  private prUrlFor(request: BootstrapRepoRequest): string {
+    const repo = request.monorepo
+      ? `${request.monorepo.owner}/${request.monorepo.name}`
+      : `acme/${request.target.name}`
+    return `https://github.com/${repo}/pull/7`
   }
 
   async stopBootstrap(handle: BootstrapJobHandle): Promise<void> {

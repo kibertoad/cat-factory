@@ -712,7 +712,7 @@ subset that dead-ends ANY run, or every stored pipeline predating it stops runni
 **Repo bootstrap** mirrors the execution pattern: `BootstrapService` → `bootstrap_jobs` →
 `BootstrapWorkflow` polling the idempotent `pollBootstrapJob()`, then links the repo and flips the frame
 `ready`; pre-flights an EMPTY target, its prompt riding Pi's global `AGENTS.md` so it never lands there.
-Targeting a DIRECTORY of an EXISTING repo splits the run into two drives around a human adoption review (a BOUNDED tool-loop survey → park `awaiting_review` → write + PR); traps: a parked run is neither `running` nor terminal, so it takes its OWN `driveId`, and the plan is checked against the transcript the loop LEFT, never the opening snapshot. [Doc](./docs/initiatives/monorepo-service-bootstrap.md).
+Targeting a DIRECTORY of an EXISTING repo splits the run into two drives around a human adoption review (a BOUNDED tool-loop survey → park `awaiting_review` → write); `delivery` then picks PR vs push, defaulted per TARGET and PERSISTED (a retry re-dispatches under it). Traps: a parked run is neither `running` nor terminal, so it takes its OWN `driveId`; the plan is checked against the transcript the loop LEFT, never the opening snapshot; only a run that PROMISED a PR fails for reporting none. [Doc](./docs/initiatives/monorepo-service-bootstrap.md).
 
 **Service blueprints**: a Blueprinter agent decomposes a repo into service → modules and persists it IN
 THE REPO under `blueprints/`: no table, because the files are the truth and the board is the projection.

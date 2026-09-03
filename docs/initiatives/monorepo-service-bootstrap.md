@@ -26,7 +26,8 @@ the platform surveys both sides, a model proposes per-area recommendations with 
 read behind each, and a human decides before a line is written.
 
 End state: a bootstrap either creates a repository (unchanged) or lands a service in a
-directory of one that exists, delivered as a pull request, under decisions a person made.
+directory of one that exists, under decisions a person made, delivered the way the person
+starting it chose (D11).
 
 ## Decisions
 
@@ -145,8 +146,9 @@ against (a loop that errors mid-way) already has an honest answer: the run parks
 ### D3: The apply phase is an ORDINARY coding job
 
 **Decision: the apply dispatch carries no `bootstrap` spec. It is the standard multi-repo coding
-shape: the monorepo as the writable primary at a work branch, the reference template as a
-read-only `referenceRepos` sibling, one pull request on the primary.**
+shape: the monorepo as the writable primary, the reference template as a read-only
+`referenceRepos` sibling, and the delivery D11 resolved (a work branch plus one pull request on
+the primary, or commits on the default branch).**
 
 The harness already does all of this, including the guarantee that matters most: a
 `ReferenceRepoSpec` carries no branch or PR fields at all, so the run is structurally incapable
@@ -395,10 +397,12 @@ identical beside a list of model calls that plainly cost something.
   binding is provider-matched, so a repo projected under a provider this bootstrapper cannot
   push to is refused here rather than at a dispatch that would build its clone URL off the
   wrong host.
-- **A completed apply with no pull request is a FAILURE.** The deliverable is the PR (nothing is
-  merged for the reviewer), so a run reporting done without one has left the work where nobody
-  can find it. The container reports `prUrl` alone on that path rather than a fabricated
-  "created repository" outcome naming a repo it did not create.
+- **A completed run with no pull request is a FAILURE where the run PROMISED one.** The
+  deliverable of a `pull_request` run is the PR (nothing is merged for the reviewer), so a run
+  reporting done without one has left the work where nobody can find it. The refusal keys off
+  the run's own `delivery`, never off the field being empty, which is the ordinary state of a
+  `direct_push` run. A monorepo run reports `prUrl` alone rather than a fabricated "created
+  repository" outcome naming a repo it did not create.
 - **The directory is pre-flighted twice, deliberately.** Once before the survey (so a refused
   target leaves neither a job nor a board card) and again at dispatch, because a review can be
   settled days later and something may have landed there in between.
@@ -414,6 +418,64 @@ identical beside a list of model calls that plainly cost something.
   every one persisted on the plan and rendered to the reviewer. The drop list is capped and the
   overflow COUNTED, because "the reply was mostly invention" and "the reply proposed little"
   need opposite reactions.
+
+### D11: Delivery is a THIRD axis, and neither target's answer is the other's
+
+**Decision: `BootstrapRepoInput.delivery` (`pull_request` | `direct_push`) is orthogonal to both
+existing axes, resolved once at start from the target's own default when the request omits it,
+and PERSISTED on the run.** ([#2177](https://github.com/kibertoad/cat-factory/issues/2177))
+
+The first axis says where the CONTENT comes from (a template, or a prompt), the second where the
+service LANDS (a new repository, or a directory of one that exists). Delivery is how the work
+ARRIVES, and folding it into the target was the shape this replaced: a monorepo run always opened
+a pull request and a new-repo run always force-pushed, so a team that wanted their scaffold
+reviewed before it became `main` had no way to ask, and a team standing services up in their own
+monorepo all day had to merge a pull request per service to get there.
+
+The default is per TARGET rather than a constant, because the two want opposite answers: a
+repository this run is CREATING has nobody to review its first commit, and a monorepo's default
+branch is the branch every other service is built from. A valibot default cannot depend on a
+sibling field, so the schema carries none and `BootstrapService.bootstrap` applies the rule once.
+It is stored rather than re-derived because a RETRY re-dispatches under it, and a retry that
+re-defaulted would move a run the user asked to have reviewed onto everyone's branch.
+
+**`direct_push` on a monorepo publishes AS THE AGENT WORKS, and that is stated rather than
+engineered around.** The harness checkpoints committed work to whatever branch it is pushing, so
+a run that faults leaves what it had written on the default branch. Suppressing the checkpoint for
+this delivery would trade that for losing the whole run to an eviction, which is worse for a
+scaffold; hiding it would be worse still. The modal's own copy says it, and a retry resumes on top
+of what landed.
+
+**What `pull_request` costs a NEW repository is a base commit.** A pull request is opened between
+two commits, so a repository with none cannot take one: nothing to clone, branch from, or target.
+That delivery therefore refuses an uncommitted repository at pre-flight, naming both ways out (add
+an initial commit, or push directly), rather than surfacing later as a clone failure that reads
+like an outage. The emptiness rule is unchanged under both: a bootstrap writes a whole service, so
+real content is still refused and a README/.gitignore/license is still tolerated.
+
+**A new-repo `pull_request` run drops the `bootstrap` harness spec.** That spec reinitialises
+history and force-pushes, and a branch sharing no ancestor with the default branch is not
+something a pull request can be opened from. So it takes the SAME coding shape D3 describes,
+minus `serviceDirectory`: the target repository as the writable primary, the template beside it
+read-only. `ContainerRepoBootstrapper.dispatchCodingShape` is that one builder, which is also
+what keeps `newBranch` and `pr` from ever being set apart: a body carrying a branch and no pull
+request pushes work onto a branch nobody is told about.
+
+**Not on `/api/v1` as an INPUT; projected as an OUTPUT.** The public bootstrap body has no
+`monorepo` target either, and the narrower shape is deliberate there; `delivery` joins it as an
+additive optional field whenever the monorepo half does. The READ carries it from spec 1.68.0,
+because it had to: `prUrl` beside `repoUrl` was documented as mutually exclusive and as the way to
+tell the two run shapes apart, and a new-repo run that opens a pull request sets both. `repoUrl`
+still discriminates the TARGET; `delivery` is what discriminates the delivery, from the first poll
+rather than at the end.
+
+**A `pull_request` run does NOT trigger the initial blueprint mapping.** That run has written
+nothing to the default branch, which is what the mapper clones, so mapping it would spend a real
+agent run reading the repository's initial README, commit that empty map to `blueprints/` and
+project it onto the board, where the wrong projection would outlive the merge. The frame still goes
+`ready` (nothing watches the pull request, so a status withheld until the merge would misreport a
+live service forever); what it carries is a description naming both outstanding moves, and the
+inspector's "map service" action is the way in once the pull request has landed.
 
 ## Gotchas the second slice surfaced
 

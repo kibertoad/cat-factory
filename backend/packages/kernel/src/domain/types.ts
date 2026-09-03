@@ -290,6 +290,7 @@ export type {
   UpdateReferenceArchitectureInput,
   BootstrapStatus,
   BootstrapPhase,
+  BootstrapDelivery,
   BootstrapFailure,
   BootstrapFailureKind,
   BootstrapJob,

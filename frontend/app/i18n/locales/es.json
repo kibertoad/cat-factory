@@ -4516,6 +4516,10 @@
       "selected": "Seleccionado",
       "added": "Añadido",
       "useThisFolder": "Usar esta carpeta",
+      "createHere": "Crear aquí",
+      "newDirTarget": "Nuevo directorio:",
+      "nameTaken": "{name} ya existe aquí. Elige otra carpeta o cambia el nombre de arriba.",
+      "exists": "Existe",
       "errors": {
         "listDirectory": "No se pudo listar el directorio"
       },
@@ -6952,7 +6956,8 @@
       "title": "Ejecuciones recientes",
       "fromArch": "desde {name}",
       "fromScratch": "desde cero",
-      "open": "Abrir"
+      "open": "Abrir",
+      "openPr": "Pull request"
     },
     "status": {
       "pending": "pendiente",
@@ -7004,11 +7009,24 @@
       "label": "Dónde va el servicio",
       "newRepo": {
         "label": "Un repositorio nuevo",
-        "description": "Crear un repositorio propio y subir el servicio como su primer commit."
+        "description": "Crear un repositorio propio y escribir el servicio en él."
       },
       "monorepo": {
         "label": "Un directorio de un monorepo existente",
-        "description": "Añadir el servicio a un repositorio que ya tienes y abrir un pull request."
+        "description": "Añadir el servicio a un repositorio que ya tienes."
+      }
+    },
+    "delivery": {
+      "label": "Cómo se entrega el trabajo",
+      "pullRequest": {
+        "label": "Abrir un pull request",
+        "descNewRepo": "Subir una rama y abrir un pull request contra el primer commit del repositorio, para que alguien revise el andamiaje antes de que sea la rama principal. El repositorio ya debe tener un commit.",
+        "descMonorepo": "Subir una rama y abrir un pull request. No se fusiona nada por ti."
+      },
+      "directPush": {
+        "label": "Subir directamente",
+        "descNewRepo": "Escribir el servicio directamente en la rama principal como primer commit del repositorio.",
+        "descMonorepo": "Hacer commits en la rama principal mientras el agente trabaja. Si la ejecución falla, queda lo que ya se había escrito."
       }
     },
     "serviceName": {
@@ -7016,7 +7034,7 @@
       "description": "Nombra el servicio en el tablero y propone su directorio."
     },
     "monorepo": {
-      "intro": "El servicio se escribe en un directorio de un repositorio existente y se entrega como pull request. No se fusiona nada por ti ni se cambia nada fuera del nuevo directorio.",
+      "intro": "El servicio se escribe en un directorio de un repositorio existente, y no se cambia nada fuera de ese directorio.",
       "repo": {
         "label": "Monorepo",
         "description": "El repositorio donde vivirá el nuevo servicio. Ya debe estar vinculado a este espacio de trabajo.",
@@ -7025,8 +7043,11 @@
       },
       "directory": {
         "label": "Directorio del servicio",
-        "description": "Dónde vive el servicio, relativo a la raíz del repositorio. Todavía no debe existir.",
+        "description": "Dónde vive el servicio, relativo a la raíz del repo. La ejecución lo crea, así que todavía no debe existir.",
         "placeholder": "services/payments",
+        "browse": "Explorar el repositorio",
+        "browseHint": "Abre la carpeta donde debe ir el servicio. El nombre de arriba se crea dentro de ella, así que no hay nada que elegir en el árbol.",
+        "browseNeedsName": "Primero indica un directorio arriba (o el nombre del servicio abajo). Explorar decide dónde va ese nombre, no cómo se llama.",
         "error": {
           "empty": "Indica un directorio dentro del repositorio.",
           "escapes": "El directorio debe quedarse dentro del repositorio."

@@ -4516,6 +4516,10 @@
       "selected": "Wybrano",
       "added": "Dodano",
       "useThisFolder": "Użyj tego folderu",
+      "createHere": "Utwórz tutaj",
+      "newDirTarget": "Nowy katalog:",
+      "nameTaken": "{name} już tu istnieje. Wybierz inny folder lub zmień nazwę powyżej.",
+      "exists": "Istnieje",
       "errors": {
         "listDirectory": "Nie udało się wyświetlić katalogu"
       },
@@ -6952,7 +6956,8 @@
       "title": "Ostatnie uruchomienia",
       "fromArch": "z {name}",
       "fromScratch": "od zera",
-      "open": "Otwórz"
+      "open": "Otwórz",
+      "openPr": "Pull request"
     },
     "status": {
       "pending": "oczekuje",
@@ -7004,11 +7009,24 @@
       "label": "Gdzie trafi usługa",
       "newRepo": {
         "label": "Nowe repozytorium",
-        "description": "Utwórz osobne repozytorium i wypchnij usługę jako jego pierwszy commit."
+        "description": "Utwórz osobne repozytorium i zapisz w nim usługę."
       },
       "monorepo": {
         "label": "Katalog w istniejącym monorepo",
-        "description": "Dodaj usługę do repozytorium, które już masz, i otwórz pull request."
+        "description": "Dodaj usługę do repozytorium, które już masz."
+      }
+    },
+    "delivery": {
+      "label": "Jak trafia praca",
+      "pullRequest": {
+        "label": "Otwórz pull request",
+        "descNewRepo": "Wypchnij gałąź i otwórz pull request wobec pierwszego commita repozytorium, żeby ktoś przejrzał szkielet, zanim stanie się gałęzią domyślną. Repozytorium musi już mieć commit.",
+        "descMonorepo": "Wypchnij gałąź i otwórz pull request. Nic nie zostanie scalone za ciebie."
+      },
+      "directPush": {
+        "label": "Wypchnij bezpośrednio",
+        "descNewRepo": "Zapisz usługę prosto na gałęzi domyślnej, jako pierwszy commit repozytorium.",
+        "descMonorepo": "Commituj na gałąź domyślną w trakcie pracy agenta. Nieudany przebieg zostawia to, co zdążył zapisać."
       }
     },
     "serviceName": {
@@ -7016,7 +7034,7 @@
       "description": "Nazywa usługę na tablicy i podpowiada jej katalog."
     },
     "monorepo": {
-      "intro": "Usługa jest zapisywana w katalogu istniejącego repozytorium i dostarczana jako pull request. Nic nie jest za Ciebie scalane ani zmieniane poza nowym katalogiem.",
+      "intro": "Usługa jest zapisywana w katalogu istniejącego repozytorium; poza tym katalogiem nic się nie zmienia.",
       "repo": {
         "label": "Monorepo",
         "description": "Repozytorium, w którym zamieszka nowa usługa. Musi być już powiązane z tą przestrzenią roboczą.",
@@ -7025,8 +7043,11 @@
       },
       "directory": {
         "label": "Katalog usługi",
-        "description": "Gdzie znajduje się usługa, względem katalogu głównego repozytorium. Nie może jeszcze istnieć.",
+        "description": "Gdzie znajduje się usługa, względem katalogu głównego repo. Uruchomienie go tworzy, więc nie może jeszcze istnieć.",
         "placeholder": "services/payments",
+        "browse": "Przeglądaj repozytorium",
+        "browseHint": "Otwórz folder, w którym ma znaleźć się usługa. Nazwa podana powyżej zostanie w nim utworzona, więc w drzewie nie ma czego wybierać.",
+        "browseNeedsName": "Najpierw podaj katalog powyżej (lub nazwę usługi poniżej). Przeglądanie decyduje, gdzie ta nazwa wyląduje, a nie jak brzmi.",
         "error": {
           "empty": "Podaj katalog wewnątrz repozytorium.",
           "escapes": "Katalog musi pozostać wewnątrz repozytorium."
