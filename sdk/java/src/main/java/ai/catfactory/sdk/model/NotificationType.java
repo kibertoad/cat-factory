@@ -30,6 +30,7 @@ public enum NotificationType {
     FORK_DECISION_PENDING("fork_decision_pending"),
     JUDGE_REVIEW("judge_review"),
     PR_REVIEW_READY("pr_review_ready"),
+    BUG_FISHING_TRIAGE("bug_fishing_triage"),
     INITIATIVE("initiative"),
     PLATFORM_HEALTH("platform_health"),
     INFRA_UNREACHABLE("infra_unreachable"),

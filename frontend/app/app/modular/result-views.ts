@@ -48,6 +48,9 @@ const ForkDecisionWindow = defineAsyncView(
   () => import('~/components/forkDecision/ForkDecisionWindow.vue'),
 )
 const PrReviewWindow = defineAsyncView(() => import('~/components/prReview/PrReviewWindow.vue'))
+const BugFishingWindow = defineAsyncView(
+  () => import('~/components/bugFishing/BugFishingWindow.vue'),
+)
 const MergerResultView = defineAsyncView(() => import('~/components/panels/MergerResultView.vue'))
 const InitiativeTrackerWindow = defineAsyncView(
   () => import('~/components/initiative/InitiativeTrackerWindow.vue'),
@@ -120,6 +123,9 @@ const BUILT_IN_RESULT_VIEWS: Record<ResultViewId, Component> = {
   'binary-candidates': BinaryCandidatesWindow,
   // The PR deep-review: the reviewer's sliced, prioritized findings + the human's multi-select.
   'pr-review': PrReviewWindow,
+  // The bug-fishing expedition: the per-angle catch, and the human's per-finding triage (each
+  // marked finding spawns its own bug-fix task).
+  'bug-fishing': BugFishingWindow,
   // The merger's verdict: PR complexity/risk/impact scores + the engine's decision (and why).
   merger: MergerResultView,
   // The initiative tracker: phases, per-item status + PR links, decisions, deviations, caveats.

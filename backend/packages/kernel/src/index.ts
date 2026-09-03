@@ -37,6 +37,18 @@ export {
   providerCachePolicy,
   providerCachesPrompts,
 } from '@cat-factory/contracts'
+// The bug-fishing ANGLE catalog lives in `@cat-factory/contracts` (the SPA renders the same
+// titles in the create form's angle picker and the expedition window); re-exported here so the
+// engine, which briefs each pass from it, keeps one import.
+export {
+  BUG_FISHING_PHASE_IDS,
+  BUG_FISHING_PHASES,
+  BUG_FISHING_SEVERITY_ORDER,
+  BUG_FISHING_SPAWN_CLAIM_TTL_MS,
+  bugFishingSpawnIsClaimable,
+  describeBugFishingPhase,
+  isBugFishingPhaseId,
+} from '@cat-factory/contracts'
 export { resolveWritebackFlag } from './domain/writeback.js'
 export {
   AUDIT_PAGE_LIMIT_DEFAULT,
@@ -232,6 +244,7 @@ export {
   defaultBuildPipelineId,
   BUG_TRIAGE_PIPELINE_ID,
   BUGFIX_PIPELINE_ID,
+  BUG_FISHING_PIPELINE_ID,
   CODE_COMMENTS_PIPELINE_ID,
   BUSINESS_DOCS_PIPELINE_ID,
   DOCUMENT_PIPELINE_ID,

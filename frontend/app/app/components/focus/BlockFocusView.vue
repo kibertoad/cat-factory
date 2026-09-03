@@ -98,6 +98,8 @@ function openApprovalFor(approvalId: string) {
     class="absolute inset-0 z-30 flex flex-col bg-slate-950/95 backdrop-blur"
     role="dialog"
     aria-modal="true"
+    data-testid="block-focus-view"
+    :data-focus-block="block.id"
   >
     <!-- header / breadcrumb -->
     <header class="flex items-center gap-3 border-b border-slate-800 px-6 py-4">

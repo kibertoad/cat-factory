@@ -587,6 +587,7 @@ function rowToWorkspaceSettings(row: typeof workspaceSettings.$inferSelect): Wor
       (row.default_provision_type as WorkspaceSettings['defaultProvisionType']) ?? null,
     defaultProvisionManifestId: row.default_provision_manifest_id,
     allowInitiatorPat: row.allow_initiator_pat === 1,
+    bugFishingFixPipelineId: row.bug_fishing_fix_pipeline_id,
     metadata,
   }
 }
@@ -650,6 +651,7 @@ export class DrizzleWorkspaceSettingsRepository implements WorkspaceSettingsRepo
       default_provision_type: settings.defaultProvisionType,
       default_provision_manifest_id: settings.defaultProvisionManifestId,
       allow_initiator_pat: settings.allowInitiatorPat ? 1 : 0,
+      bug_fishing_fix_pipeline_id: settings.bugFishingFixPipelineId,
       metadata: JSON.stringify(settings.metadata),
     }
     await this.db
@@ -679,6 +681,7 @@ export class DrizzleWorkspaceSettingsRepository implements WorkspaceSettingsRepo
           default_provision_type: values.default_provision_type,
           default_provision_manifest_id: values.default_provision_manifest_id,
           allow_initiator_pat: values.allow_initiator_pat,
+          bug_fishing_fix_pipeline_id: values.bug_fishing_fix_pipeline_id,
           metadata: values.metadata,
         },
       })

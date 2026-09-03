@@ -22,6 +22,7 @@ import org.jspecify.annotations.Nullable;
  * @param mergeTrackRecordId May be absent entirely.
  * @param mergedRepos May be absent entirely.
  * @param onCallAssessment May be absent entirely.
+ * @param phaseCount May be absent entirely.
  * @param pipelineName May be absent entirely.
  * @param platformAlertFailureKinds May be absent entirely.
  * @param platformAlertTransition May be absent entirely.
@@ -36,6 +37,7 @@ import org.jspecify.annotations.Nullable;
  * @param targetUserId May be absent entirely.
  * @param unmergedRepos May be absent entirely.
  * @param unreachableAreas May be absent entirely.
+ * @param untriagedFindingCount May be absent entirely.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record NotificationPayload(
@@ -71,6 +73,9 @@ public record NotificationPayload(
 
     /** May be absent entirely. */
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("onCallAssessment") @Nullable NotificationPayloadOnCallAssessment onCallAssessment,
+
+    /** May be absent entirely. */
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("phaseCount") @Nullable Double phaseCount,
 
     /** May be absent entirely. */
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("pipelineName") @Nullable String pipelineName,
@@ -112,7 +117,10 @@ public record NotificationPayload(
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("unmergedRepos") @Nullable List<String> unmergedRepos,
 
     /** May be absent entirely. */
-    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("unreachableAreas") @Nullable List<NotificationPayloadUnreachableArea> unreachableAreas
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("unreachableAreas") @Nullable List<NotificationPayloadUnreachableArea> unreachableAreas,
+
+    /** May be absent entirely. */
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("untriagedFindingCount") @Nullable Double untriagedFindingCount
 ) {
 
     /** A new builder for {@link NotificationPayload}. */
@@ -138,6 +146,7 @@ public record NotificationPayload(
         private @Nullable String mergeTrackRecordId;
         private @Nullable List<String> mergedRepos;
         private @Nullable NotificationPayloadOnCallAssessment onCallAssessment;
+        private @Nullable Double phaseCount;
         private @Nullable String pipelineName;
         private @Nullable List<String> platformAlertFailureKinds;
         private @Nullable Double platformAlertTransition;
@@ -152,6 +161,7 @@ public record NotificationPayload(
         private @Nullable String targetUserId;
         private @Nullable List<String> unmergedRepos;
         private @Nullable List<NotificationPayloadUnreachableArea> unreachableAreas;
+        private @Nullable Double untriagedFindingCount;
 
         /** Set {@code assessment}. */
         public Builder assessment(@Nullable NotificationPayloadAssessment assessment) {
@@ -216,6 +226,12 @@ public record NotificationPayload(
         /** Set {@code onCallAssessment}. */
         public Builder onCallAssessment(@Nullable NotificationPayloadOnCallAssessment onCallAssessment) {
             this.onCallAssessment = onCallAssessment;
+            return this;
+        }
+
+        /** Set {@code phaseCount}. */
+        public Builder phaseCount(@Nullable Double phaseCount) {
+            this.phaseCount = phaseCount;
             return this;
         }
 
@@ -303,9 +319,15 @@ public record NotificationPayload(
             return this;
         }
 
+        /** Set {@code untriagedFindingCount}. */
+        public Builder untriagedFindingCount(@Nullable Double untriagedFindingCount) {
+            this.untriagedFindingCount = untriagedFindingCount;
+            return this;
+        }
+
         /** Build the {@link NotificationPayload}. */
         public NotificationPayload build() {
-            return new NotificationPayload(assessment, budgetAlerts, budgetPeriodStart, changeClass, driftAffected, findingCount, forkCount, initiativeReason, mergeTrackRecordId, mergedRepos, onCallAssessment, pipelineName, platformAlertFailureKinds, platformAlertTransition, platformAlerts, platformFailedTotal, platformFailingRuns, platformWindow, prUrl, releaseSignals, revertUrl, sliceCount, targetUserId, unmergedRepos, unreachableAreas);
+            return new NotificationPayload(assessment, budgetAlerts, budgetPeriodStart, changeClass, driftAffected, findingCount, forkCount, initiativeReason, mergeTrackRecordId, mergedRepos, onCallAssessment, phaseCount, pipelineName, platformAlertFailureKinds, platformAlertTransition, platformAlerts, platformFailedTotal, platformFailingRuns, platformWindow, prUrl, releaseSignals, revertUrl, sliceCount, targetUserId, unmergedRepos, unreachableAreas, untriagedFindingCount);
         }
     }
 }

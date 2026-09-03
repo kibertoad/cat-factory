@@ -20,6 +20,7 @@ import { COMPANIONS } from './companions.js'
 import type { AgentTuning } from './tuning.js'
 import type { AgentKindVariantDefinition } from './variants.js'
 import type { StructuredOutput } from './structured-output.js'
+import { registerBugFisherAgent } from './bug-fisher.js'
 import { registerBugInvestigatorAgent } from './bug-investigator.js'
 import { registerForkProposerAgent } from './fork-proposer.js'
 import { registerPrReviewerAgent } from './pr-reviewer.js'
@@ -742,6 +743,7 @@ const EMPTY_TOOL_REFS = Object.freeze({
  */
 export function defaultAgentKindRegistry(): AgentKindRegistry {
   const registry = new AgentKindRegistry()
+  registerBugFisherAgent(registry)
   registerBugInvestigatorAgent(registry)
   registerForkProposerAgent(registry)
   registerPrReviewerAgent(registry)

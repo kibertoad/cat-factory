@@ -22,6 +22,7 @@ const AGENT_KINDS: AgentKind[] = [
   'requirements-brainstorm',
   'architecture-brainstorm',
   'bug-investigator',
+  'bug-fisher',
   'pr-reviewer',
   'spike',
   'task-estimator',

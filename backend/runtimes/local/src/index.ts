@@ -264,6 +264,7 @@ export {
   REVIEW_PIPELINE_ID,
   SPIKE_PIPELINE_ID,
   RALPH_PIPELINE_ID,
+  BUG_FISHING_PIPELINE_ID,
   MEDIA_PIPELINE_ID,
 } from '@cat-factory/kernel'
 // The pipeline AUTHORING seam, so a deployment writes a registered pipeline the way the built-in

@@ -92,6 +92,10 @@ export const blocks = pgTable(
     // Task-level: membership link to an `initiative`-level block (a task the
     // initiative's execution loop spawned), independent of parent_id.
     initiative_id: text('initiative_id'),
+    // Task-level: the BUG-FISHING expedition block whose finding spawned this fix task,
+    // independent of parent_id (which stays the enclosing service frame, so the fix runs
+    // against the repository the expedition fished).
+    expedition_id: text('expedition_id'),
     // Task-level: preceding-task auto-start toggle (0/1); null ⇒ off. When set, merging
     // this task auto-starts every dependent whose other dependencies are also done.
     auto_start_dependents: integer('auto_start_dependents'),
@@ -178,6 +182,7 @@ export const blocks = pgTable(
     index('idx_blocks_parent').on(t.workspace_id, t.parent_id),
     index('idx_blocks_epic').on(t.workspace_id, t.epic_id),
     index('idx_blocks_initiative').on(t.workspace_id, t.initiative_id),
+    index('idx_blocks_expedition').on(t.workspace_id, t.expedition_id),
     index('idx_blocks_service').on(t.service_id),
     // findById looks a block up by id alone (no workspace_id), so it can't use the
     // (workspace_id, id) PK — index id directly to avoid scanning the largest table.

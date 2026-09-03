@@ -1,4 +1,5 @@
 import type {
+  AgentRunContext,
   AgentRunResult,
   Block,
   BlockRepository,
@@ -10,6 +11,7 @@ import type {
   GateDefinition,
   JudgeDefinition,
   PipelineStep,
+  BugFishingAgentOutput,
   PrReviewAgentOutput,
   PrReviewChallengeOutput,
   RequirementReview,
@@ -28,6 +30,7 @@ import {
   CHALLENGE_INVESTIGATOR_KIND,
   FORK_PROPOSER_KIND,
   PR_REVIEWER_KIND,
+  renderBugFishingPhaseBrief,
   hasTrait,
   isCompanionKind,
   isContainerBackedCompanion,
@@ -76,6 +79,12 @@ import type { ReviewGateController, ReviewKind } from './ReviewGateController.js
 import type { BinaryCandidateController } from './BinaryCandidateController.js'
 import type { ForkDecisionController } from './ForkDecisionController.js'
 import { PrReviewController, PR_REVIEW_STEP_KIND } from './PrReviewController.js'
+import { BugFishingController, BUG_FISHING_STEP_KIND } from './BugFishingController.js'
+import {
+  describeRecordedPhase,
+  priorBugFishingFindingTitles,
+  startBugFishingPhase,
+} from './bugFishing.logic.js'
 import { forkPhasePending, resolveForkTriState } from './forkDecision.logic.js'
 import type { InterviewGateController } from './InterviewGateController.js'
 import type { TesterController } from './TesterController.js'
@@ -129,6 +138,7 @@ export interface DispatcherRegistryDeps {
   forkDecisionController: ForkDecisionController
   binaryCandidateController: BinaryCandidateController
   prReviewController: PrReviewController
+  bugFishingController: BugFishingController
   mergeResolver: MergeResolver
   requirementsKind: ReviewKind<RequirementReview>
   clarityKind: ReviewKind<ClarityReview>
@@ -179,7 +189,11 @@ export interface DispatcherRegistryDeps {
   judgeFor: (agentKind: string) => JudgeDefinition | undefined
   handleForkDecisionPhase: (ctx: StepHandlerContext) => Promise<AdvanceResult>
   handlePrReviewResolution: (ctx: StepHandlerContext) => Promise<AdvanceResult>
-  handleAgentStep: (ctx: StepHandlerContext) => Promise<AdvanceResult>
+  handleAgentStep: (
+    ctx: StepHandlerContext,
+    dispatchKind?: string,
+    augmentContext?: (context: AgentRunContext) => void,
+  ) => Promise<AdvanceResult>
   ingestBlueprint: (workspaceId: string, blockId: string, rawService: unknown) => Promise<void>
   ingestSpec: (workspaceId: string, rawDoc: unknown) => Promise<void>
 }
@@ -447,6 +461,18 @@ export function buildStepHandlerRegistry(d: DispatcherRegistryDeps): StepHandler
           step.prReview?.status === 'challenging'),
       handle: (ctx) => d.handlePrReviewResolution(ctx),
     },
+    // A BUG-FISHING EXPEDITION pass. The step is dispatched once per ANGLE rather than once per
+    // run, so this handler owns what differs between those dispatches: it seeds the expedition on
+    // first entry (planning the angles from the task's selection), marks the angle now being
+    // fished, and folds that angle's BRIEF into the dispatch as a prior output — the same
+    // injection point the Challenge Investigator's brief uses. Everything else is the ordinary
+    // container dispatch, so it delegates to `handleAgentStep` rather than reimplementing it.
+    {
+      kind: 'bug-fishing-phase',
+      order: 178,
+      canHandle: ({ step }) => step.agentKind === BUG_FISHING_STEP_KIND,
+      handle: (ctx) => handleBugFishingPhase(d, ctx),
+    },
     // The generic container/inline-agent step — claims every step no more-specific handler
     // did. Highest order so it always runs last. See {@link handleAgentStep}.
     {
@@ -457,6 +483,46 @@ export function buildStepHandlerRegistry(d: DispatcherRegistryDeps): StepHandler
     },
   ]
   return handlers.sort((a, b) => a.order - b.order)
+}
+
+/**
+ * Dispatch ONE angle of a bug-fishing expedition.
+ *
+ * Three things happen before the ordinary container dispatch, and each is here rather than in the
+ * controller because each is about THIS dispatch rather than about the expedition's record:
+ *
+ * 1. The expedition is planned on first entry (idempotent — a step that already carries one keeps
+ *    it, which is what makes every later angle and every durable replay cheap).
+ * 2. The angle now being fished is marked, so the window shows which pass is in flight rather
+ *    than only which have finished.
+ * 3. The angle's BRIEF is folded in as a prior output: what this pass is hunting, the task's own
+ *    focus, and the titles earlier passes already reported so this one does not repeat them.
+ *
+ * A cursor already past the plan falls through to the ordinary dispatch: that is the durable
+ * driver re-entering a step whose angles have all settled, and there is no angle left to brief.
+ */
+async function handleBugFishingPhase(
+  d: DispatcherRegistryDeps,
+  ctx: StepHandlerContext,
+): Promise<AdvanceResult> {
+  const { workspaceId, step, block } = ctx
+  const planned = await d.bugFishingController.ensurePlanned(workspaceId, step, block)
+  const phaseIndex = planned.currentPhaseIndex ?? 0
+  const phase = (planned.phases ?? [])[phaseIndex]
+  if (!phase) return d.handleAgentStep(ctx)
+  step.bugFishing = startBugFishingPhase(planned, phaseIndex)
+  const brief = renderBugFishingPhaseBrief({
+    phase: describeRecordedPhase(phase),
+    position: { index: phaseIndex + 1, total: (planned.phases ?? []).length },
+    focus: block.taskTypeFields?.fishingFocus ?? null,
+    priorFindingTitles: priorBugFishingFindingTitles(planned),
+  })
+  return d.handleAgentStep(ctx, undefined, (context) => {
+    context.priorOutputs = [
+      ...context.priorOutputs,
+      { agentKind: BUG_FISHING_STEP_KIND, output: brief },
+    ]
+  })
 }
 
 /**
@@ -566,6 +632,30 @@ export function buildStepCompletionInterceptors(
           ?.safeParse(result.custom) as PrReviewAgentOutput | undefined
         const block = await d.blockRepository.get(workspaceId, instance.blockId)
         return d.prReviewController.recordFindings(
+          workspaceId,
+          instance,
+          step,
+          output,
+          result.model ?? step.model,
+          block,
+        )
+      },
+    },
+    // A BUG-FISHING pass finished. Its structured `result.custom` is that ONE angle's catch:
+    // stamp the findings onto the step's `bugFishing` and either re-arm the step for the next
+    // angle or park the run for triage — never the normal single-shot completion, which would
+    // end the expedition after its first pass. Keyed on the `bug-fisher` step kind; a step whose
+    // expedition has already settled returns null and falls through.
+    {
+      kind: 'bug-fishing',
+      order: 108,
+      canIntercept: ({ step }) => step.agentKind === BUG_FISHING_STEP_KIND,
+      intercept: async ({ workspaceId, instance, step, result }) => {
+        const output = d.agentKindRegistry
+          .structuredOutput(BUG_FISHING_STEP_KIND)
+          ?.safeParse(result.custom) as BugFishingAgentOutput | undefined
+        const block = await d.blockRepository.get(workspaceId, instance.blockId)
+        return d.bugFishingController.recordPhaseResult(
           workspaceId,
           instance,
           step,

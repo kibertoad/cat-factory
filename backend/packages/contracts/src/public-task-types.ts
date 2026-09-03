@@ -1,3 +1,4 @@
+import { BUG_FISHING_PHASES } from './bugFishing.js'
 import * as v from 'valibot'
 import {
   descriptorFieldSchema,
@@ -114,6 +115,25 @@ export const BUILTIN_PUBLIC_TASK_FIELDS: Readonly<Record<string, readonly Descri
     // `checkbox-group` with no options would advertise a free-string list that creation then
     // refuses against a catalog the caller was never shown. Adding it later (as its own
     // discovery read) is additive.
+  ],
+  'bug-fishing': [
+    // The angle list is a CHECKBOX GROUP over the shipped catalog, and the empty selection is the
+    // meaningful default (fish every angle), which is exactly what a checkbox group with nothing
+    // ticked says — so the surface and the internal schema agree with no extra rule.
+    {
+      key: 'fishingPhaseIds',
+      label: 'Angles to fish',
+      type: 'checkbox-group',
+      help: 'Leave empty to fish every angle. Each angle is its own read-only pass over the codebase.',
+      options: BUG_FISHING_PHASES.map((phase) => ({ value: phase.id, label: phase.title })),
+    },
+    {
+      key: 'fishingFocus',
+      label: 'Where to concentrate',
+      type: 'textarea',
+      help: 'Subsystems, directories, or the kind of defect to look hardest for. Narrows where each angle looks, not which angles run.',
+      maxLength: 2000,
+    },
   ],
   feature: [],
   ralph: [],

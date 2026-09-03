@@ -307,6 +307,10 @@ const FEATURE_PURPOSES: readonly PipelinePurpose[] = BUG_PURPOSES.filter((p) => 
  *  - `review` → only `review` pipelines (it reviews an existing PR and opens none).
  *  - `media` → only `media` pipelines (its deliverable is generated binaries stored through an
  *    asset store; a code, document or review preset would produce none of them).
+ *  - `bug-fishing` → only `research` pipelines. An expedition changes nothing and opens no pull
+ *    request, so every code-shipping preset would run an implementer against a task carrying no
+ *    work to do. Narrowed to the purpose rather than to the one preset for the reason the others
+ *    are: a deployment's own read-only investigation preset should be offerable here too.
  *  - `bug` → everything EXCEPT `document` / `review` / `planning` ({@link BUG_PURPOSES}). It ships
  *    code, so offering it a document-authoring or PR-review preset was noise in the one picker
  *    people use most.
@@ -337,6 +341,7 @@ export function pipelineAllowedForTaskType(
   if (taskType === 'document') return pipeline.purpose === 'document'
   if (taskType === 'review') return pipeline.purpose === 'review'
   if (taskType === 'media') return pipeline.purpose === 'media'
+  if (taskType === 'bug-fishing') return pipeline.purpose === 'research'
   if (taskType === 'feature' || taskType === 'bug') {
     const own = classifierFor(pipeline.purpose)
     const offered = taskType === 'bug' ? BUG_PURPOSES : FEATURE_PURPOSES

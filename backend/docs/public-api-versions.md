@@ -103,3 +103,23 @@ deployer's next verdict, which `entries[].status` already states.
 
 Additive: a new optional field on an existing response object, and the clients ignore unknown
 fields, so a consumer built against 1.65.0 keeps parsing.
+
+## 1.67.0
+
+The BUG-FISHING EXPEDITION lands, and three closed vocabularies the public surface exposes gain a
+member each.
+
+`taskType` gains `bug-fishing`: a read-only, multi-angle hunt through a service's codebase for
+defects nobody has reported. It changes nothing and opens no pull request; its deliverable is the
+findings, and a human marks the ones worth fixing, each of which spawns its own bug-fix task.
+
+`NotificationType` gains `bug_fishing_triage`, raised when such an expedition has fished every
+angle and is waiting for its catch to be triaged. A webhook receiver that enumerates the types it
+subscribes to keeps working: it simply never asks for this one. `NotificationPayload` gains
+`phaseCount` (how many angles the expedition fished) and `untriagedFindingCount` (how many findings
+still have no decision — deliberately not the total, since a human who triaged half the catch while
+the later angles were still fishing is being told what is left).
+
+Additive throughout: a new enum member on two existing unions and two new optional payload fields.
+The SDKs tolerate an unknown enum value and ignore unknown fields by design, so a consumer built
+against 1.66.0 keeps parsing.

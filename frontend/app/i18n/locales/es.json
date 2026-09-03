@@ -223,7 +223,8 @@
         "media": "Medios",
         "recurring": "Recurrente",
         "review": "Revisión",
-        "ralph": "Bucle Ralph"
+        "ralph": "Bucle Ralph",
+        "bugFishing": "Pesca de errores"
       },
       "recurringWithFrame": "Una tarea recurrente ejecuta una pipeline con cierta cadencia. Continúa para definir el horario y el prompt.",
       "recurringNoFrame": "Una tarea recurrente debe vivir en un servicio. Añádela desde un marco de servicio (o un módulo dentro de él).",
@@ -338,7 +339,18 @@
         "prNotFound": "No se encontró la pull request n.º {number} en el repositorio de este servicio. Comprueba el número, o vincula el servicio al repositorio en el que está esa pull request.",
         "prRepoMismatch": "Esa pull request está en otro repositorio. Este servicio revisa {repo}, así que crea la tarea de revisión en el servicio vinculado al repositorio de la pull request."
       },
-      "contextFailed": "Tarea no creada: no se pudo leer {count} adjunto | Tarea no creada: no se pudieron leer {count} adjuntos"
+      "contextFailed": "Tarea no creada: no se pudo leer {count} adjunto | Tarea no creada: no se pudieron leer {count} adjuntos",
+      "bugFishingFields": {
+        "angles": {
+          "label": "Ángulos a explorar",
+          "hint": "Cada ángulo es su propia pasada por el código, con una pregunta distinta. Deje todas las casillas sin marcar para explorarlos todos.",
+          "allSelected": "Se explorarán todos los ángulos."
+        },
+        "focus": {
+          "label": "Dónde concentrarse",
+          "placeholder": "Subsistemas, directorios o el tipo de defecto que más tiempo le está costando a este equipo"
+        }
+      }
     },
     "recurring": {
       "title": "Añadir una pipeline recurrente",
@@ -690,7 +702,11 @@
         "kaizen_entry_not_settled": "La entrada de Kaizen aún no se ha evaluado",
         "bootstrap_not_awaiting_review": "Este bootstrap no está esperando una revisión",
         "adoption_plan_unavailable": "No hay ningún plan que aprobar",
-        "monorepo_directory_taken": "Ese directorio ya existe"
+        "monorepo_directory_taken": "Ese directorio ya existe",
+        "no_expedition": "Esta ejecución no tiene una pesca de errores",
+        "not_awaiting_triage": "Esta expedición no está esperando triaje",
+        "already_addressed": "Algunos hallazgos ya tienen tarea de corrección",
+        "no_host_frame": "Esta expedición no está bajo un servicio"
       },
       "description": {
         "dependencies_unmet": "Esta tarea depende de otras que aún no están terminadas. Complétalas o desbloquéalas y vuelve a iniciarla.",
@@ -735,7 +751,11 @@
         "kaizen_entry_not_settled": "Su evaluación sigue en cola o en curso, así que no hay recomendaciones que confirmar. Inténtalo de nuevo cuando termine.",
         "bootstrap_not_awaiting_review": "La ejecución avanzó desde que se abrió esta revisión. Recarga el tablero.",
         "adoption_plan_unavailable": "El análisis no pudo producir uno, así que no hay decisiones que enviar.",
-        "monorepo_directory_taken": "Un bootstrap crea un servicio nuevo. Elige un directorio que aún no exista, o importa el existente como servicio."
+        "monorepo_directory_taken": "Un bootstrap crea un servicio nuevo. Elige un directorio que aún no exista, o importa el existente como servicio.",
+        "no_expedition": "La ejecución que está viendo no lleva estado de expedición, así que no hay nada que triar. Recargue la ejecución e inténtelo de nuevo.",
+        "not_awaiting_triage": "O sigue explorando otro ángulo o ya se ha terminado. Recargue la ejecución para ver en qué punto está.",
+        "already_addressed": "Ya se creó antes una tarea de corrección para ellos, así que no se ha creado nada nuevo. Abra el hallazgo para llegar a la tarea que ya tiene.",
+        "no_host_frame": "Una tarea de corrección necesita un servicio donde vivir y un repositorio que arreglar. Mueva la tarea de la expedición bajo un marco de servicio e inténtelo de nuevo."
       },
       "action": {
         "connectGitHub": "Conectar GitHub",
@@ -2344,7 +2364,8 @@
         "budget_paused": "Marcar como leída",
         "budget_threshold": "Marcar como leída",
         "key_drift": "Descartar credenciales obsoletas",
-        "merge_tag_request": "Registrar esfuerzo"
+        "merge_tag_request": "Registrar esfuerzo",
+        "bug_fishing_triage": "Marcar como leído"
       },
       "toast": {
         "acted": "Marcado como resuelto",
@@ -3778,6 +3799,11 @@
         "ageToggle": "Ocultar también las tareas terminadas hace tiempo",
         "days": "Conservar (días)",
         "hidesOnlyHint": "No se elimina nada. Las tareas sin fecha de finalización registrada nunca se ocultan por antigüedad."
+      },
+      "bugFishing": {
+        "heading": "Pipeline de corrección de la pesca de errores",
+        "body": "La pipeline con la que se ejecuta una tarea de corrección cuando marca un hallazgo de una pesca de errores. Cada hallazgo marcado se convierte en su propia tarea sobre esta pipeline; quien lo marca puede cambiar la elección para un lote.",
+        "builtInDefault": "Usar la plantilla de corrección integrada"
       }
     },
     "localModelEndpoints": {
@@ -8297,6 +8323,70 @@
       "importFailed": "No se pudo importar el catálogo de servicios",
       "disconnected": "Catálogo de servicios desconectado",
       "disconnectFailed": "No se pudo desconectar el catálogo de servicios"
+    }
+  },
+  "bugFishing": {
+    "title": "Expedición de pesca de errores",
+    "titleWithBlock": "Pesca de errores: {title}",
+    "subtitle": "Marque los hallazgos que merezcan corrección; cada uno se convierte en su propia tarea.",
+    "stillFishing": "Aún explorando: han llegado {done} de {total} ángulos. Todo lo de abajo ya se puede tratar.",
+    "counts": "{untriaged} por triar, {spawned} enviados a corrección",
+    "showTriaged": "Mostrar los decididos",
+    "phases": {
+      "heading": "Ángulos",
+      "all": "Todo lo hallado ({count})",
+      "found": "{count} hallados",
+      "failedNote": "Este ángulo no se completó: {reason}",
+      "status": {
+        "pending": "En cola",
+        "fishing": "Explorando…",
+        "completed": "Hecho",
+        "failed": "Fallido"
+      }
+    },
+    "fixPipeline": {
+      "label": "Las correcciones se ejecutan en",
+      "boardDefault": "El valor por defecto del tablero",
+      "hint": "Los hallazgos que marque a partir de ahora se ejecutan en {pipeline}."
+    },
+    "empty": {
+      "nothingCaught": "Esta expedición no ha hallado nada por ahora.",
+      "allTriaged": "Se ha decidido sobre todos los hallazgos."
+    },
+    "finding": {
+      "failureScenario": "Cómo se manifiesta",
+      "evidence": "Pruebas citadas por la expedición",
+      "suggestedFix": "Corrección sugerida",
+      "fixThis": "Corregir esto",
+      "dismiss": "Descartar",
+      "spawned": "Una tarea de corrección se ejecuta en {pipeline}",
+      "spawning": "Creando la tarea de corrección…",
+      "spawnFailed": "No se pudo crear la tarea de corrección: {reason} Márcalo de nuevo para reintentarlo.",
+      "openTask": "Abrir la tarea"
+    },
+    "severity": {
+      "critical": "Crítica",
+      "high": "Alta",
+      "medium": "Media",
+      "low": "Baja"
+    },
+    "kind": {
+      "bug": "Error",
+      "logic-gap": "Hueco lógico",
+      "edge-case": "Caso límite",
+      "footgun": "Trampa",
+      "requirement-gap": "Hueco de requisito",
+      "other": "Otro"
+    },
+    "confidence": {
+      "high": "Confianza alta",
+      "medium": "Confianza media",
+      "low": "Confianza baja"
+    },
+    "footer": {
+      "parked": "Se han explorado todos los ángulos.",
+      "parkedWithUntriaged": "Quedan {count} hallazgo(s) sin decidir.",
+      "finish": "Terminar el triaje"
     }
   }
 }

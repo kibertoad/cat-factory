@@ -125,6 +125,27 @@ const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason>, Conf
     titleKey: 'errors.conflict.title.kaizen_entry_not_settled',
     descriptionKey: 'errors.conflict.description.kaizen_entry_not_settled',
   },
+  // The four bug-fishing-expedition refusals. `no_expedition` / `not_awaiting_triage` are the
+  // "wrong run" / "already finished" pair (the window refreshes rather than re-offering the
+  // control); `already_addressed` names findings that already have a fix task, so a second
+  // request cannot double-spawn; `no_host_frame` is a board-shape problem the operator fixes by
+  // putting the expedition under a service.
+  no_expedition: {
+    titleKey: 'errors.conflict.title.no_expedition',
+    descriptionKey: 'errors.conflict.description.no_expedition',
+  },
+  not_awaiting_triage: {
+    titleKey: 'errors.conflict.title.not_awaiting_triage',
+    descriptionKey: 'errors.conflict.description.not_awaiting_triage',
+  },
+  already_addressed: {
+    titleKey: 'errors.conflict.title.already_addressed',
+    descriptionKey: 'errors.conflict.description.already_addressed',
+  },
+  no_host_frame: {
+    titleKey: 'errors.conflict.title.no_host_frame',
+    descriptionKey: 'errors.conflict.description.no_host_frame',
+  },
   task_limit_reached: {
     titleKey: 'errors.conflict.title.task_limit_reached',
     descriptionKey: 'errors.conflict.description.task_limit_reached',

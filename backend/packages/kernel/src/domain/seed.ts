@@ -534,6 +534,29 @@ function buildOtherDeliveryPipelines(): Pipeline[] {
         'merger',
       ],
     }),
+    // The BUG-FISHING EXPEDITION: a read-only, multi-angle hunt for latent defects. One step,
+    // dispatched once per ANGLE by the engine's phase loop, each pass reading the same codebase
+    // with a different question (control flow, failure handling, boundaries, concurrency,
+    // lifecycle, contracts, footguns, requirements conformance). Nothing is written and no PR is
+    // opened: the deliverable is the catch, and each finding a human MARKS spawns its own
+    // bug-fix task on the workspace's configured fix pipeline.
+    //
+    // No tail at all — not even `conflicts`/`ci`, which would gate a PR this pipeline never
+    // opens. The run reaches `done` through the engine's no-PR completion path once the human
+    // finishes triaging.
+    definePipeline({
+      id: 'pl_bug_fishing',
+      name: 'Bug fishing expedition',
+      // `research`, beside the spike and the environment analysis: a read-only investigation whose
+      // deliverable is findings. Not `bugfix`, which names a preset built around a DEFECT REPORT to
+      // triage and reproduce — an expedition has no report and is looking for the ones nobody has
+      // filed. `pipelineAllowedForTaskType` narrows a `bug-fishing` task to this purpose.
+      purpose: 'research',
+      version: 1,
+      description:
+        'Systematically hunt an existing codebase for genuine defects, logic gaps, footguns and unhandled edge cases — one pass per angle — then spawn a bug-fix task for each finding you mark.',
+      steps: ['bug-fisher'],
+    }),
     // The "Ralph loop": a single persistent, retry-until-done coding step. Each iteration is
     // a fresh-context container run that works the task spec, after which the harness runs the
     // task's configured programmatic validation command (exit 0 = done) and the engine loops
@@ -1228,9 +1251,10 @@ export const MEDIA_PIPELINE_ID = 'pl_media'
 
 /**
  * The pipeline a task of the given task type should default to when the creator pins none.
- * `document` → `pl_document`, `spike` → `pl_spike`, `review` → `pl_review` and `media` →
- * `pl_media` (the full-build `pl_full` is wrong for all four: a document has no code, a spike
- * has no code, a review opens no PR, and a media task's deliverable is a stored binary); every
+ * `document` → `pl_document`, `spike` → `pl_spike`, `review` → `pl_review`, `media` →
+ * `pl_media` and `bug-fishing` → `pl_bug_fishing` (the full-build `pl_full` is wrong for all
+ * five: a document has no code, a spike has no code, a review opens no PR, a media task's
+ * deliverable is a stored binary, and an expedition changes nothing at all); every
  * other BUILT-IN task type falls through to the workspace's positional default.
  * A CUSTOM (namespaced) task type consults the injected {@link TaskTypeRegistry} AFTER the
  * built-in map, so a deployment-registered type can pin its own default pipeline. Returns
@@ -1245,6 +1269,7 @@ export function defaultPipelineIdForTaskType(
   if (taskType === 'review') return REVIEW_PIPELINE_ID
   if (taskType === 'ralph') return RALPH_PIPELINE_ID
   if (taskType === 'media') return MEDIA_PIPELINE_ID
+  if (taskType === 'bug-fishing') return BUG_FISHING_PIPELINE_ID
   if (taskType && taskTypeRegistry) return taskTypeRegistry.defaultPipelineId(taskType)
   return undefined
 }
@@ -1257,6 +1282,16 @@ export const BUG_TRIAGE_PIPELINE_ID = 'pl_bug_triage'
  * investigate/clarify path the recurring triage pipeline uses — see backend/docs/bug-hunt.md.
  */
 export const BUGFIX_PIPELINE_ID = 'pl_bugfix'
+
+/**
+ * Pipeline id of the BUG-FISHING EXPEDITION (`bug-fisher`, dispatched once per angle). The
+ * DEFAULT pipeline a `taskType: 'bug-fishing'` task is pinned to at creation
+ * ({@link defaultPipelineIdForTaskType}) — the full-build pipeline makes no sense for a hunt
+ * that changes nothing and opens no PR. Also the pipeline a RECURRING expedition schedule
+ * fires. Findings are acted on by spawning bug-fix tasks, whose pipeline is the workspace's
+ * `bugFishingFixPipelineId` (defaulting to {@link BUGFIX_PIPELINE_ID}).
+ */
+export const BUG_FISHING_PIPELINE_ID = 'pl_bug_fishing'
 
 // ---- The build ladder's rungs ---------------------------------------------------------------
 // The axis is how much design a task gets. `pl_build` is the DEFAULT and must stay first in

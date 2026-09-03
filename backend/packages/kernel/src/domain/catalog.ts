@@ -74,6 +74,10 @@ export const DEFAULT_WORKSPACE_SETTINGS: WorkspaceSettings = {
   // attributed to the human who started it. An operator who would rather bound every run to
   // the App installation's scope turns it off (see the field's contract doc).
   allowInitiatorPat: true,
+  // Null, not `pl_bugfix`: an unset value and a workspace that deliberately picked the built-in
+  // preset behave identically today, and only the null spelling lets a later change to which
+  // preset is the platform default reach a board that never made a choice.
+  bugFishingFixPipelineId: null,
   // Empty, not seeded: which metadata FIELDS exist is declared by the deployment's app,
   // and a value only ever arrives by someone typing it in.
   metadata: {},

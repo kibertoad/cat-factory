@@ -221,6 +221,22 @@ const PLACEHOLDER_DESCRIPTIONS = new Set([
 const PLATFORM_AUTHORED_TASK_TYPES = new Set(['recurring'])
 
 /**
+ * Task types whose real input is the CODEBASE rather than an authored brief.
+ *
+ * A bug-fishing expedition is asked to go and look: its subject is the repository, and the whole
+ * point is that nobody has written down what is wrong there yet. An empty description on one
+ * states no absence — there is nothing a human could add that would make the run more actionable,
+ * which is exactly the test `description_missing` is supposed to apply. Parking it would refuse
+ * the run at the one moment its answer costs nothing to get.
+ *
+ * Its own set rather than a second member of {@link PLATFORM_AUTHORED_TASK_TYPES}, because the two
+ * exemptions answer different questions. That one is about WHO wrote the description (nobody, so
+ * judging it blames a human for the platform's own row); this one is about WHERE the input lives
+ * (the code, which the gate cannot read and the agent will).
+ */
+const CODEBASE_INPUT_TASK_TYPES = new Set(['bug-fishing'])
+
+/**
  * Whether this block's description is the authored statement of work the gate is entitled to
  * judge. Two ways it is not, and they are separate mechanisms rather than one list:
  *
@@ -230,7 +246,8 @@ const PLATFORM_AUTHORED_TASK_TYPES = new Set(['recurring'])
  *    contents. The description on such a block is a caption, not a brief, and a run against one
  *    (an initiative's planning pipeline is the everyday case) reads the entity rather than the
  *    caption. Judging it would park exactly the runs with no task to go and fix.
- *  - **The task type is platform-authored** ({@link PLATFORM_AUTHORED_TASK_TYPES}).
+ *  - **The task type is platform-authored** ({@link PLATFORM_AUTHORED_TASK_TYPES}), or its input
+ *    is the CODEBASE rather than a brief ({@link CODEBASE_INPUT_TASK_TYPES}).
  *
  * Deliberately NOT here: a task the platform CREATED but whose description is still a real
  * statement of work (an initiative-spawned item, a task imported from a tracker ticket). Those
@@ -241,7 +258,11 @@ const PLATFORM_AUTHORED_TASK_TYPES = new Set(['recurring'])
  */
 function describesAuthoredTaskInput(input: InputGateInput): boolean {
   if (input.level !== 'task') return false
-  return !(input.taskType && PLATFORM_AUTHORED_TASK_TYPES.has(input.taskType))
+  if (!input.taskType) return true
+  return !(
+    PLATFORM_AUTHORED_TASK_TYPES.has(input.taskType) ||
+    CODEBASE_INPUT_TASK_TYPES.has(input.taskType)
+  )
 }
 
 /** Word count below which a description specifies nothing actionable (advisory only). */

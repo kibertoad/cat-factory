@@ -151,4 +151,8 @@ export const workspaceSettings = pgTable('workspace_settings', {
   // external-tool URL resolvers). One bounded JSON object per workspace, like
   // `task_limit_per_type`; null ⇒ nothing filled in. Mirrors the D1 column.
   metadata: text('metadata'),
+  // Which pipeline a bug-fix task spawned from a BUG-FISHING expedition finding runs. Nullable
+  // with NO default: null means the board never picked one, which resolves to the built-in
+  // bug-fix preset at spawn time. Mirrors the D1 column.
+  bug_fishing_fix_pipeline_id: text('bug_fishing_fix_pipeline_id'),
 })

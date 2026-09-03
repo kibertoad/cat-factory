@@ -223,7 +223,8 @@
         "media": "メディア",
         "recurring": "繰り返し",
         "review": "レビュー",
-        "ralph": "Ralph ループ"
+        "ralph": "Ralph ループ",
+        "bugFishing": "バグ探索"
       },
       "recurringWithFrame": "繰り返しタスクは一定の周期でパイプラインを実行します。続行してスケジュールとプロンプトを設定してください。",
       "recurringNoFrame": "繰り返しタスクはサービス上に配置する必要があります。サービスフレーム（またはその中のモジュール）から追加してください。",
@@ -338,7 +339,18 @@
         "prNotFound": "プルリクエスト #{number} はこのサービスのリポジトリで見つかりませんでした。番号を確認するか、そのプルリクエストがあるリポジトリをサービスに紐付けてください。",
         "prRepoMismatch": "そのプルリクエストは別のリポジトリにあります。このサービスは {repo} をレビューします。プルリクエストのリポジトリに紐付いたサービスの下にレビュータスクを作成してください。"
       },
-      "contextFailed": "タスクは作成されていません: {count} 件の添付を読み取れませんでした | タスクは作成されていません: {count} 件の添付を読み取れませんでした"
+      "contextFailed": "タスクは作成されていません: {count} 件の添付を読み取れませんでした | タスクは作成されていません: {count} 件の添付を読み取れませんでした",
+      "bugFishingFields": {
+        "angles": {
+          "label": "探索する観点",
+          "hint": "各観点はコードベースを異なる問いで見直す独立したパスです。すべて未選択のままにすると全観点を探索します。",
+          "allSelected": "すべての観点を探索します。"
+        },
+        "focus": {
+          "label": "重点を置く箇所",
+          "placeholder": "サブシステム、ディレクトリ、またはこのチームで手間になっている不具合の種類"
+        }
+      }
     },
     "recurring": {
       "title": "繰り返しパイプラインを追加",
@@ -690,7 +702,11 @@
         "kaizen_entry_not_settled": "この Kaizen エントリはまだ採点されていません",
         "bootstrap_not_awaiting_review": "このブートストラップはレビュー待ちではありません",
         "adoption_plan_unavailable": "承認できる計画がありません",
-        "monorepo_directory_taken": "そのディレクトリはすでに存在します"
+        "monorepo_directory_taken": "そのディレクトリはすでに存在します",
+        "no_expedition": "この実行にはバグ探索がありません",
+        "not_awaiting_triage": "この探索はトリアージ待ちではありません",
+        "already_addressed": "一部の指摘にはすでに修正タスクがあります",
+        "no_host_frame": "この探索はサービスの配下にありません"
       },
       "description": {
         "dependencies_unmet": "このタスクは、まだ完了していない他のタスクに依存しています。それらを完了または解除してから、もう一度開始してください。",
@@ -735,7 +751,11 @@
         "kaizen_entry_not_settled": "採点が待機中または実行中のため、確認できる改善提案がまだありません。完了してから再試行してください。",
         "bootstrap_not_awaiting_review": "このレビューを開いてから実行が先に進みました。ボードを再読み込みしてください。",
         "adoption_plan_unavailable": "調査で計画を作成できなかったため、送信できる判断がありません。",
-        "monorepo_directory_taken": "ブートストラップは新しいサービスを作成します。まだ存在しないディレクトリを選ぶか、既存のものをサービスとして取り込んでください。"
+        "monorepo_directory_taken": "ブートストラップは新しいサービスを作成します。まだ存在しないディレクトリを選ぶか、既存のものをサービスとして取り込んでください。",
+        "no_expedition": "表示中の実行には探索の状態がないため、トリアージするものがありません。実行を再読み込みしてやり直してください。",
+        "not_awaiting_triage": "まだ別の観点を探索中か、すでに終了しています。実行を再読み込みして状況を確認してください。",
+        "already_addressed": "以前に修正タスクが作成済みのため、新たには作成していません。指摘を開くと既存のタスクに移動できます。",
+        "no_host_frame": "修正タスクには所属するサービスと修正対象のリポジトリが必要です。探索タスクをサービスフレームの配下へ移動してからやり直してください。"
       },
       "action": {
         "connectGitHub": "GitHub に接続",
@@ -2344,7 +2364,8 @@
         "budget_paused": "既読にする",
         "budget_threshold": "既読にする",
         "key_drift": "古い認証情報を削除",
-        "merge_tag_request": "工数を記録"
+        "merge_tag_request": "工数を記録",
+        "bug_fishing_triage": "既読にする"
       },
       "toast": {
         "acted": "対応済みにしました",
@@ -3920,6 +3941,11 @@
         "ageToggle": "完了から時間が経ったタスクも隠す",
         "days": "保持期間（日）",
         "hidesOnlyHint": "削除は行われません。完了日が記録されていないタスクが期間によって隠されることはありません。"
+      },
+      "bugFishing": {
+        "heading": "バグ探索の修正パイプライン",
+        "body": "バグ探索の指摘をマークしたときに、修正タスクが実行されるパイプラインです。マークした指摘ごとに独立したタスクがこのパイプラインで作られます。マークする人はその都度この選択を上書きできます。",
+        "builtInDefault": "組み込みのバグ修正プリセットを使う"
       }
     },
     "localModelEndpoints": {
@@ -8297,6 +8323,70 @@
       "importFailed": "サービスカタログを取り込めませんでした",
       "disconnected": "サービスカタログを切断しました",
       "disconnectFailed": "サービスカタログを切断できませんでした"
+    }
+  },
+  "bugFishing": {
+    "title": "バグ探索",
+    "titleWithBlock": "バグ探索: {title}",
+    "subtitle": "修正すべき指摘をマークしてください。マークするごとに専用のバグ修正タスクが作られます。",
+    "stillFishing": "探索中 — {total} 観点のうち {done} 件が完了しました。以下の内容はすでに対応できます。",
+    "counts": "未判断 {untriaged} 件、修正へ送付 {spawned} 件",
+    "showTriaged": "判断済みを表示",
+    "phases": {
+      "heading": "観点",
+      "all": "すべての指摘 ({count})",
+      "found": "{count} 件",
+      "failedNote": "この観点は完了しませんでした: {reason}",
+      "status": {
+        "pending": "待機中",
+        "fishing": "探索中…",
+        "completed": "完了",
+        "failed": "失敗"
+      }
+    },
+    "fixPipeline": {
+      "label": "修正の実行先",
+      "boardDefault": "ボードの既定値",
+      "hint": "これ以降にマークした指摘は {pipeline} で実行されます。"
+    },
+    "empty": {
+      "nothingCaught": "この探索ではまだ何も見つかっていません。",
+      "allTriaged": "すべての指摘について判断が済んでいます。"
+    },
+    "finding": {
+      "failureScenario": "発生条件",
+      "evidence": "探索が挙げた根拠",
+      "suggestedFix": "修正案",
+      "fixThis": "これを修正",
+      "dismiss": "却下",
+      "spawned": "{pipeline} で修正タスクが実行中です",
+      "spawning": "修正タスクを作成しています…",
+      "spawnFailed": "修正タスクを作成できませんでした: {reason} もう一度マークすると再試行します。",
+      "openTask": "タスクを開く"
+    },
+    "severity": {
+      "critical": "致命的",
+      "high": "高",
+      "medium": "中",
+      "low": "低"
+    },
+    "kind": {
+      "bug": "バグ",
+      "logic-gap": "ロジックの抜け",
+      "edge-case": "境界ケース",
+      "footgun": "落とし穴",
+      "requirement-gap": "要件との乖離",
+      "other": "その他"
+    },
+    "confidence": {
+      "high": "確信度: 高",
+      "medium": "確信度: 中",
+      "low": "確信度: 低"
+    },
+    "footer": {
+      "parked": "すべての観点の探索が終わりました。",
+      "parkedWithUntriaged": "未判断の指摘が {count} 件あります。",
+      "finish": "トリアージを終了"
     }
   }
 }
