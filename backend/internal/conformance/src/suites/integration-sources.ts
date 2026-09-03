@@ -2,6 +2,7 @@ import { resolveDocTemplate } from '@cat-factory/agents'
 import type {
   AgentFailure,
   Block,
+  BootstrapJob,
   DocumentRecord,
   SourceTask,
   TaskRecord,
@@ -10,6 +11,7 @@ import type {
   WorkspaceSnapshot,
 } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
+import { FakeRepoBootstrapper } from '../FakeRepoBootstrapper.js'
 import { FakeTaskSourceProvider } from '../FakeTaskSourceProvider.js'
 import type { ConformanceHarness } from '../harness.js'
 
@@ -96,6 +98,133 @@ export function defineSourcesConformance(harness: ConformanceHarness): void {
       expect(frameSignals.length).toBeGreaterThan(0)
       expect(frameSignals.every((e) => !e.hasBlock)).toBe(true)
       expect(frameSignals.some((e) => e.reason === 'bootstrap-succeeded')).toBe(true)
+    })
+
+    it('records the delivery a run was started with, and reports what it delivered', async () => {
+      // The delivery is stored on the run rather than re-derived, because a RETRY re-dispatches
+      // under it: a run the user asked to deliver as a pull request must not quietly become a
+      // push to the default branch on its second attempt. It rides the same JSON detail column
+      // on both facades, so a round-trip through the store is what pins it.
+      const app = harness.makeApp()
+      const { workspace } = await app.createWorkspace()
+      const wsId = workspace.id
+
+      const omitted = await app.call<BootstrapJob>('POST', `/workspaces/${wsId}/bootstrap/jobs`, {
+        repoName: 'pushed-service',
+        instructions: 'Scaffold a small HTTP service.',
+      })
+      // A new repository's first commit is reviewed by nobody, so that is the target's default.
+      expect(omitted.body.delivery).toBe('direct_push')
+
+      const asPr = await app.call<BootstrapJob>('POST', `/workspaces/${wsId}/bootstrap/jobs`, {
+        repoName: 'reviewed-service',
+        instructions: 'Scaffold a small HTTP service.',
+        delivery: 'pull_request',
+      })
+      expect(asPr.body.delivery).toBe('pull_request')
+
+      await app.driveBootstrap(wsId, omitted.body.id)
+      await app.driveBootstrap(wsId, asPr.body.id)
+
+      const pushed = await app.call<BootstrapJob>(
+        'GET',
+        `/workspaces/${wsId}/bootstrap/jobs/${omitted.body.id}`,
+      )
+      expect(pushed.body.status).toBe('succeeded')
+      // Nothing was opened for review, and the field says so rather than carrying a branch URL.
+      expect(pushed.body.prUrl).toBeNull()
+      expect(pushed.body.repoUrl).toBeTruthy()
+
+      const reviewed = await app.call<BootstrapJob>(
+        'GET',
+        `/workspaces/${wsId}/bootstrap/jobs/${asPr.body.id}`,
+      )
+      expect(reviewed.body.status).toBe('succeeded')
+      // This run created a repository AND opened a pull request, so both are reported: a
+      // caller links the board frame to the first and sends a person to the second.
+      expect(reviewed.body.prUrl).toContain('/pull/')
+      expect(reviewed.body.repoUrl).toBeTruthy()
+      expect(reviewed.body.delivery).toBe('pull_request')
+    })
+
+    it('maps the new repository only once the service is on the default branch', async () => {
+      // The mapping agent clones the DEFAULT branch. A `pull_request` run has written nothing
+      // there, so mapping it would read the repository's initial README, commit that empty
+      // blueprint into the repo and project it onto the board, where the wrong projection would
+      // outlive the merge and cost a real agent run to produce. A `direct_push` run's service IS
+      // on the default branch, so it maps straight away, which is the behaviour every existing
+      // bootstrap has.
+      const app = harness.makeApp()
+      const { workspace } = await app.createWorkspace()
+      const wsId = workspace.id
+
+      const pushed = await app.call<BootstrapJob>('POST', `/workspaces/${wsId}/bootstrap/jobs`, {
+        repoName: 'pushed-service',
+        instructions: 'Scaffold a small HTTP service.',
+      })
+      await app.driveBootstrap(wsId, pushed.body.id)
+      const pushedFrame = pushed.body.blockId!
+      expect(app.executionEmits(pushedFrame).length).toBeGreaterThan(0)
+
+      const reviewed = await app.call<BootstrapJob>('POST', `/workspaces/${wsId}/bootstrap/jobs`, {
+        repoName: 'reviewed-service',
+        instructions: 'Scaffold a small HTTP service.',
+        delivery: 'pull_request',
+      })
+      await app.driveBootstrap(wsId, reviewed.body.id)
+      const reviewedFrame = reviewed.body.blockId!
+      const done = await app.call<BootstrapJob>(
+        'GET',
+        `/workspaces/${wsId}/bootstrap/jobs/${reviewed.body.id}`,
+      )
+      // The run SUCCEEDED; what it did not do is spend a mapping run on a branch nobody merged.
+      expect(done.body.status).toBe('succeeded')
+      expect(app.executionEmits(reviewedFrame)).toEqual([])
+    })
+
+    it('retries a pull-request run onto the branch its first attempt pushed', async () => {
+      // The work branch is stored on the run, and a retry carries it forward. That matters
+      // because a retry is a NEW run row with a new id: a branch re-derived from the id doing
+      // the dispatching would be a second branch, so the harness's resume (it clones the work
+      // branch when the remote already has it) would never fire, the first attempt's pushed
+      // commits would be stranded where nobody looks, and the target would collect one orphan
+      // branch per attempt. It rides the same JSON detail column on both facades, so what pins
+      // it is a round trip through the store, between two dispatches.
+      const bootstrapper = new FakeRepoBootstrapper()
+      const app = harness.makeApp(undefined, { repoBootstrapper: bootstrapper })
+      const { workspace } = await app.createWorkspace()
+      const wsId = workspace.id
+
+      const started = await app.call<BootstrapJob>('POST', `/workspaces/${wsId}/bootstrap/jobs`, {
+        repoName: 'reviewed-service',
+        instructions: 'Scaffold a small HTTP service.',
+        delivery: 'pull_request',
+      })
+      bootstrapper.failPollWith = 'the container was evicted mid-run'
+      await app.driveBootstrap(wsId, started.body.id)
+      const failed = await app.call<BootstrapJob>(
+        'GET',
+        `/workspaces/${wsId}/bootstrap/jobs/${started.body.id}`,
+      )
+      expect(failed.body.status).toBe('failed')
+
+      bootstrapper.failPollWith = null
+      const retried = await app.call<{ kind: string; run: BootstrapJob }>(
+        'POST',
+        `/workspaces/${wsId}/agent-runs/${started.body.id}/retry`,
+      )
+      expect(retried.status).toBe(201)
+      // A retry IS a new run (its own row, its own durable drive), which is exactly why the
+      // branch cannot be derived from the id.
+      expect(retried.body.run.id).not.toBe(started.body.id)
+      expect(retried.body.run.delivery).toBe('pull_request')
+
+      const branches = bootstrapper.calls.map((call) =>
+        call.delivery.mode === 'pull_request' ? call.delivery.branch : null,
+      )
+      expect(branches).toHaveLength(2)
+      expect(branches[1]).toBe(branches[0])
+      expect(branches[0]).toContain(started.body.id)
     })
 
     it('reads a stopped run’s structured failure back off the store', async () => {

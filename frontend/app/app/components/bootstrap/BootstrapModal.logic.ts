@@ -1,3 +1,4 @@
+import type { BootstrapDelivery } from '~/types/domain'
 import { repoPathSegments } from '~/utils/repoPath'
 
 // The pure half of the bootstrap launch form's monorepo service-directory field. That field
@@ -25,4 +26,19 @@ export function serviceDirectoryLeaf(directory: string, serviceName: string): st
  */
 export function serviceDirectoryParent(directory: string): string {
   return repoPathSegments(directory).slice(0, -1).join('/')
+}
+
+/**
+ * The delivery a target takes when nobody has answered the question.
+ *
+ * The backend applies the same rule for a request that names none, and it is stated on both
+ * sides deliberately: the form has to SHOW the default it is about to send, and a control
+ * rendering the wrong one asks the person to correct something they never chose. The two targets
+ * want opposite answers, which is why it is a function of the target rather than a constant.
+ *
+ * Also what the form RESETS to after a launch: an explicit choice binds the run it was made for,
+ * never every later one, so the reset restores the default for whatever target is still selected.
+ */
+export function defaultBootstrapDelivery(intoMonorepo: boolean): BootstrapDelivery {
+  return intoMonorepo ? 'pull_request' : 'direct_push'
 }

@@ -1,5 +1,6 @@
 import type {
   AdoptionPlan,
+  BootstrapDelivery,
   BootstrapFailure,
   BootstrapPhase,
   BootstrapStatus,
@@ -69,6 +70,23 @@ export interface BootstrapJobRecord {
   monorepo: MonorepoBootstrapRef | null
   /** Which half of the monorepo flow the run is in; null on a new-repo run. */
   phase: BootstrapPhase | null
+  /**
+   * How this run delivers its work, resolved at start. Stored rather than re-derived because a
+   * RETRY re-dispatches under it and a finished run is read back to say which shape it took;
+   * a row written before the delivery toggle existed resolves to the target's own default,
+   * which is what that run actually did.
+   */
+  delivery: BootstrapDelivery
+  /**
+   * The work branch a `pull_request` run pushes; null under `direct_push`, which opens none.
+   *
+   * Recorded rather than derived from `id` at each dispatch, because a RETRY is a new row with a
+   * new id: re-deriving would mint a second branch, so the harness's resume (it clones the branch
+   * when it already exists on the remote) would never fire and the first attempt's pushed work
+   * would be abandoned on a branch nobody looks at. Carried forward verbatim by `retry`, which is
+   * what makes "a retry resumes its branch" true rather than aspirational.
+   */
+  workBranch: string | null
   /**
    * The id of the run's CURRENT drive: the durable driver's instance/singleton key, and the
    * container job id when a container is dispatched.

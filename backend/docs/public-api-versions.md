@@ -123,3 +123,30 @@ the later angles were still fishing is being told what is left).
 Additive throughout: a new enum member on two existing unions and two new optional payload fields.
 The SDKs tolerate an unknown enum value and ignore unknown fields by design, so a consumer built
 against 1.66.0 keeps parsing.
+
+## 1.68.0
+
+`BootstrapJob` gains `delivery` (`pull_request` | `direct_push`): how a bootstrap run publishes
+what it wrote.
+
+It is projected because the pair of URL fields no longer answers the question a poller asks.
+1.65.0 added `prUrl` beside `repoUrl` and said "exactly one of the two is set on any run, which is
+also how a caller tells the two shapes apart". That was true while the target decided the delivery:
+a monorepo run opened a pull request, a new-repo run force-pushed. A bootstrap now says how its
+work should land, so a run that created a repository OF ITS OWN can also deliver into it as a pull
+request, and both fields are then set.
+
+**Read `delivery` for whether a pull request is coming, and `repoUrl` for which target the run
+took.** `repoUrl` is unchanged and still names the created repository (null on a monorepo run
+always), so the target discrimination survives; what does not is inferring the delivery from
+`prUrl`, which on a `direct_push` run is null terminally and correctly, and on a `pull_request` run
+is null only until the pull request exists. `delivery` answers both from the first poll.
+
+`POST /api/v1/repos/bootstrap` does NOT accept `delivery`, exactly as it does not accept a
+`monorepo` target: a run started through this surface still takes the default for the target it
+creates, `direct_push`. The field reaches a caller anyway, because a run started in the app is read
+back here, which is the same reason `awaiting_review` was named in 1.65.0.
+
+Additive: a new field on an existing response object, whose value is one of two members the
+clients receive as a string. A consumer built against 1.67.0 keeps parsing, and one that branched
+on `prUrl === null` to mean "this run created a repository" should move to `repoUrl !== null`.

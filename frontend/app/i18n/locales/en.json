@@ -7276,7 +7276,8 @@
       "title": "Recent runs",
       "fromArch": "from {name}",
       "fromScratch": "from scratch",
-      "open": "Open"
+      "open": "Open",
+      "openPr": "Pull request"
     },
     "status": {
       "pending": "pending",
@@ -7324,11 +7325,24 @@
       "label": "Where the service goes",
       "newRepo": {
         "label": "A new repository",
-        "description": "Create a repository of its own and push the service as its first commit."
+        "description": "Create a repository of its own and write the service into it."
       },
       "monorepo": {
         "label": "A directory in an existing monorepo",
-        "description": "Add the service to a repository you already have, and open a pull request."
+        "description": "Add the service to a repository you already have."
+      }
+    },
+    "delivery": {
+      "label": "How the work lands",
+      "pullRequest": {
+        "label": "Open a pull request",
+        "descNewRepo": "Push a branch and open a pull request against the repository's first commit, so someone reviews the scaffold before it becomes the default branch. The repository must already have a commit.",
+        "descMonorepo": "Push a branch and open a pull request. Nothing is merged for you."
+      },
+      "directPush": {
+        "label": "Push directly",
+        "descNewRepo": "Write the service straight onto the default branch as the repository's first commit.",
+        "descMonorepo": "Commit onto the default branch as the agent works. A run that fails leaves what it had already written behind."
       }
     },
     "serviceName": {
@@ -7336,7 +7350,7 @@
       "description": "Names the service on the board and seeds its directory."
     },
     "monorepo": {
-      "intro": "The service is written into a directory of an existing repository and delivered as a pull request. Nothing is merged for you, and nothing outside the new directory is changed.",
+      "intro": "The service is written into a directory of an existing repository, and nothing outside that directory is changed.",
       "repo": {
         "label": "Monorepo",
         "description": "The repository the new service lives in. It must already be linked to this workspace.",

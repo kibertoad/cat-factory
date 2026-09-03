@@ -1,9 +1,11 @@
 import type { BootstrapFailureKind, StepSubtasks } from '../domain/types.js'
 
 // RepoBootstrapper port: performs the side-effecting half of a "bootstrap repo"
-// run — pre-flight the pre-created target repo, then run a bootstrapper agent in a
+// run: pre-flight the pre-created target repo, then run a bootstrapper agent in a
 // per-run sandbox container that clones the reference architecture (or scaffolds
-// from scratch), adapts it per the instructions, and force-pushes the result.
+// from scratch), adapts it per the instructions, and publishes the result the way
+// the run's `delivery` says (a force-pushed initial commit, or a work branch and a
+// pull request).
 //
 // The run is driven asynchronously, mirroring the implementation executor: the
 // service `startBootstrap`s (dispatches the container, returning once accepted)
@@ -17,10 +19,13 @@ import type { BootstrapFailureKind, StepSubtasks } from '../domain/types.js'
  * Bootstrap into a subdirectory of an EXISTING monorepo instead of into a new repository.
  *
  * Present ⇒ the dispatch is a different shape end to end, and deliberately so: the run clones
- * the monorepo (writable) with the reference template beside it as a READ-ONLY sibling, works
- * inside `directory`, and finishes with a work branch and a pull request. It never force-pushes
- * and never resets history: the target holds other people's services, so the new-repo flow's
- * "reinitialise and force-push" is not merely wrong here, it is destructive.
+ * the monorepo (writable) with the reference template beside it as a READ-ONLY sibling and works
+ * inside `directory`. It never force-pushes and never resets history under either delivery: the
+ * target holds other people's services, so the new-repo flow's "reinitialise and force-push" is
+ * not merely wrong here, it is destructive.
+ *
+ * How the work LEAVES the container is {@link BootstrapRepoRequest.delivery}'s question, not
+ * this one's: the same subdirectory is written either way.
  */
 export interface MonorepoBootstrapLeg {
   /** The monorepo's numeric VCS id (already in the workspace's repo projection). */
@@ -31,11 +36,33 @@ export interface MonorepoBootstrapLeg {
   name: string
   /** The new service's subdirectory, relative to the repo root. */
   directory: string
-  /** The work branch to create off the monorepo's default branch and push. */
-  branch: string
-  /** Title + body for the pull request the run opens. */
-  pr: { title: string; body: string }
 }
+
+/**
+ * How a dispatched run publishes what it wrote, resolved by the orchestration from the run's
+ * `delivery` and handed over already decided.
+ *
+ * A discriminated union rather than an enum plus two optional fields, because `branch` and `pr`
+ * are meaningless without each other: a request carrying a branch and no PR would push a work
+ * branch nobody ever looks at, which is the one outcome neither toggle position asks for.
+ */
+export type BootstrapDeliveryPlan =
+  | {
+      mode: 'pull_request'
+      /** The work branch to create off the target's default branch and push. */
+      branch: string
+      /** Title + fallback body for the pull request the run opens. */
+      pr: { title: string; body: string }
+    }
+  | {
+      /**
+       * Commit onto the target's default branch. A NEW repository takes the work as its single
+       * force-pushed initial commit; a monorepo takes it as ordinary commits on the shared
+       * branch, published as the agent goes (the harness checkpoints committed work to whatever
+       * branch it is pushing), so a run that faults leaves what it had written behind.
+       */
+      mode: 'direct_push'
+    }
 
 export interface BootstrapRepoRequest {
   /** Workspace the run belongs to (resolves the GitHub installation to use). */
@@ -53,8 +80,10 @@ export interface BootstrapRepoRequest {
   referenceRepo?: { owner: string; name: string }
   /** The repository to create and bootstrap into (a new-repo run only). */
   target: { name: string; description: string; private: boolean }
-  /** Set for a monorepo run: where the service lands and how the change is delivered. */
+  /** Set for a monorepo run: which repository the service lands in, and where inside it. */
   monorepo?: MonorepoBootstrapLeg
+  /** How the run publishes its work; resolved by the caller, never re-decided here. */
+  delivery: BootstrapDeliveryPlan
   /** Effective bootstrapper instructions (reference defaults + per-run extras). */
   instructions: string
 }
@@ -92,9 +121,10 @@ export interface BootstrapJobUpdate {
   /** Present when `state === 'done'`: where the bootstrapped repo landed. */
   outcome?: BootstrapRepoOutcome
   /**
-   * Present when `state === 'done'` on a MONOREPO run: the pull request the agent opened. A
-   * monorepo bootstrap's deliverable IS the pull request, so its absence on a completed apply is
-   * a failure to report rather than a field to leave null (see `pollBootstrapJob`).
+   * Present when `state === 'done'` on a `pull_request` run: the pull request the agent opened.
+   * That run's deliverable IS the pull request, so its absence on a completed run is a failure to
+   * report rather than a field to leave null (see `pollBootstrapJob`). A `direct_push` run never
+   * carries one.
    */
   prUrl?: string
   /** Present when `state === 'failed'`: why the run faulted. */

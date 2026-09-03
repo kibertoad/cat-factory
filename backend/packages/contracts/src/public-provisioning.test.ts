@@ -48,6 +48,15 @@ describe('the shared vocabularies this surface publishes', () => {
     )
   })
 
+  it('still publishes both deliveries, which decide whether a pull request is coming', () => {
+    // The field a poller branches on BEFORE the run finishes: under `direct_push` a null
+    // `prUrl` is the terminal, correct answer, and under `pull_request` it is not. Losing a
+    // member here takes that distinction away from every generated client.
+    expect(membersOf(publicBootstrapJobSchema.entries.delivery)).toEqual(
+      expect.arrayContaining(['pull_request', 'direct_push']),
+    )
+  })
+
   it('still publishes every agent failure kind a caller branches on', () => {
     // The widest of the shared vocabularies and the one most likely to be edited: the harness
     // classifies fault modes, and a kind retired there silently retires a published constant.

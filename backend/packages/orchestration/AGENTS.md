@@ -234,7 +234,9 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   siblings" is the strongest claim the seed makes, and the opposite of what happened), and
   `listJobs` withholds that transcript with `reads: null` once a run is past review, because the
   list feeds every workspace snapshot. A monorepo run is TWO durable drives with a park between
-  them, so it carries a `driveId` distinct from its run id: [`monorepo-service-bootstrap.md`](../../../docs/initiatives/monorepo-service-bootstrap.md).
+  them, so it carries a `driveId` distinct from its run id. How the work ARRIVES is a third axis
+  (`delivery`), resolved once at start from the target's default and stored, so a retry cannot move
+  a run the user asked to have reviewed onto the default branch: [`monorepo-service-bootstrap.md`](../../../docs/initiatives/monorepo-service-bootstrap.md).
 - `pipelines/`, `board/`, `boardScan/`, `requirements/`,
   `notifications/`, `releaseHealth/`, `review/`, `estimation/`, `kaizen/`, `sandbox/`,
   `recurring/`, `settings/`, …: the other module services. In `review/`, EVERY write to a review

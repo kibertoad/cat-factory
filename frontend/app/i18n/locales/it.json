@@ -5086,7 +5086,8 @@
       "title": "Esecuzioni recenti",
       "fromArch": "da {name}",
       "fromScratch": "da zero",
-      "open": "Apri"
+      "open": "Apri",
+      "openPr": "Pull request"
     },
     "status": {
       "pending": "in attesa",
@@ -5134,11 +5135,24 @@
       "label": "Dove va il servizio",
       "newRepo": {
         "label": "Un nuovo repository",
-        "description": "Creare un repository dedicato e caricare il servizio come primo commit."
+        "description": "Crea un repository dedicato e ci scrive il servizio."
       },
       "monorepo": {
         "label": "Una cartella di un monorepo esistente",
-        "description": "Aggiungere il servizio a un repository che hai già e aprire una pull request."
+        "description": "Aggiunge il servizio a un repository che hai già."
+      }
+    },
+    "delivery": {
+      "label": "Come viene consegnato il lavoro",
+      "pullRequest": {
+        "label": "Apri una pull request",
+        "descNewRepo": "Pubblica un branch e apre una pull request sul primo commit del repository, così qualcuno rivede l’impalcatura prima che diventi il branch predefinito. Il repository deve già avere un commit.",
+        "descMonorepo": "Pubblica un branch e apre una pull request. Non viene unito nulla al posto tuo."
+      },
+      "directPush": {
+        "label": "Pubblica direttamente",
+        "descNewRepo": "Scrive il servizio direttamente sul branch predefinito, come primo commit del repository.",
+        "descMonorepo": "Fa commit sul branch predefinito mentre l’agente lavora. Se l’esecuzione fallisce, resta quanto era già stato scritto."
       }
     },
     "serviceName": {
@@ -5146,7 +5160,7 @@
       "description": "Dà il nome al servizio sulla lavagna e propone la sua cartella."
     },
     "monorepo": {
-      "intro": "Il servizio viene scritto in una cartella di un repository esistente e consegnato come pull request. Nulla viene unito al posto tuo e nulla viene modificato fuori dalla nuova cartella.",
+      "intro": "Il servizio viene scritto in una directory di un repository esistente e nulla al di fuori di quella directory viene modificato.",
       "repo": {
         "label": "Monorepo",
         "description": "Il repository in cui vivrà il nuovo servizio. Deve essere già collegato a questo spazio di lavoro.",
