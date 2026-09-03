@@ -3718,6 +3718,10 @@
       "selected": "Ausgewählt",
       "added": "Hinzugefügt",
       "useThisFolder": "Diesen Ordner verwenden",
+      "createHere": "Hier anlegen",
+      "newDirTarget": "Neues Verzeichnis:",
+      "nameTaken": "{name} existiert hier bereits. Wähle einen anderen Ordner oder ändere den Namen oben.",
+      "exists": "Existiert",
       "errors": {
         "listDirectory": "Verzeichnis konnte nicht aufgelistet werden"
       },
@@ -5151,8 +5155,11 @@
       },
       "directory": {
         "label": "Serviceverzeichnis",
-        "description": "Wo der Service liegt, relativ zum Repository-Wurzelverzeichnis. Es darf noch nicht existieren.",
+        "description": "Wo der Service liegt, relativ zum Repo-Root. Der Lauf legt es an, es darf also noch nicht existieren.",
         "placeholder": "services/payments",
+        "browse": "Repository erkunden",
+        "browseHint": "Öffne den Ordner, in dem der Service liegen soll. Der Name oben wird darin angelegt, im Baum gibt es also nichts auszuwählen.",
+        "browseNeedsName": "Gib zuerst oben ein Verzeichnis an (oder unten den Servicenamen). Das Erkunden entscheidet, wohin dieser Name kommt, nicht wie er lautet.",
         "error": {
           "empty": "Gib ein Verzeichnis innerhalb des Repositories an.",
           "escapes": "Das Verzeichnis muss innerhalb des Repositories bleiben."

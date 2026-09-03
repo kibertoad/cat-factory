@@ -4512,6 +4512,10 @@
       "selected": "Sélectionné",
       "added": "Ajouté",
       "useThisFolder": "Utiliser ce dossier",
+      "createHere": "Créer ici",
+      "newDirTarget": "Nouveau répertoire :",
+      "nameTaken": "{name} existe déjà ici. Choisissez un autre dossier ou changez le nom au-dessus.",
+      "exists": "Existe",
       "errors": {
         "listDirectory": "Impossible de lister le répertoire"
       },
@@ -7021,8 +7025,11 @@
       },
       "directory": {
         "label": "Répertoire du service",
-        "description": "Où vit le service, relativement à la racine du dépôt. Il ne doit pas encore exister.",
+        "description": "Où vit le service, relativement à la racine du dépôt. L’exécution le crée, il ne doit donc pas encore exister.",
         "placeholder": "services/payments",
+        "browse": "Explorer le dépôt",
+        "browseHint": "Ouvrez le dossier où le service doit se trouver. Le nom saisi au-dessus y est créé, il n’y a donc rien à sélectionner dans l’arborescence.",
+        "browseNeedsName": "Indiquez d’abord un répertoire au-dessus (ou le nom du service en dessous). L’exploration décide où va ce nom, pas comment il s’appelle.",
         "error": {
           "empty": "Indiquez un répertoire à l’intérieur du dépôt.",
           "escapes": "Le répertoire doit rester à l’intérieur du dépôt."

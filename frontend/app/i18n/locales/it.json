@@ -3718,6 +3718,10 @@
       "selected": "Selezionata",
       "added": "Aggiunto",
       "useThisFolder": "Usa questa cartella",
+      "createHere": "Crea qui",
+      "newDirTarget": "Nuova cartella:",
+      "nameTaken": "{name} esiste già qui. Scegli un’altra cartella o cambia il nome sopra.",
+      "exists": "Esiste",
       "errors": {
         "listDirectory": "Impossibile elencare la directory"
       },
@@ -5151,8 +5155,11 @@
       },
       "directory": {
         "label": "Cartella del servizio",
-        "description": "Dove vive il servizio, rispetto alla radice del repository. Non deve ancora esistere.",
+        "description": "Dove vive il servizio, rispetto alla radice del repo. L’esecuzione la crea, quindi non deve ancora esistere.",
         "placeholder": "services/payments",
+        "browse": "Esplora il repository",
+        "browseHint": "Apri la cartella in cui il servizio deve stare. Il nome indicato sopra viene creato al suo interno, quindi non c’è nulla da scegliere nell’albero.",
+        "browseNeedsName": "Indica prima una cartella sopra (o il nome del servizio sotto). Esplorare decide dove va quel nome, non come si chiama.",
         "error": {
           "empty": "Indica una cartella dentro il repository.",
           "escapes": "La cartella deve restare dentro il repository."

@@ -4512,6 +4512,10 @@
       "selected": "Seleccionado",
       "added": "Añadido",
       "useThisFolder": "Usar esta carpeta",
+      "createHere": "Crear aquí",
+      "newDirTarget": "Nuevo directorio:",
+      "nameTaken": "{name} ya existe aquí. Elige otra carpeta o cambia el nombre de arriba.",
+      "exists": "Existe",
       "errors": {
         "listDirectory": "No se pudo listar el directorio"
       },
@@ -7021,8 +7025,11 @@
       },
       "directory": {
         "label": "Directorio del servicio",
-        "description": "Dónde vive el servicio, relativo a la raíz del repositorio. Todavía no debe existir.",
+        "description": "Dónde vive el servicio, relativo a la raíz del repo. La ejecución lo crea, así que todavía no debe existir.",
         "placeholder": "services/payments",
+        "browse": "Explorar el repositorio",
+        "browseHint": "Abre la carpeta donde debe ir el servicio. El nombre de arriba se crea dentro de ella, así que no hay nada que elegir en el árbol.",
+        "browseNeedsName": "Primero indica un directorio arriba (o el nombre del servicio abajo). Explorar decide dónde va ese nombre, no cómo se llama.",
         "error": {
           "empty": "Indica un directorio dentro del repositorio.",
           "escapes": "El directorio debe quedarse dentro del repositorio."
