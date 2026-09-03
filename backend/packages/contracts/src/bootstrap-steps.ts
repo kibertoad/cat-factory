@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import type { AgentFailureKind } from './agent-failure-kinds.js'
 import type { BootstrapJob } from './bootstrap.js'
 import type { AdoptionPlan } from './monorepo-adoption.js'
 
@@ -28,32 +29,36 @@ export const bootstrapStepIdSchema = v.picklist(['scaffold', 'survey', 'review',
 export type BootstrapStepId = v.InferOutput<typeof bootstrapStepIdSchema>
 
 /**
- * A step's state.
+ * A step's state. A derived projection, never a stored value, which is why it is a type and
+ * not a picklist: no request or response carries one, so there is nothing to parse.
  *
  * `awaiting_review` is its own value rather than a flavour of `running`: nothing is
  * executing and nothing will until a person answers, which is the opposite of what a
  * spinner claims.
+ *
+ * `stopped` is its own value for a related reason. A run someone stopped is STORED as
+ * `failed` (with a `cancelled` failure kind), and painting the step they stopped in red
+ * reports their own decision back to them as a fault: on a monorepo run, a fault in the review
+ * step whose only actor is the reviewer.
  *
  * `unknown` is the one that is not a lifecycle position: `status` is a CLOSED vocabulary that
  * is also PERSISTED, so a row written before a member was retired still holds that value, and
  * the reader that meets it is a rendered surface. It renders as the unreadable state it is
  * rather than as `pending`, which would present a stopped run as one that never started.
  */
-export const bootstrapStepStateSchema = v.picklist([
-  'pending',
-  'running',
-  'awaiting_review',
-  'done',
-  'failed',
-  'unknown',
-])
-export type BootstrapStepState = v.InferOutput<typeof bootstrapStepStateSchema>
+export type BootstrapStepState =
+  | 'pending'
+  | 'running'
+  | 'awaiting_review'
+  | 'done'
+  | 'failed'
+  | 'stopped'
+  | 'unknown'
 
-export const bootstrapRunStepSchema = v.object({
-  id: bootstrapStepIdSchema,
-  state: bootstrapStepStateSchema,
-})
-export type BootstrapRunStep = v.InferOutput<typeof bootstrapRunStepSchema>
+export interface BootstrapRunStep {
+  id: BootstrapStepId
+  state: BootstrapStepState
+}
 
 /**
  * What the rule READS off a run, and nothing more.
@@ -61,7 +66,8 @@ export type BootstrapRunStep = v.InferOutput<typeof bootstrapRunStepSchema>
  * Declared structurally rather than as a `Pick<BootstrapJob, …>` so the backend's own record type
  * satisfies it without a conversion, and so what the answer actually depends on is visible at a
  * glance: the presence of a monorepo target and of a settled review, the phase, the run status,
- * and the PLAN'S OWN status, which is the field a retry keeps or drops.
+ * the PLAN'S OWN status (the field a retry keeps or drops), and the failure KIND, which is what
+ * separates a run that broke from one a person stopped.
  */
 export interface BootstrapRunShape {
   monorepo: object | null
@@ -69,6 +75,12 @@ export interface BootstrapRunShape {
   status: BootstrapJob['status']
   adoptionPlan: { status: AdoptionPlan['status'] } | null
   adoptionReview: object | null
+  /**
+   * The structured failure a terminal run recorded, of which only the KIND is read. `cancelled`
+   * is a stop, by a person or by the orphan sweep, and a stop is stored as a `failed` status
+   * without being a fault. Null on a run that has not faulted.
+   */
+  failure: { kind: AgentFailureKind } | null
 }
 
 /** The steps a run of this shape is made of, in order. */
@@ -89,11 +101,20 @@ export function bootstrapReachedStep(job: BootstrapRunShape): BootstrapStepId {
   if (job.phase === 'apply' && job.adoptionReview) return 'apply'
   // A parked run is at the review whatever its plan says: an `unavailable` plan still leaves
   // the decisions to a human, so the run got as far as asking. Where a RETRY re-enters is a
-  // different question, and `bootstrapResumeStep` below answers it differently for exactly
-  // that case.
+  // different question, and `bootstrapResume` below answers it differently for exactly that
+  // case.
   if (job.status === 'awaiting_review' || job.adoptionPlan) return 'review'
   return 'survey'
 }
+
+/**
+ * Where a retry re-enters, and what it re-enters WITH: the `apply` arm carries the settled
+ * review, because that is the state the re-dispatch needs and asking for it a second time is
+ * how a caller ends up re-stating the rule.
+ */
+export type BootstrapResume<Review> =
+  | { step: 'scaffold' | 'survey' | 'review' }
+  | { step: 'apply'; review: Review }
 
 /**
  * The step a retry re-enters at: what `BootstrapService.retry` does, in one place both it
@@ -104,12 +125,23 @@ export function bootstrapReachedStep(job: BootstrapRunShape): BootstrapStepId {
  * SURVEY, because the retry drops a non-ready plan so the fixed deployment can produce a real
  * one. Presenting that as "resume from review" would promise the human their pending decision
  * is what the run picks up from, when the suggestion is about to be recomputed.
+ *
+ * The run's own review type rides through, so the caller that re-dispatches the apply gets it
+ * back at the type it stored rather than as the bare `object` this rule reads.
  */
+export function bootstrapResume<T extends BootstrapRunShape>(
+  job: T,
+): BootstrapResume<NonNullable<T['adoptionReview']>> {
+  if (!job.monorepo) return { step: 'scaffold' }
+  const review = job.adoptionReview
+  if (job.phase === 'apply' && review) return { step: 'apply', review }
+  if (job.adoptionPlan?.status === 'ready') return { step: 'review' }
+  return { step: 'survey' }
+}
+
+/** Just the step a retry re-enters at, for the surfaces that only name it. */
 export function bootstrapResumeStep(job: BootstrapRunShape): BootstrapStepId {
-  if (!job.monorepo) return 'scaffold'
-  if (job.phase === 'apply' && job.adoptionReview) return 'apply'
-  if (job.adoptionPlan?.status === 'ready') return 'review'
-  return 'survey'
+  return bootstrapResume(job).step
 }
 
 /**
@@ -126,18 +158,20 @@ export function bootstrapRunSteps(job: BootstrapRunShape): BootstrapRunStep[] {
   const reachedAt = ids.indexOf(reached)
   return ids.map((id, index) => ({
     id,
-    state:
-      index < reachedAt ? 'done' : index > reachedAt ? 'pending' : stateOfReachedStep(job.status),
+    state: index < reachedAt ? 'done' : index > reachedAt ? 'pending' : stateOfReachedStep(job),
   }))
 }
 
 /** The reached step wears the run's own status; `pending` means nothing has started yet. */
-function stateOfReachedStep(status: BootstrapRunShape['status']): BootstrapStepState {
-  switch (status) {
+function stateOfReachedStep(job: BootstrapRunShape): BootstrapStepState {
+  switch (job.status) {
     case 'succeeded':
       return 'done'
     case 'failed':
-      return 'failed'
+      // A stop is stored as a failure, and it is the one terminal state that is nobody's fault:
+      // it gets its own state so the step a reviewer stopped in is not reported back to them as
+      // broken. The KIND is what separates the two; the status cannot.
+      return job.failure?.kind === 'cancelled' ? 'stopped' : 'failed'
     case 'awaiting_review':
       return 'awaiting_review'
     case 'running':
@@ -145,7 +179,7 @@ function stateOfReachedStep(status: BootstrapRunShape['status']): BootstrapStepS
     case 'pending':
       return 'pending'
     default:
-      return retiredStatusState(status)
+      return retiredStatusState(job.status)
   }
 }
 

@@ -495,17 +495,6 @@ export function buildNodeContainerExecutor(deps: NodeContainerExecutorDeps): Age
 }
 
 /**
- * Build the repo bootstrapper (the "bootstrap repo" container dispatch) when its
- * prerequisites are configured — mirroring the Worker's `selectRepoBootstrapper` and
- * the container-executor prerequisites: a resolvable runner transport, the public URL
- * + session secret backing the LLM proxy, a token source, and a GitHub client.
- * Returns undefined otherwise (the bootstrap module then has no runner and the service
- * reports a clean dispatch failure). Bootstrap is an `architect`-kind run, so it
- * follows that kind's routing. The promoted `ContainerRepoBootstrapper` dispatches
- * through the same shared runner seam the container executor uses, so on Node it runs
- * against the self-hosted pool and on local against the per-job Docker container.
- */
-/**
  * What a bootstrap dispatch records, beside what it does: the provided-context snapshot and the
  * two destinations a poll's drained tool calls reach. Spelled off the bootstrapper's own
  * constructor so adding a sink there fails to compile here rather than silently going unwired
@@ -516,6 +505,19 @@ export type BootstrapObservabilityDeps = Pick<
   'agentContextObservability' | 'recordToolCalls' | 'toolBodyGate' | 'llmTraceSink'
 >
 
+/**
+ * Build the repo bootstrapper (the "bootstrap repo" container dispatch) when its
+ * prerequisites are configured, mirroring the Worker's `selectRepoBootstrapper` and
+ * the container-executor prerequisites: a resolvable runner transport, the public URL
+ * + session secret backing the LLM proxy, a token source, and a GitHub client.
+ * Returns undefined otherwise (the bootstrap module then has no runner and the service
+ * reports a clean dispatch failure). A bootstrap run files its telemetry under its own
+ * `repo-bootstrapper` kind while resolving its MODEL through `architect`'s routing, so a
+ * deployment that pinned a model for its architect keeps getting it here. The promoted
+ * `ContainerRepoBootstrapper` dispatches through the same shared runner seam the container
+ * executor uses, so on Node it runs against the self-hosted pool and on local against the
+ * per-job Docker container.
+ */
 export function selectNodeRepoBootstrapper(deps: {
   env: NodeJS.ProcessEnv
   config: AppConfig

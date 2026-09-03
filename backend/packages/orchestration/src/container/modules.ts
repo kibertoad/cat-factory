@@ -13,15 +13,7 @@
  */
 
 import { UNATTRIBUTED_BLOCK_EDIT_AUTHORITY } from '@cat-factory/contracts'
-import type {
-  AppCaches,
-  BugHuntAssessor,
-  MonorepoAdoptionAdvisor,
-  ExecutionEventPublisher,
-  EnvironmentInvestigator,
-  JudgeAssessor,
-  TrackerIssueEvent,
-} from '@cat-factory/kernel'
+import type { AppCaches, ExecutionEventPublisher, TrackerIssueEvent } from '@cat-factory/kernel'
 import type { SpendService } from '@cat-factory/spend'
 import { type AgentKindRegistry } from '@cat-factory/agents'
 import {
@@ -69,12 +61,6 @@ import {
 } from './environmentsModule.factory.js'
 import { resolveBlockRunContext } from './blockRunContext.js'
 import { DocInterviewService } from '../modules/docInterview/DocInterviewService.js'
-import { ForkChatService } from '../modules/execution/ForkChatService.js'
-import { JudgeService } from '../modules/execution/JudgeService.js'
-import { EnvironmentInvestigationService } from '../modules/execution/EnvironmentInvestigationService.js'
-import { BugHuntAssessorService } from '../modules/bugHunt/BugHuntAssessorService.js'
-import { MonorepoAdoptionAdvisorService } from '../modules/bootstrap/MonorepoAdoptionAdvisorService.js'
-import { TesterQualityReviewService } from '../modules/execution/TesterQualityReviewService.js'
 import { KaizenService } from '../modules/kaizen/KaizenService.js'
 import { NotificationService } from '../modules/notifications/NotificationService.js'
 import { NotificationSettingsService } from '../modules/notifications/NotificationSettingsService.js'
@@ -94,6 +80,7 @@ import { WorkspaceAgentSettingsService } from '../modules/agentSettings/Workspac
 import { TaskTypeSuppressionService } from '../modules/taskTypes/TaskTypeSuppressionService.js'
 import { ModelPresetService } from '../modules/modelPresets/ModelPresetService.js'
 import { inlineModelResolutionDeps } from './inline-model-deps.js'
+import { createBugHuntAssessor, createMonorepoAdoptionAdvisor } from './inline-producers.js'
 import { ConsensusGroupService } from '../modules/consensusGroups/ConsensusGroupService.js'
 import { ServiceFragmentDefaultsService } from '../modules/serviceFragmentDefaults/ServiceFragmentDefaultsService.js'
 import { RecurringPipelineService } from '../modules/recurring/RecurringPipelineService.js'
@@ -477,44 +464,6 @@ export function createTasksModule(
 }
 
 /**
- * The inline bug-hunt ranking model, built from the same dependencies the judge/reviewer
- * assessors ride — so a facade that wired a model gets a working hunt ranking with no
- * hunt-specific wiring (the judge-registry pattern). Absent provider ⇒ undefined, and the hunt
- * returns its candidates unranked with a stated reason.
- */
-function createBugHuntAssessor(deps: CoreDependencies): BugHuntAssessor | undefined {
-  if (deps.bugHuntAssessor) return deps.bugHuntAssessor
-  if (!deps.modelProviderResolver && !deps.modelProvider) return undefined
-  return new BugHuntAssessorService({
-    modelProviderResolver: deps.modelProviderResolver,
-    modelProvider: deps.modelProvider,
-    // The routing default, the block-model resolver, the local-mode inline predicate, and the
-    // preset's per-kind default model + route order, wired as ONE slice (see the factory).
-    ...inlineModelResolutionDeps(deps),
-    ...(deps.logger ? { logger: deps.logger } : {}),
-  })
-}
-
-/**
- * The inline monorepo-adoption advisor, built from the same model dependencies the bug-hunt and
- * judge assessors ride, so a facade that wired a model gets a working adoption suggestion with
- * no bootstrap-specific wiring. Absent provider ⇒ undefined, and the run parks with a plan that
- * says the suggestion is unavailable rather than one that says there was nothing to decide.
- */
-function createMonorepoAdoptionAdvisor(
-  deps: CoreDependencies,
-): MonorepoAdoptionAdvisor | undefined {
-  if (deps.monorepoAdoptionAdvisor) return deps.monorepoAdoptionAdvisor
-  if (!deps.modelProviderResolver && !deps.modelProvider) return undefined
-  return new MonorepoAdoptionAdvisorService({
-    modelProviderResolver: deps.modelProviderResolver,
-    modelProvider: deps.modelProvider,
-    ...inlineModelResolutionDeps(deps),
-    ...(deps.logger ? { logger: deps.logger } : {}),
-  })
-}
-
-/**
  * Assemble the environment integration when its provider, both repositories and
  * the secret cipher are present; otherwise return undefined so the feature stays
  * cleanly opt-in (the deterministic deployer and env discovery in the engine are
@@ -723,33 +672,6 @@ export function createBootstrapModule(
 }
 
 /**
- * Assemble the requirements-review module when its repository is present (the
- * worker wires it unconditionally). The model provider/ref are optional within
- * the module — reads work without them and the run paths surface a clear error —
- * and the document/task repositories are reused, when wired, to fold linked PRDs
- * and tracker issues into the reviewed requirements.
- */
-/**
- * Build the inline reviewer for the test quality-control companion. It resolves its model
- * exactly like the requirements reviewer (block pin → workspace per-kind default → routing
- * default). Returns `undefined` when no model provider is configured, so the Tester gate's QC
- * step is a pass-through in unconfigured facades / tests.
- */
-export function createTesterQualityReviewer(
-  deps: CoreDependencies,
-): TesterQualityReviewService | undefined {
-  if (!deps.modelProviderResolver && !deps.modelProvider) return undefined
-  return new TesterQualityReviewService({
-    modelProviderResolver: deps.modelProviderResolver,
-    modelProvider: deps.modelProvider,
-    // The routing default, the block-model resolver, the local-mode inline predicate, and the
-    // preset's per-kind default model + route order, wired as ONE slice (see the factory).
-    ...inlineModelResolutionDeps(deps),
-    resolveRunContext: resolveBlockRunContext(deps),
-  })
-}
-
-/**
  * Build the interactive document-interview service (WS5). Self-contained (owns its session
  * store + the inline LLM); resolves its model exactly like the requirements reviewer (block
  * pin → workspace per-kind default → routing default). Returns `undefined` when no session
@@ -773,80 +695,16 @@ export function createDocInterviewService(deps: CoreDependencies): DocInterviewS
   })
 }
 
-/**
- * Build the inline grounded-chat responder for the implementation-fork decision phase. Resolves
- * its model exactly like the requirements reviewer / doc interviewer (block pin → workspace
- * per-kind default → routing default). Returns `undefined` when no model provider is configured,
- * so the fork chat degrades to a canned "chat unavailable" reply in unconfigured facades / tests
- * while pick / custom keep working. Stateless — the chat rides the coder step, no session store.
- */
-/**
- * The default {@link JudgeAssessor}: the inline LLM verdict producer behind every judge step.
- * Built from the SAME model-provider dependencies the inline reviewers use, which is why judges
- * need no per-facade wiring at all — a facade that can run a requirements review can run a
- * judge. Returns undefined when no provider is wired, and a facade/harness may inject its own
- * `judgeAssessor` (conformance does, for a deterministic verdict); either way an
- * absent/disabled assessor makes every judge step a pass-through.
- */
-export function createJudgeAssessor(deps: CoreDependencies): JudgeAssessor | undefined {
-  if (deps.judgeAssessor) return deps.judgeAssessor
-  if (!deps.modelProviderResolver && !deps.modelProvider) return undefined
-  return new JudgeService({
-    modelProviderResolver: deps.modelProviderResolver,
-    modelProvider: deps.modelProvider,
-    // The routing default, the block-model resolver, the local-mode inline predicate, and the
-    // preset's per-kind default model + route order, wired as ONE slice (see the factory).
-    ...inlineModelResolutionDeps(deps),
-    resolveRunContext: resolveBlockRunContext(deps),
-  })
-}
-
-/**
- * The default {@link EnvironmentInvestigator}: the inline diagnosis behind the deployer's
- * environment-investigation loop. Built from the SAME model-provider dependencies the inline
- * reviewers and judges use, so a facade that can run a requirements review can investigate a
- * failed environment with no investigation-specific wiring at all.
- *
- * Returns undefined when no provider is wired, and a facade or harness may inject its own
- * `environmentInvestigator` (the conformance harness does, for a deterministic verdict); either
- * way an absent or disabled investigator makes the loop a pass-through, and a failed provision is
- * terminal and unexplained exactly as it was before.
- */
-export function createEnvironmentInvestigator(
-  deps: CoreDependencies,
-): EnvironmentInvestigator | undefined {
-  if (deps.environmentInvestigator) return deps.environmentInvestigator
-  if (!deps.modelProviderResolver && !deps.modelProvider) return undefined
-  return new EnvironmentInvestigationService({
-    modelProviderResolver: deps.modelProviderResolver,
-    modelProvider: deps.modelProvider,
-    // The routing default, the block-model resolver, the local-mode inline predicate, and the
-    // preset's per-kind default model + route order, wired as ONE slice (see the factory).
-    ...inlineModelResolutionDeps(deps),
-    resolveRunContext: resolveBlockRunContext(deps),
-    // Its prompt is a member of `INLINE_ENGINE_SYSTEM_PROMPTS`, so the prompt editor offers it and
-    // an edit saved there has to reach the call. Without this the editor would show a baseline no
-    // code path sends and silently discard what a workspace wrote.
-    ...(deps.agentPromptRepository
-      ? {
-          resolveSystemPromptOverride: async (workspaceId: string, agentKind: string) =>
-            (await deps.agentPromptRepository!.head(workspaceId, agentKind))?.text ?? undefined,
-        }
-      : {}),
-  })
-}
-
-export function createForkChatService(deps: CoreDependencies): ForkChatService | undefined {
-  if (!deps.modelProviderResolver && !deps.modelProvider) return undefined
-  return new ForkChatService({
-    modelProviderResolver: deps.modelProviderResolver,
-    modelProvider: deps.modelProvider,
-    // The routing default, the block-model resolver, the local-mode inline predicate, and the
-    // preset's per-kind default model + route order, wired as ONE slice (see the factory).
-    ...inlineModelResolutionDeps(deps),
-    resolveRunContext: resolveBlockRunContext(deps),
-  })
-}
+// The inline producers built from the model dependencies alone (judge, tester-quality review,
+// environment investigation, fork chat, bug-hunt ranking, monorepo adoption) live in
+// `inline-producers.ts`: one cohesive group, extracted when this file hit its size budget.
+// Re-exported here so the composition root keeps one import site for every factory.
+export {
+  createEnvironmentInvestigator,
+  createForkChatService,
+  createJudgeAssessor,
+  createTesterQualityReviewer,
+} from './inline-producers.js'
 
 // The inline iterative-review modules (requirements / clarity / brainstorm) live in
 // `review-modules.ts` — one cohesive group, extracted when this file hit its size budget. Re-exported

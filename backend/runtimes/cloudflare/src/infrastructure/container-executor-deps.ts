@@ -169,13 +169,15 @@ export interface WorkerExecutorDeps {
 }
 
 /**
- * The three things a drained poll window reaches, built ONCE per facade: the trajectory store,
- * the double body gate, and the external trace sink.
+ * The three things a drained poll window reaches: the trajectory store, the double body gate,
+ * and the external trace sink.
  *
  * Shared by the container executor and the repo bootstrapper rather than built at each, because
  * the gate is a DECISION about what a deployment may keep: two constructions of it are two
  * places for a deployment switch to be read differently, and the one that drifts is the one
- * nobody looks at.
+ * nobody looks at. The trace sink is the same instance at every wiring site because
+ * `buildTraceSink` memoises per config; the two writers here are cheap and stateless, so this
+ * builder may be called per wiring site without either sink diverging.
  */
 export function buildToolTrajectorySinks(args: {
   env: Env
@@ -481,8 +483,15 @@ function buildContainerExecutor(deps: WorkerExecutorDeps): AgentExecutor | null 
   )
   // The trajectory drain's sinks and body gate, built by the shared builder below, because the
   // repo bootstrapper drains through the same three and two constructions is how one deployment
-  // ends up storing a bootstrap's tool-call bodies its executor would have withheld.
-  const { recordToolCalls, toolBodyGate } = buildToolTrajectorySinks({ env, config, db, clock })
+  // ends up storing a bootstrap's tool-call bodies its executor would have withheld. The trace
+  // sink comes from the same call rather than a second `buildTraceSink`, so "built once" is what
+  // the code does and not only what its doc says.
+  const { recordToolCalls, toolBodyGate, llmTraceSink } = buildToolTrajectorySinks({
+    env,
+    config,
+    db,
+    clock,
+  })
   // Modeled subscription quota-cycle provider (usage-and-quota-tracking, Part B): folds a
   // finished subscription run's tokens into rolling windows (real vendor reads land in B2,
   // so its adapter registry is empty today — every vendor reports modeled).
@@ -626,7 +635,7 @@ function buildContainerExecutor(deps: WorkerExecutorDeps): AgentExecutor | null 
     // Forward container tool spans to the external trace sink(s) (Langfuse and/or OTLP)
     // grouped under the run trace — the same sink the LLM proxy fans generations to.
     // (Langfuse nests them as children; the OTLP exporter groups them by shared trace id.)
-    llmTraceSink: buildTraceSink(config),
+    llmTraceSink,
     // Record the complete provided context per dispatch (best-effort, gated in the sink).
     ...(agentContextObservability ? { agentContextObservability } : {}),
     agentKindRegistry,

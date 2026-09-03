@@ -29,12 +29,22 @@ A bootstrap is also inspectable through the observability panel now, over the sa
 same four sinks as any other run. It had been filing almost nothing: no provided-context snapshot,
 no tool-call trajectory, and its apply phase's model calls keyed on the run's DRIVE id, which no
 run-scoped read asks for. The drive id now addresses the container and nothing else; every sink
-carries the run. The inline monorepo survey tags its loop with the run too, so its spend rolls up
-beside the apply's instead of sitting in the store outside every read that could find it.
+carries the run. The inline monorepo survey tags its loop with the run too and files its own
+context snapshot, so its prompt and its spend read beside the apply's instead of sitting in the
+store outside every read that could find them. What the panel cannot answer for a bootstrap (the
+per-phase rollup and the run's cost, both folded from an execution's steps) it now SAYS, rather
+than hiding the section: beside a list of calls that plainly cost something, a missing cost tile
+reads as a run that cost nothing.
+
+Stopping a bootstrap no longer reports itself as a failure of the step it was stopped in. A stop
+is stored as a failed status with a `cancelled` kind, so a stopped monorepo run used to paint the
+reviewer's own decision step red; it is now its own step state.
 
 Two behaviour changes worth knowing: a bootstrap's model calls are filed under the agent kinds
 that actually ran (`repo-bootstrapper`, `monorepo-adoption-advisor`) rather than under `architect`,
 which changes how new rows group in per-kind spend rollups (the container still resolves its MODEL
 through `architect`'s routing); and `MonorepoAdoptionSubject` gains a required `runId`, so a
 deployment that injects its own `MonorepoAdoptionAdvisor` implementation gets the run id it needs
-to tag its calls with.
+to tag its calls with. The two kind strings are exported from `@cat-factory/contracts`
+(`REPO_BOOTSTRAP_AGENT_KIND`, `MONOREPO_ADOPTION_AGENT_KIND`), which is where anything naming
+them should now read them from; `@cat-factory/agents` no longer exports the second.

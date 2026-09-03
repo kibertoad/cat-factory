@@ -19,7 +19,7 @@ import type {
 } from '@cat-factory/kernel'
 import { failureKindFromHarnessCause } from '@cat-factory/kernel'
 import { isProxyableProvider } from '@cat-factory/agents'
-import { bootstrapStepIds } from '@cat-factory/contracts'
+import { bootstrapStepIds, REPO_BOOTSTRAP_AGENT_KIND } from '@cat-factory/contracts'
 import type { ContainerSessionService } from '../containers/ContainerSessionService.js'
 import { recordBootstrapContextSnapshot } from './agentContextRecord.js'
 import { drainToolCalls, type ToolTrajectoryDeps } from './toolTrajectory.js'
@@ -27,18 +27,6 @@ import type { JobPackageRegistrySpec } from './ContainerAgentExecutor.js'
 import type { MintInstallationToken } from './repoTargeting.js'
 import { RunnerJobClient, type ResolveRunnerTransport } from './RunnerJobClient.js'
 import { logger } from '../observability/logger.js'
-
-/**
- * The agent kind a bootstrap run's telemetry is filed under.
- *
- * Not `architect`, which is what it used to mint and what every one of its model calls then
- * reported: the observability panel groups a run's spend and its provided context BY KIND, so a
- * bootstrap filed as an architect is a run whose only phase is labelled as somebody else's work.
- * It is not a registry kind (nothing places it in a pipeline) and it is not the MODEL routing
- * key either: the facades still resolve the model through `architect`'s routing, so a
- * deployment that pinned a model for its architect keeps getting it here.
- */
-export const REPO_BOOTSTRAP_AGENT_KIND = 'repo-bootstrapper'
 
 export interface ContainerRepoBootstrapperDependencies extends ToolTrajectoryDeps {
   /**
@@ -616,9 +604,19 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
       runId: handle.jobId,
       workspaceId: handle.workspaceId,
       agentKind: REPO_BOOTSTRAP_AGENT_KIND,
-      model: this.deps.model.model,
+      model: this.resolvedModel(),
       provider: this.deps.model.provider,
     }
+  }
+
+  /**
+   * The resolved model as every OTHER producer writes it: `provider:model`, which is the format
+   * `AgentJobHandle.model` and `agentContextSnapshotSchema.model` both document. A bare model id
+   * renders beside prefixed ones on the same panel and gives nothing to a reader that splits the
+   * field to recover the provider.
+   */
+  private resolvedModel(): string {
+    return `${this.deps.model.provider}:${this.deps.model.model}`
   }
 
   /**
@@ -636,7 +634,7 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
   ): Promise<void> {
     await recordBootstrapContextSnapshot(this.deps.agentContextObservability, log, {
       body,
-      model: this.deps.model.model,
+      model: this.resolvedModel(),
       agentKind: REPO_BOOTSTRAP_AGENT_KIND,
       workspaceId: request.workspaceId,
       executionId: request.jobId,
@@ -716,13 +714,14 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
 /**
  * Which of the RUN's own steps this dispatch is, numbered exactly as the board numbers them.
  *
- * Derived through the shared `bootstrapStepIds` rather than written as a literal, so the
- * snapshot a monorepo apply files keys to the step the board draws as the apply. A snapshot
- * carrying its own numbering is one that drifts the first time the flow gains a move.
+ * The container dispatch is always the run's LAST move: a new-repo run is only `scaffold`, and a
+ * monorepo run's apply follows the survey and the human review. So it is read off the end of the
+ * shared `bootstrapStepIds` list rather than by searching it for a step NAME, which cannot
+ * answer `-1`. A snapshot filed at a step the run never had is a row every step-scoped read
+ * silently drops.
  */
 function dispatchStepIndex(request: BootstrapRepoRequest): number {
-  const target = { monorepo: request.monorepo ?? null }
-  return bootstrapStepIds(target).indexOf(request.monorepo ? 'apply' : 'scaffold')
+  return bootstrapStepIds({ monorepo: request.monorepo ?? null }).length - 1
 }
 
 /** A repo's default branch, or the conventional fallback when the provider reported none. */

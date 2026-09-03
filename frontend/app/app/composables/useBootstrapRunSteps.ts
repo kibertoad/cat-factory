@@ -12,7 +12,8 @@ import { useAgentRunsStore } from '~/stores/agentRuns'
  * button that resumes one.
  *
  * The projection itself lives in `@cat-factory/contracts` and is shared with the backend, which
- * BRANCHES on `bootstrapResumeStep` in `BootstrapService.retry`. What this composable adds is the
+ * BRANCHES on the same rule (`bootstrapResume`) in `BootstrapService.retry`; this side needs only
+ * the step it answers with, never the state it carries. What this composable adds is the
  * one SPA-side question the backend never asks: whether the run has more than one step at all.
  * A new-repo bootstrap is a single move, so for it a step list restates the banner it sits under
  * and "resume from…" is a promise about progress there is none of: it simply starts again.

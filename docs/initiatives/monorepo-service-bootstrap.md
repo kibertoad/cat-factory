@@ -276,7 +276,7 @@ PR merged.
 
 ### D11: The run's STEPS are derived, and a retry resumes at the one it reached
 
-**Decision: `bootstrapRunSteps` / `bootstrapResumeStep` in `@cat-factory/contracts`, derived from
+**Decision: `bootstrapRunSteps` / `bootstrapResume` in `@cat-factory/contracts`, derived from
 the run row, with `BootstrapService.retry` branching on the same function the board reads.**
 
 A monorepo run is three moves around a human decision, and the board rendered it as one
@@ -293,11 +293,21 @@ the board names the step the button resumes from and the service branches on it,
 they drift.
 
 Two questions, deliberately not one. `bootstrapReachedStep` is where the run GOT to;
-`bootstrapResumeStep` is where a retry RE-ENTERS, and they differ on exactly one case: a run
-parked on an `unavailable` plan reached the review, but a retry drops a non-ready plan (D6) so a
-fixed deployment can produce a real suggestion, so it resumes at the survey. Collapsing them
-would promise a reviewer that a pending decision is what the run picks up from, while the
-suggestion behind it is about to be recomputed.
+`bootstrapResume` is where a retry RE-ENTERS, and they differ on exactly one case: a run parked
+on an `unavailable` plan reached the review, but a retry drops a non-ready plan (D6) so a fixed
+deployment can produce a real suggestion, so it resumes at the survey. Collapsing them would
+promise a reviewer that a pending decision is what the run picks up from, while the suggestion
+behind it is about to be recomputed.
+
+The resume answer CARRIES the settled review on its `apply` arm, rather than naming the step and
+leaving the caller to fetch it: the re-dispatch needs that state, and re-testing for it beside the
+step is a second statement of the rule, which is what drifts the day one of the two moves.
+
+A STOPPED run is its own step state, not a failure. A stop is stored as `status: 'failed'` with a
+`cancelled` failure kind, so the status alone cannot tell the two apart, and the step a person
+stops in is usually the review, whose only actor is that same person: painting it red reports
+their own decision back to them as a fault. That is the one thing the projection reads off the
+failure record, and the only reason `BootstrapRunShape` carries one.
 
 A new-repo bootstrap derives a single `scaffold` step. The SPA renders no list for it and keeps
 saying "retry": one move has no progress to resume, and a one-row checklist restates the banner
@@ -318,14 +328,32 @@ about it, and its more expensive half was recorded where nobody looks.
 
 The survey is the other half, and it is an INLINE caller on a run path: it now tags its whole
 loop with the run, so its spend rolls up beside the apply's rather than sitting in the store
-outside every read that could find it. Both file under kinds that name what ran
-(`repo-bootstrapper`, `monorepo-adoption-advisor`) rather than under `architect`, whose routing
-the container still follows for its MODEL.
+outside every read that could find it, and it files its own provided-context snapshot (the
+composed prompts plus the seeded opening context) under the survey step. Recording one half would
+have been worse than recording neither: the panel lists snapshots per run, so one entry with
+nothing on screen naming the missing move reads as a survey that was given nothing.
+
+Its READS stay out of the trajectory sink, deliberately. They go through the platform's own
+bounded explorer onto the run's adoption transcript, which is the record a reviewer checks a
+recommendation against and which outlives the telemetry window; a second copy as
+`agent_tool_calls` rows would be two answers to one question. The panel states where they are
+instead, because the apply's calls beside them are not empty.
+
+Both halves file under kinds that name what ran (`repo-bootstrapper`,
+`monorepo-adoption-advisor`) rather than under `architect`, whose routing the container still
+follows for its MODEL. Both strings live in contracts, since the SPA's catalog has to name the
+same two kinds the backend stamps on the rows.
 
 The reads themselves needed no new endpoint: the four sinks are keyed by the run, so the panel
 the board opens over a bootstrap is the same panel over the same routes. What that costs is a
 standing constraint, now pinned by the bootstrap conformance group: those routes may never gate
-on an execution row existing.
+on an execution row existing, and each store must answer EMPTY for a run id it holds nothing for
+rather than throwing.
+
+What the shared panel cannot do for a bootstrap is fold a per-phase rollup or price the run: both
+read the execution's STEPS, and there is no execution row. That is stated on the panel rather than
+rendered as an empty section, because a missing cost tile and a run that cost nothing look
+identical beside a list of model calls that plainly cost something.
 
 ## Slices
 

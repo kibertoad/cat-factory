@@ -1,5 +1,6 @@
 import { generateText, stepCountIs } from 'ai'
 import type {
+  AgentContextRecorder,
   Logger,
   ModelProvider,
   ModelProviderResolver,
@@ -10,16 +11,18 @@ import type {
 import {
   extractJson,
   getErrorMessage,
+  noopLogger,
   resolveScopedModelProvider,
+  runBestEffort,
   ValidationError,
 } from '@cat-factory/kernel'
 import {
   catFactoryObservability,
-  MONOREPO_ADOPTION_AGENT_KIND,
   monorepoAdoptionSystemPrompt,
   monorepoExplorationTools,
   renderMonorepoAdoptionPrompt,
 } from '@cat-factory/agents'
+import { MONOREPO_ADOPTION_AGENT_KIND } from '@cat-factory/contracts'
 import { type InlineBlockModelDeps, resolveInlineBlockModelRef } from '../../inlineBlockModel.js'
 
 // ---------------------------------------------------------------------------
@@ -55,6 +58,17 @@ export interface MonorepoAdoptionAdvisorServiceDeps {
   resolvePresetRouting?: InlineBlockModelDeps['resolvePresetRouting']
   /** Facade logger; a survey that could not run and left no trace is an unowned bug. */
   logger?: Logger
+  /**
+   * Records what this survey handed its model, so a monorepo bootstrap's Provided-context tab
+   * holds the SURVEY beside the apply container's dispatch.
+   *
+   * Without it the survey is half a record: its per-call spend files under the run (see
+   * `catFactoryObservability` below) while the prompt that produced it files nowhere, and a
+   * reader of the panel's two non-empty lists has nothing on screen saying one of them is
+   * missing an entry. Absent ⇒ nothing is recorded, exactly as for a container dispatch on a
+   * deployment that wired no sink.
+   */
+  agentContextObservability?: AgentContextRecorder
 }
 
 /**
@@ -93,6 +107,13 @@ const MAX_LOOP_STEPS = 30
  */
 const FINAL_STEP = MAX_LOOP_STEPS - 1
 
+/**
+ * The survey's index among a monorepo run's steps (`survey` → `review` → `apply`): its FIRST
+ * move, which is what makes it stateable here at all. The apply's own snapshot reads the same
+ * list from the other end (`length - 1`), so neither keys a record to a step NAME it looked up.
+ */
+const SURVEY_STEP_INDEX = 0
+
 export class MonorepoAdoptionAdvisorService implements MonorepoAdoptionAdvisor {
   constructor(private readonly deps: MonorepoAdoptionAdvisorServiceDeps) {}
 
@@ -102,19 +123,25 @@ export class MonorepoAdoptionAdvisorService implements MonorepoAdoptionAdvisor {
 
   async advise(subject: MonorepoAdoptionSubject): Promise<{ plan: unknown; model: string }> {
     const { modelProvider, ref } = await this.resolveModel(subject.workspaceId)
+    // The SAME sides the tool set is built from, so the prompt cannot promise a repository
+    // the model has no tool for.
+    const system = monorepoAdoptionSystemPrompt(subject.explorer.sides)
+    const prompt = renderMonorepoAdoptionPrompt({
+      directory: subject.directory,
+      instructions: subject.instructions,
+      survey: subject.survey,
+      files: subject.files,
+    })
+    // Filed BEFORE the generation rather than after it: a survey whose reply came back unusable
+    // is exactly the run whose prompt someone needs to read, and a snapshot written on the way
+    // out is the one missing then.
+    await this.recordContext(subject, ref, system, prompt)
     let text: string
     try {
       const result = await generateText({
         model: modelProvider.resolve(ref),
-        // The SAME sides the tool set is built from, so the prompt cannot promise a repository
-        // the model has no tool for.
-        system: monorepoAdoptionSystemPrompt(subject.explorer.sides),
-        prompt: renderMonorepoAdoptionPrompt({
-          directory: subject.directory,
-          instructions: subject.instructions,
-          survey: subject.survey,
-          files: subject.files,
-        }),
+        system,
+        prompt,
         tools: monorepoExplorationTools(subject.explorer),
         stopWhen: stepCountIs(MAX_LOOP_STEPS),
         prepareStep: ({ stepNumber }) =>
@@ -144,6 +171,58 @@ export class MonorepoAdoptionAdvisorService implements MonorepoAdoptionAdvisor {
       throw this.fail(subject, ref, 'the reply contained no JSON adoption plan')
     }
     return { plan, model: `${ref.provider}:${ref.model}` }
+  }
+
+  /**
+   * File what this survey handed its model, under the RUN and under the survey's own step, so it
+   * reads on the observability panel exactly like the apply container's dispatch does.
+   *
+   * The `files` are the seeded OPENING context, keyed by the same prefixed paths a decision's
+   * evidence cites. What the model then went and fetched is not repeated here: it lands on the
+   * run's own adoption transcript, which is the record a reviewer checks a recommendation
+   * against and which outlives the telemetry window.
+   */
+  private async recordContext(
+    subject: MonorepoAdoptionSubject,
+    ref: ModelRef,
+    systemPrompt: string,
+    userPrompt: string,
+  ): Promise<void> {
+    const recorder = this.deps.agentContextObservability
+    if (!recorder) return
+    await runBestEffort(
+      this.deps.logger ?? noopLogger,
+      'monorepoAdoption.recordAgentContext',
+      () =>
+        recorder.record({
+          workspaceId: subject.workspaceId,
+          executionId: subject.runId,
+          agentKind: MONOREPO_ADOPTION_AGENT_KIND,
+          stepIndex: SURVEY_STEP_INDEX,
+          model: `${ref.provider}:${ref.model}`,
+          // An inline call runs under no harness: recorded as none rather than named, for the
+          // reason the bootstrap dispatch's snapshot records what its body carried.
+          harness: null,
+          systemPrompt,
+          userPrompt,
+          // A survey folds no best-practice fragments: the empty list is the honest projection.
+          fragments: [],
+          contextFiles: Object.entries(subject.files).map(([path, content]) => ({
+            path,
+            title: path,
+            url: '',
+            content,
+          })),
+          extras: {
+            directory: subject.directory,
+            // Which repositories were readable at all: a run whose reference template was never
+            // linked surveys one side, and every recommendation it makes is thinner for it.
+            sides: [...subject.explorer.sides],
+            siblingServices: subject.survey.siblingServices,
+          },
+        }),
+      { workspaceId: subject.workspaceId, runId: subject.runId },
+    )
   }
 
   /**

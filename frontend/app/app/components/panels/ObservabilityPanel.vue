@@ -70,7 +70,7 @@ const block = computed(() => (blockId.value ? board.getBlock(blockId.value) : un
  * card reads as a panel that failed to load rather than as a run of a different kind.
  */
 const runSubtitle = computed(() =>
-  instance.value ? instance.value.pipelineName : bootstrap.value ? t('bootstrap.steps.title') : '',
+  instance.value ? instance.value.pipelineName : bootstrap.value ? t('bootstrap.runKind') : '',
 )
 /** The structured failure the pinned summary speaks from, whichever kind of run this is. */
 const runFailure = computed(() => instance.value?.failure ?? bootstrap.value?.failure ?? null)
@@ -374,7 +374,19 @@ function sum(items: LlmCallMetric[], pick: (m: LlmCallMetric) => number): number
 
 // Where the run's tokens went, by PHASE. Unlike the totals above (derived from the capped call
 // list), this reads the engine's SQL rollup off the steps, so it stays honest on a long run.
-const phaseRows = computed(() => foldRunPhaseMetrics(instance.value?.steps ?? []))
+//
+// A run with NO execution row (a repo bootstrap) has no steps to fold one from, which is a
+// different fact from a run whose phases each spent nothing, and the difference matters here
+// more than anywhere: this rollup is also what prices the run, so left as an empty list it hides
+// both the table and the cost tile, and a bootstrap that made N model calls reads as one that
+// cost nothing. Stated as its own answer, and rendered as a note.
+const phaseRollup = computed<{ available: boolean; rows: ReturnType<typeof foldRunPhaseMetrics> }>(
+  () =>
+    instance.value
+      ? { available: true, rows: foldRunPhaseMetrics(instance.value.steps ?? []) }
+      : { available: false, rows: [] },
+)
+const phaseRows = computed(() => phaseRollup.value.rows)
 const phaseCarryTotal = computed(() =>
   phaseRows.value.reduce((acc, p) => acc + p.carryCostTokens, 0),
 )
@@ -407,6 +419,18 @@ const showCost = computed(
  */
 const runCost = computed(() =>
   formatCost(sumCosts(phaseRows.value.map((p) => p.costEstimate)), costCurrency.value),
+)
+/**
+ * What the cost tile SAYS when it shows no figure. An unpriced phase and a run kind with no
+ * rollup to price from are different facts, and the tile is rendered for the second one rather
+ * than dropped: a missing tile is indistinguishable from a run that cost nothing.
+ */
+const costNoteKey = computed(() =>
+  !phaseRollup.value.available
+    ? 'observability.summary.costNoRollup'
+    : runCost.value
+      ? 'observability.summary.costHint'
+      : 'observability.summary.costIncomplete',
 )
 /** Share of the run's carry cost a phase accounts for (0..100), or null when nothing carried. */
 function carryShare(carryCostTokens: number): number | null {
@@ -586,18 +610,14 @@ function exportJson() {
                   </dt>
                   <dd class="mt-0.5 tabular-nums text-slate-200">{{ totals.calls }}</dd>
                 </div>
-                <div v-if="showCost">
+                <div v-if="showCost || !phaseRollup.available">
                   <dt class="text-[11px] uppercase tracking-wide text-slate-500">
                     {{ t('observability.summary.cost') }}
                   </dt>
                   <dd class="mt-0.5 tabular-nums text-slate-200">
                     {{ runCost ?? '—' }}
                     <span class="mt-0.5 block text-[11px] text-slate-500">
-                      {{
-                        runCost
-                          ? t('observability.summary.costHint')
-                          : t('observability.summary.costIncomplete')
-                      }}
+                      {{ t(costNoteKey) }}
                     </span>
                   </dd>
                 </div>
@@ -700,18 +720,23 @@ function exportJson() {
             <!-- where the run's tokens went, by phase (the engine's SQL rollup, not the
                  capped call list) -->
             <section
-              v-if="phaseRows.length"
+              v-if="phaseRows.length || !phaseRollup.available"
               class="rounded-xl border border-slate-800 bg-slate-900/50 p-4"
             >
               <div class="flex items-baseline gap-2">
                 <h2 class="text-[11px] uppercase tracking-wide text-slate-500">
                   {{ t('observability.phase.title') }}
                 </h2>
-                <span class="text-[11px] text-slate-600">
+                <span v-if="phaseRollup.available" class="text-[11px] text-slate-600">
                   {{ t('observability.phase.subtitle') }}
                 </span>
               </div>
-              <div class="mt-3 overflow-x-auto">
+              <!-- No rollup to fold: said in words, because an absent table and a run that spent
+                   nothing look identical, and the calls listed above prove it spent something. -->
+              <p v-if="!phaseRollup.available" class="mt-2 text-[12px] text-slate-400">
+                {{ t('observability.phase.noRollup') }}
+              </p>
+              <div v-else class="mt-3 overflow-x-auto">
                 <table class="w-full min-w-[32rem] text-[12px]">
                   <thead>
                     <tr class="text-[11px] uppercase tracking-wide text-slate-500">
@@ -1015,6 +1040,17 @@ function exportJson() {
               @show-failing-tools="revealFailingToolCalls"
               @retry="retryFailureEvidence"
             />
+            <!-- A monorepo bootstrap's SURVEY explores through the platform's own bounded reader,
+                 whose every read lands on the run's adoption transcript rather than here (that is
+                 the record a reviewer checks a recommendation against, and it outlives this
+                 window). Said out loud because the apply container's calls below are not empty,
+                 so the survey's absence would otherwise read as a phase that used no tools. -->
+            <p
+              v-if="bootstrap?.monorepo"
+              class="rounded-lg border border-dashed border-slate-800 px-3 py-2 text-[12px] text-slate-400"
+            >
+              {{ t('observability.toolCalls.surveyReadsElsewhere') }}
+            </p>
             <ToolCallList
               v-model:filter="toolFilter"
               :trajectory="trajectory"

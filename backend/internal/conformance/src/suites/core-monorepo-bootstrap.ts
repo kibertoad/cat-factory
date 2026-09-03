@@ -291,30 +291,41 @@ function defineSurveyGroup(harness: ConformanceHarness): void {
       expect(parked.body.adoptionReview).toBeNull()
     })
 
-    it('answers the run-observability reads for a bootstrap run, like any other agent run', async () => {
+    it('answers every run-observability read for a bootstrap run, which has no execution row', async () => {
       // A bootstrap is inspected through the SAME panel as an execution, which reads these five
       // workspace-scoped routes. They are keyed by the AGENT RUN, and a bootstrap deliberately
-      // has no execution row, so a reader that resolved one first would 404 every bootstrap
-      // while its rows sat in the telemetry store under exactly this id. Asserted on both
-      // facades because the sinks and their absence are per-facade wiring.
+      // has no execution row, so a facade whose handler resolved one first would 404 every
+      // bootstrap while its rows sat in the telemetry store under exactly this id.
+      //
+      // This is the READ half, and only that: each route runs its store's real query (D1 here,
+      // the `telemetry` Postgres schema on Node) against a bootstrap run id and comes back with
+      // the empty list its envelope declares rather than an error. The WRITE half is not
+      // assertable in this suite and is not claimed: the survey runs through a fake advisor and
+      // the apply through a {@link FakeRepoBootstrapper}, so neither producer executes. What
+      // each producer records is pinned at the producer (`MonorepoAdoptionAdvisorService.test.ts`,
+      // `ContainerRepoBootstrapper.spec.ts`), and each store's own parity by
+      // `defineAgentContextSuite` / `defineAgentToolCallSuite`.
       const { app, wsId, architectureId } = await setup(harness, { advisor: fakeAdvisor() })
       const started = await start(app, wsId, architectureId)
       await app.driveBootstrap(wsId, started.body.id)
       const runId = started.body.id
+      // Each read with the list ITS envelope names: asserting the payload rather than the
+      // echoed `executionId`, which the handler copies off the path and which is therefore
+      // true of any answer at all, including one keyed on the wrong id.
       const reads = [
-        'llm-metrics',
-        'agent-context',
-        'search-queries',
-        'tool-calls',
-        'tool-call-failures',
-      ]
-      for (const read of reads) {
-        const answer = await app.call<{ executionId: string }>(
+        ['llm-metrics', 'calls'],
+        ['agent-context', 'snapshots'],
+        ['search-queries', 'searchQueries'],
+        ['tool-calls', 'toolCalls'],
+        ['tool-call-failures', 'failures'],
+      ] as const
+      for (const [read, listed] of reads) {
+        const answer = await app.call<Record<string, unknown>>(
           'GET',
           `/workspaces/${wsId}/executions/${runId}/${read}`,
         )
         expect(answer.status, read).toBe(200)
-        expect(answer.body.executionId, read).toBe(runId)
+        expect(answer.body[listed], read).toEqual([])
       }
     })
 

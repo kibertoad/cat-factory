@@ -3,12 +3,13 @@ import type {
   GitHubClient,
   GitHubInstallation,
   GitHubInstallationRepository,
+  RecordAgentContextInput,
   RunnerJobView,
   RunnerTransport,
 } from '@cat-factory/kernel'
+import { REPO_BOOTSTRAP_AGENT_KIND } from '@cat-factory/contracts'
 import {
   ContainerRepoBootstrapper,
-  REPO_BOOTSTRAP_AGENT_KIND,
   type ContainerRepoBootstrapperDependencies,
 } from '../src/agents/ContainerRepoBootstrapper.js'
 import type { ContainerSessionService } from '../src/containers/ContainerSessionService.js'
@@ -124,17 +125,17 @@ describe('ContainerRepoBootstrapper pre-flight', () => {
     // A new-repo run is one step, so its snapshot is step 0 rather than the 2 a monorepo apply
     // files: the numbering comes from the shared step derivation, which is also what the board
     // draws, so a snapshot can never key to a step the run does not show.
-    const record = vi.fn(async () => undefined)
+    const record = vi.fn(async (_input: RecordAgentContextInput) => undefined)
     const bootstrapper = makeBootstrapper(
       fakeClient(),
       { dispatch: vi.fn(async () => undefined) } as unknown as RunnerTransport,
       { agentContextObservability: { record } },
     )
     await bootstrapper.startBootstrap(REQUEST)
-    const snapshot = record.mock.calls[0]?.[0] as unknown as Record<string, unknown>
+    const snapshot = record.mock.calls[0]?.[0]
     expect(snapshot).toMatchObject({ executionId: 'boot_1', stepIndex: 0 })
     // Where it PUSHES, which the clone-source `repo` field does not answer on a from-scratch run.
-    expect(snapshot.extras).toMatchObject({
+    expect(snapshot?.extras).toMatchObject({
       bootstrapTarget: { owner: 'kibertoad', name: 'simpler-service3' },
     })
   })
@@ -285,7 +286,7 @@ describe('ContainerRepoBootstrapper monorepo dispatch', () => {
   })
 
   it('records what the dispatch handed the agent, keyed to the run and to its APPLY step', async () => {
-    const record = vi.fn(async () => undefined)
+    const record = vi.fn(async (_input: RecordAgentContextInput) => undefined)
     const bootstrapper = makeBootstrapper(
       fakeClient(),
       { dispatch: vi.fn(async () => undefined) } as unknown as RunnerTransport,
@@ -293,7 +294,7 @@ describe('ContainerRepoBootstrapper monorepo dispatch', () => {
     )
     await bootstrapper.startBootstrap(MONOREPO_REQUEST)
     expect(record).toHaveBeenCalledTimes(1)
-    const snapshot = record.mock.calls[0]?.[0] as unknown as Record<string, unknown>
+    const snapshot = record.mock.calls[0]?.[0]
     expect(snapshot).toMatchObject({
       workspaceId: 'ws_1',
       executionId: 'boot_1',
@@ -301,8 +302,11 @@ describe('ContainerRepoBootstrapper monorepo dispatch', () => {
       // Third of the run's three steps (survey, review, apply), numbered as the board numbers
       // them rather than as a literal this file would have to keep in step by hand.
       stepIndex: 2,
+      // `provider:model`, the format the snapshot contract documents and every other producer
+      // writes. A bare model id here is a row a reader cannot recover the provider from.
+      model: 'workers-ai:@cf/test',
     })
-    expect(snapshot.systemPrompt).toContain('adding a NEW service to an existing monorepo')
+    expect(snapshot?.systemPrompt).toContain('adding a NEW service to an existing monorepo')
     // The allow-list, asserted where a bootstrap body is most tempting to copy whole: the job
     // carries a GitHub installation token and a proxy session token, and neither may be stored.
     expect(JSON.stringify(snapshot)).not.toContain('gh-token')
@@ -316,7 +320,18 @@ describe('ContainerRepoBootstrapper monorepo dispatch', () => {
     const recordToolCalls = vi.fn(async () => undefined)
     const poll = vi.fn(async (): Promise<RunnerJobView> => ({
       state: 'running',
-      spans: [{ seq: 1, tool: 'bash', args: 'ls', result: 'ok', bodies: 'stored' }],
+      spans: [
+        {
+          seq: 1,
+          tool: 'bash',
+          startedAt: 1,
+          endedAt: 2,
+          ok: true,
+          args: 'ls',
+          result: 'ok',
+          bodies: 'stored',
+        },
+      ],
     }))
     const bootstrapper = makeBootstrapper(fakeClient(), { poll } as unknown as RunnerTransport, {
       recordToolCalls,

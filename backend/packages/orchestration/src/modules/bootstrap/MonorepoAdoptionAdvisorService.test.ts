@@ -4,6 +4,7 @@ import type {
   MonorepoAdoptionExplorer,
   MonorepoAdoptionSubject,
   MonorepoExplorationRequest,
+  RecordAgentContextInput,
 } from '@cat-factory/kernel'
 import { readInlineObservabilityContext } from '@cat-factory/kernel'
 import { MockLanguageModelV3 } from 'ai/test'
@@ -120,10 +121,14 @@ function subjectWith(explorer: MonorepoAdoptionExplorer): MonorepoAdoptionSubjec
   return { ...SUBJECT_BASE, explorer }
 }
 
-function advisorFor(provider: ModelProvider): MonorepoAdoptionAdvisorService {
+function advisorFor(
+  provider: ModelProvider,
+  agentContextObservability?: { record: (input: RecordAgentContextInput) => Promise<void> },
+): MonorepoAdoptionAdvisorService {
   return new MonorepoAdoptionAdvisorService({
     modelProvider: provider,
     modelRef: { provider: 'mock', model: 'm1' },
+    ...(agentContextObservability ? { agentContextObservability } : {}),
   })
 }
 
@@ -201,6 +206,53 @@ describe('MonorepoAdoptionAdvisorService', () => {
     // stale against a namespace rename it would then silently pass.
     const kinds = seen.map((options) => readInlineObservabilityContext(options).agentKind)
     expect(kinds).toEqual(['monorepo-adoption-advisor', 'monorepo-adoption-advisor'])
+  })
+
+  it('records what the survey handed its model, under the run and its own step', async () => {
+    // The survey is half of what a monorepo bootstrap costs, and its prompt is the half no
+    // container dispatch files: without this the run's Provided-context tab holds the apply's
+    // snapshot alone, which reads as a survey that was given nothing rather than one whose
+    // context was never recorded.
+    const snapshots: RecordAgentContextInput[] = []
+    const { provider } = scriptedProvider([{ text: PLAN }])
+    const { explorer } = fakeExplorer({})
+    await advisorFor(provider, {
+      record: async (input) => {
+        snapshots.push(input)
+      },
+    }).advise(subjectWith(explorer))
+    expect(snapshots).toHaveLength(1)
+    expect(snapshots[0]).toMatchObject({
+      workspaceId: 'ws_1',
+      executionId: 'boot_1',
+      agentKind: 'monorepo-adoption-advisor',
+      // The survey is a monorepo run's FIRST step, numbered as the board numbers it.
+      stepIndex: 0,
+      // `provider:model`, the format the snapshot contract documents.
+      model: 'mock:m1',
+      // An inline call runs under no harness: stated as none rather than named.
+      harness: null,
+    })
+    // The seeded opening context, under the same prefixed keys a decision's evidence cites.
+    expect(snapshots[0]?.contextFiles.map((file) => file.path)).toEqual(['monorepo:package.json'])
+    expect(snapshots[0]?.systemPrompt).not.toBe('')
+    expect(snapshots[0]?.userPrompt).toContain('services/payments')
+  })
+
+  it('records the survey context even when the reply comes back unusable', async () => {
+    // The run whose prompt someone actually needs to read is the one that produced nothing. A
+    // snapshot written after the generation is the one missing exactly then.
+    const snapshots: RecordAgentContextInput[] = []
+    const { provider } = scriptedProvider([{ text: 'not json at all' }])
+    const { explorer } = fakeExplorer({})
+    await expect(
+      advisorFor(provider, {
+        record: async (input) => {
+          snapshots.push(input)
+        },
+      }).advise(subjectWith(explorer)),
+    ).rejects.toThrow(/no JSON adoption plan/)
+    expect(snapshots).toHaveLength(1)
   })
 
   it('files every step under the bootstrap RUN, so the survey is readable from the run', async () => {

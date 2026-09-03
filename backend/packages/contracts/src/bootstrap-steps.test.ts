@@ -3,6 +3,7 @@ import type { BootstrapJob } from './bootstrap.js'
 import type { BootstrapRunShape } from './bootstrap-steps.js'
 import {
   bootstrapReachedStep,
+  bootstrapResume,
   bootstrapResumeStep,
   bootstrapRunSteps,
   bootstrapStepIdSchema,
@@ -18,6 +19,7 @@ function job(patch: Partial<BootstrapRunShape> = {}): BootstrapRunShape {
     status: 'running',
     adoptionPlan: null,
     adoptionReview: null,
+    failure: null,
     ...patch,
   }
 }
@@ -66,6 +68,29 @@ describe('bootstrapRunSteps', () => {
     ])
   })
 
+  it('renders a run someone STOPPED as stopped, not as a failure of the step they stopped in', () => {
+    // A stop is stored as a `failed` status with a `cancelled` kind, so status alone cannot tell
+    // the two apart. Left as `failed`, stopping a parked monorepo run paints the reviewer's own
+    // decision step red: a fault reported against the one step whose only actor is them.
+    const stopped = job({
+      monorepo,
+      phase: 'survey',
+      status: 'failed',
+      adoptionPlan: plan('ready'),
+      failure: { kind: 'cancelled' },
+    })
+    expect(bootstrapRunSteps(stopped)).toEqual([
+      { id: 'survey', state: 'done' },
+      { id: 'review', state: 'stopped' },
+      { id: 'apply', state: 'pending' },
+    ])
+    // And a run that genuinely broke there still reads as broken.
+    expect(bootstrapRunSteps({ ...stopped, failure: { kind: 'agent' } })[1]).toEqual({
+      id: 'review',
+      state: 'failed',
+    })
+  })
+
   it('renders a status this build no longer defines as unreadable rather than as not-started', () => {
     // How it gets here: a row written by a build whose status vocabulary has since lost a
     // member. The switch is exhaustive against the TYPE, so only a cast can demonstrate the
@@ -110,6 +135,20 @@ describe('bootstrapResumeStep', () => {
     })
     expect(bootstrapReachedStep(unavailable)).toBe('review')
     expect(bootstrapResumeStep(unavailable)).toBe('survey')
+  })
+
+  it('hands the settled review back with the apply, so no caller re-tests for it', () => {
+    // The re-dispatch needs the review, and asking for it again beside the step is a second
+    // statement of the same rule: the two then answer differently the day one of them moves.
+    const failedApply = job({
+      monorepo,
+      phase: 'apply',
+      adoptionReview: review,
+      status: 'failed',
+    })
+    expect(bootstrapResume(failedApply)).toEqual({ step: 'apply', review })
+    // Every other step carries none: there is nothing settled to re-enter with.
+    expect(bootstrapResume(job({ monorepo, phase: 'survey' }))).toEqual({ step: 'survey' })
   })
 
   it('resumes a new-repo run at its only step', () => {

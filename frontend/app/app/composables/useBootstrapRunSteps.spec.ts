@@ -61,12 +61,13 @@ describe('useBootstrapRunSteps', () => {
     expect(resumeStep.value).toBeNull()
   })
 
-  it('marks the survey done and the review as the step a stopped monorepo run is holding', () => {
+  it('marks the survey done and the review as the step a broken monorepo run is holding', () => {
     store.upsertBootstrap(
       job('b2', {
         monorepo: MONOREPO,
         phase: 'survey',
         status: 'failed',
+        failure: { kind: 'agent' } as unknown as BootstrapJob['failure'],
         adoptionPlan: plan('ready'),
       }),
     )
@@ -77,6 +78,24 @@ describe('useBootstrapRunSteps', () => {
       { id: 'review', state: 'failed' },
       { id: 'apply', state: 'pending' },
     ])
+    expect(resumeStep.value).toBe('review')
+  })
+
+  it('renders a run the reviewer STOPPED as stopped, not as a broken review step', () => {
+    // A stop is stored as a `failed` status with a `cancelled` kind, and this is the shape the
+    // card actually renders: stopping a parked run must not report the reviewer's own decision
+    // step back to them as a fault. The resume it offers is unchanged.
+    store.upsertBootstrap(
+      job('b2s', {
+        monorepo: MONOREPO,
+        phase: 'survey',
+        status: 'failed',
+        failure: { kind: 'cancelled' } as unknown as BootstrapJob['failure'],
+        adoptionPlan: plan('ready'),
+      }),
+    )
+    const { steps, resumeStep } = useBootstrapRunSteps('b2s')
+    expect(steps.value.map((step) => step.state)).toEqual(['done', 'stopped', 'pending'])
     expect(resumeStep.value).toBe('review')
   })
 

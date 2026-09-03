@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { PIPELINE_PURPOSES, purposeAllowsAgentCategory } from '@cat-factory/contracts'
+import {
+  MONOREPO_ADOPTION_AGENT_KIND,
+  PIPELINE_PURPOSES,
+  purposeAllowsAgentCategory,
+  REPO_BOOTSTRAP_AGENT_KIND,
+} from '@cat-factory/contracts'
 import type { AgentKind, BlockStatus, BlockType } from '~/types/domain'
 import { narrowAgentPalette } from '~/utils/agentPalette'
 import {
@@ -75,6 +80,17 @@ describe('catalog', () => {
     expect(Object.keys(AGENT_BY_KIND).sort()).toEqual([...AGENT_KINDS].sort())
     for (const a of AGENT_ARCHETYPES) {
       expect(AGENT_BY_KIND[a.kind]).toBe(a)
+    }
+  })
+
+  it('names the kinds a bootstrap run files its telemetry under', () => {
+    // The backend stamps these two on a bootstrap run's metric, snapshot and tool-call rows, and
+    // the observability panel groups by kind. Unnamed here they roll up under the generic "Agent"
+    // fallback: the survey's model calls and the apply container's under one unlabelled heading,
+    // on the one panel whose job is telling them apart. Asserted through the same constants the
+    // backend imports, so this cannot pass against a stale spelling.
+    for (const kind of [REPO_BOOTSTRAP_AGENT_KIND, MONOREPO_ADOPTION_AGENT_KIND]) {
+      expect(agentKindMeta(kind).label, `${kind} falls back to the unnamed agent`).not.toBe('Agent')
     }
   })
 

@@ -8,7 +8,11 @@ import type {
   TaskTypeMeta,
 } from '~/types/domain'
 import type { BadgeColor } from '~/utils/badge'
-import { isBuiltinGatableKind } from '@cat-factory/contracts'
+import {
+  isBuiltinGatableKind,
+  MONOREPO_ADOPTION_AGENT_KIND,
+  REPO_BOOTSTRAP_AGENT_KIND,
+} from '@cat-factory/contracts'
 
 /** Simple unique id helper (fine for a client-only prototype). */
 export function uid(prefix = 'id'): string {
@@ -642,8 +646,11 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
   // opens names what actually ran. Without them both roll up as the generic "Agent" fallback,
   // which puts the survey's model calls and the apply container's under one unnamed heading on
   // the one panel whose job is telling them apart.
-  'repo-bootstrapper': {
-    kind: 'repo-bootstrapper',
+  //
+  // Keyed off the contracts constants the BACKEND stamps on those rows, never a second spelling:
+  // a rename that missed one side would fall back to the unnamed heading with nothing failing.
+  [REPO_BOOTSTRAP_AGENT_KIND]: {
+    kind: REPO_BOOTSTRAP_AGENT_KIND,
     tier: 'advanced',
     label: 'Repo Bootstrapper',
     icon: 'i-lucide-package-plus',
@@ -651,8 +658,8 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
     description:
       'Scaffolds a new repository from a reference architecture, or writes a new service into a monorepo and opens the pull request.',
   },
-  'monorepo-adoption-advisor': {
-    kind: 'monorepo-adoption-advisor',
+  [MONOREPO_ADOPTION_AGENT_KIND]: {
+    kind: MONOREPO_ADOPTION_AGENT_KIND,
     tier: 'advanced',
     label: 'Adoption Advisor',
     icon: 'i-lucide-scale',
