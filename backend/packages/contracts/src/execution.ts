@@ -9,6 +9,7 @@ import { agentFailureKindSchema } from './agent-failure-kinds.js'
 import { ralphStepStateSchema } from './ralph.js'
 import { validationReportSchema } from './validation-checks.js'
 import { reproductionReportSchema } from './reproduction.js'
+import { bugFishingStepStateSchema } from './bugFishing.js'
 import { prReviewStepStateSchema } from './prReview.js'
 import { runInputGateSchema } from './input-gate.js'
 import { stepSkipReasonSchema } from './step-conditions.js'
@@ -749,6 +750,17 @@ export const pipelineStepSchema = v.object({
    * window and resolve. Absent for non-`pr-reviewer` steps. See {@link prReviewStepStateSchema}.
    */
   prReview: v.optional(v.nullable(prReviewStepStateSchema)),
+  /**
+   * Live BUG-FISHING EXPEDITION state carried on a `bug-fisher` step: the planned angles, which
+   * of them have been fished, every finding they surfaced, and the bug-fix task each MARKED
+   * finding spawned. Created by the engine when the step first runs and extended by each phase's
+   * completion; the run parks (`awaiting_triage`) once every angle has settled, though findings
+   * are markable from the moment their phase lands. Deliberately PRESERVED across
+   * `resetStepForRerun`, exactly like `prReview` / `forkDecision` and for the same reason: the
+   * phase loop RE-ARMS this same step for each successive angle, so clearing it would throw away
+   * every earlier pass. Absent for non-`bug-fisher` steps. See {@link bugFishingStepStateSchema}.
+   */
+  bugFishing: v.optional(v.nullable(bugFishingStepStateSchema)),
   /**
    * The at-most-once driver marker for the PR-review "post" resolution: set when the human
    * resolves a parked review with `post`, so the durable driver — on re-entry, off the HTTP

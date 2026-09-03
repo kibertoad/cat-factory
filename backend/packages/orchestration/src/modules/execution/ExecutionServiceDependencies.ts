@@ -47,6 +47,7 @@ import type {
   WorkspaceRiskPolicyReader,
   RunInitiatorScope,
   RunLifecycleSink,
+  ServiceRepository,
   StepResolverRegistry,
   SubscriptionActivationRepository,
   TaskRepository,
@@ -632,6 +633,13 @@ export interface ExecutionServiceDependencies {
    * `publishPrVerificationReport` opt-out. Absent ⇒ the default (on).
    */
   workspaceSettingsRepository?: WorkspaceSettingsRepository
+  /**
+   * Optional: the service rows behind the board's frames, read when a BUG-FISHING expedition
+   * spawns a fix task so the new task lands in the same service the expedition fished. Absent ⇒
+   * the task is still created under the right frame block, just without a service association,
+   * which is the same degradation the initiative loop's spawn takes.
+   */
+  serviceRepository?: ServiceRepository
   /**
    * Optional: the settled-gate projection behind the operator dashboard's gate/CI-fixer
    * attempt statistics. Written best-effort when a polling gate reaches a terminal verdict.

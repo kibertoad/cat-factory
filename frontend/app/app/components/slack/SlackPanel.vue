@@ -74,6 +74,7 @@ const routes = reactive<Record<NotificationType, SlackRoute>>({
   fork_decision_pending: { enabled: false, channel: '' },
   judge_review: { enabled: false, channel: '' },
   pr_review_ready: { enabled: false, channel: '' },
+  bug_fishing_triage: { enabled: false, channel: '' },
   initiative: { enabled: false, channel: '' },
   platform_health: { enabled: false, channel: '' },
   budget_paused: { enabled: false, channel: '' },

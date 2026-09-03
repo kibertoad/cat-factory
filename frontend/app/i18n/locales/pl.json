@@ -223,7 +223,8 @@
         "media": "Multimedia",
         "recurring": "Cykliczne",
         "review": "Przegląd",
-        "ralph": "Pętla Ralph"
+        "ralph": "Pętla Ralph",
+        "bugFishing": "Polowanie na błędy"
       },
       "recurringWithFrame": "Zadanie cykliczne uruchamia pipeline w określonym rytmie. Kontynuuj, aby ustawić harmonogram i prompt.",
       "recurringNoFrame": "Zadanie cykliczne musi należeć do usługi. Dodaj je z ramki usługi (lub modułu w jej obrębie).",
@@ -338,7 +339,18 @@
         "prNotFound": "Nie znaleziono pull requesta #{number} w repozytorium tej usługi. Sprawdź numer albo powiąż usługę z repozytorium, w którym znajduje się ten pull request.",
         "prRepoMismatch": "Ten pull request jest w innym repozytorium. Ta usługa przegląda {repo}, więc utwórz zadanie przeglądu w usłudze powiązanej z repozytorium tego pull requesta."
       },
-      "contextFailed": "Nie utworzono zadania: nie udało się odczytać {count} załącznika | Nie utworzono zadania: nie udało się odczytać {count} załączników | Nie utworzono zadania: nie udało się odczytać {count} załączników"
+      "contextFailed": "Nie utworzono zadania: nie udało się odczytać {count} załącznika | Nie utworzono zadania: nie udało się odczytać {count} załączników | Nie utworzono zadania: nie udało się odczytać {count} załączników",
+      "bugFishingFields": {
+        "angles": {
+          "label": "Perspektywy do przeszukania",
+          "hint": "Każda perspektywa to osobne przejście po kodzie z innym pytaniem. Zostaw wszystkie pola puste, aby przeszukać wszystkie.",
+          "allSelected": "Zostaną przeszukane wszystkie perspektywy."
+        },
+        "focus": {
+          "label": "Na czym się skupić",
+          "placeholder": "Podsystemy, katalogi albo rodzaj usterki, który najbardziej kosztuje ten zespół"
+        }
+      }
     },
     "recurring": {
       "title": "Dodaj cykliczny pipeline",
@@ -690,7 +702,11 @@
         "kaizen_entry_not_settled": "Wpis Kaizen nie został jeszcze oceniony",
         "bootstrap_not_awaiting_review": "Ten bootstrap nie czeka na przegląd",
         "adoption_plan_unavailable": "Nie ma planu do zatwierdzenia",
-        "monorepo_directory_taken": "Ten katalog już istnieje"
+        "monorepo_directory_taken": "Ten katalog już istnieje",
+        "no_expedition": "To uruchomienie nie zawiera polowania na błędy",
+        "not_awaiting_triage": "Ta wyprawa nie czeka na segregację",
+        "already_addressed": "Część znalezisk ma już zadanie naprawcze",
+        "no_host_frame": "Ta wyprawa nie znajduje się pod żadną usługą"
       },
       "description": {
         "dependencies_unmet": "To zadanie zależy od innych, które nie zostały jeszcze ukończone. Ukończ je lub odblokuj, a następnie uruchom je ponownie.",
@@ -735,7 +751,11 @@
         "kaizen_entry_not_settled": "Jego ocena wciąż czeka w kolejce lub trwa, więc nie ma rekomendacji do potwierdzenia. Spróbuj ponownie po jej zakończeniu.",
         "bootstrap_not_awaiting_review": "Uruchomienie poszło dalej, odkąd otwarto ten przegląd. Odśwież tablicę.",
         "adoption_plan_unavailable": "Analiza nie zdołała go utworzyć, więc nie ma decyzji do wysłania.",
-        "monorepo_directory_taken": "Bootstrap tworzy nową usługę. Wybierz katalog, który jeszcze nie istnieje, albo zaimportuj istniejący jako usługę."
+        "monorepo_directory_taken": "Bootstrap tworzy nową usługę. Wybierz katalog, który jeszcze nie istnieje, albo zaimportuj istniejący jako usługę.",
+        "no_expedition": "Uruchomienie, które oglądasz, nie niesie stanu wyprawy, więc nie ma czego segregować. Odśwież uruchomienie i spróbuj ponownie.",
+        "not_awaiting_triage": "Albo wciąż przeszukuje kolejną perspektywę, albo zostało już zakończone. Odśwież uruchomienie, aby zobaczyć jego stan.",
+        "already_addressed": "Zadanie naprawcze powstało dla nich wcześniej, więc nic nie utworzono ponownie. Otwórz znalezisko, aby przejść do istniejącego zadania.",
+        "no_host_frame": "Zadanie naprawcze potrzebuje usługi, pod którą będzie żyć, i repozytorium do naprawy. Przenieś zadanie wyprawy pod ramkę usługi i spróbuj ponownie."
       },
       "action": {
         "connectGitHub": "Połącz GitHub",
@@ -2344,7 +2364,8 @@
         "budget_paused": "Oznacz jako przeczytane",
         "budget_threshold": "Oznacz jako przeczytane",
         "key_drift": "Usuń nieaktualne poświadczenia",
-        "merge_tag_request": "Zapisz nakład"
+        "merge_tag_request": "Zapisz nakład",
+        "bug_fishing_triage": "Oznacz jako przeczytane"
       },
       "toast": {
         "acted": "Oznaczono jako obsłużone",
@@ -3778,6 +3799,11 @@
         "ageToggle": "Ukryj także zadania ukończone dawno temu",
         "days": "Przechowuj (dni)",
         "hidesOnlyHint": "Nic nie jest usuwane. Zadania bez zapisanej daty ukończenia nigdy nie są ukrywane z powodu wieku."
+      },
+      "bugFishing": {
+        "heading": "Potok naprawczy polowania na błędy",
+        "body": "Potok, w którym uruchamia się zadanie naprawcze, gdy oznaczysz znalezisko z polowania na błędy. Każde oznaczone znalezisko staje się osobnym zadaniem w tym potoku; osoba oznaczająca może zmienić ten wybór dla jednej partii.",
+        "builtInDefault": "Użyj wbudowanego szablonu naprawy błędów"
       }
     },
     "localModelEndpoints": {
@@ -8297,6 +8323,68 @@
       "importFailed": "Nie udało się zaimportować katalogu usług",
       "disconnected": "Katalog usług rozłączony",
       "disconnectFailed": "Nie udało się rozłączyć katalogu usług"
+    }
+  },
+  "bugFishing": {
+    "title": "Wyprawa na błędy",
+    "titleWithBlock": "Polowanie na błędy: {title}",
+    "subtitle": "Oznacz znaleziska warte naprawy — z każdego powstanie osobne zadanie naprawcze.",
+    "stillFishing": "Polowanie trwa — dotarło {done} z {total} perspektyw. Wszystko poniżej można już obsłużyć.",
+    "counts": "{untriaged} do rozpatrzenia, {spawned} wysłano do naprawy",
+    "showTriaged": "Pokaż rozstrzygnięte",
+    "phases": {
+      "heading": "Perspektywy",
+      "all": "Wszystkie znaleziska ({count})",
+      "found": "znaleziono {count}",
+      "failedNote": "Ta perspektywa nie została ukończona: {reason}",
+      "status": {
+        "pending": "W kolejce",
+        "fishing": "Polowanie…",
+        "completed": "Gotowe",
+        "failed": "Niepowodzenie"
+      }
+    },
+    "fixPipeline": {
+      "label": "Naprawy uruchamiane w",
+      "boardDefault": "Domyślny potok tablicy",
+      "hint": "Znaleziska oznaczane od tej chwili uruchomią się w {pipeline}."
+    },
+    "empty": {
+      "nothingCaught": "Ta wyprawa nie znalazła jak dotąd niczego.",
+      "allTriaged": "Każde znalezisko zostało rozstrzygnięte."
+    },
+    "finding": {
+      "failureScenario": "Jak się ujawnia",
+      "evidence": "Dowody przytoczone przez wyprawę",
+      "suggestedFix": "Proponowana naprawa",
+      "fixThis": "Napraw to",
+      "dismiss": "Odrzuć",
+      "spawned": "Zadanie naprawcze działa w {pipeline}",
+      "openTask": "Otwórz zadanie"
+    },
+    "severity": {
+      "critical": "Krytyczna",
+      "high": "Wysoka",
+      "medium": "Średnia",
+      "low": "Niska"
+    },
+    "kind": {
+      "bug": "Błąd",
+      "logic-gap": "Luka w logice",
+      "edge-case": "Przypadek brzegowy",
+      "footgun": "Pułapka",
+      "requirement-gap": "Luka w wymaganiach",
+      "other": "Inne"
+    },
+    "confidence": {
+      "high": "Wysoka pewność",
+      "medium": "Średnia pewność",
+      "low": "Niska pewność"
+    },
+    "footer": {
+      "parked": "Przeszukano wszystkie perspektywy.",
+      "parkedWithUntriaged": "Pozostało {count} nierozstrzygniętych znalezisk.",
+      "finish": "Zakończ segregację"
     }
   }
 }

@@ -244,6 +244,24 @@ export const CONFLICT_REASONS = [
   // recommendations would then land on a row nobody looks at again. `details.status` names where
   // the grading actually is.
   'kaizen_entry_not_settled',
+  // A caller tried to triage a BUG-FISHING expedition on a run that carries none — the run is not
+  // an expedition, or its step has been re-run away. The remedy is "you are looking at the wrong
+  // run", so the SPA refreshes rather than re-offering the triage controls.
+  'no_expedition',
+  // Some of the findings named for a fix ALREADY have one. Its own reason rather than a silent
+  // skip: a second spawn would put two tasks on one defect, and a caller that believed the request
+  // succeeded would never learn that the tasks it thinks it created are somebody else's.
+  // `details.findingIds` names them.
+  'already_addressed',
+  // A caller tried to FINISH an expedition that is not parked on triage — it is still fishing a
+  // later angle, or it has already been finished. The opposite fact from `no_expedition` and its
+  // own reason for the same reason the input-gate pair is split: "still working, wait" and
+  // "already done, refresh" need opposite copy.
+  'not_awaiting_triage',
+  // An expedition finding was marked for a fix, but the expedition's task is not under a service
+  // frame, so there is nowhere to put the fix task and no repository to fix. `details` names
+  // nothing further: the remedy is to move the expedition under a service, which is a board edit.
+  'no_host_frame',
 ] as const
 
 export type ConflictReason = (typeof CONFLICT_REASONS)[number]

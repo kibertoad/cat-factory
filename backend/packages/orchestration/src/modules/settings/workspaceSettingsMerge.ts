@@ -64,6 +64,13 @@ export function mergeWorkspaceSettings(
         ? patch.defaultProvisionManifestId
         : current.defaultProvisionManifestId,
     allowInitiatorPat: patch.allowInitiatorPat ?? current.allowInitiatorPat,
+    // An empty string clears the pinned fix pipeline back to the built-in bug-fix preset, which is
+    // how every other pinned-pipeline field on the platform is cleared; `null` clears it too. Both
+    // are stored as null, so nothing downstream has to know there were two spellings.
+    bugFishingFixPipelineId:
+      patch.bugFishingFixPipelineId !== undefined
+        ? patch.bugFishingFixPipelineId?.trim() || null
+        : current.bugFishingFixPipelineId,
     // The custom-metadata bag is REPLACED wholesale when supplied (see the update contract): the
     // editor submits every declared field, so a key it omits was cleared and must go.
     // Normalisation drops a cleared value's key entirely, keeping "unset" distinguishable from

@@ -73,6 +73,7 @@ import { forkDecisionController } from './modules/forkDecision/ForkDecisionContr
 import { inputGateController } from './modules/inputGate/InputGateController.js'
 import { judgeController } from './modules/judge/JudgeController.js'
 import { prReviewController } from './modules/prReview/PrReviewController.js'
+import { bugFishingController } from './modules/bugFishing/BugFishingController.js'
 import { kaizenController } from './modules/kaizen/KaizenController.js'
 import { humanTestController } from './modules/humanTest/HumanTestController.js'
 import { visualConfirmationController } from './modules/visualConfirm/VisualConfirmationController.js'
@@ -459,6 +460,7 @@ export const WORKSPACE_CONTROLLERS: readonly ControllerEntry[] = [
   { name: 'inputGate', mount: WORKSPACE_MOUNT, build: () => inputGateController() },
   { name: 'judge', mount: WORKSPACE_MOUNT, build: () => judgeController() },
   { name: 'prReview', mount: WORKSPACE_MOUNT, build: () => prReviewController() },
+  { name: 'bugFishing', mount: WORKSPACE_MOUNT, build: () => bugFishingController() },
   { name: 'kaizen', mount: WORKSPACE_MOUNT, build: () => kaizenController() },
   { name: 'humanTest', mount: WORKSPACE_MOUNT, build: () => humanTestController() },
   {

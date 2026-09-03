@@ -223,7 +223,8 @@
         "media": "Média",
         "recurring": "Récurrent",
         "review": "Revue",
-        "ralph": "Boucle Ralph"
+        "ralph": "Boucle Ralph",
+        "bugFishing": "Pêche aux bogues"
       },
       "recurringWithFrame": "Une tâche récurrente exécute une pipeline selon une cadence. Continuez pour définir le calendrier et le prompt.",
       "recurringNoFrame": "Une tâche récurrente doit appartenir à un service. Ajoutez-la depuis un cadre de service (ou un module à l’intérieur).",
@@ -338,7 +339,18 @@
         "prNotFound": "La pull request n° {number} est introuvable dans le dépôt de ce service. Vérifiez le numéro, ou reliez le service au dépôt qui héberge cette pull request.",
         "prRepoMismatch": "Cette pull request se trouve dans un autre dépôt. Ce service examine {repo} : créez la tâche de revue sous le service relié au dépôt de la pull request."
       },
-      "contextFailed": "Tâche non créée : {count} pièce jointe illisible | Tâche non créée : {count} pièces jointes illisibles"
+      "contextFailed": "Tâche non créée : {count} pièce jointe illisible | Tâche non créée : {count} pièces jointes illisibles",
+      "bugFishingFields": {
+        "angles": {
+          "label": "Angles à explorer",
+          "hint": "Chaque angle est un passage distinct sur le code, avec une question différente. Laissez toutes les cases vides pour tous les explorer.",
+          "allSelected": "Tous les angles seront explorés."
+        },
+        "focus": {
+          "label": "Où se concentrer",
+          "placeholder": "Sous-systèmes, répertoires, ou le type de défaut qui coûte le plus de temps à cette équipe"
+        }
+      }
     },
     "recurring": {
       "title": "Ajouter une pipeline récurrente",
@@ -690,7 +702,11 @@
         "kaizen_entry_not_settled": "L'entrée Kaizen n'a pas encore été évaluée",
         "bootstrap_not_awaiting_review": "Ce bootstrap n’attend pas de revue",
         "adoption_plan_unavailable": "Aucun plan à approuver",
-        "monorepo_directory_taken": "Ce répertoire existe déjà"
+        "monorepo_directory_taken": "Ce répertoire existe déjà",
+        "no_expedition": "Cette exécution ne comporte aucune pêche aux bogues",
+        "not_awaiting_triage": "Cette expédition n'attend pas de tri",
+        "already_addressed": "Certaines constatations ont déjà une tâche de correction",
+        "no_host_frame": "Cette expédition n'est sous aucun service"
       },
       "description": {
         "dependencies_unmet": "Cette tâche dépend d'autres qui ne sont pas encore terminées. Terminez-les ou débloquez-les, puis relancez-la.",
@@ -735,7 +751,11 @@
         "kaizen_entry_not_settled": "Son évaluation est encore en attente ou en cours, il n'y a donc aucune recommandation à accuser réception. Réessayez une fois qu'elle sera terminée.",
         "bootstrap_not_awaiting_review": "L’exécution a avancé depuis l’ouverture de cette revue. Rechargez le tableau.",
         "adoption_plan_unavailable": "L’analyse n’a pas pu en produire, il n’y a donc aucune décision à envoyer.",
-        "monorepo_directory_taken": "Un bootstrap crée un nouveau service. Choisissez un répertoire qui n’existe pas encore, ou importez l’existant comme service."
+        "monorepo_directory_taken": "Un bootstrap crée un nouveau service. Choisissez un répertoire qui n’existe pas encore, ou importez l’existant comme service.",
+        "no_expedition": "L'exécution que vous consultez ne porte aucun état d'expédition : il n'y a rien à trier. Rechargez l'exécution et réessayez.",
+        "not_awaiting_triage": "Soit elle explore encore un autre angle, soit elle est déjà terminée. Rechargez l'exécution pour voir où elle en est.",
+        "already_addressed": "Une tâche de correction a déjà été créée pour elles ; rien n'a donc été recréé. Ouvrez la constatation pour rejoindre la tâche existante.",
+        "no_host_frame": "Une tâche de correction a besoin d'un service où vivre et d'un dépôt à corriger. Déplacez la tâche d'expédition sous un cadre de service et réessayez."
       },
       "action": {
         "connectGitHub": "Connecter GitHub",
@@ -2344,7 +2364,8 @@
         "budget_paused": "Marquer comme lu",
         "budget_threshold": "Marquer comme lu",
         "key_drift": "Supprimer les identifiants obsolètes",
-        "merge_tag_request": "Enregistrer l’effort"
+        "merge_tag_request": "Enregistrer l’effort",
+        "bug_fishing_triage": "Marquer comme lu"
       },
       "toast": {
         "acted": "Marqué comme traité",
@@ -3778,6 +3799,11 @@
         "ageToggle": "Masquer aussi les tâches terminées depuis longtemps",
         "days": "Conserver (jours)",
         "hidesOnlyHint": "Rien n’est supprimé. Les tâches sans date d’achèvement enregistrée ne sont jamais masquées en raison de leur ancienneté."
+      },
+      "bugFishing": {
+        "heading": "Pipeline de correction de la pêche aux bogues",
+        "body": "La pipeline sur laquelle s'exécute une tâche de correction lorsque vous marquez une constatation issue d'une pêche aux bogues. Chaque constatation marquée devient sa propre tâche sur cette pipeline ; la personne qui marque peut changer ce choix pour un lot.",
+        "builtInDefault": "Utiliser le préréglage de correction intégré"
       }
     },
     "localModelEndpoints": {
@@ -8297,6 +8323,68 @@
       "importFailed": "Impossible d'importer le catalogue de services",
       "disconnected": "Catalogue de services déconnecté",
       "disconnectFailed": "Impossible de déconnecter le catalogue de services"
+    }
+  },
+  "bugFishing": {
+    "title": "Expédition de pêche aux bogues",
+    "titleWithBlock": "Pêche aux bogues : {title}",
+    "subtitle": "Marquez les constatations à corriger : chacune devient sa propre tâche de correction.",
+    "stillFishing": "Pêche en cours — {done} angles sur {total} sont arrivés. Tout ce qui suit peut déjà être traité.",
+    "counts": "{untriaged} à trier, {spawned} envoyées en correction",
+    "showTriaged": "Afficher les décidées",
+    "phases": {
+      "heading": "Angles",
+      "all": "Toutes les prises ({count})",
+      "found": "{count} trouvées",
+      "failedNote": "Cet angle ne s'est pas terminé : {reason}",
+      "status": {
+        "pending": "En file d'attente",
+        "fishing": "Pêche en cours…",
+        "completed": "Terminé",
+        "failed": "Échec"
+      }
+    },
+    "fixPipeline": {
+      "label": "Les corrections s'exécutent sur",
+      "boardDefault": "La valeur par défaut du tableau",
+      "hint": "Les constatations que vous marquerez à partir de maintenant tournent sur {pipeline}."
+    },
+    "empty": {
+      "nothingCaught": "Cette expédition n'a rien trouvé pour l'instant.",
+      "allTriaged": "Toutes les constatations ont été tranchées."
+    },
+    "finding": {
+      "failureScenario": "Comment cela se déclenche",
+      "evidence": "Éléments cités par l'expédition",
+      "suggestedFix": "Correction suggérée",
+      "fixThis": "Corriger",
+      "dismiss": "Écarter",
+      "spawned": "Une tâche de correction tourne sur {pipeline}",
+      "openTask": "Ouvrir la tâche"
+    },
+    "severity": {
+      "critical": "Critique",
+      "high": "Élevée",
+      "medium": "Moyenne",
+      "low": "Faible"
+    },
+    "kind": {
+      "bug": "Bogue",
+      "logic-gap": "Trou logique",
+      "edge-case": "Cas limite",
+      "footgun": "Piège",
+      "requirement-gap": "Écart aux exigences",
+      "other": "Autre"
+    },
+    "confidence": {
+      "high": "Confiance élevée",
+      "medium": "Confiance moyenne",
+      "low": "Confiance faible"
+    },
+    "footer": {
+      "parked": "Tous les angles ont été explorés.",
+      "parkedWithUntriaged": "{count} constatation(s) encore non tranchée(s).",
+      "finish": "Terminer le tri"
     }
   }
 }

@@ -1175,6 +1175,11 @@
         "ageToggle": "Außerdem länger abgeschlossene Aufgaben verbergen",
         "days": "Aufbewahren (Tage)",
         "hidesOnlyHint": "Es wird nichts gelöscht. Aufgaben ohne erfasstes Abschlussdatum werden nie wegen ihres Alters verborgen."
+      },
+      "bugFishing": {
+        "heading": "Pipeline für Fehlerbehebungen aus der Fehlersuche",
+        "body": "Die Pipeline, auf der eine Behebungsaufgabe läuft, wenn Sie einen Befund aus einer Fehlersuche markieren. Jeder markierte Befund wird zu einer eigenen Aufgabe auf dieser Pipeline; wer markiert, kann die Auswahl für einen Durchgang überschreiben.",
+        "builtInDefault": "Die integrierte Fehlerbehebungs-Vorlage verwenden"
       }
     },
     "localModelEndpoints": {
@@ -2533,7 +2538,8 @@
         "budget_paused": "Als gelesen markieren",
         "budget_threshold": "Als gelesen markieren",
         "key_drift": "Veraltete Zugangsdaten entfernen",
-        "merge_tag_request": "Aufwand erfassen"
+        "merge_tag_request": "Aufwand erfassen",
+        "bug_fishing_triage": "Als gelesen markieren"
       },
       "failingRun": "{kind} · {at}",
       "failingRunsMore": "{count} weitere nicht angezeigt",
@@ -2999,7 +3005,8 @@
         "media": "Medien",
         "recurring": "Wiederkehrend",
         "review": "Review",
-        "ralph": "Ralph-Schleife"
+        "ralph": "Ralph-Schleife",
+        "bugFishing": "Fehlersuche"
       },
       "recurringWithFrame": "Eine wiederkehrende Aufgabe führt eine Pipeline in einem Takt aus. Fahren Sie fort, um Zeitplan + Prompt festzulegen.",
       "recurringNoFrame": "Eine wiederkehrende Aufgabe muss auf einem Service liegen. Fügen Sie sie aus einem Service-Frame (oder einem darin enthaltenen Modul) hinzu.",
@@ -3114,7 +3121,18 @@
         "prNotFound": "Pull Request #{number} wurde im Repository dieses Service nicht gefunden. Prüfe die Nummer, oder verknüpfe den Service mit dem Repository, in dem der Pull Request liegt.",
         "prRepoMismatch": "Dieser Pull Request liegt in einem anderen Repository. Dieser Service prüft {repo}; lege die Prüfaufgabe unter dem Service an, der mit dem Repository des Pull Requests verknüpft ist."
       },
-      "contextFailed": "Aufgabe nicht erstellt: {count} Anhang konnte nicht gelesen werden | Aufgabe nicht erstellt: {count} Anhänge konnten nicht gelesen werden"
+      "contextFailed": "Aufgabe nicht erstellt: {count} Anhang konnte nicht gelesen werden | Aufgabe nicht erstellt: {count} Anhänge konnten nicht gelesen werden",
+      "bugFishingFields": {
+        "angles": {
+          "label": "Zu untersuchende Blickwinkel",
+          "hint": "Jeder Blickwinkel ist ein eigener Durchgang durch die Codebasis mit einer anderen Fragestellung. Lassen Sie alle Felder leer, um alle zu untersuchen.",
+          "allSelected": "Es werden alle Blickwinkel untersucht."
+        },
+        "focus": {
+          "label": "Worauf konzentrieren",
+          "placeholder": "Teilsysteme, Verzeichnisse oder die Fehlerart, die dieses Team bisher Zeit gekostet hat"
+        }
+      }
     },
     "recurring": {
       "title": "Eine wiederkehrende Pipeline hinzufügen",
@@ -6109,7 +6127,11 @@
         "kaizen_entry_not_settled": "Der Kaizen-Eintrag wurde noch nicht bewertet",
         "bootstrap_not_awaiting_review": "Dieses Bootstrap wartet auf keine Prüfung",
         "adoption_plan_unavailable": "Es gibt keinen Plan zum Freigeben",
-        "monorepo_directory_taken": "Dieses Verzeichnis existiert bereits"
+        "monorepo_directory_taken": "Dieses Verzeichnis existiert bereits",
+        "no_expedition": "Dieser Lauf enthält keine Fehlersuch-Expedition",
+        "not_awaiting_triage": "Diese Expedition wartet nicht auf eine Sichtung",
+        "already_addressed": "Für einige Befunde gibt es bereits eine Behebungsaufgabe",
+        "no_host_frame": "Diese Expedition liegt unter keinem Service"
       },
       "description": {
         "dependencies_unmet": "Diese Aufgabe hängt von anderen ab, die noch nicht abgeschlossen sind. Schließe sie ab oder gib sie frei und starte dann erneut.",
@@ -6154,7 +6176,11 @@
         "kaizen_entry_not_settled": "Die Bewertung steht noch aus oder läuft gerade, es gibt also keine Empfehlungen zum Bestätigen. Versuchen Sie es erneut, sobald sie abgeschlossen ist.",
         "bootstrap_not_awaiting_review": "Der Lauf ist weitergegangen, seit diese Prüfung geöffnet wurde. Lade das Board neu.",
         "adoption_plan_unavailable": "Die Analyse konnte keinen erstellen, also gibt es keine Entscheidungen zum Absenden.",
-        "monorepo_directory_taken": "Ein Bootstrap legt einen neuen Service an. Wähle ein noch nicht vorhandenes Verzeichnis oder importiere das bestehende als Service."
+        "monorepo_directory_taken": "Ein Bootstrap legt einen neuen Service an. Wähle ein noch nicht vorhandenes Verzeichnis oder importiere das bestehende als Service.",
+        "no_expedition": "Der Lauf, den Sie ansehen, enthält keinen Expeditionszustand, es gibt also nichts zu sichten. Laden Sie den Lauf neu und versuchen Sie es erneut.",
+        "not_awaiting_triage": "Sie untersucht entweder noch einen weiteren Blickwinkel oder wurde bereits abgeschlossen. Laden Sie den Lauf neu, um den Stand zu sehen.",
+        "already_addressed": "Dafür wurde bereits früher eine Behebungsaufgabe erstellt, es wurde also nichts neu angelegt. Öffnen Sie den Befund, um zur vorhandenen Aufgabe zu gelangen.",
+        "no_host_frame": "Eine Behebungsaufgabe braucht einen Service als Zuhause und ein Repository zum Beheben. Verschieben Sie die Expeditionsaufgabe unter einen Service-Rahmen und versuchen Sie es erneut."
       },
       "action": {
         "connectGitHub": "GitHub verbinden",
@@ -8297,6 +8323,68 @@
       "importFailed": "Servicekatalog konnte nicht importiert werden",
       "disconnected": "Servicekatalog getrennt",
       "disconnectFailed": "Servicekatalog konnte nicht getrennt werden"
+    }
+  },
+  "bugFishing": {
+    "title": "Fehlersuch-Expedition",
+    "titleWithBlock": "Fehlersuche: {title}",
+    "subtitle": "Markieren Sie die Befunde, die behoben werden sollen — aus jedem wird eine eigene Aufgabe.",
+    "stillFishing": "Suche läuft noch — {done} von {total} Blickwinkeln sind eingetroffen. Alles unten kann bereits bearbeitet werden.",
+    "counts": "{untriaged} zu sichten, {spawned} zur Behebung geschickt",
+    "showTriaged": "Entschiedene anzeigen",
+    "phases": {
+      "heading": "Blickwinkel",
+      "all": "Alle Funde ({count})",
+      "found": "{count} gefunden",
+      "failedNote": "Dieser Blickwinkel wurde nicht abgeschlossen: {reason}",
+      "status": {
+        "pending": "In Warteschlange",
+        "fishing": "Suche läuft…",
+        "completed": "Fertig",
+        "failed": "Fehlgeschlagen"
+      }
+    },
+    "fixPipeline": {
+      "label": "Behebungen laufen auf",
+      "boardDefault": "Standard des Boards",
+      "hint": "Ab jetzt markierte Befunde laufen auf {pipeline}."
+    },
+    "empty": {
+      "nothingCaught": "Diese Expedition hat bisher nichts gefunden.",
+      "allTriaged": "Über jeden Befund wurde entschieden."
+    },
+    "finding": {
+      "failureScenario": "Wie es auftritt",
+      "evidence": "Belege, die die Expedition angeführt hat",
+      "suggestedFix": "Vorgeschlagene Behebung",
+      "fixThis": "Beheben",
+      "dismiss": "Verwerfen",
+      "spawned": "Eine Behebungsaufgabe läuft auf {pipeline}",
+      "openTask": "Aufgabe öffnen"
+    },
+    "severity": {
+      "critical": "Kritisch",
+      "high": "Hoch",
+      "medium": "Mittel",
+      "low": "Niedrig"
+    },
+    "kind": {
+      "bug": "Fehler",
+      "logic-gap": "Logiklücke",
+      "edge-case": "Randfall",
+      "footgun": "Stolperfalle",
+      "requirement-gap": "Anforderungslücke",
+      "other": "Sonstiges"
+    },
+    "confidence": {
+      "high": "Hohe Sicherheit",
+      "medium": "Mittlere Sicherheit",
+      "low": "Geringe Sicherheit"
+    },
+    "footer": {
+      "parked": "Alle Blickwinkel wurden untersucht.",
+      "parkedWithUntriaged": "Über {count} Befund(e) wurde noch nicht entschieden.",
+      "finish": "Sichtung abschließen"
     }
   }
 }

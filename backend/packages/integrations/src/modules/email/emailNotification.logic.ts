@@ -29,6 +29,7 @@ const TYPE_LABEL: Record<NotificationType, string> = {
   fork_decision_pending: 'Choose an implementation approach',
   judge_review: 'Review verdict needs a decision',
   pr_review_ready: 'PR review findings',
+  bug_fishing_triage: 'Bug-fishing findings to triage',
   initiative: 'Initiative update',
   platform_health: 'Platform health alert',
   budget_paused: 'Runs paused: spend budget reached',

@@ -93,6 +93,9 @@ const MENTION_AUDIENCE: Record<NotificationType, MentionAudience> = {
   // The PR reviewer surfaced findings to triage: tell the task's creator (who selects which
   // findings to act on) and the engineers.
   pr_review_ready: { roles: ['engineering'], includeCreator: true },
+  // A bug-fishing expedition finished its angles: tell the task's creator (who triages what it
+  // caught and marks the findings worth fixing) and the engineers.
+  bug_fishing_triage: { roles: ['engineering'], includeCreator: true },
   // An initiative needs attention (a blocked task, or completion): tell the creator (who owns
   // the initiative) and the engineers driving its work.
   initiative: { roles: ['engineering'], includeCreator: true },
@@ -200,6 +203,7 @@ const TYPE_LABEL: Record<NotificationType, string> = {
   fork_decision_pending: ':fork_and_knife: Choose an implementation approach',
   judge_review: ':balance_scale: Review verdict needs a decision',
   pr_review_ready: ':clipboard: PR review findings',
+  bug_fishing_triage: ':fishing_pole_and_fish: Bug-fishing findings to triage',
   initiative: ':world_map: Initiative update',
   platform_health: ':bar_chart: Platform health alert',
   budget_paused: ':moneybag: Runs paused — spend budget reached',

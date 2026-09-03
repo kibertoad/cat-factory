@@ -68,6 +68,10 @@ const META: Record<Notification['type'], { icon: string; color: Accent }> = {
   // The PR reviewer surfaced findings to triage. Clicking the title opens the PR-review window
   // (see `reveal`); "act" just marks it read (findings are selected in that window, not here).
   pr_review_ready: { icon: 'i-lucide-clipboard-check', color: 'primary' },
+  // A bug-fishing expedition finished every angle and is waiting for its catch to be triaged.
+  // Clicking the title opens the expedition window (see `reveal`); "act" just marks it read
+  // (findings are marked in that window, and each mark spawns its own fix task, not here).
+  bug_fishing_triage: { icon: 'i-lucide-fish', color: 'primary' },
   // The initiative loop needs attention (a blocked task, or completion). Clicking the title
   // opens the initiative tracker window; "act" just marks it read.
   initiative: { icon: 'i-lucide-milestone', color: 'primary' },
@@ -112,6 +116,7 @@ const ACTION_KEYS: Record<Notification['type'], string> = {
   fork_decision_pending: 'layout.notifications.action.fork_decision_pending',
   judge_review: 'layout.notifications.action.judge_review',
   pr_review_ready: 'layout.notifications.action.pr_review_ready',
+  bug_fishing_triage: 'layout.notifications.action.bug_fishing_triage',
   initiative: 'layout.notifications.action.initiative',
   platform_health: 'layout.notifications.action.platform_health',
   budget_paused: 'layout.notifications.action.budget_paused',
@@ -240,6 +245,7 @@ function reveal(n: Notification) {
   else if (n.type === 'fork_decision_pending') revealForkDecision(n)
   else if (n.type === 'judge_review') revealJudge(n)
   else if (n.type === 'pr_review_ready') revealPrReview(n)
+  else if (n.type === 'bug_fishing_triage') revealBugFishing(n)
   else if (n.type === 'initiative') ui.openInitiativeTracker(n.blockId)
   else ui.select(n.blockId)
 }
@@ -292,6 +298,15 @@ function revealJudge(n: Notification) {
  */
 function revealPrReview(n: Notification) {
   if (n.executionId && execution.getInstance(n.executionId)) ui.openPrReview(n.executionId)
+  else if (n.blockId) ui.select(n.blockId)
+}
+
+/**
+ * Open the bug-fishing expedition window for a run whose angles have all settled. Falls back to
+ * focusing the block when the run is not loaded, exactly like its PR-review sibling.
+ */
+function revealBugFishing(n: Notification) {
+  if (n.executionId && execution.getInstance(n.executionId)) ui.openBugFishing(n.executionId)
   else if (n.blockId) ui.select(n.blockId)
 }
 

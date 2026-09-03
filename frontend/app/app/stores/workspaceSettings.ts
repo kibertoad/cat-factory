@@ -35,6 +35,7 @@ const DEFAULTS: WorkspaceSettings = {
   allowInitiatorPat: true,
   // The custom metadata bag: empty until someone fills a declared field in. Never null — an
   // external-tool resolver indexes it (`ctx.metadata.gameId`) with no guard.
+  bugFishingFixPipelineId: null,
   metadata: {},
 }
 

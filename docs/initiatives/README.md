@@ -45,6 +45,7 @@ a tracker document](../../CLAUDE.md).
 - [Agent-run environment fidelity](./agent-run-environment-fidelity.md)
 - [Auto-generated condensed briefs for best-practice standards](./auto-generated-fragment-briefs.md)
 - [Binary outputs stored through foundational services](./binary-output-foundational-storage.md)
+- [Bug fishing expedition (multi-angle hunt → triage → spawned fix tasks)](./bug-fishing-expedition.md)
 - [Bug-triage pipeline](./bug-triage-pipeline.md)
 - [Configurable per-agent-kind output budgets](./configurable-agent-output-budgets.md)
 - [Custom initiative definitions (org-registered presets)](./custom-initiative-definitions.md)

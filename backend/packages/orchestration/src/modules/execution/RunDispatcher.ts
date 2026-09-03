@@ -71,6 +71,7 @@ import {
   makeJudgeContext,
 } from './extension-contexts.js'
 import { PrReviewController } from './PrReviewController.js'
+import { BugFishingController } from './BugFishingController.js'
 import type { PrVerificationReportController } from './PrVerificationReportController.js'
 import { PrReviewResolutionController } from './PrReviewResolutionController.js'
 import { PollCompletionController } from './PollCompletionController.js'
@@ -162,6 +163,7 @@ export class RunDispatcher {
   private readonly forkDecisionController: ForkDecisionController
   private readonly binaryCandidateController: BinaryCandidateController
   private readonly prReviewController: PrReviewController
+  private readonly bugFishingController: BugFishingController
   // The four review-gate SUBJECTS are pure pass-throughs into `registryDeps` — the dispatcher
   // never reads one itself — so they are forwarded from `deps` there rather than mirrored onto
   // four fields that only ever feed one literal.
@@ -278,6 +280,7 @@ export class RunDispatcher {
     this.forkDecisionController = deps.forkDecisionController
     this.binaryCandidateController = deps.binaryCandidateController
     this.prReviewController = deps.prReviewController
+    this.bugFishingController = deps.bugFishingController
     this.interviewControllers = new Map(
       (deps.interviewControllers ?? []).map((c) => [c.agentKind, c]),
     )
@@ -369,6 +372,7 @@ export class RunDispatcher {
       humanTestController: deps.humanTestController,
       visualConfirmationController: deps.visualConfirmationController,
       prReviewController: deps.prReviewController,
+      bugFishingController: deps.bugFishingController,
       recordBackendDiagnostics: (instance, backend) =>
         this.recordBackendDiagnostics(instance, backend),
       recoverContainerEviction: (ws, instance, step, failure) =>
@@ -443,6 +447,7 @@ export class RunDispatcher {
       forkDecisionController: this.forkDecisionController,
       binaryCandidateController: this.binaryCandidateController,
       prReviewController: this.prReviewController,
+      bugFishingController: this.bugFishingController,
       mergeResolver: this.mergeResolver,
       requirementsKind: deps.requirementsKind,
       clarityKind: deps.clarityKind,
@@ -463,7 +468,8 @@ export class RunDispatcher {
       judgeFor: (kind) => this.judgeController.judgeFor(kind),
       handleForkDecisionPhase: (ctx) => this.handleForkDecisionPhase(ctx),
       handlePrReviewResolution: (ctx) => this.handlePrReviewResolution(ctx),
-      handleAgentStep: (ctx) => this.handleAgentStep(ctx),
+      handleAgentStep: (ctx, dispatchKind, augment) =>
+        this.handleAgentStep(ctx, dispatchKind, augment),
       ingestBlueprint: (ws, blockId, raw) => this.ingestBlueprint(ws, blockId, raw),
       ingestSpec: (ws, raw) => this.ingestSpec(ws, raw),
     }

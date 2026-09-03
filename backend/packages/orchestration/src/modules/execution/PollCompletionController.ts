@@ -19,6 +19,7 @@ import type { TesterController } from './TesterController.js'
 import type { HumanTestController } from './HumanTestController.js'
 import type { VisualConfirmationController } from './VisualConfirmationController.js'
 import type { PrReviewController } from './PrReviewController.js'
+import { type BugFishingController, BUG_FISHING_STEP_KIND } from './BugFishingController.js'
 import {
   applyValidationReport,
   coerceValidationReport,
@@ -43,6 +44,7 @@ export interface PollCompletionControllerDeps {
   humanTestController: HumanTestController
   visualConfirmationController: VisualConfirmationController
   prReviewController: PrReviewController
+  bugFishingController: BugFishingController
   recordBackendDiagnostics: (instance: ExecutionInstance, backend: string | undefined) => void
   recoverContainerEviction: (
     workspaceId: string,
@@ -72,6 +74,7 @@ export class PollCompletionController {
   private readonly humanTestController: HumanTestController
   private readonly visualConfirmationController: VisualConfirmationController
   private readonly prReviewController: PrReviewController
+  private readonly bugFishingController: BugFishingController
   private readonly recordBackendDiagnostics: PollCompletionControllerDeps['recordBackendDiagnostics']
   private readonly recoverContainerEviction: PollCompletionControllerDeps['recoverContainerEviction']
   private readonly markContainerErrored: PollCompletionControllerDeps['markContainerErrored']
@@ -84,6 +87,7 @@ export class PollCompletionController {
     this.humanTestController = deps.humanTestController
     this.visualConfirmationController = deps.visualConfirmationController
     this.prReviewController = deps.prReviewController
+    this.bugFishingController = deps.bugFishingController
     this.recordBackendDiagnostics = deps.recordBackendDiagnostics
     this.recoverContainerEviction = deps.recoverContainerEviction
     this.markContainerErrored = deps.markContainerErrored
@@ -213,6 +217,24 @@ export class PollCompletionController {
         instance,
         step,
         update.error,
+      )
+      if (settled) return settled
+    }
+    // A BUG-FISHING pass failed for real: settle THAT ANGLE as failed, carrying the reason, and
+    // carry on with the next one. The angles share nothing but the checkout, so one crashing must
+    // not cost the expedition the passes that already landed nor the ones still to come — and the
+    // failure is named on the phase, because a phase that silently reported nothing is
+    // indistinguishable from a phase that honestly found nothing. Sits beside the Challenge
+    // Investigator branch above for the same reason: both are failures of ONE non-critical part
+    // of a larger read-only investigation, not a verdict on the run.
+    if (step.agentKind === BUG_FISHING_STEP_KIND && step.bugFishing?.status === 'fishing') {
+      const block = await this.blockRepository.get(workspaceId, instance.blockId)
+      const settled = await this.bugFishingController.recordPhaseFailure(
+        workspaceId,
+        instance,
+        step,
+        update.error,
+        block,
       )
       if (settled) return settled
     }

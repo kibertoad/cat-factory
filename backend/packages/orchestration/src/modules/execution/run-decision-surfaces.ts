@@ -1,6 +1,9 @@
 import type { RunDispatcher } from './RunDispatcher.js'
+import type { BugFishingController } from './BugFishingController.js'
 import type {
+  AddressBugFishingFindingsInput,
   BinaryCandidateStepState,
+  BugFishingStepState,
   ChallengePrReviewFindingInput,
   ChooseForkInput,
   FollowUpResolution,
@@ -91,11 +94,64 @@ export interface RunDecisionSurfaces {
     findingId: string,
     input: ChallengePrReviewFindingInput,
   ): Promise<PrReviewStepState>
+  getBugFishing(workspaceId: string, executionId: string): Promise<BugFishingStepState | null>
+  addressBugFishingFindings(
+    workspaceId: string,
+    executionId: string,
+    input: AddressBugFishingFindingsInput,
+    initiatedBy: string | null,
+  ): Promise<BugFishingStepState>
+  dismissBugFishingFinding(
+    workspaceId: string,
+    executionId: string,
+    findingId: string,
+  ): Promise<BugFishingStepState>
+  resolveBugFishing(workspaceId: string, executionId: string): Promise<BugFishingStepState>
 }
 
-/** Bind the park-window verbs to the dispatcher that owns their controllers. */
-export function runDecisionSurfaces(dispatcher: () => RunDispatcher): RunDecisionSurfaces {
+/**
+ * Bind the park-window verbs to the dispatcher that owns their controllers.
+ *
+ * The bug-fishing verbs take the controller DIRECTLY rather than reaching it through the
+ * dispatcher, which the others do only because the dispatcher already held them. Routing four
+ * more verbs through it would have added a delegate apiece to a file that is against its size
+ * budget, and the dispatcher has nothing to contribute to them: they are human actions on a
+ * parked (or still-fishing) run, and none of them touches the per-step dispatch spine.
+ */
+export function runDecisionSurfaces(
+  dispatcher: () => RunDispatcher,
+  bugFishing: () => BugFishingController,
+): RunDecisionSurfaces {
   return {
+    /** @see BugFishingController.getActive */
+    getBugFishing(workspaceId: string, executionId: string): Promise<BugFishingStepState | null> {
+      return bugFishing().getActive(workspaceId, executionId)
+    },
+
+    /** @see BugFishingController.address */
+    addressBugFishingFindings(
+      workspaceId: string,
+      executionId: string,
+      input: AddressBugFishingFindingsInput,
+      initiatedBy: string | null,
+    ): Promise<BugFishingStepState> {
+      return bugFishing().address(workspaceId, executionId, input, initiatedBy)
+    },
+
+    /** @see BugFishingController.dismissFinding */
+    dismissBugFishingFinding(
+      workspaceId: string,
+      executionId: string,
+      findingId: string,
+    ): Promise<BugFishingStepState> {
+      return bugFishing().dismissFinding(workspaceId, executionId, findingId)
+    },
+
+    /** @see BugFishingController.resolve */
+    resolveBugFishing(workspaceId: string, executionId: string): Promise<BugFishingStepState> {
+      return bugFishing().resolve(workspaceId, executionId)
+    },
+
     /** @see RunDispatcher.getFollowUps */
     getFollowUps(workspaceId: string, executionId: string): Promise<FollowUpsStepState | null> {
       return dispatcher().getFollowUps(workspaceId, executionId)

@@ -81,6 +81,25 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     resultView: 'generic-structured',
   },
   {
+    // The BUG-FISHING expedition's single step, dispatched once per ANGLE by the engine's phase
+    // loop. Registered on the backend so it also arrives via the workspace manifest, but modelled
+    // statically here for the reason `pr-reviewer` is: `agentKindMeta('bug-fisher').resultView`
+    // has to resolve to the expedition window on every surface, not only once the manifest is
+    // hydrated. Mirrors the backend `presentation` in `bug-fisher.ts`.
+    kind: 'bug-fisher',
+    tier: 'intermediate',
+    label: 'Bug Fisher',
+    icon: 'i-lucide-fish',
+    color: '#0ea5e9',
+    category: 'review',
+    // Hunts for defects nobody reported: it belongs with the bug work rather than the build
+    // ladder, and with review because its product is findings.
+    purposes: ['bugfix', 'review'],
+    description:
+      'Read-only, multi-angle hunt through an existing codebase for genuine logic gaps, latent bugs, footguns and unhandled edge cases — one pass per angle, nothing changed.',
+    resultView: 'bug-fishing',
+  },
+  {
     // A read-only, token-bounded deep review of an EXISTING open pull request (the `pl_review`
     // pipeline's single step). Registered on the backend so it also arrives via the workspace
     // manifest, but modelled statically here so `agentKindMeta('pr-reviewer').resultView`
@@ -952,6 +971,12 @@ export const TASK_TYPE_META: Record<string, TaskTypeMeta> = {
     icon: 'i-lucide-bug',
     color: '#f87171',
     labelKey: 'board.addTask.types.bug',
+  },
+  'bug-fishing': {
+    taskType: 'bug-fishing',
+    icon: 'i-lucide-fish',
+    color: '#0ea5e9',
+    labelKey: 'board.addTask.types.bugFishing',
   },
   document: {
     taskType: 'document',

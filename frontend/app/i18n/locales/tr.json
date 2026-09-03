@@ -223,7 +223,8 @@
         "media": "Medya",
         "recurring": "Yinelenen",
         "review": "İnceleme",
-        "ralph": "Ralph döngüsü"
+        "ralph": "Ralph döngüsü",
+        "bugFishing": "Hata avı"
       },
       "recurringWithFrame": "Yinelenen bir görev, bir işlem hattını belirli bir aralıkta çalıştırır. Programı ve istemi ayarlamak için devam edin.",
       "recurringNoFrame": "Yinelenen bir görev bir serviste bulunmalıdır. Bir servis çerçevesinden (veya içindeki bir modülden) ekleyin.",
@@ -338,7 +339,18 @@
         "prNotFound": "#{number} numaralı pull request bu servisin deposunda bulunamadı. Numarayı kontrol edin veya servisi, pull request'in bulunduğu depoya bağlayın.",
         "prRepoMismatch": "Bu pull request başka bir depoda. Bu servis {repo} deposunu inceliyor; inceleme görevini pull request'in deposuna bağlı servis altında oluşturun."
       },
-      "contextFailed": "Görev oluşturulmadı: {count} ek okunamadı | Görev oluşturulmadı: {count} ek okunamadı"
+      "contextFailed": "Görev oluşturulmadı: {count} ek okunamadı | Görev oluşturulmadı: {count} ek okunamadı",
+      "bugFishingFields": {
+        "angles": {
+          "label": "Taranacak açılar",
+          "hint": "Her açı, kod tabanını farklı bir soruyla gözden geçiren ayrı bir geçiştir. Hepsini taramak için tüm kutuları boş bırakın.",
+          "allSelected": "Tüm açılar taranacak."
+        },
+        "focus": {
+          "label": "Nereye yoğunlaşılsın",
+          "placeholder": "Alt sistemler, dizinler ya da bu ekibe en çok zaman kaybettiren kusur türü"
+        }
+      }
     },
     "recurring": {
       "title": "Yinelenen bir işlem hattı ekle",
@@ -690,7 +702,11 @@
         "kaizen_entry_not_settled": "Kaizen kaydı henüz değerlendirilmedi",
         "bootstrap_not_awaiting_review": "Bu bootstrap bir inceleme beklemiyor",
         "adoption_plan_unavailable": "Onaylanacak bir plan yok",
-        "monorepo_directory_taken": "Bu dizin zaten var"
+        "monorepo_directory_taken": "Bu dizin zaten var",
+        "no_expedition": "Bu çalıştırmada hata avı yok",
+        "not_awaiting_triage": "Bu sefer triyaj beklemiyor",
+        "already_addressed": "Bazı bulguların zaten bir düzeltme görevi var",
+        "no_host_frame": "Bu sefer bir hizmetin altında değil"
       },
       "description": {
         "dependencies_unmet": "Bu görev henüz tamamlanmamış başka görevlere bağlı. Onları tamamla veya engelini kaldır, ardından yeniden başlat.",
@@ -735,7 +751,11 @@
         "kaizen_entry_not_settled": "Değerlendirmesi hâlâ sırada veya sürüyor, bu yüzden onaylanacak bir öneri yok. Tamamlandığında yeniden deneyin.",
         "bootstrap_not_awaiting_review": "Bu inceleme açıldığından beri çalışma ilerledi. Panoyu yeniden yükle.",
         "adoption_plan_unavailable": "İnceleme bir plan üretemedi, bu yüzden gönderilecek karar yok.",
-        "monorepo_directory_taken": "Bootstrap yeni bir servis oluşturur. Henüz var olmayan bir dizin seç ya da mevcut olanı servis olarak içe aktar."
+        "monorepo_directory_taken": "Bootstrap yeni bir servis oluşturur. Henüz var olmayan bir dizin seç ya da mevcut olanı servis olarak içe aktar.",
+        "no_expedition": "Baktığınız çalıştırma sefer durumu taşımıyor, dolayısıyla triyaj edilecek bir şey yok. Çalıştırmayı yenileyip yeniden deneyin.",
+        "not_awaiting_triage": "Ya hâlâ başka bir açıyı tarıyor ya da çoktan bitirilmiş. Nerede olduğunu görmek için çalıştırmayı yenileyin.",
+        "already_addressed": "Daha önce onlar için bir düzeltme görevi oluşturulmuştu, bu yüzden yeniden bir şey oluşturulmadı. Mevcut göreve ulaşmak için bulguyu açın.",
+        "no_host_frame": "Bir düzeltme görevinin altında yaşayacağı bir hizmete ve düzeltilecek bir depoya ihtiyacı var. Sefer görevini bir hizmet çerçevesinin altına taşıyıp yeniden deneyin."
       },
       "action": {
         "connectGitHub": "GitHub'ı bağla",
@@ -2344,7 +2364,8 @@
         "budget_paused": "Okundu işaretle",
         "budget_threshold": "Okundu işaretle",
         "key_drift": "Eski kimlik bilgilerini kaldır",
-        "merge_tag_request": "Eforu kaydet"
+        "merge_tag_request": "Eforu kaydet",
+        "bug_fishing_triage": "Okundu işaretle"
       },
       "toast": {
         "acted": "İşlendi olarak işaretlendi",
@@ -3920,6 +3941,11 @@
         "ageToggle": "Uzun süre önce tamamlanan görevleri de gizle",
         "days": "Sakla (gün)",
         "hidesOnlyHint": "Hiçbir şey silinmez. Tamamlanma tarihi kayıtlı olmayan görevler yaşları nedeniyle asla gizlenmez."
+      },
+      "bugFishing": {
+        "heading": "Hata avı düzeltme hattı",
+        "body": "Bir hata avı bulgusunu işaretlediğinizde düzeltme görevinin çalışacağı hat. İşaretlenen her bulgu bu hat üzerinde kendi görevine dönüşür; işaretleyen kişi bu seçimi tek bir grup için değiştirebilir.",
+        "builtInDefault": "Yerleşik hata düzeltme şablonunu kullan"
       }
     },
     "localModelEndpoints": {
@@ -8297,6 +8323,68 @@
       "importFailed": "Servis kataloğu aktarılamadı",
       "disconnected": "Servis kataloğu bağlantısı kesildi",
       "disconnectFailed": "Servis kataloğu bağlantısı kesilemedi"
+    }
+  },
+  "bugFishing": {
+    "title": "Hata avı seferi",
+    "titleWithBlock": "Hata avı: {title}",
+    "subtitle": "Düzeltilmeye değer bulguları işaretleyin; her biri kendi hata düzeltme görevine dönüşür.",
+    "stillFishing": "Av sürüyor — {total} açının {done} tanesi tamamlandı. Aşağıdakilerin tümü şimdiden ele alınabilir.",
+    "counts": "{untriaged} bulgu bekliyor, {spawned} tanesi düzeltmeye gönderildi",
+    "showTriaged": "Karara bağlananları göster",
+    "phases": {
+      "heading": "Açılar",
+      "all": "Tüm bulgular ({count})",
+      "found": "{count} bulundu",
+      "failedNote": "Bu açı tamamlanamadı: {reason}",
+      "status": {
+        "pending": "Sırada",
+        "fishing": "Taranıyor…",
+        "completed": "Bitti",
+        "failed": "Başarısız"
+      }
+    },
+    "fixPipeline": {
+      "label": "Düzeltmeler şurada çalışır",
+      "boardDefault": "Panonun varsayılanı",
+      "hint": "Bundan sonra işaretleyeceğiniz bulgular {pipeline} üzerinde çalışır."
+    },
+    "empty": {
+      "nothingCaught": "Bu sefer şimdiye kadar hiçbir şey bulmadı.",
+      "allTriaged": "Her bulgu karara bağlandı."
+    },
+    "finding": {
+      "failureScenario": "Nasıl ortaya çıkıyor",
+      "evidence": "Seferin gösterdiği kanıt",
+      "suggestedFix": "Önerilen düzeltme",
+      "fixThis": "Bunu düzelt",
+      "dismiss": "Yoksay",
+      "spawned": "{pipeline} üzerinde bir düzeltme görevi çalışıyor",
+      "openTask": "Görevi aç"
+    },
+    "severity": {
+      "critical": "Kritik",
+      "high": "Yüksek",
+      "medium": "Orta",
+      "low": "Düşük"
+    },
+    "kind": {
+      "bug": "Hata",
+      "logic-gap": "Mantık boşluğu",
+      "edge-case": "Sınır durumu",
+      "footgun": "Tuzak",
+      "requirement-gap": "Gereksinim boşluğu",
+      "other": "Diğer"
+    },
+    "confidence": {
+      "high": "Yüksek güven",
+      "medium": "Orta güven",
+      "low": "Düşük güven"
+    },
+    "footer": {
+      "parked": "Tüm açılar tarandı.",
+      "parkedWithUntriaged": "{count} bulgu hâlâ karara bağlanmadı.",
+      "finish": "Triyajı bitir"
     }
   }
 }

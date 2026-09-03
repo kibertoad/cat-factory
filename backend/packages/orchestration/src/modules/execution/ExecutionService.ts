@@ -45,6 +45,7 @@ import { runStepPreamble, type StepPreambleDeps } from './stepPreamble.js'
 import { resolveScopeForRun } from './runServiceScope.js'
 import type { InputGateController } from './InputGateController.js'
 import {
+  type GateWindowControllerDeps,
   buildGateWindowControllers,
   buildInputGateController,
   buildReviewSubjects,
@@ -406,24 +407,17 @@ export class ExecutionService {
         this.inferBlockTechnical(ws, block, producer, companionStep),
     })
     // The human-gate window controllers (Tester / Ralph / human-test / visual-confirmation /
-    // review / fork-decision / PR-review), built by the sibling factory over one deps bundle.
-    // The engine methods they reach back into are passed BOUND, so every closure still resolves
-    // against this instance exactly as when they were constructed inline.
-    const gateWindows = buildGateWindowControllers({
+    // review / fork-decision / PR-review / bug-fishing), built by the sibling factory over one
+    // deps bundle. Assembled in its own method for the reason {@link buildRunDispatcher} is: the
+    // constructor is against its per-function line budget, and a budget is a split trigger.
+    const gateWindows = this.buildGateWindows(dependencies, {
       blockRepository,
       executionRepository,
       workRunner,
       agentExecutor,
       notificationService,
-      contextBuilder: this.contextBuilder,
-      stateMachine: this.runStateMachine,
-      stepGraph: this.stepGraph,
       idGenerator,
       clock,
-      clockNow: () => this.clock.now(),
-      resolveRiskPolicy: (ws, block, run) => this.resolveRiskPolicy(ws, block, run),
-      dispatchIterationCap: (ws, blockId, choice, handlers) =>
-        this.runActions.iterationCap.dispatchIterationCap(ws, blockId, choice, handlers),
       testerQualityReviewer,
       environmentProvisioning,
       environmentTeardown,
@@ -433,6 +427,7 @@ export class ExecutionService {
       forkChatService,
       issueWriteback,
       logger,
+      executionEventPublisher,
     })
     this.gateWindows = gateWindows
     // The pre-dispatch input gate: not a gate WINDOW (it guards the run's first dispatch and has no
@@ -608,6 +603,57 @@ export class ExecutionService {
    * hand-maintained forwarding list, for the reason the constructor states: a field dropped from
    * such a list turns a feature off silently. Split out of the constructor purely for size.
    */
+  /**
+   * Assemble the human-gate window controllers. A method rather than a literal in the constructor
+   * for the reason {@link ExecutionService.buildRunDispatcher} is one: the constructor is against
+   * its per-function line budget, and that budget is a split trigger rather than a number to
+   * raise. `leaves` carries the values the constructor destructured out of `deps` (they are not
+   * yet fields when this runs); the engine methods the controllers reach back into are passed
+   * BOUND, so every closure still resolves against this instance exactly as it did inline.
+   */
+  private buildGateWindows(
+    deps: ExecutionServiceDependencies,
+    leaves: Pick<
+      GateWindowControllerDeps,
+      | 'blockRepository'
+      | 'executionRepository'
+      | 'workRunner'
+      | 'agentExecutor'
+      | 'notificationService'
+      | 'idGenerator'
+      | 'clock'
+      | 'testerQualityReviewer'
+      | 'environmentProvisioning'
+      | 'environmentTeardown'
+      | 'branchUpdater'
+      | 'resolveBinaryArtifactStore'
+      | 'documentRepository'
+      | 'forkChatService'
+      | 'issueWriteback'
+      | 'logger'
+    > & { executionEventPublisher: ExecutionServiceDependencies['executionEventPublisher'] },
+  ): ReturnType<typeof buildGateWindowControllers> {
+    return buildGateWindowControllers({
+      ...leaves,
+      contextBuilder: this.contextBuilder,
+      stateMachine: this.runStateMachine,
+      stepGraph: this.stepGraph,
+      clockNow: () => this.clock.now(),
+      resolveRiskPolicy: (ws, block, run) => this.resolveRiskPolicy(ws, block, run),
+      dispatchIterationCap: (ws, blockId, choice, handlers) =>
+        this.runActions.iterationCap.dispatchIterationCap(ws, blockId, choice, handlers),
+      pipelineRepository: deps.pipelineRepository,
+      workspaceSettingsRepository: deps.workspaceSettingsRepository,
+      serviceRepository: deps.serviceRepository,
+      events: leaves.executionEventPublisher,
+      // Bound, so a bug-fishing spawn starts its fix task through the real entry point rather
+      // than a copy of it — the same shape `PostMergeBoardController` takes for auto-started
+      // dependents, and for the same reason: the start funnel owns admission, the spend gate and
+      // the durable hand-off, none of which a second implementation would keep in step.
+      start: (ws, blockId, pipelineId, opts) => this.start(ws, blockId, pipelineId, opts),
+    })
+  }
+
   private buildRunDispatcher(
     deps: ExecutionServiceDependencies,
     runInitiatorScopeFn: NonNullable<ExecutionServiceDependencies['runInitiatorScope']>,
@@ -629,6 +675,7 @@ export class ExecutionService {
       forkDecisionController: this.gateWindows.forkDecisionController,
       binaryCandidateController: this.gateWindows.binaryCandidateController,
       prReviewController: this.gateWindows.prReviewController,
+      bugFishingController: this.gateWindows.bugFishingController,
       requirementsKind: this.requirementsKind,
       clarityKind: this.clarityKind,
       requirementsBrainstormKind: this.requirementsBrainstormKind,
@@ -1013,7 +1060,10 @@ export class ExecutionService {
    * One property rather than sixteen delegates, because they are one concern and the family grows
    * by two every time a park surface is added. See `run-decision-surfaces.ts`.
    */
-  readonly decisions: RunDecisionSurfaces = runDecisionSurfaces(() => this.runDispatcher)
+  readonly decisions: RunDecisionSurfaces = runDecisionSurfaces(
+    () => this.runDispatcher,
+    () => this.gateWindows.bugFishingController,
+  )
 
   /**
    * Infer + persist the block's `technical` label from the settled spec phase (item 5):
