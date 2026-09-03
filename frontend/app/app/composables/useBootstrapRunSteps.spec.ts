@@ -32,6 +32,10 @@ function job(id: string, over: Partial<BootstrapJob> = {}): BootstrapJob {
     failure: null,
     monorepo: null,
     phase: null,
+    // The base fixture is a new-repo run, so it takes that target's default delivery. The step
+    // rule never reads the field, which is why no case below overrides it: how a run's work
+    // lands says nothing about how many moves it takes to get there.
+    delivery: 'direct_push',
     adoptionPlan: null,
     adoptionReview: null,
     prUrl: null,
