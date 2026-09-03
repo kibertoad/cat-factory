@@ -345,25 +345,41 @@ export type PrReportReproduction = v.InferOutput<typeof prReportReproductionSche
  *
  * `completed` and `failed` are counted apart from `attempts` because they are the difference
  * between two machine edits and two container jobs that died having changed nothing, and a bare
- * round count reads as the first. `attempts - (completed + failed)` is a round still in flight,
- * which is reachable: the pull request is open by the time the deployer runs, so a report can be
- * published mid-loop.
+ * round count reads as the first. `attempts - (completed + failed + droppedRounds)` is a round
+ * still in flight, which is reachable: the pull request is open by the time the deployer runs, so
+ * a report can be published mid-loop.
+ *
+ * `attempts` counts every round the run dispatched while `maxAttempts` is the budget ONE
+ * provisioning cycle runs under, so the two are a ratio only where `cycles` is 1. A loop-back to
+ * the deployer re-arms the budget, and reporting four rounds "of 2" would read as a bound nobody
+ * enforces.
  *
  * There is deliberately no "did the repair work" field, for the reason the loop's own state has
  * none: whether the environment came up is the deployer's next verdict, and this section already
  * states it on {@link prReportEnvironmentSchema}'s `status`.
  */
 export const prReportDeployFixSchema = v.object({
-  /** Rounds DISPATCHED. */
+  /** Rounds DISPATCHED, across every provisioning cycle of the run. */
   attempts: v.number(),
-  /** The budget, frozen at the first escalation. Null when the loop recorded none. */
+  /** The PER-CYCLE budget, frozen at the first escalation. Null when the loop recorded none. */
   maxAttempts: v.optional(v.nullable(v.number())),
+  /**
+   * How many provisioning cycles those rounds are spread over: 1 on any run whose deployer was
+   * never looped back to, which is what makes `attempts` readable against `maxAttempts`.
+   */
+  cycles: v.number(),
   /** The classified provisioning cause that admitted the loop. */
   reason: v.string(),
   /** How many dispatched rounds the fixer's own job finished. */
   completed: v.number(),
   /** How many died without finishing, so that round changed nothing in the checkout. */
   failed: v.number(),
+  /**
+   * How many rounds ran whose outcome the step's own log cap has since dropped. Counted in
+   * `attempts` and in neither `completed` nor `failed`, and stated rather than folded into one of
+   * them: a dropped round is one nobody can now say finished or died.
+   */
+  droppedRounds: v.number(),
 })
 export type PrReportDeployFix = v.InferOutput<typeof prReportDeployFixSchema>
 
@@ -390,12 +406,24 @@ export type PrReportDeployFix = v.InferOutput<typeof prReportDeployFixSchema>
  *  - `withheld` is set when the last verdict asked for something the engine did not do: the
  *    budget was spent, the deployment forbids acting, or the provider cannot perform it. Without
  *    it a refused remedy and one that ran and did not help are the same row.
+ *
+ * `faultLayer`, `action` and `withheld` are read off ONE round, the newest that produced a
+ * verdict, and never assembled from whichever round happened to fill each field: a refusal
+ * belongs to the decision it refused, so pairing an older round's `withheld` with a newer
+ * round's verdict reports a remedy as blocked that in fact ran.
  */
 export const prReportEnvironmentInvestigationSchema = v.object({
-  /** Rounds run. */
+  /** Rounds run, across every provisioning cycle of the run. */
   attempts: v.number(),
-  /** The budget, frozen at the first round. */
+  /** The PER-CYCLE budget, frozen at the first round. */
   maxAttempts: v.optional(v.nullable(v.number())),
+  /**
+   * How many provisioning cycles those rounds are spread over; see the same field on
+   * {@link prReportDeployFixSchema}. `attempts` is a ratio against `maxAttempts` only at 1.
+   */
+  cycles: v.number(),
+  /** How many rounds the step's log cap dropped; see {@link prReportDeployFixSchema}. */
+  droppedRounds: v.number(),
   /** The layer the LAST verdict blamed; null when no round produced one. */
   faultLayer: v.optional(v.nullable(environmentFaultLayerSchema)),
   /**
@@ -453,8 +481,18 @@ export type PrReportEnvironmentRemediation = v.InferOutput<
 export const prReportEnvironmentSchema = v.object({
   /** The service frame the environment was provisioned for. */
   frameId: v.string(),
-  /** `ready` (live), `failed` (the provision broke) or `skipped` (an infraless frame). */
-  status: v.picklist(['ready', 'failed', 'skipped']),
+  /**
+   * `ready` (live), `failed` (the provision broke), `skipped` (an infraless frame), or
+   * `unsettled`.
+   *
+   * `unsettled` is the frame the run holds no terminal outcome for, and it exists because both
+   * remediation loops CLEAR the recorded outcome to make the re-provision happen: a report
+   * composed in that window (the run was abandoned, timed out, or failed elsewhere) would
+   * otherwise drop the frame entirely and read as a deployer that recorded nothing, on a run
+   * where the platform demonstrably acted. It is never a verdict about the environment, which is
+   * why it is not a member of the step's own `deployEnvStateSchema`: nothing settled.
+   */
+  status: v.picklist(['ready', 'failed', 'skipped', 'unsettled']),
   url: v.optional(v.nullable(v.string())),
   error: v.optional(v.nullable(v.string())),
   /** What the platform tried about a failure. See {@link prReportEnvironmentRemediationSchema}. */

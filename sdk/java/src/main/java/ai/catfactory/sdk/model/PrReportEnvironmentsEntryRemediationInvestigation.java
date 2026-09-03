@@ -13,6 +13,8 @@ import org.jspecify.annotations.Nullable;
  * The {@code PrReportEnvironmentsEntryRemediationInvestigation} wire model.
  * @param action May be absent entirely.
  * @param attempts the {@code attempts} field.
+ * @param cycles the {@code cycles} field.
+ * @param droppedRounds the {@code droppedRounds} field.
  * @param failure May be absent entirely.
  * @param faultLayer May be absent entirely.
  * @param maxAttempts May be absent entirely.
@@ -26,6 +28,10 @@ public record PrReportEnvironmentsEntryRemediationInvestigation(
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("action") @Nullable String action,
 
     @JsonProperty("attempts") Double attempts,
+
+    @JsonProperty("cycles") Double cycles,
+
+    @JsonProperty("droppedRounds") Double droppedRounds,
 
     /** May be absent entirely. */
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("failure") @Nullable String failure,
@@ -58,6 +64,8 @@ public record PrReportEnvironmentsEntryRemediationInvestigation(
     public static final class Builder {
         private @Nullable String action;
         private @Nullable Double attempts;
+        private @Nullable Double cycles;
+        private @Nullable Double droppedRounds;
         private @Nullable String failure;
         private @Nullable PrReportEnvironmentsEntryRemediationInvestigationFaultLayer faultLayer;
         private @Nullable Double maxAttempts;
@@ -74,6 +82,18 @@ public record PrReportEnvironmentsEntryRemediationInvestigation(
         /** Set {@code attempts}. */
         public Builder attempts(@Nullable Double attempts) {
             this.attempts = attempts;
+            return this;
+        }
+
+        /** Set {@code cycles}. */
+        public Builder cycles(@Nullable Double cycles) {
+            this.cycles = cycles;
+            return this;
+        }
+
+        /** Set {@code droppedRounds}. */
+        public Builder droppedRounds(@Nullable Double droppedRounds) {
+            this.droppedRounds = droppedRounds;
             return this;
         }
 
@@ -115,7 +135,7 @@ public record PrReportEnvironmentsEntryRemediationInvestigation(
 
         /** Build the {@link PrReportEnvironmentsEntryRemediationInvestigation}. */
         public PrReportEnvironmentsEntryRemediationInvestigation build() {
-            return new PrReportEnvironmentsEntryRemediationInvestigation(action, attempts, failure, faultLayer, maxAttempts, ranActions, waitExtensions, withheld);
+            return new PrReportEnvironmentsEntryRemediationInvestigation(action, attempts, cycles, droppedRounds, failure, faultLayer, maxAttempts, ranActions, waitExtensions, withheld);
         }
     }
 }

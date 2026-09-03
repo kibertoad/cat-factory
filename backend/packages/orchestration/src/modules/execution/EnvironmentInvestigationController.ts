@@ -17,11 +17,13 @@ import {
   type EnvironmentInvestigationVerdict,
   type EnvironmentRemediationAction,
   environmentRemediationActionSchema,
+  MAX_ENVIRONMENT_INVESTIGATION_ATTEMPT_LOG,
   MAX_ENVIRONMENT_WAIT_EXTENSIONS,
   remediationNeedsProviderSupport,
 } from '@cat-factory/contracts'
 import type { EnvironmentProvisioningService } from '@cat-factory/integrations'
 import type { AdvanceResult } from './advance.js'
+import { appendAttemptLog } from './deployer.logic.js'
 import type { RunStateMachine } from './RunStateMachine.js'
 
 // ---------------------------------------------------------------------------
@@ -227,14 +229,7 @@ export class EnvironmentInvestigationController {
       })
     }
 
-    // The round's ordinal comes off the LOG, not the cycle counter: the counter is re-armed for
-    // each provisioning cycle while the log survives the whole run
-    // (`restartEnvironmentInvestigationState`), so the counter would number a second cycle's
-    // first round `1` beside the row already holding it. Identical on a run that never loops back.
-    const round = {
-      attempt: (state?.attemptLog?.length ?? 0) + 1,
-      at: this.deps.clock.now(),
-    } as const
+    const round = { attempt: nextRoundOrdinal(state), at: this.deps.clock.now() } as const
     if (!verdict) {
       // An investigation that could not be READ is not a clean bill of health and is not a verdict
       // of `stop` either. The round is recorded so the budget cannot be spun, and the caller takes
@@ -496,9 +491,10 @@ function appendRound(
   step: PipelineStep,
   failure: EnvironmentInvestigationFailure,
   budget: number,
-  attempt: EnvironmentInvestigationAttempt,
+  attempt: Omit<EnvironmentInvestigationAttempt, 'cycle'>,
 ): void {
   const state = step.environmentInvestigation
+  const cycle = state?.cycle ?? 0
   step.environmentInvestigation = {
     ...state,
     // The CYCLE counter, which is what the budget is spent against; `attempt.attempt` is the
@@ -507,7 +503,15 @@ function appendRound(
     maxAttempts: state?.maxAttempts ?? budget,
     frameId: failure.frameId,
     environmentId: failure.environmentId,
-    attemptLog: [...(state?.attemptLog ?? []), attempt],
+    cycle,
+    ...appendAttemptLog(
+      state?.attemptLog,
+      // Stamped with the cycle that ran it, so a reader of the run-long log can scope back to
+      // the rounds this cycle spent: the environment an earlier cycle investigated is gone.
+      { ...attempt, cycle },
+      MAX_ENVIRONMENT_INVESTIGATION_ATTEMPT_LOG,
+      state?.droppedAttempts,
+    ),
   }
 }
 
@@ -531,12 +535,37 @@ function clearFrameOutcome(step: PipelineStep, frameId: string): void {
   step.deployEnvs = rest
 }
 
-/** The most recent round that produced a verdict, or undefined when none did. */
+/**
+ * The next round's 1-based ordinal in the RUN-long log: the rows still held plus the rows the cap
+ * has dropped.
+ *
+ * Off the LOG rather than the cycle counter, which is re-armed for each provisioning cycle while
+ * the log survives the whole run (`restartEnvironmentInvestigationState`): the counter would
+ * number a second cycle's first round `1` beside the row already holding it. Identical on a run
+ * that never loops back.
+ */
+function nextRoundOrdinal(state: PipelineStep['environmentInvestigation']): number {
+  return (state?.attemptLog?.length ?? 0) + (state?.droppedAttempts ?? 0) + 1
+}
+
+/**
+ * The most recent round of THIS provisioning cycle that produced a verdict, or undefined when
+ * none did.
+ *
+ * Scoped to the cycle rather than walked back over the whole log, which survives the run: a
+ * verdict from a superseded cycle is a diagnosis of an environment the re-provision has already
+ * destroyed, and reporting it as the account of this cycle's failure is exactly the
+ * misattribution the per-cycle re-arm exists to prevent. No verdict this cycle answers
+ * undefined, and the caller then takes its unchanged terminal path with the run's real error.
+ */
 function lastVerdict(step: PipelineStep): EnvironmentInvestigationVerdict | undefined {
-  const log = step.environmentInvestigation?.attemptLog ?? []
+  const state = step.environmentInvestigation
+  const log = state?.attemptLog ?? []
+  const cycle = state?.cycle ?? 0
   for (let i = log.length - 1; i >= 0; i -= 1) {
-    const verdict = log[i]?.verdict
-    if (verdict) return verdict
+    const round = log[i]
+    if ((round?.cycle ?? 0) !== cycle) continue
+    if (round?.verdict) return round.verdict
   }
   return undefined
 }

@@ -332,10 +332,24 @@ describe('checkEnvironmentRemediation', () => {
     investigation: {
       attempts: 1,
       maxAttempts: 2,
+      cycles: 1,
+      droppedRounds: 0,
       faultLayer: 'provider' as const,
       action: 'restart',
       ranActions: ['restart'],
       waitExtensions: 0,
+    },
+  }
+
+  const repaired = {
+    deployFix: {
+      attempts: 1,
+      maxAttempts: 2,
+      cycles: 1,
+      reason: 'manifest_invalid',
+      completed: 1,
+      failed: 0,
+      droppedRounds: 0,
     },
   }
 
@@ -366,12 +380,39 @@ describe('checkEnvironmentRemediation', () => {
     ).toBeGreaterThan(0)
   })
 
+  it('grades a fixer scenario on the fixer alone, not on an investigation beside it', () => {
+    // The two loops are exclusive per FAILURE, not per run: one frame's first failure can be
+    // repaired and the re-provision can then time out and be investigated, and the report
+    // accumulates both onto one entry. Grading the investigation half of that against a
+    // `deployFix` scenario turns a pass into a red on a claim the suite never made.
+    const checks = checkEnvironmentRemediation(
+      withRemediation({
+        ...repaired,
+        investigation: {
+          attempts: 1,
+          maxAttempts: 2,
+          cycles: 1,
+          droppedRounds: 0,
+          faultLayer: null,
+          ranActions: [],
+          waitExtensions: 0,
+          failure: 'the provider credentials could not be opened',
+        },
+      }),
+      'deployFix',
+    )
+
+    expect(failed(checks)).toEqual([])
+  })
+
   it('fails an investigation that produced no verdict, rather than counting the rounds as proof', () => {
     const checks = checkEnvironmentRemediation(
       withRemediation({
         investigation: {
           attempts: 2,
           maxAttempts: 2,
+          cycles: 1,
+          droppedRounds: 0,
           faultLayer: null,
           ranActions: [],
           waitExtensions: 0,

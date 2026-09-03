@@ -77,6 +77,21 @@ blamed, the action it asked for, every action the engine actually ran, why a req
 withheld, and how many readiness-ceiling extensions a `wait` verdict won. The investigator's own
 summary paragraph and cited evidence list stay on the run's record.
 
+Both halves also carry `cycles` and `droppedRounds`, and a consumer needs both to read `attempts`
+honestly. Something can send a run back to its deployer, and each pass is a fresh provisioning
+CYCLE that re-arms the budget: `attempts` counts the whole run, `maxAttempts` bounds ONE cycle,
+and the two are a ratio only where `cycles` is 1. `droppedRounds` counts rounds whose per-round
+detail the step's log cap dropped; they are counted in `attempts` and in neither `completed` nor
+`failed`, since nobody can now say which they were.
+
+`PrReportEnvironments.entries[].status` gains a fourth value, `unsettled`: the frame the run holds
+no terminal outcome for. Both remediation loops clear the recorded outcome to make the
+re-provision happen, so a report composed in that window (the run was abandoned, timed out, or
+failed at another step) would otherwise omit the frame and read as a deployer that recorded
+nothing. A consumer switching on `status` must not treat it as a failure or as a success: nothing
+settled. The SDKs tolerate an unknown enum value by design, so a client built against 1.65.0 keeps
+parsing.
+
 Three absences are deliberately distinct and a consumer must not collapse them. `remediation`
 absent means neither loop ran, which is every clean provision. `investigation.faultLayer` null
 means no round produced a verdict, which is NOT the `unknown` fault layer (a verdict reached on

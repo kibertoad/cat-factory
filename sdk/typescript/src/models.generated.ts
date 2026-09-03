@@ -1768,6 +1768,8 @@ export interface PrReportEnvironmentsEntryRemediation {
 export interface PrReportEnvironmentsEntryRemediationDeployFix {
   attempts: number
   completed: number
+  cycles: number
+  droppedRounds: number
   failed: number
   maxAttempts?: number | null
   reason: string
@@ -1776,6 +1778,8 @@ export interface PrReportEnvironmentsEntryRemediationDeployFix {
 export interface PrReportEnvironmentsEntryRemediationInvestigation {
   action?: string | null
   attempts: number
+  cycles: number
+  droppedRounds: number
   failure?: string | null
   faultLayer?: PrReportEnvironmentsEntryRemediationInvestigationFaultLayer | null
   maxAttempts?: number | null
@@ -1789,10 +1793,10 @@ export type PrReportEnvironmentsEntryRemediationInvestigationFaultLayer = 'provi
 /** Every `PrReportEnvironmentsEntryRemediationInvestigationFaultLayer` value, for exhaustive handling and runtime validation. */
 export const PR_REPORT_ENVIRONMENTS_ENTRY_REMEDIATION_INVESTIGATION_FAULT_LAYER_VALUES = ['provider', 'platform', 'deployment', 'unknown'] as const
 
-export type PrReportEnvironmentsEntryStatus = 'ready' | 'failed' | 'skipped'
+export type PrReportEnvironmentsEntryStatus = 'ready' | 'failed' | 'skipped' | 'unsettled'
 
 /** Every `PrReportEnvironmentsEntryStatus` value, for exhaustive handling and runtime validation. */
-export const PR_REPORT_ENVIRONMENTS_ENTRY_STATUS_VALUES = ['ready', 'failed', 'skipped'] as const
+export const PR_REPORT_ENVIRONMENTS_ENTRY_STATUS_VALUES = ['ready', 'failed', 'skipped', 'unsettled'] as const
 
 export interface PrReportEnvironmentsEvidence {
   /** Always present; `null` when the server has no value for it. */

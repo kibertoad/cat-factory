@@ -1,4 +1,5 @@
 import type {
+  DeployFixAttempt,
   ExecutionInstance,
   PipelineStep,
   PrReportDeployFix,
@@ -13,6 +14,7 @@ import type {
   ProvisioningLogRecord,
 } from '@cat-factory/kernel'
 import { hostMarkdown, redactSecrets } from '@cat-factory/kernel'
+import type { EnvironmentInvestigationAttempt } from '@cat-factory/contracts'
 import {
   declaresRetainedEnvironment,
   deployedFrames,
@@ -429,6 +431,31 @@ function composeEvidence(
  * `proof: 'incomplete'` is never a bare label, and `complete` is exactly "nothing was found
  * to say".
  */
+/**
+ * What the per-frame OUTCOMES contribute to the proof's gaps: frames whose provision broke, and
+ * frames the platform cleared to stand up again and never settled. Split out of
+ * {@link composeProof}, which is at its complexity budget, and they belong together anyway: both
+ * are the same statement about a part of the system the run never got standing.
+ */
+function frameOutcomeGaps(entries: readonly PrReportEnvironment[]): string[] {
+  const failed = entries.filter((e) => e.status === 'failed').length
+  const unsettled = entries.filter((e) => e.status === 'unsettled').length
+  const gaps: string[] = []
+  if (failed > 0) {
+    gaps.push(
+      `${failed} of ${entries.length} service frames failed to provision, so that part of the system was never stood up.`,
+    )
+  }
+  if (unsettled > 0) {
+    gaps.push(
+      unsettled === 1
+        ? 'A service frame has no settled provisioning outcome: the platform cleared its failure to stand it up again, and the run ended before that finished.'
+        : `${unsettled} service frames have no settled provisioning outcome: the platform cleared their failures to stand them up again, and the run ended before that finished.`,
+    )
+  }
+  return gaps
+}
+
 function composeProof(
   entries: readonly PrReportEnvironment[],
   teardown: PrVerificationReport['environments']['teardown'],
@@ -437,17 +464,13 @@ function composeProof(
   logged: LoggedEnvironments | null,
 ): Pick<PrVerificationReport['environments'], 'proof' | 'gaps'> {
   const ready = entries.filter((e) => e.status === 'ready').length
-  const failed = entries.filter((e) => e.status === 'failed').length
   // Every frame skipped (or nothing recorded at all) means no environment was ever meant to
-  // stand up, so there is no proof to be incomplete about.
-  if (ready === 0 && failed === 0) return { proof: 'not_applicable', gaps: [] }
+  // stand up, so there is no proof to be incomplete about. An UNSETTLED frame is not that: it
+  // failed at least once and the platform was standing it up again, which is a proof this run
+  // never finished rather than one it never owed.
+  if (entries.every((e) => e.status === 'skipped')) return { proof: 'not_applicable', gaps: [] }
 
-  const gaps: string[] = []
-  if (failed > 0) {
-    gaps.push(
-      `${failed} of ${entries.length} service frames failed to provision, so that part of the system was never stood up.`,
-    )
-  }
+  const gaps = frameOutcomeGaps(entries)
   if (ready === 0) {
     gaps.push('No environment reached a ready state, so nothing could be exercised against one.')
     return { proof: 'incomplete', gaps }
@@ -533,62 +556,158 @@ function composeProof(
 // on and how much work stands behind it.
 // ---------------------------------------------------------------------------
 
-/** The remediation rounds one frame accumulated, keyed by service-frame block id. */
-type RemediationByFrame = Map<string, PrReportEnvironmentRemediation>
+/**
+ * One frame's rounds from ONE loop, gathered across every deployer step of the run BEFORE
+ * anything is reduced out of them.
+ *
+ * Gathering first and reducing once is what keeps the summary coherent. Reducing step by step and
+ * carrying a `?? prior` fallback per field assembles a picture out of rounds that never happened
+ * together: one step's refusal read beside a later step's verdict reports a remedy as blocked
+ * that in fact ran, which is the misreport the whole section exists to prevent.
+ */
+interface GatheredRounds<TRound> {
+  /** Every recorded round for this frame, in run order, oldest first. */
+  rounds: TRound[]
+  /**
+   * Rounds DISPATCHED whose row has not been written yet. The deploy fixer bumps its counter when
+   * it sends a job and writes the row when the job settles, so a report published mid-loop (the
+   * pull request is open by the time the deployer runs) sees one more attempt than rows.
+   */
+  inFlight: number
+  /** Rounds whose rows the step's own log cap has dropped. */
+  dropped: number
+  /** Provisioning cycles the rounds are spread over, summed over the steps that ran them. */
+  cycles: number
+  /**
+   * The per-cycle budget, taken from the NEWEST step: it is frozen per step at the first round,
+   * so the newest step's is the bar the rounds still to come are counted against.
+   */
+  maxAttempts: number
+}
 
-/** Add one deployer step's `deployFix` rounds to the frame's running total. */
-function foldDeployFix(into: RemediationByFrame, step: PipelineStep): void {
+/** The rounds of both loops for one frame, keyed by service-frame block id. */
+interface GatheredRemediation {
+  deployFix?: GatheredRounds<DeployFixAttempt> & { reason: string }
+  investigation?: GatheredRounds<EnvironmentInvestigationAttempt> & { waitExtensions: number }
+}
+
+/**
+ * How many of a step's dispatched rounds have no row yet: the live counter (per CYCLE) minus the
+ * rows this cycle wrote. Reading it off the counter alone would report every earlier cycle's
+ * rounds as in flight, and off the log alone would never report one at all.
+ */
+function inFlightRounds(
+  attempts: number,
+  log: readonly { cycle?: number | null | undefined }[],
+  cycle: number,
+): number {
+  const thisCycle = log.filter((round) => (round.cycle ?? 0) === cycle).length
+  return Math.max(0, attempts - thisCycle)
+}
+
+/** Add one deployer step's `deployFix` rounds to the frame's gathered set. */
+function gatherDeployFix(into: Map<string, GatheredRemediation>, step: PipelineStep): void {
   const fix = step.deployFix
   if (!fix) return
   const log = fix.attemptLog ?? []
-  const prior = into.get(fix.frameId)?.deployFix
+  const cycle = fix.cycle ?? 0
+  const entry = into.get(fix.frameId) ?? {}
+  const prior = entry.deployFix
   into.set(fix.frameId, {
-    ...into.get(fix.frameId),
+    ...entry,
     deployFix: {
-      attempts: (prior?.attempts ?? 0) + fix.attempts,
-      // The bar is FROZEN per step at the first escalation, so the newest step's is the one the
-      // rounds still to come are counted against.
+      rounds: [...(prior?.rounds ?? []), ...log],
+      inFlight: (prior?.inFlight ?? 0) + inFlightRounds(fix.attempts, log, cycle),
+      dropped: (prior?.dropped ?? 0) + (fix.droppedAttempts ?? 0),
+      cycles: (prior?.cycles ?? 0) + cycle + 1,
       maxAttempts: fix.maxAttempts,
       reason: fix.reason,
-      completed:
-        (prior?.completed ?? 0) + log.filter((round) => round.outcome === 'completed').length,
-      failed: (prior?.failed ?? 0) + log.filter((round) => round.outcome === 'failed').length,
     },
   })
 }
 
-/** Add one deployer step's investigation rounds to the frame's running total. */
-function foldInvestigation(into: RemediationByFrame, step: PipelineStep): void {
+/** Add one deployer step's investigation rounds to the frame's gathered set. */
+function gatherInvestigation(into: Map<string, GatheredRemediation>, step: PipelineStep): void {
   const state = step.environmentInvestigation
   if (!state) return
   const log = state.attemptLog ?? []
-  const prior = into.get(state.frameId)?.investigation
-  // The NEWEST round that produced a verdict is the conclusion the platform settled on. A later
-  // round that failed outright does not overwrite it: it produced no verdict, and reporting the
-  // absence would discard the only diagnosis anybody has of this failure.
-  const decided = [...log].reverse().find((round) => round.verdict)
-  const last = log[log.length - 1]
+  const cycle = state.cycle ?? 0
+  const entry = into.get(state.frameId) ?? {}
+  const prior = entry.investigation
   into.set(state.frameId, {
-    ...into.get(state.frameId),
+    ...entry,
     investigation: {
-      attempts: (prior?.attempts ?? 0) + state.attempts,
+      rounds: [...(prior?.rounds ?? []), ...log],
+      inFlight: (prior?.inFlight ?? 0) + inFlightRounds(state.attempts, log, cycle),
+      dropped: (prior?.dropped ?? 0) + (state.droppedAttempts ?? 0),
+      cycles: (prior?.cycles ?? 0) + cycle + 1,
       maxAttempts: state.maxAttempts,
-      faultLayer: decided?.verdict?.faultLayer ?? prior?.faultLayer ?? null,
-      action: decided?.verdict?.action ?? prior?.action ?? null,
-      ranActions: [
-        ...(prior?.ranActions ?? []),
-        ...log.map((round) => round.ranAction).filter((action): action is string => !!action),
-      ],
-      // The refusal belongs to the round that made the decision above, so it is read off THAT
-      // round rather than off the newest one: a round that could not be completed withheld
-      // nothing, and pairing its silence with an earlier verdict would report a remedy as run.
-      withheld: scrub(decided?.withheld) ?? prior?.withheld ?? null,
-      // The investigation's OWN failure, and only when the newest round is the one that failed:
-      // a failed round followed by a successful one is history, not the state of the section.
-      failure: last && !last.verdict ? scrub(last.failure) : (prior?.failure ?? null),
+      // Run-long on the state itself, never re-armed by a loop-back, so this sums one number per
+      // step rather than reconstructing a history the re-arm would have erased.
       waitExtensions: (prior?.waitExtensions ?? 0) + (state.waitExtensions ?? 0),
     },
   })
+}
+
+/** The newest element a predicate accepts, without the copy `[...list].reverse().find()` makes. */
+function newest<T>(list: readonly T[], accept: (item: T) => boolean): T | undefined {
+  for (let i = list.length - 1; i >= 0; i -= 1) {
+    const item = list[i]
+    if (item !== undefined && accept(item)) return item
+  }
+  return undefined
+}
+
+/** Reduce one frame's gathered fixer rounds into what the report states about them. */
+function reduceDeployFix(
+  gathered: NonNullable<GatheredRemediation['deployFix']>,
+): PrReportDeployFix {
+  let completed = 0
+  let failed = 0
+  for (const round of gathered.rounds) {
+    if (round.outcome === 'completed') completed += 1
+    else failed += 1
+  }
+  return {
+    attempts: gathered.dropped + gathered.rounds.length + gathered.inFlight,
+    maxAttempts: gathered.maxAttempts,
+    cycles: gathered.cycles,
+    reason: gathered.reason,
+    completed,
+    failed,
+    droppedRounds: gathered.dropped,
+  }
+}
+
+/** Reduce one frame's gathered investigation rounds into what the report states about them. */
+function reduceInvestigation(
+  gathered: NonNullable<GatheredRemediation['investigation']>,
+): PrReportEnvironmentInvestigation {
+  const { rounds } = gathered
+  // The NEWEST round that produced a verdict is the conclusion the platform settled on. A later
+  // round that failed outright does not overwrite it: it produced no verdict, and reporting the
+  // absence would discard the only diagnosis anybody has of this failure.
+  const decided = newest(rounds, (round) => !!round.verdict)
+  const last = rounds[rounds.length - 1]
+  const ranActions: string[] = []
+  for (const round of rounds) if (round.ranAction) ranActions.push(round.ranAction)
+  return {
+    attempts: gathered.dropped + rounds.length + gathered.inFlight,
+    maxAttempts: gathered.maxAttempts,
+    cycles: gathered.cycles,
+    droppedRounds: gathered.dropped,
+    faultLayer: decided?.verdict?.faultLayer ?? null,
+    action: decided?.verdict?.action ?? null,
+    ranActions,
+    // The refusal belongs to the round that made the decision above, and is read off THAT round
+    // alone: a round that reached no verdict withheld nothing, and an OLDER round's refusal
+    // beside this verdict would report a remedy as blocked that in fact ran.
+    withheld: scrub(decided?.withheld),
+    // The investigation's OWN failure, and only when the newest round is the one that failed: a
+    // failed round followed by a successful one is history, not the state of the section.
+    failure: last && !last.verdict ? scrub(last.failure) : null,
+    waitExtensions: gathered.waitExtensions,
+  }
 }
 
 /**
@@ -599,11 +718,20 @@ function foldInvestigation(into: RemediationByFrame, step: PipelineStep): void {
  * and the investigation only where an investigator and a provisioning service are wired and the
  * step's budget is non-zero.
  */
-function remediationByFrame(steps: readonly PipelineStep[]): RemediationByFrame {
-  const byFrame: RemediationByFrame = new Map()
+function remediationByFrame(
+  steps: readonly PipelineStep[],
+): Map<string, PrReportEnvironmentRemediation> {
+  const gathered = new Map<string, GatheredRemediation>()
   for (const step of deployerSteps(steps)) {
-    foldDeployFix(byFrame, step)
-    foldInvestigation(byFrame, step)
+    gatherDeployFix(gathered, step)
+    gatherInvestigation(gathered, step)
+  }
+  const byFrame = new Map<string, PrReportEnvironmentRemediation>()
+  for (const [frameId, entry] of gathered) {
+    byFrame.set(frameId, {
+      ...(entry.deployFix ? { deployFix: reduceDeployFix(entry.deployFix) } : {}),
+      ...(entry.investigation ? { investigation: reduceInvestigation(entry.investigation) } : {}),
+    })
   }
   return byFrame
 }
@@ -640,12 +768,23 @@ export function composeEnvironments(
     return absent('No deployer step in this pipeline, so no ephemeral environment was provisioned.')
   }
   const remediation = remediationByFrame(instance.steps)
-  const entries: PrReportEnvironment[] = cap([...frames], 'environments.entries').map(
-    ([frameId, state]) => ({
+  // A frame BOTH loops clear to make the re-provision happen (`clearFrameOutcome`) holds no
+  // recorded outcome while the retry is in flight, so listing only `frames` drops it along with
+  // everything the platform did about it: a report composed in that window (the run was
+  // abandoned, timed out, or failed at another step) then reads as a deployer that recorded
+  // nothing at all. It is listed as `unsettled` instead, which is the honest word for it.
+  const rows = [
+    ...[...frames].map(([frameId, state]) => ({ frameId, state })),
+    ...[...remediation.keys()]
+      .filter((frameId) => !frames.has(frameId))
+      .map((frameId) => ({ frameId, state: undefined })),
+  ]
+  const entries: PrReportEnvironment[] = cap(rows, 'environments.entries').map(
+    ({ frameId, state }) => ({
       frameId,
-      status: state.status,
-      url: state.url ?? null,
-      error: scrub(state.error),
+      status: state?.status ?? 'unsettled',
+      url: state?.url ?? null,
+      error: scrub(state?.error),
       ...(remediation.has(frameId) ? { remediation: remediation.get(frameId) } : {}),
     }),
   )
@@ -752,26 +891,52 @@ function renderEvidence(evidence: PrReportEnvironmentEvidence): string[] {
   return [...out, '']
 }
 
+/**
+ * The round count with the budget it ran under, as one phrase.
+ *
+ * `attempts` counts the whole RUN and `maxAttempts` bounds ONE provisioning cycle, so the ratio
+ * form is used only where there was a single cycle. Past a loop-back the two are not a ratio at
+ * all, and rendering "4 of 2" tells a reviewer the budget is not enforced.
+ */
+function roundCount(
+  noun: string,
+  attempts: number,
+  maxAttempts: number | null | undefined,
+  cycles: number,
+): string {
+  if (maxAttempts == null) return `${attempts} ${noun}`
+  if (cycles <= 1) return `${attempts} of ${maxAttempts} ${noun}`
+  return `${attempts} ${noun} over ${cycles} provisioning cycles (${maxAttempts} per cycle)`
+}
+
 /** The `deploy-fixer`'s rounds as one line: how many, against what, and what they achieved. */
 function renderDeployFix(fix: PrReportDeployFix): string {
-  const budget = fix.maxAttempts == null ? '' : ` of ${fix.maxAttempts}`
   // Naming the rounds that DIED is the point of the line. "2 rounds" alone reads as two machine
   // edits, and a fixer whose jobs never finished changed nothing in the checkout.
   const outcomes = [
     fix.completed > 0 ? `${fix.completed} finished` : '',
     fix.failed > 0 ? `${fix.failed} died without finishing` : '',
+    // A capped log cannot say which of the two an older round was, and saying nothing would fold
+    // it into the in-flight remainder the counts otherwise imply.
+    fix.droppedRounds > 0 ? `${fix.droppedRounds} no longer detailed` : '',
   ].filter(Boolean)
   const settled = outcomes.length ? ` (${outcomes.join(', ')})` : ''
   return (
-    `\`deploy-fixer\`: ${fix.attempts}${budget} repair round(s) for ` +
-    `${hostMarkdown.inlineCode(fix.reason)}${settled}`
+    `\`deploy-fixer\`: ${roundCount('repair round(s)', fix.attempts, fix.maxAttempts, fix.cycles)}` +
+    ` for ${hostMarkdown.inlineCode(fix.reason)}${settled}`
   )
 }
 
 /** The investigation's verdicts as one line: the layer blamed, the ask, and what actually ran. */
 function renderInvestigation(investigation: PrReportEnvironmentInvestigation): string {
-  const budget = investigation.maxAttempts == null ? '' : ` of ${investigation.maxAttempts}`
-  const parts = [`investigation: ${investigation.attempts}${budget} round(s)`]
+  const parts = [
+    `investigation: ${roundCount(
+      'round(s)',
+      investigation.attempts,
+      investigation.maxAttempts,
+      investigation.cycles,
+    )}`,
+  ]
   // A missing verdict is STATED rather than rendered as the `unknown` fault layer, which is a
   // conclusion the investigator reached and this is the absence of one.
   parts.push(
@@ -788,8 +953,16 @@ function renderInvestigation(investigation: PrReportEnvironmentInvestigation): s
   if (investigation.waitExtensions > 0) {
     parts.push(`readiness ceiling extended ${investigation.waitExtensions}×`)
   }
-  if (investigation.withheld) parts.push(`withheld: ${hostMarkdown.prose(investigation.withheld)}`)
-  if (investigation.failure) parts.push(`failed: ${hostMarkdown.prose(investigation.failure)}`)
+  if (investigation.droppedRounds > 0) {
+    parts.push(`${investigation.droppedRounds} earlier round(s) no longer detailed`)
+  }
+  // `cell`, never `prose`: both holes carry a provider's own words (a kubectl rejection, a
+  // teardown probe's reason), which are routinely multi-line, and `prose` PRESERVES newlines by
+  // design. In a `·`-joined bullet a raw newline ends the list item and spills the tail into the
+  // pull-request body as top-level text. `cell` is the one helper that can emit none at all: it
+  // folds them to `<br>` AFTER truncating, so the cut note cannot reintroduce one either.
+  if (investigation.withheld) parts.push(`withheld: ${hostMarkdown.cell(investigation.withheld)}`)
+  if (investigation.failure) parts.push(`failed: ${hostMarkdown.cell(investigation.failure)}`)
   return parts.join(' · ')
 }
 

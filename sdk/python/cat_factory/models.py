@@ -7296,6 +7296,8 @@ class PrReportEnvironmentsEntryRemediationDeployFix:
 
     attempts: float
     completed: float
+    cycles: float
+    dropped_rounds: float
     failed: float
     reason: str
     #: May be absent entirely.
@@ -7309,10 +7311,12 @@ class PrReportEnvironmentsEntryRemediationDeployFix:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PrReportEnvironmentsEntryRemediationDeployFix":
         """Decode a `PrReportEnvironmentsEntryRemediationDeployFix` from its JSON object."""
-        known = {"attempts", "completed", "failed", "reason", "maxAttempts"}
+        known = {"attempts", "completed", "cycles", "droppedRounds", "failed", "reason", "maxAttempts"}
         return cls(
             attempts=data.get("attempts"),
             completed=data.get("completed"),
+            cycles=data.get("cycles"),
+            dropped_rounds=data.get("droppedRounds"),
             failed=data.get("failed"),
             reason=data.get("reason"),
             max_attempts=data.get("maxAttempts"),
@@ -7324,6 +7328,8 @@ class PrReportEnvironmentsEntryRemediationDeployFix:
         out: dict[str, Any] = dict(self.extra)
         out["attempts"] = self.attempts
         out["completed"] = self.completed
+        out["cycles"] = self.cycles
+        out["droppedRounds"] = self.dropped_rounds
         out["failed"] = self.failed
         out["reason"] = self.reason
         if self.max_attempts is not None:
@@ -7336,6 +7342,8 @@ class PrReportEnvironmentsEntryRemediationInvestigation:
     """`PrReportEnvironmentsEntryRemediationInvestigation`, as carried on the wire."""
 
     attempts: float
+    cycles: float
+    dropped_rounds: float
     ran_actions: list[str]
     wait_extensions: float
     #: May be absent entirely.
@@ -7357,9 +7365,11 @@ class PrReportEnvironmentsEntryRemediationInvestigation:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PrReportEnvironmentsEntryRemediationInvestigation":
         """Decode a `PrReportEnvironmentsEntryRemediationInvestigation` from its JSON object."""
-        known = {"attempts", "ranActions", "waitExtensions", "action", "failure", "faultLayer", "maxAttempts", "withheld"}
+        known = {"attempts", "cycles", "droppedRounds", "ranActions", "waitExtensions", "action", "failure", "faultLayer", "maxAttempts", "withheld"}
         return cls(
             attempts=data.get("attempts"),
+            cycles=data.get("cycles"),
+            dropped_rounds=data.get("droppedRounds"),
             ran_actions=[item for item in data.get("ranActions") or []],
             wait_extensions=data.get("waitExtensions"),
             action=data.get("action"),
@@ -7374,6 +7384,8 @@ class PrReportEnvironmentsEntryRemediationInvestigation:
         """Encode back to the JSON object shape the API expects."""
         out: dict[str, Any] = dict(self.extra)
         out["attempts"] = self.attempts
+        out["cycles"] = self.cycles
+        out["droppedRounds"] = self.dropped_rounds
         out["ranActions"] = [_encode(item) for item in self.ran_actions]
         out["waitExtensions"] = self.wait_extensions
         if self.action is not None:
@@ -7418,6 +7430,7 @@ class PrReportEnvironmentsEntryStatus(StrEnum):
     READY = "ready"
     FAILED = "failed"
     SKIPPED = "skipped"
+    UNSETTLED = "unsettled"
 
 
 @dataclass(frozen=True, slots=True)

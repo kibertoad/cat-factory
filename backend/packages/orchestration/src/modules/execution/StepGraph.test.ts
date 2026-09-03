@@ -238,10 +238,65 @@ describe('StepGraph.resetStepForRerun', () => {
     graph.resetStepForRerun(s)
 
     expect(s.environmentInvestigation?.attempts).toBe(0)
-    expect(s.environmentInvestigation?.waitExtensions).toBe(0)
     expect(s.environmentInvestigation?.environmentId).toBeNull()
     expect(s.environmentInvestigation?.maxAttempts).toBe(2)
     expect(s.environmentInvestigation?.attemptLog).toEqual([round])
+    // The rounds already on the record stay readable as a cycle apart from the ones to come.
+    expect(s.environmentInvestigation?.cycle).toBe(1)
+  })
+
+  it('carries the granted readiness-ceiling extensions THROUGH a loop-back', () => {
+    // The bound on `wait` is run-long, not per cycle, because a cycle is not always started by a
+    // person: `rerunProducerThrough` is driven by the judge loop and the below-threshold
+    // companion loop too, so re-arming it would hand the model a fresh ceiling on every
+    // automatic rework round. It is also the run's ONLY record that a `wait` was granted, which
+    // the verification report reduces: the bring-up simply runs past the configured ceiling.
+    const graph = new StepGraph(clock)
+    const s = step({
+      state: 'working',
+      environmentInvestigation: {
+        attempts: 2,
+        maxAttempts: 2,
+        frameId: 'frame-1',
+        environmentId: 'env_1',
+        waitExtensions: 1,
+        attemptLog: [],
+      },
+    })
+    graph.resetStepForRerun(s)
+
+    expect(s.environmentInvestigation?.waitExtensions).toBe(1)
+  })
+
+  it('re-arms the fixer budget onto a fresh cycle, keeping the rounds on the record', () => {
+    const graph = new StepGraph(clock)
+    const round = {
+      attempt: 1,
+      cycle: 0,
+      at: 1_000,
+      outcome: 'completed' as const,
+      reason: 'manifest_invalid',
+      error: 'image "" is not a valid reference',
+      summary: 'set the image tag',
+    }
+    const s = step({
+      state: 'working',
+      deployFix: {
+        phase: 'fixing' as const,
+        attempts: 2,
+        maxAttempts: 2,
+        frameId: 'frame-1',
+        reason: 'manifest_invalid',
+        lastError: 'image "" is not a valid reference',
+        attemptLog: [round],
+      },
+    })
+    graph.resetStepForRerun(s)
+
+    expect(s.deployFix?.attempts).toBe(0)
+    expect(s.deployFix?.cycle).toBe(1)
+    expect(s.deployFix?.phase).toBe('retrying')
+    expect(s.deployFix?.attemptLog).toEqual([round])
   })
 
   it('leaves a step that entered neither loop with no remediation state', () => {

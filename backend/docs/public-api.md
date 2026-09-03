@@ -2031,12 +2031,28 @@ unaffected.
 
 `environments.entries[].remediation` says what the platform TRIED about a frame whose provision
 failed, and it is the one part of this section that is about the PLATFORM rather than about the
-environment. Two loops can run, exclusively: `deployFix` counts the `deploy-fixer`'s repair rounds
-against the cause it was dispatched for, splitting the rounds whose job FINISHED from the ones that
-died having changed nothing in the checkout; `investigation` carries the layer the diagnosis blamed
+environment. Two loops can run: `deployFix` counts the `deploy-fixer`'s repair rounds against the
+cause it was dispatched for, splitting the rounds whose job FINISHED from the ones that died having
+changed nothing in the checkout; `investigation` carries the layer the diagnosis blamed
 (`provider` / `platform` / `deployment` / `unknown`), the remediation the last verdict asked for,
 every action the engine actually RAN, why a requested one was withheld, and how many
-readiness-ceiling extensions a `wait` verdict won. Added in 1.66.0.
+readiness-ceiling extensions a `wait` verdict won. They are exclusive per FAILURE and not per run,
+so one frame can carry both: the fixer repairs the first failure and the re-provision then times
+out into an investigation. Added in 1.66.0.
+
+**Read `attempts` against `cycles`, not against `maxAttempts` alone.** Something can send a run
+back to its deployer (a human-test gate rebuilding the environment a person is testing, an
+automatic rework loop), and each pass is a fresh provisioning CYCLE with the budget re-armed.
+`attempts` counts every round of the run, `maxAttempts` bounds one cycle, and `cycles` says how
+many there were, so the three are a ratio only where `cycles` is 1. `droppedRounds` counts rounds
+whose per-round detail the step's own log cap has since dropped: they are in `attempts` and in
+neither `completed` nor `failed`, because nobody can now say which they were.
+
+`entries[].status` gained a fourth value in the same release, `unsettled`: the frame the run holds
+no terminal outcome for. Both loops CLEAR the recorded outcome to make the re-provision happen, so
+a report composed in that window (the run was abandoned, timed out, or failed at another step)
+would otherwise omit the frame entirely and read as a deployer that recorded nothing at all. It is
+never a verdict about the environment: nothing settled.
 
 **Three absences here are three different facts, and a consumer must not collapse them.** An
 absent `remediation` means neither loop ran, which is every clean provision and every failure

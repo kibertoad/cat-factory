@@ -1078,6 +1078,12 @@
                                 "completed": {
                                   "type": "number"
                                 },
+                                "cycles": {
+                                  "type": "number"
+                                },
+                                "droppedRounds": {
+                                  "type": "number"
+                                },
                                 "failed": {
                                   "type": "number"
                                 },
@@ -1097,9 +1103,11 @@
                               },
                               "required": [
                                 "attempts",
+                                "cycles",
                                 "reason",
                                 "completed",
-                                "failed"
+                                "failed",
+                                "droppedRounds"
                               ],
                               "type": "object"
                             },
@@ -1123,6 +1131,12 @@
                                   ]
                                 },
                                 "attempts": {
+                                  "type": "number"
+                                },
+                                "cycles": {
+                                  "type": "number"
+                                },
+                                "droppedRounds": {
                                   "type": "number"
                                 },
                                 "failure": {
@@ -1183,6 +1197,8 @@
                               },
                               "required": [
                                 "attempts",
+                                "cycles",
+                                "droppedRounds",
                                 "ranActions",
                                 "waitExtensions"
                               ],
@@ -1206,7 +1222,8 @@
                   "enum": [
                     "ready",
                     "failed",
-                    "skipped"
+                    "skipped",
+                    "unsettled"
                   ],
                   "type": "string"
                 },

@@ -3167,9 +3167,11 @@ type PrReportEnvironmentsEntryRemediation struct {
 
 // PrReportEnvironmentsEntryRemediationDeployFix is the `PrReportEnvironmentsEntryRemediationDeployFix` wire model.
 type PrReportEnvironmentsEntryRemediationDeployFix struct {
-	Attempts  float64 `json:"attempts"`
-	Completed float64 `json:"completed"`
-	Failed    float64 `json:"failed"`
+	Attempts      float64 `json:"attempts"`
+	Completed     float64 `json:"completed"`
+	Cycles        float64 `json:"cycles"`
+	DroppedRounds float64 `json:"droppedRounds"`
+	Failed        float64 `json:"failed"`
 	// MaxAttempts may be absent entirely.
 	MaxAttempts *float64 `json:"maxAttempts,omitempty"`
 	Reason      string   `json:"reason"`
@@ -3178,8 +3180,10 @@ type PrReportEnvironmentsEntryRemediationDeployFix struct {
 // PrReportEnvironmentsEntryRemediationInvestigation is the `PrReportEnvironmentsEntryRemediationInvestigation` wire model.
 type PrReportEnvironmentsEntryRemediationInvestigation struct {
 	// Action may be absent entirely.
-	Action   *string `json:"action,omitempty"`
-	Attempts float64 `json:"attempts"`
+	Action        *string `json:"action,omitempty"`
+	Attempts      float64 `json:"attempts"`
+	Cycles        float64 `json:"cycles"`
+	DroppedRounds float64 `json:"droppedRounds"`
 	// Failure may be absent entirely.
 	Failure *string `json:"failure,omitempty"`
 	// FaultLayer may be absent entirely.
@@ -3216,13 +3220,14 @@ var PrReportEnvironmentsEntryRemediationInvestigationFaultLayerValues = []PrRepo
 type PrReportEnvironmentsEntryStatus string
 
 const (
-	PrReportEnvironmentsEntryStatusReady   PrReportEnvironmentsEntryStatus = "ready"
-	PrReportEnvironmentsEntryStatusFailed  PrReportEnvironmentsEntryStatus = "failed"
-	PrReportEnvironmentsEntryStatusSkipped PrReportEnvironmentsEntryStatus = "skipped"
+	PrReportEnvironmentsEntryStatusReady     PrReportEnvironmentsEntryStatus = "ready"
+	PrReportEnvironmentsEntryStatusFailed    PrReportEnvironmentsEntryStatus = "failed"
+	PrReportEnvironmentsEntryStatusSkipped   PrReportEnvironmentsEntryStatus = "skipped"
+	PrReportEnvironmentsEntryStatusUnsettled PrReportEnvironmentsEntryStatus = "unsettled"
 )
 
 // PrReportEnvironmentsEntryStatusValues lists every PrReportEnvironmentsEntryStatus this SDK release knows.
-var PrReportEnvironmentsEntryStatusValues = []PrReportEnvironmentsEntryStatus{PrReportEnvironmentsEntryStatusReady, PrReportEnvironmentsEntryStatusFailed, PrReportEnvironmentsEntryStatusSkipped}
+var PrReportEnvironmentsEntryStatusValues = []PrReportEnvironmentsEntryStatus{PrReportEnvironmentsEntryStatusReady, PrReportEnvironmentsEntryStatusFailed, PrReportEnvironmentsEntryStatusSkipped, PrReportEnvironmentsEntryStatusUnsettled}
 
 // PrReportEnvironmentsEvidence is the `PrReportEnvironmentsEvidence` wire model.
 type PrReportEnvironmentsEvidence struct {

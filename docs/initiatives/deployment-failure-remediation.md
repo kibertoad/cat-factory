@@ -158,7 +158,9 @@ Still open in this slice:
       `resetStepForRerun` dropped the whole of `deployFix`, so a frame the fixer had edited before
       a `human-test` loop-back reported as one nothing was ever attempted on. The counters are now
       re-armed per provisioning CYCLE and the attempt log survives the RUN
-      (`restartDeployFixState`).
+      (`restartDeployFixState`), each row carrying the cycle that ran it so the report can state
+      how many cycles the rounds span instead of printing a run-long count against a per-cycle
+      budget. The log is capped and counts what it drops, since it rides the run's CAS'd blob.
 - [ ] The run outcome summary is deliberately NOT the second home for it. That section answers one
       question in product language, "is there something running to click", and a fault layer plus a
       withheld action is operator-facing engineering detail a non-code reader cannot act on. If a

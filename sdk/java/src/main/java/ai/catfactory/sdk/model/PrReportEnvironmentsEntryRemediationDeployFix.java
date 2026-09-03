@@ -12,6 +12,8 @@ import org.jspecify.annotations.Nullable;
  * The {@code PrReportEnvironmentsEntryRemediationDeployFix} wire model.
  * @param attempts the {@code attempts} field.
  * @param completed the {@code completed} field.
+ * @param cycles the {@code cycles} field.
+ * @param droppedRounds the {@code droppedRounds} field.
  * @param failed the {@code failed} field.
  * @param maxAttempts May be absent entirely.
  * @param reason the {@code reason} field.
@@ -21,6 +23,10 @@ public record PrReportEnvironmentsEntryRemediationDeployFix(
     @JsonProperty("attempts") Double attempts,
 
     @JsonProperty("completed") Double completed,
+
+    @JsonProperty("cycles") Double cycles,
+
+    @JsonProperty("droppedRounds") Double droppedRounds,
 
     @JsonProperty("failed") Double failed,
 
@@ -44,6 +50,8 @@ public record PrReportEnvironmentsEntryRemediationDeployFix(
     public static final class Builder {
         private @Nullable Double attempts;
         private @Nullable Double completed;
+        private @Nullable Double cycles;
+        private @Nullable Double droppedRounds;
         private @Nullable Double failed;
         private @Nullable Double maxAttempts;
         private @Nullable String reason;
@@ -57,6 +65,18 @@ public record PrReportEnvironmentsEntryRemediationDeployFix(
         /** Set {@code completed}. */
         public Builder completed(@Nullable Double completed) {
             this.completed = completed;
+            return this;
+        }
+
+        /** Set {@code cycles}. */
+        public Builder cycles(@Nullable Double cycles) {
+            this.cycles = cycles;
+            return this;
+        }
+
+        /** Set {@code droppedRounds}. */
+        public Builder droppedRounds(@Nullable Double droppedRounds) {
+            this.droppedRounds = droppedRounds;
             return this;
         }
 
@@ -80,7 +100,7 @@ public record PrReportEnvironmentsEntryRemediationDeployFix(
 
         /** Build the {@link PrReportEnvironmentsEntryRemediationDeployFix}. */
         public PrReportEnvironmentsEntryRemediationDeployFix build() {
-            return new PrReportEnvironmentsEntryRemediationDeployFix(attempts, completed, failed, maxAttempts, reason);
+            return new PrReportEnvironmentsEntryRemediationDeployFix(attempts, completed, cycles, droppedRounds, failed, maxAttempts, reason);
         }
     }
 }

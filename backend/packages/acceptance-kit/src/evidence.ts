@@ -120,9 +120,11 @@ export function retainedEnvironmentUrl(report: PrVerificationReport): string | n
  * outside the deployment that ran it.
  *
  * Both halves are checked and neither is the other: the deploy-fixer repairs a cause a checkout
- * edit can address, the investigation covers every cause it declines, and a run that entered one
- * of them entered exactly one. Pass `expect` to say which this scenario is about; the default
- * accepts either, which is what a suite covering "something was tried" wants.
+ * edit can address and the investigation covers every cause it declines. The two are exclusive
+ * per FAILURE and not per run, though: a frame whose first failure the fixer repaired can time
+ * out on the re-provision and be investigated, and the report accumulates both onto one entry.
+ * Pass `expect` to say which this scenario is about; the default accepts either, which is what a
+ * suite covering "something was tried" wants.
  *
  * Deliberately NOT "the remedy worked". That is the deployer's next verdict, which
  * {@link checkEphemeralEnvironment} already reads off `entries[].status`, and the report has no
@@ -151,7 +153,12 @@ export function checkEnvironmentRemediation(
   ]
   // A diagnosis that reached no verdict is a real outcome and a different one: the rounds ran and
   // produced nothing to act on, which reads as a healthy provider unless it is named.
-  for (const entry of investigations) {
+  //
+  // Scoped to what the caller ASKED about. A `deployFix` scenario can carry an investigation too
+  // (the fixer's re-provision then timed out), and grading it on a verdict it never claimed makes
+  // the suite go red on a fact about a different loop.
+  const scrutinised = expect === 'deployFix' ? [] : investigations
+  for (const entry of scrutinised) {
     const investigation = entry.remediation?.investigation
     if (!investigation) continue
     checks.push(

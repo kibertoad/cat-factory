@@ -606,9 +606,11 @@ describe('composeEnvironments: remediation', () => {
     expect(section.entries[0]!.remediation?.deployFix).toEqual({
       attempts: 2,
       maxAttempts: 2,
+      cycles: 1,
       reason: 'manifest_invalid',
       completed: 1,
       failed: 1,
+      droppedRounds: 0,
     })
   })
 
@@ -634,6 +636,8 @@ describe('composeEnvironments: remediation', () => {
     expect(section.entries[0]!.remediation?.investigation).toEqual({
       attempts: 2,
       maxAttempts: 2,
+      cycles: 1,
+      droppedRounds: 0,
       faultLayer: 'provider',
       action: 'restart',
       ranActions: ['wait', 'restart'],
@@ -777,6 +781,146 @@ describe('composeEnvironments: remediation', () => {
     expect(rendered).toContain('fault: `provider`')
     expect(rendered).toContain('ran: `restart`')
     expect(rendered).toContain('readiness ceiling extended 1')
+  })
+
+  it('counts the rounds off the run-long log, never the counter a loop-back re-armed', () => {
+    // Two rounds ran, a human-test gate rebuilt the environment, and the new cycle has spent
+    // nothing yet. Reading the live counter reported "0 of 2 repair round(s) (2 finished)", an
+    // in-flight count of minus two, on exactly the loop-back this section exists to report.
+    const section = compose([
+      deployerWith({
+        deployFix: {
+          phase: 'retrying',
+          attempts: 0,
+          cycle: 1,
+          maxAttempts: 2,
+          frameId: 'frm_api',
+          reason: 'manifest_invalid',
+          lastError: 'image "" is not a valid reference',
+          attemptLog: [fixRound(1, 'completed'), fixRound(2, 'completed')],
+        },
+      }),
+    ])
+
+    expect(section.entries[0]!.remediation?.deployFix).toMatchObject({
+      attempts: 2,
+      completed: 2,
+      failed: 0,
+      cycles: 2,
+    })
+  })
+
+  it('never renders more rounds than the budget it prints them against', () => {
+    // Two deployer steps, each spending its own two-round budget on the same frame. `attempts`
+    // accumulates and `maxAttempts` is per CYCLE, so the ratio form would read "4 of 2" and tell
+    // a reviewer the bound is not enforced.
+    const spender = (attempt: number) =>
+      deployerWith({
+        deployFix: {
+          phase: 'retrying',
+          attempts: 2,
+          maxAttempts: 2,
+          frameId: 'frm_api',
+          reason: 'manifest_invalid',
+          lastError: 'e',
+          attemptLog: [fixRound(attempt, 'completed'), fixRound(attempt + 1, 'completed')],
+        },
+      })
+    const rendered = renderEnvironments(compose([spender(1), spender(3)])).join('\n')
+
+    expect(rendered).toContain('4 repair round(s) over 2 provisioning cycles (2 per cycle)')
+    expect(rendered).not.toContain('4 of 2')
+  })
+
+  it('reads every decision off the ONE round that made it, across deployer steps', () => {
+    // A refusal belongs to the decision it refused. Falling back to an earlier step's `withheld`
+    // reported a remedy as blocked that the later step in fact RAN, and an earlier step's
+    // `failure` beside a fresh verdict reported an investigation that had since succeeded.
+    const refused = deployerWith({
+      environmentInvestigation: {
+        attempts: 2,
+        maxAttempts: 2,
+        frameId: 'frm_api',
+        attemptLog: [
+          investigationRound({
+            outcome: 'reported',
+            ranAction: null,
+            withheld: 'This deployment does not allow the platform to act on an environment.',
+          }),
+          {
+            attempt: 2,
+            at: 6_000,
+            outcome: 'failed',
+            error: 'namespace never became ready',
+            failure: 'the provider credentials could not be opened',
+          },
+        ],
+      },
+    })
+    const acted = deployerWith({
+      environmentInvestigation: {
+        attempts: 1,
+        maxAttempts: 2,
+        frameId: 'frm_api',
+        attemptLog: [investigationRound({ attempt: 3, at: 9_000 })],
+      },
+    })
+    const investigation = compose([refused, acted]).entries[0]!.remediation?.investigation
+
+    expect(investigation?.ranActions).toEqual(['restart'])
+    expect(investigation?.withheld).toBeNull()
+    expect(investigation?.failure).toBeNull()
+  })
+
+  it('lists a frame whose outcome a loop CLEARED, rather than reporting nothing was attempted', () => {
+    // Both loops clear the frame's recorded outcome to make the re-provision happen. A report
+    // composed in that window (the run was abandoned, timed out, or failed at another step) read
+    // as a deployer that recorded nothing at all, on a run where the platform demonstrably acted.
+    const section = compose([
+      step({
+        agentKind: 'deployer',
+        deployEnvs: {},
+        environmentInvestigation: {
+          attempts: 1,
+          maxAttempts: 2,
+          frameId: 'frm_api',
+          attemptLog: [investigationRound()],
+        },
+      } as unknown as Partial<PipelineStep> & { agentKind: string }),
+    ])
+
+    expect(section.status).toBe('reported')
+    expect(section.entries[0]).toMatchObject({ frameId: 'frm_api', status: 'unsettled' })
+    expect(section.entries[0]!.remediation?.investigation?.ranActions).toEqual(['restart'])
+    expect(section.gaps.some((gap) => gap.includes('no settled provisioning outcome'))).toBe(true)
+  })
+
+  it('folds a multi-line refusal into its bullet rather than spilling it into the body', () => {
+    // `withheld` and `failure` carry a provider's own words, which are routinely multi-line. A
+    // raw newline ends the list item and lands the tail in a public pull-request body as prose.
+    const rendered = renderEnvironments(
+      compose([
+        deployerWith({
+          environmentInvestigation: {
+            attempts: 1,
+            maxAttempts: 1,
+            frameId: 'frm_api',
+            attemptLog: [
+              investigationRound({
+                outcome: 'reported',
+                ranAction: null,
+                withheld: 'the provider refused:\nError from server (Forbidden)\nnamespaces',
+              }),
+            ],
+          },
+        }),
+      ]),
+    ).join('\n')
+    const bullet = rendered.split('\n').find((line) => line.includes('withheld:'))
+
+    expect(bullet).toContain('Error from server (Forbidden)')
+    expect(bullet).toContain('namespaces')
+    expect(rendered).not.toMatch(/^namespaces/m)
   })
 
   it('says nothing about remediation when nothing was attempted', () => {

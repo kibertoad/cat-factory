@@ -94,7 +94,9 @@ export function deployDispatchEpoch(step: PipelineStep): number {
 //    run, or a terminal failure explained by the PREVIOUS environment's verdict.
 //  - The ATTEMPT LOG is per RUN, because it is what the run's verification report reduces. A
 //    frame repaired by one cycle and re-deployed cleanly by the next was still machine-edited,
-//    and dropping the log makes the report say nothing was ever attempted.
+//    and dropping the log makes the report say nothing was ever attempted. Each row carries the
+//    CYCLE it ran in, which is what lets a reader of the run-long log tell the rounds the live
+//    budget was spent on from the ones a superseded environment's cycle spent.
 //
 // Both return undefined for a step that carries no such state, so a caller can spread them
 // unconditionally. The retry path (`retry.logic.resetStep`) deliberately drops both by omission:
@@ -114,7 +116,13 @@ export function restartDeployFixState(
   fix: PipelineStep['deployFix'],
 ): PipelineStep['deployFix'] | undefined {
   if (!fix) return undefined
-  return { ...fix, phase: 'retrying', attempts: 0, attemptLog: fix.attemptLog ?? [] }
+  return {
+    ...fix,
+    phase: 'retrying',
+    attempts: 0,
+    cycle: (fix.cycle ?? 0) + 1,
+    attemptLog: fix.attemptLog ?? [],
+  }
 }
 
 /**
@@ -123,21 +131,50 @@ export function restartDeployFixState(
  *
  * `environmentId` goes, because it names the environment this cycle supersedes and a round run
  * against it would restart, re-probe or tear down infrastructure the re-provision has replaced.
- * `waitExtensions` goes with the counters: the readiness ceiling it extended belonged to that
- * environment, and a cycle is started by a person or a gate rather than by the model, so zeroing
- * it cannot become a way to postpone a run one ceiling at a time.
+ *
+ * `waitExtensions` deliberately does NOT go, unlike the round counter beside it. It is both the
+ * bound on `wait` verdicts and the run's only record that one was granted (the bring-up simply
+ * runs past the configured ceiling), and a cycle is not always started by a person or a gate:
+ * `StepGraph.rerunProducerThrough` resets every step from a producer through its companion and
+ * judge, and the judge and below-threshold companion loops both drive it with no human involved.
+ * Re-arming it would hand the model a fresh ceiling extension per automatic rework round, and
+ * would erase the granted one from the record the verification report reduces.
  */
 export function restartEnvironmentInvestigationState(
   state: PipelineStep['environmentInvestigation'],
 ): PipelineStep['environmentInvestigation'] | undefined {
   if (!state) return undefined
   return {
+    ...state,
     attempts: 0,
-    maxAttempts: state.maxAttempts,
-    frameId: state.frameId,
     environmentId: null,
-    waitExtensions: 0,
+    cycle: (state.cycle ?? 0) + 1,
     attemptLog: state.attemptLog ?? [],
+  }
+}
+
+/**
+ * Append one round to a remediation loop's run-long attempt log, dropping the oldest rows past
+ * `max` and counting what went.
+ *
+ * Shared by both loops because both logs have the same shape of problem: they survive the run
+ * (the verification report reduces them) while living inside the `ExecutionInstance` JSON blob,
+ * which is re-serialized on every step write and compare-and-swapped on every persist, so an
+ * uncapped log grows with every loop-back for the rest of the run. The drop is COUNTED rather
+ * than silent: the report reduces the surviving rows, so a dropped round would otherwise read as
+ * one that never ran. The model is `appendRalphAttempt`, which caps the same kind of log.
+ */
+export function appendAttemptLog<T>(
+  log: readonly T[] | null | undefined,
+  entry: T,
+  max: number,
+  dropped: number | null | undefined,
+): { attemptLog: T[]; droppedAttempts: number } {
+  const appended = [...(log ?? []), entry]
+  const overflow = Math.max(appended.length - max, 0)
+  return {
+    attemptLog: overflow > 0 ? appended.slice(overflow) : appended,
+    droppedAttempts: (dropped ?? 0) + overflow,
   }
 }
 
