@@ -155,6 +155,7 @@ interface BootstrapDetail {
   adoptionReview: ResolvedAdoption | null
   prUrl: string | null
   delivery: BootstrapDelivery | null
+  workBranch: string | null
 }
 
 const EMPTY_DETAIL: BootstrapDetail = {
@@ -171,6 +172,7 @@ const EMPTY_DETAIL: BootstrapDetail = {
   adoptionReview: null,
   prUrl: null,
   delivery: null,
+  workBranch: null,
 }
 
 function parseDetail(raw: string): BootstrapDetail {
@@ -216,6 +218,9 @@ function rowToBootstrapJob(row: typeof agentRuns.$inferSelect): BootstrapJobReco
     // See the D1 mirror: a row predating the delivery toggle records what that run DID, which
     // its target alone determined.
     delivery: detail.delivery ?? (detail.monorepo ? 'pull_request' : 'direct_push'),
+    // A row predating the field recorded no branch; the run's own dispatch derived one off its
+    // id, so there is nothing to carry and null is the honest read.
+    workBranch: detail.workBranch,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -258,6 +263,7 @@ export class DrizzleBootstrapJobRepository implements BootstrapJobRepository {
       adoptionReview: record.adoptionReview,
       prUrl: record.prUrl,
       delivery: record.delivery,
+      workBranch: record.workBranch,
     }
     await this.db.insert(agentRuns).values({
       workspace_id: record.workspaceId,

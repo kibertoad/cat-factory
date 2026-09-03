@@ -65,6 +65,11 @@ interface BootstrapDetail {
    * is what those runs actually did.
    */
   delivery: BootstrapDelivery | null
+  /**
+   * The work branch a `pull_request` run pushes; null under `direct_push` and on a row written
+   * before the field existed, whose dispatch derived one off the run id instead.
+   */
+  workBranch: string | null
 }
 
 /** The value every absent/garbled detail field falls back to. */
@@ -82,6 +87,7 @@ const EMPTY_DETAIL: BootstrapDetail = {
   adoptionReview: null,
   prUrl: null,
   delivery: null,
+  workBranch: null,
 }
 
 /** Parse the `detail` JSON, tolerating null/garbage (older/blank rows). */
@@ -130,6 +136,9 @@ function rowToRecord(row: AgentRunRow): BootstrapJobRecord {
     // pull request and a new-repo run force-pushed its initial commit, which was the only
     // behaviour either target had. Historically true, not a guess.
     delivery: detail.delivery ?? (detail.monorepo ? 'pull_request' : 'direct_push'),
+    // A row predating the field recorded no branch; that run's dispatch derived one off its own
+    // id, so there is nothing to carry forward and null is the honest read.
+    workBranch: detail.workBranch,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -191,6 +200,7 @@ export class D1BootstrapJobRepository implements BootstrapJobRepository {
       adoptionReview: record.adoptionReview,
       prUrl: record.prUrl,
       delivery: record.delivery,
+      workBranch: record.workBranch,
     }
     // Stamp `service_id` from the materialised service frame (when known) so a shared
     // service's in-flight bootstrap surfaces on every board that mounts it via `listByService`.

@@ -296,6 +296,13 @@ function registerGitHubWriteRoutes(app: Hono<AppEnv>): void {
       name,
       private: isPrivate,
       description,
+      // Always with an initial commit, because every repository this endpoint creates exists to
+      // be bootstrapped into, and a `pull_request` bootstrap is opened BETWEEN two commits: a
+      // repository with none is refused at pre-flight, which would refuse the repository the
+      // platform had just made for the user one click earlier. It costs the other delivery
+      // nothing, since a force-pushed bootstrap replaces that commit's history outright and the
+      // pre-flight tolerates the boilerplate either way.
+      autoInit: true,
     })
     if (result.status === 'delegated') {
       return c.json(

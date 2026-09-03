@@ -78,6 +78,16 @@ export interface BootstrapJobRecord {
    */
   delivery: BootstrapDelivery
   /**
+   * The work branch a `pull_request` run pushes; null under `direct_push`, which opens none.
+   *
+   * Recorded rather than derived from `id` at each dispatch, because a RETRY is a new row with a
+   * new id: re-deriving would mint a second branch, so the harness's resume (it clones the branch
+   * when it already exists on the remote) would never fire and the first attempt's pushed work
+   * would be abandoned on a branch nobody looks at. Carried forward verbatim by `retry`, which is
+   * what makes "a retry resumes its branch" true rather than aspirational.
+   */
+  workBranch: string | null
+  /**
    * The id of the run's CURRENT drive: the durable driver's instance/singleton key, and the
    * container job id when a container is dispatched.
    *

@@ -1,4 +1,5 @@
 import type {
+  BootstrapDeliveryPlan,
   BootstrapJobHandle,
   BootstrapJobRepository,
   BootstrapJobUpdate,
@@ -15,7 +16,7 @@ import type {
   RepoEntry,
   RepoProjectionRepository,
 } from '@cat-factory/kernel'
-import { failureKindFromHarnessCause } from '@cat-factory/kernel'
+import { failureKindFromHarnessCause, runBestEffort } from '@cat-factory/kernel'
 import { isProxyableProvider } from '@cat-factory/agents'
 import type { ContainerSessionService } from '../containers/ContainerSessionService.js'
 import type { JobPackageRegistrySpec } from './ContainerAgentExecutor.js'
@@ -78,32 +79,56 @@ const ADAPT_SYSTEM_PROMPT =
   'unrelated features.'
 
 /**
- * The role prompt when writing a new service INTO an existing monorepo.
+ * The role prompt when writing a new service INTO an existing monorepo, told where its work
+ * lands.
  *
- * Distinct from the two below in the thing it keeps saying: the checkout is not the new
- * service's to reshape. The agent has the monorepo (writable, at a work branch) and the
- * reference template beside it as a read-only sibling, and its whole job is confined to one
- * new subdirectory plus the minimum registration the monorepo's own tooling needs. Every
- * cross-cutting choice it might otherwise make has already been made by a human and is stated
- * in the brief, so the prompt's job is to stop it re-deciding them.
+ * Distinct from the ones below in the thing it keeps saying: the checkout is not the new
+ * service's to reshape. The agent has the monorepo (writable) and the reference template beside
+ * it as a read-only sibling, and its whole job is confined to one new subdirectory plus the
+ * minimum registration the monorepo's own tooling needs. Every cross-cutting choice it might
+ * otherwise make has already been made by a human and is stated in the brief, so the prompt's
+ * job is to stop it re-deciding them.
+ *
+ * Two of its sentences are delivery-specific, and both are the kind that changes what the agent
+ * does. WHICH BRANCH it is on is the licence to commit loosely or not: under `direct_push` the
+ * harness checkpoints every commit straight to the branch every other service is built from, and
+ * an agent told it is on a "fresh work branch" is being told the opposite of that. And WHERE a
+ * deviation goes has to be somewhere that exists: routing it to a pull request description on a
+ * run that opens no pull request is how a caveat about a settled decision is silently lost.
  */
-const MONOREPO_SYSTEM_PROMPT =
-  'You are adding a NEW service to an existing monorepo. Your working directory is the ' +
-  'monorepo checkout, already on a fresh work branch. A reference template repository is ' +
-  'checked out READ-ONLY as a sibling directory beside it: read from it freely, copy from it ' +
-  'where the brief says to, and never write to it. ' +
-  'Create the new service in the subdirectory the brief names, and touch NOTHING else in the ' +
-  'monorepo except the minimum registration its own tooling requires (a workspace list, a ' +
-  'build-graph entry, a CI matrix entry). Modifying an existing service is out of scope, and ' +
-  'so is reformatting, upgrading or "tidying" anything you did not add. ' +
-  'The brief carries adoption decisions a human has already reviewed and settled: for each ' +
-  'area they say whether the new service follows the monorepo or the template. Follow them ' +
-  'exactly. Do not substitute your own preference for one of them, and if a decision cannot be ' +
-  'honoured as written, do the closest thing that respects it and say so in the pull request ' +
-  'description rather than quietly taking the other side. ' +
-  'Match the surrounding monorepo in everything the brief does NOT settle: its naming, its ' +
-  'file layout, its dependency versions, its lint and test conventions. Leave the new service ' +
-  'building and its tests passing.'
+function monorepoSystemPrompt(delivery: BootstrapDeliveryPlan['mode']): string {
+  const checkout =
+    delivery === 'pull_request'
+      ? 'Your working directory is the monorepo checkout, already on a fresh work branch. '
+      : 'Your working directory is the monorepo checkout, on the monorepo\'s OWN DEFAULT BRANCH: ' +
+        'every commit you make is pushed to the branch every other service in it is built from, ' +
+        'as you make it. So commit only work you would be willing to merge, keep the tree ' +
+        'building at every commit, and never rewrite, revert or force-push history that was ' +
+        'there before you. '
+  const deviation =
+    delivery === 'pull_request'
+      ? 'say so in the pull request description'
+      : 'say so in the commit message that makes the change'
+  return (
+    'You are adding a NEW service to an existing monorepo. ' +
+    checkout +
+    'A reference template repository is ' +
+    'checked out READ-ONLY as a sibling directory beside it: read from it freely, copy from it ' +
+    'where the brief says to, and never write to it. ' +
+    'Create the new service in the subdirectory the brief names, and touch NOTHING else in the ' +
+    'monorepo except the minimum registration its own tooling requires (a workspace list, a ' +
+    'build-graph entry, a CI matrix entry). Modifying an existing service is out of scope, and ' +
+    'so is reformatting, upgrading or "tidying" anything you did not add. ' +
+    'The brief carries adoption decisions a human has already reviewed and settled: for each ' +
+    'area they say whether the new service follows the monorepo or the template. Follow them ' +
+    'exactly. Do not substitute your own preference for one of them, and if a decision cannot ' +
+    `be honoured as written, do the closest thing that respects it and ${deviation} rather than ` +
+    'quietly taking the other side. ' +
+    'Match the surrounding monorepo in everything the brief does NOT settle: its naming, its ' +
+    'file layout, its dependency versions, its lint and test conventions. Leave the new service ' +
+    'building and its tests passing.'
+  )
+}
 
 /**
  * The role prompt when filling a NEW repository from a reference template, delivered as a pull
@@ -251,15 +276,20 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
       return await this.startNewRepoPullRequest(request, target, installation, log)
     }
 
-    // Scoped to the one repo being bootstrapped: the run clones and force-pushes exactly this
-    // target and touches nothing else, so there is no leg to widen for. `target` came from the
-    // pre-flight `getRepo` above, which is why this costs no extra read.
     const owner = installation.accountLogin
     const repoName = request.target.name
+    // With a reference architecture the container clones + adapts it; without one
+    // it scaffolds an empty repo from the freeform instructions alone.
+    const reference = await this.resolveReferenceTemplate(request, installation.installationId, log)
+    // Scoped to the repos this run touches: the target it force-pushes, and the template it
+    // CLONES. The template belongs on the scope even though nothing pushes to it, because the
+    // clone runs on this same token: leaving it off works only for a public reference
+    // architecture and 404s on a private one, with nothing in the failure naming the cause.
+    // `target` came from the pre-flight `getRepo` above, which is why it costs no extra read.
     const ghToken = await this.deps.mintInstallationToken(installation.installationId, {
       executionId: request.containerJobId,
       workspaceId: request.workspaceId,
-      repoIds: [String(target.githubId)],
+      repoIds: [String(target.githubId), ...(reference?.githubId ? [reference.githubId] : [])],
     })
     // Private-registry auth for the scaffolder's installs, exactly as the
     // implementation executor forwards it.
@@ -270,17 +300,6 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
     const webBase = this.webBase()
     const targetCloneUrl = `${webBase}/${owner}/${repoName}.git`
     const defaultBranch = defaultBranchOf(target)
-
-    // With a reference architecture the container clones + adapts it; without one
-    // it scaffolds an empty repo from the freeform instructions alone.
-    const reference = request.referenceRepo
-      ? {
-          owner: request.referenceRepo.owner,
-          name: request.referenceRepo.name,
-          cloneUrl: `${webBase}/${request.referenceRepo.owner}/${request.referenceRepo.name}.git`,
-          baseBranch: 'main',
-        }
-      : undefined
 
     const targetSpec = { owner, name: repoName, cloneUrl: targetCloneUrl, defaultBranch }
     // The generic agent `repo` is the clone source: the reference when adapting one, or the
@@ -489,10 +508,12 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
    * the reference template alongside it as a READ-ONLY sibling checkout.
    *
    * Deliberately the plain coding shape rather than a `bootstrap` spec, and that is the design:
-   * the harness already knows how to clone a writable primary at a work branch, clone
-   * `referenceRepos` beside it without ever branching or pushing them, and open one pull request
-   * for the primary. A bespoke bootstrap mode here would be a second implementation of that with
-   * one extra way to get the push wrong, against a repository that holds other people's code.
+   * the harness already knows how to clone a writable primary (at a work branch, or at the
+   * default branch it commits onto, per the run's delivery), clone `referenceRepos` beside it
+   * without ever branching or pushing them, and open one pull request for the primary when it
+   * was given one to open. A bespoke bootstrap mode here would be a second implementation of
+   * that with one extra way to get the push wrong, against a repository that holds other
+   * people's code.
    *
    * `repo.serviceDirectory` is what scopes the agent to the new subdirectory: the same field
    * every monorepo-service run rides, so the working-directory rule is stated in one place.
@@ -537,7 +558,10 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
       )
     }
 
-    log.info('bootstrap(monorepo): dispatching container', { directory: monorepo.directory })
+    log.info('bootstrap(monorepo): dispatching container', {
+      directory: monorepo.directory,
+      delivery: request.delivery.mode,
+    })
     return await this.dispatchCodingShape(request, installation, log, {
       repo: {
         owner: monorepo.owner,
@@ -547,7 +571,7 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
         serviceDirectory: monorepo.directory,
       },
       repoGithubId: target.githubId,
-      systemPrompt: MONOREPO_SYSTEM_PROMPT,
+      systemPrompt: monorepoSystemPrompt(request.delivery.mode),
       userPrompt: request.instructions,
     })
   }
@@ -579,29 +603,23 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
       userPrompt: string
     },
   ): Promise<BootstrapJobHandle> {
-    const webBase = this.webBase()
     // Scoped to the repos this run touches: the one it pushes to, and the template it reads. A
     // template outside the installation simply is not cloneable, which the harness reports as a
     // clone failure rather than silently running without it.
-    const repoIds = [String(spec.repoGithubId)]
-    const reference = request.referenceRepo
-    let referenceRepos: { repo: Record<string, string> }[] = []
-    if (reference) {
-      const templateRepo = await this.deps.githubClient
-        .getRepo(installation.installationId, { owner: reference.owner, repo: reference.name })
-        .catch(() => null)
-      if (templateRepo) repoIds.push(String(templateRepo.githubId))
-      referenceRepos = [
-        {
-          repo: {
-            owner: reference.owner,
-            name: reference.name,
-            baseBranch: templateRepo?.defaultBranch ?? 'main',
-            cloneUrl: `${webBase}/${reference.owner}/${reference.name}.git`,
+    const reference = await this.resolveReferenceTemplate(request, installation.installationId, log)
+    const repoIds = [String(spec.repoGithubId), ...(reference?.githubId ? [reference.githubId] : [])]
+    const referenceRepos = reference
+      ? [
+          {
+            repo: {
+              owner: reference.owner,
+              name: reference.name,
+              baseBranch: reference.baseBranch,
+              cloneUrl: reference.cloneUrl,
+            },
           },
-        },
-      ]
-    }
+        ]
+      : []
 
     const ghToken = await this.deps.mintInstallationToken(installation.installationId, {
       executionId: request.containerJobId,
@@ -646,14 +664,62 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
       body,
       'agent',
     )
+    // The BRANCH is the field an operator needs first when a run reports done with no pull
+    // request (the orchestration then fails it as delivered nowhere) or faults mid-way under
+    // `direct_push`: it names where the commits are. Nothing else in the backend's logs does.
     log.info('bootstrap: container accepted job', {
       delivery: request.delivery.mode,
+      branch:
+        request.delivery.mode === 'pull_request' ? request.delivery.branch : spec.repo.baseBranch,
       reference: reference ? `${reference.owner}/${reference.name}` : null,
     })
     return {
       workspaceId: request.workspaceId,
       jobId: request.jobId,
       containerJobId: request.containerJobId,
+    }
+  }
+
+  /**
+   * Resolve the reference template a run reads from: its clone spec, plus the numeric id the
+   * run's installation token has to be scoped to.
+   *
+   * ONE resolution for both dispatch shapes, because both CLONE the template and both mint the
+   * token that clone runs on. Two copies is what left the force-push path granting only its push
+   * target while cloning the template with that same token, so a PRIVATE reference architecture
+   * 404s on clone under one delivery and works under the other, and what left it assuming the
+   * template's base branch was `main`.
+   *
+   * A template the installation cannot read resolves to no id and the conventional branch rather
+   * than refusing the run: the clone then fails inside the harness naming the repository, which
+   * is a better report than a pre-flight throw here, and the warning says which read failed.
+   */
+  private async resolveReferenceTemplate(
+    request: BootstrapRepoRequest,
+    installationId: number,
+    log: ReturnType<typeof logger.child>,
+  ): Promise<
+    | { owner: string; name: string; cloneUrl: string; baseBranch: string; githubId: string | null }
+    | undefined
+  > {
+    const reference = request.referenceRepo
+    if (!reference) return undefined
+    const template = await runBestEffort(
+      log,
+      'bootstrap: read reference template repo',
+      () =>
+        this.deps.githubClient.getRepo(installationId, {
+          owner: reference.owner,
+          repo: reference.name,
+        }),
+      { reference: `${reference.owner}/${reference.name}` },
+    )
+    return {
+      owner: reference.owner,
+      name: reference.name,
+      cloneUrl: `${this.webBase()}/${reference.owner}/${reference.name}.git`,
+      baseBranch: template ? defaultBranchOf(template) : 'main',
+      githubId: template ? String(template.githubId) : null,
     }
   }
 
@@ -776,7 +842,18 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
     return { installationId: installation.installationId, githubId: repo.githubId }
   }
 
-  /** Construct the success outcome from the installation + the recorded job's repo name. */
+  /**
+   * Construct the success outcome from the installation + the recorded job's repo name.
+   *
+   * `resultDefaultBranch` is what the HARNESS reported, and only the `bootstrap` spec reports one
+   * (it echoes back the branch it force-pushed, which it also created). The plain coding shape a
+   * `pull_request` run takes reports none, so the branch is READ off the target repository rather
+   * than defaulted to `main`: this field states which branch the work lands on, and a repository
+   * whose default is `master`, `trunk` or an org-wide choice would otherwise be recorded as a ref
+   * that does not exist. One read, on the terminal poll only. A failed read keeps the
+   * conventional fallback and says so in a warning, rather than failing a delivered run over the
+   * one field nothing reads back.
+   */
   private async buildOutcome(
     handle: BootstrapJobHandle,
     repoName: string,
@@ -786,11 +863,24 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
     if (!installation)
       throw new Error(`Workspace '${handle.workspaceId}' is not connected to GitHub`)
     const owner = installation.accountLogin
+    const log = logger.child({ jobId: handle.jobId, workspaceId: handle.workspaceId })
+    const target = resultDefaultBranch
+      ? null
+      : await runBestEffort(
+          log,
+          'bootstrap: read the target repo default branch',
+          () =>
+            this.deps.githubClient.getRepo(installation.installationId, {
+              owner,
+              repo: repoName,
+            }),
+          { repo: `${owner}/${repoName}` },
+        )
     return {
       repoUrl: `${this.webBase()}/${owner}/${repoName}`,
       owner,
       name: repoName,
-      defaultBranch: resultDefaultBranch ?? 'main',
+      defaultBranch: resultDefaultBranch ?? (target ? defaultBranchOf(target) : 'main'),
     }
   }
 

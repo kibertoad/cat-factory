@@ -418,9 +418,12 @@ export function renderAdoptionPrSection(resolved: ResolvedAdoption, directory: s
 /**
  * The work-branch name a bootstrap opens its pull request from, whichever target it writes to.
  *
- * Derived from the run's own id rather than the service name so two bootstraps of similarly
- * named services can never collide on one branch, and stable per run so a retry of the SAME run
- * resumes its branch instead of opening a second pull request against the target.
+ * Derived from a run id rather than the service name so two bootstraps of similarly named
+ * services can never collide on one branch. It is minted ONCE, by the attempt that first claims
+ * it, and then RECORDED on the run (`BootstrapJobRecord.workBranch`) and carried forward by a
+ * retry, which is what makes the harness's resume real: a retry mints a new run id, so a branch
+ * re-derived here would be a fresh one, and the first attempt's pushed work would be abandoned on
+ * an orphan branch instead of resumed.
  */
 export function bootstrapWorkBranch(jobId: string): string {
   return `cat-factory/bootstrap-${jobId}`

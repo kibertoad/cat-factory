@@ -1,7 +1,7 @@
 import * as v from 'valibot'
 import { frameRepoTypeSchema } from './primitives.js'
 import { stepSubtasksSchema } from './execution.js'
-import { bootstrapStatusSchema } from './bootstrap.js'
+import { bootstrapDeliverySchema, bootstrapStatusSchema } from './bootstrap.js'
 import { agentFailureKindSchema } from './agent-failure-kinds.js'
 import { runAutonomySchema } from './merge.js'
 import { vcsProviderSchema } from './routes/auth.js'
@@ -179,16 +179,35 @@ export const publicBootstrapJobSchema = v.object({
   /** Web URL of the created repository; null until it succeeds, and on a monorepo run always. */
   repoUrl: v.nullable(v.string()),
   /**
-   * The pull request a MONOREPO bootstrap opened; null on a run that created a repository of
-   * its own, and until the pull request exists.
+   * The pull request this run opened; null until it exists, and for the whole life of a
+   * `direct_push` run, which opens none.
    *
    * Projected beside `repoUrl` rather than reusing it, which is the whole point: a monorepo run
    * creates no repository, so it has no `repoUrl` to report, and writing the pull request there
    * would silently re-scope a field this surface documents as "the created repository": a
-   * caller that clones what it reads would clone a pull-request link. Two fields, one of which
-   * is always null, states which shape of run answered.
+   * caller that clones what it reads would clone a pull-request link.
+   *
+   * **Read `delivery` to tell whether a pull request is coming, and `repoUrl` to tell which
+   * TARGET a run took.** The two are independent: since the delivery toggle, a run that created
+   * a repository of its own can also deliver into it as a pull request, so both fields are set
+   * on one run and the mutual exclusion this pair once had (spec 1.65.0) no longer holds.
    */
   prUrl: v.nullable(v.string()),
+  /**
+   * How the run delivers what it wrote: as a pull request somebody reviews, or as commits on the
+   * target's default branch.
+   *
+   * Published because it is the only field that says, from the FIRST poll, whether a `prUrl` is
+   * still to come: on a `direct_push` run a null `prUrl` is terminal and correct, and on a
+   * `pull_request` run a completed run without one is a reported failure. A caller that inferred
+   * this from the two URL fields has to wait for the run to finish to learn it, and gets it wrong
+   * for the new-repo run that opens a pull request.
+   *
+   * `POST /api/v1/repos/bootstrap` does not (yet) accept it, so a run STARTED here always takes
+   * the target's default, `direct_push`. It reaches a caller anyway, because a run started in the
+   * app is read back through this surface, exactly as `awaiting_review` does.
+   */
+  delivery: bootstrapDeliverySchema,
   /** The board service frame this run materialises; null when none was created. */
   serviceId: v.nullable(v.string()),
   /** Live subtask counts from the agent's todo list; null until it first reports. */
