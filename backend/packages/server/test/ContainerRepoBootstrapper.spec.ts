@@ -427,11 +427,12 @@ describe('ContainerRepoBootstrapper monorepo dispatch', () => {
         branch: MONOREPO_DELIVERY.branch,
       },
     }))
-    const bootstrapper = makeBootstrapper(
-      fakeClient(),
-      { poll } as unknown as RunnerTransport,
-      { bootstrapJobRepository: fakeJobRepository({ monorepo: MONOREPO_REF, delivery: 'pull_request' }) },
-    )
+    const bootstrapper = makeBootstrapper(fakeClient(), { poll } as unknown as RunnerTransport, {
+      bootstrapJobRepository: fakeJobRepository({
+        monorepo: MONOREPO_REF,
+        delivery: 'pull_request',
+      }),
+    })
     const update = await bootstrapper.pollBootstrap({
       workspaceId: 'ws_1',
       jobId: 'boot_1',
@@ -519,11 +520,9 @@ describe('ContainerRepoBootstrapper new-repo pull-request delivery', () => {
       state: 'done',
       result: { prUrl: 'https://github.com/kibertoad/simpler-service3/pull/1' },
     }))
-    const bootstrapper = makeBootstrapper(
-      fakeClient(),
-      { poll } as unknown as RunnerTransport,
-      { bootstrapJobRepository: fakeJobRepository({ delivery: 'pull_request' }) },
-    )
+    const bootstrapper = makeBootstrapper(fakeClient(), { poll } as unknown as RunnerTransport, {
+      bootstrapJobRepository: fakeJobRepository({ delivery: 'pull_request' }),
+    })
     const update = await bootstrapper.pollBootstrap({
       workspaceId: 'ws_1',
       jobId: 'boot_1',
