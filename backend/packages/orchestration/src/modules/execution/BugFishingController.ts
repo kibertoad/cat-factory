@@ -26,15 +26,18 @@ import {
   runBestEffort,
 } from '@cat-factory/kernel'
 import { BUG_FISHER_KIND } from '@cat-factory/agents'
+import type { TaskTypeCreationDefaults } from '../board/taskTypeCreationDefaults.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import type { AdvanceResult } from './advance.js'
 import {
+  bugFishingSpawnIsClaimable,
+  claimBugFishingSpawn,
   coerceBugFishingFindings,
   dismissBugFishingFinding,
   failBugFishingPhase,
   planBugFishingPhases,
   recordBugFishingPhase,
-  recordBugFishingSpawn,
+  settleBugFishingSpawn,
   untriagedBugFishingFindings,
 } from './bugFishing.logic.js'
 import type { RunStateMachine } from './RunStateMachine.js'
@@ -42,6 +45,16 @@ import type { StepGraph } from './StepGraph.js'
 
 /** The step kind the bug-fishing phase loop runs on (the read-only expedition agent). */
 export const BUG_FISHING_STEP_KIND = BUG_FISHER_KIND
+
+/**
+ * What a phase records when its pass came back with no readable findings report.
+ *
+ * Named as its own cause rather than folded into the generic "did not complete": a crashed
+ * container and a container that ran fine and answered unusably need different fixes, and only
+ * the second one points at the kind's prompt or its structured-output schema.
+ */
+const UNREADABLE_PASS_REASON =
+  'The pass returned no readable findings report, so nothing it may have found could be recorded.'
 
 /** What the bug-fishing controller needs beyond the shared run state-machine spine. */
 export interface BugFishingControllerDeps {
@@ -63,6 +76,13 @@ export interface BugFishingControllerDeps {
   clock: Clock
   /** Resolves the frame block's service row, so a spawned task lands in the right service. */
   serviceRepository?: ServiceRepository
+  /**
+   * The task-type creation defaults, narrowed to the one question a spawn asks: which
+   * best-practice fragments a new `bug` task under this service is created with. The SAME seam
+   * `BoardService.addTask` reads, so a spawned fix and a hand-filed one are held to one set of
+   * standards. Absent ⇒ no fragments, the answer a deployment with no fragment pool gets anyway.
+   */
+  taskTypeDefaults?: Pick<TaskTypeCreationDefaults, 'fragmentIdsFor'>
   /** Bound `ExecutionService.start` — a spawned fix starts through the real entry point. */
   start: (
     workspaceId: string,
@@ -75,6 +95,15 @@ export interface BugFishingControllerDeps {
   /** Optional inbox channel; when unwired the `bug_fishing_triage` card is skipped. */
   notificationService?: NotificationService
   logger?: Logger
+}
+
+/**
+ * Where a spawned fix task lands: the expedition's own service frame and that frame's service
+ * row. Resolved ONCE per marking batch, because every finding in it spawns under the same frame.
+ */
+interface SpawnHost {
+  frame: Block
+  serviceId: string | null
 }
 
 /**
@@ -116,14 +145,18 @@ export class BugFishingController {
    * an expedition (every dispatch after the first, and every durable replay of the first) keeps
    * it, because re-planning would discard the phases already fished.
    *
-   * Returns null when the block plans no angles at all, which the handler renders as a
-   * `skipped` pass-through rather than a run that parks with nothing to triage.
+   * ALWAYS plans at least one angle, because {@link planBugFishingPhases} falls back to the whole
+   * catalog: an empty or entirely unrecognised selection means "fish everything", which is the
+   * point of an expedition, so narrowing it is the deliberate act. There is deliberately no
+   * "planned nothing" outcome for the handler to pass through — one existed, could not be
+   * reached, and would have dispatched a full container run for a step it had just marked
+   * skipped.
    */
   async ensurePlanned(
     workspaceId: string,
     step: PipelineStep,
     block: Block,
-  ): Promise<BugFishingStepState | null> {
+  ): Promise<BugFishingStepState> {
     if (step.bugFishing) return step.bugFishing
     const { phases, unknown } = planBugFishingPhases(block.taskTypeFields?.fishingPhaseIds)
     if (unknown.length > 0) {
@@ -136,7 +169,6 @@ export class BugFishingController {
         unknown,
       })
     }
-    if (phases.length === 0) return null
     return {
       status: 'fishing',
       phases,
@@ -188,11 +220,24 @@ export class BugFishingController {
       step.bugFishing = { ...state, status: 'awaiting_triage' }
       return this.deps.stateMachine.parkStepOnDecision(workspaceId, instance, step)
     }
+    if (!output) {
+      // The pass returned nothing this build can read: no `result.custom` at all, or a blob the
+      // kind's structured-output schema rejected. Settling that as a COMPLETED phase with an
+      // empty summary would put it on the record as "this angle was fished and found nothing",
+      // which is the one thing it demonstrably does not say — and the expedition's whole product
+      // is a human's reading of which angles came back empty. So it takes the failure path, the
+      // same one a crashed container job takes, and the angle is named as unfished.
+      //
+      // The model is stamped first: WHICH model answered unusably is exactly what a reader of
+      // this failure needs, and the failure path has no dispatch result to take it from.
+      step.bugFishing = { ...state, model: model ?? state.model ?? null }
+      return this.recordPhaseFailure(workspaceId, instance, step, UNREADABLE_PASS_REASON, block)
+    }
     const { findings, dropped } = coerceBugFishingFindings(output, phase.id, () =>
       this.deps.idGenerator.next('bff'),
     )
     const next = recordBugFishingPhase(state, phaseIndex, {
-      summary: output?.summary ?? null,
+      summary: output.summary ?? null,
       findings,
       dropped,
       at: this.deps.clock.now(),
@@ -267,11 +312,14 @@ export class BugFishingController {
    * Accepted while the expedition is still fishing later angles as well as once it has parked —
    * see the class doc for why that is the point rather than a convenience.
    *
-   * Order of operations per finding, and why: the block is inserted, its run started, and only
-   * then is the spawn recorded onto the expedition. So a failure mid-way leaves a task a human
-   * can see and start by hand, never a finding that CLAIMS a task that does not exist. The
-   * spawn record is the finding's own "this is being fixed" state, so writing it before the work
-   * existed would be the platform reporting work it had not done.
+   * Order of operations per finding, and why: the spawn record is CLAIMED under the run's
+   * compare-and-swap first, with the task id it is about to create, and only then is the block
+   * inserted and its run started; the claim is settled to `spawned` or `failed` afterwards.
+   * Creating first and recording after was the first cut and it is not safe: two people marking
+   * the same finding (or one person and a retried request) both read a snapshot with no spawn on
+   * it, and both file the same bug and start a run for it. The claim is what makes exactly one
+   * of them win, and it is why a spawn record must be read through its STATUS rather than by
+   * being present: `pending` means a task is being made, not that one exists.
    *
    * The pipeline is resolved ONCE for the whole batch and validated against the workspace's
    * catalog before anything is created: a caller naming a pipeline that does not exist gets a
@@ -299,7 +347,12 @@ export class BugFishingController {
         findingIds: missing,
       })
     }
-    const already = targets.filter((f) => f.spawn)
+    // A read-time refusal, so a caller marking a batch is told which findings are already taken
+    // before anything at all is created. It is NOT the safety property — the per-finding claim
+    // below is, and it re-checks the same rule against the winning snapshot.
+    const already = targets.filter(
+      (f) => !bugFishingSpawnIsClaimable(f.spawn, this.deps.clock.now()),
+    )
     if (already.length > 0) {
       throw new ConflictError(
         'Some of those findings already have a fix task.',
@@ -308,31 +361,17 @@ export class BugFishingController {
       )
     }
     const pipelineId = await this.resolveSpawnPipelineId(workspaceId, input.pipelineId, state)
-    const { frame, serviceId } = await this.resolveSpawnHost(workspaceId, instance.blockId)
+    const host = await this.resolveSpawnHost(workspaceId, instance.blockId)
 
     let latest = state
     for (const finding of targets) {
-      const spawned = await this.spawnFixTask(workspaceId, {
+      latest = await this.spawnForFinding(workspaceId, executionId, {
         expeditionBlockId: instance.blockId,
-        frame,
-        serviceId,
+        host,
         finding,
         pipelineId,
         initiatedBy,
       })
-      // Persist the spawn on the run under CAS, one finding at a time: a batch that fails
-      // half-way has still recorded the tasks it did create, which is what stops a retry of the
-      // same request from spawning them twice.
-      const persisted = await this.deps.stateMachine.mutateInstance(
-        workspaceId,
-        executionId,
-        (inst) => {
-          const live = this.activeExpeditionStep(inst)
-          if (!live?.bugFishing) return
-          live.bugFishing = recordBugFishingSpawn(live.bugFishing, finding.id, spawned)
-        },
-      )
-      latest = this.activeExpeditionStep(persisted)?.bugFishing ?? latest
     }
     const emitted = await this.deps.executionRepository.get(workspaceId, executionId)
     if (emitted) await this.deps.stateMachine.emitInstance(workspaceId, emitted)
@@ -340,9 +379,129 @@ export class BugFishingController {
   }
 
   /**
+   * Claim ONE finding, create its fix task behind the claim, and settle the claim either way.
+   *
+   * The three writes are separate on purpose. The CLAIM is the concurrency boundary: it lands
+   * under CAS, and the caller learns whether it won by re-reading the finding and comparing the
+   * task id it minted — the initiative loop's spawn recognises its own the same way, and for the
+   * same reason (the loser's transform is a no-op, so a lost race creates nothing rather than
+   * duplicating the winner's work).
+   *
+   * The SETTLE writes cannot be skipped on either branch. On success the record becomes terminal,
+   * which is what stops the finding being marked twice. On failure it records the cause and
+   * becomes claimable again, which is what stops a finding whose fix task was never created from
+   * reading as one that is being worked on. The failure then PROPAGATES: marking is the caller's
+   * own request, so answering 200 with a finding nobody is fixing would report work the platform
+   * did not do.
+   */
+  private async spawnForFinding(
+    workspaceId: string,
+    executionId: string,
+    input: {
+      expeditionBlockId: string
+      host: SpawnHost
+      finding: BugFishingStepState['findings'][number]
+      pipelineId: string
+      initiatedBy: string | null
+    },
+  ): Promise<BugFishingStepState> {
+    const { finding, pipelineId, initiatedBy } = input
+    const taskId = this.deps.idGenerator.next('blk')
+    const claim: BugFishingSpawn = {
+      status: 'pending',
+      taskId,
+      executionId: null,
+      pipelineId,
+      requestedBy: initiatedBy,
+      requestedAt: this.deps.clock.now(),
+    }
+    const claimed = await this.mutateExpedition(workspaceId, executionId, (live) =>
+      claimBugFishingSpawn(live, finding.id, claim, this.deps.clock.now()),
+    )
+    if (claimed.findings?.find((f) => f.id === finding.id)?.spawn?.taskId !== taskId) {
+      // Somebody else's claim is on it. Refuse rather than spawn a second task for one finding:
+      // the caller asked for a fix to be filed and one is being filed, but not by this request,
+      // and saying so is the only answer that does not either duplicate the bug or claim credit
+      // for work this call did not do.
+      throw new ConflictError(
+        'Some of those findings already have a fix task.',
+        'already_addressed',
+        { findingIds: [finding.id] },
+      )
+    }
+    try {
+      const spawnedRunId = await this.spawnFixTask(workspaceId, {
+        expeditionBlockId: input.expeditionBlockId,
+        host: input.host,
+        finding,
+        taskId,
+        pipelineId,
+        initiatedBy,
+      })
+      return await this.mutateExpedition(workspaceId, executionId, (live) =>
+        settleBugFishingSpawn(live, finding.id, taskId, {
+          status: 'spawned',
+          executionId: spawnedRunId,
+        }),
+      )
+    } catch (error) {
+      // Release the claim before rethrowing, so the finding is markable again. Best-effort
+      // because the caller is about to be told the spawn failed either way, and a release that
+      // itself fails must not replace that cause with its own: the claim then expires on its TTL.
+      await runBestEffort(
+        this.log,
+        'bugFishing.releaseSpawnClaim',
+        () =>
+          this.mutateExpedition(workspaceId, executionId, (live) =>
+            settleBugFishingSpawn(live, finding.id, taskId, {
+              status: 'failed',
+              failureReason: getErrorMessage(error),
+            }),
+          ),
+        { workspaceId, executionId, findingId: finding.id, taskId },
+      )
+      throw error
+    }
+  }
+
+  /**
+   * Apply a pure reduction to the run's live expedition state under CAS, and answer the result.
+   *
+   * REFUSES rather than returning when the winning snapshot carries no expedition. That case was
+   * a silent `return` and it is the worst shape available here: on the settle path the task and
+   * its run already exist, so dropping the write leaves a finding that reads as untouched beside
+   * a fix task nothing on the expedition points at, and the caller is told it all worked.
+   */
+  private async mutateExpedition(
+    workspaceId: string,
+    executionId: string,
+    reduce: (state: BugFishingStepState) => BugFishingStepState,
+  ): Promise<BugFishingStepState> {
+    let next: BugFishingStepState | undefined
+    await this.deps.stateMachine.mutateInstance(workspaceId, executionId, (inst) => {
+      const live = this.activeExpeditionStep(inst)
+      if (!live?.bugFishing) {
+        throw new ConflictError(
+          'This run has no bug-fishing expedition to triage.',
+          'no_expedition',
+        )
+      }
+      live.bugFishing = reduce(live.bugFishing)
+      next = live.bugFishing
+    })
+    return next!
+  }
+
+  /**
    * Dismiss a finding: it stays on the expedition's record, struck through, and can no longer be
    * marked. A curation action, not a resolution — the run stays exactly where it is, whether it
    * is still fishing or already parked.
+   *
+   * REFUSES an id this expedition does not carry, and one whose fix task exists or is being
+   * created, with the same two reasons {@link address} uses for the same two cases. Answering 200
+   * to either was a filter that quietly matched nothing: the SPA then struck the row through on
+   * its optimistic echo and the next snapshot silently put it back, which reads as a dismissal
+   * the platform undid rather than as one it never accepted.
    */
   async dismissFinding(
     workspaceId: string,
@@ -361,7 +520,22 @@ export class BugFishingController {
             'no_expedition',
           )
         }
-        step.bugFishing = dismissBugFishingFinding(step.bugFishing, findingId)
+        const finding = (step.bugFishing.findings ?? []).find((f) => f.id === findingId)
+        if (!finding) {
+          throw new ValidationError('That finding is no longer part of this expedition.', {
+            reason: 'unknown_finding',
+            findingIds: [findingId],
+          })
+        }
+        if (!finding.dismissed && !bugFishingSpawnIsClaimable(finding.spawn, this.deps.clock.now()))
+          throw new ConflictError('That finding already has a fix task.', 'already_addressed', {
+            findingIds: [findingId],
+          })
+        step.bugFishing = dismissBugFishingFinding(
+          step.bugFishing,
+          findingId,
+          this.deps.clock.now(),
+        )
         state = step.bugFishing
       },
     )
@@ -480,16 +654,22 @@ export class BugFishingController {
   }
 
   /**
-   * The frame a spawned fix task lives under, and its service row.
+   * The frame a spawned fix task lives under, its service row, and the standards that frame's
+   * service holds every task under it to.
    *
    * The expedition's OWN parent frame, so the fix runs against the same repository the
    * expedition fished. A task whose frame cannot be resolved has nothing to host the work and no
    * repo to fix, so this refuses rather than dropping the task somewhere plausible.
+   *
+   * The frame is also where the service's standing standards live (`serviceFragmentIds`), which
+   * is why it is carried rather than reduced to an id: a spawned task has to be handed them
+   * EXPLICITLY, since a task-level run folds only its own `fragmentIds` and never re-unions the
+   * service's (kernel's `applicableFragmentIds`).
    */
   private async resolveSpawnHost(
     workspaceId: string,
     expeditionBlockId: string,
-  ): Promise<{ frame: Block; serviceId: string | null }> {
+  ): Promise<SpawnHost> {
     const anchor = await this.deps.blockRepository.get(workspaceId, expeditionBlockId)
     const frame = anchor?.parentId
       ? await this.deps.blockRepository.get(workspaceId, anchor.parentId)
@@ -507,13 +687,42 @@ export class BugFishingController {
   }
 
   /**
-   * Create ONE bug-fix task for a finding and start its run, returning the spawn record.
+   * The best-practice fragments a spawned fix task is created with.
+   *
+   * Resolved through the SAME seam the create form goes through (`BoardService.addTask`'s
+   * `fragmentIdsFor`), against the same inputs a person filing this bug by hand under this
+   * service would supply: the service's standing standards, the `bug` type's own defaults, and
+   * whichever standing-context entries hold for the fields the finding filled in. Anything less
+   * would make a spawned fix quietly weaker than the identical bug filed by hand, and the
+   * difference would only ever show up in the fix's output.
+   *
+   * Unwired (a facade that passes no defaults seam) means no fragments, which is the same answer
+   * that seam gives a deployment with no fragment pool at all.
+   */
+  private async resolveSpawnFragmentIds(
+    frame: Block,
+    taskTypeFields: Block['taskTypeFields'],
+  ): Promise<string[]> {
+    if (!this.deps.taskTypeDefaults) return []
+    return this.deps.taskTypeDefaults.fragmentIdsFor({
+      taskType: 'bug',
+      ...(frame.serviceFragmentIds ? { serviceFragmentIds: frame.serviceFragmentIds } : {}),
+      ...(taskTypeFields ? { fields: taskTypeFields } : {}),
+    })
+  }
+
+  /**
+   * Create ONE bug-fix task for a finding and start its run, answering the run's id (or null when
+   * the start entry point reported none).
    *
    * The task is a `bug`-typed block carrying the finding as its description and its evidence as
    * the reproduction field, so the bug-fix pipeline's investigator starts from what the
    * expedition actually found rather than from a title. On a start failure the block is rolled
    * back, exactly as the initiative loop does: a task on the board with no run and no record on
    * either side is the one outcome nothing later reconciles.
+   *
+   * The block id is passed IN rather than minted here, because the claim that authorised this
+   * call already carries it — see {@link spawnForFinding}.
    *
    * A failure PROPAGATES rather than being swallowed into "this finding stays untriaged". The
    * marking is the caller's own request, not a best-effort background pass, and the failures that
@@ -527,17 +736,22 @@ export class BugFishingController {
     workspaceId: string,
     input: {
       expeditionBlockId: string
-      frame: Block
-      serviceId: string | null
+      host: SpawnHost
       finding: BugFishingStepState['findings'][number]
+      taskId: string
       pipelineId: string
       initiatedBy: string | null
     },
-  ): Promise<BugFishingSpawn> {
-    const { finding, frame } = input
-    const blockId = this.deps.idGenerator.next('blk')
+  ): Promise<string | null> {
+    const { finding, taskId } = input
+    const { frame, serviceId } = input.host
+    const taskTypeFields: Block['taskTypeFields'] = {
+      severity: finding.severity,
+      ...(finding.failureScenario ? { stepsToReproduce: finding.failureScenario } : {}),
+    }
+    const fragmentIds = await this.resolveSpawnFragmentIds(frame, taskTypeFields)
     const block: Block = {
-      id: blockId,
+      id: taskId,
       title: finding.title || 'Bug-fishing finding',
       // Inherit the host frame's behavioural repo type, like `BoardService.addTask`.
       type: frame.type,
@@ -551,16 +765,19 @@ export class BugFishingController {
       parentId: frame.id,
       expeditionId: input.expeditionBlockId,
       taskType: 'bug',
-      taskTypeFields: {
-        severity: finding.severity,
-        ...(finding.failureScenario ? { stepsToReproduce: finding.failureScenario } : {}),
-      },
+      taskTypeFields,
       pipelineId: input.pipelineId,
+      // The person who MARKED the finding is this task's creator, for the same reason the create
+      // form's signed-in user is: it is what the "notify the task creator" audience resolves
+      // through, so without it every notification this fix run raises reaches nobody. Null with
+      // auth disabled, exactly as `BoardService.addTask` leaves it.
+      ...(input.initiatedBy != null ? { createdBy: input.initiatedBy } : {}),
+      ...(fragmentIds.length ? { fragmentIds } : {}),
     }
-    await this.deps.blockRepository.insert(workspaceId, block, input.serviceId)
+    await this.deps.blockRepository.insert(workspaceId, block, serviceId)
     let executionId: string | null = null
     try {
-      const started = await this.deps.start(workspaceId, blockId, input.pipelineId, {
+      const started = await this.deps.start(workspaceId, taskId, input.pipelineId, {
         initiatedBy: input.initiatedBy,
       })
       executionId = readExecutionId(started)
@@ -568,8 +785,8 @@ export class BugFishingController {
       await runBestEffort(
         this.log,
         'bugFishing.rollbackSpawnedBlock',
-        () => this.deps.blockRepository.deleteMany(workspaceId, [blockId]),
-        { workspaceId, blockId, findingId: finding.id },
+        () => this.deps.blockRepository.deleteMany(workspaceId, [taskId]),
+        { workspaceId, blockId: taskId, findingId: finding.id },
       )
       this.log.warn('bugFishing.spawnStartFailed', {
         workspaceId,
@@ -589,15 +806,9 @@ export class BugFishingController {
       () =>
         this.deps.events?.boardChanged(workspaceId, { reason: 'block-added', block }) ??
         Promise.resolve(),
-      { workspaceId, blockId, findingId: finding.id },
+      { workspaceId, blockId: taskId, findingId: finding.id },
     )
-    return {
-      taskId: blockId,
-      executionId,
-      pipelineId: input.pipelineId,
-      requestedBy: input.initiatedBy,
-      requestedAt: this.deps.clock.now(),
-    }
+    return executionId
   }
 
   /** Raise the "finish triaging the catch" inbox card when the expedition parks. */
@@ -608,7 +819,7 @@ export class BugFishingController {
     state: BugFishingStepState,
   ): Promise<void> {
     if (!this.deps.notificationService || !block) return
-    const untriaged = untriagedBugFishingFindings(state).length
+    const untriaged = untriagedBugFishingFindings(state, this.deps.clock.now()).length
     const phases = (state.phases ?? []).length
     await this.deps.notificationService.raise(workspaceId, {
       type: 'bug_fishing_triage',

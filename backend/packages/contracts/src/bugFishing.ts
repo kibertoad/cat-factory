@@ -238,26 +238,87 @@ export const bugFishingPhaseSchema = v.object({
 export type BugFishingPhase = v.InferOutput<typeof bugFishingPhaseSchema>
 
 /**
+ * How far a marked finding's spawn has got.
+ *
+ * - `pending`: the CLAIM. Written BEFORE the task exists, which is what makes marking safe
+ *   against two people (or a retried request) marking one finding at the same time: the second
+ *   claim finds the first and is refused, rather than both creating a task and a run.
+ * - `spawned`: terminal. The task exists and its run was started.
+ * - `failed`: the claim was taken and the work behind it did not land, carrying the cause. The
+ *   finding is markable again, because nothing was created for it.
+ */
+export const bugFishingSpawnStatusSchema = v.picklist(['pending', 'spawned', 'failed'])
+export type BugFishingSpawnStatus = v.InferOutput<typeof bugFishingSpawnStatusSchema>
+
+/**
  * The record of a finding a human MARKED to be addressed: the bug-fix task the platform
  * spawned for it, and the pipeline that task runs.
  *
- * Written once, when the spawn succeeds. It is what links the expedition to the work it
- * caused: the window reads the spawned task's live status through it, and the spawned block
- * carries the expedition's own block id back the other way (`Block.expeditionId`).
+ * It is what links the expedition to the work it caused: the window reads the spawned task's
+ * live status through it, and the spawned block carries the expedition's own block id back the
+ * other way (`Block.expeditionId`).
+ *
+ * Written TWICE, and the first write is the point. A spawn creates a board task and starts a run,
+ * so it is an external side effect in a path two callers can enter at once; the record is
+ * therefore taken as a `pending` CLAIM before any of that happens and settled to `spawned` or
+ * `failed` after. Reading it as "there is a fix task" means reading {@link
+ * bugFishingSpawnStatusSchema}, never merely the presence of this record.
  */
 export const bugFishingSpawnSchema = v.object({
-  /** The spawned task block's id. */
+  /** How far the spawn has got; see {@link bugFishingSpawnStatusSchema}. */
+  status: bugFishingSpawnStatusSchema,
+  /** The spawned task block's id, minted with the claim so the claimer can recognise its own. */
   taskId: v.string(),
-  /** The run started on it, or null when the task was created but its run could not start. */
+  /**
+   * The run started on the task. Null while the claim is `pending`, and on a `spawned` record
+   * whose task was created but whose run reported no id.
+   */
   executionId: v.optional(v.nullable(v.string())),
   /** The pipeline the spawned task runs (the resolved default, or the caller's override). */
   pipelineId: v.string(),
   /** Who marked the finding. Null for a system-initiated marking. */
   requestedBy: v.optional(v.nullable(v.string())),
-  /** Epoch ms the task was spawned. */
+  /** Epoch ms the claim was taken. */
   requestedAt: v.number(),
+  /** Why the spawn failed, on a `failed` record. Null otherwise. */
+  failureReason: v.optional(v.nullable(v.string())),
 })
 export type BugFishingSpawn = v.InferOutput<typeof bugFishingSpawnSchema>
+
+/**
+ * How long a `pending` spawn claim holds a finding before another marking may take it.
+ *
+ * The claim is held across a board insert and a run start, so it is normally seconds. The window
+ * exists for the one case the claimer cannot clean up after itself: a process killed between
+ * taking the claim and settling it, which would otherwise leave the finding claimed by nobody,
+ * forever, with no fix task to show for it. Generous enough that it can never expire under a
+ * merely slow start, which would be exactly the double spawn the claim exists to prevent.
+ */
+export const BUG_FISHING_SPAWN_CLAIM_TTL_MS = 5 * 60_000
+
+/**
+ * Whether a finding is still OPEN: nothing is being done about it, so it may be marked (or
+ * dismissed) right now.
+ *
+ * Here rather than in the engine because both sides have to agree about it and neither owns the
+ * answer: the engine refuses a second marking with it, and the window counts "N left to triage"
+ * and decides which rows the working list shows with it. Stated once, the two cannot drift into
+ * a window that offers a mark the engine will refuse.
+ *
+ * Three ways to be open: nothing has been claimed, the last attempt `failed` (nothing was created,
+ * so there is nothing to collide with), or a `pending` claim has outlived
+ * {@link BUG_FISHING_SPAWN_CLAIM_TTL_MS} and its claimer is gone. A `spawned` record is terminal:
+ * the task exists, and marking again would file the same bug twice.
+ */
+export function bugFishingSpawnIsClaimable(
+  spawn: BugFishingSpawn | null | undefined,
+  now: number,
+): boolean {
+  if (!spawn) return true
+  if (spawn.status === 'spawned') return false
+  if (spawn.status === 'failed') return true
+  return now - spawn.requestedAt >= BUG_FISHING_SPAWN_CLAIM_TTL_MS
+}
 
 /**
  * One finding, id-stamped by the engine and anchored to the phase that surfaced it.
@@ -288,7 +349,12 @@ export const bugFishingFindingSchema = v.object({
   evidence: v.optional(v.nullable(v.string())),
   /** A concrete suggested change, when the agent offered one. */
   suggestedFix: v.optional(v.nullable(v.string())),
-  /** The bug-fix task spawned for this finding, when a human marked it. Null otherwise. */
+  /**
+   * The bug-fix task spawned for this finding, when a human marked it. Null when nobody has.
+   * A record with a `failed` status is a mark that did not land: the finding is markable again,
+   * so a reader deciding whether this finding is being worked on reads the STATUS, not the
+   * presence of the record.
+   */
   spawn: v.optional(v.nullable(bugFishingSpawnSchema)),
   /** Set when a human dismissed the finding: it stays on the record, struck through. */
   dismissed: v.optional(v.boolean(), false),
@@ -300,13 +366,15 @@ export type BugFishingFinding = v.InferOutput<typeof bugFishingFindingSchema>
  * - `fishing`: a phase's read-only container job is in flight (or the next one is about to be).
  * - `awaiting_triage`: every phase settled; parked for the human to finish triaging.
  * - `done`: the human finished the expedition (the run advances past it).
- * - `skipped`: nothing to fish (no phases planned) — the step passed through.
+ *
+ * There is deliberately no `skipped`: an expedition with no angles cannot be asked for, because
+ * an empty selection means "fish every angle" (see `planBugFishingPhases`).
  *
  * There is deliberately no `triaging` state: marking a finding is available from the moment
  * its phase lands, INCLUDING while later phases are still fishing, which is the whole reason
  * the angles run as separate passes.
  */
-export const bugFishingStatusSchema = v.picklist(['fishing', 'awaiting_triage', 'done', 'skipped'])
+export const bugFishingStatusSchema = v.picklist(['fishing', 'awaiting_triage', 'done'])
 export type BugFishingStatus = v.InferOutput<typeof bugFishingStatusSchema>
 
 /**

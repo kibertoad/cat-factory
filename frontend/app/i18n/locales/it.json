@@ -8360,6 +8360,8 @@
       "fixThis": "Correggi",
       "dismiss": "Scarta",
       "spawned": "Un'attività di correzione è in esecuzione su {pipeline}",
+      "spawning": "Creazione dell'attività di correzione…",
+      "spawnFailed": "Non è stato possibile creare l'attività di correzione: {reason} Contrassegnalo di nuovo per riprovare.",
       "openTask": "Apri l'attività"
     },
     "severity": {

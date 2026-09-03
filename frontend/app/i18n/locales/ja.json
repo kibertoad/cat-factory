@@ -8360,6 +8360,8 @@
       "fixThis": "これを修正",
       "dismiss": "却下",
       "spawned": "{pipeline} で修正タスクが実行中です",
+      "spawning": "修正タスクを作成しています…",
+      "spawnFailed": "修正タスクを作成できませんでした: {reason} もう一度マークすると再試行します。",
       "openTask": "タスクを開く"
     },
     "severity": {

@@ -51,16 +51,16 @@ as a defect.
 
 ## What shipped
 
-| Layer         | What                                                                                                                                                                                                        |
-| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Contracts     | `bugFishing.ts` (the angle catalog, findings, step state, the lenient agent output, the request bodies), `bug-fishing` task type + its two creation fields, `Block.expeditionId`, `bugFishingFixPipelineId` |
-| Kernel        | `pl_bug_fishing` (a single `bug-fisher` step, `research` purpose, no tail), the `bug-fishing → pl_bug_fishing` type default, the input-gate exemption                                                       |
-| Agents        | the `bug-fisher` kind (read-only `container-explore`, full base-branch clone) + `renderBugFishingPhaseBrief`                                                                                                |
-| Orchestration | `bugFishing.logic.ts` (the pure reductions), `BugFishingController` (the phase loop, the park, triage, spawning), the step handler + completion interceptor + failed-pass branch                            |
-| Server        | four workspace-scoped routes under `/executions/:executionId/bug-fishing`                                                                                                                                   |
-| Runtimes      | `blocks.expedition_id` + `workspace_settings.bug_fishing_fix_pipeline_id`, D1 ⇄ Drizzle                                                                                                                     |
-| Frontend      | the expedition window (phase rail, per-finding triage, pipeline override), the create-form angle picker, the board setting, the inbox card, 10 locales                                                      |
-| Coverage      | `bugFishing.logic.test.ts` (23 cases) + a cross-runtime conformance suite (loop → park → spawn → finish; board default + per-batch override + both loud refusals)                                           |
+| Layer         | What                                                                                                                                                                                                                 |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Contracts     | `bugFishing.ts` (the angle catalog, findings, step state, the lenient agent output, the request bodies), `bug-fishing` task type + its two creation fields, `Block.expeditionId`, `bugFishingFixPipelineId`          |
+| Kernel        | `pl_bug_fishing` (a single `bug-fisher` step, `research` purpose, no tail), the `bug-fishing → pl_bug_fishing` type default, the input-gate exemption                                                                |
+| Agents        | the `bug-fisher` kind (read-only `container-explore`, full base-branch clone) + `renderBugFishingPhaseBrief`                                                                                                         |
+| Orchestration | `bugFishing.logic.ts` (the pure reductions), `BugFishingController` (the phase loop, the park, triage, spawning), the step handler + completion interceptor + failed-pass branch                                     |
+| Server        | four workspace-scoped routes under `/executions/:executionId/bug-fishing`                                                                                                                                            |
+| Runtimes      | `blocks.expedition_id` + `workspace_settings.bug_fishing_fix_pipeline_id`, D1 ⇄ Drizzle                                                                                                                              |
+| Frontend      | the expedition window (phase rail, per-finding triage, pipeline override), the create-form angle picker, the board setting, the inbox card, 10 locales                                                               |
+| Coverage      | `bugFishing.logic.test.ts` (28 cases, the claim lifecycle included) + a cross-runtime conformance suite (loop → park → spawn → finish; board default + per-batch override + both loud refusals + the released claim) |
 
 ## The rules that bit, and why each is what it is
 
@@ -79,9 +79,31 @@ as a defect.
 - **A spawn that cannot happen fails LOUDLY.** The first cut swallowed a start failure into
   "the finding stays untriaged" and answered 200. That reports the request as done and leaves
   somebody waiting for a task that is never going to appear, so the failure propagates instead;
-  findings spawned earlier in the batch are already persisted, and the refused finding keeps no
-  spawn record, so it stays markable. Conformance drives both refusals (a pipeline that does not
-  exist, and one that exists but cannot be started on a one-off task).
+  findings spawned earlier in the batch are already persisted, and the refused finding's record
+  is released as `failed` carrying the cause, so it stays markable. Conformance drives both
+  refusals (a pipeline that does not exist, and one that exists but cannot be started on a
+  one-off task).
+- **The spawn record is a CLAIM, taken before the task exists.** Marking creates a board task and
+  starts a run, so it is an external side effect two callers can enter at once: creating first
+  and recording after (the first cut) let two markings of one finding each file the same bug and
+  start a run for it. The record is now written as `pending` under the run's CAS with the block id
+  it is about to create, and settled to `spawned` or `failed` behind the work — the shape
+  `InitiativeLoopService.spawnItem` uses, down to recognising its own claim by that id so a
+  settle cannot report the loser's outcome against the winner's task. The consequence every
+  reader owes: "is this finding being fixed" is its spawn's STATUS, never the record being
+  present, which is why `bugFishingSpawnIsClaimable` lives in contracts where the engine and the
+  window read the same one.
+- **A pass that answers unusably is not a pass that found nothing.** An absent or unparseable
+  `result.custom` used to settle the phase as `completed` with an empty summary, which is
+  byte-for-byte how an angle that honestly caught nothing is recorded — and "which angles came
+  back empty" is the whole product a human reads. It takes the failure path instead, named as its
+  own cause so it is distinguishable from a crashed container too.
+- **A spawned fix is created the way the CREATE FORM would create it.** The task is hand-built
+  rather than routed through `BoardService.addTask` (the initiative loop's precedent), so
+  everything that door applies has to be applied deliberately: the service's standing standards
+  through the same `fragmentIdsFor` seam (a task-level run folds only its own `fragmentIds` and
+  never re-unions the service's), and `createdBy` from whoever marked the finding, without which
+  the "notify the task creator" audience of every notification the fix run raises is empty.
 - **The input gate had to learn about it.** A bug-fishing task legitimately has no description:
   its input is the codebase. `description_missing` is BLOCKING, so every expedition would have
   parked at step 0 before ever dispatching. The exemption is its own set

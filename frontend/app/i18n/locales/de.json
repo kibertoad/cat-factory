@@ -8360,6 +8360,8 @@
       "fixThis": "Beheben",
       "dismiss": "Verwerfen",
       "spawned": "Eine Behebungsaufgabe läuft auf {pipeline}",
+      "spawning": "Behebungsaufgabe wird erstellt …",
+      "spawnFailed": "Die Behebungsaufgabe konnte nicht erstellt werden: {reason} Markieren Sie den Befund erneut, um es noch einmal zu versuchen.",
       "openTask": "Aufgabe öffnen"
     },
     "severity": {

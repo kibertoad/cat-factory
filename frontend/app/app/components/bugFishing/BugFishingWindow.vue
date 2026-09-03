@@ -23,6 +23,7 @@ import { usePipelinesStore } from '~/stores/pipelines'
 import { useUiStore } from '~/stores/ui'
 import { pipelineAllowedForTaskType } from '~/utils/pipeline'
 import { useBugFishingStore } from '~/stores/bugFishing'
+import { bugFishingSpawnIsClaimable } from '@cat-factory/contracts'
 import type { BugFishingFinding, BugFishingSeverity, BugFishingStepState } from '~/types/execution'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import StepRunMeta from '~/components/panels/StepRunMeta.vue'
@@ -77,17 +78,33 @@ const selectedPhaseId = ref<string | null>(null)
  *  decide is the working list, and a triaged finding that stays in it reads as untriaged. */
 const showTriaged = ref(false)
 
+/**
+ * Whether a finding is still OPEN — nothing is being done about it, so it belongs in the working
+ * list and the Fix button applies to it.
+ *
+ * Never `!f.spawn`: a spawn record whose status is `failed` is a mark the platform did not carry
+ * out, and reading the record's mere PRESENCE as "being fixed" is how a finding nobody is working
+ * on would drop out of the list of things left to decide. The rule is the engine's own
+ * (`@cat-factory/contracts`), so this window cannot come to offer a mark the engine refuses.
+ */
+function isOpen(f: BugFishingFinding): boolean {
+  return !f.dismissed && bugFishingSpawnIsClaimable(f.spawn, Date.now())
+}
+
 const visibleFindings = computed<BugFishingFinding[]>(() => {
   const byPhase = selectedPhaseId.value
     ? findings.value.filter((f) => f.phaseId === selectedPhaseId.value)
     : findings.value
-  const triaged = showTriaged.value ? byPhase : byPhase.filter((f) => !f.spawn && !f.dismissed)
+  const triaged = showTriaged.value ? byPhase : byPhase.filter(isOpen)
   return [...triaged].sort((a, b) => severityRank(a.severity) - severityRank(b.severity))
 })
 
 /** Findings with no decision yet, across every phase — what the header counts. */
-const untriagedCount = computed(() => findings.value.filter((f) => !f.spawn && !f.dismissed).length)
-const spawnedCount = computed(() => findings.value.filter((f) => f.spawn).length)
+const untriagedCount = computed(() => findings.value.filter(isOpen).length)
+/** Findings whose fix task EXISTS. A claim still in flight is not one, and a failed one is not. */
+const spawnedCount = computed(
+  () => findings.value.filter((f) => f.spawn?.status === 'spawned').length,
+)
 
 /** The phase the rail has selected, when one is. */
 const selectedPhase = computed(() =>
@@ -264,7 +281,7 @@ const PHASE_ICON: Record<string, string> = {
           <MarkdownProse
             v-else-if="selectedPhase.summary"
             :text="selectedPhase.summary"
-            class="mt-2 text-[12px]"
+            class="mt-2 max-w-3xl text-[12px]"
           />
         </div>
 
@@ -368,13 +385,13 @@ const PHASE_ICON: Record<string, string> = {
               {{ finding.path }}<span v-if="finding.line">:{{ finding.line }}</span>
             </p>
 
-            <MarkdownProse :text="finding.detail" class="mt-2 text-[12px]" />
+            <MarkdownProse :text="finding.detail" class="mt-2 max-w-3xl text-[12px]" />
 
             <div v-if="finding.failureScenario" class="mt-2 text-[12px] text-slate-300">
               <span class="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
                 {{ t('bugFishing.finding.failureScenario') }}
               </span>
-              <MarkdownProse :text="finding.failureScenario" class="mt-0.5" />
+              <MarkdownProse :text="finding.failureScenario" class="mt-0.5 max-w-3xl" />
             </div>
 
             <!-- Evidence is rendered apart from the detail for the reason the contract keeps them
@@ -384,19 +401,22 @@ const PHASE_ICON: Record<string, string> = {
               <summary class="cursor-pointer text-[11px] text-slate-400 hover:text-slate-200">
                 {{ t('bugFishing.finding.evidence') }}
               </summary>
-              <MarkdownProse :text="finding.evidence" class="mt-1 text-[12px]" />
+              <MarkdownProse :text="finding.evidence" class="mt-1 max-w-3xl text-[12px]" />
             </details>
 
             <details v-if="finding.suggestedFix" class="mt-1">
               <summary class="cursor-pointer text-[11px] text-slate-400 hover:text-slate-200">
                 {{ t('bugFishing.finding.suggestedFix') }}
               </summary>
-              <MarkdownProse :text="finding.suggestedFix" class="mt-1 text-[12px]" />
+              <MarkdownProse :text="finding.suggestedFix" class="mt-1 max-w-3xl text-[12px]" />
             </details>
 
-            <!-- Already marked: say what was created and let the reader follow it. -->
+            <!-- Already marked: say what was created and let the reader follow it. The three
+                 spawn states are rendered apart because they are three different facts — a task
+                 that exists, one being made, and a mark that did not land — and only the last
+                 one is something the reader has to do again. -->
             <div
-              v-if="finding.spawn"
+              v-if="finding.spawn?.status === 'spawned'"
               data-testid="bug-fishing-finding-spawned"
               class="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-emerald-300"
             >
@@ -419,7 +439,32 @@ const PHASE_ICON: Record<string, string> = {
               </button>
             </div>
 
-            <div v-else-if="canAct" class="mt-2 flex items-center gap-2">
+            <!-- A claim held by a marking still in flight. No task to link yet, and no Fix
+                 button: pressing it again is exactly the double-spawn the claim prevents. -->
+            <div
+              v-else-if="finding.spawn?.status === 'pending'"
+              data-testid="bug-fishing-finding-spawning"
+              class="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-400"
+            >
+              <UIcon name="i-lucide-loader-circle" class="h-3.5 w-3.5 animate-spin" />
+              <span>{{ t('bugFishing.finding.spawning') }}</span>
+            </div>
+
+            <!-- A mark that did not land. Says so and carries the cause, because the finding is
+                 markable again and the reader is the one who has to decide to try. -->
+            <p
+              v-else-if="finding.spawn?.status === 'failed'"
+              data-testid="bug-fishing-finding-spawn-failed"
+              class="mt-2 max-w-3xl text-[11px] text-amber-300"
+            >
+              {{
+                t('bugFishing.finding.spawnFailed', {
+                  reason: finding.spawn.failureReason ?? '',
+                })
+              }}
+            </p>
+
+            <div v-if="isOpen(finding) && canAct" class="mt-2 flex items-center gap-2">
               <UButton
                 size="xs"
                 color="primary"

@@ -52,6 +52,7 @@ import type {
   SubscriptionActivationRepository,
   TaskRepository,
   TaskTypeRegistry,
+  PromptFragmentSource,
   TestSecretRef,
   TicketTrackerProvider,
   WorkRunner,
@@ -327,6 +328,14 @@ export interface ExecutionServiceDependencies {
    * configured; absent → the engine resolves against the static built-in pool.
    */
   fragmentResolver?: FragmentBodyResolver
+  /**
+   * Optional: the pool a task type's DEFAULT fragment set is read from — this deployment's own
+   * registry, or (in mothership mode) the mothership's. Distinct from `fragmentResolver`, which
+   * resolves ids to BODIES for a run: this one answers which ids a newly created task starts
+   * with, and is what lets a bug-fishing spawn create its fix task with the same standards the
+   * create form would have given it. Absent ⇒ no per-type defaults.
+   */
+  promptFragmentSource?: PromptFragmentSource
   /**
    * Optional: resolves a `skill` step's picked skill to its instructions + resource bodies for
    * the run (see {@link SkillResolver}). Wired only when the repo-sourced Claude Skills library is

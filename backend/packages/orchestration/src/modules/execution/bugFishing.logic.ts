@@ -6,9 +6,15 @@ import {
   type BugFishingPhase,
   type BugFishingSpawn,
   type BugFishingStepState,
+  bugFishingSpawnIsClaimable,
   describeBugFishingPhase,
   redactSecrets,
 } from '@cat-factory/kernel'
+
+// The one rule both this engine and the triage window judge a finding by ("is anything being
+// done about it") lives in contracts, so the window cannot come to offer a mark this refuses.
+// Re-exported so a caller in this module's own layer keeps one import.
+export { BUG_FISHING_SPAWN_CLAIM_TTL_MS, bugFishingSpawnIsClaimable } from '@cat-factory/kernel'
 
 // ---------------------------------------------------------------------------
 // Pure reductions over a bug-fishing expedition's step state. Everything here is a
@@ -237,15 +243,57 @@ export function startBugFishingPhase(
   }
 }
 
-/** Record the bug-fix task a marked finding spawned. */
-export function recordBugFishingSpawn(
+/**
+ * CLAIM a finding for a spawn, BEFORE the task it names is created.
+ *
+ * The claim is what makes marking safe against two callers at once: it is written under the
+ * run's compare-and-swap, so exactly one of them lands and the loser's transform is a no-op on
+ * a finding that is no longer claimable. The claimer recognises its own by the `taskId` it minted
+ * and put in the claim, exactly as the initiative loop recognises its own spawn by block id —
+ * which is what lets {@link settleBugFishingSpawn} refuse to overwrite a claim it does not own.
+ *
+ * A no-op on an unknown, dismissed or already-claimed finding. The caller re-reads the finding
+ * afterwards and compares the `taskId`: that comparison, not this function, is how it learns
+ * whether it won.
+ */
+export function claimBugFishingSpawn(
   state: BugFishingStepState,
   findingId: string,
-  spawn: BugFishingSpawn,
+  claim: BugFishingSpawn,
+  now: number,
 ): BugFishingStepState {
   return {
     ...state,
-    findings: (state.findings ?? []).map((f) => (f.id === findingId ? { ...f, spawn } : f)),
+    findings: (state.findings ?? []).map((f) =>
+      f.id === findingId && !f.dismissed && bugFishingSpawnIsClaimable(f.spawn, now)
+        ? { ...f, spawn: claim }
+        : f,
+    ),
+  }
+}
+
+/**
+ * SETTLE a claim this caller owns: `spawned` once the task and its run exist, or `failed` with
+ * the cause when they do not.
+ *
+ * Matched on `taskId`, so a claim that expired and was re-taken by somebody else is left alone.
+ * Overwriting it would report the loser's outcome against the winner's task.
+ */
+export function settleBugFishingSpawn(
+  state: BugFishingStepState,
+  findingId: string,
+  taskId: string,
+  outcome:
+    | { status: 'spawned'; executionId: string | null }
+    | { status: 'failed'; failureReason: string },
+): BugFishingStepState {
+  return {
+    ...state,
+    findings: (state.findings ?? []).map((f) =>
+      f.id === findingId && f.spawn?.taskId === taskId
+        ? { ...f, spawn: { ...f.spawn, ...outcome } }
+        : f,
+    ),
   }
 }
 
@@ -255,25 +303,39 @@ export function recordBugFishingSpawn(
  * Kept rather than removed because the expedition's record is what a human reads to decide
  * whether the hunt was worth running: a finding that was looked at and rejected is evidence
  * about the agent's precision, and deleting it would make every expedition look flawless.
- * Idempotent, and a no-op on a finding that already spawned a task (that decision is made).
+ * Idempotent, and a no-op on a finding whose fix task exists or is being created (that decision
+ * is made). A finding whose last mark FAILED is dismissable: nothing was created for it.
  */
 export function dismissBugFishingFinding(
   state: BugFishingStepState,
   findingId: string,
+  now: number,
 ): BugFishingStepState {
   return {
     ...state,
     findings: (state.findings ?? []).map((f) =>
-      f.id === findingId && !f.spawn ? { ...f, dismissed: true } : f,
+      f.id === findingId && bugFishingSpawnIsClaimable(f.spawn, now)
+        ? { ...f, dismissed: true }
+        : f,
     ),
   }
 }
 
-/** Findings with no decision yet: neither marked for a fix nor dismissed. */
+/**
+ * Findings with no decision yet: neither dismissed nor carrying a mark that landed.
+ *
+ * A `failed` spawn counts as UNTRIAGED, because it is: the human made a decision, the platform
+ * did not carry it out, and nothing was created. Counting it as done is how "N findings to
+ * triage" would come to under-report the work left, on exactly the runs where something went
+ * wrong.
+ */
 export function untriagedBugFishingFindings(
   state: BugFishingStepState,
+  now: number,
 ): readonly BugFishingFinding[] {
-  return (state.findings ?? []).filter((f) => !f.spawn && !f.dismissed)
+  return (state.findings ?? []).filter(
+    (f) => !f.dismissed && bugFishingSpawnIsClaimable(f.spawn, now),
+  )
 }
 
 /**

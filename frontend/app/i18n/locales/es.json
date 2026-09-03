@@ -8360,6 +8360,8 @@
       "fixThis": "Corregir esto",
       "dismiss": "Descartar",
       "spawned": "Una tarea de corrección se ejecuta en {pipeline}",
+      "spawning": "Creando la tarea de corrección…",
+      "spawnFailed": "No se pudo crear la tarea de corrección: {reason} Márcalo de nuevo para reintentarlo.",
       "openTask": "Abrir la tarea"
     },
     "severity": {

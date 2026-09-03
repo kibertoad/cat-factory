@@ -3,12 +3,15 @@ import { BUG_FISHING_PHASES, type BugFishingStepState } from '@cat-factory/kerne
 import {
   coerceBugFishingFindings,
   describeRecordedPhase,
+  BUG_FISHING_SPAWN_CLAIM_TTL_MS,
+  bugFishingSpawnIsClaimable,
+  claimBugFishingSpawn,
   dismissBugFishingFinding,
   failBugFishingPhase,
   planBugFishingPhases,
   priorBugFishingFindingTitles,
   recordBugFishingPhase,
-  recordBugFishingSpawn,
+  settleBugFishingSpawn,
   startBugFishingPhase,
   untriagedBugFishingFindings,
 } from './bugFishing.logic.js'
@@ -313,57 +316,139 @@ describe('triage reductions', () => {
     return { state: stateWith({ findings }), findings }
   }
 
-  it('records a spawn on the marked finding only', () => {
+  const NOW = 1_000_000
+  const claim = (taskId: string, at = NOW) => ({
+    status: 'pending' as const,
+    taskId,
+    executionId: null,
+    pipelineId: 'pl_bugfix',
+    requestedBy: 'usr_1',
+    requestedAt: at,
+  })
+
+  it('claims the marked finding only', () => {
     const { state, findings } = seeded()
-    const next = recordBugFishingSpawn(state, findings[0]!.id, {
+    const next = claimBugFishingSpawn(state, findings[0]!.id, claim('blk_x'), NOW)
+    expect(next.findings?.[0]?.spawn).toMatchObject({ status: 'pending', taskId: 'blk_x' })
+    expect(next.findings?.[1]?.spawn).toBeNull()
+  })
+
+  // The whole point of claiming BEFORE the task exists: the second marker's transform must be a
+  // no-op, so it can tell it lost by finding somebody else's task id on the finding.
+  it('leaves a claim already held by another marking alone', () => {
+    const { state, findings } = seeded()
+    const first = claimBugFishingSpawn(state, findings[0]!.id, claim('blk_x'), NOW)
+    const second = claimBugFishingSpawn(first, findings[0]!.id, claim('blk_y'), NOW)
+    expect(second.findings?.[0]?.spawn?.taskId).toBe('blk_x')
+  })
+
+  it('re-claims a finding whose last mark failed, and one whose claim outlived its TTL', () => {
+    const { state, findings } = seeded()
+    const failed = settleBugFishingSpawn(
+      claimBugFishingSpawn(state, findings[0]!.id, claim('blk_x'), NOW),
+      findings[0]!.id,
+      'blk_x',
+      { status: 'failed', failureReason: 'the run would not start' },
+    )
+    expect(
+      claimBugFishingSpawn(failed, findings[0]!.id, claim('blk_y'), NOW).findings?.[0]?.spawn
+        ?.taskId,
+    ).toBe('blk_y')
+
+    const stale = claimBugFishingSpawn(state, findings[0]!.id, claim('blk_x'), NOW)
+    const later = NOW + BUG_FISHING_SPAWN_CLAIM_TTL_MS
+    expect(
+      claimBugFishingSpawn(stale, findings[0]!.id, claim('blk_z'), later).findings?.[0]?.spawn
+        ?.taskId,
+    ).toBe('blk_z')
+    // …but not one second before it: a merely slow start must never be re-claimed, which would
+    // be exactly the double spawn the claim exists to prevent.
+    expect(
+      claimBugFishingSpawn(stale, findings[0]!.id, claim('blk_z'), later - 1).findings?.[0]?.spawn
+        ?.taskId,
+    ).toBe('blk_x')
+  })
+
+  it('settles only the claim the caller owns', () => {
+    const { state, findings } = seeded()
+    const claimed = claimBugFishingSpawn(state, findings[0]!.id, claim('blk_x'), NOW)
+    const settled = settleBugFishingSpawn(claimed, findings[0]!.id, 'blk_x', {
+      status: 'spawned',
+      executionId: 'exe_x',
+    })
+    expect(settled.findings?.[0]?.spawn).toMatchObject({
+      status: 'spawned',
       taskId: 'blk_x',
       executionId: 'exe_x',
-      pipelineId: 'pl_bugfix',
-      requestedBy: 'usr_1',
-      requestedAt: 5,
     })
-    expect(next.findings?.[0]?.spawn?.taskId).toBe('blk_x')
-    expect(next.findings?.[1]?.spawn).toBeNull()
+    // A settle from a caller whose claim expired and was re-taken must not report its outcome
+    // against the winner's task.
+    const foreign = settleBugFishingSpawn(settled, findings[0]!.id, 'blk_y', {
+      status: 'failed',
+      failureReason: 'nope',
+    })
+    expect(foreign.findings?.[0]?.spawn?.status).toBe('spawned')
   })
 
   it('keeps a dismissed finding on the record', () => {
     // The record is what a human reads to decide whether the hunt was worth running: deleting a
     // rejected finding would make every expedition look flawless.
     const { state, findings } = seeded()
-    const next = dismissBugFishingFinding(state, findings[1]!.id)
+    const next = dismissBugFishingFinding(state, findings[1]!.id, NOW)
     expect(next.findings).toHaveLength(2)
     expect(next.findings?.[1]?.dismissed).toBe(true)
   })
 
-  it('refuses to dismiss a finding that already spawned a task', () => {
+  it('refuses to dismiss a finding whose fix task exists or is being created', () => {
     const { state, findings } = seeded()
-    const spawned = recordBugFishingSpawn(state, findings[0]!.id, {
-      taskId: 'blk_x',
-      pipelineId: 'pl_bugfix',
-      requestedAt: 5,
+    const claimed = claimBugFishingSpawn(state, findings[0]!.id, claim('blk_x'), NOW)
+    expect(dismissBugFishingFinding(claimed, findings[0]!.id, NOW).findings?.[0]?.dismissed).toBe(
+      false,
+    )
+    const spawned = settleBugFishingSpawn(claimed, findings[0]!.id, 'blk_x', {
+      status: 'spawned',
+      executionId: 'exe_x',
     })
-    const next = dismissBugFishingFinding(spawned, findings[0]!.id)
-    expect(next.findings?.[0]?.dismissed).toBe(false)
+    expect(dismissBugFishingFinding(spawned, findings[0]!.id, NOW).findings?.[0]?.dismissed).toBe(
+      false,
+    )
   })
 
-  it('counts only the findings with no decision yet', () => {
+  it('counts a finding whose mark FAILED as still untriaged', () => {
+    // The human decided and the platform did not carry it out. Counting it as done is how "N to
+    // triage" comes to under-report exactly on the runs where something went wrong.
     const { state, findings } = seeded()
-    const spawned = recordBugFishingSpawn(state, findings[0]!.id, {
-      taskId: 'blk_x',
-      pipelineId: 'pl_bugfix',
-      requestedAt: 5,
+    const claimed = claimBugFishingSpawn(state, findings[0]!.id, claim('blk_x'), NOW)
+    expect(untriagedBugFishingFindings(claimed, NOW).map((f) => f.title)).toEqual(['B'])
+    const spawned = settleBugFishingSpawn(claimed, findings[0]!.id, 'blk_x', {
+      status: 'spawned',
+      executionId: 'exe_x',
     })
-    expect(untriagedBugFishingFindings(spawned).map((f) => f.title)).toEqual(['B'])
-    expect(untriagedBugFishingFindings(dismissBugFishingFinding(spawned, findings[1]!.id))).toEqual(
-      [],
-    )
+    expect(untriagedBugFishingFindings(spawned, NOW).map((f) => f.title)).toEqual(['B'])
+    const failed = settleBugFishingSpawn(claimed, findings[0]!.id, 'blk_x', {
+      status: 'failed',
+      failureReason: 'the run would not start',
+    })
+    expect(untriagedBugFishingFindings(failed, NOW).map((f) => f.title)).toEqual(['A', 'B'])
+    expect(
+      untriagedBugFishingFindings(dismissBugFishingFinding(spawned, findings[1]!.id, NOW), NOW),
+    ).toEqual([])
+  })
+
+  it('answers claimability from the status, never from the record being present', () => {
+    expect(bugFishingSpawnIsClaimable(null, NOW)).toBe(true)
+    expect(bugFishingSpawnIsClaimable(claim('blk_x'), NOW)).toBe(false)
+    expect(
+      bugFishingSpawnIsClaimable({ ...claim('blk_x'), status: 'spawned' }, NOW + 10 ** 9),
+    ).toBe(false)
+    expect(bugFishingSpawnIsClaimable({ ...claim('blk_x'), status: 'failed' }, NOW)).toBe(true)
   })
 
   it('briefs the next pass with EVERY earlier title, dismissed ones included', () => {
     // A human rejecting a finding says they do not want it fixed, not that the next angle should
     // raise it again.
     const { state, findings } = seeded()
-    const next = dismissBugFishingFinding(state, findings[1]!.id)
+    const next = dismissBugFishingFinding(state, findings[1]!.id, NOW)
     expect(priorBugFishingFindingTitles(next)).toEqual(['A', 'B'])
   })
 })

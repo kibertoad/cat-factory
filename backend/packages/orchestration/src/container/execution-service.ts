@@ -113,6 +113,11 @@ export function buildExecutionService(input: ExecutionServiceWiringInput): Execu
     // managed + document-backed fragments reach a run), present only when the
     // library is configured; otherwise the engine falls back to the static pool.
     fragmentResolver: fragmentLibrary?.libraryService,
+    // The pool a NEW task's default fragments are read from. The RESOLVED source, so it is the
+    // same one `BoardService` seeds a hand-created task from: a bug-fishing spawn has to create
+    // its fix task with the standards the create form would have given it, and two sources would
+    // be exactly the drift that makes a spawned fix quietly weaker than a hand-filed one.
+    promptFragmentSource: runtime.promptFragments,
     // Route a `skill` step's skill resolution (instructions + resource bodies at the pinned
     // commit) through the skill library, present only when it's configured; a skill step
     // dispatched without it fails loudly rather than running blank.

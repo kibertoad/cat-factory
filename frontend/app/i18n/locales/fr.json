@@ -8360,6 +8360,8 @@
       "fixThis": "Corriger",
       "dismiss": "Écarter",
       "spawned": "Une tâche de correction tourne sur {pipeline}",
+      "spawning": "Création de la tâche de correction…",
+      "spawnFailed": "La tâche de correction n’a pas pu être créée : {reason} Marquez-le à nouveau pour réessayer.",
       "openTask": "Ouvrir la tâche"
     },
     "severity": {

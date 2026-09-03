@@ -416,6 +416,7 @@ export type {
   BugFishingPhaseStatus,
   BugFishingPhase,
   BugFishingSpawn,
+  BugFishingSpawnStatus,
   BugFishingFinding,
   BugFishingStatus,
   BugFishingStepState,

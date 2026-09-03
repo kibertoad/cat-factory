@@ -8360,6 +8360,8 @@
       "fixThis": "Bunu düzelt",
       "dismiss": "Yoksay",
       "spawned": "{pipeline} üzerinde bir düzeltme görevi çalışıyor",
+      "spawning": "Düzeltme görevi oluşturuluyor…",
+      "spawnFailed": "Düzeltme görevi oluşturulamadı: {reason} Yeniden denemek için tekrar işaretleyin.",
       "openTask": "Görevi aç"
     },
     "severity": {

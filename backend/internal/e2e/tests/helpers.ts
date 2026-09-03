@@ -1033,9 +1033,30 @@ export function taskCard(page: Page, blockId: string): Locator {
  * and the failure points at the assertion rather than at the click.
  *
  * A spec that needs the card SELECTED takes `selectTask` below, for the same reason.
+ *
+ * Targeting the right control is only half of it: the click can still be LOST, the same way
+ * `openAttention` documents. The action row's membership changes as the execution instance
+ * lands, so Vue can re-render the row between Playwright's hit test and its mouse event, and the
+ * event is then dispatched to a detached node with no handler behind it. Nothing is pending after
+ * a lost click, so waiting longer cannot help and the failure surfaces later, on the step list
+ * the spec goes on to read — which is what `element(s) not found` on `pipeline-step` was. So
+ * click again until the focus view is actually up, which is what a user does too; opening it is a
+ * UI-only action, and the guard makes re-clicking a no-op once it is open.
  */
 export async function openTaskFocusView(card: Locator): Promise<void> {
-  await card.getByTestId('task-review').click()
+  const blockId = await card.getAttribute('data-block-id')
+  if (!blockId)
+    throw new Error(
+      'openTaskFocusView expects a card locator carrying data-block-id (see `taskCard`)',
+    )
+  // Keyed by BLOCK, so a focus view left open on an earlier task cannot read as this one's.
+  const focus = card
+    .page()
+    .locator(`[data-testid="block-focus-view"][data-focus-block="${blockId}"]`)
+  await expect(async () => {
+    if (await focus.isHidden()) await card.getByTestId('task-review').click()
+    await expect(focus).toBeVisible({ timeout: 2_000 })
+  }).toPass({ timeout: LIVE_TIMEOUT })
 }
 
 /**

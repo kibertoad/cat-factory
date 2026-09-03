@@ -498,9 +498,8 @@ export function buildStepHandlerRegistry(d: DispatcherRegistryDeps): StepHandler
  * 3. The angle's BRIEF is folded in as a prior output: what this pass is hunting, the task's own
  *    focus, and the titles earlier passes already reported so this one does not repeat them.
  *
- * A block that plans no angles at all settles the step as `skipped` and falls through to the
- * ordinary dispatch, which is the honest reading: there was nothing to fish, and parking a human
- * in front of an empty expedition would be worse than saying so.
+ * A cursor already past the plan falls through to the ordinary dispatch: that is the durable
+ * driver re-entering a step whose angles have all settled, and there is no angle left to brief.
  */
 async function handleBugFishingPhase(
   d: DispatcherRegistryDeps,
@@ -508,10 +507,6 @@ async function handleBugFishingPhase(
 ): Promise<AdvanceResult> {
   const { workspaceId, step, block } = ctx
   const planned = await d.bugFishingController.ensurePlanned(workspaceId, step, block)
-  if (!planned) {
-    step.bugFishing = { status: 'skipped', phases: [], currentPhaseIndex: 0, findings: [] }
-    return d.handleAgentStep(ctx)
-  }
   const phaseIndex = planned.currentPhaseIndex ?? 0
   const phase = (planned.phases ?? [])[phaseIndex]
   if (!phase) return d.handleAgentStep(ctx)

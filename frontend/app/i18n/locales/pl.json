@@ -8360,6 +8360,8 @@
       "fixThis": "Napraw to",
       "dismiss": "Odrzuć",
       "spawned": "Zadanie naprawcze działa w {pipeline}",
+      "spawning": "Tworzenie zadania naprawczego…",
+      "spawnFailed": "Nie udało się utworzyć zadania naprawczego: {reason} Oznacz je ponownie, aby spróbować jeszcze raz.",
       "openTask": "Otwórz zadanie"
     },
     "severity": {

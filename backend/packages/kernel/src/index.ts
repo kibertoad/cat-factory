@@ -44,6 +44,8 @@ export {
   BUG_FISHING_PHASE_IDS,
   BUG_FISHING_PHASES,
   BUG_FISHING_SEVERITY_ORDER,
+  BUG_FISHING_SPAWN_CLAIM_TTL_MS,
+  bugFishingSpawnIsClaimable,
   describeBugFishingPhase,
   isBugFishingPhaseId,
 } from '@cat-factory/contracts'

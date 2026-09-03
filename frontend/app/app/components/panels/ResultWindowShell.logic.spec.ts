@@ -35,6 +35,10 @@ const WINDOWS: Record<string, { width: ResultWindowWidth; why: string }> = {
     width: 'full',
     why: 'options column + the choose/dismiss action rail',
   },
+  'bugFishing/BugFishingWindow.vue': {
+    width: 'full',
+    why: 'the angle rail + the catch column, whose finding rows lay badges, path and the mark/dismiss actions out beside each other',
+  },
   'clarity/ClarityReviewWindow.vue': {
     width: 'full',
     why: 'findings column + the answer/dismiss action rail',

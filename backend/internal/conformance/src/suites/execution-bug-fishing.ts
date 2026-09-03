@@ -125,6 +125,12 @@ export function defineBugFishingSuite(harness: ConformanceHarness): void {
       const { call, createWorkspace, drive } = harness.makeApp({ customResult: fisherOutput })
       const { workspace } = await createWorkspace({ seed: true })
       const wsId = workspace.id
+      // Give the host service its standing standards, so the spawned fix task has something to
+      // inherit: a task-level run folds only its OWN `fragmentIds` and never re-unions the
+      // service's, which is exactly why a spawn has to be handed them at creation.
+      await call('PATCH', `/workspaces/${wsId}/blocks/blk_auth`, {
+        serviceFragmentIds: ['node.best-practices'],
+      })
       const task = await call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
         title: 'Fish for bugs in auth',
         taskType: 'bug-fishing',
@@ -148,6 +154,10 @@ export function defineBugFishingSuite(harness: ConformanceHarness): void {
       const spawn = marked.body.findings?.find((f) => f.id === findings[0]!.id)?.spawn
       expect(spawn?.pipelineId).toBe('pl_bugfix')
       expect(spawn?.taskId).toBeTruthy()
+      // SETTLED, not merely present. The record is written first as a `pending` claim (which is
+      // what makes two markings of one finding safe), so a caller that read only its presence
+      // could not tell a fix task that exists from one being made.
+      expect(spawn?.status).toBe('spawned')
 
       // The board is read through the snapshot (there is no single-block GET), which is also the
       // surface a person would see the new card on.
@@ -162,6 +172,11 @@ export function defineBugFishingSuite(harness: ConformanceHarness): void {
       // expedition found rather than from a title.
       expect(spawned.description).toContain('src/session.ts')
       expect(spawned.executionId).toBeTruthy()
+      // The spawned task is created the way the CREATE FORM would have created it under this
+      // service, not as a bare block: the service's standing standards ride along, so a fix
+      // spawned from a finding is held to exactly the standards the same bug filed by hand
+      // would have been.
+      expect(spawned.fragmentIds).toContain('node.best-practices')
 
       // A second mark of the SAME finding is refused rather than double-spawning.
       const again = await call(
@@ -243,13 +258,16 @@ export function defineBugFishingSuite(harness: ConformanceHarness): void {
       )
       expect(unstartable.status).toBeGreaterThanOrEqual(400)
 
-      // Neither refusal recorded a spawn, so the finding is still markable — which is what makes
-      // "loudly" useful rather than merely honest.
+      // The finding is still MARKABLE after both refusals, which is what makes "loudly" useful
+      // rather than merely honest. The first refused before taking a claim at all; the second
+      // took one, could not start the run behind it, and RELEASED it as `failed` carrying the
+      // cause — never left `pending`, which would read as a fix somebody is working on.
       const untouched = await call<BugFishingStepState>(
         'GET',
         `/workspaces/${wsId}/executions/${parked.id}/bug-fishing`,
       )
-      expect(untouched.body.findings?.[0]?.spawn).toBeFalsy()
+      const releasedSpawn = untouched.body.findings?.[0]?.spawn
+      expect(releasedSpawn === null || releasedSpawn?.status === 'failed').toBe(true)
 
       // A mark with no override takes the board's setting…
       const first = await call<BugFishingStepState>(

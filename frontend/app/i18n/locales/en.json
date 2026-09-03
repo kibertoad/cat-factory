@@ -8649,6 +8649,8 @@
       "fixThis": "Fix this",
       "dismiss": "Dismiss",
       "spawned": "A fix task is running on {pipeline}",
+      "spawning": "Creating the fix task…",
+      "spawnFailed": "The fix task could not be created: {reason} Mark it again to retry.",
       "openTask": "Open the task"
     },
     "severity": {
