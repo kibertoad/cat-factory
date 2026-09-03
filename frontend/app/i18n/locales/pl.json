@@ -636,6 +636,12 @@
         "service_catalog_response_too_large": "Portal deweloperski zwrócił więcej danych, niż ta platforma przyjmuje w jednej odpowiedzi. Otwórz ustawienia katalogu usług i obniż limit usług albo wyłącz importowanie definicji interfejsów, a następnie zaimportuj ponownie."
       }
     },
+    "reason": {
+      "description": {
+        "reference_repo_not_found": "Repozytorium stojące za architekturą referencyjną tego uruchomienia nie jest widoczne przez połączenie kontroli źródeł tej przestrzeni roboczej. Albo wpis wskazuje niewłaściwe repozytorium, albo połączenie nie ma do niego dostępu: popraw architekturę referencyjną lub nadaj jej dostęp i spróbuj ponownie.",
+        "reference_repo_unreadable": "Nie udało się teraz odczytać repozytorium stojącego za architekturą referencyjną tego uruchomienia, więc nie zostało ono uruchomione na szablonie, którego może nie umieć sklonować. Nic nie jest źle skonfigurowane i nie trzeba nic zmieniać: spróbuj ponownie, gdy połączenie wróci."
+      }
+    },
     "action": {
       "retryFailed": "Ponowienie nie powiodło się",
       "startFailed": "Nie udało się uruchomić",
@@ -6916,7 +6922,14 @@
       "label": "Architektura referencyjna",
       "description": "Zarządzane repozytorium bazowe do sklonowania i dostosowania.",
       "empty": "Brak architektur referencyjnych. Dodaj jedną poniżej lub przełącz na „Od zera”.",
-      "placeholder": "Wybierz architekturę referencyjną"
+      "placeholder": "Wybierz architekturę referencyjną",
+      "refusal": {
+        "title": "Nie udało się użyć tej architektury referencyjnej",
+        "notFound": "Nie widać {repo} przez połączenie kontroli źródeł tej przestrzeni roboczej. Albo ten wpis wskazuje niewłaściwe repozytorium, albo połączenie nie ma do niego dostępu. Nic nie zostało utworzone: popraw wpis i uruchom ponownie, reszta tego formularza zostaje zachowana.",
+        "unreadable": "Nie udało się teraz odczytać {repo}, więc nic nie zostało utworzone. Nic nie jest źle skonfigurowane: uruchom ponownie, gdy połączenie wróci, reszta tego formularza zostaje zachowana.",
+        "unnamedRepo": "repozytorium architektury referencyjnej",
+        "edit": "Edytuj tę architekturę referencyjną"
+      }
     },
     "targetRepo": {
       "label": "Nazwa repozytorium docelowego",

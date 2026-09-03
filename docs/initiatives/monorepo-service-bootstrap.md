@@ -287,6 +287,13 @@ PR merged.
       with `siblingServices` and `exploration`, the SPA's "what the survey read" disclosure, and
       three conformance assertions (the call budget is enforced, exhaustion is reported, a plan
       cites nothing outside the transcript). See D10.
+- [x] **Slice 3, the reference template is reached the way the CLONE reaches it.** The
+      `RepoBootstrapper.resolveReferenceRepo` verdict (`reachable` / `not_connected` / `not_found` /
+      `unreadable`), the run-start and retry pre-flight (`assertReferenceReachable`, refusing a 422
+      `reference_repo_not_found` or a 503 `reference_repo_unreadable` before any row is written), the
+      survey reading the template through it, a dispatch that scopes the job token to the template
+      and clones it at its OWN default branch, and the launch dialog's jump to the offending entry.
+      See the slice-3 gotchas.
 
 ## Gotchas the first slice surfaced
 
@@ -355,16 +362,49 @@ PR merged.
   `inputSchema` fails at CALL time rather than at build time. The tools use `jsonSchema()` with an
   explicit `validate`.
 
+## Gotchas the third slice surfaced
+
+- **The survey and the CLONE had two different notions of "can we reach the template".** The survey
+  resolved it through `resolveRepoFilesForCoords` (the workspace's PROJECTED repos) and the apply
+  phase cloned it with the installation token, and a reference architecture is an admin-managed
+  `owner/name` rather than a repo the board links. So the common case (a template that is not also
+  a board service) surveyed as unread on every deployment while the clone worked perfectly, and
+  what a reviewer saw for every area was the template having no opinion. Resolving it on the
+  BOOTSTRAPPER makes the two agree by construction, because that component is what clones it.
+- **What a launcher DOES about a refused template is the website's, not this document's.** The two
+  fixes (correct the entry, or grant the App the repository) need no checkout, so they live on
+  [Connect a Repository](https://www.catfactory.ai/guide/repositories.html#the-reference-architecture-s-own-repository-has-to-be-reachable-too);
+  what stays here is why the check exists and where it sits.
+- **Reachability has to be pre-flighted, not discovered a phase later.** Nothing between typing an
+  `owner/name` and the container's `git clone` ever asked the provider whether the repository was
+  there. A monorepo run answered by surveying the template as unread; a new-repo run answered
+  minutes later with a clone failure; both left a job row and a provisional board card behind for a
+  run that never had a chance. The check now runs before anything is recorded, so the refusal costs
+  a correction rather than a cleanup.
+- **A refused entry has to be REACHABLE from the refusal.** The refusal carries
+  `referenceArchitectureId` and `repo`, and the launch dialog opens that entry prefilled with every
+  other field of the form left alone. A 422 that only says "this failed" makes the person work out
+  which of the two repositories in the dialog was the problem.
+- **Three verdicts, not a nullable.** `not_found` is the entry to fix, `not_connected` is a
+  workspace to bind, `unreadable` is the provider being down and NOBODY's configuration. Collapsed
+  into one, an outage tells an operator to go and correct a value that is already right, which is
+  the misattribution the 503-with-a-reason rule exists to prevent.
+- **The new-repo path never scoped its token to the template it clones.** `repoIds` held the target
+  alone and the clone URL assumed `main`, so a PRIVATE template was uncloneable and one on any other
+  default branch was cloned at a ref that does not exist, both surfacing as a bare git error. The
+  template is resolved at dispatch on BOTH paths now, and a failure there throws rather than being
+  swallowed: an apply dispatch can be days after the review.
+
 ## Not in this slice
 
 - **Starting a monorepo bootstrap from `/api/v1`.** The public surface's
   `POST /api/v1/bootstraps` still creates a repository of its own. `awaiting_review` is already
   named in the spec (1.65.0) because a run started in the app is READ through that surface; the
   start body and the review endpoint are a later, additive step.
-- **Reading the monorepo through an installation the workspace has not linked.** The survey
-  resolves both sides through `resolveRepoFilesForCoords`, which is scoped to the workspace's
-  PROJECTED repos. An unlinked reference template is reported as unsurveyed rather than silently
-  surveyed as empty; the apply phase still clones it with the installation token.
+- **Reading the MONOREPO through an installation the workspace has not linked.** The monorepo side
+  still resolves through `resolveRepoFilesForCoords`, scoped to the workspace's PROJECTED repos,
+  and correctly so: `resolveMonorepoTarget` already refuses a target the board does not link, so
+  the scoping costs the survey nothing. (The TEMPLATE side no longer answers to it: see slice 3.)
 - **A second reviewer, or a review that can be revised after approval.** Approval is one act by
   one person; changing your mind means retrying the run.
 - **Grep over the whole tree.** The loop reaches any path it can NAME, which is what closes the

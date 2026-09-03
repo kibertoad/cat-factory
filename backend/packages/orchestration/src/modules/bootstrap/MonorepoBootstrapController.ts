@@ -12,6 +12,7 @@ import type {
   Logger,
   MonorepoAdoptionAdvisor,
   ReferenceArchitectureRecord,
+  ReferenceRepoAccess,
   RepoBootstrapper,
   ResolveRepoFilesForCoords,
 } from '@cat-factory/kernel'
@@ -101,6 +102,36 @@ function prNumberFromUrl(url: string): number | null {
   const match = /\/(?:pull|merge_requests)\/(\d+)/.exec(url)
   const parsed = match ? Number(match[1]) : Number.NaN
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null
+}
+
+/**
+ * Why the reference template was not surveyed, in the sentence the reviewer reads on the
+ * transcript beside the read it stands in for.
+ *
+ * Each verdict gets its own sentence because each sends a different person somewhere different:
+ * a template the connection cannot see is an entry to fix, an absent connection is a workspace to
+ * bind, and a failed probe is nobody's configuration at all. `reachable` is `never` here (the
+ * caller has already narrowed it out) so a new verdict fails the build rather than arriving as an
+ * `undefined` spliced into the reviewer's note.
+ */
+function describeUnreachableTemplate(
+  access: Exclude<ReferenceRepoAccess, { status: 'reachable' }>,
+) {
+  switch (access.status) {
+    case 'not_connected':
+      return 'this workspace has no source-control connection, so the template was not surveyed'
+    case 'not_found':
+      return "this workspace's source-control connection cannot see it, so it was not surveyed"
+    case 'unreadable':
+      return `it could not be read just now, so it was not surveyed: ${access.detail}`
+    default:
+      return describeUnknownTemplateVerdict(access)
+  }
+}
+
+/** Compile-time totality over {@link ReferenceRepoAccess}; see the switch above. */
+function describeUnknownTemplateVerdict(access: never): string {
+  return `it was not surveyed (${JSON.stringify(access)})`
 }
 
 /** A resolved monorepo target plus what the survey will need to read it. */
@@ -214,6 +245,7 @@ export class MonorepoBootstrapController {
    * analysis never ran".
    */
   async buildAdoptionPlan(
+    bootstrapper: RepoBootstrapper,
     workspaceId: string,
     record: BootstrapJobRecord,
     reference: ReferenceArchitectureRecord | null,
@@ -231,13 +263,24 @@ export class MonorepoBootstrapController {
         `${monorepo.repoOwner}/${monorepo.repoName} could not be read through this workspace's VCS connection.`,
       )
     }
-    // A reference architecture the workspace has not LINKED is unreadable from here even though
-    // the apply phase's container can still clone it with the installation token. Stated rather
-    // than silently surveyed as empty: "the template ships nothing for this area" and "nobody
-    // looked at the template" lead a reviewer to opposite conclusions.
-    const templateSide = reference
-      ? await this.side(workspaceId, reference.repoOwner, reference.repoName)
-      : undefined
+    // The template is reached through the workspace's VCS CONNECTION, not through its repo
+    // projection: a reference architecture names `owner/name` and is not, in general, a repo the
+    // board has linked, so resolving it the way the monorepo side is resolved reported "nobody
+    // looked at the template" for a repository the apply phase then cloned without trouble. The
+    // run is pre-flighted against this same reach before it is recorded, so an unreachable
+    // template normally never gets this far; when one does (a grant revoked while the run sat in
+    // its queue) the transcript SAYS so, because "the template ships nothing for this area" and
+    // "nobody looked at the template" lead a reviewer to opposite conclusions.
+    const templateAccess = reference
+      ? await bootstrapper.resolveReferenceRepo(workspaceId, {
+          owner: reference.repoOwner,
+          name: reference.repoName,
+        })
+      : null
+    const templateSide =
+      templateAccess?.status === 'reachable'
+        ? { files: templateAccess.files, gitRef: templateAccess.defaultBranch }
+        : undefined
 
     const session = await surveyMonorepo({
       monorepo: monoSide,
@@ -245,11 +288,11 @@ export class MonorepoBootstrapController {
       directory: monorepo.directory,
       logger: log,
     })
-    if (reference && !templateSide) {
+    if (reference && templateAccess && templateAccess.status !== 'reachable') {
       session.noteUnavailable(
         'template',
         `${reference.repoOwner}/${reference.repoName}`,
-        'not linked to this workspace, so it was not surveyed',
+        describeUnreachableTemplate(templateAccess),
       )
     }
 
@@ -402,7 +445,15 @@ export class MonorepoBootstrapController {
     await write(number, next)
   }
 
-  /** Bind a `RepoFiles` for one side, or undefined when the workspace cannot read that repo. */
+  /**
+   * Bind a `RepoFiles` for the MONOREPO side, or undefined when the workspace cannot read it.
+   *
+   * Projection-scoped, and correctly so here: the monorepo is a repository the board links (that
+   * is what `resolveMonorepoTarget` already refused without), so the same scoping that keeps this
+   * seam from becoming a way to read anything the deployment's credential reaches costs the
+   * survey nothing. The TEMPLATE side is resolved differently, through the bootstrapper: see
+   * `buildAdoptionPlan`.
+   */
   private async side(
     workspaceId: string,
     owner: string,

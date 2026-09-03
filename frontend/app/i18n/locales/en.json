@@ -705,6 +705,12 @@
         "service_catalog_response_too_large": "The developer portal answered with more data than this platform will hold in one response. Open the service-catalog settings and lower the service cap, or turn off importing interface definitions, then import again."
       }
     },
+    "reason": {
+      "description": {
+        "reference_repo_not_found": "The repository behind this run's reference architecture cannot be seen through this workspace's source-control connection. Either the entry names the wrong repository, or the connection has not been granted access to it: correct the reference architecture, or grant it access, then try again.",
+        "reference_repo_unreadable": "The repository behind this run's reference architecture could not be read just now, so the run was not started against a template it might be unable to clone. Nothing here is misconfigured and no change is needed: try again once the source-control connection recovers."
+      }
+    },
     "action": {
       "retryFailed": "Retry failed",
       "startFailed": "Failed to start",
@@ -7236,7 +7242,14 @@
       "label": "Reference architecture",
       "description": "The managed base repo to clone and adapt.",
       "empty": "No reference architectures yet. Add one below, or switch to 'From scratch'.",
-      "placeholder": "Choose a reference architecture"
+      "placeholder": "Choose a reference architecture",
+      "refusal": {
+        "title": "This reference architecture could not be used",
+        "notFound": "{repo} cannot be seen through this workspace's source-control connection. Either this entry names the wrong repository, or the connection has not been granted access to it. Nothing was created, so correct the entry and launch again: everything else on this form is kept.",
+        "unreadable": "{repo} could not be read just now, so nothing was created. Nothing here is misconfigured: launch again once the source-control connection recovers, and everything else on this form is kept.",
+        "unnamedRepo": "The reference architecture's repository",
+        "edit": "Edit this reference architecture"
+      }
     },
     "targetRepo": {
       "label": "Target repository name",

@@ -42,6 +42,8 @@ import {
   resolveAdoptionReview,
   runBestEffort,
   sameSubtasks,
+  UnavailableError,
+  ValidationError,
 } from '@cat-factory/kernel'
 import { registerServiceForFrame, requireWorkspace } from '@cat-factory/kernel'
 import { monorepoBootstrapPrTitle } from '@cat-factory/agents'
@@ -190,6 +192,11 @@ function newRunDefaults(
     adoptionReview: null,
     prUrl: null,
   }
+}
+
+/** Compile-time totality over the reference-repository verdict; see `assertReferenceReachable`. */
+function exhaustiveReferenceVerdict(access: never): never {
+  throw new Error(`Unhandled reference-repository verdict: ${JSON.stringify(access)}`)
 }
 
 /** Join the reference architecture's default instructions with per-run extras. */
@@ -379,6 +386,13 @@ export class BootstrapService {
         )
       : null
 
+    // The template the run is about to clone must be reachable NOW, before anything is written.
+    // Its absence used to surface a whole phase later: on a monorepo run as a survey that
+    // reported the template unread, and on a new-repo run as a clone failure inside the
+    // container, with a board card and a job row already left behind for a run that never had a
+    // chance. See `assertReferenceReachable`.
+    if (reference) await this.assertReferenceReachable(bootstrapper, workspaceId, reference)
+
     const instructions = composeInstructions(
       reference?.defaultInstructions ?? '',
       input.instructions,
@@ -492,6 +506,60 @@ export class BootstrapService {
   }
 
   /**
+   * Refuse a run whose reference template this workspace cannot reach, before anything is written.
+   *
+   * The check the flow was missing. A reference architecture is an admin-managed entry naming
+   * `owner/name`, and nothing between typing it and the container's `git clone` ever asked the
+   * provider whether that repository is there: a monorepo run answered by surveying the template
+   * as unread (which reads to a reviewer as a template with no opinion, not as a template nobody
+   * opened), and a new-repo run answered several minutes later with a clone failure, both with a
+   * job row and a board card already left behind. It is resolved through the BOOTSTRAPPER, so
+   * what is pre-flighted is exactly the reach the clone will have.
+   *
+   * Three verdicts, three refusals, because they need three different next moves and only one of
+   * them is about this run's inputs. Each carries the architecture's id and name, so the launch
+   * dialog can open the entry that named the repository rather than only reporting a failure.
+   */
+  private async assertReferenceReachable(
+    bootstrapper: RepoBootstrapper,
+    workspaceId: string,
+    reference: ReferenceArchitectureRecord,
+  ): Promise<void> {
+    const repo = `${reference.repoOwner}/${reference.repoName}`
+    const context = {
+      referenceArchitectureId: reference.id,
+      referenceArchitectureName: reference.name,
+      repo,
+    }
+    const access = await bootstrapper.resolveReferenceRepo(workspaceId, {
+      owner: reference.repoOwner,
+      name: reference.repoName,
+    })
+    switch (access.status) {
+      case 'reachable':
+        return
+      case 'not_connected':
+        throw new ConflictError(
+          'Workspace is not connected to GitHub. Install the GitHub App for this workspace before bootstrapping a repository.',
+          'github_not_connected',
+        )
+      case 'not_found':
+        throw new ValidationError(
+          `The reference architecture "${reference.name}" points at ${repo}, which this workspace's source-control connection cannot see. Either it names the wrong repository, or the connection has not been granted access to it. Correct the reference architecture (or grant it access) and launch again: nothing has been created.`,
+          { reason: 'reference_repo_not_found', ...context },
+        )
+      case 'unreadable':
+        throw new UnavailableError(
+          `${repo}, the repository behind the reference architecture "${reference.name}", could not be read just now, so this run was not started rather than started against a template it may be unable to clone. Nothing here is misconfigured: try again once the source-control connection recovers.`,
+          'reference_repo_unreadable',
+          { ...context, detail: access.detail },
+        )
+      default:
+        return exhaustiveReferenceVerdict(access)
+    }
+  }
+
+  /**
    * Retry a failed "bootstrap repo" run. Spins a **fresh** container (and a new
    * durable driver instance) for the same target, reusing the original job's
    * service frame so the board card stays put — it flips from the failed badge
@@ -532,6 +600,11 @@ export class BootstrapService {
           'bootstrap_reference_missing',
         )
       }
+      // Re-flighted rather than trusted from the first attempt, and that is what makes editing the
+      // entry the way OUT of a run that failed on it: the retry re-resolves the architecture by
+      // id, so a corrected `owner/name` is picked up here with every other value of the run left
+      // exactly as it was. A still-unreachable template is refused before a second row is written.
+      await this.assertReferenceReachable(bootstrapper, workspaceId, reference)
       referenceRepo = { owner: reference.repoOwner, name: reference.repoName }
     }
 
@@ -892,13 +965,18 @@ export class BootstrapService {
       // that is what the row says: the next poll reads the winner's plan and parks.
       return { state: 'running' }
     }
+    // Read AFTER the short-circuit and the claim, never at the top: a run that is already parked
+    // needs nothing from the bootstrapper, and throwing there would turn a deployment that lost
+    // its container wiring into a driver that can no longer even report a settled park.
+    const bootstrapper = this.deps.repoBootstrapper
+    if (!bootstrapper) throw new Error('Repository bootstrapping is not configured')
     const reference = record.referenceArchitectureId
       ? await this.deps.referenceArchitectureRepository.get(
           workspaceId,
           record.referenceArchitectureId,
         )
       : null
-    const plan = await this.monorepo.buildAdoptionPlan(workspaceId, record, reference)
+    const plan = await this.monorepo.buildAdoptionPlan(bootstrapper, workspaceId, record, reference)
     await this.park(workspaceId, record, plan)
     return { state: 'awaiting_review' }
   }

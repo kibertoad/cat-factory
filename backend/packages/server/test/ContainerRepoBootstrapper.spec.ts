@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { VcsApiError } from '@cat-factory/kernel'
 import type {
   GitHubClient,
   GitHubInstallation,
@@ -7,6 +8,7 @@ import type {
   RunnerTransport,
 } from '@cat-factory/kernel'
 import { ContainerRepoBootstrapper } from '../src/agents/ContainerRepoBootstrapper.js'
+import type { MintInstallationToken } from '../src/agents/repoTargeting.js'
 import type { ContainerSessionService } from '../src/containers/ContainerSessionService.js'
 
 // The bootstrap pre-flight gates a force-push run: the target must exist, be empty,
@@ -44,9 +46,16 @@ function fakeClient(overrides: Partial<GitHubClient> = {}): GitHubClient {
   return base as unknown as GitHubClient
 }
 
+/** The dispatch-token mint, so a test can read the `repoIds` a run was scoped to. */
+type MintSpy = ReturnType<typeof makeMint>
+function makeMint() {
+  return vi.fn<MintInstallationToken>(async () => 'gh-token')
+}
+
 function makeBootstrapper(
   client: GitHubClient,
   transport: RunnerTransport,
+  mint: MintSpy = makeMint(),
 ): ContainerRepoBootstrapper {
   const installationRepository = {
     getByWorkspace: vi.fn(async () => INSTALLATION),
@@ -60,7 +69,7 @@ function makeBootstrapper(
     bootstrapJobRepository: {} as never,
     repoRepository: {} as never,
     githubClient: client,
-    mintInstallationToken: vi.fn(async () => 'gh-token'),
+    mintInstallationToken: mint,
     sessionService,
     model: { provider: 'workers-ai', model: '@cf/test' },
     proxyBaseUrl: 'https://proxy.example/v1',
@@ -248,5 +257,110 @@ describe('ContainerRepoBootstrapper monorepo dispatch', () => {
     })
     expect(update.state).toBe('done')
     expect(update.prUrl).toBe('https://github.com/acme/platform/pull/7')
+  })
+})
+
+// The reference template is reached through the workspace's INSTALLATION, not through its repo
+// projection. That is the pair the apply phase's clone actually depends on, and resolving it
+// anywhere else is what let a survey report "nobody looked at the template" for a repository the
+// container then cloned without trouble.
+describe('ContainerRepoBootstrapper.resolveReferenceRepo', () => {
+  const TEMPLATE = { owner: 'acme', name: 'service-template' }
+
+  it('binds checkout-free reads at the template’s OWN default branch', async () => {
+    const client = fakeClient({
+      getRepo: vi.fn(async () => ({ defaultBranch: 'trunk', githubId: 55 })),
+      getFileContent: vi.fn(async () => ({ content: 'module.exports = {}', sha: 'abc' })),
+    } as unknown as Partial<GitHubClient>)
+    const bootstrapper = makeBootstrapper(client, {} as RunnerTransport)
+
+    const access = await bootstrapper.resolveReferenceRepo('ws_1', TEMPLATE)
+    expect(access.status).toBe('reachable')
+    if (access.status !== 'reachable') return
+    // Not `main`: a template whose default branch is anything else was read at a branch that
+    // does not exist, which the contents API answers as "absent" for every file in it.
+    expect(access.defaultBranch).toBe('trunk')
+    await access.files.getFile('jest.config.js', access.defaultBranch)
+    expect(client.getFileContent).toHaveBeenCalledWith(
+      99,
+      { owner: 'acme', repo: 'service-template' },
+      'jest.config.js',
+      'trunk',
+    )
+  })
+
+  it('reports a 404 as NOT FOUND and any other failure as UNREADABLE', async () => {
+    // The distinction the caller turns into two different refusals: one says the entry is wrong,
+    // the other says the provider is down. Collapsing them tells an operator to go and fix a
+    // configuration that is already correct.
+    const missing = makeBootstrapper(
+      fakeClient({
+        getRepo: vi.fn(async () => {
+          throw new VcsApiError('github', 404, 'GitHub GET /repos/acme/service-template → 404')
+        }),
+      } as unknown as Partial<GitHubClient>),
+      {} as RunnerTransport,
+    )
+    expect(await missing.resolveReferenceRepo('ws_1', TEMPLATE)).toEqual({ status: 'not_found' })
+
+    const down = makeBootstrapper(
+      fakeClient({
+        getRepo: vi.fn(async () => {
+          throw new VcsApiError('github', 500, 'GitHub GET /repos/acme/service-template → 500')
+        }),
+      } as unknown as Partial<GitHubClient>),
+      {} as RunnerTransport,
+    )
+    const outage = await down.resolveReferenceRepo('ws_1', TEMPLATE)
+    expect(outage.status).toBe('unreadable')
+  })
+})
+
+describe('ContainerRepoBootstrapper reference-template dispatch', () => {
+  const REFERENCE_REQUEST = {
+    ...REQUEST,
+    referenceRepo: { owner: 'acme', name: 'service-template' },
+  }
+
+  it('scopes the new-repo job’s token to the template it clones, at the template’s branch', async () => {
+    // Without the template in `repoIds` the minted token cannot read it, so a PRIVATE template
+    // was uncloneable and the run reported a bare git failure; without its own default branch a
+    // template on anything but `main` was cloned at a ref that does not exist.
+    const mint = makeMint()
+    const dispatch = vi.fn(async () => undefined)
+    const client = fakeClient({
+      getRepo: vi.fn(async (_id: number, ref: { repo: string }) =>
+        ref.repo === 'service-template'
+          ? { defaultBranch: 'trunk', githubId: 55 }
+          : { defaultBranch: 'main', githubId: 1 },
+      ),
+    } as unknown as Partial<GitHubClient>)
+    const bootstrapper = makeBootstrapper(client, { dispatch } as unknown as RunnerTransport, mint)
+
+    await bootstrapper.startBootstrap(REFERENCE_REQUEST)
+    expect(mint.mock.calls[0]?.[1]?.repoIds).toEqual(['1', '55'])
+    const [, body] = dispatch.mock.calls[0] as unknown as [unknown, Record<string, unknown>]
+    expect(body.repo).toMatchObject({ name: 'service-template', baseBranch: 'trunk' })
+  })
+
+  it('refuses before dispatch when the template cannot be read, naming it', async () => {
+    // The run is pre-flighted at start, but an apply dispatch can be days later. A swallowed
+    // failure here scoped the token to the monorepo alone and left the harness reporting a bare
+    // clone error about a sibling checkout nobody had named.
+    const dispatch = vi.fn(async () => undefined)
+    const client = fakeClient({
+      getRepo: vi.fn(async (_id: number, ref: { repo: string }) => {
+        if (ref.repo === 'service-template') {
+          throw new VcsApiError('github', 404, 'GitHub GET /repos/acme/service-template → 404')
+        }
+        return { defaultBranch: 'main', githubId: 1 }
+      }),
+    } as unknown as Partial<GitHubClient>)
+    const bootstrapper = makeBootstrapper(client, { dispatch } as unknown as RunnerTransport)
+
+    await expect(bootstrapper.startBootstrap(MONOREPO_REQUEST)).rejects.toThrow(
+      /reference template acme\/service-template cannot be read/i,
+    )
+    expect(dispatch).not.toHaveBeenCalled()
   })
 })

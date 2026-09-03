@@ -5,6 +5,7 @@ import {
   describeGenericFailure,
 } from '~/composables/usePipelineErrorToast'
 import { ApiError } from '~/composables/api/errors'
+import { BOOTSTRAP_REFERENCE_REASONS, UNAVAILABLE_REASONS } from '@cat-factory/contracts'
 import en from '../../i18n/locales/en.json'
 
 /**
@@ -302,6 +303,23 @@ describe('describeGenericFailure', () => {
     expect(
       describeGenericFailure(new ApiError(418, { error: { code: 'teapot' } })).descriptionKey,
     ).toBe('errors.generic.description.unexpected')
+  })
+
+  it('gives every reason with its own copy a key that ships, and lets it beat the status class', () => {
+    // Derived from the vocabularies the code reads rather than pinned to a count: a new reason is
+    // supposed to be an ordinary addition, and an expectation that fails on every one of them
+    // trains the next person to re-pin it unread. What is worth asserting is the property the
+    // exhaustive `Record` alone cannot make, that the key it maps to actually EXISTS in the
+    // catalog, and that a reason wins over the status class it is attached to. Both refusals here
+    // reach a person who can act on them, and the generic 503 wording ("this deployment has not
+    // configured the capability") would send them to configure something that is already wired.
+    for (const reason of [...UNAVAILABLE_REASONS, ...BOOTSTRAP_REFERENCE_REASONS]) {
+      const failure = describeGenericFailure(
+        new ApiError(503, { error: { code: 'unavailable', details: { reason } } }),
+      )
+      expect(failure.descriptionKey).not.toBe('errors.generic.description.unavailable')
+      expect(hasKey(failure.descriptionKey), `${reason} has no copy`).toBe(true)
+    }
   })
 
   it('never presents a conflict (parseConflict owns those) but still classifies safely', () => {

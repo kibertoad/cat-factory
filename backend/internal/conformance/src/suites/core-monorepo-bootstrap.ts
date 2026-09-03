@@ -167,21 +167,22 @@ async function setup(
     installationId: 4242,
     defaultBranch: 'main',
   })
+  // The reference template is reached through the CONNECTION, not through the workspace's repo
+  // projection, so it is registered here and deliberately NOT on the coords resolver below. That
+  // asymmetry is the fixture: a template surveyed only when the board also links it as a service
+  // is the bug this arrangement pins, and it is invisible in a fixture that projects both.
+  bootstrapper.referenceRepoFiles.set('acme/service-template', fakeRepoFiles(TEMPLATE_FILES))
   const app = harness.makeApp(
     {},
     {
       repoBootstrapper: bootstrapper,
       ...(options.advisor ? { monorepoAdoptionAdvisor: options.advisor } : {}),
+      // The MONOREPO only: it is the side that is a linked board repo, and answering for the
+      // template here too would hide whether the template is surveyed through the connection.
       resolveRepoFilesForCoords: async (_workspaceId, coords) => {
-        const files =
-          coords.repo === 'platform'
-            ? MONOREPO_FILES
-            : coords.repo === 'service-template'
-              ? TEMPLATE_FILES
-              : null
-        if (!files) return null
+        if (coords.repo !== 'platform') return null
         return {
-          repo: fakeRepoFiles(files, options.prBodies),
+          repo: fakeRepoFiles(MONOREPO_FILES, options.prBodies),
           baseBranch: 'main',
           repoId: coords.repo,
           owner: coords.owner,
@@ -626,6 +627,40 @@ function defineReviewGroup(harness: ConformanceHarness): void {
       // reference would close issue 412 on this monorepo when the bootstrap PR merged.
       expect(body).not.toContain('#412')
       expect(body).toContain('412')
+    })
+
+    it('refuses a run whose reference template the connection cannot see, and records nothing', async () => {
+      // The pre-flight the flow used to lack. Reachability was first consulted a whole phase
+      // later: by the survey (which reported the template unread, indistinguishable to a
+      // reviewer from a template with no opinion) and by the container's clone, with a job row
+      // and a board card already left behind for a run that never had a chance. It is refused as
+      // a VALIDATION failure naming the entry, because what is wrong is the reference
+      // architecture, not the state of anything.
+      const { app, wsId, architectureId, bootstrapper } = await setup(harness, {
+        advisor: fakeAdvisor(),
+      })
+      bootstrapper.referenceRepoVerdicts.set('acme/service-template', 'not_found')
+
+      const refused = await app.call('POST', `/workspaces/${wsId}/bootstrap/jobs`, {
+        repoName: 'payments',
+        referenceArchitectureId: architectureId,
+        instructions: 'A payments service.',
+        monorepo: { repoGithubId: 777, directory: 'services/payments' },
+      })
+      expect(refused.status).toBe(422)
+      const details = (refused.body as { error: { details?: Record<string, unknown> } }).error
+        .details
+      expect(details?.reason).toBe('reference_repo_not_found')
+      // The entry that named the repository, so the launch dialog can offer to fix THAT one.
+      expect(details?.referenceArchitectureId).toBe(architectureId)
+      expect(details?.repo).toBe('acme/service-template')
+
+      // Nothing was written: no run to retry, no provisional service card to clean up, and the
+      // target repo was never marked a monorepo (that mark re-points every service pinned to it).
+      const jobs = await app.call<BootstrapJob[]>('GET', `/workspaces/${wsId}/bootstrap/jobs`)
+      expect(jobs.body).toEqual([])
+      expect(bootstrapper.markedMonorepo).toEqual([])
+      expect(bootstrapper.calls).toEqual([])
     })
 
     it('refuses a target repository this workspace has not linked', async () => {

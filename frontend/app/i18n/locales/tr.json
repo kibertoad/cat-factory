@@ -636,6 +636,12 @@
         "service_catalog_response_too_large": "Geliştirici portalı, bu platformun tek bir yanıtta tutacağından daha fazla veri döndürdü. Servis kataloğu ayarlarını açıp servis sınırını düşürün ya da arayüz tanımlarının aktarımını kapatın, sonra yeniden aktarın."
       }
     },
+    "reason": {
+      "description": {
+        "reference_repo_not_found": "Bu çalıştırmanın referans mimarisinin arkasındaki depo, bu çalışma alanının kaynak denetimi bağlantısı üzerinden görülemiyor. Ya kayıt yanlış depoyu gösteriyor ya da bağlantıya erişim verilmemiş: referans mimarisini düzeltin veya erişim verin, sonra yeniden deneyin.",
+        "reference_repo_unreadable": "Bu çalıştırmanın referans mimarisinin arkasındaki depo şu anda okunamadı, bu yüzden klonlayamayabileceği bir şablon üzerinde başlatılmadı. Yanlış yapılandırılmış bir şey yok ve bir değişiklik gerekmiyor: bağlantı düzeldiğinde yeniden deneyin."
+      }
+    },
     "action": {
       "retryFailed": "Yeniden deneme başarısız oldu",
       "startFailed": "Başlatılamadı",
@@ -6916,7 +6922,14 @@
       "label": "Referans mimari",
       "description": "Klonlanacak ve uyarlanacak yönetilen temel depo.",
       "empty": "Henüz referans mimari yok. Aşağıdan bir tane ekleyin veya 'Sıfırdan' seçeneğine geçin.",
-      "placeholder": "Bir referans mimari seçin"
+      "placeholder": "Bir referans mimari seçin",
+      "refusal": {
+        "title": "Bu referans mimari kullanılamadı",
+        "notFound": "{repo}, bu çalışma alanının kaynak denetimi bağlantısı üzerinden görülemiyor. Ya bu kayıt yanlış depoyu gösteriyor ya da bağlantıya erişim verilmemiş. Hiçbir şey oluşturulmadı: kaydı düzeltip yeniden başlatın, bu formdaki diğer her şey korunur.",
+        "unreadable": "{repo} şu anda okunamadı, bu yüzden hiçbir şey oluşturulmadı. Yanlış yapılandırılmış bir şey yok: bağlantı düzeldiğinde yeniden başlatın, bu formdaki diğer her şey korunur.",
+        "unnamedRepo": "Referans mimarinin deposu",
+        "edit": "Bu referans mimariyi düzenle"
+      }
     },
     "targetRepo": {
       "label": "Hedef depo adı",

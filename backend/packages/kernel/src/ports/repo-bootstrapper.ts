@@ -1,4 +1,5 @@
 import type { BootstrapFailureKind, StepSubtasks } from '../domain/types.js'
+import type { RepoFiles } from './repo-files.js'
 
 // RepoBootstrapper port: performs the side-effecting half of a "bootstrap repo"
 // run — pre-flight the pre-created target repo, then run a bootstrapper agent in a
@@ -115,6 +116,39 @@ export interface MonorepoTargetRepo {
   defaultBranch: string | null
 }
 
+/**
+ * Whether the workspace's VCS connection can reach the REFERENCE TEMPLATE a bootstrap run was
+ * asked to build from, and the checkout-free reads to survey it with.
+ *
+ * A discriminated verdict rather than a nullable `RepoFiles`, because the three failures send an
+ * operator to three different places and only the first is theirs to fix: a template the
+ * connection cannot see is a reference architecture pointing at the wrong repository (or at one
+ * the App has not been granted), an absent connection is a workspace that was never bound, and a
+ * failed probe is the provider being down. Collapsing them would report an outage as a typo.
+ *
+ * It lives on this port for the reason {@link RepoBootstrapper.resolveMonorepoTarget} does, plus
+ * one of its own: this component is what CLONES the template at apply time, so resolving it here
+ * makes the pre-flight and the clone agree by construction. Resolving it through the workspace's
+ * repo PROJECTION instead is what they used to disagree about: a template is named by owner and
+ * name in a reference-architecture record and is not, in general, a repo the board has linked, so
+ * the survey reported "nobody looked at the template" for a repository the apply phase then went
+ * on to clone perfectly well.
+ */
+export type ReferenceRepoAccess =
+  | {
+      status: 'reachable'
+      /** Checkout-free reads bound to the template, for the adoption survey. */
+      files: RepoFiles
+      /** The branch the template is read at. */
+      defaultBranch: string
+    }
+  /** No VCS connection on this workspace, so nothing can be read or cloned. */
+  | { status: 'not_connected' }
+  /** The provider answered: this workspace's credential cannot see that repository. */
+  | { status: 'not_found' }
+  /** The probe itself failed (an outage, a rate limit), so reachability is UNKNOWN. */
+  | { status: 'unreadable'; detail: string }
+
 export interface RepoBootstrapper {
   /**
    * Whether the workspace is connected to GitHub (an active App installation
@@ -153,6 +187,19 @@ export interface RepoBootstrapper {
    * thing the resolution does, never the first.
    */
   markRepoAsMonorepo(workspaceId: string, repoGithubId: number): Promise<void>
+  /**
+   * Resolve the reference template through the workspace's VCS connection: the pre-flight every
+   * run that names a reference architecture takes before anything is recorded, and the reader the
+   * monorepo survey reads the template side with.
+   *
+   * Never throws for a repository it merely cannot reach: the caller turns each verdict into its
+   * own refusal, and a thrown provider error would arrive as a 500 telling the operator to file a
+   * platform bug about their own typo.
+   */
+  resolveReferenceRepo(
+    workspaceId: string,
+    ref: { owner: string; name: string },
+  ): Promise<ReferenceRepoAccess>
   /**
    * Pre-flight the target repo (exists, reachable, empty-or-boilerplate) and
    * dispatch the bootstrap container. Returns once the job is accepted — the work

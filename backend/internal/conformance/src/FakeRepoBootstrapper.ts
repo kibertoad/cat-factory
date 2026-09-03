@@ -4,7 +4,9 @@ import type {
   BootstrapRepoOutcome,
   BootstrapRepoRequest,
   MonorepoTargetRepo,
+  ReferenceRepoAccess,
   RepoBootstrapper,
+  RepoFiles,
   StepSubtasks,
 } from '@cat-factory/kernel'
 
@@ -42,6 +44,23 @@ export class FakeRepoBootstrapper implements RepoBootstrapper {
   readonly monorepoRepos = new Map<number, MonorepoTargetRepo>()
   /** Repo ids `markRepoAsMonorepo` marked, in order (empty when a pre-flight refused first). */
   readonly markedMonorepo: number[] = []
+  /**
+   * The reference templates the workspace's connection can READ, keyed `owner/name`.
+   *
+   * Reachability defaults to true (matching {@link connected}: the fake models a healthy
+   * connection, and most suites name a reference architecture only to have a run to drive), so an
+   * entry here supplies the FILES a monorepo survey reads rather than granting access. Unreachable
+   * is the opt-in, through {@link referenceRepoVerdicts}.
+   */
+  readonly referenceRepoFiles = new Map<string, RepoFiles>()
+  /**
+   * Reference templates that are NOT reachable, keyed `owner/name`: the pre-flight refusals.
+   *
+   * Two verdicts rather than one flag, because the service turns them into two different refusals
+   * (a 422 about the entry, a 503 about the provider) and a fake that could only express one could
+   * not exercise the distinction.
+   */
+  readonly referenceRepoVerdicts = new Map<string, 'not_found' | 'unreadable'>()
 
   private readonly requests = new Map<string, BootstrapRepoRequest>()
   private readonly pollCounts = new Map<string, number>()
@@ -59,6 +78,22 @@ export class FakeRepoBootstrapper implements RepoBootstrapper {
 
   async markRepoAsMonorepo(_workspaceId: string, repoGithubId: number): Promise<void> {
     this.markedMonorepo.push(repoGithubId)
+  }
+
+  async resolveReferenceRepo(
+    _workspaceId: string,
+    ref: { owner: string; name: string },
+  ): Promise<ReferenceRepoAccess> {
+    if (!this.connected) return { status: 'not_connected' }
+    const key = `${ref.owner}/${ref.name}`
+    const verdict = this.referenceRepoVerdicts.get(key)
+    if (verdict === 'not_found') return { status: 'not_found' }
+    if (verdict === 'unreadable') return { status: 'unreadable', detail: 'the fake probe failed' }
+    return {
+      status: 'reachable',
+      files: this.referenceRepoFiles.get(key) ?? emptyRepoFiles(),
+      defaultBranch: 'main',
+    }
   }
 
   async startBootstrap(request: BootstrapRepoRequest): Promise<BootstrapJobHandle> {
@@ -130,4 +165,20 @@ export class FakeRepoBootstrapper implements RepoBootstrapper {
       defaultBranch: 'main',
     }
   }
+}
+
+/**
+ * A reachable template with nothing in it: what a suite gets for a reference architecture it
+ * declared but never surveys (every new-repo bootstrap). Reads answer honestly, as absent rather
+ * than as failed, so a survey run against one records `absent` and not an unreadable provider.
+ */
+function emptyRepoFiles(): RepoFiles {
+  return {
+    async getFile() {
+      return null
+    },
+    async listDirectory() {
+      return []
+    },
+  } as unknown as RepoFiles
 }

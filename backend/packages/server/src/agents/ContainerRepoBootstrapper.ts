@@ -7,6 +7,7 @@ import type {
   GitHubClient,
   MonorepoBootstrapLeg,
   MonorepoTargetRepo,
+  ReferenceRepoAccess,
   GitHubInstallationRepository,
   GitHubRepo,
   GroupCacheHandle,
@@ -15,10 +16,11 @@ import type {
   RepoEntry,
   RepoProjectionRepository,
 } from '@cat-factory/kernel'
-import { failureKindFromHarnessCause } from '@cat-factory/kernel'
+import { failureKindFromHarnessCause, getErrorMessage, VcsApiError } from '@cat-factory/kernel'
 import { isProxyableProvider } from '@cat-factory/agents'
 import type { ContainerSessionService } from '../containers/ContainerSessionService.js'
 import type { JobPackageRegistrySpec } from './ContainerAgentExecutor.js'
+import { makeRepoFiles } from './repoFiles.js'
 import type { MintInstallationToken } from './repoTargeting.js'
 import { RunnerJobClient, type ResolveRunnerTransport } from './RunnerJobClient.js'
 import { logger } from '../observability/logger.js'
@@ -143,6 +145,48 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
   }
 
   /**
+   * Resolve the reference template through the workspace's INSTALLATION, which is the same reach
+   * the apply phase's clone has.
+   *
+   * Deliberately NOT the workspace's repo projection (`resolveRepoFilesForCoords`), the way every
+   * other checkout-free read here is scoped. A reference architecture is an admin-managed entry
+   * naming `owner/name`, not a repository the board has linked, so the projection answers "no such
+   * repo" for a template the run then clones without trouble: the survey used to report the
+   * template as unsurveyed on every deployment whose template is not also a board service. What
+   * scopes this instead is the entry itself plus the installation's own grant, which is the pair
+   * that decides whether the clone works.
+   *
+   * A 404 is the provider's answer that this credential cannot see the repository, which on GitHub
+   * covers both "no such repo" and "the App was not granted it", and it is one verdict because
+   * they take the same fix. Any other failure is reported as UNREADABLE rather than as an absence,
+   * so an outage cannot be presented to an operator as a typo in their configuration.
+   */
+  async resolveReferenceRepo(
+    workspaceId: string,
+    ref: { owner: string; name: string },
+  ): Promise<ReferenceRepoAccess> {
+    const installation = await this.deps.installationRepository.getByWorkspace(workspaceId)
+    if (!installation || installation.deletedAt) return { status: 'not_connected' }
+    try {
+      const repo = await this.deps.githubClient.getRepo(installation.installationId, {
+        owner: ref.owner,
+        repo: ref.name,
+      })
+      return {
+        status: 'reachable',
+        files: makeRepoFiles(this.deps.githubClient, installation.installationId, {
+          owner: ref.owner,
+          repo: ref.name,
+        }),
+        defaultBranch: defaultBranchOf(repo),
+      }
+    } catch (error) {
+      if (error instanceof VcsApiError && error.status === 404) return { status: 'not_found' }
+      return { status: 'unreadable', detail: getErrorMessage(error) }
+    }
+  }
+
+  /**
    * Resolve a monorepo bootstrap target out of the WORKSPACE's own repo projection.
    *
    * Nothing here consults the provider: the projection is the workspace's declared set of
@@ -257,13 +301,24 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
       )
     }
 
-    // Scoped to the one repo being bootstrapped: the run clones and force-pushes exactly this
-    // target and touches nothing else, so there is no leg to widen for. `target` came from the
-    // pre-flight `getRepo` above, which is why this costs no extra read.
+    // The template the run CLONES, resolved rather than assumed: its numeric id is what puts it
+    // inside the token's scope and its own default branch is what the clone checks out. Assuming
+    // `main` and scoping the token to the target alone made a private template uncloneable and a
+    // template on any other default branch a clone failure, both reported as a generic git error.
+    const referenceRepo = request.referenceRepo
+      ? await this.resolveDispatchReference(installation.installationId, request.referenceRepo)
+      : null
+
+    // Scoped to the repos this run touches: the target it force-pushes, plus the template it
+    // clones to adapt. `target` came from the pre-flight `getRepo` above, which is why that half
+    // costs no extra read.
     const ghToken = await this.deps.mintInstallationToken(installation.installationId, {
       executionId: request.containerJobId,
       workspaceId: request.workspaceId,
-      repoIds: [String(target.githubId)],
+      repoIds: [
+        String(target.githubId),
+        ...(referenceRepo ? [String(referenceRepo.githubId)] : []),
+      ],
     })
     // Private-registry auth for the scaffolder's installs, exactly as the
     // implementation executor forwards it.
@@ -283,14 +338,15 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
 
     // With a reference architecture the container clones + adapts it; without one
     // it scaffolds an empty repo from the freeform instructions alone.
-    const reference = request.referenceRepo
-      ? {
-          owner: request.referenceRepo.owner,
-          name: request.referenceRepo.name,
-          cloneUrl: `${webBase}/${request.referenceRepo.owner}/${request.referenceRepo.name}.git`,
-          baseBranch: 'main',
-        }
-      : undefined
+    const reference =
+      request.referenceRepo && referenceRepo
+        ? {
+            owner: request.referenceRepo.owner,
+            name: request.referenceRepo.name,
+            cloneUrl: `${webBase}/${request.referenceRepo.owner}/${request.referenceRepo.name}.git`,
+            baseBranch: defaultBranchOf(referenceRepo),
+          }
+        : undefined
 
     const targetSpec = { owner, name: repoName, cloneUrl: targetCloneUrl, defaultBranch }
     // The generic agent `repo` is the clone source: the reference when adapting one, or the
@@ -434,16 +490,21 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
     const reference = request.referenceRepo
     let referenceRepos: { repo: Record<string, string> }[] = []
     if (reference) {
-      const templateRepo = await this.deps.githubClient
-        .getRepo(installation.installationId, { owner: reference.owner, repo: reference.name })
-        .catch(() => null)
-      if (templateRepo) repoIds.push(String(templateRepo.githubId))
+      // Re-flighted here for the same reason the target directory is: an apply dispatch can be
+      // days after the review, and a template that has since moved out of reach is a clone this
+      // run is about to fail. It used to be swallowed, which scoped the token to the monorepo
+      // alone and left the harness reporting a bare git error about a sibling checkout.
+      const templateRepo = await this.resolveDispatchReference(
+        installation.installationId,
+        reference,
+      )
+      repoIds.push(String(templateRepo.githubId))
       referenceRepos = [
         {
           repo: {
             owner: reference.owner,
             name: reference.name,
-            baseBranch: templateRepo?.defaultBranch ?? 'main',
+            baseBranch: defaultBranchOf(templateRepo),
             cloneUrl: `${webBase}/${reference.owner}/${reference.name}.git`,
           },
         },
@@ -507,6 +568,35 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
       workspaceId: request.workspaceId,
       jobId: request.jobId,
       containerJobId: request.containerJobId,
+    }
+  }
+
+  /**
+   * The reference template as the DISPATCH needs it: the row whose numeric id scopes the job's
+   * installation token and whose default branch the clone checks out.
+   *
+   * Throws, and that is the point. `startBootstrap`'s contract is that a pre-flight failure fails
+   * the run fast with an actionable message, and a template that cannot be resolved is one: the
+   * container is about to clone it. The previous shape swallowed the failure, minted a token that
+   * did not cover the template, and left the harness to report a bare `git clone` error naming
+   * neither the repository nor the reference architecture that chose it.
+   */
+  private async resolveDispatchReference(
+    installationId: number,
+    ref: { owner: string; name: string },
+  ): Promise<GitHubRepo> {
+    try {
+      return await this.deps.githubClient.getRepo(installationId, {
+        owner: ref.owner,
+        repo: ref.name,
+      })
+    } catch (error) {
+      throw new Error(
+        `The reference template ${ref.owner}/${ref.name} cannot be read through this workspace's ` +
+          `source-control connection, so it cannot be cloned. Point the reference architecture at ` +
+          `a repository this workspace can reach, or grant the App access to it, then retry. ` +
+          `Cause: ${getErrorMessage(error)}`,
+      )
     }
   }
 
