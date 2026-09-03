@@ -59,7 +59,12 @@ export type DeployFixConfig = v.InferOutput<typeof deployFixConfigSchema>
  * teardown probe and the bugfix reproduction proof are built on.
  */
 export const deployFixAttemptSchema = v.object({
-  /** 1-based attempt number (matches `attempts` when the fixer was dispatched). */
+  /**
+   * 1-based ordinal in this log. It matches `attempts` on a run that never loops back to the
+   * deployer, and diverges from it after one: the counter is re-armed for each provisioning cycle
+   * (`restartDeployFixState`) while these rows survive the whole run, being what the verification
+   * report reduces.
+   */
   attempt: v.number(),
   /** Epoch ms when the fixer job settled. */
   at: v.number(),

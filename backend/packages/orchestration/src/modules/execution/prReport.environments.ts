@@ -1,8 +1,11 @@
 import type {
   ExecutionInstance,
   PipelineStep,
+  PrReportDeployFix,
   PrReportEnvironment,
   PrReportEnvironmentEvidence,
+  PrReportEnvironmentInvestigation,
+  PrReportEnvironmentRemediation,
   PrReportEnvironmentTimeline,
   PrReportEvidenceArtifact,
   PrReportTimelineGap,
@@ -514,6 +517,97 @@ function composeProof(
   return { proof: gaps.length === 0 ? 'complete' : 'incomplete', gaps }
 }
 
+// ---------------------------------------------------------------------------
+// REMEDIATION: what the platform tried about a frame whose provision failed.
+//
+// Both loops record their rounds on the deployer STEP (`step.deployFix`,
+// `step.environmentInvestigation`) and neither reached this report before, so a run whose
+// environment failed, was diagnosed as a provider fault, was restarted in place and then came up
+// reported exactly what a run with no remediation loop at all reports.
+//
+// Folded over EVERY deployer step and ACCUMULATED per frame, which is deliberately NOT the
+// last-wins rule the entry's own `status` follows: a frame repaired by one deployer step and
+// re-deployed cleanly by a later one was still machine-edited, and the record of that is the whole
+// point of the section. Within one frame the DECISIONS come from the newest round that made them
+// and the COUNTS from every round, because a reader needs both the conclusion the platform settled
+// on and how much work stands behind it.
+// ---------------------------------------------------------------------------
+
+/** The remediation rounds one frame accumulated, keyed by service-frame block id. */
+type RemediationByFrame = Map<string, PrReportEnvironmentRemediation>
+
+/** Add one deployer step's `deployFix` rounds to the frame's running total. */
+function foldDeployFix(into: RemediationByFrame, step: PipelineStep): void {
+  const fix = step.deployFix
+  if (!fix) return
+  const log = fix.attemptLog ?? []
+  const prior = into.get(fix.frameId)?.deployFix
+  into.set(fix.frameId, {
+    ...into.get(fix.frameId),
+    deployFix: {
+      attempts: (prior?.attempts ?? 0) + fix.attempts,
+      // The bar is FROZEN per step at the first escalation, so the newest step's is the one the
+      // rounds still to come are counted against.
+      maxAttempts: fix.maxAttempts,
+      reason: fix.reason,
+      completed:
+        (prior?.completed ?? 0) + log.filter((round) => round.outcome === 'completed').length,
+      failed: (prior?.failed ?? 0) + log.filter((round) => round.outcome === 'failed').length,
+    },
+  })
+}
+
+/** Add one deployer step's investigation rounds to the frame's running total. */
+function foldInvestigation(into: RemediationByFrame, step: PipelineStep): void {
+  const state = step.environmentInvestigation
+  if (!state) return
+  const log = state.attemptLog ?? []
+  const prior = into.get(state.frameId)?.investigation
+  // The NEWEST round that produced a verdict is the conclusion the platform settled on. A later
+  // round that failed outright does not overwrite it: it produced no verdict, and reporting the
+  // absence would discard the only diagnosis anybody has of this failure.
+  const decided = [...log].reverse().find((round) => round.verdict)
+  const last = log[log.length - 1]
+  into.set(state.frameId, {
+    ...into.get(state.frameId),
+    investigation: {
+      attempts: (prior?.attempts ?? 0) + state.attempts,
+      maxAttempts: state.maxAttempts,
+      faultLayer: decided?.verdict?.faultLayer ?? prior?.faultLayer ?? null,
+      action: decided?.verdict?.action ?? prior?.action ?? null,
+      ranActions: [
+        ...(prior?.ranActions ?? []),
+        ...log.map((round) => round.ranAction).filter((action): action is string => !!action),
+      ],
+      // The refusal belongs to the round that made the decision above, so it is read off THAT
+      // round rather than off the newest one: a round that could not be completed withheld
+      // nothing, and pairing its silence with an earlier verdict would report a remedy as run.
+      withheld: scrub(decided?.withheld) ?? prior?.withheld ?? null,
+      // The investigation's OWN failure, and only when the newest round is the one that failed:
+      // a failed round followed by a successful one is history, not the state of the section.
+      failure: last && !last.verdict ? scrub(last.failure) : (prior?.failure ?? null),
+      waitExtensions: (prior?.waitExtensions ?? 0) + (state.waitExtensions ?? 0),
+    },
+  })
+}
+
+/**
+ * The remediation rounds each frame accumulated across the run's deployer steps.
+ *
+ * A frame with no entry never entered either loop, which is every clean provision plus every
+ * failure whose classified cause admitted neither: the fixer runs only for `manifest_invalid`,
+ * and the investigation only where an investigator and a provisioning service are wired and the
+ * step's budget is non-zero.
+ */
+function remediationByFrame(steps: readonly PipelineStep[]): RemediationByFrame {
+  const byFrame: RemediationByFrame = new Map()
+  for (const step of deployerSteps(steps)) {
+    foldDeployFix(byFrame, step)
+    foldInvestigation(byFrame, step)
+  }
+  return byFrame
+}
+
 /**
  * Compose the test-environment lifecycle section. Reads the run's per-frame deploy outcomes, its
  * provisioning-log rows and the tester's report, all already resolved by the caller, so nothing
@@ -545,12 +639,14 @@ export function composeEnvironments(
   if (deployerSteps(instance.steps).length === 0) {
     return absent('No deployer step in this pipeline, so no ephemeral environment was provisioned.')
   }
+  const remediation = remediationByFrame(instance.steps)
   const entries: PrReportEnvironment[] = cap([...frames], 'environments.entries').map(
     ([frameId, state]) => ({
       frameId,
       status: state.status,
       url: state.url ?? null,
       error: scrub(state.error),
+      ...(remediation.has(frameId) ? { remediation: remediation.get(frameId) } : {}),
     }),
   )
   if (entries.length === 0) {
@@ -656,9 +752,73 @@ function renderEvidence(evidence: PrReportEnvironmentEvidence): string[] {
   return [...out, '']
 }
 
+/** The `deploy-fixer`'s rounds as one line: how many, against what, and what they achieved. */
+function renderDeployFix(fix: PrReportDeployFix): string {
+  const budget = fix.maxAttempts == null ? '' : ` of ${fix.maxAttempts}`
+  // Naming the rounds that DIED is the point of the line. "2 rounds" alone reads as two machine
+  // edits, and a fixer whose jobs never finished changed nothing in the checkout.
+  const outcomes = [
+    fix.completed > 0 ? `${fix.completed} finished` : '',
+    fix.failed > 0 ? `${fix.failed} died without finishing` : '',
+  ].filter(Boolean)
+  const settled = outcomes.length ? ` (${outcomes.join(', ')})` : ''
+  return (
+    `\`deploy-fixer\`: ${fix.attempts}${budget} repair round(s) for ` +
+    `${hostMarkdown.inlineCode(fix.reason)}${settled}`
+  )
+}
+
+/** The investigation's verdicts as one line: the layer blamed, the ask, and what actually ran. */
+function renderInvestigation(investigation: PrReportEnvironmentInvestigation): string {
+  const budget = investigation.maxAttempts == null ? '' : ` of ${investigation.maxAttempts}`
+  const parts = [`investigation: ${investigation.attempts}${budget} round(s)`]
+  // A missing verdict is STATED rather than rendered as the `unknown` fault layer, which is a
+  // conclusion the investigator reached and this is the absence of one.
+  parts.push(
+    investigation.faultLayer
+      ? `fault: ${hostMarkdown.inlineCode(investigation.faultLayer)}`
+      : 'no verdict was produced',
+  )
+  if (investigation.action) parts.push(`asked: ${hostMarkdown.inlineCode(investigation.action)}`)
+  parts.push(
+    investigation.ranActions.length
+      ? `ran: ${investigation.ranActions.map((action) => hostMarkdown.inlineCode(action)).join(', ')}`
+      : 'nothing was run',
+  )
+  if (investigation.waitExtensions > 0) {
+    parts.push(`readiness ceiling extended ${investigation.waitExtensions}×`)
+  }
+  if (investigation.withheld) parts.push(`withheld: ${hostMarkdown.prose(investigation.withheld)}`)
+  if (investigation.failure) parts.push(`failed: ${hostMarkdown.prose(investigation.failure)}`)
+  return parts.join(' · ')
+}
+
+/**
+ * What the platform TRIED, per frame that entered either loop. Rendered under the outcomes table
+ * rather than as columns on it: the two loops answer different questions and a row that carried
+ * both would be mostly empty on every frame, which is every frame on an ordinary run.
+ *
+ * Omitted entirely when no frame entered a loop, which is the honest reading of an absent section
+ * here: nothing was attempted, and there is no cause to state (see
+ * `prReportEnvironmentRemediationSchema`).
+ */
+function renderRemediation(entries: readonly PrReportEnvironment[]): string[] {
+  const remediated = entries.filter((entry) => entry.remediation)
+  if (remediated.length === 0) return []
+  const out = ['**Remediation attempted**', '']
+  for (const entry of remediated) {
+    const { deployFix, investigation } = entry.remediation ?? {}
+    out.push(`- ${hostMarkdown.inlineCode(entry.frameId)}`)
+    if (deployFix) out.push(`  - ${renderDeployFix(deployFix)}`)
+    if (investigation) out.push(`  - ${renderInvestigation(investigation)}`)
+  }
+  return [...out, '']
+}
+
 /**
  * Render the section: the computed proof first (it is what a reviewer acts on), then the
- * per-frame outcomes, the dated timeline, the evidence and the teardown verdict.
+ * per-frame outcomes, what was attempted about any that failed, the dated timeline, the evidence
+ * and the teardown verdict.
  */
 export function renderEnvironments(envs: PrVerificationReport['environments']): string[] {
   const out = ['### Test environment lifecycle', '']
@@ -672,7 +832,8 @@ export function renderEnvironments(envs: PrVerificationReport['environments']): 
       `| \`${hostMarkdown.cell(entry.frameId)}\` | ${entry.status} | ${hostMarkdown.cell(entry.url ?? '')} | ${hostMarkdown.cell(entry.error ?? '')} |`,
     )
   }
-  out.push('', ...renderTimeline(envs.timeline))
+  out.push('', ...renderRemediation(envs.entries))
+  out.push(...renderTimeline(envs.timeline))
   out.push(`**Teardown:** ${TEARDOWN_RENDERINGS[envs.teardown]}`, '')
   return [...out, ...renderEvidence(envs.evidence)]
 }

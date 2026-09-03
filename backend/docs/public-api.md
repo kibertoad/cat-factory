@@ -2000,8 +2000,9 @@ Every section carries `status: "reported" | "absent"` plus a `note`, so _"this p
 tester step"_ and _"the tester found nothing"_ never read the same. What it covers: what the run
 built FROM, the CI gate's verdict and failing checks, the platform's own run of the service's
 lint/test/build commands with the failing output, the red-then-green reproduction proof for a
-bugfix, the tester's structured report, requirement coverage, the throwaway-environment lifecycle,
-judge verdicts, and the merge decision. `truncations` names anything a per-list cap left out.
+bugfix, the tester's structured report, requirement coverage, the throwaway-environment lifecycle
+plus what the platform tried about any of it that failed, judge verdicts, and the merge decision.
+`truncations` names anything a per-list cap left out.
 
 `context` is the one that answers what the run was working from: each linked document its agents
 read, with the revision the dispatch confirmed it at. `freshness` is the same three-way verdict the
@@ -2027,6 +2028,25 @@ names `ownPullRequest` so a reader can reach them. This endpoint always answers 
 the complete one: a caller is asking about the RUN, not about one of its pull requests. Absent
 `scope` means what it always meant, the own-service PR, so a consumer written before 1.12 is
 unaffected.
+
+`environments.entries[].remediation` says what the platform TRIED about a frame whose provision
+failed, and it is the one part of this section that is about the PLATFORM rather than about the
+environment. Two loops can run, exclusively: `deployFix` counts the `deploy-fixer`'s repair rounds
+against the cause it was dispatched for, splitting the rounds whose job FINISHED from the ones that
+died having changed nothing in the checkout; `investigation` carries the layer the diagnosis blamed
+(`provider` / `platform` / `deployment` / `unknown`), the remediation the last verdict asked for,
+every action the engine actually RAN, why a requested one was withheld, and how many
+readiness-ceiling extensions a `wait` verdict won. Added in 1.66.0.
+
+**Three absences here are three different facts, and a consumer must not collapse them.** An
+absent `remediation` means neither loop ran, which is every clean provision and every failure
+whose classified cause admitted neither. A null `faultLayer` means no round produced a verdict at
+all, with `failure` saying why: it is NOT the `unknown` layer, which is a verdict the investigator
+REACHED on evidence that did not settle the question, and "nobody looked" sends a different person
+to a different place than "we looked and could not tell". An empty `ranActions` means nothing was
+run, and `withheld` is then the reason. There is deliberately **no field saying whether the remedy
+worked**: that is the deployer's next verdict, which `entries[].status` states, and the platform
+never takes a model's account of its own remedy.
 
 **The outcome summary is the report's sibling, not a projection of it.** Same evidence, different
 reader: the report is a reviewer's bundle (every failing check by name, every captured log tail, the

@@ -227,7 +227,14 @@ export class EnvironmentInvestigationController {
       })
     }
 
-    const round = { attempt: attempts + 1, at: this.deps.clock.now() } as const
+    // The round's ordinal comes off the LOG, not the cycle counter: the counter is re-armed for
+    // each provisioning cycle while the log survives the whole run
+    // (`restartEnvironmentInvestigationState`), so the counter would number a second cycle's
+    // first round `1` beside the row already holding it. Identical on a run that never loops back.
+    const round = {
+      attempt: (state?.attemptLog?.length ?? 0) + 1,
+      at: this.deps.clock.now(),
+    } as const
     if (!verdict) {
       // An investigation that could not be READ is not a clean bill of health and is not a verdict
       // of `stop` either. The round is recorded so the budget cannot be spun, and the caller takes
@@ -494,7 +501,9 @@ function appendRound(
   const state = step.environmentInvestigation
   step.environmentInvestigation = {
     ...state,
-    attempts: attempt.attempt,
+    // The CYCLE counter, which is what the budget is spent against; `attempt.attempt` is the
+    // row's ordinal in the run-long log and the two diverge after a loop-back.
+    attempts: (state?.attempts ?? 0) + 1,
     maxAttempts: state?.maxAttempts ?? budget,
     frameId: failure.frameId,
     environmentId: failure.environmentId,

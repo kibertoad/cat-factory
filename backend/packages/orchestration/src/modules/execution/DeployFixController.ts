@@ -273,7 +273,12 @@ export class DeployFixController {
     if (fix?.phase !== 'fixing') return null
 
     const attempt: DeployFixAttempt = {
-      attempt: fix.attempts,
+      // Numbered off the LOG rather than the live counter, so the ordinals stay monotonic across
+      // a loop-back: the counter is re-armed per provisioning cycle and the log survives the run
+      // (`restartDeployFixState`), so reading the counter would number a second cycle's first
+      // round `1` beside the row already holding that number. Identical on a run that never
+      // loops back, where each dispatch settles into exactly one row.
+      attempt: (fix.attemptLog?.length ?? 0) + 1,
       at: this.deps.clock.now(),
       outcome: update.state === 'done' ? 'completed' : 'failed',
       reason: fix.reason,

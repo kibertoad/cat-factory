@@ -82,6 +82,66 @@ export function deployDispatchEpoch(step: PipelineStep): number {
 }
 
 // ---------------------------------------------------------------------------
+// Re-arming the two remediation loops for a fresh provisioning cycle.
+//
+// A `deployer` step is re-run WITHIN one run whenever something loops back to it (the `human-test`
+// gate rebuilding the environment a person is testing, a producer re-run through it), and each of
+// these keeps the two halves the loops need kept apart:
+//
+//  - The COUNTERS are per provisioning CYCLE. A re-run provisions from scratch, so it is a fresh
+//    failure if it fails, and carrying the spent `attempts` across sends its FIRST failure
+//    straight to the give-up: a `deploy_blocked` card raised with zero repair rounds actually
+//    run, or a terminal failure explained by the PREVIOUS environment's verdict.
+//  - The ATTEMPT LOG is per RUN, because it is what the run's verification report reduces. A
+//    frame repaired by one cycle and re-deployed cleanly by the next was still machine-edited,
+//    and dropping the log makes the report say nothing was ever attempted.
+//
+// Both return undefined for a step that carries no such state, so a caller can spread them
+// unconditionally. The retry path (`retry.logic.resetStep`) deliberately drops both by omission:
+// a retry is a NEW run with a report of its own, so nothing there is history worth keeping.
+// ---------------------------------------------------------------------------
+
+/**
+ * Re-arm a `deployer` step's `deploy-fixer` budget for another provisioning cycle, keeping the
+ * rounds already on the record.
+ *
+ * `phase` is reset to `retrying` because a stale `fixing` routes the re-run's container-backed
+ * deploy job to the agent poller that never dispatched it. The two members are both live-loop
+ * phases and the poll router asks only whether the phase IS `fixing`, so `retrying` is the one
+ * that means "no fixer job is in flight, and the deployer is about to provision".
+ */
+export function restartDeployFixState(
+  fix: PipelineStep['deployFix'],
+): PipelineStep['deployFix'] | undefined {
+  if (!fix) return undefined
+  return { ...fix, phase: 'retrying', attempts: 0, attemptLog: fix.attemptLog ?? [] }
+}
+
+/**
+ * Re-arm a `deployer` step's environment-investigation budget for another provisioning cycle,
+ * keeping the rounds already on the record.
+ *
+ * `environmentId` goes, because it names the environment this cycle supersedes and a round run
+ * against it would restart, re-probe or tear down infrastructure the re-provision has replaced.
+ * `waitExtensions` goes with the counters: the readiness ceiling it extended belonged to that
+ * environment, and a cycle is started by a person or a gate rather than by the model, so zeroing
+ * it cannot become a way to postpone a run one ceiling at a time.
+ */
+export function restartEnvironmentInvestigationState(
+  state: PipelineStep['environmentInvestigation'],
+): PipelineStep['environmentInvestigation'] | undefined {
+  if (!state) return undefined
+  return {
+    attempts: 0,
+    maxAttempts: state.maxAttempts,
+    frameId: state.frameId,
+    environmentId: null,
+    waitExtensions: 0,
+    attemptLog: state.attemptLog ?? [],
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Run-start Deployer-config gate (pure half).
 //
 // When a pipeline INCLUDES an enabled `deployer` step, the environment it will stand up must be

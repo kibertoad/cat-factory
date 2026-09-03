@@ -152,13 +152,9 @@ describe('StepGraph.resetStepForRerun', () => {
     expect(s.dispatches).toEqual([{ agentKind: 'coder', count: 1 }])
   })
 
-  it('clears the deployer fan-out state INCLUDING the spent remediation budget', () => {
+  it('clears the deployer fan-out state', () => {
     // Every field here belongs to one provisioning attempt, and the human-test gate loops a
-    // `deployer` step back to rebuild its environment. A budget carried across that loop-back is
-    // worse than a stale display: the re-run provisions from scratch, so its first failure is a
-    // first failure, and an `attempts` already at the bar sends it straight to `deploy_blocked`
-    // with no repair round ever dispatched. `phase` is the other half, since a stale `fixing`
-    // hands the re-run's deploy job to the agent poller that never dispatched it.
+    // `deployer` step back to rebuild its environment.
     const graph = new StepGraph(clock)
     const s = step({
       state: 'working',
@@ -168,6 +164,34 @@ describe('StepGraph.resetStepForRerun', () => {
       deployFrameId: 'frame-1',
       deployPrimaryFrameId: 'frame-1',
       deployProvisioning: { type: 'kubernetes' },
+    })
+    graph.resetStepForRerun(s)
+    expect([s.deployEnvs, s.deployFrameId, s.deployPrimaryFrameId, s.deployProvisioning]).toEqual([
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ])
+  })
+
+  it('re-arms the spent deploy-fix budget while keeping the rounds on the record', () => {
+    // The budget is per provisioning CYCLE: the re-run provisions from scratch, so its first
+    // failure is a first failure, and an `attempts` already at the bar sends it straight to
+    // `deploy_blocked` with no repair round ever dispatched. `phase` is the other half, since a
+    // stale `fixing` hands the re-run's deploy job to the agent poller that never dispatched it.
+    // The attempt LOG is per run, because the verification report reduces it: dropping it made a
+    // frame whose deployment files the fixer had edited report as one nothing was attempted on.
+    const graph = new StepGraph(clock)
+    const round = {
+      attempt: 1,
+      at: 1_000,
+      outcome: 'completed' as const,
+      reason: 'manifest_invalid',
+      error: 'Deployment is invalid',
+      summary: 'set the image tag',
+    }
+    const s = step({
+      state: 'working',
       deployFix: {
         phase: 'fixing',
         attempts: 2,
@@ -175,16 +199,57 @@ describe('StepGraph.resetStepForRerun', () => {
         frameId: 'frame-1',
         reason: 'manifest_invalid',
         lastError: 'Deployment is invalid',
+        attemptLog: [round],
       },
     })
     graph.resetStepForRerun(s)
-    expect([
-      s.deployEnvs,
-      s.deployFrameId,
-      s.deployPrimaryFrameId,
-      s.deployProvisioning,
-      s.deployFix,
-    ]).toEqual([undefined, undefined, undefined, undefined, undefined])
+
+    expect(s.deployFix?.attempts).toBe(0)
+    expect(s.deployFix?.phase).not.toBe('fixing')
+    expect(s.deployFix?.maxAttempts).toBe(2)
+    expect(s.deployFix?.attemptLog).toEqual([round])
+  })
+
+  it('re-arms the investigation budget too, which used to survive a loop-back untouched', () => {
+    // The sibling loop had no reset line at all, so a looped-back deployer carried a SPENT
+    // `attempts` into its next failure: the first round of the new cycle was refused as "the
+    // budget is spent", and the terminal failure was explained by the verdict about the
+    // environment the re-provision had already superseded. `environmentId` goes with it, since a
+    // remedy run against that id restarts or tears down replaced infrastructure.
+    const graph = new StepGraph(clock)
+    const round = {
+      attempt: 1,
+      at: 1_000,
+      outcome: 'reported' as const,
+      error: 'namespace never became ready',
+      failure: null,
+    }
+    const s = step({
+      state: 'working',
+      environmentInvestigation: {
+        attempts: 2,
+        maxAttempts: 2,
+        frameId: 'frame-1',
+        environmentId: 'env_1',
+        waitExtensions: 1,
+        attemptLog: [round],
+      },
+    })
+    graph.resetStepForRerun(s)
+
+    expect(s.environmentInvestigation?.attempts).toBe(0)
+    expect(s.environmentInvestigation?.waitExtensions).toBe(0)
+    expect(s.environmentInvestigation?.environmentId).toBeNull()
+    expect(s.environmentInvestigation?.maxAttempts).toBe(2)
+    expect(s.environmentInvestigation?.attemptLog).toEqual([round])
+  })
+
+  it('leaves a step that entered neither loop with no remediation state', () => {
+    const graph = new StepGraph(clock)
+    const s = step({ state: 'working' })
+    graph.resetStepForRerun(s)
+
+    expect([s.deployFix, s.environmentInvestigation]).toEqual([undefined, undefined])
   })
 })
 

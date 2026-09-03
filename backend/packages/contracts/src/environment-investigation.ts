@@ -334,7 +334,12 @@ export const environmentInvestigationConfigSchema: v.GenericSchema<
  * the deployer's next verdict and is nowhere in here on purpose.
  */
 export interface EnvironmentInvestigationAttempt {
-  /** 1-based round number. */
+  /**
+   * 1-based ordinal in this log. It matches `attempts` on a run that never loops back to the
+   * deployer, and diverges from it after one: the counter is re-armed for each provisioning cycle
+   * (`restartEnvironmentInvestigationState`) while these rows survive the whole run, being what
+   * the verification report reduces.
+   */
   attempt: number
   /** Epoch ms when the round settled. */
   at: number
@@ -379,8 +384,13 @@ export const environmentInvestigationAttemptSchema: v.GenericSchema<
 })
 
 /**
- * How many readiness-ceiling extensions a `wait` verdict may win, across the whole step. One: a
- * second would let a model postpone a run indefinitely, one ceiling at a time.
+ * How many readiness-ceiling extensions a `wait` verdict may win, per provisioning cycle of a
+ * `deployer` step. One: a second would let a model postpone a run indefinitely, one ceiling at a
+ * time.
+ *
+ * A loop-back to the deployer re-arms it (`restartEnvironmentInvestigationState`), because the
+ * ceiling it extended belonged to the environment that cycle superseded. That is not a way around
+ * the bound: a cycle is started by a person or a gate, never by the model.
  */
 export const MAX_ENVIRONMENT_WAIT_EXTENSIONS = 1
 

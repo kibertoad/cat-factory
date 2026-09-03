@@ -2,6 +2,7 @@ import * as v from 'valibot'
 import { mergeAssessmentSchema } from './merge.js'
 import { judgeDispositionSchema, judgeFindingSchema, judgeModelPinSchema } from './judge.js'
 import { documentFreshnessSchema, documentOriginSchema } from './documents.js'
+import { environmentFaultLayerSchema } from './environment-investigation.js'
 import { followUpItemKindSchema, followUpItemStatusSchema } from './followUp.js'
 import { requirementPrioritySchema, requirementStateSchema } from './spec.js'
 import { reproductionStatusSchema } from './reproduction.js'
@@ -338,6 +339,116 @@ export const prReportReproductionSchema = v.object({
 })
 export type PrReportReproduction = v.InferOutput<typeof prReportReproductionSchema>
 
+/**
+ * The `deploy-fixer` rounds one frame's failed provision was offered to: the loop that repairs a
+ * cause a checkout edit can address (`manifest_invalid`) and re-provisions.
+ *
+ * `completed` and `failed` are counted apart from `attempts` because they are the difference
+ * between two machine edits and two container jobs that died having changed nothing, and a bare
+ * round count reads as the first. `attempts - (completed + failed)` is a round still in flight,
+ * which is reachable: the pull request is open by the time the deployer runs, so a report can be
+ * published mid-loop.
+ *
+ * There is deliberately no "did the repair work" field, for the reason the loop's own state has
+ * none: whether the environment came up is the deployer's next verdict, and this section already
+ * states it on {@link prReportEnvironmentSchema}'s `status`.
+ */
+export const prReportDeployFixSchema = v.object({
+  /** Rounds DISPATCHED. */
+  attempts: v.number(),
+  /** The budget, frozen at the first escalation. Null when the loop recorded none. */
+  maxAttempts: v.optional(v.nullable(v.number())),
+  /** The classified provisioning cause that admitted the loop. */
+  reason: v.string(),
+  /** How many dispatched rounds the fixer's own job finished. */
+  completed: v.number(),
+  /** How many died without finishing, so that round changed nothing in the checkout. */
+  failed: v.number(),
+})
+export type PrReportDeployFix = v.InferOutput<typeof prReportDeployFixSchema>
+
+/**
+ * The ENVIRONMENT INVESTIGATION rounds one frame's failed provision was offered to: the other
+ * half of the same decision, run for every cause the fixer declined, and whose evidence is the
+ * provider rather than the repository.
+ *
+ * What travels is the DECISIONS. The investigator's `summary` is a paragraph and its `evidence` a
+ * cited list, and both belong to the run's own record rather than to a pull-request body; what a
+ * reviewer acts on is which layer was blamed, what the platform was asked to do, and what it did.
+ *
+ * Three fields carry that, and each is empty for a DIFFERENT reason, so none may stand in for
+ * another:
+ *
+ *  - `faultLayer` null means no round produced a verdict at all, and `failure` says why. It is
+ *    NOT the `unknown` layer, which is a verdict the investigator reached on evidence that did
+ *    not settle the question: "nobody looked" and "we looked and could not tell" send different
+ *    people to different places.
+ *  - `ranActions` empty means nothing was run, every round having recommended stopping or been
+ *    refused. A list rather than the last round's single action, because a run whose first round
+ *    restarted the workload and whose second concluded `stop` DID act, and reading the last round
+ *    alone would report it as a diagnosis nobody acted on.
+ *  - `withheld` is set when the last verdict asked for something the engine did not do: the
+ *    budget was spent, the deployment forbids acting, or the provider cannot perform it. Without
+ *    it a refused remedy and one that ran and did not help are the same row.
+ */
+export const prReportEnvironmentInvestigationSchema = v.object({
+  /** Rounds run. */
+  attempts: v.number(),
+  /** The budget, frozen at the first round. */
+  maxAttempts: v.optional(v.nullable(v.number())),
+  /** The layer the LAST verdict blamed; null when no round produced one. */
+  faultLayer: v.optional(v.nullable(environmentFaultLayerSchema)),
+  /**
+   * The remediation the LAST verdict asked for; null when there is no verdict.
+   *
+   * A plain string rather than the action union, for the reason the stored attempt log types its
+   * own copy that way: the vocabulary is closed and PERSISTED, so a member retired later is still
+   * sitting on a saved step, and a picklist here would fail this report's own response validation
+   * on the public read instead of naming what a human must re-pick.
+   */
+  action: v.optional(v.nullable(v.string())),
+  /** Every action the engine actually RAN, in round order. Empty ⇒ nothing was. */
+  ranActions: v.array(v.string()),
+  /** Why the last verdict's action was not run, when it was not. */
+  withheld: v.optional(v.nullable(v.string())),
+  /** The investigation's own failure, when the last round produced no verdict. */
+  failure: v.optional(v.nullable(v.string())),
+  /**
+   * How many readiness-ceiling extensions a `wait` verdict won. Non-zero is what accounts for a
+   * lifecycle whose bring-up ran past this deployment's configured ceiling; without it the dates
+   * in the timeline below cannot be reconciled with the ceiling, which is the one way an
+   * invisible remediation reads worse than none.
+   */
+  waitExtensions: v.number(),
+})
+export type PrReportEnvironmentInvestigation = v.InferOutput<
+  typeof prReportEnvironmentInvestigationSchema
+>
+
+/**
+ * What the platform TRIED about a frame's failed provision, as the decisions rather than the
+ * prose.
+ *
+ * Both loops live on the `deployer` step and neither reached this report before, so a run whose
+ * environment failed, was diagnosed, was restarted in place and then came up reported exactly
+ * what a run with no remediation loop at all reports. Present ⇒ at least one loop ran for this
+ * frame; absent ⇒ neither did, which is every clean provision and every failure whose cause
+ * admitted neither.
+ *
+ * It rides the per-frame ENTRY rather than the section because both loops are about one frame's
+ * provision and name that frame in their own state. Folded over every deployer step of the run
+ * and ACCUMULATED per frame, unlike the entry's `status`, which is the last deploy's outcome: a
+ * frame repaired by one deployer step and re-deployed cleanly by a later one was still
+ * machine-edited, and a last-wins fold would drop exactly the record this exists to keep.
+ */
+export const prReportEnvironmentRemediationSchema = v.object({
+  deployFix: v.optional(v.nullable(prReportDeployFixSchema)),
+  investigation: v.optional(v.nullable(prReportEnvironmentInvestigationSchema)),
+})
+export type PrReportEnvironmentRemediation = v.InferOutput<
+  typeof prReportEnvironmentRemediationSchema
+>
+
 /** One ephemeral environment the `deployer` step stood up (per service frame). */
 export const prReportEnvironmentSchema = v.object({
   /** The service frame the environment was provisioned for. */
@@ -346,6 +457,8 @@ export const prReportEnvironmentSchema = v.object({
   status: v.picklist(['ready', 'failed', 'skipped']),
   url: v.optional(v.nullable(v.string())),
   error: v.optional(v.nullable(v.string())),
+  /** What the platform tried about a failure. See {@link prReportEnvironmentRemediationSchema}. */
+  remediation: v.optional(v.nullable(prReportEnvironmentRemediationSchema)),
 })
 export type PrReportEnvironment = v.InferOutput<typeof prReportEnvironmentSchema>
 

@@ -58,6 +58,7 @@ export {
   assertChecks,
   check,
   checkCi,
+  checkEnvironmentRemediation,
   checkEphemeralEnvironment,
   checkMergeDecision,
   checkNotTruncated,

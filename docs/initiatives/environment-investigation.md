@@ -230,14 +230,58 @@ to one bullet. Three separate defects, filed together, all landed:
       time), for the environments whose provider says nothing useful. The STORED route proof is
       already in the bundle (slice 2b), which is the cheap half; this is the half that costs I/O on
       the failure path. Note the facade split: a Worker has neither.
+- [ ] **Git context on the diagnostics request, WITH a commit sha in it.** `describe` receives an
+      `EnvironmentStatusRequest` (`{ manifest, externalId, provisionFields, resolveSecret }`) while
+      `provision` gets a full `ProvisionContext` plus a `runRepo`, so a provider whose diagnostic
+      artifacts are addressed by commit (a deploy-job log route keyed on a sha) cannot reach them.
+      Reported downstream in [#2181](https://github.com/kibertoad/cat-factory/issues/2181), whose
+      work-around is to resolve a sha at provision time and keep it in `provisionFields`, where it
+      names an older run the moment the environment is redeployed for a newer commit.
+
+      The asymmetry is real and the remedy as filed does not close it: **`ProvisionContext` carries
+          no sha** (`kernel/src/ports/environment-provider.ts`), because nothing in the platform does.
+          `PullRequestRef` is `{ url, number?, branch? }`, the environment row records no git context,
+          and the deployer resolves a BRANCH and hands the deploy container a branch ref. Passing the
+          context through as it stands would hand a provider the branch it already captured. So this is
+          gated on `deployment-failure-remediation.md`'s slice 3 item of the same shape ("no commit sha
+          anywhere"), which is the prerequisite and not a detail: a sha has to be resolved and recorded
+          once, on the run, where the merge decision and the report can read it too.
+
+          Land the two together, not the context alone. An optional field on this port that no shipped
+          provider reads and that does not answer the case it was added for is the half-wired feature
+          CLAUDE.md's governing principle is about. `remediate` takes it on the same terms (its request
+          extends the status request), and it is a diagnostics-only addition: `status()` and
+          `teardown()` are also driven by the TTL sweep, which has no run in scope.
 
 ## Slice 4: surfacing
 
 - [ ] The investigation on the run-details surface. The evidence exists
       (`step.environmentInvestigation.attemptLog`) and only the recorded failure message reduces it
       today, so a reader gets the cause and not the rounds behind it.
-- [ ] The investigation in the PR verification report, alongside the deploy-fixer attempts that
-      the same slice of `deployment-failure-remediation.md` still owes.
+- [x] The investigation in the PR verification report, alongside the deploy-fixer attempts that
+      the same slice of `deployment-failure-remediation.md` owed:
+      `environments.entries[].remediation.investigation` carries the fault layer the last verdict
+      settled on, the action it asked for, every action the engine RAN, a withheld reason, the
+      investigation's own failure when a round produced no verdict, and the readiness-ceiling
+      extensions a `wait` won. Filed downstream as
+      [#2181](https://github.com/kibertoad/cat-factory/issues/2181), whose reporter needed it as
+      the only provider-neutral observable a headless acceptance suite could assert the loop on:
+      `@cat-factory/acceptance-kit`'s `checkEnvironmentRemediation` is that reduction.
+
+      Three things the shape settles, each of which a simpler one gets wrong. A null `faultLayer`
+          is "no round produced a verdict", never the `unknown` LAYER, which is a verdict reached on
+          evidence that did not settle the question. `ranActions` is a LIST, because a run whose first
+          round restarted the workload and whose second concluded `stop` did act, and a last-wins read
+          reports it as a diagnosis nobody acted on. And `waitExtensions` is carried because a granted
+          `wait` is the one remedy that leaves no trace anywhere else: the bring-up simply runs past
+          the configured ceiling, and the timeline beside it cannot be reconciled without it.
+
+          Fixing the loop-back reset was part of it: `environmentInvestigation` had no reset line at
+          all, so a looped-back deployer carried a SPENT `attempts` into its next failure. The first
+          round of the new cycle was refused as "the budget is spent" and the terminal failure was
+          explained by the verdict about the environment the re-provision had already superseded
+          (`restartEnvironmentInvestigationState`).
+
 - [ ] A per-step UI for `stepOptions.environmentInvestigation`, if and when `deployFix` gets one:
       the two are siblings and neither has one, so shipping one alone would be the odd surface.
 

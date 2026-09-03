@@ -4,6 +4,7 @@ import {
   assertChecks,
   check,
   checkCi,
+  checkEnvironmentRemediation,
   checkEphemeralEnvironment,
   checkMergeDecision,
   checkNotTruncated,
@@ -308,5 +309,80 @@ describe('retainedEnvironmentUrl', () => {
         withEnvironments('retained', [{ frameId: 'blk_1', status: 'failed', error: 'boom' }]),
       ),
     ).toBeNull()
+  })
+})
+
+describe('checkEnvironmentRemediation', () => {
+  /** A `failed` frame carrying whatever remediation record the case is about. */
+  function withRemediation(
+    remediation: NonNullable<
+      PrVerificationReport['environments']['entries'][number]['remediation']
+    >,
+  ): PrVerificationReport {
+    return report({
+      environments: {
+        ...report().environments,
+        status: 'reported',
+        entries: [{ frameId: 'blk_1', status: 'failed', error: 'never became ready', remediation }],
+      },
+    })
+  }
+
+  const investigated = {
+    investigation: {
+      attempts: 1,
+      maxAttempts: 2,
+      faultLayer: 'provider' as const,
+      action: 'restart',
+      ranActions: ['restart'],
+      waitExtensions: 0,
+    },
+  }
+
+  it('fails a run whose environment simply failed, with no loop ever entered', () => {
+    // The claim this suite exists to make. Before the report carried a remediation block, this
+    // shape and the one below were byte-identical, so the feature could not be asserted at all.
+    const checks = checkEnvironmentRemediation(
+      report({
+        environments: {
+          ...report().environments,
+          status: 'reported',
+          entries: [{ frameId: 'blk_1', status: 'failed', error: 'never became ready' }],
+        },
+      }),
+    )
+    expect(failed(checks).length).toBeGreaterThan(0)
+  })
+
+  it('passes a run the platform diagnosed and acted on', () => {
+    expect(failed(checkEnvironmentRemediation(withRemediation(investigated)))).toEqual([])
+  })
+
+  it('fails when the loop that ran is not the one the scenario is about', () => {
+    // The two loops are mutually exclusive by construction, so a suite covering the fixer must be
+    // able to say so: an investigation record would otherwise pass a check about machine edits.
+    expect(
+      failed(checkEnvironmentRemediation(withRemediation(investigated), 'deployFix')).length,
+    ).toBeGreaterThan(0)
+  })
+
+  it('fails an investigation that produced no verdict, rather than counting the rounds as proof', () => {
+    const checks = checkEnvironmentRemediation(
+      withRemediation({
+        investigation: {
+          attempts: 2,
+          maxAttempts: 2,
+          faultLayer: null,
+          ranActions: [],
+          waitExtensions: 0,
+          failure: 'the provider credentials could not be opened',
+        },
+      }),
+    )
+    expect(
+      failed(checks)
+        .map((entry) => entry.detail)
+        .join(),
+    ).toContain('credentials could not be opened')
   })
 })

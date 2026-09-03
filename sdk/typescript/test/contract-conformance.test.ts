@@ -438,6 +438,24 @@ expectMutuallyAssignable<
   v.InferOutput<typeof contracts.publicVisualConfirmPairSchema>
 >()
 
+// What the platform TRIED about a frame whose provision failed. Inlined under
+// `PrReportEnvironments` rather than hoisted, so the coverage guard cannot see it, and the
+// generated names are path-derived (`PrReportEnvironmentsEntryRemediationDeployFix`) where the
+// contracts' are not: pairing them here is the only place the two vocabularies are written down
+// together.
+expectMutuallyAssignable<
+  sdk.PrReportEnvironmentsEntryRemediation,
+  v.InferOutput<typeof contracts.prReportEnvironmentRemediationSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PrReportEnvironmentsEntryRemediationDeployFix,
+  v.InferOutput<typeof contracts.prReportDeployFixSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PrReportEnvironmentsEntryRemediationInvestigation,
+  v.InferOutput<typeof contracts.prReportEnvironmentInvestigationSchema>
+>()
+
 /** Every DTO asserted above. Compared against the spec so the list cannot fall behind. */
 const ASSERTED_COMPONENTS = [
   'ErrorResponse',
