@@ -533,3 +533,399 @@ describe('renderEnvironments', () => {
     expect(rendered).not.toContain('@everyone')
   })
 })
+
+// The REMEDIATION half: what the platform tried about a frame whose provision failed. Both loops
+// record on the deployer step and nothing reduced either into the report, so a run that failed,
+// was diagnosed, was restarted and then came up said exactly what a run with no loop wired says.
+describe('composeEnvironments: remediation', () => {
+  const failedFrame = {
+    frm_api: { status: 'failed' as const, error: 'namespace never became ready' },
+  }
+
+  /** One settled investigation round, defaulting to the shape the motivating incident had. */
+  function investigationRound(overrides: Record<string, unknown> = {}) {
+    return {
+      attempt: 1,
+      at: 5_000,
+      outcome: 'remediated',
+      error: 'namespace never became ready',
+      verdict: {
+        faultLayer: 'provider',
+        summary: 'The VM behind the environment went offline under a deploy job that succeeded.',
+        evidence: [{ source: 'provider.describe', statement: 'jobs[0].vm.status=offline' }],
+        action: 'restart',
+        actionRationale: 'The workload is the only thing that has to move.',
+      },
+      ranAction: 'restart',
+      ...overrides,
+    }
+  }
+
+  /** A settled `deploy-fixer` round. */
+  function fixRound(attempt: number, outcome: 'completed' | 'failed') {
+    return {
+      attempt,
+      at: attempt * 1_000,
+      outcome,
+      reason: 'manifest_invalid',
+      error: 'image "" is not a valid reference',
+      summary: outcome === 'completed' ? 'set the image tag' : null,
+    }
+  }
+
+  /** A deployer step whose own frame failed, carrying whatever loop state the case is about. */
+  function deployerWith(state: Record<string, unknown>): PipelineStep {
+    return step({
+      agentKind: 'deployer',
+      deployEnvs: failedFrame,
+      ...state,
+    } as unknown as Partial<PipelineStep> & { agentKind: string })
+  }
+
+  it('leaves the entry untouched when neither loop ran', () => {
+    const section = compose([deployed])
+
+    expect(section.entries.map((entry) => entry.remediation)).toEqual([undefined, undefined])
+  })
+
+  it('carries the fixer rounds, telling a job that finished from one that died', () => {
+    const section = compose([
+      deployerWith({
+        deployFix: {
+          phase: 'retrying',
+          attempts: 2,
+          maxAttempts: 2,
+          frameId: 'frm_api',
+          reason: 'manifest_invalid',
+          lastError: 'image "" is not a valid reference',
+          attemptLog: [fixRound(1, 'completed'), fixRound(2, 'failed')],
+        },
+      }),
+    ])
+
+    expect(section.entries[0]!.remediation?.deployFix).toEqual({
+      attempts: 2,
+      maxAttempts: 2,
+      cycles: 1,
+      reason: 'manifest_invalid',
+      completed: 1,
+      failed: 1,
+      droppedRounds: 0,
+    })
+  })
+
+  it('carries the verdict, what ran, and the extensions a `wait` won', () => {
+    const section = compose([
+      deployerWith({
+        environmentInvestigation: {
+          attempts: 2,
+          maxAttempts: 2,
+          frameId: 'frm_api',
+          waitExtensions: 1,
+          attemptLog: [
+            investigationRound({
+              verdict: { ...investigationRound().verdict, action: 'wait' },
+              ranAction: 'wait',
+            }),
+            investigationRound({ attempt: 2 }),
+          ],
+        },
+      }),
+    ])
+
+    expect(section.entries[0]!.remediation?.investigation).toEqual({
+      attempts: 2,
+      maxAttempts: 2,
+      cycles: 1,
+      droppedRounds: 0,
+      faultLayer: 'provider',
+      action: 'restart',
+      ranActions: ['wait', 'restart'],
+      withheld: null,
+      failure: null,
+      waitExtensions: 1,
+    })
+  })
+
+  it('keeps an earlier round that ACTED rather than reporting only the last verdict', () => {
+    const section = compose([
+      deployerWith({
+        environmentInvestigation: {
+          attempts: 2,
+          maxAttempts: 2,
+          frameId: 'frm_api',
+          attemptLog: [
+            investigationRound(),
+            investigationRound({
+              attempt: 2,
+              outcome: 'reported',
+              verdict: { ...investigationRound().verdict, action: 'stop' },
+              ranAction: null,
+            }),
+          ],
+        },
+      }),
+    ])
+    const investigation = section.entries[0]!.remediation?.investigation
+
+    // The last round asked for nothing, and a last-wins read would report a diagnosis nobody
+    // acted on, of an environment the platform had already restarted.
+    expect(investigation?.ranActions).toEqual(['restart'])
+    expect(investigation?.action).toBe('stop')
+  })
+
+  it('states a round that produced no verdict rather than reporting the `unknown` layer', () => {
+    const section = compose([
+      deployerWith({
+        environmentInvestigation: {
+          attempts: 1,
+          maxAttempts: 2,
+          frameId: 'frm_api',
+          attemptLog: [
+            {
+              attempt: 1,
+              at: 5_000,
+              outcome: 'failed',
+              error: 'namespace never became ready',
+              failure: 'the provider credentials could not be opened',
+            },
+          ],
+        },
+      }),
+    ])
+    const investigation = section.entries[0]!.remediation?.investigation
+
+    // `unknown` is a verdict the investigator REACHED; this is the absence of one, and the two
+    // send different people to different places.
+    expect(investigation?.faultLayer).toBeNull()
+    expect(investigation?.failure).toBe('the provider credentials could not be opened')
+    expect(investigation?.ranActions).toEqual([])
+  })
+
+  it('names a refused remedy so it never reads as one that ran and did not help', () => {
+    const section = compose([
+      deployerWith({
+        environmentInvestigation: {
+          attempts: 1,
+          maxAttempts: 1,
+          frameId: 'frm_api',
+          attemptLog: [
+            investigationRound({
+              outcome: 'reported',
+              ranAction: null,
+              withheld: 'This deployment does not allow the platform to act on an environment.',
+            }),
+          ],
+        },
+      }),
+    ])
+    const investigation = section.entries[0]!.remediation?.investigation
+
+    expect(investigation?.action).toBe('restart')
+    expect(investigation?.ranActions).toEqual([])
+    expect(investigation?.withheld).toContain('does not allow')
+  })
+
+  it('accumulates across deployer steps rather than letting the last deploy win', () => {
+    // A frame the fixer repaired, then re-deployed cleanly by a later deployer step. The entry's
+    // status is the CLEAN one; the record of the machine edit has to survive it.
+    const repaired = deployerWith({
+      deployFix: {
+        phase: 'retrying',
+        attempts: 1,
+        maxAttempts: 2,
+        frameId: 'frm_api',
+        reason: 'manifest_invalid',
+        lastError: 'e',
+        attemptLog: [fixRound(1, 'completed')],
+      },
+    })
+    const redeployed = step({
+      agentKind: 'deployer',
+      deployEnvs: { frm_api: { status: 'ready', url: 'https://env.test' } },
+    })
+    const section = compose([repaired, redeployed])
+
+    expect(section.entries[0]!.status).toBe('ready')
+    expect(section.entries[0]!.remediation?.deployFix).toMatchObject({ attempts: 1, completed: 1 })
+  })
+
+  it('renders the attempted remediation under the outcomes table', () => {
+    const rendered = renderEnvironments(
+      compose([
+        deployerWith({
+          deployFix: {
+            phase: 'retrying',
+            attempts: 1,
+            maxAttempts: 2,
+            frameId: 'frm_api',
+            reason: 'manifest_invalid',
+            lastError: 'e',
+            attemptLog: [fixRound(1, 'failed')],
+          },
+          environmentInvestigation: {
+            attempts: 1,
+            maxAttempts: 2,
+            frameId: 'frm_api',
+            waitExtensions: 1,
+            attemptLog: [investigationRound()],
+          },
+        }),
+      ]),
+    ).join('\n')
+
+    expect(rendered).toContain('**Remediation attempted**')
+    expect(rendered).toContain(
+      '1 of 2 repair round(s) for `manifest_invalid` (1 died without finishing)',
+    )
+    expect(rendered).toContain('fault: `provider`')
+    expect(rendered).toContain('ran: `restart`')
+    expect(rendered).toContain('readiness ceiling extended 1')
+  })
+
+  it('counts the rounds off the run-long log, never the counter a loop-back re-armed', () => {
+    // Two rounds ran, a human-test gate rebuilt the environment, and the new cycle has spent
+    // nothing yet. Reading the live counter reported "0 of 2 repair round(s) (2 finished)", an
+    // in-flight count of minus two, on exactly the loop-back this section exists to report.
+    const section = compose([
+      deployerWith({
+        deployFix: {
+          phase: 'retrying',
+          attempts: 0,
+          cycle: 1,
+          maxAttempts: 2,
+          frameId: 'frm_api',
+          reason: 'manifest_invalid',
+          lastError: 'image "" is not a valid reference',
+          attemptLog: [fixRound(1, 'completed'), fixRound(2, 'completed')],
+        },
+      }),
+    ])
+
+    expect(section.entries[0]!.remediation?.deployFix).toMatchObject({
+      attempts: 2,
+      completed: 2,
+      failed: 0,
+      cycles: 2,
+    })
+  })
+
+  it('never renders more rounds than the budget it prints them against', () => {
+    // Two deployer steps, each spending its own two-round budget on the same frame. `attempts`
+    // accumulates and `maxAttempts` is per CYCLE, so the ratio form would read "4 of 2" and tell
+    // a reviewer the bound is not enforced.
+    const spender = (attempt: number) =>
+      deployerWith({
+        deployFix: {
+          phase: 'retrying',
+          attempts: 2,
+          maxAttempts: 2,
+          frameId: 'frm_api',
+          reason: 'manifest_invalid',
+          lastError: 'e',
+          attemptLog: [fixRound(attempt, 'completed'), fixRound(attempt + 1, 'completed')],
+        },
+      })
+    const rendered = renderEnvironments(compose([spender(1), spender(3)])).join('\n')
+
+    expect(rendered).toContain('4 repair round(s) over 2 provisioning cycles (2 per cycle)')
+    expect(rendered).not.toContain('4 of 2')
+  })
+
+  it('reads every decision off the ONE round that made it, across deployer steps', () => {
+    // A refusal belongs to the decision it refused. Falling back to an earlier step's `withheld`
+    // reported a remedy as blocked that the later step in fact RAN, and an earlier step's
+    // `failure` beside a fresh verdict reported an investigation that had since succeeded.
+    const refused = deployerWith({
+      environmentInvestigation: {
+        attempts: 2,
+        maxAttempts: 2,
+        frameId: 'frm_api',
+        attemptLog: [
+          investigationRound({
+            outcome: 'reported',
+            ranAction: null,
+            withheld: 'This deployment does not allow the platform to act on an environment.',
+          }),
+          {
+            attempt: 2,
+            at: 6_000,
+            outcome: 'failed',
+            error: 'namespace never became ready',
+            failure: 'the provider credentials could not be opened',
+          },
+        ],
+      },
+    })
+    const acted = deployerWith({
+      environmentInvestigation: {
+        attempts: 1,
+        maxAttempts: 2,
+        frameId: 'frm_api',
+        attemptLog: [investigationRound({ attempt: 3, at: 9_000 })],
+      },
+    })
+    const investigation = compose([refused, acted]).entries[0]!.remediation?.investigation
+
+    expect(investigation?.ranActions).toEqual(['restart'])
+    expect(investigation?.withheld).toBeNull()
+    expect(investigation?.failure).toBeNull()
+  })
+
+  it('lists a frame whose outcome a loop CLEARED, rather than reporting nothing was attempted', () => {
+    // Both loops clear the frame's recorded outcome to make the re-provision happen. A report
+    // composed in that window (the run was abandoned, timed out, or failed at another step) read
+    // as a deployer that recorded nothing at all, on a run where the platform demonstrably acted.
+    const section = compose([
+      step({
+        agentKind: 'deployer',
+        deployEnvs: {},
+        environmentInvestigation: {
+          attempts: 1,
+          maxAttempts: 2,
+          frameId: 'frm_api',
+          attemptLog: [investigationRound()],
+        },
+      } as unknown as Partial<PipelineStep> & { agentKind: string }),
+    ])
+
+    expect(section.status).toBe('reported')
+    expect(section.entries[0]).toMatchObject({ frameId: 'frm_api', status: 'unsettled' })
+    expect(section.entries[0]!.remediation?.investigation?.ranActions).toEqual(['restart'])
+    expect(section.gaps.some((gap) => gap.includes('no settled provisioning outcome'))).toBe(true)
+  })
+
+  it('folds a multi-line refusal into its bullet rather than spilling it into the body', () => {
+    // `withheld` and `failure` carry a provider's own words, which are routinely multi-line. A
+    // raw newline ends the list item and lands the tail in a public pull-request body as prose.
+    const rendered = renderEnvironments(
+      compose([
+        deployerWith({
+          environmentInvestigation: {
+            attempts: 1,
+            maxAttempts: 1,
+            frameId: 'frm_api',
+            attemptLog: [
+              investigationRound({
+                outcome: 'reported',
+                ranAction: null,
+                withheld: 'the provider refused:\nError from server (Forbidden)\nnamespaces',
+              }),
+            ],
+          },
+        }),
+      ]),
+    ).join('\n')
+    const bullet = rendered.split('\n').find((line) => line.includes('withheld:'))
+
+    expect(bullet).toContain('Error from server (Forbidden)')
+    expect(bullet).toContain('namespaces')
+    expect(rendered).not.toMatch(/^namespaces/m)
+  })
+
+  it('says nothing about remediation when nothing was attempted', () => {
+    const rendered = renderEnvironments(compose([deployed, uiTester()])).join('\n')
+
+    expect(rendered).not.toContain('Remediation attempted')
+  })
+})

@@ -59,8 +59,21 @@ export type DeployFixConfig = v.InferOutput<typeof deployFixConfigSchema>
  * teardown probe and the bugfix reproduction proof are built on.
  */
 export const deployFixAttemptSchema = v.object({
-  /** 1-based attempt number (matches `attempts` when the fixer was dispatched). */
+  /**
+   * 1-based ordinal in this log. It matches `attempts` on a run that never loops back to the
+   * deployer, and diverges from it after one: the counter is re-armed for each provisioning cycle
+   * (`restartDeployFixState`) while these rows survive the whole run, being what the verification
+   * report reduces.
+   */
   attempt: v.number(),
+  /**
+   * The 0-based provisioning CYCLE this round was dispatched in. A loop-back to the deployer
+   * re-arms the budget and opens a new cycle (`restartDeployFixState`) while these rows
+   * survive the whole run, so the marker is what tells a reader which rounds were counted
+   * against the LIVE budget and how many cycles the log spans. Absent on a row written before
+   * the field existed, which reads as cycle 0, the only cycle such a run had reached.
+   */
+  cycle: v.optional(v.nullable(v.number())),
   /** Epoch ms when the fixer job settled. */
   at: v.number(),
   /** Whether the fixer's own job completed or died without finishing. */
@@ -98,7 +111,32 @@ export const deployFixStateSchema = v.object({
   reason: v.string(),
   /** The provisioning error the in-flight round was handed. */
   lastError: v.string(),
-  /** Per-round history; see {@link deployFixAttemptSchema}. */
+  /**
+   * The 0-based provisioning cycle now running, bumped by `restartDeployFixState`. It is
+   * what {@link deployFixAttemptSchema}'s own `cycle` is stamped from, and what scopes a read of
+   * the run-long log back to the rounds the live budget was spent on.
+   */
+  cycle: v.optional(v.nullable(v.number())),
+  /**
+   * Per-round history, newest last, CAPPED at {@link MAX_DEPLOY_FIX_ATTEMPT_LOG}. The log
+   * survives the whole run (the verification report reduces it) while the state rides the run's
+   * `detail` JSON, which is re-serialized on every step write, so an uncapped log would grow
+   * with every loop-back for the rest of the run. See {@link droppedAttempts}.
+   */
   attemptLog: v.optional(v.nullable(v.array(deployFixAttemptSchema))),
+  /**
+   * How many of the oldest rounds the {@link attemptLog} cap has dropped. Recorded rather than
+   * silently truncated: the report counts finished and died rounds off the surviving rows, so a
+   * dropped one would otherwise turn into a round that reads as never having run.
+   */
+  droppedAttempts: v.optional(v.nullable(v.number())),
 })
 export type DeployFixState = v.InferOutput<typeof deployFixStateSchema>
+
+/**
+ * How many `deploy-fixer` rounds the run-long {@link deployFixStateSchema.entries.attemptLog}
+ * keeps. Four times the per-cycle ceiling of 5, so only a run that looped its deployer back
+ * several times over reaches it, and what it then drops is the oldest cycle rather than the one
+ * a reader is looking at.
+ */
+export const MAX_DEPLOY_FIX_ATTEMPT_LOG = 20

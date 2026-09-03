@@ -111,6 +111,93 @@ export function retainedEnvironmentUrl(report: PrVerificationReport): string | n
 }
 
 /**
+ * An unhealthy environment was INVESTIGATED and acted on, not merely failed.
+ *
+ * The claim this reduction exists for is the negative one: before the report carried a
+ * `remediation` block, a run whose environment failed, was diagnosed, was restarted in place and
+ * then came up was indistinguishable from one that fell over with no remediation loop wired at
+ * all. There was nothing provider-neutral to assert on, so the feature was unfalsifiable from
+ * outside the deployment that ran it.
+ *
+ * Both halves are checked and neither is the other: the deploy-fixer repairs a cause a checkout
+ * edit can address and the investigation covers every cause it declines. The two are exclusive
+ * per FAILURE and not per run, though: a frame whose first failure the fixer repaired can time
+ * out on the re-provision and be investigated, and the report accumulates both onto one entry.
+ * Pass `expect` to say which this scenario is about; the default accepts either, which is what a
+ * suite covering "something was tried" wants.
+ *
+ * Deliberately NOT "the remedy worked". That is the deployer's next verdict, which
+ * {@link checkEphemeralEnvironment} already reads off `entries[].status`, and the report has no
+ * field for it on purpose: the platform never takes a model's account of its own remedy.
+ */
+export function checkEnvironmentRemediation(
+  report: PrVerificationReport,
+  expect: 'either' | 'deployFix' | 'investigation' = 'either',
+): Check[] {
+  const remediated = report.environments.entries.filter((entry) => entry.remediation)
+  const fixes = remediated.filter((entry) => entry.remediation?.deployFix)
+  const investigations = remediated.filter((entry) => entry.remediation?.investigation)
+  const wanted =
+    expect === 'deployFix' ? fixes : expect === 'investigation' ? investigations : remediated
+  const checks: Check[] = [
+    check(
+      expect === 'either'
+        ? 'the platform attempted a remediation on a frame whose provision failed'
+        : `the platform ran the ${expect === 'deployFix' ? 'deploy-fixer' : 'environment investigation'} loop`,
+      wanted.length > 0,
+      wanted.length > 0
+        ? wanted.map(describeRemediation).join('; ')
+        : `no frame carries a ${expect === 'either' ? 'remediation' : expect} record` +
+            ` (${report.environments.entries.length} frame(s) reported)`,
+    ),
+  ]
+  // A diagnosis that reached no verdict is a real outcome and a different one: the rounds ran and
+  // produced nothing to act on, which reads as a healthy provider unless it is named.
+  //
+  // Scoped to what the caller ASKED about. A `deployFix` scenario can carry an investigation too
+  // (the fixer's re-provision then timed out), and grading it on a verdict it never claimed makes
+  // the suite go red on a fact about a different loop.
+  const scrutinised = expect === 'deployFix' ? [] : investigations
+  for (const entry of scrutinised) {
+    const investigation = entry.remediation?.investigation
+    if (!investigation) continue
+    checks.push(
+      check(
+        `the investigation of \`${entry.frameId}\` settled on a fault layer`,
+        Boolean(investigation.faultLayer),
+        investigation.faultLayer
+          ? `faultLayer=${investigation.faultLayer}, asked=${investigation.action ?? 'null'}`
+          : `no verdict after ${investigation.attempts} round(s): ${investigation.failure ?? '(the report gave no reason)'}`,
+      ),
+    )
+  }
+  return checks
+}
+
+function describeRemediation(
+  entry: PrVerificationReport['environments']['entries'][number],
+): string {
+  const { deployFix, investigation } = entry.remediation ?? {}
+  const parts = [`${entry.frameId} (${entry.status})`]
+  if (deployFix) {
+    parts.push(
+      `deploy-fixer: ${deployFix.attempts} round(s) for ${deployFix.reason}` +
+        `, ${deployFix.completed} finished / ${deployFix.failed} died`,
+    )
+  }
+  if (investigation) {
+    parts.push(
+      `investigation: ${investigation.attempts} round(s)` +
+        `, fault=${investigation.faultLayer ?? 'none'}` +
+        `, ran=[${investigation.ranActions.join(', ')}]` +
+        (investigation.withheld ? `, withheld: ${investigation.withheld}` : '') +
+        (investigation.waitExtensions ? `, ceiling extended ${investigation.waitExtensions}×` : ''),
+    )
+  }
+  return parts.join(' | ')
+}
+
+/**
  * The bugfix run proved the defect: RED on the pre-fix tree, GREEN on the pushed tree.
  *
  * Only `reproduced` is proof. The other two verdicts are honest outcomes the platform is

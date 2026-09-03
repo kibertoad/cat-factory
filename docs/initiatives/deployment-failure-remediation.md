@@ -148,9 +148,24 @@ Still open in this slice:
       a fixer at the exact failure this feature exists to keep it away from. The fix is the deploy
       harness reporting a cause on its own outcome channel (an image bump), after which the pipe
       above already carries it.
-- [ ] Every attempt on the record in the PR verification report and the run outcome summary, so a
-      human reviewing the PR sees that deployment files were machine-edited and why. The evidence
-      exists (`step.deployFix.attemptLog`); nothing reduces it into either surface yet.
+- [x] Every attempt on the record in the PR verification report, so a human reviewing the PR sees
+      that deployment files were machine-edited and why:
+      `environments.entries[].remediation.deployFix` carries the rounds, the frozen budget, the
+      classified cause, and the split between rounds whose job FINISHED and rounds that died
+      having changed nothing (a bare count reads as the first). Filed downstream as
+      [#2181](https://github.com/kibertoad/cat-factory/issues/2181), landed with the
+      investigation's half of the same section. It also needed the loop-back reset fixed:
+      `resetStepForRerun` dropped the whole of `deployFix`, so a frame the fixer had edited before
+      a `human-test` loop-back reported as one nothing was ever attempted on. The counters are now
+      re-armed per provisioning CYCLE and the attempt log survives the RUN
+      (`restartDeployFixState`), each row carrying the cycle that ran it so the report can state
+      how many cycles the rounds span instead of printing a run-long count against a per-cycle
+      budget. The log is capped and counts what it drops, since it rides the run's CAS'd blob.
+- [ ] The run outcome summary is deliberately NOT the second home for it. That section answers one
+      question in product language, "is there something running to click", and a fault layer plus a
+      withheld action is operator-facing engineering detail a non-code reader cannot act on. If a
+      surface is wanted for a person rather than a reviewer it is the run-details panel, which is
+      `environment-investigation.md`'s slice 4.
 - [ ] Server-side apply does not prune: a resource the fixer DELETES from the manifests stays live
       in the namespace and can keep serving the environment. Either prune by field manager or state
       plainly that it does not.
@@ -172,7 +187,13 @@ Each of these makes the classification sharper; none blocks slice 2.
       `image: "{{image}}"` is the difference between "edit this file" and "do not touch this file".
 - [ ] The provider error reaches the debug overview and the provisioning log truncated mid-JSON.
 - [ ] No commit sha anywhere: `PullRequestRef` is `{ url, number?, branch? }`. A repair that needs
-      a sha-tagged image needs the sha added to the platform first.
+      a sha-tagged image needs the sha added to the platform first. A SECOND consumer of the same
+      gap has since arrived from outside: a provider whose diagnostic artifacts are addressed by
+      commit cannot fetch them, because there is no sha to hand its `describe`
+      ([#2181](https://github.com/kibertoad/cat-factory/issues/2181), tracked as the paired item in
+      `environment-investigation.md` slice 3, which is gated on this one). That makes the sha a
+      run-level fact rather than a fixer input: resolve and record it ONCE, where the diagnostics
+      request, the merge decision and the verification report can all read it.
 
 ## Slice 4 — write-path scope
 

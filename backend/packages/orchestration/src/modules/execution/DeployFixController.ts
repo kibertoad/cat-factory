@@ -15,10 +15,12 @@ import {
   DEFAULT_DEPLOY_FIX_MAX_ATTEMPTS,
   DEPLOY_FIXER_AGENT_KIND,
   isRepoFixableEnvironmentFailure,
+  MAX_DEPLOY_FIX_ATTEMPT_LOG,
 } from '@cat-factory/contracts'
 import { DEPLOY_FAILURE_PRIOR_KIND } from '@cat-factory/agents'
 import type { AdvanceResult } from './advance.js'
 import type { AgentContextBuilder } from './AgentContextBuilder.js'
+import { appendAttemptLog } from './deployer.logic.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import type { RunStateMachine } from './RunStateMachine.js'
 import { recordDispatchAttribution } from './step-fold.logic.js'
@@ -273,7 +275,16 @@ export class DeployFixController {
     if (fix?.phase !== 'fixing') return null
 
     const attempt: DeployFixAttempt = {
-      attempt: fix.attempts,
+      // Numbered off the LOG rather than the live counter, so the ordinals stay monotonic across
+      // a loop-back: the counter is re-armed per provisioning cycle and the log survives the run
+      // (`restartDeployFixState`), so reading the counter would number a second cycle's first
+      // round `1` beside the row already holding that number. Identical on a run that never
+      // loops back, where each dispatch settles into exactly one row. The rounds the log CAP has
+      // dropped are counted in too, or the ordinals would restart under a capped log.
+      attempt: (fix.attemptLog?.length ?? 0) + (fix.droppedAttempts ?? 0) + 1,
+      // Which provisioning cycle spent it, so a reader of the run-long log can tell the rounds
+      // this cycle's budget covers from a superseded environment's.
+      cycle: fix.cycle ?? 0,
       at: this.deps.clock.now(),
       outcome: update.state === 'done' ? 'completed' : 'failed',
       reason: fix.reason,
@@ -286,7 +297,7 @@ export class DeployFixController {
     step.deployFix = {
       ...fix,
       phase: 'retrying',
-      attemptLog: [...(fix.attemptLog ?? []), attempt],
+      ...appendAttemptLog(fix.attemptLog, attempt, MAX_DEPLOY_FIX_ATTEMPT_LOG, fix.droppedAttempts),
     }
     // Drop the handle so a replay re-attaches to nothing and the deployer's own re-entry is not
     // mistaken for a re-attach. The container RECORD is left as the deploy path maintains it: the

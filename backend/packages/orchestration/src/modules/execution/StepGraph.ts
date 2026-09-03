@@ -1,6 +1,7 @@
 import type { Clock, ExecutionInstance, PipelineStep } from '@cat-factory/kernel'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import { companionTargets } from '@cat-factory/agents'
+import { restartDeployFixState, restartEnvironmentInvestigationState } from './deployer.logic.js'
 import { restartRalphState } from './ralph.logic.js'
 
 /**
@@ -135,12 +136,17 @@ export class StepGraph {
     // A stale readiness wait would park the re-run on the SUPERSEDED environment's id — polling,
     // and then reporting on, an environment this attempt never provisioned.
     step.deployWait = undefined
-    // The remediation budget goes with the fan-out state it belongs to. A re-run provisions from
-    // scratch, so it is a fresh failure if it fails, and carrying the spent `attempts` across would
-    // send its FIRST failure straight to the give-up: a `deploy_blocked` card raised with zero
-    // repair rounds actually run. `phase` matters as much as the counter, since a stale `fixing`
-    // routes the re-run's deploy job to the agent poller that never dispatched it.
-    step.deployFix = undefined
+    // Re-arm BOTH remediation loops for a fresh provisioning cycle, keeping the rounds already on
+    // the record: the counters are per cycle and the attempt log is per RUN, because the run's
+    // verification report reduces it. Dropping the whole of `deployFix` (what this used to do)
+    // made a frame the fixer had machine-edited before a loop-back report as one nothing was ever
+    // attempted on; leaving `environmentInvestigation` untouched (what this used to do) sent the
+    // re-run's first failure straight to "the budget is spent", explained by the SUPERSEDED
+    // environment's verdict. Why each field survives or goes: `deployer.logic.ts`.
+    step.deployFix = restartDeployFixState(step.deployFix)
+    step.environmentInvestigation = restartEnvironmentInvestigationState(
+      step.environmentInvestigation,
+    )
     // Re-seed a `ralph` step's loop state: unlike the fields above it must NOT be dropped (a
     // ralph step with no state dispatches with no completion command and silently degrades to a
     // one-shot coder), but keeping it as-is is just as wrong — a spent `attempts` would send the

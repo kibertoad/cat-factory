@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { DEPLOYER_AGENT_KIND } from '@cat-factory/integrations'
 import type { PipelineStep, ServiceProvisioning } from '@cat-factory/kernel'
 import {
+  appendAttemptLog,
   decideDeployerConfig,
   deployerServiceConfigIssues,
   deployDispatchEpoch,
@@ -238,5 +239,28 @@ describe('decideDeployerConfig', () => {
         handlerResolution: ok,
       }),
     ).toEqual(ok)
+  })
+})
+
+describe('appendAttemptLog', () => {
+  const round = (attempt: number) => ({ attempt })
+
+  it('keeps every round while the log is within its cap', () => {
+    const first = appendAttemptLog(undefined, round(1), 3, undefined)
+    const second = appendAttemptLog(first.attemptLog, round(2), 3, first.droppedAttempts)
+
+    expect(second).toEqual({ attemptLog: [round(1), round(2)], droppedAttempts: 0 })
+  })
+
+  it('drops the OLDEST round past the cap and counts what went', () => {
+    // The logs survive the whole run inside the compare-and-swapped run blob, so an uncapped one
+    // grows with every loop-back. The drop is counted because the verification report reduces the
+    // surviving rows: a silently dropped round reads as one that never ran.
+    let state = { attemptLog: [round(1), round(2)] as { attempt: number }[], droppedAttempts: 0 }
+    state = appendAttemptLog(state.attemptLog, round(3), 2, state.droppedAttempts)
+    expect(state).toEqual({ attemptLog: [round(2), round(3)], droppedAttempts: 1 })
+
+    state = appendAttemptLog(state.attemptLog, round(4), 2, state.droppedAttempts)
+    expect(state).toEqual({ attemptLog: [round(3), round(4)], droppedAttempts: 2 })
   })
 })
