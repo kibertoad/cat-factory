@@ -5,7 +5,9 @@
 // once reached npm as shells; `prepublishOnly` now rebuilds on publish, this is the CI
 // backstop). Three layers, run over every non-private workspace package after `pnpm build`:
 //   1. Empty-shell guard: every file that `main`/`types`/`bin`/`exports` points at exists
-//      and is non-empty.
+//      and is non-empty, PLUS a files-payload guard: every concrete path the `files` list
+//      declares would publish content. The second is what covers `@cat-factory/app`, whose
+//      payload no entry point names (rationale: `publish-payload.mjs`).
 //   2. publint: the package.json publish contract (files/exports/type shape) is coherent.
 //   3. attw --pack --profile esm-only: the *packed tarball*'s types resolve for node16-ESM
 //      and bundler consumers (every package here is ESM-only, so the node10/CJS resolutions
@@ -20,6 +22,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { publint } from 'publint'
 import { formatMessage } from 'publint/utils'
+import { findMissingPayload } from './publish-payload.mjs'
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -164,7 +167,7 @@ const problems = []
 // files more verbosely, so it's skipped for exactly these (and only these) below.
 const shellFailed = new Set()
 
-// 1. Empty-shell guard + 2. publint (in-process API, one pass over all packages).
+// 1. Empty-shell + files-payload guards + 2. publint (in-process API, one pass over all packages).
 for (const { relDir, pkg } of packages) {
   for (const entryFile of collectEntryFiles(pkg)) {
     const abs = join(repoRoot, relDir, entryFile)
@@ -183,6 +186,15 @@ for (const { relDir, pkg } of packages) {
         `${pkg.name}: entry point ${entryFile} ${why} — the package would publish as an empty shell. Run \`pnpm build\` first; if dist/ is built, the exports map is wrong.`,
       )
     }
+  }
+
+  // A missing declared payload does NOT join `shellFailed`: a gone `migrations/` or `i18n/`
+  // says nothing about whether the packed tarball's types resolve, and suppressing attw for it
+  // would let one problem hide the other.
+  for (const { entry, why } of findMissingPayload(join(repoRoot, relDir), pkg)) {
+    problems.push(
+      `${pkg.name}: files entry ${entry} ${why}: the package would publish without the payload it declares. Run \`pnpm build\` first; if the tree is built, the \`files\` list names a path that is gone.`,
+    )
   }
 
   const { messages } = await publint({ pkgDir: join(repoRoot, relDir) })
@@ -218,5 +230,5 @@ if (problems.length > 0) {
 }
 
 console.log(
-  `check-publish-integrity: all ${packages.length} publishable packages ship coherent artifacts (entries exist, publint clean, attw clean). ✅`,
+  `check-publish-integrity: all ${packages.length} publishable packages ship coherent artifacts (entries and declared payloads exist, publint clean, attw clean). ✅`,
 )
