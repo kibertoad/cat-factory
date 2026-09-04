@@ -32,15 +32,15 @@
     "precompile:templates": "node scripts/precompile-prompts.mjs"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^4.0.46",
-    "@ai-sdk/openai": "^4.0.52",
-    "@ai-sdk/openai-compatible": "^3.0.41",
-    "@ai-sdk/provider": "^4.0.9",
+    "@ai-sdk/anthropic": "^4.0.49",
+    "@ai-sdk/openai": "^4.0.57",
+    "@ai-sdk/openai-compatible": "^3.0.43",
+    "@ai-sdk/provider": "^4.0.10",
     "@cat-factory/contracts": "workspace:*",
     "@cat-factory/kernel": "workspace:*",
     "@cat-factory/prompt-fragments": "workspace:*",
     "@openrouter/ai-sdk-provider": "^3.0.0",
-    "ai": "^7.0.85",
+    "ai": "^7.0.91",
     "handlebars": "^4.7.9",
     "p-map": "^7.0.7",
     "valibot": "^1.4.2"

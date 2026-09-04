@@ -30,13 +30,17 @@ const back = useIntegrationBack(open)
 // Popular slugs offered by "Enable recommended" — these mirror the curated `openrouter`
 // refs in the backend MODEL_CATALOG. Only the ones present in the live browse list are
 // ticked, so a recommendation never enables a slug OpenRouter doesn't actually serve.
+// The contributor tier of Muse Spark is deliberately absent: it is cheaper because Meta
+// trains on the traffic, and a one-click "enable recommended" is the wrong place to make
+// that trade on somebody's behalf.
 const RECOMMENDED_SLUGS = [
-  'anthropic/claude-fable-5',
+  'anthropic/claude-fable-5.1',
   'anthropic/claude-opus-5',
   'openai/gpt-5.6-sol',
   'openai/gpt-5.6-terra',
   'google/gemini-3.1-pro-preview',
-  'google/gemini-3.6-flash',
+  'google/gemini-3.8-flash',
+  'meta/muse-spark-1.3',
   'deepseek/deepseek-v4-flash',
   'moonshotai/kimi-k2.7-code',
   'z-ai/glm-5.2',
