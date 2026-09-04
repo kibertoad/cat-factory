@@ -255,11 +255,16 @@ So a large-codebase expedition opens with a **scout**: ONE bounded inline tool l
 `RepoFiles`, the shape `MonorepoAdoptionAdvisorService` already runs for the bootstrap adoption
 survey (a call ceiling plus a character ceiling, temperature 0, tools withdrawn on the final step
 so it must answer, every failure TOLD to the model rather than thrown, the transcript filed through
-the inline recorder with the run in scope). It is handed the territory manifest up front, so its
-reads are the entry points and a few hotspots rather than a walk, and its cost does not scale with
-the size of the repo it lands in. It returns, per territory: the hotspots (paths and one line of
-why), a relevance rating per angle with a reason, and the **seams**: the files where territories
-meet (shared types, cross-module calls, persisted shapes read by more than one). It reports no
+the inline recorder with the run in scope). It is handed the territory DESCRIPTORS and each
+territory's top-level listing up front, never the full file list (thirty territories of several
+hundred files each is a prompt the size of the problem it is meant to shrink), so its reads are
+the entry points and a few hotspots rather than a walk, and its cost does not scale with the size
+of the repo it lands in. It returns, per territory: the hotspots (paths and one line of why,
+capped per territory), a relevance rating per angle with a one-line reason, and the **seams**: the
+files where territories meet (shared types, cross-module calls, persisted shapes read by more than
+one), capped as a whole. The caps are stated in the prompt and enforced at coercion, the way the
+finding cap is: a scout that exceeds one has its overflow dropped and the plan says so, because on
+a big service the scout's own answer is otherwise the first thing to explode. It reports no
 findings; it draws a map. The existing explorer port is monorepo-and-template specific (`side`,
 prefixed keys); the scout generalises its shape into a `RepoExplorer` over one `RepoFiles`, and
 the adoption survey becomes its first caller when convenient, not in this slice.
@@ -304,6 +309,15 @@ The per-phase finding cap (still 40, still reported when hit) and the harness's 
 stay as they are. The territory target size is what makes both bite less often: a pass that can
 read most of its scope stops sampling.
 
+What the design does NOT yet have is a hard ceiling on one pass's own transcript. The context
+discipline in the prompt (ranged reads, no re-reads) is advisory, and a read-only pass runs with
+`expectsEdits: false`, which disables the harness's no-edit progress guard, so the clock is the
+only bound today. The territory and the manifest make an explosion unlikely; they do not make it
+impossible. The honest bound is a per-dispatch READ BUDGET in the harness's `guardLimits` (a total
+tool-call ceiling for an explore job, sized by the engine from the territory's token count), which
+stops the pass and makes it answer with what it has, recorded on the phase as budget-stopped
+rather than as completed. That is a harness change and an image bump, so it is its own slice.
+
 ### Decision 5: the brief hands over orientation, so a pass spends its turns reading code
 
 This is where the token saving actually comes from, and it is independent of how many passes run.
@@ -312,9 +326,13 @@ handler's context mutator, the same mutator that folds today's phase brief into 
 rendered from the cached tree (the seam `prReviewerDiffPreOp` uses to hand the reviewer its
 diff):
 
-- **`territory.md`**: the territory's files with sizes, the scout's hotspots for this angle, the
-  entry points, and which neighbouring territories it touches. A pass starts from a map instead
-  of `find`, `ls` and three greps, and its first body read is its first turn.
+- **`territory.md`**: the territory's shape, the scout's hotspots for this angle, the entry
+  points, and which neighbouring territories it touches. A pass starts from a map instead of
+  `find`, `ls` and three greps, and its first body read is its first turn. The manifest is itself
+  context, so it is SIZED: directories with file counts and token totals always, individual files
+  only where the territory is small enough for the list to stay a few thousand tokens, and above
+  that the file list stays in the tree the pass can `ls` on demand. A map that costs a tenth of
+  the budget it is meant to save is not a map.
 - **The standards as files, not folded prose.** `bug-fisher` is `code-aware`, so today every
   selected best-practice fragment is folded into every pass's system prompt and re-sent on every
   turn of every pass. It switches to `standardsDelivery: 'context-files'`, the PR reviewer's
@@ -371,6 +389,18 @@ a new subtree SHA, which is what re-arms its territory.
 - The harness image does not change: the manifest and the standards arrive as `.cat-context/`
   files through a seam the harness already materialises, and the scout runs inline on the backend.
 
+### What bounds what
+
+Three things can explode on a big service, and each has its own bound; the table is the one place
+they are stated together, so a change to one can check it did not silently lean on another.
+
+| What grows                        | Bounded by                                                                                                                                     | Soft until                                 |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| One pass's transcript             | the territory's size; orientation handed over; standards as files; territory-scoped prior findings; the sized manifest; fresh context per pass | Slice 6 lands the per-dispatch read budget |
+| The plan (dispatches per run)     | the scout's relevance floor; the pass budget with every cut recorded; rotation across scheduled runs                                           | hard from Slice 4                          |
+| The scout's own prompt and answer | descriptors plus top-level listings in, capped hotspots and seams out, the call and character ceilings of the inline loop                      | hard from Slice 3                          |
+| The run blob                      | phases bounded by the pass budget; descriptors persisted, never file lists; the per-phase finding cap                                          | hard; the side-table escape hatch is named |
+
 ### Slices
 
 - [ ] **Slice 1: territories + the brief.** `RepoFiles.listTree?` (delegating to the client's
@@ -394,7 +424,11 @@ a new subtree SHA, which is what re-arms its territory.
 - [ ] **Slice 5: rotation.** The territory ledger (remote bucket, D1 ⇄ Drizzle), the
       changed-since-fished priority signal, the recurring-run planner reading it, the fix-merge
       re-arm.
-- [ ] **Slice 6: measure.** One expedition over a representative large repo before and after
+- [ ] **Slice 6: the per-pass read budget.** A total tool-call ceiling for explore jobs on
+      `guardLimits`, sized per dispatch from the territory's token count, the budget-stopped
+      phase status and its rendering, the image bump. The pass-through rule holds: a
+      single-territory expedition gets no ceiling it does not have today.
+- [ ] **Slice 7: measure.** One expedition over a representative large repo before and after
       (turns, fresh vs cached tokens, coverage share, findings a human marked), folded back here
       the way the PR-review tracker did.
 
