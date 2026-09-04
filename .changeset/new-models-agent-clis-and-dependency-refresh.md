@@ -5,6 +5,7 @@
 '@cat-factory/caching': patch
 '@cat-factory/cli': patch
 '@cat-factory/consensus': patch
+'@cat-factory/deploy-harness': patch
 '@cat-factory/eks': patch
 '@cat-factory/executor-harness': minor
 '@cat-factory/gatekeeper-bindings': patch
@@ -56,11 +57,15 @@ carries the account's own geo prefix, so `priceFor` can only ever match the bare
 that row is deliberately set to the frontier tier the catalog can select there. Fable 5.1 moved that
 ceiling; leaving the row behind would have metered every Fable-5.1-on-Bedrock run at half its cost.
 
+**Both runner image tags roll**: the executor to 1.150.0 for the CLI bumps, and the deploy image
+to 0.6.2 because the dependency round moved `@types/node` in its `package.json`, which the image
+builds from. A dep bump inside a harness IS an image-source change, and republishing over a live
+tag does not roll a deployment out.
+
 **Agent CLIs at their newest, ahead of the age window**, as the Dockerfile's standing note allows
 for exactly these pins: Claude Code 2.1.252 -> 2.1.260 and Codex 0.152.0 -> 0.153.2. Pi is already
 at its newest (0.84.4). Both Pi extensions move 2.8.0 -> 2.9.0 and have aged past the window, so
-they take the ordinary route. The executor image tag rolls to 1.150.0 because republishing over a
-live tag does not roll a deployment out.
+they take the ordinary route.
 
 **Dependency refresh**: direct ranges plus a lockfile re-resolution, so transitives move to the
 newest release each declared range already admits under the `minimumReleaseAge` gate. 68 resolved
