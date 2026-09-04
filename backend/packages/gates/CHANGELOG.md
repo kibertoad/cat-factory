@@ -1,5 +1,12 @@
 # @cat-factory/gates
 
+## 0.11.35
+
+### Patch Changes
+
+- Updated dependencies [cd220f2]
+  - @cat-factory/kernel@0.336.0
+
 ## 0.11.34
 
 ### Patch Changes
