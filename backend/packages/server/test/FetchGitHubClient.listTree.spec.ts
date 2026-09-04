@@ -64,13 +64,22 @@ describe('FetchGitHubClient.listTree', () => {
       ],
       truncated: false,
     })
-    const entries = await makeClient().listTree(1, ref, 'main')
+    const listing = await makeClient().listTree(1, ref, 'main')
     expect(calledUrl(fn)).toBe('/repos/acme/app/git/trees/main?recursive=1')
-    expect(entries).toEqual([
+    expect(listing.entries).toEqual([
       { path: 'README.md', name: 'README.md', type: 'file', sha: 'a', size: 12 },
       { path: 'docs', name: 'docs', type: 'dir', sha: 'b' },
       { path: 'docs/architecture.md', name: 'architecture.md', type: 'file', sha: 'c', size: 34 },
     ])
+    expect(listing.truncated).toBe(false)
+  })
+
+  // A truncated tree is a PREFIX, and the caller partitioning a codebase out of it has to be
+  // able to say so: dropping the flag would let a survey report the files GitHub cut as files
+  // the repository does not have.
+  it('reports the provider truncating the tree', async () => {
+    stubFetch(200, { tree: [{ path: 'a.ts', type: 'blob', sha: 'a', size: 1 }], truncated: true })
+    await expect(makeClient().listTree(1, ref, 'main')).resolves.toMatchObject({ truncated: true })
   })
 
   it('resolves a HEAD/absent ref to the HEAD tree', async () => {
@@ -82,8 +91,11 @@ describe('FetchGitHubClient.listTree', () => {
     expect(calledUrl(fn2)).toBe('/repos/acme/app/git/trees/HEAD?recursive=1')
   })
 
-  it('returns [] for an empty repo / unknown ref (404)', async () => {
+  it('returns an empty, untruncated listing for an empty repo / unknown ref (404)', async () => {
     stubFetch(404, { message: 'Not Found' })
-    await expect(makeClient().listTree(1, ref, 'main')).resolves.toEqual([])
+    await expect(makeClient().listTree(1, ref, 'main')).resolves.toEqual({
+      entries: [],
+      truncated: false,
+    })
   })
 })

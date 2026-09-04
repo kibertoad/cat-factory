@@ -32,7 +32,7 @@ function makeService(tree: Array<{ path: string; name: string; type: 'file' | 'd
     githubClient: {
       listTree: async (_id: number, _ref: unknown, gitRef?: string) => {
         treeCalls.push({ gitRef })
-        return tree.map((e) => ({ ...e, sha: 'x' }))
+        return { entries: tree.map((e) => ({ ...e, sha: 'x' })), truncated: false }
       },
     },
   } as unknown as GitHubSyncServiceDependencies

@@ -1,4 +1,5 @@
 import { type BugFishingPhaseDescriptor, bugFishingAgentOutputSchema } from '@cat-factory/contracts'
+import { standardsAsContextFilesPreOp } from './pr-review-context.js'
 import { defineStructuredOutput } from './structured-output.js'
 import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
 import { CODE_AWARE_TRAIT, SPEC_AWARE_TRAIT } from './traits.js'
@@ -53,8 +54,11 @@ export type BugFishingOutput = ReturnType<typeof bugFishing.parse>
 const CONTEXT_DISCIPLINE = `
 Everything you read stays in your context for the rest of this pass and is re-sent on every later
 turn, so a large file read early costs many times what it looks like. Work accordingly:
-- Start from structure, not bodies: the directory layout, entry points, and \`grep -n\` for the
-  shapes this angle is about. Read a body only once something points you at it.
+- Start from structure, not bodies. When \`.cat-context/territory.md\` is present it is that
+  structure already handed to you: read it FIRST and let it point you at bodies, instead of
+  spending turns on \`find\`, \`ls\` and three greps to rebuild it.
+- Otherwise start from the directory layout, entry points, and \`grep -n\` for the shapes this
+  angle is about. Read a body only once something points you at it.
 - Read RANGES, not whole files (\`sed -n '120,260p'\`, \`grep -n -C5 <pattern>\`).
 - Never re-read something you already read — it is still in your context.
 - When a lead needs deep reading, dispatch a subagent for it: its reading lands on its context,
@@ -98,7 +102,11 @@ export const BUG_FISHER_SYSTEM_PROMPT =
   'because of it. A human then decides which findings become fix tasks.\n' +
   'This dispatch fishes ONE ANGLE, named in the phase brief you have been given. Stay on that ' +
   'angle. If you notice something that belongs to a different angle, leave it: another pass ' +
-  'covers it, and a pass that wanders covers its own angle badly. The brief also lists the ' +
+  'covers it, and a pass that wanders covers its own angle badly. On a large codebase the brief ' +
+  'ALSO names one TERRITORY: the slice of the codebase this pass owns. Read outside it freely ' +
+  'when a neighbour answers "has something else already handled this?", but REPORT only findings ' +
+  'whose code lies inside it. Another pass owns the rest, and a finding outside your territory ' +
+  'is dropped rather than filed twice. The brief also lists the ' +
   'findings earlier passes already reported — do NOT report the same defect again, even phrased ' +
   'differently, and say so in your summary if an earlier finding turned out to be the root ' +
   'cause of something you were about to raise.\n' +
@@ -118,6 +126,7 @@ export const BUG_FISHER_SYSTEM_PROMPT =
   'Return ONLY a JSON object of this exact shape:\n' +
   '{\n' +
   '  "summary": "one paragraph: what you covered under this angle and what you concluded",\n' +
+  '  "filesRead": ["every repo-relative path you actually read during this pass"],\n' +
   '  "findings": [{\n' +
   '    "path": "repo/relative/path.ts",\n' +
   '    "line": 42,\n' +
@@ -133,9 +142,14 @@ export const BUG_FISHER_SYSTEM_PROMPT =
   '}\n' +
   'Severity is about CONSEQUENCE, not about how interesting the finding is: `critical` means ' +
   'data loss, a security hole, or a broken core path; `low` means a real but contained problem. ' +
-  'Confidence is about how sure YOU are that it is real, and is yours to set honestly — a ' +
+  'Confidence is about how sure YOU are that it is real, and is yours to set honestly: a ' +
   'low-confidence finding that says so is useful, and a low-confidence finding reported as ' +
-  'certain is worse than no finding at all.'
+  'certain is worse than no finding at all.\n' +
+  '`filesRead` is how the platform records what this expedition COVERED, so list every path you ' +
+  'opened, including the ones you read and found nothing in. It is not a score and nothing ' +
+  'judges you by its length: a short honest list plus an empty findings list says "this ' +
+  'territory was sampled", which is what a human needs in order to know whether to run the ' +
+  'angle again. Never list a file you did not open.'
 
 /**
  * Render the per-dispatch PHASE BRIEF the engine injects as a prior output: which angle this
@@ -155,13 +169,29 @@ export function renderBugFishingPhaseBrief(input: {
   focus?: string | null
   /** Titles of findings earlier passes already reported, so this one does not repeat them. */
   priorFindingTitles?: readonly string[]
+  /**
+   * The territory this pass owns, on a codebase large enough to have been partitioned. Absent ⇒
+   * the pass fishes the whole codebase, which is what a small repository gets and what every
+   * expedition got before territories existed.
+   */
+  territory?: { label: string; roots: readonly string[] } | null
 }): string {
-  const { phase, position, focus, priorFindingTitles } = input
+  const { phase, position, focus, priorFindingTitles, territory } = input
   const lines = [
     `## Phase ${position.index} of ${position.total}: ${phase.title}`,
     '',
     `Goal: ${phase.goal}`,
   ]
+  if (territory) {
+    lines.push(
+      '',
+      `Territory: ${territory.label}`,
+      'This pass owns the paths below, and `.cat-context/territory.md` holds their shape. Read ' +
+        'outside them whenever a neighbour tells you whether something is already handled, and ' +
+        'report only findings whose own code lies inside them:',
+      ...territory.roots.map((root) => `- \`${root}\``),
+    )
+  }
   // A retired angle carries no focus text (there is no catalog entry left to take it from), and
   // an empty "What to look for" heading would read as an angle with nothing to look for.
   if (phase.focus) lines.push('', 'What to look for:', phase.focus)
@@ -184,14 +214,96 @@ export function renderBugFishingPhaseBrief(input: {
   if (prior.length > 0) {
     lines.push(
       '',
-      'Earlier phases of this expedition already reported the findings below. Do NOT report any ' +
-        'of them again:',
+      territory
+        ? 'Earlier phases of this expedition already reported the findings below IN THIS ' +
+            'TERRITORY. Do NOT report any of them again:'
+        : 'Earlier phases of this expedition already reported the findings below. Do NOT report ' +
+            'any of them again:',
       ...prior.map((title) => `- ${title}`),
     )
   } else {
     lines.push('', 'No earlier phase of this expedition has reported a finding yet.')
   }
   return lines.join('\n')
+}
+
+/** Where the engine writes the territory manifest into the container's context directory. */
+export const BUG_FISHING_TERRITORY_CONTEXT_FILE = '.cat-context/territory.md'
+
+/**
+ * Render the TERRITORY MANIFEST a pass is handed up front: the shape of the slice it owns, the
+ * directories inside it with their file counts, and the territories it sits beside.
+ *
+ * This is where the token saving of the whole partition actually comes from, and it is
+ * independent of how many passes run. Each angle is a fresh context by design, so without a
+ * manifest every one of them re-discovers the layout, the entry points and the package boundaries
+ * before it reads a body, and those discovery turns are re-sent on every later turn of the pass.
+ * Handed the map, a pass's FIRST body read is its first turn.
+ *
+ * The manifest is itself context, so it is SIZED: directories with counts always, individual file
+ * paths only while the list stays small. A map that costs a tenth of the budget it is meant to
+ * save is not a map, and above the threshold the file list stays in the tree, which the pass can
+ * `ls` on demand.
+ */
+export function renderBugFishingTerritoryContext(input: {
+  territory: { label: string; roots: readonly string[]; approxTokens?: number }
+  /** Every file of the territory, repo-relative. */
+  files: readonly string[]
+  /** The labels of the other territories this expedition fishes, so the pass knows its edges. */
+  neighbours: readonly string[]
+  /** Most individual paths to list before falling back to directory counts alone. */
+  maxListedFiles?: number
+}): string {
+  const { territory, files, neighbours } = input
+  const maxListed = input.maxListedFiles ?? 200
+  const lines = [
+    `# Territory: ${territory.label}`,
+    '',
+    'This is the slice of the codebase your pass owns. It was computed by the platform from the ',
+    'repository tree, not by a model, so it is a fact about the code rather than a guess.',
+    '',
+    `- Files: ${files.length}`,
+    `- Approximate size: ${territory.approxTokens ?? 0} tokens`,
+    `- Roots: ${territory.roots.length > 0 ? territory.roots.map((r) => `\`${r}\``).join(', ') : 'the whole codebase'}`,
+    '',
+    '## Directories',
+    '',
+  ]
+  for (const [directory, count] of directoryCounts(files)) {
+    lines.push(`- \`${directory}\` (${count} ${count === 1 ? 'file' : 'files'})`)
+  }
+  if (files.length <= maxListed) {
+    lines.push('', '## Files', '', ...files.map((file) => `- \`${file}\``))
+  } else {
+    lines.push(
+      '',
+      `The full file list is ${files.length} paths, too long to hand over without spending the ` +
+        'context this map exists to save. The directory counts above are complete; list what you ' +
+        'need with `ls` or `find` inside a directory.',
+    )
+  }
+  if (neighbours.length > 0) {
+    lines.push(
+      '',
+      '## Neighbouring territories',
+      '',
+      'Other passes of this expedition own these. Read into them when you need to know whether ' +
+        'something is already handled, and leave their defects to them:',
+      ...neighbours.map((label) => `- ${label}`),
+    )
+  }
+  return lines.join('\n')
+}
+
+/** Files per directory, deepest-path-first ordering removed: plain alphabetical by directory. */
+function directoryCounts(files: readonly string[]): [string, number][] {
+  const counts = new Map<string, number>()
+  for (const file of files) {
+    const slash = file.lastIndexOf('/')
+    const directory = slash === -1 ? '.' : file.slice(0, slash)
+    counts.set(directory, (counts.get(directory) ?? 0) + 1)
+  }
+  return [...counts.entries()].sort(([a], [b]) => a.localeCompare(b))
 }
 
 export const BUG_FISHER_AGENT_KINDS: AgentKindDefinition[] = [
@@ -204,6 +316,17 @@ export const BUG_FISHER_AGENT_KINDS: AgentKindDefinition[] = [
     // `AgentContextBuilder.resolveFragments`. Spec-aware for the requirements angle: the
     // committed specs are the other half of "what was this supposed to do".
     traits: [CODE_AWARE_TRAIT, SPEC_AWARE_TRAIT],
+    // The task's best-practice standards arrive as `.cat-context/` FILES rather than folded into
+    // the system prompt (the PR reviewer's precedent). A `code-aware` kind folds them by default,
+    // and an agentic loop re-sends its whole system prompt on every turn of every pass: across
+    // an expedition's passes that is the same standards text paid for dozens of times, to be read
+    // once. As files, a standard is read when the angle needs it.
+    standardsDelivery: 'context-files',
+    // The other half of that decision, and it is not optional: `standardsDelivery` only stops the
+    // engine folding the standards in. Without the op that WRITES them, a `code-aware` kind
+    // declaring `context-files` does not deliver its standards more cheaply, it stops delivering
+    // them, and the loss is invisible: the pass simply reviews against nothing.
+    preOps: [standardsAsContextFilesPreOp],
     // Read-only FULL clone of the base branch. An expedition reads the codebase as it stands on
     // the default branch — there is no work branch, and nothing it does produces one. Full
     // history because several angles (lifecycle, concurrency, contracts) are answered by what a

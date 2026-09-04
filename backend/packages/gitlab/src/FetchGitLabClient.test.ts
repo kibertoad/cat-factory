@@ -746,7 +746,7 @@ describe('FetchGitLabClient — approvals, threads, rebase and tree reads', () =
         ],
       },
     })
-    const entries = await c.listTree(connection, ref, 'main')
+    const { entries } = await c.listTree(connection, ref, 'main')
     expect(calls[0]!.url).toBe('/projects/7/repository/tree?per_page=100&recursive=true&ref=main')
     expect(entries).toEqual([
       { path: 'README.md', name: 'README.md', type: 'file', sha: 'a' },
@@ -759,7 +759,7 @@ describe('FetchGitLabClient — approvals, threads, rebase and tree reads', () =
     const { c } = client({
       'GET /projects/7/repository/tree?per_page=100&recursive=true&ref=nope': { status: 404 },
     })
-    expect(await c.listTree(connection, ref, 'nope')).toEqual([])
+    expect(await c.listTree(connection, ref, 'nope')).toEqual({ entries: [], truncated: false })
   })
 })
 

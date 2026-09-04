@@ -17,6 +17,7 @@ import type {
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
 import {
+  BUG_FISHING_DEFAULT_PASS_BUDGET,
   BUGFIX_PIPELINE_ID,
   ConflictError,
   NotFoundError,
@@ -30,9 +31,11 @@ import type { TaskTypeCreationDefaults } from '../board/taskTypeCreationDefaults
 import type { NotificationService } from '../notifications/NotificationService.js'
 import type { AdvanceResult } from './advance.js'
 import {
+  type BugFishingPassScope,
   bugFishingSpawnIsClaimable,
   claimBugFishingSpawn,
   coerceBugFishingFindings,
+  computeBugFishingCoverage,
   dismissBugFishingFinding,
   failBugFishingPhase,
   planBugFishingPhases,
@@ -40,6 +43,8 @@ import {
   settleBugFishingSpawn,
   untriagedBugFishingFindings,
 } from './bugFishing.logic.js'
+import { planTerritoryPasses, prioritiseTerritories } from './bugFishingTerritories.logic.js'
+import type { CodebaseSurveyResult } from './bugFishingSurvey.js'
 import type { RunStateMachine } from './RunStateMachine.js'
 import type { StepGraph } from './StepGraph.js'
 
@@ -98,6 +103,25 @@ export interface BugFishingControllerDeps {
 }
 
 /**
+ * What a settled pass came back with, as the completion path knows it.
+ *
+ * Bundled rather than spread across the call, because `scope` only means anything WITH the output
+ * it grades: the manifest a pass was briefed with is the one its findings are scoped against and
+ * its coverage measured against, and two positional arguments could drift apart at a call site
+ * without failing to compile.
+ */
+export interface SettledBugFishingPass {
+  /** The pass's structured catch, or undefined when it answered nothing this build can read. */
+  output: BugFishingAgentOutput | undefined
+  /** Which model answered, for the record (the failure path has no dispatch result to take it from). */
+  model: string | null | undefined
+  /** The expedition's own task block, for the triage card's audience. */
+  block: Block | null | undefined
+  /** The territory this pass owned, when the codebase was partitioned. */
+  scope?: BugFishingPassScope
+}
+
+/**
  * Where a spawned fix task lands: the expedition's own service frame and that frame's service
  * row. Resolved ONCE per marking batch, because every finding in it spawns under the same frame.
  */
@@ -139,26 +163,33 @@ export class BugFishingController {
 
   /**
    * The expedition state a `bug-fisher` step should carry on THIS dispatch, seeded on first
-   * entry from the task's angle selection and the workspace's fix-pipeline default.
+   * entry from the task's angle selection, the codebase survey, and the workspace's fix-pipeline
+   * default.
    *
    * Called by the step handler before dispatching, and idempotent: a step that already carries
    * an expedition (every dispatch after the first, and every durable replay of the first) keeps
    * it, because re-planning would discard the phases already fished.
    *
-   * ALWAYS plans at least one angle, because {@link planBugFishingPhases} falls back to the whole
-   * catalog: an empty or entirely unrecognised selection means "fish everything", which is the
-   * point of an expedition, so narrowing it is the deliberate act. There is deliberately no
-   * "planned nothing" outcome for the handler to pass through — one existed, could not be
-   * reached, and would have dispatched a full container run for a step it had just marked
-   * skipped.
+   * ALWAYS plans at least one angle over at least one territory, because
+   * {@link planBugFishingPhases} falls back to the whole catalog and the survey falls back to one
+   * whole-codebase territory: an empty or entirely unrecognised selection means "fish
+   * everything", which is the point of an expedition, so narrowing it is the deliberate act.
+   * There is deliberately no "planned nothing" outcome for the handler to pass through: one
+   * existed, could not be reached, and would have dispatched a full container run for a step it
+   * had just marked skipped.
+   *
+   * A codebase that fits ONE territory plans the angles field-for-field as they were planned
+   * before territories existed, with no territory stamped on any phase. Large-codebase mode is a
+   * size threshold crossed, never a mode a task opts into.
    */
   async ensurePlanned(
     workspaceId: string,
     step: PipelineStep,
     block: Block,
+    survey?: CodebaseSurveyResult,
   ): Promise<BugFishingStepState> {
     if (step.bugFishing) return step.bugFishing
-    const { phases, unknown } = planBugFishingPhases(block.taskTypeFields?.fishingPhaseIds)
+    const { phases: angles, unknown } = planBugFishingPhases(block.taskTypeFields?.fishingPhaseIds)
     if (unknown.length > 0) {
       // Named, never silently dropped: the person picked angles this build no longer ships, and
       // an expedition that quietly fished fewer than they asked for reads as one that found
@@ -169,11 +200,34 @@ export class BugFishingController {
         unknown,
       })
     }
+    const territories = prioritiseTerritories(
+      survey?.territories ?? [],
+      block.taskTypeFields?.fishingFocus ?? null,
+    )
+    const passBudget = block.taskTypeFields?.fishingMaxPasses ?? BUG_FISHING_DEFAULT_PASS_BUDGET
+    const planned = planTerritoryPasses({ territories, angles, passBudget })
+    if (planned.unfished.length > 0) {
+      this.log.info('bugFishing.passBudgetTrimmedPlan', {
+        workspaceId,
+        blockId: block.id,
+        passBudget,
+        plannedCells: planned.plannedCells,
+        unfished: planned.unfished.length,
+      })
+    }
     return {
       status: 'fishing',
-      phases,
+      phases: planned.phases,
       currentPhaseIndex: 0,
       findings: [],
+      territories,
+      plan: {
+        passBudget,
+        plannedCells: planned.plannedCells,
+        unfished: planned.unfished,
+        treeTruncated: survey?.treeTruncated ?? false,
+        surveyUnavailableReason: survey?.unavailableReason ?? null,
+      },
       model: null,
       defaultFixPipelineId: await this.resolveDefaultFixPipelineId(workspaceId),
     }
@@ -197,10 +251,9 @@ export class BugFishingController {
     workspaceId: string,
     instance: ExecutionInstance,
     step: PipelineStep,
-    output: BugFishingAgentOutput | undefined,
-    model: string | null | undefined,
-    block: Block | null | undefined,
+    settled: SettledBugFishingPass,
   ): Promise<AdvanceResult | null> {
+    const { output, model, block, scope } = settled
     const state = step.bugFishing
     if (!state) return null
     if (state.status !== 'fishing') {
@@ -233,13 +286,18 @@ export class BugFishingController {
       step.bugFishing = { ...state, model: model ?? state.model ?? null }
       return this.recordPhaseFailure(workspaceId, instance, step, UNREADABLE_PASS_REASON, block)
     }
-    const { findings, dropped } = coerceBugFishingFindings(output, phase.id, () =>
-      this.deps.idGenerator.next('bff'),
+    const { findings, dropped, outOfScope } = coerceBugFishingFindings(
+      output,
+      phase.id,
+      () => this.deps.idGenerator.next('bff'),
+      scope,
     )
     const next = recordBugFishingPhase(state, phaseIndex, {
       summary: output.summary ?? null,
       findings,
       dropped,
+      outOfScope,
+      coverage: computeBugFishingCoverage(output, scope),
       at: this.deps.clock.now(),
     })
     step.bugFishing = { ...next, model: model ?? next.model ?? null }

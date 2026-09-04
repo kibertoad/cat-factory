@@ -373,6 +373,8 @@ export {
   bugFishing,
   type BugFishingOutput,
   renderBugFishingPhaseBrief,
+  renderBugFishingTerritoryContext,
+  BUG_FISHING_TERRITORY_CONTEXT_FILE,
   registerBugFisherAgent,
 } from './agents/kinds/bug-fisher.js'
 export {

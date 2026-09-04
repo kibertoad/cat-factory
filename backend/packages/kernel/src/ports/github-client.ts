@@ -141,6 +141,26 @@ export interface RepoContentEntry {
   size?: number
 }
 
+/**
+ * A whole-tree listing plus the one fact a caller cannot recover from the entries: whether the
+ * provider CUT the listing short.
+ *
+ * Carried beside the entries rather than left implicit because the two readings are opposite and
+ * a bare array cannot tell them apart. A file-search box treats a truncated tree as a best-effort
+ * index and loses nothing; a caller building a MANIFEST from it (which files exist, so which were
+ * never read) would state a partial tree as the whole codebase, and every "no pass read this
+ * directory" conclusion drawn from it would be a claim about files the read never saw.
+ */
+export interface RepoTreeListing {
+  entries: RepoContentEntry[]
+  /**
+   * True when the provider returned only part of the tree (GitHub's git-trees `truncated` flag;
+   * a GitLab sweep that hit its page ceiling). A caller that needs exhaustiveness must say so
+   * rather than assume it.
+   */
+  truncated: boolean
+}
+
 /** A single file's decoded UTF-8 content plus its blob sha. */
 export interface RepoFileContent {
   content: string
@@ -570,11 +590,11 @@ export interface GitHubClient {
    * List a repository's ENTIRE tree on a ref in as few calls as possible (the git
    * trees API, recursive), so a caller can search files by path without walking the
    * tree directory-by-directory (an N+1 of contents reads). Returns every entry with
-   * its full, repo-root-relative `path` and `type` (`file`/`dir`). `[]` for an empty
-   * repo / unknown ref. A very large tree may be truncated by the provider — the
-   * listing is best-effort, so a caller must not treat it as exhaustive.
+   * its full, repo-root-relative `path` and `type` (`file`/`dir`), plus whether the
+   * provider TRUNCATED the listing. `{ entries: [], truncated: false }` for an empty
+   * repo / unknown ref.
    */
-  listTree(installationId: number, ref: GitHubRepoRef, gitRef?: string): Promise<RepoContentEntry[]>
+  listTree(installationId: number, ref: GitHubRepoRef, gitRef?: string): Promise<RepoTreeListing>
   /** Read a file's decoded UTF-8 content + blob sha on a ref, or null if absent. */
   getFileContent(
     installationId: number,

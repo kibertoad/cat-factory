@@ -80,6 +80,8 @@ import type { BinaryCandidateController } from './BinaryCandidateController.js'
 import type { ForkDecisionController } from './ForkDecisionController.js'
 import { PrReviewController, PR_REVIEW_STEP_KIND } from './PrReviewController.js'
 import { BugFishingController, BUG_FISHING_STEP_KIND } from './BugFishingController.js'
+import type { CodebaseSurveyResult } from './bugFishingSurvey.js'
+import { bugFishingPassScope } from './bugFishingPass.js'
 import {
   describeRecordedPhase,
   priorBugFishingFindingTitles,
@@ -194,6 +196,13 @@ export interface DispatcherRegistryDeps {
     dispatchKind?: string,
     augmentContext?: (context: AgentRunContext) => void,
   ) => Promise<AdvanceResult>
+  /**
+   * Survey the codebase a block's run targets: the repository tree partitioned into the
+   * TERRITORIES a bug-fishing expedition fishes. Bound to the dispatcher, which owns the run's
+   * repo resolution; the read is cached per ref, so the dispatch and completion paths of one
+   * expedition share it.
+   */
+  surveyCodebase: (workspaceId: string, blockId: string) => Promise<CodebaseSurveyResult>
   ingestBlueprint: (workspaceId: string, blockId: string, rawService: unknown) => Promise<void>
   ingestSpec: (workspaceId: string, rawDoc: unknown) => Promise<void>
 }
@@ -488,15 +497,21 @@ export function buildStepHandlerRegistry(d: DispatcherRegistryDeps): StepHandler
 /**
  * Dispatch ONE angle of a bug-fishing expedition.
  *
- * Three things happen before the ordinary container dispatch, and each is here rather than in the
+ * Four things happen before the ordinary container dispatch, and each is here rather than in the
  * controller because each is about THIS dispatch rather than about the expedition's record:
  *
- * 1. The expedition is planned on first entry (idempotent — a step that already carries one keeps
- *    it, which is what makes every later angle and every durable replay cheap).
+ * 1. The codebase is SURVEYED (one cached tree read) and the expedition planned on first entry
+ *    (idempotent: a step that already carries one keeps it, which is what makes every later angle
+ *    and every durable replay cheap).
  * 2. The angle now being fished is marked, so the window shows which pass is in flight rather
  *    than only which have finished.
- * 3. The angle's BRIEF is folded in as a prior output: what this pass is hunting, the task's own
- *    focus, and the titles earlier passes already reported so this one does not repeat them.
+ * 3. The angle's BRIEF is folded in as a prior output: what this pass is hunting, the territory
+ *    it owns, the task's own focus, and the titles earlier passes already reported IN THAT
+ *    TERRITORY so this one does not repeat them.
+ * 4. The territory MANIFEST is injected as a `.cat-context/` file, so the pass starts from a map
+ *    instead of spending its first turns rebuilding one with `find`, `ls` and three greps. This
+ *    is where the partition's token saving actually comes from, and it is independent of how
+ *    many passes run.
  *
  * A cursor already past the plan falls through to the ordinary dispatch: that is the durable
  * driver re-entering a step whose angles have all settled, and there is no angle left to brief.
@@ -506,22 +521,30 @@ async function handleBugFishingPhase(
   ctx: StepHandlerContext,
 ): Promise<AdvanceResult> {
   const { workspaceId, step, block } = ctx
-  const planned = await d.bugFishingController.ensurePlanned(workspaceId, step, block)
+  const survey = await d.surveyCodebase(workspaceId, block.id)
+  const planned = await d.bugFishingController.ensurePlanned(workspaceId, step, block, survey)
   const phaseIndex = planned.currentPhaseIndex ?? 0
   const phase = (planned.phases ?? [])[phaseIndex]
   if (!phase) return d.handleAgentStep(ctx)
   step.bugFishing = startBugFishingPhase(planned, phaseIndex)
+  const pass = bugFishingPassScope(planned, phase, survey)
   const brief = renderBugFishingPhaseBrief({
     phase: describeRecordedPhase(phase),
     position: { index: phaseIndex + 1, total: (planned.phases ?? []).length },
     focus: block.taskTypeFields?.fishingFocus ?? null,
-    priorFindingTitles: priorBugFishingFindingTitles(planned),
+    priorFindingTitles: priorBugFishingFindingTitles(planned, phase.territoryId),
+    ...(pass.territory ? { territory: pass.territory } : {}),
   })
   return d.handleAgentStep(ctx, undefined, (context) => {
     context.priorOutputs = [
       ...context.priorOutputs,
       { agentKind: BUG_FISHING_STEP_KIND, output: brief },
     ]
+    // APPENDED, never assigned: the context builder injects files of its own, and overwriting
+    // them here would drop them silently.
+    if (pass.contextFile) {
+      context.injectedContextFiles = [...(context.injectedContextFiles ?? []), pass.contextFile]
+    }
   })
 }
 
@@ -655,14 +678,25 @@ export function buildStepCompletionInterceptors(
           .structuredOutput(BUG_FISHING_STEP_KIND)
           ?.safeParse(result.custom) as BugFishingAgentOutput | undefined
         const block = await d.blockRepository.get(workspaceId, instance.blockId)
-        return d.bugFishingController.recordPhaseResult(
-          workspaceId,
-          instance,
-          step,
+        // The SAME survey the dispatch handed this pass (one cached tree read of the branch the
+        // whole expedition fishes). Both the out-of-scope drop and the coverage share are
+        // computed against the manifest the pass was actually given, so a manifest and a verdict
+        // about it can never come from two different readings of the tree.
+        const state = step.bugFishing
+        const phase = state?.phases?.[state.currentPhaseIndex ?? 0]
+        const scope = phase
+          ? bugFishingPassScope(
+              state!,
+              phase,
+              await d.surveyCodebase(workspaceId, instance.blockId),
+            ).scope
+          : undefined
+        return d.bugFishingController.recordPhaseResult(workspaceId, instance, step, {
           output,
-          result.model ?? step.model,
+          model: result.model ?? step.model,
           block,
-        )
+          ...(scope ? { scope } : {}),
+        })
       },
     },
     // A `tester` step returned a structured report. On a withheld greenlight we do NOT

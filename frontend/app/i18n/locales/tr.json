@@ -349,6 +349,10 @@
         "focus": {
           "label": "Nereye yoğunlaşılsın",
           "placeholder": "Alt sistemler, dizinler ya da bu ekibe en çok zaman kaybettiren kusur türü"
+        },
+        "maxPasses": {
+          "label": "En fazla geçiş",
+          "hint": "Bu seferin yapabileceği en fazla salt okunur geçiş sayısı. {count} için boş bırakın. Büyük bir kod tabanında her açı her bölge için ayrı taranır ve bütçenin kestikleri taranmamış olarak kaydedilir."
         }
       }
     },
@@ -8444,6 +8448,19 @@
       "parked": "Tüm açılar tarandı.",
       "parkedWithUntriaged": "{count} bulgu hâlâ karara bağlanmadı.",
       "finish": "Triyajı bitir"
+    },
+    "coverage": {
+      "share": "Bu bölgenin %{percent} kadarı okundu",
+      "tooltip": "Bu geçiş, bölgesinin %{percent} kadarını okuduğunu bildirdi. Ajanın kendi beyanı."
+    },
+    "plan": {
+      "surveyUnavailable": "Kod tabanı taranamadı, bu nedenle bu sefer tek parça olarak tarandı: {reason}",
+      "treeTruncated": "Depo ağacı kırpılmış olarak döndü, bu nedenle aşağıdaki bölgeler yalnızca okunabilen kısmı kapsıyor.",
+      "unfished": "Planlanan {planned} geçişten {fished} tanesi yapıldı. Bu çalışmada taranmayanlar:",
+      "unfishedCell": "{angle} açısından {territory}"
+    },
+    "territories": {
+      "heading": "Bölgeler"
     }
   }
 }

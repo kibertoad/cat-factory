@@ -118,8 +118,9 @@ as a defect.
 
 ## Large codebases: territories, a scout, a pass budget, and rotation
 
-Design for the next slices. Nothing below has shipped; the checklist at the end is the record of
-what has.
+Design for the large-codebase slices. **Slices 1, 2 and 4 have shipped** (territories, the handed-over
+brief, the coverage record, the pass budget); the checklist at the end is the record, and the
+"what shipped" notes under it are what the implementation settled that the design left open.
 
 ### The problem, stated against what ships
 
@@ -403,7 +404,7 @@ they are stated together, so a change to one can check it did not silently lean 
 
 ### Slices
 
-- [ ] **Slice 1: territories + the brief.** `RepoFiles.listTree?` (delegating to the client's
+- [x] **Slice 1: territories + the brief.** `RepoFiles.listTree?` (delegating to the client's
       existing tree read, truncation surfaced, conformance pinned), the blueprint read,
       `partitionCodebase` as a pure reduction beside `planBugFishingPhases` (blueprint-first,
       then package/directory bin-packing, the ignore vocabulary shared with the file-size
@@ -412,14 +413,14 @@ they are stated together, so a change to one can check it did not silently lean 
       findings, out-of-scope paths dropped and counted at coercion. Full matrix within the
       shipped pass budget; no scout yet. Window: phases grouped by territory. Pass-through
       asserted: a one-territory plan is today's plan, field for field.
-- [ ] **Slice 2: coverage.** `coverage.filesRead` on the agent output, the per-phase and
+- [x] **Slice 2: coverage.** `coverage.filesRead` on the agent output, the per-phase and
       per-territory coverage record, the coverage rail, the unread-files list in the parked
       summary.
 - [ ] **Slice 3: the scout.** The `RepoExplorer` generalisation of the adoption explorer, the
       scout's inline tool loop and output schema, the deterministic planner over its verdict
       (relevance floor, the always-run top two, the `seams` territory), the plan section in the
       window with what was pruned and why, the fallback to the full matrix when the scout fails.
-- [ ] **Slice 4: budgets.** `fishingMaxPasses` plus the workspace default, the trim order, the
+- [x] **Slice 4: budgets.** `fishingMaxPasses` plus the workspace default, the trim order, the
       UNFISHED record on the plan and in the summary.
 - [ ] **Slice 5: rotation.** The territory ledger (remote bucket, D1 ⇄ Drizzle), the
       changed-since-fished priority signal, the recurring-run planner reading it, the fix-merge
@@ -431,6 +432,34 @@ they are stated together, so a change to one can check it did not silently lean 
 - [ ] **Slice 7: measure.** One expedition over a representative large repo before and after
       (turns, fresh vs cached tokens, coverage share, findings a human marked), folded back here
       the way the PR-review tracker did.
+
+### What slices 1, 2 and 4 settled
+
+The design left four things to the implementation, and each was decided against the rule it came
+closest to breaking.
+
+- **A tree with no blob sizes is sized by assumption, not by zero.** GitHub's tree read carries a
+  byte size per file; GitLab's does not. Sizing a size-less entry as weightless would pack a whole
+  GitLab monorepo into one territory and silently undo the partition, so an unsized file counts as
+  a middling source file (4 KB) and the constant is stated in one place. The failure mode is now
+  "territories are sized coarsely on GitLab", not "sizing stopped applying on one provider".
+- **`standardsDelivery: 'context-files'` is HALF a decision.** It only stops the engine folding the
+  standards into the system prompt; the op that WRITES them is separate. A `code-aware` kind that
+  declares the first without the second does not deliver its standards more cheaply, it stops
+  delivering them, and nothing fails. The PR reviewer's op was already kind-neutral, so it was
+  renamed (`standardsAsContextFilesPreOp`) rather than copied, and both kinds register it.
+- **Without the scout, the trim order is focus then SIZE.** The design's second key is the scout's
+  hotspot density, which does not exist until Slice 3. Size is the honest stand-in: it is a fact the
+  platform computes rather than a judgement it would be inventing, and the biggest territory is the
+  one most likely to hide something. The creator's `fishingFocus` still outranks it, because naming
+  a subsystem is the deliberate act.
+- **"Could not survey" is its own status, not a one-territory plan.** An unreadable tree, an unwired
+  repo and a genuinely small codebase all yield ONE territory, which is the same value and opposite
+  facts. `plan.surveyUnavailableReason` is what separates them, and the window renders it.
+
+The pass-through is asserted rather than assumed, on both sides: a one-territory plan is
+field-for-field the plan that shipped before territories (no `territoryId` on any phase, no
+manifest, no scope), and conformance drives it on every facade.
 
 ### Gotchas already visible
 

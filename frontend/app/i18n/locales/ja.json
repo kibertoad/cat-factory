@@ -349,6 +349,10 @@
         "focus": {
           "label": "重点を置く箇所",
           "placeholder": "サブシステム、ディレクトリ、またはこのチームで手間になっている不具合の種類"
+        },
+        "maxPasses": {
+          "label": "最大パス数",
+          "hint": "この遠征が実行できる読み取り専用パスの上限です。空欄なら {count} 回。大規模なコードベースでは各観点を領域ごとに探索し、予算で削られた分は未探索として記録されます。"
         }
       }
     },
@@ -8444,6 +8448,19 @@
       "parked": "すべての観点の探索が終わりました。",
       "parkedWithUntriaged": "未判断の指摘が {count} 件あります。",
       "finish": "トリアージを終了"
+    },
+    "coverage": {
+      "share": "この領域の {percent}% を読了",
+      "tooltip": "このパスは自身の領域の {percent}% を読んだと報告しました。エージェントの自己申告です。"
+    },
+    "plan": {
+      "surveyUnavailable": "コードベースを調査できなかったため、この遠征は全体を一括で探索しました: {reason}",
+      "treeTruncated": "リポジトリのツリーが切り詰められて返されたため、以下の領域は読み取れた範囲のみを対象としています。",
+      "unfished": "予定 {planned} パス中 {fished} パスを実施しました。今回未探索:",
+      "unfishedCell": "{territory} の {angle}"
+    },
+    "territories": {
+      "heading": "領域"
     }
   }
 }

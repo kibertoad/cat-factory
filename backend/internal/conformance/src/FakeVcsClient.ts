@@ -17,6 +17,7 @@ import type {
   OpenedPullRequest,
   Paged,
   RepoContentEntry,
+  RepoTreeListing,
   RepoEntry,
   RepoFileContent,
   VcsClient,
@@ -244,8 +245,8 @@ export class FakeVcsClient implements VcsClient {
   async listDirectory(): Promise<RepoContentEntry[]> {
     return []
   }
-  async listTree(): Promise<RepoContentEntry[]> {
-    return []
+  async listTree(): Promise<RepoTreeListing> {
+    return { entries: [], truncated: false }
   }
   async getFileContent(): Promise<RepoFileContent | null> {
     return null

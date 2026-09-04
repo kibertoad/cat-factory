@@ -2,6 +2,7 @@ import {
   BUG_FISHING_PHASES,
   BUG_FISHING_SEVERITY_ORDER,
   type BugFishingAgentOutput,
+  type BugFishingCoverage,
   type BugFishingFinding,
   type BugFishingPhase,
   type BugFishingSpawn,
@@ -97,6 +98,66 @@ export function planBugFishingPhases(selected: readonly string[] | undefined): {
   }
 }
 
+/**
+ * What ONE pass was told it owns: its territory and the manifest that territory was rendered
+ * from. Absent for a whole-codebase pass, which owns everything.
+ */
+export interface BugFishingPassScope {
+  territoryId: string
+  /** The repo-relative roots the territory owns. */
+  roots: readonly string[]
+  /** Every file of the manifest handed to the pass, for the coverage intersection. */
+  manifest: ReadonlySet<string>
+}
+
+/**
+ * Whether a finding's path lies inside the pass's territory.
+ *
+ * The brief tells a pass what it is NOT responsible for, and this is the platform holding it to
+ * that rather than exhorting it: a pass that wanders is corrected here, and the count of what was
+ * dropped lands on the phase so a human can see how often it happens. A finding with NO path is
+ * kept: an expedition can legitimately report a gap that spans files, and dropping it would be
+ * the platform deciding it did not happen.
+ */
+function isInTerritory(path: string, scope: BugFishingPassScope | undefined): boolean {
+  if (!scope || scope.roots.length === 0) return true
+  if (!path) return true
+  const clean = path.replace(/^\.\//, '').replace(/^\/+/, '')
+  return scope.roots.some((root) => clean === root || clean.startsWith(`${root}/`))
+}
+
+/**
+ * What a pass reported READING, intersected with the manifest it was handed.
+ *
+ * Self-reported by construction (the model lists its own reads), which is why the record says
+ * so: nothing here verifies the claim, and a later verified producer would name itself instead.
+ * A pass that reported no paths at all gets NO record rather than a zero: "did not say" and
+ * "read nothing" are different facts, and a coverage rail showing 0% for the first would accuse
+ * a pass that may have read everything.
+ */
+export function computeBugFishingCoverage(
+  output: BugFishingAgentOutput | undefined,
+  scope: BugFishingPassScope | undefined,
+): BugFishingCoverage | null {
+  const reported = (output?.filesRead ?? [])
+    .map((path) => clamp(path, 400).replace(/^\.\//, '').replace(/^\/+/, ''))
+    .filter((path) => path.length > 0)
+  if (reported.length === 0) return null
+  const manifest = scope?.manifest
+  const unique = new Set(reported)
+  if (!manifest) {
+    return { filesRead: unique.size, manifestFiles: 0, offManifest: 0, source: 'self-reported' }
+  }
+  let onManifest = 0
+  for (const path of unique) if (manifest.has(path)) onManifest++
+  return {
+    filesRead: onManifest,
+    manifestFiles: manifest.size,
+    offManifest: unique.size - onManifest,
+    source: 'self-reported',
+  }
+}
+
 /** Severity rank, most severe first; an unrecognised severity sorts last rather than first. */
 function severityRank(severity: string): number {
   const index = BUG_FISHING_SEVERITY_ORDER.indexOf(severity as never)
@@ -116,17 +177,22 @@ export function coerceBugFishingFindings(
   output: BugFishingAgentOutput | undefined,
   phaseId: string,
   mintId: () => string,
-): { findings: BugFishingFinding[]; dropped: number } {
+  scope?: BugFishingPassScope,
+): { findings: BugFishingFinding[]; dropped: number; outOfScope: number } {
   const raw = (output?.findings ?? []).filter(
     (f) =>
       clamp(f.title, MAX_FINDING_TEXT).length > 0 || clamp(f.detail, MAX_FINDING_TEXT).length > 0,
   )
-  const kept = [...raw].sort((a, b) => severityRank(a.severity) - severityRank(b.severity))
+  const inScope = raw.filter((f) => isInTerritory(clamp(f.path, 400), scope))
+  const outOfScope = raw.length - inScope.length
+  const kept = [...inScope].sort((a, b) => severityRank(a.severity) - severityRank(b.severity))
   const dropped = Math.max(0, kept.length - MAX_FINDINGS_PER_PHASE)
   return {
+    outOfScope,
     findings: kept.slice(0, MAX_FINDINGS_PER_PHASE).map((f) => ({
       id: mintId(),
       phaseId,
+      ...(scope?.territoryId ? { territoryId: scope.territoryId } : {}),
       path: clamp(f.path, 400),
       line: typeof f.line === 'number' && Number.isFinite(f.line) ? f.line : null,
       severity: f.severity,
@@ -155,16 +221,32 @@ export function coerceBugFishingFindings(
 export function recordBugFishingPhase(
   state: BugFishingStepState,
   phaseIndex: number,
-  outcome: { summary: string | null; findings: BugFishingFinding[]; dropped: number; at: number },
+  outcome: {
+    summary: string | null
+    findings: BugFishingFinding[]
+    dropped: number
+    at: number
+    /** What the pass reported reading, against its manifest. Null when it reported nothing. */
+    coverage?: BugFishingCoverage | null
+    /** Findings dropped for lying outside the pass's territory. */
+    outOfScope?: number
+  },
 ): BugFishingStepState {
   const phases = (state.phases ?? []).map((phase, i) =>
     i === phaseIndex
       ? {
           ...phase,
           status: 'completed' as const,
-          summary: phaseSummary(outcome.summary, outcome.findings.length, outcome.dropped),
+          summary: phaseSummary(
+            outcome.summary,
+            outcome.findings.length,
+            outcome.dropped,
+            outcome.outOfScope ?? 0,
+          ),
           settledAt: outcome.at,
           failureReason: null,
+          coverage: outcome.coverage ?? null,
+          outOfScopeFindings: outcome.outOfScope ?? 0,
         }
       : phase,
   )
@@ -185,14 +267,29 @@ export function recordBugFishingPhase(
  * A cap that is not a plain prefix has to say so — a reader who assumed one would conclude the
  * tail was never found, when in fact it was found and discarded.
  */
-function phaseSummary(summary: string | null, kept: number, dropped: number): string {
-  const base = clamp(summary, MAX_SUMMARY)
-  if (dropped <= 0) return base
-  const note =
-    `This pass reported more findings than one phase may record: the ${kept} most severe were ` +
-    `kept and ${dropped} lower-severity ones were dropped. Re-run this angle with a narrower ` +
-    'focus to see them.'
-  return base ? `${base}\n\n${note}` : note
+function phaseSummary(
+  summary: string | null,
+  kept: number,
+  dropped: number,
+  outOfScope: number,
+): string {
+  const notes: string[] = []
+  if (dropped > 0) {
+    notes.push(
+      `This pass reported more findings than one phase may record: the ${kept} most severe were ` +
+        `kept and ${dropped} lower-severity ones were dropped. Re-run this angle with a narrower ` +
+        'focus to see them.',
+    )
+  }
+  if (outOfScope > 0) {
+    // Named for the same reason the cap is: the reader has to be able to tell a territory that
+    // came back clean from one whose pass spent its findings on somebody else's code.
+    notes.push(
+      `${outOfScope} ${outOfScope === 1 ? 'finding was' : 'findings were'} dropped for pointing ` +
+        "outside this pass's territory. Another pass owns that ground.",
+    )
+  }
+  return [clamp(summary, MAX_SUMMARY), ...notes].filter((part) => part.length > 0).join('\n\n')
 }
 
 /**
@@ -343,8 +440,17 @@ export function untriagedBugFishingFindings(
  * already caught. Dismissed findings are included deliberately: a human rejecting a finding says
  * they do not want it fixed, not that the next pass should raise it again.
  */
-export function priorBugFishingFindingTitles(state: BugFishingStepState): string[] {
-  return (state.findings ?? []).map((f) => f.title).filter((t) => t.trim().length > 0)
+export function priorBugFishingFindingTitles(
+  state: BugFishingStepState,
+  territoryId?: string | null,
+): string[] {
+  // Scoped to the territory once the codebase is partitioned. Across thirty passes the whole
+  // list is hundreds of lines, and nobody fishing territory five needs territory one's catch:
+  // the deduplication this brief exists for is between passes over the SAME code.
+  const scoped = territoryId
+    ? (state.findings ?? []).filter((f) => f.territoryId === territoryId)
+    : (state.findings ?? [])
+  return scoped.map((f) => f.title).filter((t) => t.trim().length > 0)
 }
 
 /**

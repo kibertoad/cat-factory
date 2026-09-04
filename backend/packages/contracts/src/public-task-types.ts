@@ -1,4 +1,8 @@
-import { BUG_FISHING_PHASES } from './bugFishing.js'
+import {
+  BUG_FISHING_DEFAULT_PASS_BUDGET,
+  BUG_FISHING_MAX_PASS_BUDGET,
+  BUG_FISHING_PHASES,
+} from './bugFishing.js'
 import * as v from 'valibot'
 import {
   descriptorFieldSchema,
@@ -133,6 +137,18 @@ export const BUILTIN_PUBLIC_TASK_FIELDS: Readonly<Record<string, readonly Descri
       type: 'textarea',
       help: 'Subsystems, directories, or the kind of defect to look hardest for. Narrows where each angle looks, not which angles run.',
       maxLength: 2000,
+    },
+    // Only bites on a codebase large enough to be split into territories, where the planned
+    // matrix is territories x angles. Offered as a number rather than left implicit because
+    // what the budget cuts is recorded as unfished, and a caller who set it should recognise
+    // its own cut in that record.
+    {
+      key: 'fishingMaxPasses',
+      label: 'Maximum passes',
+      type: 'number',
+      help: `Most read-only passes this expedition may run. Leave empty for ${BUG_FISHING_DEFAULT_PASS_BUDGET}. On a large codebase the expedition fishes each angle per territory, and whatever the budget cuts is recorded as unfished.`,
+      min: 1,
+      max: BUG_FISHING_MAX_PASS_BUDGET,
     },
   ],
   feature: [],

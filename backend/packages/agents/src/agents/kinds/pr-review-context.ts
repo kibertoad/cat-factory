@@ -829,19 +829,24 @@ export const prReviewerExistingCommentsPreOp: RepoOp = async (
 }
 
 /**
- * PreOp for the `pr-reviewer` kind: write the task's selected best-practice standards as one
- * `.cat-context/standard-<id>.md` file each, plus an index.
+ * PreOp for any `standardsDelivery: 'context-files'` kind: write the task's selected
+ * best-practice standards as one `.cat-context/standard-<id>.md` file each, plus an index.
  *
- * The reviewer's own prompt does NOT carry the standards (the kind declares
- * `standardsDelivery: 'context-files'`, so the engine skips the fold). Folding them in charged
- * the parent for every standard on every turn — 145 KB across 5 standards on the measured run,
- * ~3.7M tokens over 96 turns — while the agents that actually review the code, the parallel slice
- * subagents, never received them and worked from the parent's one-line paraphrase instead. As
- * files, each standard is read once by the slices it applies to, from the real text.
+ * KIND-NEUTRAL despite living beside the PR reviewer, which is the kind that first needed it: it
+ * reads nothing but the run's resolved fragments. `standardsDelivery: 'context-files'` only stops
+ * the ENGINE folding the standards into the system prompt, so a kind that declares it without
+ * pairing it with this op does not deliver its standards more cheaply, it silently stops
+ * delivering them.
  *
- * Pass-through when the run resolved no fragments (a review task with none selected).
+ * Why the split is worth it: folding them charged the parent for every standard on every turn
+ * (145 KB across 5 standards on the measured run, ~3.7M tokens over 96 turns) while the agents
+ * that actually read the code never received them. As files, each standard is read once, by the
+ * pass it applies to, from the real text. A bug-fishing expedition is the same shape and worse:
+ * it re-sends its whole system prompt on every turn of every one of its passes.
+ *
+ * Pass-through when the run resolved no fragments (a task with none selected).
  */
-export const prReviewerStandardsPreOp: RepoOp = async (
+export const standardsAsContextFilesPreOp: RepoOp = async (
   ctx: RepoOpContext,
 ): Promise<RepoOpResult | void> => {
   const fragments = ctx.context.block.resolvedFragments ?? []

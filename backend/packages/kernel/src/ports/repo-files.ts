@@ -9,6 +9,7 @@ import type {
   GitHubReviewThread,
   RepoContentEntry,
   RepoFileContent,
+  RepoTreeListing,
 } from './github-client.js'
 
 // ---------------------------------------------------------------------------
@@ -39,6 +40,21 @@ export interface RepoFiles {
    * spec post-op to seed Gherkin feature files only when they don't already exist.
    */
   listDirectory(path: string, gitRef?: string): Promise<RepoContentEntry[]>
+  /**
+   * The repository's WHOLE tree on `gitRef` in one recursive read, with the provider's
+   * truncation flag. The one read that answers "what is in this codebase" without an N+1 walk
+   * of {@link listDirectory}, which is banned over HTTP for the same reason it is banned over a
+   * database.
+   *
+   * Its caller is the bug-fishing survey, which partitions a large codebase into TERRITORIES and
+   * sizes each one from the tree's blob bytes. It reads the tree ONCE per dispatch through the
+   * app's `repoFiles` cache, so every angle of an expedition shares one read.
+   *
+   * Optional, like {@link listChangedFiles}: a bound client that cannot enumerate a tree omits
+   * it, and the survey then plans one whole-codebase territory, which is byte-for-byte the
+   * expedition a small repository gets.
+   */
+  listTree?(gitRef?: string): Promise<RepoTreeListing>
   /**
    * The head commit sha of `branch`, or null when the branch does not exist. Lets a
    * post-op decide create-vs-commit (the spec-writer runs before the coder, so its
@@ -171,6 +187,18 @@ export interface RunRepoContext {
   name?: string
   /** Which VCS provider hosts it; absent ⇒ `github` (see the projection's `provider` column). */
   provider?: VcsProvider
+  /**
+   * For a service in a monorepo, the subdirectory the service lives in (e.g. `packages/api`),
+   * exactly as the container executor's `RepoTarget.serviceDirectory` resolves it. Absent ⇒ the
+   * service is the whole repository.
+   *
+   * Carried here so a checkout-free reader scopes to the same subtree the agent's checkout is
+   * rooted at. The bug-fishing survey walks from it rather than from the repository root: a
+   * sibling service's code is out of scope for an expedition exactly as it is for every other
+   * run, and partitioning the whole monorepo would spend the pass budget on code the finding
+   * bar has no business judging.
+   */
+  serviceDirectory?: string
 }
 
 /**

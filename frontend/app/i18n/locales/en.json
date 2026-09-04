@@ -394,6 +394,10 @@
         "focus": {
           "label": "Where to concentrate",
           "placeholder": "Subsystems, directories, or the kind of defect that has been costing this team"
+        },
+        "maxPasses": {
+          "label": "Maximum passes",
+          "hint": "Most read-only passes this expedition may run. Leave empty for {count}. On a large codebase each angle is fished per territory, and whatever the budget cuts is recorded as unfished."
         }
       }
     },
@@ -8742,6 +8746,19 @@
       "parked": "Every angle has been fished.",
       "parkedWithUntriaged": "{count} finding(s) still undecided.",
       "finish": "Finish triage"
+    },
+    "coverage": {
+      "share": "{percent}% of this territory read",
+      "tooltip": "This pass reported reading {percent}% of its territory. Self-reported by the agent."
+    },
+    "plan": {
+      "surveyUnavailable": "The codebase was not surveyed, so this expedition fished it as one whole: {reason}",
+      "treeTruncated": "The repository tree came back truncated, so the territories below cover only the part that could be read.",
+      "unfished": "Fished {fished} of {planned} planned passes. Not fished this run:",
+      "unfishedCell": "{territory}, under {angle}"
+    },
+    "territories": {
+      "heading": "Territories"
     }
   }
 }

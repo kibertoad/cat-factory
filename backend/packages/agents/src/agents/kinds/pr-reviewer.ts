@@ -6,7 +6,7 @@ import { FRAGMENT_ADHERENCE_GUIDANCE_CONTEXT_FILES } from '../prompts/shared.js'
 import {
   prReviewerDiffPreOp,
   prReviewerExistingCommentsPreOp,
-  prReviewerStandardsPreOp,
+  standardsAsContextFilesPreOp,
 } from './pr-review-context.js'
 
 // ---------------------------------------------------------------------------
@@ -34,7 +34,7 @@ import {
 //
 // It is standards-aware WITHOUT paying for the standards on every turn: the kind declares
 // `standardsDelivery: 'context-files'`, so the engine does NOT fold the task's best-practice
-// fragments into the system prompt and `prReviewerStandardsPreOp` writes them as one
+// fragments into the system prompt and `standardsAsContextFilesPreOp` writes them as one
 // `.cat-context/standard-<id>.md` file each instead — read by the slice reviewers that need
 // them, from the real text rather than a paraphrase.
 //
@@ -255,7 +255,7 @@ export const PR_REVIEWER_AGENT_KINDS: AgentKindDefinition[] = [
   {
     kind: PR_REVIEWER_KIND,
     systemPrompt: PR_REVIEWER_SYSTEM_PROMPT,
-    preOps: [prReviewerDiffPreOp, prReviewerExistingCommentsPreOp, prReviewerStandardsPreOp],
+    preOps: [prReviewerDiffPreOp, prReviewerExistingCommentsPreOp, standardsAsContextFilesPreOp],
     // Read-only FULL clone of the repo's BASE (default) branch — a review task targets an
     // EXISTING external PR that the run never opened, so there is no work branch to clone. Full
     // history so the base..head diff resolves. `prHead: true` has the ENGINE resolve the reviewed
@@ -277,7 +277,7 @@ export const PR_REVIEWER_AGENT_KINDS: AgentKindDefinition[] = [
     // ...but they are delivered as `.cat-context/standard-<id>.md` FILES rather than folded into
     // this kind's system prompt. The parent reviewer delegates the actual reading to per-slice
     // subagents, so folding charged it for every standard on every one of its turns while the
-    // agents doing the reviewing never saw them. See `prReviewerStandardsPreOp`.
+    // agents doing the reviewing never saw them. See `standardsAsContextFilesPreOp`.
     standardsDelivery: 'context-files',
     structuredOutput: prReview,
     presentation: {
@@ -314,7 +314,7 @@ export {
   planSlices,
   prReviewerDiffPreOp,
   prReviewerExistingCommentsPreOp,
-  prReviewerStandardsPreOp,
+  standardsAsContextFilesPreOp,
   renderExistingReviewComments,
   renderPrDiffContext,
   renderPriorReviewContext,

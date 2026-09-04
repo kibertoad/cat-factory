@@ -209,6 +209,141 @@ export type BugFishingFindingKind = v.InferOutput<typeof bugFishingFindingKindSc
 export const bugFishingConfidenceSchema = v.picklist(['high', 'medium', 'low'])
 export type BugFishingConfidence = v.InferOutput<typeof bugFishingConfidenceSchema>
 
+/**
+ * The most container dispatches one expedition may make when nobody names a number.
+ *
+ * Three times today's eight-angle expedition. This is a COUNT, not a spend gate: the engine
+ * already runs the workspace's budget check before every dispatch, so an over-budget workspace
+ * pauses between passes regardless. What this bounds is a run that is within budget and
+ * unreasonably long, which is what a partitioned codebase makes possible: six territories under
+ * eight angles is forty-eight passes, and most of that matrix is not worth fishing.
+ */
+export const BUG_FISHING_DEFAULT_PASS_BUDGET = 24
+
+/** The most a task may raise its own pass budget to. */
+export const BUG_FISHING_MAX_PASS_BUDGET = 96
+
+// ---- Territories: the partition of a large codebase --------------------------
+
+/**
+ * A cohesive slice of the codebase the expedition fishes as one unit.
+ *
+ * A large codebase cannot be fished as one scope: a pass told to "decide where this angle could
+ * bite, then read narrowly" reads whatever its first grep pointed at, and a module nobody read
+ * then reports exactly like a module that was read and found clean. Territories are the platform
+ * COMPUTING the partition (from the repository tree, blueprint modules first, then package and
+ * directory boundaries) so the model can go on judging code rather than inventing a module map.
+ *
+ * A territory id is an OPEN vocabulary, unlike a phase id: it is derived from the tree, and the
+ * tree moves. Nothing looks a territory up by id at render time, which is why the label and the
+ * roots are RECORDED here rather than re-derived: a phase whose territory a later survey no
+ * longer produces is still rendered from what the run itself fished.
+ */
+export const bugFishingTerritorySchema = v.object({
+  /** Stable within one expedition; derived from the territory's root path. */
+  id: v.string(),
+  /** Human label (the module name, or the directory the territory is rooted at). */
+  label: v.string(),
+  /** Repo-relative roots the territory owns. Empty ⇒ the whole codebase (the single-territory case). */
+  roots: v.optional(v.array(v.string()), []),
+  /** How many source files the manifest counted under those roots. */
+  fileCount: v.optional(v.number(), 0),
+  /**
+   * Approximate source tokens (bytes / 4 over the tree's blob sizes). The sizing input, and what
+   * the window shows a human deciding whether a low coverage share is a big territory or a lazy
+   * pass. Approximate is stated in the NAME, because it is a byte estimate and never a count.
+   */
+  approxTokens: v.optional(v.number(), 0),
+  /**
+   * How the territory was derived, so a reader can tell a blueprint's own decomposition from the
+   * fallback the platform computed for a repository that has never been blueprinted.
+   */
+  source: v.optional(v.picklist(['blueprint', 'directory', 'whole-codebase']), 'directory'),
+  /**
+   * The subtree shas of the territory's roots, one per root, in `roots` order. A string compare
+   * against a later survey answers "has this territory changed since it was fished" with no diff.
+   * Recorded now because it comes free with the tree read.
+   */
+  subtreeShas: v.optional(v.array(v.string()), []),
+})
+export type BugFishingTerritory = v.InferOutput<typeof bugFishingTerritorySchema>
+
+/**
+ * The single territory a codebase small enough to fish whole is partitioned into.
+ *
+ * Named rather than spelled out at each site because the PASS-THROUGH is a property worth
+ * pinning: a small repository plans one territory, its phases carry no territory id, and the
+ * expedition it gets is byte-for-byte the one that shipped before territories existed.
+ */
+export const WHOLE_CODEBASE_TERRITORY_ID = 'whole-codebase'
+
+/**
+ * One cell of the matrix that was planned but NOT fished, because the pass budget ran out.
+ *
+ * A cap silent about its tail teaches the reader that the tail was clean. This is the tail,
+ * named: which angle over which territory nobody looked at on this run.
+ */
+export const bugFishingUnfishedCellSchema = v.object({
+  territoryId: v.string(),
+  /** The territory's label as it stood when the plan was made (never looked up at render time). */
+  territoryLabel: v.string(),
+  phaseId: v.string(),
+  /** The angle's label as it stood when the plan was made. */
+  phaseTitle: v.string(),
+})
+export type BugFishingUnfishedCell = v.InferOutput<typeof bugFishingUnfishedCellSchema>
+
+/**
+ * What the expedition DECIDED to fish, and what it decided not to.
+ *
+ * Written before the first pass runs, so the window can state the shape of the hunt while it is
+ * still in flight, and so the record of an expedition a human stopped early says what was left.
+ */
+export const bugFishingPlanSchema = v.object({
+  /** Most dispatches this expedition may make. */
+  passBudget: v.number(),
+  /** How many cells the full (territory x angle) matrix had, before the budget trimmed it. */
+  plannedCells: v.number(),
+  /** The cells the budget cut, by territory and angle. Empty when the matrix fitted. */
+  unfished: v.optional(v.array(bugFishingUnfishedCellSchema), []),
+  /**
+   * True when the provider TRUNCATED the tree the survey partitioned. A truncated tree is not a
+   * manifest: the territories cover what was read, and the coverage record below is a share of
+   * that rather than of the repository. Stated because the two readings are opposite and nothing
+   * else in the record can tell them apart.
+   */
+  treeTruncated: v.optional(v.boolean(), false),
+  /**
+   * Set when the codebase survey could not run at all (no repository bound to the run, or the
+   * bound client cannot enumerate a tree). The expedition then fishes the whole codebase as one
+   * territory, which is the shipped behaviour, and this says WHY rather than leaving a
+   * single-territory plan looking like a small repository.
+   */
+  surveyUnavailableReason: v.optional(v.nullable(v.string())),
+})
+export type BugFishingPlan = v.InferOutput<typeof bugFishingPlanSchema>
+
+/**
+ * What one pass actually read, intersected with its territory's manifest.
+ *
+ * SELF-REPORTED, and the record says so in the field name: the agent lists the paths it read and
+ * the engine computes the share against the manifest it handed over. A territory with a low share
+ * is what tells a human that "found nothing" here means "did not look", which is the distinction
+ * the whole partition exists to preserve. Verifying it against the tool-call trajectory sink is a
+ * later, different producer, and would say so.
+ */
+export const bugFishingCoverageSchema = v.object({
+  /** How many manifest files the pass reported reading. */
+  filesRead: v.number(),
+  /** How many files the territory's manifest held. Zero ⇒ nothing to be a share OF. */
+  manifestFiles: v.number(),
+  /** Paths the pass reported that the manifest does not have (a wander, or a stale read). */
+  offManifest: v.optional(v.number(), 0),
+  /** Always `self-reported` today; the field exists so a verified record can say it is one. */
+  source: v.optional(v.picklist(['self-reported']), 'self-reported'),
+})
+export type BugFishingCoverage = v.InferOutput<typeof bugFishingCoverageSchema>
+
 /** A phase's lifecycle across the expedition's successive dispatches. */
 export const bugFishingPhaseStatusSchema = v.picklist(['pending', 'fishing', 'completed', 'failed'])
 export type BugFishingPhaseStatus = v.InferOutput<typeof bugFishingPhaseStatusSchema>
@@ -234,6 +369,27 @@ export const bugFishingPhaseSchema = v.object({
   settledAt: v.optional(v.nullable(v.number())),
   /** Why the pass failed, when it did. Null otherwise. */
   failureReason: v.optional(v.nullable(v.string())),
+  /**
+   * The territory this pass fished, or null for the whole codebase. Null is what every
+   * expedition stored before territories existed carries, and what a small codebase still
+   * carries today, so a stored run parses unchanged either way.
+   */
+  territoryId: v.optional(v.nullable(v.string())),
+  /**
+   * The territory's label as it stood when this pass ran. Recorded rather than looked up: a
+   * territory is derived from the tree, and a later survey of a moved tree may not produce it.
+   */
+  territoryLabel: v.optional(v.nullable(v.string())),
+  /** What the pass reported reading, against the manifest it was given. Null when it reported none. */
+  coverage: v.optional(v.nullable(bugFishingCoverageSchema)),
+  /**
+   * How many findings were dropped for pointing OUTSIDE this pass's territory. The brief tells a
+   * pass what it is not responsible for and the platform holds it to that at coercion, so a pass
+   * that wanders is corrected rather than exhorted. Counted rather than silent, so a human can
+   * see how often it happens. Absent on a pass that was never scoped to a territory, which is a
+   * different fact from a scoped pass that dropped none.
+   */
+  outOfScopeFindings: v.optional(v.number()),
 })
 export type BugFishingPhase = v.InferOutput<typeof bugFishingPhaseSchema>
 
@@ -332,6 +488,8 @@ export const bugFishingFindingSchema = v.object({
   id: v.string(),
   /** The phase that surfaced it (a phase id; see {@link describeBugFishingPhase}). */
   phaseId: v.string(),
+  /** The territory the pass was fishing, or null for a whole-codebase pass. */
+  territoryId: v.optional(v.nullable(v.string())),
   /** Repo-relative path the finding concerns; empty when it is not anchored to one file. */
   path: v.string(),
   /** The line the finding anchors to, or null. */
@@ -395,6 +553,20 @@ export const bugFishingStepStateSchema = v.object({
   currentPhaseIndex: v.optional(v.number(), 0),
   /** Every finding surfaced so far, oldest phase first, severity-ordered within a phase. */
   findings: v.optional(v.array(bugFishingFindingSchema), []),
+  /**
+   * The partition the survey computed, in the order the expedition fishes them. One entry whose
+   * `source` is `whole-codebase` for a codebase small enough to fish whole.
+   *
+   * DESCRIPTORS only, never file lists: this rides the run's `detail` blob, re-serialised on
+   * every progress write, and a thousand paths per territory would put the manifest in the blob
+   * thirty times over. The per-pass manifest is re-rendered from the cached tree at dispatch.
+   *
+   * ABSENT, never `[]`, on an expedition that predates territories: an empty array would claim
+   * the codebase was surveyed and found to contain nothing.
+   */
+  territories: v.optional(v.array(bugFishingTerritorySchema)),
+  /** What the expedition planned to fish, and what the pass budget cut. */
+  plan: v.optional(v.nullable(bugFishingPlanSchema)),
   /** Identifier of the model that fished, for transparency. */
   model: v.optional(v.nullable(v.string())),
   /**
@@ -419,6 +591,15 @@ export type BugFishingStepState = v.InferOutput<typeof bugFishingStepStateSchema
 export const bugFishingAgentOutputSchema = v.object({
   /** What this pass covered and what it concluded, in one paragraph. */
   summary: v.fallback(v.optional(v.string()), undefined),
+  /**
+   * The repo-relative paths this pass actually READ, so the engine can compute a coverage record
+   * against the territory manifest it handed over.
+   *
+   * Capped in the schema rather than only in the prompt: it is model-authored text that becomes
+   * a count, and an unbounded list would ride the run blob. A pass that reports none gets no
+   * coverage record at all, which is a different fact from a pass that covered nothing.
+   */
+  filesRead: v.fallback(v.array(v.fallback(v.pipe(v.string(), v.maxLength(400)), '')), []),
   /** The findings this pass surfaced. */
   findings: v.fallback(
     v.array(

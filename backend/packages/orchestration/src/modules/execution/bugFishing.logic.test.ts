@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { BUG_FISHING_PHASES, type BugFishingStepState } from '@cat-factory/kernel'
 import {
   coerceBugFishingFindings,
+  computeBugFishingCoverage,
   describeRecordedPhase,
   BUG_FISHING_SPAWN_CLAIM_TTL_MS,
   bugFishingSpawnIsClaimable,
@@ -510,5 +511,126 @@ describe('secret scrubbing', () => {
       mintId,
     )
     expect(findings[0]!.evidence).not.toContain('ghp_0123456789abcdefghijklmnopqrstuvwxyzAB')
+  })
+})
+
+describe('territory scope and coverage', () => {
+  const scope = {
+    territoryId: 'billing',
+    roots: ['billing'],
+    manifest: new Set(['billing/a.ts', 'billing/b.ts', 'billing/c.ts', 'billing/d.ts']),
+  }
+  const finding = (path: string) => ({
+    path,
+    severity: 'medium' as const,
+    kind: 'bug' as const,
+    confidence: 'high' as const,
+    title: `t ${path}`,
+    detail: 'd',
+  })
+
+  it('drops findings outside the territory and COUNTS them', () => {
+    // The brief tells a pass what it is not responsible for; this is the platform holding it to
+    // that rather than exhorting it. Counted rather than silent, because a territory that came
+    // back clean and one whose pass spent its findings on somebody else's code read alike.
+    const result = coerceBugFishingFindings(
+      {
+        summary: 'x',
+        filesRead: [],
+        findings: [finding('billing/a.ts'), finding('sessions/x.ts')],
+      },
+      'control-flow',
+      mintId,
+      scope,
+    )
+    expect(result.findings.map((f) => f.path)).toEqual(['billing/a.ts'])
+    expect(result.outOfScope).toBe(1)
+    expect(result.findings[0]!.territoryId).toBe('billing')
+  })
+
+  it('keeps a finding with NO path, which can legitimately span files', () => {
+    const result = coerceBugFishingFindings(
+      { summary: 'x', filesRead: [], findings: [finding('')] },
+      'control-flow',
+      mintId,
+      scope,
+    )
+    expect(result.findings).toHaveLength(1)
+    expect(result.outOfScope).toBe(0)
+  })
+
+  it('scopes nothing on a whole-codebase pass', () => {
+    const result = coerceBugFishingFindings(
+      { summary: 'x', filesRead: [], findings: [finding('anywhere/at/all.ts')] },
+      'control-flow',
+      mintId,
+    )
+    expect(result.findings).toHaveLength(1)
+    expect(result.outOfScope).toBe(0)
+  })
+
+  it('computes coverage against the manifest, separating off-manifest reads', () => {
+    const coverage = computeBugFishingCoverage(
+      {
+        summary: 'x',
+        filesRead: ['billing/a.ts', './billing/b.ts', 'billing/a.ts', 'sessions/other.ts'],
+        findings: [],
+      },
+      scope,
+    )
+    expect(coverage).toEqual({
+      filesRead: 2,
+      manifestFiles: 4,
+      offManifest: 1,
+      source: 'self-reported',
+    })
+  })
+
+  it('answers NULL for a pass that reported no reads, never a zero', () => {
+    // "Did not say" and "read nothing" are different facts, and a 0% coverage rail for the first
+    // accuses a pass that may have read everything.
+    expect(
+      computeBugFishingCoverage({ summary: 'x', filesRead: [], findings: [] }, scope),
+    ).toBeNull()
+    expect(computeBugFishingCoverage(undefined, scope)).toBeNull()
+  })
+
+  it("briefs a pass with its OWN territory's prior findings only", () => {
+    const state = stateWith({
+      findings: [
+        {
+          ...coerceBugFishingFindings(
+            { summary: '', filesRead: [], findings: [finding('billing/a.ts')] },
+            'control-flow',
+            mintId,
+            scope,
+          ).findings[0]!,
+        },
+        {
+          ...coerceBugFishingFindings(
+            { summary: '', filesRead: [], findings: [finding('sessions/a.ts')] },
+            'control-flow',
+            mintId,
+            { ...scope, territoryId: 'sessions', roots: ['sessions'] },
+          ).findings[0]!,
+        },
+      ],
+    })
+    expect(priorBugFishingFindingTitles(state, 'billing')).toEqual(['t billing/a.ts'])
+    // With no territory named (a whole-codebase expedition) the whole list is briefed, as before.
+    expect(priorBugFishingFindingTitles(state)).toHaveLength(2)
+  })
+
+  it('names the out-of-scope drop in the phase summary', () => {
+    const next = recordBugFishingPhase(stateWith(), 0, {
+      summary: 'read the write paths',
+      findings: [],
+      dropped: 0,
+      outOfScope: 2,
+      coverage: null,
+      at: 1,
+    })
+    expect(next.phases?.[0]?.summary).toContain('outside')
+    expect(next.phases?.[0]?.outOfScopeFindings).toBe(2)
   })
 })

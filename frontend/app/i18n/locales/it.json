@@ -3131,6 +3131,10 @@
         "focus": {
           "label": "Dove concentrarsi",
           "placeholder": "Sottosistemi, cartelle o il tipo di difetto che sta costando più tempo a questo team"
+        },
+        "maxPasses": {
+          "label": "Passaggi massimi",
+          "hint": "Numero massimo di passaggi in sola lettura di questa spedizione. Lascia vuoto per {count}. Su una codebase grande ogni angolazione viene pescata per territorio, e ciò che il budget taglia resta registrato come non pescato."
         }
       }
     },
@@ -8444,6 +8448,19 @@
       "parked": "Tutte le angolazioni sono state esplorate.",
       "parkedWithUntriaged": "Restano {count} rilievi senza decisione.",
       "finish": "Concludi il triage"
+    },
+    "coverage": {
+      "share": "{percent}% di questo territorio letto",
+      "tooltip": "Questo passaggio ha dichiarato di aver letto il {percent}% del suo territorio. Dato dichiarato dall'agente."
+    },
+    "plan": {
+      "surveyUnavailable": "La codebase non è stata mappata, quindi questa spedizione l'ha pescata per intero: {reason}",
+      "treeTruncated": "L'albero del repository è arrivato troncato, quindi i territori qui sotto coprono solo la parte leggibile.",
+      "unfished": "Pescati {fished} passaggi su {planned} previsti. Non pescati in questa esecuzione:",
+      "unfishedCell": "{territory}, sotto {angle}"
+    },
+    "territories": {
+      "heading": "Territori"
     }
   }
 }

@@ -23,6 +23,7 @@ import type {
   ProjectIssueQuery,
   ProjectIssuePage,
   RepoContentEntry,
+  RepoTreeListing,
   RepoEntry,
   RepoFileContent,
   VcsClient,
@@ -257,14 +258,15 @@ export class FetchGitLabClient implements VcsClient {
     connection: VcsConnectionRef,
     ref: VcsRepoRef,
     gitRef?: string,
-  ): Promise<RepoContentEntry[]> {
+  ): Promise<RepoTreeListing> {
     // GitLab's tree endpoint lists recursively in one paginated sweep, so file search
     // never walks the tree directory-by-directory. Bounded by MAX_PAGES like every other
-    // listing (a huge tree is truncated best-effort).
+    // listing, and the cap is REPORTED: a caller partitioning a codebase out of this tree
+    // has to know it is holding a prefix rather than the repository.
     const params = new URLSearchParams({ per_page: String(PER_PAGE), recursive: 'true' })
     if (gitRef) params.set('ref', gitRef)
     try {
-      return await this.paginate(
+      const { items, truncated } = await this.paginatePage(
         `/projects/${projectPath(ref)}/repository/tree?${params.toString()}`,
         { connection },
         (json) => {
@@ -287,8 +289,10 @@ export class FetchGitLabClient implements VcsClient {
             }))
         },
       )
+      return { entries: items, truncated }
     } catch (err) {
-      if (err instanceof GitLabApiError && err.status === 404) return []
+      if (err instanceof GitLabApiError && err.status === 404)
+        return { entries: [], truncated: false }
       throw err
     }
   }

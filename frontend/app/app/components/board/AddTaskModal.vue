@@ -22,7 +22,11 @@ import type {
   TaskTypeFields,
 } from '~/types/domain'
 import { DOC_KINDS, DOC_KIND_FIELDS } from '~/types/domain'
-import { BUG_FISHING_PHASES } from '@cat-factory/contracts'
+import {
+  BUG_FISHING_DEFAULT_PASS_BUDGET,
+  BUG_FISHING_MAX_PASS_BUDGET,
+  BUG_FISHING_PHASES,
+} from '@cat-factory/contracts'
 import { resolveComponentRegistry } from '@modular-vue/core'
 import { useReactiveSlots } from '@modular-vue/runtime'
 import type { AppSlots, ResultViewContribution } from '~/modular/slots'
@@ -138,6 +142,8 @@ const timeboxHours = ref<number | undefined>(undefined)
 // the deliberate act) plus an optional focus folded into every angle's prompt.
 const fishingPhaseIds = ref<string[]>([])
 const fishingFocus = ref('')
+/** Held as a string because the input is a text field; parsed at submit, blank ⇒ the default. */
+const fishingMaxPasses = ref('')
 // Spike research criteria — folded into the spike agent's prompt (see the backend `spike` kind).
 const spikeResearchQuestion = ref('')
 const spikeSuccessCriteria = ref('')
@@ -310,6 +316,8 @@ function buildBugFishingFields(): TaskTypeFields | undefined {
     f.fishingPhaseIds = [...fishingPhaseIds.value]
   }
   if (fishingFocus.value.trim()) f.fishingFocus = fishingFocus.value.trim()
+  const maxPasses = Number.parseInt(fishingMaxPasses.value, 10)
+  if (Number.isFinite(maxPasses) && maxPasses > 0) f.fishingMaxPasses = maxPasses
   return Object.keys(f).length ? f : undefined
 }
 
@@ -597,6 +605,7 @@ watch(open, (isOpen) => {
   timeboxHours.value = undefined
   fishingPhaseIds.value = []
   fishingFocus.value = ''
+  fishingMaxPasses.value = ''
   spikeResearchQuestion.value = ''
   spikeSuccessCriteria.value = ''
   spikeOptionsToCompare.value = ''
@@ -1103,6 +1112,28 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
                 autoresize
                 :placeholder="t('board.addTask.bugFishingFields.focus.placeholder')"
                 class="w-full"
+              />
+            </UFormField>
+            <!-- An OVERRIDE, so it is hidden at the basic tier and what remains is exactly the
+                 shipped default it would have shown. It bites only on a codebase large enough to
+                 be split into territories, where the plan is territories x angles. -->
+            <UFormField
+              v-if="uiMode.isAdvanced"
+              :label="t('board.addTask.bugFishingFields.maxPasses.label')"
+              :hint="t('board.addTask.optional')"
+              :description="
+                t('board.addTask.bugFishingFields.maxPasses.hint', {
+                  count: BUG_FISHING_DEFAULT_PASS_BUDGET,
+                })
+              "
+            >
+              <UInput
+                v-model="fishingMaxPasses"
+                type="number"
+                :min="1"
+                :max="BUG_FISHING_MAX_PASS_BUDGET"
+                :placeholder="String(BUG_FISHING_DEFAULT_PASS_BUDGET)"
+                data-testid="add-task-fishing-max-passes"
               />
             </UFormField>
           </div>

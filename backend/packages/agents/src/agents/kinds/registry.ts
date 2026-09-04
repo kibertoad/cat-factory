@@ -141,7 +141,7 @@ export interface AgentKindDefinition {
    *   subagents: an agentic loop re-sends its prompt on every turn, so folding charges the
    *   delegating agent for every standard on every one of its turns while the subagents that
    *   actually apply them never receive them. A kind choosing this MUST write the files itself
-   *   (see `prReviewerStandardsPreOp`) and say where they are — the engine only stops folding.
+   *   (see `standardsAsContextFilesPreOp`) and say where they are — the engine only stops folding.
    *
    * - `none` — this kind receives no standards at all. Right for a kind that JUDGES rather than
    *   produces (`merger` scores a diff's complexity/risk/impact): a house coding standard has no

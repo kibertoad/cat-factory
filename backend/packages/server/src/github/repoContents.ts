@@ -4,6 +4,7 @@ import type {
   RepoContentEntry,
   RepoEntry,
   RepoFileContent,
+  RepoTreeListing,
 } from '@cat-factory/kernel'
 import {
   GITHUB_CONTENTS_MAX_BYTES,
@@ -91,13 +92,20 @@ export async function readDirectory(
 /**
  * The WHOLE tree in one recursive git-trees read, so file search never walks the contents API
  * directory by directory. `HEAD` resolves to the repository's default branch.
+ *
+ * The endpoint's own `truncated` flag rides back on the listing rather than being dropped here.
+ * GitHub cuts the response off past its entry/size ceiling, and a caller building a MANIFEST out
+ * of the result (the bug-fishing survey partitioning a codebase into territories) would otherwise
+ * state a partial tree as the whole codebase: every path the cut removed would read as a file
+ * that does not exist, which is exactly the "absent and zero render the same" failure a coverage
+ * record exists to prevent.
  */
 export async function readTree(
   request: ContentsRequest,
   installationId: number,
   ref: GitHubRepoRef,
   gitRef?: string,
-): Promise<RepoContentEntry[]> {
+): Promise<RepoTreeListing> {
   const treeRef = encodeURIComponent(gitRef && gitRef !== 'HEAD' ? gitRef : 'HEAD')
   let json: unknown
   try {
@@ -106,16 +114,17 @@ export async function readTree(
     }))
   } catch (err) {
     // Empty repo / unknown ref → no entries (mirrors readDirectory).
-    if (githubApiStatus(err) === 404) return []
+    if (githubApiStatus(err) === 404) return { entries: [], truncated: false }
     throw err
   }
   const body = json as {
     tree?: Array<{ path?: string; type?: string; sha?: string; size?: number }>
+    truncated?: boolean
   }
-  const entries = Array.isArray(body.tree) ? body.tree : []
+  const tree = Array.isArray(body.tree) ? body.tree : []
   // GitHub git-tree `type` is `blob` | `tree` | `commit` (submodule); normalise to the neutral
   // file/dir vocabulary and drop submodules (they have no browsable content here).
-  return entries
+  const entries = tree
     .filter((e) => e.type === 'blob' || e.type === 'tree')
     .map((e) => ({
       path: e.path ?? '',
@@ -124,6 +133,7 @@ export async function readTree(
       sha: e.sha ?? '',
       ...(typeof e.size === 'number' ? { size: e.size } : {}),
     }))
+  return { entries, truncated: body.truncated === true }
 }
 
 /**
@@ -167,4 +177,38 @@ export async function readFileContent(
       ? decodeRepoFileBase64(file.content)
       : { content: file.content, lossy: false }
   return { content, sha: file.sha ?? '', ...(lossy ? { lossy: true } : {}) }
+}
+
+/**
+ * The sha of the most recent commit that touched `path` on `gitRef`, or null when there is none.
+ *
+ * Here beside the other contents reads rather than on the client, for the reason that file's
+ * header states: it is at its size budget, and a read that talks only to the commits endpoint has
+ * nothing client-specific in it.
+ */
+export async function readLatestCommitSha(
+  request: ContentsRequest,
+  installationId: number,
+  ref: GitHubRepoRef,
+  path: string,
+  gitRef?: string,
+): Promise<string | null> {
+  const clean = path.replace(/^\/+|\/+$/g, '')
+  const params = new URLSearchParams({ per_page: '1' })
+  if (clean) params.set('path', clean)
+  // The commits list endpoint does not accept `HEAD`; omitting `sha` defaults to the repo's
+  // default branch, which is exactly what a `HEAD`/absent gitRef means here.
+  if (gitRef && gitRef !== 'HEAD') params.set('sha', gitRef)
+  let json: unknown
+  try {
+    ;({ json } = await request(`/repos/${ref.owner}/${ref.repo}/commits?${params.toString()}`, {
+      installationId,
+    }))
+  } catch (err) {
+    // Empty repo / missing path / unknown ref → no commit to pin against.
+    if (githubApiStatus(err) === 404) return null
+    throw err
+  }
+  const commits = Array.isArray(json) ? (json as Array<{ sha?: string }>) : []
+  return commits[0]?.sha ?? null
 }

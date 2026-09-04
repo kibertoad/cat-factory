@@ -3131,6 +3131,10 @@
         "focus": {
           "label": "Worauf konzentrieren",
           "placeholder": "Teilsysteme, Verzeichnisse oder die Fehlerart, die dieses Team bisher Zeit gekostet hat"
+        },
+        "maxPasses": {
+          "label": "Maximale Durchgänge",
+          "hint": "Höchstzahl der Nur-Lese-Durchgänge dieser Expedition. Leer lassen für {count}. Bei einer großen Codebasis wird jeder Blickwinkel pro Gebiet durchsucht; was das Budget streicht, wird als nicht durchsucht vermerkt."
         }
       }
     },
@@ -8444,6 +8448,19 @@
       "parked": "Alle Blickwinkel wurden untersucht.",
       "parkedWithUntriaged": "Über {count} Befund(e) wurde noch nicht entschieden.",
       "finish": "Sichtung abschließen"
+    },
+    "coverage": {
+      "share": "{percent}% dieses Gebiets gelesen",
+      "tooltip": "Dieser Durchgang hat angegeben, {percent}% seines Gebiets gelesen zu haben. Selbstauskunft des Agenten."
+    },
+    "plan": {
+      "surveyUnavailable": "Die Codebasis wurde nicht kartiert, daher wurde sie als ein Ganzes durchsucht: {reason}",
+      "treeTruncated": "Der Repository-Baum kam gekürzt zurück, daher decken die Gebiete unten nur den lesbaren Teil ab.",
+      "unfished": "{fished} von {planned} geplanten Durchgängen ausgeführt. In diesem Lauf nicht durchsucht:",
+      "unfishedCell": "{territory}, unter {angle}"
+    },
+    "territories": {
+      "heading": "Gebiete"
     }
   }
 }
