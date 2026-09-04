@@ -127,7 +127,13 @@ export function effectiveTierLimit(
  */
 export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   // Anthropic (list prices from the Claude model catalog, USD→EUR ~0.92).
-  // Claude Fable 5 is above Opus-tier ($10 in / $50 out per 1M).
+  // Claude Fable 5.1 and Claude Fable 5 both sit above Opus-tier, at the same $10 in / $50 out
+  // per 1M: 5.1 succeeded 5 in the same tier at the same per-token price. What 5.1 changed is
+  // the cache-READ rate, cut to $0.25/M from Fable 5's $1.00/M, and that is deliberately NOT
+  // named here: the derived 0.1x floor lands on $1.00, which OVER-states a 5.1 cache read
+  // fourfold, and a budget safeguard is allowed to be early but never short. Naming it would
+  // be right the moment a route this platform sends breakpoints on serves the model.
+  'anthropic:claude-fable-5-1': { inputPerMillion: 9.2, outputPerMillion: 46 },
   'anthropic:claude-fable-5': { inputPerMillion: 9.2, outputPerMillion: 46 },
   // Claude Opus 5 lands at Opus-tier list price ($5 in / $25 out per 1M) — same as the
   // Opus 4.8 it supersedes in the catalog. Opus 4.8 keeps its entry: a workspace can
@@ -264,6 +270,15 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   // Its cached tier is named because $0.25 sits above the 0.1x floor its input implies ($0.20),
   // so deriving it would under-meter a run riding a warm prefix.
   'qwen:qwen3.8-max': { inputPerMillion: 1.84, outputPerMillion: 5.52, cacheReadPerMillion: 0.23 },
+  // The pinned 0902 snapshot bills exactly as the undated alias does; Alibaba shipped the
+  // post-training improvement without a price change. It gets its own row rather than leaning
+  // on the bare `qwen` fallback, which is the older 3.7-Max rate and would meter it high on
+  // input and short on output at the same time.
+  'qwen:qwen3.8-max-0902': {
+    inputPerMillion: 1.84,
+    outputPerMillion: 5.52,
+    cacheReadPerMillion: 0.23,
+  },
   // Qwen3-Max is the superseded flagship, kept so historical spend rows keep costing; Alibaba
   // has since cut it to $0.78 in / $3.90 out per 1M, from the $1.20 / $6.00 this held.
   'qwen:qwen3-max': { inputPerMillion: 0.72, outputPerMillion: 3.59 },
@@ -319,6 +334,10 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   // per-token markup), so each curated model carries the upstream vendor's list price
   // (USD→EUR ~0.92). Keyed by the OpenRouter `vendor/model` slug. The bare `openrouter`
   // fallback is a mid-range guess for any uncatalogued slug.
+  // The 5.1 slug is DOTTED (`claude-fable-5.1`) where the direct id is dashed; see the catalog
+  // entry. A key spelled the other way would silently fall through to the bare `openrouter`
+  // row, which meters this model at a fifth of its cost.
+  'openrouter:anthropic/claude-fable-5.1': { inputPerMillion: 9.2, outputPerMillion: 46 },
   'openrouter:anthropic/claude-fable-5': { inputPerMillion: 9.2, outputPerMillion: 46 },
   'openrouter:anthropic/claude-opus-5': { inputPerMillion: 4.6, outputPerMillion: 23 },
   'openrouter:anthropic/claude-opus-4.8': { inputPerMillion: 4.6, outputPerMillion: 23 },
@@ -330,6 +349,9 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   // published a 100% increase on BOTH Flash rows for 2027-01-01, which this table does not
   // pre-empt: a future price is not the current one, and the next sweep lands it.
   'openrouter:google/gemini-3.7-flash': { inputPerMillion: 0.69, outputPerMillion: 3.45 },
+  // 3.8 Flash launched at 3.7 Flash's list, $0.75 / $3.75, and is NOT discounted, so this row
+  // is the rate actually billed rather than the deliberate over-count above it.
+  'openrouter:google/gemini-3.8-flash': { inputPerMillion: 0.69, outputPerMillion: 3.45 },
   // The same OpenAI list prices as the direct rows above, and the same two stale halves
   // corrected. OpenRouter's own model page currently advertises Sol at $2 / $10, below both
   // OpenAI's list and its own Terra row; that is an upstream listing artefact, so the entry
@@ -339,6 +361,20 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   'openrouter:openai/gpt-5.6-luna': { inputPerMillion: 0.19, outputPerMillion: 1.11 },
   'openrouter:openai/gpt-5.5': { inputPerMillion: 4.6, outputPerMillion: 27.6 },
   'openrouter:openai/gpt-oss-120b': { inputPerMillion: 0.034, outputPerMillion: 0.16 },
+  // Meta Muse Spark 1.3, both tiers: $1.25 / $4.25 standard, $0.10 / $0.20 contributor. The
+  // two are the same model on the same route, so the gap between these rows IS the entire
+  // difference the contributor tier buys, and metering both at the standard rate would hide
+  // the one thing a workspace picks between them for.
+  //
+  // Neither names a cache-read rate. Meta publishes one ($0.15/M standard, $0.002/M
+  // contributor), but OpenRouter's caching docs carry no Meta section at all, so
+  // `providerCachePolicy` answers `none` for the prefix and this platform reports no cache
+  // class on the route. A pinned rate would assert a hit that nothing here knows how to enter.
+  'openrouter:meta/muse-spark-1.3': { inputPerMillion: 1.15, outputPerMillion: 3.91 },
+  'openrouter:meta/muse-spark-1.3-contributor': {
+    inputPerMillion: 0.092,
+    outputPerMillion: 0.184,
+  },
   // Both DeepSeek slugs are unpinned MOVING ALIASES, and the catalog routes to them
   // deliberately (each follows the newest GA build), so these two entries track the alias's
   // blended rate rather than either the cheapest provider behind it or DeepSeek's own
@@ -346,15 +382,18 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   // OpenRouter models API actually reported when it was last read, and why re-reading it is
   // part of every pricing sweep rather than something to infer from the vendor's own page.
   //
-  // Observed 2026-09-01 by `scripts/check-openrouter-pins.mjs`: Flash $0.0809 in / $0.0162
-  // cached / $0.1618 out, Pro $1.60 in / $0.135 cached / $3.20 out per 1M. Pro has moved back
-  // UP, and by nearly 3x: the rows below it carried ($0.556 / $1.112, read 2026-08-26) metered a
-  // budget at roughly a third of what the alias now bills. That swing in five days is the case
-  // for the checker rather than for a sweep nobody schedules.
+  // Observed 2026-09-04 by `scripts/check-openrouter-pins.mjs`: Flash $0.0886 in / $0.0177
+  // cached / $0.1772 out, Pro $1.60 in / $0.135 cached / $3.20 out per 1M. Pro is unmoved since
+  // the 2026-09-01 read; Flash has drifted up ~9% and the row below it was the checker's one
+  // UNDERSTATED pin, which is the direction that matters: a budget metering below the live rate
+  // is the failure this table's conservatism exists to rule out, so it is re-pinned even though
+  // the gap is small. (An earlier read had Pro at $0.556 / $1.112 on 2026-08-26, a third of what
+  // it bills now. That swing in five days is the case for the checker rather than for a sweep
+  // nobody schedules.)
   'openrouter:deepseek/deepseek-v4-flash': {
-    inputPerMillion: 0.075,
-    outputPerMillion: 0.15,
-    cacheReadPerMillion: 0.015,
+    inputPerMillion: 0.082,
+    outputPerMillion: 0.164,
+    cacheReadPerMillion: 0.017,
   },
   'openrouter:deepseek/deepseek-v4-pro': {
     inputPerMillion: 1.48,
@@ -424,12 +463,17 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   // Bedrock ref carries the operator's geo/global inference prefix (`eu.anthropic.…`), which
   // differs per Region, and `priceFor` matches `provider:model` EXACTLY: a per-model key
   // would silently never match and fall through anyway. The rate errs HIGH, at the frontier
-  // tier this catalog can select on Bedrock (Opus 4.8 / GPT-5.5, ~$5 in / $30 out per 1M),
-  // for the same reason the dynamic-OpenRouter overlay skips a zero price: a budget
-  // safeguard must never undercount, and `defaultPrice` would meter an Opus-on-Bedrock run
-  // at roughly a thirtieth of its real cost. Accurate per-model Bedrock pricing needs
-  // prefix-aware matching in `priceFor`; see the initiative doc.
-  bedrock: { inputPerMillion: 4.6, outputPerMillion: 27.6 },
+  // tier this catalog can select on Bedrock, for the same reason the dynamic-OpenRouter
+  // overlay skips a zero price: a budget safeguard must never undercount, and `defaultPrice`
+  // would meter a frontier-on-Bedrock run at roughly a sixtieth of its real cost. Accurate
+  // per-model Bedrock pricing needs prefix-aware matching in `priceFor`; see the initiative doc.
+  //
+  // That ceiling MOVED with Claude Fable 5.1, which Bedrock serves from launch day: the
+  // frontier tier here is now ~$10 in / $50 out per 1M, not the ~$5 / $30 of Opus 4.8 and
+  // GPT-5.5. Adding a Bedrock flavour is therefore two edits, and the one that is easy to
+  // forget is this one: leaving the row at the old tier meters every Fable-5.1-on-Bedrock run
+  // at half its cost, which is the undercount this entry exists to rule out.
+  bedrock: { inputPerMillion: 9.2, outputPerMillion: 46 },
 }
 
 /** Default budget: roughly 100 EUR of tokens per calendar month. */

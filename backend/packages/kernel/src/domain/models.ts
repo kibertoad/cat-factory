@@ -229,6 +229,10 @@ const OPENROUTER_SLUG_FAMILY: Record<string, ModelFamily> = {
   'z-ai': 'glm',
   zai: 'glm',
   'meta-llama': 'llama',
+  // Meta ships under BOTH prefixes: the open-weights Llamas as `meta-llama/…` and the Muse
+  // line as a bare `meta/…`. Both are the same vendor and the same residency answer, so both
+  // land on the one Meta family this policy has (labelled "Llama (Meta)" in the picker).
+  meta: 'llama',
   'x-ai': 'grok',
   xai: 'grok',
 }

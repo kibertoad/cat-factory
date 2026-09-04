@@ -183,11 +183,19 @@ Several shapes of entry fall out of this:
   window** usually differs: the Cloudflare variant runs a cut context (e.g. DeepSeek V4
   Pro 131K) while the direct/subscription variant gets the full window (1M).
   `contextTokens` on the `ModelRef` surfaces this in the picker.
-- **No Cloudflare floor**: `gemini`, `gemini-flash`, `kimi-k3`, `qwen3.8-max`. Nothing serves
-  these on the binding, so each stays unavailable until a key is pooled: the two Gemini entries
-  through OpenRouter alone, `kimi-k3` and `qwen3.8-max` direct (Moonshot / DashScope) or through
-  OpenRouter. A vendor's newest flagship lands here first, because Workers AI serves the open
-  weights and a closed flagship has none to serve.
+- **No Cloudflare floor**: `gemini`, `gemini-flash`, `gemini-3.8-flash`, `kimi-k3`,
+  `qwen3.8-max`, `qwen3.8-max-0902`, `muse-spark`, `muse-spark-contributor`. Nothing serves
+  these on the binding, so each stays unavailable until a key is pooled: the Gemini and Muse
+  Spark entries through OpenRouter alone, `kimi-k3` and `qwen3.8-max` direct (Moonshot /
+  DashScope) or through OpenRouter, and `qwen3.8-max-0902` on DashScope alone (OpenRouter
+  carries only the undated Qwen alias). A vendor's newest flagship lands here first, because
+  Workers AI serves the open weights and a closed flagship has none to serve.
+- **Two entries for one model, split by TERMS**: `muse-spark` and `muse-spark-contributor` are
+  the same Meta model on the same route. The contributor tier costs a twelfth on input in
+  exchange for Meta training on the prompts and completions, so the choice is a per-block one
+  an operator has to make with the price in front of them, and one entry could only make it
+  silently. The SPA's "enable recommended" OpenRouter set deliberately omits the contributor
+  slug for the same reason.
 - **Operator-hosted-gateway entries**: `bifrost-default`, `litellm-default`. One generic entry
   each for the two self-hosted gateways (Bifrost, LiteLLM), because what such a gateway serves
   is its operator's configuration and no catalog here can enumerate it. Both are `direct`-flavour
@@ -199,12 +207,17 @@ Several shapes of entry fall out of this:
   carries it. It is a **separate entry rather than a `bedrock` flavour on `claude-opus`**,
   because Bedrock lags Anthropic: folding it in would silently run 4.8 for a block pinned
   to Opus 5. Any entry whose model Bedrock serves at the SAME generation (`gpt-5.5`,
-  `gpt-oss-120b`) does carry the flavour directly.
+  `gpt-oss-120b`, `claude-fable-5-1`) does carry the flavour directly. Fable 5.1 is the case
+  where that lag closed: Bedrock listed `anthropic.claude-fable-5-1` on Anthropic's own launch
+  day, which is why it is the first Claude entry here to carry subscription, OpenRouter and
+  Bedrock arms at once. It is also now the most expensive model this catalog can select on
+  Bedrock, so the bare `bedrock` price row (which cannot match per model, because a Bedrock ref
+  carries the account's geo prefix) moved up to its tier.
 - **Subscription-only**: `claude-sonnet`. No Cloudflare/direct/OpenRouter base; the
   subscription harness is the _only_ way to run it, so it requires a connected vendor
-  token (§6) and there is **no inline fallback** (§5). `claude-fable`, `claude-opus` and
-  the GPT-5.6 / GPT-5.5 tiers pair their subscription flavour with an OpenRouter
-  pay-as-you-go base, so they are dual-mode rather than subscription-only.
+  token (§6) and there is **no inline fallback** (§5). `claude-fable`, `claude-fable-5-1`,
+  `claude-opus` and the GPT-5.6 / GPT-5.5 tiers pair their subscription flavour with an
+  OpenRouter pay-as-you-go base, so they are dual-mode rather than subscription-only.
 - **Local (per-user)**: locally-run models on a user's own runner (Ollama / LM Studio /
   llama.cpp / vLLM / custom OpenAI-compatible). NOT static catalog entries: each user
   configures runners in the UI ("My local runners", stored per-user in

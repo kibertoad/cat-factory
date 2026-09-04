@@ -46,6 +46,55 @@ export const MODEL_CATALOG: SelectableModel[] = [
       acceptsImages: true,
     },
   },
+  // Meta's Muse Spark 1.3, in its two commercial tiers. They are the SAME model on the same
+  // route and differ only in what Meta may do with the traffic, which is why they are two
+  // entries rather than one: the choice is a per-block one an operator makes with the price
+  // in front of them, and a single entry could only make it silently.
+  {
+    id: 'muse-spark',
+    family: 'llama',
+    label: 'Muse Spark 1.3',
+    description:
+      "Meta's multimodal reasoning model for long-running agentic and coding work: a 1M " +
+      'window that reads images, video, audio and PDFs. Via OpenRouter, billed at Meta rates.',
+    // `family: 'llama'` is the Meta bucket, not a claim that Muse Spark is a Llama. The
+    // family axis exists for the account residency/allow-block policy, where what matters is
+    // the vendor, and the picker labels that member "Llama (Meta)". Blocking Meta therefore
+    // blocks this too, which is the answer an admin who blocked the family meant.
+    openrouter: {
+      ref: {
+        provider: 'openrouter',
+        model: 'meta/muse-spark-1.3',
+        contextTokens: 1_048_576,
+        acceptsImages: true,
+      },
+      keyEnv: 'OPENROUTER_API_KEY',
+      providerLabel: 'OpenRouter',
+    },
+  },
+  {
+    id: 'muse-spark-contributor',
+    family: 'llama',
+    label: 'Muse Spark 1.3 Contributor',
+    description:
+      'The same Muse Spark 1.3 at a twelfth of the input price and a twentieth of the ' +
+      'output, in exchange for Meta training on your prompts and completions. Pick it for ' +
+      'experiments, never for a repository whose contents may not leave the company.',
+    // Kept as its own entry, and its description leads with the data term rather than the
+    // price, because the price is what makes somebody pick it and the term is what they
+    // would otherwise find out afterwards. Nothing else in this catalog trades training
+    // rights for rate, so there is no established convention a reader could assume.
+    openrouter: {
+      ref: {
+        provider: 'openrouter',
+        model: 'meta/muse-spark-1.3-contributor',
+        contextTokens: 1_048_576,
+        acceptsImages: true,
+      },
+      keyEnv: 'OPENROUTER_API_KEY',
+      providerLabel: 'OpenRouter',
+    },
+  },
   {
     id: 'qwen',
     family: 'qwen',
@@ -67,6 +116,33 @@ export const MODEL_CATALOG: SelectableModel[] = [
       ref: { provider: 'openrouter', model: 'qwen/qwen3.7-max', contextTokens: 1_000_000 },
       keyEnv: 'OPENROUTER_API_KEY',
       providerLabel: 'OpenRouter',
+    },
+  },
+  {
+    id: 'qwen3.8-max-0902',
+    family: 'qwen',
+    label: 'Qwen3.8 Max (0902)',
+    description:
+      "Alibaba's 2026-09-02 snapshot of Qwen3.8 Max, post-trained for engineering-scale " +
+      'coding, longer autonomous runs and steadier multi-tool orchestration. Same 2.4T base, ' +
+      'same 1M window and same price as the floating entry, direct via a DashScope key.',
+    // A PINNED snapshot beside the floating `qwen3.8-max` below, on the same reasoning that
+    // gives `claude-opus-4-8` its own entry: a block pinned here must keep getting this exact
+    // build when DashScope's undated alias moves on to the next one.
+    //
+    // DashScope only. OpenRouter serves `qwen/qwen3.8-max` (the undated alias) and carries no
+    // dated slug, so declaring an `openrouter` arm would be picked by `effectiveVariant` and
+    // then fail at dispatch. The alias may well be serving 0902 today, but "probably the same
+    // build" is exactly what a pinned entry exists to not depend on.
+    direct: {
+      ref: {
+        provider: 'qwen',
+        model: 'qwen3.8-max-0902',
+        contextTokens: 1_000_000,
+        acceptsImages: true,
+      },
+      keyEnv: 'QWEN_API_KEY',
+      providerLabel: 'DashScope',
     },
   },
   {
@@ -369,6 +445,49 @@ export const MODEL_CATALOG: SelectableModel[] = [
   // Subscription-only models: run in the Claude Code / Codex harness with a pooled
   // subscription token (Claude Pro/Max, ChatGPT Plus/Pro), direct to the vendor.
   {
+    id: 'claude-fable-5-1',
+    family: 'claude',
+    label: 'Claude Fable 5.1',
+    description:
+      "Anthropic's frontier model for whole-codebase refactors and multi-hour agent runs: " +
+      'run via Claude Code on your Claude subscription, on AWS Bedrock in your own account, ' +
+      'or pay-as-you-go through OpenRouter (billed at Anthropic rates).',
+    // The first Claude entry here to declare all three routes, because Bedrock shipped it on
+    // the SAME day Anthropic did (2026-09-01) rather than a generation behind: the model card
+    // names `anthropic.claude-fable-5-1` on `bedrock-runtime` with the 1M window and image
+    // input, so the flavour is declared against a verified route rather than an expected one.
+    // That is also why the bare `bedrock` price row in @cat-factory/spend moved up a tier:
+    // this is now the most expensive model the catalog can select there.
+    bedrock: {
+      baseModelId: 'anthropic.claude-fable-5-1',
+      contextTokens: 1_000_000,
+      acceptsImages: true,
+    },
+    openrouter: {
+      ref: {
+        // A DOTTED slug, unlike every other Anthropic pin here. OpenRouter spells this one
+        // `claude-fable-5.1` while Anthropic's own API id is `claude-fable-5-1`; the two
+        // disagree, and normalising either onto the other's spelling yields a dead id.
+        provider: 'openrouter',
+        model: 'anthropic/claude-fable-5.1',
+        contextTokens: 1_000_000,
+        acceptsImages: true,
+      },
+      keyEnv: 'OPENROUTER_API_KEY',
+      providerLabel: 'OpenRouter',
+    },
+    subscription: {
+      ref: {
+        provider: 'anthropic',
+        model: 'claude-fable-5-1',
+        harness: 'claude-code',
+        contextTokens: 1_000_000,
+        acceptsImages: true,
+      },
+      vendor: 'claude',
+    },
+  },
+  {
     id: 'claude-fable',
     family: 'claude',
     label: 'Claude Fable 5',
@@ -601,6 +720,25 @@ export const MODEL_CATALOG: SelectableModel[] = [
         // would swap the model under a pinned block with no version change to review.
         provider: 'openrouter',
         model: 'google/gemini-3.1-pro-preview',
+        contextTokens: 1_048_576,
+        acceptsImages: true,
+      },
+      keyEnv: 'OPENROUTER_API_KEY',
+      providerLabel: 'OpenRouter',
+    },
+  },
+  {
+    id: 'gemini-3.8-flash',
+    family: 'gemini',
+    label: 'Gemini 3.8 Flash',
+    description:
+      "Google's newest Flash: a step over 3.7 Flash on software engineering, agentic work " +
+      'and multi-step reasoning, at the same 1M window and the same list price. Via ' +
+      'OpenRouter, billed at Google rates.',
+    openrouter: {
+      ref: {
+        provider: 'openrouter',
+        model: 'google/gemini-3.8-flash',
         contextTokens: 1_048_576,
         acceptsImages: true,
       },
