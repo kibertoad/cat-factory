@@ -26,7 +26,8 @@ the platform surveys both sides, a model proposes per-area recommendations with 
 read behind each, and a human decides before a line is written.
 
 End state: a bootstrap either creates a repository (unchanged) or lands a service in a
-directory of one that exists, delivered as a pull request, under decisions a person made.
+directory of one that exists, under decisions a person made, delivered the way the person
+starting it chose (D11).
 
 ## Decisions
 
@@ -145,8 +146,9 @@ against (a loop that errors mid-way) already has an honest answer: the run parks
 ### D3: The apply phase is an ORDINARY coding job
 
 **Decision: the apply dispatch carries no `bootstrap` spec. It is the standard multi-repo coding
-shape: the monorepo as the writable primary at a work branch, the reference template as a
-read-only `referenceRepos` sibling, one pull request on the primary.**
+shape: the monorepo as the writable primary, the reference template as a read-only
+`referenceRepos` sibling, and the delivery D11 resolved (a work branch plus one pull request on
+the primary, or commits on the default branch).**
 
 The harness already does all of this, including the guarantee that matters most: a
 `ReferenceRepoSpec` carries no branch or PR fields at all, so the run is structurally incapable
@@ -274,6 +276,87 @@ through `hostMarkdown` and the caller scrubs secrets at compose time, because a 
 reading "fixes #412" would otherwise close an unrelated issue on the monorepo when the bootstrap
 PR merged.
 
+### D11: The run's STEPS are derived, and a retry resumes at the one it reached
+
+**Decision: `bootstrapRunSteps` / `bootstrapResume` in `@cat-factory/contracts`, derived from
+the run row, with `BootstrapService.retry` branching on the same function the board reads.**
+
+A monorepo run is three moves around a human decision, and the board rendered it as one
+"bootstrapping…" bar. That bar cannot say which move a stopped run got to, and the control under
+it said "Retry bootstrap", which reads as "start over" and is not what the service does: a retry
+carries the settled review forward and re-enters at the phase reached (D4's own consequence). A
+reviewer offered "retry" after their decisions were recorded had no reason to expect those
+decisions to survive it.
+
+Derived, not stored: `phase`, the recorded plan and `awaiting_review` already say where the run
+is, and a stored cursor would be a fourth thing to keep in step with those three. It lives in
+contracts rather than kernel because the SPA and the backend both have to AGREE about the answer:
+the board names the step the button resumes from and the service branches on it, and stated twice
+they drift.
+
+Two questions, deliberately not one. `bootstrapReachedStep` is where the run GOT to;
+`bootstrapResume` is where a retry RE-ENTERS, and they differ on exactly one case: a run parked
+on an `unavailable` plan reached the review, but a retry drops a non-ready plan (D6) so a fixed
+deployment can produce a real suggestion, so it resumes at the survey. Collapsing them would
+promise a reviewer that a pending decision is what the run picks up from, while the suggestion
+behind it is about to be recomputed.
+
+The resume answer CARRIES the settled review on its `apply` arm, rather than naming the step and
+leaving the caller to fetch it: the re-dispatch needs that state, and re-testing for it beside the
+step is a second statement of the rule, which is what drifts the day one of the two moves.
+
+A STOPPED run is its own step state, not a failure. A stop is stored as `status: 'failed'` with a
+`cancelled` failure kind, so the status alone cannot tell the two apart, and the step a person
+stops in is usually the review, whose only actor is that same person: painting it red reports
+their own decision back to them as a fault. That is the one thing the projection reads off the
+failure record, and the only reason `BootstrapRunShape` carries one.
+
+A new-repo bootstrap derives a single `scaffold` step. The SPA renders no list for it and keeps
+saying "retry": one move has no progress to resume, and a one-row checklist restates the banner
+above it.
+
+### D12: A bootstrap files its telemetry under the RUN, so it is inspectable like any other run
+
+**Decision: the session token, the job body's `executionId`, the provided-context snapshot and
+the drained tool-call trajectory all carry `request.jobId`; the drive id addresses the container
+and nothing else.**
+
+A bootstrap is already a first-class agent run (one `agent_runs` table, one retry surface, one
+stop surface). It was not an inspectable one: it filed no context snapshot and drained no
+trajectory, and the apply phase's model calls were keyed on its DRIVE id, which is the one id no
+run-scoped read asks for. So the run that most needs explaining when it goes wrong (nothing has
+been written, and the only artefact is a failure message) was the one with the least recorded
+about it, and its more expensive half was recorded where nobody looks.
+
+The survey is the other half, and it is an INLINE caller on a run path: it now tags its whole
+loop with the run, so its spend rolls up beside the apply's rather than sitting in the store
+outside every read that could find it, and it files its own provided-context snapshot (the
+composed prompts plus the seeded opening context) under the survey step. Recording one half would
+have been worse than recording neither: the panel lists snapshots per run, so one entry with
+nothing on screen naming the missing move reads as a survey that was given nothing.
+
+Its READS stay out of the trajectory sink, deliberately. They go through the platform's own
+bounded explorer onto the run's adoption transcript, which is the record a reviewer checks a
+recommendation against and which outlives the telemetry window; a second copy as
+`agent_tool_calls` rows would be two answers to one question. The panel states where they are
+instead, because the apply's calls beside them are not empty.
+
+Both halves file under kinds that name what ran (`repo-bootstrapper`,
+`monorepo-adoption-advisor`) rather than under `architect`, whose routing the container still
+follows for its MODEL. Both strings live in contracts, since the SPA's catalog has to name the
+same two kinds the backend stamps on the rows.
+
+The reads themselves needed no new endpoint: the four sinks are keyed by the run, so the panel
+the board opens over a bootstrap is the same panel over the same routes. What that costs is a
+standing constraint, now pinned by the bootstrap conformance group: those routes may never gate
+on an execution row existing, and each store must answer EMPTY for a run id it holds nothing for
+rather than throwing.
+
+What the shared panel cannot do for a bootstrap is fold a per-phase rollup or price the run: both
+read the execution's STEPS, and there is no execution row. That is stated on the panel rather than
+rendered as an empty section, because a missing cost tile and a run that cost nothing look
+identical beside a list of model calls that plainly cost something.
+
 ## Slices
 
 - [x] **Slice 1, the flow end to end.** Contracts (`monorepo` target, adoption plan/review,
@@ -287,13 +370,18 @@ PR merged.
       with `siblingServices` and `exploration`, the SPA's "what the survey read" disclosure, and
       three conformance assertions (the call budget is enforced, exhaustion is reported, a plan
       cites nothing outside the transcript). See D10.
-- [x] **Slice 3, the reference template is reached the way the CLONE reaches it.** The
+- [x] **Slice 3, the run is legible.** The derived step model plus the resume rule both sides
+      read (D11), the board's step list on the in-progress, parked and failed cards, the retry
+      control that names the step it resumes from, and the telemetry a bootstrap run had not been
+      filing: the provided-context snapshot per dispatch, the tool-call trajectory per poll, and
+      every sink keyed on the RUN rather than the drive (D12).
+- [x] **Slice 4, the reference template is reached the way the CLONE reaches it.** The
       `RepoBootstrapper.resolveReferenceRepo` verdict (`reachable` / `not_connected` / `not_found` /
       `unreadable`), the run-start and retry pre-flight (`assertReferenceReachable`, refusing a 422
       `reference_repo_not_found` or a 503 `reference_repo_unreadable` before any row is written), the
-      survey reading the template through it, a dispatch that scopes the job token to the template
-      and clones it at its OWN default branch, and the launch dialog's jump to the offending entry.
-      See the slice-3 gotchas.
+      survey reading the template through it, a dispatch that resolves it once for every delivery
+      shape and clones it at its OWN default branch, and the launch dialog's jump to the offending
+      entry. See the slice-4 gotchas.
 
 ## Gotchas the first slice surfaced
 
@@ -316,10 +404,12 @@ PR merged.
   binding is provider-matched, so a repo projected under a provider this bootstrapper cannot
   push to is refused here rather than at a dispatch that would build its clone URL off the
   wrong host.
-- **A completed apply with no pull request is a FAILURE.** The deliverable is the PR (nothing is
-  merged for the reviewer), so a run reporting done without one has left the work where nobody
-  can find it. The container reports `prUrl` alone on that path rather than a fabricated
-  "created repository" outcome naming a repo it did not create.
+- **A completed run with no pull request is a FAILURE where the run PROMISED one.** The
+  deliverable of a `pull_request` run is the PR (nothing is merged for the reviewer), so a run
+  reporting done without one has left the work where nobody can find it. The refusal keys off
+  the run's own `delivery`, never off the field being empty, which is the ordinary state of a
+  `direct_push` run. A monorepo run reports `prUrl` alone rather than a fabricated "created
+  repository" outcome naming a repo it did not create.
 - **The directory is pre-flighted twice, deliberately.** Once before the survey (so a refused
   target leaves neither a job nor a board card) and again at dispatch, because a review can be
   settled days later and something may have landed there in between.
@@ -335,6 +425,64 @@ PR merged.
   every one persisted on the plan and rendered to the reviewer. The drop list is capped and the
   overflow COUNTED, because "the reply was mostly invention" and "the reply proposed little"
   need opposite reactions.
+
+### D11: Delivery is a THIRD axis, and neither target's answer is the other's
+
+**Decision: `BootstrapRepoInput.delivery` (`pull_request` | `direct_push`) is orthogonal to both
+existing axes, resolved once at start from the target's own default when the request omits it,
+and PERSISTED on the run.** ([#2177](https://github.com/kibertoad/cat-factory/issues/2177))
+
+The first axis says where the CONTENT comes from (a template, or a prompt), the second where the
+service LANDS (a new repository, or a directory of one that exists). Delivery is how the work
+ARRIVES, and folding it into the target was the shape this replaced: a monorepo run always opened
+a pull request and a new-repo run always force-pushed, so a team that wanted their scaffold
+reviewed before it became `main` had no way to ask, and a team standing services up in their own
+monorepo all day had to merge a pull request per service to get there.
+
+The default is per TARGET rather than a constant, because the two want opposite answers: a
+repository this run is CREATING has nobody to review its first commit, and a monorepo's default
+branch is the branch every other service is built from. A valibot default cannot depend on a
+sibling field, so the schema carries none and `BootstrapService.bootstrap` applies the rule once.
+It is stored rather than re-derived because a RETRY re-dispatches under it, and a retry that
+re-defaulted would move a run the user asked to have reviewed onto everyone's branch.
+
+**`direct_push` on a monorepo publishes AS THE AGENT WORKS, and that is stated rather than
+engineered around.** The harness checkpoints committed work to whatever branch it is pushing, so
+a run that faults leaves what it had written on the default branch. Suppressing the checkpoint for
+this delivery would trade that for losing the whole run to an eviction, which is worse for a
+scaffold; hiding it would be worse still. The modal's own copy says it, and a retry resumes on top
+of what landed.
+
+**What `pull_request` costs a NEW repository is a base commit.** A pull request is opened between
+two commits, so a repository with none cannot take one: nothing to clone, branch from, or target.
+That delivery therefore refuses an uncommitted repository at pre-flight, naming both ways out (add
+an initial commit, or push directly), rather than surfacing later as a clone failure that reads
+like an outage. The emptiness rule is unchanged under both: a bootstrap writes a whole service, so
+real content is still refused and a README/.gitignore/license is still tolerated.
+
+**A new-repo `pull_request` run drops the `bootstrap` harness spec.** That spec reinitialises
+history and force-pushes, and a branch sharing no ancestor with the default branch is not
+something a pull request can be opened from. So it takes the SAME coding shape D3 describes,
+minus `serviceDirectory`: the target repository as the writable primary, the template beside it
+read-only. `ContainerRepoBootstrapper.dispatchCodingShape` is that one builder, which is also
+what keeps `newBranch` and `pr` from ever being set apart: a body carrying a branch and no pull
+request pushes work onto a branch nobody is told about.
+
+**Not on `/api/v1` as an INPUT; projected as an OUTPUT.** The public bootstrap body has no
+`monorepo` target either, and the narrower shape is deliberate there; `delivery` joins it as an
+additive optional field whenever the monorepo half does. The READ carries it from spec 1.68.0,
+because it had to: `prUrl` beside `repoUrl` was documented as mutually exclusive and as the way to
+tell the two run shapes apart, and a new-repo run that opens a pull request sets both. `repoUrl`
+still discriminates the TARGET; `delivery` is what discriminates the delivery, from the first poll
+rather than at the end.
+
+**A `pull_request` run does NOT trigger the initial blueprint mapping.** That run has written
+nothing to the default branch, which is what the mapper clones, so mapping it would spend a real
+agent run reading the repository's initial README, commit that empty map to `blueprints/` and
+project it onto the board, where the wrong projection would outlive the merge. The frame still goes
+`ready` (nothing watches the pull request, so a status withheld until the merge would misreport a
+live service forever); what it carries is a description naming both outstanding moves, and the
+inspector's "map service" action is the way in once the pull request has landed.
 
 ## Gotchas the second slice surfaced
 
@@ -362,7 +510,7 @@ PR merged.
   `inputSchema` fails at CALL time rather than at build time. The tools use `jsonSchema()` with an
   explicit `validate`.
 
-## Gotchas the third slice surfaced
+## Gotchas the fourth slice surfaced
 
 - **The survey and the CLONE had two different notions of "can we reach the template".** The survey
   resolved it through `resolveRepoFilesForCoords` (the workspace's PROJECTED repos) and the apply
@@ -410,11 +558,13 @@ PR merged.
   run `running` with nothing to settle until the claim goes stale. A deployment that lost its
   container wiring mid-run therefore gets an `unreadable` template note saying exactly that, and a
   reviewer who can still make every decision unaided.
-- **The new-repo path never scoped its token to the template it clones.** `repoIds` held the target
-  alone and the clone URL assumed `main`, so a PRIVATE template was uncloneable and one on any other
-  default branch was cloned at a ref that does not exist, both surfacing as a bare git error. The
-  template is resolved at dispatch on BOTH paths now, and a failure there throws rather than being
-  swallowed: an apply dispatch can be days after the review.
+- **A template the dispatch cannot resolve is refused there, not dispatched around.** The clone is
+  about to happen on a token this component mints, so the run is over either way; what differs is
+  whether the report names the reference architecture and the next move, or arrives as a git error
+  out of a container that had to be started first. Resolution is ONE method for every delivery
+  shape (`resolveReferenceTemplate`), which is what stopped the force-push path from granting only
+  its push target while cloning the template on that same token, and what stopped both paths from
+  assuming the template's default branch was `main`.
 
 ## Not in this slice
 

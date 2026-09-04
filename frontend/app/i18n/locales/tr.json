@@ -413,7 +413,8 @@
       "retrying": "Yeniden deneniyor…",
       "history": {
         "previousErrors": "{count} önceki hata | {count} önceki hata"
-      }
+      },
+      "resumeBootstrap": "Şuradan devam et: {step}"
     },
     "stop": {
       "label": "Durdur",
@@ -1774,7 +1775,8 @@
       "cacheRead": "{tokens} önbellekten okundu",
       "cacheReadHint": "Sağlayıcının önbelleğinden sunulan giriş token'ları (yeni girişin yaklaşık 0,1 katı fiyat)",
       "cacheWrite": "{tokens} önbelleğe yazıldı",
-      "cacheWriteHint": "Sağlayıcının önbelleğine yazılan giriş token'ları (yeni girişin 1,25 ila 2 katı fiyat)"
+      "cacheWriteHint": "Sağlayıcının önbelleğine yazılan giriş token'ları (yeni girişin 1,25 ila 2 katı fiyat)",
+      "costNoRollup": "Ücretlendirilmedi: tahmin, adım bazlı dökümden hesaplanır ve bu çalışmanın böyle bir dökümü yok. Çağrılarının ne tükettiği aşağıda listelenir."
     },
     "phase": {
       "title": "Token'lar nereye gitti",
@@ -1789,7 +1791,8 @@
       "costHint": "Bu aşamanın tokenlarının liste fiyatlarına göre tahmini maliyeti. Tire, bu kurulumda çalışan model için bir tarife bulunmadığını gösterir.",
       "carryCostHint": "Her aşamanın kendisinden sonraki turlara ne kadar yük bindirdiği: bağlamı, onu yeniden göndermek zorunda kalan her sonraki tur için bir kez sayılır. Bir çalıştırmanın aşamalarını birbiriyle karşılaştırın; tek başına bu sayı bir şey ifade etmez. En sonda çalışan bir aşama ne kadar harcarsa harcasın az taşır; bu sütunu yanındaki token sayılarıyla birlikte okuyun.",
       "unattributed": "Atanmamış",
-      "unattributedHint": "aşama bildirmeyen bir kanal tarafından kaydedildi"
+      "unattributedHint": "aşama bildirmeyen bir kanal tarafından kaydedildi",
+      "noRollup": "Bu çalışmanın ardışık düzen adımları yok, bu yüzden aşama bazlı bir döküm de yok: model çağrıları aşağıda kayıtlı, ancak hiçbir şey onları gruplamıyor veya ücretlendirmiyor."
     },
     "metricsBar": {
       "calls": "{count} çağrı | {count} çağrı",
@@ -1897,7 +1900,8 @@
       "result": "Sonuç",
       "dropped": "Kayıt sırasında {chars} karakter atıldı",
       "truncated": "Bu çalıştırmanın ilk {shown} çağrısı gösteriliyor. Yukarıdaki sayılar çalıştırmanın tamamına aittir; hepsini görmek için başarısızlara daraltın.",
-      "failuresTruncated": "İlk {shown} başarısız çağrı gösteriliyor. Yukarıdaki sayı çalıştırmanın tamamına aittir."
+      "failuresTruncated": "İlk {shown} başarısız çağrı gösteriliyor. Yukarıdaki sayı çalıştırmanın tamamına aittir.",
+      "surveyReadsElsewhere": "İncelemenin kendi okumaları burada değil: platformun sınırlı okuyucusu üzerinden keşif yapar ve yaptığı her okuma çalışmanın benimseme dökümüne kaydedilir. Aşağıda, servisi yazan konteynerin araç çağrıları yer alır."
     }
   },
   "platformObservability": {
@@ -6965,7 +6969,8 @@
       "title": "Son çalıştırmalar",
       "fromArch": "{name} kaynağından",
       "fromScratch": "sıfırdan",
-      "open": "Aç"
+      "open": "Aç",
+      "openPr": "Pull request"
     },
     "status": {
       "pending": "beklemede",
@@ -7017,11 +7022,24 @@
       "label": "Servis nereye gidecek",
       "newRepo": {
         "label": "Yeni bir depo",
-        "description": "Kendine ait bir depo oluştur ve servisi ilk commit olarak gönder."
+        "description": "Kendine ait bir depo oluşturur ve servisi içine yazar."
       },
       "monorepo": {
         "label": "Mevcut bir monorepo içindeki dizin",
-        "description": "Servisi hâlihazırda sahip olduğun bir depoya ekle ve pull request aç."
+        "description": "Servisi hâlihazırda sahip olduğun bir depoya ekler."
+      }
+    },
+    "delivery": {
+      "label": "İş nasıl teslim edilsin",
+      "pullRequest": {
+        "label": "Pull request aç",
+        "descNewRepo": "Bir dal gönderir ve deponun ilk commit’ine karşı pull request açar; böylece iskelet varsayılan dal olmadan önce biri inceler. Deponun zaten bir commit’i olmalıdır.",
+        "descMonorepo": "Bir dal gönderir ve pull request açar. Senin yerine hiçbir şey birleştirilmez."
+      },
+      "directPush": {
+        "label": "Doğrudan gönder",
+        "descNewRepo": "Servisi doğrudan varsayılan dala, deponun ilk commit’i olarak yazar.",
+        "descMonorepo": "Ajan çalışırken varsayılan dala commit atar. Başarısız bir çalıştırma, o ana kadar yazdıklarını geride bırakır."
       }
     },
     "serviceName": {
@@ -7029,7 +7047,7 @@
       "description": "Servisi panoda adlandırır ve dizinini önerir."
     },
     "monorepo": {
-      "intro": "Servis mevcut bir deponun dizinine yazılır ve pull request olarak teslim edilir. Senin yerine hiçbir şey birleştirilmez ve yeni dizinin dışında hiçbir şey değişmez.",
+      "intro": "Servis mevcut bir deponun bir dizinine yazılır ve o dizinin dışında hiçbir şey değiştirilmez.",
       "repo": {
         "label": "Monorepo",
         "description": "Yeni servisin yaşayacağı depo. Bu çalışma alanına önceden bağlanmış olmalı.",
@@ -7119,7 +7137,26 @@
         "approvedDesc": "Ajan şimdi {directory} dizinini yazıyor ve bir pull request açacak.",
         "failed": "İnceleme gönderilemedi"
       }
-    }
+    },
+    "steps": {
+      "title": "Bootstrap adımları",
+      "name": {
+        "scaffold": "Depo iskeletini oluştur",
+        "survey": "Monorepo ve şablonu incele",
+        "review": "Neyin benimseneceğine dair kararların",
+        "apply": "Servisi yaz ve pull request aç"
+      },
+      "state": {
+        "pending": "Başlamadı",
+        "running": "Çalışıyor",
+        "awaiting_review": "Seni bekliyor",
+        "done": "Tamam",
+        "failed": "Başarısız",
+        "stopped": "Durduruldu",
+        "unknown": "Durum okunamıyor"
+      }
+    },
+    "runKind": "Depo başlatma"
   },
   "riskPolicy": {
     "health": {

@@ -229,12 +229,14 @@ function start(
   wsId: string,
   architectureId: string,
   directory = 'services/payments',
+  delivery?: 'pull_request' | 'direct_push',
 ) {
   return app.call<BootstrapJob>('POST', `/workspaces/${wsId}/bootstrap/jobs`, {
     repoName: 'payments',
     referenceArchitectureId: architectureId,
     instructions: 'A payments service.',
     monorepo: { repoGithubId: 777, directory },
+    ...(delivery ? { delivery } : {}),
   })
 }
 
@@ -293,6 +295,44 @@ function defineSurveyGroup(harness: ConformanceHarness): void {
       // Nothing has been written to the monorepo: a parked run has produced no pull request.
       expect(parked.body.prUrl).toBeNull()
       expect(parked.body.adoptionReview).toBeNull()
+    })
+
+    it('answers every run-observability read for a bootstrap run, which has no execution row', async () => {
+      // A bootstrap is inspected through the SAME panel as an execution, which reads these five
+      // workspace-scoped routes. They are keyed by the AGENT RUN, and a bootstrap deliberately
+      // has no execution row, so a facade whose handler resolved one first would 404 every
+      // bootstrap while its rows sat in the telemetry store under exactly this id.
+      //
+      // This is the READ half, and only that: each route runs its store's real query (D1 here,
+      // the `telemetry` Postgres schema on Node) against a bootstrap run id and comes back with
+      // the empty list its envelope declares rather than an error. The WRITE half is not
+      // assertable in this suite and is not claimed: the survey runs through a fake advisor and
+      // the apply through a {@link FakeRepoBootstrapper}, so neither producer executes. What
+      // each producer records is pinned at the producer (`MonorepoAdoptionAdvisorService.test.ts`,
+      // `ContainerRepoBootstrapper.spec.ts`), and each store's own parity by
+      // `defineAgentContextSuite` / `defineAgentToolCallSuite`.
+      const { app, wsId, architectureId } = await setup(harness, { advisor: fakeAdvisor() })
+      const started = await start(app, wsId, architectureId)
+      await app.driveBootstrap(wsId, started.body.id)
+      const runId = started.body.id
+      // Each read with the list ITS envelope names: asserting the payload rather than the
+      // echoed `executionId`, which the handler copies off the path and which is therefore
+      // true of any answer at all, including one keyed on the wrong id.
+      const reads = [
+        ['llm-metrics', 'calls'],
+        ['agent-context', 'snapshots'],
+        ['search-queries', 'searchQueries'],
+        ['tool-calls', 'toolCalls'],
+        ['tool-call-failures', 'failures'],
+      ] as const
+      for (const [read, listed] of reads) {
+        const answer = await app.call<Record<string, unknown>>(
+          'GET',
+          `/workspaces/${wsId}/executions/${runId}/${read}`,
+        )
+        expect(answer.status, read).toBe(200)
+        expect(answer.body[listed], read).toEqual([])
+      }
     })
 
     it('bounds the model’s reads, and REPORTS the ceiling rather than ending quietly', async () => {
@@ -501,6 +541,40 @@ function defineReviewGroup(harness: ConformanceHarness): void {
       // Everything a card DOES render survives the trim.
       expect(row?.adoptionPlan?.decisions).toHaveLength(1)
       expect(row?.adoptionPlan?.survey.siblingServices.length).toBeGreaterThan(0)
+    })
+
+    it('lands a direct-push run on the default branch, with no branch and no pull request', async () => {
+      // The review is about what the service ADOPTS and is unchanged by the delivery; what
+      // changes is where the work lands. A direct-push run must therefore still park, still be
+      // settled by a human, and then report no pull request: not as a missing deliverable
+      // (which fails the run on the other delivery) but as the ordinary state of this one.
+      const { app, wsId, architectureId } = await setup(harness, { advisor: fakeAdvisor() })
+      const started = await start(app, wsId, architectureId, 'services/payments', 'direct_push')
+      expect(started.body.delivery).toBe('direct_push')
+      await app.driveBootstrap(wsId, started.body.id)
+
+      const reviewed = await app.call<BootstrapJob>(
+        'POST',
+        `/workspaces/${wsId}/bootstrap/jobs/${started.body.id}/adoption-review`,
+        { choices: [{ id: DECISION_ID, choice: 'monorepo' }] },
+      )
+      expect(reviewed.status).toBe(200)
+      expect(reviewed.body.phase).toBe('apply')
+      // No work branch is opened, so recording one would name a ref that never existed.
+      expect(reviewed.body.monorepo?.branch).toBeNull()
+
+      await app.driveBootstrap(wsId, started.body.id)
+      const done = await app.call<BootstrapJob>(
+        'GET',
+        `/workspaces/${wsId}/bootstrap/jobs/${started.body.id}`,
+      )
+      expect(done.body.status).toBe('succeeded')
+      expect(done.body.prUrl).toBeNull()
+      // The service is pinned to its directory exactly as it is under the other delivery: the
+      // linkage is about where the code LIVES, not about how it got there.
+      const catalog = await app.call<Service[]>('GET', `/workspaces/${wsId}/services/catalog`)
+      const service = catalog.body.find((s) => s.frameBlockId === done.body.blockId)
+      expect(service?.directory).toBe('services/payments')
     })
 
     it('parks with a stated reason when no model is wired, instead of an empty plan', async () => {

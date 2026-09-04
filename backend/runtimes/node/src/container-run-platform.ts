@@ -41,7 +41,11 @@ import type { buildNodeModelDeps } from './container-model-deps.js'
 import { selectNodeGitHubDeps } from './container-github-deps.js'
 import type { DrizzleDb } from './db/client.js'
 import { buildNodeRunServices } from './container-run-services-deps.js'
-import { buildNodeBootstrapper, buildNodeTransportDeploy } from './container-transport-deps.js'
+import {
+  bootstrapObservabilityFrom,
+  buildNodeBootstrapper,
+  buildNodeTransportDeploy,
+} from './container-transport-deps.js'
 import {
   type NodeContainerExecutorDeps,
   buildNodeContainerExecutor,
@@ -399,6 +403,9 @@ export function buildNodeRunPlatform({ options, foundation, models }: NodeRunPla
       mintInstallationToken: options.mintInstallationToken,
       resolvePackageRegistries: runServices.resolvePackageRegistries,
       caches: options.caches,
+      // The same sinks the container executor records through, so a bootstrap run's provided
+      // context and tool-call trajectory answer the observability panel like any other run's.
+      observability: bootstrapObservabilityFrom(runServices, config),
     })
 
   return {

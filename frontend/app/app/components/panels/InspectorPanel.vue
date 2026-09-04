@@ -7,6 +7,7 @@ import { inspectorPanels } from '~/modular/panels/inspector.logic'
 import IconButton from '~/components/common/IconButton.vue'
 import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
 import AgentStopButton from '~/components/board/AgentStopButton.vue'
+import BootstrapRunSteps from '~/components/bootstrap/BootstrapRunSteps.vue'
 import { BLUEPRINT_AGENT_KIND } from '@cat-factory/contracts'
 import { VCS_PROVIDER_ICONS } from '~/utils/vcs'
 
@@ -489,16 +490,33 @@ const showOriginalDescription = ref(false)
       <!-- failed run (bootstrap or execution): shared failure banner + retry -->
       <AgentFailureCard v-if="failedRun" :run="failedRun" />
 
-      <!-- running bootstrap: let the user stop it (kills the container) -->
+      <!-- running bootstrap: show the steps, let the user inspect it, let them stop it -->
       <div
         v-else-if="runningRun"
-        class="flex items-center justify-between gap-2 rounded-lg border border-amber-900/60 bg-amber-950/30 px-3 py-2"
+        class="space-y-2 rounded-lg border border-amber-900/60 bg-amber-950/30 px-3 py-2"
       >
-        <span class="flex items-center gap-1.5 text-xs text-amber-300">
-          <UIcon name="i-lucide-loader-circle" class="h-3.5 w-3.5 animate-spin" />
-          {{ t('panels.inspector.bootstrapping') }}
-        </span>
-        <AgentStopButton :run-id="runningRun.runId" :kind="runningRun.kind" size="xs" />
+        <div class="flex items-center justify-between gap-2">
+          <span class="flex items-center gap-1.5 text-xs text-amber-300">
+            <UIcon name="i-lucide-loader-circle" class="h-3.5 w-3.5 animate-spin" />
+            {{ t('panels.inspector.bootstrapping') }}
+          </span>
+          <div class="flex items-center gap-1.5">
+            <!-- A bootstrap has no step surface of its own, so this is where its run details are
+                 reached from: the same panel every task run opens, over the same four sinks. -->
+            <UButton
+              v-if="runningRun.kind === 'bootstrap'"
+              size="xs"
+              color="neutral"
+              variant="ghost"
+              icon="i-lucide-activity"
+              @click="ui.openObservability(runningRun.runId)"
+            >
+              {{ t('observability.modelActivity') }}
+            </UButton>
+            <AgentStopButton :run-id="runningRun.runId" :kind="runningRun.kind" size="xs" />
+          </div>
+        </div>
+        <BootstrapRunSteps v-if="runningRun.kind === 'bootstrap'" :run-id="runningRun.runId" />
       </div>
 
       <!-- external links -->

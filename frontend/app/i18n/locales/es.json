@@ -413,7 +413,8 @@
       "retrying": "Reintentando…",
       "history": {
         "previousErrors": "{count} error anterior | {count} errores anteriores"
-      }
+      },
+      "resumeBootstrap": "Reanudar desde: {step}"
     },
     "stop": {
       "label": "Detener",
@@ -1774,7 +1775,8 @@
       "cacheRead": "{tokens} leídos de caché",
       "cacheReadHint": "Tokens de entrada servidos desde la caché del proveedor (unas 0,1 veces el precio de la entrada fresca)",
       "cacheWrite": "{tokens} escritos en caché",
-      "cacheWriteHint": "Tokens de entrada escritos en la caché del proveedor (de 1,25 a 2 veces el precio de la entrada fresca)"
+      "cacheWriteHint": "Tokens de entrada escritos en la caché del proveedor (de 1,25 a 2 veces el precio de la entrada fresca)",
+      "costNoRollup": "Sin valorar: la estimación se calcula a partir del resumen por paso, y esta ejecución no tiene ninguno. Abajo se indica lo que consumieron sus llamadas."
     },
     "phase": {
       "title": "Adónde fueron los tokens",
@@ -1789,7 +1791,8 @@
       "costHint": "Coste estimado de los tokens de esta fase a precios de lista. Un guion indica que esta instalación no tiene tarifa para el modelo que se ejecutó.",
       "carryCostHint": "Cuánto cargó cada fase sobre los turnos posteriores: su contexto contado una vez por cada turno que tuvo que reenviarlo. Compara entre sí las fases de una ejecución; por sí sola la cifra no significa nada. Una fase que se ejecuta al final arrastra poco por mucho que haya gastado, así que lee esta columna junto a los tokens de al lado.",
       "unattributed": "Sin atribuir",
-      "unattributedHint": "registrado por un canal que no informa de la fase"
+      "unattributedHint": "registrado por un canal que no informa de la fase",
+      "noRollup": "Esta ejecución no tiene pasos de pipeline, así que no hay un resumen por fase: sus llamadas al modelo están registradas abajo, pero nada las agrupa ni las valora."
     },
     "metricsBar": {
       "calls": "{count} llamada | {count} llamadas",
@@ -1897,7 +1900,8 @@
       "result": "Resultado",
       "dropped": "{chars} caracteres descartados al capturar",
       "truncated": "Se muestran las primeras {shown} llamadas de esta ejecución. Los recuentos de arriba corresponden a la ejecución completa; filtra por los fallos para verlos todos.",
-      "failuresTruncated": "Se muestran las primeras {shown} llamadas fallidas. El recuento de arriba corresponde a la ejecución completa."
+      "failuresTruncated": "Se muestran las primeras {shown} llamadas fallidas. El recuento de arriba corresponde a la ejecución completa.",
+      "surveyReadsElsewhere": "Las lecturas del estudio no están aquí: explora mediante el lector acotado de la plataforma y cada lectura queda registrada en la transcripción de adopción de la ejecución. Abajo están las llamadas a herramientas del contenedor que escribió el servicio."
     }
   },
   "platformObservability": {
@@ -6965,7 +6969,8 @@
       "title": "Ejecuciones recientes",
       "fromArch": "desde {name}",
       "fromScratch": "desde cero",
-      "open": "Abrir"
+      "open": "Abrir",
+      "openPr": "Pull request"
     },
     "status": {
       "pending": "pendiente",
@@ -7017,11 +7022,24 @@
       "label": "Dónde va el servicio",
       "newRepo": {
         "label": "Un repositorio nuevo",
-        "description": "Crear un repositorio propio y subir el servicio como su primer commit."
+        "description": "Crear un repositorio propio y escribir el servicio en él."
       },
       "monorepo": {
         "label": "Un directorio de un monorepo existente",
-        "description": "Añadir el servicio a un repositorio que ya tienes y abrir un pull request."
+        "description": "Añadir el servicio a un repositorio que ya tienes."
+      }
+    },
+    "delivery": {
+      "label": "Cómo se entrega el trabajo",
+      "pullRequest": {
+        "label": "Abrir un pull request",
+        "descNewRepo": "Subir una rama y abrir un pull request contra el primer commit del repositorio, para que alguien revise el andamiaje antes de que sea la rama principal. El repositorio ya debe tener un commit.",
+        "descMonorepo": "Subir una rama y abrir un pull request. No se fusiona nada por ti."
+      },
+      "directPush": {
+        "label": "Subir directamente",
+        "descNewRepo": "Escribir el servicio directamente en la rama principal como primer commit del repositorio.",
+        "descMonorepo": "Hacer commits en la rama principal mientras el agente trabaja. Si la ejecución falla, queda lo que ya se había escrito."
       }
     },
     "serviceName": {
@@ -7029,7 +7047,7 @@
       "description": "Nombra el servicio en el tablero y propone su directorio."
     },
     "monorepo": {
-      "intro": "El servicio se escribe en un directorio de un repositorio existente y se entrega como pull request. No se fusiona nada por ti ni se cambia nada fuera del nuevo directorio.",
+      "intro": "El servicio se escribe en un directorio de un repositorio existente, y no se cambia nada fuera de ese directorio.",
       "repo": {
         "label": "Monorepo",
         "description": "El repositorio donde vivirá el nuevo servicio. Ya debe estar vinculado a este espacio de trabajo.",
@@ -7119,7 +7137,26 @@
         "approvedDesc": "El agente está escribiendo {directory} y abrirá un pull request.",
         "failed": "No se pudo enviar la revisión"
       }
-    }
+    },
+    "steps": {
+      "title": "Pasos del bootstrap",
+      "name": {
+        "scaffold": "Crear la estructura del repositorio",
+        "survey": "Analizar el monorepo y la plantilla",
+        "review": "Tus decisiones de adopción",
+        "apply": "Escribir el servicio y abrir la pull request"
+      },
+      "state": {
+        "pending": "Sin empezar",
+        "running": "En curso",
+        "awaiting_review": "Esperándote",
+        "done": "Hecho",
+        "failed": "Con error",
+        "stopped": "Detenido",
+        "unknown": "Estado ilegible"
+      }
+    },
+    "runKind": "Arranque de repositorio"
   },
   "riskPolicy": {
     "health": {

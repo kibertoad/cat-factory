@@ -198,3 +198,75 @@ export async function recordAgentContextSnapshot(
     recorder.record(buildAgentContextRecord(context, body, model, ids)),
   )
 }
+
+/**
+ * The same snapshot for a REPO-BOOTSTRAP dispatch, which has no {@link AgentRunContext}.
+ *
+ * A bootstrap runs before the service it creates exists, so there is no block, no pipeline and
+ * no resolved fragments to fold. There IS a composed system prompt, a brief a human wrote,
+ * and a repository the agent was pointed at, which is the whole of what "what was this agent
+ * given" means for this run. Left unrecorded (as it was), a bootstrap is the one agent run whose
+ * Provided-context tab is empty with nothing on screen to say whether that is an opt-out, an
+ * unwired sink, or a dispatch that never filed one.
+ *
+ * It lives here rather than beside the bootstrapper for the reason stated at the top of this
+ * file: this module is the ONE place the persistence allow-list is decided, and a second builder
+ * elsewhere is how a second (looser) list gets written.
+ */
+export function buildBootstrapContextRecord(input: {
+  body: Record<string, unknown>
+  model: string
+  agentKind: string
+  workspaceId: string
+  executionId: string
+  /** The run's own step this dispatch IS, so a snapshot keys to a step like every other one. */
+  stepIndex: number
+}): RecordAgentContextInput {
+  const str = (v: unknown): string => (typeof v === 'string' ? v : '')
+  const body = input.body
+  const repo = (body.repo ?? {}) as Record<string, unknown>
+  const bootstrap = (body.bootstrap ?? {}) as Record<string, unknown>
+  const target = (bootstrap.target ?? {}) as Record<string, unknown>
+  return {
+    workspaceId: input.workspaceId,
+    executionId: input.executionId,
+    agentKind: input.agentKind,
+    stepIndex: input.stepIndex,
+    model: input.model,
+    // Recorded as the body carries it, exactly as above: bootstrap sends no explicit harness,
+    // and inventing one here would make this the one snapshot that states rather than records.
+    harness: typeof body.harness === 'string' ? body.harness : null,
+    systemPrompt: str(body.systemPrompt),
+    userPrompt: str(body.userPrompt),
+    // A bootstrap folds no best-practice fragments and injects no `.cat-context` files: the
+    // empty lists are the honest projection, not a gap.
+    fragments: [],
+    contextFiles: [],
+    extras: {
+      mode: body.mode,
+      // Clone SOURCE (owner/name/branch only, never the clone URL, which is where a token
+      // would ride), the subdirectory a monorepo run is confined to, and the push TARGET a
+      // new-repo run force-pushes to. Between them they answer "which repositories was this
+      // agent pointed at", which is the first question a wrong bootstrap raises.
+      repo: { owner: str(repo.owner), name: str(repo.name), baseBranch: str(repo.baseBranch) },
+      branch: body.branch,
+      serviceDirectory: repo.serviceDirectory,
+      ...(target.owner || target.name
+        ? { bootstrapTarget: { owner: str(target.owner), name: str(target.name) } }
+        : {}),
+      ...(body.newBranch ? { newBranch: body.newBranch } : {}),
+    },
+  }
+}
+
+/** File a bootstrap dispatch's snapshot. The best-effort sibling of the function above. */
+export async function recordBootstrapContextSnapshot(
+  recorder: AgentContextRecorder | undefined,
+  logger: Logger,
+  input: Parameters<typeof buildBootstrapContextRecord>[0],
+): Promise<void> {
+  if (!recorder) return
+  await runBestEffort(logger, 'bootstrap.recordAgentContext', () =>
+    recorder.record(buildBootstrapContextRecord(input)),
+  )
+}

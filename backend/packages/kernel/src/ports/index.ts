@@ -606,6 +606,7 @@ export type {
   SurveyClaim,
 } from './bootstrap-repositories.js'
 export type {
+  BootstrapDeliveryPlan,
   BootstrapJobHandle,
   BootstrapJobUpdate,
   BootstrapRepoOutcome,

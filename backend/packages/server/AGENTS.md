@@ -125,9 +125,16 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   budget: `containerAgentLogging.ts` (the workflow↔container seam's log vocabulary) and
   `agentContextRecord.ts` (the observability snapshot's ALLOW-LIST projection; the one place
   that decides what of a dispatch may be persisted, so a new body field is opt-in, never
-  inherited). A third, `toolTrajectory.ts`, owns the poll's TOOL-CALL drain: it applies the body
+  inherited, and the reason the BOOTSTRAP projection lives there too rather than beside the
+  bootstrapper: a second builder elsewhere is how a second, looser list gets written). A third,
+  `toolTrajectory.ts`, owns the poll's TOOL-CALL drain: it applies the body
   gate ONCE and hands the same gated batch to the trajectory store and to any wired trace sink,
-  so the two can never end up with different answers about what a workspace permitted. A fourth,
+  so the two can never end up with different answers about what a workspace permitted. Both of
+  those are called by `ContainerRepoBootstrapper` as well as by the executor, because a repo
+  bootstrap is inspected through the same panel as any other agent run: it files a snapshot per
+  dispatch and drains its trajectory on every poll, under the RUN id (`request.jobId`), NEVER the
+  drive id its container is addressed by. The two ids differ on a monorepo run's apply phase, and
+  keying telemetry on the drive is what filed that phase where no run-scoped read looks. A fourth,
   `dispatchTokenMint.ts`, owns the dispatch CREDENTIAL: it is the one place that decides whose
   token a job carries (the run initiator's PAT, else the deployment's) and how wide it is minted
   (`repository_ids` narrowed to `jobTokenRepoIds`, the repos that dispatch resolved). Both facades

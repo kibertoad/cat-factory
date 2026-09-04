@@ -413,7 +413,8 @@
       "retrying": "Ponawianie…",
       "history": {
         "previousErrors": "{count} poprzedni błąd | {count} poprzednie błędy | {count} poprzednich błędów"
-      }
+      },
+      "resumeBootstrap": "Wznów od: {step}"
     },
     "stop": {
       "label": "Zatrzymaj",
@@ -1774,7 +1775,8 @@
       "cacheRead": "{tokens} odczytane z pamięci podręcznej",
       "cacheReadHint": "Tokeny wejściowe obsłużone z pamięci podręcznej dostawcy (około 0,1 ceny świeżego wejścia)",
       "cacheWrite": "{tokens} zapisane do pamięci podręcznej",
-      "cacheWriteHint": "Tokeny wejściowe zapisane do pamięci podręcznej dostawcy (od 1,25 do 2 razy cena świeżego wejścia)"
+      "cacheWriteHint": "Tokeny wejściowe zapisane do pamięci podręcznej dostawcy (od 1,25 do 2 razy cena świeżego wejścia)",
+      "costNoRollup": "Bez wyceny: szacunek powstaje z zestawienia według kroków, a ten przebieg go nie ma. Poniżej widać, ile zużyły jego wywołania."
     },
     "phase": {
       "title": "Na co poszły tokeny",
@@ -1789,7 +1791,8 @@
       "costHint": "Szacowany koszt tokenów tej fazy według cennika. Myślnik oznacza, że ta instalacja nie ma stawki dla uruchomionego modelu.",
       "carryCostHint": "Jak bardzo każda faza obciążyła kolejne tury: jej kontekst policzony raz za każdą późniejszą turę, która musiała go wysłać ponownie. Porównuj fazy jednego przebiegu ze sobą; sama liczba nic nie znaczy. Faza wykonywana na końcu przenosi niewiele, choć by zużyła dużo, dlatego czytaj tę kolumnę razem z tokenami obok.",
       "unattributed": "Bez przypisania",
-      "unattributedHint": "zarejestrowane przez kanał, który nie podaje fazy"
+      "unattributedHint": "zarejestrowane przez kanał, który nie podaje fazy",
+      "noRollup": "Ten przebieg nie ma kroków potoku, więc nie ma zestawienia według faz: jego wywołania modelu są zapisane poniżej, ale nic ich nie grupuje ani nie wycenia."
     },
     "metricsBar": {
       "calls": "{count} wywołanie | {count} wywołania | {count} wywołań",
@@ -1897,7 +1900,8 @@
       "result": "Wynik",
       "dropped": "{chars} znaków odrzuconych przy zapisie",
       "truncated": "Pokazano pierwsze {shown} wywołań tego uruchomienia. Liczby powyżej dotyczą całego uruchomienia; zawęź do nieudanych, aby zobaczyć wszystkie.",
-      "failuresTruncated": "Pokazano pierwsze {shown} nieudanych wywołań. Liczba powyżej dotyczy całego uruchomienia."
+      "failuresTruncated": "Pokazano pierwsze {shown} nieudanych wywołań. Liczba powyżej dotyczy całego uruchomienia.",
+      "surveyReadsElsewhere": "Odczytów samego przeglądu tu nie ma: prowadzi je przez ograniczony czytnik platformy, a każdy odczyt jest zapisany w transkrypcji adopcji tego przebiegu. Poniżej znajdują się wywołania narzędzi kontenera, który zapisał usługę."
     }
   },
   "platformObservability": {
@@ -6965,7 +6969,8 @@
       "title": "Ostatnie uruchomienia",
       "fromArch": "z {name}",
       "fromScratch": "od zera",
-      "open": "Otwórz"
+      "open": "Otwórz",
+      "openPr": "Pull request"
     },
     "status": {
       "pending": "oczekuje",
@@ -7017,11 +7022,24 @@
       "label": "Gdzie trafi usługa",
       "newRepo": {
         "label": "Nowe repozytorium",
-        "description": "Utwórz osobne repozytorium i wypchnij usługę jako jego pierwszy commit."
+        "description": "Utwórz osobne repozytorium i zapisz w nim usługę."
       },
       "monorepo": {
         "label": "Katalog w istniejącym monorepo",
-        "description": "Dodaj usługę do repozytorium, które już masz, i otwórz pull request."
+        "description": "Dodaj usługę do repozytorium, które już masz."
+      }
+    },
+    "delivery": {
+      "label": "Jak trafia praca",
+      "pullRequest": {
+        "label": "Otwórz pull request",
+        "descNewRepo": "Wypchnij gałąź i otwórz pull request wobec pierwszego commita repozytorium, żeby ktoś przejrzał szkielet, zanim stanie się gałęzią domyślną. Repozytorium musi już mieć commit.",
+        "descMonorepo": "Wypchnij gałąź i otwórz pull request. Nic nie zostanie scalone za ciebie."
+      },
+      "directPush": {
+        "label": "Wypchnij bezpośrednio",
+        "descNewRepo": "Zapisz usługę prosto na gałęzi domyślnej, jako pierwszy commit repozytorium.",
+        "descMonorepo": "Commituj na gałąź domyślną w trakcie pracy agenta. Nieudany przebieg zostawia to, co zdążył zapisać."
       }
     },
     "serviceName": {
@@ -7029,7 +7047,7 @@
       "description": "Nazywa usługę na tablicy i podpowiada jej katalog."
     },
     "monorepo": {
-      "intro": "Usługa jest zapisywana w katalogu istniejącego repozytorium i dostarczana jako pull request. Nic nie jest za Ciebie scalane ani zmieniane poza nowym katalogiem.",
+      "intro": "Usługa jest zapisywana w katalogu istniejącego repozytorium; poza tym katalogiem nic się nie zmienia.",
       "repo": {
         "label": "Monorepo",
         "description": "Repozytorium, w którym zamieszka nowa usługa. Musi być już powiązane z tą przestrzenią roboczą.",
@@ -7119,7 +7137,26 @@
         "approvedDesc": "Agent zapisuje {directory} i otworzy pull request.",
         "failed": "Nie udało się wysłać przeglądu"
       }
-    }
+    },
+    "steps": {
+      "title": "Kroki bootstrapu",
+      "name": {
+        "scaffold": "Utworzenie szkieletu repozytorium",
+        "survey": "Analiza monorepo i szablonu",
+        "review": "Twoje decyzje o tym, co przejąć",
+        "apply": "Napisanie usługi i otwarcie pull requesta"
+      },
+      "state": {
+        "pending": "Nierozpoczęty",
+        "running": "W toku",
+        "awaiting_review": "Czeka na Ciebie",
+        "done": "Gotowe",
+        "failed": "Niepowodzenie",
+        "stopped": "Zatrzymano",
+        "unknown": "Stan nieczytelny"
+      }
+    },
+    "runKind": "Inicjalizacja repozytorium"
   },
   "riskPolicy": {
     "health": {

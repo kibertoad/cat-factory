@@ -106,13 +106,31 @@ export const bootstrapPhaseSchema = v.picklist(['survey', 'apply'])
 export type BootstrapPhase = v.InferOutput<typeof bootstrapPhaseSchema>
 
 /**
+ * How a bootstrap run DELIVERS what it produced.
+ *
+ *  - `pull_request`: the run pushes a work branch and opens a pull request, so a person reviews
+ *    the scaffold before it reaches the branch everyone builds from.
+ *  - `direct_push`: the run commits onto the default branch itself. For a new repository that is
+ *    a single force-pushed initial commit; for a monorepo the new subdirectory lands on the
+ *    shared branch AS THE AGENT WORKS, because the harness checkpoints committed work to
+ *    whichever branch it is pushing, so a run that faults leaves what it had written behind.
+ *
+ * The schema carries no default, because the two targets want OPPOSITE ones: a brand-new
+ * repository has nobody to review its first commit, a monorepo full of other people's services
+ * has everybody. A valibot default cannot depend on a sibling field, so the omitted-value rule
+ * is applied once, in `BootstrapService.bootstrap`.
+ */
+export const bootstrapDeliverySchema = v.picklist(['pull_request', 'direct_push'])
+export type BootstrapDelivery = v.InferOutput<typeof bootstrapDeliverySchema>
+
+/**
  * Bootstrap INTO an existing monorepo instead of into a new repository of its own.
  *
  * The target is a repository the workspace already projects (so it is already reachable, and
  * its `isMonorepo` flag is already the board's) plus the subdirectory the new service will
- * live in. There is no repo creation and no force-push: the run opens a pull request against
- * the monorepo's default branch, which is the only shape that is safe against a repository
- * holding other people's services.
+ * live in. There is no repo creation and no force-push under either delivery: the run adds a
+ * subdirectory, because the target holds other people's services and the new-repo flow's
+ * "reinitialise and reset history" would destroy them.
  */
 export const monorepoBootstrapTargetSchema = v.object({
   /** The monorepo's numeric VCS id, as the workspace's repo projection lists it. */
@@ -133,7 +151,11 @@ export const monorepoBootstrapRefSchema = v.object({
   repoOwner: v.string(),
   /** Name of the monorepo, resolved from the projection at start. */
   repoName: v.string(),
-  /** The branch the run pushes its work to; null until the apply phase dispatches. */
+  /**
+   * The work branch the run opens its pull request from; null until the apply phase dispatches,
+   * and null for the whole life of a `direct_push` run, which commits onto the default branch
+   * and opens no branch of its own.
+   */
   branch: v.nullable(v.string()),
 })
 export type MonorepoBootstrapRef = v.InferOutput<typeof monorepoBootstrapRefSchema>
@@ -213,13 +235,22 @@ export const bootstrapJobSchema = v.object({
   monorepo: v.nullable(monorepoBootstrapRefSchema),
   /** Which half of the monorepo flow the run is in; null on a new-repo run. */
   phase: v.nullable(bootstrapPhaseSchema),
+  /**
+   * How this run delivers its work, resolved at start from the request (or from the target's
+   * own default when the request named none). Recorded rather than re-derived: a retry
+   * re-dispatches under the delivery the run was started with, and the board says which one a
+   * finished run took.
+   */
+  delivery: bootstrapDeliverySchema,
   /** The suggestion the human is reviewing (or the stated reason there is none). */
   adoptionPlan: v.nullable(adoptionPlanSchema),
   /** What the human settled; null until the review is submitted. */
   adoptionReview: v.nullable(resolvedAdoptionSchema),
   /**
-   * The pull request the apply phase opened against the monorepo; null until it does.
-   * A monorepo bootstrap's deliverable IS a PR: nothing is merged for the reviewer.
+   * The pull request this run opened; null until it does, and null for the whole life of a
+   * `direct_push` run. A `pull_request` run's deliverable IS the PR: nothing is merged for the
+   * reviewer, which is why a completed run that opened none is reported as a failure rather
+   * than as a success with a null here.
    */
   prUrl: v.nullable(v.string()),
   createdAt: v.number(),
@@ -251,6 +282,12 @@ export const bootstrapRepoSchema = v.pipe(
      * once a human has settled it.
      */
     monorepo: v.optional(monorepoBootstrapTargetSchema),
+    /**
+     * How the run delivers its work. Omitted ⇒ the target's own default: `direct_push` for a
+     * new repository (its first commit is reviewed by nobody), `pull_request` for a monorepo
+     * (its default branch is everybody's).
+     */
+    delivery: v.optional(bootstrapDeliverySchema),
     /**
      * The repository role for the bootstrapped frame (backend service / frontend / library /
      * document repository). Omitted → `service`, so existing callers are unchanged.

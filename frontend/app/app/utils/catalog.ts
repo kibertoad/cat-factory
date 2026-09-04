@@ -8,7 +8,11 @@ import type {
   TaskTypeMeta,
 } from '~/types/domain'
 import type { BadgeColor } from '~/utils/badge'
-import { isBuiltinGatableKind } from '@cat-factory/contracts'
+import {
+  isBuiltinGatableKind,
+  MONOREPO_ADOPTION_AGENT_KIND,
+  REPO_BOOTSTRAP_AGENT_KIND,
+} from '@cat-factory/contracts'
 
 /** Simple unique id helper (fine for a client-only prototype). */
 export function uid(prefix = 'id'): string {
@@ -635,6 +639,33 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
     description:
       'Re-examines a single challenged PR-review finding against the full source, then upholds ' +
       '(strengthening it) or retracts it with a justification. Configurable separately from the reviewer.',
+  },
+  // The two agent kinds a REPO BOOTSTRAP run files its telemetry under. Neither is placeable
+  // and neither is a model-routing key (the bootstrapper runs on the `architect` routing, the
+  // advisor on the workspace default): they are here so the observability panel a bootstrap run
+  // opens names what actually ran. Without them both roll up as the generic "Agent" fallback,
+  // which puts the survey's model calls and the apply container's under one unnamed heading on
+  // the one panel whose job is telling them apart.
+  //
+  // Keyed off the contracts constants the BACKEND stamps on those rows, never a second spelling:
+  // a rename that missed one side would fall back to the unnamed heading with nothing failing.
+  [REPO_BOOTSTRAP_AGENT_KIND]: {
+    kind: REPO_BOOTSTRAP_AGENT_KIND,
+    tier: 'advanced',
+    label: 'Repo Bootstrapper',
+    icon: 'i-lucide-package-plus',
+    color: '#f59e0b',
+    description:
+      'Scaffolds a new repository from a reference architecture, or writes a new service into a monorepo and opens the pull request.',
+  },
+  [MONOREPO_ADOPTION_AGENT_KIND]: {
+    kind: MONOREPO_ADOPTION_AGENT_KIND,
+    tier: 'advanced',
+    label: 'Adoption Advisor',
+    icon: 'i-lucide-scale',
+    color: '#f59e0b',
+    description:
+      'Reads a monorepo and the reference template and proposes what a new service should adopt from each. Its suggestion is the one a human settles before anything is written.',
   },
   // The Initiative Planning pipeline's steps. Only runnable on an initiative
   // block (pl_initiative — enforced by the engine), so they are display-metadata

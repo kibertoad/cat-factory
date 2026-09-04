@@ -159,6 +159,18 @@ export const useAgentRunsStore = defineStore('agentRuns', () => {
   })
 
   /**
+   * One bootstrap run by its RUN id.
+   *
+   * The counterpart to `execution.getInstance`, and it exists for the same surfaces: anything
+   * that holds a run id and needs the run WHOLE rather than the coarse {@link byBlock} summary:
+   * the observability panel's header, and the step list a card renders. A retry mints a NEW id,
+   * so unlike the block-keyed reads below this one needs nothing of the list's ordering.
+   */
+  function bootstrapById(runId: string | null | undefined): BootstrapJob | undefined {
+    return runId ? bootstrapJobs.value.find((job) => job.id === runId) : undefined
+  }
+
+  /**
    * The parked monorepo bootstrap for a block, when it is waiting on an adoption review.
    *
    * Read off the stored run rather than off `byBlock`, because the review needs the PLAN and
@@ -221,6 +233,7 @@ export const useAgentRunsStore = defineStore('agentRuns', () => {
 
   return {
     bootstrapJobs,
+    bootstrapById,
     awaitingReview,
     submitAdoptionReview,
     hydrate,

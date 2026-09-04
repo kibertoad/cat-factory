@@ -126,6 +126,33 @@ against 1.66.0 keeps parsing.
 
 ## 1.68.0
 
+`BootstrapJob` gains `delivery` (`pull_request` | `direct_push`): how a bootstrap run publishes
+what it wrote.
+
+It is projected because the pair of URL fields no longer answers the question a poller asks.
+1.65.0 added `prUrl` beside `repoUrl` and said "exactly one of the two is set on any run, which is
+also how a caller tells the two shapes apart". That was true while the target decided the delivery:
+a monorepo run opened a pull request, a new-repo run force-pushed. A bootstrap now says how its
+work should land, so a run that created a repository OF ITS OWN can also deliver into it as a pull
+request, and both fields are then set.
+
+**Read `delivery` for whether a pull request is coming, and `repoUrl` for which target the run
+took.** `repoUrl` is unchanged and still names the created repository (null on a monorepo run
+always), so the target discrimination survives; what does not is inferring the delivery from
+`prUrl`, which on a `direct_push` run is null terminally and correctly, and on a `pull_request` run
+is null only until the pull request exists. `delivery` answers both from the first poll.
+
+`POST /api/v1/repos/bootstrap` does NOT accept `delivery`, exactly as it does not accept a
+`monorepo` target: a run started through this surface still takes the default for the target it
+creates, `direct_push`. The field reaches a caller anyway, because a run started in the app is read
+back here, which is the same reason `awaiting_review` was named in 1.65.0.
+
+Additive: a new field on an existing response object, whose value is one of two members the
+clients receive as a string. A consumer built against 1.67.0 keeps parsing, and one that branched
+on `prUrl === null` to mean "this run created a repository" should move to `repoUrl !== null`.
+
+## 1.69.0, not 1.68.0
+
 `POST /api/v1/repos/bootstrap` gains two refusals, both about the reference architecture a creation
 names: `422` with `details.reason: reference_repo_not_found` when the workspace's source-control
 connection cannot see that repository, and `503` with `reference_repo_unreadable` when the probe
@@ -143,3 +170,8 @@ A template the connection can READ but the App was never granted still passes th
 at dispatch, as a `failed` creation whose message names the repository to grant. A public
 repository is the case that reaches it: `repository_ids` may only name repositories an installation
 holds, and reading one proves nothing about that.
+
+The number moved after the fact, the way 1.64.0's did and for the same reason: this branch was
+written against 1.67.0 and main reached 1.68.0 with `BootstrapJob.delivery` while it was in
+flight. Both sides produced the same version line, so git auto-merged it clean and the collision
+arrived here, in the paragraph, exactly as the note at the top of this file says it does.

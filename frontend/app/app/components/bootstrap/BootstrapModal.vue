@@ -4,8 +4,14 @@
 // adapt it (in a sandbox container) — either by cloning a chosen reference
 // architecture, or from scratch following a freeform prompt. The modal pairs the
 // launch form with the managed base list.
-import type { BootstrapStatus, FrameRepoType, ReferenceArchitecture } from '~/types/domain'
+import type {
+  BootstrapDelivery,
+  BootstrapStatus,
+  FrameRepoType,
+  ReferenceArchitecture,
+} from '~/types/domain'
 import {
+  defaultBootstrapDelivery,
   type ReferenceRefusal,
   referenceRefusalOf,
   referenceRefusalSurvivesSave,
@@ -107,6 +113,42 @@ const targetItems = computed(() => [
   },
 ])
 const intoMonorepo = computed(() => target.value === 'monorepo')
+
+// ---- how the work LANDS ----------------------------------------------------
+// A third axis, orthogonal to both of the above: the same service, written the same way, either
+// arrives as a pull request somebody reviews or straight on the default branch. The two targets
+// want opposite defaults (a repository being created has nobody to review its first commit; a
+// monorepo's default branch is the branch every other service builds from), which is exactly why
+// this is a control and not a constant.
+const delivery = ref<BootstrapDelivery>(defaultBootstrapDelivery(false))
+// Whether the person has answered this question themselves. Until they have, switching target
+// re-defaults; once they have, their answer stands, because re-defaulting over an explicit
+// choice is how a run they asked to review lands unreviewed. Cleared after a launch, so the
+// answer binds the run it was given for rather than every later one (see `launch`).
+const deliveryTouched = ref(false)
+watch(intoMonorepo, (into) => {
+  if (!deliveryTouched.value) delivery.value = defaultBootstrapDelivery(into)
+})
+function chooseDelivery(value: BootstrapDelivery) {
+  deliveryTouched.value = true
+  delivery.value = value
+}
+const deliveryItems = computed(() => [
+  {
+    label: t('bootstrap.delivery.pullRequest.label'),
+    value: 'pull_request' as const,
+    description: intoMonorepo.value
+      ? t('bootstrap.delivery.pullRequest.descMonorepo')
+      : t('bootstrap.delivery.pullRequest.descNewRepo'),
+  },
+  {
+    label: t('bootstrap.delivery.directPush.label'),
+    value: 'direct_push' as const,
+    description: intoMonorepo.value
+      ? t('bootstrap.delivery.directPush.descMonorepo')
+      : t('bootstrap.delivery.directPush.descNewRepo'),
+  },
+])
 
 /** The projected repo the new service lands in, by numeric id. */
 const monorepoRepoId = ref<number | undefined>(undefined)
@@ -369,6 +411,7 @@ async function launch() {
       private: isPrivate.value,
       instructions: instructions.value.trim(),
       type: selectedType.value,
+      delivery: delivery.value,
       ...(intoMonorepo.value && monorepoRepoId.value
         ? {
             monorepo: {
@@ -409,6 +452,12 @@ async function launch() {
       browsingDirectory.value = false
       // Reset the repo role too, so a later bootstrap doesn't silently inherit this one's type.
       selectedType.value = 'service'
+      // And the delivery, which has to reset the ANSWERED flag with it: leaving that set disarms
+      // the per-target default for good, so a "push directly" picked deliberately for one
+      // monorepo would go on governing the next bootstrap, into a different repository, without
+      // the person having been asked about that one. Back to the current target's own default.
+      deliveryTouched.value = false
+      delivery.value = defaultBootstrapDelivery(intoMonorepo.value)
       // The provisional frame arrived (bootstrap() refreshed the board). Re-home it to
       // free space so it never overlaps an existing service — the backend places it on a
       // fixed diagonal stagger that can land on top of a large neighbour — then centre the
@@ -605,6 +654,17 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
 
           <UFormField :label="t('bootstrap.target.label')" required>
             <URadioGroup v-model="target" :items="targetItems" />
+          </UFormField>
+
+          <!-- Where the service goes and how it gets there are two questions, and the second
+               has no answer that is right for both targets. Its descriptions therefore change
+               with the target rather than the control being duplicated per target. -->
+          <UFormField :label="t('bootstrap.delivery.label')" required>
+            <URadioGroup
+              :model-value="delivery"
+              :items="deliveryItems"
+              @update:model-value="chooseDelivery($event as BootstrapDelivery)"
+            />
           </UFormField>
 
           <!-- Landing in an existing monorepo: pick the repository and the subdirectory. The
@@ -878,6 +938,18 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
                 class="text-[11px] text-indigo-400 hover:underline"
               >
                 {{ t('bootstrap.recent.open') }}
+              </ULink>
+              <!-- The deliverable of a `pull_request` run, and the only thing it produced that
+                   the user still has to act on. A monorepo run has no `repoUrl` at all, so
+                   without this the run's whole output is unreachable from the list that
+                   offered the choice. -->
+              <ULink
+                v-if="job.prUrl"
+                :to="job.prUrl"
+                target="_blank"
+                class="text-[11px] text-indigo-400 hover:underline"
+              >
+                {{ t('bootstrap.recent.openPr') }}
               </ULink>
               <UBadge :color="statusColor[job.status]" variant="subtle" size="sm">
                 {{ statusLabel[job.status] }}

@@ -19,7 +19,6 @@ import type {
 import {
   ConflictError,
   getErrorMessage,
-  monorepoBootstrapBranch,
   NotFoundError,
   parseAdoptionDecisions,
   PR_ADOPTION_MARKERS,
@@ -258,11 +257,6 @@ export class MonorepoBootstrapController {
     }
   }
 
-  /** The branch the apply phase pushes; stable per run so a retry resumes rather than forks. */
-  branchFor(jobId: string): string {
-    return monorepoBootstrapBranch(jobId)
-  }
-
   /**
    * Survey both repositories and produce the plan a human reviews. NEVER throws: every failure
    * becomes a plan recorded `unavailable` with the cause, because the run parks either way and a
@@ -352,6 +346,9 @@ export class MonorepoBootstrapController {
     try {
       const { plan, model } = await advisor.advise({
         workspaceId,
+        // The run the survey's model calls are filed under: a bootstrap run IS an agent run, and
+        // its observability reads are keyed by the run id like every other one's.
+        runId: record.id,
         directory: monorepo.directory,
         instructions: record.instructions,
         // The seeded opening context. The bodies are already scrubbed and budgeted by the

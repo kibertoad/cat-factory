@@ -1181,7 +1181,8 @@ POST /api/v1/repos/bootstrap
   "instructions": "A Fastify service exposing a paginated catalog over Postgres." }
 
 201 { "jobId": "bsj_...", "status": "running", "repoName": "payments-api",
-      "repoOwner": null, "repoUrl": null, "serviceId": "blk_...", "progress": null,
+      "repoOwner": null, "repoUrl": null, "prUrl": null, "delivery": "direct_push",
+      "serviceId": "blk_...", "progress": null,
       "error": null, "failureKind": null, "failureDetail": null, "failureHint": null,
       "createdAt": 1760000000000, "updatedAt": 1760000000000 }
 ```
@@ -1189,6 +1190,14 @@ POST /api/v1/repos/bootstrap
 Either `instructions` or a `referenceArchitectureId` is required: a request with neither describes no
 work. `serviceId` is the board frame the run materialises, and it exists from the first response, so
 work can be filed against the service before the repository has finished being written.
+
+**`delivery` says how the run publishes what it wrote, and it is the field to branch on rather than
+the two URLs.** A run started here always answers `direct_push` (this surface accepts no delivery,
+just as it accepts no monorepo target), so its `prUrl` is null terminally and correctly. A run
+started in the app can answer `pull_request`, and then `prUrl` is its deliverable and null only
+until the pull request exists; a run that finishes without one is reported `failed`. `repoUrl`
+remains the created repository, null for the whole life of a run that bootstrapped into a monorepo
+somebody already had, so THAT is what tells the two targets apart.
 
 A creation answers `running` or, when the pre-flight refuses it outright (nothing connected, the
 target repository already has content), `failed` with the reason already filled in. So the terminal

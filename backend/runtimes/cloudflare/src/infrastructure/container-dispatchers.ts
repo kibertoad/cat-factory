@@ -21,13 +21,14 @@ import {
   logger,
   resolveUrlSafetyPolicy,
 } from '@cat-factory/server'
-import type { Clock, IdGenerator } from '@cat-factory/kernel'
+import type { AgentContextRecorder, Clock, IdGenerator } from '@cat-factory/kernel'
 import type { CoreDependencies } from '@cat-factory/orchestration'
 import type { EnvironmentBackendRegistry } from '@cat-factory/integrations'
 import { isProxyableProvider, resolveAgentConfig } from '@cat-factory/agents'
 import type { Env } from './env'
 import { buildAppRegistry, buildResolvePackageRegistries } from './container'
 import { workerDispatchTokenMint } from './dispatchTokenMint'
+import { buildToolTrajectorySinks } from './container-executor-deps'
 import { D1BootstrapJobRepository } from './repositories/D1BootstrapJobRepository'
 import { D1GitHubInstallationRepository } from './repositories/D1GitHubInstallationRepository'
 import { D1RateLimitRepository } from './repositories/D1RateLimitRepository'
@@ -40,14 +41,21 @@ import { D1RepoProjectionRepository } from './repositories/D1RepoProjectionRepos
  * undefined otherwise, leaving reference-architecture CRUD available while the run
  * path reports itself unavailable.
  */
-export function selectRepoBootstrapper(
-  env: Env,
-  config: AppConfig,
-  db: D1Database,
-  clock: Clock,
-  idGenerator: IdGenerator,
-  resolveTransport: ResolveRunnerTransport | null,
-): ContainerRepoBootstrapper | undefined {
+export function selectRepoBootstrapper(deps: {
+  env: Env
+  config: AppConfig
+  db: D1Database
+  clock: Clock
+  idGenerator: IdGenerator
+  resolveTransport: ResolveRunnerTransport | null
+  /**
+   * The provided-context sink, shared with the container executor. Absent ⇒ a bootstrap files
+   * no snapshot, exactly as an execution step would not: the capability is the deployment's,
+   * never the run kind's.
+   */
+  agentContextObservability?: AgentContextRecorder
+}): ContainerRepoBootstrapper | undefined {
+  const { env, config, db, clock, idGenerator, resolveTransport, agentContextObservability } = deps
   if (
     !resolveTransport ||
     !config.github.enabled ||
@@ -91,6 +99,11 @@ export function selectRepoBootstrapper(
     proxyBaseUrl: `${env.WORKER_PUBLIC_URL.replace(/\/+$/, '')}/v1`,
     githubApiBase: config.github.apiBase,
     ...(resolvePackageRegistries ? { resolvePackageRegistries } : {}),
+    // A bootstrap run is inspected through the same panel as any other agent run, so it
+    // records through the same sinks: the provided-context snapshot per dispatch, and the
+    // tool-call trajectory (plus trace spans) drained on every poll.
+    ...(agentContextObservability ? { agentContextObservability } : {}),
+    ...buildToolTrajectorySinks({ env, config, db, clock }),
   })
 }
 

@@ -1,13 +1,20 @@
 import { describe, expect, it, vi } from 'vitest'
 import { VcsApiError } from '@cat-factory/kernel'
 import type {
+  BootstrapJobRecord,
+  BootstrapJobRepository,
   GitHubClient,
   GitHubInstallation,
   GitHubInstallationRepository,
+  RecordAgentContextInput,
   RunnerJobView,
   RunnerTransport,
 } from '@cat-factory/kernel'
-import { ContainerRepoBootstrapper } from '../src/agents/ContainerRepoBootstrapper.js'
+import { REPO_BOOTSTRAP_AGENT_KIND } from '@cat-factory/contracts'
+import {
+  ContainerRepoBootstrapper,
+  type ContainerRepoBootstrapperDependencies,
+} from '../src/agents/ContainerRepoBootstrapper.js'
 import type { MintInstallationToken } from '../src/agents/repoTargeting.js'
 import type { ContainerSessionService } from '../src/containers/ContainerSessionService.js'
 
@@ -34,12 +41,19 @@ const INSTALLATION: GitHubInstallation = {
   deletedAt: null,
 }
 
-/** A GitHubClient that pre-flights cleanly except for the bits a test overrides. */
+/**
+ * A GitHubClient that pre-flights cleanly except for the bits a test overrides.
+ *
+ * The target holds a README, which is what a repository created through either the host's
+ * new-repo page or the platform's own button looks like: boilerplate the bootstrap tolerates,
+ * and the initial commit a pull request is opened against. A test about the EMPTY repository
+ * overrides `listRootEntries` to say so.
+ */
 function fakeClient(overrides: Partial<GitHubClient> = {}): GitHubClient {
   const base = {
     getRepo: vi.fn(async () => ({ defaultBranch: 'main', githubId: 1 })),
     canPush: vi.fn(async () => true),
-    listRootEntries: vi.fn(async () => []),
+    listRootEntries: vi.fn(async () => [{ path: 'README.md', type: 'file' }]),
     listDirectory: vi.fn(async () => []),
     ...overrides,
   }
@@ -47,20 +61,35 @@ function fakeClient(overrides: Partial<GitHubClient> = {}): GitHubClient {
 }
 
 /** The dispatch-token mint, so a test can read the `repoIds` a run was scoped to. */
-type MintSpy = ReturnType<typeof makeMint>
 function makeMint() {
   return vi.fn<MintInstallationToken>(async () => 'gh-token')
+}
+
+/**
+ * The stored run a poll reads its target off. Only the fields the poll consults are populated:
+ * whether the run has a monorepo (which decides what a completed run can NAME) and the repo
+ * name a new-repo outcome is built from.
+ */
+function fakeJobRepository(record: Partial<BootstrapJobRecord> = {}): BootstrapJobRepository {
+  return {
+    get: vi.fn(async () => ({
+      id: 'boot_1',
+      workspaceId: 'ws_1',
+      repoName: 'simpler-service3',
+      monorepo: null,
+      delivery: 'direct_push',
+      ...record,
+    })),
+  } as unknown as BootstrapJobRepository
 }
 
 function makeBootstrapper(
   client: GitHubClient,
   transport: RunnerTransport,
-  mint: MintSpy = makeMint(),
-  /** The installation the workspace resolves to, or a read that fails outright. */
-  installation: () => Promise<GitHubInstallation | null> = async () => INSTALLATION,
+  overrides: Partial<ContainerRepoBootstrapperDependencies> = {},
 ): ContainerRepoBootstrapper {
   const installationRepository = {
-    getByWorkspace: vi.fn(installation),
+    getByWorkspace: vi.fn(async () => INSTALLATION),
   } as unknown as GitHubInstallationRepository
   const sessionService = {
     mint: vi.fn(async () => 'session-token'),
@@ -68,16 +97,31 @@ function makeBootstrapper(
   return new ContainerRepoBootstrapper({
     resolveTransport: async () => transport,
     installationRepository,
-    bootstrapJobRepository: {} as never,
+    bootstrapJobRepository: fakeJobRepository(),
     repoRepository: {} as never,
     githubClient: client,
     // Every test here drives the GitHub-App shape, which is what the two hosted facades wire.
     clientProvider: 'github',
-    mintInstallationToken: mint,
+    mintInstallationToken: makeMint(),
     sessionService,
     model: { provider: 'workers-ai', model: '@cf/test' },
     proxyBaseUrl: 'https://proxy.example/v1',
+    ...overrides,
   })
+}
+
+/**
+ * A client that answers a DISTINCT numeric id per repository, so a test can tell the push target
+ * and the reference template apart in one token scope, and reports a non-conventional default
+ * branch so a hard-coded `main` cannot pass for a read of the real one.
+ */
+function idPerRepoClient(): GitHubClient {
+  return fakeClient({
+    getRepo: vi.fn(async (_installationId: number, ref: { owner: string; repo: string }) => ({
+      defaultBranch: 'trunk',
+      githubId: ref.repo === 'service-template' ? 77 : 1,
+    })),
+  } as unknown as Partial<GitHubClient>)
 }
 
 const REQUEST = {
@@ -86,7 +130,18 @@ const REQUEST = {
   // A new-repo run is one drive, so the container job id is the run id.
   containerJobId: 'boot_1',
   target: { name: 'simpler-service3', description: '', private: false },
+  delivery: { mode: 'direct_push' } as const,
   instructions: 'Scaffold a service.',
+}
+
+/** The same run asked to deliver its scaffold as a pull request instead. */
+const PR_REQUEST = {
+  ...REQUEST,
+  delivery: {
+    mode: 'pull_request',
+    branch: 'cat-factory/bootstrap-boot_1',
+    pr: { title: 'Bootstrap simpler-service3', body: 'the fallback body' },
+  } as const,
 }
 
 describe('ContainerRepoBootstrapper pre-flight', () => {
@@ -126,6 +181,25 @@ describe('ContainerRepoBootstrapper pre-flight', () => {
     expect(spec.workspaceId).toBe('ws_1')
     expect(spec.executionId).toBe('boot_1')
   })
+
+  it(`records the new-repo dispatch as the run's FIRST step, naming the push target`, async () => {
+    // A new-repo run is one step, so its snapshot is step 0 rather than the 2 a monorepo apply
+    // files: the numbering comes from the shared step derivation, which is also what the board
+    // draws, so a snapshot can never key to a step the run does not show.
+    const record = vi.fn(async (_input: RecordAgentContextInput) => undefined)
+    const bootstrapper = makeBootstrapper(
+      fakeClient(),
+      { dispatch: vi.fn(async () => undefined) } as unknown as RunnerTransport,
+      { agentContextObservability: { record } },
+    )
+    await bootstrapper.startBootstrap(REQUEST)
+    const snapshot = record.mock.calls[0]?.[0]
+    expect(snapshot).toMatchObject({ executionId: 'boot_1', stepIndex: 0 })
+    // Where it PUSHES, which the clone-source `repo` field does not answer on a from-scratch run.
+    expect(snapshot?.extras).toMatchObject({
+      bootstrapTarget: { owner: 'kibertoad', name: 'simpler-service3' },
+    })
+  })
 })
 
 describe('ContainerRepoBootstrapper.pollBootstrap', () => {
@@ -156,8 +230,22 @@ const MONOREPO_LEG = {
   owner: 'acme',
   name: 'platform',
   directory: 'services/payments',
+}
+
+/** The delivery a monorepo apply takes by default: a work branch and one pull request. */
+const MONOREPO_DELIVERY = {
+  mode: 'pull_request',
   branch: 'cat-factory/bootstrap-boot_1',
   pr: { title: 'Bootstrap payments at services/payments', body: 'the settled decisions' },
+} as const
+
+/** The resolved monorepo a stored run carries, as the poll reads it back. */
+const MONOREPO_REF = {
+  repoGithubId: 777,
+  directory: 'services/payments',
+  repoOwner: 'acme',
+  repoName: 'platform',
+  branch: MONOREPO_DELIVERY.branch,
 }
 
 const MONOREPO_REQUEST = {
@@ -165,6 +253,7 @@ const MONOREPO_REQUEST = {
   containerJobId: 'boot_1:apply',
   referenceRepo: { owner: 'acme', name: 'service-template' },
   monorepo: MONOREPO_LEG,
+  delivery: MONOREPO_DELIVERY,
 }
 
 describe('ContainerRepoBootstrapper monorepo dispatch', () => {
@@ -184,8 +273,8 @@ describe('ContainerRepoBootstrapper monorepo dispatch', () => {
     const { body } = await dispatchMonorepo()
     expect(body.bootstrap).toBeUndefined()
     expect(body.branch).toBe('main')
-    expect(body.newBranch).toBe(MONOREPO_LEG.branch)
-    expect(body.pr).toEqual(MONOREPO_LEG.pr)
+    expect(body.newBranch).toBe(MONOREPO_DELIVERY.branch)
+    expect(body.pr).toEqual(MONOREPO_DELIVERY.pr)
   })
 
   it('scopes the agent to the new subdirectory through the same field every monorepo run uses', async () => {
@@ -219,8 +308,16 @@ describe('ContainerRepoBootstrapper monorepo dispatch', () => {
     })
     expect(body.jobId).toBe('boot_1:apply')
     const [, ref] = dispatch.mock.calls[0] as unknown as [string, unknown]
-    expect(body.executionId).toBe('boot_1:apply')
     expect(ref).toBeDefined()
+  })
+
+  it('files the apply phase under the RUN, so both phases answer one observability read', async () => {
+    // The other half of the id split above, and the one that is NOT the drive: `executionId` is
+    // what every run-scoped telemetry read is keyed by, so filing the apply under its drive id
+    // put a monorepo run's second (and much more expensive) phase somewhere no reader looks,
+    // on a run whose survey rows were right there under the run id.
+    const { body } = await dispatchMonorepo()
+    expect(body.executionId).toBe('boot_1')
   })
 
   it('refuses before dispatch when the App cannot write to the monorepo', async () => {
@@ -248,12 +345,103 @@ describe('ContainerRepoBootstrapper monorepo dispatch', () => {
     expect(dispatch).not.toHaveBeenCalled()
   })
 
-  it('reports the pull request a completed apply opened', async () => {
+  it('mints the proxy session against the RUN, so proxied calls land under it too', async () => {
+    // The proxy stamps `llm_call_metrics.executionId` off the SESSION TOKEN, not off the body,
+    // so the two have to name the same run or the apply's model calls and its tool calls end up
+    // filed under different ids.
+    const mint = vi.fn(async () => 'session-token')
+    const bootstrapper = makeBootstrapper(
+      fakeClient(),
+      { dispatch: vi.fn(async () => undefined) } as unknown as RunnerTransport,
+      { sessionService: { mint } as unknown as ContainerSessionService },
+    )
+    await bootstrapper.startBootstrap(MONOREPO_REQUEST)
+    expect(mint).toHaveBeenCalledWith(
+      expect.objectContaining({ executionId: 'boot_1', agentKind: REPO_BOOTSTRAP_AGENT_KIND }),
+    )
+  })
+
+  it('records what the dispatch handed the agent, keyed to the run and to its APPLY step', async () => {
+    const record = vi.fn(async (_input: RecordAgentContextInput) => undefined)
+    const bootstrapper = makeBootstrapper(
+      fakeClient(),
+      { dispatch: vi.fn(async () => undefined) } as unknown as RunnerTransport,
+      { agentContextObservability: { record } },
+    )
+    await bootstrapper.startBootstrap(MONOREPO_REQUEST)
+    expect(record).toHaveBeenCalledTimes(1)
+    const snapshot = record.mock.calls[0]?.[0]
+    expect(snapshot).toMatchObject({
+      workspaceId: 'ws_1',
+      executionId: 'boot_1',
+      agentKind: REPO_BOOTSTRAP_AGENT_KIND,
+      // Third of the run's three steps (survey, review, apply), numbered as the board numbers
+      // them rather than as a literal this file would have to keep in step by hand.
+      stepIndex: 2,
+      // `provider:model`, the format the snapshot contract documents and every other producer
+      // writes. A bare model id here is a row a reader cannot recover the provider from.
+      model: 'workers-ai:@cf/test',
+    })
+    expect(snapshot?.systemPrompt).toContain('adding a NEW service to an existing monorepo')
+    // The allow-list, asserted where a bootstrap body is most tempting to copy whole: the job
+    // carries a GitHub installation token and a proxy session token, and neither may be stored.
+    expect(JSON.stringify(snapshot)).not.toContain('gh-token')
+    expect(JSON.stringify(snapshot)).not.toContain('session-token')
+  })
+
+  it(`drains a poll window's tool calls under the run, grouped by the container job`, async () => {
+    // Without this a bootstrap is the one agent run whose trajectory tab is empty however much
+    // the agent did, and the trajectory is the half of "why did it produce this" that neither
+    // the prompt nor the diff answers.
+    const recordToolCalls = vi.fn(async () => undefined)
+    const poll = vi.fn(async (): Promise<RunnerJobView> => ({
+      state: 'running',
+      spans: [
+        {
+          seq: 1,
+          tool: 'bash',
+          startedAt: 1,
+          endedAt: 2,
+          ok: true,
+          args: 'ls',
+          result: 'ok',
+          bodies: 'stored',
+        },
+      ],
+    }))
+    const bootstrapper = makeBootstrapper(fakeClient(), { poll } as unknown as RunnerTransport, {
+      recordToolCalls,
+      toolBodyGate: async () => true,
+    })
+    await bootstrapper.pollBootstrap({
+      workspaceId: 'ws_1',
+      jobId: 'boot_1',
+      containerJobId: 'boot_1:apply',
+    })
+    expect(recordToolCalls).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: 'ws_1',
+        executionId: 'boot_1',
+        jobId: 'boot_1:apply',
+        agentKind: REPO_BOOTSTRAP_AGENT_KIND,
+      }),
+    )
+  })
+
+  it('reports the pull request a completed apply opened, and NO created repository', async () => {
     const poll = vi.fn(async (): Promise<RunnerJobView> => ({
       state: 'done',
-      result: { prUrl: 'https://github.com/acme/platform/pull/7', branch: MONOREPO_LEG.branch },
+      result: {
+        prUrl: 'https://github.com/acme/platform/pull/7',
+        branch: MONOREPO_DELIVERY.branch,
+      },
     }))
-    const bootstrapper = makeBootstrapper(fakeClient(), { poll } as unknown as RunnerTransport)
+    const bootstrapper = makeBootstrapper(fakeClient(), { poll } as unknown as RunnerTransport, {
+      bootstrapJobRepository: fakeJobRepository({
+        monorepo: MONOREPO_REF,
+        delivery: 'pull_request',
+      }),
+    })
     const update = await bootstrapper.pollBootstrap({
       workspaceId: 'ws_1',
       jobId: 'boot_1',
@@ -261,6 +449,195 @@ describe('ContainerRepoBootstrapper monorepo dispatch', () => {
     })
     expect(update.state).toBe('done')
     expect(update.prUrl).toBe('https://github.com/acme/platform/pull/7')
+    // The run created no repository, so naming one would name a URL that does not resolve.
+    expect(update.outcome).toBeUndefined()
+  })
+
+  it('omits the branch and the PR together when the run pushes directly', async () => {
+    // The direct-push delivery is the same coding job MINUS the pair: the harness then commits
+    // onto `branch`, the monorepo's own default. A body carrying one of the two and not the
+    // other is the failure this asserts against.
+    const dispatch = vi.fn(async () => undefined)
+    const bootstrapper = makeBootstrapper(fakeClient(), {
+      dispatch,
+    } as unknown as RunnerTransport)
+    await bootstrapper.startBootstrap({
+      ...MONOREPO_REQUEST,
+      delivery: { mode: 'direct_push' } as const,
+    })
+    const [, body] = dispatch.mock.calls[0] as unknown as [unknown, Record<string, unknown>]
+    expect(body.branch).toBe('main')
+    expect(body.newBranch).toBeUndefined()
+    expect(body.pr).toBeUndefined()
+    // Still never a force-push: the monorepo holds other people's services either way.
+    expect(body.bootstrap).toBeUndefined()
+    expect(body.repo).toMatchObject({ serviceDirectory: 'services/payments' })
+  })
+})
+
+describe('ContainerRepoBootstrapper new-repo pull-request delivery', () => {
+  it('dispatches a work-branch coding job against the target, never the force-push spec', async () => {
+    // A branch whose history was reinitialised shares no ancestor with the default branch, so a
+    // pull request cannot be opened from it. This delivery therefore clones the TARGET and
+    // treats the template as a read-only sibling, exactly as the monorepo path does.
+    const dispatch = vi.fn(async () => undefined)
+    const bootstrapper = makeBootstrapper(fakeClient(), {
+      dispatch,
+    } as unknown as RunnerTransport)
+    await bootstrapper.startBootstrap({
+      ...PR_REQUEST,
+      referenceRepo: { owner: 'acme', name: 'service-template' },
+    })
+    const [, body] = dispatch.mock.calls[0] as unknown as [unknown, Record<string, unknown>]
+    expect(body.bootstrap).toBeUndefined()
+    expect(body.repo).toMatchObject({ owner: 'kibertoad', name: 'simpler-service3' })
+    // No service directory: the whole checkout IS the new service.
+    expect(body.repo).not.toHaveProperty('serviceDirectory')
+    expect(body.newBranch).toBe(PR_REQUEST.delivery.branch)
+    expect(body.pr).toEqual(PR_REQUEST.delivery.pr)
+    const references = body.referenceRepos as { repo: Record<string, string> }[]
+    expect(references[0]?.repo).toMatchObject({ owner: 'acme', name: 'service-template' })
+  })
+
+  it('refuses a repository with no commits, naming both ways out', async () => {
+    // `listRootEntries` answers `[]` for a repository that has never been committed to, and a
+    // pull request needs a base commit. Refusing here beats failing deep inside the clone,
+    // where the message would read like an outage.
+    const dispatch = vi.fn(async () => undefined)
+    const bootstrapper = makeBootstrapper(fakeClient({ listRootEntries: vi.fn(async () => []) }), {
+      dispatch,
+    } as unknown as RunnerTransport)
+    await expect(bootstrapper.startBootstrap(PR_REQUEST)).rejects.toThrow(/no commits yet/i)
+    expect(dispatch).not.toHaveBeenCalled()
+  })
+
+  it('accepts the same repository for a direct push, which writes that first commit', async () => {
+    // The floor is a PULL-REQUEST rule, not a bootstrap rule: the delivery whose whole job is to
+    // create the initial commit must not be refused for the repository not having one.
+    const dispatch = vi.fn(async () => undefined)
+    const bootstrapper = makeBootstrapper(fakeClient({ listRootEntries: vi.fn(async () => []) }), {
+      dispatch,
+    } as unknown as RunnerTransport)
+    await bootstrapper.startBootstrap(REQUEST)
+    expect(dispatch).toHaveBeenCalledTimes(1)
+  })
+
+  it('reports the created repository AND the pull request when the run completes', async () => {
+    // Unlike a monorepo run, this one really did create a repository, so a caller gets both:
+    // the repo to link the board frame to, and the pull request to review.
+    const poll = vi.fn(async (): Promise<RunnerJobView> => ({
+      state: 'done',
+      result: { prUrl: 'https://github.com/kibertoad/simpler-service3/pull/1' },
+    }))
+    const bootstrapper = makeBootstrapper(fakeClient(), { poll } as unknown as RunnerTransport, {
+      bootstrapJobRepository: fakeJobRepository({ delivery: 'pull_request' }),
+    })
+    const update = await bootstrapper.pollBootstrap({
+      workspaceId: 'ws_1',
+      jobId: 'boot_1',
+      containerJobId: 'boot_1',
+    })
+    expect(update.prUrl).toBe('https://github.com/kibertoad/simpler-service3/pull/1')
+    expect(update.outcome).toMatchObject({ owner: 'kibertoad', name: 'simpler-service3' })
+  })
+})
+
+describe('ContainerRepoBootstrapper token scope and reported branch', () => {
+  it('scopes the token to the template it CLONES under the force-push delivery too', async () => {
+    // That delivery pushes only the target, so the scope read as "just the target" for a long
+    // time. But it also CLONES the reference template on the same token, so a scope without the
+    // template works for a public reference architecture and 404s on a private one, under one
+    // delivery and not the other.
+    const mint = vi.fn(async () => 'gh-token')
+    const bootstrapper = makeBootstrapper(
+      idPerRepoClient(),
+      { dispatch: vi.fn(async () => undefined) } as unknown as RunnerTransport,
+      { mintInstallationToken: mint },
+    )
+    await bootstrapper.startBootstrap({
+      ...REQUEST,
+      referenceRepo: { owner: 'acme', name: 'service-template' },
+    })
+    expect(mint).toHaveBeenCalledWith(99, expect.objectContaining({ repoIds: ['1', '77'] }))
+  })
+
+  it('clones the template at ITS default branch, not an assumed `main`', async () => {
+    const dispatch = vi.fn(async () => undefined)
+    const bootstrapper = makeBootstrapper(idPerRepoClient(), {
+      dispatch,
+    } as unknown as RunnerTransport)
+    await bootstrapper.startBootstrap({
+      ...REQUEST,
+      referenceRepo: { owner: 'acme', name: 'service-template' },
+    })
+    const [, body] = dispatch.mock.calls[0] as unknown as [unknown, Record<string, unknown>]
+    expect(body.repo).toMatchObject({ name: 'service-template', baseBranch: 'trunk' })
+  })
+
+  it('reports the real default branch of the target when the harness reported none', async () => {
+    // Only the force-push `bootstrap` spec echoes a branch back (it created the one it pushed).
+    // The coding shape a `pull_request` run takes reports none, so the outcome READS it: a
+    // repository whose default is `trunk` must not be recorded as `main`, which is a ref that
+    // does not exist there.
+    const poll = vi.fn(async (): Promise<RunnerJobView> => ({
+      state: 'done',
+      result: { prUrl: 'https://github.com/kibertoad/simpler-service3/pull/1' },
+    }))
+    const bootstrapper = makeBootstrapper(
+      idPerRepoClient(),
+      { poll } as unknown as RunnerTransport,
+      { bootstrapJobRepository: fakeJobRepository({ delivery: 'pull_request' }) },
+    )
+    const update = await bootstrapper.pollBootstrap({
+      workspaceId: 'ws_1',
+      jobId: 'boot_1',
+      containerJobId: 'boot_1',
+    })
+    expect(update.outcome?.defaultBranch).toBe('trunk')
+  })
+})
+
+describe('the monorepo role prompt', () => {
+  /** The system prompt a monorepo apply dispatches under the given delivery. */
+  async function promptFor(mode: 'pull_request' | 'direct_push'): Promise<string> {
+    const dispatch = vi.fn(async () => undefined)
+    const bootstrapper = makeBootstrapper(fakeClient(), {
+      dispatch,
+    } as unknown as RunnerTransport)
+    await bootstrapper.startBootstrap({
+      ...MONOREPO_REQUEST,
+      delivery: mode === 'pull_request' ? MONOREPO_DELIVERY : ({ mode: 'direct_push' } as const),
+    })
+    const [, body] = dispatch.mock.calls[0] as unknown as [unknown, Record<string, unknown>]
+    return body.systemPrompt as string
+  }
+
+  it('tells a direct-push run it is on the SHARED branch, and where a deviation goes', async () => {
+    // Both sentences change what the agent does. "Already on a fresh work branch" is the licence
+    // to commit loosely, and this delivery checkpoints every commit onto the branch every other
+    // service is built from. And a caveat routed to a pull request description is LOST on a run
+    // that opens no pull request.
+    const prompt = await promptFor('direct_push')
+    expect(prompt).toMatch(/OWN DEFAULT BRANCH/)
+    expect(prompt).not.toMatch(/fresh work branch/)
+    expect(prompt).toMatch(/commit message/)
+    expect(prompt).not.toMatch(/pull request description/)
+  })
+
+  it('tells a pull-request run it is on a work branch, and to note deviations on the PR', async () => {
+    const prompt = await promptFor('pull_request')
+    expect(prompt).toMatch(/fresh work branch/)
+    expect(prompt).toMatch(/pull request description/)
+    expect(prompt).not.toMatch(/DEFAULT BRANCH/)
+  })
+
+  it('keeps the rules that are not about delivery under both', async () => {
+    // The scoping rules are the point of this prompt and neither delivery relaxes them.
+    for (const prompt of [await promptFor('pull_request'), await promptFor('direct_push')]) {
+      expect(prompt).toMatch(/READ-ONLY as a sibling directory/)
+      expect(prompt).toMatch(/touch NOTHING else in the/)
+      expect(prompt).toMatch(/adoption decisions a human has already reviewed/)
+    }
   })
 })
 
@@ -324,8 +701,12 @@ describe('ContainerRepoBootstrapper.resolveReferenceRepo', () => {
     // owes a 503. On a mothership-mode node this read is an RPC to a second process, so a throw
     // from here would arrive as a 500 about somebody's own reference architecture, and, in the
     // survey, would arrive after the claim was taken, leaving the run parked on nothing.
-    const bootstrapper = makeBootstrapper(fakeClient(), {} as RunnerTransport, makeMint(), () => {
-      throw new Error('persistence RPC unreachable')
+    const bootstrapper = makeBootstrapper(fakeClient(), {} as RunnerTransport, {
+      installationRepository: {
+        getByWorkspace: vi.fn(async () => {
+          throw new Error('persistence RPC unreachable')
+        }),
+      } as unknown as GitHubInstallationRepository,
     })
 
     const access = await bootstrapper.resolveReferenceRepo('ws_1', TEMPLATE)
@@ -340,10 +721,11 @@ describe('ContainerRepoBootstrapper.resolveReferenceRepo', () => {
     // tells the operator their reference architecture names the wrong repository when the entry
     // is fine and the deployment simply does not reach their provider from here.
     const client = fakeClient()
-    const bootstrapper = makeBootstrapper(client, {} as RunnerTransport, makeMint(), async () => ({
-      ...INSTALLATION,
-      provider: 'gitlab',
-    }))
+    const bootstrapper = makeBootstrapper(client, {} as RunnerTransport, {
+      installationRepository: {
+        getByWorkspace: vi.fn(async () => ({ ...INSTALLATION, provider: 'gitlab' })),
+      } as unknown as GitHubInstallationRepository,
+    })
 
     expect(await bootstrapper.resolveReferenceRepo('ws_1', TEMPLATE)).toEqual({
       status: 'not_connected',
@@ -358,37 +740,20 @@ describe('ContainerRepoBootstrapper reference-template dispatch', () => {
     referenceRepo: { owner: 'acme', name: 'service-template' },
   }
 
-  it('scopes the new-repo job’s token to the template it clones, at the template’s branch', async () => {
-    // Without the template in `repoIds` the minted token cannot read it, so a PRIVATE template
-    // was uncloneable and the run reported a bare git failure; without its own default branch a
-    // template on anything but `main` was cloned at a ref that does not exist.
-    const mint = makeMint()
-    const dispatch = vi.fn(async () => undefined)
-    const client = fakeClient({
-      getRepo: vi.fn(async (_id: number, ref: { repo: string }) =>
-        ref.repo === 'service-template'
-          ? { defaultBranch: 'trunk', githubId: 55 }
-          : { defaultBranch: 'main', githubId: 1 },
-      ),
-    } as unknown as Partial<GitHubClient>)
-    const bootstrapper = makeBootstrapper(client, { dispatch } as unknown as RunnerTransport, mint)
-
-    await bootstrapper.startBootstrap(REFERENCE_REQUEST)
-    expect(mint.mock.calls[0]?.[1]?.repoIds).toEqual(['1', '55'])
-    const [, body] = dispatch.mock.calls[0] as unknown as [unknown, Record<string, unknown>]
-    expect(body.repo).toMatchObject({ name: 'service-template', baseBranch: 'trunk' })
-  })
-
   it('asks for the template ONCE in the token scope when it is the run’s own target', async () => {
     // `repository_ids` is a set, and a reference architecture naming the repository the run is
     // bootstrapping is a legitimate configuration (a template adapted in place). The hand-built
     // array asked GitHub for the same id twice; the shared scope builder is what dedupes it.
     const mint = makeMint()
     const dispatch = vi.fn(async () => undefined)
-    const client = fakeClient({
-      getRepo: vi.fn(async () => ({ defaultBranch: 'main', githubId: 1 })),
-    } as unknown as Partial<GitHubClient>)
-    const bootstrapper = makeBootstrapper(client, { dispatch } as unknown as RunnerTransport, mint)
+    // One id for every repository, which is what a run whose template IS its target looks like.
+    const bootstrapper = makeBootstrapper(
+      fakeClient(),
+      { dispatch } as unknown as RunnerTransport,
+      {
+        mintInstallationToken: mint,
+      },
+    )
 
     await bootstrapper.startBootstrap(REFERENCE_REQUEST)
     expect(mint.mock.calls[0]?.[1]?.repoIds).toEqual(['1'])
@@ -404,14 +769,11 @@ describe('ContainerRepoBootstrapper reference-template dispatch', () => {
       throw new Error('Failed to mint installation token for 99 (HTTP 422)')
     })
     const dispatch = vi.fn(async () => undefined)
-    const client = fakeClient({
-      getRepo: vi.fn(async (_id: number, ref: { repo: string }) =>
-        ref.repo === 'service-template'
-          ? { defaultBranch: 'trunk', githubId: 55 }
-          : { defaultBranch: 'main', githubId: 1 },
-      ),
-    } as unknown as Partial<GitHubClient>)
-    const bootstrapper = makeBootstrapper(client, { dispatch } as unknown as RunnerTransport, mint)
+    const bootstrapper = makeBootstrapper(
+      idPerRepoClient(),
+      { dispatch } as unknown as RunnerTransport,
+      { mintInstallationToken: mint },
+    )
 
     await expect(bootstrapper.startBootstrap(REFERENCE_REQUEST)).rejects.toThrow(
       /grant the App access to acme\/service-template/i,

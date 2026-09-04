@@ -3195,7 +3195,8 @@
       "retrying": "Nuovo tentativo…",
       "history": {
         "previousErrors": "{count} errore precedente | {count} errori precedenti"
-      }
+      },
+      "resumeBootstrap": "Riprendi da: {step}"
     },
     "stop": {
       "label": "Interrompi",
@@ -3814,7 +3815,8 @@
       "cacheRead": "{tokens} letti dalla cache",
       "cacheReadHint": "Token di input serviti dalla cache del provider (circa 0,1 volte il prezzo dell'input fresco)",
       "cacheWrite": "{tokens} scritti nella cache",
-      "cacheWriteHint": "Token di input scritti nella cache del provider (da 1,25 a 2 volte il prezzo dell'input fresco)"
+      "cacheWriteHint": "Token di input scritti nella cache del provider (da 1,25 a 2 volte il prezzo dell'input fresco)",
+      "costNoRollup": "Non valorizzato: la stima si ricava dal riepilogo per step, e questa esecuzione non ne ha. Qui sotto è indicato quanto hanno consumato le sue chiamate."
     },
     "phase": {
       "title": "Dove sono finiti i token",
@@ -3829,7 +3831,8 @@
       "costHint": "Costo stimato dei token di questa fase ai prezzi di listino. Un trattino indica che questa installazione non ha una tariffa per il modello eseguito.",
       "carryCostHint": "Quanto ogni fase ha gravato sui turni successivi: il suo contesto contato una volta per ogni turno che ha dovuto rinviarlo. Confronta tra loro le fasi di un'esecuzione; da solo il numero non significa nulla. Una fase che viene eseguita per ultima trascina poco per quanto abbia speso, quindi leggi questa colonna insieme ai token accanto.",
       "unattributed": "Non attribuito",
-      "unattributedHint": "registrato da un canale che non riporta la fase"
+      "unattributedHint": "registrato da un canale che non riporta la fase",
+      "noRollup": "Questa esecuzione non ha step di pipeline, quindi non esiste un riepilogo per fase: le sue chiamate al modello sono registrate qui sotto, ma nulla le raggruppa né le valorizza."
     },
     "metricsBar": {
       "calls": "{count} chiamata | {count} chiamate",
@@ -3937,7 +3940,8 @@
       "result": "Risultato",
       "dropped": "{chars} caratteri scartati all'acquisizione",
       "truncated": "Sono mostrate le prime {shown} chiamate di questa esecuzione. I conteggi sopra si riferiscono all'intera esecuzione; filtra sui fallimenti per vederli tutti.",
-      "failuresTruncated": "Sono mostrate le prime {shown} chiamate fallite. Il conteggio sopra si riferisce all'intera esecuzione."
+      "failuresTruncated": "Sono mostrate le prime {shown} chiamate fallite. Il conteggio sopra si riferisce all'intera esecuzione.",
+      "surveyReadsElsewhere": "Le letture dell’indagine non sono qui: esplora tramite il lettore limitato della piattaforma e ogni lettura è registrata nella trascrizione di adozione dell’esecuzione. Sotto ci sono le chiamate agli strumenti del container che ha scritto il servizio."
     }
   },
   "platformObservability": {
@@ -5093,7 +5097,8 @@
       "title": "Esecuzioni recenti",
       "fromArch": "da {name}",
       "fromScratch": "da zero",
-      "open": "Apri"
+      "open": "Apri",
+      "openPr": "Pull request"
     },
     "status": {
       "pending": "in attesa",
@@ -5141,11 +5146,24 @@
       "label": "Dove va il servizio",
       "newRepo": {
         "label": "Un nuovo repository",
-        "description": "Creare un repository dedicato e caricare il servizio come primo commit."
+        "description": "Crea un repository dedicato e ci scrive il servizio."
       },
       "monorepo": {
         "label": "Una cartella di un monorepo esistente",
-        "description": "Aggiungere il servizio a un repository che hai già e aprire una pull request."
+        "description": "Aggiunge il servizio a un repository che hai già."
+      }
+    },
+    "delivery": {
+      "label": "Come viene consegnato il lavoro",
+      "pullRequest": {
+        "label": "Apri una pull request",
+        "descNewRepo": "Pubblica un branch e apre una pull request sul primo commit del repository, così qualcuno rivede l’impalcatura prima che diventi il branch predefinito. Il repository deve già avere un commit.",
+        "descMonorepo": "Pubblica un branch e apre una pull request. Non viene unito nulla al posto tuo."
+      },
+      "directPush": {
+        "label": "Pubblica direttamente",
+        "descNewRepo": "Scrive il servizio direttamente sul branch predefinito, come primo commit del repository.",
+        "descMonorepo": "Fa commit sul branch predefinito mentre l’agente lavora. Se l’esecuzione fallisce, resta quanto era già stato scritto."
       }
     },
     "serviceName": {
@@ -5153,7 +5171,7 @@
       "description": "Dà il nome al servizio sulla lavagna e propone la sua cartella."
     },
     "monorepo": {
-      "intro": "Il servizio viene scritto in una cartella di un repository esistente e consegnato come pull request. Nulla viene unito al posto tuo e nulla viene modificato fuori dalla nuova cartella.",
+      "intro": "Il servizio viene scritto in una directory di un repository esistente e nulla al di fuori di quella directory viene modificato.",
       "repo": {
         "label": "Monorepo",
         "description": "Il repository in cui vivrà il nuovo servizio. Deve essere già collegato a questo spazio di lavoro.",
@@ -5243,7 +5261,26 @@
         "approvedDesc": "L'agente sta scrivendo {directory} e aprirà una pull request.",
         "failed": "Impossibile inviare la revisione"
       }
-    }
+    },
+    "steps": {
+      "title": "Passaggi del bootstrap",
+      "name": {
+        "scaffold": "Creare la struttura del repository",
+        "survey": "Analizzare il monorepo e il template",
+        "review": "Le tue decisioni di adozione",
+        "apply": "Scrivere il servizio e aprire la pull request"
+      },
+      "state": {
+        "pending": "Non iniziato",
+        "running": "In corso",
+        "awaiting_review": "In attesa di te",
+        "done": "Completato",
+        "failed": "Fallito",
+        "stopped": "Interrotto",
+        "unknown": "Stato illeggibile"
+      }
+    },
+    "runKind": "Bootstrap del repository"
   },
   "fragments": {
     "panel": {
