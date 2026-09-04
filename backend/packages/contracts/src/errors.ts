@@ -362,3 +362,31 @@ export type UnavailableReason = (typeof UNAVAILABLE_REASONS)[number]
 export const REVIEW_TARGET_REASONS = ['review_pr_not_found', 'review_pr_repo_mismatch'] as const
 
 export type ReviewTargetReason = (typeof REVIEW_TARGET_REASONS)[number]
+
+/**
+ * Machine-readable reasons a bootstrap run is refused because of the REFERENCE ARCHITECTURE it
+ * was asked to build from, carried on `error.details.reason` beside `referenceArchitectureId`
+ * and `repo` (`owner/name`) so the launch dialog can offer to fix the entry rather than only
+ * reporting that something went wrong.
+ *
+ * Two reasons on two different status classes, because they need opposite reactions and only one
+ * of them is about the run's inputs at all:
+ *
+ *  - `reference_repo_not_found` (422): the provider positively reports that this workspace's
+ *    source-control connection cannot see that repository. Either the entry names the wrong
+ *    `owner/name`, or the App has not been granted the repo. Both are fixed by editing the
+ *    reference architecture (or widening the grant) and launching again, which is why this is
+ *    raised BEFORE the run is recorded: nothing to retry, nothing left on the board.
+ *  - `reference_repo_unreadable` (503): the probe itself failed, so reachability is UNKNOWN.
+ *    Nothing here is misconfigured and no edit helps; the run is refused because starting one
+ *    that is about to fail its clone is worse than saying so now.
+ *
+ * The SPA keys an exhaustive `Record<BootstrapReferenceReason, …>` of message keys off this, so
+ * adding a reason without wording trips the frontend typecheck.
+ */
+export const BOOTSTRAP_REFERENCE_REASONS = [
+  'reference_repo_not_found',
+  'reference_repo_unreadable',
+] as const
+
+export type BootstrapReferenceReason = (typeof BOOTSTRAP_REFERENCE_REASONS)[number]

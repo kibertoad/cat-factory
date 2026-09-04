@@ -398,9 +398,12 @@ export class MonorepoSurveySession implements MonorepoAdoptionExplorer {
   /**
    * Record something the platform could not even attempt, so it does not read as an absence.
    *
-   * The one caller is a reference template the workspace has not LINKED: unreadable from here
-   * even though the apply phase's container can still clone it. "The template ships nothing for
-   * this area" and "nobody looked at the template" lead a reviewer to opposite conclusions.
+   * The one caller is a reference template the workspace's source-control connection could not
+   * read when the survey ran: a grant revoked while the run sat in its queue, a provider outage,
+   * or a deployment that lost the component that answers the question. The run was pre-flighted
+   * against the same reach before it was recorded, so this is the narrow window rather than the
+   * normal case, and it has to be SAID: "the template ships nothing for this area" and "nobody
+   * looked at the template" lead a reviewer to opposite conclusions.
    */
   noteUnavailable(side: MonorepoAdoptionSide, path: string, note: string): void {
     this.record({ path: `${side}:${path}`, origin: 'seed', outcome: 'unreadable', chars: 0, note })

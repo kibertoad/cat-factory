@@ -250,8 +250,10 @@ the `dispatch.token_scope_widened` counter, because a security property degradin
 exactly like one holding.
 
 **"A dispatch" means every path that hands a container a GitHub credential**, not just the step
-executor: the repo bootstrapper, the env-config repairer, the frontend preview job and the deploy
-clone target each name the one repo they touch. They go through the same builder on both facades,
+executor: the env-config repairer, the frontend preview job and the deploy clone target each name
+the one repo they touch, and the repo bootstrapper names TWO where a run builds from a reference
+architecture (the repository it writes, plus the template it clones read-only beside it). They go
+through the same builder on both facades,
 so neither the two runtimes nor the five dispatchers can drift on whose token it is or how wide.
 That totality is held by the TYPE rather than by review: supplying the run context is what makes a
 mint a dispatch mint, and a context must carry `repoIds`. A dispatcher whose own lookup came back
@@ -264,6 +266,14 @@ Two things this does NOT narrow, both by construction. **Permissions**: the toke
 `Contents: write` for the repos it does cover, because GitHub App tokens cannot be branch-scoped.
 **A personal PAT**: `repository_ids` is an App-token mechanism with no PAT equivalent, so a run on
 the initiator's own token is bounded by that token; `allowInitiatorPat` is what bounds that.
+
+**A scope GitHub refuses is reported as one.** `repository_ids` may only name repositories the
+installation was GRANTED, while a PUBLIC repository reads through the API without being one, so a
+dispatch resolving a repo it can read but does not hold (a reference template outside the App's
+repository access is the reachable case) is refused at the MINT with a 422. That refusal names the
+repository to grant rather than an installation id. The alternative (dropping the leg and minting
+the narrower token) hands the harness a credential for a repo the job body still tells it to clone,
+which fails the same run one step later with nothing to act on.
 
 **The initiator's personal PAT OUTRANKS whichever row applies, unless the workspace refuses it.**
 Wherever the per-user secret store is wired (it needs `ENCRYPTION_KEY`), a run whose initiator has

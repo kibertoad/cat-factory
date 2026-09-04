@@ -150,3 +150,28 @@ back here, which is the same reason `awaiting_review` was named in 1.65.0.
 Additive: a new field on an existing response object, whose value is one of two members the
 clients receive as a string. A consumer built against 1.67.0 keeps parsing, and one that branched
 on `prUrl === null` to mean "this run created a repository" should move to `repoUrl !== null`.
+
+## 1.69.0, not 1.68.0
+
+`POST /api/v1/repos/bootstrap` gains two refusals, both about the reference architecture a creation
+names: `422` with `details.reason: reference_repo_not_found` when the workspace's source-control
+connection cannot see that repository, and `503` with `reference_repo_unreadable` when the probe
+itself failed. Each carries `details.referenceArchitectureId` and `details.repo`.
+
+Additive in shape (two new `details.reason` values on statuses this surface already answers), and
+a change of BEHAVIOUR a caller has to notice, which is why it is written down rather than left to
+the spec: the template is now checked before anything is recorded, so a refusal about it arrives as
+an HTTP error instead of a `failed` creation in the `201`. A caller that only branches on the
+creation body sees an exception where it used to see a job it could read `failureKind` off. Nothing
+that used to succeed now fails: the same runs previously failed several minutes later inside the
+container, with a job row and a board card left behind.
+
+A template the connection can READ but the App was never granted still passes the check and fails
+at dispatch, as a `failed` creation whose message names the repository to grant. A public
+repository is the case that reaches it: `repository_ids` may only name repositories an installation
+holds, and reading one proves nothing about that.
+
+The number moved after the fact, the way 1.64.0's did and for the same reason: this branch was
+written against 1.67.0 and main reached 1.68.0 with `BootstrapJob.delivery` while it was in
+flight. Both sides produced the same version line, so git auto-merged it clean and the collision
+arrived here, in the paragraph, exactly as the note at the top of this file says it does.

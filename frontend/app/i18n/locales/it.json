@@ -5050,7 +5050,14 @@
       "label": "Architettura di riferimento",
       "description": "Il repository base gestito da clonare e adattare.",
       "empty": "Nessuna architettura di riferimento ancora. Aggiungine una qui sotto, oppure passa a 'Da zero'.",
-      "placeholder": "Scegli un'architettura di riferimento"
+      "placeholder": "Scegli un'architettura di riferimento",
+      "refusal": {
+        "title": "Non è stato possibile usare questa architettura di riferimento",
+        "notFound": "{repo} non è visibile attraverso la connessione di controllo del codice di questo workspace. O questa voce indica il repository sbagliato, o la connessione non vi ha accesso. Non è stato creato nulla: correggi la voce e riavvia, tutto il resto di questo modulo viene mantenuto.",
+        "unreadable": "{repo} non è risultato leggibile in questo momento, quindi non è stato creato nulla. Non c'è nulla di configurato male: riavvia quando la connessione sarà ripristinata, tutto il resto di questo modulo viene mantenuto.",
+        "unnamedRepo": "Il repository dell'architettura di riferimento",
+        "edit": "Modifica questa architettura di riferimento"
+      }
     },
     "targetRepo": {
       "label": "Nome del repository di destinazione",
@@ -6103,6 +6110,12 @@
         "service_catalog_unauthorized": "Il portale per sviluppatori ha rifiutato le credenziali salvate. Molto probabilmente sono state ruotate o revocate: apri le impostazioni del catalogo dei servizi e inseriscine di valide.",
         "service_catalog_filter_missing": "Non è stato possibile leggere il filtro delle entità di questa connessione, quindi non c’è nulla da importare. Salva di nuovo la connessione al catalogo dei servizi per ripristinarlo.",
         "service_catalog_response_too_large": "Il portale per sviluppatori ha risposto con più dati di quanti questa piattaforma ne accolga in una sola risposta. Apri le impostazioni del catalogo dei servizi e abbassa il limite dei servizi, oppure disattiva l'importazione delle definizioni di interfaccia, poi importa di nuovo."
+      }
+    },
+    "reason": {
+      "description": {
+        "reference_repo_not_found": "Il repository dietro l'architettura di riferimento di questa esecuzione non è visibile attraverso la connessione di controllo del codice di questo workspace. O la voce indica il repository sbagliato, o la connessione non vi ha accesso: correggi l'architettura di riferimento, oppure concedile l'accesso, e riprova.",
+        "reference_repo_unreadable": "Non è stato possibile leggere in questo momento il repository dietro l'architettura di riferimento di questa esecuzione, quindi l'esecuzione non è stata avviata su un modello che potrebbe non riuscire a clonare. Non c'è nulla di configurato male e non serve alcuna modifica: riprova quando la connessione sarà ripristinata."
       }
     },
     "action": {

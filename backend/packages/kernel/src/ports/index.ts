@@ -613,6 +613,7 @@ export type {
   BootstrapRepoRequest,
   MonorepoBootstrapLeg,
   MonorepoTargetRepo,
+  ReferenceRepoAccess,
   RepoBootstrapper,
 } from './repo-bootstrapper.js'
 export type {

@@ -28,7 +28,12 @@ import { createBespokeConflictToasts } from '~/composables/pipelineErrorToast/be
 // Imported by path rather than left to Nuxt's auto-import: this module is also loaded directly by
 // unit tests (and from store setup), where the auto-import globals are not installed.
 import { useCopyToClipboard } from '~/composables/useCopyToClipboard'
-import type { ApiErrorCode, ConflictReason, UnavailableReason } from '@cat-factory/contracts'
+import type {
+  ApiErrorCode,
+  BootstrapReferenceReason,
+  ConflictReason,
+  UnavailableReason,
+} from '@cat-factory/contracts'
 import { apiErrorEnvelope, apiErrorReason, apiErrorStatus } from './api/errors'
 
 /** The parsed shape of a backend conflict (`{ error: { code: 'conflict', details } }`). */
@@ -386,8 +391,16 @@ const GENERIC_DESCRIPTION_KEYS: Record<Exclude<ApiErrorCode, 'conflict'>, string
  * the reasons in {@link UNAVAILABLE_REASONS} carry their own copy, and the exhaustive `Record`
  * over that union is the drift guard: a new user-reachable 503 reason fails this typecheck until
  * it has wording.
+ *
+ * `BootstrapReferenceReason` joins it because the same argument reaches one 422: a bootstrap
+ * refused for its reference architecture is not "the request was malformed", it names a specific
+ * entry a specific person can go and fix. The launch dialog handles that one itself, since it can
+ * open the entry. This is what every OTHER caller of the funnel is told instead of the status
+ * class's generic wording, above all a retry driven from the run card.
  */
-const UNAVAILABLE_DESCRIPTION_KEYS: Record<UnavailableReason, string> = {
+const REASON_DESCRIPTION_KEYS: Record<UnavailableReason | BootstrapReferenceReason, string> = {
+  reference_repo_not_found: 'errors.reason.description.reference_repo_not_found',
+  reference_repo_unreadable: 'errors.reason.description.reference_repo_unreadable',
   binary_generators_unreachable: 'errors.unavailable.description.binary_generators_unreachable',
   foundational_builtins_unreachable:
     'errors.unavailable.description.foundational_builtins_unreachable',
@@ -445,7 +458,7 @@ export function describeGenericFailure(error: unknown): GenericFailure {
   // A REASON that has its own copy wins over the status class's, through the same widened-alias
   // read and for the same reason: a `reason` this build doesn't know must resolve to `undefined`
   // and fall through, never narrow the wire string to the union by casting.
-  const byReason: Readonly<Record<string, string | undefined>> = UNAVAILABLE_DESCRIPTION_KEYS
+  const byReason: Readonly<Record<string, string | undefined>> = REASON_DESCRIPTION_KEYS
   const reason = apiErrorReason(error)
   const mapped =
     (reason ? byReason[reason] : undefined) ?? (envelope?.code ? byCode[envelope.code] : undefined)

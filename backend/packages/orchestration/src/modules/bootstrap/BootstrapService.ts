@@ -45,6 +45,7 @@ import {
 import { registerServiceForFrame, requireWorkspace } from '@cat-factory/kernel'
 import { bootstrapResume } from '@cat-factory/contracts'
 import { defaultDelivery, deliveryPlanFor } from './bootstrapDelivery.js'
+import { assertReferenceUsable, notConnected } from './referenceRefusal.js'
 import {
   MonorepoBootstrapController,
   type MonorepoBootstrapDeps,
@@ -371,10 +372,7 @@ export class BootstrapService {
     // so an unconnected workspace fails fast with a clear 409 instead of leaving a
     // job that immediately fails deep inside the container run.
     if (!(await bootstrapper.isWorkspaceConnected(workspaceId))) {
-      throw new ConflictError(
-        'Workspace is not connected to GitHub. Install the GitHub App for this workspace before bootstrapping a repository.',
-        'github_not_connected',
-      )
+      throw notConnected()
     }
 
     // A reference architecture is optional: when supplied the run clones and adapts
@@ -390,6 +388,13 @@ export class BootstrapService {
           input.referenceArchitectureId,
         )
       : null
+
+    // The template the run is about to clone must be reachable NOW, before anything is written.
+    // Its absence used to surface a whole phase later: on a monorepo run as a survey that
+    // reported the template unread, and on a new-repo run as a clone failure inside the
+    // container, with a board card and a job row already left behind for a run that never had a
+    // chance. See `assertReferenceReachable`.
+    if (reference) await this.assertReferenceReachable(bootstrapper, workspaceId, reference)
 
     const instructions = composeInstructions(
       reference?.defaultInstructions ?? '',
@@ -510,6 +515,25 @@ export class BootstrapService {
   }
 
   /**
+   * Refuse a run whose reference template this workspace cannot reach, before anything is
+   * written: resolve the verdict through the bootstrapper, and let `assertReferenceUsable` decide
+   * what each one means for the person who launched the run.
+   */
+  private async assertReferenceReachable(
+    bootstrapper: RepoBootstrapper,
+    workspaceId: string,
+    reference: ReferenceArchitectureRecord,
+  ): Promise<void> {
+    assertReferenceUsable(
+      reference,
+      await bootstrapper.resolveReferenceRepo(workspaceId, {
+        owner: reference.repoOwner,
+        name: reference.repoName,
+      }),
+    )
+  }
+
+  /**
    * Retry a failed "bootstrap repo" run. Spins a **fresh** container (and a new
    * durable driver instance) for the same target, reusing the original job's
    * service frame so the board card stays put — it flips from the failed badge
@@ -550,6 +574,11 @@ export class BootstrapService {
           'bootstrap_reference_missing',
         )
       }
+      // Re-flighted rather than trusted from the first attempt, and that is what makes editing the
+      // entry the way OUT of a run that failed on it: the retry re-resolves the architecture by
+      // id, so a corrected `owner/name` is picked up here with every other value of the run left
+      // exactly as it was. A still-unreachable template is refused before a second row is written.
+      await this.assertReferenceReachable(bootstrapper, workspaceId, reference)
       referenceRepo = { owner: reference.repoOwner, name: reference.repoName }
     }
 
@@ -956,13 +985,21 @@ export class BootstrapService {
       // that is what the row says: the next poll reads the winner's plan and parks.
       return { state: 'running' }
     }
+    // Read AFTER the short-circuit and the claim, never at the top: a run that is already parked
+    // needs nothing from the bootstrapper. Absent, it is passed on as absent rather than thrown
+    // on, and for the same reason every other missing dependency in this phase parks instead of
+    // failing: the claim has already been taken, so a throw here burns it and writes no plan, and
+    // the run sits `running` with nothing for a human to settle until the claim goes stale. The
+    // survey needs it for the TEMPLATE side alone, which is how it degrades: the note says the
+    // template was not read and the decisions stay the reviewer's to make.
+    const bootstrapper = this.deps.repoBootstrapper ?? null
     const reference = record.referenceArchitectureId
       ? await this.deps.referenceArchitectureRepository.get(
           workspaceId,
           record.referenceArchitectureId,
         )
       : null
-    const plan = await this.monorepo.buildAdoptionPlan(workspaceId, record, reference)
+    const plan = await this.monorepo.buildAdoptionPlan(bootstrapper, workspaceId, record, reference)
     await this.park(workspaceId, record, plan)
     return { state: 'awaiting_review' }
   }

@@ -5050,7 +5050,14 @@
       "label": "Referenzarchitektur",
       "description": "Das verwaltete Basis-Repo zum Klonen und Anpassen.",
       "empty": "Noch keine Referenzarchitekturen. Fügen Sie unten eine hinzu oder wechseln Sie zu 'Von Grund auf'.",
-      "placeholder": "Referenzarchitektur wählen"
+      "placeholder": "Referenzarchitektur wählen",
+      "refusal": {
+        "title": "Diese Referenzarchitektur konnte nicht verwendet werden",
+        "notFound": "{repo} ist über die Quellcodeverwaltungs-Verbindung dieses Workspace nicht sichtbar. Entweder nennt dieser Eintrag das falsche Repository, oder die Verbindung hat keinen Zugriff darauf. Es wurde nichts angelegt: Korrigieren Sie den Eintrag und starten Sie erneut, alles andere in diesem Formular bleibt erhalten.",
+        "unreadable": "{repo} konnte gerade nicht gelesen werden, deshalb wurde nichts angelegt. Es ist nichts falsch konfiguriert: Starten Sie erneut, sobald die Verbindung wieder steht, alles andere in diesem Formular bleibt erhalten.",
+        "unnamedRepo": "Das Repository der Referenzarchitektur",
+        "edit": "Diese Referenzarchitektur bearbeiten"
+      }
     },
     "targetRepo": {
       "label": "Name des Ziel-Repositorys",
@@ -6103,6 +6110,12 @@
         "service_catalog_unauthorized": "Das Entwicklerportal hat die gespeicherte Zugangsdaten abgelehnt. Sie wurden wahrscheinlich rotiert oder widerrufen: öffne die Servicekatalog-Einstellungen und trage aktuelle ein.",
         "service_catalog_filter_missing": "Der Entitätsfilter dieser Verbindung konnte nicht gelesen werden, es gibt also nichts zu importieren. Speichere die Servicekatalog-Verbindung erneut, um ihn wiederherzustellen.",
         "service_catalog_response_too_large": "Das Entwicklerportal hat mit mehr Daten geantwortet, als diese Plattform in einer Antwort aufnimmt. Öffne die Servicekatalog-Einstellungen und senke das Service-Limit oder deaktiviere den Import von Schnittstellendefinitionen, und importiere dann erneut."
+      }
+    },
+    "reason": {
+      "description": {
+        "reference_repo_not_found": "Das Repository hinter der Referenzarchitektur dieses Laufs ist über die Quellcodeverwaltungs-Verbindung dieses Workspace nicht sichtbar. Entweder nennt der Eintrag das falsche Repository, oder die Verbindung hat keinen Zugriff darauf: Korrigieren Sie die Referenzarchitektur oder erteilen Sie den Zugriff, und versuchen Sie es erneut.",
+        "reference_repo_unreadable": "Das Repository hinter der Referenzarchitektur dieses Laufs konnte gerade nicht gelesen werden, deshalb wurde der Lauf nicht gegen eine Vorlage gestartet, die er möglicherweise nicht klonen kann. Es ist nichts falsch konfiguriert und keine Änderung nötig: versuchen Sie es erneut, sobald die Verbindung wieder steht."
       }
     },
     "action": {

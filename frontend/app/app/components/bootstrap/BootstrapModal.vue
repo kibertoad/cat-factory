@@ -12,6 +12,9 @@ import type {
 } from '~/types/domain'
 import {
   defaultBootstrapDelivery,
+  type ReferenceRefusal,
+  referenceRefusalOf,
+  referenceRefusalSurvivesSave,
   serviceDirectoryLeaf,
   serviceDirectoryParent,
 } from '~/components/bootstrap/BootstrapModal.logic'
@@ -243,6 +246,49 @@ const selectedArch = computed(() =>
   bootstrap.architectures.find((a) => a.id === selectedArchId.value),
 )
 
+// ---- a launch refused for its reference architecture -----------------------
+// The backend pre-flights the template against the workspace's source-control connection BEFORE
+// it records anything, so this refusal costs the user nothing except a correction: the run does
+// not exist, the board has no card, and every other field of this form is still filled in. That
+// is what the alert is for. A toast would say the same words and then disappear, leaving the
+// person to work out which of the two repositories in this dialog was the problem. Reading it off
+// the wire, and deciding when a save makes it stale, are in `BootstrapModal.logic.ts`.
+const referenceRefusal = ref<ReferenceRefusal | null>(null)
+
+const referenceRefusalMessage = computed(() => {
+  const refusal = referenceRefusal.value
+  if (!refusal) return ''
+  const repo = refusal.repo ?? t('bootstrap.reference.refusal.unnamedRepo')
+  return refusal.reason === 'reference_repo_not_found'
+    ? t('bootstrap.reference.refusal.notFound', { repo })
+    : t('bootstrap.reference.refusal.unreadable', { repo })
+})
+
+/**
+ * Whether correcting the ENTRY is the fix. Only for `not_found`: an unreadable probe says nothing
+ * about the entry, so offering to edit it there would send someone to change a value that is
+ * very likely already right.
+ */
+const referenceRefusalIsFixable = computed(
+  () => referenceRefusal.value?.reason === 'reference_repo_not_found',
+)
+
+/** Open the refused entry's edit form, prefilled, leaving the launch form untouched. */
+function editRefusedArchitecture() {
+  const id = referenceRefusal.value?.architectureId
+  const arch = bootstrap.architectures.find((a) => a.id === id)
+  if (arch) startEdit(arch)
+}
+
+// A refusal is about ONE entry as it was, so picking a different reference architecture makes it
+// stale, and a stale error banner reads as a live one. Reopening the dialog clears it for the same
+// reason: the form deliberately keeps its fields across opens, but a refusal is not a field, it is
+// a claim about a check that has not been made again. Saving the refused entry clears it too
+// (`saveArch`), and saving any other one deliberately does not.
+watch([open, selectedArchId], () => {
+  referenceRefusal.value = null
+})
+
 const archOptions = computed(() =>
   bootstrap.architectures.map((a) => ({
     label: `${a.name} · ${a.repoOwner}/${a.repoName}`,
@@ -433,6 +479,10 @@ async function launch() {
       ui.closeBootstrap()
     }
   } catch (e) {
+    // A reference-architecture refusal is kept on the form as well as toasted: the run was never
+    // recorded, so what the user needs is the one field to change and everything else left alone,
+    // which a toast cannot hold still long enough to give them.
+    referenceRefusal.value = referenceRefusalOf(e)
     present(e, 'bootstrap.toast.bootstrapFailed')
   } finally {
     launching.value = false
@@ -513,8 +563,12 @@ async function saveArch() {
       description: archForm.value.description.trim(),
       defaultInstructions: archForm.value.defaultInstructions.trim(),
     }
-    if (archForm.value.id) await bootstrap.updateArchitecture(archForm.value.id, body)
+    const editedId = archForm.value.id
+    if (editedId) await bootstrap.updateArchitecture(editedId, body)
     else await bootstrap.createArchitecture(body)
+    if (!referenceRefusalSurvivesSave(editedId, referenceRefusal.value)) {
+      referenceRefusal.value = null
+    }
     showArchForm.value = false
     archForm.value = blankForm()
     archRepoSlug.value = undefined
@@ -706,6 +760,31 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
                 class="w-full"
               />
             </UFormField>
+
+            <!-- The launch was refused for the template, before anything was recorded. The
+                 remedy lives in this same dialog, so the alert carries the jump to it rather
+                 than describing where to go. -->
+            <UAlert
+              v-if="referenceRefusal"
+              color="error"
+              variant="subtle"
+              icon="i-lucide-triangle-alert"
+              :title="t('bootstrap.reference.refusal.title')"
+              :description="referenceRefusalMessage"
+              data-testid="bootstrap-reference-refusal"
+            >
+              <template v-if="referenceRefusalIsFixable" #actions>
+                <UButton
+                  color="error"
+                  variant="soft"
+                  size="xs"
+                  icon="i-lucide-pencil"
+                  @click="editRefusedArchitecture"
+                >
+                  {{ t('bootstrap.reference.refusal.edit') }}
+                </UButton>
+              </template>
+            </UAlert>
           </template>
 
           <UFormField

@@ -148,10 +148,13 @@ const TEMPLATE_FILES: Record<string, string> = {
 // the human REVIEW does with it.
 
 /**
- * A workspace with `acme/platform` projected as a linked repo, plus a `RepoFiles` resolver
- * that answers for it and for the reference template. `linkFrameRepo` is what puts the repo
- * in the projection on each facade's OWN stores, which is what makes the target resolution
- * below a real cross-runtime read rather than a fixture.
+ * A workspace with `acme/platform` projected as a linked repo and a `RepoFiles` resolver that
+ * answers for THAT repo alone, plus a reference template the bootstrapper answers for through
+ * the connection. The asymmetry is the fixture, not an omission: a template surveyed only where
+ * the board also links it as a service is the bug this arrangement pins, and it is invisible in a
+ * fixture that projects both. `linkFrameRepo` is what puts the repo in the projection on each
+ * facade's OWN stores, which is what makes the target resolution below a real cross-runtime read
+ * rather than a fixture.
  */
 async function setup(
   harness: ConformanceHarness,
@@ -167,21 +170,22 @@ async function setup(
     installationId: 4242,
     defaultBranch: 'main',
   })
+  // The reference template is reached through the CONNECTION, not through the workspace's repo
+  // projection, so it is registered here and deliberately NOT on the coords resolver below. That
+  // asymmetry is the fixture: a template surveyed only when the board also links it as a service
+  // is the bug this arrangement pins, and it is invisible in a fixture that projects both.
+  bootstrapper.referenceRepoFiles.set('acme/service-template', fakeRepoFiles(TEMPLATE_FILES))
   const app = harness.makeApp(
     {},
     {
       repoBootstrapper: bootstrapper,
       ...(options.advisor ? { monorepoAdoptionAdvisor: options.advisor } : {}),
+      // The MONOREPO only: it is the side that is a linked board repo, and answering for the
+      // template here too would hide whether the template is surveyed through the connection.
       resolveRepoFilesForCoords: async (_workspaceId, coords) => {
-        const files =
-          coords.repo === 'platform'
-            ? MONOREPO_FILES
-            : coords.repo === 'service-template'
-              ? TEMPLATE_FILES
-              : null
-        if (!files) return null
+        if (coords.repo !== 'platform') return null
         return {
-          repo: fakeRepoFiles(files, options.prBodies),
+          repo: fakeRepoFiles(MONOREPO_FILES, options.prBodies),
           baseBranch: 'main',
           repoId: coords.repo,
           owner: coords.owner,
@@ -627,6 +631,37 @@ function defineReviewGroup(harness: ConformanceHarness): void {
       expect(done.body.prUrl).toContain('/pull/')
     })
 
+    it('records the template as UNREAD, with the cause, when it goes out of reach after the run started', async () => {
+      // The window the pre-flight cannot close: the run was refused nothing at start, and the
+      // grant was revoked (or the provider went down) while it sat in its driver's queue. The
+      // survey still runs and the plan is still produced, because the DECISION is the phase's
+      // point and a reviewer can make it unaided. The transcript still has to SAY the template
+      // was never opened, since "the template ships nothing for this area" and "nobody looked at
+      // the template" lead to opposite conclusions.
+      const { app, wsId, architectureId, bootstrapper } = await setup(harness, {
+        advisor: fakeAdvisor(),
+      })
+      const started = await start(app, wsId, architectureId)
+      expect(started.status).toBe(201)
+      bootstrapper.referenceRepoVerdicts.set('acme/service-template', 'unreadable')
+
+      await app.driveBootstrap(wsId, started.body.id)
+
+      const parked = await app.call<BootstrapJob>(
+        'GET',
+        `/workspaces/${wsId}/bootstrap/jobs/${started.body.id}`,
+      )
+      expect(parked.body.status).toBe('awaiting_review')
+      const rows = transcript(parked.body.adoptionPlan as AdoptionPlan)
+      const note = rows.find((entry) => entry.path === 'template:acme/service-template')
+      expect(note).toMatchObject({ outcome: 'unreadable' })
+      // The verdict's own sentence, not a generic one: an unreadable probe is nobody's
+      // configuration, so the note may not read like an entry that names the wrong repository.
+      expect(note?.note).toContain('could not be read just now')
+      // Nothing of the template was surveyed, so no read of it can be cited.
+      expect(rows.filter((entry) => entry.path.startsWith('template:'))).toEqual([note])
+    })
+
     it('refuses a directory that already holds a service, and leaves the repo unmarked', async () => {
       // The pre-flight is what stands between a bootstrap and somebody else's work, so it is
       // asserted from the OUTSIDE (no row, no board card) and from the projection's side: the
@@ -700,6 +735,66 @@ function defineReviewGroup(harness: ConformanceHarness): void {
       // reference would close issue 412 on this monorepo when the bootstrap PR merged.
       expect(body).not.toContain('#412')
       expect(body).toContain('412')
+    })
+
+    it('refuses a run whose reference template the connection cannot see, and records nothing', async () => {
+      // The pre-flight the flow used to lack. Reachability was first consulted a whole phase
+      // later: by the survey (which reported the template unread, indistinguishable to a
+      // reviewer from a template with no opinion) and by the container's clone, with a job row
+      // and a board card already left behind for a run that never had a chance. It is refused as
+      // a VALIDATION failure naming the entry, because what is wrong is the reference
+      // architecture, not the state of anything.
+      const { app, wsId, architectureId, bootstrapper } = await setup(harness, {
+        advisor: fakeAdvisor(),
+      })
+      bootstrapper.referenceRepoVerdicts.set('acme/service-template', 'not_found')
+
+      const refused = await app.call('POST', `/workspaces/${wsId}/bootstrap/jobs`, {
+        repoName: 'payments',
+        referenceArchitectureId: architectureId,
+        instructions: 'A payments service.',
+        monorepo: { repoGithubId: 777, directory: 'services/payments' },
+      })
+      expect(refused.status).toBe(422)
+      const details = (refused.body as { error: { details?: Record<string, unknown> } }).error
+        .details
+      expect(details?.reason).toBe('reference_repo_not_found')
+      // The entry that named the repository, so the launch dialog can offer to fix THAT one.
+      expect(details?.referenceArchitectureId).toBe(architectureId)
+      expect(details?.repo).toBe('acme/service-template')
+
+      // Nothing was written: no run to retry, no provisional service card to clean up, and the
+      // target repo was never marked a monorepo (that mark re-points every service pinned to it).
+      const jobs = await app.call<BootstrapJob[]>('GET', `/workspaces/${wsId}/bootstrap/jobs`)
+      expect(jobs.body).toEqual([])
+      expect(bootstrapper.markedMonorepo).toEqual([])
+      expect(bootstrapper.calls).toEqual([])
+    })
+
+    it('refuses a run whose reference template could not be READ as an outage, not a bad entry', async () => {
+      // The other half of the split, and the one a single verdict would have swallowed: the probe
+      // itself failed, so reachability is unknown and NOTHING here is misconfigured. It answers
+      // 503 rather than 422 for that reason (a 422 tells an operator to go and correct a value
+      // that is very likely already right), and it carries the probe's own detail, because "the
+      // provider is down" and "your entry is wrong" are the two conclusions a reader picks
+      // between with nothing else to go on.
+      const { app, wsId, architectureId, bootstrapper } = await setup(harness, {
+        advisor: fakeAdvisor(),
+      })
+      bootstrapper.referenceRepoVerdicts.set('acme/service-template', 'unreadable')
+
+      const refused = await start(app, wsId, architectureId)
+      expect(refused.status).toBe(503)
+      const details = (refused.body as unknown as { error: { details?: Record<string, unknown> } })
+        .error.details
+      expect(details?.reason).toBe('reference_repo_unreadable')
+      expect(details?.referenceArchitectureId).toBe(architectureId)
+      expect(details?.repo).toBe('acme/service-template')
+      expect(details?.detail).toBeTruthy()
+
+      const jobs = await app.call<BootstrapJob[]>('GET', `/workspaces/${wsId}/bootstrap/jobs`)
+      expect(jobs.body).toEqual([])
+      expect(bootstrapper.markedMonorepo).toEqual([])
     })
 
     it('refuses a target repository this workspace has not linked', async () => {

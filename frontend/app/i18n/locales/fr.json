@@ -637,6 +637,12 @@
         "service_catalog_response_too_large": "Le portail développeur a renvoyé plus de données que cette plateforme n'en accepte dans une seule réponse. Ouvrez les paramètres du catalogue de services et abaissez la limite de services, ou désactivez l'import des définitions d'interface, puis relancez l'import."
       }
     },
+    "reason": {
+      "description": {
+        "reference_repo_not_found": "Le dépôt de l'architecture de référence de cette exécution n'est pas visible via la connexion de gestion de code de cet espace de travail. Soit l'entrée désigne le mauvais dépôt, soit la connexion n'y a pas accès : corrigez l'architecture de référence, ou accordez-lui l'accès, puis réessayez.",
+        "reference_repo_unreadable": "Le dépôt de l'architecture de référence de cette exécution n'a pas pu être lu pour l'instant, l'exécution n'a donc pas été lancée sur un modèle qu'elle pourrait ne pas savoir cloner. Rien n'est mal configuré et aucune modification n'est nécessaire : réessayez une fois la connexion rétablie."
+      }
+    },
     "action": {
       "retryFailed": "Échec de la nouvelle tentative",
       "startFailed": "Échec du démarrage",
@@ -6920,7 +6926,14 @@
       "label": "Architecture de référence",
       "description": "Le dépôt de base géré à cloner et à adapter.",
       "empty": "Aucune architecture de référence pour l'instant. Ajoutez-en une ci-dessous, ou passez à « À partir de zéro ».",
-      "placeholder": "Choisissez une architecture de référence"
+      "placeholder": "Choisissez une architecture de référence",
+      "refusal": {
+        "title": "Cette architecture de référence n'a pas pu être utilisée",
+        "notFound": "{repo} n'est pas visible via la connexion de gestion de code de cet espace de travail. Soit cette entrée désigne le mauvais dépôt, soit la connexion n'y a pas accès. Rien n'a été créé : corrigez l'entrée et relancez, tout le reste de ce formulaire est conservé.",
+        "unreadable": "{repo} n'a pas pu être lu pour l'instant, rien n'a donc été créé. Rien n'est mal configuré : relancez une fois la connexion rétablie, tout le reste de ce formulaire est conservé.",
+        "unnamedRepo": "Le dépôt de l'architecture de référence",
+        "edit": "Modifier cette architecture de référence"
+      }
     },
     "targetRepo": {
       "label": "Nom du dépôt cible",

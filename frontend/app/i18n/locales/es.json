@@ -637,6 +637,12 @@
         "service_catalog_response_too_large": "El portal de desarrollo respondió con más datos de los que esta plataforma admite en una sola respuesta. Abre la configuración del catálogo de servicios y reduce el límite de servicios, o desactiva la importación de definiciones de interfaz, y vuelve a importar."
       }
     },
+    "reason": {
+      "description": {
+        "reference_repo_not_found": "El repositorio de la arquitectura de referencia de esta ejecución no es visible a través de la conexión de control de código de este espacio de trabajo. O la entrada indica el repositorio equivocado, o la conexión no tiene acceso a él: corrige la arquitectura de referencia, o concédele acceso, e inténtalo de nuevo.",
+        "reference_repo_unreadable": "No se ha podido leer en este momento el repositorio de la arquitectura de referencia de esta ejecución, así que no se ha iniciado contra una plantilla que quizá no pueda clonar. No hay nada mal configurado ni hace falta ningún cambio: inténtalo de nuevo cuando se restablezca la conexión."
+      }
+    },
     "action": {
       "retryFailed": "El reintento falló",
       "startFailed": "No se pudo iniciar",
@@ -6920,7 +6926,14 @@
       "label": "Arquitectura de referencia",
       "description": "El repositorio base gestionado que se clona y adapta.",
       "empty": "Aún no hay arquitecturas de referencia. Añade una abajo o cambia a 'Desde cero'.",
-      "placeholder": "Elige una arquitectura de referencia"
+      "placeholder": "Elige una arquitectura de referencia",
+      "refusal": {
+        "title": "No se ha podido usar esta arquitectura de referencia",
+        "notFound": "{repo} no es visible a través de la conexión de control de código de este espacio de trabajo. O esta entrada indica el repositorio equivocado, o la conexión no tiene acceso a él. No se ha creado nada: corrige la entrada y vuelve a lanzar, todo lo demás de este formulario se conserva.",
+        "unreadable": "{repo} no se ha podido leer en este momento, así que no se ha creado nada. No hay nada mal configurado: vuelve a lanzar cuando se restablezca la conexión, todo lo demás de este formulario se conserva.",
+        "unnamedRepo": "El repositorio de la arquitectura de referencia",
+        "edit": "Editar esta arquitectura de referencia"
+      }
     },
     "targetRepo": {
       "label": "Nombre del repositorio de destino",

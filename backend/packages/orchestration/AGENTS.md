@@ -233,10 +233,17 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   that FAILS is recorded `unreadable` rather than skipped (a blinded sibling probe reporting "no
   siblings" is the strongest claim the seed makes, and the opposite of what happened), and
   `listJobs` withholds that transcript with `reads: null` once a run is past review, because the
-  list feeds every workspace snapshot. A monorepo run is TWO durable drives with a park between
-  them, so it carries a `driveId` distinct from its run id. How the work ARRIVES is a third axis
-  (`delivery`), resolved once at start from the target's default and stored, so a retry cannot move
-  a run the user asked to have reviewed onto the default branch: [`monorepo-service-bootstrap.md`](../../../docs/initiatives/monorepo-service-bootstrap.md).
+  list feeds every workspace snapshot. The two sides are resolved DIFFERENTLY and that is not an
+  oversight: the monorepo through `resolveRepoFilesForCoords` (the workspace's projected repos,
+  which its target already had to be one of), the reference TEMPLATE through
+  `RepoBootstrapper.resolveReferenceRepo`, because a reference architecture is an admin-managed
+  `owner/name` rather than a linked board repo and the bootstrapper is what clones it. The same call
+  is the run-start and retry pre-flight (`assertReferenceReachable`), so an unreachable template is
+  refused before a row exists rather than surfacing as an unread template a phase later. A monorepo
+  run is TWO durable drives with a park between them, so it carries a `driveId` distinct from its
+  run id. How the work ARRIVES is a third axis (`delivery`), resolved once at start from the
+  target's default and stored, so a retry cannot move a run the user asked to have reviewed onto
+  the default branch: [`monorepo-service-bootstrap.md`](../../../docs/initiatives/monorepo-service-bootstrap.md).
 - `pipelines/`, `board/`, `boardScan/`, `requirements/`,
   `notifications/`, `releaseHealth/`, `review/`, `estimation/`, `kaizen/`, `sandbox/`,
   `recurring/`, `settings/`, …: the other module services. In `review/`, EVERY write to a review

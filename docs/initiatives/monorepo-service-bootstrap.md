@@ -375,6 +375,13 @@ identical beside a list of model calls that plainly cost something.
       control that names the step it resumes from, and the telemetry a bootstrap run had not been
       filing: the provided-context snapshot per dispatch, the tool-call trajectory per poll, and
       every sink keyed on the RUN rather than the drive (D12).
+- [x] **Slice 4, the reference template is reached the way the CLONE reaches it.** The
+      `RepoBootstrapper.resolveReferenceRepo` verdict (`reachable` / `not_connected` / `not_found` /
+      `unreadable`), the run-start and retry pre-flight (`assertReferenceReachable`, refusing a 422
+      `reference_repo_not_found` or a 503 `reference_repo_unreadable` before any row is written), the
+      survey reading the template through it, a dispatch that resolves it once for every delivery
+      shape and clones it at its OWN default branch, and the launch dialog's jump to the offending
+      entry. See the slice-4 gotchas.
 
 ## Gotchas the first slice surfaced
 
@@ -503,16 +510,72 @@ inspector's "map service" action is the way in once the pull request has landed.
   `inputSchema` fails at CALL time rather than at build time. The tools use `jsonSchema()` with an
   explicit `validate`.
 
+## Gotchas the fourth slice surfaced
+
+- **The survey and the CLONE had two different notions of "can we reach the template".** The survey
+  resolved it through `resolveRepoFilesForCoords` (the workspace's PROJECTED repos) and the apply
+  phase cloned it with the installation token, and a reference architecture is an admin-managed
+  `owner/name` rather than a repo the board links. So the common case (a template that is not also
+  a board service) surveyed as unread on every deployment while the clone worked perfectly, and
+  what a reviewer saw for every area was the template having no opinion. Resolving it on the
+  BOOTSTRAPPER makes the two agree by construction, because that component is what clones it.
+- **What a launcher DOES about a refused template is the website's, not this document's.** The two
+  fixes (correct the entry, or grant the App the repository) need no checkout, so they live on
+  [Connect a Repository](https://www.catfactory.ai/guide/repositories.html#the-reference-architecture-s-own-repository-has-to-be-reachable-too);
+  what stays here is why the check exists and where it sits.
+- **Reachability has to be pre-flighted, not discovered a phase later.** Nothing between typing an
+  `owner/name` and the container's `git clone` ever asked the provider whether the repository was
+  there. A monorepo run answered by surveying the template as unread; a new-repo run answered
+  minutes later with a clone failure; both left a job row and a provisional board card behind for a
+  run that never had a chance. The check now runs before anything is recorded, so the refusal costs
+  a correction rather than a cleanup.
+- **A refused entry has to be REACHABLE from the refusal.** The refusal carries
+  `referenceArchitectureId` and `repo`, and the launch dialog opens that entry prefilled with every
+  other field of the form left alone. A 422 that only says "this failed" makes the person work out
+  which of the two repositories in the dialog was the problem.
+- **Three verdicts, not a nullable.** `not_found` is the entry to fix, `not_connected` is a
+  workspace to bind, `unreadable` is the provider being down and NOBODY's configuration. Collapsed
+  into one, an outage tells an operator to go and correct a value that is already right, which is
+  the misattribution the 503-with-a-reason rule exists to prevent. The verdict is produced ONCE, by
+  a probe both the pre-flight and the dispatch share: they used to ask the same question with
+  different code, so the same rate limit read as an outage at run start and as a wrong entry at
+  dispatch.
+- **`not_connected` also covers a connection on ANOTHER provider.** The bootstrapper holds one
+  client and is told which provider it speaks (`engineVcsProvider`), so a GitLab-connected
+  workspace on a facade whose bootstrap path is the GitHub App is refused rather than probed with
+  the wrong credential: probing answers 404, which would report a correct entry as the wrong
+  repository. Same disposition, and same reasoning, as `makeResolveRepoFilesForCoords`.
+- **READABLE is not GRANTED, and no read on the port separates them cheaply.** `repository_ids`
+  may only name repositories the installation holds, while a PUBLIC repository reads through the
+  API without being one, so such a template pre-flights `reachable` and its scoped mint is refused
+  with a 422. `getRepoById` looks like the discriminator and is not: the GitLab adapter answers it
+  from a bounded project listing, so a null there would refuse working setups. What is done
+  instead is to make the mint's refusal name the repository to grant, and to say so where the
+  verdict is defined. Dropping the leg was the other candidate and is worse: it hands the harness
+  a credential for a repo the job body still tells it to clone.
+- **The survey degrades rather than throwing, including when the BOOTSTRAPPER is the thing that is
+  gone.** It runs behind an atomic claim, so a throw after the claim writes no plan and leaves the
+  run `running` with nothing to settle until the claim goes stale. A deployment that lost its
+  container wiring mid-run therefore gets an `unreadable` template note saying exactly that, and a
+  reviewer who can still make every decision unaided.
+- **A template the dispatch cannot resolve is refused there, not dispatched around.** The clone is
+  about to happen on a token this component mints, so the run is over either way; what differs is
+  whether the report names the reference architecture and the next move, or arrives as a git error
+  out of a container that had to be started first. Resolution is ONE method for every delivery
+  shape (`resolveReferenceTemplate`), which is what stopped the force-push path from granting only
+  its push target while cloning the template on that same token, and what stopped both paths from
+  assuming the template's default branch was `main`.
+
 ## Not in this slice
 
 - **Starting a monorepo bootstrap from `/api/v1`.** The public surface's
   `POST /api/v1/bootstraps` still creates a repository of its own. `awaiting_review` is already
   named in the spec (1.65.0) because a run started in the app is READ through that surface; the
   start body and the review endpoint are a later, additive step.
-- **Reading the monorepo through an installation the workspace has not linked.** The survey
-  resolves both sides through `resolveRepoFilesForCoords`, which is scoped to the workspace's
-  PROJECTED repos. An unlinked reference template is reported as unsurveyed rather than silently
-  surveyed as empty; the apply phase still clones it with the installation token.
+- **Reading the MONOREPO through an installation the workspace has not linked.** The monorepo side
+  still resolves through `resolveRepoFilesForCoords`, scoped to the workspace's PROJECTED repos,
+  and correctly so: `resolveMonorepoTarget` already refuses a target the board does not link, so
+  the scoping costs the survey nothing. (The TEMPLATE side no longer answers to it: see slice 3.)
 - **A second reviewer, or a review that can be revised after approval.** Approval is one act by
   one person; changing your mind means retrying the run.
 - **Grep over the whole tree.** The loop reaches any path it can NAME, which is what closes the
