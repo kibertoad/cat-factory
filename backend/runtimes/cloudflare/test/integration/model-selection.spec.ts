@@ -258,9 +258,16 @@ describe('per-block model selection', () => {
   })
 
   describe('persistence', () => {
-    // Pick concrete selectable ids from the catalog rather than naming specific models.
-    const SELECTED_MODEL_ID = MODEL_CATALOG[0]!.id
-    const OTHER_MODEL_ID = MODEL_CATALOG[1]?.id ?? MODEL_CATALOG[0]!.id
+    // Pick concrete ids from the catalog rather than naming specific models, but pick them by
+    // the PROPERTY the second test needs rather than by position. That test drives a real run,
+    // so its model has to be one this app can actually resolve, and the only flavour needing no
+    // key is the Cloudflare floor. `MODEL_CATALOG[1]` did not say that: it happened to hold a
+    // Cloudflare-backed entry until a gateway-only model (Muse Spark, OpenRouter-only) was added
+    // above it, at which point the run never dispatched and the failure read as "the context was
+    // never captured" rather than as "the model was unusable".
+    const cloudflareBackedIds = MODEL_CATALOG.filter((m) => m.cloudflare).map((m) => m.id)
+    const SELECTED_MODEL_ID = cloudflareBackedIds[0]!
+    const OTHER_MODEL_ID = cloudflareBackedIds[1] ?? cloudflareBackedIds[0]!
 
     let app: TestApp
     let wsId: string
