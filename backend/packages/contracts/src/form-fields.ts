@@ -161,6 +161,16 @@ export const descriptorFieldEntries = {
    */
   min: v.optional(v.number()),
   max: v.optional(v.number()),
+  /**
+   * Whether a `number` value must be a WHOLE number; ignored for every other type.
+   *
+   * Its own attribute rather than a convention, because `min`/`max` cannot express it and the
+   * doors disagree without it: an internal schema that pipes `v.integer()` refuses `4.5` with a
+   * raw parse error while the descriptor that is supposed to RESTATE that schema admits it, so the
+   * public caller is told nothing it can act on and the form renders a spinner that steps by 0.1.
+   * A count of passes, attempts or days is the shape this exists for.
+   */
+  integer: v.optional(v.boolean()),
 } as const
 
 /**
@@ -497,9 +507,10 @@ function isExplicitOptOut(field: DescriptorField, value: DescriptorFieldValue): 
  * means valid). Pure + total (never throws), so a controller maps a non-empty result to a single
  * `ValidationError` and the SPA disables its submit button off the same call. Enforces: no unknown
  * keys, the right value type per field, required VISIBLE fields present,
- * `select`/`checkbox-group` values drawn from the declared options, declared `maxLength` respected,
- * and `path` values that stay inside the repo ({@link isSafeRepoDirPath}). Hidden fields (failing
- * `showWhen`) are not required and their stale values are ignored.
+ * `select`/`checkbox-group` values drawn from the declared options, declared `maxLength` /
+ * `min` / `max` / `integer` respected, and `path` values that stay inside the repo
+ * ({@link isSafeRepoDirPath}). Hidden fields (failing `showWhen`) are not required and their stale
+ * values are ignored.
  */
 export function validateDescriptorFields(
   fields: readonly DescriptorField[],
@@ -631,6 +642,9 @@ function semanticProblems(field: DescriptorField, value: DescriptorFieldValue): 
     problems.push(`Field "${field.key}" exceeds its maximum length of ${field.maxLength}.`)
   }
   if (typeof value === 'number') {
+    if (field.integer && !Number.isInteger(value)) {
+      problems.push(`Field "${field.key}" must be a whole number.`)
+    }
     if (field.min !== undefined && value < field.min) {
       problems.push(`Field "${field.key}" must be at least ${field.min}.`)
     }

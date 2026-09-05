@@ -55,7 +55,7 @@ import { buildDeployerFamily, type DeployerFamily } from './deployer-family.js'
 import { SettledHelperRouter } from './SettledHelperRouter.js'
 import type { FollowUpGateController } from './FollowUpGateController.js'
 import { RunRepoOpsController } from './RunRepoOpsController.js'
-import { type CodebaseSurveyResult, surveyCodebase } from './bugFishingSurvey.js'
+import { surveyRunCodebase } from './bugFishingSurvey.js'
 import { CompanionController } from './CompanionController.js'
 import { HumanTestController } from './HumanTestController.js'
 import { MergeResolver } from './MergeResolver.js'
@@ -473,32 +473,14 @@ export class RunDispatcher {
         this.handleAgentStep(ctx, dispatchKind, augment),
       ingestBlueprint: (ws, blockId, raw) => this.ingestBlueprint(ws, blockId, raw),
       ingestSpec: (ws, raw) => this.ingestSpec(ws, raw),
-      surveyCodebase: (ws, blockId) => this.surveyCodebaseForBlock(ws, blockId),
+      // The survey owns both halves of "never throws" (see `surveyRunCodebase`); the dispatcher
+      // supplies only the binding, because resolving a run's repo is its job.
+      surveyCodebase: (ws, blockId) =>
+        surveyRunCodebase({
+          resolveRunRepo: () => this.repoOps.resolveRunRepo(ws, blockId),
+          logger: this.log.child({ blockId }),
+        }),
     }
-  }
-
-  /**
-   * Survey the codebase a block's run targets, for the bug-fishing expedition's territories.
-   *
-   * Here rather than in the step handler because resolving the run's repo is the dispatcher's
-   * job (`RunRepoOpsController` owns the same resolution every pre/post-op uses), and because the
-   * completion path needs the SAME survey the dispatch path handed the pass: the coverage record
-   * and the territory scope are both computed against the manifest that pass was given.
-   *
-   * Cheap to call twice: the tree read goes through the app's `repoFiles` cache, keyed by the ref
-   * every pass of the expedition fishes.
-   */
-  private async surveyCodebaseForBlock(
-    workspaceId: string,
-    blockId: string,
-  ): Promise<CodebaseSurveyResult> {
-    const runRepo = await this.repoOps.resolveRunRepo(workspaceId, blockId)
-    return surveyCodebase({
-      repo: runRepo?.repo ?? null,
-      branch: runRepo?.baseBranch ?? 'HEAD',
-      serviceDirectory: runRepo?.serviceDirectory ?? null,
-      logger: this.log,
-    })
   }
 
   /**

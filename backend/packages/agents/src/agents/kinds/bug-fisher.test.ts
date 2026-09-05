@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   BUG_FISHER_KIND,
+  BUG_FISHER_SYSTEM_PROMPT,
   BUG_FISHING_TERRITORY_CONTEXT_FILE,
+  BUG_FISHING_TERRITORY_CONTEXT_PATH,
   renderBugFishingPhaseBrief,
   renderBugFishingTerritoryContext,
 } from './bug-fisher.js'
@@ -23,6 +25,14 @@ describe('bug-fisher kind declarations', () => {
     const registry = defaultAgentKindRegistry()
     expect(registry.standardsDelivery(BUG_FISHER_KIND)).toBe('context-files')
     expect(registry.preOps(BUG_FISHER_KIND)).toContain(standardsAsContextFilesPreOp)
+  })
+
+  it('TELLS the pass its standards are files, which is the third half of that decision', () => {
+    // The op writes them and the flag suppresses the fold, so without a prompt that names the
+    // files the standards land in a directory the agent has no reason to open: byte-for-byte the
+    // silent loss the two halves above exist to prevent.
+    expect(BUG_FISHER_SYSTEM_PROMPT).toContain('.cat-context/standards.md')
+    expect(BUG_FISHER_SYSTEM_PROMPT).toContain('.cat-context/standard-<id>.md')
   })
 })
 
@@ -86,7 +96,12 @@ describe('renderBugFishingTerritoryContext', () => {
     expect(rendered).toContain('`packages/billing` (40 files)')
   })
 
-  it('writes to the path the engine injects', () => {
-    expect(BUG_FISHING_TERRITORY_CONTEXT_FILE).toBe('.cat-context/territory.md')
+  it('is injected under a NAME and read at a PATH, and the prompt names the path', () => {
+    // `InjectedContextFile.path` is the name INSIDE the run's context directory: the harness
+    // strips any directory part, so a path spelled with the directory in it landed correctly and
+    // was recorded as `.cat-context/.cat-context/territory.md` everywhere the run is inspected.
+    expect(BUG_FISHING_TERRITORY_CONTEXT_FILE).toBe('territory.md')
+    expect(BUG_FISHING_TERRITORY_CONTEXT_PATH).toBe('.cat-context/territory.md')
+    expect(BUG_FISHER_SYSTEM_PROMPT).toContain(BUG_FISHING_TERRITORY_CONTEXT_PATH)
   })
 })

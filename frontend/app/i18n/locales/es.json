@@ -352,7 +352,8 @@
         },
         "maxPasses": {
           "label": "Pasadas máximas",
-          "hint": "Número máximo de pasadas de solo lectura de esta expedición. Déjalo vacío para {count}. En una base de código grande cada ángulo se pesca por territorio, y lo que el presupuesto recorte queda registrado como no pescado."
+          "hint": "Número máximo de pasadas de solo lectura de esta expedición. Déjalo vacío para {count}. En una base de código grande cada ángulo se pesca por territorio, y lo que el presupuesto recorte queda registrado como no pescado.",
+          "problem": "Introduce un número entero entre 1 y {max}, o déjalo vacío para el valor predeterminado."
         }
       }
     },

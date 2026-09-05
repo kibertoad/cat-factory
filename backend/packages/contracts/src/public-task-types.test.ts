@@ -70,6 +70,24 @@ describe('BUILTIN_PUBLIC_TASK_FIELDS', () => {
     },
   )
 
+  it.each(
+    everyPublicField
+      .filter((entry) => entry.field.type === 'number')
+      .map((entry) => [`${entry.taskType}.${entry.field.key}`, entry] as const),
+  )('agrees with the internal schema about a FRACTIONAL %s', (_name, { field }) => {
+    // The relation the sample value above structurally cannot see: it is drawn from `min`, which
+    // is a whole number in every descriptor, so a public field that admits `4.5` where the
+    // internal schema pipes `v.integer()` round-trips clean here and refuses the caller at
+    // creation with a raw parse error naming nothing they can fix. What must hold is that the two
+    // doors AGREE, in either direction: both admit a fraction, or both refuse it.
+    const low = field.min ?? 1
+    const fraction = field.max !== undefined && low + 0.5 > field.max ? field.max - 0.5 : low + 0.5
+    const admittedByDescriptor =
+      validateDescriptorFields([field], { [field.key]: fraction }).length === 0
+    const admittedBySchema = v.safeParse(taskTypeFieldsSchema, { [field.key]: fraction }).success
+    expect(admittedByDescriptor).toBe(admittedBySchema)
+  })
+
   it('bounds a string field no wider than the internal schema does', () => {
     // The bound is RESTATED rather than derived, so the direction that matters is that the public
     // one never promises more than the internal one honours. `stepsToReproduce` is the widest

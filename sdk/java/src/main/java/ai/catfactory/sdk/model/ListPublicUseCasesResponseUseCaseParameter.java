@@ -14,6 +14,7 @@ import org.jspecify.annotations.Nullable;
  * @param defaultValue May be absent entirely. Length 0..2000.
  * @param defaultValues May be absent entirely.
  * @param help May be absent entirely. Length 0..300.
+ * @param integer May be absent entirely.
  * @param key Length 1..80.
  * @param label Length 1..120.
  * @param max May be absent entirely.
@@ -36,6 +37,9 @@ public record ListPublicUseCasesResponseUseCaseParameter(
 
     /** May be absent entirely. Length 0..300. */
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("help") @Nullable String help,
+
+    /** May be absent entirely. */
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("integer") @Nullable Boolean integer,
 
     /** Length 1..80. */
     @JsonProperty("key") String key,
@@ -86,6 +90,7 @@ public record ListPublicUseCasesResponseUseCaseParameter(
         private @Nullable String defaultValue;
         private @Nullable List<String> defaultValues;
         private @Nullable String help;
+        private @Nullable Boolean integer;
         private @Nullable String key;
         private @Nullable String label;
         private @Nullable Double max;
@@ -113,6 +118,12 @@ public record ListPublicUseCasesResponseUseCaseParameter(
         /** Set {@code help}. */
         public Builder help(@Nullable String help) {
             this.help = help;
+            return this;
+        }
+
+        /** Set {@code integer}. */
+        public Builder integer(@Nullable Boolean integer) {
+            this.integer = integer;
             return this;
         }
 
@@ -184,7 +195,7 @@ public record ListPublicUseCasesResponseUseCaseParameter(
 
         /** Build the {@link ListPublicUseCasesResponseUseCaseParameter}. */
         public ListPublicUseCasesResponseUseCaseParameter build() {
-            return new ListPublicUseCasesResponseUseCaseParameter(defaultValue, defaultValues, help, key, label, max, maxLength, min, options, placeholder, required, section, showWhen, type);
+            return new ListPublicUseCasesResponseUseCaseParameter(defaultValue, defaultValues, help, integer, key, label, max, maxLength, min, options, placeholder, required, section, showWhen, type);
         }
     }
 }

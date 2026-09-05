@@ -1,7 +1,17 @@
-import { safeParseBlueprintService } from '@cat-factory/contracts'
-import type { BlueprintService, BugFishingTerritory, Logger, RepoFiles } from '@cat-factory/kernel'
+import { BLUEPRINT_JSON_PATH, safeParseBlueprintService } from '@cat-factory/contracts'
+import type {
+  BlueprintService,
+  BugFishingTerritory,
+  Logger,
+  RepoFiles,
+  RunRepoContext,
+} from '@cat-factory/kernel'
 import { describeError, noopLogger } from '@cat-factory/kernel'
-import { type SurveyedFile, partitionCodebase } from './bugFishingTerritories.logic.js'
+import {
+  type SurveyedFile,
+  partitionCodebase,
+  wholeCodebaseTerritory,
+} from './bugFishingTerritories.logic.js'
 
 // ---------------------------------------------------------------------------
 // The CODEBASE SURVEY a bug-fishing expedition plans from: one checkout-free read of the
@@ -18,24 +28,25 @@ import { type SurveyedFile, partitionCodebase } from './bugFishingTerritories.lo
 // every progress write is exactly the growth the design refuses.
 // ---------------------------------------------------------------------------
 
-/** Where the Blueprinter commits its decomposition, relative to the service root. */
-const BLUEPRINT_PATH = 'blueprints/blueprint.json'
-
 /** What a survey produced, plus what it could not do. */
 export interface CodebaseSurveyResult {
   /** The partition, most worth fishing first once the caller has prioritised it. */
   territories: BugFishingTerritory[]
-  /** Every fishable file of each territory, for the manifest and the coverage intersection. */
+  /**
+   * Every fishable file of each territory, for the manifest and the coverage intersection. Paths
+   * are relative to the SURVEY ROOT (the service's own directory in a monorepo), which is the
+   * frame the agent's checkout is rooted at.
+   */
   filesByTerritory: Map<string, SurveyedFile[]>
   /** True when the provider cut the tree short: the territories cover a PREFIX of the codebase. */
   treeTruncated: boolean
   /**
    * Why the survey could not read the codebase, when it could not. Null on a real survey.
    *
-   * Stated rather than left as a one-territory plan, because the two are the same VALUE and
-   * opposite FACTS: "this repository is small enough to fish whole" and "nobody could see this
-   * repository" would otherwise render identically, and the second is the one a human has to act
-   * on.
+   * Stated rather than left for the one-territory plan to imply, because the plan is the same
+   * VALUE for opposite FACTS: "this repository is small enough to fish whole" and "nobody could
+   * see this repository" produce an identical partition, and only the second is something a human
+   * has to act on.
    */
   unavailableReason: string | null
 }
@@ -61,11 +72,24 @@ export interface CodebaseSurveyInput {
  * A pass-through is the correct disposition for an unwired capability, and it must be invisible
  * to the domain: the expedition this plans is byte-for-byte the eight-angle hunt that shipped
  * before territories existed. What it must not be is silent, which is what `reason` is for.
+ *
+ * ONE territory rather than none, and the difference is not cosmetic: an empty list is what the
+ * step then persists as `territories: []`, the value the schema documents as forbidden because it
+ * claims the codebase was surveyed and found to contain nothing, and it is also what leaves the
+ * planner with no cell to name when the pass budget cuts an angle. The territory's counts are
+ * zero because nobody could count them; `unavailableReason` is what says so, and it is the only
+ * thing that tells this apart from a genuinely tiny repository.
+ *
+ * Exported because the seam that RESOLVES the run's repository sits outside this module and can
+ * fail on its own terms (an unlinked block chain refuses with a `ValidationError`), and this
+ * module's contract is that a survey never throws. That caller states its own reason through here
+ * rather than rebuilding the shape.
  */
-function unavailable(reason: string): CodebaseSurveyResult {
+export function unavailableSurvey(reason: string): CodebaseSurveyResult {
+  const only = wholeCodebaseTerritory([])
   return {
-    territories: [],
-    filesByTerritory: new Map(),
+    territories: [only],
+    filesByTerritory: new Map([[only.id, []]]),
     treeTruncated: false,
     unavailableReason: reason,
   }
@@ -84,9 +108,11 @@ export async function surveyCodebase(input: CodebaseSurveyInput): Promise<Codeba
   const log = input.logger ?? noopLogger
   const repo = input.repo
   if (!repo)
-    return unavailable('No repository is linked to this task, so the codebase was not surveyed.')
+    return unavailableSurvey(
+      'No repository is linked to this task, so the codebase was not surveyed.',
+    )
   if (!repo.listTree) {
-    return unavailable(
+    return unavailableSurvey(
       'The connected VCS client cannot list a repository tree, so the codebase was not surveyed.',
     )
   }
@@ -95,9 +121,11 @@ export async function surveyCodebase(input: CodebaseSurveyInput): Promise<Codeba
     tree = await repo.listTree(input.branch)
   } catch (error) {
     log.warn('bugFishing.treeReadFailed', { branch: input.branch, ...describeError(error) })
-    return unavailable('The repository tree could not be read, so the codebase was not surveyed.')
+    return unavailableSurvey(
+      'The repository tree could not be read, so the codebase was not surveyed.',
+    )
   }
-  const blueprint = await readBlueprint(repo, input.branch, input.serviceDirectory, log)
+  const blueprint = await readBlueprint(repo, input.branch, log)
   const survey = partitionCodebase(tree, {
     serviceDirectory: input.serviceDirectory ?? null,
     blueprint,
@@ -111,7 +139,50 @@ export async function surveyCodebase(input: CodebaseSurveyInput): Promise<Codeba
 }
 
 /**
+ * Survey the codebase a RUN targets: resolve its repository, then partition the tree.
+ *
+ * The repo resolution is its own refusal and does not belong to a survey. An unlinked block chain
+ * throws a `ValidationError` rather than answering null, deliberately, because guessing a repo once
+ * pushed a task into someone else's; that refusal belongs to a DISPATCH, where a human can act on
+ * it. This module's contract is the opposite one, that a survey never throws, and its callers
+ * include the COMPLETION path of a pass that has already run and has nothing left to refuse.
+ *
+ * Here rather than on the dispatcher so the two halves of "never throws" sit together, and so the
+ * dispatcher keeps only the binding: which repo resolver, which logger.
+ */
+export async function surveyRunCodebase(input: {
+  /** The run's repo resolution, bound to one workspace and block by the caller. */
+  resolveRunRepo: () => Promise<RunRepoContext | null>
+  /** Bind the block id on it: everything below logs into this scope. */
+  logger?: Logger
+}): Promise<CodebaseSurveyResult> {
+  const log = input.logger ?? noopLogger
+  let runRepo: RunRepoContext | null
+  try {
+    runRepo = await input.resolveRunRepo()
+  } catch (error) {
+    log.warn('bugFishing.repoResolveFailed', describeError(error))
+    return unavailableSurvey(
+      'The repository this task targets could not be resolved, so the codebase was not surveyed.',
+    )
+  }
+  return surveyCodebase({
+    repo: runRepo?.repo ?? null,
+    branch: runRepo?.baseBranch ?? 'HEAD',
+    serviceDirectory: runRepo?.serviceDirectory ?? null,
+    logger: log,
+  })
+}
+
+/**
  * The service's committed blueprint, or null.
+ *
+ * Read at the REPOSITORY root, because that is where `blueprintPostOp` commits it: the post-op
+ * writes {@link BLUEPRINT_JSON_PATH} through a root-scoped `RepoFiles`, with no service prefix,
+ * whatever subdirectory the service that produced it lives in. Reading it under the service
+ * directory found nothing on every monorepo service, and found it silently: a blueprinted service
+ * fell through to the directory heuristic with nothing saying it had one. The constant is imported
+ * rather than restated so the reader cannot drift from the writer again.
  *
  * The blueprint is a DECOMPOSITION first and a file map second: its `references` were written by
  * a model against an older tree, so the partition drops a reference the tree no longer has rather
@@ -122,17 +193,17 @@ export async function surveyCodebase(input: CodebaseSurveyInput): Promise<Codeba
 async function readBlueprint(
   repo: RepoFiles,
   branch: string,
-  serviceDirectory: string | null | undefined,
   log: Logger,
 ): Promise<BlueprintService | null> {
-  const root = (serviceDirectory ?? '').replace(/^\/+|\/+$/g, '')
-  const path = root ? `${root}/${BLUEPRINT_PATH}` : BLUEPRINT_PATH
   try {
-    const file = await repo.getFile(path, branch)
+    const file = await repo.getFile(BLUEPRINT_JSON_PATH, branch)
     if (!file?.content) return null
     return safeParseBlueprintService(JSON.parse(file.content)) ?? null
   } catch (error) {
-    log.warn('bugFishing.blueprintReadFailed', { path, ...describeError(error) })
+    log.warn('bugFishing.blueprintReadFailed', {
+      path: BLUEPRINT_JSON_PATH,
+      ...describeError(error),
+    })
     return null
   }
 }

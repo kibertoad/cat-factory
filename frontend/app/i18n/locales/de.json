@@ -3134,7 +3134,8 @@
         },
         "maxPasses": {
           "label": "Maximale Durchgänge",
-          "hint": "Höchstzahl der Nur-Lese-Durchgänge dieser Expedition. Leer lassen für {count}. Bei einer großen Codebasis wird jeder Blickwinkel pro Gebiet durchsucht; was das Budget streicht, wird als nicht durchsucht vermerkt."
+          "hint": "Höchstzahl der Nur-Lese-Durchgänge dieser Expedition. Leer lassen für {count}. Bei einer großen Codebasis wird jeder Blickwinkel pro Gebiet durchsucht; was das Budget streicht, wird als nicht durchsucht vermerkt.",
+          "problem": "Geben Sie eine ganze Zahl zwischen 1 und {max} ein oder lassen Sie das Feld leer für den Standardwert."
         }
       }
     },

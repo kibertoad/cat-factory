@@ -352,7 +352,8 @@
         },
         "maxPasses": {
           "label": "Passes maximum",
-          "hint": "Nombre maximal de passes en lecture seule de cette expédition. Laisser vide pour {count}. Sur un gros code, chaque angle est pêché par territoire, et ce que le budget coupe est consigné comme non pêché."
+          "hint": "Nombre maximal de passes en lecture seule de cette expédition. Laisser vide pour {count}. Sur un gros code, chaque angle est pêché par territoire, et ce que le budget coupe est consigné comme non pêché.",
+          "problem": "Saisissez un nombre entier compris entre 1 et {max}, ou laissez le champ vide pour la valeur par défaut."
         }
       }
     },

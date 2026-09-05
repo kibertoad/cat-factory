@@ -397,7 +397,8 @@
         },
         "maxPasses": {
           "label": "Maximum passes",
-          "hint": "Most read-only passes this expedition may run. Leave empty for {count}. On a large codebase each angle is fished per territory, and whatever the budget cuts is recorded as unfished."
+          "hint": "Most read-only passes this expedition may run. Leave empty for {count}. On a large codebase each angle is fished per territory, and whatever the budget cuts is recorded as unfished.",
+          "problem": "Enter a whole number between 1 and {max}, or leave it empty for the default."
         }
       }
     },

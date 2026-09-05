@@ -1,5 +1,6 @@
 import type {
   BlueprintService,
+  BlueprintModule,
   BugFishingPhase,
   BugFishingTerritory,
   BugFishingUnfishedCell,
@@ -17,6 +18,15 @@ import { WHOLE_CODEBASE_TERRITORY_ID } from '@cat-factory/kernel'
 // record is docs/initiatives/bug-fishing-expedition.md ("Large codebases"); the one sentence that
 // governs the whole module is its rule: the platform COMPUTES the partition, the model JUDGES the
 // code. Nothing below asks an LLM where the modules are.
+//
+// THE FRAME, and it binds every path this module emits: a territory's roots and its manifest are
+// relative to the SURVEY ROOT, which is the service's own directory in a monorepo and the
+// repository root otherwise. That is the frame the agent works in — the harness roots its checkout
+// at `<clone>/<serviceDirectory>` — so it is the frame the manifest has to be written in, the
+// frame the pass reports its reads and its findings in, and therefore the frame the scope check
+// and the coverage intersection have to judge in. A repo-relative manifest handed to a service
+// agent lists paths it cannot open, and every finding it reports back lands outside every root.
+// The tree read is repo-relative, so the prefix is stripped ONCE, here, in `fishableFiles`.
 // ---------------------------------------------------------------------------
 
 /**
@@ -103,14 +113,35 @@ const PACKAGE_MARKERS = new Set([
   'Gemfile',
 ])
 
-/** Whether a candidate's own root directory carries a package marker. */
+/**
+ * The id and label stem for the files sitting DIRECTLY in a root, beside its sub-directories.
+ *
+ * They are a group in their own right rather than a claim on the root itself: see
+ * {@link groupByChildDirectory} for why owning the root would be either an over-claim or, at the
+ * survey root, nothing at all.
+ */
+const LOOSE_FILES_SEGMENT = 'root-files'
+
+/** The label those loose files get, under a root and at the survey root. */
+function looseFilesLabel(root: string): string {
+  return root ? `${root} (files)` : 'Top-level files'
+}
+
+/**
+ * Whether any of a candidate's roots is a directory carrying a package marker.
+ *
+ * Asked of every root rather than only of a lone one: a candidate that already packed two
+ * directories together is exactly the one that must stop packing when the next is a package, and
+ * the earlier "only when there is a single root" reading meant the first pack disabled the
+ * boundary check for everything after it.
+ */
 function isPackageRoot(candidate: Candidate): boolean {
-  const root = candidate.roots[0]
-  if (candidate.roots.length !== 1 || root === undefined) return false
-  const prefix = root ? `${root}/` : ''
-  return candidate.files.some(
-    (file) => file.path.startsWith(prefix) && PACKAGE_MARKERS.has(file.path.slice(prefix.length)),
-  )
+  return candidate.roots.some((root) => {
+    const prefix = root ? `${root}/` : ''
+    return candidate.files.some(
+      (file) => file.path.startsWith(prefix) && PACKAGE_MARKERS.has(file.path.slice(prefix.length)),
+    )
+  })
 }
 
 /** Whether a repo-relative path is source the expedition should fish. */
@@ -123,7 +154,7 @@ export function isFishablePath(path: string): boolean {
   return !IGNORED_FILE_SUFFIXES.some((suffix) => name.endsWith(suffix))
 }
 
-/** One file of the survey's manifest: the path, and what it weighs. */
+/** One file of the survey's manifest: the path (survey-root-relative), and what it weighs. */
 export interface SurveyedFile {
   path: string
   bytes: number
@@ -133,7 +164,10 @@ export interface SurveyedFile {
 export interface CodebaseSurvey {
   /** The partition, in the order the expedition fishes it. Always at least one entry. */
   territories: BugFishingTerritory[]
-  /** Every fishable file under the survey root, indexed by territory id. */
+  /**
+   * Every fishable file under the survey root, indexed by territory id, with paths in the survey
+   * root's frame (see this module's header).
+   */
   filesByTerritory: Map<string, SurveyedFile[]>
   /** True when the provider cut the tree short: the manifest is a prefix of the codebase. */
   treeTruncated: boolean
@@ -144,7 +178,8 @@ export interface SurveyOptions {
   /**
    * The monorepo subdirectory the service lives in, when it has one. The survey walks from here
    * rather than from the repository root: a sibling service's code is out of scope for an
-   * expedition exactly as it is for every other run.
+   * expedition exactly as it is for every other run. It is also the frame every path this module
+   * emits is relative to, because it is the directory the agent's checkout is rooted at.
    */
   serviceDirectory?: string | null
   /**
@@ -162,11 +197,12 @@ function normalizePath(path: string): string {
 }
 
 /**
- * The fishable FILES of a tree, scoped to the survey root and sized.
+ * The fishable FILES of a tree, scoped to the survey root, sized, and REBASED onto that root.
  *
  * Directories are dropped here rather than filtered at each later step: a territory is a set of
- * files, and a `dir` entry carries no bytes to size it with. The subtree shas the territories
- * record come from the directory entries, read separately below.
+ * files, and a `dir` entry carries no bytes to size it with. The ignore rules are applied to the
+ * FULL repo path, before the rebase, so `packages/api/dist` is still recognised as generated
+ * output once the prefix is gone.
  */
 function fishableFiles(entries: readonly RepoContentEntry[], root: string): SurveyedFile[] {
   const prefix = root ? `${root}/` : ''
@@ -176,16 +212,25 @@ function fishableFiles(entries: readonly RepoContentEntry[], root: string): Surv
     const path = normalizePath(entry.path)
     if (prefix && !path.startsWith(prefix)) continue
     if (!isFishablePath(path)) continue
-    files.push({ path, bytes: typeof entry.size === 'number' ? entry.size : ASSUMED_FILE_BYTES })
+    files.push({
+      path: path.slice(prefix.length),
+      bytes: typeof entry.size === 'number' ? entry.size : ASSUMED_FILE_BYTES,
+    })
   }
   return files.sort((a, b) => a.path.localeCompare(b.path))
 }
 
-/** Subtree shas of the tree's directory entries, keyed by normalised path. */
-function subtreeShas(entries: readonly RepoContentEntry[]): Map<string, string> {
+/**
+ * Shas of the tree's entries, keyed by normalised REPO-relative path.
+ *
+ * Directories and files both: a territory root is usually a directory, whose subtree sha answers
+ * "has this changed since it was fished" with a string compare, but the loose-files group's roots
+ * are individual files, and a blob sha answers exactly the same question about one of those.
+ */
+function entryShas(entries: readonly RepoContentEntry[]): Map<string, string> {
   const shas = new Map<string, string>()
   for (const entry of entries) {
-    if (entry.type === 'dir' && entry.sha) shas.set(normalizePath(entry.path), entry.sha)
+    if (entry.sha) shas.set(normalizePath(entry.path), entry.sha)
   }
   return shas
 }
@@ -194,18 +239,33 @@ function tokensOf(files: readonly SurveyedFile[]): number {
   return Math.round(files.reduce((sum, file) => sum + file.bytes, 0) / BYTES_PER_TOKEN)
 }
 
-/** A territory id derived from its roots: stable for the same partition of the same tree. */
-function territoryIdFor(roots: readonly string[]): string {
-  const first = roots[0] ?? WHOLE_CODEBASE_TERRITORY_ID
-  const slug = first.replace(/[^a-zA-Z0-9._/-]/g, '-').replace(/\//g, '.')
-  return roots.length > 1 ? `${slug}+${roots.length - 1}` : slug
+/** The slug a territory id is built from: path-shaped, safe to read and to put in a log field. */
+function territorySlug(idBase: string): string {
+  const slug = idBase.replace(/[^a-zA-Z0-9._/-]/g, '-').replace(/\//g, '.')
+  return slug || WHOLE_CODEBASE_TERRITORY_ID
 }
 
-/** The label a human reads for a territory rooted at `root`. */
-function labelFor(root: string, serviceRoot: string): string {
-  const relative =
-    serviceRoot && root.startsWith(`${serviceRoot}/`) ? root.slice(serviceRoot.length + 1) : root
-  return relative || 'Whole codebase'
+/**
+ * Stamp a territory id that no other territory of this survey carries.
+ *
+ * Ids are DERIVED from paths, and derived ids collide: two blueprint modules whose first reference
+ * is the same directory produce the same stem, and so does a directory whose name happens to match
+ * the loose-files stem. A collision is not cosmetic — `filesByTerritory` is keyed by id, so the
+ * second territory would overwrite the first's manifest and every lookup by id would resolve both
+ * to one set of roots. Suffixing is enough because an id only has to be stable and distinct WITHIN
+ * one expedition: nothing looks a territory up across surveys (see the schema's note on why the
+ * label and roots are recorded rather than re-derived).
+ */
+function uniqueTerritoryId(stem: string, used: Set<string>): string {
+  let id = stem
+  for (let n = 2; used.has(id); n++) id = `${stem}~${n}`
+  used.add(id)
+  return id
+}
+
+/** The label a human reads for a territory rooted at `root` (already in the survey frame). */
+function labelForRoot(root: string): string {
+  return root || 'Whole codebase'
 }
 
 /**
@@ -215,7 +275,7 @@ function labelFor(root: string, serviceRoot: string): string {
  * that shipped before territories existed. Large-codebase mode is a size threshold crossed, never
  * a mode a task opts into.
  */
-function wholeCodebaseTerritory(files: readonly SurveyedFile[]): BugFishingTerritory {
+export function wholeCodebaseTerritory(files: readonly SurveyedFile[]): BugFishingTerritory {
   return {
     id: WHOLE_CODEBASE_TERRITORY_ID,
     label: 'Whole codebase',
@@ -227,33 +287,90 @@ function wholeCodebaseTerritory(files: readonly SurveyedFile[]): BugFishingTerri
   }
 }
 
+/** A set of files under one root: one child directory, or the files sitting directly in it. */
+interface FileGroup {
+  /** Sort key, so two surveys of the same tree order their groups identically. */
+  key: string
+  /** The stem the territory id is derived from. */
+  idBase: string
+  /** The prefixes this group owns, in the survey root's frame. */
+  roots: string[]
+  /** What a human reads for it. */
+  label: string
+  files: SurveyedFile[]
+}
+
 /**
  * Group a set of files by their first path segment BELOW `root`, so a directory stays whole
- * whenever it fits. Files sitting directly in `root` are grouped under `root` itself.
+ * whenever it fits.
+ *
+ * Files sitting DIRECTLY in `root` form their own group, and that group owns its FILES rather than
+ * `root`. Owning `root` would be an over-claim wherever `root` is a real directory — it is a prefix
+ * over every sibling group here too, so a finding in one of them would be attributed to this one —
+ * and at the SURVEY root, where `root` is the empty string, it is worse than that: read as a
+ * prefix, the empty root matches no path at all, so every finding a pass raised on a top-level file
+ * was dropped as out of scope, and the empty id it derived was falsy enough that the pass was
+ * dispatched with no manifest and no scope in the first place.
  */
-function groupByChildDirectory(
-  files: readonly SurveyedFile[],
-  root: string,
-): Map<string, SurveyedFile[]> {
-  const groups = new Map<string, SurveyedFile[]>()
+function groupByChildDirectory(files: readonly SurveyedFile[], root: string): FileGroup[] {
+  const directories = new Map<string, SurveyedFile[]>()
+  const loose: SurveyedFile[] = []
   const prefixLength = root ? root.length + 1 : 0
   for (const file of files) {
     const rest = file.path.slice(prefixLength)
     const slash = rest.indexOf('/')
-    const key =
-      slash === -1 ? root : root ? `${root}/${rest.slice(0, slash)}` : rest.slice(0, slash)
-    const bucket = groups.get(key)
+    if (slash === -1) {
+      loose.push(file)
+      continue
+    }
+    const child = rest.slice(0, slash)
+    const key = root ? `${root}/${child}` : child
+    const bucket = directories.get(key)
     if (bucket) bucket.push(file)
-    else groups.set(key, [file])
+    else directories.set(key, [file])
   }
-  return groups
+  const groups: FileGroup[] = [...directories.entries()].map(([key, groupFiles]) => ({
+    key,
+    idBase: key,
+    roots: [key],
+    label: labelForRoot(key),
+    files: groupFiles,
+  }))
+  if (loose.length > 0) {
+    groups.push({
+      // A trailing slash sorts the loose group immediately before the child directories of the
+      // same root, and the survey root's loose group first of all.
+      key: root ? `${root}/` : '',
+      idBase: root ? `${root}/${LOOSE_FILES_SEGMENT}` : LOOSE_FILES_SEGMENT,
+      roots: loose.map((file) => file.path),
+      label: looseFilesLabel(root),
+      files: loose,
+    })
+  }
+  return groups.sort((a, b) => a.key.localeCompare(b.key))
 }
 
-/** A candidate territory before it is stamped with an id and a label. */
+/** A candidate territory before it is stamped with an id. */
 interface Candidate {
+  /** The stem the territory id is derived from, before de-duplication. */
+  idBase: string
+  /** Repo-relative (survey-framed) prefixes the territory owns: directories, or single files. */
   roots: string[]
+  /** One label per group packed in, joined for the territory label. */
+  labels: string[]
   files: SurveyedFile[]
   source: 'blueprint' | 'directory'
+}
+
+/** A file group as a directory-sourced candidate. */
+function directoryCandidate(group: FileGroup): Candidate {
+  return {
+    idBase: group.idBase,
+    roots: group.roots,
+    labels: [group.label],
+    files: group.files,
+    source: 'directory',
+  }
 }
 
 /**
@@ -267,17 +384,24 @@ function splitOversized(candidate: Candidate): Candidate[] {
   if (tokensOf(candidate.files) <= MAX_TERRITORY_TOKENS) return [candidate]
   const root = candidate.roots[0]
   if (candidate.roots.length !== 1 || root === undefined) {
-    // A packed multi-root candidate is over the ceiling only if packing was wrong; unpack it.
-    return candidate.roots.map((r) => ({
-      roots: [r],
-      files: candidate.files.filter((f) => f.path === r || f.path.startsWith(`${r}/`)),
-      source: candidate.source,
-    }))
+    // A multi-root candidate over the ceiling is a blueprint module spanning several references
+    // (packing runs after this), so give each reference its own territory rather than chopping the
+    // module at a file boundary.
+    return candidate.roots
+      .map((r): Candidate => ({
+        idBase: r,
+        roots: [r],
+        labels: [labelForRoot(r)],
+        files: candidate.files.filter((f) => f.path === r || f.path.startsWith(`${r}/`)),
+        source: candidate.source,
+      }))
+      .filter((unpacked) => unpacked.files.length > 0)
+      .flatMap(splitOversized)
   }
   const groups = groupByChildDirectory(candidate.files, root)
-  if (groups.size <= 1) return [candidate]
-  return [...groups.entries()].flatMap(([childRoot, files]) =>
-    splitOversized({ roots: [childRoot], files, source: candidate.source }),
+  if (groups.length <= 1) return [candidate]
+  return groups.flatMap((group) =>
+    splitOversized({ ...directoryCandidate(group), source: candidate.source }),
   )
 }
 
@@ -300,16 +424,40 @@ function packSmall(candidates: readonly Candidate[]): Candidate[] {
       tokensOf(previous.files) + tokensOf(candidate.files) <= TARGET_TERRITORY_TOKENS
     ) {
       previous.roots.push(...candidate.roots)
+      previous.labels.push(...candidate.labels)
       previous.files.push(...candidate.files)
       continue
     }
     packed.push({
+      idBase: candidate.idBase,
       roots: [...candidate.roots],
+      labels: [...candidate.labels],
       files: [...candidate.files],
       source: candidate.source,
     })
   }
   return packed
+}
+
+/**
+ * A blueprint module's references, in the SURVEY root's frame.
+ *
+ * A reference is written by whoever ran the Blueprinter, and the two authorings differ by exactly
+ * the service prefix: an agent rooted at the service directory writes `src/billing`, while one
+ * that saw the repository root writes `packages/api/src/billing`. Both name the same code, so the
+ * prefix is stripped where it is present rather than assumed either way. A reference that matches
+ * nothing is dropped downstream, which is what makes normalising safe: nothing here can move a
+ * module onto code it does not name.
+ */
+function blueprintReferenceRoots(module: BlueprintModule, serviceRoot: string): string[] {
+  return (module.references ?? [])
+    .map((reference) => normalizePath(reference))
+    .map((reference) =>
+      serviceRoot && (reference === serviceRoot || reference.startsWith(`${serviceRoot}/`))
+        ? reference.slice(serviceRoot.length).replace(/^\/+/, '')
+        : reference,
+    )
+    .filter((reference) => reference.length > 0)
 }
 
 /**
@@ -328,14 +476,7 @@ function blueprintCandidates(
   const claimed = new Set<string>()
   const candidates: Candidate[] = []
   for (const module of blueprint.modules ?? []) {
-    const roots = (module.references ?? [])
-      .map((reference) => normalizePath(reference))
-      .map((reference) =>
-        serviceRoot && !reference.startsWith(`${serviceRoot}/`) && reference !== serviceRoot
-          ? `${serviceRoot}/${reference}`
-          : reference,
-      )
-      .filter((reference) => reference.length > 0)
+    const roots = blueprintReferenceRoots(module, serviceRoot)
     const moduleFiles = files.filter(
       (file) =>
         !claimed.has(file.path) &&
@@ -343,7 +484,17 @@ function blueprintCandidates(
     )
     if (moduleFiles.length === 0) continue
     for (const file of moduleFiles) claimed.add(file.path)
-    candidates.push({ roots, files: moduleFiles, source: 'blueprint' })
+    // The module NAME is both the better label and the better id stem: it is what the person who
+    // decomposed the service called this, and unlike the first reference it distinguishes two
+    // modules that happen to share one.
+    const name = module.name?.trim() ?? ''
+    candidates.push({
+      idBase: name || (roots[0] ?? ''),
+      roots,
+      labels: [name || roots.map(labelForRoot).join(', ')],
+      files: moduleFiles,
+      source: 'blueprint',
+    })
   }
   return { candidates, unclaimed: files.filter((file) => !claimed.has(file.path)) }
 }
@@ -361,7 +512,7 @@ export function partitionCodebase(
 ): CodebaseSurvey {
   const serviceRoot = normalizePath(options.serviceDirectory ?? '')
   const files = fishableFiles(tree.entries, serviceRoot)
-  const shas = subtreeShas(tree.entries)
+  const shas = entryShas(tree.entries)
   const filesByTerritory = new Map<string, SurveyedFile[]>()
 
   if (tokensOf(files) <= MAX_TERRITORY_TOKENS) {
@@ -373,24 +524,27 @@ export function partitionCodebase(
   const blueprint = options.blueprint
     ? blueprintCandidates(files, options.blueprint, serviceRoot)
     : { candidates: [] as Candidate[], unclaimed: files }
-  const byDirectory = [...groupByChildDirectory(blueprint.unclaimed, serviceRoot).entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([root, group]): Candidate => ({ roots: [root], files: group, source: 'directory' }))
+  const byDirectory = groupByChildDirectory(blueprint.unclaimed, '').map(directoryCandidate)
 
   const candidates = packSmall(
     [...blueprint.candidates, ...byDirectory].flatMap((candidate) => splitOversized(candidate)),
   )
+  const usedIds = new Set<string>()
   const territories = candidates.map((candidate): BugFishingTerritory => {
-    const id = territoryIdFor(candidate.roots)
+    const id = uniqueTerritoryId(territorySlug(candidate.idBase), usedIds)
     filesByTerritory.set(id, candidate.files)
     return {
       id,
-      label: candidate.roots.map((root) => labelFor(root, serviceRoot)).join(', '),
+      label: candidate.labels.join(', '),
       roots: candidate.roots,
       fileCount: candidate.files.length,
       approxTokens: tokensOf(candidate.files),
       source: candidate.source,
-      subtreeShas: candidate.roots.map((root) => shas.get(root) ?? ''),
+      // The sha map is keyed in the tree's own repo-relative frame, so the survey-framed root goes
+      // back through the service prefix to look itself up.
+      subtreeShas: candidate.roots.map(
+        (root) => shas.get(serviceRoot ? `${serviceRoot}/${root}` : root) ?? '',
+      ),
     }
   })
   return { territories, filesByTerritory, treeTruncated: tree.truncated }
@@ -422,20 +576,26 @@ export function planTerritoryPasses(input: {
   passBudget: number
 }): { phases: BugFishingPhase[]; unfished: BugFishingUnfishedCell[]; plannedCells: number } {
   const { territories, angles, passBudget } = input
-  const whole =
-    territories.length <= 1 &&
-    (territories[0]?.source === 'whole-codebase' || territories.length === 0)
+  const only = territories[0]
+  if (territories.length === 0 || (territories.length === 1 && only?.source === 'whole-codebase')) {
+    // The whole-codebase branch names its cut cells from the ANGLES rather than from a cell list,
+    // because a survey that could not read the repository hands over no territory to build cells
+    // from — and the budget can cut angles all the same. Deriving the tail from the cells left the
+    // one case the record exists for, a cut nobody can see, as the one case it did not cover.
+    return {
+      phases: angles.slice(0, passBudget),
+      unfished: angles.slice(passBudget).map((phase) => ({
+        territoryId: only?.id ?? WHOLE_CODEBASE_TERRITORY_ID,
+        territoryLabel: only?.label ?? 'Whole codebase',
+        phaseId: phase.id,
+        phaseTitle: phase.title,
+      })),
+      plannedCells: angles.length,
+    }
+  }
   const cells: PlannedCell[] = territories.flatMap((territory) =>
     angles.map((phase) => ({ territory, phase })),
   )
-  const plannedCells = whole ? angles.length : cells.length
-  if (whole) {
-    return {
-      phases: angles.slice(0, passBudget),
-      unfished: unfishedFor(cells.slice(passBudget)),
-      plannedCells,
-    }
-  }
   const kept = cells.slice(0, passBudget)
   return {
     phases: kept.map(({ territory, phase }) => ({
@@ -444,7 +604,7 @@ export function planTerritoryPasses(input: {
       territoryLabel: territory.label,
     })),
     unfished: unfishedFor(cells.slice(passBudget)),
-    plannedCells,
+    plannedCells: cells.length,
   }
 }
 

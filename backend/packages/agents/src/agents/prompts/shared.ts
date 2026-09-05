@@ -517,6 +517,28 @@ export const FRAGMENT_ADHERENCE_GUIDANCE_CONTEXT_FILES =
   'against — do not invent any.'
 
 /**
+ * The standards CHANNEL statement for a `standardsDelivery: 'context-files'` kind whose output
+ * carries no `fragmentAdherence` rating.
+ *
+ * The flag only stops the ENGINE folding the standards into the system prompt; nothing else tells
+ * the agent they exist. A kind that pairs the flag with `standardsAsContextFilesPreOp` and then
+ * says nothing has its standards written into a directory the agent has no reason to open, which
+ * reads to it exactly like a task that selected none.
+ *
+ * Separate from {@link FRAGMENT_ADHERENCE_GUIDANCE_CONTEXT_FILES} rather than shared with it,
+ * because that one also states a JSON output contract: a kind with no `fragmentAdherence` field
+ * would be told to fill one it cannot return.
+ */
+export const STANDARDS_AS_CONTEXT_FILES_GUIDANCE =
+  'BEST-PRACTICE STANDARDS: the standards this task selected normally reach you as FILES rather ' +
+  'than as prompt text, one `.cat-context/standard-<id>.md` per standard, listed in ' +
+  '`.cat-context/standards.md`. Read the ones the angle you are fishing is about, from the real ' +
+  'text rather than a paraphrase, and treat them as requirements of this codebase rather than as ' +
+  'suggestions. If a run folded them into this prompt instead, as `<best-practice-standard>` ' +
+  'blocks, use those. If NEITHER channel carries any, this task selected none: say so in your ' +
+  'summary rather than inventing a standard to measure the code against.'
+
+/**
  * Appended to the Coder's system prompt ONLY when the Follow-up companion is enabled for
  * the step. It tells the Coder to be future-looking: as it works, append one JSON line per
  * forward-looking item to the {@link FOLLOW_UPS_FILE} sentinel file in its working

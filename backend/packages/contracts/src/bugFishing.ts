@@ -223,6 +223,15 @@ export const BUG_FISHING_DEFAULT_PASS_BUDGET = 24
 /** The most a task may raise its own pass budget to. */
 export const BUG_FISHING_MAX_PASS_BUDGET = 96
 
+/**
+ * The most paths one pass's `filesRead` may carry before the list stops being a coverage report.
+ *
+ * A territory is sized to what one pass can read a meaningful share of, so its manifest is
+ * hundreds of files and never thousands. This is the shape backstop above that, not a limit an
+ * honest pass approaches.
+ */
+export const BUG_FISHING_MAX_FILES_READ = 2_000
+
 // ---- Territories: the partition of a large codebase --------------------------
 
 /**
@@ -592,14 +601,23 @@ export const bugFishingAgentOutputSchema = v.object({
   /** What this pass covered and what it concluded, in one paragraph. */
   summary: v.fallback(v.optional(v.string()), undefined),
   /**
-   * The repo-relative paths this pass actually READ, so the engine can compute a coverage record
+   * The paths this pass actually READ, in the frame the agent works in (its own working directory,
+   * which is the service's subtree in a monorepo), so the engine can compute a coverage record
    * against the territory manifest it handed over.
    *
-   * Capped in the schema rather than only in the prompt: it is model-authored text that becomes
-   * a count, and an unbounded list would ride the run blob. A pass that reports none gets no
-   * coverage record at all, which is a different fact from a pass that covered nothing.
+   * Bounded in the schema rather than only in the prompt, and the bound is a BACKSTOP well above
+   * any real territory: {@link BUG_FISHING_MAX_FILES_READ} paths is more than a manifest sized for
+   * one pass can hold, so an honest pass never meets it. A list that overruns it is not a coverage
+   * report at all, and falls back to none: the phase then records NO coverage, the same answer a
+   * pass that listed nothing gets, because neither one said anything the platform can count.
    */
-  filesRead: v.fallback(v.array(v.fallback(v.pipe(v.string(), v.maxLength(400)), '')), []),
+  filesRead: v.fallback(
+    v.pipe(
+      v.array(v.fallback(v.pipe(v.string(), v.maxLength(400)), '')),
+      v.maxLength(BUG_FISHING_MAX_FILES_READ),
+    ),
+    [],
+  ),
   /** The findings this pass surfaced. */
   findings: v.fallback(
     v.array(

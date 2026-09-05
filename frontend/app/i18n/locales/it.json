@@ -3134,7 +3134,8 @@
         },
         "maxPasses": {
           "label": "Passaggi massimi",
-          "hint": "Numero massimo di passaggi in sola lettura di questa spedizione. Lascia vuoto per {count}. Su una codebase grande ogni angolazione viene pescata per territorio, e ciò che il budget taglia resta registrato come non pescato."
+          "hint": "Numero massimo di passaggi in sola lettura di questa spedizione. Lascia vuoto per {count}. Su una codebase grande ogni angolazione viene pescata per territorio, e ciò che il budget taglia resta registrato come non pescato.",
+          "problem": "Inserisci un numero intero compreso tra 1 e {max}, oppure lascia vuoto per il valore predefinito."
         }
       }
     },

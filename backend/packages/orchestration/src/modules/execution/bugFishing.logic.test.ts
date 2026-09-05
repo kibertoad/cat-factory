@@ -559,14 +559,17 @@ describe('territory scope and coverage', () => {
     expect(result.outOfScope).toBe(0)
   })
 
-  it('scopes nothing on a whole-codebase pass', () => {
+  it('scopes nothing on a whole-codebase pass, and reports NO count rather than a zero', () => {
+    // A zero would claim the pass was held to a territory and stayed inside it. The phase record's
+    // own contract is that an absent count means the pass was never scoped, so the two facts have
+    // to leave here as two values.
     const result = coerceBugFishingFindings(
       { summary: 'x', filesRead: [], findings: [finding('anywhere/at/all.ts')] },
       'control-flow',
       mintId,
     )
     expect(result.findings).toHaveLength(1)
-    expect(result.outOfScope).toBe(0)
+    expect(result.outOfScope).toBeUndefined()
   })
 
   it('computes coverage against the manifest, separating off-manifest reads', () => {
@@ -632,5 +635,61 @@ describe('territory scope and coverage', () => {
     })
     expect(next.phases?.[0]?.summary).toContain('outside')
     expect(next.phases?.[0]?.outOfScopeFindings).toBe(2)
+  })
+
+  it('leaves the out-of-scope count ABSENT on a phase that was never scoped', () => {
+    const next = recordBugFishingPhase(stateWith(), 0, {
+      summary: 'read the write paths',
+      findings: [],
+      dropped: 0,
+      coverage: null,
+      at: 1,
+    })
+    expect(next.phases?.[0]).not.toHaveProperty('outOfScopeFindings')
+  })
+})
+
+describe('the expedition-wide findings cap', () => {
+  // The per-phase cap bounded the run blob only while a phase list was the angle catalog. A
+  // partitioned codebase plans territories x angles, so the same per-phase number multiplied out
+  // to thousands of findings on state that is re-serialised on every progress write.
+  const manyFindings = (count: number, at: number) =>
+    coerceBugFishingFindings(
+      {
+        summary: '',
+        filesRead: [],
+        findings: Array.from({ length: count }, (_, i) => ({
+          path: `src/f${at}-${i}.ts`,
+          severity: 'medium' as const,
+          kind: 'bug' as const,
+          confidence: 'high' as const,
+          title: `t ${at}-${i}`,
+          detail: 'd',
+        })),
+      },
+      'control-flow',
+      mintId,
+    ).findings
+
+  it('stops recording past the ceiling, and SAYS it stopped', () => {
+    let state = stateWith()
+    let recorded = 0
+    // Far more passes than any per-phase cap alone would bound, each contributing its maximum.
+    for (let pass = 0; pass < 12; pass++) {
+      const findings = manyFindings(40, pass)
+      state = recordBugFishingPhase(state, 0, {
+        summary: null,
+        findings,
+        dropped: 0,
+        at: pass,
+      })
+      recorded += findings.length
+      state = { ...state, currentPhaseIndex: 0 }
+    }
+    expect(recorded).toBeGreaterThan(state.findings!.length)
+    expect(state.findings!.length).toBeLessThanOrEqual(200)
+    // The trim is a cap that is not a plain prefix of what the pass found, so it is stated on the
+    // phase that hit it rather than left for the reader to infer from a round number.
+    expect(state.phases?.[0]?.summary).toContain('not recorded')
   })
 })

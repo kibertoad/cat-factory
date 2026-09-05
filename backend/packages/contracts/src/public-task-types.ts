@@ -98,6 +98,8 @@ export const BUILTIN_PUBLIC_TASK_FIELDS: Readonly<Record<string, readonly Descri
       type: 'number',
       help: 'The open PR to review, on the service’s linked repository.',
       min: 1,
+      // A pull request number, so the descriptor states the same bound the schema pipes.
+      integer: true,
     },
     {
       key: 'prUrl',
@@ -149,6 +151,10 @@ export const BUILTIN_PUBLIC_TASK_FIELDS: Readonly<Record<string, readonly Descri
       help: `Most read-only passes this expedition may run. Leave empty for ${BUG_FISHING_DEFAULT_PASS_BUDGET}. On a large codebase the expedition fishes each angle per territory, and whatever the budget cuts is recorded as unfished.`,
       min: 1,
       max: BUG_FISHING_MAX_PASS_BUDGET,
+      // A count of dispatches, so the descriptor states the same bound `taskTypeFieldsSchema`
+      // pipes. Without it a fractional value passes here and is refused a layer down as a raw
+      // schema error naming nothing the caller can fix.
+      integer: true,
     },
   ],
   feature: [],

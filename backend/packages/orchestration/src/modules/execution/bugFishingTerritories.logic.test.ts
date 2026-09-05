@@ -90,17 +90,84 @@ describe('partitionCodebase', () => {
     expect(survey.territories[0]!.fileCount).toBe(3)
   })
 
-  it('walks from the service directory, so a sibling service is out of scope', () => {
+  it('walks from the service directory, and speaks in the frame the AGENT works in', () => {
+    // The agent's checkout is rooted at `<clone>/packages/api`, so the manifest it is handed and
+    // the paths it reports back are relative to THAT. A repo-relative manifest would list files it
+    // cannot open, and every finding it reported would land outside every root.
     const survey = partitionCodebase(
       {
-        entries: [...bulk('packages/api', 4, 200_000), ...bulk('packages/web', 4, 200_000)],
+        entries: [
+          ...bulk('packages/api/billing', 4, 200_000),
+          ...bulk('packages/api/sessions', 4, 200_000),
+          ...bulk('packages/web', 4, 200_000),
+        ],
         truncated: false,
       },
       { serviceDirectory: 'packages/api' },
     )
-    expect(survey.territories.flatMap((t) => t.roots ?? []).join(' ')).not.toContain('packages/web')
+    expect(survey.territories.map((t) => t.label).sort()).toEqual(['billing', 'sessions'])
     const files = [...survey.filesByTerritory.values()].flat()
-    expect(files.every((f) => f.path.startsWith('packages/api/'))).toBe(true)
+    expect(
+      files.every((f) => f.path.startsWith('billing/') || f.path.startsWith('sessions/')),
+    ).toBe(true)
+    // The subtree sha is still looked up in the TREE's own frame, so the rebase does not cost the
+    // "has this territory changed" compare.
+    expect(survey.territories.every((t) => t.subtreeShas?.[0]?.startsWith('tree-'))).toBe(true)
+  })
+
+  it('gives the files loose at a root their own NAMED territory, owning themselves', () => {
+    // A root-level file used to bucket under the survey root itself: an empty id, which every
+    // reader treats as "no territory" (so the pass was dispatched unscoped and unbriefed), and an
+    // empty root, which as a prefix matches nothing (so every finding on one of those files was
+    // dropped as somebody else's ground).
+    const survey = partitionCodebase({
+      entries: [
+        ...bulk('billing', 4, 200_000),
+        ...bulk('sessions', 4, 200_000),
+        file('README.md', 400_000),
+        file('index.ts', 400_000),
+      ],
+      truncated: false,
+    })
+    const loose = survey.territories.find((t) => (t.roots ?? []).includes('README.md'))!
+    expect(loose.id).not.toBe('')
+    expect(loose.label).toBe('Top-level files')
+    // Roots and manifest are the SAME list, in the manifest's own order: the roots ARE the files.
+    const manifest = survey.filesByTerritory.get(loose.id)?.map((f) => f.path)
+    expect(manifest).toEqual(['index.ts', 'README.md'])
+    expect(loose.roots).toEqual(manifest)
+  })
+
+  it('never gives two territories the same id, however their stems collide', () => {
+    // Ids are DERIVED, so they collide: two blueprint modules that share a name (or a first
+    // reference) derived one id, and the second then overwrote the first's manifest in a map
+    // keyed by it, leaving every lookup resolving both to one set of roots.
+    const survey = partitionCodebase(
+      {
+        entries: [...bulk('src/a', 4, 200_000), ...bulk('src/b', 4, 200_000)],
+        truncated: false,
+      },
+      {
+        blueprint: {
+          type: 'service',
+          name: 'app',
+          summary: '',
+          references: [],
+          modules: [
+            { name: 'Core', summary: '', references: ['src/a'] },
+            { name: 'Core', summary: '', references: ['src/b'] },
+          ],
+        },
+      },
+    )
+    const ids = survey.territories.map((t) => t.id)
+    expect(ids).toHaveLength(2)
+    expect(new Set(ids).size).toBe(ids.length)
+    // Each keeps its OWN manifest, which is the thing the collision actually cost.
+    expect(survey.territories.map((t) => survey.filesByTerritory.get(t.id)?.[0]?.path)).toEqual([
+      'src/a/f0.ts',
+      'src/b/f0.ts',
+    ])
   })
 
   it("prefers the blueprint's own modules, and drops references the tree no longer has", () => {
@@ -157,6 +224,16 @@ describe('planTerritoryPasses', () => {
     expect(planned.phases.every((p) => p.territoryId === undefined)).toBe(true)
     expect(planned.plannedCells).toBe(2)
     expect(planned.unfished).toEqual([])
+  })
+
+  it('names the cut angles when the survey produced no territory to name them by', () => {
+    // The budget can cut angles on an expedition whose repository nobody could read, and that is
+    // exactly the run whose tail a reader would otherwise take for clean. Deriving the tail from
+    // the CELLS left it empty, because there was no territory to build a cell from.
+    const planned = planTerritoryPasses({ territories: [], angles, passBudget: 1 })
+    expect(planned.phases).toHaveLength(1)
+    expect(planned.plannedCells).toBe(2)
+    expect(planned.unfished.map((cell) => cell.phaseId)).toEqual(['concurrency'])
   })
 
   it('plans territory-major, so one territory has a complete answer early', () => {

@@ -83,6 +83,7 @@ import { BugFishingController, BUG_FISHING_STEP_KIND } from './BugFishingControl
 import type { CodebaseSurveyResult } from './bugFishingSurvey.js'
 import { bugFishingPassScope } from './bugFishingPass.js'
 import {
+  type BugFishingPassScope,
   describeRecordedPhase,
   priorBugFishingFindingTitles,
   startBugFishingPhase,
@@ -549,6 +550,25 @@ async function handleBugFishingPhase(
 }
 
 /**
+ * The territory scope a SETTLED bug-fishing pass is graded against, or undefined when it had none.
+ *
+ * Split out of the interceptor so the survey is reached only where it is used: the phase's own
+ * `territoryId` is the whole question, and it is recorded on the step at dispatch, so the decision
+ * needs no repository at all.
+ */
+async function settledPassScope(
+  d: DispatcherRegistryDeps,
+  workspaceId: string,
+  blockId: string,
+  step: PipelineStep,
+): Promise<BugFishingPassScope | undefined> {
+  const state = step.bugFishing
+  const phase = state?.phases?.[state.currentPhaseIndex ?? 0]
+  if (!state || !phase?.territoryId) return undefined
+  return bugFishingPassScope(state, phase, await d.surveyCodebase(workspaceId, blockId)).scope
+}
+
+/**
  * Build the order-sorted completion-path interceptors (companion / tester verdict
  * short-circuits), mirroring {@link buildStepHandlerRegistry}.
  */
@@ -682,15 +702,12 @@ export function buildStepCompletionInterceptors(
         // whole expedition fishes). Both the out-of-scope drop and the coverage share are
         // computed against the manifest the pass was actually given, so a manifest and a verdict
         // about it can never come from two different readings of the tree.
-        const state = step.bugFishing
-        const phase = state?.phases?.[state.currentPhaseIndex ?? 0]
-        const scope = phase
-          ? bugFishingPassScope(
-              state!,
-              phase,
-              await d.surveyCodebase(workspaceId, instance.blockId),
-            ).scope
-          : undefined
+        //
+        // Surveyed only for a pass that CARRIES a territory. A whole-codebase pass is scoped by
+        // nothing and its manifest would be discarded, so reading the tree for it buys nothing and
+        // costs the pass-through path a repo resolution it never needed: that path is the one
+        // almost every existing deployment takes.
+        const scope = await settledPassScope(d, workspaceId, instance.blockId, step)
         return d.bugFishingController.recordPhaseResult(workspaceId, instance, step, {
           output,
           model: result.model ?? step.model,

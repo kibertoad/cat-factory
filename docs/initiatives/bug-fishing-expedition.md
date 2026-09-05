@@ -175,9 +175,14 @@ before the first dispatch, from the repository TREE, not by asking a model to in
    whenever it fits. Generated, vendored, fixture, snapshot and lockfile paths are excluded by the
    same ignore vocabulary the file-size ratchet uses, and test files stay WITH the code they test
    (a pass answering "does a test pin this invariant?" needs both).
-3. **The service's monorepo `directory` is the root.** `resolveRepoTarget` already narrows a
-   service to its directory; the survey walks from there, never from the repository root, so a
-   sibling service's code is out of scope exactly as it is for every other run.
+3. **The service's monorepo `directory` is the root, and the FRAME.** `resolveRepoTarget` already
+   narrows a service to its directory; the survey walks from there, never from the repository root,
+   so a sibling service's code is out of scope exactly as it is for every other run. Every path the
+   survey then emits (a territory's roots, its manifest) is relative to that root, because the
+   harness checks the agent out at `<clone>/<serviceDirectory>` and that is the frame the pass reads
+   files in, reports its `filesRead` in, and anchors its findings in. A repo-relative manifest handed
+   to a service agent lists paths it cannot open, and every finding it sends back lands outside every
+   root and is dropped as somebody else's ground.
 
 The tree comes from ONE call. `GitHubClient.listTree` and `VcsClient.listTree` already read the
 whole tree through the recursive git-trees endpoint, every entry carrying its blob or subtree SHA
@@ -455,7 +460,22 @@ closest to breaking.
   a subsystem is the deliberate act.
 - **"Could not survey" is its own status, not a one-territory plan.** An unreadable tree, an unwired
   repo and a genuinely small codebase all yield ONE territory, which is the same value and opposite
-  facts. `plan.surveyUnavailableReason` is what separates them, and the window renders it.
+  facts. `plan.surveyUnavailableReason` is what separates them, and the window renders it. The
+  survey answers with that one territory rather than with none: an empty list is what the step would
+  persist as `territories: []`, which claims the codebase WAS surveyed and found to contain nothing,
+  and it also leaves the planner with no cell to name when the budget cuts an angle.
+- **The files loose at a root own themselves, not the root.** A territory's roots are prefixes, and
+  the files sitting directly in a root cannot be described by one: the root is a prefix over every
+  sibling directory too. At the survey root it is worse, because the empty prefix matches nothing at
+  all. So they form their own named territory whose roots ARE those file paths, which `isInTerritory`
+  already matches exactly.
+- **A derived id needs a de-duplication rule.** Territory ids come from the tree, so two blueprint
+  modules sharing a name (or a first reference) derive one id, and `filesByTerritory` is keyed by it.
+  Ids are stamped unique within a survey; nothing looks a territory up across surveys, which is what
+  makes a local suffix enough.
+- **The findings cap is per-expedition as well as per-phase.** The per-phase cap bounded the run blob
+  only while a phase list was the angle catalog. Territories x angles multiplies it, so a second
+  ceiling bounds the whole record, and the phase that hits it says so.
 
 The pass-through is asserted rather than assumed, on both sides: a one-territory plan is
 field-for-field the plan that shipped before territories (no `territoryId` on any phase, no

@@ -186,7 +186,7 @@ export class BugFishingController {
     workspaceId: string,
     step: PipelineStep,
     block: Block,
-    survey?: CodebaseSurveyResult,
+    survey: CodebaseSurveyResult,
   ): Promise<BugFishingStepState> {
     if (step.bugFishing) return step.bugFishing
     const { phases: angles, unknown } = planBugFishingPhases(block.taskTypeFields?.fishingPhaseIds)
@@ -200,8 +200,12 @@ export class BugFishingController {
         unknown,
       })
     }
+    // The survey always hands over at least one territory, so this is never the `[]` the schema
+    // forbids: an expedition that could not read its repository records the whole-codebase
+    // territory plus the reason it could not partition, which are different facts an empty list
+    // would collapse into one.
     const territories = prioritiseTerritories(
-      survey?.territories ?? [],
+      survey.territories,
       block.taskTypeFields?.fishingFocus ?? null,
     )
     const passBudget = block.taskTypeFields?.fishingMaxPasses ?? BUG_FISHING_DEFAULT_PASS_BUDGET
@@ -225,8 +229,8 @@ export class BugFishingController {
         passBudget,
         plannedCells: planned.plannedCells,
         unfished: planned.unfished,
-        treeTruncated: survey?.treeTruncated ?? false,
-        surveyUnavailableReason: survey?.unavailableReason ?? null,
+        treeTruncated: survey.treeTruncated,
+        surveyUnavailableReason: survey.unavailableReason,
       },
       model: null,
       defaultFixPipelineId: await this.resolveDefaultFixPipelineId(workspaceId),
@@ -296,7 +300,8 @@ export class BugFishingController {
       summary: output.summary ?? null,
       findings,
       dropped,
-      outOfScope,
+      // Spread rather than passed, so an unscoped pass records NO count instead of a zero.
+      ...(outOfScope !== undefined ? { outOfScope } : {}),
       coverage: computeBugFishingCoverage(output, scope),
       at: this.deps.clock.now(),
     })

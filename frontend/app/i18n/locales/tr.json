@@ -352,7 +352,8 @@
         },
         "maxPasses": {
           "label": "En fazla geçiş",
-          "hint": "Bu seferin yapabileceği en fazla salt okunur geçiş sayısı. {count} için boş bırakın. Büyük bir kod tabanında her açı her bölge için ayrı taranır ve bütçenin kestikleri taranmamış olarak kaydedilir."
+          "hint": "Bu seferin yapabileceği en fazla salt okunur geçiş sayısı. {count} için boş bırakın. Büyük bir kod tabanında her açı her bölge için ayrı taranır ve bütçenin kestikleri taranmamış olarak kaydedilir.",
+          "problem": "1 ile {max} arasında bir tam sayı girin veya varsayılan değer için boş bırakın."
         }
       }
     },

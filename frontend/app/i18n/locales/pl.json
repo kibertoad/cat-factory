@@ -352,7 +352,8 @@
         },
         "maxPasses": {
           "label": "Maksymalna liczba przejść",
-          "hint": "Najwyższa liczba przejść tylko do odczytu w tej wyprawie. Zostaw puste, aby użyć {count}. W dużej bazie kodu każdy kąt przeszukiwany jest osobno dla każdego terytorium, a to, co utnie budżet, zapisujemy jako nieprzeszukane."
+          "hint": "Najwyższa liczba przejść tylko do odczytu w tej wyprawie. Zostaw puste, aby użyć {count}. W dużej bazie kodu każdy kąt przeszukiwany jest osobno dla każdego terytorium, a to, co utnie budżet, zapisujemy jako nieprzeszukane.",
+          "problem": "Podaj liczbę całkowitą od 1 do {max} albo pozostaw pole puste, aby użyć wartości domyślnej."
         }
       }
     },

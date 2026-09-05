@@ -1,4 +1,6 @@
 import { type BugFishingPhaseDescriptor, bugFishingAgentOutputSchema } from '@cat-factory/contracts'
+import { STANDARDS_AS_CONTEXT_FILES_GUIDANCE } from '../prompts/shared.js'
+import { CONTEXT_DIR } from '../prompts/standard.js'
 import { standardsAsContextFilesPreOp } from './pr-review-context.js'
 import { defineStructuredOutput } from './structured-output.js'
 import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
@@ -45,6 +47,18 @@ export const bugFishing = defineStructuredOutput(bugFishingAgentOutputSchema)
 export type BugFishingOutput = ReturnType<typeof bugFishing.parse>
 
 /**
+ * The NAME the territory manifest is injected under, which is what `InjectedContextFile.path`
+ * takes: the harness resolves every injected file inside the run's context directory and
+ * `sanitizeContextFileName` strips any directory part it is handed. A path spelled with the
+ * directory in it therefore landed correctly and was RECORDED wrong, so the context snapshot and
+ * the run's own listing named `.cat-context/.cat-context/territory.md`.
+ */
+export const BUG_FISHING_TERRITORY_CONTEXT_FILE = 'territory.md'
+
+/** Where the agent reads that manifest, and therefore the only spelling a prompt may use. */
+export const BUG_FISHING_TERRITORY_CONTEXT_PATH = `${CONTEXT_DIR}/${BUG_FISHING_TERRITORY_CONTEXT_FILE}`
+
+/**
  * How the fisher must spend its context. Same constraint as the PR reviewer's, for the same
  * reason: an agentic loop re-sends its whole transcript every turn, so a file read into context
  * early is paid for again on every later turn. An expedition is worse off than a review, since
@@ -54,8 +68,8 @@ export type BugFishingOutput = ReturnType<typeof bugFishing.parse>
 const CONTEXT_DISCIPLINE = `
 Everything you read stays in your context for the rest of this pass and is re-sent on every later
 turn, so a large file read early costs many times what it looks like. Work accordingly:
-- Start from structure, not bodies. When \`.cat-context/territory.md\` is present it is that
-  structure already handed to you: read it FIRST and let it point you at bodies, instead of
+- Start from structure, not bodies. When \`${BUG_FISHING_TERRITORY_CONTEXT_PATH}\` is present it is
+  that structure already handed to you: read it FIRST and let it point you at bodies, instead of
   spending turns on \`find\`, \`ls\` and three greps to rebuild it.
 - Otherwise start from the directory layout, entry points, and \`grep -n\` for the shapes this
   angle is about. Read a body only once something points you at it.
@@ -126,9 +140,10 @@ export const BUG_FISHER_SYSTEM_PROMPT =
   'Return ONLY a JSON object of this exact shape:\n' +
   '{\n' +
   '  "summary": "one paragraph: what you covered under this angle and what you concluded",\n' +
-  '  "filesRead": ["every repo-relative path you actually read during this pass"],\n' +
+  '  "filesRead": ["every path you actually read during this pass, relative to your working ' +
+  'directory"],\n' +
   '  "findings": [{\n' +
-  '    "path": "repo/relative/path.ts",\n' +
+  '    "path": "path/relative/to/your/working/directory.ts",\n' +
   '    "line": 42,\n' +
   '    "severity": "critical | high | medium | low",\n' +
   '    "kind": "bug | logic-gap | edge-case | footgun | requirement-gap | other",\n' +
@@ -149,7 +164,32 @@ export const BUG_FISHER_SYSTEM_PROMPT =
   'opened, including the ones you read and found nothing in. It is not a score and nothing ' +
   'judges you by its length: a short honest list plus an empty findings list says "this ' +
   'territory was sampled", which is what a human needs in order to know whether to run the ' +
-  'angle again. Never list a file you did not open.'
+  'angle again. Never list a file you did not open.\n' +
+  'Every path you report, in `filesRead` and in a finding alike, is RELATIVE TO YOUR WORKING ' +
+  'DIRECTORY, which for a service inside a monorepo is that service and not the repository root. ' +
+  'The platform matches those paths against the territory it gave you, so a path in another ' +
+  "frame reads as a file that is not in this pass's territory.\n" +
+  STANDARDS_AS_CONTEXT_FILES_GUIDANCE
+
+/**
+ * Most territory roots a brief or a manifest header spells out before naming the remainder.
+ *
+ * A territory's roots are usually a directory or two, but the group of files sitting loose at a
+ * root owns each of those files by path, and a flat repository has many. The brief is itself
+ * context, so the list is bounded; the cap SAYS what it left out, because a reader who took the
+ * list for the whole territory would treat the rest as somebody else's ground.
+ */
+const MAX_LISTED_ROOTS = 25
+
+/** The roots a brief spells out, as bullets, plus a line naming any it did not. */
+function listedRoots(roots: readonly string[]): string[] {
+  const shown = roots.slice(0, MAX_LISTED_ROOTS).map((root) => `- \`${root}\``)
+  if (roots.length <= MAX_LISTED_ROOTS) return shown
+  return [
+    ...shown,
+    `- plus ${roots.length - MAX_LISTED_ROOTS} more paths this pass owns, not spelled out here.`,
+  ]
+}
 
 /**
  * Render the per-dispatch PHASE BRIEF the engine injects as a prior output: which angle this
@@ -186,10 +226,10 @@ export function renderBugFishingPhaseBrief(input: {
     lines.push(
       '',
       `Territory: ${territory.label}`,
-      'This pass owns the paths below, and `.cat-context/territory.md` holds their shape. Read ' +
+      `This pass owns the paths below, and \`${BUG_FISHING_TERRITORY_CONTEXT_PATH}\` holds their shape. Read ` +
         'outside them whenever a neighbour tells you whether something is already handled, and ' +
         'report only findings whose own code lies inside them:',
-      ...territory.roots.map((root) => `- \`${root}\``),
+      ...listedRoots(territory.roots),
     )
   }
   // A retired angle carries no focus text (there is no catalog entry left to take it from), and
@@ -227,9 +267,6 @@ export function renderBugFishingPhaseBrief(input: {
   return lines.join('\n')
 }
 
-/** Where the engine writes the territory manifest into the container's context directory. */
-export const BUG_FISHING_TERRITORY_CONTEXT_FILE = '.cat-context/territory.md'
-
 /**
  * Render the TERRITORY MANIFEST a pass is handed up front: the shape of the slice it owns, the
  * directories inside it with their file counts, and the territories it sits beside.
@@ -247,7 +284,7 @@ export const BUG_FISHING_TERRITORY_CONTEXT_FILE = '.cat-context/territory.md'
  */
 export function renderBugFishingTerritoryContext(input: {
   territory: { label: string; roots: readonly string[]; approxTokens?: number }
-  /** Every file of the territory, repo-relative. */
+  /** Every file of the territory, in the frame the agent works in (see the engine's survey). */
   files: readonly string[]
   /** The labels of the other territories this expedition fishes, so the pass knows its edges. */
   neighbours: readonly string[]
@@ -260,11 +297,15 @@ export function renderBugFishingTerritoryContext(input: {
     `# Territory: ${territory.label}`,
     '',
     'This is the slice of the codebase your pass owns. It was computed by the platform from the ',
-    'repository tree, not by a model, so it is a fact about the code rather than a guess.',
+    'repository tree, not by a model, so it is a fact about the code rather than a guess. Every ',
+    'path below is relative to your working directory.',
     '',
     `- Files: ${files.length}`,
     `- Approximate size: ${territory.approxTokens ?? 0} tokens`,
-    `- Roots: ${territory.roots.length > 0 ? territory.roots.map((r) => `\`${r}\``).join(', ') : 'the whole codebase'}`,
+    '',
+    '## Roots',
+    '',
+    ...(territory.roots.length > 0 ? listedRoots(territory.roots) : ['- the whole codebase']),
     '',
     '## Directories',
     '',
@@ -310,11 +351,12 @@ export const BUG_FISHER_AGENT_KINDS: AgentKindDefinition[] = [
   {
     kind: BUG_FISHER_KIND,
     systemPrompt: BUG_FISHER_SYSTEM_PROMPT,
-    // Code-aware, so the engine folds the task's selected best-practice fragments into the
-    // prompt: what "correct" means for this service is exactly what an expedition measures the
-    // code against, and without the trait the task's chosen standards are silently dropped by
-    // `AgentContextBuilder.resolveFragments`. Spec-aware for the requirements angle: the
-    // committed specs are the other half of "what was this supposed to do".
+    // Code-aware, so the engine RESOLVES the task's selected best-practice fragments for this
+    // step: what "correct" means for this service is exactly what an expedition measures the code
+    // against, and without the trait the task's chosen standards are silently dropped by
+    // `AgentContextBuilder.resolveFragments`. Where they are then delivered is
+    // `standardsDelivery`, below. Spec-aware for the requirements angle: the committed specs are
+    // the other half of "what was this supposed to do".
     traits: [CODE_AWARE_TRAIT, SPEC_AWARE_TRAIT],
     // The task's best-practice standards arrive as `.cat-context/` FILES rather than folded into
     // the system prompt (the PR reviewer's precedent). A `code-aware` kind folds them by default,
@@ -325,7 +367,9 @@ export const BUG_FISHER_AGENT_KINDS: AgentKindDefinition[] = [
     // The other half of that decision, and it is not optional: `standardsDelivery` only stops the
     // engine folding the standards in. Without the op that WRITES them, a `code-aware` kind
     // declaring `context-files` does not deliver its standards more cheaply, it stops delivering
-    // them, and the loss is invisible: the pass simply reviews against nothing.
+    // them, and the loss is invisible: the pass simply reviews against nothing. The THIRD half is
+    // the prompt: `STANDARDS_AS_CONTEXT_FILES_GUIDANCE` above is what tells the pass the files are
+    // there at all, and without it the op writes into a directory the agent never opens.
     preOps: [standardsAsContextFilesPreOp],
     // Read-only FULL clone of the base branch. An expedition reads the codebase as it stands on
     // the default branch — there is no work branch, and nothing it does produces one. Full
