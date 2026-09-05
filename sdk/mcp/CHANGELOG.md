@@ -1,5 +1,12 @@
 # @cat-factory/mcp-server
 
+## 0.49.2
+
+### Patch Changes
+
+- Updated dependencies [5c50d30]
+  - @cat-factory/sdk@0.51.2
+
 ## 0.49.1
 
 ### Patch Changes

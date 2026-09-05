@@ -1,5 +1,43 @@
 # @cat-factory/node-server
 
+## 0.225.3
+
+### Patch Changes
+
+- 5c50d30: Cleanup pass with no behaviour change: deletes exports nothing consumed (dead constants, parse
+  wrappers, alias schemas, pass-through re-exports and the Worker's compat-shim modules left over
+  from the `@cat-factory/server` extraction), drops the `export` keyword from module-local symbols,
+  folds duplicated private helpers onto one owner (base64, `scrub`, `sleep`, `withFlag`, the
+  per-row busy guard), and removes tests that asserted a constant against its own literal or
+  re-implemented the code under test. The SPA's unreachable palette drop handler goes with it.
+  
+  Internal-surface break, flagged per the compatibility rules: the removed barrel exports
+  (`DEFAULT_CI_MAX_ATTEMPTS`, `STANDARD_PHASES`, `isTestingKind`, `isBugFishingPhaseId`,
+  `SEALED_SECRET_SOURCE_NAMES`, `TelemetryReadResults`, `LinearFetchLike`, `ENVIRONMENT_BLOCK_TYPE`,
+  the contracts `parse*`/`safeParse*` one-liners and the `initiativePreset*`/`taskTypeFieldOption`
+  schema aliases) had no consumer in this repository; a downstream import of one of them fails at
+  typecheck and should read the underlying helper directly.
+- Updated dependencies [5c50d30]
+  - @cat-factory/agents@0.156.3
+  - @cat-factory/consensus@0.17.36
+  - @cat-factory/contracts@0.346.2
+  - @cat-factory/gitlab@0.22.36
+  - @cat-factory/integrations@0.172.5
+  - @cat-factory/kernel@0.336.1
+  - @cat-factory/observability-otel@0.23.29
+  - @cat-factory/orchestration@0.301.3
+  - @cat-factory/prompt-fragments@1.1.32
+  - @cat-factory/server@0.314.3
+  - @cat-factory/binary-generators@0.3.36
+  - @cat-factory/provider-bedrock@0.7.527
+  - @cat-factory/provider-cloudflare@0.7.528
+  - @cat-factory/eks@0.1.375
+  - @cat-factory/gates@0.11.36
+  - @cat-factory/spend@0.18.1
+  - @cat-factory/caching@0.20.70
+  - @cat-factory/observability-langfuse@0.11.36
+  - @cat-factory/provider-s3@0.2.443
+
 ## 0.225.2
 
 ### Patch Changes
