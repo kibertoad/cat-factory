@@ -4,7 +4,7 @@ import { createQueueWithDeadLetter } from './deadLetter.js'
 import type { Logger, ServerContainer } from '@cat-factory/server'
 import type { Job, PgBoss, SendOptions } from 'pg-boss'
 import type { AdvanceQueueOptions } from './pgBossRunner.js'
-import { driveJobOptions } from './pgBossRunner.js'
+import { driveJobOptions, sleep } from './pgBossRunner.js'
 import type { DriveConfig } from './drive.js'
 
 // Durable env-config-repair driving on pg-boss: the analogue of the Worker's
@@ -32,8 +32,6 @@ function sendOptions(jobId: string, opts: AdvanceQueueOptions): SendOptions {
   // this file used to hold its own copy of it. See {@link driveJobOptions}.
   return driveJobOptions(jobId, opts)
 }
-
-const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 
 /**
  * Poll an env-config-repair run to a terminal state, sleeping between polls — the Node

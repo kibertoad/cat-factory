@@ -79,7 +79,7 @@ export interface SignedDeliveryDependencies {
 const MAX_CONCURRENT_DELIVERIES = 6
 
 /** One delivery: where to POST, how to sign it, and the already-serialized body. */
-export interface SignedDeliveryRequest {
+interface SignedDeliveryRequest {
   url: string
   /** The endpoint's signing secret, still sealed. Null ⇒ deliver unsigned. */
   secretSealed: string | null
@@ -118,7 +118,7 @@ export class WebhookDeliveryNotAttemptedError extends Error {
  * when every attempt is spent — the CALLER decides what a failure means (both current callers
  * treat it as best-effort and report it through their observability hook).
  */
-export async function postSignedWebhook(
+async function postSignedWebhook(
   deps: SignedDeliveryDependencies,
   request: SignedDeliveryRequest,
 ): Promise<void> {

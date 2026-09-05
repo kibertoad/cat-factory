@@ -1,10 +1,4 @@
-import type {
-  BlockType,
-  CreateTaskType,
-  FrameRepoType,
-  TaskTypeFields,
-  Block,
-} from '~/types/domain'
+import type { CreateTaskType, FrameRepoType, TaskTypeFields, Block } from '~/types/domain'
 import { useWorkspaceStore } from '~/stores/workspace'
 import type { BoardWriteContext } from './context'
 
@@ -18,12 +12,6 @@ import type { BoardWriteContext } from './context'
  */
 export function createBoardMutations(ctx: BoardWriteContext) {
   const { getBlock, upsert, api, present } = ctx
-
-  async function addBlock(type: BlockType, position: { x: number; y: number }): Promise<Block> {
-    const block = await api.addFrame(useWorkspaceStore().requireId(), { type, position })
-    upsert(block)
-    return block
-  }
 
   /**
    * Import an existing GitHub repo (the App is installed + it's projected) as a
@@ -164,7 +152,6 @@ export function createBoardMutations(ctx: BoardWriteContext) {
   }
 
   return {
-    addBlock,
     addServiceFromRepo,
     addTask,
     addModule,

@@ -34,7 +34,6 @@ describe('narrowingOptionsFor', () => {
 describe('INHERIT_RULE', () => {
   it('is a non-empty value the select can carry as an item', () => {
     expect(INHERIT_RULE).not.toBe('')
-    expect(INHERIT_RULE.length).toBeGreaterThan(0)
   })
 
   // It is also not one of the rules, or clearing a row would be indistinguishable from setting it.

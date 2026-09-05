@@ -190,8 +190,8 @@ export const DEFAULT_MERGE_CLASS_RULES: MergeClassRules = {}
  * a seed cannot make on an operator's behalf, and the identity of these two empties is what keeps
  * every existing workspace on byte-for-byte its previous merge behaviour.
  */
-export const DEFAULT_CLASS_RULES_BY_ROLE: ClassRulesByRole = {}
-export const DEFAULT_DRY_RUN_ROLES: readonly WorkspaceRole[] = []
+const DEFAULT_CLASS_RULES_BY_ROLE: ClassRulesByRole = {}
+const DEFAULT_DRY_RUN_ROLES: readonly WorkspaceRole[] = []
 
 /**
  * Nor any per-role submission allowlist: every role may land every class until an operator says
@@ -199,7 +199,7 @@ export const DEFAULT_DRY_RUN_ROLES: readonly WorkspaceRole[] = []
  * why this is `{}` and not a map of full lists: an explicit list would silently bar whatever
  * class the vocabulary gains next, and a seed may not make that call for a deployment.
  */
-export const DEFAULT_SUBMISSION_CLASSES_BY_ROLE: SubmissionClassesByRole = {}
+const DEFAULT_SUBMISSION_CLASSES_BY_ROLE: SubmissionClassesByRole = {}
 
 /**
  * A built-in merge-preset template (no `createdAt` yet, but with a STABLE id so a
@@ -485,9 +485,6 @@ export function riskPolicyFromSeed(seed: RiskPolicySeed, createdAt: number): Ris
 export function riskPolicySeedRows(now: number): RiskPolicy[] {
   return seedRiskPolicies().map((seed, index) => riskPolicyFromSeed(seed, now + index))
 }
-
-/** Fallback CI-fixer attempt budget when no preset resolves (defensive default). */
-export const DEFAULT_CI_MAX_ATTEMPTS = DEFAULT_RISK_POLICY.ciMaxAttempts
 
 /**
  * Fallback cap on the iterative requirements-review loop (reviewer passes) when no

@@ -118,7 +118,6 @@ export {
   linearAuthFromCredentials,
   unwrapLinearData,
   type LinearAuth,
-  type LinearFetchLike,
 } from './modules/shared/linear.client.js'
 
 export {
@@ -326,7 +325,6 @@ export {
   classifyTeardownProbe,
   DEPLOYER_AGENT_KIND,
   DISPOSER_AGENT_KIND,
-  ENVIRONMENT_BLOCK_TYPE,
 } from './modules/environments/environments.logic.js'
 
 export {

@@ -202,13 +202,7 @@
     },
     "canvas": {
       "emptyTitle": "Twoja tablica jest pusta",
-      "emptyBody": "Dodaj usługę, aby zacząć: zainicjuj nowe repozytorium albo dołącz istniejące.",
-      "addBlockFailedTitle": "Nie udało się dodać bloku",
-      "addBlockFailedBody": "Backend odrzucił żądanie.",
-      "dropOntoTaskTitle": "Upuść na zadanie",
-      "dropOntoTaskBody": "Pipeline’y działają na zadaniach, a nie na usługach.",
-      "taskBlockedTitle": "Zadanie jest zablokowane",
-      "taskBlockedBody": "Jego zależności nie zostały jeszcze scalone."
+      "emptyBody": "Dodaj usługę, aby zacząć: zainicjuj nowe repozytorium albo dołącz istniejące."
     },
     "addTask": {
       "title": "Dodaj zadanie",

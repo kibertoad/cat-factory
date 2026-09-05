@@ -21,7 +21,7 @@
 // ---------------------------------------------------------------------------
 
 /** The modern revision the probe opens with. */
-export const MODERN_PROTOCOL_VERSION = '2026-07-28'
+const MODERN_PROTOCOL_VERSION = '2026-07-28'
 
 /**
  * Every modern revision this client can speak, newest first. A server answering
@@ -29,10 +29,10 @@ export const MODERN_PROTOCOL_VERSION = '2026-07-28'
  * intersected against: a version outside it is one whose per-request shape we have not implemented,
  * so agreeing to it would be a handshake we could not follow.
  */
-export const MODERN_PROTOCOL_VERSIONS: readonly string[] = [MODERN_PROTOCOL_VERSION]
+const MODERN_PROTOCOL_VERSIONS: readonly string[] = [MODERN_PROTOCOL_VERSION]
 
 /** The legacy revision the fallback handshake asks for. Negotiated, so a server may answer older. */
-export const LEGACY_PROTOCOL_VERSION = '2025-11-25'
+const LEGACY_PROTOCOL_VERSION = '2025-11-25'
 
 /**
  * The revision at which the modern dialect BEGINS: `2026-07-28` is the one that deleted the
@@ -67,7 +67,7 @@ const MISSING_REQUIRED_CLIENT_CAPABILITY = -32021
 const UNSUPPORTED_PROTOCOL_VERSION = -32022
 
 /** What the probe identifies itself as, on every modern request and in the legacy handshake. */
-export const CLIENT_INFO = { name: 'cat-factory-tool-server-probe', version: '1' } as const
+const CLIENT_INFO = { name: 'cat-factory-tool-server-probe', version: '1' } as const
 
 /** Which dialect the exchange is speaking. Decided once per server, then held for every request. */
 export type McpEra = { era: 'modern'; version: string } | { era: 'legacy' }
@@ -246,6 +246,6 @@ export function readEraVerdict(frame: Record<string, unknown> | undefined): EraV
   return { verdict: 'legacy' }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }

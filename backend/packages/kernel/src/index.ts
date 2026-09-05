@@ -47,7 +47,6 @@ export {
   BUG_FISHING_SPAWN_CLAIM_TTL_MS,
   bugFishingSpawnIsClaimable,
   describeBugFishingPhase,
-  isBugFishingPhaseId,
 } from '@cat-factory/contracts'
 export { resolveWritebackFlag } from './domain/writeback.js'
 export {
@@ -159,7 +158,6 @@ export {
   riskPolicyFromSeed,
   riskPolicySeedRows,
   type RiskPolicySeed,
-  DEFAULT_CI_MAX_ATTEMPTS,
   DEFAULT_MAX_REQUIREMENT_ITERATIONS,
   CONTEXT_BUDGET,
   DEFAULT_WORKSPACE_SETTINGS,

@@ -26,7 +26,7 @@ import { CODER_REPRODUCTION_PROOF_CONFIG_ID, reproTestOutcome } from '@cat-facto
 // ends with no final text). See the initiative's D3.
 
 /** The producer kind the proof phase attaches to (the Coder, which opens the PR). */
-export const REPRODUCTION_PROOF_PRODUCER_KIND = 'coder'
+const REPRODUCTION_PROOF_PRODUCER_KIND = 'coder'
 
 /** The step kind whose structured outcome carries the reproduction declaration. */
 export const REPRO_DECLARATION_KIND = 'repro-test'

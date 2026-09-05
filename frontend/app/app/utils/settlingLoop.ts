@@ -41,7 +41,7 @@ export type SettlingLoop = {
  * unchanged frame would miss every animation. Four frames (~66ms at 60Hz) clears that gap
  * while keeping a false wake-up cheap.
  */
-export const DEFAULT_SETTLE_FRAMES = 4
+const DEFAULT_SETTLE_FRAMES = 4
 
 export function createSettlingLoop(options: {
   /** Runs one frame; returns whether it changed anything the user can see. */

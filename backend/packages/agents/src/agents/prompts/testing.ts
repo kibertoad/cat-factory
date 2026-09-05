@@ -186,11 +186,6 @@ const FIXER_SYSTEM_PROMPT = [
   're-check them.',
 ].join('\n')
 
-/** True when the kind is part of the Tester/Fixer track (API or UI tester + fixer). */
-export function isTestingKind(kind: AgentKind): boolean {
-  return kind === TESTER_AGENT_KIND || kind === UI_TESTER_AGENT_KIND || kind === FIXER_AGENT_KIND
-}
-
 /** The built-out system prompt for a Tester/Fixer kind, or undefined otherwise. */
 export function testingSystemPrompt(kind: AgentKind): string | undefined {
   if (kind === TESTER_AGENT_KIND) return TESTER_SYSTEM_PROMPT

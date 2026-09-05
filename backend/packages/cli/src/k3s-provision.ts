@@ -24,7 +24,7 @@ export const CAT_FACTORY_NAMESPACE = 'cat-factory'
 export const SERVICE_ACCOUNT_NAME = 'cat-factory'
 const TOKEN_SECRET_NAME = 'cat-factory-token'
 /** The apiserver port k3d/kind is asked to publish (the kube default). */
-export const DEFAULT_API_PORT = 6443
+const DEFAULT_API_PORT = 6443
 
 /**
  * Watchdog budget (ms) for `k3d cluster create` / `kind create cluster`. These pull node images on
@@ -34,7 +34,7 @@ export const DEFAULT_API_PORT = 6443
 export const CLUSTER_CREATE_TIMEOUT_MS = 300_000
 
 /** Watchdog budget (ms) for `k3d/kind cluster delete`, which tears down containers + volumes. */
-export const CLUSTER_DELETE_TIMEOUT_MS = 120_000
+const CLUSTER_DELETE_TIMEOUT_MS = 120_000
 
 /**
  * The resolved local-k3s connection produced by provisioning: the apiserver URL read from the
@@ -268,7 +268,7 @@ export function clusterDeleteCommand(runtime: 'k3d' | 'kind', name: string): Com
 }
 
 /** Namespaces on the target context, read so a destructive prompt can name what is on it. */
-export function listNamespacesCommand(context?: string): Command {
+function listNamespacesCommand(context?: string): Command {
   const args = [
     'get',
     'namespaces',
@@ -517,7 +517,7 @@ async function readSaToken(deps: ProvisionDeps, context?: string): Promise<strin
 }
 
 /** The distribution behind a create/recreate offer; `null` for the reuse path. */
-export function offerRuntime(chosen: OfferId): 'k3d' | 'kind' | null {
+function offerRuntime(chosen: OfferId): 'k3d' | 'kind' | null {
   if (chosen === 'create-k3d' || chosen === RECREATE_OFFERS.k3d) return 'k3d'
   if (chosen === 'create-kind' || chosen === RECREATE_OFFERS.kind) return 'kind'
   return null

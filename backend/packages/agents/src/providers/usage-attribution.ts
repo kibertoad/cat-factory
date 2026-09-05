@@ -80,7 +80,7 @@ export function usageAttributionOf(model: unknown): UsageAttribution | undefined
  *
  * Empty in ⇒ `undefined` out: nothing to agree about is not agreement.
  */
-export function agreedUsageAttribution(models: readonly unknown[]): UsageAttribution | undefined {
+function agreedUsageAttribution(models: readonly unknown[]): UsageAttribution | undefined {
   const first = models.length > 0 ? usageAttributionOf(models[0]) : undefined
   if (!first) return undefined
   const agrees = models.every((model) => {

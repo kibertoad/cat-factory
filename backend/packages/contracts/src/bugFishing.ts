@@ -48,11 +48,6 @@ export const BUG_FISHING_PHASE_IDS = [
 export const bugFishingPhaseIdSchema = v.picklist(BUG_FISHING_PHASE_IDS)
 export type BugFishingPhaseId = v.InferOutput<typeof bugFishingPhaseIdSchema>
 
-/** Whether `id` is a phase angle this build still ships. Derived from the picklist itself. */
-export function isBugFishingPhaseId(id: string): id is BugFishingPhaseId {
-  return (BUG_FISHING_PHASE_IDS as readonly string[]).includes(id)
-}
-
 /** What one angle is, and what the pass fishing it is told to look for. */
 export interface BugFishingPhaseDescriptor {
   id: string

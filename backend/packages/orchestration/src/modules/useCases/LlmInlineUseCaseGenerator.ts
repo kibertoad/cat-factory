@@ -57,7 +57,7 @@ import { readUseCaseUsage } from './useCaseUsage.js'
  * minutes, but FINITE: the alternative is a request held open for as long as the transport allows,
  * on a surface whose whole shape is "ask and be answered". A deployment narrows it per facade.
  */
-export const DEFAULT_USE_CASE_TIMEOUT_MS = 120_000
+const DEFAULT_USE_CASE_TIMEOUT_MS = 120_000
 
 /**
  * Retries the AI SDK may make inside one invocation.

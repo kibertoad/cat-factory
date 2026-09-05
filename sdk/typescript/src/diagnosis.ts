@@ -104,7 +104,7 @@ const MAX_CHAIN_LINKS = 12
  * `AggregateError.errors` is walked as well as `cause`: a host resolving to both `::1` and
  * `127.0.0.1` fails as an aggregate of two connection attempts, and the useful code is inside it.
  */
-export function flattenCauseChain(error: unknown): unknown[] {
+function flattenCauseChain(error: unknown): unknown[] {
   const links: unknown[] = []
   const seen = new Set<unknown>()
   const queue: unknown[] = [error]
@@ -161,7 +161,7 @@ export function classifyTransportFailure(error: unknown): TransportFailureCause 
 }
 
 /** Render the chain as the runtime reported it, leading with the link that names the failure. */
-export function renderCauseChain(error: unknown): string {
+function renderCauseChain(error: unknown): string {
   const parts: string[] = []
   for (const link of flattenCauseChain(error)) {
     const text = link instanceof Error ? link.message : String(link)

@@ -54,7 +54,7 @@ interface CredentialRow {
 }
 
 /** The stored deployment credential, decrypted. */
-export interface StoredVcsCredential {
+interface StoredVcsCredential {
   provider: VcsProvider
   token: string
   /** The account handle the token resolved to when it was installed, for display. */

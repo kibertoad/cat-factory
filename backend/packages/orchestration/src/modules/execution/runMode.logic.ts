@@ -17,7 +17,7 @@ import type { Logger, RunMode, WorkspaceRole } from '@cat-factory/kernel'
 // ---------------------------------------------------------------------------
 
 /** What settled a run's mode, recorded so a run can explain a sandbox it did not ask for. */
-export type RunModeSource = 'requested' | 'role_policy' | 'default'
+type RunModeSource = 'requested' | 'role_policy' | 'default'
 
 export interface RunModeResolution {
   mode: RunMode
@@ -66,7 +66,7 @@ export function resolveRunMode(input: {
  * apart: a future source that also surprises the initiator gets its note by extending this
  * function, not by remembering to add a branch in the engine.
  */
-export function runModeStartNotes(source: RunModeSource): string[] {
+function runModeStartNotes(source: RunModeSource): string[] {
   if (source !== 'role_policy') return []
   return [
     "Sandboxed run: this task's merge policy holds your role to dry runs, so the pipeline will " +

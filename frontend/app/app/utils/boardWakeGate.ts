@@ -34,7 +34,7 @@ export type WakeGate = {
  * instead of every frame, while a change that really did move a card is on screen well inside
  * the window a reader would notice.
  */
-export const RENDER_WAKE_INTERVAL_MS = 250
+const RENDER_WAKE_INTERVAL_MS = 250
 
 export function createWakeGate(options: {
   /** Raise the pulse. */

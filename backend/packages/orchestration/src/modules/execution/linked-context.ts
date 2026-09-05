@@ -128,7 +128,7 @@ export function linkedContextSourcesFrom(deps: {
  * falling back to the title merges two same-titled uploads. It is the same `(origin, externalId)`
  * pair this resolver already dedupes its own corpus by.
  */
-export type LinkedContextDoc = NonNullable<AgentRunContext['block']['contextDocs']>[number] & {
+type LinkedContextDoc = NonNullable<AgentRunContext['block']['contextDocs']>[number] & {
   externalId: string
 }
 
@@ -328,7 +328,7 @@ function reportUnmatchedUrls(
 }
 
 /** Map a document record to the agent-context doc shape (summary index + materialisable body). */
-export function toContextDoc(d: DocumentRecord, freshness?: DocumentFreshness): LinkedContextDoc {
+function toContextDoc(d: DocumentRecord, freshness?: DocumentFreshness): LinkedContextDoc {
   return {
     externalId: d.externalId,
     title: d.title,
@@ -342,7 +342,7 @@ export function toContextDoc(d: DocumentRecord, freshness?: DocumentFreshness): 
 }
 
 /** Map a task record to the agent-context task shape (adds the index `summary`). */
-export function toContextTask(
+function toContextTask(
   t: TaskRecord,
 ): NonNullable<AgentRunContext['block']['contextTasks']>[number] {
   return {

@@ -1,4 +1,4 @@
-import { descriptorFieldDefaults, descriptorFieldSections } from '@cat-factory/contracts'
+import { descriptorFieldSections } from '@cat-factory/contracts'
 import type { DescriptorField, DescriptorFieldValue, DescriptorFieldValues } from '~/types/domain'
 
 // Form-side helpers over the shared descriptor-field vocabulary (`contracts/src/form-fields.ts`),
@@ -10,18 +10,6 @@ import type { DescriptorField, DescriptorFieldValue, DescriptorFieldValues } fro
 // decides: how one edit changes the bag. Pure functions over the value bag rather than methods
 // inside the SFC, so the mutation rules a wrong answer would freeze on an entity are unit-testable
 // without mounting a component.
-
-/**
- * The initial values a field list implies, for seeding a freshly opened form. A repo-detection
- * probe's prefill and the user's own edits layer on top.
- *
- * The SHARED helper, not a form-side copy: the server folds the same defaults in at the creation
- * door (`withDescriptorFieldDefaults`), so a duplicate here would be the drift that made a headless
- * caller and this form disagree about what a descriptor's default means.
- */
-export function defaultDescriptorValues(fields: readonly DescriptorField[]): DescriptorFieldValues {
-  return descriptorFieldDefaults(fields)
-}
 
 /**
  * A value that must stay ABSENT from the bag rather than freeze on the entity: an unchecked

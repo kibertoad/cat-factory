@@ -161,7 +161,7 @@ export interface RegistrationWarning {
  * type-checks and cannot be partial. A registry added to the validator therefore reaches all three
  * facades with no call-site edit at all.
  */
-export interface ValidatedRegistries {
+interface ValidatedRegistries {
   /**
    * The app-owned agent-kind registry to validate (the facade's injected instance). Required:
    * without it there are no registered kinds to cross-check the gates/pipelines against.

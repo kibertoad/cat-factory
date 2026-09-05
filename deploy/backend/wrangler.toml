@@ -192,7 +192,7 @@ class_name = "ExecutionContainer"
 # raw-manifest REST path still works); a render-needing config then fails loudly.
 [[containers]]
 class_name = "DeployContainer"
-image = "registry.cloudflare.com/REPLACE_WITH_CLOUDFLARE_ACCOUNT_ID/cat-factory-deploy:0.6.3"
+image = "registry.cloudflare.com/REPLACE_WITH_CLOUDFLARE_ACCOUNT_ID/cat-factory-deploy:0.6.4"
 max_instances = 10
 # kustomize/helm rendering + kubectl apply/rollout is light vs a coding run, but the
 # slim base still wants real headroom for a large manifest tree; standard-1 matches the

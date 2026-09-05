@@ -79,7 +79,7 @@ export const INITIATIVE_ATTENTION_ICONS: Record<InitiativeAttentionKind, string>
  * interview park is already owned by the planning window, behind the differently-worded "Answer
  * planning questions".
  */
-export const INTERVIEW_GATE_RESULT_VIEW = 'initiative-planning'
+const INTERVIEW_GATE_RESULT_VIEW = 'initiative-planning'
 
 /**
  * The block's parked approval that is a PLAN REVIEW — the planner's human gate (`pl_initiative`

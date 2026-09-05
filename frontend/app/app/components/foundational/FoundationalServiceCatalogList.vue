@@ -14,7 +14,8 @@
 // A contract body is fetched only when a human expands one, through the SAME lazy read a consumer
 // dispatch makes — so what is inspected here is what an agent would be given, and merely opening
 // the catalog transfers no documents.
-import { computed, reactive, ref } from 'vue'
+import { computed, ref } from 'vue'
+import { useBusyRows } from '~/composables/useBusyRows'
 import type { ApiContractFormat, FoundationalServiceTier } from '~/types/domain'
 import { useFoundationalServicesStore } from '~/stores/foundationalServices'
 import FoundationalContractSummary from '~/components/foundational/FoundationalContractSummary.vue'
@@ -45,17 +46,7 @@ const tierColor = {
   workspace: 'primary',
 } as const satisfies Record<FoundationalServiceTier, string>
 
-const busyRows = reactive(new Set<string>())
-const rowBusy = (key: string) => busyRows.has(key)
-async function withRow(key: string, fn: () => Promise<void>) {
-  if (busyRows.has(key)) return
-  busyRows.add(key)
-  try {
-    await fn()
-  } finally {
-    busyRows.delete(key)
-  }
-}
+const { rowBusy, withRow } = useBusyRows()
 
 /** Service ids whose contract documents the user has expanded. */
 const expanded = ref<string[]>([])

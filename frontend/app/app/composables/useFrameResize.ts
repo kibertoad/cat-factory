@@ -35,11 +35,6 @@ const resizingId = ref<string | null>(null)
 /** The grips in render order, so a component can `v-for` them instead of listing eight blocks. */
 export const RESIZE_EDGES = Object.keys(HANDLES) as ResizeEdge[]
 
-/** The `cursor` a given grip shows, and holds on `<body>` while its drag runs. */
-export function resizeCursor(edge: ResizeEdge): string {
-  return HANDLES[edge].cursor
-}
-
 /**
  * Pointer-driven resizing for containers (service frames and modules) by dragging any border or
  * corner, Miro-style. The drag delta is divided by the board zoom so the border tracks the

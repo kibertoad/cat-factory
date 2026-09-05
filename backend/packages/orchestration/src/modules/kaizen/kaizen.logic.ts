@@ -4,7 +4,7 @@ import type { KaizenGrading, KaizenVerifiedCombo } from '@cat-factory/contracts'
 // service so the streak/verification rules are unit-testable in isolation.
 
 /** The grade (on the 1..5 scale) at or above which a grading counts as "high". */
-export const HIGH_GRADE = 4
+const HIGH_GRADE = 4
 
 /** Consecutive high-grade-with-no-recommendations gradings needed to verify a combo. */
 export const VERIFICATION_STREAK = 5

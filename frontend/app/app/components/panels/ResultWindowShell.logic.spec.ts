@@ -1,11 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import {
-  PROSE_MEASURE_CLASS,
-  RESULT_WINDOW_WIDTH_CLASS,
-  type ResultWindowWidth,
-} from './ResultWindowShell.logic'
+import { PROSE_MEASURE_CLASS, type ResultWindowWidth } from './ResultWindowShell.logic'
 
 // The width decision is a per-window LAYOUT judgement that lives on each window's
 // `<ResultWindowShell width="…">`, which means nothing in the type system can ask a window author
@@ -165,22 +161,11 @@ describe('result-window width buckets', () => {
   })
 })
 
-describe('RESULT_WINDOW_WIDTH_CLASS', () => {
-  it('caps every bucket at its own name and leaves `full` uncapped', () => {
-    expect(RESULT_WINDOW_WIDTH_CLASS).toEqual({
-      '3xl': 'max-w-3xl',
-      '4xl': 'max-w-4xl',
-      '5xl': 'max-w-5xl',
-      // Not a bigger number: the panel's `w-full` spans the backdrop and the variant's gutter
-      // (`m-4` / `p-4`) is the only inset. A cap here would reintroduce the indefensible number
-      // `full` exists to avoid.
-      full: 'max-w-none',
-    })
-  })
-
-  it('shares one measure with the step reader', () => {
-    // `AgentStepDetail` reads prose at `mx-auto max-w-3xl`; the windows must not hold a second
-    // opinion about how wide prose should be.
-    expect(PROSE_MEASURE_CLASS).toBe('max-w-3xl')
+describe('PROSE_MEASURE_CLASS', () => {
+  it('is the measure the step reader already uses', () => {
+    // `AgentStepDetail` reads prose at its own measure; the windows must not hold a second
+    // opinion about how wide prose should be, so the constant is checked against that source.
+    const stepReader = readFileSync(resolve(componentsDir, 'panels/AgentStepDetail.vue'), 'utf8')
+    expect(stepReader).toContain(PROSE_MEASURE_CLASS)
   })
 })

@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 import type { AgentContextSnapshot, AgentSearchQuery } from '~/types/execution'
 import { useSingleFlight } from '~/composables/useSingleFlight'
+import { withFlag } from './withFlag'
 
 /** What the two reads need from the store: the workspace binding, nothing else. */
 export interface AgentContextSinkDeps {
@@ -8,14 +9,6 @@ export interface AgentContextSinkDeps {
   ready: () => boolean
   fetchContext: (executionId: string) => Promise<{ snapshots: AgentContextSnapshot[] }>
   fetchSearchQueries: (executionId: string) => Promise<{ searchQueries: AgentSearchQuery[] }>
-}
-
-/** Add or remove a key from a reactive `Set` ref, replacing it so the reactivity fires. */
-function withFlag(set: ReturnType<typeof ref<Set<string>>>, key: string, on: boolean) {
-  const next = new Set(set.value)
-  if (on) next.add(key)
-  else next.delete(key)
-  set.value = next
 }
 
 /**

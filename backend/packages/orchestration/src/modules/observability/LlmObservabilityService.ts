@@ -116,7 +116,7 @@ const EMPTY_STORED_PROMPT: StoredPrompt = { promptText: '', promptPrefixCount: 0
  * it JSON-serialises the whole AI-SDK prompt, which on a judge or a reviewer carries a rubric
  * and a diff, inside a CPU-metered isolate.
  */
-export type LlmCallBody = string | (() => string)
+type LlmCallBody = string | (() => string)
 
 /** Resolve a {@link LlmCallBody}. Only ever called when the body is going to be kept. */
 function resolveBody(body: LlmCallBody): string {

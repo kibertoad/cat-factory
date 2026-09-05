@@ -21,7 +21,7 @@ import {
   validateInitiativePresetInputs,
 } from '@cat-factory/contracts'
 import type { InitiativePresetInputs, InitiativePresetInputValue } from '~/types/domain'
-import { defaultDescriptorValues } from '~/utils/descriptorFields'
+import { descriptorFieldDefaults } from '@cat-factory/contracts'
 import { GENERIC_PRESET_ID } from '~/stores/initiative'
 import DescriptorFields from '~/components/common/DescriptorFields.vue'
 import ContextAttachmentFields from '~/components/context/ContextAttachmentFields.vue'
@@ -71,7 +71,7 @@ let probeSeq = 0
 /** Seed the form to the selected preset's descriptor defaults, then fire its detection probe. */
 function applyPreset(): void {
   const descriptor = selectedPreset.value
-  inputs.value = descriptor ? defaultDescriptorValues(descriptor.fields) : {}
+  inputs.value = descriptor ? descriptorFieldDefaults(descriptor.fields) : {}
   void runProbe()
 }
 

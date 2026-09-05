@@ -19,7 +19,7 @@ import { logger } from '../observability/logger.js'
 // ---------------------------------------------------------------------------
 
 /** Which webhook route rejected the delivery — GitHub (HMAC) or a neutral VCS provider (token). */
-export type WebhookSignatureProvider = 'github' | 'gitlab'
+type WebhookSignatureProvider = 'github' | 'gitlab'
 
 export interface WebhookSignatureRejection {
   provider: WebhookSignatureProvider

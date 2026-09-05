@@ -21,9 +21,9 @@ import { apiBase, k8sName, labelValue } from './kubernetes.logic.js'
 // and derive the environment URL. No I/O — the provider does the apiserver fetches.
 
 /** The label key stamped on the namespace + applied resources, carrying the run/block id. */
-export const ENV_BLOCK_LABEL = 'cat-factory.blockId'
+const ENV_BLOCK_LABEL = 'cat-factory.blockId'
 /** The owning-prefix for the per-PR namespace. */
-export const ENV_NAMESPACE_PREFIX = 'cf-env-'
+const ENV_NAMESPACE_PREFIX = 'cf-env-'
 
 /** A parsed Kubernetes resource (apiVersion + kind + metadata + the rest). */
 export interface KubernetesResource {

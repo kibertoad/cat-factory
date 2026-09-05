@@ -14,6 +14,7 @@
 // Mirrors the skill library's sources UI: with the GitHub App connected the user searches a repo
 // and browses to a path; otherwise the manual owner/name fields are the fallback.
 import { computed, reactive, ref, watch } from 'vue'
+import { useBusyRows } from '~/composables/useBusyRows'
 import type {
   FolderScanCoverage,
   FoundationalServiceOwnerKind,
@@ -44,17 +45,7 @@ const { confirm } = useConfirm()
 const githubReady = computed(() => github.available === true && github.connected)
 
 // Per-row in-flight tracking so only the control that triggered an action spins.
-const busyRows = reactive(new Set<string>())
-const rowBusy = (key: string) => busyRows.has(key)
-async function withRow(key: string, fn: () => Promise<void>) {
-  if (busyRows.has(key)) return
-  busyRows.add(key)
-  try {
-    await fn()
-  } finally {
-    busyRows.delete(key)
-  }
-}
+const { rowBusy, withRow } = useBusyRows()
 
 // ---- link a repo source ----------------------------------------------------
 const mode = ref<FoundationalServiceSourceMode>('directory')

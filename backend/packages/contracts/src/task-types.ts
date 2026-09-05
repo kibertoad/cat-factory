@@ -1,7 +1,6 @@
 import * as v from 'valibot'
 import {
   descriptorFieldEntries,
-  descriptorFieldOptionSchema,
   descriptorFieldShowWhenSchema,
   type DescriptorFieldOption,
 } from './form-fields.js'
@@ -42,8 +41,7 @@ export const taskTypePresentationSchema = v.object({
 })
 export type TaskTypePresentation = v.InferOutput<typeof taskTypePresentationSchema>
 
-/** One choice of a `select` / `checkbox-group` field (the shared {@link descriptorFieldOptionSchema}). */
-export const taskTypeFieldOptionSchema = descriptorFieldOptionSchema
+/** One choice of a `select` / `checkbox-group` field (the shared {@link DescriptorFieldOption}). */
 export type TaskTypeFieldOption = DescriptorFieldOption
 
 /**

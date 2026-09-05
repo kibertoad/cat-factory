@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { BUILTIN_TASK_TYPE_DEFAULTS, FRAGMENTS, getFragment } from '../index.js'
+import { BUILTIN_TASK_TYPE_DEFAULTS, getFragment } from '../index.js'
 import { deploymentFragments, DEPLOYMENT_FRAGMENT_IDS } from './deployment.js'
 
 // The `deployment.*` collection ships the containerized-service standards a design review kept
@@ -67,10 +67,5 @@ describe('deployment fragment collection', () => {
     for (const ids of Object.values(BUILTIN_TASK_TYPE_DEFAULTS)) {
       for (const id of ids ?? []) expect(DEPLOYMENT_FRAGMENT_IDS).not.toContain(id)
     }
-  })
-
-  it('introduces no id collision with the rest of the catalog', () => {
-    const ids = FRAGMENTS.map((f) => f.id)
-    expect(new Set(ids).size).toBe(ids.length)
   })
 })

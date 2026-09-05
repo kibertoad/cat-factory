@@ -21,7 +21,7 @@ import { resolveDesignReferences } from './visual-confirm-design-references.js'
 // ---------------------------------------------------------------------------
 
 /** The view name an uploaded reference with no view of its own is filed under. */
-export const UNNAMED_REFERENCE_VIEW = '(reference)'
+const UNNAMED_REFERENCE_VIEW = '(reference)'
 
 /** One view's reference image, and which producer it came from. */
 export interface BlockReference {

@@ -79,7 +79,7 @@ export interface SuperviseClock {
  * poll timer was then the only thing left, so Node exited 0 the instant its child was killed: a
  * watchdog that died with its patient, silently and with a success code.
  */
-export const systemClock: SuperviseClock = {
+const systemClock: SuperviseClock = {
   now: () => Date.now(),
   sleep: (ms, signal) =>
     new Promise((resolve) => {

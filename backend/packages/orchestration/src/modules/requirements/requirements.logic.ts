@@ -88,7 +88,7 @@ export interface RequirementsContext {
  * holds why the unresolved case is stated rather than omitted), plus the service's own statement of
  * intent from its committed `spec/overview.md` when one was readable.
  */
-export function renderProductContext(ctx: RequirementsContext): string[] {
+function renderProductContext(ctx: RequirementsContext): string[] {
   return renderProductContextLines(ctx.service, 'reason', {
     label: 'From the service specification (`spec/overview.md`):',
     body: ctx.specIntent ?? '',

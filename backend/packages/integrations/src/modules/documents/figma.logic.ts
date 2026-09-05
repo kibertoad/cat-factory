@@ -337,7 +337,7 @@ function round(value: number): number {
 // ---- Styling facts ---------------------------------------------------------
 
 /** Figma's 0–1 colour channels → `#rrggbb`, with an alpha qualifier below full opacity. */
-export function figmaColorHex(
+function figmaColorHex(
   color: { r?: number; g?: number; b?: number; a?: number } | null | undefined,
   paintOpacity?: number,
 ): string | null {

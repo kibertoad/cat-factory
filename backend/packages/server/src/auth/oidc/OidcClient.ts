@@ -5,6 +5,7 @@ import type { JSONWebKeySet, JWTPayload } from 'jose'
 import { base64url } from '../../crypto/encoding.js'
 import type { SsoConfig } from '../../config/types.js'
 import type { OidcProviderDirectory } from './discovery.js'
+import { causeText } from './discovery.js'
 
 // ---------------------------------------------------------------------------
 // The OpenID Connect Authorization Code + PKCE client — one adapter for every enterprise IdP.
@@ -276,11 +277,6 @@ export class OidcClient {
       return null
     }
   }
-}
-
-/** The scrubbed message of a thrown value, as a string safe to interpolate. */
-function causeText(error: unknown): string {
-  return String(describeError(error).err ?? '')
 }
 
 /**

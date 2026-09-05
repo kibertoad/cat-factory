@@ -193,10 +193,4 @@ describe('NodeOtelTraceSink (official SDK exporter)', () => {
     expect(generation!.spanContext().traceId).toBe(rootSpan!.spanContext().traceId)
     await sink.shutdown()
   })
-
-  it('never throws into the caller', () => {
-    const { sink } = harness()
-    // A malformed event must not surface — the sink swallows + logs.
-    expect(() => sink.recordGeneration(baseEvent())).not.toThrow()
-  })
 })

@@ -124,7 +124,6 @@ export {
 } from './agents/kinds/configs.js'
 // Tester / Fixer track prompts + helpers.
 export {
-  isTestingKind,
   testingSystemPrompt,
   testerEnvironmentSection,
   runsAgainstEphemeralEnvironment,
@@ -216,7 +215,6 @@ export {
 } from './agents/runtime/fragments.js'
 export {
   type StandardPhase,
-  STANDARD_PHASES,
   STANDARD_PHASE_BY_KIND,
   phaseForKind,
   standardSystemPrompt,

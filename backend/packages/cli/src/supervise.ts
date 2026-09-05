@@ -52,7 +52,7 @@ export interface SuperviseConfig {
 }
 
 /** Defaults chosen for a laptop-dev loop: notice within ~30s, never fight a cold boot. */
-export const SUPERVISE_DEFAULTS = {
+const SUPERVISE_DEFAULTS = {
   pollMs: 10_000,
   bootGraceMs: 60_000,
   resumeGraceMs: 25_000,

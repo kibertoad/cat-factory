@@ -235,13 +235,7 @@
     },
     "canvas": {
       "emptyTitle": "Your board is empty",
-      "emptyBody": "Add a service to get started: bootstrap a fresh repo or pull in one you already have.",
-      "addBlockFailedTitle": "Could not add block",
-      "addBlockFailedBody": "The backend rejected the request.",
-      "dropOntoTaskTitle": "Drop onto a task",
-      "dropOntoTaskBody": "Pipelines run against tasks, not services.",
-      "taskBlockedTitle": "Task is blocked",
-      "taskBlockedBody": "Its dependencies haven't merged yet."
+      "emptyBody": "Add a service to get started: bootstrap a fresh repo or pull in one you already have."
     },
     "addTask": {
       "title": "Add a task",

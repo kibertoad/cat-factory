@@ -2984,13 +2984,7 @@
     },
     "canvas": {
       "emptyTitle": "La tua board è vuota",
-      "emptyBody": "Aggiungi un servizio per iniziare: esegui il bootstrap di un repo nuovo o importane uno che hai già.",
-      "addBlockFailedTitle": "Impossibile aggiungere il blocco",
-      "addBlockFailedBody": "Il backend ha rifiutato la richiesta.",
-      "dropOntoTaskTitle": "Rilascia su un'attività",
-      "dropOntoTaskBody": "Le pipeline vengono eseguite sulle attività, non sui servizi.",
-      "taskBlockedTitle": "L'attività è bloccata",
-      "taskBlockedBody": "Le sue dipendenze non sono ancora state unite."
+      "emptyBody": "Aggiungi un servizio per iniziare: esegui il bootstrap di un repo nuovo o importane uno che hai già."
     },
     "addTask": {
       "title": "Aggiungi un'attività",

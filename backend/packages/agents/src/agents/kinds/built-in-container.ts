@@ -55,7 +55,7 @@ import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
 export const IMPLEMENTER_AGENT_KIND = 'coder'
 
 /** The agent kind of the read-only container agent that proposes a design after reading the repo. */
-export const ARCHITECT_AGENT_KIND = 'architect'
+const ARCHITECT_AGENT_KIND = 'architect'
 
 /** The agent kind of the read-only tech-debt auditor that reads the repo and emits a report. */
 export const ANALYSIS_AGENT_KIND = 'analysis'

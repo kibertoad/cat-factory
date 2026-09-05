@@ -57,7 +57,7 @@ const USER_AGENT = 'cat-factory'
 export const PREVIEW_WORKFLOW_PATH = '.github/workflows/preview-env.yml'
 
 /** Carries the HTTP status so the API can surface a meaningful (redacted) error. */
-export class CloudflareEnvironmentApiError extends Error {
+class CloudflareEnvironmentApiError extends Error {
   constructor(
     readonly status: number,
     message: string,

@@ -389,9 +389,9 @@ export function initiativeProgress(initiative: Initiative): { done: number; tota
 // ---------------------------------------------------------------------------
 
 /** How many interviewer passes may run before the loop is force-converged. */
-export const INITIATIVE_MAX_INTERVIEW_ROUNDS = 4
+const INITIATIVE_MAX_INTERVIEW_ROUNDS = 4
 /** Upper bound on questions the interviewer may ask in one round (keeps the gate answerable). */
-export const INITIATIVE_MAX_INTERVIEW_QUESTIONS = 8
+const INITIATIVE_MAX_INTERVIEW_QUESTIONS = 8
 
 const clampShort = (s: string): string => s.trim().slice(0, INITIATIVE_SHORT_MAX)
 
@@ -852,11 +852,6 @@ export function applyRevertClaim(
         : i,
     ),
   }
-}
-
-/** Whether an item currently holds an active concurrency slot. Exported for the loop's math. */
-export function itemIsActive(item: InitiativeItem): boolean {
-  return INITIATIVE_ITEM_ACTIVE_STATUSES.has(item.status)
 }
 
 // ---------------------------------------------------------------------------

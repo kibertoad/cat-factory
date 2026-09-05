@@ -5,7 +5,8 @@
 // synced skill catalog a pipeline `skill` step picks from. Mirrors the fragment library's
 // repo-sources UI; when the GitHub App is connected the user searches a repo + browses to the
 // skills directory, otherwise the manual owner/name/dir fields are the fallback.
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { useBusyRows } from '~/composables/useBusyRows'
 import type { GitHubAvailableRepo } from '~/types/domain'
 import { useSkillLibrary } from '~/stores/skillLibrary'
 import { SKILL_GROUP_LABEL_KEYS } from '~/utils/skills'
@@ -36,17 +37,7 @@ watch(
 const githubReady = computed(() => github.available === true && github.connected)
 
 // Per-row in-flight tracking so only the control that triggered an action spins.
-const busyRows = reactive(new Set<string>())
-const rowBusy = (key: string) => busyRows.has(key)
-async function withRow(key: string, fn: () => Promise<void>) {
-  if (busyRows.has(key)) return
-  busyRows.add(key)
-  try {
-    await fn()
-  } finally {
-    busyRows.delete(key)
-  }
-}
+const { rowBusy, withRow } = useBusyRows()
 
 // ---- link a repo source ----------------------------------------------------
 const sourceRepoId = ref<number | undefined>(undefined)

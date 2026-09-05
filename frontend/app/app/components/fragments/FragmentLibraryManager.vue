@@ -6,7 +6,8 @@
 // the merged catalog (built-in ∪ account ∪ workspace) an agent is selected from per
 // run. The account scope has no resolved/merged catalog and fetches document
 // fragments through `viaWorkspaceId` (document-source credentials are per-workspace).
-import { computed, nextTick, reactive, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
+import { useBusyRows } from '~/composables/useBusyRows'
 import type {
   DocumentSourceKind,
   FragmentOwnerKind,
@@ -108,17 +109,7 @@ function tabLabel(which: Tab): string {
 // Per-row / per-form in-flight tracking. The store's single `library.loading` flag
 // drove every row's button at once (UX-29) and cross-spun the add/link forms; key
 // each async action so only the control that triggered it shows a spinner.
-const busyRows = reactive(new Set<string>())
-const rowBusy = (key: string) => busyRows.has(key)
-async function withRow(key: string, fn: () => Promise<void>) {
-  if (busyRows.has(key)) return
-  busyRows.add(key)
-  try {
-    await fn()
-  } finally {
-    busyRows.delete(key)
-  }
-}
+const { rowBusy, withRow } = useBusyRows()
 const creating = ref(false)
 const linkingDoc = ref(false)
 const linkingSource = ref(false)

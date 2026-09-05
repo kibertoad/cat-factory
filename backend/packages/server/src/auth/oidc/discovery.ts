@@ -197,10 +197,12 @@ function trimIssuer(value: string): string {
 }
 
 /** The scrubbed message of a thrown value, as a string safe to interpolate. */
-function causeText(error: unknown): string {
+/** The cause chain of a discovery or token failure, as one line for a refusal message. */
+export function causeText(error: unknown): string {
   return String(describeError(error).err ?? '')
 }
 
-function str(value: unknown): string | null {
+/** A non-blank string claim, trimmed; anything else reads as absent. */
+export function str(value: unknown): string | null {
   return typeof value === 'string' && value.trim() !== '' ? value.trim() : null
 }

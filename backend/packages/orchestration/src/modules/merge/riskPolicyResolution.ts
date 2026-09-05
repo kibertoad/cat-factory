@@ -32,9 +32,7 @@ import type { ResolvedRunRiskPolicy } from '../execution/policy-types.js'
  * shape that reads as correct until someone renames a prefix; a second reader that answers off a
  * preloaded library needs the id, not the key.
  */
-export type RiskPolicyTarget =
-  | { kind: 'picked'; id: string }
-  | { kind: 'default'; scope: RunDefaultScope }
+type RiskPolicyTarget = { kind: 'picked'; id: string } | { kind: 'default'; scope: RunDefaultScope }
 
 /** Reads one preset row, possibly through a cache slice or a preloaded library. */
 export type RiskPolicyRead = (
@@ -43,7 +41,7 @@ export type RiskPolicyRead = (
 ) => Promise<RiskPolicy | null>
 
 /** Read straight from the repository, for the paths with no cache slice wired to read through. */
-export const directRiskPolicyRead: RiskPolicyRead = (_target, load) => load()
+const directRiskPolicyRead: RiskPolicyRead = (_target, load) => load()
 
 /**
  * The cache key one target resolves under; the ONE place that spelling lives.

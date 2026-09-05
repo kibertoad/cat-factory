@@ -1,4 +1,5 @@
 import type { Clock, Logger, SecretCipher } from '@cat-factory/kernel'
+import { bytesToBase64Url } from '../shared/base64.js'
 import { ConflictError, noopLogger } from '@cat-factory/kernel'
 import { PUBLIC_API_SCOPES, type PublicApiScope } from '@cat-factory/contracts'
 import { scopeSatisfies, type PublicApiKeyService } from '../publicApi/PublicApiKeyService.js'
@@ -795,12 +796,5 @@ function resourceMatches(presented: string, expected: string): boolean {
 async function pkceMatches(verifier: string, challenge: string): Promise<boolean> {
   if (!verifier) return false
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))
-  return base64url(new Uint8Array(digest)) === challenge
-}
-
-/** Base64url, unpadded, the encoding PKCE's S256 challenge is stated in. */
-function base64url(bytes: Uint8Array): string {
-  let binary = ''
-  for (const byte of bytes) binary += String.fromCharCode(byte)
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  return bytesToBase64Url(new Uint8Array(digest)) === challenge
 }

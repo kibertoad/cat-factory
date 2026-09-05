@@ -7,7 +7,7 @@ import type { ReviewQuestionPost, ReviewQuestionSubject, TaskRecord } from '@cat
 // The marker every platform-authored tracker comment opens with. Shared with the reply renderer
 // (and the ingest guard that keys off it) so the two can never emit different prefixes — a comment
 // this side stopped marking is a comment the reply path would start ingesting as a human's.
-import { PLATFORM_COMMENT_MARKER } from './reviewReplies.logic.js'
+import { PLATFORM_COMMENT_MARKER, safeInline } from './reviewReplies.logic.js'
 
 // Pure rendering + keying for the headless clarification loop's question writeback (slice 2a
 // of `backend/docs/adr/0047-headless-clarification-loop.md`). Kept out of `IssueWritebackService`
@@ -58,12 +58,6 @@ const MAX_COMMENT_CHARS = 30_000
 
 /** Marks where a value was cut, so a reader never mistakes a truncation for the whole story. */
 const TRUNCATION_NOTE = '… (truncated)'
-
-/** Scrub secrets, then hand to the host boundary. Order matters: scrub BEFORE any cut, so a
- * half-truncated credential can never survive as plausible-looking text. */
-function safeInline(value: string, max: number): string {
-  return hostMarkdown.inline(redactSecrets(value) ?? '', max)
-}
 
 function safeProse(value: string, max: number): string {
   return hostMarkdown.prose(redactSecrets(value) ?? '', max)

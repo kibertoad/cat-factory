@@ -95,7 +95,7 @@ export function coerceJudgeScores(rubric: Rubric, raw: unknown): SandboxGradeDim
 }
 
 /** Project the deterministic objective score into the wire `SandboxObjectiveResult` (findings). */
-export function toFindingsObjectiveResult(score: ExpectationScore): SandboxObjectiveResult {
+function toFindingsObjectiveResult(score: ExpectationScore): SandboxObjectiveResult {
   return {
     kind: 'findings',
     pass: score.missedHighImpact.length === 0,

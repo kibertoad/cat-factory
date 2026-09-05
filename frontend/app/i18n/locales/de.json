@@ -2984,13 +2984,7 @@
     },
     "canvas": {
       "emptyTitle": "Ihr Board ist leer",
-      "emptyBody": "Fügen Sie einen Service hinzu, um zu beginnen: bootstrappen Sie ein frisches Repo oder binden Sie ein bereits vorhandenes ein.",
-      "addBlockFailedTitle": "Block konnte nicht hinzugefügt werden",
-      "addBlockFailedBody": "Das Backend hat die Anfrage abgelehnt.",
-      "dropOntoTaskTitle": "Auf eine Aufgabe ziehen",
-      "dropOntoTaskBody": "Pipelines laufen gegen Aufgaben, nicht gegen Services.",
-      "taskBlockedTitle": "Aufgabe ist blockiert",
-      "taskBlockedBody": "Ihre Abhängigkeiten wurden noch nicht gemergt."
+      "emptyBody": "Fügen Sie einen Service hinzu, um zu beginnen: bootstrappen Sie ein frisches Repo oder binden Sie ein bereits vorhandenes ein."
     },
     "addTask": {
       "title": "Eine Aufgabe hinzufügen",

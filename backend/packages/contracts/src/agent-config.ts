@@ -82,11 +82,6 @@ export const agentConfigValuesSchema = v.record(
 )
 export type AgentConfigValues = v.InferOutput<typeof agentConfigValuesSchema>
 
-/** Parse-or-throw a block's stored agent-config values. */
-export function parseAgentConfigValues(value: unknown): AgentConfigValues {
-  return v.parse(agentConfigValuesSchema, value)
-}
-
 /**
  * Resolve a single descriptor's effective value for a block: the explicit choice
  * if present and valid, else the descriptor's default.
