@@ -1,5 +1,35 @@
 # @cat-factory/local-server
 
+## 0.146.5
+
+### Patch Changes
+
+- 5c50d30: Cleanup pass with no behaviour change: deletes exports nothing consumed (dead constants, parse
+  wrappers, alias schemas, pass-through re-exports and the Worker's compat-shim modules left over
+  from the `@cat-factory/server` extraction), drops the `export` keyword from module-local symbols,
+  folds duplicated private helpers onto one owner (base64, `scrub`, `sleep`, `withFlag`, the
+  per-row busy guard), and removes tests that asserted a constant against its own literal or
+  re-implemented the code under test. The SPA's unreachable palette drop handler goes with it.
+  
+  Internal-surface break, flagged per the compatibility rules: the removed barrel exports
+  (`DEFAULT_CI_MAX_ATTEMPTS`, `STANDARD_PHASES`, `isTestingKind`, `isBugFishingPhaseId`,
+  `SEALED_SECRET_SOURCE_NAMES`, `TelemetryReadResults`, `LinearFetchLike`, `ENVIRONMENT_BLOCK_TYPE`,
+  the contracts `parse*`/`safeParse*` one-liners and the `initiativePreset*`/`taskTypeFieldOption`
+  schema aliases) had no consumer in this repository; a downstream import of one of them fails at
+  typecheck and should read the underlying helper directly.
+- Updated dependencies [5c50d30]
+  - @cat-factory/agents@0.156.3
+  - @cat-factory/contracts@0.346.2
+  - @cat-factory/gitlab@0.22.36
+  - @cat-factory/integrations@0.172.5
+  - @cat-factory/kernel@0.336.1
+  - @cat-factory/node-server@0.225.3
+  - @cat-factory/orchestration@0.301.3
+  - @cat-factory/prompt-fragments@1.1.32
+  - @cat-factory/server@0.314.3
+  - @cat-factory/binary-generators@0.3.36
+  - @cat-factory/executor-harness@1.151.0
+
 ## 0.146.4
 
 ### Patch Changes
