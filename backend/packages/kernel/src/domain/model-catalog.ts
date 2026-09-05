@@ -577,10 +577,54 @@ export const MODEL_CATALOG: SelectableModel[] = [
     // cap the proxy's output budget against a limit nobody measured.
     bedrock: { baseModelId: 'anthropic.claude-opus-4-8', acceptsImages: true },
   },
-  // The GPT-5.6 tiers are what Codex actually serves today: `sol` (flagship), `terra`
-  // (balanced everyday) and `luna` (cheapest). The model id IS the Codex `--model` slug —
-  // the `-codex` suffixed family ended at GPT-5.3, so a `gpt-5.5-codex`-shaped id makes the
-  // CLI fail with `Unknown model`. GPT-5.5 stays as the previous-generation frontier tier.
+  // GPT-6 Astra (2026-09-03) is OpenAI's flagship and the newest model Codex serves. Same id
+  // rule as the GPT-5.6 tiers below: the model id IS the Codex `--model` slug. Codex resolves
+  // it only from 0.153.0 onward, which the executor image's pin is well past: a CLI older than
+  // that answers `Unknown model` rather than falling back, so dropping that pin below 0.153.0
+  // silently breaks this entry at dispatch.
+  {
+    id: 'gpt-6-astra',
+    family: 'openai',
+    label: 'GPT-6 Astra',
+    description:
+      "OpenAI's flagship for long-horizon agentic work, computer use and software " +
+      'engineering: a 1.05M window that reads images. Run via Codex on your ChatGPT ' +
+      'subscription, or pay-as-you-go through OpenRouter (billed at OpenAI rates).',
+    // No `bedrock` arm, though OpenAI named Bedrock among the launch-day routes. No model
+    // card published so far names the Bedrock id for it, and this catalog declares a route
+    // only once that route is VERIFIED to serve the exact model: a declared-but-absent one
+    // is picked by `effectiveVariant` and then fails at dispatch, which is the failure the
+    // `qwen3.8-max-0902` entry above is also shaped to avoid. Add the arm when the id lands.
+    //
+    // No separate "Astra Pro" entry either, and it is not an omission. Pro is not a second
+    // model or a second API id: it is this same `gpt-6-astra` served with `reasoning.mode`
+    // set to `pro`, and it exists only inside the ChatGPT plans, never on the API or in
+    // Codex. An entry for it could only name a route nothing here is able to dispatch.
+    openrouter: {
+      ref: {
+        provider: 'openrouter',
+        model: 'openai/gpt-6-astra',
+        contextTokens: 1_050_000,
+        acceptsImages: true,
+      },
+      keyEnv: 'OPENROUTER_API_KEY',
+      providerLabel: 'OpenRouter',
+    },
+    subscription: {
+      ref: {
+        provider: 'openai',
+        model: 'gpt-6-astra',
+        harness: 'codex',
+        contextTokens: 1_050_000,
+        acceptsImages: true,
+      },
+      vendor: 'codex',
+    },
+  },
+  // The GPT-5.6 tiers are the generation below it, and Codex still serves all three: `sol`
+  // (flagship), `terra` (balanced everyday) and `luna` (cheapest). The `-codex` suffixed
+  // family ended at GPT-5.3, so a `gpt-5.5-codex`-shaped id makes the CLI fail with
+  // `Unknown model`. GPT-5.5 stays as the previous-generation frontier tier.
   {
     id: 'gpt-5.6-sol',
     family: 'openai',

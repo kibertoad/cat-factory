@@ -118,9 +118,13 @@ RUN echo 'harness:100000:65536' > /etc/subuid \
 # times a week and the harness tracks them closely. That exemption is specific to these
 # three pins (an explicit call, re-made each time they are bumped) and does NOT extend to
 # the Pi extensions below or to anything installed through the workspace lockfile.
-ARG PI_VERSION=0.84.4
-ARG CLAUDE_CODE_VERSION=2.1.260
-ARG CODEX_VERSION=0.153.2
+#
+# The Codex pin also carries a FLOOR the catalog depends on: `gpt-6-astra` resolves only from
+# Codex 0.153.0 onward, and an older CLI answers `Unknown model` rather than falling back, so
+# moving this pin below that version silently breaks that catalog entry at dispatch.
+ARG PI_VERSION=0.85.0
+ARG CLAUDE_CODE_VERSION=2.1.261
+ARG CODEX_VERSION=0.153.4
 RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
     sh -eu -c 'apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl procps psmisc python3 jq ripgrep && rm -rf /var/lib/apt/lists/*; \
     if [ -s /tmp/extra_ca.crt ]; then export NODE_EXTRA_CA_CERTS=/tmp/extra_ca.crt; fi; \

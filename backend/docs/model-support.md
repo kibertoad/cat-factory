@@ -212,12 +212,19 @@ Several shapes of entry fall out of this:
   day, which is why it is the first Claude entry here to carry subscription, OpenRouter and
   Bedrock arms at once. It is also now the most expensive model this catalog can select on
   Bedrock, so the bare `bedrock` price row (which cannot match per model, because a Bedrock ref
-  carries the account's geo prefix) moved up to its tier.
+  carries the account's geo prefix) moved up to its tier. `gpt-6-astra` is the counter-case and
+  the reason this bullet is a rule rather than a habit: OpenAI named Bedrock among its launch-day
+  routes, but no published card names the Bedrock **id**, so the entry declares no `bedrock` arm.
+  An announcement is not a verified route, and a declared-but-absent one is selected by
+  `effectiveVariant` and then fails at dispatch.
 - **Subscription-only**: `claude-sonnet`. No Cloudflare/direct/OpenRouter base; the
   subscription harness is the _only_ way to run it, so it requires a connected vendor
   token (§6) and there is **no inline fallback** (§5). `claude-fable`, `claude-fable-5-1`,
-  `claude-opus` and the GPT-5.6 / GPT-5.5 tiers pair their subscription flavour with an
-  OpenRouter pay-as-you-go base, so they are dual-mode rather than subscription-only.
+  `claude-opus` and the GPT-6 Astra / GPT-5.6 / GPT-5.5 tiers pair their subscription flavour
+  with an OpenRouter pay-as-you-go base, so they are dual-mode rather than subscription-only.
+  `gpt-6-astra` carries one more constraint the others do not: Codex resolves that slug only
+  from CLI 0.153.0 onward, so a deployment running an older executor image gets `Unknown model`
+  rather than a fallback.
 - **Local (per-user)**: locally-run models on a user's own runner (Ollama / LM Studio /
   llama.cpp / vLLM / custom OpenAI-compatible). NOT static catalog entries: each user
   configures runners in the UI ("My local runners", stored per-user in
@@ -611,9 +618,10 @@ Example `BEDROCK_MODELS` for a US account (verified Aug 2026):
 BEDROCK_MODELS=us.anthropic.claude-opus-4-8,global.anthropic.claude-opus-4-8,openai.gpt-5.5
 ```
 
-**Bedrock lags the vendors' own APIs**: its newest Anthropic model is Opus 4.8, not the
-Opus 5 / Sonnet 5 the subscription and OpenRouter flavours run, and its OpenAI ids are
-`openai.gpt-5.5` / `openai.gpt-5.4` rather than the GPT-5.6 tiers. Don't copy a catalog
+**Bedrock lags the vendors' own APIs**, unevenly and per vendor: Fable 5.1 landed there on
+Anthropic's launch day while Opus 5 / Sonnet 5 are still subscription and OpenRouter only, and
+its OpenAI ids remain `openai.gpt-5.5` / `openai.gpt-5.4` rather than the GPT-5.6 tiers or
+GPT-6 Astra. Don't copy a catalog
 model id into `BEDROCK_MODELS`. The catalog spans 18 providers and 110+ variants and
 access is granted per account, so confirm each id against
 `aws bedrock list-foundation-models` / `list-inference-profiles` for YOUR region: an id
