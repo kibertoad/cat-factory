@@ -343,6 +343,11 @@
         "focus": {
           "label": "Dónde concentrarse",
           "placeholder": "Subsistemas, directorios o el tipo de defecto que más tiempo le está costando a este equipo"
+        },
+        "maxPasses": {
+          "label": "Pasadas máximas",
+          "hint": "Número máximo de pasadas de solo lectura de esta expedición. Déjalo vacío para {count}. En una base de código grande cada ángulo se pesca por territorio, y lo que el presupuesto recorte queda registrado como no pescado.",
+          "problem": "Introduce un número entero entre 1 y {max}, o déjalo vacío para el valor predeterminado."
         }
       }
     },
@@ -8438,6 +8443,19 @@
       "parked": "Se han explorado todos los ángulos.",
       "parkedWithUntriaged": "Quedan {count} hallazgo(s) sin decidir.",
       "finish": "Terminar el triaje"
+    },
+    "coverage": {
+      "share": "{percent}% de este territorio leído",
+      "tooltip": "Esta pasada declaró haber leído el {percent}% de su territorio. Dato declarado por el agente."
+    },
+    "plan": {
+      "surveyUnavailable": "No se pudo inspeccionar el código, así que esta expedición lo pescó como un todo: {reason}",
+      "treeTruncated": "El árbol del repositorio llegó truncado, así que los territorios de abajo cubren solo la parte que se pudo leer.",
+      "unfished": "Se pescaron {fished} de {planned} pasadas previstas. Sin pescar en esta ejecución:",
+      "unfishedCell": "{territory}, bajo {angle}"
+    },
+    "territories": {
+      "heading": "Territorios"
     }
   }
 }

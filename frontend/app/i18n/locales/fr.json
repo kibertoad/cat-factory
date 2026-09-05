@@ -343,6 +343,11 @@
         "focus": {
           "label": "Où se concentrer",
           "placeholder": "Sous-systèmes, répertoires, ou le type de défaut qui coûte le plus de temps à cette équipe"
+        },
+        "maxPasses": {
+          "label": "Passes maximum",
+          "hint": "Nombre maximal de passes en lecture seule de cette expédition. Laisser vide pour {count}. Sur un gros code, chaque angle est pêché par territoire, et ce que le budget coupe est consigné comme non pêché.",
+          "problem": "Saisissez un nombre entier compris entre 1 et {max}, ou laissez le champ vide pour la valeur par défaut."
         }
       }
     },
@@ -8438,6 +8443,19 @@
       "parked": "Tous les angles ont été explorés.",
       "parkedWithUntriaged": "{count} constatation(s) encore non tranchée(s).",
       "finish": "Terminer le tri"
+    },
+    "coverage": {
+      "share": "{percent}% de ce territoire lu",
+      "tooltip": "Cette passe déclare avoir lu {percent}% de son territoire. Donnée déclarée par l'agent."
+    },
+    "plan": {
+      "surveyUnavailable": "Le code n'a pas été cartographié, cette expédition l'a donc pêché d'un seul tenant : {reason}",
+      "treeTruncated": "L'arbre du dépôt est revenu tronqué : les territoires ci-dessous ne couvrent que la partie lisible.",
+      "unfished": "{fished} passes pêchées sur {planned} prévues. Non pêché lors de cette exécution :",
+      "unfishedCell": "{territory}, sous {angle}"
+    },
+    "territories": {
+      "heading": "Territoires"
     }
   }
 }

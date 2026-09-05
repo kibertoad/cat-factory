@@ -19,6 +19,10 @@ function fakeClient(overrides: Partial<GitHubClient> = {}): GitHubClient {
     listDirectory: vi.fn(async () => [
       { path: 'spec/features/a.feature', name: 'a.feature', type: 'file', sha: 's' },
     ]),
+    listTree: vi.fn(async () => ({
+      entries: [{ path: 'src/a.ts', name: 'a.ts', type: 'file', sha: 's', size: 12 }],
+      truncated: false,
+    })),
     branchHeadSha: vi.fn(async (_inst: number, _ref: unknown, branch: string) =>
       branch === 'main' ? 'sha-main' : branch === 'cat-factory/blk' ? 'sha-work' : null,
     ),
@@ -44,6 +48,23 @@ describe('makeRepoFiles', () => {
 
     await repo.listDirectory('spec/features')
     expect(client.listDirectory).toHaveBeenCalledWith(42, REF, 'spec/features', undefined)
+
+    await repo.listTree!('main')
+    expect(client.listTree).toHaveBeenCalledWith(42, REF, 'main')
+  })
+
+  it('caches the whole-tree read as ONE entry per ref', async () => {
+    // The read every pass of a bug-fishing expedition shares: without one entry per ref, each of
+    // the T x A dispatches would re-read the tree of a branch that does not move while they run.
+    const client = fakeClient()
+    const cache = fakeRepoFilesCache()
+    const repo = makeRepoFiles(client, 42, REF, cache)
+
+    const first = await repo.listTree!('main')
+    const second = await repo.listTree!('main')
+    expect(client.listTree).toHaveBeenCalledTimes(1)
+    expect(second).toEqual(first)
+    expect(first.entries).toHaveLength(1)
   })
 
   it('resolves a branch head sha via the exact single-ref lookup, or null when absent', async () => {

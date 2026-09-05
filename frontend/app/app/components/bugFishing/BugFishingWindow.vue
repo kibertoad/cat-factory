@@ -68,11 +68,44 @@ const severityRank = (s: BugFishingSeverity) => {
 }
 
 /**
- * Which phase's findings the reader is looking at. `null` is "everything caught so far", which
- * is the default because an expedition's value is the whole catch — the per-phase filter exists
+ * A pass is an ANGLE over a TERRITORY, so a phase id alone no longer identifies one: on a
+ * partitioned codebase the same angle runs once per territory. The rail selects, filters and
+ * counts by this pair, which is also why it is derived in one place rather than spelled at each
+ * site.
+ */
+function passKey(pass: { id: string; territoryId?: string | null }): string {
+  return `${pass.territoryId ?? ''}::${pass.id}`
+}
+
+/**
+ * Which pass's findings the reader is looking at. `null` is "everything caught so far", which
+ * is the default because an expedition's value is the whole catch — the per-pass filter exists
  * for someone working through one angle at a time, not as the primary reading.
  */
-const selectedPhaseId = ref<string | null>(null)
+const selectedPassKey = ref<string | null>(null)
+
+/**
+ * The passes grouped by the territory they fished, in plan order.
+ *
+ * One group with no territory is the pass-through: a codebase small enough to fish whole (or an
+ * expedition planned before territories existed) renders exactly the flat angle rail it always
+ * did, because its group has no header to show.
+ */
+const territoryGroups = computed(() => {
+  const groups: { id: string | null; label: string | null; passes: typeof phases.value }[] = []
+  for (const phase of phases.value) {
+    const id = phase.territoryId ?? null
+    const last = groups[groups.length - 1]
+    if (last && last.id === id) last.passes.push(phase)
+    else groups.push({ id, label: phase.territoryLabel ?? null, passes: [phase] })
+  }
+  return groups
+})
+
+/** The expedition's plan: the budget, what it cut, and what the survey could not see. */
+const plan = computed(() => state.value?.plan ?? null)
+/** The cells the pass budget cut, so the window can name the ground nobody looked at. */
+const unfished = computed(() => plan.value?.unfished ?? [])
 
 /** Whether findings whose decision has been made are shown. Off by default: what is left to
  *  decide is the working list, and a triaged finding that stays in it reads as untriaged. */
@@ -92,10 +125,12 @@ function isOpen(f: BugFishingFinding): boolean {
 }
 
 const visibleFindings = computed<BugFishingFinding[]>(() => {
-  const byPhase = selectedPhaseId.value
-    ? findings.value.filter((f) => f.phaseId === selectedPhaseId.value)
+  const byPass = selectedPassKey.value
+    ? findings.value.filter(
+        (f) => passKey({ id: f.phaseId, territoryId: f.territoryId }) === selectedPassKey.value,
+      )
     : findings.value
-  const triaged = showTriaged.value ? byPhase : byPhase.filter(isOpen)
+  const triaged = showTriaged.value ? byPass : byPass.filter(isOpen)
   return [...triaged].sort((a, b) => severityRank(a.severity) - severityRank(b.severity))
 })
 
@@ -106,19 +141,38 @@ const spawnedCount = computed(
   () => findings.value.filter((f) => f.spawn?.status === 'spawned').length,
 )
 
-/** The phase the rail has selected, when one is. */
+/** The pass the rail has selected, when one is. */
 const selectedPhase = computed(() =>
-  selectedPhaseId.value ? (phases.value.find((p) => p.id === selectedPhaseId.value) ?? null) : null,
+  selectedPassKey.value
+    ? (phases.value.find((p) => passKey(p) === selectedPassKey.value) ?? null)
+    : null,
 )
+
+/**
+ * What share of its territory's manifest a settled pass reported reading, as a percentage, or
+ * null when there is nothing honest to show.
+ *
+ * Null covers two different absences on purpose, and neither renders as 0%. A pass that reported
+ * no paths said nothing about what it read, and a whole-codebase pass had no manifest to be a
+ * share of; showing either as "0% covered" would accuse a pass that may have read everything.
+ */
+function coverageShare(pass: { coverage?: { filesRead: number; manifestFiles: number } | null }) {
+  const coverage = pass.coverage
+  if (!coverage || coverage.manifestFiles <= 0) return null
+  return Math.min(100, Math.round((coverage.filesRead / coverage.manifestFiles) * 100))
+}
 
 /** How many angles have settled (completed or failed) — what the still-fishing banner counts. */
 const settledPhaseCount = computed(
   () => phases.value.filter((p) => p.status === 'completed' || p.status === 'failed').length,
 )
 
-/** How many findings each phase contributed, for the rail's per-angle count. */
-function phaseFindingCount(phaseId: string): number {
-  return findings.value.filter((f) => f.phaseId === phaseId).length
+/** How many findings each pass contributed, for the rail's per-pass count. */
+function phaseFindingCount(pass: { id: string; territoryId?: string | null }): number {
+  const key = passKey(pass)
+  return findings.value.filter(
+    (f) => passKey({ id: f.phaseId, territoryId: f.territoryId }) === key,
+  ).length
 }
 
 /**
@@ -216,50 +270,80 @@ const PHASE_ICON: Record<string, string> = {
           type="button"
           class="mb-1 w-full rounded-md px-2 py-1.5 text-left text-[12px]"
           :class="
-            selectedPhaseId === null
+            selectedPassKey === null
               ? 'bg-slate-800 text-slate-100'
               : 'text-slate-400 hover:bg-slate-800/60'
           "
-          @click="selectedPhaseId = null"
+          @click="selectedPassKey = null"
         >
           {{ t('bugFishing.phases.all', { count: findings.length }) }}
         </button>
-        <ul class="space-y-0.5">
-          <li v-for="phase in phases" :key="phase.id">
-            <button
-              type="button"
-              class="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left"
-              :class="
-                selectedPhaseId === phase.id
-                  ? 'bg-slate-800 text-slate-100'
-                  : 'text-slate-400 hover:bg-slate-800/60'
-              "
-              :data-testid="`bug-fishing-phase-${phase.id}`"
-              @click="selectedPhaseId = phase.id"
-            >
-              <UIcon
-                :name="PHASE_ICON[phase.status] ?? 'i-lucide-circle-dashed'"
-                class="mt-0.5 h-3.5 w-3.5 shrink-0"
-                :class="{
-                  'animate-spin text-sky-300': phase.status === 'fishing',
-                  'text-emerald-400': phase.status === 'completed',
-                  'text-amber-400': phase.status === 'failed',
-                  'text-slate-600': phase.status === 'pending',
-                }"
-              />
-              <span class="min-w-0 flex-1">
-                <span class="block truncate text-[12px]">{{ phase.title }}</span>
-                <span class="block text-[10px] text-slate-500">
-                  {{
-                    phase.status === 'completed' || phase.status === 'failed'
-                      ? t('bugFishing.phases.found', { count: phaseFindingCount(phase.id) })
-                      : t(`bugFishing.phases.status.${phase.status}`)
-                  }}
+        <!-- Grouped by TERRITORY on a partitioned codebase. A codebase small enough to fish
+             whole has one group with no label, which renders as the flat angle rail. -->
+        <div v-for="group in territoryGroups" :key="group.id ?? 'whole'" class="mb-2">
+          <p
+            v-if="group.label"
+            class="mb-1 mt-2 truncate px-1 text-[10px] font-semibold uppercase tracking-wide text-sky-400/80"
+            :title="group.label"
+          >
+            {{ group.label }}
+          </p>
+          <ul class="space-y-0.5">
+            <li v-for="phase in group.passes" :key="passKey(phase)">
+              <button
+                type="button"
+                class="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left"
+                :class="
+                  selectedPassKey === passKey(phase)
+                    ? 'bg-slate-800 text-slate-100'
+                    : 'text-slate-400 hover:bg-slate-800/60'
+                "
+                :data-testid="`bug-fishing-phase-${phase.id}`"
+                @click="selectedPassKey = passKey(phase)"
+              >
+                <UIcon
+                  :name="PHASE_ICON[phase.status] ?? 'i-lucide-circle-dashed'"
+                  class="mt-0.5 h-3.5 w-3.5 shrink-0"
+                  :class="{
+                    'animate-spin text-sky-300': phase.status === 'fishing',
+                    'text-emerald-400': phase.status === 'completed',
+                    'text-amber-400': phase.status === 'failed',
+                    'text-slate-600': phase.status === 'pending',
+                  }"
+                />
+                <span class="min-w-0 flex-1">
+                  <span class="block truncate text-[12px]">{{ phase.title }}</span>
+                  <span class="block text-[10px] text-slate-500">
+                    {{
+                      phase.status === 'completed' || phase.status === 'failed'
+                        ? t('bugFishing.phases.found', { count: phaseFindingCount(phase) })
+                        : t(`bugFishing.phases.status.${phase.status}`)
+                    }}
+                  </span>
+                  <!-- The coverage rail. A LOW share is what tells a reader that "found nothing"
+                       here means "did not look"; absent (a pass that reported no reads, or one
+                       with no manifest to be a share of) shows nothing at all rather than 0%. -->
+                  <span
+                    v-if="coverageShare(phase) !== null"
+                    class="mt-1 block"
+                    :data-testid="`bug-fishing-coverage-${phase.id}`"
+                    :title="t('bugFishing.coverage.tooltip', { percent: coverageShare(phase) })"
+                  >
+                    <span class="block h-0.5 w-full rounded-full bg-slate-700">
+                      <span
+                        class="block h-0.5 rounded-full bg-sky-500/70"
+                        :style="{ width: `${coverageShare(phase)}%` }"
+                      />
+                    </span>
+                    <span class="mt-0.5 block text-[10px] text-slate-600">
+                      {{ t('bugFishing.coverage.share', { percent: coverageShare(phase) }) }}
+                    </span>
+                  </span>
                 </span>
-              </span>
-            </button>
-          </li>
-        </ul>
+              </button>
+            </li>
+          </ul>
+        </div>
       </aside>
 
       <div class="min-w-0 flex-1 overflow-y-auto px-5 py-4">
@@ -301,6 +385,44 @@ const PHASE_ICON: Record<string, string> = {
               })
             }}
           </span>
+        </div>
+
+        <!-- What this expedition did NOT cover. Three separate facts, each with its own fix, so
+             none of them is folded into the others: the pass budget cut cells nobody fished, the
+             provider truncated the tree the territories were computed from, or the codebase could
+             not be surveyed at all. A cap silent about its tail teaches the reader that the tail
+             was clean. -->
+        <div
+          v-if="plan && (unfished.length > 0 || plan.treeTruncated || plan.surveyUnavailableReason)"
+          data-testid="bug-fishing-plan"
+          class="mb-4 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-[12px] text-amber-200"
+        >
+          <p v-if="plan.surveyUnavailableReason" data-testid="bug-fishing-survey-unavailable">
+            {{ t('bugFishing.plan.surveyUnavailable', { reason: plan.surveyUnavailableReason }) }}
+          </p>
+          <p v-if="plan.treeTruncated" data-testid="bug-fishing-tree-truncated" class="mt-1">
+            {{ t('bugFishing.plan.treeTruncated') }}
+          </p>
+          <template v-if="unfished.length > 0">
+            <p class="mt-1" data-testid="bug-fishing-unfished">
+              {{
+                t('bugFishing.plan.unfished', {
+                  fished: phases.length,
+                  planned: plan.plannedCells,
+                })
+              }}
+            </p>
+            <ul class="mt-1 space-y-0.5 text-[11px] text-amber-200/80">
+              <li v-for="cell in unfished" :key="`${cell.territoryId}::${cell.phaseId}`">
+                {{
+                  t('bugFishing.plan.unfishedCell', {
+                    territory: cell.territoryLabel,
+                    angle: cell.phaseTitle,
+                  })
+                }}
+              </li>
+            </ul>
+          </template>
         </div>
 
         <!-- What the marks will run. Stated before anything is created, because the pipeline is

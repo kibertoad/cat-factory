@@ -22,7 +22,11 @@ import type {
   TaskTypeFields,
 } from '~/types/domain'
 import { DOC_KINDS, DOC_KIND_FIELDS } from '~/types/domain'
-import { BUG_FISHING_PHASES } from '@cat-factory/contracts'
+import {
+  BUG_FISHING_DEFAULT_PASS_BUDGET,
+  BUG_FISHING_MAX_PASS_BUDGET,
+  BUG_FISHING_PHASES,
+} from '@cat-factory/contracts'
 import { resolveComponentRegistry } from '@modular-vue/core'
 import { useReactiveSlots } from '@modular-vue/runtime'
 import type { AppSlots, ResultViewContribution } from '~/modular/slots'
@@ -138,6 +142,8 @@ const timeboxHours = ref<number | undefined>(undefined)
 // the deliberate act) plus an optional focus folded into every angle's prompt.
 const fishingPhaseIds = ref<string[]>([])
 const fishingFocus = ref('')
+/** Held as a string because the input is a text field; parsed at submit, blank ⇒ the default. */
+const fishingMaxPasses = ref('')
 // Spike research criteria — folded into the spike agent's prompt (see the backend `spike` kind).
 const spikeResearchQuestion = ref('')
 const spikeSuccessCriteria = ref('')
@@ -304,12 +310,37 @@ function buildCustomTypeFields(): TaskTypeFields | undefined {
  * Its own function rather than another arm of {@link buildTypeFields}, whose per-type chain is at
  * its complexity ceiling — a budget is a split trigger, not a number to raise.
  */
+/**
+ * The typed pass budget, or undefined when the field is blank.
+ *
+ * `null` is the third answer: something was typed that is not a budget. Kept distinct from blank
+ * so {@link fishingMaxPassesProblem} can refuse it HERE, where the person can see which field is
+ * wrong, rather than letting the create call come back as a generic 422 whose only detail is a
+ * valibot path.
+ */
+const fishingMaxPassesValue = computed<number | null | undefined>(() => {
+  const raw = fishingMaxPasses.value.trim()
+  if (!raw) return undefined
+  const parsed = Number(raw)
+  if (!Number.isInteger(parsed)) return null
+  return parsed >= 1 && parsed <= BUG_FISHING_MAX_PASS_BUDGET ? parsed : null
+})
+
+/** The message shown under the pass-budget field, or null when it is fine. */
+const fishingMaxPassesProblem = computed(() =>
+  fishingMaxPassesValue.value === null
+    ? t('board.addTask.bugFishingFields.maxPasses.problem', { max: BUG_FISHING_MAX_PASS_BUDGET })
+    : null,
+)
+
 function buildBugFishingFields(): TaskTypeFields | undefined {
   const f: TaskTypeFields = {}
   if (fishingPhaseIds.value.length && fishingPhaseIds.value.length < BUG_FISHING_PHASES.length) {
     f.fishingPhaseIds = [...fishingPhaseIds.value]
   }
   if (fishingFocus.value.trim()) f.fishingFocus = fishingFocus.value.trim()
+  const maxPasses = fishingMaxPassesValue.value
+  if (typeof maxPasses === 'number') f.fishingMaxPasses = maxPasses
   return Object.keys(f).length ? f : undefined
 }
 
@@ -597,6 +628,7 @@ watch(open, (isOpen) => {
   timeboxHours.value = undefined
   fishingPhaseIds.value = []
   fishingFocus.value = ''
+  fishingMaxPasses.value = ''
   spikeResearchQuestion.value = ''
   spikeSuccessCriteria.value = ''
   spikeOptionsToCompare.value = ''
@@ -708,6 +740,10 @@ const canAdd = computed(() => {
     return false
   // A custom type's collected form must satisfy its descriptor (the same rule the server enforces).
   if (customFieldProblems.value.length > 0) return false
+  // The pass budget is bounded by `taskTypeFieldsSchema`, so a value outside it is refused at
+  // creation whatever this form does. Refusing it here is what turns that into a message beside
+  // the field rather than a generic failure toast.
+  if (taskType.value === 'bug-fishing' && fishingMaxPassesProblem.value) return false
   return true
 })
 
@@ -1103,6 +1139,30 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
                 autoresize
                 :placeholder="t('board.addTask.bugFishingFields.focus.placeholder')"
                 class="w-full"
+              />
+            </UFormField>
+            <!-- An OVERRIDE, so it is hidden at the basic tier and what remains is exactly the
+                 shipped default it would have shown. It bites only on a codebase large enough to
+                 be split into territories, where the plan is territories x angles. -->
+            <UFormField
+              v-if="uiMode.isAdvanced"
+              :label="t('board.addTask.bugFishingFields.maxPasses.label')"
+              :hint="t('board.addTask.optional')"
+              :description="
+                t('board.addTask.bugFishingFields.maxPasses.hint', {
+                  count: BUG_FISHING_DEFAULT_PASS_BUDGET,
+                })
+              "
+              :error="fishingMaxPassesProblem ?? undefined"
+            >
+              <UInput
+                v-model="fishingMaxPasses"
+                type="number"
+                :min="1"
+                :max="BUG_FISHING_MAX_PASS_BUDGET"
+                :step="1"
+                :placeholder="String(BUG_FISHING_DEFAULT_PASS_BUDGET)"
+                data-testid="add-task-fishing-max-passes"
               />
             </UFormField>
           </div>

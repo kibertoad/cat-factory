@@ -46,10 +46,10 @@ function isPinnedSha(gitRef: string): boolean {
 /**
  * Bind a {@link GitHubClient} to one installation + repo as a {@link RepoFiles}.
  *
- * When `cache` (the app's `repoFiles` cache, slice 4) is supplied, `getFile`/`listDirectory`
- * against a NAMED ref read through it — grouped per `(installation, owner, repo, ref)` so one
+ * When `cache` (the app's `repoFiles` cache, slice 4) is supplied, `getFile`/`listDirectory`/
+ * `listTree` against a NAMED ref read through it — grouped per `(installation, owner, repo, ref)` so one
  * `commitFiles` (or a push webhook) drops exactly the branch it touched, and keyed per path
- * (`f:`/`d:` prefixes). Each entry remembers the branch head sha it reflects, so an entry
+ * (`f:`/`d:` prefixes; the whole-tree read is the single `t:` entry of its ref). Each entry remembers the branch head sha it reflects, so an entry
  * entering its refresh window re-validates with a single cheap `branchHeadSha` compare instead
  * of re-fetching every file; a sha-pinned read is immutable (no probe). The head sha a cold
  * batch stamps onto its entries is read ONCE per branch (memoised for this instance's lifetime,
@@ -64,12 +64,16 @@ export function makeRepoFiles(
   cache?: GroupCacheHandle<CachedRepoRead>,
 ): RepoFiles {
   const headSha = (branch: string) => client.branchHeadSha(installationId, ref, branch)
-  // The direct pass-through facade. When a cache is supplied we override only the three methods
-  // it actually changes (getFile/listDirectory/commitFiles) and inherit the rest from here, so
-  // the shared bindings can't drift between the cached and uncached paths.
+  // The direct pass-through facade. When a cache is supplied we override only the four methods
+  // it actually changes (getFile/listDirectory/listTree/commitFiles) and inherit the rest from
+  // here, so the shared bindings can't drift between the cached and uncached paths.
   const base: RepoFiles = {
     getFile: (path, gitRef) => client.getFileContent(installationId, ref, path, gitRef),
     listDirectory: (path, gitRef) => client.listDirectory(installationId, ref, path, gitRef),
+    // The whole recursive tree, with the provider's truncation flag intact. Bound
+    // unconditionally: `listTree` is a required member of the client, so a caller holding a
+    // `RepoFiles` at all can survey the codebase.
+    listTree: (gitRef) => client.listTree(installationId, ref, gitRef),
     // Exact single-ref lookup — correct even on repos with more branches than one
     // `listBranches` page. Null ⇒ the branch does not exist yet (create-vs-commit).
     headSha,
@@ -213,6 +217,23 @@ export function makeRepoFiles(
       )
       return cached.kind === 'dir' ? cached.entries : []
     },
+    // One entry per ref (the tree IS the ref's whole content, so there is nothing to key on
+    // below it). This is what makes a bug-fishing expedition's T x A dispatches share ONE tree
+    // read of the branch they all fish, instead of re-reading it per pass.
+    listTree: async (gitRef) => {
+      if (!gitRef) return client.listTree(installationId, ref, gitRef)
+      const cached = await cache.get(
+        't:',
+        group(gitRef),
+        async () => ({
+          kind: 'tree' as const,
+          headSha: await headForLoad(gitRef),
+          listing: await client.listTree(installationId, ref, gitRef),
+        }),
+        probeFor(gitRef),
+      )
+      return cached.kind === 'tree' ? cached.listing : { entries: [], truncated: false }
+    },
     commitFiles: async (input) => {
       const result = await client.commitFiles(installationId, ref, input)
       // The branch moved: drop its cached reads (this replica's, and — when a notification
@@ -263,6 +284,9 @@ export function makeResolveRunRepoContext(
       owner: target.owner,
       name: target.name,
       ...(target.provider ? { provider: target.provider } : {}),
+      // The monorepo subtree this service lives in, carried through so a checkout-free reader
+      // scopes to the same root the agent's checkout is rooted at.
+      ...(target.serviceDirectory ? { serviceDirectory: target.serviceDirectory } : {}),
     }
   }
 }

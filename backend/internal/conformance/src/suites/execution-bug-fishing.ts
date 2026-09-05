@@ -2,6 +2,8 @@ import {
   type Block,
   type BugFishingStepState,
   type ExecutionInstance,
+  type RepoContentEntry,
+  type RepoFiles,
   type WorkspaceSnapshot,
 } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
@@ -45,6 +47,18 @@ const fisherOutput = {
       detail: 'A caller passing an inverted range gets an empty result rather than an error.',
     },
   ],
+}
+
+/**
+ * The phase a given territory was fished under.
+ *
+ * A function rather than an inline `find(...)!`, so a partition that produced no phase for the
+ * territory fails naming the territory instead of dereferencing undefined three assertions later.
+ */
+function phaseForTerritory(state: BugFishingStepState, territoryId: string) {
+  const phase = (state.phases ?? []).find((p) => p.territoryId === territoryId)
+  if (!phase) throw new Error(`no phase was recorded for territory ${territoryId}`)
+  return phase
 }
 
 export function defineBugFishingSuite(harness: ConformanceHarness): void {
@@ -285,5 +299,182 @@ export function defineBugFishingSuite(harness: ConformanceHarness): void {
       )
       expect(second.body.findings?.[1]?.spawn?.pipelineId).toBe('pl_bugfix')
     })
+
+    // The territory half of the flow is its own suite: same harness, same describe-level
+    // contract, split out because one function may not carry both and a suite that grows a
+    // dimension is exactly what the budget is a trigger for.
+    defineTerritoryCases(harness)
+  })
+}
+
+/**
+ * TERRITORIES: a codebase too large to fish whole is partitioned by the platform, and every
+ * angle runs once per territory.
+ *
+ * This is the half that cannot be unit-tested, because it crosses the run-repo resolution, the
+ * tree read, the phase loop and the persisted step blob: a facade that mapped `territoryId` off
+ * the phase row would still pass every pure reduction's test and lose the whole partition on a
+ * real run.
+ */
+function defineTerritoryCases(harness: ConformanceHarness): void {
+  it('partitions a large codebase into territories and fishes each angle per territory', async () => {
+    // Two directories, each far past the per-territory ceiling, so the survey cannot pack them
+    // together. Sizes come from the tree's blob bytes, which is what the real provider reports.
+    const bigFile = (path: string): RepoContentEntry => ({
+      path,
+      name: path.split('/').pop()!,
+      type: 'file',
+      sha: `sha-${path}`,
+      size: 200_000,
+    })
+    const entries: RepoContentEntry[] = [
+      { path: 'billing', name: 'billing', type: 'dir', sha: 'tree-billing' },
+      { path: 'sessions', name: 'sessions', type: 'dir', sha: 'tree-sessions' },
+      ...Array.from({ length: 4 }, (_, i) => bigFile(`billing/invoice${i}.ts`)),
+      ...Array.from({ length: 4 }, (_, i) => bigFile(`sessions/store${i}.ts`)),
+      // Excluded by the ignore vocabulary: a vendored tree is not code this repository wrote,
+      // so a territory packed with it would be budget spent on nothing.
+      bigFile('node_modules/left-pad/index.js'),
+    ]
+    const repo: RepoFiles = {
+      getFile: async () => null,
+      listDirectory: async () => [],
+      listTree: async () => ({ entries, truncated: false }),
+      headSha: async () => 'base-sha',
+      createBranch: async () => {},
+      deleteBranch: async () => {},
+      commitFiles: async () => ({ sha: 'commit-sha' }),
+      openPullRequest: async () => {
+        throw new Error('not exercised by this test')
+      },
+    }
+    // Every pass returns findings anchored in `billing`, which is one territory's ground and
+    // not the other's. That is what makes the assertions below about the PARTITION rather than
+    // about the loop: the billing pass keeps them, and the sessions pass has them dropped and
+    // COUNTED, which is the platform holding a wandering pass to its territory.
+    const billingOutput = {
+      summary: 'Read the invoice write paths.',
+      filesRead: ['billing/invoice0.ts', 'billing/invoice1.ts'],
+      findings: [
+        {
+          path: 'billing/invoice0.ts',
+          line: 12,
+          severity: 'critical',
+          kind: 'bug',
+          confidence: 'high',
+          title: 'Invoice total is recomputed after the ledger write',
+          detail: 'A corrected line item never reaches the ledger row.',
+        },
+        {
+          path: 'billing/invoice1.ts',
+          severity: 'low',
+          kind: 'footgun',
+          confidence: 'medium',
+          title: 'roundCents clamps instead of refusing',
+          detail: 'A negative amount silently becomes zero.',
+        },
+      ],
+    }
+    const { call, createWorkspace, drive } = harness.makeApp(
+      { customResult: billingOutput },
+      { resolveRunRepoContext: async () => ({ repo, baseBranch: 'main', repoId: 'repo_1' }) },
+    )
+    const { workspace } = await createWorkspace({ seed: true })
+    const wsId = workspace.id
+
+    const task = await call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+      title: 'Fish the whole service',
+      taskType: 'bug-fishing',
+      // One angle, so the matrix is exactly one pass per territory and the assertion below is
+      // about the PARTITION rather than about the angle list.
+      taskTypeFields: { fishingPhaseIds: ['control-flow'] },
+    })
+    await call('POST', `/workspaces/${wsId}/blocks/${task.body.id}/executions`, {
+      pipelineId: 'pl_bug_fishing',
+    })
+    const parked = (await drive(wsId)).find((e) => e.blockId === task.body.id)!
+    const state = parked.steps.find((s) => s.agentKind === 'bug-fisher')!.bugFishing!
+
+    // The partition is on the record as DESCRIPTORS, never file lists: the state rides the run
+    // blob, re-serialised on every progress write.
+    const territories = state.territories ?? []
+    expect(territories.map((t) => t.label).sort()).toEqual(['billing', 'sessions'])
+    expect(territories.every((t) => (t.fileCount ?? 0) === 4)).toBe(true)
+    // The subtree sha comes free with the tree read and is what a later run compares against.
+    expect(territories.every((t) => (t.subtreeShas ?? []).every((sha) => sha.length > 0))).toBe(
+      true,
+    )
+
+    // ONE run, whose phase list is territory x angle, TERRITORY-MAJOR: every phase carries the
+    // territory it fished plus the label it fished under, so a territory a later survey no
+    // longer produces still renders from what this run recorded.
+    expect(state.phases).toHaveLength(2)
+    expect(state.phases?.every((p) => p.id === 'control-flow')).toBe(true)
+    expect(state.phases?.map((p) => p.territoryId).sort()).toEqual(
+      territories.map((t) => t.id).sort(),
+    )
+    expect(state.phases?.every((p) => (p.territoryLabel ?? '').length > 0)).toBe(true)
+    expect(state.phases?.every((p) => p.status === 'completed')).toBe(true)
+
+    // Each pass's findings are stamped with the territory that pass owned, which is what lets
+    // the window group a catch by module and the next pass be briefed with only its own. Both
+    // passes reported the same `billing` findings, and only the billing pass's were kept: a
+    // finding outside a pass's territory is another pass's to file, so filing it twice is what
+    // the drop prevents.
+    const billing = territories.find((t) => t.label === 'billing')!
+    const sessions = territories.find((t) => t.label === 'sessions')!
+    const findings = state.findings ?? []
+    expect(findings).toHaveLength(2)
+    expect(findings.every((f) => f.territoryId === billing.id)).toBe(true)
+
+    // The drop is COUNTED, never silent: a territory that came back clean and one whose pass
+    // spent its findings on somebody else's code have to read differently.
+    const sessionsPhase = phaseForTerritory(state, sessions.id)
+    expect(sessionsPhase.outOfScopeFindings).toBe(2)
+    expect(sessionsPhase.summary).toContain('territory')
+
+    // Coverage is a computed record, and honest about being self-reported. The billing pass
+    // read two of its four manifest files; the sessions pass read none of ITS four and reported
+    // two paths that are not on its manifest at all.
+    const billingPhase = phaseForTerritory(state, billing.id)
+    expect(billingPhase.coverage).toEqual({
+      filesRead: 2,
+      manifestFiles: 4,
+      offManifest: 0,
+      source: 'self-reported',
+    })
+    expect(sessionsPhase.coverage).toMatchObject({ filesRead: 0, offManifest: 2 })
+
+    // The plan says what was planned and what the budget cut. Nothing was cut here (two cells,
+    // a budget of twenty-four), and an empty `unfished` is the honest answer for that.
+    expect(state.plan?.plannedCells).toBe(2)
+    expect(state.plan?.unfished).toEqual([])
+    expect(state.plan?.treeTruncated).toBe(false)
+    expect(state.plan?.surveyUnavailableReason ?? null).toBeNull()
+  })
+
+  // The PASS-THROUGH, asserted rather than assumed: with no repository to survey, the
+  // expedition is field-for-field the one that shipped before territories existed, and it SAYS
+  // it could not survey rather than presenting itself as a small codebase.
+  it('fishes an unsurveyable codebase whole, and says why', async () => {
+    const { call, createWorkspace, drive } = harness.makeApp({ customResult: fisherOutput })
+    const { workspace } = await createWorkspace({ seed: true })
+    const wsId = workspace.id
+    const task = await call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+      title: 'Fish for bugs',
+      taskType: 'bug-fishing',
+      taskTypeFields: { fishingPhaseIds: ['control-flow', 'concurrency'] },
+    })
+    await call('POST', `/workspaces/${wsId}/blocks/${task.body.id}/executions`, {
+      pipelineId: 'pl_bug_fishing',
+    })
+    const parked = (await drive(wsId)).find((e) => e.blockId === task.body.id)!
+    const state = parked.steps.find((s) => s.agentKind === 'bug-fisher')!.bugFishing!
+    expect(state.phases?.map((p) => p.id)).toEqual(['control-flow', 'concurrency'])
+    expect(state.phases?.every((p) => (p.territoryId ?? null) === null)).toBe(true)
+    expect(state.findings?.every((f) => (f.territoryId ?? null) === null)).toBe(true)
+    // An unsurveyable codebase and a small one are the same VALUE and opposite FACTS; only the
+    // reason tells them apart.
+    expect(state.plan?.surveyUnavailableReason).toBeTruthy()
   })
 }

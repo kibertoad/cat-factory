@@ -268,6 +268,7 @@ export type {
   ProjectIssuePage,
   RateLimitSnapshot,
   RepoContentEntry,
+  RepoTreeListing,
   RepoEntry,
   RepoFileContent,
 } from './github-client.js'

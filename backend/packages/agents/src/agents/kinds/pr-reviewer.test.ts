@@ -20,7 +20,7 @@ import {
   planSlices,
   prReviewerDiffPreOp,
   prReviewerExistingCommentsPreOp,
-  prReviewerStandardsPreOp,
+  standardsAsContextFilesPreOp,
   renderExistingReviewComments,
   renderPrDiffContext,
   renderPriorReviewContext,
@@ -541,7 +541,7 @@ describe('standards as context files', () => {
   })
 
   it('writes an index plus one file per resolved fragment', async () => {
-    const result = await prReviewerStandardsPreOp({
+    const result = await standardsAsContextFilesPreOp({
       repo: {} as unknown as RepoFiles,
       context: {
         block: { resolvedFragments: [fragment('a', 'Alpha'), fragment('b', 'Beta')] },
@@ -560,7 +560,7 @@ describe('standards as context files', () => {
 
   it('passes through when the run resolved no fragments', async () => {
     expect(
-      await prReviewerStandardsPreOp({
+      await standardsAsContextFilesPreOp({
         repo: {} as unknown as RepoFiles,
         context: { block: {} } as unknown as AgentRunContext,
         branch: 'main',
@@ -744,7 +744,7 @@ describe('pr-reviewer kind registration', () => {
     const ops = defaultAgentKindRegistry().preOps(PR_REVIEWER_KIND)
     expect(ops).toContain(prReviewerDiffPreOp)
     expect(ops).toContain(prReviewerExistingCommentsPreOp)
-    expect(ops).toContain(prReviewerStandardsPreOp)
+    expect(ops).toContain(standardsAsContextFilesPreOp)
   })
 
   it('takes its standards as context files, not folded into the prompt', () => {

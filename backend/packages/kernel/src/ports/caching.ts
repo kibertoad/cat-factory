@@ -17,7 +17,7 @@ import type { AccountSkillRecord } from './skill-repositories.js'
 import type { ResolvedFoundationalService } from '@cat-factory/contracts'
 export type { ResolvedFoundationalService }
 import type { SsoDiscoveryDocument } from './sso.js'
-import type { Paged, RepoContentEntry, RepoFileContent } from './github-client.js'
+import type { Paged, RepoContentEntry, RepoFileContent, RepoTreeListing } from './github-client.js'
 import type { WorkspaceSettingsRepository } from './workspace-settings-repositories.js'
 import type { WorkspaceAccess } from '../domain/workspace-access.js'
 
@@ -69,8 +69,12 @@ export interface GroupCacheHandle<T> {
  * branch head sha it reflects, so the staleness probe can re-validate a git-backed
  * entry with a single cheap `headSha` compare instead of a per-file contents-API
  * refetch. `headSha` is null for a sha-pinned or tag ref (immutable — those entries
- * never probe stale). Discriminated by `kind` because getFile and listDirectory share
- * one branch-scoped cache (distinct key prefixes within the same group).
+ * never probe stale). Discriminated by `kind` because getFile, listDirectory and listTree
+ * share one branch-scoped cache (distinct key prefixes within the same group).
+ *
+ * The `tree` variant is the whole recursive tree of one ref. It is the read every angle of a
+ * bug-fishing expedition shares: without it each of the T x A dispatches would re-read the
+ * tree it partitions from, on a branch that does not move while the run lasts.
  */
 export type CachedRepoRead =
   | {
@@ -79,6 +83,11 @@ export type CachedRepoRead =
       readonly content: RepoFileContent | null
     }
   | { readonly kind: 'dir'; readonly headSha: string | null; readonly entries: RepoContentEntry[] }
+  | {
+      readonly kind: 'tree'
+      readonly headSha: string | null
+      readonly listing: RepoTreeListing
+    }
 
 /**
  * The group a cached {@link CachedRepoRead} lives under: one branch of one repo of one

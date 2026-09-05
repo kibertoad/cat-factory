@@ -33,6 +33,7 @@ import {
   type RepoContentEntry,
   type RepoEntry,
   type RepoFileContent,
+  type RepoTreeListing,
   describeVcsApiError,
   runBestEffort,
   VCS_DOC_URLS,
@@ -48,6 +49,7 @@ import {
   readDirectory,
   readFileContent,
   readRootEntries,
+  readLatestCommitSha,
   readTree,
 } from './repoContents.js'
 import { getRepoForToken, listReposForToken } from './viewerTokenReads.js'
@@ -437,7 +439,7 @@ export class FetchGitHubClient implements GitHubClient {
     installationId: number,
     ref: GitHubRepoRef,
     gitRef?: string,
-  ): Promise<RepoContentEntry[]> {
+  ): Promise<RepoTreeListing> {
     return readTree(this.contentsRequest(), installationId, ref, gitRef)
   }
 
@@ -461,25 +463,7 @@ export class FetchGitHubClient implements GitHubClient {
     path: string,
     gitRef?: string,
   ): Promise<string | null> {
-    const clean = path.replace(/^\/+|\/+$/g, '')
-    const params = new URLSearchParams({ per_page: '1' })
-    if (clean) params.set('path', clean)
-    // The commits list endpoint does not accept `HEAD`; omitting `sha` defaults to the
-    // repo's default branch, which is exactly what a `HEAD`/absent gitRef means here.
-    if (gitRef && gitRef !== 'HEAD') params.set('sha', gitRef)
-    let json: unknown
-    try {
-      ;({ json } = await this.request(
-        `/repos/${ref.owner}/${ref.repo}/commits?${params.toString()}`,
-        { installationId },
-      ))
-    } catch (err) {
-      // Empty repo / missing path / unknown ref → no commit to pin against.
-      if (err instanceof GitHubApiError && err.status === 404) return null
-      throw err
-    }
-    const commits = Array.isArray(json) ? (json as Array<{ sha?: string }>) : []
-    return commits[0]?.sha ?? null
+    return readLatestCommitSha(this.contentsRequest(), installationId, ref, path, gitRef)
   }
 
   async listPullRequests(

@@ -36,6 +36,7 @@ import type {
   RepoContentEntry,
   RepoEntry,
   RepoFileContent,
+  RepoTreeListing,
 } from './github-client.js'
 
 export type {
@@ -56,6 +57,7 @@ export type {
   RepoContentEntry,
   RepoEntry,
   RepoFileContent,
+  RepoTreeListing,
 }
 
 // ---------------------------------------------------------------------------
@@ -102,14 +104,10 @@ export interface VcsClient {
   /**
    * List a repository's ENTIRE tree on a ref recursively (in as few calls as the
    * provider allows), so a caller can search files by path without an N+1 walk. Every
-   * entry carries its full, repo-root-relative `path` and `type`. `[]` for an empty
-   * repo / unknown ref; a very large tree may be truncated (best-effort).
+   * entry carries its full, repo-root-relative `path` and `type`, and the listing says
+   * whether the provider truncated it. Empty listing for an empty repo / unknown ref.
    */
-  listTree(
-    connection: VcsConnectionRef,
-    ref: VcsRepoRef,
-    gitRef?: string,
-  ): Promise<RepoContentEntry[]>
+  listTree(connection: VcsConnectionRef, ref: VcsRepoRef, gitRef?: string): Promise<RepoTreeListing>
   /** Read a file's decoded UTF-8 content + blob sha on a ref, or null if absent. */
   getFileContent(
     connection: VcsConnectionRef,

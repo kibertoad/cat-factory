@@ -1,5 +1,6 @@
 import * as v from 'valibot'
 import { descriptorFieldValuesSchema } from './form-fields.js'
+import { BUG_FISHING_MAX_PASS_BUDGET } from './bugFishing.js'
 
 // Shared scalar schemas. Picklists mirror the frontend's `app/types/domain.ts`
 // unions exactly, so a payload that validates here drops straight into the Pinia
@@ -343,6 +344,18 @@ export const taskTypeFieldsSchema = v.object({
    * changing which angles run.
    */
   fishingFocus: v.optional(v.pipe(v.string(), v.maxLength(4000))),
+  /**
+   * Bug fishing: the most read-only passes this expedition may dispatch. Absent ⇒
+   * {@link BUG_FISHING_DEFAULT_PASS_BUDGET}.
+   *
+   * It bites only on a codebase big enough to be partitioned into several territories, where the
+   * planned matrix is territories x angles rather than angles alone. Whatever the budget cuts is
+   * recorded on the plan as unfished, by territory and angle, so a narrow budget reads as a
+   * deliberate cut rather than as ground that came back clean.
+   */
+  fishingMaxPasses: v.optional(
+    v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(BUG_FISHING_MAX_PASS_BUDGET)),
+  ),
 
   // --- Custom-task-type fields ----------------------------------------------
   /**

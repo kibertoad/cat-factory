@@ -343,6 +343,11 @@
         "focus": {
           "label": "Na czym się skupić",
           "placeholder": "Podsystemy, katalogi albo rodzaj usterki, który najbardziej kosztuje ten zespół"
+        },
+        "maxPasses": {
+          "label": "Maksymalna liczba przejść",
+          "hint": "Najwyższa liczba przejść tylko do odczytu w tej wyprawie. Zostaw puste, aby użyć {count}. W dużej bazie kodu każdy kąt przeszukiwany jest osobno dla każdego terytorium, a to, co utnie budżet, zapisujemy jako nieprzeszukane.",
+          "problem": "Podaj liczbę całkowitą od 1 do {max} albo pozostaw pole puste, aby użyć wartości domyślnej."
         }
       }
     },
@@ -8438,6 +8443,19 @@
       "parked": "Przeszukano wszystkie perspektywy.",
       "parkedWithUntriaged": "Pozostało {count} nierozstrzygniętych znalezisk.",
       "finish": "Zakończ segregację"
+    },
+    "coverage": {
+      "share": "Przeczytano {percent}% tego terytorium",
+      "tooltip": "To przejście zgłosiło przeczytanie {percent}% swojego terytorium. Dane podane przez agenta."
+    },
+    "plan": {
+      "surveyUnavailable": "Baza kodu nie została zbadana, więc ta wyprawa przeszukała ją w całości: {reason}",
+      "treeTruncated": "Drzewo repozytorium wróciło obcięte, więc terytoria poniżej obejmują tylko tę część, którą udało się odczytać.",
+      "unfished": "Wykonano {fished} z {planned} zaplanowanych przejść. Nieprzeszukane w tym uruchomieniu:",
+      "unfishedCell": "{territory}, pod kątem {angle}"
+    },
+    "territories": {
+      "heading": "Terytoria"
     }
   }
 }

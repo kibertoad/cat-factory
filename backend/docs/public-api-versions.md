@@ -175,3 +175,19 @@ The number moved after the fact, the way 1.64.0's did and for the same reason: t
 written against 1.67.0 and main reached 1.68.0 with `BootstrapJob.delivery` while it was in
 flight. Both sides produced the same version line, so git auto-merged it clean and the collision
 arrived here, in the paragraph, exactly as the note at the top of this file says it does.
+
+## 1.70.0
+
+A task-type field DESCRIPTOR (`GET /api/v1/task-types`, and the descriptors a registered task type
+carries) gains `integer`: whether a `number` field's value must be a whole number.
+
+Additive, and it exists because the descriptor's whole job is to state what the create door will
+accept, before a caller sends anything. `min` and `max` could not say this, so a field the internal
+schema pipes through `integer()` advertised itself as accepting `4.5`, admitted it through every
+public validation, and was then refused at creation with a raw parse error naming a schema path
+rather than the field. Both built-in `number` fields declare it (`review.prNumber`, and
+`bug-fishing.fishingMaxPasses`, new in this release), and a consumer that renders a form from the
+descriptors gains a stepper that agrees with the server.
+
+Nothing that used to succeed now fails: a fractional value for either field was already refused,
+one layer further in and less legibly.

@@ -55,6 +55,7 @@ import { buildDeployerFamily, type DeployerFamily } from './deployer-family.js'
 import { SettledHelperRouter } from './SettledHelperRouter.js'
 import type { FollowUpGateController } from './FollowUpGateController.js'
 import { RunRepoOpsController } from './RunRepoOpsController.js'
+import { surveyRunCodebase } from './bugFishingSurvey.js'
 import { CompanionController } from './CompanionController.js'
 import { HumanTestController } from './HumanTestController.js'
 import { MergeResolver } from './MergeResolver.js'
@@ -472,6 +473,13 @@ export class RunDispatcher {
         this.handleAgentStep(ctx, dispatchKind, augment),
       ingestBlueprint: (ws, blockId, raw) => this.ingestBlueprint(ws, blockId, raw),
       ingestSpec: (ws, raw) => this.ingestSpec(ws, raw),
+      // The survey owns both halves of "never throws" (see `surveyRunCodebase`); the dispatcher
+      // supplies only the binding, because resolving a run's repo is its job.
+      surveyCodebase: (ws, blockId) =>
+        surveyRunCodebase({
+          resolveRunRepo: () => this.repoOps.resolveRunRepo(ws, blockId),
+          logger: this.log.child({ blockId }),
+        }),
     }
   }
 

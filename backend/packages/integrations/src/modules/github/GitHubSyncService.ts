@@ -387,7 +387,7 @@ export class GitHubSyncService {
     if (!repo) {
       throw new Error(`Repo ${repoGithubId} is not accessible to workspace '${workspaceId}'`)
     }
-    const entries = await this.deps.githubClient.listTree(
+    const { entries } = await this.deps.githubClient.listTree(
       installation.installationId,
       { owner: repo.owner, repo: repo.name },
       repo.defaultBranch ?? undefined,

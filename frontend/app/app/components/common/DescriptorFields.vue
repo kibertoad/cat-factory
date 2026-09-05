@@ -166,11 +166,18 @@ function selectItems(field: DescriptorField) {
           @update:model-value="(v: string) => set(field.key, v)"
         />
 
+        <!-- The declared bounds are INPUT HINTS only: `validateDescriptorFields` is what actually
+             refuses a value, here and at every other door, so a stepper that respects them is a
+             convenience rather than the check. `integer` steps by one; a field that admits
+             fractions leaves `step` unset so the browser does not round the value away. -->
         <UInput
           v-else-if="field.type === 'number'"
           :model-value="numberStr(field.key)"
           type="number"
           class="w-full font-mono"
+          :min="field.min"
+          :max="field.max"
+          :step="field.integer ? 1 : undefined"
           :placeholder="field.placeholder"
           @update:model-value="(v: string) => set(field.key, v === '' ? undefined : Number(v))"
         />

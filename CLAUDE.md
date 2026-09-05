@@ -743,10 +743,10 @@ must be TOLD what system the work is about; a derived subject never displaces it
 call no run start gates, and any future un-run-scoped LLM call owes it too. [`bug-hunt.md`](./backend/docs/bug-hunt.md).
 
 **Bug fishing expedition**: a read-only hunt for the defects nobody reported. ONE `bug-fisher` step,
-dispatched once per ANGLE, each pass reading the same tree with a different question; a human MARKS what
-to fix and each mark spawns its own task on the board's `bugFishingFixPipelineId`. Trap: marking is
-accepted MID-hunt, so the state survives `resetStepForRerun` (the loop re-arms one step) and every
-reduction is over the ACCUMULATED catch. Doc: [`bug-fishing-expedition.md`](./docs/initiatives/bug-fishing-expedition.md).
+dispatched once per ANGLE per platform-computed TERRITORY; a human MARKS what to fix and each mark spawns
+its own task on the board's `bugFishingFixPipelineId`. Trap: marking is accepted MID-hunt, so the state
+survives `resetStepForRerun` (the loop re-arms one step) and every reduction is over the ACCUMULATED
+catch. Doc: [`bug-fishing-expedition.md`](./docs/initiatives/bug-fishing-expedition.md).
 
 **Implementation-fork decision**: an optional two-phase `coder` step that proposes materially different
 implementations and parks for a human BETWEEN two dispatches on the same step (a container job can't

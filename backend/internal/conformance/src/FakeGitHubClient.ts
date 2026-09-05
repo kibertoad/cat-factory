@@ -19,6 +19,7 @@ import type {
   OpenPullRequestInput,
   Paged,
   RepoContentEntry,
+  RepoTreeListing,
   RepoEntry,
   RepoFileContent,
 } from '@cat-factory/kernel'
@@ -121,7 +122,7 @@ export class FakeGitHubClient implements GitHubClient {
    * carries the file `content` and a `sha`; `listDirectory` lists the entries
    * under a dir prefix and `getFileContent` returns one. Populate before syncing.
    */
-  files: Record<string, { content: string; sha: string }> = {}
+  files: Record<string, { content: string; sha: string; size?: number }> = {}
 
   async listDirectory(
     _installationId: number,
@@ -144,14 +145,20 @@ export class FakeGitHubClient implements GitHubClient {
     _installationId: number,
     _ref: GitHubRepoRef,
     _gitRef?: string,
-  ): Promise<RepoContentEntry[]> {
-    // The canned `files` map is already the full recursive tree (paths keyed flat).
-    return Object.entries(this.files).map(([p, f]) => ({
-      path: p,
-      name: p.split('/').pop() ?? p,
-      type: 'file',
-      sha: f.sha,
-    }))
+  ): Promise<RepoTreeListing> {
+    // The canned `files` map is already the full recursive tree (paths keyed flat). Never
+    // truncated: a fake that reported a cut would make every consumer's degraded path the one
+    // the suites exercise.
+    return {
+      entries: Object.entries(this.files).map(([p, f]) => ({
+        path: p,
+        name: p.split('/').pop() ?? p,
+        type: 'file',
+        sha: f.sha,
+        ...(typeof f.size === 'number' ? { size: f.size } : {}),
+      })),
+      truncated: false,
+    }
   }
 
   async getFileContent(
