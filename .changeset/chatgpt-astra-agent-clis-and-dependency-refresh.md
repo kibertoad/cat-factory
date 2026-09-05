@@ -55,8 +55,16 @@ falling back, so that coupling is recorded at both ends. Both Pi extensions are 
 2.9.0. The executor image tag rolls to 1.152.0.
 
 **Dependency refresh.** Direct ranges plus a full lockfile re-resolution: 70 resolved names moved,
-no package name added or dropped. Three holds, each for a live constraint rather than caution:
-vitest and `@vitest/coverage-v8` stay on 4.1.11 because `@cloudflare/vitest-pool-workers` 0.22.0
-(the newest) still peers `vitest: ^4.1.0`; wrangler holds at 4.124.0 for the sixth round, still
-pinned exactly as a dependency of that same package; and TypeScript holds at 6.0.3 on the frontend,
-where `vue-tsc` resolves `typescript/lib/tsc`, which TS 7 no longer exports.
+no package name added or dropped. Four holds, each on a live constraint rather than caution, and
+the first three are one constraint at three levels:
+
+- vitest and `@vitest/coverage-v8` stay on 4.1.11: `@cloudflare/vitest-pool-workers` 0.22.0 is the
+  newest release and still peers `vitest: ^4.1.0`.
+- wrangler holds at 4.124.0 for the sixth round, pinned exactly as a dependency of that same package.
+- `@cloudflare/workers-types` holds at 5.20260815.1, one level further down. Its version encodes a
+  workerd DATE and the wrangler above pins `workerd@1.20260815.1`, so moving the types to
+  5.20260904.1 would describe a runtime three weeks newer than the one that actually executes: an
+  API added in the gap typechecks green and throws in production. That is the whole reason
+  `check-cloudflare-runtime-pins` exists, and it is what caught the attempt.
+- TypeScript holds at 6.0.3 on the frontend, where `vue-tsc` resolves `typescript/lib/tsc`, which
+  TS 7 no longer exports.
