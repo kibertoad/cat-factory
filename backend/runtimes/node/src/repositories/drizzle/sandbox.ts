@@ -42,7 +42,7 @@ import {
   sandboxRuns,
 } from '../../db/schema.js'
 
-export class DrizzleSandboxPromptVersionRepository implements SandboxPromptVersionRepository {
+class DrizzleSandboxPromptVersionRepository implements SandboxPromptVersionRepository {
   constructor(private readonly db: DrizzleDb) {}
 
   async get(workspaceId: string, id: string): Promise<SandboxPromptVersion | null> {
@@ -133,7 +133,7 @@ export class DrizzleSandboxPromptVersionRepository implements SandboxPromptVersi
   }
 }
 
-export class DrizzleSandboxFixtureRepository implements SandboxFixtureRepository {
+class DrizzleSandboxFixtureRepository implements SandboxFixtureRepository {
   constructor(private readonly db: DrizzleDb) {}
 
   async get(workspaceId: string, id: string): Promise<SandboxFixture | null> {
@@ -189,7 +189,7 @@ export class DrizzleSandboxFixtureRepository implements SandboxFixtureRepository
   }
 }
 
-export class DrizzleSandboxExperimentRepository implements SandboxExperimentRepository {
+class DrizzleSandboxExperimentRepository implements SandboxExperimentRepository {
   constructor(private readonly db: DrizzleDb) {}
 
   async get(workspaceId: string, id: string): Promise<SandboxExperiment | null> {
@@ -268,7 +268,7 @@ export class DrizzleSandboxExperimentRepository implements SandboxExperimentRepo
   }
 }
 
-export class DrizzleSandboxRunRepository implements SandboxRunRepository {
+class DrizzleSandboxRunRepository implements SandboxRunRepository {
   constructor(private readonly db: DrizzleDb) {}
 
   async get(workspaceId: string, id: string): Promise<SandboxRun | null> {
@@ -376,7 +376,7 @@ export class DrizzleSandboxRunRepository implements SandboxRunRepository {
   }
 }
 
-export class DrizzleSandboxGradeRepository implements SandboxGradeRepository {
+class DrizzleSandboxGradeRepository implements SandboxGradeRepository {
   constructor(private readonly db: DrizzleDb) {}
 
   async getByRun(workspaceId: string, runId: string): Promise<SandboxGrade | null> {

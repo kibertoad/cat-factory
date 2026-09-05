@@ -1,7 +1,7 @@
 import type { LodLevel } from '~/types/domain'
 
 /** The LOD scale, shallow → deep. Index order lets callers ask "is at least". */
-export const LOD_ORDER: LodLevel[] = ['far', 'mid', 'close', 'steps', 'subtasks']
+const LOD_ORDER: LodLevel[] = ['far', 'mid', 'close', 'steps', 'subtasks']
 
 /** Map a raw zoom factor to a level-of-detail bucket. Shared by the main board
  * and the drill-down focus view so both honour the same thresholds.

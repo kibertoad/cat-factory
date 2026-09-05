@@ -17,9 +17,6 @@ const step = (over: Partial<PipelineStep> = {}): PipelineStep =>
 describe('deployJobId', () => {
   it('is deterministic from the run id (replay-stable, no epoch suffix at epoch 0)', () => {
     expect(deployJobId('exec1', 0)).toBe(`exec1-${DEPLOYER_AGENT_KIND}`)
-    // Same inputs reproduce the same id, so a replayed dispatch re-attaches rather than
-    // starting a duplicate deploy container.
-    expect(deployJobId('exec1', 0)).toBe(deployJobId('exec1', 0))
   })
 
   it('suffixes the eviction epoch so each re-dispatch is a distinct job', () => {

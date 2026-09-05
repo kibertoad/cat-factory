@@ -49,7 +49,7 @@ export function refuse<E extends AppEnv>(
 }
 
 /** Resolve the caller's public-API key to a workspace scope, or the error to emit. */
-export async function resolveKey<E extends AppEnv>(c: Context<E>): Promise<KeyResult> {
+async function resolveKey<E extends AppEnv>(c: Context<E>): Promise<KeyResult> {
   const svc = c.get('container').publicApiKeys
   if (!svc) {
     return { fail: { status: 503, code: 'unavailable', message: 'Public API is not configured' } }

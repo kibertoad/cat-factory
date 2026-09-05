@@ -40,7 +40,7 @@ export function stripComments(source) {
  * would bury the vendor calls. Such a file reaches the inventory through the binding signals
  * above instead.
  */
-export const OUTBOUND_CALL = new RegExp(
+const OUTBOUND_CALL = new RegExp(
   [
     String.raw`(?:await|return|void|yield|=|\?\?|\(|,|:)\s*(?:globalThis\.)?fetch\(`,
     String.raw`\b(?:fetchImpl|safeFetch|createHostPinnedFetch)\(`,
@@ -62,7 +62,7 @@ export function makesOutboundCall(source) {
  * `.test` hosts, doc links inside error messages and placeholder UI copy. Requiring the host to be
  * ASSIGNED as an endpoint leaves the ones a vendor page can make wrong.
  */
-export const VENDOR_ENDPOINT = new RegExp(
+const VENDOR_ENDPOINT = new RegExp(
   String.raw`(?:endpoint|base_?url|api_?host|api_?base|servers?)\s*[:=]\s*[[{(]?\s*\{?\s*` +
     String.raw`(?:url\s*:\s*)?['"\x60](?:https?:\/\/)?([a-z0-9][a-z0-9.-]*\.[a-z]{2,})`,
   'gi',

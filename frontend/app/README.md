@@ -203,9 +203,10 @@ reaches the wire. **Every string a descriptor carries is deployment-authored Eng
 verbatim**, labels, help, option captions and the `section` grouping captions alike: only the
 platform's own chrome around them (the path-invalid message) is i18n, so no descriptor string enters
 a locale catalog. And **the value-bag rules live in `utils/descriptorFields.ts`, not in the SFC**
-(`defaultDescriptorValues` for the initial values, `setDescriptorValue` / `setDescriptorCheckbox` /
-`toggleDescriptorGroupValue` for one edit): what an edit freezes on an entity is what a unit test
-must be able to reach, and a rule inside a component is only reachable by mounting one.
+(`setDescriptorValue` / `setDescriptorCheckbox` / `toggleDescriptorGroupValue` for one edit; the
+initial values come straight from contracts' `descriptorFieldDefaults`, the same helper the server
+folds in at the creation door): what an edit freezes on an entity is what a unit test must be able
+to reach, and a rule inside a component is only reachable by mounting one.
 
 Mirroring the server's check leaves one refusal still reachable, deliberately: the deployment can
 re-register the descriptor while the dialog sits open, so a create can come back `422` with

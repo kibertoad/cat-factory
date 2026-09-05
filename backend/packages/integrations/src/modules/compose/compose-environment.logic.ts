@@ -726,7 +726,7 @@ function isHostPathSource(source: string): boolean {
 
 /** The build context of a service's `build:` (short string form or long `{ context }`), or null
  * when no `build:` is declared. A `build:` with no explicit context defaults to `.`. */
-export function buildContextSource(build: unknown): string | null {
+function buildContextSource(build: unknown): string | null {
   if (build === undefined) return null
   if (typeof build === 'string') return build || '.'
   if (build && typeof build === 'object') {
@@ -1063,7 +1063,7 @@ export const DEFAULT_RECIPE_STEP_TIMEOUT_MS = 300_000
 /** Default budget (ms) for a `wait-*` step / a non-`compose-healthy` health gate. */
 export const DEFAULT_RECIPE_WAIT_TIMEOUT_MS = 300_000
 /** Default re-probe interval (ms) for a `wait-*` step / health gate. */
-export const DEFAULT_RECIPE_POLL_INTERVAL_MS = 2_000
+const DEFAULT_RECIPE_POLL_INTERVAL_MS = 2_000
 /** The rewritten-compose filename prefix, written beside each original inside the checkout. */
 const RECIPE_REWRITE_PREFIX = 'cat-factory.'
 

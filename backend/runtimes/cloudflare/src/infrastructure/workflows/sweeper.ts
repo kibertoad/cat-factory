@@ -32,7 +32,7 @@ import type { Workflow } from '@cloudflare/workers-types'
  *                  having lost its instance at once, and re-drove the whole fleet with no log
  *                  line to say why.
  */
-export type InstanceState = 'alive' | 'terminal' | 'missing' | 'unknown'
+type InstanceState = 'alive' | 'terminal' | 'missing' | 'unknown'
 
 /** What the probe learned about a run's durable instance. */
 export interface InstanceProbe {

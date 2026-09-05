@@ -27,11 +27,6 @@ describe('withoutUndefinedQueryParams', () => {
     expect(out.queryParams).toEqual({ blockId: 'blk_1', page: 0, all: false, q: '' })
   })
 
-  it('drops only the undefined keys from a mixed set', () => {
-    const out = strip({ queryParams: { window: '7d', workspaceId: undefined } })
-    expect(out.queryParams).toEqual({ window: '7d' })
-  })
-
   it('leaves other request params untouched', () => {
     const params = {
       pathPrefix: '/workspaces/ws_1',

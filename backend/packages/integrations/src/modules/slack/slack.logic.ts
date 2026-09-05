@@ -117,7 +117,7 @@ const MENTION_AUDIENCE: Record<NotificationType, MentionAudience> = {
 }
 
 /** The mention audience for a notification type. */
-export function mentionAudience(type: NotificationType): MentionAudience {
+function mentionAudience(type: NotificationType): MentionAudience {
   return MENTION_AUDIENCE[type]
 }
 

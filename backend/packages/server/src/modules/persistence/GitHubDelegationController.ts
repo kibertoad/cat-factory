@@ -46,7 +46,7 @@ import { getErrorMessage, RateLimitedError, UnavailableError } from '@cat-factor
  */
 
 /** Fixed-window rate limit for the delegation mint (per authenticated node). */
-export interface GitHubDelegationRateLimit {
+interface GitHubDelegationRateLimit {
   /** Max mints per node per window. */
   limit: number
   windowMs: number

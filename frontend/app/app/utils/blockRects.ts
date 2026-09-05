@@ -30,7 +30,7 @@ export type BlockMeasurements = {
   rectFor: (el: Element) => DOMRect
 }
 
-export const BLOCK_ID_ATTRIBUTE = 'data-block-id'
+const BLOCK_ID_ATTRIBUTE = 'data-block-id'
 
 export function measureBlocks(root: ParentNode = document): BlockMeasurements {
   let elements: Map<string, HTMLElement> | null = null

@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 import type { RunToolCallFailures, RunToolCallTrajectory } from '~/types/execution'
 import { useSingleFlight } from '~/composables/useSingleFlight'
+import { withFlag } from './withFlag'
 
 // The observability store's TOOL-CALL sink, extracted whole because it is one concern with two
 // reads and its own coherence rule between them.
@@ -39,14 +40,6 @@ export const EMPTY_TRAJECTORY: RunToolCallTrajectory = Object.freeze({
   toolCalls: Object.freeze([]) as never,
   truncated: false,
 })
-
-/** Add or remove a key from a reactive `Set` ref, replacing it so the reactivity fires. */
-function withFlag(set: ReturnType<typeof ref<Set<string>>>, key: string, on: boolean) {
-  const next = new Set(set.value)
-  if (on) next.add(key)
-  else next.delete(key)
-  set.value = next
-}
 
 export function createToolCallSinkState(deps: ToolCallSinkDeps) {
   /**

@@ -27,7 +27,7 @@ import {
 } from '@cat-factory/kernel'
 
 /** The repo identity a record carries, in the provider-neutral VCS vocabulary. */
-export interface MergeTrackRepoRef {
+interface MergeTrackRepoRef {
   repoId?: string | null
   provider?: VcsProvider | null
 }

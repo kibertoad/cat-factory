@@ -57,7 +57,7 @@ export interface CapabilitySecretJobSpec {
 }
 
 /** One credential as a producer states it: both names plus the disposition, never a value. */
-export interface DeclaredCredential {
+interface DeclaredCredential {
   key: string
   envName?: string
   /** False ⇒ the capability works without it, so an unresolved one is not a misconfiguration. */

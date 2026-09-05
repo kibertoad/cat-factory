@@ -13,27 +13,24 @@ import { modelCostResolver } from '@cat-factory/spend'
 import type { Env } from '../env'
 import { bedrockModelsCapability } from '../ai/registries'
 import { openRouterRoutingFor } from '../ai/providerEndpoints'
-import { type AgentsConfig, loadAgentsConfig } from './agents'
-import { type ExecutionConfig, loadExecutionConfig } from './execution'
+import { loadAgentsConfig } from './agents'
+import { loadExecutionConfig } from './execution'
 import { loadSpendPricing } from './spending'
-import { type GitHubConfig, loadGitHubConfig } from './github'
+import { loadGitHubConfig } from './github'
 import { loadGitLabConfig } from './gitlab'
-import { type AuthConfig, loadAuthConfig } from './auth'
-import { type DocumentsConfig, loadDocumentsConfig } from './documents'
-import { type TasksConfig, loadTasksConfig } from './tasks'
+import { loadAuthConfig } from './auth'
+import { loadDocumentsConfig } from './documents'
+import { loadTasksConfig } from './tasks'
 import { loadServiceCatalogConfig } from './serviceCatalog'
-import { type EnvironmentsConfig, loadEnvironmentsConfig } from './environments'
-import { type RunnerPoolConfig, loadRunnerPoolConfig } from './runners'
-import { type SlackConfig, loadSlackConfig } from './slack'
-import {
-  type NotificationWebhookConfig,
-  loadNotificationWebhookConfig,
-} from './notificationWebhooks'
-import { type ReleaseHealthConfig, loadReleaseHealthConfig } from './releaseHealth'
-import { type EmailConfig, loadEmailConfig } from './email'
-import { type RetentionConfig, loadRetentionConfig } from './retention'
-import { type FragmentLibraryConfig, loadFragmentLibraryConfig } from './fragmentLibrary'
-import { type ObservabilityConfig, loadObservabilityConfig } from './observability'
+import { loadEnvironmentsConfig } from './environments'
+import { loadRunnerPoolConfig } from './runners'
+import { loadSlackConfig } from './slack'
+import { loadNotificationWebhookConfig } from './notificationWebhooks'
+import { loadReleaseHealthConfig } from './releaseHealth'
+import { loadEmailConfig } from './email'
+import { loadRetentionConfig } from './retention'
+import { loadFragmentLibraryConfig } from './fragmentLibrary'
+import { loadObservabilityConfig } from './observability'
 import { type LangfuseConfig, loadLangfuseConfig } from './langfuse'
 import { type OtelConfig, loadOtelConfig } from './otel'
 
@@ -43,28 +40,10 @@ import { type OtelConfig, loadOtelConfig } from './otel'
 // Each concern lives in a sibling module; this barrel composes them.
 
 // The config SHAPE (AppConfig + every sub-config) is the shared contract in
-// @cat-factory/server; this module re-exports it and owns the Worker's env-driven
-// loaders that produce it.
-export type {
-  AgentsConfig,
-  AppConfig,
-  ExecutionConfig,
-  GitHubConfig,
-  AuthConfig,
-  DocumentsConfig,
-  TasksConfig,
-  EnvironmentsConfig,
-  RunnerPoolConfig,
-  SlackConfig,
-  NotificationWebhookConfig,
-  ReleaseHealthConfig,
-  EmailConfig,
-  RetentionConfig,
-  FragmentLibraryConfig,
-  ObservabilityConfig,
-  LangfuseConfig,
-  OtelConfig,
-}
+// @cat-factory/server; this module owns the Worker's env-driven loaders that produce it and
+// re-exports only the types its own loaders hand back. A sub-config type is imported from
+// @cat-factory/server directly.
+export type { AppConfig, LangfuseConfig, OtelConfig }
 
 export function loadConfig(env: Env): AppConfig {
   // Validate the system encryption key up front: present, valid base64, and decoding to a full

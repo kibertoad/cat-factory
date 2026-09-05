@@ -7,6 +7,7 @@ import type {
   McpOAuthTokenResult,
   SecretCipher,
 } from '@cat-factory/kernel'
+import { bytesToBase64Url } from '../shared/base64.js'
 import {
   getErrorMessage,
   MCP_OAUTH_DEFAULT_HEADER,
@@ -651,17 +652,11 @@ function asRefusal(error: unknown): unknown {
 function randomCodeVerifier(): string {
   const bytes = new Uint8Array(32)
   crypto.getRandomValues(bytes)
-  return base64url(bytes)
+  return bytesToBase64Url(bytes)
 }
 
 /** The S256 challenge for a verifier. */
 async function codeChallengeFor(verifier: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))
-  return base64url(new Uint8Array(digest))
-}
-
-function base64url(bytes: Uint8Array): string {
-  let binary = ''
-  for (const byte of bytes) binary += String.fromCharCode(byte)
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  return bytesToBase64Url(new Uint8Array(digest))
 }

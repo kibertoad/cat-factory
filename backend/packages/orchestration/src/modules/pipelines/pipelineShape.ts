@@ -213,7 +213,7 @@ export function assertValidPullRequestReaders({
  * Skipped when no registry is supplied (the kernel seed test's built-in catalog, which has no
  * deployment registrations in view); both real boundaries pass one.
  */
-export function assertValidGateConfig({
+function assertValidGateConfig({
   agentKinds,
   enabled,
   gates,

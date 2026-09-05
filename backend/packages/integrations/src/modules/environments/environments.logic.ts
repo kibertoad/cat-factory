@@ -37,9 +37,6 @@ import {
   wildcardDnsShiftRemedies,
 } from '@cat-factory/contracts'
 import type { WildcardDnsShift } from '@cat-factory/contracts'
-/** Board category for environment blocks (a deployer pipeline typically runs here). */
-export const ENVIRONMENT_BLOCK_TYPE = 'environment'
-
 /**
  * Whether a pipeline step should provision an environment deterministically.
  * Keyed strictly on the `deployer` agent kind so that other steps in a pipeline

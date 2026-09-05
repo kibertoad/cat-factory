@@ -28,9 +28,3 @@ export const agentEffortReportSchema = v.object({
   obstacles: v.fallback(v.optional(v.array(v.string())), undefined),
 })
 export type AgentEffortReport = v.InferOutput<typeof agentEffortReportSchema>
-
-/** Non-throwing parse of an effort report the agent wrote; `undefined` when unusable. */
-export function safeParseAgentEffortReport(value: unknown): AgentEffortReport | undefined {
-  const result = v.safeParse(agentEffortReportSchema, value)
-  return result.success ? result.output : undefined
-}

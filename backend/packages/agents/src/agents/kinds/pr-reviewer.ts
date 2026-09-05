@@ -310,7 +310,6 @@ export {
   PR_DIFF_CONTEXT_FILE,
   PR_EXISTING_COMMENTS_CONTEXT_FILE,
   PR_PRIOR_REVIEW_CONTEXT_FILE,
-  PR_STANDARDS_INDEX_CONTEXT_FILE,
   planSlices,
   prReviewerDiffPreOp,
   prReviewerExistingCommentsPreOp,
@@ -323,5 +322,4 @@ export {
   resolvePrHeadNumber,
   resolvePrNumber,
   standardsContextFileName,
-  type SuggestedSlice,
 } from './pr-review-context.js'

@@ -57,7 +57,7 @@ const DEFAULT_PROTECTION_PROBE_LIMIT = 100
 const PROTECTION_PROBE_CONCURRENCY = 4
 
 /** One repository's default-branch protection posture. */
-export interface RepoBranchProtection {
+interface RepoBranchProtection {
   repoGithubId: number
   owner: string
   name: string

@@ -91,7 +91,7 @@ const COMPONENTS: Record<InspectorPanelId, Component> = {
 }
 
 /** The built-in `PanelEntry`s: each spec's gating/order + its wrapped component. */
-export const INSPECTOR_PANEL_ENTRIES: PanelEntry<Block>[] = INSPECTOR_PANEL_SPECS.map((spec) => ({
+const INSPECTOR_PANEL_ENTRIES: PanelEntry<Block>[] = INSPECTOR_PANEL_SPECS.map((spec) => ({
   id: spec.id,
   order: spec.order,
   when: spec.when,

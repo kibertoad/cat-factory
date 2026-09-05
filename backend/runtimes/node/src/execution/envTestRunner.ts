@@ -8,7 +8,7 @@ import type { Logger, ServerContainer, SweepHealthTracker } from '@cat-factory/s
 import { createQueueWithDeadLetter } from './deadLetter.js'
 import type { Job, PgBoss, SendOptions } from 'pg-boss'
 import type { AdvanceQueueOptions } from './pgBossRunner.js'
-import { driveJobOptions } from './pgBossRunner.js'
+import { driveJobOptions, sleep } from './pgBossRunner.js'
 import type { DriveConfig } from './drive.js'
 
 // Durable ephemeral-environment self-test driving on pg-boss: the analogue of the Worker's
@@ -18,8 +18,7 @@ import type { DriveConfig } from './drive.js'
 // terminal state. The run record in Postgres is authoritative, so a crash mid-run is
 // recovered by pg-boss's retry of the expired/failed drive job.
 
-export const ENV_TEST_QUEUE = 'env-test.advance'
-const QUEUE = ENV_TEST_QUEUE
+const QUEUE = 'env-test.advance'
 // `exclusive` so (queue, singletonKey=runId) is unique across created/active/retry — at most
 // one drive job per self-test run alive. Mirrors the bootstrap/execution advance queues.
 const QUEUE_POLICY = 'exclusive' as const
@@ -35,8 +34,6 @@ function sendOptions(id: string, opts: AdvanceQueueOptions): SendOptions {
   // this file used to hold its own copy of it. See {@link driveJobOptions}.
   return driveJobOptions(id, opts)
 }
-
-const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 
 /**
  * Advance a self-test run to a terminal state, sleeping between polls — the Node analogue of

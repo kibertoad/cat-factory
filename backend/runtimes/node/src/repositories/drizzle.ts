@@ -320,12 +320,7 @@ export {
   DrizzleDocInterviewRepository,
   DrizzleRequirementReviewRepository,
 } from './drizzle/reviews.js'
-// The account tier of the risk-policy library (ADR 0055) + a board's suppressions. Re-exported so
-// the conformance harness can author an account policy against the real store.
-export {
-  DrizzleAccountRiskPolicyRepository,
-  DrizzleRiskPolicySuppressionRepository,
-} from './drizzle/account-risk-policies.js'
+// The account tier of the risk-policy library (ADR 0055). Re-exported so the conformance harness
+// can author an account policy against the real store.
+export { DrizzleAccountRiskPolicyRepository } from './drizzle/account-risk-policies.js'
 export { createDrizzleSandboxDeps } from './drizzle/sandbox.js'
-export { DrizzleTestSecretsRepository } from './drizzle/connections.js'
-export { DrizzleValidationConfigRepository } from './drizzle/connections.js'

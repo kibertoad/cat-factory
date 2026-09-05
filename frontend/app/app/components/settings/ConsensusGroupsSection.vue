@@ -12,6 +12,7 @@
 import { computed, ref } from 'vue'
 import type { ConsensusGroup, ConsensusStrategy } from '~/types/consensus'
 import { isSelectable } from '~/stores/models'
+import { uid } from '~/utils/catalog'
 
 const { t } = useI18n()
 const groups = useConsensusGroupsStore()
@@ -51,10 +52,6 @@ interface EditorState {
 
 const editor = ref<EditorState | null>(null)
 const busy = ref(false)
-
-function uid(prefix: string) {
-  return `${prefix}_${Math.random().toString(36).slice(2, 9)}`
-}
 
 /** A fresh group starts as a gated two-model panel — the shape the feature is for. */
 function startCreate() {

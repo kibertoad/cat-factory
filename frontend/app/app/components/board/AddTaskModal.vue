@@ -39,7 +39,7 @@ import {
   sanitizeDescriptorFields,
   validateDescriptorFields,
 } from '@cat-factory/contracts'
-import { defaultDescriptorValues } from '~/utils/descriptorFields'
+import { descriptorFieldDefaults } from '@cat-factory/contracts'
 import { pipelineAllowedForManualStart } from '~/utils/pipeline'
 import { buildTaskTypePickerRows } from '~/utils/taskTypePicker'
 
@@ -493,7 +493,7 @@ watch(taskType, (next) => {
   const custom = customTaskTypes.value.find((tt) => tt.taskType === next)
   // A custom type owns a fresh field bag on every switch (its descriptors differ per type), seeded
   // to whatever defaults the new type declares.
-  customFieldValues.value = defaultDescriptorValues(custom?.fields ?? [])
+  customFieldValues.value = descriptorFieldDefaults(custom?.fields ?? [])
   // An unresolvable preset leaves the current selection alone rather than blanking it: a type
   // switch is an edit to a form the user is already filling in, not a reset.
   const preset = defaultPipelineIdFor(next)

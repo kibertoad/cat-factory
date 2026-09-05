@@ -47,7 +47,7 @@ export type Translate = (key: string, params?: Record<string, string>) => string
  * Derived from the contract rather than re-listed, so an action whose fields change cannot leave
  * this behind: the `Record` it reads is exhaustive over the same picklist `ACTION_KEYS` is.
  */
-export function detailParams(
+function detailParams(
   action: AuditAction,
   details: AuditEventWire['details'],
   none: string,
@@ -61,7 +61,7 @@ export function detailParams(
 }
 
 /** Who the action was performed ON: the resolved name, else the raw id. */
-export function targetLabel(event: AuditEventWire): string {
+function targetLabel(event: AuditEventWire): string {
   return event.targetName ?? event.targetId
 }
 

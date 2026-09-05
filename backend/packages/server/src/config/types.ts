@@ -523,7 +523,7 @@ export interface OtelLogsConfig {
   maxBatchSize: number
 }
 
-export interface OtelPlatformMetricsConfig {
+interface OtelPlatformMetricsConfig {
   /** Opt-in flag (`OTEL_PLATFORM_METRICS=true`); only effective when the base OTel exporter is on. */
   enabled: boolean
   /**

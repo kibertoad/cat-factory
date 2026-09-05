@@ -5,7 +5,7 @@ import BlockNode from './nodes/BlockNode.vue'
 import EpicNode from './nodes/EpicNode.vue'
 import TaskDependencyEdges from './TaskDependencyEdges.vue'
 import DependencyConnectOverlay from './DependencyConnectOverlay.vue'
-import { readDndPayload, blockIdFromEvent } from '~/utils/dnd'
+import { blockIdFromEvent } from '~/utils/dnd'
 import { BOARD_FLOW_ID, BOARD_MIN_ZOOM, BOARD_MAX_ZOOM } from '~/composables/useBoardFlow'
 import { provideBoardActivity } from '~/composables/useBoardActivity'
 import { useTaskExpansion } from '~/composables/useTaskExpansion'
@@ -18,21 +18,17 @@ import { boardPanMode } from '~/utils/boardPanMode'
 import { createBoardNodeProjection } from './BoardCanvas.logic'
 
 const board = useBoardStore()
-const pipelines = usePipelinesStore()
-const execution = useExecutionStore()
 const ui = useUiStore()
 const github = useGitHubStore()
-const toast = useToast()
 // The drop resolves its target task at the moment of the drop, so the sandbox reading is a
 // function of that id rather than a computed over a bound block.
-const { forcedFor } = useDryRunPolicy()
 const access = useWorkspaceAccess()
 const { t } = useI18n()
 
-const { onNodeDragStop, onViewportChange, screenToFlowCoordinate } = useVueFlow(BOARD_FLOW_ID)
+const { onNodeDragStop, onViewportChange } = useVueFlow(BOARD_FLOW_ID)
 const { draggingId } = useBlockDrag()
 const { hoveredFrameId } = useFrameStacking()
-const { freeFramePosition, focusFrame } = useFramePlacement()
+const { focusFrame } = useFramePlacement()
 // The board's "no two top-level nodes overlap" invariant: whenever a frame comes to overlap a
 // neighbour (dragged onto it, grown into it by a border drag, or grown by its first task), the two
 // are bounced apart. Every client draws that correction; only the one whose own gesture caused the
@@ -127,94 +123,10 @@ function onNodeDoubleClick({ event, node }: NodeMouseEvent) {
 function onPaneClick() {
   ui.select(null)
 }
-
-// ---- palette drag & drop onto the canvas ----------------------------------
-function onDragOver(event: DragEvent) {
-  event.preventDefault()
-  if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
-}
-
-async function onDrop(event: DragEvent) {
-  event.preventDefault()
-  const payload = readDndPayload(event)
-  if (!payload) return
-
-  if (payload.kind === 'block') {
-    // Drop where the cursor is, but nudge off any existing frame it lands on so a new
-    // frame never overlaps a neighbour; then centre the camera on it.
-    const dropped = screenToFlowCoordinate({ x: event.clientX, y: event.clientY })
-    const position = freeFramePosition({ near: dropped })
-    try {
-      const block = await board.addBlock(payload.blockType, position)
-      ui.select(block.id)
-      await focusFrame(block.id)
-    } catch {
-      toast.add({
-        title: t('board.canvas.addBlockFailedTitle'),
-        description: t('board.canvas.addBlockFailedBody'),
-        color: 'error',
-      })
-    }
-    return
-  }
-
-  if (payload.kind === 'pipeline') {
-    // Pipelines run against tasks, not frames. The nearest [data-block-id] under
-    // the cursor is the task card when dropped inside an expanded frame.
-    const blockId = blockIdFromEvent(event)
-    const target = blockId ? board.getBlock(blockId) : undefined
-    const pipeline = pipelines.getPipeline(payload.pipelineId)
-    // Unknown pipeline id is an internal glitch (nothing the user can act on); a drop
-    // onto blank canvas / a non-block, though, needs the same "aim at a task" nudge the
-    // wrong-level path gives — otherwise the drop just vanishes (UX-07).
-    if (!pipeline) return
-    if (!target) {
-      toast.add({
-        title: t('board.canvas.dropOntoTaskTitle'),
-        description: t('board.canvas.dropOntoTaskBody'),
-      })
-      return
-    }
-    if (target.level !== 'task') {
-      toast.add({
-        title: t('board.canvas.dropOntoTaskTitle'),
-        description: t('board.canvas.dropOntoTaskBody'),
-      })
-      return
-    }
-    if (!board.isRunnable(target.id)) {
-      toast.add({
-        title: t('board.canvas.taskBlockedTitle'),
-        description: t('board.canvas.taskBlockedBody'),
-      })
-      return
-    }
-    // A dropped pipeline starts live and has nothing to ask for, but a preset that sandboxes the
-    // dropper's role means this run merges nothing. Said HERE, because the drop is the only
-    // moment this surface has: the ordinary start stays silent (it is already visible on the
-    // card it landed on), and only the sandbox, which is not, earns a toast.
-    if (forcedFor(target.id)) {
-      toast.add({
-        title: t('board.dryRunToast.title'),
-        description: t('board.dryRunToast.body', { name: pipeline.name }),
-        color: 'warning',
-        icon: 'i-lucide-shield',
-      })
-    }
-    execution.start(target.id, pipeline)
-    ui.select(target.id)
-  }
-}
 </script>
 
 <template>
-  <div
-    ref="boardEl"
-    data-testid="board-canvas"
-    class="relative h-full w-full"
-    @drop="onDrop"
-    @dragover="onDragOver"
-  >
+  <div ref="boardEl" data-testid="board-canvas" class="relative h-full w-full">
     <VueFlow
       :id="BOARD_FLOW_ID"
       :nodes="nodes"

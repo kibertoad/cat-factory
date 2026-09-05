@@ -28,7 +28,7 @@ export type UiRole = (typeof UI_ROLES)[number]
  * The first-run prompt is offered once per session until it is answered (see `stores/uiRole.ts`),
  * and closing it leaves the whole product in place rather than guessing a narrower persona.
  */
-export const DEFAULT_UI_ROLE: UiRole = 'engineer'
+const DEFAULT_UI_ROLE: UiRole = 'engineer'
 
 /**
  * How much of the SPA a role is offered.

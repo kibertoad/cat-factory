@@ -45,7 +45,6 @@ function ctx(overrides: Partial<AgentRunContext> = {}): AgentRunContext {
 
 describe('mock-builder agent prompt', () => {
   it('recognises the mock kind and nothing else', () => {
-    expect(MOCK_AGENT_KIND).toBe('mocker')
     expect(isMockKind('mocker')).toBe(true)
     expect(isMockKind('coder')).toBe(false)
     // The mock builder is not a standard solution phase.

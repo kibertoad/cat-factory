@@ -55,7 +55,7 @@ export const PARKING_INLINE_KINDS = new Set<string>([
  * but it parks the run just as surely, so it is named alongside the kinds wherever parks are
  * enumerated for a caller.
  */
-export const APPROVAL_GATE_PARK_SURFACE = 'approval-gate'
+const APPROVAL_GATE_PARK_SURFACE = 'approval-gate'
 
 /**
  * The park surface the PRE-DISPATCH INPUT GATE presents. A THIRD kind of thing again, and the
@@ -86,7 +86,7 @@ export const INPUT_GATE_PARK_SURFACE = 'input-gate'
  * were admitted as parking on that; what changes is that the refusal now names the interview, and
  * that a pipeline whose only park is the interview is finally seen.
  */
-export const INTERVIEW_PARK_SURFACE = 'interview'
+const INTERVIEW_PARK_SURFACE = 'interview'
 
 /**
  * The park surface a BINARY-CANDIDATE COMPARISON presents: a generating step renders several
@@ -137,7 +137,7 @@ export const BINARY_CANDIDATE_PARK_SURFACE = 'binary-candidates'
  * before) never enters into it. Every mechanism this module enumerates now derives from a
  * declaration a deployment's own registrations flow through.
  */
-export function isHumanWaitGate(kind: string, gates: GateRegistry): boolean {
+function isHumanWaitGate(kind: string, gates: GateRegistry): boolean {
   return gates.pollExhaustion(kind) === 'rearm'
 }
 

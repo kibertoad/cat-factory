@@ -30,7 +30,7 @@
 
 import { publicDiagnostic } from '@cat-factory/kernel'
 
-export interface ReadinessCheck {
+interface ReadinessCheck {
   ok: boolean
   /**
    * The failure detail when `ok` is false. `/ready` is PUBLIC (unauthenticated, like `/health`), so

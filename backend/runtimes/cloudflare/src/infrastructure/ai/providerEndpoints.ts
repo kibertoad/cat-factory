@@ -1,9 +1,4 @@
 import {
-  DEEPSEEK_BASE_URL,
-  MOONSHOT_BASE_URL,
-  OPENAI_BASE_URL,
-  OPENROUTER_BASE_URL,
-  QWEN_BASE_URL,
   isDirectProvider,
   isOpenAiCompatibleProvider,
   openRouterRoutingFrom,
@@ -20,7 +15,6 @@ import type { Env } from '../env'
 // the Worker-specific `env` plumbing: each base URL is overridable via env (e.g.
 // QWEN_BASE_URL) so a deployment can point a provider at a self-hosted gateway, a
 // regional endpoint, or, in the acceptance tests, a local stub, without code changes.
-export { DEEPSEEK_BASE_URL, MOONSHOT_BASE_URL, OPENAI_BASE_URL, OPENROUTER_BASE_URL, QWEN_BASE_URL }
 
 /**
  * Which `Env` field carries each direct provider's base-URL override.

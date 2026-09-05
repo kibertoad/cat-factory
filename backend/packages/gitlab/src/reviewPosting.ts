@@ -24,8 +24,6 @@ interface GlDiffRefs {
   head_sha?: string | null
 }
 
-const errorMessage = (error: unknown): string => getErrorMessage(error)
-
 /**
  * Publish an MR review's findings on GitLab, posting each inline comment INDIVIDUALLY as its own
  * diff discussion — behaviourally identical to the GitHub half, and for the same reason: a comment
@@ -60,7 +58,7 @@ export async function postMrReview(
     // back to `base_sha` rather than failing the whole post over the one optional leg.
     refs = { base_sha: base, start_sha: diffRefs?.start_sha ?? base, head_sha: head }
   } catch (error) {
-    const reason = errorMessage(error)
+    const reason = getErrorMessage(error)
     return {
       comments: input.comments.map(() => ({ posted: false, error: reason })),
       bodyPosted: input.body ? false : null,
@@ -100,7 +98,7 @@ export async function postMrReview(
       })
       comments.push({ posted: true })
     } catch (error) {
-      comments.push({ posted: false, error: errorMessage(error) })
+      comments.push({ posted: false, error: getErrorMessage(error) })
     }
   }
 
@@ -117,7 +115,7 @@ export async function postMrReview(
       bodyPosted = true
     } catch (error) {
       bodyPosted = false
-      bodyError = errorMessage(error)
+      bodyError = getErrorMessage(error)
     }
   }
 

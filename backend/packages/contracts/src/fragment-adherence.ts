@@ -35,9 +35,3 @@ export type FragmentAdherenceItem = v.InferOutput<typeof fragmentAdherenceItemSc
 /** A review agent's per-standard adherence assessment (empty when no standards were reachable). */
 export const fragmentAdherenceSchema = v.array(fragmentAdherenceItemSchema)
 export type FragmentAdherence = v.InferOutput<typeof fragmentAdherenceSchema>
-
-/** Non-throwing parse of a fragment-adherence list the model returned; `undefined` when unusable. */
-export function safeParseFragmentAdherence(value: unknown): FragmentAdherence | undefined {
-  const result = v.safeParse(fragmentAdherenceSchema, value)
-  return result.success ? result.output : undefined
-}

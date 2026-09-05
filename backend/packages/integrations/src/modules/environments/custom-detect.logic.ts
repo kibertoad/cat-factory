@@ -51,7 +51,7 @@ export interface CustomTypeForDetection {
  * method-style hook stays correct). Workspace-defined rows are never included — they carry no
  * `detect()` hook, so they can't be arbitrated.
  */
-export function detectableCustomTypes(
+function detectableCustomTypes(
   registered: RegisteredCustomManifestType[],
 ): CustomTypeForDetection[] {
   return registered.map((t) => ({
@@ -67,7 +67,7 @@ export function detectableCustomTypes(
  * falling back to the `defaultPath` path-only search. Always returns a recommendation (the caller
  * pinned this type, so we surface its result even when nothing is found).
  */
-export async function detectSelectedCustomType(
+async function detectSelectedCustomType(
   reader: ProvisioningRepoReader,
   registered: RegisteredCustomManifestType[],
   input: {

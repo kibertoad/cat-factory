@@ -136,7 +136,7 @@ const KUBERNETES_CRD_GROUP_SUFFIXES = [
  * a false positive here is a source dir wrongly offered as a deploy target, whereas a genuinely exotic
  * CRD-only layout is covered by the `serviceManifestPaths` escape hatch.
  */
-export function isKubernetesManifestDoc(doc: Record<string, unknown>): boolean {
+function isKubernetesManifestDoc(doc: Record<string, unknown>): boolean {
   const kind = asString(doc.kind)
   const apiVersion = asString(doc.apiVersion)
   if (!kind || !apiVersion) return false
@@ -182,7 +182,7 @@ export function emptyScan(): ManifestScan {
 }
 
 /** Pull the URL-bearing kinds + image refs + pinned namespace out of one manifest document. */
-export function scanManifestDoc(doc: Record<string, unknown>, scan: ManifestScan): void {
+function scanManifestDoc(doc: Record<string, unknown>, scan: ManifestScan): void {
   const kind = asString(doc.kind)
   if (!kind) return
   scan.kinds.add(kind)
@@ -317,7 +317,7 @@ export function inferUrlSource(scan: ManifestScan): KubernetesUrlSource | undefi
 }
 
 /** Bare image name (repo) with any `:tag` / `@digest` suffix stripped, for an override match. */
-export function bareImageName(image: string): string {
+function bareImageName(image: string): string {
   const atDigest = image.split('@')[0]!
   const lastSlash = atDigest.lastIndexOf('/')
   const lastColon = atDigest.lastIndexOf(':')
@@ -332,7 +332,7 @@ export function inferImageOverrides(scan: ManifestScan): KubernetesImageOverride
   return names.slice(0, MAX_IMAGES).map((name) => ({ name, newTagTemplate: '{{branch}}' }))
 }
 
-export function pinnedHelmReleases(parsedReleases: unknown[]): {
+function pinnedHelmReleases(parsedReleases: unknown[]): {
   releases: KubernetesHelmRelease[]
   unpinned: number
 } {

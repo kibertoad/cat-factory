@@ -7,10 +7,10 @@ import type {
   PrReportValidationCommand,
   ReproductionPhaseOutcome,
 } from '@cat-factory/kernel'
-import { hostMarkdown, redactSecrets } from '@cat-factory/kernel'
+import { hostMarkdown } from '@cat-factory/kernel'
 import { PR_REPORT_MAX_OUTPUT_CHARS } from '@cat-factory/contracts'
 import { REPRO_DECLARATION_KIND } from './reproductionProof.logic.js'
-import { absentNote, findStep } from './prReport.steps.js'
+import { absentNote, findStep, scrub } from './prReport.steps.js'
 
 // ---------------------------------------------------------------------------
 // The verification report's two CAPTURED-OUTPUT sections: the platform's own pre-PR validation
@@ -41,11 +41,6 @@ import { absentNote, findStep } from './prReport.steps.js'
 //    log is the whole point: only a human can see whether the pre-fix tree was red for the right
 //    reason.
 // ---------------------------------------------------------------------------
-
-/** Scrub credentials out of an optional free-text value, preserving `null`/`undefined`. */
-function scrub(value: string | null | undefined): string | null {
-  return value == null ? null : (redactSecrets(value) ?? null)
-}
 
 /**
  * The caps the report's spine owns, passed in so this module stays pure and every truncation

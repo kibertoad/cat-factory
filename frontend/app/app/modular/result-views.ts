@@ -144,9 +144,10 @@ const BUILT_IN_RESULT_VIEWS: Record<ResultViewId, Component> = {
  * The built-in windows as slot entries, derived from `RESULT_VIEW_IDS` so the slot order matches
  * the canonical id order. Exhaustiveness is guaranteed by {@link BUILT_IN_RESULT_VIEWS}'s type.
  */
-export const RESULT_VIEW_CONTRIBUTIONS: readonly ResultViewContribution[] = RESULT_VIEW_IDS.map(
-  (id) => ({ id, component: BUILT_IN_RESULT_VIEWS[id] }),
-)
+const RESULT_VIEW_CONTRIBUTIONS: readonly ResultViewContribution[] = RESULT_VIEW_IDS.map((id) => ({
+  id,
+  component: BUILT_IN_RESULT_VIEWS[id],
+}))
 
 /**
  * The first-party result-views module: contributes every built-in window to the

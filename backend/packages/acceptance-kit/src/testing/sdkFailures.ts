@@ -16,10 +16,10 @@
 import { CatFactoryConnectionError, CatFactoryClient } from '@cat-factory/sdk'
 
 /** The base URL every fixture here is driven against, and the one the probes name. */
-export const FIXTURE_BASE_URL = 'http://127.0.0.1:8787'
+const FIXTURE_BASE_URL = 'http://127.0.0.1:8787'
 
 /** A transport failure as Node reports one: the contentless wrapper over the informative link. */
-export function runtimeFailure(message: string, code: string): Error {
+function runtimeFailure(message: string, code: string): Error {
   return new TypeError('fetch failed', { cause: Object.assign(new Error(message), { code }) })
 }
 

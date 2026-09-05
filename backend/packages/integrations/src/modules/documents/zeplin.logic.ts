@@ -248,7 +248,7 @@ function screenMeta(screen: ZeplinScreen): string | undefined {
 }
 
 /** Map Zeplin screens into source-neutral blocks (name + an optional description line). */
-export function zeplinScreensToBlocks(screens: ZeplinScreen[]): DesignBlock[] {
+function zeplinScreensToBlocks(screens: ZeplinScreen[]): DesignBlock[] {
   return screens.slice(0, MAX_SCREENS).map((screen) => ({
     title: screen.name?.trim() || '(unnamed screen)',
     meta: screenMeta(screen),
@@ -259,7 +259,7 @@ export function zeplinScreensToBlocks(screens: ZeplinScreen[]): DesignBlock[] {
 }
 
 /** Map Zeplin components into source-neutral components (grouped by their section). */
-export function zeplinComponentsToDesign(components: ZeplinComponent[]): DesignComponent[] {
+function zeplinComponentsToDesign(components: ZeplinComponent[]): DesignComponent[] {
   return components
     .filter((c) => c.name?.trim())
     .map((c) => ({

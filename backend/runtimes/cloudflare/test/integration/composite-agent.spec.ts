@@ -7,7 +7,7 @@ import type {
   RunReclaimTarget,
 } from '@cat-factory/kernel'
 import { defaultAgentKindRegistry } from '@cat-factory/agents'
-import { CompositeAgentExecutor } from '../../src/infrastructure/ai/CompositeAgentExecutor'
+import { CompositeAgentExecutor } from '@cat-factory/server'
 
 // CompositeAgentExecutor must send the repo-operating steps — implementation
 // (`coder`), the mock builder (`mocker`), the Playwright e2e writer (`playwright`)

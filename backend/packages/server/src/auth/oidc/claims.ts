@@ -1,5 +1,6 @@
 import type { SsoErrorReason } from '@cat-factory/contracts'
 import type { SsoConfig } from '../../config/types.js'
+import { str } from './discovery.js'
 
 // ---------------------------------------------------------------------------
 // Reading an identity out of OIDC claims, and deciding whether it may sign in.
@@ -65,16 +66,12 @@ export interface SsoIdentity {
  * returning employee is refused, and every refusal would cut every one of their live sessions,
  * including those of the admin who has to fix the configuration.
  */
-export type SsoRefusalEvidence = 'directory' | 'indeterminate'
+type SsoRefusalEvidence = 'directory' | 'indeterminate'
 
 /** Whether a sign-in is admitted, and if not, which rule refused it and on what evidence. */
 export type SsoAdmission =
   | { allowed: true }
   | { allowed: false; reason: SsoErrorReason; evidence: SsoRefusalEvidence }
-
-function str(value: unknown): string | null {
-  return typeof value === 'string' && value.trim() !== '' ? value.trim() : null
-}
 
 /**
  * Read a group-membership claim, tolerating every shape providers ship it in: an array of

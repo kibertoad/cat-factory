@@ -2,9 +2,6 @@ import * as v from 'valibot'
 import { createTaskTypeSchema, taskTypeFieldsSchema } from './primitives.js'
 import { agentConfigValuesSchema } from './agent-config.js'
 import {
-  DESCRIPTOR_FIELD_ARRAY_MAX,
-  DESCRIPTOR_FIELD_VALUE_MAX,
-  descriptorFieldValueSchema,
   descriptorFieldValuesSchema,
   type DescriptorFieldValue,
   type DescriptorFieldValues,
@@ -66,17 +63,11 @@ const shortProseField = v.pipe(v.string(), v.maxLength(INITIATIVE_SHORT_MAX))
 // preset-named aliases, kept here beside the entity that persists them.
 // ---------------------------------------------------------------------------
 
-/** Bound on a single string / string-array element value in {@link initiativePresetInputsSchema}. */
-export const INITIATIVE_PRESET_INPUT_MAX = DESCRIPTOR_FIELD_VALUE_MAX
-/** Bound on the number of elements in a `checkbox-group`/multi-value input. */
-export const INITIATIVE_PRESET_INPUT_ARRAY_MAX = DESCRIPTOR_FIELD_ARRAY_MAX
-
 /**
  * One filled preset-form value: a scalar (`text`/`select`/`path`/…), a multi-select, a toggle, or a
- * number. The shared descriptor-form value shape ({@link descriptorFieldValueSchema}) under the
+ * number. The shared descriptor-form value shape ({@link DescriptorFieldValue}) under the
  * preset's own name, so this entity keeps referencing the vocabulary it persists.
  */
-export const initiativePresetInputValueSchema = descriptorFieldValueSchema
 export type InitiativePresetInputValue = DescriptorFieldValue
 
 /** The user's filled preset form: a bounded map from field `key` to its value. */

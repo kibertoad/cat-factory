@@ -56,7 +56,7 @@ export interface JudgeDispositionInput {
  * JudgeDispositionResult.note}, which is display prose one wording change away from re-pointing
  * the decision silently.
  */
-export type JudgeParkReason = 'budget_spent' | 'no_bounce_target' | 'registration'
+type JudgeParkReason = 'budget_spent' | 'no_bounce_target' | 'registration'
 
 /** The decision plus the reason to record on the step (surfaced in the window + PR report). */
 export interface JudgeDispositionResult {

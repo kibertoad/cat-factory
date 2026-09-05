@@ -34,7 +34,7 @@ export interface GatekeeperEnv {
 }
 
 /** How an operator supplies one binding. */
-export type BindingKind = 'var' | 'secret' | 'durable-object'
+type BindingKind = 'var' | 'secret' | 'durable-object'
 
 /**
  * Which mechanism each binding arrives through, and the one place that fact is stated.

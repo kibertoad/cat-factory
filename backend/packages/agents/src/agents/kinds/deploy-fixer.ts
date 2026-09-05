@@ -93,7 +93,7 @@ export const DEPLOY_FIXER_DIRECTIVES = [
  *
  * The failure brief rides `priorOutputs` tagged as the deployer's, which is whose output it is.
  */
-export function deployFixerUserPrompt(context: AgentRunContext): string {
+function deployFixerUserPrompt(context: AgentRunContext): string {
   const failure = context.priorOutputs.find((o) => o.agentKind === DEPLOY_FAILURE_PRIOR_KIND)
   const description = context.block.description?.trim()
   return [

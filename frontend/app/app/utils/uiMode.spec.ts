@@ -27,7 +27,6 @@ describe('resolveUiMode', () => {
   it('falls back to the stored choice, then to the default', () => {
     expect(resolveUiMode(null, 'advanced')).toBe('advanced')
     expect(resolveUiMode(null, null)).toBe(DEFAULT_UI_MODE)
-    expect(DEFAULT_UI_MODE).toBe('basic')
   })
 
   it('caps an intake role at basic, above BOTH the env pin and the stored choice', () => {

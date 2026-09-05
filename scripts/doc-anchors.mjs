@@ -28,7 +28,7 @@
  * `_(Application team)_` would slug with two stray underscores and every live deep-link to it would
  * read as broken. `*` and `` ` `` are dropped by the character class anyway.
  */
-export function stripInlineMarkup(heading) {
+function stripInlineMarkup(heading) {
   return heading
     .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
     .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')

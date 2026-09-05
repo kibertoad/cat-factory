@@ -55,7 +55,7 @@ import type { ScopedRun } from './scope.js'
 //     consumer can render it in its own surface; nothing here composes it into markdown.
 
 /** Project a live requirements review onto the external decision resource. */
-export function toRequirementsDecision(review: RequirementReview): PublicDecision {
+function toRequirementsDecision(review: RequirementReview): PublicDecision {
   return {
     kind: 'requirements-review',
     reviewId: review.id,
@@ -69,7 +69,7 @@ export function toRequirementsDecision(review: RequirementReview): PublicDecisio
 }
 
 /** Project a live clarity (bug-triage) review — the requirements twin over its own document. */
-export function toClarityDecision(review: ClarityReview): PublicDecision {
+function toClarityDecision(review: ClarityReview): PublicDecision {
   return {
     kind: 'clarity-review',
     reviewId: review.id,
@@ -83,7 +83,7 @@ export function toClarityDecision(review: ClarityReview): PublicDecision {
 }
 
 /** Project a live brainstorm session for one stage. */
-export function toBrainstormDecision(session: BrainstormSession): PublicDecision {
+function toBrainstormDecision(session: BrainstormSession): PublicDecision {
   return {
     kind: 'brainstorm',
     sessionId: session.id,
@@ -116,7 +116,7 @@ function toFinding(item: RequirementReview['items'][number]) {
 }
 
 /** Project a run's fork-decision step state onto the external decision resource. */
-export function toForkDecision(state: ForkDecisionStepState): PublicDecision {
+function toForkDecision(state: ForkDecisionStepState): PublicDecision {
   return {
     kind: 'fork',
     status: state.status,
@@ -129,7 +129,7 @@ export function toForkDecision(state: ForkDecisionStepState): PublicDecision {
  * Project a run's JUDGE step state onto the external decision resource. The rubric body is
  * deliberately omitted (see `publicJudgeDecisionSchema`) — a caller answers the findings.
  */
-export function toJudgeDecision(stepKind: string, state: JudgeStepState): PublicDecision {
+function toJudgeDecision(stepKind: string, state: JudgeStepState): PublicDecision {
   return {
     kind: 'judge',
     stepKind,
@@ -155,7 +155,7 @@ export function toJudgeDecision(stepKind: string, state: JudgeStepState): Public
  * verdict and is forbidden from restating its own findings). Read through the shared
  * `blockingReviewComments` so the API cannot count a must-fix the engine did not.
  */
-export function toApprovalDecision(
+function toApprovalDecision(
   step: PipelineStep,
   stepIndex: number,
   approval: StepApproval,
@@ -182,7 +182,7 @@ export function toApprovalDecision(
 }
 
 /** Project a decision an agent raised mid-work. */
-export function toAgentDecision(step: PipelineStep, decision: Decision): PublicDecision {
+function toAgentDecision(step: PipelineStep, decision: Decision): PublicDecision {
   return {
     kind: 'agent-decision',
     decisionId: decision.id,
@@ -200,7 +200,7 @@ export function toAgentDecision(step: PipelineStep, decision: Decision): PublicD
  * published ones must not move, and the `optional | null` internals collapse to always-present
  * nullables so four generated clients have one shape to check.
  */
-export function toPrReviewDecision(state: PrReviewStepState): PublicDecision {
+function toPrReviewDecision(state: PrReviewStepState): PublicDecision {
   return {
     kind: 'pr-review',
     status: state.status,
@@ -250,7 +250,7 @@ function toPrReviewFinding(finding: PrReviewFinding): PublicPrReviewFinding {
 }
 
 /** Project a parked human-test gate: what to test against, and how much fix budget is left. */
-export function toHumanTestDecision(state: HumanTestStepState): PublicDecision {
+function toHumanTestDecision(state: HumanTestStepState): PublicDecision {
   const env = state.environment
   return {
     kind: 'human-test',
@@ -265,7 +265,7 @@ export function toHumanTestDecision(state: HumanTestStepState): PublicDecision {
 }
 
 /** Project a parked visual-confirmation gate: the pairings awaiting a verdict. */
-export function toVisualConfirmDecision(state: VisualConfirmStepState): PublicDecision {
+function toVisualConfirmDecision(state: VisualConfirmStepState): PublicDecision {
   return {
     kind: 'visual-confirmation',
     phase: state.phase,
@@ -393,7 +393,7 @@ function unclassifiedPhase(_phase: never): boolean {
  * re-defaulted here: a caller reads these two numbers to decide whether a `send-back` will actually
  * re-run the Coder, so reporting a ceiling the gate would not honour is worse than reporting none.
  */
-export function toFollowUpsDecision(
+function toFollowUpsDecision(
   step: PipelineStep,
   stepIndex: number,
   state: FollowUpsStepState,
@@ -429,7 +429,7 @@ function isLiveFollowUps(state: FollowUpsStepState): boolean {
 }
 
 /** Project a parked INTERVIEW gate: which interviewer is asking, and the exchanges so far. */
-export function toInterviewDecision(
+function toInterviewDecision(
   stepKind: string,
   blockId: string,
   view: InterviewView,
@@ -454,7 +454,7 @@ export function toInterviewDecision(
  * closed vocabulary the SPA renders, so an integration maps them to its own copy (or hands them to
  * whoever filed the ticket) rather than parsing our prose.
  */
-export function toInputGateDecision(gate: RunInputGate): PublicDecision {
+function toInputGateDecision(gate: RunInputGate): PublicDecision {
   return {
     kind: 'input-gate',
     status: gate.status,

@@ -674,7 +674,7 @@ function unreachableSource(value: never): never {
  * Lower a public manifest source onto the internal one, for the same reason and with the same
  * exhaustiveness as the URL source above.
  */
-export function toKubernetesManifestSource(
+function toKubernetesManifestSource(
   source: PublicKubernetesManifestSource,
 ): KubernetesManifestSource {
   const renderer = source.renderer === undefined ? {} : { renderer: source.renderer }

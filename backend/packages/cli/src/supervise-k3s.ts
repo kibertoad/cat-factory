@@ -43,7 +43,7 @@ export function looksLikeCgroupWedge(output: string): boolean {
 }
 
 /** The guidance printed when the wedge is hit — the only sequence that actually clears it. */
-export const CGROUP_WEDGE_GUIDANCE =
+const CGROUP_WEDGE_GUIDANCE =
   'the container runtime cannot restart this cluster: a stale cgroup is blocking it ' +
   '(runc: "device or resource busy"). This does NOT clear on its own and no retry will fix it. ' +
   'Restart the container engine (e.g. `docker desktop restart`, or Docker Desktop > Restart), ' +

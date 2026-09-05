@@ -1,13 +1,3 @@
-import type {
-  AgentContextSnapshot,
-  AgentContextSnapshotIndex,
-  AgentSearchQuery,
-  AgentToolCall,
-  AgentToolCallSummary,
-  LlmCallMetric,
-  LlmCallMetricPage,
-  LlmCallMetricSummary,
-} from '@cat-factory/kernel'
 import { MAX_AGENT_CONTEXT_TOTAL_CHARS, MAX_BODY_CHARS } from '@cat-factory/orchestration'
 
 // Mothership-mode telemetry READ-THROUGH (docs/initiatives/mothership-mode.md, PR 5 — the last
@@ -288,23 +278,6 @@ export interface TelemetryReadRequest {
 export type TelemetryReadResponse =
   | { ok: true; value: unknown }
   | { ok: false; error: { code: string; message: string } }
-
-/** The typed results the read-through expects back, per method. */
-export interface TelemetryReadResults {
-  'llmCallMetricRepository.listRunPage': LlmCallMetric[]
-  'llmCallMetricRepository.listPage': LlmCallMetricPage[]
-  'llmCallMetricRepository.get': LlmCallMetricPage | null
-  'llmCallMetricRepository.summarizeByExecution': LlmCallMetricSummary[]
-  'agentContextSnapshotRepository.listRunPage': AgentContextSnapshot[]
-  'agentContextSnapshotRepository.listIndex': AgentContextSnapshotIndex[]
-  'agentContextSnapshotRepository.get': AgentContextSnapshot | null
-  'agentContextSnapshotRepository.countByExecution': number
-  'agentSearchQueryRepository.listPage': AgentSearchQuery[]
-  'agentSearchQueryRepository.countByExecution': number
-  'agentToolCallRepository.listPage': AgentToolCall[]
-  'agentToolCallRepository.listByExecution': AgentToolCall[]
-  'agentToolCallRepository.summarizeByExecution': AgentToolCallSummary[]
-}
 
 /** The client half: performs one bounded telemetry read against the mothership. */
 export interface MachineTelemetryReadClient {

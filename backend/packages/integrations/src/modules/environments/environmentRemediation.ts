@@ -29,7 +29,7 @@ export interface ResolvedEnvironmentProvider {
 }
 
 /** One appended `remediate` row, as the owning service maps it onto the provisioning log. */
-export interface EnvironmentRemediationLogRow {
+interface EnvironmentRemediationLogRow {
   workspaceId: string
   environmentId: string
   providerId: string

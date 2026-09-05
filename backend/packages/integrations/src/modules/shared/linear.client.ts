@@ -81,16 +81,6 @@ function isRateLimited(status: number, errors: GraphqlError[] | undefined): bool
   return status === 429 || (errors ?? []).some((e) => errorCodeOf(e) === 'RATELIMITED')
 }
 
-/**
- * The minimal slice of the Fetch API the GraphQL POST needs (no DOM lib). Matches
- * the `FetchLike` the tracker/writeback services inject, so a fake `fetch` drives
- * both. `body` is always set (GraphQL is POST-only), so it is required here.
- */
-export type LinearFetchLike = (
-  url: string,
-  init: { method: string; headers: Record<string, string>; body: string },
-) => Promise<{ ok: boolean; status: number; text(): Promise<string>; json(): Promise<unknown> }>
-
 /** One GraphQL error, with the machine-readable code Linear carries beside the prose. */
 interface GraphqlError {
   message?: string

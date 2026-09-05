@@ -310,7 +310,7 @@ export function buildCommonBody(
  * resolved `repoTargets` beside it: the job's token is minted AFTER this resolution and narrowed
  * to exactly those repos ({@link jobTokenRepoIds}), so `common` does not exist yet when this runs.
  */
-export async function resolveMultiRepoFanout(
+async function resolveMultiRepoFanout(
   context: AgentRunContext,
   args: {
     workspaceId: string
@@ -402,7 +402,7 @@ export async function resolveMultiRepoFanout(
  * off a recorded pull request, and a record carrying none would otherwise read as an own-repo
  * conflict and send the resolver at a repo that does not conflict.
  */
-export async function resolveConflictResolverPeer(
+async function resolveConflictResolverPeer(
   context: AgentRunContext,
   args: {
     workspaceId: string
@@ -470,7 +470,7 @@ export async function resolveConflictResolverPeer(
  * `resolveRepoTargets` is what CONFIRMS the repo (it is harness-reported), so a peer outside the
  * resolved checkout set is dropped LOUDLY: named to the merger in the section, and logged.
  */
-export async function resolveMergerCombinedDiff(
+async function resolveMergerCombinedDiff(
   context: AgentRunContext,
   args: {
     workspaceId: string
@@ -621,7 +621,7 @@ const REFERENCE_BRANCH_KINDS: ReadonlySet<string> = new Set([
  * `resolveRepoOrigin` (the same deployment-level seam the primary rides), so a GitLab deployment
  * clones from GitLab. Extracted from {@link resolveAuxiliaryRepos} to keep it under the ceiling.
  */
-export function resolveReferenceRepos(
+function resolveReferenceRepos(
   context: AgentRunContext,
   repo: RepoTarget,
   deps: ContainerAgentExecutorDependencies,
@@ -680,7 +680,7 @@ export function resolveReferenceRepos(
  * best-effort. A run that already carries a PR still reads reference branches (they are context,
  * independent of the work branch). Extracted from {@link resolveAuxiliaryRepos} for the ceiling.
  */
-export async function resolveReferenceBranches(
+async function resolveReferenceBranches(
   context: AgentRunContext,
   args: { repo: RepoTarget; workBranch: string; multiRepo: boolean },
   deps: ContainerAgentExecutorDependencies,

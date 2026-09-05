@@ -12,7 +12,7 @@ import type { AppEnv } from '../http/env.js'
 // both with headroom.
 
 /** Ceiling on a buffered webhook delivery, before HMAC verification. */
-export const MAX_WEBHOOK_BODY_BYTES = 25 * 1024 * 1024
+const MAX_WEBHOOK_BODY_BYTES = 25 * 1024 * 1024
 
 /**
  * The `bodyLimit` middleware for a webhook route: reject an oversized delivery with 413.

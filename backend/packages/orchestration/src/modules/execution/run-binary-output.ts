@@ -166,7 +166,7 @@ export function dispatchBinaryStorageFor(input: {
  * A step with neither was never handed a brief, so a block in its reply would be a coincidence,
  * not a declaration.
  */
-export function stepMayDeclareBinaryOutputs(
+function stepMayDeclareBinaryOutputs(
   step: PipelineStep,
   agentKindRegistry: AgentKindRegistry,
 ): boolean {

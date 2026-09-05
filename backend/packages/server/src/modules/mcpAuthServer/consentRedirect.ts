@@ -17,7 +17,7 @@ import type { AppEnv } from '../../http/env.js'
  * page must change this constant too, or `GET /oauth/authorize` sends every host to a 404 while
  * everything on this side stays green.
  */
-export const MCP_AUTHORIZE_PATH = '/mcp-authorize'
+const MCP_AUTHORIZE_PATH = '/mcp-authorize'
 
 /**
  * Where to send the browser for consent, with the sealed request on it.

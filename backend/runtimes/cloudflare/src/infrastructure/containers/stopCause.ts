@@ -21,7 +21,7 @@ import { errorChainMatches } from '@cat-factory/kernel'
 export type ContainerStopCause = 'rollout' | 'idle'
 
 /** DO-storage key holding the {@link StopCauseRecord} of the most recent self-observed stop. */
-export const STOP_CAUSE_KEY = 'containerStopCause'
+const STOP_CAUSE_KEY = 'containerStopCause'
 
 /**
  * What the runtime reported when the workload stopped, mirroring the container base class's
@@ -40,7 +40,7 @@ export interface ContainerExitState {
 }
 
 /** What the container persists when it observes its own stop. */
-export interface StopCauseRecord {
+interface StopCauseRecord {
   /**
    * The infrastructure-churn cause, when the container recognised one. Absent for a stop it
    * cannot explain (a crash, an OOM kill), which is exactly the case {@link exit} exists for.
@@ -224,11 +224,7 @@ function isContainerExitState(value: unknown): value is ContainerExitState {
  * dropping the exit state with the cause would throw away the diagnostic to protect a budget the
  * diagnostic never touches.
  */
-export function attributeStopCause(
-  record: unknown,
-  now: number,
-  claimant: string,
-): StopObservation {
+function attributeStopCause(record: unknown, now: number, claimant: string): StopObservation {
   if (!record || typeof record !== 'object') return {}
   const { cause, exit, at, claimedBy } = record as Partial<StopCauseRecord>
   if (typeof at !== 'number') return {}

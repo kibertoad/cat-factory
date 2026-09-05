@@ -350,13 +350,3 @@ export const consensusSessionSchema = v.object({
   updatedAt: v.number(),
 })
 export type ConsensusSession = v.InferOutput<typeof consensusSessionSchema>
-
-/** Parse-or-throw a task estimate payload an agent returned (the engine validates it). */
-export function parseTaskEstimate(value: unknown): TaskEstimate {
-  return v.parse(taskEstimateSchema, value)
-}
-
-/** Parse-or-throw a consensus step config (used when persisting builder edits). */
-export function parseConsensusStepConfig(value: unknown): ConsensusStepConfig {
-  return v.parse(consensusStepConfigSchema, value)
-}

@@ -1,5 +1,5 @@
 import { SERVICE_CATALOG_CIPHER_INFO } from '@cat-factory/integrations'
-import { ORG_SECRET_KEY_ARITY, ORG_SECRET_SOURCES, type OrgSecretSource } from '@cat-factory/kernel'
+import { ORG_SECRET_KEY_ARITY, type OrgSecretSource } from '@cat-factory/kernel'
 
 // The server-side half of mothership secret delegation: what each `OrgSecretSource` actually
 // binds to on the mothership's own repository registry.
@@ -145,6 +145,3 @@ export function sealedSecretSourceSpec(source: unknown): SealedSecretSourceBindi
   const name = source as OrgSecretSource
   return { ...SEALED_SECRET_SOURCES[name], source: name, keyArity: ORG_SECRET_KEY_ARITY[name] }
 }
-
-/** The declared vocabulary, for tests and for the boot-time completeness assertions. */
-export const SEALED_SECRET_SOURCE_NAMES: readonly OrgSecretSource[] = ORG_SECRET_SOURCES

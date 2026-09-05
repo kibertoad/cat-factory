@@ -81,7 +81,7 @@ export const KNOWN_REASONS = toolServerUnavailableReasonSchema.options
  * it were a translation key, taking the retired-member path away from exactly the case it exists
  * for. Narrowing at the boundary keeps the exhaustive `Record` compile-time guard intact.
  */
-export function isKnownReason(reason: string): reason is ToolServerUnavailableReason {
+function isKnownReason(reason: string): reason is ToolServerUnavailableReason {
   return (KNOWN_REASONS as readonly string[]).includes(reason)
 }
 
@@ -205,7 +205,7 @@ export const KNOWN_OBSERVED_STATUSES = toolServerObservedStatusSchema.options
  * A predicate rather than a truthiness check on the lookup, for the reason {@link isKnownReason}
  * gives: an `Object.prototype` member name reads back as a truthy non-key.
  */
-export function isKnownObservedStatus(status: string): status is ToolServerObservedStatus {
+function isKnownObservedStatus(status: string): status is ToolServerObservedStatus {
   return (KNOWN_OBSERVED_STATUSES as readonly string[]).includes(status)
 }
 

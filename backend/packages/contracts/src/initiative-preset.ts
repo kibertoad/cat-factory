@@ -1,12 +1,10 @@
 import * as v from 'valibot'
 import {
   descriptorFieldEntries,
-  descriptorFieldShowWhenSchema,
   descriptorFieldTypeSchema,
   sanitizeDescriptorFields,
   validateDescriptorFields,
   withDescriptorFieldDefaults,
-  type DescriptorFieldShowWhen,
 } from './form-fields.js'
 import {
   INITIATIVE_ID_MAX,
@@ -44,10 +42,6 @@ import {
  */
 export const initiativePresetFieldTypeSchema = descriptorFieldTypeSchema
 export type InitiativePresetFieldType = v.InferOutput<typeof initiativePresetFieldTypeSchema>
-
-/** Single-condition visibility for a preset field (the shared {@link descriptorFieldShowWhenSchema}). */
-export const initiativePresetShowWhenSchema = descriptorFieldShowWhenSchema
-export type InitiativePresetShowWhen = DescriptorFieldShowWhen
 
 /** One value a preset needs, rendered as a single form field. */
 export const initiativePresetFieldSchema = v.object({

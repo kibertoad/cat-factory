@@ -9,6 +9,7 @@ import {
 import { readCappedText, safeFetch } from '../shared/safe-fetch.js'
 import { CONFLUENCE_DESCRIPTOR } from './confluence.logic.js'
 import * as confluenceLogic from './confluence.logic.js'
+import { normalizeAtlassianBaseUrl } from '@cat-factory/kernel'
 
 // ConfluenceProvider: the document-source provider for Confluence Cloud. It
 // authenticates with HTTP Basic (account email + API token), fetches a page in
@@ -66,7 +67,7 @@ export class ConfluenceProvider implements DocumentSourceProvider {
     if (!baseUrlRaw || !accountEmail || !apiToken) {
       throw new ValidationError('Confluence requires a site URL, account email and API token')
     }
-    const baseUrl = confluenceLogic.normalizeBaseUrl(baseUrlRaw)
+    const baseUrl = normalizeAtlassianBaseUrl(baseUrlRaw)
     // Guard against SSRF: the stored base URL is later fetched with the
     // workspace's credentials, so it must be a public https host.
     confluenceLogic.assertSafeConfluenceBaseUrl(baseUrl)
