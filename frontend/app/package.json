@@ -52,7 +52,7 @@
   },
   "devDependencies": {
     "@toad-contracts/testing": "0.3.2",
-    "happy-dom": "^20.13.2",
+    "happy-dom": "^20.14.0",
     "msw": "^2.15.0",
     "nuxt": "^4.5.2",
     "typescript": "^6.0.3",

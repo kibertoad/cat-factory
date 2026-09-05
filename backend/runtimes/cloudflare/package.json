@@ -43,7 +43,7 @@
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.49",
-    "@ai-sdk/openai": "^4.0.57",
+    "@ai-sdk/openai": "^4.0.58",
     "@ai-sdk/openai-compatible": "^3.0.43",
     "@cat-factory/agents": "workspace:*",
     "@cat-factory/binary-generators": "workspace:*",
@@ -64,7 +64,7 @@
     "@cat-factory/spend": "workspace:*",
     "@cloudflare/containers": "^0.3.7",
     "@hono/valibot-validator": "^0.6.1",
-    "ai": "^7.0.91",
+    "ai": "^7.0.92",
     "hono": "^4.13.5",
     "pino": "^10.3.1",
     "valibot": "^1.4.2",
@@ -73,7 +73,7 @@
   "devDependencies": {
     "@cat-factory/conformance": "workspace:*",
     "@cloudflare/vitest-pool-workers": "^0.22.0",
-    "@cloudflare/workers-types": "5.20260815.1",
+    "@cloudflare/workers-types": "5.20260904.1",
     "typescript": "7.0.2",
     "vitest": "^4.1.11",
     "wrangler": "4.124.0"

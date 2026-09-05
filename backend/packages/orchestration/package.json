@@ -40,7 +40,7 @@
     "@cat-factory/sandbox": "workspace:*",
     "@cat-factory/spend": "workspace:*",
     "@cat-factory/workspaces": "workspace:*",
-    "ai": "^7.0.91"
+    "ai": "^7.0.92"
   },
   "devDependencies": {
     "@cat-factory/sandbox-fixtures": "workspace:*",

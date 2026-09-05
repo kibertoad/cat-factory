@@ -155,12 +155,18 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   'openai:gpt-4o': { inputPerMillion: 2.3, outputPerMillion: 9.2 },
   'openai:gpt-4o-mini': { inputPerMillion: 0.14, outputPerMillion: 0.55 },
   // ChatGPT/Codex subscription models (informational list prices, USD→EUR ~0.92). Keys are
-  // the Codex `--model` slugs the catalog dispatches, so the GPT-5.6 tiers and plain GPT-5.5
-  // — never a `-codex`-suffixed id, which no longer exists past GPT-5.3.
+  // the Codex `--model` slugs the catalog dispatches, so GPT-6 Astra, the GPT-5.6 tiers and
+  // plain GPT-5.5, never a `-codex`-suffixed id, which no longer exists past GPT-5.3.
   // Post-2026-07-30 list: Sol $5 / $30, Terra $2 / $12, Luna $0.20 / $1.20 per 1M. Terra and
   // Luna were both carrying HALF their real rate here, which meters a Terra run at a twelfth
   // of an equivalent Sol one when the true gap is 2.5x on output. Cache reads bill at 0.1x
   // and writes at 1.25x on all three tiers, so both derived tiers are already exact.
+  // GPT-6 Astra is $10 / $50 per 1M, the most expensive model this catalog can select on
+  // either OpenAI route. Its cached input is $1, i.e. the same 0.1x read multiplier as the
+  // tiers below, so the derived cache tiers land exactly here too. The 2x "Fast mode" rate
+  // is deliberately not modelled: nothing here dispatches it, and a row set to a mode we
+  // never request would over-meter every ordinary Astra run against the budget gate.
+  'openai:gpt-6-astra': { inputPerMillion: 9.2, outputPerMillion: 46 },
   'openai:gpt-5.6-sol': { inputPerMillion: 4.6, outputPerMillion: 27.6 },
   'openai:gpt-5.6-terra': { inputPerMillion: 1.84, outputPerMillion: 11.04 },
   'openai:gpt-5.6-luna': { inputPerMillion: 0.18, outputPerMillion: 1.1 },
@@ -356,6 +362,7 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   // corrected. OpenRouter's own model page currently advertises Sol at $2 / $10, below both
   // OpenAI's list and its own Terra row; that is an upstream listing artefact, so the entry
   // stays on the vendor list price this passthrough gateway bills at.
+  'openrouter:openai/gpt-6-astra': { inputPerMillion: 9.2, outputPerMillion: 46 },
   'openrouter:openai/gpt-5.6-sol': { inputPerMillion: 4.6, outputPerMillion: 27.6 },
   'openrouter:openai/gpt-5.6-terra': { inputPerMillion: 1.84, outputPerMillion: 11.04 },
   'openrouter:openai/gpt-5.6-luna': { inputPerMillion: 0.19, outputPerMillion: 1.11 },
