@@ -12,6 +12,7 @@ import {
   requestParams,
   type McpEra,
   type ServerIdentity,
+  isRecord,
 } from './mcpDialect.js'
 
 // ---------------------------------------------------------------------------
@@ -93,7 +94,7 @@ export interface McpProbeDeps {
   maxPages?: number
 }
 
-export interface McpProbeSuccess {
+interface McpProbeSuccess {
   status: 'ok'
   serverName: string
   serverVersion: string
@@ -105,7 +106,7 @@ export interface McpProbeSuccess {
   toolsComplete: boolean
 }
 
-export type McpProbeFailure =
+type McpProbeFailure =
   | { status: 'unreachable'; error: string }
   | { status: 'http_error'; httpStatus: number; error: string }
   | { status: 'protocol_error'; error: string }
@@ -864,10 +865,6 @@ function extractSseData(buffered: string): string | undefined {
     .filter((line) => line.startsWith('data:'))
     .map((line) => line.slice('data:'.length).replace(/^ /, ''))
   return data.length ? data.join('\n') : undefined
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 /** A body as a JSON-RPC frame, or undefined when it is neither JSON nor an object. */

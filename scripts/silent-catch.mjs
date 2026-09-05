@@ -226,7 +226,7 @@ const FUNCTION_HEAD = String.raw`(?:async\s+)?function\s*[\w$]*\s*${PARAMS}`
  * `.catch(noop)` and friends are deliberately NOT matched: whether a named function is empty is
  * not a question this file can answer, and guessing would make the guard unpredictable.
  */
-export const SILENT_CATCH = new RegExp(
+const SILENT_CATCH = new RegExp(
   String.raw`\.catch\(\s*(?:${ARROW_HEAD}|${FUNCTION_HEAD})\s*\{\s*\}\s*\)`,
   'g',
 )

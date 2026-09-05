@@ -8,7 +8,7 @@ import type {
 import type { ConfigRepairDispatch } from './EnvironmentConnectionService.js'
 
 /** Deterministic head branch for the PR-mode config bootstrap (idempotent re-runs). */
-export const BOOTSTRAP_CONFIG_BRANCH = 'cat-factory/env-config'
+const BOOTSTRAP_CONFIG_BRANCH = 'cat-factory/env-config'
 
 /**
  * Write the generated config files: a direct commit, or (in PR mode) create the config
@@ -16,7 +16,7 @@ export const BOOTSTRAP_CONFIG_BRANCH = 'cat-factory/env-config'
  * Extracted so its branch/PR conditionals don't nest under the generation guards
  * (keeps max-depth ≤ 4).
  */
-export async function writeGeneratedConfig(
+async function writeGeneratedConfig(
   repo: RunRepoContext['repo'],
   opts: {
     message: string

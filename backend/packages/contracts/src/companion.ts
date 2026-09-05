@@ -83,9 +83,3 @@ export type CompanionAssessment = v.InferOutput<typeof companionAssessmentSchema
 export function parseCompanionAssessment(value: unknown): CompanionAssessment {
   return v.parse(companionAssessmentSchema, value)
 }
-
-/** Non-throwing variant: returns the parsed assessment or `undefined` when invalid. */
-export function safeParseCompanionAssessment(value: unknown): CompanionAssessment | undefined {
-  const result = v.safeParse(companionAssessmentSchema, value)
-  return result.success ? result.output : undefined
-}

@@ -319,7 +319,6 @@ export {
   type TelemetryReadRepository,
   type TelemetryReadRequest,
   type TelemetryReadResponse,
-  type TelemetryReadResults,
   HttpMachineTelemetryReadClient,
   MachineTokenUnavailableForReadError,
   TelemetryReadTooLargeError,
@@ -629,7 +628,6 @@ export {
 // facade composes into `createOrgSecretCipher`.
 export {
   SEALED_SECRET_SOURCES,
-  SEALED_SECRET_SOURCE_NAMES,
   sealedSecretSourceSpec,
   type SealedSecretSourceBinding,
   type SealedSecretSourceSpec,

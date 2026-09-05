@@ -202,13 +202,7 @@
     },
     "canvas": {
       "emptyTitle": "ボードが空です",
-      "emptyBody": "サービスを追加して始めましょう。新しいリポジトリをブートストラップするか、既存のリポジトリを取り込みます。",
-      "addBlockFailedTitle": "ブロックを追加できませんでした",
-      "addBlockFailedBody": "バックエンドがリクエストを拒否しました。",
-      "dropOntoTaskTitle": "タスクにドロップ",
-      "dropOntoTaskBody": "パイプラインはサービスではなくタスクに対して実行されます。",
-      "taskBlockedTitle": "タスクがブロックされています",
-      "taskBlockedBody": "依存関係がまだマージされていません。"
+      "emptyBody": "サービスを追加して始めましょう。新しいリポジトリをブートストラップするか、既存のリポジトリを取り込みます。"
     },
     "addTask": {
       "title": "タスクを追加",

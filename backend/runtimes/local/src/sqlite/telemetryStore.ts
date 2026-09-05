@@ -1411,7 +1411,7 @@ class SqliteSubscriptionQuotaCycleRepository implements SubscriptionQuotaCycleRe
  * board's per-step rollups and the retention sweep — resolves the local store with no per-consumer
  * wiring.
  */
-export interface LocalTelemetryRepositories {
+interface LocalTelemetryRepositories {
   llmCallMetricRepository: LlmCallMetricRepository
   agentContextSnapshotRepository: AgentContextSnapshotRepository
   agentSearchQueryRepository: AgentSearchQueryRepository

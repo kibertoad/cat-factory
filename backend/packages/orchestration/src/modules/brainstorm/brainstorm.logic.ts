@@ -60,7 +60,7 @@ const stageNoun = (stage: BrainstormStage): string =>
  * or the rough description (requirements). Used both as the agent's input and as the base
  * the incorporate step rewrites.
  */
-export function renderBrainstormSubject(ctx: BrainstormContext): string {
+function renderBrainstormSubject(ctx: BrainstormContext): string {
   const lines = [
     `# ${ctx.block.title} (${ctx.block.type})`,
     ...renderProductContextLines(ctx.service, 'propose'),

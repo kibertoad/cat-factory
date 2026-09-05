@@ -26,7 +26,7 @@
 // published library must accept the consumer's copy, so widening there is correct.
 
 /** Packages whose resolved version must be unique across the whole tree. */
-export const SINGLETON_PACKAGES = ['wrangler', 'workerd', 'miniflare', '@cloudflare/workers-types']
+const SINGLETON_PACKAGES = ['wrangler', 'workerd', 'miniflare', '@cloudflare/workers-types']
 
 /**
  * Collect every resolved version per package name from a pnpm lockfile's `packages:` section.

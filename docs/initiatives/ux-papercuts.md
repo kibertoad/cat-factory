@@ -154,11 +154,10 @@ per-file patches:
   `components/board/TaskDependencyEdges.vue:163`: the whole SVG overlay is
   `pointer-events-none`. Removal requires re-running the exact same drag
   (`toggleDependency`), which is undiscoverable. Fix: clickable edge with hover "×".
-- **UX-07: Silent failed pipeline drop. DONE.** `BoardCanvas.vue`'s `onDrop` split the
-  old `if (!target || !pipeline) return`: an unknown pipeline id stays a silent no-op
-  (internal glitch, nothing the user can act on), but a drop onto blank canvas / a
-  non-block now raises the same `board.canvas.dropOntoTask` nudge the wrong-level path
-  gives, so the drop never just vanishes.
+- **UX-07: Silent failed pipeline drop. RETIRED.** Fixed at the time (`BoardCanvas.vue`'s
+  `onDrop` raised a "drop onto a task" nudge instead of returning silently), then removed
+  with the draggable block/pipeline palettes: nothing produces a palette drop payload any
+  more, so the canvas no longer carries a drop handler at all.
 - **UX-08: Untitled zoom controls. DONE.** The three zoom controls in
   `BoardToolbar.vue` now route through the shared `common/IconButton.vue` primitive with
   labels (`board.toolbar.zoomOut`/`zoomIn`/`fitView`), applied as both `:title` and

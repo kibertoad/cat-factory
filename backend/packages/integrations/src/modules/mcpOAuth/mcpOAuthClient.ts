@@ -4,6 +4,7 @@ import {
   isCloudMetadataHost,
   redactSecrets,
 } from '@cat-factory/kernel'
+import { toBase64 } from '../shared/base64.js'
 import { safeFetch } from '../shared/safe-fetch.js'
 
 // ---------------------------------------------------------------------------
@@ -432,7 +433,7 @@ async function tokenRequest(
   }
   if (input.clientSecret) {
     if (input.useBasicAuth) {
-      headers.authorization = `Basic ${base64(`${encodeURIComponent(input.clientId)}:${encodeURIComponent(input.clientSecret)}`)}`
+      headers.authorization = `Basic ${toBase64(`${encodeURIComponent(input.clientId)}:${encodeURIComponent(input.clientSecret)}`)}`
     } else {
       body.set('client_secret', input.clientSecret)
     }
@@ -550,12 +551,4 @@ function preview(text: string): string {
 
 function describe(error: unknown): string {
   return preview(getErrorMessage(error))
-}
-
-/** base64 (not url-safe) of a UTF-8 string, for the HTTP Basic header. */
-function base64(value: string): string {
-  const bytes = new TextEncoder().encode(value)
-  let binary = ''
-  for (const byte of bytes) binary += String.fromCharCode(byte)
-  return btoa(binary)
 }

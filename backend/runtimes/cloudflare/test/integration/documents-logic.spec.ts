@@ -19,12 +19,6 @@ describe('confluence logic', () => {
     expect(confluenceLogic.parseConfluenceRef('not-a-page')).toBeNull()
   })
 
-  it('normalizes a trailing /wiki and slash', () => {
-    expect(confluenceLogic.normalizeBaseUrl('https://acme.atlassian.net/wiki/')).toBe(
-      'https://acme.atlassian.net',
-    )
-  })
-
   it('rejects SSRF-prone base URLs and accepts a public https host', () => {
     expect(() =>
       confluenceLogic.assertSafeConfluenceBaseUrl('https://acme.atlassian.net'),

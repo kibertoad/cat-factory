@@ -79,17 +79,6 @@
         "@hono/valibot-validator",
         "pino",
       ],
-      // Unreferenced-file baseline (same extraction leftovers) — triage separately.
-      "ignore": [
-        "src/infrastructure/ai/RunnerJobClient.ts",
-        "src/infrastructure/auth/GitHubOAuth.ts",
-        "src/infrastructure/auth/middleware.ts",
-        "src/infrastructure/auth/signing.ts",
-        "src/infrastructure/github/encoding.ts",
-        "src/infrastructure/github/state.ts",
-        "src/infrastructure/http/params.ts",
-        "src/infrastructure/runners/RunnerPoolTransport.ts",
-      ],
     },
     "backend/runtimes/node": {
       "entry": ["src/main.ts", "test/**/*.ts"],

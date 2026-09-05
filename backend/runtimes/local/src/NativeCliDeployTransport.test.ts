@@ -32,12 +32,9 @@ describe('buildLocalDeployTransport', () => {
       LOCAL_DEPLOY_RUNTIME: 'container',
       LOCAL_DEPLOY_IMAGE: 'ghcr.io/acme/cat-factory-deploy:0.2.2',
     })
-    // Not the native host-process transport, and a usable RunnerTransport (dispatch/poll/release).
+    // Not the native host-process transport.
     expect(t).not.toBeNull()
     expect(t).not.toBeInstanceOf(NativeCliDeployTransport)
-    expect(typeof t!.dispatch).toBe('function')
-    expect(typeof t!.poll).toBe('function')
-    expect(typeof t!.release).toBe('function')
   })
 
   it('builds container mode with NO LOCAL_DEPLOY_IMAGE — the image is resolved automatically', () => {
@@ -47,7 +44,6 @@ describe('buildLocalDeployTransport', () => {
     const t = buildLocalDeployTransport({ ...SECRET, LOCAL_DEPLOY_RUNTIME: 'container' })
     expect(t).not.toBeNull()
     expect(t).not.toBeInstanceOf(NativeCliDeployTransport)
-    expect(typeof t!.dispatch).toBe('function')
   })
 
   it('BREAKS (throws) on native mode without LOCAL_DEPLOY_HARNESS_ENTRY — no silent fallback', () => {

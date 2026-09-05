@@ -331,7 +331,7 @@ export class DeployFixController {
  * `enabled: false` is expressed as a zero budget so the disabled case and the deliberately
  * zero-rounds case take one path, there being no difference between them.
  */
-export function resolveDeployFixBudget(step: Pick<PipelineStep, 'stepOptions'>): number {
+function resolveDeployFixBudget(step: Pick<PipelineStep, 'stepOptions'>): number {
   const config = step.stepOptions?.deployFix
   if (config?.enabled === false) return 0
   return config?.maxAttempts ?? DEFAULT_DEPLOY_FIX_MAX_ATTEMPTS

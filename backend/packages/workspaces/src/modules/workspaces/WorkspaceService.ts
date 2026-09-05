@@ -50,8 +50,6 @@ import type {
 } from '@cat-factory/kernel'
 import type { Clock, IdGenerator } from '@cat-factory/kernel'
 
-export { requireWorkspace } from '@cat-factory/kernel'
-
 /**
  * The one line that reports spend a deleted board took with it. Shared by every way the final
  * fold can come up short so an operator greps ONE message: what separates the causes are the

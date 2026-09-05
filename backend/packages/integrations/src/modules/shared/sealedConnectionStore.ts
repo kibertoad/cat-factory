@@ -32,7 +32,7 @@ export interface SealedConnectionRow<Kind extends string> {
 }
 
 /** The same row with its bag opened. */
-export interface OpenedConnection<Kind extends string> {
+interface OpenedConnection<Kind extends string> {
   workspaceId: string
   source: Kind
   credentials: Record<string, string>
@@ -42,7 +42,7 @@ export interface OpenedConnection<Kind extends string> {
 }
 
 /** The non-secret half, which `listSummaries` answers without opening anything. */
-export interface ConnectionSummary<Kind extends string> {
+interface ConnectionSummary<Kind extends string> {
   workspaceId: string
   source: Kind
   label: string

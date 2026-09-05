@@ -39,8 +39,3 @@ export function redact(input: string, knownSecrets: readonly string[] = []): str
   }
   return out
 }
-
-/** Pattern-only redaction (no known values). Kept for callers without a secret list. */
-export function redactSecrets(input: string): string {
-  return redact(input)
-}

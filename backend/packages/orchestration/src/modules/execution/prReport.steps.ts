@@ -1,5 +1,5 @@
 import type { ExecutionInstance, PipelineStep } from '@cat-factory/kernel'
-import { hostMarkdown } from '@cat-factory/kernel'
+import { hostMarkdown, redactSecrets } from '@cat-factory/kernel'
 import { selectEvidenceStep } from '@cat-factory/contracts'
 
 // ---------------------------------------------------------------------------
@@ -46,4 +46,9 @@ export function findStep(
  */
 export function absentNote(note: string | null | undefined): string {
   return `_${hostMarkdown.prose(note ?? 'Not reported.')}_`
+}
+
+/** Scrub an optional free-text value, keeping `null` for "nothing recorded". */
+export function scrub(value: string | null | undefined): string | null {
+  return value == null ? null : (redactSecrets(value) ?? null)
 }

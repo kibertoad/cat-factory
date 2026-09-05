@@ -28,10 +28,7 @@ import { stripUrlCredentials } from '../../agents/agentContextRecord.js'
  * `ToolServerOAuthStatus` holds except the two fields the DECLARATION decides (`grant`) and this
  * projection derives (`connected`).
  */
-export type StoredOAuthGrants = ReadonlyMap<
-  string,
-  Omit<ToolServerOAuthStatus, 'grant' | 'connected'>
->
+type StoredOAuthGrants = ReadonlyMap<string, Omit<ToolServerOAuthStatus, 'grant' | 'connected'>>
 
 export interface CollectDeclaredToolServersInput {
   agentKindRegistry: AgentKindRegistry

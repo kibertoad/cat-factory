@@ -256,7 +256,7 @@ function specWriterResult(result: RunnerJobResult) {
   }
 }
 
-export const SPEC_BLUEPRINT_AGENT_KINDS: AgentKindDefinition[] = [
+const SPEC_BLUEPRINT_AGENT_KINDS: AgentKindDefinition[] = [
   // The Blueprinter runs as a read-only structured explore, cloning the PR branch when one is
   // open, else the repo's default branch (the generic `pr`-clone resolution), returning ONLY the
   // service tree as JSON. `toRunResult` coerces it into `blueprintService`; the deterministic

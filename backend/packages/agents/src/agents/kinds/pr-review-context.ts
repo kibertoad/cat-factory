@@ -61,7 +61,7 @@ export const PR_PRIOR_REVIEW_CONTEXT_FILE = 'pr-prior-review.md'
  * decides whether to fold standards into the prompt as a fallback — recognises what this preOp
  * writes without knowing anything pr-review-specific.
  */
-export const PR_STANDARD_CONTEXT_PREFIX = STANDARDS_CONTEXT_FILE_PREFIX
+const PR_STANDARD_CONTEXT_PREFIX = STANDARDS_CONTEXT_FILE_PREFIX
 
 /**
  * Total inlined-patch budget. Under it, the WHOLE diff is inlined and a small PR is reviewable
@@ -768,7 +768,7 @@ export function renderStandardsIndex(fragments: ComposableFragment[]): string {
 }
 
 /** The index file listing every injected standard (the shared `context-files` convention). */
-export const PR_STANDARDS_INDEX_CONTEXT_FILE = STANDARDS_CONTEXT_INDEX_FILE
+const PR_STANDARDS_INDEX_CONTEXT_FILE = STANDARDS_CONTEXT_INDEX_FILE
 
 // ---------------------------------------------------------------------------
 // PreOps

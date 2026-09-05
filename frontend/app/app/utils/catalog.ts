@@ -15,7 +15,7 @@ import {
 } from '@cat-factory/contracts'
 
 /** Simple unique id helper (fine for a client-only prototype). */
-export function uid(prefix = 'id'): string {
+export function uid(prefix: string): string {
   return `${prefix}_${Math.random().toString(36).slice(2, 9)}`
 }
 
@@ -1202,17 +1202,4 @@ export const FORK_DECISION_META = {
   label: 'Implementation-fork decision',
   icon: 'i-lucide-git-fork',
   color: '#a78bfa',
-}
-
-/**
- * Whether a Coder step has the Follow-up companion enabled, given the pipeline's per-step
- * `followUps` toggle at index `i`. Enabled by default on a `coder` step (only `false`
- * disables it); ignored on other kinds.
- */
-export function followUpCompanionEnabled(
-  kind: string,
-  followUps: (boolean | null)[] | undefined,
-  i: number,
-): boolean {
-  return kind === 'coder' && followUps?.[i] !== false
 }

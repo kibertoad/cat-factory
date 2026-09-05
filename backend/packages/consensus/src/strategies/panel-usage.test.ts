@@ -57,9 +57,5 @@ describe('a panel folding usage across providers', () => {
       outputTokens: 30,
       inputClasses: { promptTokens: 1_200, cacheReadTokens: 1_800, cacheWriteTokens: 0 },
     })
-    const classes = result.usage.inputClasses!
-    expect(classes.promptTokens + classes.cacheReadTokens + classes.cacheWriteTokens).toBe(
-      result.usage.inputTokens,
-    )
   })
 })

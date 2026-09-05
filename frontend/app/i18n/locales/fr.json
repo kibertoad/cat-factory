@@ -202,13 +202,7 @@
     },
     "canvas": {
       "emptyTitle": "Votre tableau est vide",
-      "emptyBody": "Ajoutez un service pour commencer : initialisez un nouveau dépôt ou importez-en un existant.",
-      "addBlockFailedTitle": "Impossible d’ajouter le bloc",
-      "addBlockFailedBody": "Le backend a rejeté la requête.",
-      "dropOntoTaskTitle": "Déposez sur une tâche",
-      "dropOntoTaskBody": "Les pipelines s’exécutent sur des tâches, pas sur des services.",
-      "taskBlockedTitle": "La tâche est bloquée",
-      "taskBlockedBody": "Ses dépendances n’ont pas encore été fusionnées."
+      "emptyBody": "Ajoutez un service pour commencer : initialisez un nouveau dépôt ou importez-en un existant."
     },
     "addTask": {
       "title": "Ajouter une tâche",

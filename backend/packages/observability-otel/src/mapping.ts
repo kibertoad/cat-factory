@@ -80,7 +80,7 @@ export const OPERATION = {
  * The run root span's name. A constant rather than an interpolation, because a span name is a
  * low-cardinality CLASS; see {@link mapRunSpan} for why the pipeline stays an attribute.
  */
-export const RUN_SPAN_NAME = 'run'
+const RUN_SPAN_NAME = 'run'
 
 /** Metric names + units (OTel GenAI client metrics). */
 export const METRIC = {
@@ -407,16 +407,16 @@ export const PLATFORM_ATTR = {
 } as const
 
 /** Metric units: a dimensionless run count, a dimensionless ratio, and seconds. */
-export const RUN_UNIT = '{run}'
+const RUN_UNIT = '{run}'
 /** The unit of the settled-gate gauges (a gate, and a helper dispatch against one). */
-export const GATE_UNIT = '{gate}'
-export const GATE_ATTEMPT_UNIT = '{attempt}'
-export const RATIO_UNIT = '1'
+const GATE_UNIT = '{gate}'
+const GATE_ATTEMPT_UNIT = '{attempt}'
+const RATIO_UNIT = '1'
 /** The unit of the operational queue-depth gauge (live, dead-lettered, or otherwise). */
-export const JOB_UNIT = '{job}'
+const JOB_UNIT = '{job}'
 
 /** One gauge data point: its dimensions, value, and whether to encode as int or double. */
-export interface MappedGaugePoint {
+interface MappedGaugePoint {
   attributes: AttributeMap
   value: number
   /** true ⇒ encode as an integer (counts); false ⇒ a double (ratios/durations). */
@@ -723,7 +723,7 @@ export function mapStepSpan(step: LlmStepSpan): MappedSpan {
  * adding a counter there fails to compile until it is named here — the same guard the
  * `STATUS_BY_CODE` error map gives the wire vocabulary.
  */
-export const OPERATIONAL_METRIC: Record<OperationalCounter, string> = {
+const OPERATIONAL_METRIC: Record<OperationalCounter, string> = {
   'sweep.run_redriven': 'cat_factory.platform.sweep_runs_redriven',
   'sweep.run_finalized': 'cat_factory.platform.sweep_runs_finalized',
   'sweep.run_stalled': 'cat_factory.platform.sweep_runs_stalled',
@@ -758,7 +758,7 @@ export const OPERATIONAL_METRIC: Record<OperationalCounter, string> = {
 }
 
 /** Metric name per operational gauge. Exhaustive, for the same reason. */
-export const OPERATIONAL_GAUGE_METRIC: Record<OperationalGauge, string> = {
+const OPERATIONAL_GAUGE_METRIC: Record<OperationalGauge, string> = {
   'queue.depth': 'cat_factory.platform.queue_depth',
 }
 
@@ -902,7 +902,7 @@ export function mapOperationalGauges(samples: OperationalGaugeSample[]): MappedG
  * exactly what an operator reading `LOG_LEVEL` expects. Exhaustive over the union, so adding
  * a level fails the build here rather than exporting an unmapped line as severity 0.
  */
-export const LOG_SEVERITY_NUMBER: Record<LogLevel, number> = {
+const LOG_SEVERITY_NUMBER: Record<LogLevel, number> = {
   debug: 5,
   info: 9,
   warn: 13,
@@ -910,7 +910,7 @@ export const LOG_SEVERITY_NUMBER: Record<LogLevel, number> = {
 }
 
 /** The matching `SeverityText`, upper-cased per the OTLP convention. */
-export const LOG_SEVERITY_TEXT: Record<LogLevel, string> = {
+const LOG_SEVERITY_TEXT: Record<LogLevel, string> = {
   debug: 'DEBUG',
   info: 'INFO',
   warn: 'WARN',
@@ -946,7 +946,7 @@ function cap(value: string): string {
  * `null`/`undefined` are OMITTED rather than sent as an empty string: an absent attribute and
  * one holding `""` are different facts, and only the absence states "the emitter had nothing".
  */
-export function logAttributeValue(value: unknown): AttributeValue | undefined {
+function logAttributeValue(value: unknown): AttributeValue | undefined {
   if (value === null || value === undefined) return undefined
   if (typeof value === 'string') return cap(value)
   if (typeof value === 'boolean') return value
@@ -986,7 +986,7 @@ function unreadable(error: unknown): string {
  * presence is what tells a reader the emitter had something to say there, which an absent
  * attribute would not.
  */
-export function logAttributes(fields: Record<string, unknown>): AttributeMap {
+function logAttributes(fields: Record<string, unknown>): AttributeMap {
   const attributes: AttributeMap = {}
   let keys: string[]
   try {

@@ -24,7 +24,7 @@ import type {
 // without a VCS.
 
 /** The default VCS API root when the config names none. */
-export const DEFAULT_VCS_API_BASE = 'https://api.github.com'
+const DEFAULT_VCS_API_BASE = 'https://api.github.com'
 
 /** The `providerConfig` key the Cloudflare config is stored under on the manifest. */
 const PROVIDER_CONFIG_KEY = 'cloudflare'

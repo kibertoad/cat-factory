@@ -202,13 +202,7 @@
     },
     "canvas": {
       "emptyTitle": "Panonuz boş",
-      "emptyBody": "Başlamak için bir servis ekleyin: yeni bir depo başlatın veya zaten sahip olduğunuz bir depoyu ekleyin.",
-      "addBlockFailedTitle": "Blok eklenemedi",
-      "addBlockFailedBody": "Arka uç isteği reddetti.",
-      "dropOntoTaskTitle": "Bir göreve bırakın",
-      "dropOntoTaskBody": "İşlem hatları servislere değil, görevlere karşı çalışır.",
-      "taskBlockedTitle": "Görev engellendi",
-      "taskBlockedBody": "Bağımlılıkları henüz birleştirilmedi."
+      "emptyBody": "Başlamak için bir servis ekleyin: yeni bir depo başlatın veya zaten sahip olduğunuz bir depoyu ekleyin."
     },
     "addTask": {
       "title": "Görev ekle",

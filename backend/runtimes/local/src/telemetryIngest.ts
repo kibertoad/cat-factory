@@ -67,7 +67,7 @@ const ENVELOPE_OVERHEAD_CHARS = 4_096
 const BATCH_BUDGET_CHARS = MAX_TELEMETRY_INGEST_CHARS - ENVELOPE_OVERHEAD_CHARS
 
 /** A row no batch can ever carry, named so the sweep can REPORT the drop rather than hide it. */
-export interface OversizedRow {
+interface OversizedRow {
   id: string
   chars: number
 }

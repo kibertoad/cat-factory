@@ -164,7 +164,7 @@ export function renderErrorChainLinks(links: readonly unknown[]): string[] {
  * there is more to ask for. The marker sits outside the budget on purpose: it is the report about
  * the cap, not part of what was capped.
  */
-export function capErrorChain(text: string, maxChars: number = MAX_ERROR_CHAIN_CHARS): string {
+function capErrorChain(text: string, maxChars: number = MAX_ERROR_CHAIN_CHARS): string {
   if (text.length <= maxChars) return text
   const dropped = text.length - maxChars
   return `${text.slice(0, maxChars)} […${dropped} more characters of the cause chain]`

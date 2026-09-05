@@ -23,7 +23,7 @@ import {
   runEnvironmentObservations,
 } from '@cat-factory/contracts'
 import { isTesterKind } from './ci.logic.js'
-import { absentNote, findStep } from './prReport.steps.js'
+import { absentNote, findStep, scrub } from './prReport.steps.js'
 
 // ---------------------------------------------------------------------------
 // The verification report's TEST ENVIRONMENT LIFECYCLE section: the three-leg proof that the
@@ -111,11 +111,6 @@ export interface PrReportEnvironmentInputs {
 
 /** Cap a list, recording what was dropped in the report's own `truncations` log. */
 type Capper = <T>(items: readonly T[], label: string) => T[]
-
-/** Scrub credentials out of an optional free-text value, preserving `null`/`undefined`. */
-function scrub(value: string | null | undefined): string | null {
-  return value == null ? null : (redactSecrets(value) ?? null)
-}
 
 /** The human-readable rendering of each way the timeline can come back empty. */
 const TIMELINE_GAP_NOTES: Record<PrReportTimelineGap, string> = {

@@ -330,12 +330,6 @@ export function selectIncidentEnrichmentDeps(
   }
 }
 
-// The per-account deployment-settings builder lives in its own LEAF module: this file imports
-// both `container-shared-services` and `container-artifact-storage`, and both needed it — an
-// import cycle that only a hoisted function declaration was papering over. Re-exported here so
-// every existing import site is unchanged.
-export { buildAccountSettings } from './container-account-settings'
-
 /**
  * The Worker's content-storage capability + blob-backend factory: on Cloudflare the bytes
  * always go to the deployment's R2 bucket (the only blob store that makes sense on the
@@ -345,11 +339,8 @@ export { buildAccountSettings } from './container-account-settings'
  * the same backend.
  */
 // The binary-artifact/content-storage wiring lives in its own module (this file is at its size
-// ratchet); re-exported here so every existing import site is unchanged.
-export {
-  buildCloudflareArtifactStoreResolver,
-  cloudflareContentStorage,
-} from './container-artifact-storage'
+// ratchet); the resolver is re-exported here for the retention cron.
+export { buildCloudflareArtifactStoreResolver } from './container-artifact-storage'
 import { cloudflareContentStorage } from './container-artifact-storage'
 import { selectNotificationDeliveryDeps } from './container-notification-deps'
 

@@ -65,11 +65,4 @@ describe('shouldRunReachabilityPass', () => {
       expect(ran[i]! - ran[i - 1]!).toBeGreaterThanOrEqual(4 * 60_000)
     }
   })
-
-  it('is a pure function of the aligned tick, so a fresh isolate needs no state', () => {
-    const at = 7 * 60 * 60_000
-    expect(shouldRunReachabilityPass(at, TICK, 30 * 60_000)).toBe(
-      shouldRunReachabilityPass(at, TICK, 30 * 60_000),
-    )
-  })
 })

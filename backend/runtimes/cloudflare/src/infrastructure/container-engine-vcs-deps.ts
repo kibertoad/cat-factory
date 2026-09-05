@@ -51,7 +51,7 @@ import {
  * gates then pass through. Shared by the merge-lifecycle and RepoFiles wiring so they resolve the
  * SAME provider, and so the GitLab fallback cannot drift from the App path.
  */
-export function selectEngineVcsClient(
+function selectEngineVcsClient(
   env: Env,
   config: AppConfig,
   db: D1Database,

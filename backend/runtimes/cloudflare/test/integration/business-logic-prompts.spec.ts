@@ -1,7 +1,6 @@
 import type { AgentRunContext } from '@cat-factory/kernel'
 import {
   BUSINESS_DOCUMENTER_KIND,
-  BUSINESS_LOGIC_AGENT_KINDS,
   BUSINESS_LOGIC_DOCS_DIR,
   BUSINESS_REVIEWER_KIND,
   businessLogicSystemPrompt,
@@ -52,7 +51,6 @@ function ctx(overrides: Partial<AgentRunContext> = {}): AgentRunContext {
 
 describe('business-logic agent prompts', () => {
   it('recognises both kinds and nothing else', () => {
-    expect(BUSINESS_LOGIC_AGENT_KINDS).toEqual(['business-documenter', 'business-reviewer'])
     expect(isBusinessLogicKind('business-documenter')).toBe(true)
     expect(isBusinessLogicKind('business-reviewer')).toBe(true)
     expect(isBusinessLogicKind('coder')).toBe(false)

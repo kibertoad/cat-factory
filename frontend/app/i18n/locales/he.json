@@ -202,13 +202,7 @@
     },
     "canvas": {
       "emptyTitle": "הלוח שלך ריק",
-      "emptyBody": "הוסף שירות כדי להתחיל: אתחל מאגר חדש או משוך מאגר קיים שכבר יש לך.",
-      "addBlockFailedTitle": "לא ניתן היה להוסיף בלוק",
-      "addBlockFailedBody": "השרת דחה את הבקשה.",
-      "dropOntoTaskTitle": "גרור על משימה",
-      "dropOntoTaskBody": "צינורות פועלים על משימות, לא על שירותים.",
-      "taskBlockedTitle": "המשימה חסומה",
-      "taskBlockedBody": "התלויות שלה עדיין לא מוזגו."
+      "emptyBody": "הוסף שירות כדי להתחיל: אתחל מאגר חדש או משוך מאגר קיים שכבר יש לך."
     },
     "addTask": {
       "title": "הוסף משימה",

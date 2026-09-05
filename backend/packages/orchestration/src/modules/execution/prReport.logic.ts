@@ -38,7 +38,7 @@ import {
 } from './prReport.commands.js'
 import { composeContext, renderContext } from './prReport.context.js'
 import { followUpLoopBudget } from './followUp.logic.js'
-import { absentNote, findStep } from './prReport.steps.js'
+import { absentNote, findStep, scrub } from './prReport.steps.js'
 
 // ---------------------------------------------------------------------------
 // The PR verification report's PURE half: compose it from a run's already-loaded state, and
@@ -71,11 +71,6 @@ import { absentNote, findStep } from './prReport.steps.js'
 // references, table-breaking newlines, unbalanced code fences) are handled at the interpolation
 // boundary — see kernel's `hostMarkdown` boundary.
 // ---------------------------------------------------------------------------
-
-/** Scrub credentials out of an optional free-text value, preserving `null`/`undefined`. */
-function scrub(value: string | null | undefined): string | null {
-  return value == null ? null : (redactSecrets(value) ?? null)
-}
 
 /** Scrub a required free-text value. */
 function scrubbed(value: string): string {

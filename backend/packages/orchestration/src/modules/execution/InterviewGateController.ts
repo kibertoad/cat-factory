@@ -32,7 +32,7 @@ import { stepAwaitsDecision } from './step-park.logic.js'
  * answer; the document interviewer has only the answer). Deriving it once here is what lets a
  * caller read both through one shape.
  */
-export interface InterviewQuestionView {
+interface InterviewQuestionView {
   /** The id an answer is addressed by; null for an exchange that carries none. */
   id: string | null
   question: string

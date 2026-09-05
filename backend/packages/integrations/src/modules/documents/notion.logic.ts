@@ -58,7 +58,7 @@ export function parseNotionSearchResults(json: unknown): DocumentSearchResult[] 
 }
 
 /** Format 32 hex chars as a canonical dashed Notion/UUID id. */
-export function formatNotionId(hex32: string): string {
+function formatNotionId(hex32: string): string {
   const h = hex32.toLowerCase()
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`
 }

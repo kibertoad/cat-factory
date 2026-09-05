@@ -332,7 +332,7 @@ export type ScopeRule =
 export type LibrarySourceEntity = 'fragmentSource' | 'foundationalServiceSource'
 
 /** A content-library source row's owning tier, as the scope check needs it. */
-export interface LibrarySourceOwner {
+interface LibrarySourceOwner {
   ownerKind: unknown
   ownerId: unknown
 }

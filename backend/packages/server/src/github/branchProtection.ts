@@ -142,7 +142,7 @@ function detailFromRules(rules: ActiveRule[]): BranchProtectionDetail {
  * Classify a failed probe into the reason an operator would act on differently: a missing
  * branch is a stale projection, a refusal is a credential problem, anything else is transient.
  */
-export function unknownProtectionReason(status: number | undefined): BranchProtectionUnknownReason {
+function unknownProtectionReason(status: number | undefined): BranchProtectionUnknownReason {
   if (status === 404) return 'branch_not_found'
   if (status === 403 || status === 401) return 'forbidden'
   return 'error'

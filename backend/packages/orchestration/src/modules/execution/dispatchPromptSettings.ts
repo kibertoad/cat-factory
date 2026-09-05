@@ -130,7 +130,7 @@ export interface DispatchPromptSettingsDeps {
  * for, and a workspace override or a withdrawal can mean the variant's text never reached the
  * prompt, so only a pin taken HERE can answer what the step actually ran under.
  */
-export async function resolveDispatchSystemPrompt(
+async function resolveDispatchSystemPrompt(
   deps: DispatchPromptSettingsDeps,
   workspaceId: string,
   agentKind: string,
@@ -192,7 +192,7 @@ export async function resolveDispatchSystemPrompt(
  * setting, which beats the deployment routing ceiling. The step value is read WITHOUT touching the
  * repository, so a pipeline that pins its own budget costs no query.
  */
-export async function resolveDispatchMaxOutputTokens(
+async function resolveDispatchMaxOutputTokens(
   deps: DispatchPromptSettingsDeps,
   workspaceId: string,
   agentKind: string,

@@ -21,7 +21,7 @@ import type { Job, PgBoss, SendOptions } from 'pg-boss'
 export const TRACKER_SYNC_QUEUE = 'tracker.sync'
 
 /** One unit of async tracker work: a verified, parsed delivery for one workspace. */
-export interface TrackerSyncJob {
+interface TrackerSyncJob {
   workspaceId: string
   event: TrackerWebhookEvent
 }

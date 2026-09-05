@@ -19,7 +19,7 @@ import {
   CORS_EXPOSED_HEADERS,
   corsReflectsWhenUnset,
   corsOriginFor,
-} from './infrastructure/config/cors'
+} from '@cat-factory/server'
 import { buildContainer } from './infrastructure/container'
 import { registerToolSecretPolicy } from './infrastructure/toolSecretResolver'
 import { registerBinaryGeneratorRegistry } from './infrastructure/binaryGenerators'

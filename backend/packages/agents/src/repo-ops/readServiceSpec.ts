@@ -72,7 +72,7 @@ export const READ_CONCURRENCY = 12
  * the request's own auth, board and ref reads. Exhausting it is REPORTED (`unread`), never silent:
  * a stopped walk and a small spec produce the same tree and need different reactions.
  */
-export const SPEC_READ_BUDGET = 500
+const SPEC_READ_BUDGET = 500
 
 /** Knobs a caller may override; every one of them defaults to the shared, safe value. */
 export interface ReadServiceSpecOptions {

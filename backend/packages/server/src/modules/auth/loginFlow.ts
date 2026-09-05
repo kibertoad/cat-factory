@@ -32,7 +32,7 @@ import type { AppEnv } from '../../http/env.js'
 export const OAUTH_STATE_TTL_MS = 10 * 60 * 1000
 
 /** Browser-binding cookie for an OAuth round-trip (the CSRF pair for the signed `state`). */
-export const OAUTH_STATE_COOKIE = 'cf_oauth_state'
+const OAUTH_STATE_COOKIE = 'cf_oauth_state'
 
 export interface OAuthState {
   aud: typeof TOKEN_AUDIENCE.oauthState

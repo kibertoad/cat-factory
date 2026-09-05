@@ -48,18 +48,18 @@ import AcmeSecurityDashboard from '../components/acme/AcmeSecurityDashboard.vue'
 
 /** The namespaced result-view id shared by the window (the `resultViews` entry) and the
  *  agent kind that selects it (the `agentKinds` entry) — the pairing key. */
-export const ACME_SECURITY_REPORT_VIEW = 'acme:security-report'
+const ACME_SECURITY_REPORT_VIEW = 'acme:security-report'
 
 /** The namespaced overlay id shared by the `appOverlays` entry and the nav item that opens
  *  it (extension slice D) — the pairing key for a consumer top-level overlay. */
-export const ACME_SECURITY_DASHBOARD_OVERLAY = 'acme:security-dashboard-overlay'
+const ACME_SECURITY_DASHBOARD_OVERLAY = 'acme:security-dashboard-overlay'
 
 /** The backend agent kind this deployment provides a bespoke window for. Matches
  *  `SECURITY_AUDITOR_KIND` in `@cat-factory/example-custom-agent`. */
 const SECURITY_AUDITOR_KIND = 'security-auditor'
 
 /** The CUSTOM task type this deployment contributes (a namespaced `<ns>:<name>` id). */
-export const ACME_INCIDENT_TASK_TYPE = 'acme:incident'
+const ACME_INCIDENT_TASK_TYPE = 'acme:incident'
 
 /**
  * The registration shapes for the two slots this module adds, copied structurally so the example

@@ -59,7 +59,7 @@ import {
  * DOCUMENT each converges on, which a reply never touches — so one structural type covers both
  * rather than a union the apply loop would have to narrow on every branch.
  */
-export interface ReplyableReview {
+interface ReplyableReview {
   id: string
   status: RequirementReview['status']
   items: RequirementReviewItem[]

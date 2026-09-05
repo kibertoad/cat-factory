@@ -202,13 +202,7 @@
     },
     "canvas": {
       "emptyTitle": "Tu tablero está vacío",
-      "emptyBody": "Añade un servicio para empezar: arranca un repo nuevo o trae uno que ya tengas.",
-      "addBlockFailedTitle": "No se pudo añadir el bloque",
-      "addBlockFailedBody": "El backend rechazó la solicitud.",
-      "dropOntoTaskTitle": "Suéltalo sobre una tarea",
-      "dropOntoTaskBody": "Las pipelines se ejecutan sobre tareas, no sobre servicios.",
-      "taskBlockedTitle": "La tarea está bloqueada",
-      "taskBlockedBody": "Sus dependencias aún no se han fusionado."
+      "emptyBody": "Añade un servicio para empezar: arranca un repo nuevo o trae uno que ya tengas."
     },
     "addTask": {
       "title": "Añadir una tarea",

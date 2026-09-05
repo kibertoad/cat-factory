@@ -56,7 +56,7 @@ export interface PollLoopDeps {
  * keeps every name distinct; {@link driveGatePollLoop} additionally has its own `gate-` prefix, so
  * it can never collide with the job/environment loop within one hop.
  */
-export interface PollLoopSite {
+interface PollLoopSite {
   /** The pipeline step index: `log.warn` fields and the step a failure is recorded against. */
   index: number
   /** The unique-per-loop durable name scope, `<step>-<hop>`. */
@@ -73,7 +73,7 @@ export type GatePollLoopDeps = PollLoopDeps & { resolveExhaustion: () => Promise
  * is spent or the budget runs out. Returns the settled result, or `null` once it has
  * already failed the run (the caller returns).
  */
-export async function drivePollLoop(
+async function drivePollLoop(
   deps: PollLoopDeps & {
     /** The park kind this loop drains; anything else settles it. Defaults to `awaiting_job`. */
     awaiting?: AdvanceResult['kind']
@@ -145,7 +145,7 @@ export async function drivePollLoop(
  * budget resolves through the gate's own exhaustion policy. Read failures are tolerated
  * exactly like the job loop. Returns the updated result, or `null` once it failed the run.
  */
-export async function driveGatePollLoop(
+async function driveGatePollLoop(
   deps: GatePollLoopDeps,
   site: PollLoopSite,
   initial: AdvanceResult,

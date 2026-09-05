@@ -1,4 +1,5 @@
 import type { KubernetesConnectionConfig, KubernetesProvisionConfig } from '@cat-factory/kernel'
+import { toBase64 } from '../shared/base64.js'
 import { isLocalMachineHost } from '@cat-factory/kernel'
 import { resolveImageOverrides } from './kubernetes-deploy.logic.js'
 import type { KubernetesResource } from './kubernetes-environment.logic.js'
@@ -91,7 +92,7 @@ export const REGISTRY_AUTH_FIELD_MANAGER = 'cat-factory-registry-auth'
  * The honest half of the trade is that the window is NAMED: in the recorded step, and in the
  * operator doc.
  */
-export const REGISTRY_AUTH_CREDENTIAL_LIFETIME =
+const REGISTRY_AUTH_CREDENTIAL_LIFETIME =
   'about an hour, the git token being short-lived and nothing renewing it: a pull after that ' +
   '(a rollout, a scale-up, a reschedule) needs the environment re-provisioned'
 
@@ -354,7 +355,7 @@ export function dockerConfigJson(auths: RegistryAuth[]): string {
     {
       username: auth.username,
       password: auth.password,
-      auth: base64(`${auth.username}:${auth.password}`),
+      auth: toBase64(`${auth.username}:${auth.password}`),
     },
   ])
   return JSON.stringify({ auths: Object.fromEntries(entries) })
@@ -367,7 +368,7 @@ export function buildPullSecret(namespace: string, auths: RegistryAuth[]): Kuber
     kind: 'Secret',
     metadata: { name: REGISTRY_AUTH_SECRET_NAME, namespace },
     type: 'kubernetes.io/dockerconfigjson',
-    data: { '.dockerconfigjson': base64(dockerConfigJson(auths)) },
+    data: { '.dockerconfigjson': toBase64(dockerConfigJson(auths)) },
   }
 }
 
@@ -485,17 +486,4 @@ function podSpecServiceAccountName(resource: KubernetesResource): string | null 
     spec?.template?.spec?.serviceAccountName ??
     spec?.serviceAccountName
   return typeof name === 'string' && name.trim() ? name.trim() : null
-}
-
-/**
- * Base64 of a string's UTF-8 bytes. `btoa` alone is wrong here: it encodes CODE UNITS, so any
- * non-ASCII character in a repo owner would produce a payload the apiserver stores and the
- * kubelet cannot parse. The bytes are accumulated in a loop rather than spread into
- * `String.fromCharCode(...)`, which blows the call stack on a large enough input.
- */
-function base64(value: string): string {
-  const bytes = new TextEncoder().encode(value)
-  let binary = ''
-  for (const byte of bytes) binary += String.fromCharCode(byte)
-  return btoa(binary)
 }

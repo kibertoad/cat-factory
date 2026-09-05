@@ -49,7 +49,7 @@ export const DEFAULT_INGRESS_PORT = 80
  * rendered host and which the environment provider refuses a provision on. See
  * `backend/docs/local-k3s-environments.md`.
  */
-export const INGRESS_PROBE_HOST = '127.0.0.1'
+const INGRESS_PROBE_HOST = '127.0.0.1'
 
 /**
  * The ingress HOST template, with no port in it. It is deliberately portless: the rendered value
@@ -82,7 +82,7 @@ export type IngressGap = 'controller' | 'hostPort'
  * `kubectl` on PATH to "re-run once the cluster has settled" is advice for a problem they do not
  * have.
  */
-export type IngressProbeCause =
+type IngressProbeCause =
   | 'kubectl-missing'
   | 'cluster-unreachable'
   | 'cluster-refused'
@@ -98,7 +98,7 @@ export type IngressProbeCause =
  * controller entrypoint on that host port; `unattributed` means the port answers and the check
  * could not run, which the summary says out loud rather than claiming the stronger fact.
  */
-export type PortAttribution = 'cluster' | 'unattributed'
+type PortAttribution = 'cluster' | 'unattributed'
 
 /**
  * The three-state verdict. `unknown` is its own state rather than folded into `missing` for the

@@ -2,7 +2,7 @@ import { timingSafeEqual } from 'node:crypto'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { handleDeploy } from './deploy.js'
 import { parseDeployJob } from './job.js'
-import { redactSecrets } from './redact.js'
+import { redact } from './redact.js'
 import { JobRegistry, loadRunnerLimits, type JobResultBase, type RunOptions } from './runner.js'
 import { log } from './logger.js'
 import { DEFAULT_HARNESS_PORT } from './harness-port.js'
@@ -115,7 +115,7 @@ const server = createServer((req, res) => {
       }
       return send(res, 404, { error: 'not found' })
     } catch (error) {
-      const message = redactSecrets(error instanceof Error ? error.message : String(error))
+      const message = redact(error instanceof Error ? error.message : String(error))
       log.error('request handler error', { method: req.method, url: req.url, error: message })
       if (!res.headersSent) send(res, 400, { error: message })
     }

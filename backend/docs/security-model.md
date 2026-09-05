@@ -718,7 +718,7 @@ the root `CLAUDE.md`.
   the App's OAuth flow is bounded by the INTERSECTION of the installation's scope and the user's
   own access, and is short-lived. That is attribution (pushes and PRs from the human who started
   the run) with the operator's installation scoping still the real bound, which is exactly the
-  property this whole section works around. `auth/GitHubOAuth.ts` already implements that flow,
+  property this whole section works around. `@cat-factory/server`'s `auth/GitHubOAuth.ts` already implements that flow,
   wired for LOGIN only (`scope: 'read:user'`, token read for identity and discarded), so what is
   missing is the run-path plumbing (consent per user, refresh, and a fallback for a repo the App
   is not installed on) rather than the client.

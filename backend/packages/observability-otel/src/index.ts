@@ -275,14 +275,19 @@ export const PLATFORM_METRICS_DEFAULT_INTERVAL_MS = 60_000
 export const PLATFORM_METRICS_WINDOWS = ['1h', '24h', '7d'] as const
 export type PlatformMetricsWindow = (typeof PLATFORM_METRICS_WINDOWS)[number]
 
+/** A positive integer read off an env var, or `fallback` when unset, non-numeric or not positive. */
+function positiveIntegerOr(raw: string | undefined, fallback: number): number {
+  const n = Number(raw?.trim())
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback
+}
+
 /**
  * Parse `OTEL_PLATFORM_METRICS_INTERVAL_MS` into a positive integer ms, falling back to
  * {@link PLATFORM_METRICS_DEFAULT_INTERVAL_MS} for unset / non-numeric / non-positive values.
  * Shared by every facade so the sweep cadence is parsed identically.
  */
 export function parsePlatformMetricsIntervalMs(raw: string | undefined): number {
-  const n = Number(raw?.trim())
-  return Number.isFinite(n) && n > 0 ? Math.floor(n) : PLATFORM_METRICS_DEFAULT_INTERVAL_MS
+  return positiveIntegerOr(raw, PLATFORM_METRICS_DEFAULT_INTERVAL_MS)
 }
 
 /**
@@ -310,8 +315,7 @@ export const LOG_EXPORT_DEFAULT_FLUSH_INTERVAL_MS = 5_000
  * {@link LOG_EXPORT_DEFAULT_FLUSH_INTERVAL_MS} for unset / non-numeric / non-positive values.
  */
 export function parseLogExportFlushIntervalMs(raw: string | undefined): number {
-  const n = Number(raw?.trim())
-  return Number.isFinite(n) && n > 0 ? Math.floor(n) : LOG_EXPORT_DEFAULT_FLUSH_INTERVAL_MS
+  return positiveIntegerOr(raw, LOG_EXPORT_DEFAULT_FLUSH_INTERVAL_MS)
 }
 
 /**
@@ -321,6 +325,5 @@ export function parseLogExportFlushIntervalMs(raw: string | undefined): number {
  * for a chatty deployment is raising both together, deliberately.
  */
 export function parseLogExportBatchSize(raw: string | undefined): number {
-  const n = Number(raw?.trim())
-  return Number.isFinite(n) && n > 0 ? Math.floor(n) : DEFAULT_LOG_BATCH_SIZE
+  return positiveIntegerOr(raw, DEFAULT_LOG_BATCH_SIZE)
 }

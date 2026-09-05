@@ -79,7 +79,7 @@ export async function resolveNewServiceFrameDefaults(
  * The workspace's default service-fragment selection. Empty when the defaults repo isn't wired,
  * none is set, or the read fails — frame creation is never blocked by a defaults read.
  */
-export async function resolveDefaultServiceFragmentIds(
+async function resolveDefaultServiceFragmentIds(
   workspaceId: string,
   deps: Pick<NewServiceFrameDefaultsDeps, 'serviceFragmentDefaults' | 'logger'>,
 ): Promise<string[]> {

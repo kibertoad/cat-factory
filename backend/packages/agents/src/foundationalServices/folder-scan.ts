@@ -40,7 +40,7 @@ export const MAX_FOLDER_CONTRACT_FILES = 100
  * one round trip at a time, which on a deep tree is the difference between a sync that takes
  * seconds and one that takes minutes.
  */
-export const FOLDER_SCAN_CONCURRENCY = 8
+const FOLDER_SCAN_CONCURRENCY = 8
 
 /**
  * How large a candidate file may be before the walk declines to read it.

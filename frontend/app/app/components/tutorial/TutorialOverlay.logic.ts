@@ -82,7 +82,7 @@ export function focusLeftCard(card: Node | null, relatedTarget: EventTarget | nu
  * no selector is ever built from a string that could break one, and an id that fails simply
  * finds no anchor, which the runtime already handles as a skipped step.
  */
-export const TARGET_ID_PATTERN = /^[a-z0-9-]+$/
+const TARGET_ID_PATTERN = /^[a-z0-9-]+$/
 
 /** Is this a well-formed anchor id, i.e. safe to put in a selector? */
 export function isSafeTargetId(id: string): boolean {
@@ -129,7 +129,7 @@ export function resolveSkip(
  * step's target id, since the same id (`task-card`) is a canvas node on the board and a plain
  * list row in a panel.
  */
-export const BOARD_NODE_SELECTOR = '.vue-flow__node'
+const BOARD_NODE_SELECTOR = '.vue-flow__node'
 
 /** The part of an element the reveal path needs: ancestry, and that ancestor's node id. */
 interface RevealNode {

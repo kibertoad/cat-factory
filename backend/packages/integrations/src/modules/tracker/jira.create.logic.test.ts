@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import { buildJiraIssuePayload, markdownToAdf } from './jira.create.logic.js'
-import { toBase64 } from '../shared/base64.js'
 
 describe('markdownToAdf', () => {
   it('maps headings, paragraphs and bullet lists', () => {
@@ -37,14 +36,5 @@ describe('buildJiraIssuePayload', () => {
       body: '',
     }) as { fields: { summary: string } }
     expect(payload.fields.summary.length).toBe(250)
-  })
-})
-
-describe('toBase64', () => {
-  it('encodes ASCII credentials like btoa', () => {
-    expect(toBase64('user@example.com:token123')).toBe('dXNlckBleGFtcGxlLmNvbTp0b2tlbjEyMw==')
-    expect(toBase64('a')).toBe('YQ==')
-    expect(toBase64('ab')).toBe('YWI=')
-    expect(toBase64('abc')).toBe('YWJj')
   })
 })

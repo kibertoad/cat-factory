@@ -188,7 +188,7 @@ export const TARGET_IDLE_INTERVAL_MS = 400
  * two means "mostly visible" for a small control and "filling a good part of the screen" for a
  * large one, which is the same judgement in both cases.
  */
-export const MIN_VISIBLE_RATIO = 0.5
+const MIN_VISIBLE_RATIO = 0.5
 
 /** Deterministic tour-list order: `order`, then `id`. */
 export function sortTours(tours: readonly TutorialTour[]): TutorialTour[] {

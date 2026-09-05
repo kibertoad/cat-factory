@@ -294,8 +294,9 @@ function idList(ids: string[]): string {
   return ids.map((id) => `\`${id}\``).join(', ')
 }
 
-/** Scrub secrets, THEN hand to the host boundary — the order `reviewQuestions.logic.ts` fixes. */
-function safeInline(value: string, max: number): string {
+/** Scrub secrets, THEN hand to the host boundary: scrub BEFORE any cut, so a half-truncated
+ * credential can never survive as plausible-looking text. Shared with `reviewQuestions.logic.ts`. */
+export function safeInline(value: string, max: number): string {
   return hostMarkdown.inline(redactSecrets(value) ?? '', max)
 }
 

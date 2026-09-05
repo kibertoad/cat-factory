@@ -129,7 +129,9 @@ function advanceInsert(data: AdvanceJob, opts: AdvanceQueueOptions): JobInsert<A
 const RESUME_ENQUEUE_RETRY_ATTEMPTS = 25
 const RESUME_ENQUEUE_RETRY_INTERVAL_MS = 200
 
-const realSleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
+/** A real timer; the runners take it as the default and tests inject a fake. */
+export const sleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms))
 
 export class PgBossWorkRunner implements WorkRunner {
   private readonly sleep: (ms: number) => Promise<void>
@@ -140,7 +142,7 @@ export class PgBossWorkRunner implements WorkRunner {
     // Test seam: override the retry delay (defaults to a real timer).
     options: { sleep?: (ms: number) => Promise<void> } = {},
   ) {
-    this.sleep = options.sleep ?? realSleep
+    this.sleep = options.sleep ?? sleep
   }
 
   async startRun(workspaceId: string, executionId: string): Promise<void> {

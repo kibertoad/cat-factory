@@ -241,7 +241,7 @@ export function publicApiGateActor(auth: PublicApiKeyAuth): GateActor {
 }
 
 /** The settled context an iterative-review route acts on, for one review kind. */
-export interface ReviewAction<TReview> {
+interface ReviewAction<TReview> {
   workspaceId: string
   scoped: ScopedRun
   review: TReview

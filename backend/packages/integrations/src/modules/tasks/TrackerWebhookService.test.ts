@@ -164,7 +164,6 @@ describe('TrackerWebhookService — ticket replies', () => {
 
   it('reports an unknown finding id rather than applying it somewhere', async () => {
     const { gateway, calls } = makeGateway(review([item('a')]))
-    const service = makeService(gateway)
     const ack = vi.fn(makeAckSpy)
     const withAck = makeService(gateway, { issueWriteback: { postReviewReplyAck: ack } })
     await withAck.handle('ws1', comment('@cat-factory answer nope hello'))
@@ -174,7 +173,6 @@ describe('TrackerWebhookService — ticket replies', () => {
       answered: [],
       rejected: [{ reason: expect.stringContaining('no finding') }],
     })
-    expect(service).toBeDefined()
   })
 
   it('rejects an empty answer instead of storing one', async () => {
@@ -201,7 +199,6 @@ describe('TrackerWebhookService — ticket replies', () => {
     )
     const stored = gateway.getForBlock ? await gateway.getForBlock('ws1', 'blk_1') : null
     expect(stored?.items[0]?.reply).not.toContain('ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789')
-    expect(service).toBeDefined()
   })
 
   it('maps `proceed` to the ordinary proceed outside the cap, and to the choice at it', async () => {

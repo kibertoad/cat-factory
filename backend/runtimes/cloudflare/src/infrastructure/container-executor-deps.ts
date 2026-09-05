@@ -78,7 +78,7 @@ import { ContainerInstanceRegistry } from './containers/ContainerInstanceRegistr
 import { D1LiveContainerRepository } from './repositories/D1LiveContainerRepository'
 import { HttpRunnerPoolProvider } from './runners/HttpRunnerPoolProvider'
 import { D1RunnerPoolConnectionRepository } from './repositories/D1RunnerPoolConnectionRepository'
-import { CompositeAgentExecutor } from './ai/CompositeAgentExecutor'
+import { CompositeAgentExecutor } from '@cat-factory/server'
 import { ContainerSessionService } from './containers/ContainerSessionService'
 import { D1AgentToolCallRepository } from './repositories/D1AgentToolCallRepository'
 import { D1LlmCallMetricRepository } from './repositories/D1LlmCallMetricRepository'

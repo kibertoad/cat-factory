@@ -119,17 +119,6 @@ export const mergeTrackDecisionSchema = v.picklist([
 ])
 export type MergeTrackDecision = v.InferOutput<typeof mergeTrackDecisionSchema>
 
-/**
- * The decisions that represent a pull request that actually LANDED. The auto-merge share a
- * rollup reports is `autoMerged / (every landed decision)` — a `pending_review` row is not in
- * the denominator (nothing was decided yet) and neither is a `rejected` one.
- */
-export const MERGED_TRACK_DECISIONS = [
-  'auto_merged',
-  'human_merged',
-  'external_merged',
-] as const satisfies readonly MergeTrackDecision[]
-
 const scoreSchema = v.pipe(v.number(), v.minValue(0), v.maxValue(1))
 
 /**

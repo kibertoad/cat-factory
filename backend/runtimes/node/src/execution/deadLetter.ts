@@ -20,7 +20,7 @@ import type { PgBoss, Queue } from 'pg-boss'
 export const DEAD_LETTER_SUFFIX = '.dlq'
 
 /** The dead-letter queue name for `queue`. */
-export function deadLetterQueueName(queue: string): string {
+function deadLetterQueueName(queue: string): string {
   return `${queue}${DEAD_LETTER_SUFFIX}`
 }
 

@@ -42,8 +42,6 @@ const Handlebars = HandlebarsRuntime as unknown as typeof import('handlebars')
 /** The four standard phases of building out a solution. */
 export type StandardPhase = 'design' | 'build' | 'review' | 'test'
 
-export const STANDARD_PHASES: readonly StandardPhase[] = ['design', 'build', 'review', 'test']
-
 /**
  * Maps the built-in agent kinds to the standard phase they perform. Other agent
  * kinds (researcher, documenter, integrator, custom ids) are not standard phases
