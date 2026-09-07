@@ -1,4 +1,5 @@
 import type {
+  EnvironmentProbeReport,
   EnvironmentTestRunRecord,
   EnvironmentTestRunRepository,
   ServiceProvisioning,
@@ -11,14 +12,60 @@ import { describe, expect, it } from 'vitest'
 // running-list → stale-list assertions through whichever real repository a runtime hands
 // it, so a column mapped differently or a filter built differently fails a test instead of
 // shipping.
+//
+// The AGENT DRY RUN's three members ride the same assertions plus one case of their own, because
+// they are where the two stores differ most: `probe` is a JSON blob each facade serializes itself,
+// and `probeSurface` is the claim the durable driver's replay guard reads before dispatching a
+// container. A facade that dropped either would leave a dry run re-dispatching probers or
+// reporting a verdict with no operations behind it.
 
 const PROVISIONING: ServiceProvisioning = { type: 'kubernetes' }
+
+/**
+ * A dry-run report with every field populated, including the ones a naive round-trip loses: a
+ * nested optional (`target` / `failure` / `detail` on one operation but not another), a
+ * zero-valued count, and the cap marker. The report is stored as a JSON blob on both runtimes, so
+ * this case is what catches a facade that serialized it as `[object Object]`, dropped the optional
+ * members, or coerced `0` to null.
+ */
+const PROBE: EnvironmentProbeReport = {
+  surface: 'api',
+  verdict: 'partially_operable',
+  summary: 'Listed projects with the supplied token; creating one was refused.',
+  operations: [
+    { name: 'healthcheck', authenticated: false, outcome: 'succeeded' },
+    {
+      name: 'list projects',
+      target: 'GET /api/v1/projects',
+      authenticated: true,
+      outcome: 'succeeded',
+      detail: '200, 3 rows',
+    },
+    {
+      name: 'create a project',
+      target: 'POST /api/v1/projects',
+      authenticated: true,
+      outcome: 'failed',
+      failure: 'auth_rejected',
+      detail: '403 insufficient_scope',
+    },
+  ],
+  missingContext: ['no credential with write scope was supplied'],
+  blockers: [],
+  attempted: 3,
+  succeeded: 2,
+  authenticatedSucceeded: 1,
+  operationsOmitted: 2,
+  operationsUnreadable: 1,
+  model: 'workers-ai:qwen',
+}
 
 function record(
   overrides: Partial<EnvironmentTestRunRecord> &
     Pick<EnvironmentTestRunRecord, 'id' | 'workspaceId' | 'blockId'>,
 ): EnvironmentTestRunRecord {
   return {
+    mode: 'provision',
     status: 'running',
     stage: 'creating_branch',
     initiatedBy: null,
@@ -28,6 +75,10 @@ function record(
     envUrl: null,
     error: null,
     failedStage: null,
+    probeSurface: null,
+    probeDispatchedAt: null,
+    probeProgress: null,
+    probe: null,
     createdAt: 1_000,
     updatedAt: 1_000,
     ...overrides,
@@ -113,6 +164,70 @@ export function defineEnvironmentTestSuite(
         error: 'boom',
         failedStage: 'provisioning',
       })
+    })
+
+    it('round-trips an agent dry run: its mode, its probe claim and its whole report', async () => {
+      const repo = makeRepo()
+      const { ws, block, id } = scope()
+      await repo.insert(
+        record({ id, workspaceId: ws, blockId: block, mode: 'agent-probe', stage: 'provisioning' }),
+      )
+      // The CLAIM is written on its own, before the prober is dispatched: the write the durable
+      // driver's replay guard depends on. It must survive as the surface it named, because every
+      // later poll and reclaim addresses a container by it, and it must come back with
+      // `probeDispatchedAt` still NULL, which is the whole difference between a claim with no
+      // container behind it and a job that is really running. A facade that defaulted that column
+      // to anything would turn a replay's re-dispatch into a poll of a job nobody started, which
+      // the backend answers as an eviction.
+      expect(await repo.updateIfRunning(ws, id, { stage: 'probing', probeSurface: 'ui' })).toBe(
+        true,
+      )
+      expect(await repo.get(ws, id)).toMatchObject({
+        mode: 'agent-probe',
+        stage: 'probing',
+        probeSurface: 'ui',
+        probeDispatchedAt: null,
+        probeProgress: null,
+        probe: null,
+      })
+      // The MARK, written after the container accepted the job, and then the live progress the
+      // longest stage of this run pushes to the SPA. Both are read back on every later poll, so a
+      // facade that dropped either leaves a dry run re-dispatching or a card frozen.
+      expect(await repo.updateIfRunning(ws, id, { probeDispatchedAt: 3_000 })).toBe(true)
+      expect(
+        await repo.updateIfRunning(ws, id, {
+          probeProgress: { completed: 1, inProgress: 1, total: 4 },
+        }),
+      ).toBe(true)
+      expect(await repo.get(ws, id)).toMatchObject({
+        probeDispatchedAt: 3_000,
+        probeProgress: { completed: 1, inProgress: 1, total: 4 },
+      })
+      // The report then lands as a whole, and comes back structurally equal rather than merely
+      // present: `toEqual` here is the assertion, since a facade that dropped an operation's
+      // optional `failure` or flattened the list would still satisfy a `toMatchObject` on the
+      // report's scalar fields.
+      expect(
+        await repo.updateIfRunning(ws, id, {
+          stage: 'tearing_down',
+          probe: PROBE,
+          // Cleared with the same write that lands the report: a stale count beside a finished
+          // probe reads as one still working, and a facade that ignored the null would keep it.
+          probeProgress: null,
+          updatedAt: 4,
+        }),
+      ).toBe(true)
+      const settled = await repo.get(ws, id)
+      expect(settled?.probe).toEqual(PROBE)
+      expect(settled?.probeProgress).toBeNull()
+      // A dry run that reported bad news still SUCCEEDS as a lifecycle: the status is about the
+      // run, the verdict is about the service (see the contract's note on `status`).
+      expect(
+        await repo.updateIfRunning(ws, id, { stage: 'done', status: 'succeeded', updatedAt: 5 }),
+      ).toBe(true)
+      const done = await repo.get(ws, id)
+      expect(done).toMatchObject({ status: 'succeeded', stage: 'done', probeSurface: 'ui' })
+      expect(done?.probe?.verdict).toBe('partially_operable')
     })
 
     it('refuses to patch a terminal run (the stop ⇄ driver race guard)', async () => {

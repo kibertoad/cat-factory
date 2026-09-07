@@ -26,7 +26,7 @@ import {
   repoValidationResultSchema,
 } from '../provider-config.js'
 import { detectFrontendConfigSchema, frontendConfigRecommendationSchema } from '../frontend.js'
-import { environmentTestRunSchema } from '../environment-test.js'
+import { environmentTestModeSchema, environmentTestRunSchema } from '../environment-test.js'
 import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
@@ -238,12 +238,21 @@ export const teardownEnvironmentContract = defineApiContract({
 const environmentTestIdParams = singleStringParam('id')
 const environmentTestBlockParams = singleStringParam('blockId')
 
+/**
+ * What a self-test start asks for. `mode` is optional and defaults to `provision`, so the
+ * provisioning self-test keeps its byte-for-byte existing request; an agent dry run names itself.
+ */
+export const startEnvironmentTestSchema = v.object({
+  mode: v.optional(environmentTestModeSchema),
+})
+export type StartEnvironmentTestInput = v.InferOutput<typeof startEnvironmentTestSchema>
+
 /** Start an environment-test run against a service frame's provisioning config. */
 export const startEnvironmentTestContract = defineApiContract({
   method: 'post',
   requestPathParamsSchema: environmentTestBlockParams,
   pathResolver: ({ blockId }) => `/blocks/${blockId}/environment-test`,
-  requestBodySchema: ContractNoBody,
+  requestBodySchema: startEnvironmentTestSchema,
   responsesByStatusCode: { 201: environmentTestRunSchema, ...errorResponses },
 })
 

@@ -436,6 +436,15 @@ export {
   renderEnvironmentInvestigationPrompt,
 } from './agents/prompts/environment-investigation.js'
 export {
+  ENVIRONMENT_PROBE_API_SYSTEM_PROMPT,
+  ENVIRONMENT_PROBE_SHAPE_HINT,
+  ENVIRONMENT_PROBE_UI_SYSTEM_PROMPT,
+  type EnvironmentProbeBrief,
+  type EnvironmentProbeSecretsBrief,
+  environmentProbeSystemPrompt,
+  environmentProbeUserPrompt,
+} from './agents/prompts/environment-probe.js'
+export {
   BUG_HUNT_AGENT_KIND,
   BUG_HUNT_SYSTEM_PROMPT,
   renderBugHuntPrompt,

@@ -1,10 +1,14 @@
 import type {
+  EnvironmentProbeReport,
+  EnvironmentProbeSurface,
+  EnvironmentTestMode,
   EnvironmentTestRunRecord,
   EnvironmentTestRunRecordPatch,
   EnvironmentTestRunRepository,
   EnvironmentTestStage,
   EnvironmentTestStatus,
   ServiceProvisioning,
+  StepSubtasks,
 } from '@cat-factory/kernel'
 import { and, asc, desc, eq, lt } from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
@@ -20,6 +24,7 @@ function rowToRecord(row: typeof environmentTestRuns.$inferSelect): EnvironmentT
     id: row.id,
     workspaceId: row.workspace_id,
     blockId: row.block_id,
+    mode: row.mode as EnvironmentTestMode,
     status: row.status as EnvironmentTestStatus,
     stage: row.stage as EnvironmentTestStage,
     initiatedBy: row.initiated_by,
@@ -29,6 +34,10 @@ function rowToRecord(row: typeof environmentTestRuns.$inferSelect): EnvironmentT
     envUrl: row.env_url,
     error: row.error,
     failedStage: (row.failed_stage as EnvironmentTestStage | null) ?? null,
+    probeSurface: (row.probe_surface as EnvironmentProbeSurface | null) ?? null,
+    probeDispatchedAt: row.probe_dispatched_at,
+    probeProgress: row.probe_progress ? (JSON.parse(row.probe_progress) as StepSubtasks) : null,
+    probe: row.probe ? (JSON.parse(row.probe) as EnvironmentProbeReport) : null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -43,6 +52,7 @@ export class DrizzleEnvironmentTestRunRepository implements EnvironmentTestRunRe
       id: record.id,
       workspace_id: record.workspaceId,
       block_id: record.blockId,
+      mode: record.mode,
       status: record.status,
       stage: record.stage,
       initiated_by: record.initiatedBy,
@@ -52,6 +62,10 @@ export class DrizzleEnvironmentTestRunRepository implements EnvironmentTestRunRe
       env_url: record.envUrl,
       error: record.error,
       failed_stage: record.failedStage,
+      probe_surface: record.probeSurface,
+      probe_dispatched_at: record.probeDispatchedAt,
+      probe_progress: record.probeProgress ? JSON.stringify(record.probeProgress) : null,
+      probe: record.probe ? JSON.stringify(record.probe) : null,
       created_at: record.createdAt,
       updated_at: record.updatedAt,
     })
@@ -70,6 +84,13 @@ export class DrizzleEnvironmentTestRunRepository implements EnvironmentTestRunRe
     if (patch.envUrl !== undefined) set.env_url = patch.envUrl
     if (patch.error !== undefined) set.error = patch.error
     if (patch.failedStage !== undefined) set.failed_stage = patch.failedStage
+    if (patch.probeSurface !== undefined) set.probe_surface = patch.probeSurface
+    if (patch.probeDispatchedAt !== undefined) set.probe_dispatched_at = patch.probeDispatchedAt
+    // The structured members of the patch, so the ones that are serialized here.
+    if (patch.probeProgress !== undefined) {
+      set.probe_progress = patch.probeProgress ? JSON.stringify(patch.probeProgress) : null
+    }
+    if (patch.probe !== undefined) set.probe = patch.probe ? JSON.stringify(patch.probe) : null
     if (patch.updatedAt !== undefined) set.updated_at = patch.updatedAt
     if (Object.keys(set).length === 0) return false
     const result = await this.db

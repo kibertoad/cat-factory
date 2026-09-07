@@ -28,6 +28,7 @@ import {
   validateEnvironmentRepoContract,
 } from '@cat-factory/contracts'
 import { buildHonoRoute } from '@toad-contracts/hono'
+import { optionalJsonBody } from '../../http/optionalJsonBody.js'
 import * as v from 'valibot'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
@@ -329,12 +330,19 @@ function registerEnvironmentRegistryRoutes(app: Hono<AppEnv>): void {
   // Start a full create-branch → provision → teardown → delete-branch cycle against a
   // service frame's provisioning config. Returns immediately with the `running` run; the
   // durable driver advances it and pushes live `envTest` stage events.
+  // `mode` is optional, so the historical body-less start must keep working: the route was
+  // body-less for its whole life, and `buildHonoRoute`'s validator reads `c.req.json()` FIRST,
+  // which throws on an absent body before the all-optional schema is ever consulted.
+  app.use('/blocks/:blockId/environment-test', optionalJsonBody)
   buildHonoRoute(app, startEnvironmentTestContract, async (c) => {
     const service = requireEnvironmentTest(c)
     const run = await service.startTest(
       param(c, 'workspaceId'),
       c.req.valid('param').blockId,
       c.get('user')?.id ?? null,
+      // Absent ⇒ the provisioning self-test, so an older client's body-less start is unchanged.
+      // A deployment with no prober refuses `agent-probe` in the service, before side effects.
+      c.req.valid('json').mode ?? 'provision',
     )
     return c.json(run, 201)
   })

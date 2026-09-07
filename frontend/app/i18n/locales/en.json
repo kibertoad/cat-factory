@@ -766,6 +766,9 @@
         "env_test_not_provisionable": "Environment handler not configured",
         "env_test_no_vcs": "Git provider not connected",
         "env_test_connection_failed": "Environment connection failed",
+        "env_test_probe_unavailable": "Agent dry runs not available here",
+        "env_test_already_running": "Self-test already running",
+        "env_test_over_budget": "Spend budget reached",
         "prompt_revision_conflict": "Prompt changed by someone else",
         "pipeline_schedule_attached": "Recurring schedule uses this pipeline",
         "pipeline_schedule_requires_recurring": "Recurring schedule needs this pipeline",
@@ -815,6 +818,9 @@
         "env_test_no_vcs": "The self-test needs a git provider to create and delete its throwaway branch, but this workspace isn't connected to one.",
         "env_test_connection_failed": "The environment handler for this service failed its connection test. Check its endpoint, credentials and project settings, then re-test the connection.",
         "env_test_connection_failed_detail": "The environment handler for this service failed its connection test: {detail}. Check its endpoint, credentials and project settings, then re-test the connection.",
+        "env_test_probe_unavailable": "An agent dry run needs a container runner, a connected repository and a model this deployment's LLM proxy can serve. One of them is missing here, so only the provisioning self-test can run.",
+        "env_test_already_running": "A self-test is already running for this service. Each one provisions its own throwaway environment, so only one runs at a time. Wait for it to finish, or stop it first.",
+        "env_test_over_budget": "An agent dry run is a billable model call, and this workspace has reached a spend budget. Raise the budget or wait for the billing period to reset. The provisioning self-test costs nothing and still runs.",
         "@env_test_connection_failed_detail": {
           "description": "Keep the named placeholder for the failure detail intact (the environment provider's connection-test error message, injected at runtime)."
         },
@@ -1231,16 +1237,67 @@
         "hint": "Runs the whole lifecycle against a throwaway branch: create branch, provision, tear down, delete branch.",
         "start": "Test environment creation",
         "stop": "Stop",
-        "infraless": "Configure a provision type above to test environment creation.",
+        "infraless": "Configure a provision type above to run either self-test.",
         "running": "Testing: {stage}",
         "succeeded": "Test passed: the environment was created and torn down, and the branch was deleted.",
         "failed": "Test failed",
         "stage": {
           "creating_branch": "creating branch",
           "provisioning": "provisioning environment",
+          "probing": "probing with an agent",
           "tearing_down": "tearing down environment",
           "deleting_branch": "deleting branch",
           "done": "done"
+        }
+      },
+      "envProbe": {
+        "title": "Test agent dry run",
+        "hint": "Provisions a throwaway environment, has an agent attempt a few real operations against it, then tears it all down. Reports what it tried and what it could not work out.",
+        "surfaceApi": "This service is driven over HTTP.",
+        "surfaceUi": "This frontend is driven in a browser.",
+        "start": "Test agent dry run",
+        "completed": "Dry run finished: the environment was torn down and the branch deleted.",
+        "failed": "Dry run failed",
+        "verdict": {
+          "operable": "An agent can operate this service.",
+          "partially_operable": "An agent can only partly operate this service.",
+          "inoperable": "An agent could not operate this service."
+        },
+        "counts": "{succeeded} of {attempted} operations succeeded; {authenticated} of those went through authentication.",
+        "@counts": {
+          "description": "Keep all three named placeholders intact: how many operations succeeded, how many were attempted, and how many of the successes went through authentication. The platform computes these from the agent report; the phrasing may be reordered to suit the language."
+        },
+        "missingContext": "What the agent was not told",
+        "blockers": "What stopped the dry run",
+        "operations": "Operations attempted",
+        "operationsOmitted": "Reported operations dropped at the cap: {count}.",
+        "@operationsOmitted": {
+          "description": "Keep the named placeholder for the number of reported operations the platform dropped at its cap. Deliberately not pluralized: the count follows a colon so no noun has to agree with it."
+        },
+        "operationsUnreadable": "Reported operations the platform could not read: {count}.",
+        "@operationsUnreadable": {
+          "description": "Keep the named placeholder for the number of reported operations the platform could not read (they carried no usable name). Deliberately not pluralized: the count follows a colon so no noun has to agree with it."
+        },
+        "progress": "({completed} of {total} steps done)",
+        "@progress": {
+          "description": "Keep both named placeholders: how many of the prober's steps are done, and how many there are in total. Rendered directly after the running stage label, in parentheses."
+        },
+        "authenticated": "(authenticated)",
+        "model": "Model: {model}",
+        "@model": {
+          "description": "Keep the named placeholder for the model identifier (e.g. `workers-ai:qwen`), which is injected verbatim and never translated."
+        },
+        "failure": {
+          "auth_missing": "No credential supplied",
+          "auth_rejected": "Credential refused",
+          "access_unclear": "Unclear how to authenticate",
+          "endpoint_unknown": "Could not find what to call",
+          "unreachable": "Environment unreachable",
+          "timeout": "Timed out",
+          "server_error": "Service error",
+          "bad_request": "Request refused as malformed",
+          "tooling_missing": "No client or browser available",
+          "other": "Other"
         }
       }
     },

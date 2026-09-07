@@ -1,5 +1,5 @@
 // The container dispatchers the Worker composition root wires BESIDE the step executor: the repo
-// bootstrapper and the env-config repairer.
+// bootstrapper, the env-config repairer and the environment dry-run prober.
 //
 // They sit together because they are one concern rather than two. Each hands a container a real
 // clone/push credential, which is what `backend/docs/security-model.md` Layer 3 bounds, and each
@@ -13,9 +13,11 @@
 
 import {
   ContainerEnvConfigRepairer,
+  ContainerEnvironmentProbeAgent,
   ContainerRepoBootstrapper,
   ContainerSessionService,
   FetchGitHubClient,
+  deploymentRepoOrigin,
   type AppConfig,
   type ResolveRunnerTransport,
   logger,
@@ -33,6 +35,7 @@ import { D1BootstrapJobRepository } from './repositories/D1BootstrapJobRepositor
 import { D1GitHubInstallationRepository } from './repositories/D1GitHubInstallationRepository'
 import { D1RateLimitRepository } from './repositories/D1RateLimitRepository'
 import { D1RepoProjectionRepository } from './repositories/D1RepoProjectionRepository'
+import { buildTestSecretsService } from './wireCredentialServices'
 
 /**
  * Build the container-backed repo bootstrapper for the "bootstrap repo" task,
@@ -173,6 +176,80 @@ export function selectEnvConfigRepairer(deps: {
     environmentProvider,
     model,
     proxyBaseUrl: `${env.WORKER_PUBLIC_URL.replace(/\/+$/, '')}/v1`,
+    githubApiBase: config.github.apiBase,
+  })
+}
+
+/**
+ * Build the environment AGENT DRY RUN prober, gated on the same container prerequisites as the
+ * bootstrapper: a runner transport, a configured source-control App, the proxy's public URL and
+ * its signing secret. Absent any of them the self-test still runs in `provision` mode and
+ * `startTest` refuses `agent-probe` with a 409 that names the gap.
+ *
+ * The models follow the TESTERS' routing rather than the coder's: a dry run reads a service and
+ * exercises it without changing anything, which is the tester's job description, so a deployment
+ * that routed its testers to a cheap model gets a cheap dry run without a second setting. PER
+ * SURFACE, from each tester's own kind: the browser prober reads screenshots and drives a page and
+ * the HTTP one reads a schema and calls it, so a deployment that routed `tester-ui` at a
+ * vision-capable model and `tester-api` at a cheap text one must get the same split here. Both must
+ * be proxyable, for the reason the repairer states: the Pi harness reaches the model through the
+ * LLM proxy, and an individual-subscription vendor cannot be served that way. A misconfiguration is
+ * surfaced HERE, at wiring, rather than at every dispatch; a surface whose own routing is
+ * unproxyable disables the whole prober rather than half of it, because the SPA offers one button
+ * per frame and the frame's type decides which surface it lands on.
+ */
+export function selectEnvironmentProbeAgent(deps: {
+  env: Env
+  config: AppConfig
+  db: D1Database
+  clock: Clock
+  resolveTransport: ResolveRunnerTransport | null
+}): ContainerEnvironmentProbeAgent | undefined {
+  const { env, config, db, clock, resolveTransport } = deps
+  if (
+    !resolveTransport ||
+    !config.github.enabled ||
+    !env.GITHUB_APP_PRIVATE_KEY ||
+    !env.WORKER_PUBLIC_URL ||
+    !env.AUTH_SESSION_SECRET
+  ) {
+    return undefined
+  }
+  const models = {
+    api: resolveAgentConfig(config.agents.routing, 'tester-api').ref,
+    ui: resolveAgentConfig(config.agents.routing, 'tester-ui').ref,
+  }
+  const unproxyable = Object.entries(models).find(([, ref]) => !isProxyableProvider(ref.provider))
+  if (unproxyable) {
+    logger.warn(
+      'environment dry run: a tester routing model is not proxyable by the LLM proxy; ' +
+        'agent dry runs are disabled on this deployment.',
+      { surface: unproxyable[0], provider: unproxyable[1].provider },
+    )
+    return undefined
+  }
+  const registry = buildAppRegistry(env, config, db, clock)
+  // The frame's sealed test credentials, resolved through the same service the tester dispatch
+  // uses. Absent (no ENCRYPTION_KEY) ⇒ the prober is told there are none, which is what puts the
+  // gap in its report rather than in its guesswork.
+  const testSecrets = buildTestSecretsService(env, db, clock)
+  return new ContainerEnvironmentProbeAgent({
+    resolveTransport,
+    installationRepository: new D1GitHubInstallationRepository({ db }),
+    repoRepository: new D1RepoProjectionRepository({ db }),
+    mintInstallationToken: workerDispatchTokenMint(registry),
+    sessionService: new ContainerSessionService({ secret: env.AUTH_SESSION_SECRET }),
+    models,
+    proxyBaseUrl: `${env.WORKER_PUBLIC_URL.replace(/\/+$/, '')}/v1`,
+    // Provider-aware, so a GitLab deployment's prober clones its own instance rather than a
+    // same-named project on github.com.
+    resolveRepoOrigin: deploymentRepoOrigin(config),
+    ...(testSecrets
+      ? {
+          resolveTestSecrets: (workspaceId: string, blockId: string) =>
+            testSecrets.resolveValuesForBlock(workspaceId, blockId),
+        }
+      : {}),
     githubApiBase: config.github.apiBase,
   })
 }

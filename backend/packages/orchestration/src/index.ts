@@ -415,6 +415,13 @@ export {
 } from './modules/environments/EnvironmentTestService.js'
 
 export {
+  EnvironmentProbeStage,
+  type EnvironmentProbeOutcome,
+  type EnvironmentProbeRegistry,
+  type EnvironmentProbeStageDependencies,
+} from './modules/environments/environmentProbeStage.js'
+
+export {
   BoardScanService,
   type BoardScanServiceDependencies,
 } from './modules/boardScan/BoardScanService.js'

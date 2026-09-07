@@ -14,7 +14,9 @@
 
 import { UNATTRIBUTED_BLOCK_EDIT_AUTHORITY } from '@cat-factory/contracts'
 import type { AppCaches, ExecutionEventPublisher, TrackerIssueEvent } from '@cat-factory/kernel'
-import type { SpendService } from '@cat-factory/spend'
+import { DEFAULT_SPEND_PRICING, SpendService } from '@cat-factory/spend'
+import { TutorialProgressService } from '../modules/tutorial/TutorialProgressService.js'
+import { UserSettingsService } from '../modules/settings/UserSettingsService.js'
 import { type AgentKindRegistry } from '@cat-factory/agents'
 import {
   BugIntakeService,
@@ -120,6 +122,8 @@ import type {
   SlackModule,
   TrackerModule,
   TrackerWebhookModule,
+  TutorialProgressModule,
+  UserSettingsModule,
   TaskTypeSuppressionModule,
   WorkspaceAgentSettingsModule,
   WorkspaceSettingsModule,
@@ -475,6 +479,7 @@ export function createEnvironmentsModule(
   eventPublisher: ExecutionEventPublisher | undefined,
   sharedStackService: SharedStackService | undefined,
   preflightService: PreflightService | undefined,
+  spend: SpendService,
 ): EnvironmentsModule | undefined {
   const { environmentConnectionRepository, environmentRegistryRepository, secretCipher } = deps
   if (!environmentConnectionRepository || !environmentRegistryRepository || !secretCipher) {
@@ -584,6 +589,8 @@ export function createEnvironmentsModule(
     teardownService,
     environmentRegistryRepository,
     eventPublisher,
+    // The agent dry run's admission budget, the same one the bug hunt's ranking answers to.
+    isOverBudget: (workspaceId) => spend.isOverBudget(workspaceId),
   })
 
   return {
@@ -601,6 +608,67 @@ export function createEnvironmentsModule(
  * the secret cipher are present; otherwise return undefined so the feature stays
  * cleanly opt-in. Per-tenant scheduler-API secrets are encrypted via the cipher.
  */
+/**
+ * The workspace/account/user SPEND service: the one budget ledger every billable call answers to
+ * (a run start, the bug hunt's ranking, an environment dry run).
+ *
+ * A factory beside the module builders rather than 16 lines in the composition root, because it
+ * is the same shape as everything else here: read what the deps supply, hand back one collaborator
+ * the caller registers. It is NOT a module (nothing resolves it by name and several modules take
+ * it directly), so it returns the service itself.
+ */
+export function createSpendService(deps: CoreDependencies, caches: AppCaches): SpendService {
+  return new SpendService({
+    tokenUsageRepository: deps.tokenUsageRepository,
+    idGenerator: deps.idGenerator,
+    clock: deps.clock,
+    pricing: deps.spendPricing ?? DEFAULT_SPEND_PRICING,
+    workspaceSettingsRepository: deps.workspaceSettingsRepository,
+    accountRepository: deps.accountRepository,
+    userSettingsRepository: deps.userSettingsRepository,
+    dynamicPricesFor: deps.dynamicModelPricesFor,
+    // The pricing overlay reads the workspace-settings row through the shared slice
+    // (invalidated by WorkspaceSettingsService.update); the two budget-limit slices are
+    // invalidated by the account/user budget-change callbacks on their own writers.
+    workspaceSettingsCache: caches.workspaceSettings,
+    accountBudgetLimitCache: caches.accountBudgetLimit,
+    userBudgetLimitCache: caches.userBudgetLimit,
+  })
+}
+
+/**
+ * Per-user preferences, including the user's own monthly budget.
+ *
+ * Takes the spend service because both of its budget seams are ITS: a budget edit invalidates the
+ * cached limit, and a budget above the operator cap is refused at the write rather than discovered
+ * by a run that was allowed to start.
+ */
+export function createUserSettingsModule(
+  deps: CoreDependencies,
+  spend: SpendService,
+): UserSettingsModule | undefined {
+  if (!deps.userSettingsRepository) return undefined
+  return {
+    service: new UserSettingsService({
+      userSettingsRepository: deps.userSettingsRepository,
+      onUserBudgetChanged: (userId) => spend.invalidateUserLimit(userId),
+      resolveUserBudgetCap: () => spend.budgetCaps().userMonthlyLimitMax,
+    }),
+  }
+}
+
+/** The onboarding tutorial's per-user progress. Absent repository ⇒ the surface 503s. */
+export function createTutorialProgressModule(
+  deps: CoreDependencies,
+): TutorialProgressModule | undefined {
+  if (!deps.tutorialProgressRepository) return undefined
+  return {
+    service: new TutorialProgressService({
+      tutorialProgressRepository: deps.tutorialProgressRepository,
+    }),
+  }
+}
+
 export function createRunnersModule(deps: CoreDependencies): RunnersModule | undefined {
   const { runnerPoolConnectionRepository, runnerSecretCipher } = deps
   if (!runnerPoolConnectionRepository || !runnerSecretCipher) return undefined

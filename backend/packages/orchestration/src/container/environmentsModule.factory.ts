@@ -19,6 +19,7 @@ import type {
   SharedStackService,
 } from '@cat-factory/integrations'
 import { EnvironmentTestService } from '../modules/environments/EnvironmentTestService.js'
+import { EnvironmentProbeStage } from '../modules/environments/environmentProbeStage.js'
 
 /**
  * How many provisioning-log rows the environment investigation's timeline reads. The collector
@@ -156,6 +157,8 @@ export function buildEnvironmentTestService(args: {
   teardownService: EnvironmentTeardownService
   environmentRegistryRepository: NonNullable<CoreDependencies['environmentRegistryRepository']>
   eventPublisher: ExecutionEventPublisher | undefined
+  /** The workspace spend safeguard, for the agent dry run's billable model call. */
+  isOverBudget?: (workspaceId: string) => Promise<boolean>
 }): EnvironmentTestService | undefined {
   const {
     deps,
@@ -165,6 +168,17 @@ export function buildEnvironmentTestService(args: {
     eventPublisher,
   } = args
   if (!deps.environmentTestRunRepository || !deps.resolveRunRepoContext) return undefined
+  // The AGENT DRY RUN's stage, wired only when a facade supplied a prober. Absent ⇒ the
+  // provisioning self-test is unchanged and `startTest` refuses `agent-probe` up front.
+  const probeStage = deps.environmentProbeAgent
+    ? new EnvironmentProbeStage({
+        agent: deps.environmentProbeAgent,
+        blockRepository: deps.blockRepository,
+        environments: provisioningService,
+        resolveRunRepoContext: deps.resolveRunRepoContext,
+        logger: deps.logger,
+      })
+    : undefined
   return new EnvironmentTestService({
     environmentTestRunRepository: deps.environmentTestRunRepository,
     workspaceRepository: deps.workspaceRepository,
@@ -175,6 +189,11 @@ export function buildEnvironmentTestService(args: {
     resolveRunRepoContext: deps.resolveRunRepoContext,
     idGenerator: deps.idGenerator,
     clock: deps.clock,
+    ...(probeStage ? { probeStage } : {}),
+    // The dry run is a billable model call no run start gates, so it answers to the SAME workspace
+    // budget `RunAdmission` applies before a run. Wired only alongside the prober: the provisioning
+    // self-test spends nothing and must stay startable at any budget.
+    ...(probeStage && args.isOverBudget ? { isOverBudget: args.isOverBudget } : {}),
     ...(deps.environmentTestRunner ? { runner: deps.environmentTestRunner } : {}),
     ...(eventPublisher ? { eventPublisher } : {}),
     logger: deps.logger,

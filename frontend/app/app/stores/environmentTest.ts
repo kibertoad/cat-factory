@@ -1,18 +1,22 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import type { EnvironmentTestMode } from '@cat-factory/contracts'
 import type { EnvironmentTestRun } from '~/types/domain'
 import { useWorkspaceStore } from '~/stores/workspace'
 
 /**
- * Ephemeral-environment self-test runs. A developer starts one from a service frame's inspector
- * (`POST …/blocks/:id/environment-test`); the backend drives the create-branch → provision →
- * tear-down → delete-branch cycle durably and pushes live `envTest` stage events, which
+ * Ephemeral-environment self-test runs, in both modes: the provisioning self-test and the AGENT
+ * DRY RUN, which adds a `probing` stage and comes back with a report. A developer starts one from
+ * a service frame's inspector (`POST …/blocks/:id/environment-test`); the backend drives the
+ * create-branch → provision → [probe] → tear-down → delete-branch cycle durably and pushes live
+ * `envTest` stage events, which
  * `useWorkspaceStream` folds in via {@link upsert}. In-flight runs also arrive in the workspace
  * snapshot ({@link hydrate}) so the inspector re-attaches to a running test after a reconnect.
  *
  * Runs are keyed by their FRAME block id for the inspector's per-service lookup ({@link runForBlock}
- * returns the newest run for a block). Terminal runs are kept in memory for the session so the
- * inspector can show the last outcome; the snapshot only carries running ones.
+ * returns the newest run for a block IN ONE MODE, since the two self-tests render side by side).
+ * Terminal runs are kept in memory for the session so the inspector can show the last outcome; the
+ * snapshot only carries running ones.
  */
 export const useEnvironmentTestStore = defineStore('environmentTest', () => {
   const api = useApi()
@@ -113,15 +117,22 @@ export const useEnvironmentTestStore = defineStore('environmentTest', () => {
     return runs.value.find((r) => r.id === id)
   }
 
-  /** The newest run for a service frame — the inspector's per-service attach point. */
-  function runForBlock(blockId: string): EnvironmentTestRun | undefined {
-    return runs.value.find((r) => r.blockId === blockId)
+  /**
+   * The newest run for a service frame IN ONE MODE: the inspector's per-service attach point.
+   *
+   * Scoped by mode because the inspector shows the two self-tests side by side and each owns its
+   * own status line: an unscoped read would have a provisioning test's outcome appear under the
+   * agent dry run's button (and vice versa) whenever the other one ran more recently, which is
+   * the reading a developer would act on.
+   */
+  function runForBlock(blockId: string, mode: EnvironmentTestMode): EnvironmentTestRun | undefined {
+    return runs.value.find((r) => r.blockId === blockId && r.mode === mode)
   }
 
   /** Start a self-test against a service frame; the returned run is tracked immediately. */
-  async function start(blockId: string): Promise<EnvironmentTestRun> {
+  async function start(blockId: string, mode: EnvironmentTestMode): Promise<EnvironmentTestRun> {
     const ws = useWorkspaceStore()
-    const run = await api.startEnvironmentTest(ws.requireId(), blockId)
+    const run = await api.startEnvironmentTest(ws.requireId(), blockId, mode)
     upsert(run)
     return run
   }

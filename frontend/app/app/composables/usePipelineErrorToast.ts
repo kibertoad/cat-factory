@@ -270,6 +270,25 @@ const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason>, Conf
       run: (ui) => ui.openProviderConnection('environment'),
     },
   },
+  // An agent dry run on a deployment that cannot drive one. No ACTION: the gap is a container
+  // runner, a proxyable model or a repository seam, none of which a user can wire from the SPA.
+  // Offering a settings jump here would send them somewhere that cannot fix it.
+  env_test_probe_unavailable: {
+    titleKey: 'errors.conflict.title.env_test_probe_unavailable',
+    descriptionKey: 'errors.conflict.description.env_test_probe_unavailable',
+  },
+  // A second self-test on a frame that already has one running. No ACTION: the remedy is to wait
+  // for the run showing in the same panel, or to stop it with the button beside it.
+  env_test_already_running: {
+    titleKey: 'errors.conflict.title.env_test_already_running',
+    descriptionKey: 'errors.conflict.description.env_test_already_running',
+  },
+  // The workspace is over a spend budget and a dry run is a billable call. No ACTION here either:
+  // budgets are an account-level setting, and the provisioning self-test beside it still runs.
+  env_test_over_budget: {
+    titleKey: 'errors.conflict.title.env_test_over_budget',
+    descriptionKey: 'errors.conflict.description.env_test_over_budget',
+  },
   // Opt-in review-debt friction. In the normal task-create flow AddTaskModal intercepts these
   // 409s and opens the friction dialog (which can retry with an acknowledgement), so these entries
   // are the last-resort toast fallback for any OTHER caller — a generic, param-free title +

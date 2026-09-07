@@ -3,13 +3,11 @@ import { computed, onMounted, ref, watch } from 'vue'
 import type {
   Block,
   CloudProvider,
-  EnvironmentTestStage,
   InstanceSize,
   ProvisionType,
   ServiceProvisioning,
 } from '~/types/domain'
 import type {
-  ConflictReason,
   KubernetesManifestSource,
   KubernetesRenderer,
   ProvisioningComposeServiceCandidate,
@@ -20,8 +18,8 @@ import type {
 } from '@cat-factory/contracts'
 import RepoTreeBrowser from '~/components/github/RepoTreeBrowser.vue'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
+import ServiceSelfTests from '~/components/panels/inspector/ServiceSelfTests.vue'
 import { apiErrorEnvelope } from '~/composables/api/errors'
-import { parseConflict } from '~/composables/usePipelineErrorToast'
 
 // Service-level (frame) configuration: the service-owned PROVISIONING — the provision
 // TYPE this service produces (`infraless` / `docker-compose` / `kubernetes` / `custom`)
@@ -260,117 +258,6 @@ async function generateOrFixManifest() {
     manifestRepairError.value = true
   } finally {
     generating.value = false
-  }
-}
-
-// Ephemeral-environment self-test: run the whole create-branch → provision → tear-down →
-// delete-branch cycle against this service's provisioning config and report success / the stage
-// it failed at. The returned run is tracked live (by frame id) via the workspace stream store.
-const envTest = useEnvironmentTestStore()
-const envTestStarting = ref(false)
-// The self-test's start/stop error. Structured (not a bare string) so the not-provisionable case
-// can render its remedy prose PLUS a one-click jump to the environment-handler config; every other
-// case is plain text.
-interface EnvTestError {
-  text: string
-  /** Show the "Configure infrastructure" deep-link — only the not-provisionable handler case. */
-  configurable?: boolean
-}
-const envTestError = ref<EnvTestError | null>(null)
-// The newest self-test run for this frame — re-attaches after a reconnect (the run is carried in
-// the snapshot while running), so the live stage keeps showing without a locally-held id.
-const envTestRun = computed(() => envTest.runForBlock(props.block.id))
-const envTestRunning = computed(() => envTestRun.value?.status === 'running')
-// Nothing to provision for an `infraless` service, so there is nothing to test.
-const canTestEnv = computed(() => provisionType.value !== 'infraless')
-
-// Per-stage label KEYS, exhaustive over the contracts `EnvironmentTestStage` union: a new
-// backend stage fails THIS typecheck until mapped (the key is resolved at runtime, so the
-// typed-message-keys check can't see the `t()` lookup — the map's exhaustiveness is the
-// drift guard, same pattern as `CONFLICT_TITLE_KEYS`).
-const ENV_TEST_STAGE_KEYS: Record<EnvironmentTestStage, string> = {
-  creating_branch: 'inspector.testConfig.envTest.stage.creating_branch',
-  provisioning: 'inspector.testConfig.envTest.stage.provisioning',
-  tearing_down: 'inspector.testConfig.envTest.stage.tearing_down',
-  deleting_branch: 'inspector.testConfig.envTest.stage.deleting_branch',
-  done: 'inspector.testConfig.envTest.stage.done',
-}
-
-function envTestStageLabel(stage: EnvironmentTestStage): string {
-  const key = ENV_TEST_STAGE_KEYS[stage]
-  // `te`-guarded so a locale missing the key shows the raw stage id, never a raw message key.
-  return te(key) ? t(key) : stage
-}
-
-// The start preflight's machine-readable 409 reasons, mapped to their localized titles —
-// exhaustive over the contracts `env_test_*` conflict reasons (same drift guard as above).
-// The raw backend `message` is only the last-resort fallback for unmapped/non-conflict errors.
-const ENV_TEST_CONFLICT_KEYS: Record<Extract<ConflictReason, `env_test_${string}`>, string> = {
-  env_test_not_a_frame: 'errors.conflict.title.env_test_not_a_frame',
-  env_test_infraless: 'errors.conflict.title.env_test_infraless',
-  env_test_not_provisionable: 'errors.conflict.title.env_test_not_provisionable',
-  env_test_no_vcs: 'errors.conflict.title.env_test_no_vcs',
-  env_test_connection_failed: 'errors.conflict.title.env_test_connection_failed',
-}
-
-function buildEnvTestError(e: unknown): EnvTestError {
-  const parsed = parseConflict(e)
-  const reason = parsed?.reason
-  // No workspace handler resolves for the service's provision type. Word the SPECIFIC case —
-  // nothing configured vs. an ambiguous match (carried on `details.handlerIssue`, distinct from the
-  // `env_test_not_provisionable` code) — and offer the one-click jump to the Infrastructure →
-  // Test-environments handler config.
-  if (reason === 'env_test_not_provisionable') {
-    const ambiguous = parsed?.details.handlerIssue === 'type-mismatch'
-    return {
-      text: t(
-        ambiguous
-          ? 'errors.conflict.description.env_test_not_provisionable_type_mismatch'
-          : 'errors.conflict.description.env_test_not_provisionable_no_handler',
-      ),
-      configurable: true,
-    }
-  }
-  // The handler resolved but its live connection probe failed. The provider's OWN message is the
-  // actionable part ("project 'X' was not found"), so wrap it in localized prose rather than
-  // replacing it with a generic sentence — and offer the same jump, since the fix is in the
-  // handler's connection config.
-  if (reason === 'env_test_connection_failed' && parsed?.message) {
-    return {
-      text: t('errors.conflict.description.env_test_connection_failed_detail', {
-        detail: parsed.message,
-      }),
-      configurable: true,
-    }
-  }
-  const key =
-    reason && reason in ENV_TEST_CONFLICT_KEYS
-      ? ENV_TEST_CONFLICT_KEYS[reason as keyof typeof ENV_TEST_CONFLICT_KEYS]
-      : undefined
-  if (key && te(key)) return { text: t(key) }
-  return { text: apiErrorEnvelope(e)?.message ?? (e instanceof Error ? e.message : String(e)) }
-}
-
-async function startEnvTest() {
-  if (!canTestEnv.value || envTestStarting.value || envTestRunning.value) return
-  envTestStarting.value = true
-  envTestError.value = null
-  try {
-    await envTest.start(props.block.id)
-  } catch (e) {
-    envTestError.value = buildEnvTestError(e)
-  } finally {
-    envTestStarting.value = false
-  }
-}
-
-async function stopEnvTest() {
-  const run = envTestRun.value
-  if (!run || run.status !== 'running') return
-  try {
-    await envTest.stop(run.id)
-  } catch (e) {
-    envTestError.value = buildEnvTestError(e)
   }
 }
 
@@ -1049,93 +936,10 @@ function setSize(value: InstanceSize) {
       </div>
     </InspectorSection>
 
-    <!-- Ephemeral-environment self-test: exercise the whole provisioning lifecycle against a
-         throwaway branch and report success / the failing stage. Disabled for `infraless`. -->
-    <div class="mt-3 space-y-2 border-t border-white/5 pt-3" data-testid="env-test-section">
-      <div class="flex items-center justify-between gap-2">
-        <div class="min-w-0">
-          <p class="text-[11px] font-medium text-slate-300">
-            {{ t('inspector.testConfig.envTest.title') }}
-          </p>
-          <p class="text-[11px] text-slate-400">{{ t('inspector.testConfig.envTest.hint') }}</p>
-        </div>
-        <UButton
-          v-if="!envTestRunning"
-          icon="i-lucide-flask-conical"
-          size="xs"
-          color="primary"
-          variant="soft"
-          data-testid="env-test-start"
-          :loading="envTestStarting"
-          :disabled="!canTestEnv"
-          @click="startEnvTest"
-        >
-          {{ t('inspector.testConfig.envTest.start') }}
-        </UButton>
-        <UButton
-          v-else
-          icon="i-lucide-square"
-          size="xs"
-          color="neutral"
-          variant="ghost"
-          data-testid="env-test-stop"
-          @click="stopEnvTest"
-        >
-          {{ t('inspector.testConfig.envTest.stop') }}
-        </UButton>
-      </div>
-
-      <p v-if="!canTestEnv" class="text-[11px] text-slate-500">
-        {{ t('inspector.testConfig.envTest.infraless') }}
-      </p>
-
-      <!-- Live stage + terminal outcome of the tracked run (pushed via the workspace stream). -->
-      <p
-        v-if="envTestRun"
-        class="text-[11px]"
-        :class="{
-          'text-sky-300/80': envTestRun.status === 'running',
-          'text-emerald-300/80': envTestRun.status === 'succeeded',
-          'text-rose-300/80': envTestRun.status === 'failed',
-        }"
-        data-testid="env-test-status"
-      >
-        <template v-if="envTestRun.status === 'running'">
-          {{
-            t('inspector.testConfig.envTest.running', {
-              stage: envTestStageLabel(envTestRun.stage),
-            })
-          }}
-        </template>
-        <template v-else-if="envTestRun.status === 'succeeded'">
-          {{ t('inspector.testConfig.envTest.succeeded') }}
-        </template>
-        <template v-else>
-          {{ t('inspector.testConfig.envTest.failed') }}
-          <template v-if="envTestRun.failedStage">
-            ({{ envTestStageLabel(envTestRun.failedStage) }})
-          </template>
-          <span v-if="envTestRun.error" class="block text-rose-300/70">{{ envTestRun.error }}</span>
-        </template>
-      </p>
-
-      <div v-if="envTestError" class="text-[11px] text-rose-400" data-testid="env-test-error">
-        <p>{{ envTestError.text }}</p>
-        <!-- Only the not-provisionable handler case is one-click fixable: jump to Infrastructure →
-             Test environments, where the workspace's per-type environment handler is registered. -->
-        <UButton
-          v-if="envTestError.configurable"
-          class="mt-1.5"
-          icon="i-lucide-settings"
-          size="xs"
-          color="neutral"
-          variant="soft"
-          data-testid="env-test-configure-handler"
-          @click="ui.openProviderConnection('environment')"
-        >
-          {{ t('errors.conflict.action.configureInfrastructure') }}
-        </UButton>
-      </div>
-    </div>
+    <!-- The two self-tests this service offers: does its provisioning stand an environment up,
+         and could an agent handed that environment actually operate the service. Their own
+         collaborator (they share every piece of state and every refusal), so this view stays
+         about the provisioning CONFIG. -->
+    <ServiceSelfTests :block="block" />
   </InspectorSection>
 </template>

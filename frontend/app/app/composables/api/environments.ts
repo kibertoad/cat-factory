@@ -5,7 +5,7 @@ import {
   startEnvironmentTestContract,
   stopEnvironmentTestContract,
 } from '@cat-factory/contracts'
-import type { ProvisionEnvironmentInput } from '@cat-factory/contracts'
+import type { EnvironmentTestMode, ProvisionEnvironmentInput } from '@cat-factory/contracts'
 import type { ApiContext } from './context'
 
 /** Ephemeral environments: the workspace's live env handles (used to resolve frontend bindings). */
@@ -20,9 +20,14 @@ export function environmentsApi({ send, ws }: ApiContext) {
       send(provisionEnvironmentContract, { pathPrefix: ws(workspaceId), body }),
 
     // Ephemeral-environment self-test: start a full create-branch → provision → tear-down →
-    // delete-branch cycle against a service frame, then read / stop its run.
-    startEnvironmentTest: (workspaceId: string, blockId: string) =>
-      send(startEnvironmentTestContract, { pathPrefix: ws(workspaceId), pathParams: { blockId } }),
+    // delete-branch cycle against a service frame, then read / stop its run. `mode` picks what it
+    // exercises: the provisioning alone, or that plus an agent dry run against the environment.
+    startEnvironmentTest: (workspaceId: string, blockId: string, mode: EnvironmentTestMode) =>
+      send(startEnvironmentTestContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { blockId },
+        body: { mode },
+      }),
     getEnvironmentTest: (workspaceId: string, id: string) =>
       send(getEnvironmentTestContract, { pathPrefix: ws(workspaceId), pathParams: { id } }),
     stopEnvironmentTest: (workspaceId: string, id: string) =>

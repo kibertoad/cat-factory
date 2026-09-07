@@ -347,6 +347,15 @@ service's declared `provisioning` (`tester-infra.logic.ts`, `decideTesterInfra`)
 The gate resolves the handler lazily via `EnvironmentProvisioningService.canProvision` (a
 pass-through when the provisioning seam is unwired).
 
+## Self-tests: does this config work, and can an agent use what it produces?
+
+A service frame's inspector offers two diagnostics that exercise this whole model against a
+throwaway branch and always clean up: **Test environment creation** (does the environment stand up
+and come down?) and **Test agent dry run** (handed that environment, could an agent work out how
+to operate the service?). Both are one durable run store and one state machine; the dry run adds a
+`probing` stage and comes back with a report of what it attempted and what the platform failed to
+tell it. See [`environment-self-tests.md`](./environment-self-tests.md).
+
 ## API surface
 
 Workspace-scoped per-type handlers + the custom-type catalog + detection
@@ -362,6 +371,9 @@ PUT    /workspaces/:ws/environments/custom-types/:manifestId        upsert a wor
 DELETE /workspaces/:ws/environments/custom-types/:manifestId        remove a workspace custom manifest type
 POST   /workspaces/:ws/environments/detect-provisioning             non-binding recommended config from the repo
 POST   /workspaces/:ws/environments/custom-manifest/repair          generate/fix a custom manifest via the fixer agent
+POST   /workspaces/:ws/blocks/:blockId/environment-test              start a self-test ({ mode: 'provision' | 'agent-probe' })
+GET    /workspaces/:ws/environment-tests/:id                         one self-test run's live stage + outcome
+POST   /workspaces/:ws/environment-tests/:id/stop                    stop a running self-test (cleanup, then failed)
 ```
 
 Local-mode-only per-user override (`EnvironmentUserHandlerController`, mounted at ROOT with no
@@ -398,6 +410,8 @@ Every table/column mirrors D1 ⇄ Drizzle with a cross-runtime conformance asser
   paths.
 - `blocks`: gains `provisioning`; dropped `default_test_environment` / `test_compose_path` /
   `no_infra_dependencies`.
+- `environment_test_runs`: the self-test runs, including the dry run's `mode`, its `probe_surface`
+  claim and its `probe` report ([`environment-self-tests.md`](./environment-self-tests.md)).
 
 The render inputs (`renderer`/`images`/`helmReleases`/`secretInjections`) ride as nested JSON
 inside the existing `handler_json` / service `provisioning` TEXT columns, so they needed **no**

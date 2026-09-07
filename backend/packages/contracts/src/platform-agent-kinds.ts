@@ -41,6 +41,20 @@ export const REPO_BOOTSTRAP_AGENT_KIND = 'repo-bootstrapper'
 export const MONOREPO_ADOPTION_AGENT_KIND = 'monorepo-adoption-advisor'
 
 /**
+ * The agents an environment self-test dispatches at a freshly provisioned environment to find out
+ * whether an agent could operate it (the AGENT DRY RUN). Two, because the answer is reached in two
+ * completely different ways: HTTP calls against a backend service, a browser against a frontend.
+ *
+ * Not registry kinds (nothing places them in a pipeline, and a self-test is not an
+ * `ExecutionInstance`), but named here for the reason the whole module exists: the backend files
+ * their telemetry under these strings and the SPA labels the spend it reads back, so a copy on
+ * each side is a pair that drifts. They are also the keys the facades resolve a MODEL through, so
+ * a deployment can route its probers independently of its testers.
+ */
+export const ENVIRONMENT_PROBE_API_AGENT_KIND = 'environment-prober-api'
+export const ENVIRONMENT_PROBE_UI_AGENT_KIND = 'environment-prober-ui'
+
+/**
  * The id prefix a single-kind run carries in place of a catalog pipeline id. Deliberately not a
  * `pl_` id: nothing defines it and nothing stores it, so a reader who goes looking for the
  * pipeline behind such a run should find a name that says there isn't one rather than a 404.

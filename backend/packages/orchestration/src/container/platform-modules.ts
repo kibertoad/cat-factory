@@ -26,6 +26,7 @@ import {
   createSharedStackSeeder,
 } from '@cat-factory/integrations'
 import { DEFAULT_SPEND_PRICING, ratesFor } from '@cat-factory/spend'
+import type { SpendService } from '@cat-factory/spend'
 import {
   createDocumentsModule,
   createEnvironmentsModule,
@@ -64,6 +65,11 @@ export interface PlatformModulesInput {
   foundationalBuiltins: CoreRuntime['foundationalBuiltins']
   /** The RESOLVED prompt-fragment pool source (own registry, or the mothership's). */
   promptFragments: CoreRuntime['promptFragments']
+  /**
+   * The spend safeguard, so the environment self-test's AGENT DRY RUN honours the same budget a
+   * run does. It is the only billable call anywhere in this slice.
+   */
+  spend: SpendService
 }
 
 export interface PlatformModules {
@@ -91,6 +97,7 @@ export function createPlatformModules(input: PlatformModulesInput): PlatformModu
     boardService,
     foundationalBuiltins,
     promptFragments,
+    spend,
   } = input
   // The price table the run-telemetry rollups are costed against: the DEPLOYMENT base table,
   // deliberately, and its own currency. A workspace may override the budget's currency without
@@ -218,6 +225,7 @@ export function createPlatformModules(input: PlatformModulesInput): PlatformModu
       executionEventPublisher,
       sharedStacks?.service,
       preflight?.service,
+      spend,
     ),
   )
   // The deployment-declared environment-handler seeder, built over the environments module's

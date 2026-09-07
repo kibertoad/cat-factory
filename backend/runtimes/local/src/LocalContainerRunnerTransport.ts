@@ -5,6 +5,7 @@ import type {
   RunnerDispatchAck,
   RunnerDispatchKind,
   RunnerDispatchOptions,
+  RunnerImageVariant,
   RunnerJobRef,
   RunnerJobStopOutcome,
   RunnerJobView,
@@ -17,6 +18,7 @@ import {
   deploymentImageVariantMessage,
   describeError,
   getErrorMessage,
+  getErrorReason,
   isPlatformImageVariant,
   runBestEffort,
   RUNNER_IMAGE_UNWIRED_REASON,
@@ -436,6 +438,21 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
    * deployment branch and earning a refusal that names `LOCAL_HARNESS_IMAGE_VARIANTS` for an image
    * no operator could have put there.
    */
+  /**
+   * Whether a local image tag is configured for `variant`, asked through the same resolver a
+   * dispatch uses so the two can never disagree. Only the unwired refusal answers `false`; any
+   * other throw propagates rather than being reported as a missing image.
+   */
+  supportsImage(variant?: RunnerImageVariant): boolean {
+    try {
+      this.imageFor({ runId: '', jobId: '', ...(variant ? { image: variant } : {}) })
+      return true
+    } catch (error) {
+      if (getErrorReason(error) === RUNNER_IMAGE_UNWIRED_REASON) return false
+      throw error
+    }
+  }
+
   private imageFor(ref: RunnerJobRef): string {
     const declared = ref.image || 'default'
     if (!isPlatformImageVariant(declared)) {

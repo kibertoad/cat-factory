@@ -62,6 +62,7 @@ import type {
   EnvironmentProvider,
   EnvironmentRegistryRepository,
   EnvironmentTestRunRepository,
+  EnvironmentProbeAgent,
   EnvironmentTestRunner,
   EnvironmentUserHandlerRepository,
   ExecutionEventPublisher,
@@ -502,6 +503,13 @@ export interface CoreDependencies extends ContentLibraryDependencies {
    * `EnvironmentTestWorkflow` / Node pg-boss). Absent → tests poll `pollEnvTest` directly.
    */
   environmentTestRunner?: EnvironmentTestRunner
+  /**
+   * Optional: dispatches, polls and reclaims the AGENT DRY RUN's prober container (the server's
+   * `ContainerEnvironmentProbeAgent`). Wired ⇒ a self-test may be started in `agent-probe` mode;
+   * absent ⇒ `startTest` refuses that mode as a 409 before provisioning anything, and the
+   * provisioning self-test is unaffected.
+   */
+  environmentProbeAgent?: EnvironmentProbeAgent
   /**
    * Optional: runs the engine's gate-probe / merge GitHub reads under the run
    * initiator's ambient context so a per-user PAT is preferred (see
