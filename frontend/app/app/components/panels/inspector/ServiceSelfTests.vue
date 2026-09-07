@@ -158,6 +158,12 @@ async function stop(mode: EnvironmentTestMode) {
 
 <template>
   <div class="mt-3 space-y-3 border-t border-white/5 pt-3" data-testid="env-test-section">
+    <!-- The precondition both self-tests share, stated once at the top: with no provision type
+         there is no environment to stand up and therefore nothing for an agent to drive either. -->
+    <p v-if="!canTest" class="text-[11px] text-slate-500">
+      {{ t('inspector.testConfig.envTest.infraless') }}
+    </p>
+
     <!-- 1. The provisioning self-test: the whole lifecycle against a throwaway branch. -->
     <div class="flex items-center justify-between gap-2">
       <div class="min-w-0">
@@ -278,10 +284,6 @@ async function stop(mode: EnvironmentTestMode) {
         {{ t('inspector.testConfig.envTest.stop') }}
       </UButton>
     </div>
-
-    <p v-if="!canTest" class="text-[11px] text-slate-500">
-      {{ t('inspector.testConfig.envTest.infraless') }}
-    </p>
 
     <p
       v-if="probeRun"

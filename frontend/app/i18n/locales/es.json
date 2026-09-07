@@ -1137,7 +1137,7 @@
         "hint": "Ejecuta todo el ciclo de vida sobre una rama desechable: crear rama, aprovisionar, desmontar, eliminar rama.",
         "start": "Probar la creación del entorno",
         "stop": "Detener",
-        "infraless": "Configura arriba un tipo de aprovisionamiento para probar la creación del entorno.",
+        "infraless": "Configura arriba un tipo de aprovisionamiento para ejecutar cualquiera de las dos autopruebas.",
         "running": "Probando: {stage}",
         "succeeded": "Prueba superada: el entorno se creó y se desmontó, y la rama se eliminó.",
         "failed": "La prueba falló",

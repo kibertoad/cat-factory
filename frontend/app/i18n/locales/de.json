@@ -1691,7 +1691,7 @@
         "hint": "Führt den gesamten Lebenszyklus gegen einen Wegwerf-Branch aus: Branch erstellen, bereitstellen, abbauen, Branch löschen.",
         "start": "Umgebungserstellung testen",
         "stop": "Stopp",
-        "infraless": "Konfiguriere oben einen Bereitstellungstyp, um die Umgebungserstellung zu testen.",
+        "infraless": "Konfigurieren Sie oben einen Bereitstellungstyp, um einen der beiden Selbsttests auszuführen.",
         "running": "Wird getestet: {stage}",
         "succeeded": "Test bestanden: Die Umgebung wurde erstellt und abgebaut, und der Branch wurde gelöscht.",
         "failed": "Test fehlgeschlagen",

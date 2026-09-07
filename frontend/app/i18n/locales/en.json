@@ -1233,7 +1233,7 @@
         "hint": "Runs the whole lifecycle against a throwaway branch: create branch, provision, tear down, delete branch.",
         "start": "Test environment creation",
         "stop": "Stop",
-        "infraless": "Configure a provision type above to test environment creation.",
+        "infraless": "Configure a provision type above to run either self-test.",
         "running": "Testing: {stage}",
         "succeeded": "Test passed: the environment was created and torn down, and the branch was deleted.",
         "failed": "Test failed",

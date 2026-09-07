@@ -1137,7 +1137,7 @@
         "hint": "Uruchamia cały cykl życia na jednorazowej gałęzi: utworzenie gałęzi, udostępnienie, usunięcie zasobów, usunięcie gałęzi.",
         "start": "Testowanie tworzenia środowiska",
         "stop": "Zatrzymaj",
-        "infraless": "Skonfiguruj powyżej typ udostępniania, aby przetestować tworzenie środowiska.",
+        "infraless": "Skonfiguruj powyżej typ przydzielania środowiska, aby uruchomić którykolwiek z autotestów.",
         "running": "Testowanie: {stage}",
         "succeeded": "Test zaliczony: środowisko zostało utworzone i usunięte, a gałąź została skasowana.",
         "failed": "Test nie powiódł się",

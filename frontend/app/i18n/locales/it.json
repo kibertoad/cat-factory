@@ -1691,7 +1691,7 @@
         "hint": "Esegue l'intero ciclo di vita su un branch usa e getta: crea branch, provisiona, smonta, elimina branch.",
         "start": "Prova la creazione dell'ambiente",
         "stop": "Ferma",
-        "infraless": "Configura sopra un tipo di provisioning per provare la creazione dell'ambiente.",
+        "infraless": "Configura sopra un tipo di provisioning per eseguire uno dei due autotest.",
         "running": "Prova in corso: {stage}",
         "succeeded": "Prova superata: l'ambiente è stato creato e smontato, e il branch è stato eliminato.",
         "failed": "Prova fallita",

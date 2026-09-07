@@ -112,6 +112,10 @@ export class EnvironmentProbeStage {
     if (!record.branch) {
       throw new Error('The agent dry run has no test branch to check out.')
     }
+    // The same projection the engine hands a tester, so the prober and the tester cannot disagree
+    // about what the platform proved. Undefined when nothing has dialled it, which the prompt
+    // states rather than omits.
+    const reachability = reachabilityNote(handle.reachability ?? null)
     return this.deps.agent.start({
       workspaceId: record.workspaceId,
       jobId: record.id,
@@ -131,12 +135,7 @@ export class EnvironmentProbeStage {
         url: handle.url,
         status: handle.status,
         ...(handle.access ? { access: handle.access } : {}),
-        // The same projection the engine hands a tester, so the prober and the tester cannot
-        // disagree about what the platform proved. Undefined when nothing has dialled it, which
-        // the prompt states rather than omits.
-        ...(reachabilityNote(handle.reachability ?? null)
-          ? { reachability: reachabilityNote(handle.reachability ?? null) }
-          : {}),
+        ...(reachability ? { reachability } : {}),
       },
       service: {
         title: frame.title,

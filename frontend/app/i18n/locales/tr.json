@@ -1137,7 +1137,7 @@
         "hint": "Tek kullanımlık bir dal üzerinde tüm yaşam döngüsünü çalıştırır: dal oluştur, sağla, kaldır, dalı sil.",
         "start": "Ortam oluşturmayı test et",
         "stop": "Durdur",
-        "infraless": "Ortam oluşturmayı test etmek için yukarıdan bir sağlama türü yapılandırın.",
+        "infraless": "İki öz testten birini çalıştırmak için yukarıda bir hazırlama türü yapılandırın.",
         "running": "Test ediliyor: {stage}",
         "succeeded": "Test başarılı: ortam oluşturuldu ve kaldırıldı, dal silindi.",
         "failed": "Test başarısız",
