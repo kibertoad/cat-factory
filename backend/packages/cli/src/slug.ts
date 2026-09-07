@@ -4,6 +4,11 @@
 // otherwise produce `"My Cats-local"`, which `npm install` rejects. This coerces any input into a
 // safe slug, falling back to a default when nothing usable survives.
 
+/** Compose project names cannot contain dots, unlike npm package names. */
+export function slugifyComposeProjectName(input: string): string {
+  return slugifyProjectName(input.replace(/\./g, '-'))
+}
+
 /** Coerce arbitrary text into a valid npm-name slug. Returns `fallback` if nothing usable remains. */
 export function slugifyProjectName(input: string, fallback = 'cat-factory'): string {
   const slug = input

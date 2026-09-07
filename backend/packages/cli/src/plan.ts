@@ -79,7 +79,10 @@ export function buildPlan(input: BootstrapInput): PlannedFile[] {
     // Local-mode backend.
     { path: 'local/package.json', content: localPackageJson(input.projectName) },
     { path: 'local/src/main.ts', content: localMainTs },
-    { path: 'local/docker-compose.yml', content: dockerCompose(input.databaseUrl) },
+    {
+      path: 'local/docker-compose.yml',
+      content: dockerCompose(input.databaseUrl, input.projectName),
+    },
     { path: 'local/tsconfig.json', content: tsconfigJson },
     {
       path: 'local/.env.example',

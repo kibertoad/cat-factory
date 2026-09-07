@@ -72,6 +72,21 @@ describe('buildPlan', () => {
     expect(env).toMatch(/^LOCAL_HARNESS_IMAGE=ghcr\.io\/x\/y:1\.2\.3$/m)
   })
 
+  for (const { projectName, composeProjectName } of [
+    { projectName: 'todo-list', composeProjectName: 'todo-list-local' },
+    { projectName: 'acme-site', composeProjectName: 'acme-site-local' },
+    { projectName: ' Todo List ', composeProjectName: 'todo-list-local' },
+    { projectName: 'ACME Site', composeProjectName: 'acme-site-local' },
+    { projectName: 'acme.site', composeProjectName: 'acme-site-local' },
+    { projectName: '.__Acme..Site__', composeProjectName: 'acme-site-local' },
+    { projectName: '!!!', composeProjectName: 'cat-factory-local' },
+  ]) {
+    it(`names the Compose project from the setup project name ${projectName}`, () => {
+      const compose = plan({ projectName }).byPath.get('local/docker-compose.yml')?.content ?? ''
+      expect(compose).toContain(`\nname: ${composeProjectName}\n`)
+    })
+  }
+
   it('derives the docker-compose db from the DATABASE_URL', () => {
     const compose =
       plan({ databaseUrl: 'postgres://bob:pw@localhost:6000/mydb' }).byPath.get(

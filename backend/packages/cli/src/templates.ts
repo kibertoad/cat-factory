@@ -1,3 +1,5 @@
+import { slugifyComposeProjectName } from './slug.js'
+
 // Static file templates for the scaffolded deployment. These mirror `deploy/local` and
 // `deploy/frontend` in this repo, but depend on the PUBLISHED libraries (not `workspace:*`) so
 // the generated project works standalone outside the monorepo.
@@ -90,7 +92,7 @@ startLocal().catch((err: unknown) => {
 })
 `
 
-export const dockerCompose = (dbUrl: string): string => {
+export const dockerCompose = (dbUrl: string, projectName: string): string => {
   // Derive the compose credentials/db from the DATABASE_URL so the two always agree.
   let user = 'cat'
   let password = 'cat'
@@ -109,6 +111,8 @@ export const dockerCompose = (dbUrl: string): string => {
 # (so it can drive the container runtime to spawn agent containers), so only Postgres lives here.
 #
 #   docker compose up -d postgres   # or: pnpm db:up
+name: ${slugifyComposeProjectName(projectName)}-local
+
 services:
   postgres:
     image: postgres:18
