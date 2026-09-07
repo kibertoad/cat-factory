@@ -32,7 +32,7 @@
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
-    "@changesets/cli": "^3.0.1",
+    "@changesets/cli": "^3.0.2",
     "@stryker-mutator/api": "10.0.0",
     "@valibot/to-json-schema": "^1.7.1",
     "knip": "^6.34.0",

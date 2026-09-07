@@ -43,8 +43,8 @@ ENV HOME=/root
 # bump alongside the harness version when upgrading. `--with-deps` installs the apt packages
 # Chromium requires on Debian trixie.
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers
-RUN npm install -g playwright@1.62.1 \
-  && PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers npx --yes playwright@1.62.1 install --with-deps chromium \
+RUN npm install -g playwright@1.63.0 \
+  && PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers npx --yes playwright@1.63.0 install --with-deps chromium \
   && chown -R harness:harness /opt/pw-browsers
 
 # Self-contained frontend UI-test tooling (see src/frontend-infra.ts). The `tester-ui` flow

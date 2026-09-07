@@ -44,6 +44,7 @@ const RECOMMENDED_SLUGS = [
   'meta/muse-spark-1.3',
   'deepseek/deepseek-v4-flash',
   'moonshotai/kimi-k2.7-code',
+  'z-ai/glm-5.3',
   'z-ai/glm-5.2',
 ]
 

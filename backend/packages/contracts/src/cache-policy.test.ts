@@ -75,7 +75,7 @@ describe('providerCachePolicy: gateways', () => {
     // on this path emits them, so the direct provider's `auto-prefix` would be a claim to a
     // cache the picker never gets.
     expect(providerCachePolicy('qwen')).toBe('auto-prefix')
-    expect(providerCachePolicy('openrouter', 'qwen/qwen3.8-max')).toBe('none')
+    expect(providerCachePolicy('openrouter', 'qwen/qwen3.8-max-0902')).toBe('none')
   })
 
   // The deliberate asymmetry. `explicit-anthropic` is a claim about a request WE build, and

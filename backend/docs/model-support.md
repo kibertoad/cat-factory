@@ -178,18 +178,21 @@ Several shapes of entry fall out of this:
 
 - **Cloudflare-only**, e.g. `cloudflare-llama`, `kimi-k2.7`, `gpt-oss-120b`. One
   flavour, always on the binding.
-- **Dual-mode**: `qwen`, `kimi`, `deepseek`, `deepseek-v4-pro`, `glm`, `glm-5.3-flash`. A
-  Cloudflare base **plus** a direct, OpenRouter and/or subscription flavour. Note the **context
-  window** usually differs: the Cloudflare variant runs a cut context (e.g. DeepSeek V4
-  Pro 131K) while the direct/subscription variant gets the full window (1M).
-  `contextTokens` on the `ModelRef` surfaces this in the picker.
+- **Dual-mode**: `qwen`, `kimi`, `deepseek`, `deepseek-v4-pro`, `glm`, `glm-5.3`,
+  `glm-5.3-flash`. A Cloudflare base **plus** a direct, OpenRouter and/or subscription flavour.
+  Note the **context window** usually differs: the Cloudflare variant runs a cut context (e.g.
+  DeepSeek V4 Pro 131K) while the direct/subscription variant gets the full window (1M).
+  `contextTokens` on the `ModelRef` surfaces this in the picker. `glm-5.3` joined this shape
+  once Z.ai published the weights and Workers AI picked the model up; it shipped
+  subscription-only, which is the usual path into this list.
 - **No Cloudflare floor**: `gemini`, `gemini-flash`, `gemini-3.8-flash`, `kimi-k3`,
-  `qwen3.8-max`, `qwen3.8-max-0902`, `muse-spark`, `muse-spark-contributor`. Nothing serves
-  these on the binding, so each stays unavailable until a key is pooled: the Gemini and Muse
-  Spark entries through OpenRouter alone, `kimi-k3` and `qwen3.8-max` direct (Moonshot /
-  DashScope) or through OpenRouter, and `qwen3.8-max-0902` on DashScope alone (OpenRouter
-  carries only the undated Qwen alias). A vendor's newest flagship lands here first, because
-  Workers AI serves the open weights and a closed flagship has none to serve.
+  `qwen3.8-max`, `qwen3.8-max-0902`, `qwen3.8-flash`, `muse-spark`, `muse-spark-contributor`.
+  Nothing serves these on the binding, so each stays unavailable until a key is pooled: the
+  Gemini and Muse Spark entries through OpenRouter alone; `kimi-k3`, `qwen3.8-max-0902` and
+  `qwen3.8-flash` direct (Moonshot / DashScope) or through OpenRouter; and `qwen3.8-max` on
+  DashScope alone, because OpenRouter withdrew the undated Qwen alias in favour of the dated
+  snapshot. A vendor's newest flagship lands here first, because Workers AI serves the open
+  weights and a closed flagship has none to serve.
 - **Two entries for one model, split by TERMS**: `muse-spark` and `muse-spark-contributor` are
   the same Meta model on the same route. The contributor tier costs a twelfth on input in
   exchange for Meta training on the prompts and completions, so the choice is a per-block one
