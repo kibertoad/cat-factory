@@ -228,7 +228,7 @@ function toView(context: AgentRunContext): UserPromptView {
  * Silent for the ordinary case (the name carried), because a line that appears on every prompt is
  * a line nobody reads on the one prompt where it matters.
  */
-function reachabilityLines(
+export function reachabilityLines(
   reachability: NonNullable<AgentRunContext['environment']>['reachability'],
 ): string[] {
   if (!reachability) return []

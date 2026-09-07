@@ -58,7 +58,11 @@ import type {
   RunLifecycleSink,
 } from '@cat-factory/kernel'
 import type { AppConfig } from './config'
-import { selectEnvConfigRepairer, selectRepoBootstrapper } from './container-dispatchers'
+import {
+  selectEnvConfigRepairer,
+  selectEnvironmentProbeAgent,
+  selectRepoBootstrapper,
+} from './container-dispatchers'
 import type { Env } from './env'
 import { requireAuditDb } from './env'
 import type { WorkerRegistries } from './container-registries.js'
@@ -965,6 +969,20 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
   // explicit `overrides.envConfigRepairer` wins, exactly like `repoBootstrapper`.
   if (envConfigRepairer && !dependencies.envConfigRepairer) {
     dependencies.envConfigRepairer = envConfigRepairer
+  }
+
+  // The environment AGENT DRY RUN's prober. Same override rule as the two dispatchers above: a
+  // fake injected by the conformance harness wins, so the suite drives the `probing` stage
+  // without a container.
+  const environmentProbeAgent = selectEnvironmentProbeAgent({
+    env,
+    config,
+    db,
+    clock,
+    resolveTransport,
+  })
+  if (environmentProbeAgent && !dependencies.environmentProbeAgent) {
+    dependencies.environmentProbeAgent = environmentProbeAgent
   }
 
   // Apply any test-injected gate providers LAST, so they override the config wiring done by the

@@ -270,6 +270,13 @@ const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason>, Conf
       run: (ui) => ui.openProviderConnection('environment'),
     },
   },
+  // An agent dry run on a deployment that cannot drive one. No ACTION: the gap is a container
+  // runner, a proxyable model or a repository seam, none of which a user can wire from the SPA.
+  // Offering a settings jump here would send them somewhere that cannot fix it.
+  env_test_probe_unavailable: {
+    titleKey: 'errors.conflict.title.env_test_probe_unavailable',
+    descriptionKey: 'errors.conflict.description.env_test_probe_unavailable',
+  },
   // Opt-in review-debt friction. In the normal task-create flow AddTaskModal intercepts these
   // 409s and opens the friction dialog (which can retry with an acknowledgement), so these entries
   // are the last-resort toast fallback for any OTHER caller — a generic, param-free title +

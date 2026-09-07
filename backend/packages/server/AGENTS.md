@@ -121,6 +121,14 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   sides, after the omission shipped twice.
 - `agents/`: the **shared, runtime-neutral** agent-dispatch layer: `CompositeAgentExecutor`,
   `ContainerAgentExecutor`, `RunnerJobClient`, `ContainerRepoBootstrapper`, `ModelRouter`.
+  `ContainerEnvironmentProbeAgent` is the third single-job dispatcher beside the bootstrapper and
+  the env-config repairer: the AGENT DRY RUN's read-only `explore` job pointed at a freshly
+  provisioned environment, whose product is the structured report on `result.custom`. Its three
+  load-bearing details (the environment is DECLARED as a dispatch option, the image is pinned per
+  surface and rides the job ref on every call, and the test secrets are resolved ONCE so the
+  prompt cannot name a variable the container lacks) are stated on the class and pinned by
+  `test/ContainerEnvironmentProbeAgent.spec.ts`; the flow is
+  [`environment-self-tests.md`](../../docs/environment-self-tests.md).
   Two collaborators split out of the executor to keep it inside its (ratcheting-down) size
   budget: `containerAgentLogging.ts` (the workflow↔container seam's log vocabulary) and
   `agentContextRecord.ts` (the observability snapshot's ALLOW-LIST projection; the one place

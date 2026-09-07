@@ -688,6 +688,7 @@
         "env_test_not_provisionable": "Gestor de entorno no configurado",
         "env_test_no_vcs": "Proveedor de Git no conectado",
         "env_test_connection_failed": "Fallo de conexión del entorno",
+        "env_test_probe_unavailable": "Las ejecuciones en seco del agente no están disponibles aquí",
         "prompt_revision_conflict": "Otra persona cambió el prompt",
         "pipeline_schedule_attached": "Una programación recurrente usa esta canalización",
         "pipeline_schedule_requires_recurring": "Una programación recurrente necesita esta canalización",
@@ -737,6 +738,7 @@
         "env_test_no_vcs": "La autoprueba necesita un proveedor de Git para crear y eliminar su rama desechable, pero este espacio de trabajo no está conectado a ninguno.",
         "env_test_connection_failed": "El gestor de entornos de este servicio no superó su prueba de conexión. Revisa su endpoint, sus credenciales y la configuración del proyecto, y vuelve a probar la conexión.",
         "env_test_connection_failed_detail": "El gestor de entornos de este servicio no superó su prueba de conexión: {detail}. Revisa su endpoint, sus credenciales y la configuración del proyecto, y vuelve a probar la conexión.",
+        "env_test_probe_unavailable": "Una ejecución en seco del agente necesita un ejecutor de contenedores, un repositorio conectado y un modelo que el proxy LLM de este despliegue pueda servir. Aquí falta uno de ellos, así que solo puede ejecutarse la autoprueba de aprovisionamiento.",
         "prompt_revision_conflict": "Otra edición de este prompt llegó primero. Recárgalo y vuelve a aplicar tu cambio encima.",
         "pipeline_schedule_attached": "Una programación recurrente todavía apunta a esta canalización, y cada ejecución que inicia la resuelve por su id. Desvincule o elimine esa programación antes de quitar la canalización.",
         "pipeline_schedule_requires_recurring": "Una programación recurrente todavía apunta a esta canalización, así que limitarla a un solo uso rompería cada ejecución futura. Desvincule primero esa programación.",
@@ -1142,9 +1144,43 @@
         "stage": {
           "creating_branch": "creando rama",
           "provisioning": "aprovisionando entorno",
+          "probing": "sondeo con un agente",
           "tearing_down": "desmontando entorno",
           "deleting_branch": "eliminando rama",
           "done": "listo"
+        }
+      },
+      "envProbe": {
+        "title": "Probar ejecución en seco del agente",
+        "hint": "Aprovisiona un entorno desechable, deja que un agente intente varias operaciones reales contra él y luego lo desmonta todo. Informa de lo que intentó y de lo que no pudo averiguar.",
+        "surfaceApi": "Este servicio se recorre por HTTP.",
+        "surfaceUi": "Este frontend se recorre en un navegador.",
+        "start": "Probar ejecución en seco del agente",
+        "completed": "Ejecución en seco terminada: el entorno se desmontó y la rama se eliminó.",
+        "failed": "La ejecución en seco falló",
+        "verdict": {
+          "operable": "Un agente puede operar este servicio.",
+          "partially_operable": "Un agente solo puede operar parcialmente este servicio.",
+          "inoperable": "Un agente no pudo operar este servicio."
+        },
+        "counts": "{succeeded} de {attempted} operaciones con éxito; {authenticated} de ellas con autenticación.",
+        "missingContext": "Lo que no se le dijo al agente",
+        "blockers": "Lo que detuvo la ejecución en seco",
+        "operations": "Operaciones intentadas",
+        "operationsOmitted": "Operaciones informadas descartadas por el límite: {count}.",
+        "authenticated": "(autenticada)",
+        "model": "Modelo: {model}",
+        "failure": {
+          "auth_missing": "No se entregó ninguna credencial",
+          "auth_rejected": "Credencial rechazada",
+          "access_unclear": "No estaba claro cómo autenticarse",
+          "endpoint_unknown": "No se encontró qué invocar",
+          "unreachable": "Entorno inalcanzable",
+          "timeout": "Tiempo de espera agotado",
+          "server_error": "Error del servicio",
+          "bad_request": "Solicitud rechazada por estar mal formada",
+          "tooling_missing": "Sin cliente ni navegador disponibles",
+          "other": "Otro"
         }
       }
     },

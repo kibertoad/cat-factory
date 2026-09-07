@@ -1698,9 +1698,43 @@
         "stage": {
           "creating_branch": "Branch wird erstellt",
           "provisioning": "Umgebung wird bereitgestellt",
+          "probing": "Prüfung durch einen Agenten",
           "tearing_down": "Umgebung wird abgebaut",
           "deleting_branch": "Branch wird gelöscht",
           "done": "fertig"
+        }
+      },
+      "envProbe": {
+        "title": "Agenten-Probelauf testen",
+        "hint": "Stellt eine Wegwerf-Umgebung bereit, lässt einen Agenten darin einige echte Operationen versuchen und baut anschließend alles ab. Berichtet, was versucht wurde und was der Agent nicht herausfinden konnte.",
+        "surfaceApi": "Dieser Dienst wird über HTTP angesprochen.",
+        "surfaceUi": "Dieses Frontend wird im Browser bedient.",
+        "start": "Agenten-Probelauf testen",
+        "completed": "Probelauf abgeschlossen: Die Umgebung wurde abgebaut und der Branch gelöscht.",
+        "failed": "Probelauf fehlgeschlagen",
+        "verdict": {
+          "operable": "Ein Agent kann diesen Dienst bedienen.",
+          "partially_operable": "Ein Agent kann diesen Dienst nur teilweise bedienen.",
+          "inoperable": "Ein Agent konnte diesen Dienst nicht bedienen."
+        },
+        "counts": "{succeeded} von {attempted} Operationen erfolgreich; {authenticated} davon mit Authentifizierung.",
+        "missingContext": "Was dem Agenten nicht mitgeteilt wurde",
+        "blockers": "Was den Probelauf gestoppt hat",
+        "operations": "Versuchte Operationen",
+        "operationsOmitted": "Gemeldete Operationen, die durch das Limit entfallen sind: {count}.",
+        "authenticated": "(authentifiziert)",
+        "model": "Modell: {model}",
+        "failure": {
+          "auth_missing": "Keine Zugangsdaten übergeben",
+          "auth_rejected": "Zugangsdaten abgelehnt",
+          "access_unclear": "Authentifizierungsweg unklar",
+          "endpoint_unknown": "Aufrufziel nicht auffindbar",
+          "unreachable": "Umgebung nicht erreichbar",
+          "timeout": "Zeitüberschreitung",
+          "server_error": "Fehler im Dienst",
+          "bad_request": "Anfrage als fehlerhaft abgelehnt",
+          "tooling_missing": "Kein Client oder Browser verfügbar",
+          "other": "Sonstiges"
         }
       }
     },
@@ -6163,6 +6197,7 @@
         "env_test_not_provisionable": "Umgebungs-Handler nicht konfiguriert",
         "env_test_no_vcs": "Git-Anbieter nicht verbunden",
         "env_test_connection_failed": "Umgebungsverbindung fehlgeschlagen",
+        "env_test_probe_unavailable": "Agenten-Probeläufe hier nicht verfügbar",
         "prompt_revision_conflict": "Prompt von jemand anderem geändert",
         "pipeline_schedule_attached": "Wiederkehrender Zeitplan nutzt diese Pipeline",
         "pipeline_schedule_requires_recurring": "Wiederkehrender Zeitplan braucht diese Pipeline",
@@ -6212,6 +6247,7 @@
         "env_test_no_vcs": "Der Selbsttest benötigt einen Git-Anbieter, um seinen Wegwerf-Branch zu erstellen und zu löschen, aber dieser Workspace ist mit keinem verbunden.",
         "env_test_connection_failed": "Der Umgebungs-Handler dieses Dienstes hat seinen Verbindungstest nicht bestanden. Prüfen Sie Endpunkt, Anmeldedaten und Projekteinstellungen und testen Sie die Verbindung erneut.",
         "env_test_connection_failed_detail": "Der Umgebungs-Handler dieses Dienstes hat seinen Verbindungstest nicht bestanden: {detail}. Prüfen Sie Endpunkt, Anmeldedaten und Projekteinstellungen und testen Sie die Verbindung erneut.",
+        "env_test_probe_unavailable": "Ein Agenten-Probelauf benötigt einen Container-Runner, ein verbundenes Repository und ein Modell, das der LLM-Proxy dieses Deployments bereitstellen kann. Hier fehlt eines davon, daher lässt sich nur der Bereitstellungs-Selbsttest ausführen.",
         "prompt_revision_conflict": "Eine andere Änderung an diesem Prompt war zuerst da. Laden Sie ihn neu und wenden Sie Ihre Änderung darauf erneut an.",
         "pipeline_schedule_attached": "Ein wiederkehrender Zeitplan verweist noch auf diese Pipeline, und jeder von ihm gestartete Lauf löst die Pipeline über ihre ID auf. Lösen oder löschen Sie zuerst diesen Zeitplan und entfernen Sie danach die Pipeline.",
         "pipeline_schedule_requires_recurring": "Ein wiederkehrender Zeitplan verweist noch auf diese Pipeline. Sie nur einmalig zu machen würde jeden künftigen Lauf unterbrechen. Lösen Sie zuerst diesen Zeitplan.",

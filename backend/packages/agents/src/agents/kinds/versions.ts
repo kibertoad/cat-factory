@@ -12,6 +12,10 @@ import {
   REQUIREMENTS_BRAINSTORM_SYSTEM_PROMPT,
 } from '../prompts/brainstorm.js'
 import { ENVIRONMENT_INVESTIGATION_SYSTEM_PROMPT } from '../prompts/environment-investigation.js'
+import {
+  ENVIRONMENT_PROBE_API_SYSTEM_PROMPT,
+  ENVIRONMENT_PROBE_UI_SYSTEM_PROMPT,
+} from '../prompts/environment-probe.js'
 import { KAIZEN_SYSTEM_PROMPT } from '../prompts/kaizen.js'
 import { FORK_PROPOSER_SYSTEM_PROMPT } from './fork-proposer.js'
 import { FORK_CHAT_SYSTEM_PROMPT } from '../prompts/fork-decision.js'
@@ -122,6 +126,20 @@ export const PROMPT_VERSIONS = {
     id: 'environment-investigation',
     version: 2,
     text: ENVIRONMENT_INVESTIGATION_SYSTEM_PROMPT,
+  },
+  // The two AGENT DRY RUN probers. Numbered from the start (there is no earlier recorded version
+  // to succeed) and numbered SEPARATELY, unlike the requirements trio: they share their rules
+  // block but state different roles, and an edit to the browser prompt says nothing about whether
+  // the HTTP one still produces the report an operator acted on.
+  'environment-probe-api': {
+    id: 'environment-probe-api',
+    version: 1,
+    text: ENVIRONMENT_PROBE_API_SYSTEM_PROMPT,
+  },
+  'environment-probe-ui': {
+    id: 'environment-probe-ui',
+    version: 1,
+    text: ENVIRONMENT_PROBE_UI_SYSTEM_PROMPT,
   },
 } as const satisfies Record<string, VersionedPrompt>
 

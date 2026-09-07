@@ -1698,9 +1698,43 @@
         "stage": {
           "creating_branch": "creazione del branch",
           "provisioning": "provisioning dell'ambiente",
+          "probing": "sondaggio con un agente",
           "tearing_down": "smontaggio dell'ambiente",
           "deleting_branch": "eliminazione del branch",
           "done": "completato"
+        }
+      },
+      "envProbe": {
+        "title": "Prova a vuoto dell'agente",
+        "hint": "Provvisiona un ambiente usa e getta, fa tentare a un agente alcune operazioni reali e poi smonta tutto. Riporta cosa ha tentato e cosa non è riuscito a capire.",
+        "surfaceApi": "Questo servizio viene interrogato via HTTP.",
+        "surfaceUi": "Questo frontend viene guidato in un browser.",
+        "start": "Prova a vuoto dell'agente",
+        "completed": "Prova a vuoto conclusa: l'ambiente è stato smontato e il branch eliminato.",
+        "failed": "Prova a vuoto fallita",
+        "verdict": {
+          "operable": "Un agente può operare questo servizio.",
+          "partially_operable": "Un agente può operare questo servizio solo in parte.",
+          "inoperable": "Un agente non è riuscito a operare questo servizio."
+        },
+        "counts": "{succeeded} operazioni riuscite su {attempted}; {authenticated} di queste autenticate.",
+        "missingContext": "Ciò che non è stato detto all'agente",
+        "blockers": "Ciò che ha bloccato la prova a vuoto",
+        "operations": "Operazioni tentate",
+        "operationsOmitted": "Operazioni riportate scartate per il limite: {count}.",
+        "authenticated": "(autenticata)",
+        "model": "Modello: {model}",
+        "failure": {
+          "auth_missing": "Nessuna credenziale fornita",
+          "auth_rejected": "Credenziale rifiutata",
+          "access_unclear": "Non era chiaro come autenticarsi",
+          "endpoint_unknown": "Non è stato possibile capire cosa chiamare",
+          "unreachable": "Ambiente non raggiungibile",
+          "timeout": "Tempo scaduto",
+          "server_error": "Errore del servizio",
+          "bad_request": "Richiesta rifiutata perché malformata",
+          "tooling_missing": "Nessun client o browser disponibile",
+          "other": "Altro"
         }
       }
     },
@@ -6163,6 +6197,7 @@
         "env_test_not_provisionable": "Handler dell'ambiente non configurato",
         "env_test_no_vcs": "Provider Git non connesso",
         "env_test_connection_failed": "Connessione all'ambiente non riuscita",
+        "env_test_probe_unavailable": "Prove a vuoto dell'agente non disponibili qui",
         "prompt_revision_conflict": "Prompt modificato da qualcun altro",
         "pipeline_schedule_attached": "Una pianificazione ricorrente usa questa pipeline",
         "pipeline_schedule_requires_recurring": "Una pianificazione ricorrente richiede questa pipeline",
@@ -6212,6 +6247,7 @@
         "env_test_no_vcs": "L'autotest ha bisogno di un provider Git per creare ed eliminare il suo branch usa e getta, ma questo workspace non è collegato a nessuno.",
         "env_test_connection_failed": "Il gestore dell'ambiente di questo servizio non ha superato il test di connessione. Controlla endpoint, credenziali e impostazioni del progetto, poi ripeti il test della connessione.",
         "env_test_connection_failed_detail": "Il gestore dell'ambiente di questo servizio non ha superato il test di connessione: {detail}. Controlla endpoint, credenziali e impostazioni del progetto, poi ripeti il test della connessione.",
+        "env_test_probe_unavailable": "Una prova a vuoto dell’agente richiede un runner di container, un repository collegato e un modello che il proxy LLM di questo deployment possa servire. Qui ne manca uno, quindi può essere eseguito solo l’autotest di provisioning.",
         "prompt_revision_conflict": "Un'altra modifica a questo prompt è arrivata prima. Ricaricalo e riapplica la tua sopra.",
         "pipeline_schedule_attached": "Una pianificazione ricorrente punta ancora a questa pipeline e ogni esecuzione che avvia la risolve tramite id. Scollega o elimina prima quella pianificazione, poi rimuovi la pipeline.",
         "pipeline_schedule_requires_recurring": "Una pianificazione ricorrente punta ancora a questa pipeline, quindi renderla solo una tantum interromperebbe ogni esecuzione futura. Scollega prima quella pianificazione.",

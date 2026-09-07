@@ -55,6 +55,7 @@ import {
   type ResolveRunnerTransport,
   ContainerAgentExecutor,
   ContainerEnvConfigRepairer,
+  ContainerEnvironmentProbeAgent,
   ContainerRepoBootstrapper,
   ContainerSessionService,
   GitHubAppRegistry,
@@ -692,4 +693,59 @@ export function buildNodeGitHubIssueFiler(
     })
     return { externalId: `${repo.owner}/${repo.name}#${issue.number}`, url: issue.url }
   }
+}
+
+/**
+ * Build the environment AGENT DRY RUN prober for the Node family, gated on the same container
+ * prerequisites as the env-config repairer beside it: a runner transport, the proxy's public URL,
+ * a session secret and a dispatch mint. Absent any of them the self-test still runs in
+ * `provision` mode and `startTest` refuses `agent-probe` with a 409 that names the gap.
+ *
+ * Model routing follows the TESTER rather than the coder: a dry run reads a service and exercises
+ * it without changing anything, so a deployment that routed its testers to a cheap model gets a
+ * cheap dry run with no second setting. It must be proxyable (the Pi harness reaches the model
+ * through the LLM proxy), and a misconfiguration is surfaced HERE at wiring rather than at every
+ * dispatch. Mirror of the Worker's `selectEnvironmentProbeAgent`.
+ */
+export function selectNodeEnvironmentProbeAgent(deps: {
+  env: NodeJS.ProcessEnv
+  config: AppConfig
+  resolveTransport: ResolveRunnerTransport | null
+  installationRepository: GitHubInstallationRepository
+  repoRepository: Pick<RepoProjectionRepository, 'list'>
+  mintInstallationToken: MintInstallationToken | undefined
+  /** Where the container clones from, so a GitLab deployment probes its own instance. */
+  resolveRepoOrigin: ResolveRepoOrigin
+  /**
+   * The frame's sealed test credentials. Absent (no ENCRYPTION_KEY) ⇒ the prober is told there
+   * are none, which is what puts the gap in its report rather than in its guesswork.
+   */
+  resolveTestSecrets?: (workspaceId: string, blockId: string) => Promise<TestSecretEntry[]>
+}): ContainerEnvironmentProbeAgent | undefined {
+  const publicUrl = deps.env.PUBLIC_URL?.trim()
+  const sessionSecret = deps.config.auth.sessionSecret
+  if (!deps.resolveTransport || !publicUrl || !sessionSecret || !deps.mintInstallationToken) {
+    return undefined
+  }
+  const model = resolveAgentConfig(deps.config.agents.routing, 'tester-api').ref
+  if (!isProxyableProvider(model.provider)) {
+    logger.warn(
+      'environment dry run: the tester routing model is not proxyable by the LLM proxy; ' +
+        'agent dry runs are disabled on this deployment.',
+      { provider: model.provider },
+    )
+    return undefined
+  }
+  return new ContainerEnvironmentProbeAgent({
+    resolveTransport: deps.resolveTransport,
+    installationRepository: deps.installationRepository,
+    repoRepository: deps.repoRepository,
+    mintInstallationToken: deps.mintInstallationToken,
+    sessionService: new ContainerSessionService({ secret: sessionSecret }),
+    model,
+    proxyBaseUrl: `${publicUrl.replace(/\/+$/, '')}/v1`,
+    resolveRepoOrigin: deps.resolveRepoOrigin,
+    ...(deps.resolveTestSecrets ? { resolveTestSecrets: deps.resolveTestSecrets } : {}),
+    ...(deps.config.github.apiBase ? { githubApiBase: deps.config.github.apiBase } : {}),
+  })
 }

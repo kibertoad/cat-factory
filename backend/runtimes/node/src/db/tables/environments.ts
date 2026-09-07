@@ -93,16 +93,19 @@ export const environments = pgTable(
   ],
 )
 
-// Ephemeral-environment self-test runs (mirror of D1 migration 0050). A developer-triggered
+// Ephemeral-environment self-test runs (mirror of D1 migrations 0050 + 0101). A developer-triggered
 // diagnostic that exercises a service frame's provisioning config end to end against a
-// throwaway branch (create branch → provision → tear down → delete branch). Its own table
-// (not agent_runs) because it carries a `stage` state machine and is not a container agent.
+// throwaway branch (create branch → provision → [probe with an agent] → tear down → delete
+// branch). Its own table (not agent_runs) because it carries a `stage` state machine and is not a
+// container agent.
 export const environmentTestRuns = pgTable(
   'environment_test_runs',
   {
     id: text('id').primaryKey(),
     workspace_id: text('workspace_id').notNull(),
     block_id: text('block_id').notNull(),
+    // `provision` (the provisioning self-test) or `agent-probe` (that, plus the AGENT DRY RUN).
+    mode: text('mode').notNull().default('provision'),
     status: text('status').notNull(),
     stage: text('stage').notNull(),
     initiated_by: text('initiated_by'),
@@ -113,6 +116,10 @@ export const environmentTestRuns = pgTable(
     env_url: text('env_url'),
     error: text('error'),
     failed_stage: text('failed_stage'),
+    // The dry run's claim + the surface it claimed; written before the prober is dispatched.
+    probe_surface: text('probe_surface'),
+    // The agent's report (JSON): operations attempted, missing context, computed verdict.
+    probe: text('probe'),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
     updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
   },

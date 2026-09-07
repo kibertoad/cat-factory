@@ -644,6 +644,15 @@ export type {
   EnvironmentTestRunner,
 } from './environment-test.js'
 export { NoopEnvironmentTestRunner } from './environment-test.js'
+// The agent DRY RUN's dispatch/poll/stop seam: the `probing` stage's side-effecting half.
+export type {
+  EnvironmentProbeAgent,
+  EnvironmentProbeHandle,
+  EnvironmentProbeRepo,
+  EnvironmentProbeRequest,
+  EnvironmentProbeTarget,
+  EnvironmentProbeUpdate,
+} from './environment-probe.js'
 
 // Proving a route to a provisioned environment: one bounded TCP connect, per facade. See
 // `ports/route-probe.ts` for why it is a connect rather than a request.

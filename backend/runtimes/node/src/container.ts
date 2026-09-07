@@ -63,7 +63,10 @@ import { createDrizzleRepositories } from './repositories/drizzle.js'
 // The container-agent-executor wiring (transport resolver, provisioning-log wrapper, container
 // executor + bootstrapper + env-config repairer, GitHub-issue filer, trace-sink builder), lifted
 // into a sibling module so this composition root stays within the file-size budget.
-import { selectNodeEnvConfigRepairer } from './container-executor-deps.js'
+import {
+  selectNodeEnvConfigRepairer,
+  selectNodeEnvironmentProbeAgent,
+} from './container-executor-deps.js'
 
 import { assembleNodeCoreDependencies } from './container-core-deps.js'
 import {
@@ -362,6 +365,7 @@ interface PostAssemblyContext extends PreviewModuleContext {
   repoProjectionRepository: DrizzleRepoProjectionRepository
   bootstrapMintInstallationToken: NodeBootstrapperResult['bootstrapMintInstallationToken']
   environmentBackendRegistry: NodeAppRegistriesResult['environmentBackendRegistry']
+  resolveTestSecrets: NodeRunServicesResult['resolveTestSecrets']
   remoteRepos: Record<string, unknown> | undefined
 }
 
@@ -409,6 +413,24 @@ function applyNodePostAssemblyWiring(
   // explicit `overrides.envConfigRepairer` wins, exactly like `repoBootstrapper`.
   if (envConfigRepairer && !dependencies.envConfigRepairer) {
     dependencies.envConfigRepairer = envConfigRepairer
+  }
+
+  // The environment AGENT DRY RUN's prober, on the same override rule: a fake injected by the
+  // conformance harness wins, so the suite drives the `probing` stage with no container. Local
+  // inherits this through `buildNodeContainer` with no extra wiring, which is what keeps the two
+  // Node-family facades symmetric here.
+  const environmentProbeAgent = selectNodeEnvironmentProbeAgent({
+    env,
+    config,
+    resolveTransport: ctx.resolveTransport,
+    installationRepository: ctx.githubInstallationRepository,
+    repoRepository: ctx.repoProjectionRepository,
+    mintInstallationToken: ctx.bootstrapMintInstallationToken,
+    resolveRepoOrigin: options.resolveRepoOrigin ?? deploymentRepoOrigin(config),
+    ...(ctx.resolveTestSecrets ? { resolveTestSecrets: ctx.resolveTestSecrets } : {}),
+  })
+  if (environmentProbeAgent && !dependencies.environmentProbeAgent) {
+    dependencies.environmentProbeAgent = environmentProbeAgent
   }
 
   // Mothership mode (`db` undefined): re-source the run-path org/durable repos the sub-helpers
@@ -878,6 +900,12 @@ interface NodeContainerFinalizeBundle {
   agentContextObservability: NodeRunServicesResult['agentContextObservability']
   searchQueryObservability: NodeRunServicesResult['searchQueryObservability']
   resolveTestSecretRefs: NodeRunServicesResult['resolveTestSecretRefs']
+  /**
+   * The sealed test-secret VALUES, threaded here (not only into the executor deps) because the
+   * environment dry-run prober is a second dispatch that carries them: it advertises their keys
+   * in its prompt and reads the values from the container's environment.
+   */
+  resolveTestSecrets: NodeRunServicesResult['resolveTestSecrets']
   resolveValidationChecks: NodeRunServicesResult['resolveValidationChecks']
   githubClient: NodeGitHubDepsResult['githubClient']
   tasks: NodeGitHubDepsResult['tasks']
@@ -976,6 +1004,7 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     agentContextObservability,
     searchQueryObservability,
     resolveTestSecretRefs,
+    resolveTestSecrets,
     resolveValidationChecks,
     githubClient,
     tasks,
@@ -1142,6 +1171,7 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     githubInstallationRepository,
     bootstrapMintInstallationToken,
     environmentBackendRegistry,
+    resolveTestSecrets,
     remoteRepos,
   })
 

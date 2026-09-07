@@ -226,6 +226,10 @@ export {
   type ContainerEnvConfigRepairerDependencies,
 } from './agents/ContainerEnvConfigRepairer.js'
 export {
+  ContainerEnvironmentProbeAgent,
+  type ContainerEnvironmentProbeAgentDependencies,
+} from './agents/ContainerEnvironmentProbeAgent.js'
+export {
   buildResolveRepoTarget,
   buildResolveRepoTargets,
   buildListWorkspaceRunRepos,

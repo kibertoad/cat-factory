@@ -1,4 +1,7 @@
 import type {
+  EnvironmentProbeReport,
+  EnvironmentProbeSurface,
+  EnvironmentTestMode,
   EnvironmentTestStage,
   EnvironmentTestStatus,
   ServiceProvisioning,
@@ -26,6 +29,8 @@ export interface EnvironmentTestRunRecord {
   workspaceId: string
   /** The service frame (board block) whose provisioning config is under test. */
   blockId: string
+  /** What this run exercises: the provisioning alone, or provisioning plus an agent dry run. */
+  mode: EnvironmentTestMode
   status: EnvironmentTestStatus
   /** The stage currently in flight (or `done` when finished successfully). */
   stage: EnvironmentTestStage
@@ -52,6 +57,23 @@ export interface EnvironmentTestRunRecord {
   error: string | null
   /** The stage the run was at when it failed; null unless `status` is `failed`. */
   failedStage: EnvironmentTestStage | null
+  /**
+   * The dry run's CLAIM, and the surface it claimed: one field doing both jobs.
+   *
+   * It is the claim because it is written (guarded) BEFORE the probe container is dispatched,
+   * never after: the durable driver replays, and a marker written after the effect would let a
+   * crash between the two dispatch a second agent at the same environment. A poll that finds the
+   * `probing` stage with this still null therefore knows the claim is its to take.
+   *
+   * It carries the SURFACE because the surface decides which container the job runs in (the
+   * browser prober needs the heavier image), so every later poll and every reclaim has to address
+   * the one that was started. Re-deriving it from the frame would address the wrong container for
+   * a frame whose type was edited, or none at all for a frame that was deleted, which is exactly
+   * when a leaked browser container costs the most. Null in `provision` mode and before the claim.
+   */
+  probeSurface: EnvironmentProbeSurface | null
+  /** The dry-run agent's report, once the probe settled. Null until then, and in `provision` mode. */
+  probe: EnvironmentProbeReport | null
   createdAt: number
   updatedAt: number
 }
@@ -66,6 +88,8 @@ export type EnvironmentTestRunRecordPatch = Partial<
     | 'envUrl'
     | 'error'
     | 'failedStage'
+    | 'probeSurface'
+    | 'probe'
     | 'updatedAt'
   >
 >

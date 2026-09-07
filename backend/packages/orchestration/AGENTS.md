@@ -244,6 +244,15 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   run id. How the work ARRIVES is a third axis (`delivery`), resolved once at start from the
   target's default and stored, so a retry cannot move a run the user asked to have reviewed onto
   the default branch: [`monorepo-service-bootstrap.md`](../../../docs/initiatives/monorepo-service-bootstrap.md).
+- `environments/`: the ephemeral-environment SELF-TESTS a developer starts from a service frame.
+  `EnvironmentTestService` owns ONE state machine for both modes (create branch → provision →
+  [probe] → tear down → delete branch) plus the always-cleans-up funnel every failure path runs
+  through; `environmentProbeStage.ts` is the AGENT DRY RUN's `probing` stage, resolving what the
+  prober is handed and coercing what it reports. Two traps: the run's `status` is the LIFECYCLE
+  (an `inoperable` verdict is a SUCCEEDED run that found something), and the probe's claim is
+  written BEFORE its container is dispatched, carrying the SURFACE, because that is what a replay
+  reads and what every later poll and reclaim addresses a container by. Doc:
+  [`environment-self-tests.md`](../../docs/environment-self-tests.md).
 - `pipelines/`, `board/`, `boardScan/`, `requirements/`,
   `notifications/`, `releaseHealth/`, `review/`, `estimation/`, `kaizen/`, `sandbox/`,
   `recurring/`, `settings/`, …: the other module services. In `review/`, EVERY write to a review

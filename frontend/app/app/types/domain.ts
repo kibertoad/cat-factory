@@ -40,6 +40,7 @@ export type {
   ResolvedFrontendBinding,
   EnvironmentHandle,
   EnvironmentTestRun,
+  EnvironmentTestMode,
   EnvironmentTestStage,
   EnvironmentTestStatus,
   ServiceConnection,

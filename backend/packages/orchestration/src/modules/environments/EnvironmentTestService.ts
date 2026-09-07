@@ -3,6 +3,8 @@ import type {
   Clock,
   ConnectionTestResult,
   EnvironmentHandle,
+  EnvironmentProbeSurface,
+  EnvironmentTestMode,
   EnvironmentTestRun,
   ExecutionEventPublisher,
   IdGenerator,
@@ -24,9 +26,12 @@ import {
   describeTerminalEnvironment,
   getErrorMessage,
   NotFoundError,
+  noopLogger,
   requireWorkspace,
+  runBestEffort,
 } from '@cat-factory/kernel'
 import type { ProvisionArgs, ProvisionDispatch, SettledProvision } from '@cat-factory/integrations'
+import type { EnvironmentProbeStage } from './environmentProbeStage.js'
 
 /** The poll's terminal-ness, returned to the durable driver so it knows when to stop. */
 export interface EnvironmentTestPollResult {
@@ -98,6 +103,12 @@ export interface EnvironmentTestServiceDependencies {
   resolveRunRepoContext: ResolveRunRepoContext
   idGenerator: IdGenerator
   clock: Clock
+  /**
+   * Drives the AGENT DRY RUN's `probing` stage. Absent ⇒ this deployment cannot run one (no
+   * container transport, no proxyable model, no repository seam), and `startTest` refuses the
+   * `agent-probe` mode up front rather than letting a run reach a stage nothing can advance.
+   */
+  probeStage?: EnvironmentProbeStage
   /** Durably drives the run's poll loop; absent → tests poll `pollEnvTest` directly. */
   runner?: EnvironmentTestRunner
   /** Pushes live stage transitions to subscribed clients. */
@@ -118,27 +129,40 @@ function toRun(record: EnvironmentTestRunRecord): EnvironmentTestRun {
     id: record.id,
     workspaceId: record.workspaceId,
     blockId: record.blockId,
+    mode: record.mode,
     status: record.status,
     stage: record.stage,
     branch: record.branch,
     envUrl: record.envUrl,
     error: record.error,
     failedStage: record.failedStage,
+    probe: record.probe,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
   }
 }
 
 // ---------------------------------------------------------------------------
-// EnvironmentTestService — the ephemeral-environment SELF-TEST run.
+// EnvironmentTestService: the ephemeral-environment SELF-TEST run, in two modes.
 //
 // A developer-triggered diagnostic that exercises a service frame's configured
 // provisioning end to end against a THROWAWAY branch and always cleans up:
-//   creating_branch → provisioning → tearing_down → deleting_branch → done
+//   creating_branch → provisioning → [probing] → tearing_down → deleting_branch → done
 // (or `failed` with the stage it failed at). It touches no board block and
 // leaves no branch/env behind. Modelled like a bootstrap run: `startTest`
 // does the fast up-front work + dispatch and hands off to the durable driver;
 // `pollEnvTest` advances the state machine idempotently so replays are safe.
+//
+// `probing` is the AGENT DRY RUN (`mode: 'agent-probe'`): the environment is handed to a prober
+// that tries to OPERATE the service and reports what it managed and what it could not work out
+// (see `environmentProbeStage.ts`). It is ONE state machine rather than two services on purpose:
+// the always-cleans-up contract, the stop⇄driver race guard and the sweeper are the hard parts of
+// this flow, and a second implementation of them is a second set of ways to strand an
+// environment. The extra mode costs one stage, one claim field and one report field.
+//
+// The run's `status` stays a statement about the LIFECYCLE in both modes: a dry run that reports
+// `inoperable` SUCCEEDED, because the diagnostic did its job and cleaned up. What the agent found
+// is the report's own `verdict`; see the contract's note on `status`.
 //
 // Repo/registry isolation (see EnvironmentProvisioningService): provisioning
 // resolves the repo from `frameId ?? blockId`, and `recordProvisioned`
@@ -158,7 +182,15 @@ function toRun(record: EnvironmentTestRunRecord): EnvironmentTestRun {
 // ---------------------------------------------------------------------------
 
 export class EnvironmentTestService {
-  constructor(private readonly deps: EnvironmentTestServiceDependencies) {}
+  /**
+   * The injected logger, normalised once so every site can log unconditionally (and so
+   * `runBestEffort`, which requires one, can be used at all). See CLAUDE.md's logging rules.
+   */
+  private readonly log: Logger
+
+  constructor(private readonly deps: EnvironmentTestServiceDependencies) {
+    this.log = deps.logger ?? noopLogger
+  }
 
   /** The synthetic provisioning block id for a run (registry-key + namespace isolation). */
   private provisionBlockId(runId: string): string {
@@ -195,8 +227,20 @@ export class EnvironmentTestService {
     workspaceId: string,
     blockId: string,
     initiatedBy?: string | null,
+    mode: EnvironmentTestMode = 'provision',
   ): Promise<EnvironmentTestRun> {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)
+    // Refuse an agent dry run this deployment cannot drive BEFORE anything is provisioned. A run
+    // admitted here would create a branch, stand an environment up and then park at a stage with
+    // nothing to advance it, until the sweeper tore the whole thing down with a timeout for a
+    // reason (a wiring gap) that was knowable before a single side effect.
+    if (mode === 'agent-probe' && !this.deps.probeStage) {
+      throw new ConflictError(
+        'Agent dry runs are not available on this deployment: they need a container runner, a ' +
+          'connected repository and a model the LLM proxy can serve.',
+        'env_test_probe_unavailable',
+      )
+    }
 
     const frame = assertFound(
       await this.deps.blockRepository.get(workspaceId, blockId),
@@ -260,6 +304,7 @@ export class EnvironmentTestService {
       id: this.deps.idGenerator.next('envtest'),
       workspaceId,
       blockId,
+      mode,
       status: 'running',
       stage: 'creating_branch',
       initiatedBy: initiatedBy ?? null,
@@ -272,6 +317,8 @@ export class EnvironmentTestService {
       envUrl: null,
       error: null,
       failedStage: null,
+      probeSurface: null,
+      probe: null,
       createdAt: now,
       updatedAt: now,
     }
@@ -356,6 +403,8 @@ export class EnvironmentTestService {
           )
         case 'provisioning':
           return await this.advanceProvisioning(record)
+        case 'probing':
+          return await this.advanceProbing(record)
         case 'tearing_down':
           return await this.advanceTeardown(record)
         case 'deleting_branch':
@@ -389,7 +438,7 @@ export class EnvironmentTestService {
       )
       if (handle.status === 'ready') {
         await this.patch(record, {
-          stage: 'tearing_down',
+          stage: this.stageAfterProvisioning(record),
           ...(handle.url ? { envUrl: handle.url } : {}),
         })
         return { state: 'running' }
@@ -443,11 +492,85 @@ export class EnvironmentTestService {
       throw new Error(handle.lastError ?? 'Environment provisioning failed.')
     }
     await this.patch(record, {
-      stage: 'tearing_down',
+      stage: this.stageAfterProvisioning(record),
       environmentId: handle.id,
       envUrl: handle.url,
     })
     return { state: 'running' }
+  }
+
+  /**
+   * Where a run goes once its environment is up: straight to teardown, or through the dry run
+   * first. One helper rather than the ternary twice, because `advanceProvisioning` has two exits
+   * (the synchronous provider's readiness poll and the deploy job's finalize) and a mode honoured
+   * at only one of them is a dry run that silently skips the probe for half the providers.
+   */
+  private stageAfterProvisioning(record: EnvironmentTestRunRecord): 'probing' | 'tearing_down' {
+    return record.mode === 'agent-probe' ? 'probing' : 'tearing_down'
+  }
+
+  /**
+   * Advance the AGENT DRY RUN: claim and dispatch the prober, then poll it, then record what it
+   * reported and move on to teardown.
+   *
+   * The claim (`probeSurface`) is written BEFORE the dispatch and through the same running-guard
+   * every other write uses, so the two races this stage has are both first-writer-wins: a durable
+   * replay between the claim and the dispatch re-attaches to the job rather than starting a second
+   * agent, and a user stop mid-probe is never overwritten by the driver that was mid-flight.
+   *
+   * A probe that FAILS (an evicted container, a reply with no JSON) throws, so the run fails at
+   * this stage with the container's error and `fail()` reclaims the environment. A probe that
+   * REPORTS advances, whatever its verdict: an `inoperable` verdict is the diagnostic working, and
+   * the run still owes the developer its teardown.
+   */
+  private async advanceProbing(
+    record: EnvironmentTestRunRecord,
+  ): Promise<EnvironmentTestPollResult> {
+    const stage = this.deps.probeStage
+    if (!stage) {
+      // Only reachable when a deployment lost the capability between the start and the poll (a
+      // redeploy mid-run). Nothing can advance the run, so fail it here rather than spin: the
+      // environment is up and every poll is costing the developer.
+      throw new Error('Agent dry runs are no longer configured on this deployment.')
+    }
+    if (!record.probeSurface) {
+      const frame = assertFound(
+        await this.deps.blockRepository.get(record.workspaceId, record.blockId),
+        'Block',
+        record.blockId,
+      )
+      const surface = stage.surfaceFor(frame)
+      if (!(await this.guardedUpdate(record, { probeSurface: surface }))) {
+        throw new Error('The environment test was stopped before the agent dry run started.')
+      }
+      record.probeSurface = surface
+      await stage.dispatch(record, surface)
+      return { state: 'running' }
+    }
+    const outcome = await stage.poll(record, record.probeSurface)
+    if (outcome.state === 'running') return { state: 'running' }
+    // The report is in hand, so the prober's container has nothing left to do: reclaim it before
+    // teardown rather than leaving it to idle out beside an environment that is about to vanish.
+    await this.releaseProbe(record)
+    await this.patch(record, { stage: 'tearing_down', probe: outcome.report })
+    return { state: 'running' }
+  }
+
+  /**
+   * Reclaim the dry run's container, if one was ever claimed. Best-effort by contract (an
+   * unreachable runner idles out on its own), and it must never propagate: every caller is either
+   * settling a run or already failing one.
+   */
+  private async releaseProbe(record: EnvironmentTestRunRecord): Promise<void> {
+    const stage = this.deps.probeStage
+    const surface: EnvironmentProbeSurface | null = record.probeSurface
+    if (!stage || !surface) return
+    await runBestEffort(
+      this.log,
+      'release environment dry-run container',
+      () => stage.release(record, surface),
+      { workspaceId: record.workspaceId, runId: record.id, surface },
+    )
   }
 
   private async advanceTeardown(
@@ -582,13 +705,18 @@ export class EnvironmentTestService {
     // record + SPA aside). Carries the stage + message (which now includes any provider
     // field-level detail) and the stack when the cause is an `Error`, so an unexpected throw is
     // debuggable from the logs rather than just the terminal run row.
-    this.deps.logger?.warn('environment self-test failed', {
+    this.log.warn('environment self-test failed', {
       workspaceId: record.workspaceId,
       runId: record.id,
       failedStage,
       err: message,
       ...(cause instanceof Error && cause.stack ? { stack: cause.stack } : {}),
     })
+    // Reclaim the dry run's container when one was claimed and never settled (a stop mid-probe, a
+    // dispatch that threw, a replay that failed the run). It is claimed before it is dispatched,
+    // so a claim with no container behind it is a tolerated no-op. The opposite ordering would
+    // leave a browser container running for its full lifetime beside a torn-down environment.
+    await this.releaseProbe(record)
     // Release any in-flight deploy job when provisioning never settled (a stop
     // mid-provision, a dispatch that threw or crashed before the stage patch landed):
     // best-effort abort of the deploy runner so a stopped test doesn't keep a container
@@ -652,7 +780,9 @@ export class EnvironmentTestService {
    */
   private async patch(
     record: EnvironmentTestRunRecord,
-    patch: Partial<Pick<EnvironmentTestRunRecord, 'status' | 'stage' | 'environmentId' | 'envUrl'>>,
+    patch: Partial<
+      Pick<EnvironmentTestRunRecord, 'status' | 'stage' | 'environmentId' | 'envUrl' | 'probe'>
+    >,
   ): Promise<boolean> {
     const full = { ...patch, updatedAt: this.deps.clock.now() }
     const applied = await this.deps.environmentTestRunRepository.updateIfRunning(
@@ -669,7 +799,9 @@ export class EnvironmentTestService {
   /** A guarded field write with an `updatedAt` stamp, without emitting an event. */
   private async guardedUpdate(
     record: EnvironmentTestRunRecord,
-    patch: Partial<Pick<EnvironmentTestRunRecord, 'branch' | 'environmentId' | 'envUrl'>>,
+    patch: Partial<
+      Pick<EnvironmentTestRunRecord, 'branch' | 'environmentId' | 'envUrl' | 'probeSurface'>
+    >,
   ): Promise<boolean> {
     return this.deps.environmentTestRunRepository.updateIfRunning(record.workspaceId, record.id, {
       ...patch,

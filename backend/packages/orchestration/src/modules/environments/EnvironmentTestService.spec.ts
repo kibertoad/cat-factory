@@ -4,6 +4,8 @@ import type {
   Block,
   Clock,
   EnvironmentHandle,
+  EnvironmentProbeReport,
+  EnvironmentProbeSurface,
   EnvironmentTestRunRecord,
   EnvironmentTestRunRecordPatch,
   EnvironmentTestRunRepository,
@@ -23,6 +25,7 @@ import {
   type EnvironmentTestRegistry,
   type EnvironmentTestTeardown,
 } from './EnvironmentTestService.js'
+import type { EnvironmentProbeOutcome, EnvironmentProbeStage } from './environmentProbeStage.js'
 
 // EnvironmentTestService state-machine unit. Drives the create-branch → provision →
 // tear-down → delete-branch lifecycle over in-memory fakes (no DB / GitHub), covering both
@@ -70,6 +73,36 @@ class FakeRegistry implements EnvironmentTestRegistry {
   async softDelete(_ws: string, id: string): Promise<void> {
     this.rows = this.rows.filter((r) => r.id !== id)
     this.softDeleted.push(id)
+  }
+}
+
+/**
+ * A bare `running` run row, for the cases that simulate a crash between the insert and whatever
+ * comes next. Its own builder rather than a literal per case: the record has grown fields (the
+ * mode, the dry run's claim and report) and a literal per case is a literal that stops compiling
+ * every time it grows again.
+ */
+function strandedRecord(
+  overrides: Partial<EnvironmentTestRunRecord> & Pick<EnvironmentTestRunRecord, 'id'>,
+): EnvironmentTestRunRecord {
+  return {
+    workspaceId: 'ws',
+    blockId: 'frame-1',
+    mode: 'provision',
+    status: 'running',
+    stage: 'creating_branch',
+    initiatedBy: null,
+    provisioning: { type: 'kubernetes' },
+    branch: null,
+    environmentId: null,
+    envUrl: null,
+    error: null,
+    failedStage: null,
+    probeSurface: null,
+    probe: null,
+    createdAt: 1,
+    updatedAt: 1,
+    ...overrides,
   }
 }
 
@@ -131,6 +164,11 @@ function makeService(opts: {
   probe?: { ok: boolean; message?: string } | null
   /** Full replacement teardown port (e.g. one that throws NotFound on replay). */
   teardownImpl?: EnvironmentTestTeardown
+  /**
+   * Wires the AGENT DRY RUN's stage. Absent means this deployment cannot run one, which is what
+   * `startTest` refuses the `agent-probe` mode on.
+   */
+  probeStage?: FakeProbeStage
 }) {
   const runRepo = opts.runRepo ?? new InMemoryRunRepo()
   const registry = opts.registry ?? new FakeRegistry()
@@ -216,6 +254,7 @@ function makeService(opts: {
   const logger = createRecordingLogger()
   const logs = logger.lines
   const service = new EnvironmentTestService({
+    ...(opts.probeStage ? { probeStage: opts.probeStage as unknown as EnvironmentProbeStage } : {}),
     environmentTestRunRepository: runRepo,
     workspaceRepository,
     blockRepository: {
@@ -235,6 +274,63 @@ function makeService(opts: {
     logger,
   })
   return { service, runRepo, registry, teardowns, released, logs }
+}
+
+/**
+ * The probe stage, faked at the COLLABORATOR boundary rather than at the kernel port: the service
+ * only ever calls these three methods, and driving the real stage here would pull a repo
+ * resolution and an environment read into a test about the state machine.
+ */
+class FakeProbeStage {
+  dispatched: EnvironmentProbeSurface[] = []
+  released: EnvironmentProbeSurface[] = []
+  polls = 0
+  constructor(
+    private readonly script: {
+      surface?: EnvironmentProbeSurface
+      /** Successive poll outcomes (the last repeats). Default: reports on the first poll. */
+      outcomes?: EnvironmentProbeOutcome[]
+      dispatchThrows?: Error
+      pollThrows?: Error
+    } = {},
+  ) {}
+  surfaceFor(): EnvironmentProbeSurface {
+    return this.script.surface ?? 'api'
+  }
+  async dispatch(_record: EnvironmentTestRunRecord, surface: EnvironmentProbeSurface) {
+    if (this.script.dispatchThrows) throw this.script.dispatchThrows
+    this.dispatched.push(surface)
+    return { workspaceId: 'ws', jobId: 'j', surface }
+  }
+  async poll(
+    _record: EnvironmentTestRunRecord,
+    _surface: EnvironmentProbeSurface,
+  ): Promise<EnvironmentProbeOutcome> {
+    this.polls += 1
+    if (this.script.pollThrows) throw this.script.pollThrows
+    const seq = this.script.outcomes
+    const next = seq ? (seq[this.polls - 1] ?? seq[seq.length - 1]) : undefined
+    return next ?? { state: 'reported', report: probeReport() }
+  }
+  async release(_record: EnvironmentTestRunRecord, surface: EnvironmentProbeSurface) {
+    this.released.push(surface)
+  }
+}
+
+/** A minimal already-graded report, as the stage hands one back. */
+function probeReport(over: Partial<EnvironmentProbeReport> = {}): EnvironmentProbeReport {
+  return {
+    surface: 'api',
+    verdict: 'operable',
+    summary: 'Listed and created a record with the supplied token.',
+    operations: [{ name: 'list projects', authenticated: true, outcome: 'succeeded' }],
+    missingContext: [],
+    blockers: [],
+    attempted: 1,
+    succeeded: 1,
+    authenticatedSucceeded: 1,
+    ...over,
+  }
 }
 
 describe('EnvironmentTestService — start guards and the happy paths', () => {
@@ -657,22 +753,7 @@ describe('EnvironmentTestService — failure, teardown and terminal guards', () 
   it('fails a run stranded at creating_branch (the start request died mid-flight)', async () => {
     const { service, runRepo } = makeService({})
     // Simulate a crash between insert and dispatch: a bare `creating_branch` record.
-    await runRepo.insert({
-      id: 'envtest-stranded',
-      workspaceId: 'ws',
-      blockId: 'frame-1',
-      status: 'running',
-      stage: 'creating_branch',
-      initiatedBy: null,
-      provisioning: { type: 'kubernetes' },
-      branch: null,
-      environmentId: null,
-      envUrl: null,
-      error: null,
-      failedStage: null,
-      createdAt: 1,
-      updatedAt: 1,
-    })
+    await runRepo.insert(strandedRecord({ id: 'envtest-stranded' }))
     const result = await service.pollEnvTest('ws', 'envtest-stranded')
     expect(result.state).toBe('failed')
     expect((await service.getRun('ws', 'envtest-stranded')).status).toBe('failed')
@@ -695,5 +776,187 @@ describe('EnvironmentTestService — failure, teardown and terminal guards', () 
     // Idempotent: a second expire returns the terminal run unchanged.
     const again = await service.expire('ws', started.id, 'other reason')
     expect(again.error).toBe('driver lost')
+  })
+})
+
+describe('EnvironmentTestService: the agent dry run (`agent-probe` mode)', () => {
+  it('refuses the mode outright when no prober is wired, before any side effect', async () => {
+    // Admitting it would create a branch, stand an environment up and then park at a stage with
+    // nothing to advance it, until the sweeper tore the lot down with a timeout for a reason that
+    // was knowable before a single side effect.
+    const { repo, calls } = fakeRepo()
+    const { service, runRepo } = makeService({
+      repoContext: { repo, baseBranch: 'main', repoId: 'repo_1' },
+    })
+    const err = await service
+      .startTest('ws', 'frame-1', null, 'agent-probe')
+      .catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(ConflictError)
+    expect((err as ConflictError).details?.reason).toBe('env_test_probe_unavailable')
+    expect(runRepo.rows.size).toBe(0)
+    expect(calls.created).toEqual([])
+  })
+
+  it('leaves the provisioning self-test unaffected when no prober is wired', async () => {
+    const { service } = makeService({})
+    const run = await service.startTest('ws', 'frame-1')
+    expect(run.mode).toBe('provision')
+    expect(run.status).toBe('running')
+  })
+
+  it('runs the whole lifecycle through the probe: claim, dispatch, report, tear down', async () => {
+    const { repo, calls } = fakeRepo()
+    const probeStage = new FakeProbeStage({ surface: 'ui' })
+    const { service, runRepo, teardowns, registry } = makeService({
+      repoContext: { repo, baseBranch: 'main', repoId: 'repo_1' },
+      probeStage,
+    })
+    const started = await service.startTest('ws', 'frame-1', 'usr-1', 'agent-probe')
+    expect(started.mode).toBe('agent-probe')
+
+    // The environment settles, so the run goes to `probing` rather than straight to teardown.
+    expect((await service.pollEnvTest('ws', started.id)).state).toBe('running')
+    expect(runRepo.rows.get(`ws:${started.id}`)?.stage).toBe('probing')
+
+    // The first probing poll CLAIMS (persisting the surface) and dispatches; it does not poll.
+    expect((await service.pollEnvTest('ws', started.id)).state).toBe('running')
+    expect(probeStage.dispatched).toEqual(['ui'])
+    expect(probeStage.polls).toBe(0)
+    expect(runRepo.rows.get(`ws:${started.id}`)?.probeSurface).toBe('ui')
+
+    // The next poll reads the report, reclaims the prober's container, and moves to teardown.
+    expect((await service.pollEnvTest('ws', started.id)).state).toBe('running')
+    expect(probeStage.polls).toBe(1)
+    expect(probeStage.released).toEqual(['ui'])
+    expect(runRepo.rows.get(`ws:${started.id}`)?.probe?.verdict).toBe('operable')
+
+    // Then the ordinary tail: tear down, delete the branch, done.
+    expect((await service.pollEnvTest('ws', started.id)).state).toBe('running')
+    expect((await service.pollEnvTest('ws', started.id)).state).toBe('done')
+    const settled = await service.getRun('ws', started.id)
+    expect(settled.status).toBe('succeeded')
+    expect(settled.stage).toBe('done')
+    expect(settled.probe?.verdict).toBe('operable')
+    expect(teardowns).toEqual(['env-1'])
+    expect(calls.deleted).toHaveLength(1)
+    expect(registry.rows).toEqual([])
+  })
+
+  it('keeps a bad verdict a SUCCEEDED run, because the status is the lifecycle', async () => {
+    // The one interesting outcome must not be indistinguishable from a broken diagnostic: an
+    // `inoperable` verdict is the dry run working, and it still owes the developer its teardown.
+    const { repo, calls } = fakeRepo()
+    const probeStage = new FakeProbeStage({
+      outcomes: [
+        {
+          state: 'reported',
+          report: probeReport({
+            verdict: 'inoperable',
+            succeeded: 0,
+            authenticatedSucceeded: 0,
+            missingContext: ['no test credentials were supplied'],
+          }),
+        },
+      ],
+    })
+    const { service, teardowns } = makeService({
+      repoContext: { repo, baseBranch: 'main', repoId: 'repo_1' },
+      probeStage,
+    })
+    const started = await service.startTest('ws', 'frame-1', null, 'agent-probe')
+    for (let i = 0; i < 5; i++) await service.pollEnvTest('ws', started.id)
+    const settled = await service.getRun('ws', started.id)
+    expect(settled.status).toBe('succeeded')
+    expect(settled.probe?.verdict).toBe('inoperable')
+    expect(settled.probe?.missingContext).toEqual(['no test credentials were supplied'])
+    expect(teardowns).toEqual(['env-1'])
+    expect(calls.deleted).toHaveLength(1)
+  })
+
+  it('fails the run at the `probing` stage when the probe itself broke, and cleans up', async () => {
+    // A container that never reported has established NOTHING about the environment, so it must
+    // not be laundered into a verdict about the service.
+    const { repo, calls } = fakeRepo()
+    const probeStage = new FakeProbeStage({
+      pollThrows: new Error('the dry-run container was evicted'),
+    })
+    const { service, teardowns, registry } = makeService({
+      repoContext: { repo, baseBranch: 'main', repoId: 'repo_1' },
+      probeStage,
+    })
+    const started = await service.startTest('ws', 'frame-1', null, 'agent-probe')
+    await service.pollEnvTest('ws', started.id)
+    await service.pollEnvTest('ws', started.id)
+    const result = await service.pollEnvTest('ws', started.id)
+    expect(result.state).toBe('failed')
+    const settled = await service.getRun('ws', started.id)
+    expect(settled.status).toBe('failed')
+    expect(settled.failedStage).toBe('probing')
+    expect(settled.error).toContain('evicted')
+    expect(settled.probe).toBeNull()
+    // Always cleans up: the environment, its registry row, the branch AND the prober's container.
+    expect(teardowns).toEqual(['env-1'])
+    expect(registry.rows).toEqual([])
+    expect(calls.deleted).toHaveLength(1)
+    expect(probeStage.released).toEqual(['api'])
+  })
+
+  it('a stop mid-probe reclaims the prober container it claimed', async () => {
+    const { repo } = fakeRepo()
+    const probeStage = new FakeProbeStage({ surface: 'ui', outcomes: [{ state: 'running' }] })
+    const { service, teardowns } = makeService({
+      repoContext: { repo, baseBranch: 'main', repoId: 'repo_1' },
+      probeStage,
+    })
+    const started = await service.startTest('ws', 'frame-1', null, 'agent-probe')
+    await service.pollEnvTest('ws', started.id)
+    await service.pollEnvTest('ws', started.id)
+    expect(probeStage.dispatched).toEqual(['ui'])
+
+    const stopped = await service.stop('ws', started.id)
+    expect(stopped.status).toBe('failed')
+    // The claim is what makes the reclaim addressable, and it names the container that started.
+    expect(probeStage.released).toEqual(['ui'])
+    expect(teardowns).toEqual(['env-1'])
+  })
+
+  it('does not dispatch a second prober when a replay re-enters a claimed probing stage', async () => {
+    // The claim is written BEFORE the dispatch precisely so a durable replay lands on the poll
+    // path rather than starting another agent against the same environment.
+    const { repo } = fakeRepo()
+    const probeStage = new FakeProbeStage({
+      outcomes: [{ state: 'running' }, { state: 'running' }],
+    })
+    const { service } = makeService({
+      repoContext: { repo, baseBranch: 'main', repoId: 'repo_1' },
+      probeStage,
+    })
+    const started = await service.startTest('ws', 'frame-1', null, 'agent-probe')
+    await service.pollEnvTest('ws', started.id)
+    await service.pollEnvTest('ws', started.id)
+    await service.pollEnvTest('ws', started.id)
+    await service.pollEnvTest('ws', started.id)
+    expect(probeStage.dispatched).toHaveLength(1)
+    expect(probeStage.polls).toBe(2)
+  })
+
+  it('fails the run when the dispatch throws, with the environment reclaimed', async () => {
+    const { repo, calls } = fakeRepo()
+    const probeStage = new FakeProbeStage({
+      dispatchThrows: new Error('The environment provider exposed no URL for this environment.'),
+    })
+    const { service, teardowns } = makeService({
+      repoContext: { repo, baseBranch: 'main', repoId: 'repo_1' },
+      probeStage,
+    })
+    const started = await service.startTest('ws', 'frame-1', null, 'agent-probe')
+    await service.pollEnvTest('ws', started.id)
+    const result = await service.pollEnvTest('ws', started.id)
+    expect(result.state).toBe('failed')
+    const settled = await service.getRun('ws', started.id)
+    expect(settled.failedStage).toBe('probing')
+    expect(settled.error).toContain('no URL')
+    expect(teardowns).toEqual(['env-1'])
+    expect(calls.deleted).toHaveLength(1)
   })
 })

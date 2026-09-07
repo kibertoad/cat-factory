@@ -688,6 +688,7 @@
         "env_test_not_provisionable": "Ortam işleyicisi yapılandırılmamış",
         "env_test_no_vcs": "Git sağlayıcısı bağlı değil",
         "env_test_connection_failed": "Ortam bağlantısı başarısız",
+        "env_test_probe_unavailable": "Aracı prova çalışmaları burada kullanılamıyor",
         "prompt_revision_conflict": "İstem başka biri tarafından değiştirildi",
         "pipeline_schedule_attached": "Yinelenen bir zamanlama bu hattı kullanıyor",
         "pipeline_schedule_requires_recurring": "Yinelenen bir zamanlama bu hatta ihtiyaç duyuyor",
@@ -737,6 +738,7 @@
         "env_test_no_vcs": "Öz test, tek kullanımlık dalını oluşturup silmek için bir Git sağlayıcısına ihtiyaç duyar ancak bu çalışma alanı hiçbirine bağlı değil.",
         "env_test_connection_failed": "Bu hizmetin ortam işleyicisi bağlantı testini geçemedi. Uç noktasını, kimlik bilgilerini ve proje ayarlarını kontrol edin, ardından bağlantıyı yeniden test edin.",
         "env_test_connection_failed_detail": "Bu hizmetin ortam işleyicisi bağlantı testini geçemedi: {detail}. Uç noktasını, kimlik bilgilerini ve proje ayarlarını kontrol edin, ardından bağlantıyı yeniden test edin.",
+        "env_test_probe_unavailable": "Aracı prova çalışması bir konteyner çalıştırıcısı, bağlı bir depo ve bu kurulumun LLM proxy'sinin sunabileceği bir model gerektirir. Burada bunlardan biri eksik, bu yüzden yalnızca ortam hazırlama öz testi çalıştırılabilir.",
         "prompt_revision_conflict": "Bu isteme yapılan başka bir düzenleme önce ulaştı. Yeniden yükleyip değişikliğinizi onun üzerine uygulayın.",
         "pipeline_schedule_attached": "Yinelenen bir zamanlama hâlâ bu hattı gösteriyor ve başlattığı her çalışma hattı kimliğiyle çözümlüyor. Önce o zamanlamayı ayırın veya silin, sonra hattı kaldırın.",
         "pipeline_schedule_requires_recurring": "Yinelenen bir zamanlama hâlâ bu hattı gösteriyor, bu yüzden yalnızca tek seferlik yapmak gelecekteki her çalışmayı bozar. Önce o zamanlamayı ayırın.",
@@ -1142,9 +1144,43 @@
         "stage": {
           "creating_branch": "dal oluşturuluyor",
           "provisioning": "ortam sağlanıyor",
+          "probing": "bir aracıyla sondalama",
           "tearing_down": "ortam kaldırılıyor",
           "deleting_branch": "dal siliniyor",
           "done": "tamamlandı"
+        }
+      },
+      "envProbe": {
+        "title": "Aracı prova çalışmasını test et",
+        "hint": "Tek kullanımlık bir ortam hazırlar, bir aracının orada birkaç gerçek işlem denemesini sağlar ve ardından her şeyi kaldırır. Neyi denediğini ve neyi çözemediğini bildirir.",
+        "surfaceApi": "Bu servis HTTP üzerinden yoklanır.",
+        "surfaceUi": "Bu ön yüz bir tarayıcıda sürülür.",
+        "start": "Aracı prova çalışmasını test et",
+        "completed": "Prova çalışması bitti: ortam kaldırıldı ve dal silindi.",
+        "failed": "Prova çalışması başarısız oldu",
+        "verdict": {
+          "operable": "Bir aracı bu servisi kullanabilir.",
+          "partially_operable": "Bir aracı bu servisi yalnızca kısmen kullanabilir.",
+          "inoperable": "Bir aracı bu servisi kullanamadı."
+        },
+        "counts": "{attempted} işlemden {succeeded} tanesi başarılı; bunların {authenticated} tanesi kimlik doğrulamalı.",
+        "missingContext": "Aracıya söylenmeyenler",
+        "blockers": "Prova çalışmasını durduran şeyler",
+        "operations": "Denenen işlemler",
+        "operationsOmitted": "Sınır nedeniyle atılan bildirilmiş işlemler: {count}.",
+        "authenticated": "(kimlik doğrulamalı)",
+        "model": "Model: {model}",
+        "failure": {
+          "auth_missing": "Hiçbir kimlik bilgisi verilmedi",
+          "auth_rejected": "Kimlik bilgisi reddedildi",
+          "access_unclear": "Kimlik doğrulamanın nasıl yapılacağı belirsizdi",
+          "endpoint_unknown": "Neyin çağrılacağı bulunamadı",
+          "unreachable": "Ortama ulaşılamıyor",
+          "timeout": "Zaman aşımı",
+          "server_error": "Servis hatası",
+          "bad_request": "İstek hatalı biçimli olduğu için reddedildi",
+          "tooling_missing": "Kullanılabilir istemci veya tarayıcı yok",
+          "other": "Diğer"
         }
       }
     },
