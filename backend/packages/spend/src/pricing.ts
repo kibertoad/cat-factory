@@ -222,6 +222,15 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
     outputPerMillion: 4.05,
     cacheReadPerMillion: 0.24,
   },
+  // GLM-5.3 joined Workers AI on 2026-08-28, once Z.ai released the weights, and Cloudflare
+  // lists it at Z.ai's own $1.40 in / $0.26 cached / $4.40 out per 1M. Partner model, billed
+  // per token like the GLM-5.2 row above rather than at the near-free neuron rate, so it needs
+  // its own entry or a Cloudflare GLM-5.3 run meters at ~0.00 and escapes the budget gate.
+  'workers-ai:@cf/zai-org/glm-5.3': {
+    inputPerMillion: 1.29,
+    outputPerMillion: 4.05,
+    cacheReadPerMillion: 0.24,
+  },
   // GLM-5.3 Flash bills at $0.15 in / $0.03 cached / $0.50 out per 1M on Workers AI, the same
   // list rate Z.ai and OpenRouter carry for it. Its cached tier is named because $0.03/M sits at
   // twice the 0.1x floor its cheap input implies, so deriving it would under-meter a warm prefix.
@@ -284,6 +293,14 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
     inputPerMillion: 1.84,
     outputPerMillion: 5.52,
     cacheReadPerMillion: 0.23,
+  },
+  // Qwen3.8 Flash, the cheap tier of the same generation: $0.15 in / $0.016 cached / $0.47 out
+  // per 1M. Its cached tier is named because $0.016 sits just above the 0.1x floor $0.15 implies,
+  // and DashScope is `auto-prefix` direct, so that class is genuinely recorded here.
+  'qwen:qwen3.8-flash': {
+    inputPerMillion: 0.14,
+    outputPerMillion: 0.44,
+    cacheReadPerMillion: 0.015,
   },
   // Qwen3-Max is the superseded flagship, kept so historical spend rows keep costing; Alibaba
   // has since cut it to $0.78 in / $3.90 out per 1M, from the $1.20 / $6.00 this held.
@@ -425,6 +442,13 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
     outputPerMillion: 3.44,
     cacheReadPerMillion: 0.21,
   },
+  // GLM-5.3's open weights landed after the last sweep, so the gateway now serves it and the
+  // catalog routes to it. Same $1.40 / $4.40 list as every other GLM-5.3 row here. No cached
+  // tier is NAMED: OpenRouter's blend reads $0.14/M, which the 0.1x floor this input implies
+  // already lands a hair above, so deriving is both correct and the safe direction. That is a
+  // real difference from the `zai:` row beside it, which names $0.26 because Z.ai's own API
+  // charges nearly double for the same class.
+  'openrouter:z-ai/glm-5.3': { inputPerMillion: 1.29, outputPerMillion: 4.05 },
   // The same Z.ai list rates as the `zai:` row above: OpenRouter passes the upstream vendor's
   // price through, and the launch promotion the slug is served at today is the half-rate this
   // row deliberately does not carry.
@@ -440,13 +464,39 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
     outputPerMillion: 0.37,
     cacheReadPerMillion: 0.01,
   },
-  'openrouter:x-ai/grok-4.6': { inputPerMillion: 1.84, outputPerMillion: 5.52 },
+  // The SAME long-band rates as the `xai:grok-4.6` row above, and for the same reason stated
+  // there: xAI bills a request whose prompt reaches 200K tokens entirely at $4 in / $1 cached /
+  // $12 out, and OpenRouter is a passthrough, so the doubling reaches this route too. This row
+  // used to carry the SHORT band ($2 / $6) with its cache tier left to derive, which understated
+  // a cache read by 60% against even the short-band rate ($0.184 derived against a live $0.50)
+  // and every long-prompt token by half. `x-ai` is `auto-prefix` on the gateway, so that cache
+  // class is really recorded and really metered: this was the one pinned row whose understatement
+  // the budget gate could actually spend through.
+  'openrouter:x-ai/grok-4.6': {
+    inputPerMillion: 3.68,
+    outputPerMillion: 11.04,
+    cacheReadPerMillion: 0.92,
+  },
   'openrouter:qwen/qwen3.7-max': { inputPerMillion: 1.36, outputPerMillion: 4.07 },
-  // OpenRouter passes Alibaba's own Qwen3.8 Max rates through, cached tier included.
-  'openrouter:qwen/qwen3.8-max': {
+  // OpenRouter passes Alibaba's own Qwen3.8 rates through, cached tier included. The key is the
+  // DATED slug: the gateway withdrew the undated `qwen/qwen3.8-max` and now serves `-0902` at the
+  // same $2 / $6 / $0.25, so the old key is not kept for historical rows the way the retired
+  // `qwen:qwen3-max` row above is. A withdrawn pin is what `check-openrouter-pins.mjs` EXITS 1 on,
+  // so leaving one behind costs the guard its meaning; a stray old row falls through to the bare
+  // `qwen` fallback below, which is dearer than this model and so errs in the safe direction.
+  'openrouter:qwen/qwen3.8-max-0902': {
     inputPerMillion: 1.84,
     outputPerMillion: 5.52,
     cacheReadPerMillion: 0.23,
+  },
+  // Qwen3.8 Flash, $0.15 in / $0.016 cached / $0.47 out per 1M on both of its routes. The cached
+  // tier is named on the DIRECT row for the usual reason (it sits above the 0.1x floor $0.15
+  // implies, so deriving it would under-meter a warm prefix); the gateway row carries it too so
+  // the two rates for one model cannot drift apart on a later read.
+  'openrouter:qwen/qwen3.8-flash': {
+    inputPerMillion: 0.14,
+    outputPerMillion: 0.44,
+    cacheReadPerMillion: 0.015,
   },
   openrouter: { inputPerMillion: 1.84, outputPerMillion: 11.04 },
   // Bifrost / LiteLLM: operator-hosted gateways whose cost is the backend model each routes to.

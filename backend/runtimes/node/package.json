@@ -60,11 +60,11 @@
     "@cat-factory/spend": "workspace:*",
     "@hono/node-server": "^2.1.1",
     "drizzle-orm": "1.0.0-rc.4",
-    "hono": "^4.13.5",
+    "hono": "^4.13.7",
     "layered-loader": "^16.1.1",
     "pg": "^8.23.0",
     "pg-boss": "^12.30.0",
-    "toad-scheduler": "^4.1.0",
+    "toad-scheduler": "^4.2.0",
     "ws": "^8.21.3"
   },
   "devDependencies": {

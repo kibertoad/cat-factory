@@ -164,23 +164,40 @@ describe('isModelUsable', () => {
   })
 
   it('leaves an entry with no Cloudflare flavour unusable on the binding alone', () => {
-    // `qwen3.8-max` declares direct + openrouter and no cloudflare route: Workers AI serves the
-    // open-weights Qwen3.8-27B, not Max, so the binding is not a floor under this entry and
-    // either key is what makes it usable.
+    // Neither Qwen3.8 Max entry declares a cloudflare route: Workers AI serves the open-weights
+    // Qwen3.8-27B, not Max, so the binding is not a floor under either and a KEY is what makes
+    // them usable. The two differ in which keys count, and the split is the gateway's doing:
+    // OpenRouter withdrew the undated `qwen/qwen3.8-max` and now serves the dated snapshot, so
+    // the floating entry is DashScope-only and the pinned one takes either key.
     expect(isModelUsable('qwen3.8-max', caps({ cloudflareEnabled: true }))).toBe(false)
     expect(isModelUsable('qwen3.8-max', caps({ directProviders: new Set(['qwen']) }))).toBe(true)
     expect(isModelUsable('qwen3.8-max', caps({ directProviders: new Set(['openrouter']) }))).toBe(
+      false,
+    )
+    expect(isModelUsable('qwen3.8-max-0902', caps({ cloudflareEnabled: true }))).toBe(false)
+    expect(isModelUsable('qwen3.8-max-0902', caps({ directProviders: new Set(['qwen']) }))).toBe(
       true,
     )
+    expect(
+      isModelUsable('qwen3.8-max-0902', caps({ directProviders: new Set(['openrouter']) })),
+    ).toBe(true)
   })
 
   it('keeps a Cloudflare floor under an entry that also declares a subscription route', () => {
     // `glm-5.3-flash` ships with MIT weights, so Workers AI serves the same model the coding
-    // plan does: the binding alone makes it usable, unlike `glm-5.3`, whose weights had not
-    // been published and which therefore needs the GLM subscription.
+    // plan does: the binding alone makes it usable. `glm-5.3` now reads the same way, and that
+    // is the change worth pinning — its weights were unpublished when this entry was written,
+    // so it was the FOIL here, and Workers AI picking it up turned the assertion over.
     expect(isModelUsable('glm-5.3-flash', caps({ cloudflareEnabled: true }))).toBe(true)
-    expect(isModelUsable('glm-5.3', caps({ cloudflareEnabled: true }))).toBe(false)
+    expect(isModelUsable('glm-5.3', caps({ cloudflareEnabled: true }))).toBe(true)
     expect(isModelUsable('glm-5.3', caps({ subscriptionVendors: new Set(['glm']) }))).toBe(true)
+    // The foil is now an entry whose ONLY route is a subscription: `claude-sonnet` runs in the
+    // Claude Code harness and nowhere else, so the binding is no floor under it. Without a case
+    // like this the assertion above says only that some entries are usable.
+    expect(isModelUsable('claude-sonnet', caps({ cloudflareEnabled: true }))).toBe(false)
+    expect(isModelUsable('claude-sonnet', caps({ subscriptionVendors: new Set(['claude']) }))).toBe(
+      true,
+    )
   })
 
   it('gates an openrouter flavour on the openrouter key alone, not on the enabled-slug set', () => {

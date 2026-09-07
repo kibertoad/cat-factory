@@ -35,9 +35,9 @@
   "dependencies": {
     "@cat-factory/contracts": "workspace:*",
     "@cat-factory/kernel": "workspace:*",
-    "ai": "^7.0.92",
+    "ai": "^7.0.93",
     "p-map": "^7.0.7",
-    "undici": "^8.10.1",
+    "undici": "^8.10.2",
     "yaml": "^2.9.0"
   },
   "devDependencies": {

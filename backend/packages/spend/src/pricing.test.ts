@@ -228,8 +228,13 @@ describe('pinned gateway cache rates against the cache policy', () => {
   const CACHE_HIT_UNREACHABLE: Record<string, string> = {
     // OpenRouter's Alibaba route requires explicit `cache_control` breakpoints (the same syntax
     // Anthropic needs) and nothing on the gateway path emits them, so the published rate is real
-    // and unreachable. Emitting the breakpoints is what would let this move.
-    'qwen/qwen3.8-max': 'Alibaba caches only on explicit breakpoints, which this path never sends',
+    // and unreachable. Emitting the breakpoints is what would let these move. Both Alibaba slugs
+    // are named for the one reason: the gateway withdrew the undated `qwen/qwen3.8-max` in favour
+    // of the dated snapshot, and `qwen3.8-flash` joined the table in the same sweep.
+    'qwen/qwen3.8-max-0902':
+      'Alibaba caches only on explicit breakpoints, which this path never sends',
+    'qwen/qwen3.8-flash':
+      'Alibaba caches only on explicit breakpoints, which this path never sends',
   }
 
   const pinnedCacheReadSlugs = Object.entries(DEFAULT_SPEND_PRICING.prices)

@@ -125,15 +125,18 @@ export const MODEL_CATALOG: SelectableModel[] = [
     description:
       "Alibaba's 2026-09-02 snapshot of Qwen3.8 Max, post-trained for engineering-scale " +
       'coding, longer autonomous runs and steadier multi-tool orchestration. Same 2.4T base, ' +
-      'same 1M window and same price as the floating entry, direct via a DashScope key.',
+      'same 1M window and same price as the floating entry, direct via a DashScope key or ' +
+      'pay-as-you-go through OpenRouter.',
     // A PINNED snapshot beside the floating `qwen3.8-max` below, on the same reasoning that
     // gives `claude-opus-4-8` its own entry: a block pinned here must keep getting this exact
     // build when DashScope's undated alias moves on to the next one.
     //
-    // DashScope only. OpenRouter serves `qwen/qwen3.8-max` (the undated alias) and carries no
-    // dated slug, so declaring an `openrouter` arm would be picked by `effectiveVariant` and
-    // then fail at dispatch. The alias may well be serving 0902 today, but "probably the same
-    // build" is exactly what a pinned entry exists to not depend on.
+    // The gateway's two Qwen3.8 Max slugs have swapped since this entry was written, in the
+    // direction that suits a pinned snapshot: OpenRouter has WITHDRAWN the undated
+    // `qwen/qwen3.8-max` and now serves the dated `qwen/qwen3.8-max-0902` (1M window, image
+    // input, $2 / $6 per 1M, the same rates DashScope lists). So the arm this entry could not
+    // declare is now the verified one, and the arm the floating entry below used to carry is
+    // the one that had to go.
     direct: {
       ref: {
         provider: 'qwen',
@@ -144,6 +147,16 @@ export const MODEL_CATALOG: SelectableModel[] = [
       keyEnv: 'QWEN_API_KEY',
       providerLabel: 'DashScope',
     },
+    openrouter: {
+      ref: {
+        provider: 'openrouter',
+        model: 'qwen/qwen3.8-max-0902',
+        contextTokens: 1_000_000,
+        acceptsImages: true,
+      },
+      keyEnv: 'OPENROUTER_API_KEY',
+      providerLabel: 'OpenRouter',
+    },
   },
   {
     id: 'qwen3.8-max',
@@ -151,12 +164,22 @@ export const MODEL_CATALOG: SelectableModel[] = [
     label: 'Qwen3.8 Max',
     description:
       "Alibaba's flagship Qwen3.8 model: a 2.4T-param multimodal MoE with a 1M context, " +
-      'direct via a DashScope key or pay-as-you-go through OpenRouter. Not served on Workers AI.',
+      'direct via a DashScope key. Not served on Workers AI.',
     // Qwen3.8 Max reached general availability on 2026-08-03, on DashScope and OpenRouter
     // alike. Workers AI carries the open-weights sibling (Qwen3.8-27B, 262K) rather than Max,
     // and folding this entry onto it would run a different model than the picker names, so no
-    // Cloudflare flavour is declared: the entry stays unavailable until one of its two keys is
+    // Cloudflare flavour is declared: the entry stays unavailable until its DashScope key is
     // pooled, which is the same shape `kimi-k3` takes.
+    //
+    // The `openrouter` arm this entry used to carry is GONE, and its absence is the point:
+    // OpenRouter has WITHDRAWN the undated `qwen/qwen3.8-max` in favour of the dated
+    // `qwen/qwen3.8-max-0902` (which the pinned entry above now declares). A pin nothing
+    // serves does not fail loudly, which is why `scripts/check-openrouter-pins.mjs` exists and
+    // is what caught this: `effectiveVariant` would keep choosing the gateway for a workspace
+    // holding only an OpenRouter key, and every dispatch would fail on a dead slug. Re-pointing
+    // this entry at the dated slug instead is the one thing NOT to do: this is the FLOATING
+    // entry, and following the alias to a snapshot is exactly the identity the pinned entry
+    // beside it exists to hold.
     direct: {
       ref: {
         provider: 'qwen',
@@ -167,10 +190,41 @@ export const MODEL_CATALOG: SelectableModel[] = [
       keyEnv: 'QWEN_API_KEY',
       providerLabel: 'DashScope',
     },
+  },
+  {
+    id: 'qwen3.8-flash',
+    family: 'qwen',
+    label: 'Qwen3.8 Flash',
+    description:
+      "Alibaba's cheap multimodal tier of the Qwen3.8 generation: a 1M window that reads " +
+      "images and video, at a fortieth of Max's input rate. Direct via a DashScope key or " +
+      'pay-as-you-go through OpenRouter.',
+    // Shipped 2026-08-26 and the cheapest 1M-window model this catalog carries with image
+    // input, which is what earns it an entry rather than the dynamic OpenRouter catalog: it is
+    // the natural low-cost tier for the inline steps that today reach for `glm-flash`, and
+    // those steps are the ones a per-token rate actually decides.
+    //
+    // Both routes read off the serving provider: DashScope lists `qwen3.8-flash` at $0.15 in /
+    // $0.016 cached / $0.47 out per 1M over a 1M window (131,072 max completion), and
+    // OpenRouter's `qwen/qwen3.8-flash` carries the same rates and window.
+    //
+    // No Cloudflare flavour: Workers AI's Qwen line stops at `qwen3-30b-a3b-fp8`, and the
+    // `qwen` entry above already routes that model. No `bedrock` arm either; AWS serves no
+    // Qwen3.8 tier.
+    direct: {
+      ref: {
+        provider: 'qwen',
+        model: 'qwen3.8-flash',
+        contextTokens: 1_000_000,
+        acceptsImages: true,
+      },
+      keyEnv: 'QWEN_API_KEY',
+      providerLabel: 'DashScope',
+    },
     openrouter: {
       ref: {
         provider: 'openrouter',
-        model: 'qwen/qwen3.8-max',
+        model: 'qwen/qwen3.8-flash',
         contextTokens: 1_000_000,
         acceptsImages: true,
       },
@@ -333,18 +387,32 @@ export const MODEL_CATALOG: SelectableModel[] = [
     label: 'GLM-5.3',
     description:
       "Z.ai's newest agentic-coding model, on the same base as GLM-5.2 with scaled-up " +
-      'post-training. Subscription-only here: it runs on a GLM (Z.ai) coding-plan token, ' +
-      'which is the only route serving it today.',
-    // Z.ai shipped GLM-5.3 on 2026-08-14 to its own API and to every existing GLM Coding
-    // Plan subscriber, and states the weights follow in roughly two weeks after safety
-    // hardening. That timing is why this entry declares NO other flavour: Workers AI and
-    // OpenRouter both serve GLM from the open weights, so neither can carry 5.3 until the
-    // release lands, and Bedrock's Z.ai line stops at GLM-5. A flavour declared before its
-    // route exists would be picked by `effectiveVariant` and fail at dispatch, so each one
-    // is added when the route is verified rather than when it is expected.
+      'post-training: on Workers AI, through OpenRouter, or on a GLM (Z.ai) coding-plan token.',
+    // The open weights this entry was waiting for have landed, so the two flavours it used to
+    // withhold are now declared. Z.ai shipped GLM-5.3 on 2026-08-14 to its own API and to
+    // every GLM Coding Plan subscriber, with the weights following after safety hardening;
+    // Workers AI picked it up on 2026-08-28 and OpenRouter serves `z-ai/glm-5.3` today. Both
+    // were read off the SERVING provider before being declared, which is the rule that kept
+    // them out while the release was merely expected: a flavour declared ahead of its route is
+    // picked by `effectiveVariant` and then fails at dispatch.
     //
-    // Context is the 1M window GLM-5.2 carries on the same base model; Z.ai has not yet
-    // published a 5.3 model card, so nothing narrower is asserted here.
+    // Bedrock's Z.ai line still stops at GLM-4.7 Flash, so no `bedrock` arm.
+    //
+    // The window differs per route and each is the serving provider's own published figure,
+    // the same shape `glm-5.3-flash` below takes: Workers AI 1,048,576, OpenRouter 1,310,720,
+    // and Z.ai's own 1M on the coding plan. No `acceptsImages` on any of them: unlike its
+    // Flash sibling, neither model card claims image input for GLM-5.3, and undeclared is
+    // reported honestly as unknown rather than promised.
+    cloudflare: {
+      provider: 'workers-ai',
+      model: '@cf/zai-org/glm-5.3',
+      contextTokens: 1_048_576,
+    },
+    openrouter: {
+      ref: { provider: 'openrouter', model: 'z-ai/glm-5.3', contextTokens: 1_310_720 },
+      keyEnv: 'OPENROUTER_API_KEY',
+      providerLabel: 'OpenRouter',
+    },
     subscription: {
       ref: { provider: 'zai', model: 'glm-5.3', harness: 'claude-code', contextTokens: 1_000_000 },
       vendor: 'glm',
@@ -590,16 +658,23 @@ export const MODEL_CATALOG: SelectableModel[] = [
       "OpenAI's flagship for long-horizon agentic work, computer use and software " +
       'engineering: a 1.05M window that reads images. Run via Codex on your ChatGPT ' +
       'subscription, or pay-as-you-go through OpenRouter (billed at OpenAI rates).',
-    // No `bedrock` arm, though OpenAI named Bedrock among the launch-day routes. No model
-    // card published so far names the Bedrock id for it, and this catalog declares a route
-    // only once that route is VERIFIED to serve the exact model: a declared-but-absent one
-    // is picked by `effectiveVariant` and then fails at dispatch, which is the failure the
-    // `qwen3.8-max-0902` entry above is also shaped to avoid. Add the arm when the id lands.
+    // No `bedrock` arm, and re-checked rather than assumed: Codex 0.153.3 did add Astra to
+    // the Bedrock model picker, so the ROUTE now demonstrably exists, but neither AWS nor
+    // OpenAI publishes the Bedrock model id it addresses. This catalog declares a route only
+    // once that route is VERIFIED to serve the exact model, and a `baseModelId` is the whole
+    // content of a `bedrock` flavour: guessing `openai.gpt-6-astra` from the neighbouring
+    // `openai.gpt-5.5` would be picked by `effectiveVariant` and then fail at dispatch, which
+    // is the failure the `qwen3.8-max` entry above was just repaired for. Add the arm when the
+    // id is published.
     //
-    // No separate "Astra Pro" entry either, and it is not an omission. Pro is not a second
-    // model or a second API id: it is this same `gpt-6-astra` served with `reasoning.mode`
-    // set to `pro`, and it exists only inside the ChatGPT plans, never on the API or in
-    // Codex. An entry for it could only name a route nothing here is able to dispatch.
+    // No separate "Astra Pro" entry either, and it is still not an omission, though the
+    // reasoning has narrowed. OpenRouter has since minted `openai/gpt-6-astra-pro` as its own
+    // slug, so one route does name it; OpenAI's model doc does not, stating that reasoning
+    // effort is a PARAMETER on the single `gpt-6-astra` id, and Codex has no such `--model`
+    // slug. So an entry could carry exactly one arm, re-badging a model already in this
+    // catalog at byte-identical pricing. The two-entry shape is for a choice an operator makes
+    // with the PRICE in front of them (see the Muse Spark tiers); with nothing to choose
+    // between, a second id here would only split the picker.
     openrouter: {
       ref: {
         provider: 'openrouter',
