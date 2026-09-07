@@ -149,6 +149,17 @@ export const CONFLICT_REASONS = [
   // the provisioning self-test beside it works, so "this capability is not configured" has to name
   // WHICH capability or it reads as the environment integration being unwired.
   'env_test_probe_unavailable',
+  // A second self-test was started for a service frame that already has one running. Refused
+  // because each run provisions its OWN ephemeral environment under a synthetic per-run key that
+  // nothing supersedes: two in flight means two live environments for one service, billed twice,
+  // and on a provider whose namespace is derived per service rather than per branch, two creates
+  // racing on the same target. The refusal names the running run so the SPA can point at it.
+  'env_test_already_running',
+  // An AGENT DRY RUN was requested by a workspace that has reached a spend budget. Its own reason
+  // rather than the generic budget refusal a run start raises, because the remedy sentence differs:
+  // the provisioning self-test beside it costs nothing and is still startable, which is the first
+  // thing a developer who just pressed the wrong button needs told.
+  'env_test_over_budget',
   // Opt-in review-debt friction (soft tier): the workspace has enough tasks parked on human
   // review to cross its warn threshold. Creating a task is refused UNLESS the request carries
   // `acknowledgeReviewDebt: true`; the SPA turns this into a confirm-to-proceed dialog listing

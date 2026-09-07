@@ -96,6 +96,22 @@ export type EnvironmentProbeUpdate =
 
 export interface EnvironmentProbeAgent {
   /**
+   * Whether this deployment can actually run a dry run on `surface`, asked at ADMISSION: before a
+   * throwaway branch exists, before an environment is provisioned, before anything has been spent.
+   *
+   * A prober being wired is not the same question. Each surface runs on its OWN executor image
+   * (the browser one needs Playwright), and a deployment that binds the plain image and not the UI
+   * one can serve an `api` dry run and not a `ui` one. Asked only at dispatch, that gap costs a
+   * branch, a full provision and a teardown to discover, which is precisely what the admission
+   * refusal exists to prevent.
+   *
+   * FALSE means a resolved backend said it cannot serve the surface's image. A backend that cannot
+   * answer (a self-hosted pool, which resolves images on the pool side) answers TRUE: an unknown
+   * is not a refusal, and a dry run that fails at dispatch on such a deployment is the behaviour
+   * every other container flow already has there.
+   */
+  supports(workspaceId: string, surface: EnvironmentProbeSurface): Promise<boolean>
+  /**
    * Pre-flight (a reachable environment URL, a connected repo, a proxyable model) and dispatch the
    * probe container. Returns once accepted; the work continues in the container and is read through
    * {@link poll}. Throws on a pre-flight or dispatch failure so the run fails fast at the stage it

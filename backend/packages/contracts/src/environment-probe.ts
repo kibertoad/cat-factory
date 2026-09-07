@@ -92,11 +92,13 @@ export type EnvironmentProbeOutcome = v.InferOutput<typeof environmentProbeOutco
  * The platform's verdict on a dry run, COMPUTED from the operations the agent reported (see
  * {@link summarizeEnvironmentProbe}) rather than read off the reply.
  *
- *  - `operable`: every attempted operation worked, and at least one of them exercised
- *    authentication.
+ *  - `operable`: every operation the agent listed was attempted, every one of them worked, and at
+ *    least one exercised authentication.
  *  - `partially_operable`: something worked, but not everything, or nothing that worked was
- *    behind auth. A public healthcheck answering is not evidence that an agent can operate the
- *    service, which is why it cannot earn `operable` on its own.
+ *    behind auth, or the agent listed operations it could not even attempt. A public healthcheck
+ *    answering is not evidence that an agent can operate the service, which is why it cannot earn
+ *    `operable` on its own, and neither is a run whose one success sits beside four things the
+ *    agent could not work out how to try.
  *  - `inoperable`: nothing the agent attempted worked, or it never got to attempt anything.
  */
 export const environmentProbeVerdictSchema = v.picklist([
@@ -156,11 +158,20 @@ export const environmentProbeReportSchema = v.object({
   /** How many SUCCESSFUL operations exercised authentication. The verdict's deciding count. */
   authenticatedSucceeded: v.number(),
   /**
-   * How many reported operations were dropped at the cap, so a reader never takes a truncated
+   * How many reported operations were dropped AT THE CAP, so a reader never takes a truncated
    * list for the whole attempt. Absent means nothing was dropped, which is a different fact from
    * a drop nobody recorded.
    */
   operationsOmitted: v.optional(v.number()),
+  /**
+   * How many reported operations were UNREADABLE (no usable name) and so could not be kept.
+   *
+   * Its own count rather than a second way to spell the one above, because the two send a reader
+   * somewhere different: a cap drop says the agent reported more than the report shows, and an
+   * unreadable entry says the model's reply was malformed. Rendered as "truncated at the cap",
+   * the second one tells an operator their agent did more work than it did.
+   */
+  operationsUnreadable: v.optional(v.number()),
   /** The model that produced the report. Absent when the dispatch did not say. */
   model: v.optional(v.string()),
 })
@@ -178,9 +189,16 @@ const CAPS = {
   blockers: 6,
 } as const
 
-function text(value: unknown, max: number): string | undefined {
+/**
+ * One model-authored string, scrubbed and then capped, in that order.
+ *
+ * The order is the platform's standing rule for untrusted text: a scrub applied AFTER a cap can
+ * leave the head of a credential in the kept prefix, and a scrub that runs on the whole value
+ * keeps the prose and the JSON consistent about what was dropped.
+ */
+function text(value: unknown, max: number, scrub: Scrub): string | undefined {
   if (typeof value !== 'string') return undefined
-  const trimmed = value.trim()
+  const trimmed = scrub(value).trim()
   if (!trimmed) return undefined
   return trimmed.length > max ? `${trimmed.slice(0, max)} [truncated]` : trimmed
 }
@@ -193,10 +211,21 @@ function outcomeOf(raw: unknown): EnvironmentProbeOutcome {
   return 'not_attempted'
 }
 
+/**
+ * Whether a value is something the coercion below can read anything out of: a plain object.
+ *
+ * Exported because the DISPATCHER asks the same question before it calls the coercion. A reply
+ * that came back as an array, a string or a number has told the platform nothing, and coercing it
+ * yields an empty report the verdict then grades `inoperable`: a finding about the service,
+ * invented out of a malformed reply. The caller that can still say "the agent produced nothing"
+ * has to ask before the shape is flattened, and it has to ask the same question this does.
+ */
+export function isEnvironmentProbeReportPayload(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
 function record(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {}
+  return isEnvironmentProbeReportPayload(value) ? value : {}
 }
 
 function array(value: unknown): unknown[] {
@@ -210,6 +239,12 @@ function array(value: unknown): unknown[] {
  * declared it could not even try is a FINDING (it carries the failure kind saying why), not a
  * failed call, and counting it as attempted would make "nothing was reachable" read as
  * "everything was tried and failed".
+ *
+ * It does, however, keep the run OFF `operable`, which is the whole reason the counts and the
+ * verdict are computed together here. One authenticated success beside four operations the agent
+ * could not work out how to attempt is the exact shape this diagnostic exists to surface, and
+ * grading it on the attempted ones alone would render "an agent can operate this service" in
+ * green directly above the list of things it could not do.
  */
 export function summarizeEnvironmentProbe(operations: readonly EnvironmentProbeOperation[]): {
   attempted: number
@@ -225,11 +260,16 @@ export function summarizeEnvironmentProbe(operations: readonly EnvironmentProbeO
   const verdict: EnvironmentProbeVerdict =
     succeeded === 0
       ? 'inoperable'
-      : succeeded === attempted && authenticatedSucceeded > 0
+      : succeeded === attempted && attempted === operations.length && authenticatedSucceeded > 0
         ? 'operable'
         : 'partially_operable'
   return { attempted, succeeded, authenticatedSucceeded, verdict }
 }
+
+/** Scrubs one model-authored string on its way into the report. Identity when none is supplied. */
+type Scrub = (value: string) => string
+
+const noScrub: Scrub = (value) => value
 
 /**
  * Coerce an agent's raw structured reply into an {@link EnvironmentProbeReport}.
@@ -242,20 +282,27 @@ export function summarizeEnvironmentProbe(operations: readonly EnvironmentProbeO
  *
  * `surface` is supplied by the CALLER, not read from the reply: the platform chose which prober to
  * dispatch, so a model claiming otherwise would be reporting about a run that did not happen.
+ *
+ * `scrub` is likewise the caller's, because contracts is SPA-visible and the redaction rules live
+ * in kernel. Supplying it is not optional in spirit: this is the COMPOSE site for a body that is
+ * persisted and rendered, the prompt hands the agent the environment's own credential verbatim,
+ * and an agent that pastes its `curl -H "Authorization: Bearer ..."` into an operation's `detail`
+ * is doing the natural thing. The prompt asks it not to, which is guidance, not a boundary.
  */
 export function coerceEnvironmentProbeReport(
   raw: unknown,
-  context: { surface: EnvironmentProbeSurface; model?: string },
+  context: { surface: EnvironmentProbeSurface; model?: string; scrub?: Scrub },
 ): EnvironmentProbeReport {
+  const scrub = context.scrub ?? noScrub
   const root = record(raw)
   const rawOperations = array(root.operations)
   const operations: EnvironmentProbeOperation[] = []
   for (const entry of rawOperations.slice(0, CAPS.operations)) {
     const op = record(entry)
-    const name = text(op.name, CAPS.name)
+    const name = text(op.name, CAPS.name, scrub)
     if (!name) continue
-    const target = text(op.target, CAPS.target)
-    const detail = text(op.detail, CAPS.detail)
+    const target = text(op.target, CAPS.target, scrub)
+    const detail = text(op.detail, CAPS.detail, scrub)
     const outcome = outcomeOf(op.outcome)
     const failure = isEnvironmentProbeFailure(op.failure) ? op.failure : undefined
     operations.push({
@@ -272,7 +319,7 @@ export function coerceEnvironmentProbeReport(
   const blockers: EnvironmentProbeBlocker[] = []
   for (const entry of array(root.blockers).slice(0, CAPS.blockers)) {
     const blocker = record(entry)
-    const detail = text(blocker.detail, CAPS.detail)
+    const detail = text(blocker.detail, CAPS.detail, scrub)
     if (!detail) continue
     blockers.push({
       kind: isEnvironmentProbeFailure(blocker.kind) ? blocker.kind : 'other',
@@ -281,21 +328,26 @@ export function coerceEnvironmentProbeReport(
   }
   const missingContext: string[] = []
   for (const entry of array(root.missingContext).slice(0, CAPS.missingContext)) {
-    const line = text(entry, CAPS.missingContextEntry)
+    const line = text(entry, CAPS.missingContextEntry, scrub)
     if (line) missingContext.push(line)
   }
-  const omitted = Math.max(0, rawOperations.length - operations.length)
+  // The two ways an operation the model reported fails to reach the report, counted apart: the
+  // ones past the cap were never looked at, the ones inside it were looked at and had nothing to
+  // identify them by. See the schema's note on why one number for both misreports the first.
+  const overCap = Math.max(0, rawOperations.length - CAPS.operations)
+  const unreadable = Math.max(0, rawOperations.length - overCap - operations.length)
   return {
     surface: context.surface,
     ...summarizeEnvironmentProbe(operations),
     // An empty summary stays empty rather than being filled with a sentence the model did not
     // write: the SPA renders the operations and the verdict either way, and inventing prose here
     // would make a model that returned nothing look like one that reported.
-    summary: text(root.summary, CAPS.summary) ?? '',
+    summary: text(root.summary, CAPS.summary, scrub) ?? '',
     operations,
     missingContext,
     blockers,
-    ...(omitted > 0 ? { operationsOmitted: omitted } : {}),
+    ...(overCap > 0 ? { operationsOmitted: overCap } : {}),
+    ...(unreadable > 0 ? { operationsUnreadable: unreadable } : {}),
     ...(context.model ? { model: context.model } : {}),
   }
 }

@@ -3650,6 +3650,32 @@
       "table": "environment_test_runs"
     },
     {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "probe_dispatched_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "environment_test_runs"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "probe_progress",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "environment_test_runs"
+    },
+    {
       "type": "text",
       "typeSchema": null,
       "notNull": false,

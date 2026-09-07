@@ -134,6 +134,28 @@ export function environmentProbeSystemPrompt(surface: EnvironmentProbeSurface): 
   return surface === 'ui' ? ENVIRONMENT_PROBE_UI_SYSTEM_PROMPT : ENVIRONMENT_PROBE_API_SYSTEM_PROMPT
 }
 
+/**
+ * What the platform can tell the prober about the frame's sealed test credentials, as a state
+ * rather than a list.
+ *
+ * Three outcomes that a bare list of refs collapses into one, and the collapse points an operator
+ * at the wrong fix:
+ *
+ *  - `resolved`: the store was read. An EMPTY list here means this service genuinely has no test
+ *    credentials configured on the board, which is a board fact and a board fix.
+ *  - `unreadable`: credentials may well be configured, and the platform could not open its own
+ *    sealed store to fetch them (a bad `ENCRYPTION_KEY`, a store that would not answer). The dry
+ *    run still runs, because a report naming what was missing is worth more than a refused stage,
+ *    but the agent must be told the PLATFORM failed, or it files an outage as "nobody configured
+ *    credentials" and sends someone to re-enter secrets that are already there.
+ *  - `unwired`: this deployment has no sealed credential store at all, so no service on this board
+ *    can be given test credentials. A deployment fact, and again not something to fix on the frame.
+ */
+export type EnvironmentProbeSecretsBrief =
+  | { status: 'resolved'; refs: readonly TestSecretRef[] }
+  | { status: 'unreadable' }
+  | { status: 'unwired' }
+
 /** Everything the platform knows about the target, as the prompt states it. */
 export interface EnvironmentProbeBrief {
   surface: EnvironmentProbeSurface
@@ -144,7 +166,7 @@ export interface EnvironmentProbeBrief {
     access?: EnvironmentAccessHandle | null
     reachability?: EnvironmentReachabilityNote
   }
-  testSecretRefs: readonly TestSecretRef[]
+  testSecrets: EnvironmentProbeSecretsBrief
   repo: { owner: string; name: string; branch: string; serviceDirectory?: string }
 }
 
@@ -185,18 +207,7 @@ export function environmentProbeUserPrompt(brief: EnvironmentProbeBrief): string
   )
   lines.push(...accessLines(brief.environment.access))
   lines.push('', '## Credentials your shell carries', '')
-  if (brief.testSecretRefs.length === 0) {
-    lines.push(
-      'NONE. This service has no test credentials configured on the board, so the only auth material you have is whatever the environment section above states and whatever the repository itself documents. If an operation needs a credential you do not have, that is `auth_missing`: record it and name what is needed.',
-    )
-  } else {
-    lines.push(
-      'Read each of these from the environment (e.g. `$API_TOKEN`). The values are NOT printed here and must never appear in your reply:',
-    )
-    for (const ref of brief.testSecretRefs) {
-      lines.push(`- \`${ref.key}\`${ref.description ? `: ${ref.description}` : ''}`)
-    }
-  }
+  lines.push(...testSecretLines(brief.testSecrets))
   lines.push(
     '',
     '## The repository',
@@ -213,6 +224,39 @@ export function environmentProbeUserPrompt(brief: EnvironmentProbeBrief): string
     'Now probe the environment and report. Remember: at least one authenticated operation, and everything you could not work out goes in `missingContext`.',
   )
   return lines.join('\n')
+}
+
+/**
+ * The credentials section, one wording per {@link EnvironmentProbeSecretsBrief} state.
+ *
+ * The two failure states say who is at fault IN THE PROMPT, because the agent is the one writing
+ * `missingContext` and it can only name a fix it was told about. Left to the "none configured"
+ * wording, a platform that could not open its own store produces a report telling an operator to
+ * configure credentials that already exist, which is worse than silence: it is a confident wrong
+ * answer with a run's evidence behind it.
+ */
+function testSecretLines(secrets: EnvironmentProbeSecretsBrief): string[] {
+  if (secrets.status === 'unreadable') {
+    return [
+      'NONE REACHED YOU, AND THE PLATFORM IS AT FAULT. This service may well have test credentials configured on the board: the platform could not open its own sealed credential store to fetch them, so your shell carries none of them. If an operation needs one, record it as `auth_missing` and say in `missingContext` that the PLATFORM failed to supply the configured credentials. Do NOT tell a human to configure credentials for this service: that may already be done, and this run cannot tell.',
+    ]
+  }
+  if (secrets.status === 'unwired') {
+    return [
+      'NONE, AND NONE ARE POSSIBLE HERE. This deployment has no sealed credential store wired, so no service on this board can hand test credentials to a dry run. The only auth material you have is whatever the environment section above states and whatever the repository documents. If an operation needs a credential, record it as `auth_missing` and say in `missingContext` that the DEPLOYMENT has no credential store, rather than asking for this service to be reconfigured.',
+    ]
+  }
+  if (secrets.refs.length === 0) {
+    return [
+      'NONE. This service has no test credentials configured on the board, so the only auth material you have is whatever the environment section above states and whatever the repository itself documents. If an operation needs a credential you do not have, that is `auth_missing`: record it and name what is needed.',
+    ]
+  }
+  return [
+    'Read each of these from the environment (e.g. `$API_TOKEN`). The values are NOT printed here and must never appear in your reply:',
+    ...secrets.refs.map(
+      (ref) => `- \`${ref.key}\`${ref.description ? `: ${ref.description}` : ''}`,
+    ),
+  ]
 }
 
 /**

@@ -157,6 +157,8 @@ export function buildEnvironmentTestService(args: {
   teardownService: EnvironmentTeardownService
   environmentRegistryRepository: NonNullable<CoreDependencies['environmentRegistryRepository']>
   eventPublisher: ExecutionEventPublisher | undefined
+  /** The workspace spend safeguard, for the agent dry run's billable model call. */
+  isOverBudget?: (workspaceId: string) => Promise<boolean>
 }): EnvironmentTestService | undefined {
   const {
     deps,
@@ -188,6 +190,10 @@ export function buildEnvironmentTestService(args: {
     idGenerator: deps.idGenerator,
     clock: deps.clock,
     ...(probeStage ? { probeStage } : {}),
+    // The dry run is a billable model call no run start gates, so it answers to the SAME workspace
+    // budget `RunAdmission` applies before a run. Wired only alongside the prober: the provisioning
+    // self-test spends nothing and must stay startable at any budget.
+    ...(probeStage && args.isOverBudget ? { isOverBudget: args.isOverBudget } : {}),
     ...(deps.environmentTestRunner ? { runner: deps.environmentTestRunner } : {}),
     ...(eventPublisher ? { eventPublisher } : {}),
     logger: deps.logger,

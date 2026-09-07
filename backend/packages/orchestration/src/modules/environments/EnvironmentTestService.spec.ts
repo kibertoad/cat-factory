@@ -6,9 +6,11 @@ import type {
   EnvironmentHandle,
   EnvironmentProbeReport,
   EnvironmentProbeSurface,
+  EnvironmentTestRun,
   EnvironmentTestRunRecord,
   EnvironmentTestRunRecordPatch,
   EnvironmentTestRunRepository,
+  ExecutionEventPublisher,
   IdGenerator,
   RepoFiles,
   RunnerJobRef,
@@ -99,6 +101,8 @@ function strandedRecord(
     error: null,
     failedStage: null,
     probeSurface: null,
+    probeDispatchedAt: null,
+    probeProgress: null,
     probe: null,
     createdAt: 1,
     updatedAt: 1,
@@ -169,6 +173,10 @@ function makeService(opts: {
    * `startTest` refuses the `agent-probe` mode on.
    */
   probeStage?: FakeProbeStage
+  /** The workspace spend safeguard the agent dry run answers to. Absent ⇒ nothing is enforced. */
+  isOverBudget?: (workspaceId: string) => Promise<boolean>
+  /** Records the pushed run transitions, for the cases about what the SPA is told and when. */
+  eventPublisher?: { envTestChanged: (ws: string, run: EnvironmentTestRun) => Promise<void> }
 }) {
   const runRepo = opts.runRepo ?? new InMemoryRunRepo()
   const registry = opts.registry ?? new FakeRegistry()
@@ -255,6 +263,10 @@ function makeService(opts: {
   const logs = logger.lines
   const service = new EnvironmentTestService({
     ...(opts.probeStage ? { probeStage: opts.probeStage as unknown as EnvironmentProbeStage } : {}),
+    ...(opts.isOverBudget ? { isOverBudget: opts.isOverBudget } : {}),
+    ...(opts.eventPublisher
+      ? { eventPublisher: opts.eventPublisher as unknown as ExecutionEventPublisher }
+      : {}),
     environmentTestRunRepository: runRepo,
     workspaceRepository,
     blockRepository: {
@@ -284,6 +296,8 @@ function makeService(opts: {
 class FakeProbeStage {
   dispatched: EnvironmentProbeSurface[] = []
   released: EnvironmentProbeSurface[] = []
+  /** Frame reads, so a stage that read the block twice per tick fails a test. */
+  targetReads = 0
   polls = 0
   constructor(
     private readonly script: {
@@ -292,13 +306,25 @@ class FakeProbeStage {
       outcomes?: EnvironmentProbeOutcome[]
       dispatchThrows?: Error
       pollThrows?: Error
+      /** Whether the deployment can run this surface's prober at all (admission). */
+      supported?: boolean
+      /** Runs INSIDE the dispatch, to simulate a stop landing while it is in flight. */
+      onDispatch?: () => Promise<void>
     } = {},
   ) {}
   surfaceFor(): EnvironmentProbeSurface {
     return this.script.surface ?? 'api'
   }
+  async supports(): Promise<boolean> {
+    return this.script.supported ?? true
+  }
+  async resolveTarget(_record: EnvironmentTestRunRecord) {
+    this.targetReads += 1
+    return { frame: frameBlock(), surface: this.surfaceFor() }
+  }
   async dispatch(_record: EnvironmentTestRunRecord, surface: EnvironmentProbeSurface) {
     if (this.script.dispatchThrows) throw this.script.dispatchThrows
+    await this.script.onDispatch?.()
     this.dispatched.push(surface)
     return { workspaceId: 'ws', jobId: 'j', surface }
   }
@@ -818,11 +844,15 @@ describe('EnvironmentTestService: the agent dry run (`agent-probe` mode)', () =>
     expect((await service.pollEnvTest('ws', started.id)).state).toBe('running')
     expect(runRepo.rows.get(`ws:${started.id}`)?.stage).toBe('probing')
 
-    // The first probing poll CLAIMS (persisting the surface) and dispatches; it does not poll.
+    // The first probing poll CLAIMS (persisting the surface), dispatches, then MARKS; it does not
+    // poll. The mark is what a replay reads to tell a claim with no container behind it from a
+    // job that is really running, and the frame is read ONCE for both the surface and the prompt.
     expect((await service.pollEnvTest('ws', started.id)).state).toBe('running')
     expect(probeStage.dispatched).toEqual(['ui'])
     expect(probeStage.polls).toBe(0)
+    expect(probeStage.targetReads).toBe(1)
     expect(runRepo.rows.get(`ws:${started.id}`)?.probeSurface).toBe('ui')
+    expect(runRepo.rows.get(`ws:${started.id}`)?.probeDispatchedAt).toBe(1_000)
 
     // The next poll reads the report, reclaims the prober's container, and moves to teardown.
     expect((await service.pollEnvTest('ws', started.id)).state).toBe('running')
@@ -938,6 +968,196 @@ describe('EnvironmentTestService: the agent dry run (`agent-probe` mode)', () =>
     await service.pollEnvTest('ws', started.id)
     expect(probeStage.dispatched).toHaveLength(1)
     expect(probeStage.polls).toBe(2)
+  })
+
+  it('re-dispatches after a replay landed between the CLAIM and the dispatch', async () => {
+    // The window the mark exists for. Without it the poll path sees a claim, polls a job that was
+    // never started, and the backend answers "no such job", which the dispatcher reports as an
+    // EVICTION: a lost isolate told to the developer as a container failure.
+    const { repo } = fakeRepo()
+    const probeStage = new FakeProbeStage({ outcomes: [{ state: 'running' }] })
+    const { service, runRepo } = makeService({
+      repoContext: { repo, baseBranch: 'main', repoId: 'repo_1' },
+      probeStage,
+    })
+    const started = await service.startTest('ws', 'frame-1', null, 'agent-probe')
+    await service.pollEnvTest('ws', started.id)
+
+    // Simulate the crash: the claim landed, the dispatch did not.
+    const row = runRepo.rows.get(`ws:${started.id}`)!
+    row.probeSurface = 'api'
+    row.probeDispatchedAt = null
+    row.stage = 'probing'
+
+    await service.pollEnvTest('ws', started.id)
+    expect(probeStage.dispatched).toEqual(['api'])
+    expect(probeStage.polls).toBe(0)
+    expect(runRepo.rows.get(`ws:${started.id}`)?.probeDispatchedAt).toBe(1_000)
+  })
+
+  it('reclaims the container when a stop lands WHILE the dispatch is in flight', async () => {
+    // The stop's own cleanup ran against a container that did not exist yet, so the one now
+    // starting has nobody left to reclaim it: unnoticed, it idles for its full lifetime beside a
+    // torn-down environment. The post-dispatch mark is the guard that catches it.
+    const { repo } = fakeRepo()
+    let service!: EnvironmentTestService
+    let runId = ''
+    const probeStage = new FakeProbeStage({
+      surface: 'ui',
+      onDispatch: async () => {
+        await service.stop('ws', runId)
+      },
+    })
+    const made = makeService({
+      repoContext: { repo, baseBranch: 'main', repoId: 'repo_1' },
+      probeStage,
+    })
+    service = made.service
+    const started = await service.startTest('ws', 'frame-1', null, 'agent-probe')
+    runId = started.id
+    await service.pollEnvTest('ws', started.id)
+    const result = await service.pollEnvTest('ws', started.id)
+
+    expect(result.state).toBe('failed')
+    expect(probeStage.dispatched).toEqual(['ui'])
+    // Twice: once by the stop (a no-op against a container that had not started) and once by the
+    // fail() the rejected mark triggers, which is the one that actually collects it. The teardown
+    // runs twice for the same reason, which is why every cleanup step on this path is idempotent.
+    expect(probeStage.released).toEqual(['ui', 'ui'])
+    expect(made.teardowns).toEqual(['env-1', 'env-1'])
+  })
+
+  it('persists and pushes the prober live progress, then clears it with the report', async () => {
+    // `probing` is the only stage measured in minutes. With nothing written the run row never
+    // changes, no event fires, and the card sits on "probing with an agent" for the whole
+    // container run, which reads exactly like a wedge.
+    const { repo } = fakeRepo()
+    const probeStage = new FakeProbeStage({
+      outcomes: [
+        { state: 'running', subtasks: { completed: 1, inProgress: 1, total: 4 } },
+        { state: 'running', subtasks: { completed: 1, inProgress: 1, total: 4 } },
+        { state: 'running', subtasks: { completed: 3, inProgress: 0, total: 4 } },
+        { state: 'reported', report: probeReport() },
+      ],
+    })
+    const emitted: EnvironmentTestRun[] = []
+    const { service, runRepo } = makeService({
+      repoContext: { repo, baseBranch: 'main', repoId: 'repo_1' },
+      probeStage,
+      eventPublisher: { envTestChanged: async (_ws, run) => void emitted.push(run) },
+    })
+    const started = await service.startTest('ws', 'frame-1', null, 'agent-probe')
+    await service.pollEnvTest('ws', started.id) // provisioning → probing
+    await service.pollEnvTest('ws', started.id) // claim + dispatch
+    emitted.length = 0
+
+    await service.pollEnvTest('ws', started.id)
+    expect(runRepo.rows.get(`ws:${started.id}`)?.probeProgress).toEqual({
+      completed: 1,
+      inProgress: 1,
+      total: 4,
+    })
+    expect(emitted).toHaveLength(1)
+
+    // The SAME counts again write nothing: a write per poll is what the comparison avoids.
+    await service.pollEnvTest('ws', started.id)
+    expect(emitted).toHaveLength(1)
+
+    await service.pollEnvTest('ws', started.id)
+    expect(runRepo.rows.get(`ws:${started.id}`)?.probeProgress?.completed).toBe(3)
+    expect(emitted).toHaveLength(2)
+
+    // The report is the finer answer to the same question, so the counts go with it: a stale
+    // "3 of 4" beside a finished probe reads as one still working.
+    await service.pollEnvTest('ws', started.id)
+    const settled = runRepo.rows.get(`ws:${started.id}`)
+    expect(settled?.probe?.verdict).toBe('operable')
+    expect(settled?.probeProgress).toBeNull()
+  })
+
+  it('refuses the mode when the deployment cannot serve THIS surface image, before provisioning', async () => {
+    // A wired prober is not a runnable one: the browser prober needs its own executor image, and a
+    // deployment that binds the plain class and not that one would otherwise pay for a branch, a
+    // full provision and a teardown to discover it inside the dispatch.
+    const { repo, calls } = fakeRepo()
+    const probeStage = new FakeProbeStage({ surface: 'ui', supported: false })
+    const { service, runRepo } = makeService({
+      repoContext: { repo, baseBranch: 'main', repoId: 'repo_1' },
+      probeStage,
+    })
+    const err = await service
+      .startTest('ws', 'frame-1', null, 'agent-probe')
+      .catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(ConflictError)
+    expect((err as ConflictError).details?.reason).toBe('env_test_probe_unavailable')
+    expect((err as ConflictError).details?.surface).toBe('ui')
+    expect(runRepo.rows.size).toBe(0)
+    expect(calls.created).toEqual([])
+
+    // The provisioning self-test is untouched by a prober gap.
+    expect((await service.startTest('ws', 'frame-1')).status).toBe('running')
+  })
+
+  it('refuses a dry run past the workspace spend budget, before provisioning', async () => {
+    // The first billable call no run start gates. Admitted, the proxy refuses the container's
+    // first completion and the operator has paid for a provision and a teardown to be told about
+    // a ceiling that was knowable up front.
+    const { repo, calls } = fakeRepo()
+    const { service, runRepo } = makeService({
+      repoContext: { repo, baseBranch: 'main', repoId: 'repo_1' },
+      probeStage: new FakeProbeStage(),
+      isOverBudget: async () => true,
+    })
+    const err = await service
+      .startTest('ws', 'frame-1', null, 'agent-probe')
+      .catch((e: unknown) => e)
+    expect((err as ConflictError).details?.reason).toBe('env_test_over_budget')
+    expect(runRepo.rows.size).toBe(0)
+    expect(calls.created).toEqual([])
+    // The provisioning self-test spends nothing, so a budget never blocks it.
+    expect((await service.startTest('ws', 'frame-1')).status).toBe('running')
+  })
+
+  it('fails CLOSED when the budget probe itself throws', async () => {
+    const { repo } = fakeRepo()
+    const { service, logs } = makeService({
+      repoContext: { repo, baseBranch: 'main', repoId: 'repo_1' },
+      probeStage: new FakeProbeStage(),
+      isOverBudget: async () => {
+        throw new Error('the spend ledger is unreachable')
+      },
+    })
+    const err = await service
+      .startTest('ws', 'frame-1', null, 'agent-probe')
+      .catch((e: unknown) => e)
+    expect((err as ConflictError).details?.reason).toBe('env_test_over_budget')
+    expect(logs.some((l) => l.msg.includes('budget probe failed'))).toBe(true)
+  })
+
+  it('refuses a SECOND self-test for a frame that already has one running', async () => {
+    // Each run provisions its own environment under a synthetic per-run key nothing supersedes,
+    // so two in flight is two live environments for one service: billed twice, and racing each
+    // other to create on any provider whose namespace is derived per service.
+    const { repo, calls } = fakeRepo()
+    const { service, runRepo } = makeService({
+      repoContext: { repo, baseBranch: 'main', repoId: 'repo_1' },
+      probeStage: new FakeProbeStage(),
+    })
+    const first = await service.startTest('ws', 'frame-1')
+    const branchesAfterFirst = calls.created.length
+
+    const err = await service
+      .startTest('ws', 'frame-1', null, 'agent-probe')
+      .catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(ConflictError)
+    expect((err as ConflictError).details?.reason).toBe('env_test_already_running')
+    expect((err as ConflictError).details?.runId).toBe(first.id)
+    expect(runRepo.rows.size).toBe(1)
+    expect(calls.created).toHaveLength(branchesAfterFirst)
+
+    // Once the first settles, the second is admitted.
+    await service.stop('ws', first.id)
+    expect((await service.startTest('ws', 'frame-1', null, 'agent-probe')).mode).toBe('agent-probe')
   })
 
   it('fails the run when the dispatch throws, with the environment reclaimed', async () => {

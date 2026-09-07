@@ -151,10 +151,19 @@ function outcomeClass(outcome: EnvironmentProbeReport['operations'][number]['out
         </li>
       </ul>
       <!-- Every cap records what it dropped: a reader must never take a truncated list for the
-           whole attempt. -->
+           whole attempt. The two ways an operation fails to reach the list are rendered SEPARATELY
+           because they send a reader somewhere different: one says the agent reported more than is
+           shown, the other says its reply was malformed. -->
       <p v-if="report.operationsOmitted" class="mt-1 text-[11px] text-slate-500">
         {{
           t('inspector.testConfig.envProbe.operationsOmitted', { count: report.operationsOmitted })
+        }}
+      </p>
+      <p v-if="report.operationsUnreadable" class="mt-1 text-[11px] text-slate-500">
+        {{
+          t('inspector.testConfig.envProbe.operationsUnreadable', {
+            count: report.operationsUnreadable,
+          })
         }}
       </p>
     </div>

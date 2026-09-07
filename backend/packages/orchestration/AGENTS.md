@@ -250,8 +250,8 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   through; `environmentProbeStage.ts` is the AGENT DRY RUN's `probing` stage, resolving what the
   prober is handed and coercing what it reports. Two traps: the run's `status` is the LIFECYCLE
   (an `inoperable` verdict is a SUCCEEDED run that found something), and the probe's claim is
-  written BEFORE its container is dispatched, carrying the SURFACE, because that is what a replay
-  reads and what every later poll and reclaim addresses a container by. Doc:
+  written BEFORE its container is dispatched and MARKED after, carrying the SURFACE, because the
+  pair is what a replay reads and what every later poll and reclaim addresses a container by. Doc:
   [`environment-self-tests.md`](../../docs/environment-self-tests.md).
 - `pipelines/`, `board/`, `boardScan/`, `requirements/`,
   `notifications/`, `releaseHealth/`, `review/`, `estimation/`, `kaizen/`, `sandbox/`,

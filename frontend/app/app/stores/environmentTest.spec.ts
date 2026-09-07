@@ -21,6 +21,7 @@ function run(id: string, over: Partial<EnvironmentTestRun> = {}): EnvironmentTes
     error: null,
     failedStage: null,
     probe: null,
+    probeProgress: null,
     createdAt: 1,
     updatedAt: 1,
     ...over,

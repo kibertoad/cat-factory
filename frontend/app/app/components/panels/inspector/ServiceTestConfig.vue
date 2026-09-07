@@ -3,13 +3,11 @@ import { computed, onMounted, ref, watch } from 'vue'
 import type {
   Block,
   CloudProvider,
-  EnvironmentTestStage,
   InstanceSize,
   ProvisionType,
   ServiceProvisioning,
 } from '~/types/domain'
 import type {
-  ConflictReason,
   KubernetesManifestSource,
   KubernetesRenderer,
   ProvisioningComposeServiceCandidate,
@@ -22,7 +20,6 @@ import RepoTreeBrowser from '~/components/github/RepoTreeBrowser.vue'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
 import ServiceSelfTests from '~/components/panels/inspector/ServiceSelfTests.vue'
 import { apiErrorEnvelope } from '~/composables/api/errors'
-import { parseConflict } from '~/composables/usePipelineErrorToast'
 
 // Service-level (frame) configuration: the service-owned PROVISIONING — the provision
 // TYPE this service produces (`infraless` / `docker-compose` / `kubernetes` / `custom`)

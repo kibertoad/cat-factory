@@ -727,12 +727,18 @@ export function selectNodeEnvironmentProbeAgent(deps: {
   if (!deps.resolveTransport || !publicUrl || !sessionSecret || !deps.mintInstallationToken) {
     return undefined
   }
-  const model = resolveAgentConfig(deps.config.agents.routing, 'tester-api').ref
-  if (!isProxyableProvider(model.provider)) {
+  // PER SURFACE, from each tester kind's own routing: see the Worker's sibling for why one
+  // shared ref would send a cheap text model at a Playwright job with no setting able to fix it.
+  const models = {
+    api: resolveAgentConfig(deps.config.agents.routing, 'tester-api').ref,
+    ui: resolveAgentConfig(deps.config.agents.routing, 'tester-ui').ref,
+  }
+  const unproxyable = Object.entries(models).find(([, ref]) => !isProxyableProvider(ref.provider))
+  if (unproxyable) {
     logger.warn(
-      'environment dry run: the tester routing model is not proxyable by the LLM proxy; ' +
+      'environment dry run: a tester routing model is not proxyable by the LLM proxy; ' +
         'agent dry runs are disabled on this deployment.',
-      { provider: model.provider },
+      { surface: unproxyable[0], provider: unproxyable[1].provider },
     )
     return undefined
   }
@@ -742,7 +748,7 @@ export function selectNodeEnvironmentProbeAgent(deps: {
     repoRepository: deps.repoRepository,
     mintInstallationToken: deps.mintInstallationToken,
     sessionService: new ContainerSessionService({ secret: sessionSecret }),
-    model,
+    models,
     proxyBaseUrl: `${publicUrl.replace(/\/+$/, '')}/v1`,
     resolveRepoOrigin: deps.resolveRepoOrigin,
     ...(deps.resolveTestSecrets ? { resolveTestSecrets: deps.resolveTestSecrets } : {}),

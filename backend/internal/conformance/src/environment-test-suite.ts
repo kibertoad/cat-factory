@@ -56,6 +56,7 @@ const PROBE: EnvironmentProbeReport = {
   succeeded: 2,
   authenticatedSucceeded: 1,
   operationsOmitted: 2,
+  operationsUnreadable: 1,
   model: 'workers-ai:qwen',
 }
 
@@ -75,6 +76,8 @@ function record(
     error: null,
     failedStage: null,
     probeSurface: null,
+    probeDispatchedAt: null,
+    probeProgress: null,
     probe: null,
     createdAt: 1_000,
     updatedAt: 1_000,
@@ -171,7 +174,11 @@ export function defineEnvironmentTestSuite(
       )
       // The CLAIM is written on its own, before the prober is dispatched: the write the durable
       // driver's replay guard depends on. It must survive as the surface it named, because every
-      // later poll and reclaim addresses a container by it.
+      // later poll and reclaim addresses a container by it, and it must come back with
+      // `probeDispatchedAt` still NULL, which is the whole difference between a claim with no
+      // container behind it and a job that is really running. A facade that defaulted that column
+      // to anything would turn a replay's re-dispatch into a poll of a job nobody started, which
+      // the backend answers as an eviction.
       expect(await repo.updateIfRunning(ws, id, { stage: 'probing', probeSurface: 'ui' })).toBe(
         true,
       )
@@ -179,7 +186,22 @@ export function defineEnvironmentTestSuite(
         mode: 'agent-probe',
         stage: 'probing',
         probeSurface: 'ui',
+        probeDispatchedAt: null,
+        probeProgress: null,
         probe: null,
+      })
+      // The MARK, written after the container accepted the job, and then the live progress the
+      // longest stage of this run pushes to the SPA. Both are read back on every later poll, so a
+      // facade that dropped either leaves a dry run re-dispatching or a card frozen.
+      expect(await repo.updateIfRunning(ws, id, { probeDispatchedAt: 3_000 })).toBe(true)
+      expect(
+        await repo.updateIfRunning(ws, id, {
+          probeProgress: { completed: 1, inProgress: 1, total: 4 },
+        }),
+      ).toBe(true)
+      expect(await repo.get(ws, id)).toMatchObject({
+        probeDispatchedAt: 3_000,
+        probeProgress: { completed: 1, inProgress: 1, total: 4 },
       })
       // The report then lands as a whole, and comes back structurally equal rather than merely
       // present: `toEqual` here is the assertion, since a facade that dropped an operation's
@@ -189,11 +211,15 @@ export function defineEnvironmentTestSuite(
         await repo.updateIfRunning(ws, id, {
           stage: 'tearing_down',
           probe: PROBE,
+          // Cleared with the same write that lands the report: a stale count beside a finished
+          // probe reads as one still working, and a facade that ignored the null would keep it.
+          probeProgress: null,
           updatedAt: 4,
         }),
       ).toBe(true)
       const settled = await repo.get(ws, id)
       expect(settled?.probe).toEqual(PROBE)
+      expect(settled?.probeProgress).toBeNull()
       // A dry run that reported bad news still SUCCEEDS as a lifecycle: the status is about the
       // run, the verdict is about the service (see the contract's note on `status`).
       expect(

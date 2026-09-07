@@ -1,4 +1,5 @@
 import type {
+  AgentFailureKind,
   Block,
   BlockRepository,
   EnvironmentHandle,
@@ -10,7 +11,9 @@ import type {
   EnvironmentTestRunRecord,
   Logger,
   ResolveRunRepoContext,
+  StepSubtasks,
 } from '@cat-factory/kernel'
+import { noopLogger, redactSecrets } from '@cat-factory/kernel'
 import {
   coerceEnvironmentProbeReport,
   environmentProbeSurfaceFor,
@@ -51,22 +54,90 @@ export interface EnvironmentProbeStageDependencies {
 
 /** What one poll of the probing stage settled on. */
 export type EnvironmentProbeOutcome =
-  | { state: 'running' }
-  /** The agent reported; the report is already coerced, capped and platform-graded. */
+  /**
+   * Still working. `subtasks` is the container's own live todo count when it reported one, which
+   * the caller persists: `probing` is the only stage of this run that lasts minutes, so it is the
+   * only one where writing nothing leaves the SPA unable to tell work from a wedge.
+   */
+  | { state: 'running'; subtasks?: StepSubtasks }
+  /** The agent reported; the report is already coerced, capped, scrubbed and platform-graded. */
   | { state: 'reported'; report: EnvironmentProbeReport }
 
+/**
+ * What a BROKEN dry run says, ahead of the container's own message.
+ *
+ * The run record has ONE error field, so without this a container that vanished and a model that
+ * errored read identically to the developer who has to decide whether pressing the button again
+ * is worth anything. Not an exhaustive `Record` over the failure vocabulary: only these arrive on
+ * this path (the dispatcher maps everything else through `failureKindFromHarnessCause`), and the
+ * default is a true statement about every one of the rest rather than a hole.
+ */
+function probeFailureCause(kind: AgentFailureKind): string {
+  switch (kind) {
+    case 'evicted':
+      return (
+        'The dry run container vanished before it reported (an eviction or a crash), so nothing ' +
+        'was established about the environment. Re-running gets a fresh container.'
+      )
+    case 'harness_shutdown':
+      return (
+        'The dry run container was shut down while the agent was still working, so nothing was ' +
+        'established about the environment.'
+      )
+    case 'timeout':
+      return (
+        'The dry run passed its watchdog before reporting, so nothing was established about the ' +
+        'environment.'
+      )
+    default:
+      return 'The dry-run agent failed before it produced a report.'
+  }
+}
+
 export class EnvironmentProbeStage {
-  constructor(private readonly deps: EnvironmentProbeStageDependencies) {}
+  /** The injected logger, normalised once so every site can log unconditionally (CLAUDE.md). */
+  private readonly log: Logger
+
+  constructor(private readonly deps: EnvironmentProbeStageDependencies) {
+    this.log = deps.logger ?? noopLogger
+  }
 
   /**
-   * Which prober a frame's dry run runs, through the shared rule the SPA's button label reads.
-   *
-   * Resolved ONCE, at the claim, and PINNED on the run (`probeSurface`): the surface decides which
-   * container the job runs in, so every later poll and reclaim must address the one that started
-   * rather than re-derive from a frame that may since have been retyped or deleted.
+   * Which prober a frame's dry run would run, through the shared rule the SPA's button label
+   * reads. Pure, so ADMISSION can ask it with the frame it has already loaded and no record yet.
    */
   surfaceFor(frame: Block): EnvironmentProbeSurface {
     return environmentProbeSurfaceFor(frame.type)
+  }
+
+  /**
+   * Whether this deployment can actually run `surface`'s prober for this workspace, asked at
+   * admission. Delegated to the agent, which is where the runner backend is known; see the port
+   * for why an unknown answers yes.
+   */
+  async supports(workspaceId: string, surface: EnvironmentProbeSurface): Promise<boolean> {
+    return this.deps.agent.supports(workspaceId, surface)
+  }
+
+  /**
+   * The frame this run is probing, read ONCE per tick, with the prober its type selects.
+   *
+   * One read rather than one per collaborator: the surface decides which container the job runs
+   * in and the title and description go into the prompt, and two reads a moment apart can observe
+   * two different frames, so a rename between them puts a service name in the prompt that does not
+   * match the surface the claim pinned. The caller PINS the surface on the run at the claim
+   * (`probeSurface`) and passes the pinned value back to {@link dispatch}: every later poll and
+   * reclaim must address the container that actually started, not one re-derived from a frame that
+   * may since have been retyped or deleted.
+   */
+  async resolveTarget(
+    record: EnvironmentTestRunRecord,
+  ): Promise<{ frame: Block; surface: EnvironmentProbeSurface }> {
+    const frame = await this.deps.blockRepository.get(record.workspaceId, record.blockId)
+    if (!frame) {
+      throw new Error('The service frame was deleted while the agent dry run was starting.')
+    }
+    return { frame, surface: this.surfaceFor(frame) }
   }
 
   /**
@@ -81,11 +152,8 @@ export class EnvironmentProbeStage {
   async dispatch(
     record: EnvironmentTestRunRecord,
     surface: EnvironmentProbeSurface,
+    frame: Block,
   ): Promise<EnvironmentProbeHandle> {
-    const frame = await this.deps.blockRepository.get(record.workspaceId, record.blockId)
-    if (!frame) {
-      throw new Error('The service frame was deleted while the agent dry run was starting.')
-    }
     if (!record.environmentId) {
       throw new Error('The agent dry run has no provisioned environment to probe.')
     }
@@ -163,15 +231,24 @@ export class EnvironmentProbeStage {
       jobId: record.id,
       surface,
     })
-    if (update.state === 'running') return { state: 'running' }
+    if (update.state === 'running') {
+      return update.subtasks
+        ? { state: 'running', subtasks: update.subtasks }
+        : { state: 'running' }
+    }
     if (update.state === 'failed') {
-      throw new Error(update.error)
+      throw new Error(`${probeFailureCause(update.failureKind)} ${update.error}`)
     }
     const report = coerceEnvironmentProbeReport(update.report, {
       surface,
       ...(update.model ? { model: update.model } : {}),
+      // The report is model-authored text on its way to a persisted row and a rendered panel, and
+      // the prompt hands the agent the environment's own credential verbatim plus every sealed
+      // test secret in its shell. Asking it not to echo them is guidance; this is the boundary.
+      // Applied at the COMPOSE site so it runs before the caps, per the untrusted-text rule.
+      scrub: (value) => redactSecrets(value) ?? value,
     })
-    this.deps.logger?.info('environment dry run reported', {
+    this.log.info('environment dry run reported', {
       workspaceId: record.workspaceId,
       runId: record.id,
       surface,

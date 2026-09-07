@@ -2,6 +2,7 @@ import { PLATFORM_IMAGE_VARIANTS } from '@cat-factory/kernel'
 import type { DurableObjectNamespace } from '@cloudflare/workers-types'
 import { describe, expect, it } from 'vitest'
 import type { ExecutionContainer } from '../src/infrastructure/containers/ExecutionContainer'
+import { CloudflareContainerTransport } from '../src/infrastructure/containers/CloudflareContainerTransport'
 import {
   agentContainerNamespace,
   deploymentContainerBinding,
@@ -96,5 +97,29 @@ describe('deploymentContainerBindings', () => {
         UI_CONTAINER: stub('ui'),
       }),
     ).toEqual({})
+  })
+})
+
+describe('CloudflareContainerTransport.supportsImage', () => {
+  // The capability question a caller whose dispatch sits behind expensive setup asks FIRST: an
+  // environment dry run has created a branch and provisioned an environment by the time it
+  // dispatches, so an unwired image discovered there costs a full provision and teardown.
+  it('answers from the same resolver a dispatch uses', () => {
+    const bound = new CloudflareContainerTransport(agentContainerNamespace({ exec, ui }))
+    expect(bound.supportsImage('ui')).toBe(true)
+    expect(bound.supportsImage(undefined)).toBe(true)
+
+    const unbound = new CloudflareContainerTransport(agentContainerNamespace({ exec }))
+    expect(unbound.supportsImage('ui')).toBe(false)
+    expect(unbound.supportsImage('default')).toBe(true)
+  })
+
+  it('propagates anything that is NOT an unwired-image refusal', () => {
+    // Swallowing it would report a bug here as a deployment gap, which is the one answer this
+    // question must never invent.
+    const broken = new CloudflareContainerTransport(() => {
+      throw new Error('the resolver itself is broken')
+    })
+    expect(() => broken.supportsImage('ui')).toThrow(/resolver itself is broken/)
   })
 })

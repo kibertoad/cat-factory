@@ -17,12 +17,14 @@ import { failureKindFromHarnessCause, runBestEffort } from '@cat-factory/kernel'
 import {
   environmentProbeSystemPrompt,
   environmentProbeUserPrompt,
+  type EnvironmentProbeSecretsBrief,
   ENVIRONMENT_PROBE_SHAPE_HINT,
   isProxyableProvider,
 } from '@cat-factory/agents'
 import {
   ENVIRONMENT_PROBE_API_AGENT_KIND,
   ENVIRONMENT_PROBE_UI_AGENT_KIND,
+  isEnvironmentProbeReportPayload,
 } from '@cat-factory/contracts'
 import type { ContainerSessionService } from '../containers/ContainerSessionService.js'
 import type { MintInstallationToken, ResolveRepoOrigin } from './repoTargeting.js'
@@ -41,7 +43,7 @@ import { logger } from '../observability/logger.js'
 // NO push (this agent must never change the repository), against `infra: ephemeral`, which stands
 // nothing up and hands the environment's URL to the harness so a container backend can bridge it.
 //
-// Three details are load-bearing and each cost a real bug elsewhere in this codebase first:
+// Four details are load-bearing and each cost a real bug elsewhere in this codebase first:
 //
 //  - The dispatch DECLARES its environment through `RunnerDispatchOptions.environments`. That is
 //    what feeds the container's hosts entry (`--add-host` / `hostAliases`), and a transport is
@@ -51,10 +53,14 @@ import { logger } from '../observability/logger.js'
 //    and release. A per-run container backend puts a differently-imaged job in its own container,
 //    so a poll that forgot the variant polls a container that was never started, and a release
 //    that forgot it leaves a browser container running for its full lifetime.
+//  - The MODEL is per surface too, resolved by the facade from each tester kind's own routing. One
+//    shared ref sends whatever `tester-api` resolved to at a Playwright job that has to read
+//    screenshots, and no setting anywhere could change it.
 //  - The TEST SECRETS are resolved ONCE here: the values go on the body's dedicated `testSecrets`
 //    field (the harness turns them into the agent process's environment) and the key +
 //    description pairs of that SAME list are what the prompt advertises. One resolution, so the
-//    prompt cannot name a variable the container does not carry.
+//    prompt cannot name a variable the container does not carry, and the three states that
+//    resolution can END in are stated to the prober rather than collapsed into an empty list.
 // ---------------------------------------------------------------------------
 
 /** Which executor image each surface needs. */
@@ -89,15 +95,26 @@ export interface ContainerEnvironmentProbeAgentDependencies {
   mintInstallationToken: MintInstallationToken
   /** Mints the signed, model-locked LLM-proxy session token the container uses. */
   sessionService: ContainerSessionService
-  /** Model the prober runs with (must be proxyable, like the other Pi-harness flows). */
-  model: ModelRef
+  /**
+   * The model each prober runs with, PER SURFACE (both must be proxyable, like every other
+   * Pi-harness flow).
+   *
+   * Two entries rather than one, because the two probers do different work and a deployment
+   * routes them separately: the browser prober reads screenshots and drives a page, the HTTP one
+   * reads a schema and calls it. One shared ref sends whatever `tester-api` resolves to at a
+   * Playwright job, and no setting anywhere could change it. The facades resolve each from its own
+   * agent-kind routing, which is what {@link ENVIRONMENT_PROBE_UI_AGENT_KIND} and its sibling
+   * exist for.
+   */
+  models: Record<EnvironmentProbeSurface, ModelRef>
   /** Public base URL of the LLM proxy, including `/v1`. */
   proxyBaseUrl: string
   /**
    * Resolves the service frame's sealed test credentials. Absent ⇒ the deployment has no sealed
-   * store, which the prompt STATES ("no test credentials are configured") rather than omitting: a
-   * prober that cannot tell an unconfigured store from one it was not shown files the platform's
-   * own gap as its own ignorance, and `missingContext` is the field that gap belongs in.
+   * store, which the prompt STATES as a DEPLOYMENT fact rather than omitting: a prober that cannot
+   * tell an unconfigured store from one it was not shown files the platform's own gap as its own
+   * ignorance, and `missingContext` is the field that gap belongs in. A store that is wired and
+   * will not OPEN is a third state, stated as such (see {@link EnvironmentProbeSecretsBrief}).
    */
   resolveTestSecrets?: (workspaceId: string, blockId: string) => Promise<TestSecretEntry[]>
   /**
@@ -117,6 +134,24 @@ export class ContainerEnvironmentProbeAgent implements EnvironmentProbeAgent {
     this.jobs = new RunnerJobClient(deps.resolveTransport)
   }
 
+  /**
+   * Whether the workspace's resolved runner backend can serve this surface's executor image.
+   *
+   * The backend is asked because it is the only thing that knows: a Worker binds container
+   * classes, a local transport pins image tags, and a self-hosted pool resolves images on its own
+   * side and cannot answer at all. That last case answers TRUE (see the port): an unknown is not a
+   * refusal, and a deployment whose pool has no UI image still fails at dispatch exactly as every
+   * other container flow does there.
+   *
+   * A transport that cannot even be RESOLVED is `false`: a dry run needs a runner, and refusing at
+   * admission is the whole point of asking here.
+   */
+  async supports(workspaceId: string, surface: EnvironmentProbeSurface): Promise<boolean> {
+    const transport = await this.deps.resolveTransport(workspaceId).catch(() => null)
+    if (!transport) return false
+    return transport.supportsImage?.(IMAGE_BY_SURFACE[surface]) ?? true
+  }
+
   async start(request: EnvironmentProbeRequest): Promise<EnvironmentProbeHandle> {
     const { workspaceId, jobId, surface, repo, environment } = request
     const log = logger.child({
@@ -133,10 +168,12 @@ export class ContainerEnvironmentProbeAgent implements EnvironmentProbeAgent {
           'agent dry run has no repository to read.',
       )
     }
-    if (!isProxyableProvider(this.deps.model.provider)) {
+    const model = this.deps.models[surface]
+    if (!isProxyableProvider(model.provider)) {
       throw new Error(
         `An agent dry run needs a model the LLM proxy can serve (Workers AI, or a direct ` +
-          `OpenAI-compatible provider); '${this.deps.model.provider}' is not supported.`,
+          `OpenAI-compatible provider); the '${surface}' prober is routed to ` +
+          `'${model.provider}', which is not supported.`,
       )
     }
     if (!environment.url) {
@@ -158,8 +195,8 @@ export class ContainerEnvironmentProbeAgent implements EnvironmentProbeAgent {
       workspaceId,
       executionId: jobId,
       agentKind,
-      provider: this.deps.model.provider,
-      model: this.deps.model.model,
+      provider: model.provider,
+      model: model.model,
     })
     const origin = (this.deps.resolveRepoOrigin ?? githubRepoOrigin)({
       installationId: installation.installationId,
@@ -183,7 +220,7 @@ export class ContainerEnvironmentProbeAgent implements EnvironmentProbeAgent {
         surface,
         service: request.service,
         environment,
-        testSecretRefs: secrets.refs,
+        testSecrets: secrets.brief,
         repo: {
           owner: repo.owner,
           name: repo.name,
@@ -191,7 +228,7 @@ export class ContainerEnvironmentProbeAgent implements EnvironmentProbeAgent {
           ...(repo.serviceDirectory ? { serviceDirectory: repo.serviceDirectory } : {}),
         },
       }),
-      model: this.deps.model.model,
+      model: model.model,
       proxyBaseUrl: this.deps.proxyBaseUrl,
       proxyPhasePath: true,
       sessionToken,
@@ -272,23 +309,26 @@ export class ContainerEnvironmentProbeAgent implements EnvironmentProbeAgent {
         detail: result.error,
       }
     }
-    if (result.custom === undefined || result.custom === null) {
-      // The job completed and returned no JSON. Reported as a FAILED dry run rather than as an
-      // empty report: an agent that produced nothing has established nothing about the
-      // environment, and an empty report would be graded `inoperable` and read as a finding
-      // about the service.
+    if (!isEnvironmentProbeReportPayload(result.custom)) {
+      // The job completed and returned nothing a report can be read out of: no `custom` at all, or
+      // a top-level array/string/number the harness's repair pass let through. Reported as a
+      // FAILED dry run rather than as an empty report, and the shape question is asked with the
+      // SAME predicate the coercion applies: an agent that produced nothing has established
+      // nothing about the environment, while an empty report is graded `inoperable` and rendered
+      // as a finding about the service.
       return {
         state: 'failed',
         failureKind: failureKindFromHarnessCause(view.failureCause) ?? 'agent',
         error:
-          'The agent dry run finished without returning a report, so nothing was established ' +
-          'about the environment.',
+          'The agent dry run finished without returning a usable report, so nothing was ' +
+          'established about the environment.',
       }
     }
+    const model = this.deps.models[handle.surface]
     return {
       state: 'done',
       report: result.custom,
-      model: `${this.deps.model.provider}:${this.deps.model.model}`,
+      model: `${model.provider}:${model.model}`,
     }
   }
 
@@ -306,27 +346,37 @@ export class ContainerEnvironmentProbeAgent implements EnvironmentProbeAgent {
   }
 
   /**
-   * The service frame's sealed test credentials, as the two projections this dispatch needs.
+   * The service frame's sealed test credentials, as the two projections this dispatch needs: the
+   * values for the container, and a BRIEF the prompt states out loud.
    *
-   * Best-effort: a store that will not open is a reason to run the dry run WITHOUT credentials
-   * and let the prober report `auth_missing`, not a reason to fail the diagnostic: an operator
-   * who cannot read their own secret store learns more from a report naming what was missing than
-   * from a stage that refused to run. The warn carries the cause.
+   * Best-effort in the sense that a store that will not open still runs the dry run WITHOUT
+   * credentials, because an operator learns more from a report naming what was missing than from a
+   * stage that refused to run. It is NOT best-effort in what it SAYS: `runBestEffort` returning
+   * `undefined` is an OUTAGE, and folding that into the same empty list as "this service has none
+   * configured" makes the prober file the platform's failure as a board-configuration gap and send
+   * someone to re-enter secrets that are already there. The brief keeps the three states apart;
+   * the warn still carries the cause.
    */
   private async resolveSecrets(
     workspaceId: string,
     blockId: string,
     log: Logger,
-  ): Promise<{ env: { key: string; value: string }[]; refs: TestSecretRef[] }> {
+  ): Promise<{ env: { key: string; value: string }[]; brief: EnvironmentProbeSecretsBrief }> {
     const resolve = this.deps.resolveTestSecrets
-    if (!resolve) return { env: [], refs: [] }
-    const entries: TestSecretEntry[] =
-      (await runBestEffort(log, 'resolve dry-run test secrets', () =>
-        resolve(workspaceId, blockId),
-      )) ?? []
+    if (!resolve) return { env: [], brief: { status: 'unwired' } }
+    const entries: TestSecretEntry[] | undefined = await runBestEffort(
+      log,
+      'resolve dry-run test secrets',
+      () => resolve(workspaceId, blockId),
+    )
+    if (!entries) return { env: [], brief: { status: 'unreadable' } }
+    const refs: TestSecretRef[] = entries.map((entry) => ({
+      key: entry.key,
+      description: entry.description,
+    }))
     return {
       env: entries.map((entry) => ({ key: entry.key, value: entry.value })),
-      refs: entries.map((entry) => ({ key: entry.key, description: entry.description })),
+      brief: { status: 'resolved', refs },
     }
   }
 

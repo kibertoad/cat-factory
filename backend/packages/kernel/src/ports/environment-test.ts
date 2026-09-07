@@ -5,6 +5,7 @@ import type {
   EnvironmentTestStage,
   EnvironmentTestStatus,
   ServiceProvisioning,
+  StepSubtasks,
 } from '../domain/types.js'
 
 // ---------------------------------------------------------------------------
@@ -72,6 +73,25 @@ export interface EnvironmentTestRunRecord {
    * when a leaked browser container costs the most. Null in `provision` mode and before the claim.
    */
   probeSurface: EnvironmentProbeSurface | null
+  /**
+   * When the prober's container was accepted, so a replay can tell a CLAIMED probe from a
+   * DISPATCHED one.
+   *
+   * The claim above is written before the dispatch, which is the only ordering that cannot start
+   * two agents against one environment. It leaves a window the claim alone cannot describe: a
+   * durable replay landing between the two finds a claim with no job behind it, polls a container
+   * that was never started, and reads the backend's "no such job" as an EVICTION, so a run that
+   * simply lost its isolate reports a container failure that never happened. Written AFTER the
+   * dispatch is accepted, so a poll that finds it null re-dispatches (idempotent per job id) and a
+   * poll that finds it set knows the job is real.
+   */
+  probeDispatchedAt: number | null
+  /**
+   * The prober's live todo counts while it works. Null in `provision` mode, before the container
+   * reports any, and once the report has landed (the report is the finer answer). See the wire
+   * type for why a multi-minute stage that writes nothing is a bug rather than an omission.
+   */
+  probeProgress: StepSubtasks | null
   /** The dry-run agent's report, once the probe settled. Null until then, and in `provision` mode. */
   probe: EnvironmentProbeReport | null
   createdAt: number
@@ -89,6 +109,8 @@ export type EnvironmentTestRunRecordPatch = Partial<
     | 'error'
     | 'failedStage'
     | 'probeSurface'
+    | 'probeDispatchedAt'
+    | 'probeProgress'
     | 'probe'
     | 'updatedAt'
   >

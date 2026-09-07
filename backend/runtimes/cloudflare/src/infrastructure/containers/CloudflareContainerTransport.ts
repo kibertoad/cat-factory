@@ -3,9 +3,12 @@ import {
   CONTAINER_EVICTION_ERROR,
   HARNESS_SHUTDOWN_ERROR,
   harnessDispatchError,
+  getErrorReason,
   readRunnerDispatchAck,
+  RUNNER_IMAGE_UNWIRED_REASON,
   type RunnerDispatchAck,
   type RunnerDispatchKind,
+  type RunnerImageVariant,
   type RunnerJobRef,
   type RunnerJobStopOutcome,
   type RunnerJobView,
@@ -184,6 +187,23 @@ export class CloudflareContainerTransport implements RunnerTransport {
     const namespace = this.resolveNamespace(ref.image ?? 'default')
     const id = namespace.idFromName(containerKeyForRef(ref))
     return { id, stub: namespace.get(id) as DurableObjectStub<RunContainer> }
+  }
+
+  /**
+   * Whether a container class is bound for `variant`, answered by asking the same resolver a
+   * dispatch would: the one place that knows which classes this Worker binds.
+   *
+   * Only the UNWIRED refusal becomes a `false`. Any other throw propagates, because it is not the
+   * question that was asked and swallowing it would report a bug here as a deployment gap.
+   */
+  supportsImage(variant?: RunnerImageVariant): boolean {
+    try {
+      this.resolveNamespace(variant ?? 'default')
+      return true
+    } catch (error) {
+      if (getErrorReason(error) === RUNNER_IMAGE_UNWIRED_REASON) return false
+      throw error
+    }
   }
 
   // NB: the SIZING hints in `RunnerDispatchOptions` are intentionally ignored here. A

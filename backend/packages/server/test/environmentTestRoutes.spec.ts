@@ -27,6 +27,7 @@ const RUN: EnvironmentTestRun = {
   error: null,
   failedStage: null,
   probe: null,
+  probeProgress: null,
   createdAt: 1,
   updatedAt: 1,
 }

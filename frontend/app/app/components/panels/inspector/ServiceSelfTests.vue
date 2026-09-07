@@ -63,6 +63,31 @@ function isRunning(mode: EnvironmentTestMode) {
   return runFor(mode)?.status === 'running'
 }
 
+/**
+ * Whether EITHER self-test is in flight for this frame, which disables both start buttons.
+ *
+ * Per FRAME, not per mode: each run provisions its own ephemeral environment under a synthetic
+ * per-run key that nothing supersedes, so two at once is two live environments for one service,
+ * billed twice and racing each other to create on any provider whose namespace is derived per
+ * service rather than per branch. The backend refuses the second outright
+ * (`env_test_already_running`); this is the affordance that keeps a developer from meeting that
+ * refusal by pressing the obvious thing.
+ */
+const busy = computed(() => isRunning('provision') || isRunning('agent-probe'))
+
+/**
+ * The prober's live todo counts, rendered while the dry run is probing.
+ *
+ * `probing` is the one stage of this run measured in minutes, so it is the one where a bare
+ * "probing with an agent" is indistinguishable from a wedged run for as long as the container
+ * works.
+ */
+const probeProgress = computed(() => {
+  const run = probeRun.value
+  if (!run || run.status !== 'running' || run.stage !== 'probing') return null
+  return run.probeProgress
+})
+
 // Per-stage label KEYS, exhaustive over the contracts `EnvironmentTestStage` union: a new
 // backend stage fails THIS typecheck until mapped (the key is resolved at runtime, so the
 // typed-message-keys check can't see the `t()` lookup: the map's exhaustiveness is the
@@ -92,6 +117,8 @@ const CONFLICT_KEYS: Record<Extract<ConflictReason, `env_test_${string}`>, strin
   env_test_no_vcs: 'errors.conflict.title.env_test_no_vcs',
   env_test_connection_failed: 'errors.conflict.title.env_test_connection_failed',
   env_test_probe_unavailable: 'errors.conflict.title.env_test_probe_unavailable',
+  env_test_already_running: 'errors.conflict.title.env_test_already_running',
+  env_test_over_budget: 'errors.conflict.title.env_test_over_budget',
 }
 
 function buildError(e: unknown): SelfTestError {
@@ -133,7 +160,7 @@ function buildError(e: unknown): SelfTestError {
 }
 
 async function start(mode: EnvironmentTestMode) {
-  if (!canTest.value || starting.value[mode] || isRunning(mode)) return
+  if (!canTest.value || starting.value[mode] || busy.value) return
   starting.value = { ...starting.value, [mode]: true }
   errors.value = { ...errors.value, [mode]: undefined }
   try {
@@ -180,7 +207,7 @@ async function stop(mode: EnvironmentTestMode) {
         variant="soft"
         data-testid="env-test-start"
         :loading="starting.provision"
-        :disabled="!canTest"
+        :disabled="!canTest || busy"
         @click="start('provision')"
       >
         {{ t('inspector.testConfig.envTest.start') }}
@@ -267,7 +294,7 @@ async function stop(mode: EnvironmentTestMode) {
         variant="soft"
         data-testid="env-probe-start"
         :loading="starting['agent-probe']"
-        :disabled="!canTest"
+        :disabled="!canTest || busy"
         @click="start('agent-probe')"
       >
         {{ t('inspector.testConfig.envProbe.start') }}
@@ -297,6 +324,14 @@ async function stop(mode: EnvironmentTestMode) {
     >
       <template v-if="probeRun.status === 'running'">
         {{ t('inspector.testConfig.envTest.running', { stage: stageLabel(probeRun.stage) }) }}
+        <template v-if="probeProgress">
+          {{
+            t('inspector.testConfig.envProbe.progress', {
+              completed: probeProgress.completed,
+              total: probeProgress.total,
+            })
+          }}
+        </template>
       </template>
       <template v-else-if="probeRun.status === 'succeeded'">
         {{ t('inspector.testConfig.envProbe.completed') }}

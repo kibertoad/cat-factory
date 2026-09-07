@@ -45,11 +45,13 @@ agent can work there.
 Two things to watch when reviewing. The run's `status` deliberately stays a statement about the
 LIFECYCLE, so a dry run reporting `inoperable` is a SUCCEEDED run that found something. Folding
 the verdict in would make the one interesting outcome indistinguishable from a broken diagnostic
-and leave a real teardown failure with nothing to say. And a deployment that cannot drive a dry run
-(no container runner, no proxyable model, no repository seam) refuses the mode as a 409 before any
-side effect, rather than standing an environment up and parking at a stage nothing can advance.
+and leave a real teardown failure with nothing to say. And everything knowable before the first
+side effect is refused there rather than mid-run: a deployment that cannot drive a dry run at all,
+one whose runner backend has no image for THIS frame's surface, a workspace over its spend budget,
+and a frame that already has a self-test running. Each of those otherwise costs a branch, a full
+provision and a teardown to discover.
 
-Internal break: `environment_test_runs` gains `mode`, `probe_surface` and `probe` on both
-runtimes, and the start endpoint takes an optional `{ mode }` body (absent is the provisioning
-self-test, so an existing client is unchanged). The reasoning, the traps and the wiring:
-`backend/docs/environment-self-tests.md`.
+Internal break: `environment_test_runs` gains `mode`, `probe_surface`, `probe_dispatched_at`,
+`probe_progress` and `probe` on both runtimes, and the start endpoint takes an optional `{ mode }`
+body (absent is the provisioning self-test, so an existing client is unchanged). The reasoning, the
+traps and the wiring: `backend/docs/environment-self-tests.md`.

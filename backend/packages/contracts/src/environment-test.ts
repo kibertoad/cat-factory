@@ -1,5 +1,6 @@
 import * as v from 'valibot'
 import { environmentProbeReportSchema } from './environment-probe.js'
+import { stepSubtasksSchema } from './execution.js'
 
 // ---------------------------------------------------------------------------
 // Ephemeral-environment self-test run.
@@ -89,6 +90,18 @@ export const environmentTestRunSchema = v.object({
    * told apart by `mode` and `failedStage`, never by this field alone.
    */
   probe: v.nullable(environmentProbeReportSchema),
+  /**
+   * The dry-run agent's live todo counts while the `probing` stage is in flight, lifted from the
+   * container's own progress exactly as a pipeline step's are.
+   *
+   * Carried on the run rather than left in the container because `probing` is the LONGEST stage
+   * this flow has (a model reading a repository and driving a service, minutes of it) and every
+   * other stage moves the SPA within seconds. With nothing written, no `envTestChanged` event
+   * fires for the whole probe and the card sits frozen on "probing with an agent", which reads
+   * exactly like a wedged run. Null in `provision` mode, before the prober reports any progress,
+   * and once the report has landed.
+   */
+  probeProgress: v.nullable(stepSubtasksSchema),
   createdAt: v.number(),
   updatedAt: v.number(),
 })

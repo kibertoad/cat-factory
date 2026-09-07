@@ -440,6 +440,7 @@ export {
   ENVIRONMENT_PROBE_SHAPE_HINT,
   ENVIRONMENT_PROBE_UI_SYSTEM_PROMPT,
   type EnvironmentProbeBrief,
+  type EnvironmentProbeSecretsBrief,
   environmentProbeSystemPrompt,
   environmentProbeUserPrompt,
 } from './agents/prompts/environment-probe.js'

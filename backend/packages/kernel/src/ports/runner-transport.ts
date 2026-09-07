@@ -921,6 +921,21 @@ export interface RunnerTransport {
   /** Poll the job's current state. */
   poll(ref: RunnerJobRef): Promise<RunnerJobView>
   /**
+   * Optionally answer, WITHOUT dispatching, whether this backend can serve `variant` at all.
+   *
+   * For a caller whose dispatch sits behind expensive, side-effecting setup: an environment
+   * self-test's dry run has already created a branch and provisioned an environment by the time it
+   * dispatches, so an unwired image discovered there costs a full provision and teardown to learn
+   * something the backend knew at admission. The image refusals themselves stay where they are (a
+   * dispatch must still refuse an unwired variant); this is the same question asked earlier.
+   *
+   * Absent means UNKNOWN, never false: a backend that resolves images on the far side (a
+   * self-hosted pool hands the variant to the pool's own job API) genuinely cannot answer, and a
+   * caller must read that as "go ahead and find out", never as a refusal. Implemented by the
+   * backends that own their variant map, where the answer is a local lookup.
+   */
+  supportsImage?(variant: RunnerImageVariant | undefined): boolean
+  /**
    * Optionally reclaim a run's runner resources: the per-run container on backends
    * that share one across the run (Cloudflare, local Docker), and any of the run's
    * still-running jobs on a per-job backend (a self-hosted pool cancels `ref.jobId`).

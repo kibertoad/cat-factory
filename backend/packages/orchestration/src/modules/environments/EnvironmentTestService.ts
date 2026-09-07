@@ -12,6 +12,7 @@ import type {
   ResolveRunRepoContext,
   RunnerJobRef,
   RunnerJobView,
+  StepSubtasks,
 } from '@cat-factory/kernel'
 import type {
   BlockRepository,
@@ -109,6 +110,18 @@ export interface EnvironmentTestServiceDependencies {
    * `agent-probe` mode up front rather than letting a run reach a stage nothing can advance.
    */
   probeStage?: EnvironmentProbeStage
+  /**
+   * The workspace spend safeguard, consulted before an AGENT DRY RUN is admitted.
+   *
+   * A dry run is a billable model call that NO run start gates (a self-test is not a pipeline
+   * run), so it answers to the same budget `RunAdmission` applies before a run, exactly as the bug
+   * hunt's ranking and the monorepo survey do. Asked at ADMISSION and not later, because by the
+   * time the container's first completion is refused by the proxy the operator has already paid
+   * for a branch, a provision and a teardown to be told about a ceiling that was knowable up
+   * front. Absent ⇒ no budget is enforced, which is the pre-existing behaviour for a facade that
+   * wires no spend service at all.
+   */
+  isOverBudget?: (workspaceId: string) => Promise<boolean>
   /** Durably drives the run's poll loop; absent → tests poll `pollEnvTest` directly. */
   runner?: EnvironmentTestRunner
   /** Pushes live stage transitions to subscribed clients. */
@@ -137,6 +150,7 @@ function toRun(record: EnvironmentTestRunRecord): EnvironmentTestRun {
     error: record.error,
     failedStage: record.failedStage,
     probe: record.probe,
+    probeProgress: record.probeProgress,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
   }
@@ -260,6 +274,22 @@ export class EnvironmentTestService {
         'env_test_infraless',
       )
     }
+    // ONE self-test at a time per frame, whichever mode. Each run provisions its own environment
+    // under a synthetic per-run key that nothing supersedes or sweeps, so two in flight is two live
+    // environments for one service: billed twice, and racing each other to create on any provider
+    // whose namespace is derived per service rather than per branch. Enforced here rather than in
+    // the SPA's button state, which is per mode and per tab and so cannot see the other run.
+    const live = (
+      await this.deps.environmentTestRunRepository.listRunningByWorkspace(workspaceId)
+    ).find((row) => row.blockId === blockId)
+    if (live) {
+      throw new ConflictError(
+        'A self-test is already running for this service. Wait for it to finish, or stop it first.',
+        'env_test_already_running',
+        { runId: live.id, runMode: live.mode },
+      )
+    }
+    if (mode === 'agent-probe') await this.assertProbeAdmissible(workspaceId, frame, initiatedBy)
     const gate = await this.deps.provisioning.canProvision(workspaceId, provisioning, initiatedBy)
     if (!gate.ok) {
       throw new ConflictError(
@@ -318,6 +348,8 @@ export class EnvironmentTestService {
       error: null,
       failedStage: null,
       probeSurface: null,
+      probeDispatchedAt: null,
+      probeProgress: null,
       probe: null,
       createdAt: now,
       updatedAt: now,
@@ -375,6 +407,65 @@ export class EnvironmentTestService {
       return toRun(record)
     } catch (error) {
       return this.fail(record, getErrorMessage(error), error)
+    }
+  }
+
+  /**
+   * The two gates an AGENT DRY RUN answers to beyond the provisioning self-test's, both asked
+   * BEFORE the first side effect, because both are knowable then and neither is knowable cheaply
+   * afterwards.
+   *
+   * A wired prober is not the same question as a runnable one: each surface runs on its own
+   * executor image, so a deployment that binds the plain container class and not the browser one
+   * serves an `api` dry run and refuses a `ui` one deep inside `stage.dispatch`, after a branch, a
+   * full provision and (on the way back out) a teardown. And a workspace past its spend ceiling
+   * would pay for exactly the same sequence before the proxy refused the container's first
+   * completion.
+   */
+  private async assertProbeAdmissible(
+    workspaceId: string,
+    frame: Block,
+    initiatedBy?: string | null,
+  ): Promise<void> {
+    const stage = this.deps.probeStage
+    if (!stage) return
+    const surface = stage.surfaceFor(frame)
+    if (!(await stage.supports(workspaceId, surface))) {
+      throw new ConflictError(
+        surface === 'ui'
+          ? 'A dry run for a frontend service runs in a browser container, and this deployment ' +
+              'has no browser executor image wired. Dry runs of its backend services still run.'
+          : 'This deployment has no executor image wired for an agent dry run of this service.',
+        'env_test_probe_unavailable',
+        { surface },
+      )
+    }
+    if (await this.overBudget(workspaceId, initiatedBy)) {
+      throw new ConflictError(
+        'This workspace has reached a spend budget, and an agent dry run is a billable model ' +
+          'call. Raise the budget (or wait for the billing period to reset) and try again; the ' +
+          'provisioning self-test beside it costs nothing and still runs.',
+        'env_test_over_budget',
+      )
+    }
+  }
+
+  /**
+   * Whether the workspace is over its model budget. Fails CLOSED, as the monorepo survey's probe
+   * does: a ledger nobody can read is not a licence to spend against it.
+   */
+  private async overBudget(workspaceId: string, initiatedBy?: string | null): Promise<boolean> {
+    const probe = this.deps.isOverBudget
+    if (!probe) return false
+    try {
+      return await probe(workspaceId)
+    } catch (error) {
+      this.log.warn('environment dry run: budget probe failed; refusing the run', {
+        workspaceId,
+        initiatedBy: initiatedBy ?? null,
+        err: getErrorMessage(error),
+      })
+      return true
     }
   }
 
@@ -513,10 +604,22 @@ export class EnvironmentTestService {
    * Advance the AGENT DRY RUN: claim and dispatch the prober, then poll it, then record what it
    * reported and move on to teardown.
    *
-   * The claim (`probeSurface`) is written BEFORE the dispatch and through the same running-guard
-   * every other write uses, so the two races this stage has are both first-writer-wins: a durable
-   * replay between the claim and the dispatch re-attaches to the job rather than starting a second
-   * agent, and a user stop mid-probe is never overwritten by the driver that was mid-flight.
+   * Three writes in a fixed order, and each one is load-bearing:
+   *
+   *  1. the CLAIM (`probeSurface`), before the dispatch, so a replay cannot start a second agent
+   *     against the same environment;
+   *  2. the DISPATCH;
+   *  3. the MARK (`probeDispatchedAt`), after it is accepted, so a replay that landed in between
+   *     can tell a claim with no container behind it from a running job. Without the mark, such a
+   *     replay polls a job that was never started and the backend's "no such job" comes back as an
+   *     EVICTION: a lost isolate reported to the developer as a container failure. With it, the
+   *     replay re-dispatches instead, which is safe because a dispatch is idempotent per job id.
+   *
+   * Every write goes through the same running-guard, which makes the stop ⇄ driver race
+   * first-writer-wins in both directions. The mark's guard does double duty: a stop that landed
+   * while the dispatch was in flight ran its reclaim against a container that did not exist yet, so
+   * a rejected mark means the container now starting has nobody left to reclaim it. That throws,
+   * and `fail()` (whose FIRST action is the reclaim) is what actually collects it.
    *
    * A probe that FAILS (an evicted container, a reply with no JSON) throws, so the run fails at
    * this stage with the container's error and `fail()` reclaims the environment. A probe that
@@ -533,27 +636,67 @@ export class EnvironmentTestService {
       // environment is up and every poll is costing the developer.
       throw new Error('Agent dry runs are no longer configured on this deployment.')
     }
-    if (!record.probeSurface) {
-      const frame = assertFound(
-        await this.deps.blockRepository.get(record.workspaceId, record.blockId),
-        'Block',
-        record.blockId,
-      )
-      const surface = stage.surfaceFor(frame)
-      if (!(await this.guardedUpdate(record, { probeSurface: surface }))) {
+    const claimed = record.probeSurface
+    if (!claimed || !record.probeDispatchedAt) {
+      // ONE frame read, shared by the surface and the prompt: see `resolveTarget`. The PINNED
+      // surface still wins on a re-dispatch, because the claim addresses a container.
+      const target = await stage.resolveTarget(record)
+      const surface = claimed ?? target.surface
+      if (!claimed && !(await this.guardedUpdate(record, { probeSurface: surface }))) {
         throw new Error('The environment test was stopped before the agent dry run started.')
       }
       record.probeSurface = surface
-      await stage.dispatch(record, surface)
+      await stage.dispatch(record, surface, target.frame)
+      const probeDispatchedAt = this.deps.clock.now()
+      if (!(await this.guardedUpdate(record, { probeDispatchedAt }))) {
+        throw new Error('The environment test was stopped while the agent dry run was starting.')
+      }
+      record.probeDispatchedAt = probeDispatchedAt
       return { state: 'running' }
     }
-    const outcome = await stage.poll(record, record.probeSurface)
-    if (outcome.state === 'running') return { state: 'running' }
+    const outcome = await stage.poll(record, claimed)
+    if (outcome.state === 'running') {
+      await this.writeProbeProgress(record, outcome.subtasks)
+      return { state: 'running' }
+    }
     // The report is in hand, so the prober's container has nothing left to do: reclaim it before
     // teardown rather than leaving it to idle out beside an environment that is about to vanish.
     await this.releaseProbe(record)
-    await this.patch(record, { stage: 'tearing_down', probe: outcome.report })
+    // The live counts go with it: the report is the finer answer to the same question, and a stale
+    // "3 of 5" left beside a finished run reads as a probe still working.
+    await this.patch(record, {
+      stage: 'tearing_down',
+      probe: outcome.report,
+      probeProgress: null,
+    })
     return { state: 'running' }
+  }
+
+  /**
+   * Persist the prober's live todo counts, and push them, when they MOVED.
+   *
+   * `probing` is the only stage of this run measured in minutes; every other one turns over in
+   * seconds. With nothing written the run row never changes, so no `envTestChanged` event fires
+   * for the whole probe and the SPA sits on "probing with an agent" for the entire container run,
+   * which is indistinguishable from a wedge. Compared on the COUNTS alone: the item labels move
+   * whenever the agent rewords a todo, and a write per poll is the cost this guard exists to
+   * avoid.
+   */
+  private async writeProbeProgress(
+    record: EnvironmentTestRunRecord,
+    subtasks: StepSubtasks | undefined,
+  ): Promise<void> {
+    if (!subtasks) return
+    const current = record.probeProgress
+    if (
+      current &&
+      current.completed === subtasks.completed &&
+      current.inProgress === subtasks.inProgress &&
+      current.total === subtasks.total
+    ) {
+      return
+    }
+    await this.patch(record, { probeProgress: subtasks })
   }
 
   /**
@@ -781,7 +924,10 @@ export class EnvironmentTestService {
   private async patch(
     record: EnvironmentTestRunRecord,
     patch: Partial<
-      Pick<EnvironmentTestRunRecord, 'status' | 'stage' | 'environmentId' | 'envUrl' | 'probe'>
+      Pick<
+        EnvironmentTestRunRecord,
+        'status' | 'stage' | 'environmentId' | 'envUrl' | 'probe' | 'probeProgress'
+      >
     >,
   ): Promise<boolean> {
     const full = { ...patch, updatedAt: this.deps.clock.now() }
@@ -800,7 +946,10 @@ export class EnvironmentTestService {
   private async guardedUpdate(
     record: EnvironmentTestRunRecord,
     patch: Partial<
-      Pick<EnvironmentTestRunRecord, 'branch' | 'environmentId' | 'envUrl' | 'probeSurface'>
+      Pick<
+        EnvironmentTestRunRecord,
+        'branch' | 'environmentId' | 'envUrl' | 'probeSurface' | 'probeDispatchedAt'
+      >
     >,
   ): Promise<boolean> {
     return this.deps.environmentTestRunRepository.updateIfRunning(record.workspaceId, record.id, {

@@ -3,6 +3,7 @@ import type {
   EnvironmentProbeRequest,
   GitHubInstallation,
   GitHubInstallationRepository,
+  ModelRef,
   RepoProjectionRepository,
   RunnerDispatchOptions,
   RunnerJobRef,
@@ -51,6 +52,7 @@ function makeAgent(
       workspaceId: string,
       blockId: string,
     ) => Promise<{ key: string; description: string; value: string }[]>
+    models?: Record<'api' | 'ui', ModelRef>
   } = {},
 ): ContainerEnvironmentProbeAgent {
   return new ContainerEnvironmentProbeAgent({
@@ -63,7 +65,10 @@ function makeAgent(
     sessionService: {
       mint: vi.fn(async () => 'session-token'),
     } as unknown as ContainerSessionService,
-    model: { provider: 'workers-ai', model: '@cf/test' },
+    models: over.models ?? {
+      api: { provider: 'workers-ai', model: '@cf/test' },
+      ui: { provider: 'workers-ai', model: '@cf/test-vision' },
+    },
     proxyBaseUrl: 'https://proxy.example/v1',
     ...(over.resolveTestSecrets ? { resolveTestSecrets: over.resolveTestSecrets } : {}),
   })
@@ -181,6 +186,30 @@ describe('ContainerEnvironmentProbeAgent: the dispatch', () => {
     expect(ui.calls.dispatch[0]!.ref.image).toBe('ui')
   })
 
+  it('routes each surface to its OWN model, so a browser job cannot inherit the HTTP one', async () => {
+    // One shared ref sends whatever `tester-api` resolved to at a Playwright job, with no setting
+    // anywhere able to change it.
+    const api = recordingTransport()
+    await makeAgent(api.transport).start(request({ surface: 'api' }))
+    expect(api.calls.dispatch[0]!.spec.model).toBe('@cf/test')
+
+    const ui = recordingTransport()
+    await makeAgent(ui.transport).start(request({ surface: 'ui' }))
+    expect(ui.calls.dispatch[0]!.spec.model).toBe('@cf/test-vision')
+  })
+
+  it('refuses the surface whose OWN model the proxy cannot serve, and only that one', async () => {
+    const { transport } = recordingTransport()
+    const agent = makeAgent(transport, {
+      models: {
+        api: { provider: 'workers-ai', model: '@cf/test' },
+        ui: { provider: 'anthropic-subscription', model: 'sonnet' } as unknown as ModelRef,
+      },
+    })
+    await expect(agent.start(request({ surface: 'ui' }))).rejects.toThrow(/'ui' prober is routed/)
+    await expect(agent.start(request({ surface: 'api' }))).resolves.toBeTruthy()
+  })
+
   it('addresses the SAME container on the poll and the release as on the dispatch', async () => {
     // A per-run container backend puts a differently-imaged job in its own container: a poll that
     // dropped the variant would poll a container that never started, and a release that dropped it
@@ -266,14 +295,32 @@ describe('ContainerEnvironmentProbeAgent: the poll', () => {
     expect(update).toEqual({ state: 'done', report: raw, model: 'workers-ai:@cf/test' })
   })
 
-  it('reports a completed job that returned NO report as a failed dry run', async () => {
-    // An empty report would be graded `inoperable` and read as a finding about the service; the
-    // truth is that the platform's own step established nothing.
-    const { transport } = recordingTransport({ state: 'done', result: {} } as RunnerJobView)
+  it.each([
+    ['nothing at all', {}],
+    ['a top-level array', { custom: [{ name: 'list projects' }] }],
+    ['a bare string', { custom: 'I could not reach it' }],
+  ])('reports a job that returned %s as a FAILED dry run', async (_label, result) => {
+    // Every one of these coerces to an EMPTY report, which the platform grades `inoperable` and
+    // the SPA renders as "an agent could not operate this service": a finding about the service,
+    // invented out of a reply that established nothing. The shape question has to be asked with
+    // the same predicate the coercion applies, before the shape is flattened.
+    const { transport } = recordingTransport({ state: 'done', result } as RunnerJobView)
     const agent = makeAgent(transport)
     const update = await agent.poll(await agent.start(request()))
     expect(update.state).toBe('failed')
-    expect(update).toMatchObject({ error: expect.stringContaining('without returning a report') })
+    expect(update).toMatchObject({
+      error: expect.stringContaining('without returning a usable report'),
+    })
+  })
+
+  it('files the reply under the model of the surface that produced it', async () => {
+    const { transport } = recordingTransport({
+      state: 'done',
+      result: { custom: { summary: 'ok' } },
+    } as unknown as RunnerJobView)
+    const agent = makeAgent(transport)
+    const update = await agent.poll(await agent.start(request({ surface: 'ui' })))
+    expect(update).toMatchObject({ model: 'workers-ai:@cf/test-vision' })
   })
 
   it('maps an eviction to the evicted failure kind', async () => {
@@ -285,5 +332,71 @@ describe('ContainerEnvironmentProbeAgent: the poll', () => {
     const agent = makeAgent(transport)
     const update = await agent.poll(await agent.start(request()))
     expect(update).toMatchObject({ state: 'failed', failureKind: 'evicted' })
+  })
+})
+
+describe('ContainerEnvironmentProbeAgent: what it tells the prober about credentials', () => {
+  it('says the PLATFORM failed when the sealed store would not open', async () => {
+    // The collapse this guards is silent and expensive: a store that throws produced the same
+    // prompt as a service with nothing configured, so the report told an operator to configure
+    // credentials that were already there.
+    const { transport, calls } = recordingTransport()
+    await makeAgent(transport, {
+      resolveTestSecrets: async () => {
+        throw new Error('ENCRYPTION_KEY is not set')
+      },
+    }).start(request())
+    const prompt = String(calls.dispatch[0]!.spec.userPrompt)
+    expect(prompt).toContain('may well have test credentials configured')
+    expect(prompt).toContain('Do NOT tell a human to configure credentials for this service')
+    // The dry run still RUNS: a report naming what was missing beats a refused stage.
+    expect(calls.dispatch).toHaveLength(1)
+    expect(calls.dispatch[0]!.spec.testSecrets).toBeUndefined()
+  })
+
+  it('says the DEPLOYMENT has no store when none is wired, which is a different fix', async () => {
+    const { transport, calls } = recordingTransport()
+    await makeAgent(transport).start(request())
+    expect(String(calls.dispatch[0]!.spec.userPrompt)).toContain('no sealed credential store wired')
+  })
+})
+
+describe('ContainerEnvironmentProbeAgent: the admission capability question', () => {
+  it('reports a surface whose image the backend does not serve as unsupported', async () => {
+    const { transport } = recordingTransport()
+    const agent = makeAgent({
+      ...transport,
+      supportsImage: (variant?: string) => variant !== 'ui',
+    } as unknown as RunnerTransport)
+    expect(await agent.supports('ws_1', 'api')).toBe(true)
+    expect(await agent.supports('ws_1', 'ui')).toBe(false)
+  })
+
+  it('treats a backend that cannot answer as a yes, never as a refusal', async () => {
+    // A self-hosted pool resolves images on its own side. Reading its silence as "unsupported"
+    // would refuse every dry run on every pooled deployment.
+    const { transport } = recordingTransport()
+    const agent = makeAgent(transport)
+    expect(await agent.supports('ws_1', 'ui')).toBe(true)
+  })
+
+  it('reports no runner at all as unsupported', async () => {
+    const agent = new ContainerEnvironmentProbeAgent({
+      resolveTransport: async () => {
+        throw new Error('no runner backend is available for this workspace')
+      },
+      installationRepository: {
+        getByWorkspace: vi.fn(async () => INSTALLATION),
+      } as unknown as GitHubInstallationRepository,
+      repoRepository: { list: async () => PROJECTED_REPOS },
+      mintInstallationToken: async () => 'gh-token',
+      sessionService: { mint: vi.fn(async () => 'tok') } as unknown as ContainerSessionService,
+      models: {
+        api: { provider: 'workers-ai', model: '@cf/test' },
+        ui: { provider: 'workers-ai', model: '@cf/test' },
+      },
+      proxyBaseUrl: 'https://proxy.example/v1',
+    })
+    expect(await agent.supports('ws_1', 'api')).toBe(false)
   })
 })

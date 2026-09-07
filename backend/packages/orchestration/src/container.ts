@@ -23,6 +23,9 @@ import {
   createModelPresetsModule,
   createConsensusGroupsModule,
   createServiceFragmentDefaultsModule,
+  createSpendService,
+  createTutorialProgressModule,
+  createUserSettingsModule,
 } from './container/modules.js'
 import { resolveCoreRuntime } from './container/runtime.js'
 import { createPlatformModules } from './container/platform-modules.js'
@@ -67,7 +70,7 @@ import { UserService } from '@cat-factory/workspaces'
 import { InvitationService } from '@cat-factory/workspaces'
 import { PasswordResetService } from '@cat-factory/workspaces'
 import { EmailConnectionService } from '@cat-factory/integrations'
-import { SpendService, DEFAULT_SPEND_PRICING } from '@cat-factory/spend'
+import type { SpendService } from '@cat-factory/spend'
 
 import { LlmObservabilityService } from './modules/observability/LlmObservabilityService.js'
 import { AgentContextObservabilityService } from './modules/observability/AgentContextObservabilityService.js'
@@ -105,9 +108,7 @@ import { BootstrapService } from './modules/bootstrap/BootstrapService.js'
 import { EnvConfigRepairService } from './modules/envConfigRepair/EnvConfigRepairService.js'
 import { EnvironmentTestService } from './modules/environments/EnvironmentTestService.js'
 import { BoardScanService } from './modules/boardScan/BoardScanService.js'
-import { TutorialProgressService } from './modules/tutorial/TutorialProgressService.js'
 import { TutorialTelemetryService } from './modules/tutorial/TutorialTelemetryService.js'
-import { UserSettingsService } from './modules/settings/UserSettingsService.js'
 import { type AgentKindRegistry, type AgentKindSource } from '@cat-factory/agents'
 import type {
   FoundationalServiceModule,
@@ -784,44 +785,10 @@ export function createCore(injected: CoreDependencies): Core {
     agentKindRegistry,
     gateRegistry,
   })
-  const spendService = new SpendService({
-    tokenUsageRepository: dependencies.tokenUsageRepository,
-    idGenerator: dependencies.idGenerator,
-    clock: dependencies.clock,
-    pricing: dependencies.spendPricing ?? DEFAULT_SPEND_PRICING,
-    workspaceSettingsRepository: dependencies.workspaceSettingsRepository,
-    accountRepository: dependencies.accountRepository,
-    userSettingsRepository: dependencies.userSettingsRepository,
-    dynamicPricesFor: dependencies.dynamicModelPricesFor,
-    // The pricing overlay reads the workspace-settings row through the shared slice
-    // (invalidated by WorkspaceSettingsService.update); the two budget-limit slices are
-    // invalidated by the account/user budget-change callbacks below.
-    workspaceSettingsCache: caches.workspaceSettings,
-    accountBudgetLimitCache: caches.accountBudgetLimit,
-    userBudgetLimitCache: caches.userBudgetLimit,
-  })
+  const spendService = createSpendService(dependencies, caches)
   spendServiceRef = spendService
-  modules.build('tutorialProgress', () =>
-    dependencies.tutorialProgressRepository
-      ? {
-          service: new TutorialProgressService({
-            tutorialProgressRepository: dependencies.tutorialProgressRepository,
-          }),
-        }
-      : undefined,
-  )
-  modules.build('userSettings', () =>
-    dependencies.userSettingsRepository
-      ? {
-          service: new UserSettingsService({
-            userSettingsRepository: dependencies.userSettingsRepository,
-            onUserBudgetChanged: (userId) => spendService.invalidateUserLimit(userId),
-            // Reject a user budget above the operator cap on write.
-            resolveUserBudgetCap: () => spendService.budgetCaps().userMonthlyLimitMax,
-          }),
-        }
-      : undefined,
-  )
+  modules.build('tutorialProgress', () => createTutorialProgressModule(dependencies))
+  modules.build('userSettings', () => createUserSettingsModule(dependencies, spendService))
   // The platform slice: observability, the provisioning event log, the infrastructure chain
   // (preflight → shared stacks → environments → the deployment-declared handler seeder) and the
   // content chain (documents → fragment library → skill library). Lifted into
@@ -836,6 +803,7 @@ export function createCore(injected: CoreDependencies): Core {
     boardService,
     foundationalBuiltins,
     promptFragments,
+    spend: spendService,
   })
   const { environments, environmentHandlerSeeder, sharedStackSeeder, fragmentLibrary } = platform
 

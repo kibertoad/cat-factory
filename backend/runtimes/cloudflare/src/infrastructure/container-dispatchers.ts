@@ -186,12 +186,17 @@ export function selectEnvConfigRepairer(deps: {
  * its signing secret. Absent any of them the self-test still runs in `provision` mode and
  * `startTest` refuses `agent-probe` with a 409 that names the gap.
  *
- * The model follows the TESTER's routing rather than the coder's: a dry run reads a service and
+ * The models follow the TESTERS' routing rather than the coder's: a dry run reads a service and
  * exercises it without changing anything, which is the tester's job description, so a deployment
- * that routed its testers to a cheap model gets a cheap dry run without a second setting. It must
+ * that routed its testers to a cheap model gets a cheap dry run without a second setting. PER
+ * SURFACE, from each tester's own kind: the browser prober reads screenshots and drives a page and
+ * the HTTP one reads a schema and calls it, so a deployment that routed `tester-ui` at a
+ * vision-capable model and `tester-api` at a cheap text one must get the same split here. Both must
  * be proxyable, for the reason the repairer states: the Pi harness reaches the model through the
- * LLM proxy, and an individual-subscription vendor cannot be served that way. A misconfiguration
- * is surfaced HERE, at wiring, rather than at every dispatch.
+ * LLM proxy, and an individual-subscription vendor cannot be served that way. A misconfiguration is
+ * surfaced HERE, at wiring, rather than at every dispatch; a surface whose own routing is
+ * unproxyable disables the whole prober rather than half of it, because the SPA offers one button
+ * per frame and the frame's type decides which surface it lands on.
  */
 export function selectEnvironmentProbeAgent(deps: {
   env: Env
@@ -210,12 +215,16 @@ export function selectEnvironmentProbeAgent(deps: {
   ) {
     return undefined
   }
-  const model = resolveAgentConfig(config.agents.routing, 'tester-api').ref
-  if (!isProxyableProvider(model.provider)) {
+  const models = {
+    api: resolveAgentConfig(config.agents.routing, 'tester-api').ref,
+    ui: resolveAgentConfig(config.agents.routing, 'tester-ui').ref,
+  }
+  const unproxyable = Object.entries(models).find(([, ref]) => !isProxyableProvider(ref.provider))
+  if (unproxyable) {
     logger.warn(
-      'environment dry run: the tester routing model is not proxyable by the LLM proxy; ' +
+      'environment dry run: a tester routing model is not proxyable by the LLM proxy; ' +
         'agent dry runs are disabled on this deployment.',
-      { provider: model.provider },
+      { surface: unproxyable[0], provider: unproxyable[1].provider },
     )
     return undefined
   }
@@ -230,7 +239,7 @@ export function selectEnvironmentProbeAgent(deps: {
     repoRepository: new D1RepoProjectionRepository({ db }),
     mintInstallationToken: workerDispatchTokenMint(registry),
     sessionService: new ContainerSessionService({ secret: env.AUTH_SESSION_SECRET }),
-    model,
+    models,
     proxyBaseUrl: `${env.WORKER_PUBLIC_URL.replace(/\/+$/, '')}/v1`,
     // Provider-aware, so a GitLab deployment's prober clones its own instance rather than a
     // same-named project on github.com.

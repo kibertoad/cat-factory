@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   coerceEnvironmentProbeReport,
   environmentProbeSurfaceFor,
+  isEnvironmentProbeReportPayload,
   summarizeEnvironmentProbe,
   type EnvironmentProbeOperation,
 } from './environment-probe.js'
@@ -72,6 +73,22 @@ describe('summarizeEnvironmentProbe', () => {
       authenticatedSucceeded: 0,
       verdict: 'inoperable',
     })
+  })
+
+  it('refuses `operable` when the agent listed operations it could not even attempt', () => {
+    // The exact shape this diagnostic exists to surface: one authenticated success beside four
+    // things the agent could not work out how to try. Graded on the ATTEMPTED ones alone it reads
+    // `operable`, and the inspector then renders "an agent can operate this service" in green
+    // directly above the list of what it could not do.
+    const result = summarizeEnvironmentProbe([
+      op({ name: 'list projects' }),
+      op({ name: 'create a project', outcome: 'not_attempted', failure: 'endpoint_unknown' }),
+      op({ name: 'sign in', outcome: 'not_attempted', failure: 'auth_missing' }),
+    ])
+    expect(result.attempted).toBe(1)
+    expect(result.succeeded).toBe(1)
+    expect(result.authenticatedSucceeded).toBe(1)
+    expect(result.verdict).toBe('partially_operable')
   })
 
   it('grades an empty attempt as inoperable', () => {
@@ -148,8 +165,11 @@ describe('coerceEnvironmentProbeReport', () => {
     expect(report.operations[0]?.outcome).toBe('not_attempted')
     expect(report.operations[0]?.failure).toBe('other')
     expect(report.operations[1]?.failure).toBe('other')
-    // The dropped operation is RECORDED, so a reader never takes the list for the whole attempt.
-    expect(report.operationsOmitted).toBe(1)
+    // The dropped operation is RECORDED, and as UNREADABLE rather than as a cap drop: the two
+    // send a reader somewhere different, and "dropped at the cap" would claim the agent reported
+    // more operations than it did.
+    expect(report.operationsOmitted).toBeUndefined()
+    expect(report.operationsUnreadable).toBe(1)
     expect(report.missingContext).toEqual(['a real one'])
     // A blocker with no detail carries nothing a human can act on; one with an unknown kind does.
     expect(report.blockers).toEqual([{ kind: 'unreachable', detail: 'connection refused' }])
@@ -172,9 +192,64 @@ describe('coerceEnvironmentProbeReport', () => {
     const report = coerceEnvironmentProbeReport({ operations: many }, { surface: 'api' })
     expect(report.operations.length).toBe(12)
     expect(report.operationsOmitted).toBe(8)
+    expect(report.operationsUnreadable).toBeUndefined()
     // The tallies describe what the report HOLDS, not what the reply claimed: a count over
     // dropped entries would be a number nothing in the report accounts for.
     expect(report.attempted).toBe(12)
+  })
+
+  it('counts a cap drop and an unreadable entry apart, in the run that has both', () => {
+    const operations = [
+      ...Array.from({ length: 13 }, (_, i) => ({
+        name: `op ${i}`,
+        authenticated: true,
+        outcome: 'succeeded',
+      })),
+      { authenticated: true, outcome: 'succeeded' },
+    ]
+    // The unnamed entry is INSIDE the cap (it is the 14th of 14, but the cap takes the first 12),
+    // so this run drops 2 at the cap and 0 for being unreadable.
+    const report = coerceEnvironmentProbeReport({ operations }, { surface: 'api' })
+    expect(report.operations.length).toBe(12)
+    expect(report.operationsOmitted).toBe(2)
+    expect(report.operationsUnreadable).toBeUndefined()
+
+    // Move the unnamed entry inside the cap and the split flips.
+    const mixed = coerceEnvironmentProbeReport(
+      { operations: [{ authenticated: true, outcome: 'succeeded' }, ...operations.slice(0, 13)] },
+      { surface: 'api' },
+    )
+    expect(mixed.operations.length).toBe(11)
+    expect(mixed.operationsOmitted).toBe(2)
+    expect(mixed.operationsUnreadable).toBe(1)
+  })
+
+  it('SCRUBS the caller-supplied way, before any cap can split a credential', () => {
+    // The prompt hands the agent the environment's own bearer token, so a model that pastes its
+    // own `curl` invocation into a `detail` writes that credential into a persisted row and a
+    // rendered panel. The scrub runs on the whole value first: applied after the cap it could
+    // leave the head of a token inside the kept prefix.
+    const report = coerceEnvironmentProbeReport(
+      {
+        summary: 'called with Authorization: Bearer supersecrettokenvalue',
+        operations: [
+          {
+            name: 'list projects',
+            authenticated: true,
+            outcome: 'succeeded',
+            detail: 'curl -H "Authorization: Bearer supersecrettokenvalue"',
+          },
+        ],
+        missingContext: ['token supersecrettokenvalue had no write scope'],
+        blockers: [{ kind: 'other', detail: 'Bearer supersecrettokenvalue was refused' }],
+      },
+      { surface: 'api', scrub: (value) => value.replaceAll('supersecrettokenvalue', '[redacted]') },
+    )
+    expect(JSON.stringify(report)).not.toContain('supersecrettokenvalue')
+    expect(report.operations[0]?.detail).toContain('[redacted]')
+    expect(report.missingContext[0]).toContain('[redacted]')
+    expect(report.blockers[0]?.detail).toContain('[redacted]')
+    expect(report.summary).toContain('[redacted]')
   })
 
   it('marks a truncated string rather than silently shortening it', () => {
@@ -191,6 +266,19 @@ describe('environmentProbeSurfaceFor', () => {
     expect(environmentProbeSurfaceFor('frontend')).toBe('ui')
     for (const type of ['service', 'api', 'database', 'queue', 'integration'] as const) {
       expect(environmentProbeSurfaceFor(type)).toBe('api')
+    }
+  })
+})
+
+describe('isEnvironmentProbeReportPayload', () => {
+  it('accepts only what the coercion can read something out of', () => {
+    // The DISPATCHER asks this before calling the coercion, because everything rejected here
+    // coerces to an empty report the platform then grades `inoperable`: a finding about the
+    // service, invented out of a reply that established nothing. Two callers, one predicate.
+    expect(isEnvironmentProbeReportPayload({ summary: 'ok' })).toBe(true)
+    expect(isEnvironmentProbeReportPayload({})).toBe(true)
+    for (const value of [null, undefined, [], [{ name: 'x' }], 'text', 42, true]) {
+      expect(isEnvironmentProbeReportPayload(value)).toBe(false)
     }
   })
 })

@@ -22,7 +22,7 @@ function brief(over: Partial<EnvironmentProbeBrief> = {}): EnvironmentProbeBrief
     surface: 'api',
     service: { title: 'Grass API', description: 'Serves grass to lawns.' },
     environment: { url: 'https://pr-1.acme.test', status: 'ready' },
-    testSecretRefs: [],
+    testSecrets: { status: 'resolved', refs: [] },
     repo: { owner: 'kibertoad', name: 'acme', branch: 'cat-factory/env-test/x' },
     ...over,
   }
@@ -83,12 +83,31 @@ describe('environmentProbeUserPrompt', () => {
   it('advertises each configured credential by key and purpose, never by value', () => {
     const prompt = environmentProbeUserPrompt(
       brief({
-        testSecretRefs: [{ key: 'API_TOKEN', description: 'read-write token for the test tenant' }],
+        testSecrets: {
+          status: 'resolved',
+          refs: [{ key: 'API_TOKEN', description: 'read-write token for the test tenant' }],
+        },
       }),
     )
     expect(prompt).toContain('`API_TOKEN`')
     expect(prompt).toContain('read-write token for the test tenant')
     expect(prompt).toContain('must never appear in your reply')
+  })
+
+  it('blames the PLATFORM when the credential store would not open, never the board', () => {
+    // The collapse this guards against is silent and points a human at the wrong fix: an operator
+    // told "configure credentials for this service" may already have done exactly that, and only
+    // the platform's own store failed to open.
+    const prompt = environmentProbeUserPrompt(brief({ testSecrets: { status: 'unreadable' } }))
+    expect(prompt).toContain('may well have test credentials configured')
+    expect(prompt).toContain('Do NOT tell a human to configure credentials for this service')
+    expect(prompt).toContain('`auth_missing`')
+  })
+
+  it('states a deployment with NO credential store as a deployment fact', () => {
+    const prompt = environmentProbeUserPrompt(brief({ testSecrets: { status: 'unwired' } }))
+    expect(prompt).toContain('no sealed credential store wired')
+    expect(prompt).toContain('rather than asking for this service to be reconfigured')
   })
 
   it('renders the environment access scheme, including the deliberate `none`', () => {

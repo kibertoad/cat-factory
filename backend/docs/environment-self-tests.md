@@ -68,13 +68,25 @@ the platform failed to supply. A prober that cannot tell "no credentials are con
 service" from "credentials exist and I was not shown them" fills that list with its own ignorance
 instead of the platform's gap, which is the whole product of the run, reported backwards.
 
+The credentials section is a three-state brief for that reason, not a list that can be empty:
+
+- **resolved** (possibly with nothing in it): the store was read, and this service genuinely has no
+  test credentials on the board. A board fact, with a board fix.
+- **unreadable**: credentials may well be configured and the platform could not open its own sealed
+  store (a bad `ENCRYPTION_KEY`, a store that would not answer). The run still goes ahead, because a
+  report naming what was missing beats a refused stage, but the prompt says the PLATFORM failed.
+  Collapsed into "none configured", this sends an operator to re-enter secrets that are already
+  there.
+- **unwired**: this deployment has no sealed credential store at all, so no service on the board can
+  be given test credentials. A deployment fact, again not something to fix on the frame.
+
 ## The verdict is computed, never read off the reply
 
 The model judges each operation it attempted; the platform derives everything else
 (`summarizeEnvironmentProbe`). The deciding rule:
 
-> `operable` requires every attempted operation to have worked **AND at least one of them to have
-> gone through authentication.**
+> `operable` requires every operation the agent LISTED to have been attempted, every one of them
+> to have worked, **and at least one of them to have gone through authentication.**
 
 A healthcheck answering `200` proves an ingress exists and says nothing about whether an agent can
 work in this environment, so it can never earn a clean verdict on its own. Both prompts are told
@@ -84,6 +96,17 @@ so explicitly, and `operations[].authenticated` is the field the rule turns on.
 declared it could not even try is a **finding** carrying the reason why, not a failed call.
 Counting it as attempted would make "the agent could not work out what to call" read as
 "everything was tried and the service refused it".
+
+It does keep the run off `operable`, though, which is why the counts and the verdict are computed
+together. One authenticated success beside four operations the agent could not work out how to try
+is the exact shape this diagnostic exists to surface, and grading it on the attempted ones alone
+renders "an agent can operate this service" in green directly above the list of what it could not
+do.
+
+The two ways a reported operation fails to reach the report are counted **apart**, for the same
+reason: `operationsOmitted` is what the cap dropped (the agent reported more than is shown) and
+`operationsUnreadable` is what carried no usable name (the reply was malformed). One number for
+both tells a reader the list was truncated when nothing was.
 
 ## The failure taxonomy is shaped by WHOSE PROBLEM it is
 
@@ -106,10 +129,16 @@ report stored before a member was renamed renders the raw value rather than an e
 
 ## Traps
 
-- **The claim is written BEFORE the dispatch, never after.** `probeSurface` is the claim, taken
-  through the same running-guard every other write uses. The durable driver replays, so a marker
-  written _after_ the container was dispatched would let a crash between the two put a second agent
-  on the same environment.
+- **The claim is written BEFORE the dispatch and the MARK after it.** `probeSurface` is the
+  claim, taken through the same running-guard every other write uses; the durable driver replays,
+  so a marker written _after_ the container was dispatched would let a crash between the two put a
+  second agent on the same environment. `probeDispatchedAt` is the other half, and it is what makes
+  the window between them describable: a replay landing there finds a claim with no job behind it,
+  and a poll of a job nobody started comes back from the backend as an **eviction**, reporting a
+  lost isolate to the developer as a container failure. Seeing the mark null, the poll re-dispatches
+  instead (a dispatch is idempotent per job id). The mark's own guard does double duty: rejected, it
+  means a stop landed while the dispatch was in flight, so the stop's reclaim ran against a
+  container that did not exist yet and `fail()` has to collect the one now starting.
 - **The claim carries the SURFACE because the surface addresses a container.** A browser prober
   runs on the heavier `ui` image, so every later poll and reclaim has to name the container that
   actually started. Re-deriving it from the frame would address the wrong one for a frame that was
@@ -122,11 +151,40 @@ report stored before a member was renamed renders the raw value rather than an e
 - **A probe that BROKE throws; a probe that REPORTED advances.** An evicted container or a reply
   carrying no JSON is a diagnostic that never happened, and returning it as a verdict would tell
   an operator their service is inoperable when it is the platform's step that failed. A completed
-  probe always advances to teardown, whatever it found.
+  probe always advances to teardown, whatever it found. The throw NAMES the failure class ahead of
+  the container's own message, because the run record has one error field and "the dry run failed"
+  cannot tell a vanished container (worth retrying) from a model that errored (not).
+- **A reply that is not a plain object is a BROKEN probe, not an empty report.** A top-level array
+  or a bare string coerces to zero operations, which the platform grades `inoperable` and the SPA
+  renders as a finding about the service. The dispatcher asks the same predicate the coercion
+  applies (`isEnvironmentProbeReportPayload`) before the shape is flattened.
+- **The report is SCRUBBED at compose time.** It is model-authored text on its way to a persisted
+  row and a rendered panel, and the prompt hands the agent the environment's own credential
+  verbatim plus every sealed test secret in its shell. Asking the model not to echo them is
+  guidance; `redactSecrets`, applied before any cap can split a token, is the boundary.
+- **`probing` is the only stage measured in minutes**, so it is the only one that has to push
+  progress. The prober's todo counts land on `probeProgress` whenever they MOVE; with nothing
+  written, the run row never changes, no `envTestChanged` event fires for the whole container run,
+  and the card sits on "probing with an agent" in a way indistinguishable from a wedge. The counts
+  are cleared with the write that lands the report, since a stale "3 of 5" beside a finished probe
+  reads as one still working.
+- **One self-test at a time per frame** (409 `env_test_already_running`). Each run provisions its
+  own environment under a synthetic per-run key nothing supersedes, so two in flight is two live
+  environments for one service: billed twice, and racing each other to create on any provider whose
+  namespace is derived per service rather than per branch. The SPA disables both buttons while
+  either run is live; the refusal is what holds across two tabs and two people.
 - **`agent-probe` is refused up front on a deployment that cannot drive one** (409
   `env_test_probe_unavailable`). Admitted, such a run would create a branch, stand an environment
   up and then park at a stage nothing can advance until the sweeper tore it all down with a
-  timeout, for a wiring gap that was knowable before the first side effect.
+  timeout, for a wiring gap that was knowable before the first side effect. A wired prober is not
+  the same question as a runnable one: each surface runs on its OWN executor image, so admission
+  also asks the resolved runner backend whether it can serve THIS frame's image
+  (`RunnerTransport.supportsImage`, absent ⇒ unknown ⇒ admitted, which is the honest answer for a
+  self-hosted pool that resolves images on its own side).
+- **A dry run answers to the workspace spend budget** (409 `env_test_over_budget`). It is a
+  billable model call that no run start gates, exactly like the bug hunt's ranking, and the probe
+  fails CLOSED: a ledger nobody can read is not a licence to spend against it. The provisioning
+  self-test costs nothing and is never blocked by it.
 - **The prober must never be able to write.** The job is `mode: 'explore'` with no `pr`, no
   `pushBranch`, no `newBranch` and no bootstrap block; the prompts say so too. A diagnostic with
   push access to the repository it is reading is a different feature.
@@ -140,8 +198,13 @@ its env-config repairer (`selectEnvironmentProbeAgent` on the Worker,
 prerequisites: a container transport, a connected source-control App, the proxy's public URL and
 its signing secret.
 
-The model follows the **tester's** routing rather than the coder's: a dry run reads a service and
+The models follow the **testers'** routing rather than the coder's: a dry run reads a service and
 exercises it without changing anything, so a deployment that routed its testers to a cheap model
-gets a cheap dry run with no second setting, and it must be proxyable, since the prober runs on
-the Pi harness over the LLM proxy. A non-proxyable routing model leaves the capability unwired
-with a `warn` at boot rather than failing every dispatch.
+gets a cheap dry run with no second setting. **One per surface**, from each tester kind's own
+routing (`tester-api` and `tester-ui`): the browser prober reads screenshots and drives a page
+where the HTTP one reads a schema and calls it, and a single shared ref would send a cheap text
+model at a Playwright job with no setting anywhere able to change it. Both must be proxyable, since
+the prober runs on the Pi harness over the LLM proxy; a non-proxyable routing model on either
+surface leaves the capability unwired with a `warn` at boot rather than failing every dispatch,
+because the SPA offers one button per frame and the frame's type decides which surface it lands
+on.

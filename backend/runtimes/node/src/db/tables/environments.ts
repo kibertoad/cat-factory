@@ -118,6 +118,12 @@ export const environmentTestRuns = pgTable(
     failed_stage: text('failed_stage'),
     // The dry run's claim + the surface it claimed; written before the prober is dispatched.
     probe_surface: text('probe_surface'),
+    // When the prober's container was accepted, written AFTER it was: what tells a durable replay
+    // a claim with no job behind it from a job that is really running.
+    probe_dispatched_at: bigint('probe_dispatched_at', { mode: 'number' }),
+    // The prober's live todo counts while it works (JSON), so the longest stage of the run pushes
+    // something to the SPA instead of sitting frozen.
+    probe_progress: text('probe_progress'),
     // The agent's report (JSON): operations attempted, missing context, computed verdict.
     probe: text('probe'),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
