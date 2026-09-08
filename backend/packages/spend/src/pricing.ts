@@ -157,20 +157,31 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   // ChatGPT/Codex subscription models (informational list prices, USD→EUR ~0.92). Keys are
   // the Codex `--model` slugs the catalog dispatches, so GPT-6 Astra, the GPT-5.6 tiers and
   // plain GPT-5.5, never a `-codex`-suffixed id, which no longer exists past GPT-5.3.
-  // Post-2026-07-30 list: Sol $5 / $30, Terra $2 / $12, Luna $0.20 / $1.20 per 1M. Terra and
-  // Luna were both carrying HALF their real rate here, which meters a Terra run at a twelfth
-  // of an equivalent Sol one when the true gap is 2.5x on output. Cache reads bill at 0.1x
-  // and writes at 1.25x on all three tiers, so both derived tiers are already exact.
-  // GPT-6 Astra is $10 / $50 per 1M, the most expensive model this catalog can select on
-  // either OpenAI route. Its cached input is $1, i.e. the same 0.1x read multiplier as the
-  // tiers below, so the derived cache tiers land exactly here too. The 2x "Fast mode" rate
-  // is deliberately not modelled: nothing here dispatches it, and a row set to a mode we
-  // never request would over-meter every ordinary Astra run against the budget gate.
-  'openai:gpt-6-astra': { inputPerMillion: 9.2, outputPerMillion: 46 },
-  'openai:gpt-5.6-sol': { inputPerMillion: 4.6, outputPerMillion: 27.6 },
-  'openai:gpt-5.6-terra': { inputPerMillion: 1.84, outputPerMillion: 11.04 },
-  'openai:gpt-5.6-luna': { inputPerMillion: 0.18, outputPerMillion: 1.1 },
-  'openai:gpt-5.5': { inputPerMillion: 4.6, outputPerMillion: 27.6 },
+  //
+  // ALL FIVE ARE PRICED AT OPENAI'S LONG-CONTEXT BAND, the same decision the `xai:grok-4.6` row
+  // below makes and for the same reason. OpenAI bills in two bands: a request whose prompt reaches
+  // 272,000 input tokens is billed ENTIRELY at roughly double the short rate, with no blending, so
+  // one model has two prices and this table has one slot. Long list is $20 / $75 (Astra), $8 / $30
+  // (Sol), $4 / $18 (Terra), $0.40 / $1.80 (Luna), $10 / $45 (GPT-5.5). Every row here carried the
+  // SHORT band, which meters a long-prompt run at half its input and ~60% of its output. The
+  // catalog declares a 1,050,000-token window on these entries, so a container agent re-sending a
+  // large checkout crosses that threshold as ordinary behaviour rather than as an edge case. A
+  // short-prompt run is over-metered by ~2x as the accepted cost, which is the direction a budget
+  // safeguard is allowed to be wrong in. Pricing per band needs the recorded prompt size to reach
+  // `priceFor`, which is the same prefix-aware matching the `bedrock` row below is waiting on.
+  //
+  // Both DERIVED cache tiers stay exact on the long band: cache reads bill at 0.1x and writes at
+  // 1.25x of the band's own input rate on all five tiers, so neither needs naming.
+  //
+  // Two upstream facts checked and deliberately not followed. OpenAI's SHORT band for Sol now
+  // reads $4 / $20 where this table carried $5 / $30, which the long band supersedes. And the 2x
+  // "Fast mode" rate is still not modelled: nothing here dispatches it, so a row set to a mode we
+  // never request would over-meter on top of the band choice above.
+  'openai:gpt-6-astra': { inputPerMillion: 18.4, outputPerMillion: 69 },
+  'openai:gpt-5.6-sol': { inputPerMillion: 7.36, outputPerMillion: 27.6 },
+  'openai:gpt-5.6-terra': { inputPerMillion: 3.68, outputPerMillion: 16.56 },
+  'openai:gpt-5.6-luna': { inputPerMillion: 0.37, outputPerMillion: 1.66 },
+  'openai:gpt-5.5': { inputPerMillion: 9.2, outputPerMillion: 41.4 },
   openai: { inputPerMillion: 0.14, outputPerMillion: 0.55 },
   // Cloudflare Workers AI is billed per "neuron"; treat it as roughly free. Every model
   // BELOW is a per-token-billed exception — see the note on the Kimi entries: a model with
@@ -364,26 +375,39 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   'openrouter:anthropic/claude-fable-5': { inputPerMillion: 9.2, outputPerMillion: 46 },
   'openrouter:anthropic/claude-opus-5': { inputPerMillion: 4.6, outputPerMillion: 23 },
   'openrouter:anthropic/claude-opus-4.8': { inputPerMillion: 4.6, outputPerMillion: 23 },
-  'openrouter:google/gemini-3.1-pro-preview': { inputPerMillion: 1.84, outputPerMillion: 11.04 },
+  // Gemini 3.1 Pro is the THIRD two-band route in this table, beside OpenAI below and xAI further
+  // down, and the only Gemini entry that has one: Google bills a prompt over 200,000 tokens at
+  // $4 in / $0.40 cached / $18 out per 1M against the $2 / $0.20 / $12 below it. Priced at the LONG
+  // band for the reason those two state, and the catalog gives this entry a 1,048,576-token window,
+  // so the band is reachable by an ordinary long-context run rather than by an edge case. The
+  // derived 0.1x cache tier lands exactly on the long band's own $0.40, so it stays derived.
+  'openrouter:google/gemini-3.1-pro-preview': { inputPerMillion: 3.68, outputPerMillion: 16.56 },
+  // The three Flash rows are ONE band each, which is what makes them the plain case beside the
+  // entry above: Google prices them per token regardless of prompt length. All three sit at the
+  // $0.75 / $0.075 cached / $3.75 per 1M the gateway serves today, so these are the rate actually
+  // billed and the derived cache tier is exact. The half-rate promotion the 3.7 Flash row used to
+  // over-count against has lapsed on the gateway, so there is no longer a discount here to outlive.
+  //
+  // Google has published a 100% increase on all three for 2027-01-01, which this table does not
+  // pre-empt: a future price is not the current one, and the sweep after it lands it.
   'openrouter:google/gemini-3.6-flash': { inputPerMillion: 0.69, outputPerMillion: 3.45 },
-  // Priced at Google's $0.75 / $3.75 list, NOT the $0.375 / $1.875 the route is still
-  // discounted to. The discount is temporary and the budget gate may not undercount when it
-  // lapses; over-metering by 2x while it holds is the accepted cost. Google has also
-  // published a 100% increase on BOTH Flash rows for 2027-01-01, which this table does not
-  // pre-empt: a future price is not the current one, and the next sweep lands it.
   'openrouter:google/gemini-3.7-flash': { inputPerMillion: 0.69, outputPerMillion: 3.45 },
-  // 3.8 Flash launched at 3.7 Flash's list, $0.75 / $3.75, and is NOT discounted, so this row
-  // is the rate actually billed rather than the deliberate over-count above it.
   'openrouter:google/gemini-3.8-flash': { inputPerMillion: 0.69, outputPerMillion: 3.45 },
-  // The same OpenAI list prices as the direct rows above, and the same two stale halves
-  // corrected. OpenRouter's own model page currently advertises Sol at $2 / $10, below both
-  // OpenAI's list and its own Terra row; that is an upstream listing artefact, so the entry
-  // stays on the vendor list price this passthrough gateway bills at.
-  'openrouter:openai/gpt-6-astra': { inputPerMillion: 9.2, outputPerMillion: 46 },
-  'openrouter:openai/gpt-5.6-sol': { inputPerMillion: 4.6, outputPerMillion: 27.6 },
-  'openrouter:openai/gpt-5.6-terra': { inputPerMillion: 1.84, outputPerMillion: 11.04 },
-  'openrouter:openai/gpt-5.6-luna': { inputPerMillion: 0.19, outputPerMillion: 1.11 },
-  'openrouter:openai/gpt-5.5': { inputPerMillion: 4.6, outputPerMillion: 27.6 },
+  // The same OpenAI LONG-BAND list prices as the direct rows above, for the reason stated there
+  // and with the gateway confirming the mechanism outright: every one of these slugs carries an
+  // `overrides: [{ min_prompt_tokens: 272000, … }]` entry in the `/models` payload, at exactly the
+  // doubled rates OpenAI publishes. OpenRouter is a passthrough, so the band reaches this route
+  // too, and `openai` is `auto-prefix` on the gateway, so a long-prompt container turn really is
+  // billed at the rate this row now carries.
+  //
+  // OpenRouter's own model page still advertises Sol at HALF OpenAI's list in both bands ($2 / $10
+  // short, $4 / $15 long), below its own Terra row in the short band; that is the upstream listing
+  // artefact this comment already recorded, so the entry stays on the vendor list price.
+  'openrouter:openai/gpt-6-astra': { inputPerMillion: 18.4, outputPerMillion: 69 },
+  'openrouter:openai/gpt-5.6-sol': { inputPerMillion: 7.36, outputPerMillion: 27.6 },
+  'openrouter:openai/gpt-5.6-terra': { inputPerMillion: 3.68, outputPerMillion: 16.56 },
+  'openrouter:openai/gpt-5.6-luna': { inputPerMillion: 0.37, outputPerMillion: 1.66 },
+  'openrouter:openai/gpt-5.5': { inputPerMillion: 9.2, outputPerMillion: 41.4 },
   'openrouter:openai/gpt-oss-120b': { inputPerMillion: 0.034, outputPerMillion: 0.16 },
   // Meta Muse Spark 1.3, both tiers: $1.25 / $4.25 standard, $0.10 / $0.20 contributor. The
   // two are the same model on the same route, so the gap between these rows IS the entire
@@ -406,14 +430,14 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   // OpenRouter models API actually reported when it was last read, and why re-reading it is
   // part of every pricing sweep rather than something to infer from the vendor's own page.
   //
-  // Observed 2026-09-04 by `scripts/check-openrouter-pins.mjs`: Flash $0.0886 in / $0.0177
-  // cached / $0.1772 out, Pro $1.60 in / $0.135 cached / $3.20 out per 1M. Pro is unmoved since
-  // the 2026-09-01 read; Flash has drifted up ~9% and the row below it was the checker's one
-  // UNDERSTATED pin, which is the direction that matters: a budget metering below the live rate
-  // is the failure this table's conservatism exists to rule out, so it is re-pinned even though
-  // the gap is small. (An earlier read had Pro at $0.556 / $1.112 on 2026-08-26, a third of what
-  // it bills now. That swing in five days is the case for the checker rather than for a sweep
-  // nobody schedules.)
+  // Observed 2026-09-09 by `scripts/check-openrouter-pins.mjs`: Flash $0.0825 in / $0.0165
+  // cached / $0.1649 out, Pro $0.946 in / $0.0789 cached / $1.893 out per 1M. Both rows are left
+  // where they are: each now sits ABOVE its live rate, which is the margin this table is for, and
+  // Pro has swung $0.556 → $1.60 → $0.946 across three reads in a fortnight. Chasing that blend
+  // down would spend the margin on noise and hand the next reader a number that is wrong in the
+  // unsafe direction as soon as the cheap upstreams thin again; only an UNDERSTATED pin is
+  // re-pinned here. Re-reading the blend is still part of every sweep, because the stamp is the
+  // only record of which direction it moved.
   'openrouter:deepseek/deepseek-v4-flash': {
     inputPerMillion: 0.082,
     outputPerMillion: 0.164,
@@ -426,9 +450,15 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   },
   // K2.7 Code's cache-read rate ($0.19/M) is ~2.8x the 0.1x floor its input implies, so it is
   // named; K3's ($0.30/M) IS the floor, so it derives.
+  //
+  // The fresh classes are re-pinned from $0.674 / $3.40 to the $0.71 / $3.50 the gateway's blend
+  // reads today: the slug is served by several upstreams and the cheap end of that pool thinned,
+  // which moved input up ~5% and output ~3%. Small, and acted on anyway because the direction is
+  // the one this table may not sit on. `moonshotai` is `auto-prefix` on the gateway, so all three
+  // classes on this route are really recorded and really metered.
   'openrouter:moonshotai/kimi-k2.7-code': {
-    inputPerMillion: 0.62,
-    outputPerMillion: 3.13,
+    inputPerMillion: 0.66,
+    outputPerMillion: 3.22,
     cacheReadPerMillion: 0.17,
   },
   'openrouter:moonshotai/kimi-k3': { inputPerMillion: 2.76, outputPerMillion: 13.8 },
@@ -443,12 +473,19 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
     cacheReadPerMillion: 0.21,
   },
   // GLM-5.3's open weights landed after the last sweep, so the gateway now serves it and the
-  // catalog routes to it. Same $1.40 / $4.40 list as every other GLM-5.3 row here. No cached
-  // tier is NAMED: OpenRouter's blend reads $0.14/M, which the 0.1x floor this input implies
-  // already lands a hair above, so deriving is both correct and the safe direction. That is a
-  // real difference from the `zai:` row beside it, which names $0.26 because Z.ai's own API
-  // charges nearly double for the same class.
-  'openrouter:z-ai/glm-5.3': { inputPerMillion: 1.29, outputPerMillion: 4.05 },
+  // catalog routes to it. Same $1.40 / $4.40 list as every other GLM-5.3 row here.
+  //
+  // The cached tier is NAMED, where this row left it derived on the grounds that OpenRouter's
+  // blend read $0.14/M and the 0.1x floor landed a hair above that. The blend has since converged
+  // on Z.ai's own $0.26/M, so the floor ($0.129) now meters a cache read at 54% of the rate, and
+  // `z-ai` is `auto-prefix` on the gateway: this is the class a container agent's re-sent prefix
+  // lands in on every turn, so it was the one understatement here a budget could spend through.
+  // Rounded UP from 0.2392, as the `z-ai/glm-5.2` row beside it is.
+  'openrouter:z-ai/glm-5.3': {
+    inputPerMillion: 1.29,
+    outputPerMillion: 4.05,
+    cacheReadPerMillion: 0.24,
+  },
   // The same Z.ai list rates as the `zai:` row above: OpenRouter passes the upstream vendor's
   // price through, and the launch promotion the slug is served at today is the half-rate this
   // row deliberately does not carry.

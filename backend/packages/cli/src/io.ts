@@ -85,13 +85,27 @@ export function openCommand(url: string, platform: NodeJS.Platform): OpenBrowser
   }
 }
 
-/** A clack prompt resolved to a cancel symbol (Ctrl-C / Esc): print a notice and exit cleanly. */
+/**
+ * A clack prompt resolved to a cancel symbol (Ctrl-C / Esc): print a notice and exit cleanly.
+ *
+ * The assertion on the way out closes a gap in `@clack`'s own types rather than a modelling
+ * problem here, and this is the ONE seam every prompt result passes through, so it is the only
+ * place that has to know about it. Each prompt is declared as `Promise<T | symbol>`, with the WIDE
+ * `symbol`, while `isCancel` narrows to `value is typeof CANCEL_SYMBOL`, a UNIQUE symbol. Control
+ * flow cannot subtract a unique symbol from the wide type, so the surviving branch stays
+ * `T | symbol` even though the guard has just ruled out the only symbol these prompts produce.
+ * (Before `@clack/core@1.5.0` the guard said `value is symbol` and the subtraction worked.)
+ *
+ * Written as `as T` rather than by re-typing the parameter deliberately: taking
+ * `T | typeof CANCEL_SYMBOL` would make `T` infer as `string | symbol` from the producer's own
+ * signature, which returns the same union under a name that reads as if it had been narrowed.
+ */
 function bailIfCancelled<T>(value: T | symbol): T {
   if (isCancel(value)) {
     cancel('Cancelled.')
     process.exit(130)
   }
-  return value
+  return value as T
 }
 
 /** The real, console-backed {@link Io}, implemented with `@clack/prompts`. */
