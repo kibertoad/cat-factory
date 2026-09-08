@@ -1,5 +1,6 @@
 import type { AgentRunContext } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
+import { defaultAgentKindRegistry } from '../kinds/registry.js'
 import { ownServiceSection, renderStandardUserPrompt } from './standard.js'
 
 function ctx(ownService?: AgentRunContext['ownService']): AgentRunContext {
@@ -50,9 +51,11 @@ describe('ownServiceSection', () => {
   })
 
   it('reaches the standard-phase user prompt, not just the generic one', () => {
-    const rendered = renderStandardUserPrompt('build', {
-      ...ctx({ stated: true, frameId: 'blk_frame', title: 'billing-api' }),
-    })
+    const rendered = renderStandardUserPrompt(
+      'build',
+      { ...ctx({ stated: true, frameId: 'blk_frame', title: 'billing-api' }) },
+      defaultAgentKindRegistry(),
+    )
     expect(rendered).toContain('The system this work belongs to: billing-api')
   })
 })

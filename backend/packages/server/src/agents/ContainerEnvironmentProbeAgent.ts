@@ -1,5 +1,7 @@
 import type {
+  AgentJobHandle,
   EnvironmentProbeAgent,
+  EnvironmentProbeDispatchCheck,
   EnvironmentProbeHandle,
   EnvironmentProbeRequest,
   EnvironmentProbeSurface,
@@ -8,9 +10,10 @@ import type {
   RepoProjectionRepository,
   RunnerImageVariant,
   RunnerJobRef,
+  RunnerJobView,
   TestSecretEntry,
 } from '@cat-factory/kernel'
-import { failureKindFromHarnessCause, runBestEffort } from '@cat-factory/kernel'
+import { failureKindFromHarnessCause, getErrorMessage } from '@cat-factory/kernel'
 import {
   environmentProbeSystemPrompt,
   environmentProbeUserPrompt,
@@ -18,8 +21,13 @@ import {
 } from '@cat-factory/agents'
 import { environmentProbeAgentKind, isEnvironmentProbeReportPayload } from '@cat-factory/contracts'
 import type { ContainerJobAuthResolver } from './containerJobAuth.js'
+import {
+  ContainerJobAccounting,
+  type ContainerJobAccountingDeps,
+} from './containerJobAccounting.js'
+import { providerOf } from './containerJobAddressing.js'
 import { resolveTestCredentials } from './testCredentials.js'
-import type { ResolveSingleKindModel } from './singleKindModel.js'
+import type { ResolveSingleKindModel, SingleKindModel } from './singleKindModel.js'
 import type { MintInstallationToken, ResolveRepoOrigin } from './repoTargeting.js'
 import { githubRepoOrigin } from './containerAgentBody.js'
 import { RunnerJobClient, type ResolveRunnerTransport } from './RunnerJobClient.js'
@@ -57,7 +65,21 @@ import { logger } from '../observability/logger.js'
 //    description pairs of that SAME list are what the prompt advertises. One resolution, so the
 //    prompt cannot name a variable the container does not carry, and the three states that
 //    resolution can END in are stated to the prober rather than collapsed into an empty list.
+//  - What the dispatch RESOLVED rides back on the handle and is persisted by the caller, and what
+//    the job SPENT is filed through the same `ContainerJobAccounting` a pipeline step's is. A
+//    subscription-routed dry run talks straight to the vendor, so the LLM proxy meters none of it:
+//    with no accounting here its whole burn was absent from `llm_call_metrics`, from the leased
+//    token's usage-aware rotation, and from the modeled quota cycle. Free and invisible, on the one
+//    flow whose own admission gate is a budget.
 // ---------------------------------------------------------------------------
+
+/**
+ * The `provider:model` label a dispatch is recorded under, spelled the same way the step path
+ * spells it (`ContainerAgentExecutor`'s `buildJobBody`), so one reader can parse either.
+ */
+function modelLabel(ref: { provider: string; model: string }): string {
+  return `${ref.provider}:${ref.model}`
+}
 
 /** Which executor image each surface needs. */
 const IMAGE_BY_SURFACE: Record<EnvironmentProbeSurface, RunnerImageVariant | undefined> = {
@@ -107,6 +129,18 @@ export interface ContainerEnvironmentProbeAgentDependencies {
    */
   auth: ContainerJobAuthResolver
   /**
+   * Where a settled job's tokens are recorded: the per-call telemetry rows, the leased pool token's
+   * usage-aware rotation counters, and the modeled quota cycle. The SAME collaborator the step
+   * executor files through, so a dry run's spend is readable exactly like a step's.
+   *
+   * Only a SUBSCRIPTION harness has anything to report here: a Pi job reaches its model through the
+   * LLM proxy, which is the single metering point for it and files the rows itself. That is
+   * precisely why this cannot be omitted now the prober can resolve a subscription model: the
+   * proxy sees nothing of that job. Absent ⇒ no channel is wired (a facade with no telemetry store
+   * and no pool), which every method here treats as the no-op it is.
+   */
+  accounting?: ContainerJobAccountingDeps
+  /**
    * Resolves the service frame's sealed test credentials. Absent ⇒ the deployment has no sealed
    * store, which the prompt STATES as a DEPLOYMENT fact rather than omitting: a prober that cannot
    * tell an unconfigured store from one it was not shown files the platform's own gap as its own
@@ -128,9 +162,11 @@ export interface ContainerEnvironmentProbeAgentDependencies {
 
 export class ContainerEnvironmentProbeAgent implements EnvironmentProbeAgent {
   private readonly jobs: RunnerJobClient
+  private readonly accounting: ContainerJobAccounting
 
   constructor(private readonly deps: ContainerEnvironmentProbeAgentDependencies) {
     this.jobs = new RunnerJobClient(deps.resolveTransport)
+    this.accounting = new ContainerJobAccounting(deps.accounting ?? {})
   }
 
   /**
@@ -149,6 +185,42 @@ export class ContainerEnvironmentProbeAgent implements EnvironmentProbeAgent {
     const transport = await this.deps.resolveTransport(workspaceId).catch(() => null)
     if (!transport) return false
     return transport.supportsImage?.(IMAGE_BY_SURFACE[surface]) ?? true
+  }
+
+  /**
+   * Whether the model this frame's dry run resolves to can actually be dispatched, run at ADMISSION
+   * over the same two steps `start` takes: resolve the model (which refuses a provider the LLM proxy
+   * cannot serve), then ask the auth resolver whether the harness that model names has a credential
+   * to open it.
+   *
+   * Asked here rather than left to the dispatch because both answers are already knowable, and
+   * neither is knowable cheaply later: reached from inside `stage.dispatch`, each one fails the run
+   * at `probing` after a throwaway branch, a full provision and a teardown, to report something the
+   * workspace's own preset said before anything was created.
+   *
+   * A resolution that THROWS is the refusal, carried verbatim: `resolveDispatchRef`'s message
+   * already names the fix (pick a Workers AI model, configure a provider key, add a local runner),
+   * and re-wording it here would hand the operator two spellings of one problem.
+   */
+  async checkDispatchable(subject: {
+    workspaceId: string
+    blockId: string
+    surface: EnvironmentProbeSurface
+    initiatedBy: string | null
+  }): Promise<EnvironmentProbeDispatchCheck> {
+    let resolved: SingleKindModel
+    try {
+      resolved = await this.resolveModel(subject, subject.surface)
+    } catch (error) {
+      return { ok: false, detail: getErrorMessage(error) }
+    }
+    const gap = await this.deps.auth.describeAuthGap({
+      harness: resolved.harness,
+      subscriptionVendor: resolved.subscriptionVendor,
+      workspaceId: subject.workspaceId,
+      ...(subject.initiatedBy ? { initiatedByUserId: subject.initiatedBy } : {}),
+    })
+    return gap ? { ok: false, detail: gap } : { ok: true, model: modelLabel(resolved.ref) }
   }
 
   async start(request: EnvironmentProbeRequest): Promise<EnvironmentProbeHandle> {
@@ -175,7 +247,7 @@ export class ContainerEnvironmentProbeAgent implements EnvironmentProbeAgent {
     // The model this dispatch runs, then the credential that opens it. Both per dispatch, and in
     // this order: the harness the model names decides which auth channel there is to resolve.
     const { ref, harness, subscriptionVendor } = await this.resolveModel(request, surface)
-    const { auth } = await this.deps.auth.resolve({
+    const { auth, subscriptionTokenId } = await this.deps.auth.resolve({
       harness,
       ref,
       subscriptionVendor,
@@ -292,14 +364,27 @@ export class ContainerEnvironmentProbeAgent implements EnvironmentProbeAgent {
       surface,
       blockId: request.blockId,
       initiatedBy: request.initiatedBy,
+      // What only THIS moment knows, handed back for the caller to persist: see
+      // `EnvironmentProbeDispatch`. The leased pooled token id in particular has no second source,
+      // and it is the row the settled job's tokens are attributed back to.
+      dispatch: {
+        model: modelLabel(ref),
+        ...(subscriptionTokenId ? { subscriptionTokenId } : {}),
+        ...(subscriptionVendor ? { subscriptionVendor } : {}),
+      },
     }
   }
 
   async poll(handle: EnvironmentProbeHandle): Promise<EnvironmentProbeUpdate> {
     const view = await this.jobs.poll(handle.workspaceId, this.ref(handle.jobId, handle.surface))
+    // What the job has SPENT, filed on every poll and on every terminal state alike, exactly as the
+    // step path files it. See `settleAccounting` for why the failed branches below are not
+    // shortcuts past it.
+    await this.accounting.recordCalls(this.jobHandle(handle), view.callMetrics)
     if (view.state === 'running') {
       return view.progress ? { state: 'running', subtasks: view.progress } : { state: 'running' }
     }
+    await this.settleAccounting(handle, view)
     if (view.state === 'failed') {
       return {
         state: 'failed',
@@ -338,19 +423,67 @@ export class ContainerEnvironmentProbeAgent implements EnvironmentProbeAgent {
           'established about the environment.',
       }
     }
-    // Resolved HERE rather than remembered from the dispatch, and only on the terminal branch: the
-    // durable driver polls this from a fresh process (and possibly a second worker), so nothing
-    // the dispatch held in memory is still around, while re-reading it every poll would cost a
-    // frame read a minute for a label used once. `undefined` is a state the report already
-    // documents ("absent when the dispatch did not say"), so a resolution that cannot answer
-    // leaves the field off instead of guessing.
-    const model = await runBestEffort(logger, 'resolve the dry run model label', () =>
-      this.resolveModel(handle, handle.surface),
-    )
+    // The model the container RAN, as the dispatch recorded it and the caller handed it back: never
+    // re-resolved here. A fresh poll process asking the frame and the preset again would answer
+    // about them as they are NOW, so a pin cleared while the container worked stamps the report
+    // with a model nobody ran, which is the one label an operator weighs the verdict by. Absent is
+    // a state the report already documents ("absent when the dispatch did not say"), so a handle
+    // that carries none leaves the field off rather than guessing at one.
     return {
       state: 'done',
       report: result.custom,
-      ...(model ? { model: `${model.ref.provider}:${model.ref.model}` } : {}),
+      ...(handle.dispatch?.model ? { model: handle.dispatch.model } : {}),
+    }
+  }
+
+  /**
+   * Everything a SETTLED job owes the ledger, run once the poll knows the job is terminal and
+   * BEFORE any of the failure branches return.
+   *
+   * Before them deliberately: a dry run that spent tokens and then failed (an evicted container, a
+   * reply with no JSON) is exactly the run an operator most needs the spend for, and it is the one
+   * whose numbers a `return` above this line would drop. The three writes are the step path's own,
+   * each idempotent per job id, so the durable driver's replay of a terminal poll cannot
+   * double-count.
+   *
+   * A Pi job reports none of this: the LLM proxy is its single metering point and files its rows
+   * itself, so every call here is a no-op for it and the whole method exists for the subscription
+   * harnesses, which talk to the vendor direct and are metered nowhere else.
+   */
+  private async settleAccounting(
+    handle: EnvironmentProbeHandle,
+    view: RunnerJobView,
+  ): Promise<void> {
+    const job = this.jobHandle(handle)
+    const result = view.result ?? {}
+    await this.accounting.recordCallsOnce(job, result)
+    await this.accounting.recordPooledUsageOnce(job, result)
+    await this.accounting.recordQuotaUsageOnce(job, result)
+  }
+
+  /**
+   * The dry run's handle as the shared accounting reads one.
+   *
+   * A self-test is a SINGLE-JOB flow, so the run and the job are one row and `runId` is the job id
+   * (which is what makes the recorded rows join to the self-test run the SPA renders). The model,
+   * the leased token and the initiator all come off the persisted dispatch attribution rather than
+   * being re-derived, for the reason `EnvironmentProbeDispatch` states.
+   */
+  private jobHandle(handle: EnvironmentProbeHandle): AgentJobHandle {
+    const model = handle.dispatch?.model
+    return {
+      jobId: handle.jobId,
+      runId: handle.jobId,
+      workspaceId: handle.workspaceId,
+      agentKind: environmentProbeAgentKind(handle.surface),
+      ...(model ? { model, provider: providerOf(model) } : {}),
+      ...(handle.dispatch?.subscriptionTokenId
+        ? { subscriptionTokenId: handle.dispatch.subscriptionTokenId }
+        : {}),
+      ...(handle.dispatch?.subscriptionVendor
+        ? { subscriptionVendor: handle.dispatch.subscriptionVendor }
+        : {}),
+      ...(handle.initiatedBy ? { initiatedByUserId: handle.initiatedBy } : {}),
     }
   }
 
@@ -370,7 +503,7 @@ export class ContainerEnvironmentProbeAgent implements EnvironmentProbeAgent {
   private resolveModel(
     subject: { workspaceId: string; blockId: string; initiatedBy?: string | null },
     surface: EnvironmentProbeSurface,
-  ) {
+  ): Promise<SingleKindModel> {
     return this.deps.resolveModel({
       workspaceId: subject.workspaceId,
       blockId: subject.blockId,

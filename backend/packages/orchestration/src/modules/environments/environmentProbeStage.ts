@@ -4,6 +4,7 @@ import type {
   BlockRepository,
   EnvironmentHandle,
   EnvironmentProbeAgent,
+  EnvironmentProbeDispatchCheck,
   EnvironmentProbeHandle,
   EnvironmentProbeReport,
   EnvironmentProbeSurface,
@@ -13,7 +14,7 @@ import type {
   ResolveRunRepoContext,
   StepSubtasks,
 } from '@cat-factory/kernel'
-import { noopLogger, redactSecrets } from '@cat-factory/kernel'
+import { isSubscriptionVendor, noopLogger, redactSecrets } from '@cat-factory/kernel'
 import {
   coerceEnvironmentProbeReport,
   environmentProbeSurfaceFor,
@@ -117,6 +118,24 @@ export class EnvironmentProbeStage {
    */
   async supports(workspaceId: string, surface: EnvironmentProbeSurface): Promise<boolean> {
     return this.deps.agent.supports(workspaceId, surface)
+  }
+
+  /**
+   * Whether the model this frame's dry run would run on can actually be dispatched, asked at
+   * admission beside {@link supports}. Delegated for the same reason: the model, the harness and
+   * the credential that opens it are all facade concerns, and this stage is deliberately free of
+   * every one of them.
+   */
+  async checkDispatchable(
+    record: Pick<EnvironmentTestRunRecord, 'workspaceId' | 'blockId' | 'initiatedBy'>,
+    surface: EnvironmentProbeSurface,
+  ): Promise<EnvironmentProbeDispatchCheck> {
+    return this.deps.agent.checkDispatchable({
+      workspaceId: record.workspaceId,
+      blockId: record.blockId,
+      surface,
+      initiatedBy: record.initiatedBy,
+    })
   }
 
   /**
@@ -266,6 +285,12 @@ export class EnvironmentProbeStage {
    * dispatch: the durable driver polls from a fresh process, so the record is the only thing both
    * sides of a replay share. The SURFACE is passed in rather than re-derived, because the claim on
    * the record addresses a container and a frame edited mid-run would address a different one.
+   *
+   * The DISPATCH ATTRIBUTION rides along for the same reason the surface does, and it is why the
+   * record carries it at all: everything else on this handle is an address, but the model that ran
+   * and the token that paid for it are facts about a moment that has passed. Rebuilt from the row,
+   * they survive the replay; re-derived, they would be answers about the frame as it is now. Absent
+   * until the dispatch is accepted, which the port documents as a state rather than a hole.
    */
   private handle(
     record: EnvironmentTestRunRecord,
@@ -277,6 +302,19 @@ export class EnvironmentProbeStage {
       surface,
       blockId: record.blockId,
       initiatedBy: record.initiatedBy,
+      ...(record.probeModel
+        ? {
+            dispatch: {
+              model: record.probeModel,
+              ...(record.probeSubscriptionTokenId
+                ? { subscriptionTokenId: record.probeSubscriptionTokenId }
+                : {}),
+              ...(isSubscriptionVendor(record.probeSubscriptionVendor)
+                ? { subscriptionVendor: record.probeSubscriptionVendor }
+                : {}),
+            },
+          }
+        : {}),
     }
   }
 }

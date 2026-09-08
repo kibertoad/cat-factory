@@ -35,14 +35,31 @@ export interface CredentialGapGuidance {
 }
 
 /**
- * The default for every kind that is handed an environment without a bespoke report shape: say it
- * in the report and name what is needed. A tester uses this too, its own rules already covering
- * what a failed check does to the greenlight.
+ * The default for every kind whose DELIVERABLE IS ITS REPLY and that has no bespoke report shape:
+ * say it in the report and name what is needed. A tester uses this too, its own rules already
+ * covering what a failed check does to the greenlight.
  */
 export const DEFAULT_CREDENTIAL_GAP_GUIDANCE: CredentialGapGuidance = {
   missing: 'record it as a failure and name the credential that is needed',
   unusable:
     'record it as a failure, and say which header, flow or scope you could not work out rather than reporting the service as broken',
+}
+
+/**
+ * For a kind whose product is a pushed COMMIT (the implementers: `coder`, `ci-fixer`, `mocker`,
+ * the Playwright author, a deployment's own `container-coding` kind).
+ *
+ * Its own guidance rather than the default, because the default names a REPORT such a kind never
+ * writes: those agents legitimately end with no final text at all and their work is in the branch
+ * (`deliverableIsReply` is the declaration that decides which it is). Told to "record it as a
+ * failure", an implementer reads an instruction to stop and write one up instead of building, so
+ * this one names the channel it actually has and says to carry on with the rest.
+ */
+export const IMPLEMENTER_CREDENTIAL_GAP_GUIDANCE: CredentialGapGuidance = {
+  missing:
+    'note it where you record the change and name the credential that is needed, then carry on with what you can do without it',
+  unusable:
+    'say which header, flow or scope you could not work out where you record the change, and treat it as a gap in the SETUP rather than a defect in the service',
 }
 
 /**
@@ -64,7 +81,7 @@ export function environmentAccessLines(
 ): string[] {
   if (!access) {
     return [
-      '- Environment access: NOT STATED. The provider returned no access credentials for this environment. It may be open, or it may expect a credential the platform never received; find out from the repository and say which in your report.',
+      `- Environment access: NOT STATED. The provider returned no access credentials for this environment. It may be open, or it may expect a credential the platform never received; work out which from the repository, and if an operation needs a credential you do not have, ${guidance.missing}.`,
     ]
   }
   if (access.scheme === 'none') {
@@ -133,6 +150,9 @@ export function testCredentialLines(
  * fixtures, and a tester that was only told to read the README, do not exercise the same surface,
  * so a green dry run would say nothing about whether the tester can get in.
  */
-export const SERVICE_DISCOVERY_GUIDANCE = [
-  "Work out how to operate the service from the REPOSITORY, not from guesswork: its OpenAPI/GraphQL schema, route definitions, auth middleware, the README and any docs it points to, seed/fixture data naming test users, and any `.http` or `curl` examples. Prefer what the CODE says over what prose claims, and prefer the repo's own examples over an endpoint shape you would expect.",
-].join('\n')
+export const SERVICE_DISCOVERY_GUIDANCE =
+  'Work out how to operate the service from the REPOSITORY, not from guesswork: its ' +
+  'OpenAPI/GraphQL schema, route definitions, auth middleware, the README and any docs it ' +
+  'points to, seed/fixture data naming test users, and any `.http` or `curl` examples. Prefer ' +
+  "what the CODE says over what prose claims, and prefer the repo's own examples over an " +
+  'endpoint shape you would expect.'

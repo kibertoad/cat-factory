@@ -73,6 +73,21 @@ export interface ContainerJobAuthDependencies {
    */
   leasePersonalSubscriptionToken?: LeasePersonalSubscriptionToken
   /**
+   * Whether the WORKSPACE holds a pooled token for a vendor, and whether the USER holds their own
+   * personal one. Optional; absent ⇒ {@link ContainerJobAuthResolver.describeAuthGap} reports no
+   * gap it cannot see, and the lease itself is still the authority.
+   *
+   * They sit here as well as on the model router because they answer the same question at two
+   * moments, and only this module can turn the answer into a REFUSAL: the router asks "should a
+   * dual-mode model switch to its subscription flavour?", the gap check asks "is there a credential
+   * to open the harness this model already names?". A subscription-ONLY model (Codex) carries its
+   * harness whatever the pool holds, so nothing in the routing can notice the missing token: it
+   * surfaces as a throw from the lease, which on a dry run costs a branch, a provision and a
+   * teardown to reach.
+   */
+  hasSubscriptionToken?: (workspaceId: string, vendor: SubscriptionVendor) => Promise<boolean>
+  hasPersonalSubscription?: (userId: string, vendor: SubscriptionVendor) => Promise<boolean>
+  /**
    * NATIVE LOCAL EXECUTION (local facade only, opt-in via `LOCAL_NATIVE_AGENTS`): when this
    * returns true for a resolved subscription harness + vendor, the job carries
    * `ambientAuth: true` INSTEAD of a leased credential. The harness (run as a host process)
@@ -87,12 +102,29 @@ export interface ContainerJobAuthDependencies {
   nativeAmbientAuth?: (harness: HarnessKind, vendor: SubscriptionVendor | undefined) => boolean
 }
 
-/** One dispatch's identity, as the auth channels need it. */
-export interface ContainerJobAuthRequest {
+/**
+ * WHICH credential channel a dispatch needs: the harness the resolved model names, the vendor
+ * behind it, and whose it would be.
+ *
+ * Split out of {@link ContainerJobAuthRequest} because {@link
+ * ContainerJobAuthResolver.describeAuthGap} answers from exactly this much and no more. Asking it
+ * for a whole request would have an admission check invent an `executionId` for a run that does not
+ * exist yet, and a fabricated id is a thing later code reads as one.
+ */
+export interface ContainerJobAuthSubject {
   harness: HarnessKind
-  ref: ModelRef
   subscriptionVendor: SubscriptionVendor | undefined
   workspaceId: string
+  /**
+   * Whoever started the work. An individual-usage credential belongs to one person, so its lease
+   * cannot be resolved without one.
+   */
+  initiatedByUserId?: string | null
+}
+
+/** One dispatch's identity, as the auth channels need it. */
+export interface ContainerJobAuthRequest extends ContainerJobAuthSubject {
+  ref: ModelRef
   /**
    * The correlation id the container's model calls are metered under. A pipeline step passes its
    * run id; a single-job flow passes the id of the row that IS its run, which is also the id its
@@ -101,11 +133,6 @@ export interface ContainerJobAuthRequest {
   executionId: string
   /** The kind the spend is filed under, signed into the proxy session token. */
   agentKind: string
-  /**
-   * Whoever started the work. An individual-usage credential belongs to one person, so its lease
-   * cannot be resolved without one.
-   */
-  initiatedByUserId?: string | null
 }
 
 /** What a dispatch spreads into its job body, plus the pooled token id it must attribute back. */
@@ -121,6 +148,83 @@ export interface ContainerJobAuth {
  */
 export class ContainerJobAuthResolver {
   constructor(private readonly deps: ContainerJobAuthDependencies) {}
+
+  /**
+   * Why this dispatch's credential could not be resolved, or `null` when it can be, WITHOUT
+   * leasing anything.
+   *
+   * For a flow that can be refused before it spends: the environment dry run asks it at admission,
+   * where "this deployment has no Codex subscription connected" is a sentence an operator can act
+   * on, rather than at the dispatch, where the same fact arrives as a failed run with a branch and
+   * a provisioned environment behind it.
+   *
+   * It lives beside {@link resolve} rather than in the caller so the two cannot disagree: every
+   * refusal below is one `resolve` would have thrown, in the same words. It is deliberately NOT a
+   * guarantee (a token can be revoked between the check and the lease, and a personal activation
+   * is minted after it), so the lease stays the authority and this is only the cheap early no.
+   */
+  async describeAuthGap(subject: ContainerJobAuthSubject): Promise<string | null> {
+    const { harness, subscriptionVendor, workspaceId } = subject
+    // The Pi harness mints its own proxy session token, so there is nothing to be short of.
+    if (harness === 'pi') return null
+    if (this.deps.nativeAmbientAuth?.(harness, subscriptionVendor)) return null
+    if (!subscriptionVendor) return this.harnessUnconfigured(harness)
+    if (isIndividualVendor(subscriptionVendor)) {
+      if (!this.deps.leasePersonalSubscriptionToken) {
+        return this.personalStoreUnconfigured(subscriptionVendor)
+      }
+      const userId = subject.initiatedByUserId ?? undefined
+      if (!userId) return this.noIdentifiedInitiator(subscriptionVendor)
+      // The password-backed ACTIVATION is minted per run and cannot exist yet; what is checkable
+      // now is whether this person has the subscription at all.
+      if (
+        this.deps.hasPersonalSubscription &&
+        !(await this.deps.hasPersonalSubscription(userId, subscriptionVendor))
+      ) {
+        return (
+          `Running a ${subscriptionVendor} model needs your own personal ${subscriptionVendor} ` +
+          `subscription, and none is connected to your account.`
+        )
+      }
+      return null
+    }
+    if (!this.deps.leaseSubscriptionToken) return this.harnessUnconfigured(harness)
+    if (
+      this.deps.hasSubscriptionToken &&
+      !(await this.deps.hasSubscriptionToken(workspaceId, subscriptionVendor))
+    ) {
+      return (
+        `This model runs on a ${subscriptionVendor} subscription, and this workspace has no ` +
+        `${subscriptionVendor} subscription token connected. Connect one, or pick a different model.`
+      )
+    }
+    return null
+  }
+
+  /**
+   * The three refusals {@link describeAuthGap} and {@link resolve} share, worded ONCE.
+   *
+   * Shared because the whole value of the gap check is that admission refuses for the reason the
+   * dispatch would have: two spellings of "no Codex subscription connected" is how an operator
+   * comes to fix the thing the earlier message named and hit the later one.
+   */
+  private harnessUnconfigured(harness: HarnessKind): string {
+    return (
+      `The ${harness} harness is not configured on this deployment; connect a ` +
+      `subscription token or pick a different model.`
+    )
+  }
+
+  private personalStoreUnconfigured(vendor: SubscriptionVendor): string {
+    return (
+      `Personal ${vendor} subscriptions are not configured on this ` +
+      `deployment (no ENCRYPTION_KEY); pick a different model.`
+    )
+  }
+
+  private noIdentifiedInitiator(vendor: SubscriptionVendor): string {
+    return `Running a ${vendor} model requires a signed-in user with a personal subscription.`
+  }
 
   async resolve(request: ContainerJobAuthRequest): Promise<ContainerJobAuth> {
     const { harness, ref, subscriptionVendor, workspaceId, executionId, agentKind } = request
@@ -162,12 +266,7 @@ export class ContainerJobAuthResolver {
     if (this.deps.nativeAmbientAuth?.(harness, subscriptionVendor)) {
       return { auth: { harness, ambientAuth: true } }
     }
-    if (!subscriptionVendor) {
-      throw new Error(
-        `The ${harness} harness is not configured on this deployment; connect a ` +
-          `subscription token or pick a different model.`,
-      )
-    }
+    if (!subscriptionVendor) throw new Error(this.harnessUnconfigured(harness))
     // Individual-usage vendors (Claude) are NOT pooled: lease the run-initiator's OWN
     // activated personal credential. Pooled vendors (GLM/Kimi/DeepSeek/Codex) lease
     // from the workspace pool. Either path hands the RAW credential to the resolved
@@ -176,18 +275,15 @@ export class ContainerJobAuthResolver {
     let subscriptionTokenId: string | undefined
     if (isIndividualVendor(subscriptionVendor)) {
       if (!this.deps.leasePersonalSubscriptionToken) {
-        throw new Error(
-          `Personal ${subscriptionVendor} subscriptions are not configured on this ` +
-            `deployment (no ENCRYPTION_KEY); pick a different model.`,
-        )
+        throw new Error(this.personalStoreUnconfigured(subscriptionVendor))
       }
       if (!initiatedByUserId) {
         // No identified initiator (auth-disabled/local dev): an individual-usage
         // credential is owned by a specific user and can't be resolved without one.
-        throw new CredentialRequiredError(
-          `Running a ${subscriptionVendor} model requires a signed-in user with a personal subscription.`,
-          { vendor: subscriptionVendor, reason: 'no_subscription' },
-        )
+        throw new CredentialRequiredError(this.noIdentifiedInitiator(subscriptionVendor), {
+          vendor: subscriptionVendor,
+          reason: 'no_subscription',
+        })
       }
       // Throws CredentialRequiredError(password_required) when the run has no live
       // activation: the dispatch path surfaces it as a clear, retriable failure.
@@ -198,12 +294,7 @@ export class ContainerJobAuthResolver {
       )
       secret = leased.secret
     } else {
-      if (!this.deps.leaseSubscriptionToken) {
-        throw new Error(
-          `The ${harness} harness is not configured on this deployment; connect a ` +
-            `subscription token or pick a different model.`,
-        )
-      }
+      if (!this.deps.leaseSubscriptionToken) throw new Error(this.harnessUnconfigured(harness))
       const leased = await this.deps.leaseSubscriptionToken(workspaceId, subscriptionVendor)
       subscriptionTokenId = leased.tokenId
       secret = leased.secret

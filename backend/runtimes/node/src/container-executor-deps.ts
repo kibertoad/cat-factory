@@ -25,6 +25,7 @@ import type {
   BlockRepository,
   Clock,
   HarnessKind,
+  LocalModelDeclarations,
   ModelFlavor,
   SubscriptionVendor,
   GitHubClient,
@@ -61,6 +62,7 @@ import {
   ContainerEnvConfigRepairer,
   ContainerEnvironmentProbeAgent,
   ContainerJobAuthResolver,
+  type ContainerJobAccountingDeps,
   type ContainerJobAuthDependencies,
   ContainerRepoBootstrapper,
   ContainerSessionService,
@@ -398,7 +400,6 @@ export function buildNodeContainerExecutor(deps: NodeContainerExecutorDeps): Age
     // Multi-repo coding (service-connections phase 3): the implementer fans a cross-service
     // change out across the task's own repo + each connected involved-service repo.
     resolveRepoTargets,
-    ...(resolveAccountId ? { resolveAccountId } : {}),
     mintInstallationToken,
     // Ensure the shared per-task work branch up front so every agent (including the
     // read-only architect) operates on the same branch — idempotent, best-effort. Writers
@@ -422,6 +423,7 @@ export function buildNodeContainerExecutor(deps: NodeContainerExecutorDeps): Age
       publicUrl,
       subscriptions,
       personalSubscriptions,
+      resolveAccountId,
     }),
     // Pool-token usage attribution for usage-aware rotation. Beside the lease rather than in it:
     // it is what a SETTLED job reports back, not what a dispatch is opened with.
@@ -689,6 +691,12 @@ export function buildNodeGitHubIssueFiler(
  * ("does this workspace/user hold a subscription for the vendor, so a dual-mode model should
  * switch to it?"), and a dispatcher that resolved the model with one answer and the credential
  * with another would lease for a vendor its own routing did not pick.
+ *
+ * `resolveAccountId` is part of it for a blunter reason: the proxy session token carries the SCOPE
+ * the spend gate reads, and `isOverBudget` only checks the ACCOUNT tier when the token names an
+ * account. A dispatcher that composed its own auth without it kept spending for an account that
+ * had blown its monthly budget, while the same models were refused for pipeline steps. And an
+ * unsigned scope reads as a caller with no account, not as a caller who forgot one.
  */
 export function buildNodeJobAuthDeps(deps: {
   config: AppConfig
@@ -696,6 +704,7 @@ export function buildNodeJobAuthDeps(deps: {
   publicUrl: string
   subscriptions?: ProviderSubscriptionService
   personalSubscriptions?: PersonalSubscriptionService
+  resolveAccountId?: (workspaceId: string) => Promise<string | null | undefined>
 }): ContainerJobAuthDependencies & {
   hasSubscriptionToken?: (workspaceId: string, vendor: SubscriptionVendor) => Promise<boolean>
   hasPersonalSubscription?: (userId: string, vendor: SubscriptionVendor) => Promise<boolean>
@@ -704,6 +713,7 @@ export function buildNodeJobAuthDeps(deps: {
   return {
     sessionService: new ContainerSessionService({ secret: deps.sessionSecret }),
     proxyBaseUrl: `${deps.publicUrl.replace(/\/+$/, '')}/v1`,
+    ...(deps.resolveAccountId ? { resolveAccountId: deps.resolveAccountId } : {}),
     // The subscription harnesses (Claude Code / Codex) lease a pooled token; absent ⇒ those
     // harnesses are unavailable and a subscription-only model fails loudly at dispatch.
     ...(subscriptions
@@ -789,6 +799,27 @@ export function selectNodeEnvironmentProbeAgent(deps: {
   ) => Promise<readonly ModelFlavor[] | undefined>
   subscriptions?: ProviderSubscriptionService
   personalSubscriptions?: PersonalSubscriptionService
+  /**
+   * The workspace's owning account, signed into the proxy session token so the ACCOUNT-tier spend
+   * gate applies to a dry run exactly as it does to a step. Unsigned, `isOverBudget` reads the
+   * token as a caller with no account and skips that tier entirely.
+   */
+  resolveAccountId?: (workspaceId: string) => Promise<string | null | undefined>
+  /**
+   * The initiator's local-runner declarations, so a preset naming an Ollama/LM Studio model
+   * resolves here to exactly the ref a pipeline step on the same frame would get.
+   */
+  resolveLocalModelDeclarations?: (
+    userId: string,
+  ) => Promise<readonly LocalModelDeclarations[] | undefined>
+  /**
+   * Where a SETTLED dry run's tokens are recorded. Required in practice for a
+   * subscription-routed prober: it talks to the vendor direct, so the LLM proxy meters none of it
+   * and this is the only path its burn reaches `llm_call_metrics`, the leased token's rotation
+   * counters and the modeled quota cycle. The step executor's own recorders, handed here rather
+   * than rebuilt.
+   */
+  accounting?: ContainerJobAccountingDeps
   /** Where the container clones from, so a GitLab deployment probes its own instance. */
   resolveRepoOrigin: ResolveRepoOrigin
   /**
@@ -808,6 +839,7 @@ export function selectNodeEnvironmentProbeAgent(deps: {
     publicUrl,
     ...(deps.subscriptions ? { subscriptions: deps.subscriptions } : {}),
     ...(deps.personalSubscriptions ? { personalSubscriptions: deps.personalSubscriptions } : {}),
+    ...(deps.resolveAccountId ? { resolveAccountId: deps.resolveAccountId } : {}),
   })
   return new ContainerEnvironmentProbeAgent({
     resolveTransport: deps.resolveTransport,
@@ -827,6 +859,9 @@ export function selectNodeEnvironmentProbeAgent(deps: {
       ...(deps.resolvePresetProviderPreference
         ? { resolvePresetProviderPreference: deps.resolvePresetProviderPreference }
         : {}),
+      ...(deps.resolveLocalModelDeclarations
+        ? { resolveLocalModelDeclarations: deps.resolveLocalModelDeclarations }
+        : {}),
       ...(authDeps.hasSubscriptionToken
         ? { hasSubscriptionToken: authDeps.hasSubscriptionToken }
         : {}),
@@ -835,6 +870,7 @@ export function selectNodeEnvironmentProbeAgent(deps: {
         : {}),
     }),
     auth: new ContainerJobAuthResolver(authDeps),
+    ...(deps.accounting ? { accounting: deps.accounting } : {}),
     resolveRepoOrigin: deps.resolveRepoOrigin,
     ...(deps.resolveTestSecrets ? { resolveTestSecrets: deps.resolveTestSecrets } : {}),
     ...(deps.config.github.apiBase ? { githubApiBase: deps.config.github.apiBase } : {}),

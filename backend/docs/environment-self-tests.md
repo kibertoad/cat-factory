@@ -223,6 +223,18 @@ report stored before a member was renamed renders the raw value rather than an e
   also asks the resolved runner backend whether it can serve THIS frame's image
   (`RunnerTransport.supportsImage`, absent ⇒ unknown ⇒ admitted, which is the honest answer for a
   self-hosted pool that resolves images on its own side).
+- **And the MODEL is asked too** (409 `env_test_probe_model_unavailable`,
+  `EnvironmentProbeAgent.checkDispatchable`). Two ways to be unrunnable that the image question
+  cannot see: a provider the LLM proxy cannot serve, and a subscription-only model whose credential
+  nobody connected (which no ROUTING can notice, since such a model carries its harness whatever
+  any pool holds). Its own reason rather than the one above, because the fixes differ: an image to
+  bind versus a preset to change or a subscription to connect. The refusal carries the facade's own
+  sentence on `details.modelIssue`, produced by the code that would otherwise have thrown at the
+  dispatch, so admission and dispatch cannot name different causes for one misconfiguration.
+- **The personal-credential unlock is resolved LAST**, after every refusal above. It is the one
+  gate that asks the developer for something, so a dry run that could never have started must not
+  cost a password entry first: the HTTP edge hands `startTest` a CLOSURE and the service calls it
+  once its own refusals are past.
 - **A dry run answers to the workspace spend budget** (409 `env_test_over_budget`). It is a
   billable model call that no run start gates, exactly like the bug hunt's ranking, and the probe
   fails CLOSED: a ledger nobody can read is not a licence to spend against it. The provisioning
@@ -257,9 +269,39 @@ Per dispatch rather than at wiring, because the answer is a per-workspace fact a
 in hand. Read at wiring it is a per-deployment guess: a workspace running everything on its Claude
 preset had its dry run dispatched at the Node family's Qwen default, which the LLM proxy then
 refused for having no key configured (`502 unavailable`), after the run had already created a
-branch and stood a real environment up. The proxyable check moved with it, and is now asked of the
-**resolved** model at dispatch instead of disabling the capability for the whole deployment on the
-strength of a routing entry no workspace had chosen.
+branch and stood a real environment up. The proxyable check moved with it: it is asked of the
+**resolved** model, at ADMISSION (see `checkDispatchable` above) and again at the dispatch, instead
+of disabling the capability for the whole deployment on the strength of a routing entry no workspace
+had chosen. Admission is the earlier no, not the only one: a token can be revoked between the two.
+
+### What the dispatch records, and why the poll never re-derives it
+
+The model the container ran, the pooled subscription token leased for it and that token's vendor are
+persisted on the run row (`probe_model`, `probe_subscription_token_id`,
+`probe_subscription_vendor`) with the dispatch MARK, in one write, and re-supplied on every later
+poll through `EnvironmentProbeHandle.dispatch`. The same rule a pipeline step's
+`recordDispatchAttribution` follows, for the same reason: the poll runs in a fresh process and
+rebuilds its handle from the row alone.
+
+Both halves matter. Re-resolving the MODEL there answers about the frame and the preset as they are
+NOW, so a pin cleared (or a preset switched) while the container worked stamps the settled report
+with a model nobody ran, and that label is what an operator judges the verdict's weight by. The
+leased TOKEN ID has no second source at all: the lease happens once, at dispatch, and it is the row
+a settled subscription job's tokens are attributed back to.
+
+### What a settled dry run records
+
+Through the same `ContainerJobAccounting` a pipeline step's poll files through: the per-call rows in
+`llm_call_metrics`, the leased pool token's usage-aware rotation counters, and the modeled quota
+cycle. Filed on every poll and on every TERMINAL state, failures included: a dry run that spent
+tokens and then died is the run an operator most needs the numbers for.
+
+It binds only on a SUBSCRIPTION harness, and that is exactly why it cannot be skipped. A Pi job
+reaches its model through the LLM proxy, which is its single metering point and writes those rows
+itself; a subscription harness talks to the vendor direct, so a dispatcher that files nothing meters
+that job NOWHERE. Before this the whole burn of a subscription-routed dry run was absent from the
+telemetry, from the rotation and from the quota window: free and invisible, on the one flow whose
+own admission gate is a budget.
 
 ### Which credential opens it
 
@@ -271,13 +313,22 @@ the developer's installed CLI and nothing is leased.
 
 A personal credential is only leasable with its owner's unlock password, so the **start route gates
 on it** exactly as a run start does (`personalGateForAgentKind`, 428 `credential_required`), for the
-kind `EnvironmentTestService.probeAgentKind` says the dispatch will resolve its model under. The
-activation is minted against the **run id**, which is the id the prober's dispatch leases against;
-its 12h TTL comfortably outlives a provision. Two things go wrong if this is skipped: the person is
-never asked for the unlock they were willing to give, and the dispatch reaches the lease with
-nothing activated, having spent a branch, a provision and (on the way back out) a teardown. The SPA rides
-its cached password through `withCredential`, so the modal opens on the 428 and the start is retried
-transparently; a cancelled prompt resolves to no run rather than a spinner waiting for one.
+kind `EnvironmentTestService.probeAgentKind` says the dispatch will resolve its model under. That
+kind is `null` for anything a dry run cannot target at all (a task, a module, a service with no
+ephemeral provisioning), so those runs are refused with the 409 that names what is wrong rather than
+asked for a credential first. The activation is minted against the **run id**, which is the id the
+prober's dispatch leases against; its 12h TTL comfortably outlives a provision.
+
+The mint happens BEFORE the run row exists and OUTSIDE the start's cleanup path, exactly as
+`RunLifecycleController.start` does it. Three things go wrong otherwise. The person is never asked
+for the unlock they were willing to give. The dispatch reaches the lease with nothing activated,
+having spent a branch, a provision and (on the way back out) a teardown. And an unlock that FAILS
+(a rotated password, an expired subscription) gets caught by the cleanup path and answered as a
+`201` carrying a `failed` run: a resolved action to the SPA, so `parseCredentialError` never fires,
+the modal never opens, the stale cached password is never cleared, and every retry silently burns
+another run. The SPA rides its cached password through `withCredential`, so the modal opens on the
+428 and the start is retried transparently; a cancelled prompt resolves to no run rather than a
+spinner waiting for one.
 
 `provision` mode spends no model call and so is never gated, which is also what keeps the
 historical body-less start working.

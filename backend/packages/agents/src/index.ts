@@ -448,6 +448,7 @@ export {
 // steps and the environment dry run.
 export {
   DEFAULT_CREDENTIAL_GAP_GUIDANCE,
+  IMPLEMENTER_CREDENTIAL_GAP_GUIDANCE,
   SERVICE_DISCOVERY_GUIDANCE,
   environmentAccessLines,
   testCredentialLines,

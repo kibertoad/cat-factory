@@ -28,6 +28,9 @@ interface EnvironmentTestRunRow {
   failed_stage: string | null
   probe_surface: string | null
   probe_dispatched_at: number | null
+  probe_model: string | null
+  probe_subscription_token_id: string | null
+  probe_subscription_vendor: string | null
   probe_progress: string | null
   probe: string | null
   created_at: number
@@ -52,6 +55,9 @@ function rowToRecord(row: EnvironmentTestRunRow): EnvironmentTestRunRecord {
     failedStage: (row.failed_stage as EnvironmentTestStage | null) ?? null,
     probeSurface: (row.probe_surface as EnvironmentProbeSurface | null) ?? null,
     probeDispatchedAt: row.probe_dispatched_at ?? null,
+    probeModel: row.probe_model ?? null,
+    probeSubscriptionTokenId: row.probe_subscription_token_id ?? null,
+    probeSubscriptionVendor: row.probe_subscription_vendor ?? null,
     probeProgress: row.probe_progress ? (JSON.parse(row.probe_progress) as StepSubtasks) : null,
     probe: row.probe ? (JSON.parse(row.probe) as EnvironmentProbeReport) : null,
     createdAt: row.created_at,
@@ -70,6 +76,9 @@ const PATCH_COLUMNS: Record<keyof EnvironmentTestRunRecordPatch, string> = {
   failedStage: 'failed_stage',
   probeSurface: 'probe_surface',
   probeDispatchedAt: 'probe_dispatched_at',
+  probeModel: 'probe_model',
+  probeSubscriptionTokenId: 'probe_subscription_token_id',
+  probeSubscriptionVendor: 'probe_subscription_vendor',
   probeProgress: 'probe_progress',
   probe: 'probe',
   updatedAt: 'updated_at',
@@ -81,7 +90,7 @@ const JSON_PATCH_FIELDS = new Set<string>([
   'probeProgress',
 ] satisfies (keyof EnvironmentTestRunRecordPatch)[])
 
-/** D1-backed ephemeral-environment self-test runs (migration 0050). */
+/** D1-backed ephemeral-environment self-test runs (migrations 0050 / 0101 / 0102). */
 export class D1EnvironmentTestRunRepository implements EnvironmentTestRunRepository {
   private readonly db: D1Database
 
@@ -95,8 +104,9 @@ export class D1EnvironmentTestRunRepository implements EnvironmentTestRunReposit
         `INSERT INTO environment_test_runs
           (id, workspace_id, block_id, mode, status, stage, initiated_by, provisioning, branch,
            environment_id, env_url, error, failed_stage, probe_surface, probe_dispatched_at,
-           probe_progress, probe, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           probe_model, probe_subscription_token_id, probe_subscription_vendor, probe_progress,
+           probe, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         record.id,
@@ -114,6 +124,9 @@ export class D1EnvironmentTestRunRepository implements EnvironmentTestRunReposit
         record.failedStage,
         record.probeSurface,
         record.probeDispatchedAt,
+        record.probeModel,
+        record.probeSubscriptionTokenId,
+        record.probeSubscriptionVendor,
         record.probeProgress ? JSON.stringify(record.probeProgress) : null,
         record.probe ? JSON.stringify(record.probe) : null,
         record.createdAt,

@@ -4,6 +4,7 @@ import type {
   Block,
   Clock,
   EnvironmentHandle,
+  EnvironmentProbeDispatchCheck,
   EnvironmentProbeReport,
   EnvironmentProbeSurface,
   EnvironmentTestRun,
@@ -19,7 +20,7 @@ import type {
   Workspace,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
-import { ConflictError, NotFoundError } from '@cat-factory/kernel'
+import { ConflictError, CredentialRequiredError, NotFoundError } from '@cat-factory/kernel'
 import type { ProvisionArgs, ProvisionDispatch } from '@cat-factory/integrations'
 import {
   EnvironmentTestService,
@@ -102,6 +103,9 @@ function strandedRecord(
     failedStage: null,
     probeSurface: null,
     probeDispatchedAt: null,
+    probeModel: null,
+    probeSubscriptionTokenId: null,
+    probeSubscriptionVendor: null,
     probeProgress: null,
     probe: null,
     createdAt: 1,
@@ -308,6 +312,8 @@ class FakeProbeStage {
       pollThrows?: Error
       /** Whether the deployment can run this surface's prober at all (admission). */
       supported?: boolean
+      /** Why the resolved model cannot be dispatched; absent ⇒ it can (admission). */
+      undispatchableModel?: string
       /** Runs INSIDE the dispatch, to simulate a stop landing while it is in flight. */
       onDispatch?: () => Promise<void>
     } = {},
@@ -318,6 +324,11 @@ class FakeProbeStage {
   async supports(): Promise<boolean> {
     return this.script.supported ?? true
   }
+  async checkDispatchable(): Promise<EnvironmentProbeDispatchCheck> {
+    return this.script.undispatchableModel
+      ? { ok: false, detail: this.script.undispatchableModel }
+      : { ok: true, model: 'workers-ai:qwen' }
+  }
   async resolveTarget(_record: EnvironmentTestRunRecord) {
     this.targetReads += 1
     return { frame: frameBlock(), surface: this.surfaceFor() }
@@ -326,7 +337,14 @@ class FakeProbeStage {
     if (this.script.dispatchThrows) throw this.script.dispatchThrows
     await this.script.onDispatch?.()
     this.dispatched.push(surface)
-    return { workspaceId: 'ws', jobId: 'j', surface }
+    return {
+      workspaceId: 'ws',
+      jobId: 'j',
+      surface,
+      blockId: 'frame-1',
+      initiatedBy: null,
+      dispatch: { model: 'workers-ai:qwen' },
+    }
   }
   async poll(
     _record: EnvironmentTestRunRecord,
@@ -805,7 +823,11 @@ describe('EnvironmentTestService — failure, teardown and terminal guards', () 
   })
 })
 
-describe('EnvironmentTestService: the agent dry run (`agent-probe` mode)', () => {
+// Everything a dry run answers to BEFORE its first side effect. Each of these, left to the
+// dispatch, costs a throwaway branch, a full provision and a teardown to report something that
+// was knowable with nothing created; the credential unlock is resolved last, because it is the
+// only one that asks the developer for anything.
+describe('EnvironmentTestService: admitting an agent dry run (`agent-probe` mode)', () => {
   it('refuses the mode outright when no prober is wired, before any side effect', async () => {
     // Admitting it would create a branch, stand an environment up and then park at a stage with
     // nothing to advance it, until the sweeper tore the lot down with a timeout for a reason that
@@ -830,6 +852,211 @@ describe('EnvironmentTestService: the agent dry run (`agent-probe` mode)', () =>
     expect(run.status).toBe('running')
   })
 
+  // `probeAgentKind` is what the HTTP edge gates the initiator's personal credential on. Answering
+  // a kind for a block a dry run can never target is what asks a developer for their unlock
+  // password and only then tells them the run was impossible.
+  describe('which blocks resolve a prober kind at all', () => {
+    it('names the kind the frame TYPE selects', async () => {
+      const { service } = makeService({
+        probeStage: new FakeProbeStage({ surface: 'ui' }),
+        block: frameBlock(),
+      })
+      expect(await service.probeAgentKind('ws', 'frame-1')).toBe('environment-prober-ui')
+    })
+
+    it('answers NOTHING for a block that is not a service frame', async () => {
+      const { service } = makeService({
+        probeStage: new FakeProbeStage({}),
+        block: frameBlock({ level: 'task' }),
+      })
+      expect(await service.probeAgentKind('ws', 'frame-1')).toBeNull()
+    })
+
+    it('answers NOTHING for a service with no ephemeral provisioning to exercise', async () => {
+      const { service } = makeService({
+        probeStage: new FakeProbeStage({}),
+        block: frameBlock({ provisioning: { type: 'infraless' } }),
+      })
+      expect(await service.probeAgentKind('ws', 'frame-1')).toBeNull()
+    })
+
+    it('answers NOTHING on a deployment that cannot drive a dry run', async () => {
+      const { service } = makeService({ block: frameBlock() })
+      expect(await service.probeAgentKind('ws', 'frame-1')).toBeNull()
+    })
+  })
+
+  it('refuses a model this deployment cannot dispatch, before anything is created', async () => {
+    // The check the wiring-time proxyable guard used to make, moved to where it can be made per
+    // WORKSPACE. Reached at the dispatch instead, the identical fact costs a throwaway branch, a
+    // full provision and a teardown to report.
+    const { repo, calls } = fakeRepo()
+    const { service, runRepo } = makeService({
+      repoContext: { repo, baseBranch: 'main', repoId: 'repo_1' },
+      probeStage: new FakeProbeStage({
+        undispatchableModel: 'this workspace has no codex subscription token connected.',
+      }),
+    })
+    const err = await service
+      .startTest('ws', 'frame-1', 'usr-1', 'agent-probe')
+      .catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(ConflictError)
+    expect((err as ConflictError).details?.reason).toBe('env_test_probe_model_unavailable')
+    // The facade's own sentence rides its OWN key: `reason` is the code the SPA maps to copy.
+    expect((err as ConflictError).details?.modelIssue).toContain('codex subscription token')
+    expect(runRepo.rows.size).toBe(0)
+    expect(calls.created).toEqual([])
+  })
+
+  it('surfaces a credential that will not unlock as a THROW, never as a failed run', async () => {
+    // The shape that matters to the SPA: a resolved 201 carrying a `failed` run reads as a
+    // finished action, so the 428 that reopens the password modal never fires, the stale cached
+    // password is never cleared, and every retry burns another run. Minted before the row exists
+    // and outside the cleanup path, exactly as a pipeline start mints its own.
+    const { repo, calls } = fakeRepo()
+    const { service, runRepo } = makeService({
+      repoContext: { repo, baseBranch: 'main', repoId: 'repo_1' },
+      probeStage: new FakeProbeStage({}),
+    })
+    const err = await service
+      .startTest('ws', 'frame-1', 'usr-1', 'agent-probe', async () => {
+        throw new CredentialRequiredError('Enter your personal password.', {
+          vendor: 'claude',
+          reason: 'wrong_password',
+        })
+      })
+      .catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(CredentialRequiredError)
+    // Nothing was created, so there is nothing for a cleanup path to have had to reclaim.
+    expect(runRepo.rows.size).toBe(0)
+    expect(calls.created).toEqual([])
+  })
+
+  it('resolves the credential LAST, after every refusal that needs none', async () => {
+    // A dry run that could never have started must not cost the developer a password entry
+    // first: the gate is a closure the service calls once its own refusals are past.
+    const { repo } = fakeRepo()
+    let resolved = 0
+    const { service } = makeService({
+      repoContext: { repo, baseBranch: 'main', repoId: 'repo_1' },
+      probeStage: new FakeProbeStage({ supported: false }),
+    })
+    const err = await service
+      .startTest('ws', 'frame-1', 'usr-1', 'agent-probe', async () => {
+        resolved += 1
+        return undefined
+      })
+      .catch((e: unknown) => e)
+    expect((err as ConflictError).details?.reason).toBe('env_test_probe_unavailable')
+    expect(resolved).toBe(0)
+  })
+
+  it('persists what the DISPATCH resolved, so the poll never re-derives it', async () => {
+    const { repo } = fakeRepo()
+    const probeStage = new FakeProbeStage({ surface: 'api' })
+    const { service, runRepo } = makeService({
+      repoContext: { repo, baseBranch: 'main', repoId: 'repo_1' },
+      probeStage,
+    })
+    const started = await service.startTest('ws', 'frame-1', 'usr-1', 'agent-probe')
+    await service.pollEnvTest('ws', started.id)
+    await service.pollEnvTest('ws', started.id)
+    // Written with the MARK, in one write: what the dispatch resolved is only meaningful for a
+    // dispatch that happened, and both are read back on every later poll.
+    const row = runRepo.rows.get(`ws:${started.id}`)
+    expect(row?.probeDispatchedAt).toBe(1_000)
+    expect(row?.probeModel).toBe('workers-ai:qwen')
+  })
+
+  it('refuses the mode when the deployment cannot serve THIS surface image, before provisioning', async () => {
+    // A wired prober is not a runnable one: the browser prober needs its own executor image, and a
+    // deployment that binds the plain class and not that one would otherwise pay for a branch, a
+    // full provision and a teardown to discover it inside the dispatch.
+    const { repo, calls } = fakeRepo()
+    const probeStage = new FakeProbeStage({ surface: 'ui', supported: false })
+    const { service, runRepo } = makeService({
+      repoContext: { repo, baseBranch: 'main', repoId: 'repo_1' },
+      probeStage,
+    })
+    const err = await service
+      .startTest('ws', 'frame-1', null, 'agent-probe')
+      .catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(ConflictError)
+    expect((err as ConflictError).details?.reason).toBe('env_test_probe_unavailable')
+    expect((err as ConflictError).details?.surface).toBe('ui')
+    expect(runRepo.rows.size).toBe(0)
+    expect(calls.created).toEqual([])
+
+    // The provisioning self-test is untouched by a prober gap.
+    expect((await service.startTest('ws', 'frame-1')).status).toBe('running')
+  })
+
+  it('refuses a dry run past the workspace spend budget, before provisioning', async () => {
+    // The first billable call no run start gates. Admitted, the proxy refuses the container's
+    // first completion and the operator has paid for a provision and a teardown to be told about
+    // a ceiling that was knowable up front.
+    const { repo, calls } = fakeRepo()
+    const { service, runRepo } = makeService({
+      repoContext: { repo, baseBranch: 'main', repoId: 'repo_1' },
+      probeStage: new FakeProbeStage(),
+      isOverBudget: async () => true,
+    })
+    const err = await service
+      .startTest('ws', 'frame-1', null, 'agent-probe')
+      .catch((e: unknown) => e)
+    expect((err as ConflictError).details?.reason).toBe('env_test_over_budget')
+    expect(runRepo.rows.size).toBe(0)
+    expect(calls.created).toEqual([])
+    // The provisioning self-test spends nothing, so a budget never blocks it.
+    expect((await service.startTest('ws', 'frame-1')).status).toBe('running')
+  })
+
+  it('fails CLOSED when the budget probe itself throws', async () => {
+    const { repo } = fakeRepo()
+    const { service, logs } = makeService({
+      repoContext: { repo, baseBranch: 'main', repoId: 'repo_1' },
+      probeStage: new FakeProbeStage(),
+      isOverBudget: async () => {
+        throw new Error('the spend ledger is unreachable')
+      },
+    })
+    const err = await service
+      .startTest('ws', 'frame-1', null, 'agent-probe')
+      .catch((e: unknown) => e)
+    expect((err as ConflictError).details?.reason).toBe('env_test_over_budget')
+    expect(logs.some((l) => l.msg.includes('budget probe failed'))).toBe(true)
+  })
+
+  it('refuses a SECOND self-test for a frame that already has one running', async () => {
+    // Each run provisions its own environment under a synthetic per-run key nothing supersedes,
+    // so two in flight is two live environments for one service: billed twice, and racing each
+    // other to create on any provider whose namespace is derived per service.
+    const { repo, calls } = fakeRepo()
+    const { service, runRepo } = makeService({
+      repoContext: { repo, baseBranch: 'main', repoId: 'repo_1' },
+      probeStage: new FakeProbeStage(),
+    })
+    const first = await service.startTest('ws', 'frame-1')
+    const branchesAfterFirst = calls.created.length
+
+    const err = await service
+      .startTest('ws', 'frame-1', null, 'agent-probe')
+      .catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(ConflictError)
+    expect((err as ConflictError).details?.reason).toBe('env_test_already_running')
+    expect((err as ConflictError).details?.runId).toBe(first.id)
+    expect(runRepo.rows.size).toBe(1)
+    expect(calls.created).toHaveLength(branchesAfterFirst)
+
+    // Once the first settles, the second is admitted.
+    await service.stop('ws', first.id)
+    expect((await service.startTest('ws', 'frame-1', null, 'agent-probe')).mode).toBe('agent-probe')
+  })
+})
+
+// The `probing` stage itself: the claim, the dispatch, the mark, the report, and every way a
+// replay or a stop can land in the middle of them.
+describe('EnvironmentTestService: driving an agent dry run (`agent-probe` mode)', () => {
   it('runs the whole lifecycle through the probe: claim, dispatch, report, tear down', async () => {
     const { repo, calls } = fakeRepo()
     const probeStage = new FakeProbeStage({ surface: 'ui' })
@@ -1073,91 +1300,6 @@ describe('EnvironmentTestService: the agent dry run (`agent-probe` mode)', () =>
     const settled = runRepo.rows.get(`ws:${started.id}`)
     expect(settled?.probe?.verdict).toBe('operable')
     expect(settled?.probeProgress).toBeNull()
-  })
-
-  it('refuses the mode when the deployment cannot serve THIS surface image, before provisioning', async () => {
-    // A wired prober is not a runnable one: the browser prober needs its own executor image, and a
-    // deployment that binds the plain class and not that one would otherwise pay for a branch, a
-    // full provision and a teardown to discover it inside the dispatch.
-    const { repo, calls } = fakeRepo()
-    const probeStage = new FakeProbeStage({ surface: 'ui', supported: false })
-    const { service, runRepo } = makeService({
-      repoContext: { repo, baseBranch: 'main', repoId: 'repo_1' },
-      probeStage,
-    })
-    const err = await service
-      .startTest('ws', 'frame-1', null, 'agent-probe')
-      .catch((e: unknown) => e)
-    expect(err).toBeInstanceOf(ConflictError)
-    expect((err as ConflictError).details?.reason).toBe('env_test_probe_unavailable')
-    expect((err as ConflictError).details?.surface).toBe('ui')
-    expect(runRepo.rows.size).toBe(0)
-    expect(calls.created).toEqual([])
-
-    // The provisioning self-test is untouched by a prober gap.
-    expect((await service.startTest('ws', 'frame-1')).status).toBe('running')
-  })
-
-  it('refuses a dry run past the workspace spend budget, before provisioning', async () => {
-    // The first billable call no run start gates. Admitted, the proxy refuses the container's
-    // first completion and the operator has paid for a provision and a teardown to be told about
-    // a ceiling that was knowable up front.
-    const { repo, calls } = fakeRepo()
-    const { service, runRepo } = makeService({
-      repoContext: { repo, baseBranch: 'main', repoId: 'repo_1' },
-      probeStage: new FakeProbeStage(),
-      isOverBudget: async () => true,
-    })
-    const err = await service
-      .startTest('ws', 'frame-1', null, 'agent-probe')
-      .catch((e: unknown) => e)
-    expect((err as ConflictError).details?.reason).toBe('env_test_over_budget')
-    expect(runRepo.rows.size).toBe(0)
-    expect(calls.created).toEqual([])
-    // The provisioning self-test spends nothing, so a budget never blocks it.
-    expect((await service.startTest('ws', 'frame-1')).status).toBe('running')
-  })
-
-  it('fails CLOSED when the budget probe itself throws', async () => {
-    const { repo } = fakeRepo()
-    const { service, logs } = makeService({
-      repoContext: { repo, baseBranch: 'main', repoId: 'repo_1' },
-      probeStage: new FakeProbeStage(),
-      isOverBudget: async () => {
-        throw new Error('the spend ledger is unreachable')
-      },
-    })
-    const err = await service
-      .startTest('ws', 'frame-1', null, 'agent-probe')
-      .catch((e: unknown) => e)
-    expect((err as ConflictError).details?.reason).toBe('env_test_over_budget')
-    expect(logs.some((l) => l.msg.includes('budget probe failed'))).toBe(true)
-  })
-
-  it('refuses a SECOND self-test for a frame that already has one running', async () => {
-    // Each run provisions its own environment under a synthetic per-run key nothing supersedes,
-    // so two in flight is two live environments for one service: billed twice, and racing each
-    // other to create on any provider whose namespace is derived per service.
-    const { repo, calls } = fakeRepo()
-    const { service, runRepo } = makeService({
-      repoContext: { repo, baseBranch: 'main', repoId: 'repo_1' },
-      probeStage: new FakeProbeStage(),
-    })
-    const first = await service.startTest('ws', 'frame-1')
-    const branchesAfterFirst = calls.created.length
-
-    const err = await service
-      .startTest('ws', 'frame-1', null, 'agent-probe')
-      .catch((e: unknown) => e)
-    expect(err).toBeInstanceOf(ConflictError)
-    expect((err as ConflictError).details?.reason).toBe('env_test_already_running')
-    expect((err as ConflictError).details?.runId).toBe(first.id)
-    expect(runRepo.rows.size).toBe(1)
-    expect(calls.created).toHaveLength(branchesAfterFirst)
-
-    // Once the first settles, the second is admitted.
-    await service.stop('ws', first.id)
-    expect((await service.startTest('ws', 'frame-1', null, 'agent-probe')).mode).toBe('agent-probe')
   })
 
   it('fails the run when the dispatch throws, with the environment reclaimed', async () => {

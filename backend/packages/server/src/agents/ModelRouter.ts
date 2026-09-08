@@ -13,14 +13,20 @@ import { type AgentRouting, isProxyableProvider, resolveStepModelRef } from '@ca
  * pins, and who started the work.
  *
  * A structural SUBSET of {@link import('@cat-factory/kernel').AgentRunContext}, which is what the
- * pipeline path still passes. The point is the callers that have no run context to pass: a
- * single-job container flow (the agent dry run, the config repairer) is not an
- * `ExecutionInstance`: it has a workspace, a frame and an initiator, and nothing else the run
- * context describes. Asking those callers for a whole `AgentRunContext` would have them fabricate
- * a pipeline name, a step index and a final-step flag, and a fabricated run context is a thing
- * later code reads as one. Taking the subset instead is what lets every dispatch, pipeline step
- * or not, resolve its model through THIS precedence rather than reaching for the deployment's env
- * routing directly, which is a model nobody's preset chose.
+ * pipeline path still passes. The point is the caller that has no run context to pass: the AGENT
+ * DRY RUN's prober is not an `ExecutionInstance`: it has a workspace, a frame and an initiator, and
+ * nothing else the run context describes. Asking it for a whole `AgentRunContext` would have it
+ * fabricate a pipeline name, a step index and a final-step flag, and a fabricated run context is a
+ * thing later code reads as one. Taking the subset instead is what lets that dispatch resolve its
+ * model through THIS precedence rather than reaching for the deployment's env routing directly,
+ * which is a model nobody's preset chose.
+ *
+ * The two OTHER single-job container flows still read the env routing at WIRING and do not come
+ * through here: the env-config repairer pins `coder`'s routed ref (and disables itself when it is
+ * not proxyable), and the repo bootstrapper pins `architect`'s. Neither has a frame to resolve
+ * against (`EnvConfigRepairRequest` and a bootstrap both name a REPOSITORY, and a bootstrap runs
+ * before the board has a service block at all), so giving them this precedence is a change to their
+ * ports, not a change here.
  */
 export interface StepModelSelection {
   agentKind: string

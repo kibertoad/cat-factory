@@ -92,6 +92,21 @@ export interface EnvironmentTestRunRecord {
    * type for why a multi-minute stage that writes nothing is a bug rather than an omission.
    */
   probeProgress: StepSubtasks | null
+  /**
+   * What the prober's DISPATCH resolved, written with {@link probeDispatchedAt} and re-supplied to
+   * every later poll: the model the container ran (`provider:model`) and the pooled subscription
+   * token it leased.
+   *
+   * Persisted rather than re-derived for the reason a pipeline step persists the same pair
+   * (`recordDispatchAttribution`): the poll runs in a fresh process and rebuilds its handle from
+   * this row alone. Asking the frame and preset again there answers about them AS THEY ARE NOW, so
+   * a pin cleared mid-run stamps the report with a model nobody ran; and the leased token id has no
+   * second source at all, so without it a subscription-routed dry run's tokens are attributed to
+   * nothing. Both null in `provision` mode and until the dispatch is accepted.
+   */
+  probeModel: string | null
+  probeSubscriptionTokenId: string | null
+  probeSubscriptionVendor: string | null
   /** The dry-run agent's report, once the probe settled. Null until then, and in `provision` mode. */
   probe: EnvironmentProbeReport | null
   createdAt: number
@@ -110,6 +125,9 @@ export type EnvironmentTestRunRecordPatch = Partial<
     | 'failedStage'
     | 'probeSurface'
     | 'probeDispatchedAt'
+    | 'probeModel'
+    | 'probeSubscriptionTokenId'
+    | 'probeSubscriptionVendor'
     | 'probeProgress'
     | 'probe'
     | 'updatedAt'

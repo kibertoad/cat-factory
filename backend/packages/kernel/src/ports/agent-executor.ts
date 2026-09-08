@@ -28,6 +28,7 @@ import type {
   WebSearchAvailability,
 } from '../domain/types.js'
 import type { LocalModelDeclarations } from '../domain/local-model-declarations.js'
+import type { SubscriptionVendor } from '@cat-factory/contracts'
 import type {
   DeclaredToolServers,
   ResolvedSkill,
@@ -1213,6 +1214,17 @@ export interface AgentJobHandle {
    * telemetry falls back to the provider parsed from {@link model}.
    */
   provider?: string
+  /**
+   * The SUBSCRIPTION VENDOR this job's harness runs on, when the dispatch resolved one: the
+   * vendor slug (`claude` / `codex` / `glm` / `kimi` / `deepseek`), not the model's provider.
+   *
+   * Carried separately from {@link provider} because the two differ for four of the five vendors
+   * (`claude`⇄`anthropic`, `codex`⇄`openai`, `glm`⇄`zai`, `kimi`⇄`moonshot`), and it is the VENDOR
+   * that keys a quota cycle. Read off the provider instead, the modeled quota fold silently
+   * matched only DeepSeek and counted nothing at all for the other four. Absent for a
+   * proxy-metered Pi job, which has no vendor and no quota to fold.
+   */
+  subscriptionVendor?: SubscriptionVendor
   /**
    * The agent kind the job runs as (`coder`, `merger`, …). The poll site MUST supply it
    * for any kind whose result is mapped kind-aware (e.g. a migrated `merger`/`on-call`,

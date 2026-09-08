@@ -84,8 +84,8 @@ describe('customTaskTypeSection', () => {
   it('leaves a prompt without parameters byte-identical', () => {
     const registry = defaultAgentKindRegistry()
     const base = ctx()
-    expect(renderStandardUserPrompt('build', base)).toBe(
-      renderStandardUserPrompt('build', { ...base, customTaskType: undefined }),
+    expect(renderStandardUserPrompt('build', base, registry)).toBe(
+      renderStandardUserPrompt('build', { ...base, customTaskType: undefined }, registry),
     )
     expect(userPromptFor(base, registry)).toBe(
       userPromptFor({ ...base, customTaskType: undefined }, registry),
@@ -94,7 +94,11 @@ describe('customTaskTypeSection', () => {
 
   describe('the three emit points', () => {
     it('reaches a STANDARD phase prompt, after the block context it qualifies', () => {
-      const rendered = renderStandardUserPrompt('build', ctx({ customTaskType: PARAMS }))
+      const rendered = renderStandardUserPrompt(
+        'build',
+        ctx({ customTaskType: PARAMS }),
+        defaultAgentKindRegistry(),
+      )
       expect(rendered).toContain('## Task parameters (Introduce API)')
       // The requester's own words stay above the derived brief.
       expect(rendered.indexOf('Expose the order entity.')).toBeLessThan(

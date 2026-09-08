@@ -400,8 +400,17 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
    */
   async startJob(context: AgentRunContext): Promise<AgentJobHandle> {
     const { workspaceId, executionId } = this.requireIds(context)
-    const { body, model, provider, kind, subscriptionTokenId, search, repoSummary, toolServers } =
-      await this.buildJobBody(context)
+    const {
+      body,
+      model,
+      provider,
+      kind,
+      subscriptionTokenId,
+      subscriptionVendor,
+      search,
+      repoSummary,
+      toolServers,
+    } = await this.buildJobBody(context)
     // The job's id is per-STEP (run id + agent kind), so sibling steps that share this
     // run's container never collide in the harness's per-kind job registries; the run
     // itself is addressed by the execution id, so its container is reclaimed as a unit.
@@ -447,6 +456,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       provider,
       workspaceId,
       agentKind: context.agentKind,
+      ...(subscriptionVendor ? { subscriptionVendor } : {}),
       search,
       repo: repoSummary,
       // The run's own record of what the agent could call. Unconditional on purpose: see
@@ -663,6 +673,12 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     provider: string
     kind: RunnerDispatchKind
     subscriptionTokenId?: string
+    /**
+     * The subscription VENDOR this dispatch resolved, beside the pooled token id. Carried onto the
+     * handle because it is what a quota cycle is keyed on, and it differs from `provider` for four
+     * of the five vendors (see `AgentJobHandle.subscriptionVendor`).
+     */
+    subscriptionVendor?: SubscriptionVendor
     search: WebSearchAvailability
     /** The repo the job operates on, for the run diagnostics (owner/name/baseBranch + VCS provider). */
     repoSummary: { owner: string; name: string; baseBranch?: string; provider?: string }
@@ -884,6 +900,9 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     )
     return {
       subscriptionTokenId,
+      // The VENDOR, beside the provider: the two differ for four of the five, and it is the vendor
+      // a quota cycle is keyed on (see `recordQuotaUsageOnce`).
+      subscriptionVendor,
       body,
       model: `${ref.provider}:${ref.model}`,
       provider: ref.provider,

@@ -117,6 +117,7 @@ const CONFLICT_KEYS: Record<Extract<ConflictReason, `env_test_${string}`>, strin
   env_test_no_vcs: 'errors.conflict.title.env_test_no_vcs',
   env_test_connection_failed: 'errors.conflict.title.env_test_connection_failed',
   env_test_probe_unavailable: 'errors.conflict.title.env_test_probe_unavailable',
+  env_test_probe_model_unavailable: 'errors.conflict.title.env_test_probe_model_unavailable',
   env_test_already_running: 'errors.conflict.title.env_test_already_running',
   env_test_over_budget: 'errors.conflict.title.env_test_over_budget',
 }

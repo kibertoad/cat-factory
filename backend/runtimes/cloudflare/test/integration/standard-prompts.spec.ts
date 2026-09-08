@@ -162,12 +162,13 @@ describe('standard solution-phase prompts', () => {
       const prompt = renderStandardUserPrompt(
         'design',
         ctx({ block: { title: 'X', type: 'api', description: '' } }),
+        _agentKindRegistry,
       )
       expect(prompt).toContain('Description: (none provided)')
     })
 
     it('omits optional sections when absent', () => {
-      const prompt = renderStandardUserPrompt('build', ctx())
+      const prompt = renderStandardUserPrompt('build', ctx(), _agentKindRegistry)
       expect(prompt).not.toContain('Resolved decisions')
       expect(prompt).not.toContain('Work from earlier agents')
       // No stray runs of blank lines left by skipped conditionals.
@@ -187,6 +188,7 @@ describe('standard solution-phase prompts', () => {
           resolvedDecision: { question: 'Cache?', chosen: 'Redis' },
           priorOutputs: [{ agentKind: 'architect', output: 'Use a token service.' }],
         }),
+        _agentKindRegistry,
       )
       expect(prompt).toContain('- DB? → Postgres')
       expect(prompt).toContain('- Cache? → Redis')

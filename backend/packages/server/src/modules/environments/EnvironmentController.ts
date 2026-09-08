@@ -51,31 +51,40 @@ function requireEnvironments<E extends AppEnv>(c: Context<E>): EnvironmentsModul
 }
 
 /**
- * The personal-credential gate for an AGENT DRY RUN start: whose credential the run may use, and
- * the closure that mints its activation.
+ * The personal-credential gate for an AGENT DRY RUN start, as a CLOSURE the service calls once its
+ * own refusals are past: whose credential the run may use, and how to mint its activation.
+ *
+ * Deferred rather than resolved here, because resolving it is what raises the
+ * `428 credential_required` the SPA opens its password modal on. Called eagerly at this edge, a dry
+ * run that could never have started (a self-test already running for the frame, a model this
+ * deployment cannot dispatch) demanded a password first and answered the 409 second, so the
+ * developer paid for an unlock to be told the run was never possible.
  *
  * The kind comes from the service, because the prober's model is resolved under a kind that
  * depends on the frame's TYPE (a browser prober for a frontend frame, an HTTP one otherwise) and
- * the gate and the dispatch must ask about the same one. A deployment with no prober at all
- * answers `null`: nothing to gate, and `startTest` then refuses the mode with the 409 that names
- * the missing capability, which is a better error than one about a credential.
+ * the gate and the dispatch must ask about the same one. `null` means there is no dry run to gate
+ * at all (see `probeAgentKind`): nothing to unlock, and `startTest` then answers with the 409 that
+ * names what is actually wrong, which is a better error than one about a credential.
  */
-async function gateAgentProbe<E extends AppEnv>(
+function gateAgentProbe<E extends AppEnv>(
   c: Context<E>,
   service: EnvironmentTestService,
   workspaceId: string,
   blockId: string,
-): Promise<{ initiatedBy: string | null; activate?: (runId: string) => Promise<void> }> {
-  const agentKind = await service.probeAgentKind(workspaceId, blockId)
-  if (!agentKind) return { initiatedBy: c.get('user')?.id ?? null }
-  return personalGateForAgentKind(
-    c.get('container'),
-    workspaceId,
-    blockId,
-    agentKind,
-    c.get('user'),
-    readPersonalPassword(c),
-  )
+): () => Promise<((runId: string) => Promise<void>) | undefined> {
+  return async () => {
+    const agentKind = await service.probeAgentKind(workspaceId, blockId)
+    if (!agentKind) return undefined
+    const { activate } = await personalGateForAgentKind(
+      c.get('container'),
+      workspaceId,
+      blockId,
+      agentKind,
+      c.get('user'),
+      readPersonalPassword(c),
+    )
+    return activate
+  }
 }
 
 /**
@@ -381,11 +390,14 @@ function registerEnvironmentRegistryRoutes(app: Hono<AppEnv>): void {
     // at the deployment's env-routing default instead. Gated on the kind the DISPATCH will resolve
     // its model under (`probeAgentKind`), not a guess. `provision` mode runs no agent and so needs
     // no credential, which is what keeps the historical body-less start ungated.
-    const gate =
-      mode === 'agent-probe'
-        ? await gateAgentProbe(c, service, workspaceId, blockId)
-        : { initiatedBy: c.get('user')?.id ?? null }
-    const run = await service.startTest(workspaceId, blockId, gate.initiatedBy, mode, gate.activate)
+    const initiatedBy = c.get('user')?.id ?? null
+    const run = await service.startTest(
+      workspaceId,
+      blockId,
+      initiatedBy,
+      mode,
+      mode === 'agent-probe' ? gateAgentProbe(c, service, workspaceId, blockId) : undefined,
+    )
     return c.json(run, 201)
   })
 

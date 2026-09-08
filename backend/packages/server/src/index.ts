@@ -234,9 +234,16 @@ export {
   type ContainerJobAuth,
   type ContainerJobAuthDependencies,
   type ContainerJobAuthRequest,
+  type ContainerJobAuthSubject,
   type LeasePersonalSubscriptionToken,
   type LeaseSubscriptionToken,
 } from './agents/containerJobAuth.js'
+// Where a settled container job's tokens are recorded. Exported because the single-job flows are
+// composed in the facades, and a flow wired without it reports its spend nowhere.
+export {
+  ContainerJobAccounting,
+  type ContainerJobAccountingDeps,
+} from './agents/containerJobAccounting.js'
 export {
   buildSingleKindModelResolver,
   type ResolveSingleKindModel,

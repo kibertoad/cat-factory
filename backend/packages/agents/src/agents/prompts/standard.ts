@@ -23,7 +23,16 @@ import { renderOpenFindings } from './review-rounds.js'
 import { FINAL_ANSWER_IN_REPLY } from './shared.js'
 // The platform's statements about a live environment it did not stand up: shared verbatim with
 // the environment dry run, which exists to predict what a tester will be handed.
-import { environmentAccessLines, testCredentialLines } from './environment-under-test.js'
+import {
+  DEFAULT_CREDENTIAL_GAP_GUIDANCE,
+  IMPLEMENTER_CREDENTIAL_GAP_GUIDANCE,
+  environmentAccessLines,
+  testCredentialLines,
+} from './environment-under-test.js'
+// "Is this kind's deliverable its reply, or a pushed commit?": the declaration that decides where
+// it can record a credential gap at all.
+import { deliverableIsReply } from '../kinds/container-surface.js'
+import type { AgentKindRegistry } from '../kinds/registry.js'
 import * as templateSpecs from './standard-templates.generated.js'
 
 const Handlebars = HandlebarsRuntime as unknown as typeof import('handlebars')
@@ -273,7 +282,7 @@ export function reachabilityLines(
  * they go straight into the prompt rather than a fictional "out of band" path (the empty
  * version of which is exactly what left earlier Testers unable to reach the environment).
  */
-export function environmentSection(context: AgentRunContext): string {
+export function environmentSection(context: AgentRunContext, registry: AgentKindRegistry): string {
   const env = context.environment
   if (!env) return ''
   const coords = deriveEnvironmentCoordinates(env.url)
@@ -289,7 +298,19 @@ export function environmentSection(context: AgentRunContext): string {
   // provider stated. It renders the two states this section used to drop, and both are states an
   // agent otherwise mis-attributes: an environment declared OPEN reads as one whose credential
   // never arrived, and a scheme declared with nothing usable behind it reads as a broken service.
-  lines.push(...environmentAccessLines(env.access))
+  //
+  // The GAP GUIDANCE is per kind, because this section is not a tester's: it rides every prompt a
+  // live environment reaches. A gap has to be recorded somewhere the kind actually writes, and
+  // `deliverableIsReply` is the declaration that answers which. An implementer told to "record it
+  // as a failure" reads an instruction to stop and file a report instead of building.
+  lines.push(
+    ...environmentAccessLines(
+      env.access,
+      deliverableIsReply(context.agentKind, registry)
+        ? DEFAULT_CREDENTIAL_GAP_GUIDANCE
+        : IMPLEMENTER_CREDENTIAL_GAP_GUIDANCE,
+    ),
+  )
   return lines.join('\n')
 }
 
@@ -781,10 +802,18 @@ function implementationChoiceSection(context: AgentRunContext): string {
   return lines.join('\n')
 }
 
-/** Render the built-out user prompt for a standard phase from the run context. */
+/**
+ * Render the built-out user prompt for a standard phase from the run context.
+ *
+ * The REGISTRY is a parameter for one section's sake: `environmentSection` states how to record a
+ * credential gap, and where a kind can record one at all is a fact about its declared surface (see
+ * {@link environmentSection}). Passed rather than re-derived from the phase, so this path and the
+ * generic block-context prompt cannot answer the same question differently.
+ */
 export function renderStandardUserPrompt(
   phase: StandardPhase,
   context: AgentRunContext,
+  registry: AgentKindRegistry,
   opts: { materialized?: boolean } = {},
 ): string {
   const rendered =
@@ -802,7 +831,7 @@ export function renderStandardUserPrompt(
     // The design PICTURES, right after the linked context whose textual design description they
     // are the other half of. States its own absence-with-a-cause, so it is never conditional here.
     designImagesSection(context) +
-    environmentSection(context) +
+    environmentSection(context, registry) +
     involvedServicesSection(context) +
     // Only the implementer (build) acts on the TECHNICAL marker — its system prompt carries
     // the matching rule. The architect/reviewer have no such rule, so don't change their prompt.

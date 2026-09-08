@@ -77,6 +77,9 @@ function record(
     failedStage: null,
     probeSurface: null,
     probeDispatchedAt: null,
+    probeModel: null,
+    probeSubscriptionTokenId: null,
+    probeSubscriptionVendor: null,
     probeProgress: null,
     probe: null,
     createdAt: 1_000,
@@ -187,13 +190,26 @@ export function defineEnvironmentTestSuite(
         stage: 'probing',
         probeSurface: 'ui',
         probeDispatchedAt: null,
+        probeModel: null,
+        probeSubscriptionTokenId: null,
         probeProgress: null,
         probe: null,
       })
-      // The MARK, written after the container accepted the job, and then the live progress the
-      // longest stage of this run pushes to the SPA. Both are read back on every later poll, so a
-      // facade that dropped either leaves a dry run re-dispatching or a card frozen.
-      expect(await repo.updateIfRunning(ws, id, { probeDispatchedAt: 3_000 })).toBe(true)
+      // The MARK, written after the container accepted the job, and with it the DISPATCH
+      // ATTRIBUTION in the same write: the model the container ran and the pooled token leased for
+      // it. Both are read back on every later poll and neither can be re-derived there. The model
+      // would be re-resolved against the frame as it is NOW, and the lease happened once, so a
+      // facade that dropped either stamps the settled report with a model nobody ran and attributes
+      // a subscription job's whole burn to nothing.
+      expect(
+        await repo.updateIfRunning(ws, id, {
+          probeDispatchedAt: 3_000,
+          probeModel: 'anthropic:claude-opus-5',
+          probeSubscriptionTokenId: 'tok-pool-1',
+        }),
+      ).toBe(true)
+      // Then the live progress the longest stage of this run pushes to the SPA. A facade that
+      // dropped it leaves the card frozen.
       expect(
         await repo.updateIfRunning(ws, id, {
           probeProgress: { completed: 1, inProgress: 1, total: 4 },
@@ -201,6 +217,8 @@ export function defineEnvironmentTestSuite(
       ).toBe(true)
       expect(await repo.get(ws, id)).toMatchObject({
         probeDispatchedAt: 3_000,
+        probeModel: 'anthropic:claude-opus-5',
+        probeSubscriptionTokenId: 'tok-pool-1',
         probeProgress: { completed: 1, inProgress: 1, total: 4 },
       })
       // The report then lands as a whole, and comes back structurally equal rather than merely

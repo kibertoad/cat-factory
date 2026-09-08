@@ -17,6 +17,8 @@ import { ALL_SUBSCRIPTION_VENDORS, resolveModelRef } from '@cat-factory/kernel'
 import type { AgentRouting } from '@cat-factory/agents'
 import { ContainerEnvironmentProbeAgent } from '../src/agents/ContainerEnvironmentProbeAgent.js'
 import { ContainerJobAuthResolver } from '../src/agents/containerJobAuth.js'
+import type { ContainerJobAccountingDeps } from '../src/agents/containerJobAccounting.js'
+import type { HarnessCallsRecordInput } from '@cat-factory/orchestration'
 import { buildSingleKindModelResolver } from '../src/agents/singleKindModel.js'
 import type { MintInstallationToken } from '../src/agents/repoTargeting.js'
 import type { ContainerSessionService } from '../src/containers/ContainerSessionService.js'
@@ -97,11 +99,16 @@ function makeAgent(
       vendor: SubscriptionVendor,
     ) => Promise<{ tokenId: string; secret: string }>
     nativeAmbientAuth?: (harness: HarnessKind, vendor: SubscriptionVendor | undefined) => boolean
+    /** Vendors the WORKSPACE holds a pooled token for; absent ⇒ the pool is not asked. */
+    pooledVendors?: SubscriptionVendor[]
+    /** Where a settled job's tokens land, so the recording can be asserted. */
+    accounting?: ContainerJobAccountingDeps
     /** No runner backend resolves for this workspace at all. */
     unresolvableTransport?: boolean
   } = {},
 ): ContainerEnvironmentProbeAgent {
   const personal = new Set(over.personalVendors ?? [])
+  const pooled = over.pooledVendors ? new Set(over.pooledVendors) : undefined
   return new ContainerEnvironmentProbeAgent({
     resolveTransport: async () => {
       if (over.unresolvableTransport) {
@@ -135,6 +142,12 @@ function makeAgent(
         : {}),
       hasPersonalSubscription: async (_userId: string, vendor: SubscriptionVendor) =>
         personal.has(vendor),
+      ...(pooled
+        ? {
+            hasSubscriptionToken: async (_ws: string, vendor: SubscriptionVendor) =>
+              pooled.has(vendor),
+          }
+        : {}),
     }),
     auth: new ContainerJobAuthResolver({
       sessionService: {
@@ -144,9 +157,39 @@ function makeAgent(
       ...(over.leasePersonal ? { leasePersonalSubscriptionToken: over.leasePersonal } : {}),
       ...(over.leasePooled ? { leaseSubscriptionToken: over.leasePooled } : {}),
       ...(over.nativeAmbientAuth ? { nativeAmbientAuth: over.nativeAmbientAuth } : {}),
+      hasPersonalSubscription: async (_userId: string, vendor: SubscriptionVendor) =>
+        personal.has(vendor),
+      ...(pooled
+        ? {
+            hasSubscriptionToken: async (_ws: string, vendor: SubscriptionVendor) =>
+              pooled.has(vendor),
+          }
+        : {}),
     }),
+    ...(over.accounting ? { accounting: over.accounting } : {}),
     ...(over.resolveTestSecrets ? { resolveTestSecrets: over.resolveTestSecrets } : {}),
   })
+}
+
+/** Recording recorders, so what a settled dry run files is observable rather than inferred. */
+function recordingAccounting() {
+  const filed = {
+    calls: [] as HarnessCallsRecordInput[],
+    pooled: [] as { workspaceId: string; tokenId: string; inputTokens: number }[],
+    quota: [] as { scope: string; scopeId: string; vendor: string }[],
+  }
+  const deps: ContainerJobAccountingDeps = {
+    recordHarnessCalls: async (input) => {
+      filed.calls.push(input)
+    },
+    recordSubscriptionUsage: async (workspaceId, tokenId, usage) => {
+      filed.pooled.push({ workspaceId, tokenId, inputTokens: usage.inputTokens })
+    },
+    recordSubscriptionQuotaUsage: async (target) => {
+      filed.quota.push({ scope: target.scope, scopeId: target.scopeId, vendor: target.vendor })
+    },
+  }
+  return { deps, filed }
 }
 
 function request(over: Partial<EnvironmentProbeRequest> = {}): EnvironmentProbeRequest {
@@ -207,11 +250,14 @@ describe('ContainerEnvironmentProbeAgent: the dispatch', () => {
       workspaceId: 'ws_1',
       jobId: 'envtest_1',
       surface: 'api',
-      // The FRAME rides along, because the poll has to resolve the model that produced the report
-      // and there is no dispatch-time memory left by then: the durable driver polls from a fresh
-      // process.
+      // The FRAME rides along because the run is ABOUT it, and the reclaim addresses a container
+      // its type selected.
       blockId: 'frame_1',
       initiatedBy: 'usr_1',
+      // What only the DISPATCH knows, handed back for the caller to persist. Re-derived at poll
+      // time this would answer about the frame and preset as they are THEN, and the leased token
+      // id has no second source at all. A Pi job leases none, so only the model is here.
+      dispatch: { model: 'qwen:qwen3-max' },
     })
 
     const spec = calls.dispatch[0]!.spec
@@ -430,8 +476,8 @@ describe('ContainerEnvironmentProbeAgent: the poll', () => {
   })
 
   it('files the reply under the model of the surface that produced it', async () => {
-    // Resolved on the terminal branch from the handle's own frame, under the surface's kind: a
-    // browser prober's report must not be attributed to whatever the HTTP one runs.
+    // Recorded at DISPATCH, under the surface's own kind: a browser prober's report must not be
+    // attributed to whatever the HTTP one runs.
     const { transport } = recordingTransport({
       state: 'done',
       result: { custom: { summary: 'ok' } },
@@ -440,9 +486,29 @@ describe('ContainerEnvironmentProbeAgent: the poll', () => {
       presetModelForKind: (kind) =>
         kind === 'environment-prober-ui' ? 'gemini-3.8-flash' : 'kimi-k2.7',
     })
-    const update = await agent.poll(await agent.start(request({ surface: 'ui' })))
+    const handle = await agent.start(request({ surface: 'ui' }))
+    const update = await agent.poll(handle)
     expect(update.state).toBe('done')
     expect((update as { model?: string }).model).toContain('gemini')
+  })
+
+  it('reports the model the dispatch RAN, never the one the frame would resolve to now', async () => {
+    // The defect this pins: the poll runs in a fresh process, and re-resolving there answers about
+    // the frame and preset AS THEY ARE THEN. Clear the pin (or switch the preset) while the
+    // container works and the settled report gets stamped with a model nobody ran, which is the
+    // one label an operator weighs the verdict by.
+    const { transport } = recordingTransport({
+      state: 'done',
+      result: { custom: { summary: 'ok' } },
+    } as unknown as RunnerJobView)
+    let presetModel: string | undefined = 'kimi-k2.7'
+    const agent = makeAgent(transport, { presetModelForKind: () => presetModel })
+    const handle = await agent.start(request())
+    expect(handle.dispatch?.model).toContain('kimi')
+    // The workspace switches its preset mid-run; the poll must not notice.
+    presetModel = 'gemini-3.8-flash'
+    const update = await agent.poll(handle)
+    expect((update as { model?: string }).model).toContain('kimi')
   })
 
   it('maps an eviction to the evicted failure kind', async () => {
@@ -598,5 +664,176 @@ describe('ContainerEnvironmentProbeAgent: the credential the prober runs on', ()
       proxyPhasePath: true,
     })
     expect(calls.dispatch[0]!.spec.subscriptionToken).toBeUndefined()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// What a SETTLED dry run owes the ledger. This is the half the LLM proxy cannot cover: a
+// subscription-routed prober talks to the vendor direct, so if this dispatcher files nothing the
+// run's whole burn is absent from `llm_call_metrics`, from the leased token's usage-aware rotation
+// and from the modeled quota cycle. Free and invisible, on the one flow whose own admission gate
+// is a budget.
+// ---------------------------------------------------------------------------
+describe('ContainerEnvironmentProbeAgent: what a settled dry run records', () => {
+  const SETTLED = {
+    state: 'done',
+    callMetrics: [{ seq: 1, inputTokens: 100, outputTokens: 20 }],
+    result: {
+      custom: { summary: 'ok' },
+      usage: { inputTokens: 100, outputTokens: 20 },
+      callMetrics: [{ seq: 1, inputTokens: 100, outputTokens: 20 }],
+    },
+  } as unknown as RunnerJobView
+
+  it('files a POOLED subscription job: its calls, its token usage and its quota', async () => {
+    const { transport } = recordingTransport(SETTLED)
+    const { deps, filed } = recordingAccounting()
+    const agent = makeAgent(transport, {
+      presetModelForKind: () => 'kimi',
+      pooledVendors: ['kimi'],
+      leasePooled: async () => ({ tokenId: 'tok-pool-1', secret: 'pool-secret' }),
+      accounting: deps,
+    })
+    const update = await agent.poll(await agent.start(request()))
+    expect(update.state).toBe('done')
+    // The per-call rows, under the RUN this dry run IS (a single-job flow: run id == job id) and
+    // the prober's own kind, so they join to the self-test the SPA renders.
+    expect(filed.calls[0]).toMatchObject({
+      workspaceId: 'ws_1',
+      executionId: 'envtest_1',
+      jobId: 'envtest_1',
+      agentKind: 'environment-prober-api',
+    })
+    // The leased pool row, which is what usage-aware rotation reads. Its id cannot be re-derived
+    // at poll time, so this passes only because the dispatch carried it back.
+    expect(filed.pooled).toEqual([{ workspaceId: 'ws_1', tokenId: 'tok-pool-1', inputTokens: 100 }])
+    // Keyed on the VENDOR, not the model's provider: Kimi's ref says `moonshot`, and a fold that
+    // took the provider counted this cycle as nothing at all.
+    expect(filed.quota).toEqual([{ scope: 'pooled', scopeId: 'tok-pool-1', vendor: 'kimi' }])
+  })
+
+  it('counts a PERSONAL subscription job against the initiator, which leases no token', async () => {
+    const { transport } = recordingTransport(SETTLED)
+    const { deps, filed } = recordingAccounting()
+    const agent = makeAgent(transport, {
+      presetModelForKind: () => 'claude-opus',
+      personalVendors: ['claude'],
+      leasePersonal: async () => ({ secret: 'oauth-token' }),
+      accounting: deps,
+    })
+    const handle = await agent.start(request())
+    // No pooled id for an individual-usage credential, which is exactly why the quota fold is not
+    // gated on one.
+    expect(handle.dispatch?.subscriptionTokenId).toBeUndefined()
+    await agent.poll(handle)
+    expect(filed.pooled).toEqual([])
+    expect(filed.quota).toEqual([{ scope: 'user', scopeId: 'usr_1', vendor: 'claude' }])
+  })
+
+  it('records the spend of a dry run that spent tokens and then FAILED', async () => {
+    // The run an operator most needs the numbers for. Returning early on the failure branch is
+    // what drops them.
+    const { transport } = recordingTransport({
+      state: 'done',
+      result: {
+        error: 'the agent gave up',
+        usage: { inputTokens: 100, outputTokens: 20 },
+        callMetrics: [{ seq: 1, inputTokens: 100, outputTokens: 20 }],
+      },
+    } as unknown as RunnerJobView)
+    const { deps, filed } = recordingAccounting()
+    const agent = makeAgent(transport, {
+      presetModelForKind: () => 'kimi',
+      pooledVendors: ['kimi'],
+      leasePooled: async () => ({ tokenId: 'tok-pool-1', secret: 'pool-secret' }),
+      accounting: deps,
+    })
+    const update = await agent.poll(await agent.start(request()))
+    expect(update.state).toBe('failed')
+    expect(filed.calls).toHaveLength(1)
+    expect(filed.pooled).toHaveLength(1)
+  })
+
+  it('folds no pooled or quota usage for a Pi job, whose metering point is the proxy', async () => {
+    const { transport } = recordingTransport(SETTLED)
+    const { deps, filed } = recordingAccounting()
+    const agent = makeAgent(transport, { presetModelForKind: () => 'qwen3-max', accounting: deps })
+    await agent.poll(await agent.start(request()))
+    // A proxied job leases no token and its provider is no subscription vendor, so both folds stay
+    // silent rather than inventing a scope to attribute it to.
+    expect(filed.pooled).toEqual([])
+    expect(filed.quota).toEqual([])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// The ADMISSION question about the MODEL, asked before a branch exists. Each case here, left to the
+// dispatch, fails the run at `probing` after a throwaway branch, a full provision and a teardown,
+// to report something the workspace's own preset already said.
+// ---------------------------------------------------------------------------
+describe('ContainerEnvironmentProbeAgent: whether the resolved model can be dispatched', () => {
+  const subject = {
+    workspaceId: 'ws_1',
+    blockId: 'frame_1',
+    surface: 'api' as const,
+    initiatedBy: 'usr_1',
+  }
+
+  it('admits a proxyable model and names it', async () => {
+    const { transport } = recordingTransport()
+    const agent = makeAgent(transport, { presetModelForKind: () => 'kimi-k2.7' })
+    const check = await agent.checkDispatchable(subject)
+    expect(check).toMatchObject({ ok: true, model: expect.stringContaining('kimi') })
+  })
+
+  it('refuses a provider the proxy cannot serve, in the words the dispatch would have thrown', async () => {
+    const { transport } = recordingTransport()
+    const agent = makeAgent(transport, { presetModelForKind: () => 'claude-opus-4-8' })
+    const check = await agent.checkDispatchable(subject)
+    expect(check).toMatchObject({
+      ok: false,
+      detail: expect.stringContaining('the LLM proxy can serve'),
+    })
+    // And the same input still throws at the dispatch, so admission is an EARLIER no, not the
+    // only one: a token revoked between the two must still stop the job.
+    await expect(agent.start(request())).rejects.toThrow(/the LLM proxy can serve/)
+  })
+
+  it('refuses a subscription-only model whose credential nobody connected', async () => {
+    // The case no ROUTING can notice: a subscription-only model carries its harness whatever any
+    // pool holds, so `resolveDispatchRef` is perfectly happy and the missing credential surfaces
+    // only as a throw from the lease, at the dispatch, after the environment is up.
+    const { transport } = recordingTransport()
+    const agent = makeAgent(transport, {
+      presetModelForKind: () => 'claude-opus',
+      leasePersonal: async () => ({ secret: 'oauth-token' }),
+    })
+    const check = await agent.checkDispatchable(subject)
+    expect(check).toMatchObject({ ok: false, detail: expect.stringContaining('subscription') })
+  })
+
+  it('admits that same model once the initiator has the subscription', async () => {
+    const { transport } = recordingTransport()
+    const agent = makeAgent(transport, {
+      presetModelForKind: () => 'claude-opus',
+      personalVendors: ['claude'],
+      leasePersonal: async () => ({ secret: 'oauth-token' }),
+    })
+    expect((await agent.checkDispatchable(subject)).ok).toBe(true)
+  })
+
+  it('refuses a POOLED harness this deployment cannot lease for at all', async () => {
+    // A dual-mode model routed to its subscription flavour (the workspace holds a token) on a
+    // deployment that wired no pooled lease: the routing picked a harness nothing here can open.
+    const { transport } = recordingTransport()
+    const agent = makeAgent(transport, {
+      presetModelForKind: () => 'kimi',
+      pooledVendors: ['kimi'],
+    })
+    const check = await agent.checkDispatchable(subject)
+    expect(check).toMatchObject({
+      ok: false,
+      detail: expect.stringContaining('not configured on this deployment'),
+    })
   })
 })

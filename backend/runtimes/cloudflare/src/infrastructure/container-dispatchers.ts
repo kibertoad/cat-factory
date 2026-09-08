@@ -21,18 +21,12 @@ import {
   buildSingleKindModelResolver,
   deploymentRepoOrigin,
   type AppConfig,
-  type ContainerJobAuthDependencies,
   type ResolveRunnerTransport,
   logger,
   resolveUrlSafetyPolicy,
 } from '@cat-factory/server'
-import type {
-  AgentContextRecorder,
-  AppCaches,
-  Clock,
-  IdGenerator,
-  SubscriptionVendor,
-} from '@cat-factory/kernel'
+import type { AgentContextRecorder, AppCaches, Clock, IdGenerator } from '@cat-factory/kernel'
+import { readCachedLocalModelDeclarations } from '@cat-factory/kernel'
 import type { CoreDependencies } from '@cat-factory/orchestration'
 import type {
   EnvironmentBackendRegistry,
@@ -47,8 +41,13 @@ import {
   buildResolveWorkspaceModelDefault,
 } from './container-model-resolver'
 import { workerDispatchTokenMint } from './dispatchTokenMint'
-import { buildToolTrajectorySinks } from './container-executor-deps'
+import {
+  buildToolTrajectorySinks,
+  buildWorkerJobAccountingDeps,
+  buildWorkerJobAuthDeps,
+} from './container-executor-deps'
 import { D1BlockRepository } from './repositories/D1BlockRepository'
+import { D1LocalModelEndpointRepository } from './repositories/D1LocalModelEndpointRepository'
 import { D1BootstrapJobRepository } from './repositories/D1BootstrapJobRepository'
 import { D1GitHubInstallationRepository } from './repositories/D1GitHubInstallationRepository'
 import { D1RateLimitRepository } from './repositories/D1RateLimitRepository'
@@ -240,36 +239,17 @@ export function selectEnvironmentProbeAgent(deps: {
   const testSecrets = buildTestSecretsService(env, db, clock)
   // Every credential channel a container dispatch can carry: the model-locked proxy session token
   // for a Pi model, the pooled lease for Claude Code / Codex, the initiator's own personal lease
-  // for an individual-usage vendor. One composition, shared with the routing predicates below, so
-  // the vendor the model resolves ON is the vendor the credential is leased FOR.
-  const authDeps: ContainerJobAuthDependencies & {
-    hasSubscriptionToken?: (workspaceId: string, vendor: SubscriptionVendor) => Promise<boolean>
-    hasPersonalSubscription?: (userId: string, vendor: SubscriptionVendor) => Promise<boolean>
-  } = {
-    sessionService: new ContainerSessionService({ secret: env.AUTH_SESSION_SECRET }),
-    proxyBaseUrl: `${env.WORKER_PUBLIC_URL.replace(/\/+$/, '')}/v1`,
-    ...(deps.subscriptions
-      ? {
-          leaseSubscriptionToken: (workspaceId: string, vendor: SubscriptionVendor) =>
-            deps.subscriptions!.leaseToken(workspaceId, vendor),
-          hasSubscriptionToken: (workspaceId: string, vendor: SubscriptionVendor) =>
-            deps.subscriptions!.hasToken(workspaceId, vendor),
-        }
-      : {}),
-    ...(deps.personalSubscriptions
-      ? {
-          leasePersonalSubscriptionToken: (
-            executionId: string,
-            userId: string,
-            vendor: SubscriptionVendor,
-          ) => deps.personalSubscriptions!.leaseForRun(executionId, userId, vendor),
-          hasPersonalSubscription: (userId: string, vendor: SubscriptionVendor) =>
-            deps.personalSubscriptions!.has(userId, vendor),
-        }
-      : {}),
-    // No `nativeAmbientAuth`: the ambient-CLI path is the LOCAL facade's, and a Worker has no host
-    // process with a developer's login on it.
-  }
+  // for an individual-usage vendor, and the ACCOUNT scope the spend gate reads. The SAME
+  // composition the step executor uses, shared with the routing predicates below, so the vendor
+  // the model resolves ON is the vendor the credential is leased FOR, and so a scope the step
+  // path signs cannot be silently missing here.
+  const authDeps = buildWorkerJobAuthDeps({
+    sessionSecret: env.AUTH_SESSION_SECRET,
+    publicUrl: env.WORKER_PUBLIC_URL,
+    db,
+    ...(deps.subscriptions ? { subscriptions: deps.subscriptions } : {}),
+    ...(deps.personalSubscriptions ? { personalSubscriptions: deps.personalSubscriptions } : {}),
+  })
   return new ContainerEnvironmentProbeAgent({
     resolveTransport,
     installationRepository: new D1GitHubInstallationRepository({ db }),
@@ -281,6 +261,14 @@ export function selectEnvironmentProbeAgent(deps: {
       blockRepository: new D1BlockRepository({ db }),
       resolveWorkspaceModelDefault: buildResolveWorkspaceModelDefault(db, deps.caches),
       resolvePresetProviderPreference: buildResolvePresetProviderPreference(db, deps.caches),
+      // The initiator's local runners, read through the shared cached projection the engine uses,
+      // so ONE resolution serves a dry run and a pipeline step on the same frame.
+      resolveLocalModelDeclarations: (userId: string) =>
+        readCachedLocalModelDeclarations(
+          deps.caches?.localModelDeclarations,
+          new D1LocalModelEndpointRepository({ db }),
+          userId,
+        ),
       ...(authDeps.hasSubscriptionToken
         ? { hasSubscriptionToken: authDeps.hasSubscriptionToken }
         : {}),
@@ -289,6 +277,16 @@ export function selectEnvironmentProbeAgent(deps: {
         : {}),
     }),
     auth: new ContainerJobAuthResolver(authDeps),
+    // What a SETTLED dry run's tokens are recorded against, from the same shared composition the
+    // step executor files through. A subscription-routed prober talks to the vendor direct, so the
+    // LLM proxy meters none of it and this is the only path its burn reaches the ledger.
+    accounting: buildWorkerJobAccountingDeps({
+      env,
+      config,
+      db,
+      clock,
+      ...(deps.subscriptions ? { subscriptions: deps.subscriptions } : {}),
+    }),
     // Provider-aware, so a GitLab deployment's prober clones its own instance rather than a
     // same-named project on github.com.
     resolveRepoOrigin: deploymentRepoOrigin(config),

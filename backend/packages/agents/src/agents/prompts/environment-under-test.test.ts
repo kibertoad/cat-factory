@@ -1,13 +1,18 @@
 import type { AgentRunContext, TestCredentialBrief } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
-import { SERVICE_DISCOVERY_GUIDANCE } from './environment-under-test.js'
+import {
+  DEFAULT_CREDENTIAL_GAP_GUIDANCE,
+  IMPLEMENTER_CREDENTIAL_GAP_GUIDANCE,
+  SERVICE_DISCOVERY_GUIDANCE,
+} from './environment-under-test.js'
+import { defaultAgentKindRegistry } from '../kinds/registry.js'
 import {
   ENVIRONMENT_PROBE_API_SYSTEM_PROMPT,
   ENVIRONMENT_PROBE_UI_SYSTEM_PROMPT,
   environmentProbeUserPrompt,
 } from './environment-probe.js'
 import { FALSE_SUCCESS_SHAPES } from './shared.js'
-import { testSecretsSection } from './standard.js'
+import { environmentSection, testSecretsSection } from './standard.js'
 import { testingSystemPrompt } from './testing.js'
 
 // ---------------------------------------------------------------------------
@@ -111,5 +116,46 @@ describe('what the tester step and the environment dry run are told', () => {
     // for one, since both prompts are recorded in telemetry.
     expect(testSecretsSection(testerContext(brief))).toContain('must never appear in your reply')
     expect(proberPrompt(brief)).toContain('must never appear in your reply')
+  })
+})
+
+// The environment section is NOT a tester's: it rides every prompt a live environment reaches,
+// including the implementers, whose product is a pushed commit. The FACTS it states are the same
+// for all of them; only where a gap can be RECORDED differs, and getting that wrong tells a coder
+// to stop and file a report it does not write.
+describe('the environment section across the kinds it reaches', () => {
+  const REGISTRY = defaultAgentKindRegistry()
+  const withGap = (agentKind: string) =>
+    environmentSection(
+      {
+        ...testerContext({ status: 'resolved', refs: [] }),
+        agentKind,
+        // A bearer scheme with nothing behind it: the gap case whose remedy the guidance words.
+        environment: {
+          url: 'https://env.example.com',
+          status: 'ready',
+          access: { scheme: 'bearer' },
+          expiresAt: null,
+        },
+      },
+      REGISTRY,
+    )
+
+  it('states the same FACT to a reporter and to an implementer', () => {
+    for (const kind of ['tester-api', 'coder']) {
+      expect(withGap(kind)).toContain('PLATFORM is short a credential here, not the service')
+    }
+  })
+
+  it('asks a REPORTING kind to record the gap in its report', () => {
+    // `tester-api` is `container-explore`: its deliverable IS its reply.
+    expect(withGap('tester-api')).toContain(DEFAULT_CREDENTIAL_GAP_GUIDANCE.unusable)
+  })
+
+  it('never asks an IMPLEMENTER to record a failure it has no report for', () => {
+    // `coder` is `container-coding`: it ends with a pushed commit and routinely no final text.
+    const coder = withGap('coder')
+    expect(coder).toContain(IMPLEMENTER_CREDENTIAL_GAP_GUIDANCE.unusable)
+    expect(coder).not.toContain('record it as a failure')
   })
 })

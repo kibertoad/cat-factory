@@ -53,3 +53,37 @@ preset names neither. A deployment that wants a specific model for dry runs sets
 preset entries. The proxyable check moved with the resolution: it is asked of the RESOLVED model at
 dispatch instead of disabling the capability deployment-wide over a routing entry no workspace had
 chosen.
+
+Three things the dispatch resolves are now PERSISTED on the run row and handed back to every later
+poll (`probe_model`, `probe_subscription_token_id`, `probe_subscription_vendor`), the same rule a
+pipeline step's `recordDispatchAttribution` follows. The poll runs in a fresh process and rebuilds
+its handle from that row: re-resolving the model there answered about the frame and preset as they
+are NOW, so a pin cleared while the container worked stamped the settled report with a model nobody
+ran, and the leased pooled token id has no second source at all.
+
+With it, a settled dry run files what it spent through the same `ContainerJobAccounting` a step's
+poll files through: the per-call rows, the leased token's usage-aware rotation counters and the
+modeled quota cycle. That only binds on a subscription harness, which is why it could not be left
+out: a Pi job is metered by the LLM proxy, but a subscription harness talks to the vendor direct, so
+the whole burn of a subscription-routed dry run was previously absent from the telemetry, from the
+rotation and from the quota window: free and invisible, on the flow whose own admission gate is a
+budget.
+
+Admission now also asks whether the RESOLVED model can be dispatched (409
+`env_test_probe_model_unavailable`, translated in every locale), covering a provider the LLM proxy
+cannot serve and a subscription-only model with no connected credential. Both were knowable before
+anything was created and both used to cost a throwaway branch, a full provision and a teardown to
+discover. The personal-credential unlock moved to LAST among the gates, resolved through a closure
+the service calls after its own refusals, so a dry run that could never have started no longer asks
+for a password first; and the mint now happens before the run row exists and outside the start's
+cleanup path, so an unlock that fails answers `428 credential_required` instead of a `201` carrying
+a failed run that the SPA reads as a finished action.
+
+Two fixes reach beyond the dry run. The modeled subscription quota cycle is now keyed on the VENDOR
+the dispatch resolved rather than the model's provider: the two differ for four of the five
+(`claude`/`anthropic`, `codex`/`openai`, `glm`/`zai`, `kimi`/`moonshot`), so the fold silently
+matched DeepSeek alone and counted nothing for the rest. Expect quota cycles to start reporting
+usage for those vendors. And both facades now compose every container dispatch's credential channels
+through one builder, which is what closes the gap the dry run's own composition had: it omitted
+`resolveAccountId`, so the proxy session token carried no account scope and the account-tier spend
+budget was not enforced for a dry run while it was for every pipeline step.

@@ -10,6 +10,7 @@ import {
   type PlatformAlertSink,
   type SubscriptionVendor,
   type ToolSecretResolver,
+  readCachedLocalModelDeclarations,
 } from '@cat-factory/kernel'
 import { type CoreDependencies, createCore } from '@cat-factory/orchestration'
 import {
@@ -376,6 +377,14 @@ interface PostAssemblyContext extends PreviewModuleContext {
   resolvePresetProviderPreference: NodeContainerFoundation['resolvePresetProviderPreference']
   subscriptions: NodeModelDepsResult['subscriptions']
   personalSubscriptions: NodeModelDepsResult['personalSubscriptions']
+  /**
+   * Where a settled dry run's tokens are recorded, and the scopes its proxy session token carries.
+   * The step executor's OWN telemetry hooks and quota provider, threaded rather than rebuilt: a
+   * subscription-routed prober bypasses the LLM proxy, so this is the only path its burn reaches
+   * `llm_call_metrics`, the leased token's rotation counters and the quota cycle.
+   */
+  executorTelemetry: NodeRunServicesResult['executorTelemetry']
+  subscriptionQuotaProvider: NodeRunServicesResult['subscriptionQuotaProvider']
   /** Routed through `sourced`, so a mothership node reads the projection over the RPC. */
   repoProjectionRepository: DrizzleRepoProjectionRepository
   bootstrapMintInstallationToken: NodeBootstrapperResult['bootstrapMintInstallationToken']
@@ -446,6 +455,36 @@ function applyNodePostAssemblyWiring(
     resolvePresetProviderPreference: ctx.resolvePresetProviderPreference,
     ...(ctx.subscriptions ? { subscriptions: ctx.subscriptions } : {}),
     ...(ctx.personalSubscriptions ? { personalSubscriptions: ctx.personalSubscriptions } : {}),
+    // The SAME account scope the step executor signs into its proxy session tokens, so the
+    // account-tier spend gate applies to a dry run too.
+    resolveAccountId: (workspaceId) => repos.workspaceRepository.accountOf(workspaceId),
+    // The initiator's local runners, read through the shared cached projection the engine uses, so
+    // one resolution serves a dry run and a step on the same frame.
+    ...(dependencies.localModelEndpointRepository
+      ? {
+          resolveLocalModelDeclarations: (userId: string) =>
+            readCachedLocalModelDeclarations(
+              options.caches?.localModelDeclarations,
+              dependencies.localModelEndpointRepository!,
+              userId,
+            ),
+        }
+      : {}),
+    // What a SETTLED dry run owes the ledger. A subscription-routed prober talks to the vendor
+    // direct, so nothing else meters it.
+    accounting: {
+      ...(ctx.executorTelemetry.recordHarnessCalls
+        ? { recordHarnessCalls: ctx.executorTelemetry.recordHarnessCalls }
+        : {}),
+      ...(ctx.subscriptions
+        ? {
+            recordSubscriptionUsage: (workspaceId, tokenId, usage) =>
+              ctx.subscriptions!.recordTokenUsage(workspaceId, tokenId, usage),
+          }
+        : {}),
+      recordSubscriptionQuotaUsage: (target, usage) =>
+        ctx.subscriptionQuotaProvider.recordUsage(target, usage),
+    },
     resolveRepoOrigin: options.resolveRepoOrigin ?? deploymentRepoOrigin(config),
     ...(ctx.resolveTestSecrets ? { resolveTestSecrets: ctx.resolveTestSecrets } : {}),
   })
@@ -919,6 +958,13 @@ interface NodeContainerFinalizeBundle {
   runnerPoolConnectionRepository: CoreDependencies['runnerPoolConnectionRepository']
   agentContextObservability: NodeRunServicesResult['agentContextObservability']
   searchQueryObservability: NodeRunServicesResult['searchQueryObservability']
+  /**
+   * The container executor's telemetry hooks and quota provider, carried on the bundle because the
+   * AGENT DRY RUN's prober is a SECOND dispatch that must file through the same ones: it can
+   * resolve a subscription model, which bypasses the LLM proxy, so nothing else meters it.
+   */
+  executorTelemetry: NodeRunServicesResult['executorTelemetry']
+  subscriptionQuotaProvider: NodeRunServicesResult['subscriptionQuotaProvider']
   resolveTestSecretRefs: NodeRunServicesResult['resolveTestSecretRefs']
   /**
    * The sealed test-secret VALUES, threaded here (not only into the executor deps) because the

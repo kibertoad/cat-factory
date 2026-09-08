@@ -1,5 +1,6 @@
 import type { AgentRunContext } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
+import { defaultAgentKindRegistry } from '../kinds/registry.js'
 import { environmentSection } from './standard.js'
 
 function ctx(environment?: AgentRunContext['environment']): AgentRunContext {
@@ -16,14 +17,20 @@ function ctx(environment?: AgentRunContext['environment']): AgentRunContext {
   }
 }
 
+// A `tester-api` context throughout (see `ctx`): a `container-explore` kind, so the section
+// renders the report-shaped gap guidance. The implementer variant is asserted in
+// `environment-under-test.test.ts`.
+const REGISTRY = defaultAgentKindRegistry()
+
 describe('environmentSection', () => {
   it('is empty when no environment is attached', () => {
-    expect(environmentSection(ctx())).toBe('')
+    expect(environmentSection(ctx(), REGISTRY)).toBe('')
   })
 
   it('renders standardized coordinates (url + host/port/scheme) derived from the URL', () => {
     const out = environmentSection(
       ctx({ url: 'https://pr-123.example.com', status: 'ready', access: null, expiresAt: null }),
+      REGISTRY,
     )
     expect(out).toContain('- URL: https://pr-123.example.com')
     expect(out).toContain('Host: pr-123.example.com')
@@ -35,6 +42,7 @@ describe('environmentSection', () => {
   it('uses the explicit port when the URL carries one', () => {
     const out = environmentSection(
       ctx({ url: 'http://10.0.0.5:8080', status: 'ready', access: null, expiresAt: null }),
+      REGISTRY,
     )
     expect(out).toContain('Host: 10.0.0.5')
     expect(out).toContain('Port: 8080')
@@ -49,6 +57,7 @@ describe('environmentSection', () => {
         access: { scheme: 'bearer', token: 'tok_abc123' },
         expiresAt: null,
       }),
+      REGISTRY,
     )
     expect(out).toContain('Authorization: Bearer tok_abc123')
   })
@@ -61,6 +70,7 @@ describe('environmentSection', () => {
         access: { scheme: 'basic', username: 'tester', password: 's3cret' },
         expiresAt: null,
       }),
+      REGISTRY,
     )
     expect(out).toContain('username `tester`')
     expect(out).toContain('password `s3cret`')
@@ -74,6 +84,7 @@ describe('environmentSection', () => {
         access: { scheme: 'custom_header', headerName: 'X-Api-Key', headerValue: 'key_xyz' },
         expiresAt: null,
       }),
+      REGISTRY,
     )
     expect(out).toContain('X-Api-Key: key_xyz')
   })
@@ -89,6 +100,7 @@ describe('environmentSection', () => {
         access: { scheme: 'none' },
         expiresAt: null,
       }),
+      REGISTRY,
     )
     // Silence here reads exactly like a credential that never arrived, so the agent files the
     // platform's gap on a service that is genuinely open.
@@ -99,6 +111,7 @@ describe('environmentSection', () => {
   it('says the provider stated NOTHING when no access bag arrived', () => {
     const out = environmentSection(
       ctx({ url: 'https://env.example.com', status: 'ready', access: null, expiresAt: null }),
+      REGISTRY,
     )
     expect(out).toContain('Environment access: NOT STATED')
   })
@@ -112,6 +125,7 @@ describe('environmentSection', () => {
         access: { scheme: 'bearer' },
         expiresAt: null,
       }),
+      REGISTRY,
     )
     // Unsaid, this is the case that reads as a broken service to everyone who is not told the
     // credential never arrived.
@@ -129,6 +143,7 @@ describe('environmentSection', () => {
           expiresAt: null,
           ...(reachability ? { reachability } : {}),
         }),
+        REGISTRY,
       )
 
     it('says NOTHING for the ordinary case, where the environment name carried', () => {

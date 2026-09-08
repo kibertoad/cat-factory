@@ -767,6 +767,7 @@
         "env_test_no_vcs": "Git provider not connected",
         "env_test_connection_failed": "Environment connection failed",
         "env_test_probe_unavailable": "Agent dry runs not available here",
+        "env_test_probe_model_unavailable": "Dry run model cannot run",
         "env_test_already_running": "Self-test already running",
         "env_test_over_budget": "Spend budget reached",
         "prompt_revision_conflict": "Prompt changed by someone else",
@@ -819,6 +820,7 @@
         "env_test_connection_failed": "The environment handler for this service failed its connection test. Check its endpoint, credentials and project settings, then re-test the connection.",
         "env_test_connection_failed_detail": "The environment handler for this service failed its connection test: {detail}. Check its endpoint, credentials and project settings, then re-test the connection.",
         "env_test_probe_unavailable": "An agent dry run needs a container runner and a connected repository. One of them is missing here, so only the provisioning self-test can run.",
+        "env_test_probe_model_unavailable": "This service's dry run resolves to a model this deployment cannot dispatch: either the LLM proxy cannot serve its provider, or it needs a subscription no one has connected. Change the model preset for the prober (or the frame's own pinned model), or connect the subscription. The provisioning self-test needs no model and still runs.",
         "env_test_already_running": "A self-test is already running for this service. Each one provisions its own throwaway environment, so only one runs at a time. Wait for it to finish, or stop it first.",
         "env_test_over_budget": "An agent dry run is a billable model call, and this workspace has reached a spend budget. Raise the budget or wait for the billing period to reset. The provisioning self-test costs nothing and still runs.",
         "@env_test_connection_failed_detail": {
