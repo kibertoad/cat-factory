@@ -1,0 +1,2987 @@
+# @cat-factory/sandbox-fixtures: archived releases
+
+The older releases of this package, moved out of [`CHANGELOG.md`](./CHANGELOG.md) so a
+release commit rewrites kilobytes instead of megabytes. Frozen history: nothing writes here
+except `scripts/archive-changelogs.mjs`.
+
+## 0.8.10
+
+### Patch Changes
+
+- Updated dependencies [3ae3386]
+  - @cat-factory/contracts@0.329.0
+
+## 0.8.9
+
+### Patch Changes
+
+- Updated dependencies [a8f8d14]
+  - @cat-factory/contracts@0.328.0
+
+## 0.8.8
+
+### Patch Changes
+
+- 0cfa7a2: Refresh the dependency tree, the pinned GitHub Actions and the Docker images, and move the three bundled agent CLIs.
+  
+  **Registry deps** (direct ranges plus a full lockfile re-resolution, so transitives move to the
+  newest release each declared range already admits):
+  
+  - **AI SDK family** (held to the major that pairs with `workers-ai-provider`): `ai@^7.0.68 → ^7.0.77`,
+    `@ai-sdk/anthropic@^4.0.39 → ^4.0.41`, `@ai-sdk/openai@^4.0.43 → ^4.0.46`,
+    `@ai-sdk/openai-compatible@^3.0.31 → ^3.0.35`, `@ai-sdk/amazon-bedrock@^5.0.58 → ^5.0.61`.
+  - **Runtime deps**: `jose@^6.2.9 → ^6.2.10`, `pg-boss@^12.27.0 → ^12.28.0`,
+    `capnweb@^0.11.1 → ^0.12.0`, `@aws-sdk/client-s3@^3.1113.0 → ^3.1116.0`,
+    `@cloudflare/workers-types@^5.20260819.1 → ^5.20260823.1`.
+  - **Frontend**: `@nuxt/ui@^4.10.0 → ^4.11.0`, `happy-dom@^20.11.2 → ^20.11.6`,
+    `vue-tsc@^3.3.10 → ^3.3.11`. The frontend's `typescript@^6.0.3` is deliberately unchanged:
+    `vue-tsc` still resolves `typescript/lib/tsc`, a subpath TypeScript 7's exports map does not
+    expose, so the SPA stays on 6 until `vue-tsc` supports the Go port.
+  - **Tooling**: `@stryker-mutator/*@9.6.1 → 10.0.0` (its only breaking change is dropping Node 20;
+    CI runs 26) and pnpm `11.22.0 → 11.23.0`.
+  
+  **Changesets moves as a coupled major**: `@changesets/cli@^2.31.1 → ^3.0.1` plus
+  `changesets/action@v1.9.0 → v2.1.1`, which refuse each other's majors. Two behaviour changes had to
+  be pinned back to what this repo already relied on: `.changeset/config.json` now sets
+  `privatePackages: { version: true, tag: false }`, because v3 stopped versioning private packages by
+  default and `@cat-factory/executor-harness`'s version IS the runner image tag; and `release.yml`
+  takes the renamed inputs (`version-script`, `publish-script`, `pr-title`, `commit-message`), the
+  `pr-number` output, and the token through the `github-token` input, which v2 no longer accepts from
+  the environment. v2 pushes the release branch and tags through the GitHub API, so that job's
+  checkout no longer persists git credentials.
+  
+  **Held back, all inside the ~24h `minimumReleaseAge` window when this was cut**: `@types/node@26.3.0`,
+  `hono@4.13.4`, `oxlint@1.80.0`, `oxfmt@0.65.0`, `ai@7.0.78`, `@ai-sdk/openai-compatible@3.0.36`,
+  `@aws-sdk/client-s3@3.1117.0`. `pg-boss@12.28.0` was ~20 minutes short of the same window and was
+  taken anyway, so it is listed in `minimumReleaseAgeExclude` — the ONE third-party entry there, added
+  deliberately with a PRUNE ME note, since it has already aged past the gate and removing the line is
+  now a no-op re-resolve.
+  
+  **`wrangler` is now pinned by override**, not merely ranged. `@cloudflare/vitest-pool-workers@0.22.0`
+  pins `wrangler` (and through it `workerd` and `miniflare`) EXACTLY, so any in-range refresh floats our
+  caret ahead of the pool's pin and the tree gains a SECOND workerd — not just ~100MB of duplicated
+  platform binary per arch, but a runtime the Worker suite proves that is a different build from the one
+  `wrangler deploy` ships. The override holds it at whatever pool-workers pins, exactly as the three
+  esbuild pins beside it already do, and moves when that package moves.
+  
+  **Stryker 10 pulled Babel 8 into a tree whose Nuxt half is on Babel 7**, and the three Babel plugins
+  Nuxt declares as OPTIONAL PEERS were then filled from the 8.x line while still being handed
+  `@babel/core@7`. A Babel 8 plugin's `declare()` asserts the core major and throws, so
+  `pnpm-workspace.yaml` scopes those three names back to 7.x for their Nuxt parents.
+  
+  **The three agent CLIs the executor image bundles** move together and are all taken at their newest
+  release, ahead of the release-age window: Pi `0.84.2 → 0.84.3`, Claude Code `2.1.237 → 2.1.243`,
+  Codex `0.148.0 → 0.149.1`. That exemption is an explicit call re-made at each bump, and the
+  Dockerfile now says so for all three rather than for Claude Code alone. Pi's two extensions take the
+  ordinary aged pick, `2.6.2 → 2.7.0`. The UI image moves `pnpm 11.22.0 → 11.23.0` to match the
+  workspace; its Playwright (1.62.1), Yarn (4.18.0), `serve` (14.2.6) and WireMock (3.13.1) pins are
+  already current, as are the deploy image's kubectl `v1.36.4` / kustomize `v5.8.1` / helm `v4.2.4` and
+  both images' `node:26-trixie-slim` digest.
+  
+  The executor image tag therefore rolls to `1.130.0` (base + UI): republishing over a live tag does
+  not roll a deployment out. The deploy image is unchanged and stays at `0.2.15`.
+  
+  **Pinned GitHub Actions**: `actions/checkout v7.0.0 → v7.0.1`, `actions/setup-node v6.4.0 → v7.0.0`,
+  `actions/setup-java v5.7.0 → v6.0.0` (both majors are ESM rewrites with no change to the inputs used
+  here), `docker/build-push-action v7.2.0 → v7.3.0`, `docker/login-action v4.2.0 → v4.6.0`,
+  `docker/setup-buildx-action v4.1.0 → v4.3.0`, `docker/setup-qemu-action v4.1.0 → v4.2.0`,
+  `dorny/paths-filter v4.0.1 → v4.0.3`, `pnpm/action-setup v6.0.9 → v6.0.10`,
+  `rharkor/caching-for-turbo v2.5.0 → v2.5.1`, and `zizmorcore/zizmor-action v0.5.7 → v0.6.2`, which
+  raises the default zizmor from 1.26.1 to 1.29.0.
+- Updated dependencies [08752da]
+- Updated dependencies [0cfa7a2]
+- Updated dependencies [dc26bb5]
+  - @cat-factory/contracts@0.327.0
+
+## 0.8.7
+
+### Patch Changes
+
+- Updated dependencies [da77447]
+  - @cat-factory/contracts@0.326.0
+
+## 0.8.6
+
+### Patch Changes
+
+- Updated dependencies [4125beb]
+  - @cat-factory/contracts@0.325.0
+
+## 0.8.5
+
+### Patch Changes
+
+- Updated dependencies [432b4e4]
+  - @cat-factory/contracts@0.324.0
+
+## 0.8.4
+
+### Patch Changes
+
+- 3db0d43: Refresh the whole dependency tree, re-roll both runner images, and move the three bundled agent CLIs.
+
+  **Registry deps** (direct ranges plus a full lockfile re-resolution, so transitives move to the
+  newest release each declared range already admits):
+
+  - **AI SDK family** (held to the major that pairs with `workers-ai-provider`): `ai@^7.0.64 → ^7.0.68`,
+    `@ai-sdk/anthropic@^4.0.38 → ^4.0.39`, `@ai-sdk/openai@^4.0.41 → ^4.0.43`,
+    `@ai-sdk/openai-compatible@^3.0.30 → ^3.0.31`, `@ai-sdk/amazon-bedrock@^5.0.55 → ^5.0.58`.
+  - **Runtime deps**: `hono@^4.13.1 → ^4.13.3`, `@hono/node-server@^2.1.0 → ^2.1.1`,
+    `jose@^6.2.8 → ^6.2.9`, `capnweb@^0.11.0 → ^0.11.1`, `@aws-sdk/client-s3@^3.1109.0 → ^3.1113.0`.
+  - **Tooling**: `wrangler@^4.122.0 → ^4.124.0`,
+    `@cloudflare/workers-types@^5.20260812.1 → ^5.20260819.1` (which is what wrangler 4.124 now
+    peer-requires), `@cloudflare/vitest-pool-workers@^0.21.2 → ^0.22.0`, `vitest@^4.1.10 → ^4.1.11`,
+    `@vitest/coverage-v8@^4.1.10 → ^4.1.11`, `oxlint@^1.78.0 → ^1.79.0`, `oxfmt@^0.63.0 → ^0.64.0`,
+    `publint@^0.3.23 → ^0.3.24`, `turbo@^2.10.9 → ^2.10.11`, `vue-tsc@^3.3.9 → ^3.3.10`,
+    `@types/pg@^8.21.0 → ^8.23.1`, pnpm `11.21.0 → 11.22.0`.
+
+  **The three agent CLIs the executor image bundles** move together: Pi `0.84.1 → 0.84.2`, Codex
+  `0.147.0 → 0.148.0`, Claude Code `2.1.231 → 2.1.237`. The Claude Code pin is taken at its newest
+  release, ahead of the 24h `minimumReleaseAge` window, which is the explicit call that pin's own note
+  asks to re-make on every bump. Pi's two extensions move in lockstep as their monorepo publishes
+  them, `2.4.0 → 2.6.2`.
+
+  **The UI-tester image** aligns its Playwright with the one the e2e suite drives (`1.61.1 → 1.62.1`),
+  and moves `@yarnpkg/cli-dist@4.10.3 → 4.18.0` and `serve@14.2.5 → 14.2.6`. **The deploy image** takes
+  `kubectl v1.36.3 → v1.36.4` and `helm v4.2.3 → v4.2.4`; kustomize is already current at `v5.8.1`.
+
+  Both image tags therefore move in this change (`cat-factory-executor:1.127.0`,
+  `cat-factory-executor-ui:1.127.0`, `cat-factory-deploy:0.2.14`): republishing over a live tag does
+  not roll a deployment out.
+
+  No `minimumReleaseAgeExclude` entries were added and none were needed: every registry bump above
+  already clears the gate. Five packages had a newer release the gate still withholds
+  (`@ai-sdk/*`, `ai@7.0.70`, `happy-dom@20.11.6`, `@aws-sdk/client-s3@3.1114.0`,
+  `@cloudflare/workers-types@5.20260820.1`), so each lands one release short of the registry's head.
+  `drizzle-orm`/`drizzle-kit` stay on `1.0.0-rc.4`: the only newer builds are commit-suffixed
+  snapshots, not a released `rc.5`. Majors available but deliberately not taken here, each being its
+  own change: `@changesets/cli@3`, `@stryker-mutator/*@10`, and TypeScript 7 for the two frontend
+  packages still on 6.
+
+- Updated dependencies [3db0d43]
+  - @cat-factory/contracts@0.323.1
+
+## 0.8.3
+
+### Patch Changes
+
+- Updated dependencies [72ecc7c]
+  - @cat-factory/contracts@0.323.0
+
+## 0.8.2
+
+### Patch Changes
+
+- Updated dependencies [5b281a3]
+  - @cat-factory/contracts@0.322.0
+
+## 0.8.1
+
+### Patch Changes
+
+- Updated dependencies [53a4c40]
+  - @cat-factory/contracts@0.321.0
+
+## 0.8.0
+
+### Minor Changes
+
+- cda15b8: Widen the Sandbox: more agent kinds, rubrics that match the task, and a repo-scale review fixture.
+
+  Every cell now renders its task input through the SAME pure prompt builder its production caller
+  uses, instead of a hand-rolled approximation that dropped each prompt's output contract and scope
+  rules. `@cat-factory/agents` gains `composedSystemPromptFor`, the one place that decides
+  bespoke-vs-composed prompt assembly (container dispatch and the Sandbox both ride it), and the
+  Sandbox baseline text is now the promotable `shippedBasePromptFor` unit rather than
+  `PROMPT_VERSIONS[id].text`, which for an inline engine kind is the already-composed prompt.
+
+  The `task-estimator`'s JSON output contract is now the named `TRIAGE_JSON_CONTRACT` and an
+  `OVERRIDE_PRESERVED_FRAGMENTS` member, so a per-workspace override (or a promoted Sandbox
+  candidate) can no longer delete the shape `coerceTaskEstimate` parses. An unedited prompt is
+  byte-identical.
+
+  Four new rubrics (`architecture-review`, `bug-triage`, `estimation`, `answer-recommendation`); two
+  new testable kinds (`task-estimator`, `requirements-writer`) with their fixtures; and a repo-scale
+  multi-file code-review fixture delivered through `injectedContextFiles`.
+
+  Breaks internal shapes, per the pre-1.0 rule for everything the public API does not cover:
+
+  - `SandboxAgentKindMeta` / the `/sandbox/overview` response replace the single `bucket` field with
+    `bucket` (production surface) plus `sandboxRun` and `unsupportedReason`. The last is a bounded
+    reason CODE (`sandboxUnsupportedReasonSchema`), not prose: the backend refusal and the SPA's
+    translated note are both derived from it. Stored fixtures, experiments and prompt candidates are
+    unaffected.
+  - The builtin fixture library is now reconciled against the shipped catalog on every read rather
+    than seeded once when a workspace has none, so a workspace that used the Sandbox before a release
+    picks up that release's fixtures. A builtin row whose content has drifted from the catalog is
+    refreshed in place; workspace-authored fixtures are never touched.
+  - `clarity-review` and `architect-companion` grade on new rubrics, so their dimension keys change.
+    Grades recorded before this change carry the old keys and are no longer comparable with new ones;
+    re-launch an experiment to re-grade it.
+  - A Sandbox prompt candidate cloned from the `requirements-review`, `clarity-review` or
+    `requirements-writer` baseline before this change contains the directives half of its prompt.
+    Re-clone it rather than promoting it, or promotion doubles those directives.
+
+### Patch Changes
+
+- Updated dependencies [302e05a]
+- Updated dependencies [cda15b8]
+  - @cat-factory/contracts@0.320.0
+
+## 0.7.361
+
+### Patch Changes
+
+- Updated dependencies [3afea3a]
+  - @cat-factory/contracts@0.319.0
+
+## 0.7.360
+
+### Patch Changes
+
+- Updated dependencies [3f7d8b2]
+  - @cat-factory/contracts@0.318.0
+
+## 0.7.359
+
+### Patch Changes
+
+- Updated dependencies [053aac8]
+  - @cat-factory/contracts@0.317.0
+
+## 0.7.358
+
+### Patch Changes
+
+- Updated dependencies [eb5fa75]
+  - @cat-factory/contracts@0.316.0
+
+## 0.7.357
+
+### Patch Changes
+
+- Updated dependencies [eb740be]
+  - @cat-factory/contracts@0.315.0
+
+## 0.7.356
+
+### Patch Changes
+
+- Updated dependencies [7f990ea]
+  - @cat-factory/contracts@0.314.0
+
+## 0.7.355
+
+### Patch Changes
+
+- Updated dependencies [409238f]
+  - @cat-factory/contracts@0.313.0
+
+## 0.7.354
+
+### Patch Changes
+
+- Updated dependencies [0ef48d1]
+  - @cat-factory/contracts@0.312.0
+
+## 0.7.353
+
+### Patch Changes
+
+- Updated dependencies [c67e924]
+  - @cat-factory/contracts@0.311.0
+
+## 0.7.352
+
+### Patch Changes
+
+- Updated dependencies [056e18d]
+  - @cat-factory/contracts@0.310.0
+
+## 0.7.351
+
+### Patch Changes
+
+- Updated dependencies [a81879b]
+  - @cat-factory/contracts@0.309.0
+
+## 0.7.350
+
+### Patch Changes
+
+- Updated dependencies [0e1e0fa]
+  - @cat-factory/contracts@0.308.1
+
+## 0.7.349
+
+### Patch Changes
+
+- Updated dependencies [7312e0a]
+  - @cat-factory/contracts@0.308.0
+
+## 0.7.348
+
+### Patch Changes
+
+- Updated dependencies [95408c2]
+  - @cat-factory/contracts@0.307.0
+
+## 0.7.347
+
+### Patch Changes
+
+- Updated dependencies [fc56d82]
+- Updated dependencies [fc9afb4]
+  - @cat-factory/contracts@0.306.0
+
+## 0.7.346
+
+### Patch Changes
+
+- Updated dependencies [edd4fd0]
+  - @cat-factory/contracts@0.305.0
+
+## 0.7.345
+
+### Patch Changes
+
+- Updated dependencies [36e0c9b]
+  - @cat-factory/contracts@0.304.0
+
+## 0.7.344
+
+### Patch Changes
+
+- Updated dependencies [569181d]
+  - @cat-factory/contracts@0.303.0
+
+## 0.7.343
+
+### Patch Changes
+
+- Updated dependencies [1a0b593]
+  - @cat-factory/contracts@0.302.0
+
+## 0.7.342
+
+### Patch Changes
+
+- Updated dependencies [fc4a1e4]
+  - @cat-factory/contracts@0.301.0
+
+## 0.7.341
+
+### Patch Changes
+
+- Updated dependencies [ee733ee]
+  - @cat-factory/contracts@0.300.0
+
+## 0.7.340
+
+### Patch Changes
+
+- Updated dependencies [01086d8]
+  - @cat-factory/contracts@0.299.1
+
+## 0.7.339
+
+### Patch Changes
+
+- Updated dependencies [195b248]
+  - @cat-factory/contracts@0.299.0
+
+## 0.7.338
+
+### Patch Changes
+
+- Updated dependencies [bc2478d]
+  - @cat-factory/contracts@0.298.0
+
+## 0.7.337
+
+### Patch Changes
+
+- Updated dependencies [a634746]
+  - @cat-factory/contracts@0.297.0
+
+## 0.7.336
+
+### Patch Changes
+
+- Updated dependencies [7893f35]
+  - @cat-factory/contracts@0.296.0
+
+## 0.7.335
+
+### Patch Changes
+
+- Updated dependencies [07ff467]
+  - @cat-factory/contracts@0.295.0
+
+## 0.7.334
+
+### Patch Changes
+
+- Updated dependencies [9b3473a]
+  - @cat-factory/contracts@0.294.0
+
+## 0.7.333
+
+### Patch Changes
+
+- Updated dependencies [b25732f]
+  - @cat-factory/contracts@0.293.0
+
+## 0.7.332
+
+### Patch Changes
+
+- Updated dependencies [7119ca7]
+  - @cat-factory/contracts@0.292.2
+
+## 0.7.331
+
+### Patch Changes
+
+- Updated dependencies [57a7ecd]
+  - @cat-factory/contracts@0.292.1
+
+## 0.7.330
+
+### Patch Changes
+
+- Updated dependencies [5f6699a]
+  - @cat-factory/contracts@0.292.0
+
+## 0.7.329
+
+### Patch Changes
+
+- Updated dependencies [2428b6b]
+  - @cat-factory/contracts@0.291.0
+
+## 0.7.328
+
+### Patch Changes
+
+- Updated dependencies [31f43c1]
+  - @cat-factory/contracts@0.290.0
+
+## 0.7.327
+
+### Patch Changes
+
+- Updated dependencies [3ff215a]
+  - @cat-factory/contracts@0.289.1
+
+## 0.7.326
+
+### Patch Changes
+
+- Updated dependencies [e3cf16a]
+  - @cat-factory/contracts@0.289.0
+
+## 0.7.325
+
+### Patch Changes
+
+- Updated dependencies [83764b5]
+  - @cat-factory/contracts@0.288.0
+
+## 0.7.324
+
+### Patch Changes
+
+- Updated dependencies [1fbd83c]
+  - @cat-factory/contracts@0.287.1
+
+## 0.7.323
+
+### Patch Changes
+
+- Updated dependencies [bf473bd]
+  - @cat-factory/contracts@0.287.0
+
+## 0.7.322
+
+### Patch Changes
+
+- Updated dependencies [4715b74]
+- Updated dependencies [8c1d8a6]
+  - @cat-factory/contracts@0.286.0
+
+## 0.7.321
+
+### Patch Changes
+
+- Updated dependencies [afe1250]
+  - @cat-factory/contracts@0.285.0
+
+## 0.7.320
+
+### Patch Changes
+
+- Updated dependencies [e3fdc15]
+  - @cat-factory/contracts@0.284.0
+
+## 0.7.319
+
+### Patch Changes
+
+- Updated dependencies [de7caaf]
+  - @cat-factory/contracts@0.283.1
+
+## 0.7.318
+
+### Patch Changes
+
+- Updated dependencies [6ad1d8b]
+  - @cat-factory/contracts@0.283.0
+
+## 0.7.317
+
+### Patch Changes
+
+- Updated dependencies [a596b9c]
+  - @cat-factory/contracts@0.282.0
+
+## 0.7.316
+
+### Patch Changes
+
+- Updated dependencies [2585b2f]
+  - @cat-factory/contracts@0.281.0
+
+## 0.7.315
+
+### Patch Changes
+
+- Updated dependencies [faddbf5]
+  - @cat-factory/contracts@0.280.0
+
+## 0.7.314
+
+### Patch Changes
+
+- Updated dependencies [8a06abc]
+- Updated dependencies [8a06abc]
+  - @cat-factory/contracts@0.279.0
+
+## 0.7.313
+
+### Patch Changes
+
+- Updated dependencies [11f9efa]
+  - @cat-factory/contracts@0.278.0
+
+## 0.7.312
+
+### Patch Changes
+
+- Updated dependencies [c44e9d7]
+  - @cat-factory/contracts@0.277.0
+
+## 0.7.311
+
+### Patch Changes
+
+- Updated dependencies [3e9a6af]
+  - @cat-factory/contracts@0.276.0
+
+## 0.7.310
+
+### Patch Changes
+
+- Updated dependencies [a62bcf8]
+- Updated dependencies [fe8ca56]
+- Updated dependencies [2544fb3]
+  - @cat-factory/contracts@0.275.0
+
+## 0.7.309
+
+### Patch Changes
+
+- Updated dependencies [882b94f]
+  - @cat-factory/contracts@0.274.0
+
+## 0.7.308
+
+### Patch Changes
+
+- Updated dependencies [6e07961]
+- Updated dependencies [9f9c240]
+  - @cat-factory/contracts@0.273.0
+
+## 0.7.307
+
+### Patch Changes
+
+- Updated dependencies [6c6dd0c]
+- Updated dependencies [70745b6]
+  - @cat-factory/contracts@0.272.0
+
+## 0.7.306
+
+### Patch Changes
+
+- Updated dependencies [55310f6]
+- Updated dependencies [55310f6]
+  - @cat-factory/contracts@0.271.0
+
+## 0.7.305
+
+### Patch Changes
+
+- Updated dependencies [17687a1]
+  - @cat-factory/contracts@0.270.0
+
+## 0.7.304
+
+### Patch Changes
+
+- Updated dependencies [01bb6d2]
+- Updated dependencies [f0154ce]
+  - @cat-factory/contracts@0.269.0
+
+## 0.7.303
+
+### Patch Changes
+
+- Updated dependencies [eaab22a]
+  - @cat-factory/contracts@0.268.0
+
+## 0.7.302
+
+### Patch Changes
+
+- Updated dependencies [74ea2bc]
+  - @cat-factory/contracts@0.267.0
+
+## 0.7.301
+
+### Patch Changes
+
+- Updated dependencies [1c8df4a]
+  - @cat-factory/contracts@0.266.0
+
+## 0.7.300
+
+### Patch Changes
+
+- Updated dependencies [6637bbd]
+  - @cat-factory/contracts@0.265.0
+
+## 0.7.299
+
+### Patch Changes
+
+- Updated dependencies [be9b8dc]
+  - @cat-factory/contracts@0.264.0
+
+## 0.7.298
+
+### Patch Changes
+
+- Updated dependencies [1025674]
+- Updated dependencies [e5f7eb0]
+  - @cat-factory/contracts@0.263.0
+
+## 0.7.297
+
+### Patch Changes
+
+- Updated dependencies [8cbd518]
+  - @cat-factory/contracts@0.262.0
+
+## 0.7.296
+
+### Patch Changes
+
+- Updated dependencies [f7882cf]
+- Updated dependencies [e6aa37d]
+  - @cat-factory/contracts@0.261.1
+
+## 0.7.295
+
+### Patch Changes
+
+- Updated dependencies [24f76f1]
+- Updated dependencies [964cfa6]
+  - @cat-factory/contracts@0.261.0
+
+## 0.7.294
+
+### Patch Changes
+
+- Updated dependencies [ae44914]
+- Updated dependencies [4be3510]
+  - @cat-factory/contracts@0.260.0
+
+## 0.7.293
+
+### Patch Changes
+
+- Updated dependencies [11dae5b]
+  - @cat-factory/contracts@0.259.0
+
+## 0.7.292
+
+### Patch Changes
+
+- Updated dependencies [11a2966]
+  - @cat-factory/contracts@0.258.0
+
+## 0.7.291
+
+### Patch Changes
+
+- Updated dependencies [00bff05]
+  - @cat-factory/contracts@0.257.0
+
+## 0.7.290
+
+### Patch Changes
+
+- Updated dependencies [ab0c228]
+  - @cat-factory/contracts@0.256.0
+
+## 0.7.289
+
+### Patch Changes
+
+- Updated dependencies [ee6ce7c]
+  - @cat-factory/contracts@0.255.0
+
+## 0.7.288
+
+### Patch Changes
+
+- Updated dependencies [16576d6]
+  - @cat-factory/contracts@0.254.0
+
+## 0.7.287
+
+### Patch Changes
+
+- Updated dependencies [5202fb9]
+  - @cat-factory/contracts@0.253.0
+
+## 0.7.286
+
+### Patch Changes
+
+- Updated dependencies [4c071ec]
+  - @cat-factory/contracts@0.252.0
+
+## 0.7.285
+
+### Patch Changes
+
+- Updated dependencies [3fbc87e]
+- Updated dependencies [c9adc67]
+  - @cat-factory/contracts@0.251.0
+
+## 0.7.284
+
+### Patch Changes
+
+- Updated dependencies [e7e27ee]
+  - @cat-factory/contracts@0.250.0
+
+## 0.7.283
+
+### Patch Changes
+
+- Updated dependencies [53cd697]
+  - @cat-factory/contracts@0.249.0
+
+## 0.7.282
+
+### Patch Changes
+
+- Updated dependencies [6d3f784]
+  - @cat-factory/contracts@0.248.0
+
+## 0.7.281
+
+### Patch Changes
+
+- Updated dependencies [0937581]
+- Updated dependencies [250b7dc]
+  - @cat-factory/contracts@0.247.0
+
+## 0.7.280
+
+### Patch Changes
+
+- Updated dependencies [ec96387]
+- Updated dependencies [7f5ed08]
+- Updated dependencies [4e4d1b4]
+  - @cat-factory/contracts@0.246.0
+
+## 0.7.279
+
+### Patch Changes
+
+- Updated dependencies [10e7a15]
+- Updated dependencies [ca213b1]
+  - @cat-factory/contracts@0.245.0
+
+## 0.7.278
+
+### Patch Changes
+
+- Updated dependencies [d69115d]
+  - @cat-factory/contracts@0.244.0
+
+## 0.7.277
+
+### Patch Changes
+
+- Updated dependencies [bac6776]
+- Updated dependencies [3857ea4]
+  - @cat-factory/contracts@0.243.0
+
+## 0.7.276
+
+### Patch Changes
+
+- Updated dependencies [e7867db]
+- Updated dependencies [00c4d94]
+  - @cat-factory/contracts@0.242.0
+
+## 0.7.275
+
+### Patch Changes
+
+- Updated dependencies [c5a1a16]
+  - @cat-factory/contracts@0.241.0
+
+## 0.7.274
+
+### Patch Changes
+
+- Updated dependencies [dd90c1e]
+- Updated dependencies [289b3de]
+- Updated dependencies [dd90c1e]
+  - @cat-factory/contracts@0.240.0
+
+## 0.7.273
+
+### Patch Changes
+
+- Updated dependencies [a675c63]
+  - @cat-factory/contracts@0.239.0
+
+## 0.7.272
+
+### Patch Changes
+
+- Updated dependencies [aa62acf]
+  - @cat-factory/contracts@0.238.0
+
+## 0.7.271
+
+### Patch Changes
+
+- Updated dependencies [99be350]
+  - @cat-factory/contracts@0.237.0
+
+## 0.7.270
+
+### Patch Changes
+
+- Updated dependencies [c9c1dd3]
+  - @cat-factory/contracts@0.236.0
+
+## 0.7.269
+
+### Patch Changes
+
+- Updated dependencies [cec0c3e]
+  - @cat-factory/contracts@0.235.0
+
+## 0.7.268
+
+### Patch Changes
+
+- Updated dependencies [8cbf1a7]
+  - @cat-factory/contracts@0.234.0
+
+## 0.7.267
+
+### Patch Changes
+
+- Updated dependencies [ee6601e]
+  - @cat-factory/contracts@0.233.0
+
+## 0.7.266
+
+### Patch Changes
+
+- Updated dependencies [937d4af]
+  - @cat-factory/contracts@0.232.0
+
+## 0.7.265
+
+### Patch Changes
+
+- Updated dependencies [eb4ca17]
+  - @cat-factory/contracts@0.231.0
+
+## 0.7.264
+
+### Patch Changes
+
+- Updated dependencies [1f14793]
+  - @cat-factory/contracts@0.230.1
+
+## 0.7.263
+
+### Patch Changes
+
+- Updated dependencies [e7e4404]
+  - @cat-factory/contracts@0.230.0
+
+## 0.7.262
+
+### Patch Changes
+
+- Updated dependencies [10e0341]
+- Updated dependencies [10e0341]
+  - @cat-factory/contracts@0.229.0
+
+## 0.7.261
+
+### Patch Changes
+
+- Updated dependencies [fccb1df]
+  - @cat-factory/contracts@0.228.0
+
+## 0.7.260
+
+### Patch Changes
+
+- Updated dependencies [437a0c6]
+  - @cat-factory/contracts@0.227.0
+
+## 0.7.259
+
+### Patch Changes
+
+- Updated dependencies [43fd5c0]
+  - @cat-factory/contracts@0.226.0
+
+## 0.7.258
+
+### Patch Changes
+
+- Updated dependencies [0456066]
+  - @cat-factory/contracts@0.225.0
+
+## 0.7.257
+
+### Patch Changes
+
+- Updated dependencies [f1a6cb3]
+- Updated dependencies [cc17221]
+- Updated dependencies [889a497]
+- Updated dependencies [3605630]
+  - @cat-factory/contracts@0.224.0
+
+## 0.7.256
+
+### Patch Changes
+
+- Updated dependencies [36b1853]
+  - @cat-factory/contracts@0.223.0
+
+## 0.7.255
+
+### Patch Changes
+
+- Updated dependencies [413095f]
+  - @cat-factory/contracts@0.222.0
+
+## 0.7.254
+
+### Patch Changes
+
+- Updated dependencies [04e44f8]
+  - @cat-factory/contracts@0.221.0
+
+## 0.7.253
+
+### Patch Changes
+
+- Updated dependencies [c8ba2cd]
+- Updated dependencies [807e442]
+- Updated dependencies [807e442]
+- Updated dependencies [175f78f]
+- Updated dependencies [807e442]
+  - @cat-factory/contracts@0.220.0
+
+## 0.7.252
+
+### Patch Changes
+
+- Updated dependencies [1106c93]
+  - @cat-factory/contracts@0.219.0
+
+## 0.7.251
+
+### Patch Changes
+
+- Updated dependencies [f63145d]
+- Updated dependencies [3b88f66]
+  - @cat-factory/contracts@0.218.0
+
+## 0.7.250
+
+### Patch Changes
+
+- Updated dependencies [7f86f07]
+  - @cat-factory/contracts@0.217.0
+
+## 0.7.249
+
+### Patch Changes
+
+- Updated dependencies [87161e8]
+  - @cat-factory/contracts@0.216.0
+
+## 0.7.248
+
+### Patch Changes
+
+- Updated dependencies [96ad850]
+- Updated dependencies [96ad850]
+  - @cat-factory/contracts@0.215.0
+
+## 0.7.247
+
+### Patch Changes
+
+- Updated dependencies [4c26c01]
+  - @cat-factory/contracts@0.214.0
+
+## 0.7.246
+
+### Patch Changes
+
+- Updated dependencies [924c6f9]
+  - @cat-factory/contracts@0.213.0
+
+## 0.7.245
+
+### Patch Changes
+
+- Updated dependencies [233e279]
+- Updated dependencies [54d531d]
+  - @cat-factory/contracts@0.212.0
+
+## 0.7.244
+
+### Patch Changes
+
+- Updated dependencies [87ed4f9]
+  - @cat-factory/contracts@0.211.0
+
+## 0.7.243
+
+### Patch Changes
+
+- Updated dependencies [874d684]
+  - @cat-factory/contracts@0.210.1
+
+## 0.7.242
+
+### Patch Changes
+
+- Updated dependencies [73708cf]
+- Updated dependencies [876ee2d]
+  - @cat-factory/contracts@0.210.0
+
+## 0.7.241
+
+### Patch Changes
+
+- Updated dependencies [0a1170e]
+  - @cat-factory/contracts@0.209.0
+
+## 0.7.240
+
+### Patch Changes
+
+- Updated dependencies [d320539]
+  - @cat-factory/contracts@0.208.0
+
+## 0.7.239
+
+### Patch Changes
+
+- Updated dependencies [9e5f785]
+  - @cat-factory/contracts@0.207.0
+
+## 0.7.238
+
+### Patch Changes
+
+- Updated dependencies [8fbc0b5]
+  - @cat-factory/contracts@0.206.1
+
+## 0.7.237
+
+### Patch Changes
+
+- Updated dependencies [5511cdc]
+  - @cat-factory/contracts@0.206.0
+
+## 0.7.236
+
+### Patch Changes
+
+- Updated dependencies [1441041]
+  - @cat-factory/contracts@0.205.0
+
+## 0.7.235
+
+### Patch Changes
+
+- Updated dependencies [0b52df7]
+  - @cat-factory/contracts@0.204.0
+
+## 0.7.234
+
+### Patch Changes
+
+- Updated dependencies [54e6a45]
+- Updated dependencies [08e9bcc]
+- Updated dependencies [a7aae8a]
+  - @cat-factory/contracts@0.203.0
+
+## 0.7.233
+
+### Patch Changes
+
+- Updated dependencies [9d303f0]
+  - @cat-factory/contracts@0.202.0
+
+## 0.7.232
+
+### Patch Changes
+
+- Updated dependencies [0bffe55]
+- Updated dependencies [1cd9d73]
+  - @cat-factory/contracts@0.201.0
+
+## 0.7.231
+
+### Patch Changes
+
+- Updated dependencies [d9789f9]
+  - @cat-factory/contracts@0.200.0
+
+## 0.7.230
+
+### Patch Changes
+
+- Updated dependencies [123ac6f]
+  - @cat-factory/contracts@0.199.0
+
+## 0.7.229
+
+### Patch Changes
+
+- Updated dependencies [99412e2]
+  - @cat-factory/contracts@0.198.0
+
+## 0.7.228
+
+### Patch Changes
+
+- Updated dependencies [be7fe66]
+  - @cat-factory/contracts@0.197.0
+
+## 0.7.227
+
+### Patch Changes
+
+- Updated dependencies [83fd037]
+  - @cat-factory/contracts@0.196.0
+
+## 0.7.226
+
+### Patch Changes
+
+- Updated dependencies [7248b72]
+- Updated dependencies [449d856]
+  - @cat-factory/contracts@0.195.0
+
+## 0.7.225
+
+### Patch Changes
+
+- Updated dependencies [7ed2bc0]
+  - @cat-factory/contracts@0.194.0
+
+## 0.7.224
+
+### Patch Changes
+
+- Updated dependencies [85efc27]
+- Updated dependencies [9794c19]
+  - @cat-factory/contracts@0.193.0
+
+## 0.7.223
+
+### Patch Changes
+
+- Updated dependencies [57e1195]
+  - @cat-factory/contracts@0.192.0
+
+## 0.7.222
+
+### Patch Changes
+
+- Updated dependencies [e087b40]
+  - @cat-factory/contracts@0.191.0
+
+## 0.7.221
+
+### Patch Changes
+
+- Updated dependencies [0eacaa2]
+  - @cat-factory/contracts@0.190.0
+
+## 0.7.220
+
+### Patch Changes
+
+- Updated dependencies [a8cc6b2]
+  - @cat-factory/contracts@0.189.0
+
+## 0.7.219
+
+### Patch Changes
+
+- Updated dependencies [ac832b9]
+  - @cat-factory/contracts@0.188.0
+
+## 0.7.218
+
+### Patch Changes
+
+- Updated dependencies [22d82ac]
+  - @cat-factory/contracts@0.187.0
+
+## 0.7.217
+
+### Patch Changes
+
+- Updated dependencies [b75a08a]
+  - @cat-factory/contracts@0.186.0
+
+## 0.7.216
+
+### Patch Changes
+
+- Updated dependencies [9d965c9]
+  - @cat-factory/contracts@0.185.0
+
+## 0.7.215
+
+### Patch Changes
+
+- Updated dependencies [58e06a2]
+  - @cat-factory/contracts@0.184.0
+
+## 0.7.214
+
+### Patch Changes
+
+- Updated dependencies [65b87c1]
+- Updated dependencies [df48cb0]
+  - @cat-factory/contracts@0.183.0
+
+## 0.7.213
+
+### Patch Changes
+
+- Updated dependencies [b30cc6e]
+  - @cat-factory/contracts@0.182.0
+
+## 0.7.212
+
+### Patch Changes
+
+- Updated dependencies [c47eb66]
+  - @cat-factory/contracts@0.181.0
+
+## 0.7.211
+
+### Patch Changes
+
+- Updated dependencies [bead6df]
+  - @cat-factory/contracts@0.180.0
+
+## 0.7.210
+
+### Patch Changes
+
+- Updated dependencies [68f0edd]
+  - @cat-factory/contracts@0.179.0
+
+## 0.7.209
+
+### Patch Changes
+
+- Updated dependencies [9d8fe9b]
+  - @cat-factory/contracts@0.178.0
+
+## 0.7.208
+
+### Patch Changes
+
+- Updated dependencies [cf2779a]
+  - @cat-factory/contracts@0.177.0
+
+## 0.7.207
+
+### Patch Changes
+
+- Updated dependencies [1947062]
+  - @cat-factory/contracts@0.176.0
+
+## 0.7.206
+
+### Patch Changes
+
+- Updated dependencies [1c12289]
+  - @cat-factory/contracts@0.175.0
+
+## 0.7.205
+
+### Patch Changes
+
+- Updated dependencies [55747c5]
+  - @cat-factory/contracts@0.174.0
+
+## 0.7.204
+
+### Patch Changes
+
+- Updated dependencies [cab85c5]
+  - @cat-factory/contracts@0.173.0
+
+## 0.7.203
+
+### Patch Changes
+
+- Updated dependencies [8afa4ae]
+  - @cat-factory/contracts@0.172.0
+
+## 0.7.202
+
+### Patch Changes
+
+- Updated dependencies [f0e9bab]
+  - @cat-factory/contracts@0.171.0
+
+## 0.7.201
+
+### Patch Changes
+
+- Updated dependencies [583fc80]
+- Updated dependencies [640cadd]
+  - @cat-factory/contracts@0.170.0
+
+## 0.7.200
+
+### Patch Changes
+
+- Updated dependencies [968a214]
+  - @cat-factory/contracts@0.169.0
+
+## 0.7.199
+
+### Patch Changes
+
+- Updated dependencies [c95600b]
+  - @cat-factory/contracts@0.168.0
+
+## 0.7.198
+
+### Patch Changes
+
+- Updated dependencies [df9ca7d]
+  - @cat-factory/contracts@0.167.0
+
+## 0.7.197
+
+### Patch Changes
+
+- Updated dependencies [600a8ad]
+  - @cat-factory/contracts@0.166.0
+
+## 0.7.196
+
+### Patch Changes
+
+- Updated dependencies [3949f82]
+  - @cat-factory/contracts@0.165.0
+
+## 0.7.195
+
+### Patch Changes
+
+- Updated dependencies [5a58b9d]
+  - @cat-factory/contracts@0.164.0
+
+## 0.7.194
+
+### Patch Changes
+
+- Updated dependencies [55e0a85]
+  - @cat-factory/contracts@0.163.0
+
+## 0.7.193
+
+### Patch Changes
+
+- Updated dependencies [ecd68c5]
+  - @cat-factory/contracts@0.162.0
+
+## 0.7.192
+
+### Patch Changes
+
+- Updated dependencies [7c6bd77]
+  - @cat-factory/contracts@0.161.0
+
+## 0.7.191
+
+### Patch Changes
+
+- Updated dependencies [239788a]
+  - @cat-factory/contracts@0.160.1
+
+## 0.7.190
+
+### Patch Changes
+
+- Updated dependencies [93496b0]
+  - @cat-factory/contracts@0.160.0
+
+## 0.7.189
+
+### Patch Changes
+
+- Updated dependencies [15249df]
+  - @cat-factory/contracts@0.159.0
+
+## 0.7.188
+
+### Patch Changes
+
+- Updated dependencies [2323df1]
+  - @cat-factory/contracts@0.158.0
+
+## 0.7.187
+
+### Patch Changes
+
+- Updated dependencies [71bd63f]
+  - @cat-factory/contracts@0.157.0
+
+## 0.7.186
+
+### Patch Changes
+
+- Updated dependencies [3c7d62b]
+  - @cat-factory/contracts@0.156.0
+
+## 0.7.185
+
+### Patch Changes
+
+- Updated dependencies [916278b]
+  - @cat-factory/contracts@0.155.0
+
+## 0.7.184
+
+### Patch Changes
+
+- Updated dependencies [91ea6b7]
+  - @cat-factory/contracts@0.154.2
+
+## 0.7.183
+
+### Patch Changes
+
+- Updated dependencies [021f2a0]
+  - @cat-factory/contracts@0.154.1
+
+## 0.7.182
+
+### Patch Changes
+
+- Updated dependencies [a14fe03]
+  - @cat-factory/contracts@0.154.0
+
+## 0.7.181
+
+### Patch Changes
+
+- Updated dependencies [8053837]
+  - @cat-factory/contracts@0.153.0
+
+## 0.7.180
+
+### Patch Changes
+
+- Updated dependencies [7f54858]
+  - @cat-factory/contracts@0.152.2
+
+## 0.7.179
+
+### Patch Changes
+
+- Updated dependencies [f2b25ba]
+  - @cat-factory/contracts@0.152.1
+
+## 0.7.178
+
+### Patch Changes
+
+- Updated dependencies [e679977]
+  - @cat-factory/contracts@0.152.0
+
+## 0.7.177
+
+### Patch Changes
+
+- Updated dependencies [9450415]
+  - @cat-factory/contracts@0.151.0
+
+## 0.7.176
+
+### Patch Changes
+
+- Updated dependencies [54c44bb]
+  - @cat-factory/contracts@0.150.0
+
+## 0.7.175
+
+### Patch Changes
+
+- Updated dependencies [0abcf31]
+- Updated dependencies [a53bbf7]
+  - @cat-factory/contracts@0.149.0
+
+## 0.7.174
+
+### Patch Changes
+
+- Updated dependencies [9b3b85e]
+  - @cat-factory/contracts@0.148.1
+
+## 0.7.173
+
+### Patch Changes
+
+- Updated dependencies [1f5f5bc]
+  - @cat-factory/contracts@0.148.0
+
+## 0.7.172
+
+### Patch Changes
+
+- Updated dependencies [7c3d245]
+  - @cat-factory/contracts@0.147.1
+
+## 0.7.171
+
+### Patch Changes
+
+- Updated dependencies [bae59a7]
+  - @cat-factory/contracts@0.147.0
+
+## 0.7.170
+
+### Patch Changes
+
+- Updated dependencies [60c0a1e]
+  - @cat-factory/contracts@0.146.0
+
+## 0.7.169
+
+### Patch Changes
+
+- Updated dependencies [c47dfe1]
+  - @cat-factory/contracts@0.145.0
+
+## 0.7.168
+
+### Patch Changes
+
+- Updated dependencies [5924903]
+  - @cat-factory/contracts@0.144.0
+
+## 0.7.167
+
+### Patch Changes
+
+- Updated dependencies [f5ddc02]
+  - @cat-factory/contracts@0.143.0
+
+## 0.7.166
+
+### Patch Changes
+
+- Updated dependencies [720539f]
+  - @cat-factory/contracts@0.142.0
+
+## 0.7.165
+
+### Patch Changes
+
+- Updated dependencies [e618bf5]
+  - @cat-factory/contracts@0.141.0
+
+## 0.7.164
+
+### Patch Changes
+
+- Updated dependencies [32a0720]
+- Updated dependencies [54e117e]
+- Updated dependencies [be6e109]
+  - @cat-factory/contracts@0.140.0
+
+## 0.7.163
+
+### Patch Changes
+
+- Updated dependencies [6564507]
+  - @cat-factory/contracts@0.139.0
+
+## 0.7.162
+
+### Patch Changes
+
+- Updated dependencies [b12d7a8]
+  - @cat-factory/contracts@0.138.0
+
+## 0.7.161
+
+### Patch Changes
+
+- Updated dependencies [5b1cbbf]
+  - @cat-factory/contracts@0.137.0
+
+## 0.7.160
+
+### Patch Changes
+
+- Updated dependencies [1869ad3]
+  - @cat-factory/contracts@0.136.0
+
+## 0.7.159
+
+### Patch Changes
+
+- Updated dependencies [06a094a]
+  - @cat-factory/contracts@0.135.0
+
+## 0.7.158
+
+### Patch Changes
+
+- Updated dependencies [995249b]
+  - @cat-factory/contracts@0.134.0
+
+## 0.7.157
+
+### Patch Changes
+
+- Updated dependencies [9e9127f]
+  - @cat-factory/contracts@0.133.0
+
+## 0.7.156
+
+### Patch Changes
+
+- Updated dependencies [b414f34]
+  - @cat-factory/contracts@0.132.0
+
+## 0.7.155
+
+### Patch Changes
+
+- Updated dependencies [a552283]
+  - @cat-factory/contracts@0.131.0
+
+## 0.7.154
+
+### Patch Changes
+
+- Updated dependencies [55cae97]
+  - @cat-factory/contracts@0.130.0
+
+## 0.7.153
+
+### Patch Changes
+
+- Updated dependencies [f7e7139]
+  - @cat-factory/contracts@0.129.0
+
+## 0.7.152
+
+### Patch Changes
+
+- Updated dependencies [6c4bcef]
+  - @cat-factory/contracts@0.128.2
+
+## 0.7.151
+
+### Patch Changes
+
+- Updated dependencies [2ce396d]
+  - @cat-factory/contracts@0.128.1
+
+## 0.7.150
+
+### Patch Changes
+
+- Updated dependencies [1e684b7]
+  - @cat-factory/contracts@0.128.0
+
+## 0.7.149
+
+### Patch Changes
+
+- f8f1aa8: Update workspace dependencies (direct + transitive) to the newest versions published before the
+  `minimumReleaseAge` supply-chain cutoff. No source changes — dependency ranges + the lockfile only.
+
+  - Refreshed direct deps to their newest cooldown-compliant releases: `wrangler` 4.110.0, `hono`
+    4.12.29, `vitest` / `@vitest/coverage-v8` 4.1.10, `oxlint` 1.73.0, `knip` 6.26.0, `msw` 2.15.0,
+    `pg-boss` 12.26.0, `sherif` 1.13.0, `turbo` 2.10.4, `vue-tsc` 3.3.7, `@types/node` 26.1.1,
+    `@nuxtjs/i18n` 10.4.1, `@aws-sdk/client-s3` 3.1085.0.
+  - `typescript` moved off the `7.0.1-rc` prerelease to the stable `7.0.2` release across every
+    package that used the RC (the TS-6 world — the frontend layer and the two runner harnesses —
+    stays on `^6.0.3`).
+  - Vercel AI SDK family held to the `ai@6`-compatible majors that `workers-ai-provider@3.3.1` peers
+    require (`ai` 6.0.224, `@ai-sdk/anthropic|openai|provider` on 3.x, `@ai-sdk/openai-compatible` on
+    2.x, `@ai-sdk/amazon-bedrock` 4.x) — no v7/v5 major bumps.
+  - Coding (`executor-harness`) and deploy runner harnesses updated too, including the pinned
+    in-container coding-agent CLIs (Pi 0.80.6, Claude Code 2.1.207, Codex 0.144.1; the Pi todo /
+    web-tools extensions stay at their lockstep 1.20.0). Their image tags and the three
+    hand-maintained pins were bumped in lockstep, so the runner images must be re-published +
+    deployed for the new tags to roll out.
+
+- Updated dependencies [f8f1aa8]
+  - @cat-factory/contracts@0.127.1
+
+## 0.7.148
+
+### Patch Changes
+
+- Updated dependencies [d1a4129]
+  - @cat-factory/contracts@0.127.0
+
+## 0.7.147
+
+### Patch Changes
+
+- Updated dependencies [5072999]
+  - @cat-factory/contracts@0.126.0
+
+## 0.7.146
+
+### Patch Changes
+
+- Updated dependencies [4f936de]
+  - @cat-factory/contracts@0.125.0
+
+## 0.7.145
+
+### Patch Changes
+
+- Updated dependencies [127fe3e]
+  - @cat-factory/contracts@0.124.1
+
+## 0.7.144
+
+### Patch Changes
+
+- Updated dependencies [08a7da2]
+  - @cat-factory/contracts@0.124.0
+
+## 0.7.143
+
+### Patch Changes
+
+- Updated dependencies [eeadc97]
+  - @cat-factory/contracts@0.123.1
+
+## 0.7.142
+
+### Patch Changes
+
+- Updated dependencies [b83bcc8]
+- Updated dependencies [b83bcc8]
+- Updated dependencies [a0c6934]
+  - @cat-factory/contracts@0.123.0
+
+## 0.7.141
+
+### Patch Changes
+
+- Updated dependencies [0f3c88b]
+  - @cat-factory/contracts@0.122.0
+
+## 0.7.140
+
+### Patch Changes
+
+- Updated dependencies [ed77be6]
+  - @cat-factory/contracts@0.121.2
+
+## 0.7.139
+
+### Patch Changes
+
+- Updated dependencies [9aa9e19]
+  - @cat-factory/contracts@0.121.1
+
+## 0.7.138
+
+### Patch Changes
+
+- Updated dependencies [63f7881]
+  - @cat-factory/contracts@0.121.0
+
+## 0.7.137
+
+### Patch Changes
+
+- Updated dependencies [a2db337]
+  - @cat-factory/contracts@0.120.0
+
+## 0.7.136
+
+### Patch Changes
+
+- Updated dependencies [8728bf7]
+- Updated dependencies [7157908]
+  - @cat-factory/contracts@0.119.0
+
+## 0.7.135
+
+### Patch Changes
+
+- Updated dependencies [b35e1a0]
+  - @cat-factory/contracts@0.118.0
+
+## 0.7.134
+
+### Patch Changes
+
+- Updated dependencies [4a3e536]
+  - @cat-factory/contracts@0.117.0
+
+## 0.7.133
+
+### Patch Changes
+
+- Updated dependencies [18a9cb5]
+  - @cat-factory/contracts@0.116.1
+
+## 0.7.132
+
+### Patch Changes
+
+- Updated dependencies [bc77f89]
+  - @cat-factory/contracts@0.116.0
+
+## 0.7.131
+
+### Patch Changes
+
+- Updated dependencies [802fc05]
+  - @cat-factory/contracts@0.115.0
+
+## 0.7.130
+
+### Patch Changes
+
+- Updated dependencies [6198b08]
+  - @cat-factory/contracts@0.114.0
+
+## 0.7.129
+
+### Patch Changes
+
+- Updated dependencies [14eac27]
+  - @cat-factory/contracts@0.113.0
+
+## 0.7.128
+
+### Patch Changes
+
+- Updated dependencies [ecbcbec]
+  - @cat-factory/contracts@0.112.0
+
+## 0.7.127
+
+### Patch Changes
+
+- Updated dependencies [fdba1ea]
+  - @cat-factory/contracts@0.111.0
+
+## 0.7.126
+
+### Patch Changes
+
+- Updated dependencies [10787c4]
+  - @cat-factory/contracts@0.110.1
+
+## 0.7.125
+
+### Patch Changes
+
+- Updated dependencies [f596090]
+  - @cat-factory/contracts@0.110.0
+
+## 0.7.124
+
+### Patch Changes
+
+- Updated dependencies [9ea1e77]
+  - @cat-factory/contracts@0.109.0
+
+## 0.7.123
+
+### Patch Changes
+
+- Updated dependencies [e66accb]
+  - @cat-factory/contracts@0.108.1
+
+## 0.7.122
+
+### Patch Changes
+
+- Updated dependencies [1afa003]
+- Updated dependencies [f91b99d]
+  - @cat-factory/contracts@0.108.0
+
+## 0.7.121
+
+### Patch Changes
+
+- Updated dependencies [bf31df7]
+  - @cat-factory/contracts@0.107.0
+
+## 0.7.120
+
+### Patch Changes
+
+- Updated dependencies [6f9d935]
+  - @cat-factory/contracts@0.106.0
+
+## 0.7.119
+
+### Patch Changes
+
+- Updated dependencies [5490103]
+- Updated dependencies [e5b9462]
+  - @cat-factory/contracts@0.105.0
+
+## 0.7.118
+
+### Patch Changes
+
+- Updated dependencies [accb8ec]
+  - @cat-factory/contracts@0.104.0
+
+## 0.7.117
+
+### Patch Changes
+
+- Updated dependencies [cd435d1]
+  - @cat-factory/contracts@0.103.0
+
+## 0.7.116
+
+### Patch Changes
+
+- Updated dependencies [076d02f]
+  - @cat-factory/contracts@0.102.0
+
+## 0.7.115
+
+### Patch Changes
+
+- Updated dependencies [029a689]
+  - @cat-factory/contracts@0.101.1
+
+## 0.7.114
+
+### Patch Changes
+
+- Updated dependencies [2e4d883]
+  - @cat-factory/contracts@0.101.0
+
+## 0.7.113
+
+### Patch Changes
+
+- Updated dependencies [773695b]
+  - @cat-factory/contracts@0.100.0
+
+## 0.7.112
+
+### Patch Changes
+
+- Updated dependencies [3981bbb]
+  - @cat-factory/contracts@0.99.0
+
+## 0.7.111
+
+### Patch Changes
+
+- Updated dependencies [cfcb6c7]
+- Updated dependencies [48f9d97]
+  - @cat-factory/contracts@0.98.0
+
+## 0.7.110
+
+### Patch Changes
+
+- Updated dependencies [102c049]
+  - @cat-factory/contracts@0.97.0
+
+## 0.7.109
+
+### Patch Changes
+
+- Updated dependencies [49b498a]
+- Updated dependencies [c20a69a]
+- Updated dependencies [49b498a]
+- Updated dependencies [49b498a]
+  - @cat-factory/contracts@0.96.0
+
+## 0.7.108
+
+### Patch Changes
+
+- Updated dependencies [6c1efd1]
+  - @cat-factory/contracts@0.95.0
+
+## 0.7.107
+
+### Patch Changes
+
+- Updated dependencies [6edcce0]
+  - @cat-factory/contracts@0.94.0
+
+## 0.7.106
+
+### Patch Changes
+
+- Updated dependencies [ef57cb1]
+  - @cat-factory/contracts@0.93.0
+
+## 0.7.105
+
+### Patch Changes
+
+- Updated dependencies [1d738f7]
+  - @cat-factory/contracts@0.92.0
+
+## 0.7.104
+
+### Patch Changes
+
+- Updated dependencies [47a2975]
+  - @cat-factory/contracts@0.91.0
+
+## 0.7.103
+
+### Patch Changes
+
+- Updated dependencies [b928904]
+  - @cat-factory/contracts@0.90.0
+
+## 0.7.102
+
+### Patch Changes
+
+- Updated dependencies [7fa7578]
+  - @cat-factory/contracts@0.89.0
+
+## 0.7.101
+
+### Patch Changes
+
+- Updated dependencies [55661f4]
+  - @cat-factory/contracts@0.88.0
+
+## 0.7.100
+
+### Patch Changes
+
+- Updated dependencies [ca5c3e8]
+  - @cat-factory/contracts@0.87.0
+
+## 0.7.99
+
+### Patch Changes
+
+- Updated dependencies [b216fdc]
+  - @cat-factory/contracts@0.86.0
+
+## 0.7.98
+
+### Patch Changes
+
+- Updated dependencies [0ac0dc4]
+  - @cat-factory/contracts@0.85.0
+
+## 0.7.97
+
+### Patch Changes
+
+- Updated dependencies [36f4cf6]
+- Updated dependencies [b78adf5]
+  - @cat-factory/contracts@0.84.0
+
+## 0.7.96
+
+### Patch Changes
+
+- Updated dependencies [e0aab3f]
+  - @cat-factory/contracts@0.83.0
+
+## 0.7.95
+
+### Patch Changes
+
+- Updated dependencies [5ce03c6]
+  - @cat-factory/contracts@0.82.0
+
+## 0.7.94
+
+### Patch Changes
+
+- Updated dependencies [4a7a3f1]
+  - @cat-factory/contracts@0.81.3
+
+## 0.7.93
+
+### Patch Changes
+
+- Updated dependencies [6243bea]
+  - @cat-factory/contracts@0.81.2
+
+## 0.7.92
+
+### Patch Changes
+
+- Updated dependencies [2a91615]
+  - @cat-factory/contracts@0.81.1
+
+## 0.7.91
+
+### Patch Changes
+
+- Updated dependencies [67d3876]
+  - @cat-factory/contracts@0.81.0
+
+## 0.7.90
+
+### Patch Changes
+
+- Updated dependencies [d7f6e1c]
+  - @cat-factory/contracts@0.80.1
+
+## 0.7.89
+
+### Patch Changes
+
+- Updated dependencies [120de05]
+  - @cat-factory/contracts@0.80.0
+
+## 0.7.88
+
+### Patch Changes
+
+- Updated dependencies [dcc8b32]
+  - @cat-factory/contracts@0.79.0
+
+## 0.7.87
+
+### Patch Changes
+
+- Updated dependencies [16ee6cc]
+  - @cat-factory/contracts@0.78.1
+
+## 0.7.86
+
+### Patch Changes
+
+- Updated dependencies [16621f8]
+  - @cat-factory/contracts@0.78.0
+
+## 0.7.85
+
+### Patch Changes
+
+- Updated dependencies [9e93fe8]
+- Updated dependencies [9b26ff1]
+- Updated dependencies [e0aa45e]
+- Updated dependencies [f70c273]
+- Updated dependencies [edf4e69]
+- Updated dependencies [f21279e]
+- Updated dependencies [6c51e31]
+  - @cat-factory/contracts@0.77.0
+
+## 0.7.84
+
+### Patch Changes
+
+- Updated dependencies [762fe66]
+  - @cat-factory/contracts@0.76.0
+
+## 0.7.83
+
+### Patch Changes
+
+- Updated dependencies [fb53662]
+  - @cat-factory/contracts@0.75.0
+
+## 0.7.82
+
+### Patch Changes
+
+- Updated dependencies [6f95aff]
+  - @cat-factory/contracts@0.74.0
+
+## 0.7.81
+
+### Patch Changes
+
+- Updated dependencies [3643708]
+  - @cat-factory/contracts@0.73.0
+
+## 0.7.80
+
+### Patch Changes
+
+- Updated dependencies [70e321b]
+  - @cat-factory/contracts@0.72.0
+
+## 0.7.79
+
+### Patch Changes
+
+- Updated dependencies [77c6842]
+  - @cat-factory/contracts@0.71.0
+
+## 0.7.78
+
+### Patch Changes
+
+- Updated dependencies [2e1354f]
+  - @cat-factory/contracts@0.70.1
+
+## 0.7.77
+
+### Patch Changes
+
+- Updated dependencies [b4c7e60]
+  - @cat-factory/contracts@0.70.0
+
+## 0.7.76
+
+### Patch Changes
+
+- Updated dependencies [f568a8c]
+  - @cat-factory/contracts@0.69.0
+
+## 0.7.75
+
+### Patch Changes
+
+- Updated dependencies [41203db]
+  - @cat-factory/contracts@0.68.0
+
+## 0.7.74
+
+### Patch Changes
+
+- Updated dependencies [cb9e2e3]
+  - @cat-factory/contracts@0.67.0
+
+## 0.7.73
+
+### Patch Changes
+
+- Updated dependencies [1e55e77]
+  - @cat-factory/contracts@0.66.1
+
+## 0.7.72
+
+### Patch Changes
+
+- Updated dependencies [ecf4cc1]
+  - @cat-factory/contracts@0.66.0
+
+## 0.7.71
+
+### Patch Changes
+
+- Updated dependencies [f9678df]
+- Updated dependencies [858799e]
+  - @cat-factory/contracts@0.65.0
+
+## 0.7.70
+
+### Patch Changes
+
+- Updated dependencies [9bb75b0]
+  - @cat-factory/contracts@0.64.0
+
+## 0.7.69
+
+### Patch Changes
+
+- Updated dependencies [15c5894]
+  - @cat-factory/contracts@0.63.0
+
+## 0.7.68
+
+### Patch Changes
+
+- Updated dependencies [f383515]
+  - @cat-factory/contracts@0.62.0
+
+## 0.7.67
+
+### Patch Changes
+
+- Updated dependencies [e4cddb4]
+  - @cat-factory/contracts@0.61.0
+
+## 0.7.66
+
+### Patch Changes
+
+- Updated dependencies [337d94d]
+  - @cat-factory/contracts@0.60.0
+
+## 0.7.65
+
+### Patch Changes
+
+- Updated dependencies [1952d6b]
+  - @cat-factory/contracts@0.59.0
+
+## 0.7.64
+
+### Patch Changes
+
+- Updated dependencies [5fd0ffa]
+  - @cat-factory/contracts@0.58.0
+
+## 0.7.63
+
+### Patch Changes
+
+- Updated dependencies [f9a173f]
+  - @cat-factory/contracts@0.57.0
+
+## 0.7.62
+
+### Patch Changes
+
+- Updated dependencies [21b2096]
+  - @cat-factory/contracts@0.56.1
+
+## 0.7.61
+
+### Patch Changes
+
+- Updated dependencies [ad5d3e0]
+  - @cat-factory/contracts@0.56.0
+
+## 0.7.60
+
+### Patch Changes
+
+- Updated dependencies [4897078]
+  - @cat-factory/contracts@0.55.0
+
+## 0.7.59
+
+### Patch Changes
+
+- Updated dependencies [915861c]
+  - @cat-factory/contracts@0.54.0
+
+## 0.7.58
+
+### Patch Changes
+
+- Updated dependencies [48a3df6]
+- Updated dependencies [48a3df6]
+  - @cat-factory/contracts@0.53.0
+
+## 0.7.57
+
+### Patch Changes
+
+- Updated dependencies [0577404]
+  - @cat-factory/contracts@0.52.0
+
+## 0.7.56
+
+### Patch Changes
+
+- Updated dependencies [69558f9]
+  - @cat-factory/contracts@0.51.0
+
+## 0.7.55
+
+### Patch Changes
+
+- Updated dependencies [29d8b5d]
+  - @cat-factory/contracts@0.50.1
+
+## 0.7.54
+
+### Patch Changes
+
+- Updated dependencies [40f687d]
+  - @cat-factory/contracts@0.50.0
+
+## 0.7.53
+
+### Patch Changes
+
+- Updated dependencies [e0f1149]
+  - @cat-factory/contracts@0.49.0
+
+## 0.7.52
+
+### Patch Changes
+
+- Updated dependencies [fc324d2]
+  - @cat-factory/contracts@0.48.0
+
+## 0.7.51
+
+### Patch Changes
+
+- Updated dependencies [e3b3540]
+  - @cat-factory/contracts@0.47.0
+
+## 0.7.50
+
+### Patch Changes
+
+- Updated dependencies [704c99e]
+  - @cat-factory/contracts@0.46.0
+
+## 0.7.49
+
+### Patch Changes
+
+- Updated dependencies [c2ec53b]
+  - @cat-factory/contracts@0.45.1
+
+## 0.7.48
+
+### Patch Changes
+
+- Updated dependencies [4b5d267]
+  - @cat-factory/contracts@0.45.0
+
+## 0.7.47
+
+### Patch Changes
+
+- Updated dependencies [8727f2b]
+- Updated dependencies [56e6ce6]
+  - @cat-factory/contracts@0.44.0
+
+## 0.7.46
+
+### Patch Changes
+
+- 8fad695: Update dependencies to latest.
+
+  - `undici` 7→8 (test-only `MockAgent`). undici's MockAgent must match Node's
+    bundled undici to intercept the global `fetch`; Node 26 bundles undici 8.5.0,
+    so the test runner / CI is pinned to **Node 26**. Production runtime is
+    unaffected — `undici` is a dev/test dependency only, and the service still runs
+    on any Node >=20 (e.g. the example `deploy/node` image stays on Node 24).
+  - Minor/patch bumps: `wrangler` 4.105, `@cloudflare/*`, `@types/node` 26.0.1,
+    `vue` 3.5.39, `msw` 2.14.6, `valibot` 1.4.2, `workers-ai-provider` 3.2.1,
+    `@toad-contracts/*` (core 0.4.0, valibot 0.5.0, hono/testing/http-client 0.3.2),
+    `@aws-sdk/client-s3` 3.1075.
+  - The AI SDK (`ai`, `@ai-sdk/*`) is intentionally held at v6 / v3-v4: the latest
+    `workers-ai-provider` (3.2.1, the Cloudflare Workers AI provider) still peers on
+    `ai@^6` / `@ai-sdk/provider@^3` and is not yet compatible with `ai` v7.
+  - Pinned the whole Vue runtime family to one version via a pnpm `override`
+    (`vue` + `@vue/*` → 3.5.39). Bumping `vue` to 3.5.39 left Nuxt 4.4.8's
+    transitive deps pinning parts of the graph to 3.5.38, so two copies of Vue were
+    bundled into the SPA; Vue's render internals are module-level singletons, so the
+    second copy crashed the app on boot (`Cannot read properties of null (reading
+'ce')` in `renderSlot`) — a blank 500 page that hung the whole e2e suite. One
+    version = one singleton.
+  - GitHub Actions: `actions/checkout` v6→v7, `pnpm/action-setup` v6.0.9,
+    `zizmorcore/zizmor-action` v0.5.7, `changesets/action` pinned to v1.9.0. CI Node 24→26.
+
+- Updated dependencies [8fad695]
+  - @cat-factory/contracts@0.43.3
+
+## 0.7.45
+
+### Patch Changes
+
+- Updated dependencies [fb339db]
+  - @cat-factory/contracts@0.43.2
+
+## 0.7.44
+
+### Patch Changes
+
+- c11a0cc: Add a `prepublishOnly` build hook so each package is compiled to `dist/` before it is
+  packed, regardless of how publish is invoked. `dist/` is gitignored and was only built by
+  the canonical `pnpm ci:publish` flow, so a bare `pnpm publish` could ship an empty shell
+  (this is what happened to `@cat-factory/gitlab` and `@cat-factory/provider-s3`). The hook
+  removes that footgun for every publishable library.
+- Updated dependencies [c11a0cc]
+  - @cat-factory/contracts@0.43.1
+
+## 0.7.43
+
+### Patch Changes
+
+- Updated dependencies [eab73b8]
+- Updated dependencies [eab73b8]
+  - @cat-factory/contracts@0.43.0
+
+## 0.7.42
+
+### Patch Changes
+
+- 67c7196: Break the `orchestration → sandbox → sandbox-fixtures → orchestration` package
+  dependency cycle so the workspace graph is acyclic. The cycle was closed by a
+  single type-only conformance test in `sandbox-fixtures` that imported
+  `@cat-factory/orchestration` (a `devDependency`). That test now lives in
+  `orchestration` (which owns the requirements/clarity logic types and already sees
+  the fixtures), leaving `sandbox-fixtures` a pure leaf data package. No runtime
+  behaviour changes; this only removes a dev-time cycle that blocked a per-package
+  build task graph.
+
+## 0.7.41
+
+### Patch Changes
+
+- Updated dependencies [e641417]
+  - @cat-factory/contracts@0.42.0
+
+## 0.7.40
+
+### Patch Changes
+
+- Updated dependencies [63e2177]
+  - @cat-factory/contracts@0.41.0
+
+## 0.7.39
+
+### Patch Changes
+
+- Updated dependencies [d1027ec]
+  - @cat-factory/contracts@0.40.1
+
+## 0.7.38
+
+### Patch Changes
+
+- Updated dependencies [32c653f]
+- Updated dependencies [32c653f]
+- Updated dependencies [32c653f]
+- Updated dependencies [32c653f]
+  - @cat-factory/contracts@0.40.0
+
+## 0.7.37
+
+### Patch Changes
+
+- Updated dependencies [b5231b0]
+  - @cat-factory/contracts@0.39.0
+
+## 0.7.36
+
+### Patch Changes
+
+- Updated dependencies [6d829bb]
+  - @cat-factory/contracts@0.38.0
+
+## 0.7.35
+
+### Patch Changes
+
+- Updated dependencies [714b7c9]
+  - @cat-factory/contracts@0.37.0
+
+## 0.7.34
+
+### Patch Changes
+
+- Updated dependencies [efbd910]
+  - @cat-factory/contracts@0.36.0
+
+## 0.7.33
+
+### Patch Changes
+
+- Updated dependencies [a4ea607]
+  - @cat-factory/contracts@0.35.0
+
+## 0.7.32
+
+### Patch Changes
+
+- Updated dependencies [76543fa]
+  - @cat-factory/contracts@0.34.0
+
+## 0.7.31
+
+### Patch Changes
+
+- Updated dependencies [17adf4c]
+  - @cat-factory/contracts@0.33.0
+
+## 0.7.30
+
+### Patch Changes
+
+- Updated dependencies [eb48652]
+  - @cat-factory/contracts@0.32.0
+
+## 0.7.29
+
+### Patch Changes
+
+- Updated dependencies [9f7ee39]
+- Updated dependencies [81b60d4]
+  - @cat-factory/contracts@0.31.0
+
+## 0.7.28
+
+### Patch Changes
+
+- Updated dependencies [ea59e91]
+  - @cat-factory/contracts@0.30.0
+
+## 0.7.27
+
+### Patch Changes
+
+- Updated dependencies [b82304e]
+  - @cat-factory/contracts@0.29.0
+
+## 0.7.26
+
+### Patch Changes
+
+- Updated dependencies [765cc42]
+  - @cat-factory/contracts@0.28.0
+
+## 0.7.25
+
+### Patch Changes
+
+- Updated dependencies [52d886a]
+  - @cat-factory/contracts@0.27.0
+
+## 0.7.24
+
+### Patch Changes
+
+- Updated dependencies [a639189]
+  - @cat-factory/contracts@0.26.0
+
+## 0.7.23
+
+### Patch Changes
+
+- Updated dependencies [ed3a673]
+  - @cat-factory/contracts@0.25.1
+
+## 0.7.22
+
+### Patch Changes
+
+- Updated dependencies [69d2270]
+  - @cat-factory/contracts@0.25.0
+
+## 0.7.21
+
+### Patch Changes
+
+- Updated dependencies [3546e3d]
+  - @cat-factory/contracts@0.24.0
+
+## 0.7.20
+
+### Patch Changes
+
+- Updated dependencies [ce81233]
+  - @cat-factory/contracts@0.23.0
+
+## 0.7.19
+
+### Patch Changes
+
+- Updated dependencies [6ff1f10]
+  - @cat-factory/contracts@0.22.0
+
+## 0.7.18
+
+### Patch Changes
+
+- Updated dependencies [04befe8]
+  - @cat-factory/contracts@0.21.0
+
+## 0.7.17
+
+### Patch Changes
+
+- Updated dependencies [2c24da8]
+  - @cat-factory/contracts@0.20.0
+
+## 0.7.16
+
+### Patch Changes
+
+- Updated dependencies [4120ac5]
+  - @cat-factory/contracts@0.19.0
+
+## 0.7.15
+
+### Patch Changes
+
+- Updated dependencies [25efe48]
+  - @cat-factory/contracts@0.18.0
+
+## 0.7.14
+
+### Patch Changes
+
+- Updated dependencies [c7b8012]
+  - @cat-factory/contracts@0.17.1
+
+## 0.7.13
+
+### Patch Changes
+
+- Updated dependencies [aa06003]
+  - @cat-factory/contracts@0.17.0
+
+## 0.7.12
+
+### Patch Changes
+
+- Updated dependencies [0ac64b8]
+  - @cat-factory/contracts@0.16.0
+
+## 0.7.11
+
+### Patch Changes
+
+- Updated dependencies [fde0437]
+  - @cat-factory/contracts@0.15.0
+
+## 0.7.10
+
+### Patch Changes
+
+- Updated dependencies [82d771e]
+  - @cat-factory/contracts@0.14.0
+
+## 0.7.9
+
+### Patch Changes
+
+- Updated dependencies [ce27690]
+  - @cat-factory/contracts@0.13.1
+
+## 0.7.8
+
+### Patch Changes
+
+- Updated dependencies [5c915fd]
+  - @cat-factory/contracts@0.13.0
+
+## 0.7.7
+
+### Patch Changes
+
+- Updated dependencies [128e12e]
+- Updated dependencies [4de2f5f]
+- Updated dependencies [4de2f5f]
+  - @cat-factory/contracts@0.12.0
+
+## 0.7.6
+
+### Patch Changes
+
+- Updated dependencies [1e31cbc]
+  - @cat-factory/contracts@0.11.0
+
+## 0.7.5
+
+### Patch Changes
+
+- Updated dependencies [d0081e1]
+  - @cat-factory/contracts@0.10.0
+
+## 0.7.4
+
+### Patch Changes
+
+- Updated dependencies [ae29687]
+  - @cat-factory/contracts@0.9.0
+
+## 0.7.3
+
+### Patch Changes
+
+- Updated dependencies [c70df09]
+  - @cat-factory/contracts@0.8.0
+
+## 0.7.2
+
+### Patch Changes
+
+- 4fa5ed9: Re-release all publishable packages. The previous release bumped these on `main` but never reached npm (the publish job was never triggered), so npm is a release behind. This changeset re-triggers the release so every package publishes.
+- Updated dependencies [4fa5ed9]
+  - @cat-factory/contracts@0.7.2
+
+## 0.7.1
+
+### Patch Changes
+
+- 7463cf2: Add `repository` metadata (url + monorepo `directory`) to every published package.json. npm provenance attestation rejected the previous release because `repository.url` was empty and could not be matched against the source repo; declaring it lets the publish (and provenance) succeed, and re-triggers publishing of all packages from the failed release.
+- Updated dependencies [7463cf2]
+  - @cat-factory/contracts@0.7.1
+
+## 0.7.0
+
+### Minor Changes
+
+- c4ef995: Add **`@cat-factory/sandbox-fixtures`** — a published package of hand-authored,
+  standardized, **graded** no-repo fixtures for the Sandbox, plus the asymmetric
+  grading model that scores them.
+
+  - **`@cat-factory/sandbox-fixtures`** (new): inline (text-only) agent inputs that
+    need NO repository checkout — `requirements-review`, `clarity-review`, `reviewer`
+    (code review), and architecture-proposal review (`architect-companion`) — each
+    spanning a simple → complex range. Every fixture declares the genuine findings a
+    strong answer should surface, each rated by **trickiness** (how hard to spot —
+    catching it is a "wow") and **impact** (how bad to miss). The standardized
+    `SandboxFixtureDefinition` projects to the wire `SandboxFixture` via
+    `toSandboxFixture`. Depends only on `@cat-factory/contracts` so the published
+    `@cat-factory/sandbox` can load it via `workspace:*`.
+  - **`@cat-factory/contracts`** (breaking, pre-1.0): the `findings` fixture objective
+    now carries graded `expectations` (`{ id, summary, trickiness, impact, matchHints }`)
+    instead of a flat `expectedFindings: string[]`; the objective result records the
+    asymmetric breakdown (`impactRecall`, `wowBonus`, `caught`/`total`,
+    `missedHighImpact`). New `clarity` inline fixture kind.
+  - **`@cat-factory/sandbox`**: loads the workspace builtin fixtures by default
+    (`listBuiltinFixtures`, re-exporting `@cat-factory/sandbox-fixtures`); replaces the
+    flat `scoreExpectedFindings` recall with `scoreExpectations` (impact-weighted miss
+    penalty so missing something impactful hurts most, plus a trickiness-weighted "wow"
+    bonus for catching the subtle items) and `renderExpectationBrief` for the judge;
+    adds the `architecture-review` (`architect-companion`) catalog entry and a
+    `suggestExperiment` helper that maps selected models × prompts × fixtures to a
+    ready-to-create experiment for a selected agent.
+
+  No CI cache list change is needed: the new package sits under
+  `backend/packages/*`, already covered by the workflow's `node_modules` cache glob;
+  it is added to the `backend/tsconfig.build.json` composite build graph (the
+  incremental `.tsbuildinfo` cache) so it builds before its `@cat-factory/sandbox`
+  consumer.
+
+### Patch Changes
+
+- Updated dependencies [fe53445]
+- Updated dependencies [d94e75c]
+- Updated dependencies [3d9a9d8]
+- Updated dependencies [3bc8c79]
+- Updated dependencies [9d3a956]
+- Updated dependencies [8d11833]
+- Updated dependencies [ad9ba9e]
+- Updated dependencies [3e0d753]
+- Updated dependencies [8065fed]
+- Updated dependencies [385bd93]
+- Updated dependencies [0972696]
+- Updated dependencies [e9b9356]
+- Updated dependencies [e8005ba]
+- Updated dependencies [3a12f15]
+- Updated dependencies [b40da13]
+- Updated dependencies [8eed38c]
+- Updated dependencies [268c15d]
+- Updated dependencies [157cd02]
+- Updated dependencies [db77061]
+- Updated dependencies [57d70fa]
+- Updated dependencies [88b3170]
+- Updated dependencies [fe0b7f8]
+- Updated dependencies [f73652c]
+- Updated dependencies [db336b1]
+- Updated dependencies [8807f5c]
+- Updated dependencies [9be11e1]
+- Updated dependencies [5ec0d25]
+- Updated dependencies [a691853]
+- Updated dependencies [f066c59]
+- Updated dependencies [4a08935]
+- Updated dependencies [70e8ef0]
+- Updated dependencies [70e8ef0]
+- Updated dependencies [70e8ef0]
+- Updated dependencies [5c8ca33]
+- Updated dependencies [b156b4b]
+- Updated dependencies [7cf2a2d]
+- Updated dependencies [2d66d34]
+- Updated dependencies [197264e]
+- Updated dependencies [3a12f15]
+- Updated dependencies [37baa7f]
+- Updated dependencies [553a67d]
+- Updated dependencies [311a110]
+- Updated dependencies [f16ae62]
+- Updated dependencies [36018cb]
+- Updated dependencies [799be66]
+- Updated dependencies [d65c979]
+- Updated dependencies [7157fd7]
+- Updated dependencies [21ca647]
+- Updated dependencies [c4ef995]
+- Updated dependencies [8eed95b]
+- Updated dependencies [0b38aa6]
+- Updated dependencies [de5a9d7]
+- Updated dependencies [d5e9141]
+- Updated dependencies [2dd7e56]
+- Updated dependencies [5ca8086]
+- Updated dependencies [d0697d1]
+- Updated dependencies [7dc8e57]
+- Updated dependencies [cc8d96a]
+- Updated dependencies [7c37653]
+- Updated dependencies [43f2443]
+- Updated dependencies [acac735]
+- Updated dependencies [3841315]
+- Updated dependencies [48d2f0d]
+- Updated dependencies [3e6a844]
+  - @cat-factory/contracts@0.7.0

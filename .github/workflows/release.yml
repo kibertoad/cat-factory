@@ -54,9 +54,12 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # changesets/action v2 pushes the Release PR branch and the release tags
-          # through the GitHub API with the token handed to its own `github-token`
-          # input, so this job no longer needs git credentials left in the checkout.
+          # The version commit and the release tags go up over the git CLI (see
+          # `push-with-git-cli` below), and changesets/action installs its own
+          # command-scoped `http.extraHeader` from the token handed to its
+          # `github-token` input for every push destination. So the credentials this
+          # checkout would persist are never read, and leaving them out keeps
+          # `github-token` the single authority for what may push.
           persist-credentials: false
           # Use a PAT, not the default GITHUB_TOKEN: pushes/merges made with the
           # default token do NOT trigger further workflow runs (GitHub's
@@ -91,6 +94,22 @@ jobs:
           # red-fails the "Guard runner image tag" check. Naming the script here is
           # what wires the auto-sync into every Release PR.
           version-script: pnpm run version
+          # Push the version commit (and the release tags) with the git CLI rather
+          # than the GitHub API. The API path is the default, and it sends the FULL
+          # base64 content of every changed file in ONE `createCommitOnBranch`
+          # GraphQL mutation: a release rewrites every bumped package's CHANGELOG,
+          # which was ~13 MiB of file bytes and ~18 MiB encoded, to add ~50 lines.
+          # GitHub's edge began dropping that request as the changelogs grew, and it
+          # killed six release runs between 2026-08-26 and 2026-09-07. The symptom
+          # is a bare `HttpError` (body, in the runs that kept one: nginx's
+          # `502 Bad Gateway`) landing between "Existing pull requests: []" and
+          # "creating pull request", with `changeset-release/main` left sitting at
+          # main's own sha. Git sends a delta-compressed pack instead, so the request
+          # is kilobytes and stays that size however long the history gets. The cost
+          # is that the commit is no longer signed with GitHub's GPG key or
+          # attributed to the token's owner; the PUSH is still the PAT's, which is
+          # what the publish re-trigger described above needs.
+          push-with-git-cli: true
           # Builds every publishable package then runs `changeset publish`. The action
           # detects what was published from the file named by the CHANGESETS_OUTPUT env
           # var it sets, so this script must pass its environment through to the CLI

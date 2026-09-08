@@ -28,6 +28,7 @@
     "version": "changeset version && node scripts/sync-runner-image-tags.mjs && node scripts/sync-sdk-versions.mjs",
     "sync:sdk-versions": "node scripts/sync-sdk-versions.mjs",
     "sync:image-tags": "node scripts/sync-runner-image-tags.mjs",
+    "changelog:archive": "node scripts/archive-changelogs.mjs",
     "ci:publish": "pnpm build && changeset publish"
   },
   "devDependencies": {

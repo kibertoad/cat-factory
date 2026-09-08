@@ -20,10 +20,10 @@
 // Two deliberate exclusions, each because including it would make the guard un-greenable rather
 // than useful:
 //
-//   Generated CHANGELOGs are FROZEN HISTORY. An entry correctly names what was true when it was
-//   written, and rewriting one to chase a moved file would falsify the record. Thirty-three of the
-//   forty-three dangling targets on `main` were in them. They are already on `.oxfmtrc.json`'s
-//   ignore list for the same reason.
+//   Generated CHANGELOGs are FROZEN HISTORY, `CHANGELOG-ARCHIVE.md` included. An entry correctly
+//   names what was true when it was written, and rewriting one to chase a moved file would falsify
+//   the record. Thirty-three of the forty-three dangling targets on `main` were in them. They are
+//   already on `.oxfmtrc.json`'s ignore list for the same reason.
 //
 //   A link into a NON-markdown file is checked for EXISTENCE only. There is no anchor to resolve in
 //   a `.ts` file, and a line-number fragment (`#L42`) names something a filesystem check cannot
@@ -35,9 +35,18 @@ import { posix } from 'node:path'
 import { documentAnchors } from './doc-anchors.mjs'
 import { isRelativePath, linkTargets } from './shipped-doc-links.mjs'
 
-/** Whether a path is a CHANGELOG this guard leaves alone. */
+/**
+ * Whether a path is a CHANGELOG this guard leaves alone.
+ *
+ * Matched by EXACT basename against both halves a package keeps, never by prefix: the archive
+ * (`scripts/archive-changelogs.mjs` cuts the aged-out entries into it) is the same frozen history
+ * under a second name, while a hand-written `CHANGELOG-notes.md` would be an ordinary doc whose
+ * links a reader follows.
+ */
+const FROZEN_BASENAMES = new Set(['CHANGELOG.md', 'CHANGELOG-ARCHIVE.md'])
+
 export function isFrozenHistory(repoRelPath) {
-  return repoRelPath.split('/').pop() === 'CHANGELOG.md'
+  return FROZEN_BASENAMES.has(repoRelPath.split('/').pop())
 }
 
 /**
