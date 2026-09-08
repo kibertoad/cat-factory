@@ -475,11 +475,14 @@ describe('HumanTestController', () => {
 
   it('advances the run (and tears the env down) on a confirm action', async () => {
     const teardownEnvironment = vi.fn(async () => {})
+    // The "ready for testing" card is settled through the indexed (block, type) seam, never by
+    // scanning the workspace inbox. Faked as FINDING a card, because the branch worth pinning is
+    // the one that settles it: a wrong type string, a wrong id or `dismiss` in place of `act`
+    // leaves the card open in the inbox, escalated red for a gate that already passed.
+    const clearOnBlock = vi.fn(async () => null)
     const deps = fakeDeps({
       teardownEnvironment,
-      // The "ready for testing" card is cleared by an indexed (block, type) lookup, never by
-      // scanning the workspace inbox.
-      notificationService: { findOpenByBlock: vi.fn(async () => null) } as never,
+      notificationService: { clearOnBlock } as never,
     })
     const c = new HumanTestController(deps)
     const s = step({
@@ -503,6 +506,8 @@ describe('HumanTestController', () => {
     expect(inst.status).toBe('done')
     expect(result).toEqual({ kind: 'done' })
     expect(s.humanTest?.phase).toBe('passed')
+    // `act`, not `dismiss`: the human did the thing the card asked for.
+    expect(clearOnBlock).toHaveBeenCalledWith('ws', 'blk_1', 'human_test_ready', 'act')
   })
 
   it('dispatches the conflict-resolver when pull-main conflicts, else loops back to the deployer', async () => {

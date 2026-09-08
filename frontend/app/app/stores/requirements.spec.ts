@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { computed } from 'vue'
-import type { RequirementReview } from '~/types/requirements'
+import type { RequirementRecommendation, RequirementReview } from '~/types/requirements'
 import { useRequirementsStore } from '~/stores/requirements'
 import { useWorkspaceStore } from '~/stores/workspace'
 
@@ -17,6 +17,20 @@ function review(over: Partial<RequirementReview> = {}): RequirementReview {
     model: null,
     ...over,
   } as RequirementReview
+}
+
+/** A `pending` Writer placeholder: the state `backgroundStage` reads as "recommending". */
+function pendingRecommendation(id: string): RequirementRecommendation {
+  return {
+    id,
+    sourceFinding: { title: 'f', detail: 'd', itemId: 'i1' },
+    recommendedText: '',
+    status: 'pending',
+    note: null,
+    groundedInFragment: null,
+    createdAt: 1,
+    updatedAt: 1,
+  } as RequirementRecommendation
 }
 
 describe('requirements store load() loading flag', () => {
@@ -142,6 +156,48 @@ describe('requirements store per-key writes', () => {
     // The block's OWN event still reaches it.
     store.upsert(review({ id: 'rr-a2', blockId: 'blk-a', updatedAt: 2 }))
     expect(forA.value).toBe('rr-a2')
+    expect(evaluations).toBe(2)
+  })
+
+  it('the per-card STAGE read depends on one block too, pending recommendations included', () => {
+    // `backgroundStage` is the read every card actually makes (TaskCard/BlockNode via
+    // `useReviewStage`), and it is the one the per-key write alone does not fix: while the pending
+    // -recommendation answer came from a `computed` over the whole `reviews` record, that computed
+    // tracked every key, so one event still re-evaluated the stage of every card on the board.
+    // Answering off the block's own review object is what closes it.
+    const store = useRequirementsStore()
+    store.upsert(review({ id: 'rr-a', blockId: 'blk-a', updatedAt: 1 }))
+
+    let evaluations = 0
+    const stageForA = computed(() => {
+      evaluations++
+      return store.backgroundStage('blk-a')
+    })
+    expect(stageForA.value).toBeNull()
+    expect(evaluations).toBe(1)
+
+    // Another block starts recommending: not this card's business.
+    store.upsert(
+      review({
+        id: 'rr-b',
+        blockId: 'blk-b',
+        updatedAt: 1,
+        recommendations: [pendingRecommendation('rec-1')],
+      }),
+    )
+    expect(stageForA.value).toBeNull()
+    expect(evaluations).toBe(1)
+
+    // This block's own placeholder still surfaces the working state.
+    store.upsert(
+      review({
+        id: 'rr-a2',
+        blockId: 'blk-a',
+        updatedAt: 2,
+        recommendations: [pendingRecommendation('rec-2')],
+      }),
+    )
+    expect(stageForA.value).toBe('recommending')
     expect(evaluations).toBe(2)
   })
 })

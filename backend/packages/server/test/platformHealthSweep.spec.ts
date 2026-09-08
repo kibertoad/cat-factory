@@ -198,11 +198,14 @@ function makeContainer(opts: {
               clearByType: async (workspaceId: string) => {
                 clears.push(workspaceId)
                 const existing = open.get(workspaceId)
-                // Null when nothing was open, meaning "no recovery happened here", which stops
-                // the sweep announcing a resolved edge for a workspace that never fired.
-                if (!existing) return null
+                // Empty when nothing was open, meaning "no recovery happened here", which stops
+                // the sweep announcing a resolved edge for a workspace that never fired. The real
+                // seam settles EVERY open block-less card of the type (a raced raise can leave
+                // two) and hands them back newest first; this fake holds at most one per
+                // workspace, so its list is that one card or none.
+                if (!existing) return []
                 open.delete(workspaceId)
-                return { ...existing, resolvedAt: CLEARED_AT }
+                return [{ ...existing, resolvedAt: CLEARED_AT }]
               },
             },
           },

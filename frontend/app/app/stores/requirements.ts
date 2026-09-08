@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { computed, ref } from 'vue'
+import { ref } from 'vue'
 import type {
   RequirementReview,
   ResolveRequirementsExceededChoice,
@@ -16,7 +16,10 @@ import {
   canProceed,
   openCount,
 } from '~/stores/requirements/settlement'
-import { createRecommendationCommands } from '~/stores/requirements/recommendations'
+import {
+  awaitsRecommendations,
+  createRecommendationCommands,
+} from '~/stores/requirements/recommendations'
 
 /**
  * Requirements-review state. On the pipeline path the reviewer runs as the first gate
@@ -55,24 +58,16 @@ export const useRequirementsStore = defineStore('requirements', () => {
   function reviewFor(blockId: string): RequirementReview | null {
     return reviews.value[blockId] ?? null
   }
-  /** Whether the Requirement Writer is still producing recommendations for a block (a `pending`
-   * placeholder exists). Server-derived, so the "Recommending…" state survives the window closing
-   * and a page reload — the client-local `recommending` set only covers the request round-trip. */
   /**
-   * Blocks whose stored review still carries a `pending` recommendation placeholder, derived once
-   * per change to `reviews` rather than per call. {@link backgroundStage} asks this on the per-CARD
-   * path, so as a function it re-scanned one review's recommendation list for every card on the
-   * board on every event.
+   * Whether the Requirement Writer is still producing recommendations for a block. Reads ONE key
+   * and answers off the review object itself ({@link awaitsRecommendations} memoises the scan on
+   * that object), so a card asking about its own block depends only on its own block. A `computed`
+   * over the whole record would be the fan-out again: it tracks every key, so one review event
+   * would re-evaluate the stage of every card on the board.
    */
-  const blocksAwaitingRecommendations = computed(() => {
-    const blocks = new Set<string>()
-    for (const [blockId, review] of Object.entries(reviews.value)) {
-      if ((review?.recommendations ?? []).some((r) => r.status === 'pending')) blocks.add(blockId)
-    }
-    return blocks
-  })
   function hasPendingRecommendations(blockId: string): boolean {
-    return blocksAwaitingRecommendations.value.has(blockId)
+    const review = reviews.value[blockId]
+    return review ? awaitsRecommendations(review) : false
   }
   /**
    * The async background stage a block's review is in, or null. While the driver folds the

@@ -61,7 +61,7 @@ function container(enabled: boolean, raises: string[]): ServerContainer {
           raises.push(workspaceId)
           return {}
         },
-        clearByType: async () => null,
+        clearByType: async () => [],
       },
     },
   } as unknown as ServerContainer

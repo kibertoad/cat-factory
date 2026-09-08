@@ -254,6 +254,25 @@ export class D1NotificationRepository implements NotificationRepository {
     return (results ?? []).map(rowToNotification)
   }
 
+  async dismissOpenByType(
+    workspaceId: string,
+    type: NotificationType,
+    resolvedAt: number,
+  ): Promise<Notification[]> {
+    // One statement settles the whole set, so a workspace that raced two open block-less cards
+    // of this type (NULL block_id is exempt from the partial unique index, so `raise`'s
+    // read-before-write can still stack them) leaves none behind. Never a per-row upsert loop.
+    const { results } = await this.db
+      .prepare(
+        `UPDATE notifications SET status = 'dismissed', resolved_at = ?
+           WHERE workspace_id = ? AND block_id IS NULL AND type = ? AND status = 'open'
+         RETURNING *`,
+      )
+      .bind(resolvedAt, workspaceId, type)
+      .all<NotificationRow>()
+    return (results ?? []).map(rowToNotification)
+  }
+
   async deleteResolvedOlderThan(cutoff: number): Promise<number> {
     // Retention prune: drop terminal (acted/dismissed) cards resolved at or before the
     // cutoff. Open cards are the actionable inbox and are never eligible; a null

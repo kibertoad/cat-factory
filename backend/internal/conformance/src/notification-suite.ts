@@ -87,11 +87,57 @@ export function defineNotificationSuite(
         }),
       )
       await repo.upsert(ws, notification({ id: `${ws}-other`, blockId: 'blk-2', createdAt: 40 }))
+      // BLOCK-LESS and open: the row that separates `block_id = ?` from `block_id = ? OR
+      // block_id IS NULL`. A facade that spelled the predicate the second way would hand
+      // `ensureWaitingNotification` the workspace-wide `budget_paused` card as "a card already on
+      // this block" and suppress the `decision_required` raise for a run parked `blocked`, whose
+      // only recovery signal that card is.
+      await repo.upsert(
+        ws,
+        notification({ id: `${ws}-wide`, type: 'budget_paused', createdAt: 50 }),
+      )
 
       const onBlock = await repo.listOpenByBlock(ws, 'blk-1')
       expect(onBlock.map((n) => n.id)).toEqual([`${ws}-new`, `${ws}-old`])
       expect(onBlock[0]?.executionId).toBe('exe-1')
       expect(await repo.listOpenByBlock(ws, 'blk-absent')).toEqual([])
+    })
+
+    it('dismisses EVERY open block-less card of a type in one call, and nothing else', async () => {
+      const repo = makeRepo()
+      const { ws } = ids()
+      // Two open block-less cards of the same type: the state two sweeps racing the read-before-
+      // write raise leave behind, since NULL block_id is exempt from the open-dedup unique index.
+      // Settling only the newest would leave the other open forever, and the escalation sweep
+      // would flip it red for a condition that has since cleared.
+      await repo.upsert(ws, notification({ id: `${ws}-a`, type: 'platform_health', createdAt: 10 }))
+      await repo.upsert(ws, notification({ id: `${ws}-b`, type: 'platform_health', createdAt: 30 }))
+      // Untouched: a block-SCOPED card of the type, another type, and an already-resolved row
+      // (whose `resolvedAt` must not be restamped).
+      await repo.upsert(
+        ws,
+        notification({ id: `${ws}-scoped`, type: 'platform_health', blockId: 'blk-1' }),
+      )
+      await repo.upsert(ws, notification({ id: `${ws}-ci`, type: 'ci_failed' }))
+      await repo.upsert(
+        ws,
+        notification({
+          id: `${ws}-done`,
+          type: 'platform_health',
+          status: 'dismissed',
+          resolvedAt: 5,
+        }),
+      )
+
+      const dismissed = await repo.dismissOpenByType(ws, 'platform_health', 777)
+      expect(dismissed.map((n) => n.id).sort()).toEqual([`${ws}-a`, `${ws}-b`])
+      expect(dismissed.every((n) => n.status === 'dismissed' && n.resolvedAt === 777)).toBe(true)
+      expect(await repo.findOpenByType(ws, 'platform_health')).toBeNull()
+      expect((await repo.get(ws, `${ws}-scoped`))?.status).toBe('open')
+      expect((await repo.get(ws, `${ws}-ci`))?.status).toBe('open')
+      expect((await repo.get(ws, `${ws}-done`))?.resolvedAt).toBe(5)
+      // Idempotent: nothing open left to settle.
+      expect(await repo.dismissOpenByType(ws, 'platform_health', 888)).toEqual([])
     })
 
     it('finds the open block-less card of a type, ignoring block-scoped + resolved ones', async () => {

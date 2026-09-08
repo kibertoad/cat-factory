@@ -103,6 +103,24 @@ export interface NotificationRepository {
    */
   escalateStaleOpen(workspaceId: string, cutoff: number): Promise<Notification[]>
   /**
+   * Dismiss EVERY open, block-less notification of `type` for a workspace in ONE statement,
+   * returning the dismissed rows so the caller can re-deliver each for the real-time inbox
+   * re-render. Nothing open → empty array.
+   *
+   * Plural on purpose. A block-less card has no unique index to lean on: the partial index that
+   * makes the block-scoped raise atomic exempts them, because NULLs are distinct in a unique
+   * index, so `raise` still de-dupes them with a read-before-write and two sweeps racing on one
+   * workspace can leave two open rows. A clear that settled only the newest would leave the other
+   * open forever, and the escalation sweep would later flip it red for a condition that has since
+   * cleared: the exact lingering-stale-alert failure the clear exists to prevent. Settling the
+   * whole set is therefore both the clear AND the heal, and costs one indexed write either way.
+   */
+  dismissOpenByType(
+    workspaceId: string,
+    type: NotificationType,
+    resolvedAt: number,
+  ): Promise<Notification[]>
+  /**
    * Prune resolved notifications (status `acted`/`dismissed`) whose `resolvedAt` is at or
    * before `cutoff`, across all workspaces, returning the number of rows removed. The
    * retention sweep's write for the otherwise-unbounded `notifications` table: a busy

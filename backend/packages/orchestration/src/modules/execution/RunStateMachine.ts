@@ -1132,9 +1132,13 @@ export class RunStateMachine {
    * A spend-`paused` run is invisible to the sweeper and has no auto-resume, so the paused board
    * badge used to be its ONLY signal — the least-discoverable park in the system. This surfaces
    * it in the inbox (where the escalation sweep can flip it red). Workspace-scoped (`blockId`
-   * null), so ONE card covers every paused run rather than one per run; de-duplicated against the
-   * block-less open-card lookup, since a block-less card has no atomic per-type unique index.
+   * null), so ONE card covers every paused run rather than one per run.
    * Best-effort: no notification service (tests) is a no-op.
+   *
+   * The early return is about the WRITE, not the dedup: `raise` de-dupes on its own, but it
+   * persists the re-raise either way, and this runs once per paused run per step for as long as
+   * the budget stays exhausted. The card's title and body are constant, so there is never a
+   * content refresh to lose by skipping it. One indexed read replaces a read plus a write.
    */
   async raiseBudgetPaused(workspaceId: string): Promise<void> {
     const svc = this.notificationService
@@ -1144,7 +1148,7 @@ export class RunStateMachine {
       type: 'budget_paused',
       blockId: null,
       executionId: null,
-      title: 'Runs paused — spend budget reached',
+      title: 'Runs paused: spend budget reached',
       body:
         'One or more runs on metered models are paused because a spend budget (workspace, ' +
         'account, or user) is exhausted. Raise the budget, then resume from the spend panel.',
@@ -1156,7 +1160,10 @@ export class RunStateMachine {
    * from `resumePaused`). Idempotent + best-effort; if the budget is still exhausted a resumed run
    * simply re-pauses and re-raises the card on its next step. Routed through the same
    * `clearByType` seam the platform-health sweep uses, so a block-less card is raised and cleared
-   * through one pair of indexed lookups rather than a scan of the workspace's open inbox.
+   * through indexed lookups rather than a scan of the workspace's open inbox. That seam settles
+   * EVERY open card of the type in one statement, which is what the inbox scan it replaced was
+   * really buying: two runs pausing in the same tick can still race the un-indexable block-less
+   * raise into two cards, and a clear that took only the newest would leave the other red forever.
    */
   async clearBudgetPaused(workspaceId: string): Promise<void> {
     const svc = this.notificationService

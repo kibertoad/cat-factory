@@ -67,7 +67,7 @@ symmetric" (CLAUDE.md).
 | 16  | P3  | engine       | `InitiativeLoopService.spawnItem`: per-item pipeline point-read in loop                                                             | ✅ done | [#1078](https://github.com/kibertoad/cat-factory/pull/1078) |
 | 17  | P3  | board        | `BoardScanService` reconcile: `addModule` re-lists whole board per module                                                           | ✅ done | [#1078](https://github.com/kibertoad/cat-factory/pull/1078) |
 | 18  | P3  | board        | Block delete: teardown + remove each re-list the whole board                                                                        | ✅ done | [#1078](https://github.com/kibertoad/cat-factory/pull/1078) |
-| 19  | P3  | persistence  | `notifications.listOpen` unbounded `SELECT *` (body+payload) on snapshot                                                            | ✅ done | [#2212](https://github.com/kibertoad/cat-factory/pull/2212) |
+| 19  | P3  | persistence  | Unbounded `listOpen` on the ENGINE's run-park paths (the finding's own snapshot halves, projection + LIMIT, are REFUSED: see below) | ✅ done | [#2212](https://github.com/kibertoad/cat-factory/pull/2212) |
 | 20  | P3  | frontend     | Hydrate stringify (now WeakMap-cached), gate-map rebuilds per event, no viewport culling, z-index in `nodes` computed               | 🟡 part | [#2072](https://github.com/kibertoad/cat-factory/pull/2072) |
 | 21  | P3  | persistence  | `password_reset_tokens.deleteExpired` full-table scan (no `expires_at` index)                                                       | ✅ done | [#1143](https://github.com/kibertoad/cat-factory/pull/1143) |
 | 22  | P3  | spend        | `isOverBudget`: up to 3 live SUM aggregates per proxied LLM call (design decision)                                                  | ⬜ todo |                                                             |
@@ -731,6 +731,25 @@ for mothership mode. `type` is deliberately not a parameter: the caller asks whe
 points at the block, so narrowing to one type would raise a duplicate beside a card of another
 type. `RunStateMachine.ensureWaitingNotification.test.ts` counts inbox scans and pins zero.
 
+The block-LESS clear had to grow a plural to make the swap safe. `clearBudgetPaused` was a loop
+over the open inbox dismissing every `budget_paused` card, and the obvious replacement,
+`clearByType`, settled at most one. That is not equivalent: a block-less card is exempt from the
+partial unique index behind the block-scoped raise (NULLs are distinct in a unique index), so
+`raise` still de-dupes it with a read-before-write, and two runs pausing in one tick can leave two
+open rows. The old loop healed that on resume; the point-read would have left one open forever,
+escalated red for a budget the operator had already raised. So `clearByType` now settles the whole
+set through one indexed `UPDATE … RETURNING` (`NotificationRepository.dismissOpenByType`, mirrored
+D1 ⇄ Drizzle with a conformance case seeding the raced pair), which is also one round trip fewer
+than the find-then-upsert it replaced. Its siblings on the block get the same treatment for the
+duplication rather than the race: `clearOnBlock` is the one find-then-settle both "ready for
+review/testing" clears and `clearWaitingDecision` share.
+
+`raiseBudgetPaused` KEEPS its `findOpenByType` guard, which reads like a duplicate of the read
+`raise` performs one line later and is not. `raise` persists the re-raise whether or not the card
+changed, and this runs once per paused run per step for as long as the budget stays exhausted: on
+the steady-state path the guard trades that write for a read. The card's title and body are
+constant, so there is no content refresh to lose by skipping it.
+
 **The two halves the finding actually proposed are REFUSED, not deferred**, so nobody
 re-proposes them blind:
 
@@ -1184,8 +1203,15 @@ blocks in place across three modules.
   shape this group expected to be forced into. `initiative.hydrate` still replaces wholesale, because a
   snapshot is authoritative for EXISTENCE. `notifications.byBlock` was DELETED rather than fixed:
   the per-block badge it was built for reads `reviewDebtByBlock` now, and nothing had consumed it
-  since. Pinned in `requirements.spec.ts` by counting a `computed`'s evaluations across an event
-  for a DIFFERENT block.
+  since. Pinned in `perKeyWrites.spec.ts`, one table over all six, by counting a `computed`'s
+  evaluations across an event for a DIFFERENT block (plus the first write to a key a reader read
+  while it was absent, the half an in-place write could plausibly lose).
+- **The write was only half of it in `requirements`.** `backgroundStage` is what every card
+  actually reads, and its pending-recommendation half came from a `computed` over the whole
+  `reviews` record, which tracks every key: one event still re-evaluated every card's stage, the
+  exact fan-out the per-key write removes. It answers off the block's own review object now,
+  memoised on that object like the settlement tallies beside it. Any per-card getter that reduces
+  over the record is the same bug wearing the store's own clothes.
 
 ## Conventions & gotchas (carry between slices)
 

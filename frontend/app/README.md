@@ -1102,8 +1102,12 @@ event left to restore it.
   from `execution.instances` above, and for the opposite reason: that one is a `shallowRef`.
 - **Pin it with a store-level unit test** (`stores/workspace.spec.ts` for refreshes,
   `stores/workspace/refreshFunnel.spec.ts` for the funnel's own rules, `stores/execution.spec.ts`
-  for echoes, `stores/requirements.spec.ts` for per-key invalidation): drive the two orderings and
-  assert the fresher one wins.
+  for echoes): drive the two orderings and assert the fresher one wins. The per-key rule above has
+  one table for the whole family, `stores/perKeyWrites.spec.ts`: a store joining it is a row there,
+  and each row counts a `computed`'s evaluations across an event for a DIFFERENT block, plus the
+  first write to a key a reader read while it was absent. What the record is keyed BY is per store
+  (`stores/requirements.spec.ts` also covers the stage read, whose pending-recommendation half has
+  to answer off the block's own review object rather than a computed over the record).
 
 ## Internationalization (i18n) authoring
 

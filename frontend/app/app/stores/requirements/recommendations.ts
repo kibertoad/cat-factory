@@ -20,6 +20,31 @@ export interface RecommendationCommandContext {
   hasPendingRecommendations: (blockId: string) => boolean
 }
 
+/**
+ * Whether the Requirement Writer is still producing recommendations for THIS review: a `pending`
+ * placeholder exists. Server-derived, so the "Recommending…" state survives the window closing
+ * and a page reload; the client-local `recommending` set only covers the request round-trip.
+ *
+ * Memoised on the review OBJECT, like the settlement tallies next door, and for the same reason:
+ * the store REPLACES the review on every write, so identity self-invalidates and a superseded
+ * review is collected along with its answer.
+ *
+ * Per REVIEW rather than per record, which is the whole point. `backgroundStage` asks this on the
+ * per-CARD path, and a `computed` over the `reviews` record tracks the ref plus every key in it,
+ * so one review event would re-evaluate every card's stage, the fan-out the per-key write exists
+ * to remove. Reading one key depends on one key.
+ */
+const pendingByReview = new WeakMap<RequirementReview, boolean>()
+
+export function awaitsRecommendations(review: RequirementReview): boolean {
+  let pending = pendingByReview.get(review)
+  if (pending === undefined) {
+    pending = (review.recommendations ?? []).some((r) => r.status === 'pending')
+    pendingByReview.set(review, pending)
+  }
+  return pending
+}
+
 /** Ask for, accept, reject and re-request the Requirement Writer's suggested answers. */
 export function createRecommendationCommands(ctx: RecommendationCommandContext) {
   const { api, workspace, recommending, withFlag, store, hasPendingRecommendations } = ctx

@@ -788,6 +788,11 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // The escalation sweep's batched write (a local node runs the sweep too, so it must proxy
     // like the listOpen + per-row upsert loop it replaced). Workspace-scoped like `upsert`.
     escalateStaleOpen: { scope: { kind: 'workspace', arg: 0 } },
+    // The self-clearing counterpart to a block-less raise: the spend-pause lift and the
+    // platform-health / key-drift / infra-reachability sweeps all settle their workspace-wide
+    // card through it, and a local node runs those. Workspace-scoped like `escalateStaleOpen`,
+    // whose batched-write shape it shares.
+    dismissOpenByType: { scope: { kind: 'workspace', arg: 0 } },
   },
   // --- Repo-bootstrap management / retry / stop surface ---------------------------
   // The bootstrap flow a mothership-mode SPA drives (`BootstrapController` +
