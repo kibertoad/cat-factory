@@ -30,8 +30,13 @@ export const useConsensusStore = defineStore('consensus', () => {
     return loading.value.has(blockId)
   }
 
+  /**
+   * Write one block's session into the cache, IN PLACE: per-key, never a whole-record clone.
+   * `sessions` is a deep reactive ref, so replacing the record retriggered every consumer keyed on
+   * an UNCHANGED block; assigning the key retriggers only the block that actually changed.
+   */
   function store(session: ConsensusSession) {
-    sessions.value = { ...sessions.value, [session.blockId]: session }
+    sessions.value[session.blockId] = session
   }
 
   /** Patch the cache from a live `consensus` stream event (newest wins per block). */
@@ -62,7 +67,7 @@ export const useConsensusStore = defineStore('consensus', () => {
       if (session) {
         if (!existing || session.updatedAt >= existing.updatedAt) store(session)
       } else if (existing === undefined) {
-        sessions.value = { ...sessions.value, [blockId]: null }
+        sessions.value[blockId] = null
       }
     } catch {
       // Consensus off / no session — leave the cache as-is; the window shows its empty state.

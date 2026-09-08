@@ -42,8 +42,25 @@ function card(overrides: Partial<Notification>): Notification {
 function makeMachine(open: Notification[]) {
   const raised: { type: string; blockId: string | null; executionId: string | null }[] = []
   const resolved: { id: string; action: string }[] = []
+  // Both paths below run on run-state transitions, so neither may answer its question by pulling
+  // the workspace's whole open inbox (every card's body + payload JSON, growing with what humans
+  // have not actioned). The counter is what pins that: each reads one indexed row instead.
+  let inboxScans = 0
   const notificationService = {
-    listOpen: async () => open,
+    listOpen: async () => {
+      inboxScans++
+      return open
+    },
+    listOpenByBlock: async (_ws: string, blockId: string) =>
+      open.filter((n) => n.status === 'open' && n.blockId === blockId),
+    findOpenByType: async (_ws: string, type: string) =>
+      open.find((n) => n.status === 'open' && n.blockId === null && n.type === type) ?? null,
+    clearByType: async (_ws: string, type: string) => {
+      const found = open.find((n) => n.status === 'open' && n.blockId === null && n.type === type)
+      if (!found) return null
+      resolved.push({ id: found.id, action: 'dismiss' })
+      return card({ id: found.id, status: 'dismissed' })
+    },
     raise: async (
       _ws: string,
       input: { type: string; blockId: string | null; executionId: string | null },
@@ -70,7 +87,7 @@ function makeMachine(open: Notification[]) {
     stepGraph: {} as never,
     notificationService,
   })
-  return { machine, raised, resolved }
+  return { machine, raised, resolved, inboxScans: () => inboxScans }
 }
 
 describe('RunStateMachine.ensureWaitingNotification — F7 executionId-scoped suppression', () => {
@@ -135,5 +152,18 @@ describe('RunStateMachine budget_paused card (F3)', () => {
     await machine.clearBudgetPaused('ws_1')
     // Only the budget card is dismissed — the unrelated merge_review is left for the human.
     expect(resolved).toEqual([{ id: 'ntf_budget', action: 'dismiss' }])
+  })
+})
+
+describe('the run-park notification paths read narrowly', () => {
+  it('never scans the workspace inbox', async () => {
+    const { machine, inboxScans } = makeMachine([
+      card({ id: 'ntf_stale', type: 'pipeline_complete', executionId: 'exec_prior' }),
+      card({ id: 'ntf_budget', type: 'budget_paused', blockId: null, executionId: null }),
+    ])
+    await machine.ensureWaitingNotification('ws_1', makeInstance('exec_now'))
+    await machine.raiseBudgetPaused('ws_1')
+    await machine.clearBudgetPaused('ws_1')
+    expect(inboxScans()).toBe(0)
   })
 })

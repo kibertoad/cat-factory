@@ -1091,9 +1091,19 @@ event left to restore it.
   swaps that in. A missing trigger and an in-place patch are both SILENT, so
   `stores/execution.spec.ts` pins each write shape twice: once on the array, once through the
   `getInstance` chain a window actually reads.
+- **A record keyed by block id is written PER KEY, never replaced.** The review-family caches
+  (`requirements`, `clarity`, `brainstorm`, `consensus`, `docInterview`, `initiative`) are deep
+  reactive refs holding a `Record<blockId, T>`, so `x.value = { ...x.value, [id]: v }` is a write
+  to the REF: a dependency every reader shares, whatever key it reads. One review event therefore
+  woke every card on the board. `x.value[id] = v` keeps the invalidation on the key that changed,
+  and Vue still tracks a key read before it exists, so a first write reaches its waiting reader.
+  The exception is a HYDRATE, which replaces the record wholesale on purpose: a snapshot is
+  authoritative for EXISTENCE, so anything it omits has been deleted. This is the opposite rule
+  from `execution.instances` above, and for the opposite reason: that one is a `shallowRef`.
 - **Pin it with a store-level unit test** (`stores/workspace.spec.ts` for refreshes,
   `stores/workspace/refreshFunnel.spec.ts` for the funnel's own rules, `stores/execution.spec.ts`
-  for echoes): drive the two orderings and assert the fresher one wins.
+  for echoes, `stores/requirements.spec.ts` for per-key invalidation): drive the two orderings and
+  assert the fresher one wins.
 
 ## Internationalization (i18n) authoring
 

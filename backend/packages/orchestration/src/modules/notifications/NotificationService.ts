@@ -193,6 +193,37 @@ export class NotificationService {
   }
 
   /**
+   * Every open card on ONE block, newest first, of any type. The narrow read the engine's
+   * "has this block already been surfaced to a human" checks take instead of scanning the
+   * workspace's whole open inbox.
+   */
+  async listOpenByBlock(workspaceId: string, blockId: string): Promise<Notification[]> {
+    return this.notifications.listOpenByBlock(workspaceId, blockId)
+  }
+
+  /**
+   * The open card of `type` on `blockId`, if any (at most one exists: the partial unique index
+   * behind {@link raise} enforces it). The dedup read, exposed so a caller CLEARING such a card
+   * can find it without listing the inbox.
+   */
+  async findOpenByBlock(
+    workspaceId: string,
+    blockId: string,
+    type: NotificationType,
+  ): Promise<Notification | null> {
+    return this.notifications.findOpenByBlock(workspaceId, blockId, type)
+  }
+
+  /**
+   * The open, BLOCK-LESS card of `type` for a workspace, if any. The single-workspace sibling of
+   * {@link listOpenByType}: a caller asking "did we already raise this workspace-wide card"
+   * reads one indexed row rather than the whole open inbox.
+   */
+  async findOpenByType(workspaceId: string, type: NotificationType): Promise<Notification | null> {
+    return this.notifications.findOpenByType(workspaceId, type)
+  }
+
+  /**
    * Batched: the open, block-less card of `type` for each of `workspaceIds` that has one. The
    * platform-health sweep uses this ONCE up front to learn which workspaces already hold a card,
    * so it can skip the `clearByType` point-read for the (steady-state common) healthy workspaces

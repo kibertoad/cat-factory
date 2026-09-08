@@ -84,6 +84,18 @@ export class D1NotificationRepository implements NotificationRepository {
     return results.map(rowToNotification)
   }
 
+  async listOpenByBlock(workspaceId: string, blockId: string): Promise<Notification[]> {
+    const { results } = await this.db
+      .prepare(
+        `SELECT * FROM notifications
+           WHERE workspace_id = ? AND block_id = ? AND status = 'open'
+           ORDER BY created_at DESC`,
+      )
+      .bind(workspaceId, blockId)
+      .all<NotificationRow>()
+    return (results ?? []).map(rowToNotification)
+  }
+
   async findOpenByBlock(
     workspaceId: string,
     blockId: string,

@@ -32,6 +32,11 @@ function fakeRepo() {
         ) ?? null
       )
     },
+    async listOpenByBlock(_ws, blockId) {
+      return [...rows.values()]
+        .filter((n) => n.status === 'open' && n.blockId === blockId)
+        .sort((a, b) => b.createdAt - a.createdAt)
+    },
     async findOpenByType(_ws, type) {
       // Block-LESS dedup: the open card of `type` with no block, newest first.
       return (

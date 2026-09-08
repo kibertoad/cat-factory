@@ -19,6 +19,18 @@ export interface NotificationRepository {
     type: NotificationType,
   ): Promise<Notification | null>
   /**
+   * Every open notification on ONE block, newest first, of ANY type.
+   *
+   * The narrow read behind "does this block already have a card telling the human something is
+   * waiting". The engine used to answer that by pulling the workspace's WHOLE open inbox (each
+   * row's `body` + `payload` JSON) on every run-state transition and filtering in JS, which grows
+   * with the workspace's un-actioned inbox rather than with the block. `type` is deliberately not
+   * a parameter here: the caller asks whether ANY card points at the block, so narrowing to one
+   * type would raise a duplicate beside a card of a different type. Served by the existing
+   * `(workspace_id, block_id, type, status)` index on its leading columns.
+   */
+  listOpenByBlock(workspaceId: string, blockId: string): Promise<Notification[]>
+  /**
    * The open, BLOCK-LESS notification of `type` for a workspace (`block_id IS NULL`), if any.
    * The block-less analogue of {@link findOpenByBlock}: it de-duplicates deployment/workspace-
    * wide cards that aren't about any one block (today `platform_health`) so a periodic sweep

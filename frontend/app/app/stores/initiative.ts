@@ -96,7 +96,10 @@ export const useInitiativesStore = defineStore('initiatives', () => {
   function upsert(initiative: Initiative) {
     const existing = byBlock.value[initiative.blockId]
     if (existing && existing.rev > initiative.rev) return
-    byBlock.value = { ...byBlock.value, [initiative.blockId]: initiative }
+    // Per-key, never a whole-record clone: `byBlock` is a deep reactive ref, so replacing the
+    // record retriggered every consumer keyed on an UNCHANGED block. {@link hydrate} still
+    // replaces it wholesale, because a snapshot is authoritative for EXISTENCE.
+    byBlock.value[initiative.blockId] = initiative
   }
 
   /**

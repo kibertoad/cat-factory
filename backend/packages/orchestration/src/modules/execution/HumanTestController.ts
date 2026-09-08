@@ -687,11 +687,7 @@ export class HumanTestController {
   private async clearReadyNotification(workspaceId: string, blockId: string): Promise<void> {
     const svc = this.deps.notificationService
     if (!svc) return
-    const open = await svc.listOpen(workspaceId)
-    for (const n of open) {
-      if (n.type === 'human_test_ready' && n.blockId === blockId) {
-        await svc.resolve(workspaceId, n.id, 'act')
-      }
-    }
+    const card = await svc.findOpenByBlock(workspaceId, blockId, 'human_test_ready')
+    if (card) await svc.resolve(workspaceId, card.id, 'act')
   }
 }

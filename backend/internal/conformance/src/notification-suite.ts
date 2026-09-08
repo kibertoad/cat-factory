@@ -56,6 +56,44 @@ export function defineNotificationSuite(
       expect(open.map((n) => n.id)).toEqual([`${ws}-b`, `${ws}-a`])
     })
 
+    it('lists every open card on one block, newest first, and nothing from another', async () => {
+      const repo = makeRepo()
+      const { ws } = ids()
+      // Two DIFFERENT types on the target block: the caller asks whether ANY card points at it,
+      // so a by-type read would be the wrong answer here.
+      await repo.upsert(
+        ws,
+        notification({ id: `${ws}-old`, type: 'merge_review', blockId: 'blk-1', createdAt: 10 }),
+      )
+      await repo.upsert(
+        ws,
+        notification({
+          id: `${ws}-new`,
+          type: 'decision_required',
+          blockId: 'blk-1',
+          executionId: 'exe-1',
+          createdAt: 30,
+        }),
+      )
+      // Resolved on the same block, and open on a different one: neither belongs to the answer.
+      await repo.upsert(
+        ws,
+        notification({
+          id: `${ws}-done`,
+          blockId: 'blk-1',
+          status: 'dismissed',
+          createdAt: 20,
+          resolvedAt: 25,
+        }),
+      )
+      await repo.upsert(ws, notification({ id: `${ws}-other`, blockId: 'blk-2', createdAt: 40 }))
+
+      const onBlock = await repo.listOpenByBlock(ws, 'blk-1')
+      expect(onBlock.map((n) => n.id)).toEqual([`${ws}-new`, `${ws}-old`])
+      expect(onBlock[0]?.executionId).toBe('exe-1')
+      expect(await repo.listOpenByBlock(ws, 'blk-absent')).toEqual([])
+    })
+
     it('finds the open block-less card of a type, ignoring block-scoped + resolved ones', async () => {
       const repo = makeRepo()
       const { ws } = ids()

@@ -477,7 +477,9 @@ describe('HumanTestController', () => {
     const teardownEnvironment = vi.fn(async () => {})
     const deps = fakeDeps({
       teardownEnvironment,
-      notificationService: { listOpen: vi.fn(async () => []) } as never,
+      // The "ready for testing" card is cleared by an indexed (block, type) lookup, never by
+      // scanning the workspace inbox.
+      notificationService: { findOpenByBlock: vi.fn(async () => null) } as never,
     })
     const c = new HumanTestController(deps)
     const s = step({

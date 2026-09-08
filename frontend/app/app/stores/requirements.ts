@@ -96,8 +96,16 @@ export const useRequirementsStore = defineStore('requirements', () => {
     return incorporating.value.has(reviewId)
   }
 
+  /**
+   * Write one block's review into the cache, IN PLACE.
+   *
+   * Per-key, never a whole-record clone: `reviews` is a deep reactive ref, so a consumer reading
+   * `reviews[someBlockId]` depends on THAT key. Replacing the record retriggered every one of
+   * them (a card, a badge, an inspector panel for an untouched block) on every event; assigning
+   * the key retriggers only the consumers of the block that actually changed.
+   */
   function store(review: RequirementReview) {
-    reviews.value = { ...reviews.value, [review.blockId]: review }
+    reviews.value[review.blockId] = review
   }
 
   /** Patch the cache from a live `requirements` stream event (newest wins per block). */
@@ -139,7 +147,9 @@ export const useRequirementsStore = defineStore('requirements', () => {
       try {
         const review = await api.getRequirementReview(workspace.requireId(), blockId)
         available.value = true
-        reviews.value = { ...reviews.value, [blockId]: review }
+        // Written by key like `store()`, and directly because a load resolving to "none exists"
+        // caches a null the getter reads as "fetched, absent".
+        reviews.value[blockId] = review
       } catch {
         // 503 (feature off) or any error → hide the UI entry points.
         available.value = false

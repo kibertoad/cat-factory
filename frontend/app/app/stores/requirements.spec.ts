@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { computed } from 'vue'
 import type { RequirementReview } from '~/types/requirements'
 import { useRequirementsStore } from '~/stores/requirements'
 import { useWorkspaceStore } from '~/stores/workspace'
@@ -111,5 +112,36 @@ describe('requirements store live-event upsert guard', () => {
     store.upsert(review({ updatedAt: 2000 }))
     store.upsert(review({ id: 'rr2', updatedAt: 1000 }))
     expect(store.reviewFor('b1')?.id).toBe('rr2')
+  })
+})
+
+describe('requirements store per-key writes', () => {
+  it('an event for one block does not invalidate a consumer reading another', () => {
+    // Every card on the board reads its OWN block's review (the "Recommending…"/gate badge), so
+    // one review event used to wake every card: the store replaced the whole record, which is a
+    // write to the ref itself and therefore a dependency every reader shares. Writing the key
+    // keeps the invalidation on the block that changed.
+    const store = useRequirementsStore()
+    store.upsert(review({ id: 'rr-a', blockId: 'blk-a', updatedAt: 1 }))
+
+    let evaluations = 0
+    const forA = computed(() => {
+      evaluations++
+      return store.reviewFor('blk-a')?.id ?? null
+    })
+    expect(forA.value).toBe('rr-a')
+    expect(evaluations).toBe(1)
+
+    // A brand-new key, then a rewrite of an existing one: neither is about `blk-a`.
+    store.upsert(review({ id: 'rr-b', blockId: 'blk-b', updatedAt: 1 }))
+    expect(forA.value).toBe('rr-a')
+    store.upsert(review({ id: 'rr-b', blockId: 'blk-b', updatedAt: 2 }))
+    expect(forA.value).toBe('rr-a')
+    expect(evaluations).toBe(1)
+
+    // The block's OWN event still reaches it.
+    store.upsert(review({ id: 'rr-a2', blockId: 'blk-a', updatedAt: 2 }))
+    expect(forA.value).toBe('rr-a2')
+    expect(evaluations).toBe(2)
   })
 })

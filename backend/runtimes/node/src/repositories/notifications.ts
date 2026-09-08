@@ -73,6 +73,21 @@ export class DrizzleNotificationRepository implements NotificationRepository {
     return rows.map(rowToNotification)
   }
 
+  async listOpenByBlock(workspaceId: string, blockId: string): Promise<Notification[]> {
+    const rows = await this.db
+      .select()
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.workspace_id, workspaceId),
+          eq(notifications.block_id, blockId),
+          eq(notifications.status, 'open'),
+        ),
+      )
+      .orderBy(desc(notifications.created_at))
+    return rows.map(rowToNotification)
+  }
+
   async findOpenByBlock(
     workspaceId: string,
     blockId: string,
