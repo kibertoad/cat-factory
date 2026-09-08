@@ -112,6 +112,10 @@ export { type Io, createConsoleIo } from './io.js'
 export { type BootstrapInput, buildPlan, type PlannedFile } from './plan.js'
 export { generateSecrets, type GeneratedSecrets, type RandomBytes } from './secrets.js'
 export { slugifyProjectName } from './slug.js'
+// Travels with `buildPlan`: `BootstrapInput.composeProjectName` is what keeps two deployments out
+// of one Compose project, so a programmatic caller needs the same derivation `bootstrap()` uses
+// rather than a name of its own invention.
+export { composeProjectNameFor } from './composeProject.js'
 export {
   CONTAINER_RUNTIMES,
   type ContainerRuntime,

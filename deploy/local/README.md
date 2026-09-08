@@ -58,6 +58,14 @@ the durable execution worker, and serves the shared HTTP API. Agent jobs reach t
 LLM through this service's `/v1` proxy (no provider key needs to live in the
 container), addressed at `host.docker.internal` from inside Docker.
 
+`pnpm db:up`, `pnpm up` and `pnpm down` all act on the Compose project
+`cat-factory-monorepo`, declared as `name:` in `docker-compose.yml`, so this stack's Postgres
+container and its `cat-factory-monorepo_cat-factory-pg` volume are never shared with a
+deployment scaffolded by `cat-factory init`. A container still running under the name Compose
+derives from this directory (`local`) belongs to an older checkout: `docker compose -p local
+down` stops it, and its data stays in the `local_cat-factory-pg` volume until you remove that
+volume (`pnpm db:up` creates a fresh, empty database under the declared project).
+
 `pnpm start` serves the JSON API only. For the board UI run the frontend too (next
 section). You don't need `GITHUB_PAT` to boot: with it unset the service starts and the
 sign-in screen links to GitHub's token page (scopes pre-selected) and takes the token you

@@ -17,6 +17,14 @@
 #   pnpm up                                     # postgres + searxng (docker compose --profile web-search up -d)
 #   pnpm db:up                                  # postgres only      (docker compose up -d postgres)
 #   DATABASE_URL=postgres://cat:cat@localhost:5432/catfactory pnpm start
+#
+# The project name keying this stack's containers and its `<project>_cat-factory-pg` volume is
+# DECLARED, not left to Compose's default (this file's own `local/` directory), which any
+# deployment scaffolded by `cat-factory init` would also have claimed. It deliberately does not
+# end in `-local`, the suffix every generated deployment's project carries, so this monorepo
+# stack can never meet one of those in a single project.
+name: cat-factory-monorepo
+
 services:
   postgres:
     image: postgres:18
