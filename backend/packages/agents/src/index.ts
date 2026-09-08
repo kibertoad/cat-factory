@@ -444,6 +444,16 @@ export {
   environmentProbeSystemPrompt,
   environmentProbeUserPrompt,
 } from './agents/prompts/environment-probe.js'
+// What the platform STATES about a live environment it did not stand up, shared by the tester
+// steps and the environment dry run.
+export {
+  DEFAULT_CREDENTIAL_GAP_GUIDANCE,
+  IMPLEMENTER_CREDENTIAL_GAP_GUIDANCE,
+  SERVICE_DISCOVERY_GUIDANCE,
+  environmentAccessLines,
+  testCredentialLines,
+  type CredentialGapGuidance,
+} from './agents/prompts/environment-under-test.js'
 export {
   BUG_HUNT_AGENT_KIND,
   BUG_HUNT_SYSTEM_PROMPT,

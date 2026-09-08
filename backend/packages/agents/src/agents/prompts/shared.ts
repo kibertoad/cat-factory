@@ -117,6 +117,27 @@ export const NO_ASSUMED_PRODUCT =
   'answer about the wrong software is worse than an explicit "not stated here".'
 
 /**
+ * What a SUCCESS actually has to look like, for any agent whose product is a claim that it
+ * exercised something and it worked.
+ *
+ * Shared by the tester steps and the environment dry run, and not because the wording was
+ * duplicated: the shapes below are the ways a run reports a pass it never observed, and each role
+ * had only some of them. The prober named the three HTTP shapes; the tester, whose whole output is
+ * a greenlight, had the principle ("base every outcome on something you observed") and none of the
+ * shapes, though it is the role where a false pass is most expensive: its greenlight is what lets
+ * a change merge. A tester also runs SUITES, so the exit-code shape belongs here too, and having
+ * it in one fragment is what got it to both.
+ *
+ * Kept separate from the status word each role uses (`succeeded` / `passed`), which each states
+ * for itself, because the report shapes are deliberately not converging.
+ */
+export const FALSE_SUCCESS_SHAPES =
+  'A 200 carrying an error body, a login page returned where JSON was expected, an empty ' +
+  'response you assume is fine, a command that printed failures and still exited 0, or a suite ' +
+  'that reported zero tests run are all FAILURES, not successes. If you did not see the thing ' +
+  'you were checking for actually happen, you did not observe a success.'
+
+/**
  * Appended to EVERY kind's system prompt by `systemPromptFor`, alongside the surface directives.
  *
  * The platform's own mechanics are visible to an agent from the inside — `cat-factory/<block>`

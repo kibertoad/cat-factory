@@ -23,13 +23,7 @@ import {
   type ToolSecretResolver,
   type WebSearchAvailability,
 } from '@cat-factory/kernel'
-import {
-  ConflictError,
-  CredentialRequiredError,
-  VCS_DOC_URLS,
-  SUBSCRIPTION_VENDORS,
-  isIndividualVendor,
-} from '@cat-factory/kernel'
+import { ConflictError, VCS_DOC_URLS, noopLogger } from '@cat-factory/kernel'
 import { resolveAprioriWorkingBranch } from '@cat-factory/contracts'
 import {
   type AgentKindRegistry,
@@ -41,6 +35,11 @@ import {
   webResearchGuidanceFor,
 } from '@cat-factory/agents'
 import { ModelRouter } from './ModelRouter.js'
+import {
+  ContainerJobAuthResolver,
+  type LeasePersonalSubscriptionToken,
+  type LeaseSubscriptionToken,
+} from './containerJobAuth.js'
 import { buildDispatchContextFiles, renderSkillsForHarness } from './contextFiles.js'
 import {
   dispatchToolServerDeps,
@@ -56,6 +55,8 @@ import {
   settledRunResult,
 } from './containerAgentResult.js'
 import { buildKindBody } from './jobBody.js'
+import { resolveTestCredentials, type ResolvedTestCredentials } from './testCredentials.js'
+import { buildDispatchPromptContext } from './dispatchPromptContext.js'
 import { buildDispatchOptions } from './dispatchOptions.js'
 import { containerJobLog, settleFailureFields } from './containerAgentLogging.js'
 import { acceptContainerJob } from './containerAgentDispatch.js'
@@ -104,31 +105,6 @@ export type {
   ResolveRepoTarget,
 } from './repoTargeting.js'
 export { jobTokenRepoIds } from './repoTargeting.js'
-
-/** A subscription token leased from the workspace's pool for a vendor. */
-interface LeasedSubscriptionToken {
-  tokenId: string
-  secret: string
-}
-
-/** Lease the least-loaded subscription token for a vendor, or throw if none. */
-type LeaseSubscriptionToken = (
-  workspaceId: string,
-  vendor: SubscriptionVendor,
-) => Promise<LeasedSubscriptionToken>
-
-/**
- * Lease the run-initiator's OWN activated personal credential for an individual-usage
- * vendor (Claude). Scoped to the run + user (not pooled); throws a
- * `CredentialRequiredError` when the run has no live activation (the user must re-enter
- * their password). Returns just the raw secret — no token id, since there is no pool
- * rotation/usage to attribute for a single-user credential.
- */
-type LeasePersonalSubscriptionToken = (
-  executionId: string,
-  userId: string,
-  vendor: SubscriptionVendor,
-) => Promise<{ secret: string }>
 
 /** Fold a finished subscription job's usage into the leased token + telemetry. */
 type RecordSubscriptionUsage = (
@@ -384,8 +360,17 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
   /** Resolves which model + subscription path a step runs on (routing policy). */
   private readonly modelRouter: ModelRouter
 
+  /**
+   * Resolves the per-job auth channel (proxy session token / leased subscription credential /
+   * ambient CLI). Shared with the single-job dispatchers, so no flow can know only half of it.
+   */
+  private readonly jobAuth: ContainerJobAuthResolver
+
   /** The app-owned agent-kind registry the job-body builders read (custom-kind prompts/tuning). */
   private readonly agentKindRegistry: AgentKindRegistry
+
+  /** Normalised once, so the best-effort degradations below stay unit-testable. */
+  private readonly log: Logger
 
   constructor(private readonly deps: ContainerAgentExecutorDependencies) {
     this.jobs = new RunnerJobClient(deps.resolveTransport)
@@ -398,6 +383,8 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       hasSubscriptionToken: deps.hasSubscriptionToken,
       hasPersonalSubscription: deps.hasPersonalSubscription,
     })
+    this.jobAuth = new ContainerJobAuthResolver(deps)
+    this.log = deps.logger ?? noopLogger
   }
 
   /** Repo-operating steps always run as polled async jobs (the coding can be long). */
@@ -413,8 +400,17 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
    */
   async startJob(context: AgentRunContext): Promise<AgentJobHandle> {
     const { workspaceId, executionId } = this.requireIds(context)
-    const { body, model, provider, kind, subscriptionTokenId, search, repoSummary, toolServers } =
-      await this.buildJobBody(context)
+    const {
+      body,
+      model,
+      provider,
+      kind,
+      subscriptionTokenId,
+      subscriptionVendor,
+      search,
+      repoSummary,
+      toolServers,
+    } = await this.buildJobBody(context)
     // The job's id is per-STEP (run id + agent kind), so sibling steps that share this
     // run's container never collide in the harness's per-kind job registries; the run
     // itself is addressed by the execution id, so its container is reclaimed as a unit.
@@ -460,6 +456,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       provider,
       workspaceId,
       agentKind: context.agentKind,
+      ...(subscriptionVendor ? { subscriptionVendor } : {}),
       search,
       repo: repoSummary,
       // The run's own record of what the agent could call. Unconditional on purpose: see
@@ -676,6 +673,12 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     provider: string
     kind: RunnerDispatchKind
     subscriptionTokenId?: string
+    /**
+     * The subscription VENDOR this dispatch resolved, beside the pooled token id. Carried onto the
+     * handle because it is what a quota cycle is keyed on, and it differs from `provider` for four
+     * of the five vendors (see `AgentJobHandle.subscriptionVendor`).
+     */
+    subscriptionVendor?: SubscriptionVendor
     search: WebSearchAvailability
     /** The repo the job operates on, for the run diagnostics (owner/name/baseBranch + VCS provider). */
     repoSummary: { owner: string; name: string; baseBranch?: string; provider?: string }
@@ -720,7 +723,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // `auth` (the proxy session token for Pi, or a leased subscription token for Claude Code /
     // Codex) is spread into every job body so the per-kind bodies can't drift on which auth
     // they forward.
-    const [workBranchReady, aux, authResult, packageRegistries, resolvedTestSecrets, search] =
+    const [workBranchReady, aux, authResult, packageRegistries, testCredentials, search] =
       await Promise.all([
         this.resolveWorkBranchReady(repo, workBranch, aprioriWork, context),
         // The auxiliary checkouts + their prompt sections: the multi-repo fan-out (coder /
@@ -745,10 +748,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         this.deps.resolvePackageRegistries
           ? this.deps.resolvePackageRegistries(workspaceId)
           : Promise.resolve<JobPackageRegistrySpec[]>([]),
-        // Sensitive test credentials for the tester kinds ONLY (mapped to env pairs below).
-        isTesterKind(context.agentKind) && this.deps.resolveTestSecrets
-          ? this.deps.resolveTestSecrets(workspaceId, blockId)
-          : Promise.resolve<TestSecretEntry[]>([]),
+        this.resolveTestCredentialsFor(context.agentKind, workspaceId, blockId),
         // The proxy-backed web-tools switch: web_search is offered only when the run's account
         // has a usable upstream, so the agent is never handed a tool that always fails.
         this.deps.resolveWebSearchAvailability
@@ -802,7 +802,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     const { testSecretEnv, capabilitySecrets } = await this.resolveJobSecretEnv(context, {
       workspaceId,
       blockId,
-      resolvedTestSecrets,
+      resolvedTestSecrets: testCredentials?.env ?? [],
     })
     // Per-kind execution tuning (loosen-only progress-guard knobs) the harness applies
     // over its env/built-in defaults, so a kind whose normal pattern differs (e.g. a
@@ -844,17 +844,15 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // one of them was materialised, because `buildContextFiles` refuses a corpus that would not fit
     // rather than writing a prefix of it — so the index can never name a `.cat-context/` file the
     // agent won't find on disk.
-    // Folds in the tool servers resolved above: they are a DISPATCH-level fact (the harness
-    // decides what MCP is possible), so the engine cannot put them on the context — but the prompt
-    // and the agent-context snapshot must both see exactly what was wired.
-    const promptContext: AgentRunContext = {
-      ...context,
-      ...(tools.toolServers.length ? { toolServers: tools.toolServers } : {}),
-      ...(tools.unavailableToolServers.length
-        ? { unavailableToolServers: tools.unavailableToolServers }
-        : {}),
-      ...(designImageDelivery ? { designImageDelivery } : {}),
-    }
+    // The dispatch-resolved facts layered over the engine's context: what MCP the harness could
+    // be given, whether the design pictures were attached, and the credential state of the read
+    // that produced the values this job carries. See the collaborator for why each is a DISPATCH
+    // fact rather than something the engine could have put on the context.
+    const promptContext = buildDispatchPromptContext(context, {
+      tools,
+      designImageDelivery,
+      testCredentials,
+    })
     // The proxy-backed web-tools nudge + switch, shared by the kinds that allow web access
     // (coder/mocker/ci-fixer/fixer/tester/read-only). `search` was resolved in the wave above;
     // the per-kind hint (coder/mocker/analysis/… and any custom container kind) is applied here.
@@ -902,6 +900,9 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     )
     return {
       subscriptionTokenId,
+      // The VENDOR, beside the provider: the two differ for four of the five, and it is the vendor
+      // a quota cycle is keyed on (see `recordQuotaUsageOnce`).
+      subscriptionVendor,
       body,
       model: `${ref.provider}:${ref.model}`,
       provider: ref.provider,
@@ -915,6 +916,31 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       },
       toolServers: tools,
     }
+  }
+
+  /**
+   * The frame's sensitive test credentials, for the kinds that are handed them: one read, two
+   * projections (the values the container carries, the state the prompt states).
+   *
+   * The SAME resolution the environment dry run uses, which is what makes a dry run's verdict
+   * about authenticating here predict this step's. Best-effort inside, so a sealed store that will
+   * not open costs the credentials and not the step; resolved unguarded in the dispatch wave, a
+   * read failure took the whole step down with an error naming nothing an operator could act on.
+   *
+   * `undefined` for every other kind, which is what keeps their prompts byte-identical.
+   */
+  private resolveTestCredentialsFor(
+    agentKind: string,
+    workspaceId: string,
+    blockId: string,
+  ): Promise<ResolvedTestCredentials | undefined> {
+    if (!isTesterKind(agentKind)) return Promise.resolve(undefined)
+    return resolveTestCredentials({
+      ...(this.deps.resolveTestSecrets ? { resolve: this.deps.resolveTestSecrets } : {}),
+      workspaceId,
+      blockId,
+      logger: this.log,
+    })
   }
 
   /**
@@ -956,11 +982,12 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
   }
 
   /**
-   * Resolve the per-job auth the harness carries: the proxy session token for Pi, or a
-   * leased subscription token for Claude Code / Codex. Spread into every job body
-   * (`common`) so the per-kind bodies can't drift on which auth they forward.
+   * Resolve the per-job auth the harness carries, through the SHARED resolver: the proxy session
+   * token for Pi, or a leased subscription token for Claude Code / Codex. Spread into every job
+   * body (`common`) so the per-kind bodies can't drift on which auth they forward, and shared
+   * with the single-job dispatchers so no flow serves only the Pi branch.
    */
-  private async resolveAuth(
+  private resolveAuth(
     context: AgentRunContext,
     args: {
       harness: HarnessKind
@@ -970,107 +997,10 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       executionId: string
     },
   ): Promise<{ auth: Record<string, unknown>; subscriptionTokenId?: string }> {
-    const { harness, ref, subscriptionVendor, workspaceId, executionId } = args
-    if (harness === 'pi') {
-      const accountId = this.deps.resolveAccountId
-        ? await this.deps.resolveAccountId(workspaceId)
-        : undefined
-      const sessionToken = await this.deps.sessionService.mint({
-        workspaceId,
-        accountId: accountId ?? undefined,
-        userId: context.initiatedByUserId,
-        executionId,
-        agentKind: context.agentKind,
-        provider: ref.provider,
-        model: ref.model,
-      })
-      // `proxyPhasePath` states what THIS backend serves: the phase-tagged completions route
-      // the harness tags Pi's base URL with, so each call is attributed to the run phase that
-      // spent it (`docs/initiatives/token-burn-instrumentation.md`). Unconditional — the route
-      // is part of `llmProxyController`, so any backend running this code has it. It is the
-      // harness that may be older or newer, and telling it what we serve is what keeps an
-      // image pinned by a runner pool (or `LOCAL_HARNESS_IMAGE`) from posting every model call
-      // to a 404. Same shape as `webSearch` below: the backend declares, the harness points.
-      return {
-        auth: {
-          harness,
-          proxyBaseUrl: this.deps.proxyBaseUrl,
-          proxyPhasePath: true,
-          sessionToken,
-        },
-      }
-    }
-    // Native local execution: the harness runs the developer's own CLI with its ambient
-    // login, so we lease NOTHING and gate NOTHING — just flag ambient auth for the harness.
-    // Passed the vendor so it can refuse a non-native vendor reusing the `claude-code`
-    // harness (GLM/Kimi/DeepSeek), whose subscriptionBaseUrl ambient auth would drop.
-    if (this.deps.nativeAmbientAuth?.(harness, subscriptionVendor)) {
-      return { auth: { harness, ambientAuth: true } }
-    }
-    if (!subscriptionVendor) {
-      throw new Error(
-        `The ${harness} harness is not configured on this deployment; connect a ` +
-          `subscription token or pick a different model.`,
-      )
-    }
-    // Individual-usage vendors (Claude) are NOT pooled: lease the run-initiator's OWN
-    // activated personal credential. Pooled vendors (GLM/Kimi/DeepSeek/Codex) lease
-    // from the workspace pool. Either path hands the RAW credential to the resolved
-    // runner transport (see the trust note below).
-    let secret: string
-    let subscriptionTokenId: string | undefined
-    if (isIndividualVendor(subscriptionVendor)) {
-      if (!this.deps.leasePersonalSubscriptionToken) {
-        throw new Error(
-          `Personal ${subscriptionVendor} subscriptions are not configured on this ` +
-            `deployment (no ENCRYPTION_KEY); pick a different model.`,
-        )
-      }
-      if (!context.initiatedByUserId) {
-        // No identified initiator (auth-disabled/local dev): an individual-usage
-        // credential is owned by a specific user and can't be resolved without one.
-        throw new CredentialRequiredError(
-          `Running a ${subscriptionVendor} model requires a signed-in user with a personal subscription.`,
-          { vendor: subscriptionVendor, reason: 'no_subscription' },
-        )
-      }
-      // Throws CredentialRequiredError(password_required) when the run has no live
-      // activation — the dispatch path surfaces it as a clear, retriable failure.
-      const leased = await this.deps.leasePersonalSubscriptionToken(
-        executionId,
-        context.initiatedByUserId,
-        subscriptionVendor,
-      )
-      secret = leased.secret
-    } else {
-      if (!this.deps.leaseSubscriptionToken) {
-        throw new Error(
-          `The ${harness} harness is not configured on this deployment; connect a ` +
-            `subscription token or pick a different model.`,
-        )
-      }
-      const leased = await this.deps.leaseSubscriptionToken(workspaceId, subscriptionVendor)
-      subscriptionTokenId = leased.tokenId
-      secret = leased.secret
-    }
-    // SECURITY/TRUST: unlike the Pi harness (short-lived, model-locked proxy session
-    // token) this hands the RAW, long-lived subscription credential — a Claude OAuth
-    // token or a full ChatGPT auth.json — to the resolved runner transport. For the
-    // Cloudflare backend that is an ephemeral, managed per-run container. For a
-    // self-hosted runner pool it is the WORKSPACE'S OWN BYO infra (it connected the
-    // pool), so the credential stays within the workspace's trust domain — but a
-    // workspace should only point its subscription-harness steps at a runner pool it
-    // operates, since the credential leaves the backend to reach it.
-    // Non-Anthropic Claude-Code vendors (GLM/Kimi/DeepSeek) need their Anthropic-
-    // compatible base URL; Anthropic itself uses the OAuth token against api.anthropic.com.
-    const baseUrl = SUBSCRIPTION_VENDORS[subscriptionVendor].baseUrl
-    return {
-      auth: {
-        harness,
-        subscriptionToken: secret,
-        ...(baseUrl ? { subscriptionBaseUrl: baseUrl } : {}),
-      },
-      ...(subscriptionTokenId ? { subscriptionTokenId } : {}),
-    }
+    return this.jobAuth.resolve({
+      ...args,
+      agentKind: context.agentKind,
+      ...(context.initiatedByUserId ? { initiatedByUserId: context.initiatedByUserId } : {}),
+    })
   }
 }

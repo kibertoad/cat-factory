@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import type { EnvironmentTestMode } from '@cat-factory/contracts'
 import type { EnvironmentTestRun } from '~/types/domain'
 import { useWorkspaceStore } from '~/stores/workspace'
+import { usePersonalSubscriptionsStore } from '~/stores/personalSubscriptions'
 
 /**
  * Ephemeral-environment self-test runs, in both modes: the provisioning self-test and the AGENT
@@ -129,12 +130,31 @@ export const useEnvironmentTestStore = defineStore('environmentTest', () => {
     return runs.value.find((r) => r.blockId === blockId && r.mode === mode)
   }
 
-  /** Start a self-test against a service frame; the returned run is tracked immediately. */
-  async function start(blockId: string, mode: EnvironmentTestMode): Promise<EnvironmentTestRun> {
+  /**
+   * Start a self-test against a service frame; the returned run is tracked immediately.
+   *
+   * Gated through `withCredential`, like every other surface that starts agent work: an AGENT DRY
+   * RUN resolves its model from the workspace's model preset, which can name an individual-usage
+   * subscription (Claude), and such a credential is only leasable with the owner's unlock
+   * password. The cached password rides the first attempt and a `428` opens the modal; the
+   * provisioning self-test spends no model call, so the backend never consults it there.
+   *
+   * `null` when the person cancels the prompt: the run never started, so the caller reverts its
+   * spinner rather than waiting for a run that is not coming.
+   */
+  async function start(
+    blockId: string,
+    mode: EnvironmentTestMode,
+  ): Promise<EnvironmentTestRun | null> {
     const ws = useWorkspaceStore()
-    const run = await api.startEnvironmentTest(ws.requireId(), blockId, mode)
-    upsert(run)
-    return run
+    const personal = usePersonalSubscriptionsStore()
+    let started: EnvironmentTestRun | null = null
+    const ok = await personal.withCredential(async (password) => {
+      const run = await api.startEnvironmentTest(ws.requireId(), blockId, mode, password)
+      upsert(run)
+      started = run
+    })
+    return ok ? started : null
   }
 
   /** Stop a running self-test (best-effort cleanup, then failed). */

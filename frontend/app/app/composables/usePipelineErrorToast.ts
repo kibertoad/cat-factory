@@ -277,6 +277,15 @@ const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason>, Conf
     titleKey: 'errors.conflict.title.env_test_probe_unavailable',
     descriptionKey: 'errors.conflict.description.env_test_probe_unavailable',
   },
+  // The frame's RESOLVED model cannot be dispatched: a provider the LLM proxy cannot serve, or a
+  // subscription-only model with no connected credential. Distinct from the reason above, whose
+  // gap is a container prerequisite: this deployment is wired and the workspace's own model preset
+  // names something unrunnable, so the remedy is in the model settings and the jump is worth
+  // offering. The specific cause rides `details.modelIssue`, which the funnel surfaces as detail.
+  env_test_probe_model_unavailable: {
+    titleKey: 'errors.conflict.title.env_test_probe_model_unavailable',
+    descriptionKey: 'errors.conflict.description.env_test_probe_model_unavailable',
+  },
   // A second self-test on a frame that already has one running. No ACTION: the remedy is to wait
   // for the run showing in the same panel, or to stop it with the button beside it.
   env_test_already_running: {

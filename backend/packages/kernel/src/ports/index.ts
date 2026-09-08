@@ -647,6 +647,8 @@ export { NoopEnvironmentTestRunner } from './environment-test.js'
 // The agent DRY RUN's dispatch/poll/stop seam: the `probing` stage's side-effecting half.
 export type {
   EnvironmentProbeAgent,
+  EnvironmentProbeDispatch,
+  EnvironmentProbeDispatchCheck,
   EnvironmentProbeHandle,
   EnvironmentProbeRepo,
   EnvironmentProbeRequest,

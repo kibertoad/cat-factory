@@ -121,6 +121,14 @@ export const environmentTestRuns = pgTable(
     // When the prober's container was accepted, written AFTER it was: what tells a durable replay
     // a claim with no job behind it from a job that is really running.
     probe_dispatched_at: bigint('probe_dispatched_at', { mode: 'number' }),
+    // What the prober's DISPATCH resolved, written with `probe_dispatched_at` and re-supplied to
+    // every later poll: the model the container ran (`provider:model`) and the pooled subscription
+    // token it leased. Persisted because the poll rebuilds its handle from this row alone, so
+    // re-resolving the model there would report the frame's CURRENT pin rather than the one that
+    // ran, and the leased token id has no second source at all.
+    probe_model: text('probe_model'),
+    probe_subscription_token_id: text('probe_subscription_token_id'),
+    probe_subscription_vendor: text('probe_subscription_vendor'),
     // The prober's live todo counts while it works (JSON), so the longest stage of the run pushes
     // something to the SPA instead of sitting frozen.
     probe_progress: text('probe_progress'),

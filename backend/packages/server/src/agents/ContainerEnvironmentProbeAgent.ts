@@ -1,32 +1,33 @@
 import type {
+  AgentJobHandle,
   EnvironmentProbeAgent,
+  EnvironmentProbeDispatchCheck,
   EnvironmentProbeHandle,
   EnvironmentProbeRequest,
   EnvironmentProbeSurface,
   EnvironmentProbeUpdate,
   GitHubInstallationRepository,
-  Logger,
-  ModelRef,
   RepoProjectionRepository,
   RunnerImageVariant,
   RunnerJobRef,
+  RunnerJobView,
   TestSecretEntry,
-  TestSecretRef,
 } from '@cat-factory/kernel'
-import { failureKindFromHarnessCause, runBestEffort } from '@cat-factory/kernel'
+import { failureKindFromHarnessCause, getErrorMessage } from '@cat-factory/kernel'
 import {
   environmentProbeSystemPrompt,
   environmentProbeUserPrompt,
-  type EnvironmentProbeSecretsBrief,
   ENVIRONMENT_PROBE_SHAPE_HINT,
-  isProxyableProvider,
 } from '@cat-factory/agents'
+import { environmentProbeAgentKind, isEnvironmentProbeReportPayload } from '@cat-factory/contracts'
+import type { ContainerJobAuthResolver } from './containerJobAuth.js'
 import {
-  ENVIRONMENT_PROBE_API_AGENT_KIND,
-  ENVIRONMENT_PROBE_UI_AGENT_KIND,
-  isEnvironmentProbeReportPayload,
-} from '@cat-factory/contracts'
-import type { ContainerSessionService } from '../containers/ContainerSessionService.js'
+  ContainerJobAccounting,
+  type ContainerJobAccountingDeps,
+} from './containerJobAccounting.js'
+import { providerOf } from './containerJobAddressing.js'
+import { resolveTestCredentials } from './testCredentials.js'
+import type { ResolveSingleKindModel, SingleKindModel } from './singleKindModel.js'
 import type { MintInstallationToken, ResolveRepoOrigin } from './repoTargeting.js'
 import { githubRepoOrigin } from './containerAgentBody.js'
 import { RunnerJobClient, type ResolveRunnerTransport } from './RunnerJobClient.js'
@@ -53,15 +54,32 @@ import { logger } from '../observability/logger.js'
 //    and release. A per-run container backend puts a differently-imaged job in its own container,
 //    so a poll that forgot the variant polls a container that was never started, and a release
 //    that forgot it leaves a browser container running for its full lifetime.
-//  - The MODEL is per surface too, resolved by the facade from each tester kind's own routing. One
-//    shared ref sends whatever `tester-api` resolved to at a Playwright job that has to read
-//    screenshots, and no setting anywhere could change it.
+//  - The MODEL is resolved PER DISPATCH, by the same precedence a pipeline step's is (the frame's
+//    pin, else the workspace's model preset for this prober's kind, else the deployment's env
+//    routing), and with it the HARNESS and the credential that opens it. Read at wiring from the
+//    env routing instead, it is whatever that deployment defaults to: a workspace running
+//    everything on its Claude preset had its dry run dispatched at Qwen, which the LLM proxy then
+//    refused for having no key, and the prober's subscription was never asked for at all.
 //  - The TEST SECRETS are resolved ONCE here: the values go on the body's dedicated `testSecrets`
 //    field (the harness turns them into the agent process's environment) and the key +
 //    description pairs of that SAME list are what the prompt advertises. One resolution, so the
 //    prompt cannot name a variable the container does not carry, and the three states that
 //    resolution can END in are stated to the prober rather than collapsed into an empty list.
+//  - What the dispatch RESOLVED rides back on the handle and is persisted by the caller, and what
+//    the job SPENT is filed through the same `ContainerJobAccounting` a pipeline step's is. A
+//    subscription-routed dry run talks straight to the vendor, so the LLM proxy meters none of it:
+//    with no accounting here its whole burn was absent from `llm_call_metrics`, from the leased
+//    token's usage-aware rotation, and from the modeled quota cycle. Free and invisible, on the one
+//    flow whose own admission gate is a budget.
 // ---------------------------------------------------------------------------
+
+/**
+ * The `provider:model` label a dispatch is recorded under, spelled the same way the step path
+ * spells it (`ContainerAgentExecutor`'s `buildJobBody`), so one reader can parse either.
+ */
+function modelLabel(ref: { provider: string; model: string }): string {
+  return `${ref.provider}:${ref.model}`
+}
 
 /** Which executor image each surface needs. */
 const IMAGE_BY_SURFACE: Record<EnvironmentProbeSurface, RunnerImageVariant | undefined> = {
@@ -72,12 +90,6 @@ const IMAGE_BY_SURFACE: Record<EnvironmentProbeSurface, RunnerImageVariant | und
   // reasoning, and reports it as `tooling_missing`: a spent dispatch that says nothing about the
   // environment.
   ui: 'ui',
-}
-
-/** The telemetry agent kind each surface's spend is filed under. */
-const KIND_BY_SURFACE: Record<EnvironmentProbeSurface, string> = {
-  api: ENVIRONMENT_PROBE_API_AGENT_KIND,
-  ui: ENVIRONMENT_PROBE_UI_AGENT_KIND,
 }
 
 export interface ContainerEnvironmentProbeAgentDependencies {
@@ -93,28 +105,49 @@ export interface ContainerEnvironmentProbeAgentDependencies {
   repoRepository: Pick<RepoProjectionRepository, 'list'>
   /** Mints the short-lived clone token, scoped to the one repo the prober reads. */
   mintInstallationToken: MintInstallationToken
-  /** Mints the signed, model-locked LLM-proxy session token the container uses. */
-  sessionService: ContainerSessionService
   /**
-   * The model each prober runs with, PER SURFACE (both must be proxyable, like every other
-   * Pi-harness flow).
+   * Which model this dispatch runs, resolved PER DISPATCH by the shared single-job resolution:
+   * the frame's own pin, else the workspace's model preset for the prober's kind, else the
+   * deployment's env routing: the precedence a pipeline step already gets.
    *
-   * Two entries rather than one, because the two probers do different work and a deployment
-   * routes them separately: the browser prober reads screenshots and drives a page, the HTTP one
-   * reads a schema and calls it. One shared ref sends whatever `tester-api` resolves to at a
-   * Playwright job, and no setting anywhere could change it. The facades resolve each from its own
-   * agent-kind routing, which is what {@link ENVIRONMENT_PROBE_UI_AGENT_KIND} and its sibling
-   * exist for.
+   * Per dispatch rather than per WIRING, because the answer is a per-workspace fact and the
+   * facade has none in hand when it builds this. It is also per SURFACE by construction, since
+   * the two probers ask under their own agent kinds ({@link environmentProbeAgentKind}): a
+   * deployment that pointed its browser prober at a vision-capable model and its HTTP one at a
+   * cheap text model still gets the split.
    */
-  models: Record<EnvironmentProbeSurface, ModelRef>
-  /** Public base URL of the LLM proxy, including `/v1`. */
-  proxyBaseUrl: string
+  resolveModel: ResolveSingleKindModel
+  /**
+   * The per-job auth channel, resolved from the model above: a short-lived, model-locked proxy
+   * session token for a Pi model, a leased subscription credential for a Claude Code / Codex one,
+   * or the ambient-CLI flag in native local mode.
+   *
+   * Shared with the step dispatcher rather than reimplemented, which is what makes a
+   * subscription-routed prober possible at all: this flow used to serve only the proxy branch, so
+   * a subscription model was refused at wiring and the whole feature was disabled for the
+   * deployment that had one.
+   */
+  auth: ContainerJobAuthResolver
+  /**
+   * Where a settled job's tokens are recorded: the per-call telemetry rows, the leased pool token's
+   * usage-aware rotation counters, and the modeled quota cycle. The SAME collaborator the step
+   * executor files through, so a dry run's spend is readable exactly like a step's.
+   *
+   * Only a SUBSCRIPTION harness has anything to report here: a Pi job reaches its model through the
+   * LLM proxy, which is the single metering point for it and files the rows itself. That is
+   * precisely why this cannot be omitted now the prober can resolve a subscription model: the
+   * proxy sees nothing of that job. Absent ⇒ no channel is wired (a facade with no telemetry store
+   * and no pool), which every method here treats as the no-op it is.
+   */
+  accounting?: ContainerJobAccountingDeps
   /**
    * Resolves the service frame's sealed test credentials. Absent ⇒ the deployment has no sealed
    * store, which the prompt STATES as a DEPLOYMENT fact rather than omitting: a prober that cannot
    * tell an unconfigured store from one it was not shown files the platform's own gap as its own
    * ignorance, and `missingContext` is the field that gap belongs in. A store that is wired and
-   * will not OPEN is a third state, stated as such (see {@link EnvironmentProbeSecretsBrief}).
+   * will not OPEN is a third state, stated as such: the resolution and the three states are the
+   * SHARED `resolveTestCredentials` / `TestCredentialBrief` the tester step's dispatch uses, which
+   * is what makes a dry run's answer about authenticating here predict the tester's.
    */
   resolveTestSecrets?: (workspaceId: string, blockId: string) => Promise<TestSecretEntry[]>
   /**
@@ -129,9 +162,11 @@ export interface ContainerEnvironmentProbeAgentDependencies {
 
 export class ContainerEnvironmentProbeAgent implements EnvironmentProbeAgent {
   private readonly jobs: RunnerJobClient
+  private readonly accounting: ContainerJobAccounting
 
   constructor(private readonly deps: ContainerEnvironmentProbeAgentDependencies) {
     this.jobs = new RunnerJobClient(deps.resolveTransport)
+    this.accounting = new ContainerJobAccounting(deps.accounting ?? {})
   }
 
   /**
@@ -152,6 +187,42 @@ export class ContainerEnvironmentProbeAgent implements EnvironmentProbeAgent {
     return transport.supportsImage?.(IMAGE_BY_SURFACE[surface]) ?? true
   }
 
+  /**
+   * Whether the model this frame's dry run resolves to can actually be dispatched, run at ADMISSION
+   * over the same two steps `start` takes: resolve the model (which refuses a provider the LLM proxy
+   * cannot serve), then ask the auth resolver whether the harness that model names has a credential
+   * to open it.
+   *
+   * Asked here rather than left to the dispatch because both answers are already knowable, and
+   * neither is knowable cheaply later: reached from inside `stage.dispatch`, each one fails the run
+   * at `probing` after a throwaway branch, a full provision and a teardown, to report something the
+   * workspace's own preset said before anything was created.
+   *
+   * A resolution that THROWS is the refusal, carried verbatim: `resolveDispatchRef`'s message
+   * already names the fix (pick a Workers AI model, configure a provider key, add a local runner),
+   * and re-wording it here would hand the operator two spellings of one problem.
+   */
+  async checkDispatchable(subject: {
+    workspaceId: string
+    blockId: string
+    surface: EnvironmentProbeSurface
+    initiatedBy: string | null
+  }): Promise<EnvironmentProbeDispatchCheck> {
+    let resolved: SingleKindModel
+    try {
+      resolved = await this.resolveModel(subject, subject.surface)
+    } catch (error) {
+      return { ok: false, detail: getErrorMessage(error) }
+    }
+    const gap = await this.deps.auth.describeAuthGap({
+      harness: resolved.harness,
+      subscriptionVendor: resolved.subscriptionVendor,
+      workspaceId: subject.workspaceId,
+      ...(subject.initiatedBy ? { initiatedByUserId: subject.initiatedBy } : {}),
+    })
+    return gap ? { ok: false, detail: gap } : { ok: true, model: modelLabel(resolved.ref) }
+  }
+
   async start(request: EnvironmentProbeRequest): Promise<EnvironmentProbeHandle> {
     const { workspaceId, jobId, surface, repo, environment } = request
     const log = logger.child({
@@ -168,35 +239,44 @@ export class ContainerEnvironmentProbeAgent implements EnvironmentProbeAgent {
           'agent dry run has no repository to read.',
       )
     }
-    const model = this.deps.models[surface]
-    if (!isProxyableProvider(model.provider)) {
-      throw new Error(
-        `An agent dry run needs a model the LLM proxy can serve (Workers AI, or a direct ` +
-          `OpenAI-compatible provider); the '${surface}' prober is routed to ` +
-          `'${model.provider}', which is not supported.`,
-      )
-    }
     if (!environment.url) {
       throw new Error('The environment exposed no URL, so there is nothing for an agent to drive.')
     }
 
+    const agentKind = environmentProbeAgentKind(surface)
+    // The model this dispatch runs, then the credential that opens it. Both per dispatch, and in
+    // this order: the harness the model names decides which auth channel there is to resolve.
+    const { ref, harness, subscriptionVendor } = await this.resolveModel(request, surface)
+    const { auth, subscriptionTokenId } = await this.deps.auth.resolve({
+      harness,
+      ref,
+      subscriptionVendor,
+      workspaceId,
+      // The self-test run IS this flow's run, so its id is what the container's calls are metered
+      // under, and (for an individual-usage vendor) the id the initiator's credential activation
+      // was minted against by the start gate.
+      executionId: jobId,
+      agentKind,
+      ...(request.initiatedBy ? { initiatedByUserId: request.initiatedBy } : {}),
+    })
+
     // ONE resolution, two consumers: the values become the container's environment variables and
     // the keys + descriptions of the same list are what the prompt advertises. See the class note.
-    const secrets = await this.resolveSecrets(workspaceId, request.blockId, log)
+    // The SAME resolution the tester step's dispatch uses: one read, two projections (the values
+    // for the container, the state for the prompt). Shared because a dry run's claim is that it
+    // predicts what a tester will be handed, which it cannot do from a different read.
+    const secrets = await resolveTestCredentials({
+      ...(this.deps.resolveTestSecrets ? { resolve: this.deps.resolveTestSecrets } : {}),
+      workspaceId,
+      blockId: request.blockId,
+      logger: log,
+    })
     const repoIds = await this.resolveRepoScope(workspaceId, repo.owner, repo.name)
     const ghToken = await this.deps.mintInstallationToken(installation.installationId, {
       executionId: jobId,
       workspaceId,
       repoIds,
       ...(request.initiatedBy ? { initiatedBy: request.initiatedBy } : {}),
-    })
-    const agentKind = KIND_BY_SURFACE[surface]
-    const sessionToken = await this.deps.sessionService.mint({
-      workspaceId,
-      executionId: jobId,
-      agentKind,
-      provider: model.provider,
-      model: model.model,
     })
     const origin = (this.deps.resolveRepoOrigin ?? githubRepoOrigin)({
       installationId: installation.installationId,
@@ -228,10 +308,10 @@ export class ContainerEnvironmentProbeAgent implements EnvironmentProbeAgent {
           ...(repo.serviceDirectory ? { serviceDirectory: repo.serviceDirectory } : {}),
         },
       }),
-      model: model.model,
-      proxyBaseUrl: this.deps.proxyBaseUrl,
-      proxyPhasePath: true,
-      sessionToken,
+      model: ref.model,
+      // The resolved auth channel, spread exactly as a pipeline step's body spreads it, so the
+      // harness cannot tell a dry run's dispatch from a step's by how it was authenticated.
+      ...auth,
       ghToken,
       repo: {
         owner: repo.owner,
@@ -278,14 +358,33 @@ export class ContainerEnvironmentProbeAgent implements EnvironmentProbeAgent {
       ],
     })
     log.info('environment dry run: container accepted job')
-    return { workspaceId, jobId, surface }
+    return {
+      workspaceId,
+      jobId,
+      surface,
+      blockId: request.blockId,
+      initiatedBy: request.initiatedBy,
+      // What only THIS moment knows, handed back for the caller to persist: see
+      // `EnvironmentProbeDispatch`. The leased pooled token id in particular has no second source,
+      // and it is the row the settled job's tokens are attributed back to.
+      dispatch: {
+        model: modelLabel(ref),
+        ...(subscriptionTokenId ? { subscriptionTokenId } : {}),
+        ...(subscriptionVendor ? { subscriptionVendor } : {}),
+      },
+    }
   }
 
   async poll(handle: EnvironmentProbeHandle): Promise<EnvironmentProbeUpdate> {
     const view = await this.jobs.poll(handle.workspaceId, this.ref(handle.jobId, handle.surface))
+    // What the job has SPENT, filed on every poll and on every terminal state alike, exactly as the
+    // step path files it. See `settleAccounting` for why the failed branches below are not
+    // shortcuts past it.
+    await this.accounting.recordCalls(this.jobHandle(handle), view.callMetrics)
     if (view.state === 'running') {
       return view.progress ? { state: 'running', subtasks: view.progress } : { state: 'running' }
     }
+    await this.settleAccounting(handle, view)
     if (view.state === 'failed') {
       return {
         state: 'failed',
@@ -324,16 +423,93 @@ export class ContainerEnvironmentProbeAgent implements EnvironmentProbeAgent {
           'established about the environment.',
       }
     }
-    const model = this.deps.models[handle.surface]
+    // The model the container RAN, as the dispatch recorded it and the caller handed it back: never
+    // re-resolved here. A fresh poll process asking the frame and the preset again would answer
+    // about them as they are NOW, so a pin cleared while the container worked stamps the report
+    // with a model nobody ran, which is the one label an operator weighs the verdict by. Absent is
+    // a state the report already documents ("absent when the dispatch did not say"), so a handle
+    // that carries none leaves the field off rather than guessing at one.
     return {
       state: 'done',
       report: result.custom,
-      model: `${model.provider}:${model.model}`,
+      ...(handle.dispatch?.model ? { model: handle.dispatch.model } : {}),
+    }
+  }
+
+  /**
+   * Everything a SETTLED job owes the ledger, run once the poll knows the job is terminal and
+   * BEFORE any of the failure branches return.
+   *
+   * Before them deliberately: a dry run that spent tokens and then failed (an evicted container, a
+   * reply with no JSON) is exactly the run an operator most needs the spend for, and it is the one
+   * whose numbers a `return` above this line would drop. The three writes are the step path's own,
+   * each idempotent per job id, so the durable driver's replay of a terminal poll cannot
+   * double-count.
+   *
+   * A Pi job reports none of this: the LLM proxy is its single metering point and files its rows
+   * itself, so every call here is a no-op for it and the whole method exists for the subscription
+   * harnesses, which talk to the vendor direct and are metered nowhere else.
+   */
+  private async settleAccounting(
+    handle: EnvironmentProbeHandle,
+    view: RunnerJobView,
+  ): Promise<void> {
+    const job = this.jobHandle(handle)
+    const result = view.result ?? {}
+    await this.accounting.recordCallsOnce(job, result)
+    await this.accounting.recordPooledUsageOnce(job, result)
+    await this.accounting.recordQuotaUsageOnce(job, result)
+  }
+
+  /**
+   * The dry run's handle as the shared accounting reads one.
+   *
+   * A self-test is a SINGLE-JOB flow, so the run and the job are one row and `runId` is the job id
+   * (which is what makes the recorded rows join to the self-test run the SPA renders). The model,
+   * the leased token and the initiator all come off the persisted dispatch attribution rather than
+   * being re-derived, for the reason `EnvironmentProbeDispatch` states.
+   */
+  private jobHandle(handle: EnvironmentProbeHandle): AgentJobHandle {
+    const model = handle.dispatch?.model
+    return {
+      jobId: handle.jobId,
+      runId: handle.jobId,
+      workspaceId: handle.workspaceId,
+      agentKind: environmentProbeAgentKind(handle.surface),
+      ...(model ? { model, provider: providerOf(model) } : {}),
+      ...(handle.dispatch?.subscriptionTokenId
+        ? { subscriptionTokenId: handle.dispatch.subscriptionTokenId }
+        : {}),
+      ...(handle.dispatch?.subscriptionVendor
+        ? { subscriptionVendor: handle.dispatch.subscriptionVendor }
+        : {}),
+      ...(handle.initiatedBy ? { initiatedByUserId: handle.initiatedBy } : {}),
     }
   }
 
   async stop(handle: EnvironmentProbeHandle): Promise<void> {
     await this.jobs.release(handle.workspaceId, this.ref(handle.jobId, handle.surface))
+  }
+
+  /**
+   * The model + harness + vendor this surface's prober runs on, asked under the prober's OWN agent
+   * kind.
+   *
+   * Its own kind rather than the tester's, which is what {@link environmentProbeAgentKind}
+   * documents: a workspace routes its probers by editing the preset entry named after them, and
+   * the START gate resolves an individual-usage vendor for that same kind. Borrowing `tester-api`
+   * here would put the gate and the dispatch on two different questions.
+   */
+  private resolveModel(
+    subject: { workspaceId: string; blockId: string; initiatedBy?: string | null },
+    surface: EnvironmentProbeSurface,
+  ): Promise<SingleKindModel> {
+    return this.deps.resolveModel({
+      workspaceId: subject.workspaceId,
+      blockId: subject.blockId,
+      agentKind: environmentProbeAgentKind(surface),
+      ...(subject.initiatedBy ? { initiatedByUserId: subject.initiatedBy } : {}),
+    })
   }
 
   /**
@@ -343,41 +519,6 @@ export class ContainerEnvironmentProbeAgent implements EnvironmentProbeAgent {
   private ref(jobId: string, surface: EnvironmentProbeSurface): RunnerJobRef {
     const image = IMAGE_BY_SURFACE[surface]
     return { runId: jobId, jobId, ...(image ? { image } : {}) }
-  }
-
-  /**
-   * The service frame's sealed test credentials, as the two projections this dispatch needs: the
-   * values for the container, and a BRIEF the prompt states out loud.
-   *
-   * Best-effort in the sense that a store that will not open still runs the dry run WITHOUT
-   * credentials, because an operator learns more from a report naming what was missing than from a
-   * stage that refused to run. It is NOT best-effort in what it SAYS: `runBestEffort` returning
-   * `undefined` is an OUTAGE, and folding that into the same empty list as "this service has none
-   * configured" makes the prober file the platform's failure as a board-configuration gap and send
-   * someone to re-enter secrets that are already there. The brief keeps the three states apart;
-   * the warn still carries the cause.
-   */
-  private async resolveSecrets(
-    workspaceId: string,
-    blockId: string,
-    log: Logger,
-  ): Promise<{ env: { key: string; value: string }[]; brief: EnvironmentProbeSecretsBrief }> {
-    const resolve = this.deps.resolveTestSecrets
-    if (!resolve) return { env: [], brief: { status: 'unwired' } }
-    const entries: TestSecretEntry[] | undefined = await runBestEffort(
-      log,
-      'resolve dry-run test secrets',
-      () => resolve(workspaceId, blockId),
-    )
-    if (!entries) return { env: [], brief: { status: 'unreadable' } }
-    const refs: TestSecretRef[] = entries.map((entry) => ({
-      key: entry.key,
-      description: entry.description,
-    }))
-    return {
-      env: entries.map((entry) => ({ key: entry.key, value: entry.value })),
-      brief: { status: 'resolved', refs },
-    }
   }
 
   /**

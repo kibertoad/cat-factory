@@ -149,6 +149,15 @@ export const CONFLICT_REASONS = [
   // the provisioning self-test beside it works, so "this capability is not configured" has to name
   // WHICH capability or it reads as the environment integration being unwired.
   'env_test_probe_unavailable',
+  // An AGENT DRY RUN was requested for a frame whose RESOLVED model cannot be dispatched: a
+  // provider the LLM proxy cannot serve, or a subscription-only model with no connected
+  // credential. Distinct from `env_test_probe_unavailable`, which is the deployment missing a
+  // container prerequisite: this one is wired and the WORKSPACE'S OWN model preset (or the frame's
+  // pin) names something unrunnable, so the fix is a preset to change or a subscription to
+  // connect, not an image to bind. Refused BEFORE anything is provisioned, because the same fact
+  // reached at dispatch costs a throwaway branch, a full provision and a teardown. Carries the
+  // facade's own sentence on `details.modelIssue`, which names the specific cause.
+  'env_test_probe_model_unavailable',
   // A second self-test was started for a service frame that already has one running. Refused
   // because each run provisions its OWN ephemeral environment under a synthetic per-run key that
   // nothing supersedes: two in flight means two live environments for one service, billed twice,

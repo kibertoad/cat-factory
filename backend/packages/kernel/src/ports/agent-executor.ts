@@ -21,13 +21,14 @@ import type {
   AprioriBranch,
   ServiceProvisioning,
   StepSubtasks,
-  TestSecretRef,
+  TestCredentialBrief,
   StreamedFollowUp,
   TaskEstimate,
   TaskTypeFields,
   WebSearchAvailability,
 } from '../domain/types.js'
 import type { LocalModelDeclarations } from '../domain/local-model-declarations.js'
+import type { SubscriptionVendor } from '@cat-factory/contracts'
 import type {
   DeclaredToolServers,
   ResolvedSkill,
@@ -739,15 +740,21 @@ export interface AgentRunContext {
    */
   customTaskType?: CustomTaskTypeContext
   /**
-   * The SENSITIVE test credentials configured for this run's service frame — as non-secret
-   * REFERENCES only (each key + its description), NEVER the values. Resolved by the engine
-   * from the service-frame's sealed test-secret store; present only for the tester kinds (the
-   * kinds that receive the values out-of-band). The tester prompt advertises these so the agent
-   * knows which environment variables are available and what each is for; the VALUES are
-   * decrypted at dispatch and injected into the container environment by the executor + harness,
-   * never rendered into the prompt or the telemetry snapshot. Absent when the service has none.
+   * The SENSITIVE test credentials configured for this run's service frame, as non-secret
+   * REFERENCES only (each key + its description), NEVER the values. Resolved from the service
+   * frame's sealed test-secret store; present only for the kinds that receive the values out of
+   * band (the testers). The prompt advertises the keys so the agent knows which environment
+   * variables are available and what each is for; the VALUES are decrypted at dispatch and
+   * injected into the container environment by the executor + harness, never rendered into the
+   * prompt or the telemetry snapshot.
+   *
+   * A STATE rather than a list, and the same state the environment dry run reports
+   * ({@link TestCredentialBrief}): "the store says none are configured", "the platform could not
+   * open its own store" and "this deployment has no store" are three different fixes, and a list
+   * makes all three render as silence. Absent only for a kind that is handed no credentials at
+   * all, which is what keeps every non-tester prompt byte-identical.
    */
-  testSecrets?: TestSecretRef[]
+  testSecrets?: TestCredentialBrief
   /**
    * Read-only reference repositories attached to a document-authoring task (the doc-writer
    * agent) — lifted verbatim by the engine from the task block's `referenceRepos`. The
@@ -1207,6 +1214,17 @@ export interface AgentJobHandle {
    * telemetry falls back to the provider parsed from {@link model}.
    */
   provider?: string
+  /**
+   * The SUBSCRIPTION VENDOR this job's harness runs on, when the dispatch resolved one: the
+   * vendor slug (`claude` / `codex` / `glm` / `kimi` / `deepseek`), not the model's provider.
+   *
+   * Carried separately from {@link provider} because the two differ for four of the five vendors
+   * (`claude`⇄`anthropic`, `codex`⇄`openai`, `glm`⇄`zai`, `kimi`⇄`moonshot`), and it is the VENDOR
+   * that keys a quota cycle. Read off the provider instead, the modeled quota fold silently
+   * matched only DeepSeek and counted nothing at all for the other four. Absent for a
+   * proxy-metered Pi job, which has no vendor and no quota to fold.
+   */
+  subscriptionVendor?: SubscriptionVendor
   /**
    * The agent kind the job runs as (`coder`, `merger`, …). The poll site MUST supply it
    * for any kind whose result is mapped kind-aware (e.g. a migrated `merger`/`on-call`,

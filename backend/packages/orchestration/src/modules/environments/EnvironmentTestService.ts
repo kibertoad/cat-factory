@@ -31,6 +31,7 @@ import {
   requireWorkspace,
   runBestEffort,
 } from '@cat-factory/kernel'
+import { environmentProbeAgentKind } from '@cat-factory/contracts'
 import type { ProvisionArgs, ProvisionDispatch, SettledProvision } from '@cat-factory/integrations'
 import type { EnvironmentProbeStage } from './environmentProbeStage.js'
 
@@ -232,16 +233,55 @@ export class EnvironmentTestService {
   }
 
   /**
+   * The agent kind an `agent-probe` self-test of this block would run as, so the START edge can
+   * gate the run on the initiator's personal subscription BEFORE anything is created.
+   *
+   * Asked of the service rather than derived at the edge because the answer is the frame's TYPE
+   * (a frontend frame is driven by a browser prober, everything else by an HTTP one), and the
+   * dispatch resolves its model under this exact kind. A gate that guessed a different one would
+   * either demand a credential the run never leases or admit a run that then fails at the lease,
+   * after a branch, a provision and a teardown.
+   *
+   * `null` means there is NO dry run to gate, which covers every way that can be true: this
+   * deployment cannot drive one, the block is gone, or the block is not something a dry run can be
+   * run against at all (a task or module, or a service with no ephemeral provisioning). The last
+   * two are the ones worth stating: answering a prober kind for a block `startTest` will refuse
+   * outright is what asks a developer for their unlock password before telling them the run was
+   * never possible.
+   */
+  async probeAgentKind(workspaceId: string, blockId: string): Promise<string | null> {
+    if (!this.deps.probeStage) return null
+    const frame = await this.deps.blockRepository.get(workspaceId, blockId)
+    if (!frame || frame.level !== 'frame') return null
+    if (!frame.provisioning || frame.provisioning.type === 'infraless') return null
+    return environmentProbeAgentKind(this.deps.probeStage.surfaceFor(frame))
+  }
+
+  /**
    * Kick off a self-test against a service frame's provisioning config and return
    * immediately with the `running` run. Pre-flights (frame provisionable, git provider
    * connected) throw as 409s BEFORE any record exists; after the record is inserted,
    * every failure runs best-effort cleanup and returns the run already `failed`.
+   *
+   * `resolveActivation` produces the closure that mints the initiator's individual-usage credential
+   * for THIS run. Passed in rather than resolved here for the reason the pipeline path passes its
+   * equivalent: only the HTTP edge holds the unlock password, and only it can answer a caller who
+   * has not supplied one.
+   *
+   * It is a CLOSURE returning a closure, so that resolving it (which is what raises the
+   * `428 credential_required` a client re-prompts on) happens AFTER every structural refusal
+   * below. Resolved eagerly at the edge instead, a dry run that could never have started (a
+   * self-test already running for the frame, a model the deployment cannot dispatch) asked the
+   * developer for their password first and only then answered the 409 that needed no credential to
+   * establish. Returning `undefined` means the run needs no personal credential: a `provision`
+   * self-test always, and an `agent-probe` whose model is not an individual-usage one.
    */
   async startTest(
     workspaceId: string,
     blockId: string,
     initiatedBy?: string | null,
     mode: EnvironmentTestMode = 'provision',
+    resolveActivation?: () => Promise<((runId: string) => Promise<void>) | undefined>,
   ): Promise<EnvironmentTestRun> {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)
     // Refuse an agent dry run this deployment cannot drive BEFORE anything is provisioned. A run
@@ -250,8 +290,8 @@ export class EnvironmentTestService {
     // reason (a wiring gap) that was knowable before a single side effect.
     if (mode === 'agent-probe' && !this.deps.probeStage) {
       throw new ConflictError(
-        'Agent dry runs are not available on this deployment: they need a container runner, a ' +
-          'connected repository and a model the LLM proxy can serve.',
+        'Agent dry runs are not available on this deployment: they need a container runner and a ' +
+          'connected repository.',
         'env_test_probe_unavailable',
       )
     }
@@ -329,9 +369,22 @@ export class EnvironmentTestService {
       )
     }
 
+    // The last gate, and deliberately last: resolving it is what asks the caller for a password,
+    // so every refusal that needs no credential has already been answered by here.
+    const activate = await resolveActivation?.()
+
     const now = this.deps.clock.now()
+    const id = this.deps.idGenerator.next('envtest')
+    // Mint the activation BEFORE the row exists, and OUTSIDE the try below, exactly as
+    // `RunLifecycleController.start` does: a credential that cannot be unlocked has to reach the
+    // caller as the refusal it is. Run after the insert instead, `activate` throwing
+    // `CredentialRequiredError` was caught by the cleanup path and answered 201 with a `failed`
+    // run: a RESOLVED action to the SPA, so the 428 that reopens the password modal never fired,
+    // the stale cached password was never cleared, and every retry silently burned another run.
+    // There is nothing to clean up here yet: no branch, no environment, no row.
+    await activate?.(id)
     const record: EnvironmentTestRunRecord = {
-      id: this.deps.idGenerator.next('envtest'),
+      id,
       workspaceId,
       blockId,
       mode,
@@ -349,6 +402,9 @@ export class EnvironmentTestService {
       failedStage: null,
       probeSurface: null,
       probeDispatchedAt: null,
+      probeModel: null,
+      probeSubscriptionTokenId: null,
+      probeSubscriptionVendor: null,
       probeProgress: null,
       probe: null,
       createdAt: now,
@@ -358,7 +414,9 @@ export class EnvironmentTestService {
     await this.emit(record)
 
     try {
-      // Create the throwaway branch off the frame repo's default head.
+      // Create the throwaway branch off the frame repo's default head. The activation minted above
+      // outlives a provision by hours (12h TTL), so the probe stage minutes later still finds it
+      // live.
       const baseSha = await bound.repo.headSha(bound.baseBranch)
       if (!baseSha) {
         throw new Error(`The repository's default branch '${bound.baseBranch}' has no head commit.`)
@@ -411,16 +469,22 @@ export class EnvironmentTestService {
   }
 
   /**
-   * The two gates an AGENT DRY RUN answers to beyond the provisioning self-test's, both asked
-   * BEFORE the first side effect, because both are knowable then and neither is knowable cheaply
-   * afterwards.
+   * The three gates an AGENT DRY RUN answers to beyond the provisioning self-test's, all asked
+   * BEFORE the first side effect, because each is knowable then and none is knowable cheaply
+   * afterwards. Every one of them, left to the dispatch, costs a throwaway branch, a full
+   * provision and (on the way back out) a teardown to report something already decided.
    *
-   * A wired prober is not the same question as a runnable one: each surface runs on its own
-   * executor image, so a deployment that binds the plain container class and not the browser one
-   * serves an `api` dry run and refuses a `ui` one deep inside `stage.dispatch`, after a branch, a
-   * full provision and (on the way back out) a teardown. And a workspace past its spend ceiling
-   * would pay for exactly the same sequence before the proxy refused the container's first
-   * completion.
+   * A wired prober is not the same question as a runnable one, and there are two ways to be
+   * unrunnable. The IMAGE: each surface runs on its own executor image, so a deployment that binds
+   * the plain container class and not the browser one serves an `api` dry run and refuses a `ui`
+   * one deep inside `stage.dispatch`. The MODEL: the prober runs whatever this workspace's preset
+   * names for its kind, which may be a provider the LLM proxy cannot serve, or a subscription-only
+   * model whose credential nobody connected. Both are the facade's answers, asked through the
+   * stage; the refusals stay separate because the fixes are (an image to bind vs a preset to
+   * change), and one message covering both would name the wrong one every other time.
+   *
+   * And a workspace past its spend ceiling would pay for exactly the same sequence before the
+   * proxy refused the container's first completion.
    */
   private async assertProbeAdmissible(
     workspaceId: string,
@@ -438,6 +502,21 @@ export class EnvironmentTestService {
           : 'This deployment has no executor image wired for an agent dry run of this service.',
         'env_test_probe_unavailable',
         { surface },
+      )
+    }
+    // The facade's own verdict, carried verbatim: it is produced by the code that would otherwise
+    // have thrown at dispatch, so admission and dispatch cannot name different causes for one
+    // misconfiguration. The `detail` rides its own key, never `reason`, which `ConflictError`
+    // reserves for the code the SPA keys its localized copy off.
+    const dispatchable = await stage.checkDispatchable(
+      { workspaceId, blockId: frame.id, initiatedBy: initiatedBy ?? null },
+      surface,
+    )
+    if (!dispatchable.ok) {
+      throw new ConflictError(
+        `An agent dry run cannot run on the model this service resolves to. ${dispatchable.detail}`,
+        'env_test_probe_model_unavailable',
+        { surface, modelIssue: dispatchable.detail },
       )
     }
     if (await this.overBudget(workspaceId, initiatedBy)) {
@@ -646,12 +725,24 @@ export class EnvironmentTestService {
         throw new Error('The environment test was stopped before the agent dry run started.')
       }
       record.probeSurface = surface
-      await stage.dispatch(record, surface, target.frame)
+      const handle = await stage.dispatch(record, surface, target.frame)
       const probeDispatchedAt = this.deps.clock.now()
-      if (!(await this.guardedUpdate(record, { probeDispatchedAt }))) {
+      // The MARK and the dispatch's ATTRIBUTION in one write, because they are one fact: what the
+      // dispatch resolved is only meaningful for a dispatch that happened, and every later poll
+      // rebuilds its handle from this row (see `EnvironmentProbeDispatch`). The model that ran and
+      // the pooled token that paid for it are what the poll cannot re-derive: one because the
+      // frame and preset it came from can change while the container works, the other because the
+      // lease happens once, here.
+      const attribution = {
+        probeModel: handle.dispatch?.model ?? null,
+        probeSubscriptionTokenId: handle.dispatch?.subscriptionTokenId ?? null,
+        probeSubscriptionVendor: handle.dispatch?.subscriptionVendor ?? null,
+      }
+      if (!(await this.guardedUpdate(record, { probeDispatchedAt, ...attribution }))) {
         throw new Error('The environment test was stopped while the agent dry run was starting.')
       }
       record.probeDispatchedAt = probeDispatchedAt
+      Object.assign(record, attribution)
       return { state: 'running' }
     }
     const outcome = await stage.poll(record, claimed)

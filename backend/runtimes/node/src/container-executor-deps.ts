@@ -4,8 +4,8 @@
 // provisioning-log wrapper, the container agent executor + repo bootstrapper + env-config
 // repairer, the GitHub-issue filer, and the shared external trace-sink builder. Pure functions
 // over explicit deps — no shared mutable state beyond the per-config trace-sink memo.
-import { resolveAgentConfig, isProxyableProvider } from '@cat-factory/agents'
 import type { AgentKindRegistry } from '@cat-factory/agents'
+import { resolveAgentConfig, isProxyableProvider } from '@cat-factory/agents'
 import {
   HttpRunnerPoolProvider,
   RunnerPoolConnectionService,
@@ -22,7 +22,12 @@ import type {
 import { SUBSCRIPTION_VENDORS, composeTraceSinks, isAmbientNativeVendor } from '@cat-factory/kernel'
 import type {
   AgentExecutor,
+  BlockRepository,
   Clock,
+  HarnessKind,
+  LocalModelDeclarations,
+  ModelFlavor,
+  SubscriptionVendor,
   GitHubClient,
   GitHubInstallationRepository,
   ProvisioningSubsystem,
@@ -56,8 +61,12 @@ import {
   ContainerAgentExecutor,
   ContainerEnvConfigRepairer,
   ContainerEnvironmentProbeAgent,
+  ContainerJobAuthResolver,
+  type ContainerJobAccountingDeps,
+  type ContainerJobAuthDependencies,
   ContainerRepoBootstrapper,
   ContainerSessionService,
+  buildSingleKindModelResolver,
   GitHubAppRegistry,
   type ResolveRunInitiatorToken,
   WebCryptoSecretCipher,
@@ -391,7 +400,6 @@ export function buildNodeContainerExecutor(deps: NodeContainerExecutorDeps): Age
     // Multi-repo coding (service-connections phase 3): the implementer fans a cross-service
     // change out across the task's own repo + each connected involved-service repo.
     resolveRepoTargets,
-    ...(resolveAccountId ? { resolveAccountId } : {}),
     mintInstallationToken,
     // Ensure the shared per-task work branch up front so every agent (including the
     // read-only architect) operates on the same branch — idempotent, best-effort. Writers
@@ -406,18 +414,23 @@ export function buildNodeContainerExecutor(deps: NodeContainerExecutorDeps): Age
         branch,
         create: options.create,
       }),
-    sessionService: new ContainerSessionService({ secret: sessionSecret }),
-    // The subscription harnesses (Claude Code / Codex) lease a pooled token and
-    // attribute usage back for usage-aware rotation; absent ⇒ those harnesses are
-    // unavailable and a subscription-only model fails loudly at dispatch.
+    // The credential channels every container dispatch shares (the pooled lease, the personal
+    // lease, the ambient-CLI predicate) from ONE composition, since the single-job flows beside
+    // this executor resolve their auth through the same resolver.
+    ...buildNodeJobAuthDeps({
+      config,
+      sessionSecret,
+      publicUrl,
+      subscriptions,
+      personalSubscriptions,
+      resolveAccountId,
+    }),
+    // Pool-token usage attribution for usage-aware rotation. Beside the lease rather than in it:
+    // it is what a SETTLED job reports back, not what a dispatch is opened with.
     ...(subscriptions
       ? {
-          leaseSubscriptionToken: (workspaceId, vendor) =>
-            subscriptions.leaseToken(workspaceId, vendor),
           recordSubscriptionUsage: (workspaceId, tokenId, usage) =>
             subscriptions.recordTokenUsage(workspaceId, tokenId, usage),
-          hasSubscriptionToken: (workspaceId, vendor) =>
-            subscriptions.hasToken(workspaceId, vendor),
         }
       : {}),
     // Per-call telemetry for the subscription harnesses (proxy-bypassing), recorded
@@ -430,37 +443,6 @@ export function buildNodeContainerExecutor(deps: NodeContainerExecutorDeps): Age
     // Modeled subscription quota-cycle tracking (Part B): fold a finished subscription
     // run's tokens into the rolling windows, for BOTH pooled and personal runs.
     ...(recordSubscriptionQuotaUsage ? { recordSubscriptionQuotaUsage } : {}),
-    // Individual-usage harnesses (Claude) lease the run-initiator's OWN activated
-    // personal credential; absent ⇒ such models fail loudly at dispatch.
-    ...(personalSubscriptions
-      ? {
-          leasePersonalSubscriptionToken: (executionId, userId, vendor) =>
-            personalSubscriptions.leaseForRun(executionId, userId, vendor),
-          // Route a dual-mode individual model (GLM) to the initiator's own subscription
-          // when they have one; otherwise dispatch keeps it on the Cloudflare base.
-          hasPersonalSubscription: (userId, vendor) => personalSubscriptions.has(userId, vendor),
-        }
-      : {}),
-    // Native local execution (local facade, opt-in): run subscription-harness agents with
-    // the developer's OWN installed CLI + ambient login instead of leasing a credential.
-    // Ambient auth applies ONLY when the resolved harness is in the allow-list AND the
-    // vendor is that CLI's NATIVE vendor (no Anthropic-compatible base URL of its own:
-    // `claude` / `codex`). A non-native vendor reusing the `claude-code` harness
-    // (GLM/Kimi/DeepSeek carries its own `baseUrl`) is leased normally — otherwise ambient
-    // auth would silently drop that base URL and run the step on the developer's own
-    // Anthropic login instead of the pinned vendor.
-    ...(config.nativeAmbientAuth && config.nativeAmbientAuth.length > 0
-      ? {
-          // The allow-list + no-`baseUrl` check is the shared `isAmbientNativeVendor`
-          // predicate (so this can't drift from the personal-credential gate); the extra
-          // `harness === h` guard ensures the RESOLVED harness matches the vendor's own.
-          nativeAmbientAuth: (h, vendor) =>
-            vendor !== undefined &&
-            SUBSCRIPTION_VENDORS[vendor].harness === h &&
-            isAmbientNativeVendor(config.nativeAmbientAuth, vendor),
-        }
-      : {}),
-    proxyBaseUrl: `${publicUrl.replace(/\/+$/, '')}/v1`,
     // Point container agents' web search at the backend search proxy (no provider key in
     // the sandbox), but only for a run whose account has keys (resolved per run — see the
     // call site), so the tool is never advertised to a run where it would just fail.
@@ -696,16 +678,104 @@ export function buildNodeGitHubIssueFiler(
 }
 
 /**
+ * The credential channels EVERY container dispatch on this facade shares, as one composition:
+ * the proxy session signer and its base URL, the pooled subscription lease, the run-initiator's
+ * personal lease, and the native ambient-CLI predicate.
+ *
+ * One builder because there is now more than one dispatcher (the step executor and the single-job
+ * flows beside it), and the ambient predicate in particular must not be re-derived per call site:
+ * it has to keep matching the personal-credential gate's own `isAmbientNativeVendor` decision, or
+ * a flow gates a credential it will not lease (or leases one nobody unlocked).
+ *
+ * The two `has*` predicates ride along because they are the same question asked at ROUTING time
+ * ("does this workspace/user hold a subscription for the vendor, so a dual-mode model should
+ * switch to it?"), and a dispatcher that resolved the model with one answer and the credential
+ * with another would lease for a vendor its own routing did not pick.
+ *
+ * `resolveAccountId` is part of it for a blunter reason: the proxy session token carries the SCOPE
+ * the spend gate reads, and `isOverBudget` only checks the ACCOUNT tier when the token names an
+ * account. A dispatcher that composed its own auth without it kept spending for an account that
+ * had blown its monthly budget, while the same models were refused for pipeline steps. And an
+ * unsigned scope reads as a caller with no account, not as a caller who forgot one.
+ */
+export function buildNodeJobAuthDeps(deps: {
+  config: AppConfig
+  sessionSecret: string
+  publicUrl: string
+  subscriptions?: ProviderSubscriptionService
+  personalSubscriptions?: PersonalSubscriptionService
+  resolveAccountId?: (workspaceId: string) => Promise<string | null | undefined>
+}): ContainerJobAuthDependencies & {
+  hasSubscriptionToken?: (workspaceId: string, vendor: SubscriptionVendor) => Promise<boolean>
+  hasPersonalSubscription?: (userId: string, vendor: SubscriptionVendor) => Promise<boolean>
+} {
+  const { config, subscriptions, personalSubscriptions } = deps
+  return {
+    sessionService: new ContainerSessionService({ secret: deps.sessionSecret }),
+    proxyBaseUrl: `${deps.publicUrl.replace(/\/+$/, '')}/v1`,
+    ...(deps.resolveAccountId ? { resolveAccountId: deps.resolveAccountId } : {}),
+    // The subscription harnesses (Claude Code / Codex) lease a pooled token; absent ⇒ those
+    // harnesses are unavailable and a subscription-only model fails loudly at dispatch.
+    ...(subscriptions
+      ? {
+          leaseSubscriptionToken: (workspaceId: string, vendor: SubscriptionVendor) =>
+            subscriptions.leaseToken(workspaceId, vendor),
+          hasSubscriptionToken: (workspaceId: string, vendor: SubscriptionVendor) =>
+            subscriptions.hasToken(workspaceId, vendor),
+        }
+      : {}),
+    // Individual-usage harnesses (Claude) lease the run-initiator's OWN activated
+    // personal credential; absent ⇒ such models fail loudly at dispatch.
+    ...(personalSubscriptions
+      ? {
+          leasePersonalSubscriptionToken: (
+            executionId: string,
+            userId: string,
+            vendor: SubscriptionVendor,
+          ) => personalSubscriptions.leaseForRun(executionId, userId, vendor),
+          // Route a dual-mode individual model (GLM) to the initiator's own subscription
+          // when they have one; otherwise dispatch keeps it on the Cloudflare base.
+          hasPersonalSubscription: (userId: string, vendor: SubscriptionVendor) =>
+            personalSubscriptions.has(userId, vendor),
+        }
+      : {}),
+    // Native local execution (local facade, opt-in): run subscription-harness agents with
+    // the developer's OWN installed CLI + ambient login instead of leasing a credential.
+    // Ambient auth applies ONLY when the resolved harness is in the allow-list AND the
+    // vendor is that CLI's NATIVE vendor (no Anthropic-compatible base URL of its own:
+    // `claude` / `codex`). A non-native vendor reusing the `claude-code` harness
+    // (GLM/Kimi/DeepSeek carries its own `baseUrl`) is leased normally, since otherwise ambient
+    // auth would silently drop that base URL and run the step on the developer's own
+    // Anthropic login instead of the pinned vendor.
+    ...(config.nativeAmbientAuth && config.nativeAmbientAuth.length > 0
+      ? {
+          // The allow-list + no-`baseUrl` check is the shared `isAmbientNativeVendor`
+          // predicate (so this can't drift from the personal-credential gate); the extra
+          // `harness === h` guard ensures the RESOLVED harness matches the vendor's own.
+          nativeAmbientAuth: (h: HarnessKind, vendor: SubscriptionVendor | undefined) =>
+            vendor !== undefined &&
+            SUBSCRIPTION_VENDORS[vendor].harness === h &&
+            isAmbientNativeVendor(config.nativeAmbientAuth, vendor),
+        }
+      : {}),
+  }
+}
+
+/**
  * Build the environment AGENT DRY RUN prober for the Node family, gated on the same container
  * prerequisites as the env-config repairer beside it: a runner transport, the proxy's public URL,
  * a session secret and a dispatch mint. Absent any of them the self-test still runs in
  * `provision` mode and `startTest` refuses `agent-probe` with a 409 that names the gap.
  *
- * Model routing follows the TESTER rather than the coder: a dry run reads a service and exercises
- * it without changing anything, so a deployment that routed its testers to a cheap model gets a
- * cheap dry run with no second setting. It must be proxyable (the Pi harness reaches the model
- * through the LLM proxy), and a misconfiguration is surfaced HERE at wiring rather than at every
- * dispatch. Mirror of the Worker's `selectEnvironmentProbeAgent`.
+ * The MODEL is resolved per dispatch, not here: the prober runs whatever the WORKSPACE's model
+ * preset names for its kind (`environment-prober-api` / `-ui`), with the frame's own pin ahead of
+ * it and the deployment's env routing behind it: the precedence a pipeline step already gets.
+ * Wiring cannot answer that, and the version that tried made a per-deployment guess and called it
+ * a routing decision: a workspace running everything on its Claude preset had its dry run
+ * dispatched at this facade's Qwen default, which the LLM proxy refused for having no key, while
+ * the subscription that WOULD have served it was never asked for. A subscription harness is
+ * therefore supported here rather than refused at wiring, and the auth deps below are the same
+ * ones the step executor uses. Mirror of the Worker's `selectEnvironmentProbeAgent`.
  */
 export function selectNodeEnvironmentProbeAgent(deps: {
   env: NodeJS.ProcessEnv
@@ -713,7 +783,43 @@ export function selectNodeEnvironmentProbeAgent(deps: {
   resolveTransport: ResolveRunnerTransport | null
   installationRepository: GitHubInstallationRepository
   repoRepository: Pick<RepoProjectionRepository, 'list'>
+  /** The frame's own model pin + preset, read per dispatch by the shared single-job resolution. */
+  blockRepository: Pick<BlockRepository, 'get'>
   mintInstallationToken: MintInstallationToken | undefined
+  /** The workspace's per-kind model default, from the preset in force. */
+  resolveWorkspaceModelDefault?: (
+    workspaceId: string,
+    agentKind: string,
+    modelPresetId?: string,
+  ) => Promise<string | undefined>
+  /** That same preset's route order, so the prober walks the routes the preset ranked. */
+  resolvePresetProviderPreference?: (
+    workspaceId: string,
+    modelPresetId?: string,
+  ) => Promise<readonly ModelFlavor[] | undefined>
+  subscriptions?: ProviderSubscriptionService
+  personalSubscriptions?: PersonalSubscriptionService
+  /**
+   * The workspace's owning account, signed into the proxy session token so the ACCOUNT-tier spend
+   * gate applies to a dry run exactly as it does to a step. Unsigned, `isOverBudget` reads the
+   * token as a caller with no account and skips that tier entirely.
+   */
+  resolveAccountId?: (workspaceId: string) => Promise<string | null | undefined>
+  /**
+   * The initiator's local-runner declarations, so a preset naming an Ollama/LM Studio model
+   * resolves here to exactly the ref a pipeline step on the same frame would get.
+   */
+  resolveLocalModelDeclarations?: (
+    userId: string,
+  ) => Promise<readonly LocalModelDeclarations[] | undefined>
+  /**
+   * Where a SETTLED dry run's tokens are recorded. Required in practice for a
+   * subscription-routed prober: it talks to the vendor direct, so the LLM proxy meters none of it
+   * and this is the only path its burn reaches `llm_call_metrics`, the leased token's rotation
+   * counters and the modeled quota cycle. The step executor's own recorders, handed here rather
+   * than rebuilt.
+   */
+  accounting?: ContainerJobAccountingDeps
   /** Where the container clones from, so a GitLab deployment probes its own instance. */
   resolveRepoOrigin: ResolveRepoOrigin
   /**
@@ -727,29 +833,44 @@ export function selectNodeEnvironmentProbeAgent(deps: {
   if (!deps.resolveTransport || !publicUrl || !sessionSecret || !deps.mintInstallationToken) {
     return undefined
   }
-  // PER SURFACE, from each tester kind's own routing: see the Worker's sibling for why one
-  // shared ref would send a cheap text model at a Playwright job with no setting able to fix it.
-  const models = {
-    api: resolveAgentConfig(deps.config.agents.routing, 'tester-api').ref,
-    ui: resolveAgentConfig(deps.config.agents.routing, 'tester-ui').ref,
-  }
-  const unproxyable = Object.entries(models).find(([, ref]) => !isProxyableProvider(ref.provider))
-  if (unproxyable) {
-    logger.warn(
-      'environment dry run: a tester routing model is not proxyable by the LLM proxy; ' +
-        'agent dry runs are disabled on this deployment.',
-      { surface: unproxyable[0], provider: unproxyable[1].provider },
-    )
-    return undefined
-  }
+  const authDeps = buildNodeJobAuthDeps({
+    config: deps.config,
+    sessionSecret,
+    publicUrl,
+    ...(deps.subscriptions ? { subscriptions: deps.subscriptions } : {}),
+    ...(deps.personalSubscriptions ? { personalSubscriptions: deps.personalSubscriptions } : {}),
+    ...(deps.resolveAccountId ? { resolveAccountId: deps.resolveAccountId } : {}),
+  })
   return new ContainerEnvironmentProbeAgent({
     resolveTransport: deps.resolveTransport,
     installationRepository: deps.installationRepository,
     repoRepository: deps.repoRepository,
     mintInstallationToken: deps.mintInstallationToken,
-    sessionService: new ContainerSessionService({ secret: sessionSecret }),
-    models,
-    proxyBaseUrl: `${publicUrl.replace(/\/+$/, '')}/v1`,
+    // The step precedence, asked under the prober's own kind. The two `has*` predicates come off
+    // the SAME auth composition the lease below uses, so routing and leasing cannot disagree
+    // about which vendor this dispatch is on.
+    resolveModel: buildSingleKindModelResolver({
+      agentRouting: deps.config.agents.routing,
+      resolveBlockModel: deps.config.agents.resolveBlockModel,
+      blockRepository: deps.blockRepository,
+      ...(deps.resolveWorkspaceModelDefault
+        ? { resolveWorkspaceModelDefault: deps.resolveWorkspaceModelDefault }
+        : {}),
+      ...(deps.resolvePresetProviderPreference
+        ? { resolvePresetProviderPreference: deps.resolvePresetProviderPreference }
+        : {}),
+      ...(deps.resolveLocalModelDeclarations
+        ? { resolveLocalModelDeclarations: deps.resolveLocalModelDeclarations }
+        : {}),
+      ...(authDeps.hasSubscriptionToken
+        ? { hasSubscriptionToken: authDeps.hasSubscriptionToken }
+        : {}),
+      ...(authDeps.hasPersonalSubscription
+        ? { hasPersonalSubscription: authDeps.hasPersonalSubscription }
+        : {}),
+    }),
+    auth: new ContainerJobAuthResolver(authDeps),
+    ...(deps.accounting ? { accounting: deps.accounting } : {}),
     resolveRepoOrigin: deps.resolveRepoOrigin,
     ...(deps.resolveTestSecrets ? { resolveTestSecrets: deps.resolveTestSecrets } : {}),
     ...(deps.config.github.apiBase ? { githubApiBase: deps.config.github.apiBase } : {}),

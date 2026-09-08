@@ -80,6 +80,48 @@ The credentials section is a three-state brief for that reason, not a list that 
 - **unwired**: this deployment has no sealed credential store at all, so no service on the board can
   be given test credentials. A deployment fact, again not something to fix on the frame.
 
+### The prober is told what the TESTER will be told
+
+A dry run makes exactly one claim: an agent handed this environment could operate the service, so
+the tester step that gets here later will not be the one to discover otherwise. That claim rests
+entirely on the two being handed the same facts, so they are handed them by the same code:
+
+- **The credential brief** above is `TestCredentialBrief` in contracts, rendered into both prompts
+  by `testCredentialLines` (`prompts/environment-under-test.ts`). It reached the tester as an
+  absent section before this, i.e. as "none configured", so a store outage sent someone to re-enter
+  secrets that were already there.
+- **The environment's access scheme** goes through `environmentAccessLines`, which STATES a
+  provider that declared the environment open and a provider that named a scheme and supplied
+  nothing usable for it. Both used to render as silence on the tester's side, and silence there
+  reads as a broken service.
+- **Where to look for how to operate the service** is one `SERVICE_DISCOVERY_GUIDANCE` list (the
+  OpenAPI/GraphQL schema, route definitions, auth middleware, seed fixtures naming test users, the
+  repo's own `curl` examples). A prober that discovers a service through its schema while the tester
+  is only told to read the README are not exercising the same surface, so the dry run's verdict
+  would not transfer.
+- **The values** are resolved by one `resolveTestCredentials` (server), which both the step
+  dispatcher and the prober call. Its best-effort read is why a sealed store that will not open now
+  costs the credentials rather than the step.
+- **What a success has to look like** is `FALSE_SUCCESS_SHAPES` (`prompts/shared.ts`), in all four
+  prompts. Each role had a half of this: the prober named the HTTP shapes of a pass nobody
+  observed, the tester had the principle and none of the shapes, in the role where a false pass is
+  what lets a change merge. The fragment carries the suite shapes too (a command that printed
+  failures and exited 0, a suite that ran zero tests), which is what a tester needs and a prober
+  rarely meets.
+
+Two rules deliberately did NOT move, and they are the line between sharing a rule and merging two
+roles. **Grading**: a prober reports per-operation outcomes and leaves the conclusion to
+`summarizeEnvironmentProbe`, while a tester's whole product is a greenlight. **Writing**: the
+prober's "never change the service, the repository or the environment" is a security property, held
+up by a dispatch that carries no `pr`, `pushBranch` or `newBranch`, where a tester legitimately
+authors tests on the branch in library mode. A single fragment over both would have to weaken the
+first or contradict the second.
+
+What is deliberately NOT shared is the ROLE. A tester judges a CHANGE and rules on whether it is
+safe to release; a prober judges the SETUP and reports what the platform failed to supply. Each
+passes its own `CredentialGapGuidance` so the shared sections name a gap in the report shape that
+role actually emits (`missingContext` for a prober, a failed outcome for a tester).
+
 ## The verdict is computed, never read off the reply
 
 The model judges each operation it attempted; the platform derives everything else
@@ -181,6 +223,18 @@ report stored before a member was renamed renders the raw value rather than an e
   also asks the resolved runner backend whether it can serve THIS frame's image
   (`RunnerTransport.supportsImage`, absent ⇒ unknown ⇒ admitted, which is the honest answer for a
   self-hosted pool that resolves images on its own side).
+- **And the MODEL is asked too** (409 `env_test_probe_model_unavailable`,
+  `EnvironmentProbeAgent.checkDispatchable`). Two ways to be unrunnable that the image question
+  cannot see: a provider the LLM proxy cannot serve, and a subscription-only model whose credential
+  nobody connected (which no ROUTING can notice, since such a model carries its harness whatever
+  any pool holds). Its own reason rather than the one above, because the fixes differ: an image to
+  bind versus a preset to change or a subscription to connect. The refusal carries the facade's own
+  sentence on `details.modelIssue`, produced by the code that would otherwise have thrown at the
+  dispatch, so admission and dispatch cannot name different causes for one misconfiguration.
+- **The personal-credential unlock is resolved LAST**, after every refusal above. It is the one
+  gate that asks the developer for something, so a dry run that could never have started must not
+  cost a password entry first: the HTTP edge hands `startTest` a CLOSURE and the service calls it
+  once its own refusals are past.
 - **A dry run answers to the workspace spend budget** (409 `env_test_over_budget`). It is a
   billable model call that no run start gates, exactly like the bug hunt's ranking, and the probe
   fails CLOSED: a ledger nobody can read is not a licence to spend against it. The provisioning
@@ -198,13 +252,83 @@ its env-config repairer (`selectEnvironmentProbeAgent` on the Worker,
 prerequisites: a container transport, a connected source-control App, the proxy's public URL and
 its signing secret.
 
-The models follow the **testers'** routing rather than the coder's: a dry run reads a service and
-exercises it without changing anything, so a deployment that routed its testers to a cheap model
-gets a cheap dry run with no second setting. **One per surface**, from each tester kind's own
-routing (`tester-api` and `tester-ui`): the browser prober reads screenshots and drives a page
-where the HTTP one reads a schema and calls it, and a single shared ref would send a cheap text
-model at a Playwright job with no setting anywhere able to change it. Both must be proxyable, since
-the prober runs on the Pi harness over the LLM proxy; a non-proxyable routing model on either
-surface leaves the capability unwired with a `warn` at boot rather than failing every dispatch,
-because the SPA offers one button per frame and the frame's type decides which surface it lands
-on.
+### Which model the prober runs
+
+The same precedence a pipeline step gets, resolved **per dispatch**: the frame's own `modelId` pin,
+else the workspace's **model preset** entry for the prober's kind, else the deployment's env
+routing. `buildSingleKindModelResolver` is that resolution, over the shared `ModelRouter`, so a dry
+run and a coder step on the same frame cannot disagree about which model the workspace chose.
+
+**One kind per surface** (`environment-prober-api`, `environment-prober-ui`), which is what makes
+the two routable apart: the browser prober reads screenshots and drives a page where the HTTP one
+reads a schema and calls it, so a workspace that pointed one at a vision-capable model and the
+other at a cheap text one gets that split. A preset naming neither kind answers with its base
+model, which is the blanket statement it is.
+
+Per dispatch rather than at wiring, because the answer is a per-workspace fact and wiring has none
+in hand. Read at wiring it is a per-deployment guess: a workspace running everything on its Claude
+preset had its dry run dispatched at the Node family's Qwen default, which the LLM proxy then
+refused for having no key configured (`502 unavailable`), after the run had already created a
+branch and stood a real environment up. The proxyable check moved with it: it is asked of the
+**resolved** model, at ADMISSION (see `checkDispatchable` above) and again at the dispatch, instead
+of disabling the capability for the whole deployment on the strength of a routing entry no workspace
+had chosen. Admission is the earlier no, not the only one: a token can be revoked between the two.
+
+### What the dispatch records, and why the poll never re-derives it
+
+The model the container ran, the pooled subscription token leased for it and that token's vendor are
+persisted on the run row (`probe_model`, `probe_subscription_token_id`,
+`probe_subscription_vendor`) with the dispatch MARK, in one write, and re-supplied on every later
+poll through `EnvironmentProbeHandle.dispatch`. The same rule a pipeline step's
+`recordDispatchAttribution` follows, for the same reason: the poll runs in a fresh process and
+rebuilds its handle from the row alone.
+
+Both halves matter. Re-resolving the MODEL there answers about the frame and the preset as they are
+NOW, so a pin cleared (or a preset switched) while the container worked stamps the settled report
+with a model nobody ran, and that label is what an operator judges the verdict's weight by. The
+leased TOKEN ID has no second source at all: the lease happens once, at dispatch, and it is the row
+a settled subscription job's tokens are attributed back to.
+
+### What a settled dry run records
+
+Through the same `ContainerJobAccounting` a pipeline step's poll files through: the per-call rows in
+`llm_call_metrics`, the leased pool token's usage-aware rotation counters, and the modeled quota
+cycle. Filed on every poll and on every TERMINAL state, failures included: a dry run that spent
+tokens and then died is the run an operator most needs the numbers for.
+
+It binds only on a SUBSCRIPTION harness, and that is exactly why it cannot be skipped. A Pi job
+reaches its model through the LLM proxy, which is its single metering point and writes those rows
+itself; a subscription harness talks to the vendor direct, so a dispatcher that files nothing meters
+that job NOWHERE. Before this the whole burn of a subscription-routed dry run was absent from the
+telemetry, from the rotation and from the quota window: free and invisible, on the one flow whose
+own admission gate is a budget.
+
+### Which credential opens it
+
+Whatever the resolved model's harness needs, through the same `ContainerJobAuthResolver` the step
+executor uses: a short-lived, model-locked proxy session token for a Pi model, a pooled
+subscription credential for Claude Code / Codex, the run-initiator's OWN personal credential for an
+individual-usage vendor (Claude), or `ambientAuth` in native local mode, where the harness drives
+the developer's installed CLI and nothing is leased.
+
+A personal credential is only leasable with its owner's unlock password, so the **start route gates
+on it** exactly as a run start does (`personalGateForAgentKind`, 428 `credential_required`), for the
+kind `EnvironmentTestService.probeAgentKind` says the dispatch will resolve its model under. That
+kind is `null` for anything a dry run cannot target at all (a task, a module, a service with no
+ephemeral provisioning), so those runs are refused with the 409 that names what is wrong rather than
+asked for a credential first. The activation is minted against the **run id**, which is the id the
+prober's dispatch leases against; its 12h TTL comfortably outlives a provision.
+
+The mint happens BEFORE the run row exists and OUTSIDE the start's cleanup path, exactly as
+`RunLifecycleController.start` does it. Three things go wrong otherwise. The person is never asked
+for the unlock they were willing to give. The dispatch reaches the lease with nothing activated,
+having spent a branch, a provision and (on the way back out) a teardown. And an unlock that FAILS
+(a rotated password, an expired subscription) gets caught by the cleanup path and answered as a
+`201` carrying a `failed` run: a resolved action to the SPA, so `parseCredentialError` never fires,
+the modal never opens, the stale cached password is never cleared, and every retry silently burns
+another run. The SPA rides its cached password through `withCredential`, so the modal opens on the
+428 and the start is retried transparently; a cancelled prompt resolves to no run rather than a
+spinner waiting for one.
+
+`provision` mode spends no model call and so is never gated, which is also what keeps the
+historical body-less start working.

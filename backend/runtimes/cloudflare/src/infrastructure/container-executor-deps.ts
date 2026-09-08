@@ -19,6 +19,7 @@ import {
   type RunnerPoolProvider,
   type RunnerTransport,
   type StoreAgentContextGate,
+  type SubscriptionVendor,
   type ToolSecretResolver,
   type WebSearchAvailability,
   createStoreAgentContextGate,
@@ -56,6 +57,8 @@ import {
   resolveUrlSafetyPolicy,
   noRunnerBackendAvailableError,
   buildDispatchTokenMint,
+  type ContainerJobAccountingDeps,
+  type ContainerJobAuthDependencies,
   type MintInstallationToken,
   type WebSearchUpstream,
   operationalMetrics,
@@ -208,6 +211,125 @@ export function buildToolTrajectorySinks(args: {
     ? createStoreAgentContextGate({ repository: new D1WorkspaceSettingsRepository({ db }) })
     : () => Promise.resolve(false)
   return { recordToolCalls, toolBodyGate, llmTraceSink: buildTraceSink(config) }
+}
+
+/**
+ * The credential channels EVERY container dispatch on this facade shares, as one composition: the
+ * proxy session signer and its base URL, the workspace's owning ACCOUNT (the scope the spend gate
+ * reads), the pooled subscription lease, and the run-initiator's personal lease.
+ *
+ * One builder for the same reason {@link buildToolTrajectorySinks} is one: there is more than one
+ * dispatcher here (the step executor and the AGENT DRY RUN's prober beside it), and the failure of
+ * a second composition is silent. It was `resolveAccountId` that proved it: the step path signed
+ * the account into its session token and the prober's own composition did not, so `isOverBudget`
+ * (which checks the ACCOUNT tier only when the token names an account) kept admitting dry-run
+ * spend for an account that had blown its monthly budget while refusing the same models for steps.
+ * An unsigned scope reads as a caller with no account, never as one that was forgotten.
+ *
+ * The two `has*` predicates ride along because they are the same question asked at ROUTING time
+ * ("does this workspace/user hold a subscription for the vendor?"), and a dispatcher that resolved
+ * the model with one answer and the credential with another would lease for a vendor its own
+ * routing did not pick. `recordSubscriptionUsage` is deliberately NOT here: it is what a SETTLED
+ * job reports back, not what a dispatch is opened with (see {@link buildWorkerJobAccountingDeps}).
+ *
+ * No `nativeAmbientAuth`: the ambient-CLI path is the LOCAL facade's, and a Worker has no host
+ * process with a developer's login on it.
+ */
+export function buildWorkerJobAuthDeps(args: {
+  /**
+   * The two secrets, passed as VALUES rather than off `Env`, and both required: every caller has
+   * already refused a deployment missing either (they are container prerequisites), so taking the
+   * whole environment here would push those `undefined` checks into a builder with no honest answer
+   * for them. Same shape as the Node family's `buildNodeJobAuthDeps`.
+   */
+  sessionSecret: string
+  publicUrl: string
+  db: D1Database
+  subscriptions?: ProviderSubscriptionService
+  personalSubscriptions?: PersonalSubscriptionService
+}): ContainerJobAuthDependencies & {
+  hasSubscriptionToken?: (workspaceId: string, vendor: SubscriptionVendor) => Promise<boolean>
+  hasPersonalSubscription?: (userId: string, vendor: SubscriptionVendor) => Promise<boolean>
+} {
+  const { db, subscriptions, personalSubscriptions } = args
+  return {
+    sessionService: new ContainerSessionService({ secret: args.sessionSecret }),
+    proxyBaseUrl: `${args.publicUrl.replace(/\/+$/, '')}/v1`,
+    resolveAccountId: (workspaceId: string) =>
+      new D1WorkspaceRepository({ db }).accountOf(workspaceId),
+    ...(subscriptions
+      ? {
+          leaseSubscriptionToken: (workspaceId: string, vendor: SubscriptionVendor) =>
+            subscriptions.leaseToken(workspaceId, vendor),
+          hasSubscriptionToken: (workspaceId: string, vendor: SubscriptionVendor) =>
+            subscriptions.hasToken(workspaceId, vendor),
+        }
+      : {}),
+    ...(personalSubscriptions
+      ? {
+          leasePersonalSubscriptionToken: (
+            executionId: string,
+            userId: string,
+            vendor: SubscriptionVendor,
+          ) => personalSubscriptions.leaseForRun(executionId, userId, vendor),
+          hasPersonalSubscription: (userId: string, vendor: SubscriptionVendor) =>
+            personalSubscriptions.has(userId, vendor),
+        }
+      : {}),
+  }
+}
+
+/**
+ * Where a SETTLED container job's tokens are recorded: the per-call telemetry rows, the leased pool
+ * token's usage-aware rotation counters, and the modeled quota cycle.
+ *
+ * Shared for the same reason as the two builders above, and it binds hardest on the single-job
+ * flows: only a SUBSCRIPTION harness reports anything here, because a Pi job reaches its model
+ * through the LLM proxy, which is its single metering point and files those rows itself. So a
+ * dispatcher that can resolve a subscription model and files nothing meters that job NOWHERE: not
+ * in `llm_call_metrics`, not in the rotation, not in the quota cycle.
+ *
+ * The recorders themselves are stateless writers over the required telemetry DB; the settings
+ * repository behind the harness recorder is REQUIRED rather than hygiene, because a subscription
+ * harness's `stream-json` carries the FULL prompt and response and an absent repository makes the
+ * capture gate an open one.
+ */
+export function buildWorkerJobAccountingDeps(args: {
+  env: Env
+  config: AppConfig
+  db: D1Database
+  clock: Clock
+  subscriptions?: ProviderSubscriptionService
+}): ContainerJobAccountingDeps {
+  const { env, config, db, clock, subscriptions } = args
+  // Modeled quota-cycle provider (usage-and-quota-tracking, Part B): folds a finished
+  // subscription run's tokens into rolling windows. Built once here rather than inside the
+  // closure, which would construct one per settled job.
+  const quota = new RegistrySubscriptionQuotaProvider({
+    subscriptionQuotaCycleRepository: new D1SubscriptionQuotaCycleRepository({ db }),
+    idGenerator: new CryptoIdGenerator(),
+    clock,
+    registry: defaultSubscriptionQuotaRegistry,
+  })
+  return {
+    recordHarnessCalls: makeHarnessCallRecorder(
+      new LlmObservabilityService({
+        llmCallMetricRepository: new D1LlmCallMetricRepository({ db: requireTelemetryDb(env) }),
+        idGenerator: new CryptoIdGenerator(),
+        clock,
+        recordPrompts: config.observability.recordPrompts,
+        workspaceSettingsRepository: new D1WorkspaceSettingsRepository({ db }),
+        logger,
+      }),
+    ),
+    ...(subscriptions
+      ? {
+          recordSubscriptionUsage: (workspaceId, tokenId, usage) =>
+            subscriptions.recordTokenUsage(workspaceId, tokenId, usage),
+        }
+      : {}),
+    recordSubscriptionQuotaUsage: (target, usage) => quota.recordUsage(target, usage),
+  }
 }
 
 /**
@@ -462,25 +584,6 @@ function buildContainerExecutor(deps: WorkerExecutorDeps): AgentExecutor | null 
 
   const registry = buildAppRegistry(env, config, db, clock)
   const resolveRepoTarget = buildResolveRepoTarget(db)
-  // Record a subscription harness's (Claude Code / Codex) per-call telemetry into the
-  // SAME `llm_call_metrics` store the LLM proxy writes for Pi — those harnesses bypass
-  // the proxy, so the executor lifts the metrics off the CLI stream and feeds them here.
-  // A standalone service over the required telemetry DB (the proxy path builds its own
-  // from the same table; both are stateless writers). The settings repository is REQUIRED
-  // here, not optional hygiene: a subscription harness's `stream-json` carries the FULL
-  // prompt and response, and an absent repository makes `createStoreAgentContextGate` an
-  // open gate — so without it an opted-out workspace's bodies are retained anyway, which is
-  // exactly the privacy half of C2 (observability-logging-gaps.md) wearing a different hat.
-  const recordHarnessCalls = makeHarnessCallRecorder(
-    new LlmObservabilityService({
-      llmCallMetricRepository: new D1LlmCallMetricRepository({ db: requireTelemetryDb(env) }),
-      idGenerator: new CryptoIdGenerator(),
-      clock,
-      recordPrompts: config.observability.recordPrompts,
-      workspaceSettingsRepository: new D1WorkspaceSettingsRepository({ db }),
-      logger,
-    }),
-  )
   // The trajectory drain's sinks and body gate, built by the shared builder below, because the
   // repo bootstrapper drains through the same three and two constructions is how one deployment
   // ends up storing a bootstrap's tool-call bodies its executor would have withheld. The trace
@@ -491,15 +594,6 @@ function buildContainerExecutor(deps: WorkerExecutorDeps): AgentExecutor | null 
     config,
     db,
     clock,
-  })
-  // Modeled subscription quota-cycle provider (usage-and-quota-tracking, Part B): folds a
-  // finished subscription run's tokens into rolling windows (real vendor reads land in B2,
-  // so its adapter registry is empty today — every vendor reports modeled).
-  const subscriptionQuotaProvider = new RegistrySubscriptionQuotaProvider({
-    subscriptionQuotaCycleRepository: new D1SubscriptionQuotaCycleRepository({ db }),
-    idGenerator: new CryptoIdGenerator(),
-    clock,
-    registry: defaultSubscriptionQuotaRegistry,
   })
   // The dispatch's clone/push credential: the run initiator's per-user PAT when stored AND
   // permitted (so the container's clone/push/PR is attributed to them), else a GitHub App token
@@ -565,8 +659,6 @@ function buildContainerExecutor(deps: WorkerExecutorDeps): AgentExecutor | null 
     // Multi-repo coding (service-connections phase 3): the implementer fans a cross-service
     // change out across the task's own repo + each connected involved-service repo.
     resolveRepoTargets: buildResolveRepoTargets(db),
-    // Resolve the workspace's owning account so the proxy can lease account-scoped keys.
-    resolveAccountId: (workspaceId) => new D1WorkspaceRepository({ db }).accountOf(workspaceId),
     mintInstallationToken,
     // Ensure the shared per-task work branch up front so every agent (including the
     // read-only architect) operates on the same branch — idempotent, best-effort. Writers
@@ -581,41 +673,26 @@ function buildContainerExecutor(deps: WorkerExecutorDeps): AgentExecutor | null 
         branch,
         create: options.create,
       }),
-    sessionService: new ContainerSessionService({ secret: env.AUTH_SESSION_SECRET }),
-    // The subscription harnesses (Claude Code / Codex) lease a pooled token and
-    // attribute usage back for usage-aware rotation; absent ⇒ those harnesses are
-    // unavailable and a subscription-only model fails loudly at dispatch.
-    ...(subscriptions
-      ? {
-          leaseSubscriptionToken: (workspaceId, vendor) =>
-            subscriptions.leaseToken(workspaceId, vendor),
-          recordSubscriptionUsage: (workspaceId, tokenId, usage) =>
-            subscriptions.recordTokenUsage(workspaceId, tokenId, usage),
-          hasSubscriptionToken: (workspaceId, vendor) =>
-            subscriptions.hasToken(workspaceId, vendor),
-        }
-      : {}),
-    // Per-call telemetry for the subscription harnesses (proxy-bypassing), recorded
-    // into `llm_call_metrics` alongside the proxy-metered Pi rows.
-    recordHarnessCalls,
+    // Every credential channel a container dispatch can carry, from ONE composition shared with
+    // the single-job flows beside this executor (see `buildWorkerJobAuthDeps`).
+    ...buildWorkerJobAuthDeps({
+      sessionSecret: env.AUTH_SESSION_SECRET,
+      publicUrl: env.WORKER_PUBLIC_URL,
+      db,
+      ...(subscriptions ? { subscriptions } : {}),
+      ...(personalSubscriptions ? { personalSubscriptions } : {}),
+    }),
+    // What a SETTLED job's tokens are recorded against, from the same shared composition: the
+    // per-call telemetry rows, the leased pool token's rotation counters and the quota cycle.
+    ...buildWorkerJobAccountingDeps({
+      env,
+      config,
+      db,
+      clock,
+      ...(subscriptions ? { subscriptions } : {}),
+    }),
     recordToolCalls,
     toolBodyGate,
-    // Modeled subscription quota-cycle tracking (Part B): fold a finished subscription
-    // run's tokens into the rolling windows, for BOTH pooled and personal runs.
-    recordSubscriptionQuotaUsage: (target, usage) =>
-      subscriptionQuotaProvider.recordUsage(target, usage),
-    // Individual-usage harnesses (Claude) lease the run-initiator's OWN activated
-    // personal credential; absent ⇒ such models fail loudly at dispatch.
-    ...(personalSubscriptions
-      ? {
-          leasePersonalSubscriptionToken: (executionId, userId, vendor) =>
-            personalSubscriptions.leaseForRun(executionId, userId, vendor),
-          // Route a dual-mode individual model (GLM) to the initiator's own subscription
-          // when they have one; otherwise dispatch keeps it on the Cloudflare base.
-          hasPersonalSubscription: (userId, vendor) => personalSubscriptions.has(userId, vendor),
-        }
-      : {}),
-    proxyBaseUrl: `${env.WORKER_PUBLIC_URL.replace(/\/+$/, '')}/v1`,
     // Point container agents' web search at the backend search proxy (no provider key in
     // the sandbox), but only for a run whose account has keys (see resolver above).
     ...(resolveWebSearchAvailability ? { resolveWebSearchAvailability } : {}),

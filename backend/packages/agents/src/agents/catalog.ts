@@ -641,7 +641,7 @@ function buildBaseUserPrompt(
 ): BaseUserPrompt {
   // Standard phases get their built-out, templated user prompt.
   const phase = phaseForKind(context.agentKind)
-  if (phase) return { prompt: renderStandardUserPrompt(phase, context, opts) }
+  if (phase) return { prompt: renderStandardUserPrompt(phase, context, registry, opts) }
   const dispatch = opts.dispatch
 
   // A registered custom kind may supply its own user prompt; otherwise it falls through
@@ -694,7 +694,7 @@ function buildBaseUserPrompt(
     const spikeSection = spikeContextSection(context)
     if (spikeSection) lines.push(spikeSection)
   }
-  const envSection = environmentSection(context)
+  const envSection = environmentSection(context, registry)
   if (envSection) lines.push(envSection)
   const involvedSection = involvedServicesSection(context)
   if (involvedSection) lines.push(involvedSection)

@@ -197,12 +197,19 @@ export class ContainerJobAccounting {
   /**
    * Fold the SAME subscription usage into the modeled quota-cycle counters (Part B), for
    * BOTH pooled and personal runs. A subscription run is the one reporting per-call
-   * metrics (Pi is proxy-metered and has none), and the handle's provider is the vendor
-   * slug. Scope = the leased pool token when present, else the run initiator (personal).
-   * Best-effort, once per job id so a replayed poll can't double-count.
+   * metrics (Pi is proxy-metered and has none). Scope = the leased pool token when present,
+   * else the run initiator (personal). Best-effort, once per job id so a replayed poll can't
+   * double-count.
+   *
+   * Keyed on the VENDOR the dispatch resolved, and only then on the provider parsed off the
+   * model. The two differ for four of the five vendors (`claude`⇄`anthropic`, `codex`⇄`openai`,
+   * `glm`⇄`zai`, `kimi`⇄`moonshot`), so a fold that took the provider alone matched DeepSeek and
+   * silently counted nothing for the rest: a quota cycle that reported zero for the vendors the
+   * feature exists to track. The provider stays as the fallback, so a handle minted before the
+   * dispatch carried a vendor still folds exactly as it used to.
    */
   async recordQuotaUsageOnce(handle: AgentJobHandle, result: RunnerJobResult): Promise<void> {
-    const quotaVendor = handle.provider ?? providerOf(handle.model)
+    const quotaVendor = handle.subscriptionVendor ?? handle.provider ?? providerOf(handle.model)
     if (
       result.callMetrics &&
       result.callMetrics.length > 0 &&

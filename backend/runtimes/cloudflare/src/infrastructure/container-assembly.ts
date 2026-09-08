@@ -979,7 +979,12 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
     config,
     db,
     clock,
+    caches: input.caches,
     resolveTransport,
+    // The prober resolves its model from the workspace's preset and then leases whatever that
+    // model's vendor needs, so it gets the SAME two subscription services the step executor does.
+    ...(subscriptions ? { subscriptions } : {}),
+    ...(personalSubscriptions ? { personalSubscriptions } : {}),
   })
   if (environmentProbeAgent && !dependencies.environmentProbeAgent) {
     dependencies.environmentProbeAgent = environmentProbeAgent

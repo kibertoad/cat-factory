@@ -56,6 +56,9 @@ const RECORD: EnvironmentTestRunRecord = {
   failedStage: null,
   probeSurface: null,
   probeDispatchedAt: null,
+  probeModel: null,
+  probeSubscriptionTokenId: null,
+  probeSubscriptionVendor: null,
   probeProgress: null,
   probe: null,
   createdAt: 1,
@@ -67,9 +70,16 @@ function makeStage(over: { update?: EnvironmentProbeUpdate; frame?: Block | null
   let frameReads = 0
   const agent: EnvironmentProbeAgent = {
     supports: async () => true,
+    checkDispatchable: async () => ({ ok: true, model: 'cloudflare:qwen' }),
     start: async (request) => {
       started.push(request)
-      return { workspaceId: request.workspaceId, jobId: request.jobId, surface: request.surface }
+      return {
+        workspaceId: request.workspaceId,
+        jobId: request.jobId,
+        surface: request.surface,
+        blockId: request.blockId,
+        initiatedBy: request.initiatedBy,
+      }
     },
     poll: async () => over.update ?? { state: 'running' },
     stop: async () => {},

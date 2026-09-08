@@ -34,6 +34,7 @@ import type {
   SkillVersionPin,
   TaskRepository,
   TaskTypeRegistry,
+  TestCredentialBrief,
   TestSecretRef,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
@@ -44,7 +45,9 @@ import {
   CONTEXT_BUDGET,
   describeCustomTaskType,
   describeOwnService,
+  noopLogger,
   resolveServiceFrameBlock,
+  runBestEffort,
   selectConsensusGroup,
 } from '@cat-factory/kernel'
 import {
@@ -426,9 +429,10 @@ export class AgentContextBuilder {
       service,
       frontend,
       involvedServices,
-      // The SENSITIVE test-credential refs (key + description, NEVER values) for the tester kinds
-      // only — the kinds that receive the values out of band. Advertised in the tester prompt so
-      // the agent knows which env vars are injected; values are resolved separately at dispatch.
+      // The SENSITIVE test credentials (key + description, NEVER values) for the tester kinds
+      // only: the kinds that receive the values out of band. A STATE rather than a list, and the
+      // same one the environment dry run reports, so the prompt can tell "none configured" from
+      // "the platform could not open its own store" (see `resolveTestCredentials`).
       testSecrets,
       // The service frame's validation config (walked up the frame chain): TWO independently
       // gated context fields from ONE read, and `{}` for a service that declared neither OR a
@@ -474,9 +478,7 @@ export class AgentContextBuilder {
       this.serviceConfigFrom(workspaceId, serviceFrame),
       this.frontendConfigFrom(workspaceId, serviceFrame),
       this.resolveInvolvedServices(workspaceId, block),
-      isTesterKind(agentKind) && this.deps.resolveTestSecretRefs
-        ? this.deps.resolveTestSecretRefs(workspaceId, block.id)
-        : Promise.resolve<TestSecretRef[]>([]),
+      this.resolveTestCredentials(agentKind, workspaceId, block.id),
       validationChecksFor(this.deps, workspaceId, serviceFrame, step, observations),
       this.resolveInitiativeContext(workspaceId, block, agentKind, instance),
       block.level === 'task'
@@ -579,7 +581,9 @@ export class AgentContextBuilder {
       ownService: describeOwnService(block, serviceFrame),
       // The per-case parameters a custom-typed task was invoked with (see `customTaskTypeFor`).
       ...customTaskType,
-      ...(testSecrets.length ? { testSecrets } : {}),
+      // Spread only when the kind is handed credentials at all, so every other prompt is
+      // byte-identical; a tester ALWAYS carries the state, including "this service has none".
+      ...(testSecrets ? { testSecrets } : {}),
       // Spreads BOTH the pre-PR checks and the dependency-prepopulation install — one frame-chain
       // read, two independently-gated context fields (see `validationChecksFor`).
       ...validationChecks,
@@ -1373,6 +1377,38 @@ export class AgentContextBuilder {
     )
     observations.contextDocuments(context.docs)
     return context
+  }
+
+  /**
+   * The service frame's sealed test credentials for a kind that is handed them, as the STATE the
+   * prompt states out loud.
+   *
+   * `undefined` for every kind that receives none (so their prompts stay byte-identical), and one
+   * of three states otherwise. The states are the point: a read that FAILED and a service with
+   * none configured used to reach the tester as the same empty list, i.e. as the same absent
+   * prompt section, so an unopenable credential store was reported to a human as "nobody
+   * configured any" and someone was sent to re-enter secrets that were already there. Best-effort
+   * for the same reason the dry run's is: a tester that runs and names what was missing is worth
+   * more than a dispatch refused over a store outage.
+   *
+   * Only REFS (key + description) are read here. The values are decrypted at dispatch by the
+   * facade, which is the only layer allowed to see them, and the facade re-states the brief from
+   * its own read so the prompt describes what the container actually carries.
+   */
+  private async resolveTestCredentials(
+    agentKind: string,
+    workspaceId: string,
+    blockId: string,
+  ): Promise<TestCredentialBrief | undefined> {
+    if (!isTesterKind(agentKind)) return undefined
+    const resolve = this.deps.resolveTestSecretRefs
+    if (!resolve) return { status: 'unwired' }
+    const refs = await runBestEffort(
+      this.deps.logger ?? noopLogger,
+      'resolve the run test-credential refs',
+      () => resolve(workspaceId, blockId),
+    )
+    return refs ? { status: 'resolved', refs } : { status: 'unreadable' }
   }
 
   /**

@@ -127,18 +127,25 @@ export const PROMPT_VERSIONS = {
     version: 2,
     text: ENVIRONMENT_INVESTIGATION_SYSTEM_PROMPT,
   },
-  // The two AGENT DRY RUN probers. Numbered from the start (there is no earlier recorded version
-  // to succeed) and numbered SEPARATELY, unlike the requirements trio: they share their rules
-  // block but state different roles, and an edit to the browser prompt says nothing about whether
-  // the HTTP one still produces the report an operator acted on.
+  // The two AGENT DRY RUN probers. Numbered SEPARATELY, unlike the requirements trio: they share
+  // their rules block but state different roles, and an edit to the browser prompt says nothing
+  // about whether the HTTP one still produces the report an operator acted on.
+  //
+  // v2 on both, because the edit is to the rules block they share. Two of its rules are now the
+  // fragments the TESTER steps carry verbatim: the repository-discovery list
+  // (`SERVICE_DISCOVERY_GUIDANCE`) and the shapes of a success nobody observed
+  // (`FALSE_SUCCESS_SHAPES`). That is the dry run's whole claim made structural: it predicts what
+  // a tester will manage, which it can only do if both are sent looking in the same places and
+  // held to the same bar. So a benchmark comparing a report against a v1 one is comparing two
+  // materially different prompts.
   'environment-probe-api': {
     id: 'environment-probe-api',
-    version: 1,
+    version: 2,
     text: ENVIRONMENT_PROBE_API_SYSTEM_PROMPT,
   },
   'environment-probe-ui': {
     id: 'environment-probe-ui',
-    version: 1,
+    version: 2,
     text: ENVIRONMENT_PROBE_UI_SYSTEM_PROMPT,
   },
 } as const satisfies Record<string, VersionedPrompt>
