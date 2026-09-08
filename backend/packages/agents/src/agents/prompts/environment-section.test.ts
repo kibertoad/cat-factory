@@ -50,7 +50,7 @@ describe('environmentSection', () => {
         expiresAt: null,
       }),
     )
-    expect(out).toContain('Bearer token `tok_abc123`')
+    expect(out).toContain('Authorization: Bearer tok_abc123')
   })
 
   it('renders HTTP basic username + password in full', () => {
@@ -78,7 +78,10 @@ describe('environmentSection', () => {
     expect(out).toContain('X-Api-Key: key_xyz')
   })
 
-  it('omits the auth line for the none scheme', () => {
+  // The three access states this section used to render as silence, all of them ones an agent
+  // otherwise mis-attributes. They come from the renderer the environment DRY RUN shares, which is
+  // what lets a dry run's "could an agent authenticate here" predict what the tester is told.
+  it('STATES that the provider declared the environment open, rather than omitting it', () => {
     const out = environmentSection(
       ctx({
         url: 'https://env.example.com',
@@ -87,7 +90,33 @@ describe('environmentSection', () => {
         expiresAt: null,
       }),
     )
-    expect(out).not.toContain('Auth:')
+    // Silence here reads exactly like a credential that never arrived, so the agent files the
+    // platform's gap on a service that is genuinely open.
+    expect(out).toContain('needs NO credential of its own')
+    expect(out).toContain('belongs to the application itself')
+  })
+
+  it('says the provider stated NOTHING when no access bag arrived', () => {
+    const out = environmentSection(
+      ctx({ url: 'https://env.example.com', status: 'ready', access: null, expiresAt: null }),
+    )
+    expect(out).toContain('Environment access: NOT STATED')
+  })
+
+  it('blames the PLATFORM for a scheme declared with no usable credential behind it', () => {
+    const out = environmentSection(
+      ctx({
+        url: 'https://env.example.com',
+        status: 'ready',
+        // A bearer scheme with no token: the provider named a scheme and supplied nothing for it.
+        access: { scheme: 'bearer' },
+        expiresAt: null,
+      }),
+    )
+    // Unsaid, this is the case that reads as a broken service to everyone who is not told the
+    // credential never arrived.
+    expect(out).toContain('supplied no usable credential')
+    expect(out).toContain('PLATFORM is short a credential here, not the service')
   })
 
   describe('reachability', () => {

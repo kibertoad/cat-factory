@@ -55,6 +55,20 @@ export const ENVIRONMENT_PROBE_API_AGENT_KIND = 'environment-prober-api'
 export const ENVIRONMENT_PROBE_UI_AGENT_KIND = 'environment-prober-ui'
 
 /**
+ * The kind a dry run of `surface` runs as: its model-routing key, its spend label, and the kind
+ * the START gate resolves an individual-usage vendor for.
+ *
+ * One map, because those three readers must agree. The prober's model comes from the workspace's
+ * model preset for this kind, and a preset that resolves to a personal-subscription model can only
+ * be leased with an unlock the caller supplied: a start route that gated a DIFFERENT kind than the
+ * dispatch resolves is a run that either demands a credential it will not use or provisions an
+ * environment and then fails at the lease.
+ */
+export function environmentProbeAgentKind(surface: 'api' | 'ui'): string {
+  return surface === 'ui' ? ENVIRONMENT_PROBE_UI_AGENT_KIND : ENVIRONMENT_PROBE_API_AGENT_KIND
+}
+
+/**
  * The id prefix a single-kind run carries in place of a catalog pipeline id. Deliberately not a
  * `pl_` id: nothing defines it and nothing stores it, so a reader who goes looking for the
  * pipeline behind such a run should find a name that says there isn't one rather than a 404.

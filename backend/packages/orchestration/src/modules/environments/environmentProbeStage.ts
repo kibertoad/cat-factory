@@ -226,11 +226,7 @@ export class EnvironmentProbeStage {
     record: EnvironmentTestRunRecord,
     surface: EnvironmentProbeSurface,
   ): Promise<EnvironmentProbeOutcome> {
-    const update: EnvironmentProbeUpdate = await this.deps.agent.poll({
-      workspaceId: record.workspaceId,
-      jobId: record.id,
-      surface,
-    })
+    const update: EnvironmentProbeUpdate = await this.deps.agent.poll(this.handle(record, surface))
     if (update.state === 'running') {
       return update.subtasks
         ? { state: 'running', subtasks: update.subtasks }
@@ -262,10 +258,25 @@ export class EnvironmentProbeStage {
 
   /** Reclaim the probe's container. Best-effort by contract; never throws at the caller. */
   async release(record: EnvironmentTestRunRecord, surface: EnvironmentProbeSurface): Promise<void> {
-    await this.deps.agent.stop({
+    await this.deps.agent.stop(this.handle(record, surface))
+  }
+
+  /**
+   * The dispatched probe's handle, rebuilt from the RECORD rather than remembered from the
+   * dispatch: the durable driver polls from a fresh process, so the record is the only thing both
+   * sides of a replay share. The SURFACE is passed in rather than re-derived, because the claim on
+   * the record addresses a container and a frame edited mid-run would address a different one.
+   */
+  private handle(
+    record: EnvironmentTestRunRecord,
+    surface: EnvironmentProbeSurface,
+  ): EnvironmentProbeHandle {
+    return {
       workspaceId: record.workspaceId,
       jobId: record.id,
       surface,
-    })
+      blockId: record.blockId,
+      initiatedBy: record.initiatedBy,
+    }
   }
 }

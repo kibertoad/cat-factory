@@ -1,16 +1,23 @@
 import { describe, expect, it, vi } from 'vitest'
 import type {
+  Block,
+  BlockRepository,
   EnvironmentProbeRequest,
   GitHubInstallation,
   GitHubInstallationRepository,
-  ModelRef,
+  HarnessKind,
   RepoProjectionRepository,
   RunnerDispatchOptions,
   RunnerJobRef,
   RunnerJobView,
   RunnerTransport,
+  SubscriptionVendor,
 } from '@cat-factory/kernel'
+import { ALL_SUBSCRIPTION_VENDORS, resolveModelRef } from '@cat-factory/kernel'
+import type { AgentRouting } from '@cat-factory/agents'
 import { ContainerEnvironmentProbeAgent } from '../src/agents/ContainerEnvironmentProbeAgent.js'
+import { ContainerJobAuthResolver } from '../src/agents/containerJobAuth.js'
+import { buildSingleKindModelResolver } from '../src/agents/singleKindModel.js'
 import type { MintInstallationToken } from '../src/agents/repoTargeting.js'
 import type { ContainerSessionService } from '../src/containers/ContainerSessionService.js'
 
@@ -44,6 +51,28 @@ const PROJECTED_REPOS = [{ githubId: 501, owner: 'kibertoad', name: 'acme' }] as
   ReturnType<RepoProjectionRepository['list']>
 >
 
+/**
+ * The deployment's env routing: what the prober used to be pinned to at WIRING time, and what it
+ * must now only fall back to. Deliberately a model no test expects to see dispatched, so a
+ * resolution that quietly skipped the workspace's preset shows up as this string.
+ */
+const ENV_ROUTING: AgentRouting = {
+  default: { ref: { provider: 'qwen', model: 'qwen3-max' } },
+  byKind: {},
+}
+
+/** A frame with no model pin, which is what makes the workspace's preset the deciding tier. */
+const FRAME = { id: 'frame_1', type: 'backend' } as unknown as Block
+
+/**
+ * The prober's collaborators, as the facades compose them: the real single-job model resolution
+ * (frame pin > the workspace preset for the prober's kind > env routing) over the real model
+ * catalog, and the real per-job auth resolver.
+ *
+ * Real rather than stubbed, because the defect these cover is a WIRING one. A fake `resolveModel`
+ * returning whatever a test asked for would have passed against the version that read the env
+ * routing at wiring and never consulted a preset at all.
+ */
 function makeAgent(
   transport: RunnerTransport,
   over: {
@@ -52,24 +81,70 @@ function makeAgent(
       workspaceId: string,
       blockId: string,
     ) => Promise<{ key: string; description: string; value: string }[]>
-    models?: Record<'api' | 'ui', ModelRef>
+    /** The preset in force, as `overrides[kind] ?? baseModelId` already resolved it. */
+    presetModelForKind?: (agentKind: string) => string | undefined
+    /** What the FRAME pins, which outranks the preset. */
+    frame?: Block | null
+    /** Vendors the run initiator holds their own personal subscription for. */
+    personalVendors?: SubscriptionVendor[]
+    leasePersonal?: (
+      executionId: string,
+      userId: string,
+      vendor: SubscriptionVendor,
+    ) => Promise<{ secret: string }>
+    leasePooled?: (
+      workspaceId: string,
+      vendor: SubscriptionVendor,
+    ) => Promise<{ tokenId: string; secret: string }>
+    nativeAmbientAuth?: (harness: HarnessKind, vendor: SubscriptionVendor | undefined) => boolean
+    /** No runner backend resolves for this workspace at all. */
+    unresolvableTransport?: boolean
   } = {},
 ): ContainerEnvironmentProbeAgent {
+  const personal = new Set(over.personalVendors ?? [])
   return new ContainerEnvironmentProbeAgent({
-    resolveTransport: async () => transport,
+    resolveTransport: async () => {
+      if (over.unresolvableTransport) {
+        throw new Error('no runner backend is available for this workspace')
+      }
+      return transport
+    },
     installationRepository: {
       getByWorkspace: vi.fn(async () => INSTALLATION),
     } as unknown as GitHubInstallationRepository,
     repoRepository: { list: async () => PROJECTED_REPOS },
     mintInstallationToken: over.mint ?? (async () => 'gh-token'),
-    sessionService: {
-      mint: vi.fn(async () => 'session-token'),
-    } as unknown as ContainerSessionService,
-    models: over.models ?? {
-      api: { provider: 'workers-ai', model: '@cf/test' },
-      ui: { provider: 'workers-ai', model: '@cf/test-vision' },
-    },
-    proxyBaseUrl: 'https://proxy.example/v1',
+    resolveModel: buildSingleKindModelResolver({
+      agentRouting: ENV_ROUTING,
+      // The deployment catalog resolution the facades pass, with every subscription vendor
+      // available (which is what a deployment holding an ENCRYPTION_KEY reports).
+      resolveBlockModel: (modelId) =>
+        resolveModelRef(modelId, {
+          directProviders: new Set(),
+          subscriptionVendors: new Set(ALL_SUBSCRIPTION_VENDORS),
+          cloudflareEnabled: true,
+        }),
+      blockRepository: {
+        get: async () => (over.frame === undefined ? FRAME : over.frame),
+      } as unknown as Pick<BlockRepository, 'get'>,
+      ...(over.presetModelForKind
+        ? {
+            resolveWorkspaceModelDefault: async (_ws: string, agentKind: string) =>
+              over.presetModelForKind!(agentKind),
+          }
+        : {}),
+      hasPersonalSubscription: async (_userId: string, vendor: SubscriptionVendor) =>
+        personal.has(vendor),
+    }),
+    auth: new ContainerJobAuthResolver({
+      sessionService: {
+        mint: vi.fn(async () => 'session-token'),
+      } as unknown as ContainerSessionService,
+      proxyBaseUrl: 'https://proxy.example/v1',
+      ...(over.leasePersonal ? { leasePersonalSubscriptionToken: over.leasePersonal } : {}),
+      ...(over.leasePooled ? { leaseSubscriptionToken: over.leasePooled } : {}),
+      ...(over.nativeAmbientAuth ? { nativeAmbientAuth: over.nativeAmbientAuth } : {}),
+    }),
     ...(over.resolveTestSecrets ? { resolveTestSecrets: over.resolveTestSecrets } : {}),
   })
 }
@@ -128,7 +203,16 @@ describe('ContainerEnvironmentProbeAgent: the dispatch', () => {
   it('dispatches a read-only explore job with a structured output and no write surface', async () => {
     const { transport, calls } = recordingTransport()
     const handle = await makeAgent(transport).start(request())
-    expect(handle).toEqual({ workspaceId: 'ws_1', jobId: 'envtest_1', surface: 'api' })
+    expect(handle).toEqual({
+      workspaceId: 'ws_1',
+      jobId: 'envtest_1',
+      surface: 'api',
+      // The FRAME rides along, because the poll has to resolve the model that produced the report
+      // and there is no dispatch-time memory left by then: the durable driver polls from a fresh
+      // process.
+      blockId: 'frame_1',
+      initiatedBy: 'usr_1',
+    })
 
     const spec = calls.dispatch[0]!.spec
     expect(spec.mode).toBe('explore')
@@ -186,28 +270,60 @@ describe('ContainerEnvironmentProbeAgent: the dispatch', () => {
     expect(ui.calls.dispatch[0]!.ref.image).toBe('ui')
   })
 
-  it('routes each surface to its OWN model, so a browser job cannot inherit the HTTP one', async () => {
-    // One shared ref sends whatever `tester-api` resolved to at a Playwright job, with no setting
-    // anywhere able to change it.
-    const api = recordingTransport()
-    await makeAgent(api.transport).start(request({ surface: 'api' }))
-    expect(api.calls.dispatch[0]!.spec.model).toBe('@cf/test')
-
-    const ui = recordingTransport()
-    await makeAgent(ui.transport).start(request({ surface: 'ui' }))
-    expect(ui.calls.dispatch[0]!.spec.model).toBe('@cf/test-vision')
+  it('runs the model the WORKSPACE preset names, not the deployment env routing', async () => {
+    // The regression this exists for. The model used to be read off the env routing once, at
+    // wiring: a workspace running everything on its Claude preset had its dry run dispatched at
+    // the deployment default (Qwen on the Node family), which the LLM proxy then refused for
+    // having no key configured, after the run had already stood a real environment up.
+    const { transport, calls } = recordingTransport()
+    const agent = makeAgent(transport, {
+      presetModelForKind: () => 'kimi-k2.7',
+      // `qwen3-max` is the env routing, and it must lose.
+    })
+    await agent.start(request())
+    expect(calls.dispatch[0]!.spec.model).not.toBe('qwen3-max')
+    expect(calls.dispatch[0]!.spec.model).toContain('kimi')
   })
 
-  it('refuses the surface whose OWN model the proxy cannot serve, and only that one', async () => {
-    const { transport } = recordingTransport()
+  it('falls back to the env routing only when no preset resolves a model', async () => {
+    const { transport, calls } = recordingTransport()
+    await makeAgent(transport, { presetModelForKind: () => undefined }).start(request())
+    expect(calls.dispatch[0]!.spec.model).toBe('qwen3-max')
+  })
+
+  it("lets the FRAME's own pin outrank the preset, as it does for a pipeline step", async () => {
+    const { transport, calls } = recordingTransport()
     const agent = makeAgent(transport, {
-      models: {
-        api: { provider: 'workers-ai', model: '@cf/test' },
-        ui: { provider: 'anthropic-subscription', model: 'sonnet' } as unknown as ModelRef,
-      },
+      frame: { id: 'frame_1', type: 'backend', modelId: 'kimi-k2.7' } as never,
+      presetModelForKind: () => 'glm',
     })
-    await expect(agent.start(request({ surface: 'ui' }))).rejects.toThrow(/'ui' prober is routed/)
-    await expect(agent.start(request({ surface: 'api' }))).resolves.toBeTruthy()
+    await agent.start(request())
+    expect(calls.dispatch[0]!.spec.model).toContain('kimi')
+  })
+
+  it('routes each surface to its OWN model, so a browser job cannot inherit the HTTP one', async () => {
+    // The two probers do different work (one reads screenshots and drives a page, the other
+    // reads a schema and calls it), so each asks the preset under its own agent kind. One
+    // shared ref would send a cheap text model at a Playwright job with nothing able to fix it.
+    const presetModelForKind = (kind: string) =>
+      kind === 'environment-prober-ui' ? 'gemini-3.8-flash' : 'kimi-k2.7'
+
+    const api = recordingTransport()
+    await makeAgent(api.transport, { presetModelForKind }).start(request({ surface: 'api' }))
+    expect(api.calls.dispatch[0]!.spec.model).toContain('kimi')
+
+    const ui = recordingTransport()
+    await makeAgent(ui.transport, { presetModelForKind }).start(request({ surface: 'ui' }))
+    expect(ui.calls.dispatch[0]!.spec.model).toContain('gemini')
+  })
+
+  it('refuses a resolved model the LLM proxy cannot serve, at the dispatch', async () => {
+    // Asked per dispatch now, because the answer is per workspace. The wiring-time version of
+    // this check disabled the prober for the whole DEPLOYMENT on the strength of a routing entry
+    // no workspace had chosen.
+    const { transport } = recordingTransport()
+    const agent = makeAgent(transport, { presetModelForKind: () => 'claude-opus-4-8' })
+    await expect(agent.start(request())).rejects.toThrow(/the LLM proxy can serve/)
   })
 
   it('addresses the SAME container on the poll and the release as on the dispatch', async () => {
@@ -292,7 +408,7 @@ describe('ContainerEnvironmentProbeAgent: the poll', () => {
     } as unknown as RunnerJobView)
     const agent = makeAgent(transport)
     const update = await agent.poll(await agent.start(request()))
-    expect(update).toEqual({ state: 'done', report: raw, model: 'workers-ai:@cf/test' })
+    expect(update).toEqual({ state: 'done', report: raw, model: 'qwen:qwen3-max' })
   })
 
   it.each([
@@ -314,13 +430,19 @@ describe('ContainerEnvironmentProbeAgent: the poll', () => {
   })
 
   it('files the reply under the model of the surface that produced it', async () => {
+    // Resolved on the terminal branch from the handle's own frame, under the surface's kind: a
+    // browser prober's report must not be attributed to whatever the HTTP one runs.
     const { transport } = recordingTransport({
       state: 'done',
       result: { custom: { summary: 'ok' } },
     } as unknown as RunnerJobView)
-    const agent = makeAgent(transport)
+    const agent = makeAgent(transport, {
+      presetModelForKind: (kind) =>
+        kind === 'environment-prober-ui' ? 'gemini-3.8-flash' : 'kimi-k2.7',
+    })
     const update = await agent.poll(await agent.start(request({ surface: 'ui' })))
-    expect(update).toMatchObject({ model: 'workers-ai:@cf/test-vision' })
+    expect(update.state).toBe('done')
+    expect((update as { model?: string }).model).toContain('gemini')
   })
 
   it('maps an eviction to the evicted failure kind', async () => {
@@ -381,22 +503,100 @@ describe('ContainerEnvironmentProbeAgent: the admission capability question', ()
   })
 
   it('reports no runner at all as unsupported', async () => {
-    const agent = new ContainerEnvironmentProbeAgent({
-      resolveTransport: async () => {
-        throw new Error('no runner backend is available for this workspace')
-      },
-      installationRepository: {
-        getByWorkspace: vi.fn(async () => INSTALLATION),
-      } as unknown as GitHubInstallationRepository,
-      repoRepository: { list: async () => PROJECTED_REPOS },
-      mintInstallationToken: async () => 'gh-token',
-      sessionService: { mint: vi.fn(async () => 'tok') } as unknown as ContainerSessionService,
-      models: {
-        api: { provider: 'workers-ai', model: '@cf/test' },
-        ui: { provider: 'workers-ai', model: '@cf/test' },
-      },
-      proxyBaseUrl: 'https://proxy.example/v1',
-    })
+    const { transport } = recordingTransport()
+    const agent = makeAgent(transport, { unresolvableTransport: true })
     expect(await agent.supports('ws_1', 'api')).toBe(false)
+  })
+})
+
+describe('ContainerEnvironmentProbeAgent: the credential the prober runs on', () => {
+  it("leases the INITIATOR's own personal subscription for an individual-usage model", async () => {
+    // The half of the defect that was invisible: a workspace on the Claude preset never had its
+    // subscription asked for, because this flow served only the LLM-proxy branch and a
+    // subscription model was refused at WIRING. The lease is keyed on the self-test run id,
+    // which is the id the start gate minted the activation against.
+    const { transport, calls } = recordingTransport()
+    const leasePersonal = vi.fn(async () => ({ secret: 'oauth-token' }))
+    const agent = makeAgent(transport, {
+      presetModelForKind: () => 'claude-opus',
+      personalVendors: ['claude'],
+      leasePersonal,
+    })
+    await agent.start(request())
+    expect(leasePersonal).toHaveBeenCalledWith('envtest_1', 'usr_1', 'claude')
+    const spec = calls.dispatch[0]!.spec
+    expect(spec).toMatchObject({
+      harness: 'claude-code',
+      subscriptionToken: 'oauth-token',
+      model: 'claude-opus-5',
+    })
+    // A subscription harness talks to the vendor directly, so it carries no proxy session token:
+    // handing it one would meter the run twice and lock it to a model the proxy would serve.
+    expect(spec.sessionToken).toBeUndefined()
+    expect(spec.proxyBaseUrl).toBeUndefined()
+  })
+
+  it('surfaces the unlock refusal instead of dispatching, when nothing was activated', async () => {
+    // What the caller sees when the start gate was skipped, or the activation lapsed: the refusal
+    // the lease raises, propagated so the run fails at the probing stage naming the credential
+    // rather than the container.
+    const { transport, calls } = recordingTransport()
+    const agent = makeAgent(transport, {
+      presetModelForKind: () => 'claude-opus',
+      personalVendors: ['claude'],
+      leasePersonal: async () => {
+        throw new Error('no live activation for this run')
+      },
+    })
+    await expect(agent.start(request())).rejects.toThrow(/no live activation/)
+    expect(calls.dispatch).toHaveLength(0)
+  })
+
+  it('refuses an individual-usage model with no signed-in initiator to lease for', async () => {
+    // Such a credential belongs to one person; a system-started run has nobody to resolve.
+    const { transport } = recordingTransport()
+    const agent = makeAgent(transport, {
+      presetModelForKind: () => 'claude-opus',
+      leasePersonal: async () => ({ secret: 'oauth-token' }),
+    })
+    await expect(agent.start(request({ initiatedBy: null }))).rejects.toThrow(
+      /requires a signed-in user/,
+    )
+  })
+
+  it('says the personal store is unwired rather than dispatching without a credential', async () => {
+    const { transport } = recordingTransport()
+    const agent = makeAgent(transport, {
+      presetModelForKind: () => 'claude-opus',
+      personalVendors: ['claude'],
+    })
+    await expect(agent.start(request())).rejects.toThrow(/not configured on this deployment/)
+  })
+
+  it("runs the developer's own CLI in native local mode, leasing nothing", async () => {
+    const { transport, calls } = recordingTransport()
+    const leasePersonal = vi.fn(async () => ({ secret: 'oauth-token' }))
+    const agent = makeAgent(transport, {
+      presetModelForKind: () => 'claude-opus',
+      personalVendors: ['claude'],
+      leasePersonal,
+      nativeAmbientAuth: () => true,
+    })
+    await agent.start(request())
+    expect(leasePersonal).not.toHaveBeenCalled()
+    expect(calls.dispatch[0]!.spec).toMatchObject({ harness: 'claude-code', ambientAuth: true })
+    expect(calls.dispatch[0]!.spec.subscriptionToken).toBeUndefined()
+  })
+
+  it('carries the model-locked proxy session token for a Pi model, as before', async () => {
+    const { transport, calls } = recordingTransport()
+    await makeAgent(transport, { presetModelForKind: () => 'kimi-k2.7' }).start(request())
+    expect(calls.dispatch[0]!.spec).toMatchObject({
+      harness: 'pi',
+      sessionToken: 'session-token',
+      proxyBaseUrl: 'https://proxy.example/v1',
+      proxyPhasePath: true,
+    })
+    expect(calls.dispatch[0]!.spec.subscriptionToken).toBeUndefined()
   })
 })

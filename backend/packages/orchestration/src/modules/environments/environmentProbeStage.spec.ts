@@ -69,7 +69,13 @@ function makeStage(over: { update?: EnvironmentProbeUpdate; frame?: Block | null
     supports: async () => true,
     start: async (request) => {
       started.push(request)
-      return { workspaceId: request.workspaceId, jobId: request.jobId, surface: request.surface }
+      return {
+        workspaceId: request.workspaceId,
+        jobId: request.jobId,
+        surface: request.surface,
+        blockId: request.blockId,
+        initiatedBy: request.initiatedBy,
+      }
     },
     poll: async () => over.update ?? { state: 'running' },
     stop: async () => {},

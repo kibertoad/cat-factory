@@ -2,10 +2,19 @@ import type {
   EnvironmentProbeSurface,
   EnvironmentReachabilityNote,
   EnvironmentAccessHandle,
-  TestSecretRef,
+  TestCredentialBrief,
 } from '@cat-factory/kernel'
 import { FINAL_ANSWER_IN_REPLY } from './shared.js'
 import { reachabilityLines } from './standard.js'
+// Everything the PLATFORM states about a live environment, rendered by the same code the tester
+// steps render it with. A dry run that was told different things than the tester it predicts is a
+// dry run whose verdict means nothing (see the module's own note).
+import {
+  SERVICE_DISCOVERY_GUIDANCE,
+  environmentAccessLines,
+  testCredentialLines,
+  type CredentialGapGuidance,
+} from './environment-under-test.js'
 
 // ---------------------------------------------------------------------------
 // The AGENT DRY RUN's prompts: the two probers a self-test can dispatch at a freshly
@@ -81,7 +90,9 @@ const FAILURE_VOCABULARY = [
  */
 const PROBE_RULES = [
   'How to work:',
-  '1. READ THE REPOSITORY FIRST. It is checked out read-only at the exact revision this environment was built from. Find how the service is addressed and how it authenticates: an OpenAPI/GraphQL schema, route definitions, auth middleware, a README or docs page, seed/fixture data naming test users, and any `.http`/`curl` examples. Prefer what the CODE says over what prose claims.',
+  // The discovery list is the TESTER's own, verbatim: what a dry run establishes is whether the
+  // knowledge a tester will go looking for is actually there to find.
+  `1. READ THE REPOSITORY FIRST. It is checked out read-only at the exact revision this environment was built from. Find how the service is addressed and how it authenticates. ${SERVICE_DISCOVERY_GUIDANCE}`,
   '2. Pick 3 to 5 SIMPLE but MEANINGFUL operations: the kind of thing this service exists to do (list something, create something, read one record back). At least ONE of them MUST go through authentication. A healthcheck, a version endpoint or a static asset does not count as one of them: it proves an ingress exists and nothing about whether an agent can operate the service. Include a healthcheck only as a first sanity check, and mark it `authenticated: false`.',
   '3. ATTEMPT each one against the live environment above and record exactly what happened. Read every credential from the environment variables named below; never print a secret value into your reply, your `detail` fields or a log.',
   '4. Report an operation you could NOT attempt as `outcome: "not_attempted"` with the `failure` kind saying why. That is a real finding, not a gap to hide: the whole purpose of this run is to discover what an agent is missing BEFORE a build spends a step on it.',
@@ -135,26 +146,22 @@ export function environmentProbeSystemPrompt(surface: EnvironmentProbeSurface): 
 }
 
 /**
- * What the platform can tell the prober about the frame's sealed test credentials, as a state
- * rather than a list.
- *
- * Three outcomes that a bare list of refs collapses into one, and the collapse points an operator
- * at the wrong fix:
- *
- *  - `resolved`: the store was read. An EMPTY list here means this service genuinely has no test
- *    credentials configured on the board, which is a board fact and a board fix.
- *  - `unreadable`: credentials may well be configured, and the platform could not open its own
- *    sealed store to fetch them (a bad `ENCRYPTION_KEY`, a store that would not answer). The dry
- *    run still runs, because a report naming what was missing is worth more than a refused stage,
- *    but the agent must be told the PLATFORM failed, or it files an outage as "nobody configured
- *    credentials" and sends someone to re-enter secrets that are already there.
- *  - `unwired`: this deployment has no sealed credential store at all, so no service on this board
- *    can be given test credentials. A deployment fact, and again not something to fix on the frame.
+ * How a PROBER records a credential gap, in its own report's words. The states themselves, and
+ * whose fault each one is, come from the shared renderers.
  */
-export type EnvironmentProbeSecretsBrief =
-  | { status: 'resolved'; refs: readonly TestSecretRef[] }
-  | { status: 'unreadable' }
-  | { status: 'unwired' }
+const PROBE_GAP_GUIDANCE: CredentialGapGuidance = {
+  missing: 'record it as `auth_missing` and say in `missingContext` what is needed',
+  unusable: 'treat it as `access_unclear` and say so',
+}
+
+/**
+ * What the platform can tell the prober about the frame's sealed test credentials.
+ *
+ * The shared {@link TestCredentialBrief} under its name in this flow. Not a second type: the
+ * tester step is handed the same three states through the same renderer, which is what lets a dry
+ * run's verdict about "could an agent authenticate here" predict the tester's.
+ */
+export type EnvironmentProbeSecretsBrief = TestCredentialBrief
 
 /** Everything the platform knows about the target, as the prompt states it. */
 export interface EnvironmentProbeBrief {
@@ -205,9 +212,9 @@ export function environmentProbeUserPrompt(brief: EnvironmentProbeBrief): string
           '- Reachability: the platform has not proved a route to this environment (either its own name carried, or nothing has dialled it). If you cannot connect, report `unreachable` and say what you tried. Do not assume your tooling is at fault.',
         ]),
   )
-  lines.push(...accessLines(brief.environment.access))
+  lines.push(...environmentAccessLines(brief.environment.access, PROBE_GAP_GUIDANCE))
   lines.push('', '## Credentials your shell carries', '')
-  lines.push(...testSecretLines(brief.testSecrets))
+  lines.push(...testCredentialLines(brief.testSecrets, PROBE_GAP_GUIDANCE))
   lines.push(
     '',
     '## The repository',
@@ -224,75 +231,4 @@ export function environmentProbeUserPrompt(brief: EnvironmentProbeBrief): string
     'Now probe the environment and report. Remember: at least one authenticated operation, and everything you could not work out goes in `missingContext`.',
   )
   return lines.join('\n')
-}
-
-/**
- * The credentials section, one wording per {@link EnvironmentProbeSecretsBrief} state.
- *
- * The two failure states say who is at fault IN THE PROMPT, because the agent is the one writing
- * `missingContext` and it can only name a fix it was told about. Left to the "none configured"
- * wording, a platform that could not open its own store produces a report telling an operator to
- * configure credentials that already exist, which is worse than silence: it is a confident wrong
- * answer with a run's evidence behind it.
- */
-function testSecretLines(secrets: EnvironmentProbeSecretsBrief): string[] {
-  if (secrets.status === 'unreadable') {
-    return [
-      'NONE REACHED YOU, AND THE PLATFORM IS AT FAULT. This service may well have test credentials configured on the board: the platform could not open its own sealed credential store to fetch them, so your shell carries none of them. If an operation needs one, record it as `auth_missing` and say in `missingContext` that the PLATFORM failed to supply the configured credentials. Do NOT tell a human to configure credentials for this service: that may already be done, and this run cannot tell.',
-    ]
-  }
-  if (secrets.status === 'unwired') {
-    return [
-      'NONE, AND NONE ARE POSSIBLE HERE. This deployment has no sealed credential store wired, so no service on this board can hand test credentials to a dry run. The only auth material you have is whatever the environment section above states and whatever the repository documents. If an operation needs a credential, record it as `auth_missing` and say in `missingContext` that the DEPLOYMENT has no credential store, rather than asking for this service to be reconfigured.',
-    ]
-  }
-  if (secrets.refs.length === 0) {
-    return [
-      'NONE. This service has no test credentials configured on the board, so the only auth material you have is whatever the environment section above states and whatever the repository itself documents. If an operation needs a credential you do not have, that is `auth_missing`: record it and name what is needed.',
-    ]
-  }
-  return [
-    'Read each of these from the environment (e.g. `$API_TOKEN`). The values are NOT printed here and must never appear in your reply:',
-    ...secrets.refs.map(
-      (ref) => `- \`${ref.key}\`${ref.description ? `: ${ref.description}` : ''}`,
-    ),
-  ]
-}
-
-/**
- * How to authenticate, as the environment's own provider stated it.
- *
- * The `none` scheme is RENDERED rather than skipped: a provider that explicitly issued no
- * credentials and a provider whose access bag never arrived are opposite facts, and a prober told
- * neither would file the platform's silence as `auth_missing` on a service that is genuinely
- * open. Values are inlined exactly as the tester's environment section does: the credential is
- * the environment's own, minted for this throwaway environment and torn down with it.
- */
-function accessLines(access: EnvironmentAccessHandle | null | undefined): string[] {
-  if (!access) {
-    return [
-      '- Environment access: NOT STATED. The provider returned no access credentials for this environment. It may be open, or it may expect a credential the platform never received; find out from the repository and say which in your report.',
-    ]
-  }
-  if (access.scheme === 'none') {
-    return [
-      '- Environment access: the provider states this environment needs NO credential of its own. Any authentication you meet belongs to the application itself.',
-    ]
-  }
-  if (access.scheme === 'bearer' && access.token) {
-    return [`- Environment access: send \`Authorization: Bearer ${access.token}\`.`]
-  }
-  if (access.scheme === 'basic' && access.username !== undefined) {
-    return [
-      `- Environment access: HTTP Basic, username \`${access.username}\`, password \`${access.password ?? ''}\`.`,
-    ]
-  }
-  if (access.scheme === 'custom_header' && access.headerName) {
-    return [
-      `- Environment access: send the header \`${access.headerName}: ${access.headerValue ?? ''}\`.`,
-    ]
-  }
-  return [
-    `- Environment access: the provider declared the \`${access.scheme}\` scheme but supplied no usable credential for it. Treat that as \`access_unclear\` if an operation needs it, and say so.`,
-  ]
 }

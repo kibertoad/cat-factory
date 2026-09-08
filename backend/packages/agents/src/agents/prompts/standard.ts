@@ -21,6 +21,9 @@ import { deriveEnvironmentCoordinates } from '@cat-factory/contracts'
 import { PLATFORM_DELIVERY_CONTRACT } from './delivery-contract.js'
 import { renderOpenFindings } from './review-rounds.js'
 import { FINAL_ANSWER_IN_REPLY } from './shared.js'
+// The platform's statements about a live environment it did not stand up: shared verbatim with
+// the environment dry run, which exists to predict what a tester will be handed.
+import { environmentAccessLines, testCredentialLines } from './environment-under-test.js'
 import * as templateSpecs from './standard-templates.generated.js'
 
 const Handlebars = HandlebarsRuntime as unknown as typeof import('handlebars')
@@ -282,18 +285,11 @@ export function environmentSection(context: AgentRunContext): string {
   }
   lines.push(`- Status: ${env.status}`)
   lines.push(...reachabilityLines(env.reachability))
-  const access = env.access
-  if (access && access.scheme !== 'none') {
-    if (access.scheme === 'bearer' && access.token) {
-      lines.push(`- Auth: Bearer token \`${access.token}\` (send as \`Authorization: Bearer …\`)`)
-    } else if (access.scheme === 'basic' && access.username !== undefined) {
-      lines.push(
-        `- Auth: HTTP Basic — username \`${access.username}\`, password \`${access.password ?? ''}\``,
-      )
-    } else if (access.scheme === 'custom_header' && access.headerName) {
-      lines.push(`- Auth: header \`${access.headerName}: ${access.headerValue ?? ''}\``)
-    }
-  }
+  // The SAME renderer the dry run's prober uses, so the two cannot disagree about what the
+  // provider stated. It renders the two states this section used to drop, and both are states an
+  // agent otherwise mis-attributes: an environment declared OPEN reads as one whose credential
+  // never arrived, and a scheme declared with nothing usable behind it reads as a broken service.
+  lines.push(...environmentAccessLines(env.access))
   return lines.join('\n')
 }
 
@@ -379,25 +375,28 @@ function peerReachabilityParts(
 }
 
 /**
- * Render the SENSITIVE test-credentials section — the keys + descriptions of the secrets the
- * platform injected into the tester's container ENVIRONMENT out of band. Only the non-secret
- * KEY + DESCRIPTION appear here; the VALUE reaches the container as an environment variable
- * (`$KEY`), never the prompt, so the agent is told what is available and how to use it without
- * the secret ever being written into the prompt or telemetry. Empty string when the run carries
- * no test secrets (every non-tester run, and tester runs whose service configured none).
+ * Render the SENSITIVE test-credentials section: the keys + descriptions of the secrets the
+ * platform injected into the container ENVIRONMENT out of band. Only the non-secret KEY +
+ * DESCRIPTION appear here; the VALUE reaches the container as an environment variable (`$KEY`),
+ * never the prompt, so the agent is told what is available and how to use it without the secret
+ * ever being written into the prompt or telemetry.
+ *
+ * Rendered from the same {@link TestCredentialBrief} state, through the same renderer, as the
+ * environment DRY RUN's credentials section. That is what makes a dry run predictive: it reports
+ * whether an agent handed this environment could authenticate, and it can only predict the
+ * tester's answer if the tester is told the same thing. It also means the three states are STATED
+ * rather than collapsed: an unreadable store used to reach a tester as an absent section, which
+ * reads as "this service has none configured" and sends someone to re-enter secrets that are
+ * already there.
+ *
+ * Empty string only for a kind that is handed no credentials at all (every non-tester run), so
+ * those prompts stay byte-identical.
  */
 export function testSecretsSection(context: AgentRunContext): string {
-  const secrets = context.testSecrets
-  if (!secrets?.length) return ''
-  const lines = [
-    '',
-    'Sensitive test credentials (injected as environment variables — read them from the',
-    'environment, e.g. `$STRIPE_API_KEY`; they are NOT printed here and must not be logged):',
-  ]
-  for (const secret of secrets) {
-    lines.push(`- \`${secret.key}\`${secret.description ? ` — ${secret.description}` : ''}`)
-  }
-  return lines.join('\n')
+  const brief = context.testSecrets
+  if (!brief) return ''
+  const lines = ['', 'Sensitive test credentials for this service:']
+  return [...lines, ...testCredentialLines(brief)].join('\n')
 }
 
 /**

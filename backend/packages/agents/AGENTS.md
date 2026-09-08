@@ -112,6 +112,16 @@
   generic branch of `buildBaseUserPrompt`, and the prepend a registered kind that authors its own
   user prompt gets. A new prompt-assembly site owes it the same emit, or an operation's parameters
   silently vanish for that path. See `backend/docs/reusable-operations.md`.
+  `prompts/environment-under-test.ts` holds what the PLATFORM states about a live environment it
+  did not stand up (the access scheme it was handed, the frame's test-credential state, and where
+  to go looking for how to operate the service), and both the TESTER steps and the environment DRY
+  RUN render from it. That sharing is the dry run's whole claim: it reports whether an agent handed
+  this environment could operate the service, which predicts nothing about the tester step unless
+  the tester is told the same facts in the same words. Rendered twice, the two drifted exactly
+  where it costs most: a credential state only one of them kept. The ROLES stay separate on
+  purpose (a tester judges a CHANGE, a prober judges the SETUP), so each passes its own
+  `CredentialGapGuidance` naming how ITS report records a gap. `environment-under-test.test.ts`
+  asserts the pairing per state.
 - `providers/`, the **AI provisioning facade**: `registry.ts` (`CompositeModelProvider`),
   `resolvers.ts` (the runtime-neutral single-provider resolvers, where `openrouter` alone gets its
   own client via `openRouterResolver` and everything else the generic OpenAI-compatible one; the

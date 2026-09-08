@@ -361,6 +361,21 @@ interface PostAssemblyContext extends PreviewModuleContext {
   options: NodeContainerOptions
   resolveTransport: NodeTransportDeployResult['resolveTransport']
   githubInstallationRepository: GitHubInstallationRepository
+  /**
+   * What the AGENT DRY RUN's prober resolves its model and its credential from: the workspace's
+   * preset (model + route order) and the two subscription services. Threaded in rather than
+   * rebuilt here so the prober resolves a step's model through the same closures the step
+   * executor does. A second composition is a second answer to "which model did this workspace
+   * choose", and the losing one is whatever the deployment's env routing defaults to.
+   */
+  resolveWorkspaceModelDefault: (
+    workspaceId: string,
+    agentKind: string,
+    modelPresetId?: string,
+  ) => Promise<string | undefined>
+  resolvePresetProviderPreference: NodeContainerFoundation['resolvePresetProviderPreference']
+  subscriptions: NodeModelDepsResult['subscriptions']
+  personalSubscriptions: NodeModelDepsResult['personalSubscriptions']
   /** Routed through `sourced`, so a mothership node reads the projection over the RPC. */
   repoProjectionRepository: DrizzleRepoProjectionRepository
   bootstrapMintInstallationToken: NodeBootstrapperResult['bootstrapMintInstallationToken']
@@ -425,7 +440,12 @@ function applyNodePostAssemblyWiring(
     resolveTransport: ctx.resolveTransport,
     installationRepository: ctx.githubInstallationRepository,
     repoRepository: ctx.repoProjectionRepository,
+    blockRepository: repos.blockRepository,
     mintInstallationToken: ctx.bootstrapMintInstallationToken,
+    resolveWorkspaceModelDefault: ctx.resolveWorkspaceModelDefault,
+    resolvePresetProviderPreference: ctx.resolvePresetProviderPreference,
+    ...(ctx.subscriptions ? { subscriptions: ctx.subscriptions } : {}),
+    ...(ctx.personalSubscriptions ? { personalSubscriptions: ctx.personalSubscriptions } : {}),
     resolveRepoOrigin: options.resolveRepoOrigin ?? deploymentRepoOrigin(config),
     ...(ctx.resolveTestSecrets ? { resolveTestSecrets: ctx.resolveTestSecrets } : {}),
   })
@@ -1004,7 +1024,6 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     agentContextObservability,
     searchQueryObservability,
     resolveTestSecretRefs,
-    resolveTestSecrets,
     resolveValidationChecks,
     githubClient,
     tasks,
@@ -1015,10 +1034,6 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     bootstrapJobRepository,
     repoBootstrapper,
     resolveRepoTarget,
-    baseDeployMint,
-    resolveTransport,
-    bootstrapMintInstallationToken,
-    remoteRepos,
     defaultWebSearchUpstream,
     appRegistry,
     repoProjectionRepository,
@@ -1159,21 +1174,10 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
 
   // The post-assembly adjustments (preview module, env-config repairer, mothership re-sourcing),
   // each of which needs the FINAL dependency object — see the collaborator.
-  applyNodePostAssemblyWiring(dependencies, {
-    options,
-    env,
-    config,
-    repos,
-    resolveRepoTarget,
-    repoProjectionRepository,
-    baseDeployMint,
-    resolveTransport,
-    githubInstallationRepository,
-    bootstrapMintInstallationToken,
-    environmentBackendRegistry,
-    resolveTestSecrets,
-    remoteRepos,
-  })
+  // The BUNDLE itself, rather than a hand-copied subset of it: every field the post-assembly
+  // wiring reads is already on it, and a copied list is one more place a newly-needed dependency
+  // has to be threaded through (the prober's model resolution needed four).
+  applyNodePostAssemblyWiring(dependencies, bundle)
 
   return projectNodeServerContainer({
     dependencies,

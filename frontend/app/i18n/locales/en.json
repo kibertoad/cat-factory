@@ -818,7 +818,7 @@
         "env_test_no_vcs": "The self-test needs a git provider to create and delete its throwaway branch, but this workspace isn't connected to one.",
         "env_test_connection_failed": "The environment handler for this service failed its connection test. Check its endpoint, credentials and project settings, then re-test the connection.",
         "env_test_connection_failed_detail": "The environment handler for this service failed its connection test: {detail}. Check its endpoint, credentials and project settings, then re-test the connection.",
-        "env_test_probe_unavailable": "An agent dry run needs a container runner, a connected repository and a model this deployment's LLM proxy can serve. One of them is missing here, so only the provisioning self-test can run.",
+        "env_test_probe_unavailable": "An agent dry run needs a container runner and a connected repository. One of them is missing here, so only the provisioning self-test can run.",
         "env_test_already_running": "A self-test is already running for this service. Each one provisions its own throwaway environment, so only one runs at a time. Wait for it to finish, or stop it first.",
         "env_test_over_budget": "An agent dry run is a billable model call, and this workspace has reached a spend budget. Raise the budget or wait for the billing period to reset. The provisioning self-test costs nothing and still runs.",
         "@env_test_connection_failed_detail": {

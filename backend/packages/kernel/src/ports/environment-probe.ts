@@ -69,11 +69,24 @@ export interface EnvironmentProbeRequest {
   initiatedBy: string | null
 }
 
-/** Handle for a dispatched dry run, enough to poll and reclaim it. */
+/**
+ * Handle for a dispatched dry run, enough to poll and reclaim it.
+ *
+ * It carries the FRAME as well as the job, because a poll is not only an address: the settled
+ * report is stamped with the model that produced it, and which model that was is a fact about this
+ * workspace's frame and preset. The durable driver polls from a fresh process, so nothing the
+ * dispatch resolved is still in memory to read back; a handle that named only the container would
+ * leave the implementation re-deriving the model from a deployment default that no longer decides
+ * it, and reporting a model the run never ran.
+ */
 export interface EnvironmentProbeHandle {
   workspaceId: string
   jobId: string
   surface: EnvironmentProbeSurface
+  /** The service frame the dry run is about: the same id {@link EnvironmentProbeRequest} names. */
+  blockId: string
+  /** Who started the run, as the request carried it. Null for a system run. */
+  initiatedBy: string | null
 }
 
 /** One poll of a dispatched dry run. */

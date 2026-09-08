@@ -740,7 +740,7 @@
         "env_test_no_vcs": "Öz test, tek kullanımlık dalını oluşturup silmek için bir Git sağlayıcısına ihtiyaç duyar ancak bu çalışma alanı hiçbirine bağlı değil.",
         "env_test_connection_failed": "Bu hizmetin ortam işleyicisi bağlantı testini geçemedi. Uç noktasını, kimlik bilgilerini ve proje ayarlarını kontrol edin, ardından bağlantıyı yeniden test edin.",
         "env_test_connection_failed_detail": "Bu hizmetin ortam işleyicisi bağlantı testini geçemedi: {detail}. Uç noktasını, kimlik bilgilerini ve proje ayarlarını kontrol edin, ardından bağlantıyı yeniden test edin.",
-        "env_test_probe_unavailable": "Aracı prova çalışması bir konteyner çalıştırıcısı, bağlı bir depo ve bu kurulumun LLM proxy'sinin sunabileceği bir model gerektirir. Burada bunlardan biri eksik, bu yüzden yalnızca ortam hazırlama öz testi çalıştırılabilir.",
+        "env_test_probe_unavailable": "Aracı prova çalışması bir konteyner çalıştırıcısı ve bağlı bir depo gerektirir. Burada bunlardan biri eksik, bu yüzden yalnızca ortam hazırlama öz testi çalıştırılabilir.",
         "env_test_already_running": "Bu hizmet için zaten bir kendi kendine test çalışıyor. Her biri kendi tek kullanımlık ortamını hazırladığı için aynı anda yalnızca biri çalışır. Bitmesini bekleyin veya önce durdurun.",
         "env_test_over_budget": "Aracı deneme çalıştırması ücretli bir model çağrısıdır ve bu çalışma alanı harcama bütçesine ulaşmıştır. Bütçeyi artırın veya yeni faturalandırma dönemini bekleyin. Sağlama kendi kendine testi ücretsizdir ve çalışmaya devam eder.",
         "prompt_revision_conflict": "Bu isteme yapılan başka bir düzenleme önce ulaştı. Yeniden yükleyip değişikliğinizi onun üzerine uygulayın.",

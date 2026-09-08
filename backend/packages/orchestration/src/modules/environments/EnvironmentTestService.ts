@@ -31,6 +31,7 @@ import {
   requireWorkspace,
   runBestEffort,
 } from '@cat-factory/kernel'
+import { environmentProbeAgentKind } from '@cat-factory/contracts'
 import type { ProvisionArgs, ProvisionDispatch, SettledProvision } from '@cat-factory/integrations'
 import type { EnvironmentProbeStage } from './environmentProbeStage.js'
 
@@ -232,16 +233,43 @@ export class EnvironmentTestService {
   }
 
   /**
+   * The agent kind an `agent-probe` self-test of this frame would run as, so the START edge can
+   * gate the run on the initiator's personal subscription BEFORE anything is created.
+   *
+   * Asked of the service rather than derived at the edge because the answer is the frame's TYPE
+   * (a frontend frame is driven by a browser prober, everything else by an HTTP one), and the
+   * dispatch resolves its model under this exact kind. A gate that guessed a different one would
+   * either demand a credential the run never leases or admit a run that then fails at the lease,
+   * after a branch, a provision and a teardown. Null when this deployment cannot run a dry run at
+   * all. Nothing to gate, and `startTest` refuses the mode with a 409 that names the gap.
+   */
+  async probeAgentKind(workspaceId: string, blockId: string): Promise<string | null> {
+    if (!this.deps.probeStage) return null
+    const frame = await this.deps.blockRepository.get(workspaceId, blockId)
+    if (!frame) return null
+    return environmentProbeAgentKind(this.deps.probeStage.surfaceFor(frame))
+  }
+
+  /**
    * Kick off a self-test against a service frame's provisioning config and return
    * immediately with the `running` run. Pre-flights (frame provisionable, git provider
    * connected) throw as 409s BEFORE any record exists; after the record is inserted,
    * every failure runs best-effort cleanup and returns the run already `failed`.
+   *
+   * `activate` mints the initiator's individual-usage credential for THIS run, and is the same
+   * closure a pipeline start is handed. Passed in rather than resolved here for the reason the
+   * pipeline path passes it too: only the HTTP edge holds the unlock password, and only it can
+   * answer a caller who has not supplied one. Called with the run id, because that is the id the
+   * prober's dispatch leases against, and an activation minted against anything else is a
+   * credential the probe cannot open. Absent ⇒ the run needs no personal credential (a `provision` self-test
+   * always, an `agent-probe` whose model is not an individual-usage one).
    */
   async startTest(
     workspaceId: string,
     blockId: string,
     initiatedBy?: string | null,
     mode: EnvironmentTestMode = 'provision',
+    activate?: (runId: string) => Promise<void>,
   ): Promise<EnvironmentTestRun> {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)
     // Refuse an agent dry run this deployment cannot drive BEFORE anything is provisioned. A run
@@ -250,8 +278,8 @@ export class EnvironmentTestService {
     // reason (a wiring gap) that was knowable before a single side effect.
     if (mode === 'agent-probe' && !this.deps.probeStage) {
       throw new ConflictError(
-        'Agent dry runs are not available on this deployment: they need a container runner, a ' +
-          'connected repository and a model the LLM proxy can serve.',
+        'Agent dry runs are not available on this deployment: they need a container runner and a ' +
+          'connected repository.',
         'env_test_probe_unavailable',
       )
     }
@@ -358,6 +386,10 @@ export class EnvironmentTestService {
     await this.emit(record)
 
     try {
+      // BEFORE the first side effect of the run proper, and inside the try so a refusal here is
+      // cleaned up like any other start failure. The activation outlives a provision by hours
+      // (12h TTL), so the probe stage minutes later still finds it live.
+      await activate?.(record.id)
       // Create the throwaway branch off the frame repo's default head.
       const baseSha = await bound.repo.headSha(bound.baseBranch)
       if (!baseSha) {

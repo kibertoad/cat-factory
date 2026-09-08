@@ -14,23 +14,41 @@
 import {
   ContainerEnvConfigRepairer,
   ContainerEnvironmentProbeAgent,
+  ContainerJobAuthResolver,
   ContainerRepoBootstrapper,
   ContainerSessionService,
   FetchGitHubClient,
+  buildSingleKindModelResolver,
   deploymentRepoOrigin,
   type AppConfig,
+  type ContainerJobAuthDependencies,
   type ResolveRunnerTransport,
   logger,
   resolveUrlSafetyPolicy,
 } from '@cat-factory/server'
-import type { AgentContextRecorder, Clock, IdGenerator } from '@cat-factory/kernel'
+import type {
+  AgentContextRecorder,
+  AppCaches,
+  Clock,
+  IdGenerator,
+  SubscriptionVendor,
+} from '@cat-factory/kernel'
 import type { CoreDependencies } from '@cat-factory/orchestration'
-import type { EnvironmentBackendRegistry } from '@cat-factory/integrations'
+import type {
+  EnvironmentBackendRegistry,
+  PersonalSubscriptionService,
+  ProviderSubscriptionService,
+} from '@cat-factory/integrations'
 import { isProxyableProvider, resolveAgentConfig } from '@cat-factory/agents'
 import type { Env } from './env'
 import { buildAppRegistry, buildResolvePackageRegistries } from './container'
+import {
+  buildResolvePresetProviderPreference,
+  buildResolveWorkspaceModelDefault,
+} from './container-model-resolver'
 import { workerDispatchTokenMint } from './dispatchTokenMint'
 import { buildToolTrajectorySinks } from './container-executor-deps'
+import { D1BlockRepository } from './repositories/D1BlockRepository'
 import { D1BootstrapJobRepository } from './repositories/D1BootstrapJobRepository'
 import { D1GitHubInstallationRepository } from './repositories/D1GitHubInstallationRepository'
 import { D1RateLimitRepository } from './repositories/D1RateLimitRepository'
@@ -186,24 +204,24 @@ export function selectEnvConfigRepairer(deps: {
  * its signing secret. Absent any of them the self-test still runs in `provision` mode and
  * `startTest` refuses `agent-probe` with a 409 that names the gap.
  *
- * The models follow the TESTERS' routing rather than the coder's: a dry run reads a service and
- * exercises it without changing anything, which is the tester's job description, so a deployment
- * that routed its testers to a cheap model gets a cheap dry run without a second setting. PER
- * SURFACE, from each tester's own kind: the browser prober reads screenshots and drives a page and
- * the HTTP one reads a schema and calls it, so a deployment that routed `tester-ui` at a
- * vision-capable model and `tester-api` at a cheap text one must get the same split here. Both must
- * be proxyable, for the reason the repairer states: the Pi harness reaches the model through the
- * LLM proxy, and an individual-subscription vendor cannot be served that way. A misconfiguration is
- * surfaced HERE, at wiring, rather than at every dispatch; a surface whose own routing is
- * unproxyable disables the whole prober rather than half of it, because the SPA offers one button
- * per frame and the frame's type decides which surface it lands on.
+ * The MODEL is not one of those prerequisites, and treating it as one is what this wiring got
+ * wrong: it read the TESTERS' env routing here and pinned the prober to it for the deployment's
+ * lifetime. A model is a per-WORKSPACE fact, resolved per dispatch from the frame's own pin, else
+ * the workspace's model preset for the prober's kind (`environment-prober-api` / `-ui`), else the
+ * env routing: the precedence every pipeline step already gets. So a workspace on its Claude
+ * preset gets a Claude dry run, and its subscription is leased rather than refused: the auth deps
+ * below are the same ones the step executor uses, which is what makes a subscription harness
+ * runnable here at all. Mirror of the Node family's `selectNodeEnvironmentProbeAgent`.
  */
 export function selectEnvironmentProbeAgent(deps: {
   env: Env
   config: AppConfig
   db: D1Database
   clock: Clock
+  caches?: AppCaches
   resolveTransport: ResolveRunnerTransport | null
+  subscriptions?: ProviderSubscriptionService
+  personalSubscriptions?: PersonalSubscriptionService
 }): ContainerEnvironmentProbeAgent | undefined {
   const { env, config, db, clock, resolveTransport } = deps
   if (
@@ -215,32 +233,62 @@ export function selectEnvironmentProbeAgent(deps: {
   ) {
     return undefined
   }
-  const models = {
-    api: resolveAgentConfig(config.agents.routing, 'tester-api').ref,
-    ui: resolveAgentConfig(config.agents.routing, 'tester-ui').ref,
-  }
-  const unproxyable = Object.entries(models).find(([, ref]) => !isProxyableProvider(ref.provider))
-  if (unproxyable) {
-    logger.warn(
-      'environment dry run: a tester routing model is not proxyable by the LLM proxy; ' +
-        'agent dry runs are disabled on this deployment.',
-      { surface: unproxyable[0], provider: unproxyable[1].provider },
-    )
-    return undefined
-  }
   const registry = buildAppRegistry(env, config, db, clock)
   // The frame's sealed test credentials, resolved through the same service the tester dispatch
   // uses. Absent (no ENCRYPTION_KEY) ⇒ the prober is told there are none, which is what puts the
   // gap in its report rather than in its guesswork.
   const testSecrets = buildTestSecretsService(env, db, clock)
+  // Every credential channel a container dispatch can carry: the model-locked proxy session token
+  // for a Pi model, the pooled lease for Claude Code / Codex, the initiator's own personal lease
+  // for an individual-usage vendor. One composition, shared with the routing predicates below, so
+  // the vendor the model resolves ON is the vendor the credential is leased FOR.
+  const authDeps: ContainerJobAuthDependencies & {
+    hasSubscriptionToken?: (workspaceId: string, vendor: SubscriptionVendor) => Promise<boolean>
+    hasPersonalSubscription?: (userId: string, vendor: SubscriptionVendor) => Promise<boolean>
+  } = {
+    sessionService: new ContainerSessionService({ secret: env.AUTH_SESSION_SECRET }),
+    proxyBaseUrl: `${env.WORKER_PUBLIC_URL.replace(/\/+$/, '')}/v1`,
+    ...(deps.subscriptions
+      ? {
+          leaseSubscriptionToken: (workspaceId: string, vendor: SubscriptionVendor) =>
+            deps.subscriptions!.leaseToken(workspaceId, vendor),
+          hasSubscriptionToken: (workspaceId: string, vendor: SubscriptionVendor) =>
+            deps.subscriptions!.hasToken(workspaceId, vendor),
+        }
+      : {}),
+    ...(deps.personalSubscriptions
+      ? {
+          leasePersonalSubscriptionToken: (
+            executionId: string,
+            userId: string,
+            vendor: SubscriptionVendor,
+          ) => deps.personalSubscriptions!.leaseForRun(executionId, userId, vendor),
+          hasPersonalSubscription: (userId: string, vendor: SubscriptionVendor) =>
+            deps.personalSubscriptions!.has(userId, vendor),
+        }
+      : {}),
+    // No `nativeAmbientAuth`: the ambient-CLI path is the LOCAL facade's, and a Worker has no host
+    // process with a developer's login on it.
+  }
   return new ContainerEnvironmentProbeAgent({
     resolveTransport,
     installationRepository: new D1GitHubInstallationRepository({ db }),
     repoRepository: new D1RepoProjectionRepository({ db }),
     mintInstallationToken: workerDispatchTokenMint(registry),
-    sessionService: new ContainerSessionService({ secret: env.AUTH_SESSION_SECRET }),
-    models,
-    proxyBaseUrl: `${env.WORKER_PUBLIC_URL.replace(/\/+$/, '')}/v1`,
+    resolveModel: buildSingleKindModelResolver({
+      agentRouting: config.agents.routing,
+      resolveBlockModel: config.agents.resolveBlockModel,
+      blockRepository: new D1BlockRepository({ db }),
+      resolveWorkspaceModelDefault: buildResolveWorkspaceModelDefault(db, deps.caches),
+      resolvePresetProviderPreference: buildResolvePresetProviderPreference(db, deps.caches),
+      ...(authDeps.hasSubscriptionToken
+        ? { hasSubscriptionToken: authDeps.hasSubscriptionToken }
+        : {}),
+      ...(authDeps.hasPersonalSubscription
+        ? { hasPersonalSubscription: authDeps.hasPersonalSubscription }
+        : {}),
+    }),
+    auth: new ContainerJobAuthResolver(authDeps),
     // Provider-aware, so a GitLab deployment's prober clones its own instance rather than a
     // same-named project on github.com.
     resolveRepoOrigin: deploymentRepoOrigin(config),

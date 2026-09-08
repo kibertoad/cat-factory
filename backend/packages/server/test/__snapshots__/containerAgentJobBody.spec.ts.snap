@@ -700,6 +700,7 @@ If "Run mode" below says this is a LIBRARY test suite, there is no running syste
 
 Bootstrap your environment from the repository:
 - Read the repo's README.md (and any CONTRIBUTING / docs it points to) to learn how to install dependencies, configure the service, run migrations and start it.
+- Work out how to operate the service from the REPOSITORY, not from guesswork: its OpenAPI/GraphQL schema, route definitions, auth middleware, the README and any docs it points to, seed/fixture data naming test users, and any \`.http\` or \`curl\` examples. Prefer what the CODE says over what prose claims, and prefer the repo's own examples over an endpoint shape you would expect.
 - Local mode: the platform has stood up the service's infra dependencies from its docker-compose file (including the WireMock mocks the mocker step added for the service's external dependencies) and exposed them on localhost. Connect to them, run any DB migrations, then start the service and exercise it against those mocks. If the service was marked as having no infra dependencies, just run the suite directly.
 - Ephemeral mode: the deployed environment coordinates (URL, host, port, scheme) and any access credentials are provided in the run context below (see "Ephemeral environment under test"); test against that environment rather than starting anything locally.
 
@@ -766,6 +767,9 @@ Block: Add widget (service)
 Description: Implement the widget feature.
 
 Run mode: local — the service’s infra dependencies have been stood up on localhost; start the service yourself and test it there.
+
+Sensitive test credentials for this service:
+NONE, AND NONE ARE POSSIBLE HERE. This deployment has no sealed credential store wired, so no service on this board can be handed test credentials. The only auth material you have is whatever the environment section states and whatever the repository documents. If an operation needs a credential, record it as a failure and name the credential that is needed, and say that the DEPLOYMENT has no credential store, rather than asking for this service to be reconfigured.
 
 Produce your contribution. Be concise and concrete.",
     "webSearch": true,

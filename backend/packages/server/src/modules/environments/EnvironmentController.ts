@@ -37,12 +37,44 @@ import type { AppEnv } from '../../http/env.js'
 import { mountWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
 import { requireCapability } from '../../http/guards.js'
+import {
+  personalGateForAgentKind,
+  readPersonalPassword,
+} from '../providers/personalCredentialGate.js'
 
 /** Resolve the environment module, or refuse with a 503 naming what isn't wired. */
 function requireEnvironments<E extends AppEnv>(c: Context<E>): EnvironmentsModule {
   return requireCapability(
     c.get('container').environments,
     'Environment integration is not configured',
+  )
+}
+
+/**
+ * The personal-credential gate for an AGENT DRY RUN start: whose credential the run may use, and
+ * the closure that mints its activation.
+ *
+ * The kind comes from the service, because the prober's model is resolved under a kind that
+ * depends on the frame's TYPE (a browser prober for a frontend frame, an HTTP one otherwise) and
+ * the gate and the dispatch must ask about the same one. A deployment with no prober at all
+ * answers `null`: nothing to gate, and `startTest` then refuses the mode with the 409 that names
+ * the missing capability, which is a better error than one about a credential.
+ */
+async function gateAgentProbe<E extends AppEnv>(
+  c: Context<E>,
+  service: EnvironmentTestService,
+  workspaceId: string,
+  blockId: string,
+): Promise<{ initiatedBy: string | null; activate?: (runId: string) => Promise<void> }> {
+  const agentKind = await service.probeAgentKind(workspaceId, blockId)
+  if (!agentKind) return { initiatedBy: c.get('user')?.id ?? null }
+  return personalGateForAgentKind(
+    c.get('container'),
+    workspaceId,
+    blockId,
+    agentKind,
+    c.get('user'),
+    readPersonalPassword(c),
   )
 }
 
@@ -336,14 +368,24 @@ function registerEnvironmentRegistryRoutes(app: Hono<AppEnv>): void {
   app.use('/blocks/:blockId/environment-test', optionalJsonBody)
   buildHonoRoute(app, startEnvironmentTestContract, async (c) => {
     const service = requireEnvironmentTest(c)
-    const run = await service.startTest(
-      param(c, 'workspaceId'),
-      c.req.valid('param').blockId,
-      c.get('user')?.id ?? null,
-      // Absent ⇒ the provisioning self-test, so an older client's body-less start is unchanged.
-      // A deployment with no prober refuses `agent-probe` in the service, before side effects.
-      c.req.valid('json').mode ?? 'provision',
-    )
+    const workspaceId = param(c, 'workspaceId')
+    const blockId = c.req.valid('param').blockId
+    // Absent ⇒ the provisioning self-test, so an older client's body-less start is unchanged.
+    // A deployment with no prober refuses `agent-probe` in the service, before side effects.
+    const mode = c.req.valid('json').mode ?? 'provision'
+    // An AGENT DRY RUN spends a model call, so it answers to the same personal-credential gate a
+    // run does: a dry run whose model resolves to an individual-usage subscription (Claude) may
+    // only be started by its owner, with their unlock password on the request. Without this the
+    // dispatch reached the lease with no activation minted and the developer was never asked for
+    // anything, which is how a workspace on the Claude preset had its prober silently dispatched
+    // at the deployment's env-routing default instead. Gated on the kind the DISPATCH will resolve
+    // its model under (`probeAgentKind`), not a guess. `provision` mode runs no agent and so needs
+    // no credential, which is what keeps the historical body-less start ungated.
+    const gate =
+      mode === 'agent-probe'
+        ? await gateAgentProbe(c, service, workspaceId, blockId)
+        : { initiatedBy: c.get('user')?.id ?? null }
+    const run = await service.startTest(workspaceId, blockId, gate.initiatedBy, mode, gate.activate)
     return c.json(run, 201)
   })
 

@@ -272,6 +272,8 @@ export type {
   // Sensitive per-service test credentials (sealed; delivered out-of-band to the Tester).
   TestSecretRef,
   TestSecretEntry,
+  // What the platform can SAY about them: read, unreadable, or not possible on this deployment.
+  TestCredentialBrief,
   ServiceTestSecretsView,
   UpsertServiceTestSecretsInput,
   // Unified provisioning event-log shapes.

@@ -230,6 +230,20 @@ export {
   type ContainerEnvironmentProbeAgentDependencies,
 } from './agents/ContainerEnvironmentProbeAgent.js'
 export {
+  ContainerJobAuthResolver,
+  type ContainerJobAuth,
+  type ContainerJobAuthDependencies,
+  type ContainerJobAuthRequest,
+  type LeasePersonalSubscriptionToken,
+  type LeaseSubscriptionToken,
+} from './agents/containerJobAuth.js'
+export {
+  buildSingleKindModelResolver,
+  type ResolveSingleKindModel,
+  type SingleKindModel,
+  type SingleKindModelResolverDependencies,
+} from './agents/singleKindModel.js'
+export {
   buildResolveRepoTarget,
   buildResolveRepoTargets,
   buildListWorkspaceRunRepos,

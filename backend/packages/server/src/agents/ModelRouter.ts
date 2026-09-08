@@ -1,5 +1,5 @@
 import type {
-  AgentRunContext,
+  LocalModelDeclarations,
   ModelFlavor,
   ModelRef,
   SubscriptionVendor,
@@ -7,6 +7,34 @@ import type {
 import type { HarnessKind } from '@cat-factory/kernel'
 import { isIndividualVendor, subscriptionOptionFor } from '@cat-factory/kernel'
 import { type AgentRouting, isProxyableProvider, resolveStepModelRef } from '@cat-factory/agents'
+
+/**
+ * Everything the router reads to pick a model: the agent kind, the workspace, whatever the block
+ * pins, and who started the work.
+ *
+ * A structural SUBSET of {@link import('@cat-factory/kernel').AgentRunContext}, which is what the
+ * pipeline path still passes. The point is the callers that have no run context to pass: a
+ * single-job container flow (the agent dry run, the config repairer) is not an
+ * `ExecutionInstance`: it has a workspace, a frame and an initiator, and nothing else the run
+ * context describes. Asking those callers for a whole `AgentRunContext` would have them fabricate
+ * a pipeline name, a step index and a final-step flag, and a fabricated run context is a thing
+ * later code reads as one. Taking the subset instead is what lets every dispatch, pipeline step
+ * or not, resolve its model through THIS precedence rather than reaching for the deployment's env
+ * routing directly, which is a model nobody's preset chose.
+ */
+export interface StepModelSelection {
+  agentKind: string
+  /** Absent ⇒ no workspace defaults are consulted and the env routing decides. */
+  workspaceId?: string
+  /** Whoever started the work: whose personal (individual-usage) subscription may be leased. */
+  initiatedByUserId?: string
+  /** The route order the preset in force states; absent ⇒ the deployment's default order. */
+  providerPreference?: readonly ModelFlavor[]
+  /** The initiator's local-runner declarations, folded onto the resolved ref. */
+  localModelDeclarations?: readonly LocalModelDeclarations[]
+  /** What the block itself pins, if anything. `{}` for a caller whose subject pins nothing. */
+  block: { modelId?: string; modelPresetId?: string }
+}
 
 /** The collaborators {@link ModelRouter} needs to resolve a step's model + subscription path. */
 export interface ModelRouterDependencies {
@@ -58,7 +86,7 @@ export class ModelRouter {
    * workspace per-kind default > env routing). Side-effect-free and dispatch-free,
    * so it backs both the up-front `resolveModel` preview and `buildJobBody`.
    */
-  resolveRef(context: AgentRunContext): Promise<ModelRef> {
+  resolveRef(context: StepModelSelection): Promise<ModelRef> {
     return resolveStepModelRef(
       {
         agentRouting: this.deps.agentRouting,
@@ -94,7 +122,7 @@ export class ModelRouter {
    * default (a raw ref with no canonical id). Used to look up the model's
    * subscription path for the "subscriptions always win" override.
    */
-  private async resolveCanonicalModelId(context: AgentRunContext): Promise<string | undefined> {
+  private async resolveCanonicalModelId(context: StepModelSelection): Promise<string | undefined> {
     if (context.block.modelId) return context.block.modelId
     if (this.deps.resolveWorkspaceModelDefault && context.workspaceId) {
       return (
@@ -120,7 +148,7 @@ export class ModelRouter {
    *    workspace falls back to Cloudflare GLM.
    */
   async resolveEffectiveRef(
-    context: AgentRunContext,
+    context: StepModelSelection,
     workspaceId: string,
   ): Promise<{ ref: ModelRef; subscriptionVendor?: SubscriptionVendor }> {
     let ref = await this.resolveRef(context)
@@ -164,14 +192,14 @@ export class ModelRouter {
    * proxyable guard does not apply to them.
    */
   async resolveDispatchRef(
-    context: AgentRunContext,
+    context: StepModelSelection,
     workspaceId: string,
   ): Promise<{ ref: ModelRef; harness: HarnessKind; subscriptionVendor?: SubscriptionVendor }> {
     const { ref, subscriptionVendor } = await this.resolveEffectiveRef(context, workspaceId)
     const harness: HarnessKind = ref.harness ?? 'pi'
     if (harness === 'pi' && !isProxyableProvider(ref.provider)) {
       throw new Error(
-        `Container implementation needs a model the LLM proxy can serve ` +
+        `A container dispatch needs a model the LLM proxy can serve ` +
           `(Workers AI, a direct OpenAI-compatible provider, or a local runner); ` +
           `'${ref.provider}' is not supported. Pick a Workers AI model, configure a ` +
           `provider key (QWEN_API_KEY / DEEPSEEK_API_KEY / MOONSHOT_API_KEY), or add a local ` +

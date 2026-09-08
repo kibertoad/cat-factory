@@ -6251,7 +6251,7 @@
         "env_test_no_vcs": "L'autotest ha bisogno di un provider Git per creare ed eliminare il suo branch usa e getta, ma questo workspace non è collegato a nessuno.",
         "env_test_connection_failed": "Il gestore dell'ambiente di questo servizio non ha superato il test di connessione. Controlla endpoint, credenziali e impostazioni del progetto, poi ripeti il test della connessione.",
         "env_test_connection_failed_detail": "Il gestore dell'ambiente di questo servizio non ha superato il test di connessione: {detail}. Controlla endpoint, credenziali e impostazioni del progetto, poi ripeti il test della connessione.",
-        "env_test_probe_unavailable": "Una prova a vuoto dell’agente richiede un runner di container, un repository collegato e un modello che il proxy LLM di questo deployment possa servire. Qui ne manca uno, quindi può essere eseguito solo l’autotest di provisioning.",
+        "env_test_probe_unavailable": "Una prova a vuoto dell’agente richiede un runner di container e un repository collegato. Qui ne manca uno, quindi può essere eseguito solo l’autotest di provisioning.",
         "env_test_already_running": "È già in esecuzione un autotest per questo servizio. Ognuno effettua il provisioning del proprio ambiente temporaneo, quindi ne viene eseguito uno alla volta. Attendi che finisca oppure interrompilo.",
         "env_test_over_budget": "Una prova a vuoto dell'agente è una chiamata al modello a pagamento e questo workspace ha raggiunto il budget di spesa. Aumenta il budget o attendi il prossimo periodo di fatturazione. L'autotest di provisioning non ha costi e resta disponibile.",
         "prompt_revision_conflict": "Un'altra modifica a questo prompt è arrivata prima. Ricaricalo e riapplica la tua sopra.",

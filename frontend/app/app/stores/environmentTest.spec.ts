@@ -1,10 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import type { EnvironmentTestRun } from '~/types/domain'
 import { useEnvironmentTestStore } from '~/stores/environmentTest'
+import { usePersonalSubscriptionsStore } from '~/stores/personalSubscriptions'
+import { useWorkspaceStore } from '~/stores/workspace'
 
 // The store resolves `useApi()` at setup; override the inert global stub from
 // `test/setup.ts` with a per-suite mock so the hydrate reconcile point-read is observable.
-const apiMock = { getEnvironmentTest: vi.fn() }
+const apiMock = { getEnvironmentTest: vi.fn(), startEnvironmentTest: vi.fn() }
 vi.stubGlobal('useApi', () => apiMock)
 
 /** Minimal EnvironmentTestRun factory — only the fields the store's reconcile logic touches. */
@@ -27,6 +29,46 @@ function run(id: string, over: Partial<EnvironmentTestRun> = {}): EnvironmentTes
     ...over,
   }
 }
+
+describe('environmentTest store: starting a run that may need a personal credential', () => {
+  let store: ReturnType<typeof useEnvironmentTestStore>
+  let withCredential: ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    useWorkspaceStore().workspaceId = 'ws_test'
+    // The gate's contract, stubbed on the real store: run the action with the cached password, and
+    // resolve `false` when the person cancels the unlock prompt.
+    withCredential = vi.fn(async (action: (password?: string) => Promise<void>) => {
+      await action('cached-password')
+      return true
+    })
+    usePersonalSubscriptionsStore().withCredential = withCredential as unknown as ReturnType<
+      typeof usePersonalSubscriptionsStore
+    >['withCredential']
+    apiMock.startEnvironmentTest = vi.fn(async () => run('envtest_1', { mode: 'agent-probe' }))
+    store = useEnvironmentTestStore()
+  })
+
+  it('rides the unlock password, so a preset-resolved Claude dry run can lease it', async () => {
+    // Ungated, an `agent-probe` start 428s and the person is never asked for anything: the
+    // failure they see is a dry run that provisioned an environment and then could not open a
+    // credential nobody unlocked.
+    const started = await store.start('blk_1', 'agent-probe')
+    expect(apiMock.startEnvironmentTest).toHaveBeenCalledWith(
+      'ws_test',
+      'blk_1',
+      'agent-probe',
+      'cached-password',
+    )
+    expect(started?.id).toBe('envtest_1')
+    expect(store.runById('envtest_1')).toBeTruthy()
+  })
+
+  it('reports a cancelled unlock as no run, so the caller stops waiting for one', async () => {
+    withCredential.mockImplementation(async () => false)
+    expect(await store.start('blk_1', 'agent-probe')).toBeNull()
+  })
+})
 
 describe('environmentTest store — monotonic run reconcile', () => {
   let store: ReturnType<typeof useEnvironmentTestStore>

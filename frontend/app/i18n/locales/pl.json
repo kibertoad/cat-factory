@@ -740,7 +740,7 @@
         "env_test_no_vcs": "Autotest potrzebuje dostawcy Git, aby utworzyć i usunąć swoją jednorazową gałąź, ale ta przestrzeń robocza nie jest połączona z żadnym.",
         "env_test_connection_failed": "Obsługa środowiska dla tej usługi nie przeszła testu połączenia. Sprawdź jej punkt końcowy, poświadczenia i ustawienia projektu, a następnie ponownie przetestuj połączenie.",
         "env_test_connection_failed_detail": "Obsługa środowiska dla tej usługi nie przeszła testu połączenia: {detail}. Sprawdź jej punkt końcowy, poświadczenia i ustawienia projektu, a następnie ponownie przetestuj połączenie.",
-        "env_test_probe_unavailable": "Próbny przebieg agenta wymaga runnera kontenerów, podłączonego repozytorium i modelu, który potrafi obsłużyć proxy LLM tego wdrożenia. Brakuje tu jednego z nich, więc można uruchomić tylko autotest przydzielania środowiska.",
+        "env_test_probe_unavailable": "Próbny przebieg agenta wymaga runnera kontenerów i podłączonego repozytorium. Brakuje tu jednego z nich, więc można uruchomić tylko autotest przydzielania środowiska.",
         "env_test_already_running": "Dla tej usługi już trwa autotest. Każdy z nich udostępnia własne środowisko jednorazowe, więc naraz działa tylko jeden. Poczekaj na zakończenie albo najpierw go zatrzymaj.",
         "env_test_over_budget": "Próbny przebieg agenta to płatne wywołanie modelu, a ten obszar roboczy osiągnął limit wydatków. Zwiększ limit albo poczekaj na nowy okres rozliczeniowy. Autotest aprowizacji nic nie kosztuje i nadal działa.",
         "prompt_revision_conflict": "Inna zmiana tego promptu trafiła pierwsza. Wczytaj go ponownie i nanieś swoją zmianę na wierzch.",

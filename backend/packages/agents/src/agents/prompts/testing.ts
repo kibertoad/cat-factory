@@ -2,6 +2,7 @@ import type { AgentKind, AgentRunContext } from '@cat-factory/kernel'
 import { frameProfile } from '@cat-factory/contracts'
 import { FINAL_ANSWER_IN_REPLY } from './shared.js'
 import { REFERENCE_SCREENSHOT_DIR } from './standard.js'
+import { SERVICE_DISCOVERY_GUIDANCE } from './environment-under-test.js'
 
 // Built-out role prompts for the Tester → Fixer loop. The `tester` clones the PR
 // branch, brings its dependencies up (locally via docker-compose for a `docker-compose`
@@ -61,6 +62,10 @@ const TESTER_SYSTEM_PROMPT = [
   '',
   'Bootstrap your environment from the repository:',
   "- Read the repo's README.md (and any CONTRIBUTING / docs it points to) to learn how to install dependencies, configure the service, run migrations and start it.",
+  // The environment DRY RUN's own discovery list, shared verbatim: a dry run reports whether an
+  // agent handed this environment could work out how to operate the service, and it can only
+  // predict YOUR answer if you are sent looking in the same places.
+  `- ${SERVICE_DISCOVERY_GUIDANCE}`,
   "- Local mode: the platform has stood up the service's infra dependencies from its docker-compose file (including the WireMock mocks the mocker step added for the service's external dependencies) and exposed them on localhost. Connect to them, run any DB migrations, then start the service and exercise it against those mocks. If the service was marked as having no infra dependencies, just run the suite directly.",
   '- Ephemeral mode: the deployed environment coordinates (URL, host, port, scheme) and any access credentials are provided in the run context below (see "Ephemeral environment under test"); test against that environment rather than starting anything locally.',
   '',
