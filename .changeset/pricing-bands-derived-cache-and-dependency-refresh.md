@@ -3,6 +3,7 @@
 '@cat-factory/app': patch
 '@cat-factory/caching': patch
 '@cat-factory/cli': patch
+'@cat-factory/deploy-harness': patch
 '@cat-factory/eks': patch
 '@cat-factory/executor-harness': minor
 '@cat-factory/gatekeeper-bindings': patch
@@ -71,7 +72,9 @@ Pi holds at 0.85.1, Codex at 0.153.4 and both Pi extensions at 2.9.0, each alrea
 Code goes 2.1.263 to 2.1.265, taking its newest release ahead of the 24h age window as the
 Dockerfile's standing note allows. Playwright holds at 1.63.0 and WireMock at 3.13.1, both still
 newest stable. `node:26-trixie-slim` still resolves to the pinned digest, so no base image moved.
-The executor image tag rolls to 1.156.0.
+The executor image tag rolls to 1.156.0, and the DEPLOY image tag to 0.6.6: the dependency refresh
+reaches the deploy harness's own `@types/node` range, which is an image source, and republishing
+over a live tag does not roll a deployment out.
 
 Dependency refresh: direct ranges plus a lockfile re-resolution, 75 resolved names moved, no
 package name added or dropped, and three names that had two copies now have one. `@clack/prompts`
