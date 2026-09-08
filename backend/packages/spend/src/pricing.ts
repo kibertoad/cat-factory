@@ -19,25 +19,68 @@ import type { OpenRouterModelMeta, WorkspaceSettings } from '@cat-factory/contra
 // safeguard is allowed to be wrong in. Re-base it only DOWNWARD-safely, i.e. never
 // below the spot rate, and re-check the vendor list prices in the same pass.
 
-/** Price per 1M input/output tokens for one model. */
-export interface ModelPrice {
+/**
+ * The four per-1M rates ONE BAND bills at.
+ *
+ * Most models have a single band, which is why this shape is also a whole {@link ModelPrice}.
+ * A vendor that reprices an entire request past a prompt threshold has two, and both sit on the
+ * same entry: see {@link ModelPrice.longBand}.
+ *
+ * The two cache rates are relative to THIS band's own `inputPerMillion`, so a band that departs
+ * from the multiplier floors names its own pair rather than borrowing the other band's.
+ */
+export interface BandRates {
   /** Price per 1M FRESH (uncached) input tokens. */
   inputPerMillion: number
   outputPerMillion: number
   /**
    * Price per 1M input tokens served from the provider's prompt cache. Omitted ⇒ derived
-   * from {@link ModelPrice.inputPerMillion} via {@link CACHE_READ_MULTIPLIER}. An entry sets
-   * this only where a vendor departs from the near-universal ratio, so the ~50 entries below
-   * do not each restate the same arithmetic.
+   * from this band's {@link BandRates.inputPerMillion} via {@link CACHE_READ_MULTIPLIER}. An
+   * entry sets this only where a vendor departs from the near-universal ratio, so the ~50
+   * entries below do not each restate the same arithmetic.
    */
   cacheReadPerMillion?: number
   /**
    * Price per 1M input tokens WRITTEN into the provider's cache. Omitted ⇒ derived via
    * {@link CACHE_WRITE_MULTIPLIER}. Dearer than fresh input, which is why it cannot be
-   * folded into {@link ModelPrice.cacheReadPerMillion}: a loop that keeps invalidating its
+   * folded into {@link BandRates.cacheReadPerMillion}: a loop that keeps invalidating its
    * prefix and a loop riding a warm cache differ by roughly 12x per cached token.
    */
   cacheWritePerMillion?: number
+}
+
+/**
+ * The dearer rates a request is billed at once its input reaches {@link minPromptTokens}.
+ *
+ * Three vendors bill this way today (OpenAI at 272K input tokens, Gemini 3.1 Pro and Grok 4.6 at
+ * 200K): past the threshold the WHOLE request reprices, with no blending, so one model has two
+ * prices. The threshold is the only band condition modelled here, because it is the only one a
+ * meter can evaluate: the prompt size is recorded on the usage it prices. DeepSeek's peak /
+ * off-peak split is a band on the WALL CLOCK, which nothing hands {@link estimateCost}, so those
+ * rows carry the peak rate in their base band and say so.
+ */
+export interface LongContextBand extends BandRates {
+  /**
+   * Total input tokens at which this band takes over, counting EVERY input class: the vendor
+   * bands on the size of the request it received, and fresh input, cache reads and cache writes
+   * are a partition of that (kernel's `InputTokenClassCounts`). Counting fresh input alone would
+   * leave a 300K-token prompt served mostly from cache priced in the short band.
+   */
+  minPromptTokens: number
+}
+
+/** Price per 1M input/output tokens for one model, in each band the vendor bills it in. */
+export interface ModelPrice extends BandRates {
+  /**
+   * The long-context band, for a vendor that has one. Absent ⇒ one price at any prompt size.
+   *
+   * Kept as a second band rather than folded into the base rates: a folded row prices every
+   * SHORT request on a two-band model at roughly double its cost, and the picker renders that
+   * doubled figure as the model's list price beside single-band models at their real one.
+   * {@link bandFor} picks between them, and answers the DEARER one where the caller cannot say
+   * how large the prompt was.
+   */
+  longBand?: LongContextBand
 }
 
 /**
@@ -122,6 +165,19 @@ export function effectiveTierLimit(
 }
 
 /**
+ * The input-token thresholds the three two-band vendors reprice a whole request at, one constant
+ * per vendor: each moves on its own vendor's say-so, and two of them agree today by coincidence.
+ *
+ * Named rather than repeated on the rows that share one. The OpenAI threshold appears on ten
+ * entries (five direct, five gateway), and a per-row copy would be ten chances to mistype the
+ * number that decides which band a run is metered in, in a table where a wrong figure looks
+ * exactly like a right one.
+ */
+const OPENAI_LONG_CONTEXT_TOKENS = 272_000
+const GEMINI_LONG_CONTEXT_TOKENS = 200_000
+const GROK_LONG_CONTEXT_TOKENS = 200_000
+
+/**
  * Built-in approximate EUR prices per 1M tokens. Keys are matched most-specific
  * first: exact `provider:model`, then the bare `provider`, then `defaultPrice`.
  */
@@ -158,30 +214,68 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   // the Codex `--model` slugs the catalog dispatches, so GPT-6 Astra, the GPT-5.6 tiers and
   // plain GPT-5.5, never a `-codex`-suffixed id, which no longer exists past GPT-5.3.
   //
-  // ALL FIVE ARE PRICED AT OPENAI'S LONG-CONTEXT BAND, the same decision the `xai:grok-4.6` row
-  // below makes and for the same reason. OpenAI bills in two bands: a request whose prompt reaches
-  // 272,000 input tokens is billed ENTIRELY at roughly double the short rate, with no blending, so
-  // one model has two prices and this table has one slot. Long list is $20 / $75 (Astra), $8 / $30
-  // (Sol), $4 / $18 (Terra), $0.40 / $1.80 (Luna), $10 / $45 (GPT-5.5). Every row here carried the
-  // SHORT band, which meters a long-prompt run at half its input and ~60% of its output. The
-  // catalog declares a 1,050,000-token window on these entries, so a container agent re-sending a
-  // large checkout crosses that threshold as ordinary behaviour rather than as an edge case. A
-  // short-prompt run is over-metered by ~2x as the accepted cost, which is the direction a budget
-  // safeguard is allowed to be wrong in. Pricing per band needs the recorded prompt size to reach
-  // `priceFor`, which is the same prefix-aware matching the `bedrock` row below is waiting on.
+  // ALL FIVE ARE TWO-BAND, the shape the `xai:grok-4.6` row below and the Gemini 3.1 Pro row also
+  // carry. OpenAI bills a request whose prompt reaches 272,000 input tokens ENTIRELY at roughly
+  // double the short rate, with no blending, so each row states both bands and `bandFor` picks
+  // the one the recorded input size lands in. Short list is $10 / $50 (Astra), $4 / $20 (Sol),
+  // $2 / $12 (Terra), $0.20 / $1.20 (Luna) and $5 / $30 (GPT-5.5); the long band is $20 / $75,
+  // $8 / $30, $4 / $18, $0.40 / $1.80 and $10 / $45. The catalog declares a 1,050,000-token
+  // window on these entries, so a container agent re-sending a large checkout reaches the long
+  // band as ordinary behaviour rather than as an edge case.
   //
-  // Both DERIVED cache tiers stay exact on the long band: cache reads bill at 0.1x and writes at
-  // 1.25x of the band's own input rate on all five tiers, so neither needs naming.
+  // Both DERIVED cache tiers stay exact in EITHER band: cache reads bill at 0.1x and writes at
+  // 1.25x of that band's own input rate on all five tiers, so no band here names one.
   //
-  // Two upstream facts checked and deliberately not followed. OpenAI's SHORT band for Sol now
-  // reads $4 / $20 where this table carried $5 / $30, which the long band supersedes. And the 2x
-  // "Fast mode" rate is still not modelled: nothing here dispatches it, so a row set to a mode we
-  // never request would over-meter on top of the band choice above.
-  'openai:gpt-6-astra': { inputPerMillion: 18.4, outputPerMillion: 69 },
-  'openai:gpt-5.6-sol': { inputPerMillion: 7.36, outputPerMillion: 27.6 },
-  'openai:gpt-5.6-terra': { inputPerMillion: 3.68, outputPerMillion: 16.56 },
-  'openai:gpt-5.6-luna': { inputPerMillion: 0.37, outputPerMillion: 1.66 },
-  'openai:gpt-5.5': { inputPerMillion: 9.2, outputPerMillion: 41.4 },
+  // The 2x "Fast mode" rate is deliberately not modelled: nothing here dispatches it, and a row
+  // set to a mode we never request would over-meter every ordinary run.
+  'openai:gpt-6-astra': {
+    inputPerMillion: 9.2,
+    outputPerMillion: 46,
+    longBand: {
+      minPromptTokens: OPENAI_LONG_CONTEXT_TOKENS,
+      inputPerMillion: 18.4,
+      outputPerMillion: 69,
+    },
+  },
+  'openai:gpt-5.6-sol': {
+    inputPerMillion: 3.68,
+    outputPerMillion: 18.4,
+    longBand: {
+      minPromptTokens: OPENAI_LONG_CONTEXT_TOKENS,
+      inputPerMillion: 7.36,
+      outputPerMillion: 27.6,
+    },
+  },
+  'openai:gpt-5.6-terra': {
+    inputPerMillion: 1.84,
+    outputPerMillion: 11.04,
+    longBand: {
+      minPromptTokens: OPENAI_LONG_CONTEXT_TOKENS,
+      inputPerMillion: 3.68,
+      outputPerMillion: 16.56,
+    },
+  },
+  // Luna's bands round UP, both of them (0.184 to 0.19 short, 0.368 to 0.37 long): this is the one
+  // OpenAI tier whose EUR figures do not land on a clean two decimals, and rounding the other way
+  // is the understatement the table's whole margin exists to rule out.
+  'openai:gpt-5.6-luna': {
+    inputPerMillion: 0.19,
+    outputPerMillion: 1.11,
+    longBand: {
+      minPromptTokens: OPENAI_LONG_CONTEXT_TOKENS,
+      inputPerMillion: 0.37,
+      outputPerMillion: 1.66,
+    },
+  },
+  'openai:gpt-5.5': {
+    inputPerMillion: 4.6,
+    outputPerMillion: 27.6,
+    longBand: {
+      minPromptTokens: OPENAI_LONG_CONTEXT_TOKENS,
+      inputPerMillion: 9.2,
+      outputPerMillion: 41.4,
+    },
+  },
   openai: { inputPerMillion: 0.14, outputPerMillion: 0.55 },
   // Cloudflare Workers AI is billed per "neuron"; treat it as roughly free. Every model
   // BELOW is a per-token-billed exception — see the note on the Kimi entries: a model with
@@ -209,10 +303,13 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   // $0.19 for K2.7), and each sits above the 0.1x floor these entries would otherwise derive.
   // All three are named for that reason: deriving the cheaper number under-meters every cache
   // read on the default coder route, which is the one direction the budget gate may not err in.
+  // Each is rounded UP to the two decimals this table states rates in (0.092 to 0.10, 0.1472 to
+  // 0.15, 0.1748 to 0.18), since rounding a named rate down re-creates the same undercount from
+  // the other side.
   'workers-ai:@cf/moonshotai/kimi-k2.5': {
     inputPerMillion: 0.55,
     outputPerMillion: 2.76,
-    cacheReadPerMillion: 0.09,
+    cacheReadPerMillion: 0.1,
   },
   'workers-ai:@cf/moonshotai/kimi-k2.6': {
     inputPerMillion: 0.87,
@@ -222,7 +319,7 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   'workers-ai:@cf/moonshotai/kimi-k2.7-code': {
     inputPerMillion: 0.87,
     outputPerMillion: 3.68,
-    cacheReadPerMillion: 0.17,
+    cacheReadPerMillion: 0.18,
   },
   // The remaining per-token-billed Workers AI models the catalog exposes. GLM-5.2 is the
   // default architect/reviewer routing and the R1 distill is the DeepSeek Cloudflare
@@ -358,12 +455,33 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   'zai:glm-5.2': { inputPerMillion: 1.29, outputPerMillion: 4.05, cacheReadPerMillion: 0.24 },
   zai: { inputPerMillion: 1.29, outputPerMillion: 4.05, cacheReadPerMillion: 0.24 },
   // xAI direct. Grok 4.6 bills in two bands: $2 in / $0.50 cached / $6 out per 1M below a
-  // 200K-token prompt, and DOUBLE that for the whole request once the prompt crosses 200K.
-  // Priced at the LONG band, because the budget gate must not undercount and this table has
-  // no way to express a threshold that depends on the prompt actually sent. A short-prompt
-  // run is over-metered by 2x as the accepted cost of that. (USD→EUR ~0.92.)
-  'xai:grok-4.6': { inputPerMillion: 3.68, outputPerMillion: 11.04, cacheReadPerMillion: 0.92 },
-  xai: { inputPerMillion: 3.68, outputPerMillion: 11.04, cacheReadPerMillion: 0.92 },
+  // 200K-token prompt, and DOUBLE that for the whole request once the prompt crosses 200K. Both
+  // bands NAME their cache read, because xAI's cached-input rate is 0.25x its fresh input rather
+  // than the 0.1x floor either band would otherwise derive. The bare `xai` fallback carries the
+  // same pair: Grok 4.6 is the only model this catalog selects on the route, so the guess for an
+  // unlisted one is the model that is really there. (USD→EUR ~0.92.)
+  'xai:grok-4.6': {
+    inputPerMillion: 1.84,
+    outputPerMillion: 5.52,
+    cacheReadPerMillion: 0.46,
+    longBand: {
+      minPromptTokens: GROK_LONG_CONTEXT_TOKENS,
+      inputPerMillion: 3.68,
+      outputPerMillion: 11.04,
+      cacheReadPerMillion: 0.92,
+    },
+  },
+  xai: {
+    inputPerMillion: 1.84,
+    outputPerMillion: 5.52,
+    cacheReadPerMillion: 0.46,
+    longBand: {
+      minPromptTokens: GROK_LONG_CONTEXT_TOKENS,
+      inputPerMillion: 3.68,
+      outputPerMillion: 11.04,
+      cacheReadPerMillion: 0.92,
+    },
+  },
   // OpenRouter — a passthrough gateway billed at the underlying provider's rates (no
   // per-token markup), so each curated model carries the upstream vendor's list price
   // (USD→EUR ~0.92). Keyed by the OpenRouter `vendor/model` slug. The bare `openrouter`
@@ -377,37 +495,85 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   'openrouter:anthropic/claude-opus-4.8': { inputPerMillion: 4.6, outputPerMillion: 23 },
   // Gemini 3.1 Pro is the THIRD two-band route in this table, beside OpenAI below and xAI further
   // down, and the only Gemini entry that has one: Google bills a prompt over 200,000 tokens at
-  // $4 in / $0.40 cached / $18 out per 1M against the $2 / $0.20 / $12 below it. Priced at the LONG
-  // band for the reason those two state, and the catalog gives this entry a 1,048,576-token window,
-  // so the band is reachable by an ordinary long-context run rather than by an edge case. The
-  // derived 0.1x cache tier lands exactly on the long band's own $0.40, so it stays derived.
-  'openrouter:google/gemini-3.1-pro-preview': { inputPerMillion: 3.68, outputPerMillion: 16.56 },
+  // $4 in / $0.40 cached / $18 out per 1M against the $2 / $0.20 / $12 under it. The catalog gives
+  // this entry a 1,048,576-token window, so the long band is reachable by an ordinary long-context
+  // run rather than by an edge case. Neither band names a cache tier: the 0.1x floor lands exactly
+  // on each band's own published cached rate.
+  'openrouter:google/gemini-3.1-pro-preview': {
+    inputPerMillion: 1.84,
+    outputPerMillion: 11.04,
+    longBand: {
+      minPromptTokens: GEMINI_LONG_CONTEXT_TOKENS,
+      inputPerMillion: 3.68,
+      outputPerMillion: 16.56,
+    },
+  },
   // The three Flash rows are ONE band each, which is what makes them the plain case beside the
   // entry above: Google prices them per token regardless of prompt length. All three sit at the
-  // $0.75 / $0.075 cached / $3.75 per 1M the gateway serves today, so these are the rate actually
-  // billed and the derived cache tier is exact. The half-rate promotion the 3.7 Flash row used to
-  // over-count against has lapsed on the gateway, so there is no longer a discount here to outlive.
+  // $0.75 / $0.075 cached / $3.75 per 1M the gateway serves today, undiscounted, so these are the
+  // rate actually billed and the derived cache tier is exact.
   //
   // Google has published a 100% increase on all three for 2027-01-01, which this table does not
   // pre-empt: a future price is not the current one, and the sweep after it lands it.
   'openrouter:google/gemini-3.6-flash': { inputPerMillion: 0.69, outputPerMillion: 3.45 },
   'openrouter:google/gemini-3.7-flash': { inputPerMillion: 0.69, outputPerMillion: 3.45 },
   'openrouter:google/gemini-3.8-flash': { inputPerMillion: 0.69, outputPerMillion: 3.45 },
-  // The same OpenAI LONG-BAND list prices as the direct rows above, for the reason stated there
-  // and with the gateway confirming the mechanism outright: every one of these slugs carries an
-  // `overrides: [{ min_prompt_tokens: 272000, … }]` entry in the `/models` payload, at exactly the
+  // The same OpenAI list prices and the same two bands as the direct rows above, which
+  // `pricing.test.ts` asserts pair for pair rather than leaving to the eye: the gateway confirms
+  // the mechanism outright, since every one of these slugs carries an
+  // `overrides: [{ min_prompt_tokens: 272000, … }]` entry in the `/models` payload at exactly the
   // doubled rates OpenAI publishes. OpenRouter is a passthrough, so the band reaches this route
   // too, and `openai` is `auto-prefix` on the gateway, so a long-prompt container turn really is
-  // billed at the rate this row now carries.
+  // billed in the band these rows state.
   //
-  // OpenRouter's own model page still advertises Sol at HALF OpenAI's list in both bands ($2 / $10
-  // short, $4 / $15 long), below its own Terra row in the short band; that is the upstream listing
-  // artefact this comment already recorded, so the entry stays on the vendor list price.
-  'openrouter:openai/gpt-6-astra': { inputPerMillion: 18.4, outputPerMillion: 69 },
-  'openrouter:openai/gpt-5.6-sol': { inputPerMillion: 7.36, outputPerMillion: 27.6 },
-  'openrouter:openai/gpt-5.6-terra': { inputPerMillion: 3.68, outputPerMillion: 16.56 },
-  'openrouter:openai/gpt-5.6-luna': { inputPerMillion: 0.37, outputPerMillion: 1.66 },
-  'openrouter:openai/gpt-5.5': { inputPerMillion: 9.2, outputPerMillion: 41.4 },
+  // OpenRouter's own model page advertises Sol at HALF OpenAI's list in both bands ($2 / $10
+  // short, $4 / $15 long), below its own Terra row in the short band; that is an upstream listing
+  // artefact, so the entry stays on the vendor list price this passthrough gateway bills at.
+  'openrouter:openai/gpt-6-astra': {
+    inputPerMillion: 9.2,
+    outputPerMillion: 46,
+    longBand: {
+      minPromptTokens: OPENAI_LONG_CONTEXT_TOKENS,
+      inputPerMillion: 18.4,
+      outputPerMillion: 69,
+    },
+  },
+  'openrouter:openai/gpt-5.6-sol': {
+    inputPerMillion: 3.68,
+    outputPerMillion: 18.4,
+    longBand: {
+      minPromptTokens: OPENAI_LONG_CONTEXT_TOKENS,
+      inputPerMillion: 7.36,
+      outputPerMillion: 27.6,
+    },
+  },
+  'openrouter:openai/gpt-5.6-terra': {
+    inputPerMillion: 1.84,
+    outputPerMillion: 11.04,
+    longBand: {
+      minPromptTokens: OPENAI_LONG_CONTEXT_TOKENS,
+      inputPerMillion: 3.68,
+      outputPerMillion: 16.56,
+    },
+  },
+  'openrouter:openai/gpt-5.6-luna': {
+    inputPerMillion: 0.19,
+    outputPerMillion: 1.11,
+    longBand: {
+      minPromptTokens: OPENAI_LONG_CONTEXT_TOKENS,
+      inputPerMillion: 0.37,
+      outputPerMillion: 1.66,
+    },
+  },
+  'openrouter:openai/gpt-5.5': {
+    inputPerMillion: 4.6,
+    outputPerMillion: 27.6,
+    longBand: {
+      minPromptTokens: OPENAI_LONG_CONTEXT_TOKENS,
+      inputPerMillion: 9.2,
+      outputPerMillion: 41.4,
+    },
+  },
   'openrouter:openai/gpt-oss-120b': { inputPerMillion: 0.034, outputPerMillion: 0.16 },
   // Meta Muse Spark 1.3, both tiers: $1.25 / $4.25 standard, $0.10 / $0.20 contributor. The
   // two are the same model on the same route, so the gap between these rows IS the entire
@@ -448,18 +614,19 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
     outputPerMillion: 2.95,
     cacheReadPerMillion: 0.125,
   },
-  // K2.7 Code's cache-read rate ($0.19/M) is ~2.8x the 0.1x floor its input implies, so it is
-  // named; K3's ($0.30/M) IS the floor, so it derives.
+  // K2.7 Code's cache-read rate ($0.19/M) is ~2.6x the 0.1x floor its input implies, so it is
+  // named; K3's ($0.30/M) IS the floor, so it derives. Named at 0.18 rather than the 0.1748 the
+  // conversion gives, because two decimals is the unit every other rate here is written in and
+  // 0.17 would sit under the live rate by more than the pin checker's rounding tolerance.
   //
-  // The fresh classes are re-pinned from $0.674 / $3.40 to the $0.71 / $3.50 the gateway's blend
-  // reads today: the slug is served by several upstreams and the cheap end of that pool thinned,
-  // which moved input up ~5% and output ~3%. Small, and acted on anyway because the direction is
-  // the one this table may not sit on. `moonshotai` is `auto-prefix` on the gateway, so all three
-  // classes on this route are really recorded and really metered.
+  // The fresh classes read $0.71 / $3.50 on the gateway's blend today, up ~5% and ~3%: the slug is
+  // served by several upstreams and the cheap end of that pool thinned. Small, and acted on
+  // because the direction is the one this table may not sit on. `moonshotai` is `auto-prefix` on
+  // the gateway, so all three classes on this route are really recorded and really metered.
   'openrouter:moonshotai/kimi-k2.7-code': {
     inputPerMillion: 0.66,
     outputPerMillion: 3.22,
-    cacheReadPerMillion: 0.17,
+    cacheReadPerMillion: 0.18,
   },
   'openrouter:moonshotai/kimi-k3': { inputPerMillion: 2.76, outputPerMillion: 13.8 },
   // $1.19 in / $0.221 cached / $3.74 out per 1M, roughly double the $0.63 / $1.98 this row
@@ -475,12 +642,11 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   // GLM-5.3's open weights landed after the last sweep, so the gateway now serves it and the
   // catalog routes to it. Same $1.40 / $4.40 list as every other GLM-5.3 row here.
   //
-  // The cached tier is NAMED, where this row left it derived on the grounds that OpenRouter's
-  // blend read $0.14/M and the 0.1x floor landed a hair above that. The blend has since converged
-  // on Z.ai's own $0.26/M, so the floor ($0.129) now meters a cache read at 54% of the rate, and
-  // `z-ai` is `auto-prefix` on the gateway: this is the class a container agent's re-sent prefix
-  // lands in on every turn, so it was the one understatement here a budget could spend through.
-  // Rounded UP from 0.2392, as the `z-ai/glm-5.2` row beside it is.
+  // The cached tier is NAMED because OpenRouter's blend now reads Z.ai's own $0.26/M, which the
+  // 0.1x floor this input implies ($0.129) would meter at 54% of. `z-ai` is `auto-prefix` on the
+  // gateway, so this is the class a container agent's re-sent prefix lands in on every turn: the
+  // one understatement on this row a budget could spend through. Rounded UP from 0.2392, as the
+  // `z-ai/glm-5.2` row beside it is.
   'openrouter:z-ai/glm-5.3': {
     inputPerMillion: 1.29,
     outputPerMillion: 4.05,
@@ -501,19 +667,28 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
     outputPerMillion: 0.37,
     cacheReadPerMillion: 0.01,
   },
-  // The SAME long-band rates as the `xai:grok-4.6` row above, and for the same reason stated
-  // there: xAI bills a request whose prompt reaches 200K tokens entirely at $4 in / $1 cached /
-  // $12 out, and OpenRouter is a passthrough, so the doubling reaches this route too. This row
-  // used to carry the SHORT band ($2 / $6) with its cache tier left to derive, which understated
-  // a cache read by 60% against even the short-band rate ($0.184 derived against a live $0.50)
-  // and every long-prompt token by half. `x-ai` is `auto-prefix` on the gateway, so that cache
-  // class is really recorded and really metered: this was the one pinned row whose understatement
-  // the budget gate could actually spend through.
+  // The SAME two bands as the `xai:grok-4.6` row above, for the reason stated there: xAI bills a
+  // request whose prompt reaches 200K tokens entirely at $4 in / $1 cached / $12 out against
+  // $2 / $0.50 / $6 below it, and OpenRouter is a passthrough, so both bands reach this route.
+  // `x-ai` is `auto-prefix` on the gateway, so the cache class is really recorded and really
+  // metered, which is why each band names its own rate instead of deriving one at 0.1x.
   'openrouter:x-ai/grok-4.6': {
-    inputPerMillion: 3.68,
-    outputPerMillion: 11.04,
-    cacheReadPerMillion: 0.92,
+    inputPerMillion: 1.84,
+    outputPerMillion: 5.52,
+    cacheReadPerMillion: 0.46,
+    longBand: {
+      minPromptTokens: GROK_LONG_CONTEXT_TOKENS,
+      inputPerMillion: 3.68,
+      outputPerMillion: 11.04,
+      cacheReadPerMillion: 0.92,
+    },
   },
+  // BELOW the Alibaba list the `qwen:qwen3.7-max` row above carries (1.36 against 2.3), and
+  // deliberately so, which makes this the row that states which price a gateway entry is held to:
+  // the rate the ROUTE bills. OpenRouter's blend for this slug sits under Alibaba's own list, and
+  // a row must cover what a call through THIS route costs rather than what the same model costs
+  // elsewhere. The Z.ai rows depart the other way, carrying a list ABOVE the promotion the gateway
+  // serves today, and both are the same rule: never below the route, and above it is the margin.
   'openrouter:qwen/qwen3.7-max': { inputPerMillion: 1.36, outputPerMillion: 4.07 },
   // OpenRouter passes Alibaba's own Qwen3.8 rates through, cached tier included. The key is the
   // DATED slug: the gateway withdrew the undated `qwen/qwen3.8-max` and now serves `-0902` at the
@@ -604,6 +779,14 @@ export const DEFAULT_SPEND_PRICING: SpendPricing = {
  * catalog's 4-dp rounding makes of any real rate below 0.00005/1M. Overlaid, it would meter every
  * cache hit on that model at nothing, which is the one direction a budget safeguard may never be
  * wrong in. The multiplier over-states instead, which is the direction that keeps safeguarding.
+ *
+ * An overlaid entry carries NO {@link ModelPrice.longBand}, and is a single rate on purpose: the
+ * catalog's own fold (`dearestRate` in `openRouterModels.ts`) has already collapsed a model's
+ * conditional bands to their MAXIMUM, because which band applies depends on the prompt actually
+ * sent and a catalog is refreshed long before it. So enabling a two-band model in a workspace's
+ * OpenRouter catalog meters its short requests in the long band, where the curated row beside it
+ * prices each band exactly. That is the safe direction of the two, and closing the gap means
+ * carrying the threshold through {@link OpenRouterModelMeta} rather than re-deriving it here.
  */
 export function withDynamicPrices(
   pricing: SpendPricing,
@@ -657,18 +840,42 @@ export function priceFor(pricing: SpendPricing, ref: ModelRef): ModelPrice {
 }
 
 /**
- * {@link priceFor} with both cache tiers filled in from the multipliers where the entry names
- * none. Every per-class cost goes through this rather than reading {@link ModelPrice} directly,
- * so a caller can never silently price a cache class at the fresh rate by forgetting the `??`.
+ * The band an entry bills a request of `inputTokens` at: its {@link ModelPrice.longBand} once the
+ * threshold is reached, else its base rates.
+ *
+ * An UNKNOWN `inputTokens` answers the LONG band, which is the whole reason the argument is
+ * optional rather than required. A caller that cannot see the prompt size (the telemetry rollup's
+ * rate resolver holds a model and an aggregate, never one call's counts) must still be handed a
+ * rate a budget can meter with, and of the two only the dearer one keeps a safeguard safeguarding.
+ * A single-band entry ignores the argument entirely.
  */
-export function ratesFor(pricing: SpendPricing, ref: ModelRef): ResolvedModelPrice {
-  const price = priceFor(pricing, ref)
+export function bandFor(price: ModelPrice, inputTokens?: number): BandRates {
+  const band = price.longBand
+  if (!band) return price
+  return inputTokens !== undefined && inputTokens < band.minPromptTokens ? price : band
+}
+
+/**
+ * {@link priceFor} resolved to ONE band with both cache tiers filled in from the multipliers where
+ * that band names none. Every per-class cost goes through this rather than reading
+ * {@link ModelPrice} directly, so a caller can never silently price a cache class at the fresh
+ * rate by forgetting the `??`, nor price a long-context request in the short band.
+ *
+ * `inputTokens` is the request's TOTAL input, the count a vendor's threshold is stated against;
+ * see {@link bandFor} for what an absent one resolves to.
+ */
+export function ratesFor(
+  pricing: SpendPricing,
+  ref: ModelRef,
+  inputTokens?: number,
+): ResolvedModelPrice {
+  const band = bandFor(priceFor(pricing, ref), inputTokens)
   return {
-    inputPerMillion: price.inputPerMillion,
-    outputPerMillion: price.outputPerMillion,
-    cacheReadPerMillion: price.cacheReadPerMillion ?? price.inputPerMillion * CACHE_READ_MULTIPLIER,
+    inputPerMillion: band.inputPerMillion,
+    outputPerMillion: band.outputPerMillion,
+    cacheReadPerMillion: band.cacheReadPerMillion ?? band.inputPerMillion * CACHE_READ_MULTIPLIER,
     cacheWritePerMillion:
-      price.cacheWritePerMillion ?? price.inputPerMillion * CACHE_WRITE_MULTIPLIER,
+      band.cacheWritePerMillion ?? band.inputPerMillion * CACHE_WRITE_MULTIPLIER,
   }
 }
 
@@ -685,9 +892,14 @@ export function estimateClassedCost(
   ref: ModelRef,
   usage: InputTokenClassUsage & { outputTokens: number },
 ): number {
+  // The three input classes are SUMMED for the band decision and priced apart for the cost. They
+  // are a partition of the request's input, and a vendor's long-context threshold is stated
+  // against the whole of it, so a prompt that crosses it mostly from cache crosses it all the
+  // same. Output tokens are not input and take no part in it.
+  const inputTokens = usage.promptTokens + usage.cacheReadTokens + usage.cacheWriteTokens
   // The arithmetic itself is kernel's, shared with the telemetry rollup and the export, so the
   // ledger and the run surfaces cannot come to price the same classes differently.
-  return costOfTokenClasses(ratesFor(pricing, ref), {
+  return costOfTokenClasses(ratesFor(pricing, ref, inputTokens), {
     promptTokens: usage.promptTokens,
     cacheReadTokens: usage.cacheReadTokens,
     cacheWriteTokens: usage.cacheWriteTokens,
@@ -698,6 +910,13 @@ export function estimateClassedCost(
 /**
  * A {@link ModelCostResolver}-shaped closure over a {@link SpendPricing}, for the
  * model catalog to surface each model's informational list cost in the picker.
+ *
+ * The BASE band, never {@link ModelPrice.longBand}, and that is the difference between this and
+ * the metering paths. A budget must cover what a request will really cost, so an unknown prompt
+ * size resolves to the dearer band; the picker is a human comparing models at a glance, where
+ * every other row shows one list rate and a doubled figure beside them reads as a model that
+ * costs twice what it does. The band is not annotated either, for the same reason it is a single
+ * number: the surface has one line per model and no room to state a threshold.
  */
 export function modelCostResolver(
   pricing: SpendPricing,
@@ -734,10 +953,11 @@ export function estimateCost(pricing: SpendPricing, ref: ModelRef, usage: AgentT
       outputTokens: usage.outputTokens,
     })
   }
-  const price = priceFor(pricing, ref)
+  // A lumped count is still a count, so the band is as decidable here as on the classed path.
+  const rates = ratesFor(pricing, ref, usage.inputTokens)
   return (
-    (usage.inputTokens / 1_000_000) * price.inputPerMillion +
-    (usage.outputTokens / 1_000_000) * price.outputPerMillion
+    (usage.inputTokens / 1_000_000) * rates.inputPerMillion +
+    (usage.outputTokens / 1_000_000) * rates.outputPerMillion
   )
 }
 

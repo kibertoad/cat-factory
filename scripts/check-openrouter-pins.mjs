@@ -18,24 +18,32 @@
 // per-workspace OpenRouter catalog overrides the table entirely (`withDynamicPrices`), so drift is
 // a default-quality problem, not a correctness one.
 //
-// What is compared is the EFFECTIVE rate for each of four classes, not only the numbers a row
-// spells out. A row NAMES a cache rate only where the vendor departs from the `CACHE_*_MULTIPLIER`
-// floor, and this check used to skip the rest on the grounds that a derived class has no pinned
-// number to have drifted. That is the reasoning, and it is wrong in the one direction that costs
-// money: the derived figure is still what the budget meters with, and it follows OUR input rate
-// rather than the vendor's cache rate, so a vendor lifting a cache read above the floor leaves the
-// gate under-charging with nothing pinned to look stale. `openrouter:z-ai/glm-5.3` sat at 54% of
-// its live cache read for exactly that reason while this report said "nothing to do".
+// Three properties of the comparison earn their complexity, and each is a class of understatement
+// that a simpler read calls clean:
 //
-// A derived cache class is compared only where a hit can actually LAND on the route: the gateway
-// prefix must cache on a request this platform builds, which is read out of the contracts policy
-// map rather than restated (see `readGatewayCachingPrefixes`). Several vendors publish a cache rate
-// while OpenRouter's route needs `cache_control` breakpoints nothing here emits, and reporting an
-// unreachable class is the noise that trains a reader to skim past the reachable one.
+//  - The EFFECTIVE rate, not only the numbers a row spells out. A row NAMES a cache rate only
+//    where the vendor departs from the `CACHE_*_MULTIPLIER` floor, and the derived figure is still
+//    what the budget meters with. It follows OUR input rate rather than the vendor's cache rate,
+//    so a vendor lifting a cache read above the floor leaves the gate under-charging with nothing
+//    pinned to look stale (`openrouter:z-ai/glm-5.3` sat at 54% of its live cache read that way).
+//  - BAND FOR BAND. Several models reprice a whole request past a prompt threshold, so a row can
+//    carry two prices (`ModelPrice.longBand`) and each covers a different live band: the base
+//    rates against the route's base band, the long band against the DEAREST band any override
+//    publishes. A row carrying ONE price is compared against the dearest, because that is the rate
+//    it has to cover on its own. The threshold is a pin too, so it is read against the lowest
+//    `min_prompt_tokens` the route publishes.
+//  - Only where a cache HIT can land, for the two cache classes. The gateway prefix must cache on
+//    a request this platform builds, read out of the contracts policy map rather than restated
+//    (see `readGatewayCachingPrefixes`). Several vendors publish a cache rate while OpenRouter's
+//    route needs `cache_control` breakpoints nothing here emits: that figure is never metered,
+//    named or derived, and reporting it is the noise that trains a reader to skim past the
+//    reachable one.
 //
-// The live side is the DEAREST band the route publishes rather than its base rate, because a model
-// that reprices a whole request past a prompt threshold has two prices and this table has one slot
-// (see `dearestBandRate`). That read alone turned six rows from clean to understated.
+// COVERAGE BOUNDARY: only the `openrouter:<slug>` rows. The direct-vendor rows (`openai:gpt-*`,
+// `xai:*`, `qwen:*`) name no gateway route, and a gateway blend is not the vendor's own list price
+// in either direction, so comparing them here would report drift against a number they are not
+// held to. What keeps a direct row honest is `pricing.test.ts`, which asserts that each mirrored
+// pair (`openai:X` against `openrouter:openai/X`) carries one price, band for band.
 //
 // NOT a per-PR guard: it makes a network call, so it belongs on the same weekly cadence as the
 // external-API sweep. Run it by hand any time.
@@ -60,7 +68,7 @@ const DEFAULT_BASE_URL = 'https://openrouter.ai/api/v1'
 const DEFAULT_TIMEOUT_MS = 30_000
 
 /**
- * The USD→EUR factor the price table bakes in, restated here rather than imported.
+ * The USD to EUR factor the price table bakes in, restated here rather than imported.
  *
  * `pricing.ts` is TypeScript this plain-Node script cannot load without a build step, and the
  * factor is a documented constant of that table rather than something derived. Kept beside a
@@ -69,18 +77,22 @@ const DEFAULT_TIMEOUT_MS = 30_000
 const USD_TO_EUR = 0.92
 
 /**
- * The rate fields, mapped to the `/models` pricing key each is read against and to the
- * `CACHE_*_MULTIPLIER` the table falls back to when a row leaves the field out.
+ * The rate fields, mapped to the `/models` pricing key each is read against, to the
+ * `CACHE_*_MULTIPLIER` the table falls back to when a band leaves the field out, and to the
+ * fallback key a vendor may publish the class under instead.
  *
- * `multiplier` is what makes the two cache classes comparable at all: a row names one only where
- * the vendor departs from the floor, so most rows have no cache number of their own and the
- * budget meters them at `inputPerMillion` times this factor. Comparing the named value alone
- * checks the minority of rows and calls the majority clean.
+ * `multiplier` is what makes the two cache classes comparable at all: a band names one only where
+ * the vendor departs from the floor, so most rows have no cache number of their own and the budget
+ * meters them at that band's `inputPerMillion` times this factor. Comparing the named value alone
+ * checks the minority of rows and calls the majority clean. It doubles as the marker for a CACHE
+ * class, which is the one the reachability gate narrows.
  *
- * Both cache classes are here even though today only the read is ever the finding. A gateway
- * route that bills a cache WRITE publishes `input_cache_write` (OpenAI's and Google's do), so the
- * class is live on routes this table pins; leaving it out would make the next vendor to lift it
- * above the 1.25x floor a silent under-charge of exactly the kind the read class just was.
+ * `fallbackPriceKey` mirrors `cacheWriteRate` in `openRouterModels.ts`: a model that publishes only
+ * the 1-hour TTL states its write rate under `input_cache_write_1h`, and reading the 5-minute key
+ * alone leaves that route comparing against `undefined`, which is the same silent pass as not
+ * comparing it at all. Preferred in that order rather than folded to a maximum, because which TTL
+ * the harnesses request IS known (the default 5-minute one), the same reasoning that fixes
+ * `CACHE_WRITE_MULTIPLIER` at 1.25.
  */
 const RATE_FIELDS = [
   { field: 'inputPerMillion', priceKey: 'prompt' },
@@ -93,36 +105,170 @@ const RATE_FIELDS = [
   {
     field: 'cacheWritePerMillion',
     priceKey: 'input_cache_write',
+    fallbackPriceKey: 'input_cache_write_1h',
     multiplier: 'CACHE_WRITE_MULTIPLIER',
   },
 ]
 
-/** Pull the pinned `openrouter:<slug>` rows and their per-million rates out of the price table. */
+/**
+ * The body of the object literal opening at `openIndex`, with comments REMOVED and nested braces
+ * kept.
+ *
+ * Balanced-brace scanning rather than a `[^}]*` regex, and the difference is not theoretical in
+ * either file this script reads. `GATEWAY_PREFIX_POLICY` carries a `{@link providerCachePolicy}`
+ * reference in a comment BETWEEN its entries, so a first-`}` match ends the map mid-way and every
+ * vendor declared below that line is invisible; a price row carries a nested `longBand: { ... }`,
+ * so the same match ends the row at the band's closing brace. Both failures are silent, and both
+ * silence a comparison rather than breaking one.
+ *
+ * Comments come out because a commented-out rate inside a row would otherwise read as the row's
+ * own, and prose inside the policy map can spell an entry the map does not declare.
+ *
+ * Returns undefined for an unbalanced literal, which every caller turns into a throw: this script
+ * refuses to grade against a source it could not read.
+ */
+export function objectLiteralBody(source, openIndex) {
+  if (source[openIndex] !== '{') return undefined
+  let depth = 0
+  let body = ''
+  let i = openIndex
+  while (i < source.length) {
+    const pair = source.slice(i, i + 2)
+    if (pair === '//') {
+      const end = source.indexOf('\n', i)
+      i = end === -1 ? source.length : end + 1
+      body += '\n'
+      continue
+    }
+    if (pair === '/*') {
+      const end = source.indexOf('*/', i + 2)
+      i = end === -1 ? source.length : end + 2
+      body += ' '
+      continue
+    }
+    const ch = source[i]
+    if (ch === "'" || ch === '"' || ch === '`') {
+      const end = endOfString(source, i)
+      body += source.slice(i, end)
+      i = end
+      continue
+    }
+    if (ch === '{') depth++
+    if (ch === '}' && --depth === 0) return body.slice(1)
+    body += ch
+    i++
+  }
+  return undefined
+}
+
+/** The index just past the string literal starting at `start`, escapes included. */
+function endOfString(source, start) {
+  const quote = source[start]
+  for (let i = start + 1; i < source.length; i++) {
+    if (source[i] === '\\') {
+      i++
+      continue
+    }
+    if (source[i] === quote) return i + 1
+  }
+  return source.length
+}
+
+/**
+ * A nested `key: { ... }` lifted out of an object body: its own body, plus the body with that
+ * whole property removed.
+ *
+ * The removal is what keeps the outer read honest. `readNumber` matches the first occurrence of a
+ * field name, and a nested band states the same field names as the row around it, so leaving the
+ * band in place makes which band's rate is read a matter of which one happens to be written first.
+ */
+export function splitNested(body, key) {
+  const at = new RegExp(`\\b${key}\\s*:\\s*\\{`).exec(body)
+  if (!at) return { rest: body }
+  const openIndex = at.index + at[0].length - 1
+  const inner = objectLiteralBody(body, openIndex)
+  if (inner === undefined) {
+    // Only reachable for a body that is not itself a balanced literal, since a balanced one
+    // cannot contain an unbalanced one. A throw rather than a fallback all the same: returning
+    // the body whole would read the nested band's rates as the surrounding row's own.
+    throw new Error(`A '${key}' property does not close its object literal.`)
+  }
+  return { inner, rest: body.slice(0, at.index) + body.slice(openIndex + inner.length + 2) }
+}
+
+/** Pull the pinned `openrouter:<slug>` rows and their per-band rates out of the price table. */
 export function readPinnedSlugs(source) {
   const pins = []
-  // The rows are object literals keyed by a quoted ref. A row's numbers may sit on the same line
-  // or be spread across several, so the value block is matched up to its closing brace rather
-  // than to the end of the line.
-  const rowRe = /'openrouter:([^']+)'\s*:\s*\{([^}]*)\}/g
+  const rowRe = /'openrouter:([^']+)'\s*:\s*\{/g
   let match
   while ((match = rowRe.exec(source)) !== null) {
-    const [, slug, body] = match
-    const pin = { slug }
-    for (const { field } of RATE_FIELDS) pin[field] = readNumber(body, field)
+    const slug = match[1]
+    const body = objectLiteralBody(source, rowRe.lastIndex - 1)
+    if (body === undefined) throw unreadableRow(slug, 'does not close its object literal')
+    const { inner, rest } = splitNested(body, 'longBand')
+    const pin = { slug, ...readRates(rest) }
+    if (inner !== undefined) {
+      pin.longBand = {
+        minPromptTokens: readThreshold(inner, source, slug),
+        ...readRates(inner),
+      }
+    }
     pins.push(pin)
   }
   return pins
 }
 
+function unreadableRow(slug, what) {
+  return new Error(
+    `${PRICING_FILE}: the 'openrouter:${slug}' row ${what}. The pins cannot be read until this ` +
+      'script reads the new shape.',
+  )
+}
+
+/** The four rate fields of one band, as written (an absent field stays undefined, never 0). */
+function readRates(body) {
+  const rates = {}
+  for (const { field } of RATE_FIELDS) rates[field] = readNumber(body, field)
+  return rates
+}
+
 function readNumber(body, key) {
-  const found = new RegExp(`${key}\\s*:\\s*([0-9]*\\.?[0-9]+)`).exec(body)
-  return found ? Number(found[1]) : undefined
+  const found = new RegExp(`${key}\\s*:\\s*([0-9][0-9_]*(?:\\.[0-9]+)?|\\.[0-9]+)`).exec(body)
+  return found ? Number(found[1].replace(/_/g, '')) : undefined
+}
+
+/**
+ * A band's `minPromptTokens`, resolving the NAMED CONSTANT the table states it as.
+ *
+ * The rates are literals on their own line; a threshold is one vendor-wide rule shared by ten
+ * entries, so the table names it (`OPENAI_LONG_CONTEXT_TOKENS`) rather than repeating the number.
+ * Reading the line alone therefore finds an identifier, and leaving it at `undefined` would
+ * withhold the threshold comparison for every row that has one while the report still says
+ * "nothing to do". Resolved out of the same source instead, the way `readCacheMultipliers` reads
+ * the two cache factors, and a constant that is not a plain literal is a throw for the same
+ * reason: it is a check silently not running.
+ */
+function readThreshold(body, source, slug) {
+  const found = new RegExp(
+    `minPromptTokens\\s*:\\s*([A-Za-z_$][\\w$]*|[0-9][0-9_]*(?:\\.[0-9]+)?)`,
+  ).exec(body)
+  if (!found) throw unreadableRow(slug, 'declares a longBand with no minPromptTokens')
+  const raw = found[1]
+  if (/^[0-9]/.test(raw)) return Number(raw.replace(/_/g, ''))
+  const declared = new RegExp(`\\b${raw}\\s*=\\s*([0-9][0-9_]*(?:\\.[0-9]+)?)`).exec(source)
+  if (!declared) {
+    throw unreadableRow(
+      slug,
+      `states its band threshold as ${raw}, which is not declared with a literal value in this file`,
+    )
+  }
+  return Number(declared[1].replace(/_/g, ''))
 }
 
 /**
  * The `CACHE_*_MULTIPLIER` factors, READ OUT of the price table rather than restated here.
  *
- * The USD→EUR factor above is a copy guarded by a prose check, and that shape is only defensible
+ * The USD to EUR factor above is a copy guarded by a prose check, and that shape is only defensible
  * because it is one number the table documents in words. These two are exported constants with a
  * literal value on the line, so they can be read, and a read cannot rot: a copy that drifted would
  * compute a floor the budget never uses and report drift against a number nobody meters with.
@@ -160,8 +306,9 @@ export function readCacheMultipliers(source) {
  * quiet about a route that started to.
  */
 export function readGatewayCachingPrefixes(source) {
-  const block = /GATEWAY_PREFIX_POLICY[^=]*=\s*\{([^}]*)\}/.exec(source)
-  if (!block) {
+  const at = /GATEWAY_PREFIX_POLICY[^={]*=\s*\{/.exec(source)
+  const body = at ? objectLiteralBody(source, at.index + at[0].length - 1) : undefined
+  if (body === undefined) {
     throw new Error(
       `${CACHE_POLICY_FILE} no longer declares a GATEWAY_PREFIX_POLICY object literal. The ` +
         'derived cache rates cannot be checked until this script reads the new shape.',
@@ -170,7 +317,7 @@ export function readGatewayCachingPrefixes(source) {
   const prefixes = new Set()
   const entryRe = /'?([a-zA-Z0-9_-]+)'?\s*:\s*'([a-z-]+)'/g
   let entry
-  while ((entry = entryRe.exec(block[1])) !== null) {
+  while ((entry = entryRe.exec(body)) !== null) {
     if (entry[2] === 'auto-prefix') prefixes.add(entry[1].toLowerCase())
   }
   if (prefixes.size === 0) {
@@ -188,7 +335,7 @@ function vendorPrefix(slug) {
   return slash <= 0 ? '' : slug.slice(0, slash).toLowerCase()
 }
 
-/** USD per token (OpenRouter's string form) → EUR per million, the unit the table states. */
+/** USD per token (OpenRouter's string form) to EUR per million, the unit the table states. */
 export function eurPerMillion(usdPerToken) {
   if (usdPerToken === undefined || usdPerToken === null || usdPerToken === '') return undefined
   const n = Number(usdPerToken)
@@ -197,27 +344,66 @@ export function eurPerMillion(usdPerToken) {
 }
 
 /**
- * The DEAREST rate a route can bill this class at: the base rate, or a long-context band if the
+ * The conditional bands the route publishes beside its base pricing.
+ *
+ * The `Array.isArray` guard is the one `parseOpenRouterModels` applies to the same field, for the
+ * same reason: `overrides` is whatever the payload said. A non-array would spread into characters
+ * (a string) or throw on `.map` (an object), and a throw here exits 1, which is this script's
+ * reserved "a pinned route was withdrawn" signal. An unreadable payload must not read as a
+ * withdrawal.
+ */
+function bands(pricing) {
+  const overrides = pricing?.overrides
+  return Array.isArray(overrides) ? overrides : []
+}
+
+/**
+ * The rate the route bills this class at in its BASE band: the price beside the model, before any
+ * conditional band applies. What a row's own base rates are answerable for.
+ */
+export function baseBandRate(pricing, priceKey, fallbackPriceKey) {
+  return (
+    eurPerMillion(pricing?.[priceKey]) ??
+    (fallbackPriceKey === undefined ? undefined : eurPerMillion(pricing?.[fallbackPriceKey]))
+  )
+}
+
+/**
+ * The DEAREST rate a route can bill this class at: its base rate, or a long-context band where the
  * gateway publishes one.
  *
  * Several models bill in two bands, where a prompt past a threshold reprices the WHOLE request:
  * OpenAI at 272K input tokens, Gemini 3.1 Pro and Grok 4.6 at 200K. OpenRouter states each as an
- * `overrides: [{ min_prompt_tokens, … }]` entry beside the base pricing. The price table has ONE
- * slot per model and no way to express a threshold that depends on the prompt actually sent, so it
- * prices the long band by convention: the budget gate may over-meter a short prompt and may never
- * under-meter a long one.
+ * `overrides: [{ min_prompt_tokens, ... }]` entry beside the base pricing. A row stating ONE price
+ * has to cover this figure whatever prompt a run sends, so it is what such a row is compared
+ * against; a row carrying a `longBand` covers each band separately.
  *
- * Comparing against the base rate alone is therefore checking the wrong number, and it read as a
- * pass on five OpenAI rows and one Gemini row sitting at half their long-band input.
- *
- * The same fold, for the same stated reason, is what the DYNAMIC per-workspace overlay already
- * does (`dearestRate` in `openRouterModels.ts`). The static table and this check were the two
- * places the rule had not reached, which is how they came to contradict the path they sit behind.
+ * The same fold, for the same stated reason, is what the DYNAMIC per-workspace overlay applies
+ * (`dearestRate` in `openRouterModels.ts`), which has no prompt size to read either.
  */
-export function dearestBandRate(pricing, priceKey) {
-  const bands = [pricing?.[priceKey], ...(pricing?.overrides ?? []).map((b) => b?.[priceKey])]
-  const rates = bands.map(eurPerMillion).filter((r) => r !== undefined)
+export function dearestBandRate(pricing, priceKey, fallbackPriceKey) {
+  return foldDearest(pricing, priceKey) ?? foldDearest(pricing, fallbackPriceKey)
+}
+
+function foldDearest(pricing, priceKey) {
+  if (priceKey === undefined) return undefined
+  const published = [pricing?.[priceKey], ...bands(pricing).map((b) => b?.[priceKey])]
+  const rates = published.map(eurPerMillion).filter((r) => r !== undefined)
   return rates.length === 0 ? undefined : Math.max(...rates)
+}
+
+/**
+ * The lowest prompt size at which the route stops billing its base band, or undefined where it
+ * publishes no conditional band at all.
+ *
+ * The LOWEST rather than the one nearest ours: a row's threshold has to be at or below the point
+ * the vendor starts charging more, and a route publishing several bands starts at the first.
+ */
+export function lowestBandThreshold(pricing) {
+  const thresholds = bands(pricing)
+    .map((b) => b?.min_prompt_tokens)
+    .filter((t) => typeof t === 'number' && Number.isFinite(t) && t > 0)
+  return thresholds.length === 0 ? undefined : Math.min(...thresholds)
 }
 
 /**
@@ -232,38 +418,55 @@ export function dearestBandRate(pricing, priceKey) {
  */
 const UNDERSTATEMENT_TOLERANCE = 0.01
 
-/** Whether `pinned` sits materially below `live`; see {@link UNDERSTATEMENT_TOLERANCE}. */
-function understates(pinned, live) {
-  if (live === undefined || pinned === undefined || live <= 0) return false
-  return pinned < live * (1 - UNDERSTATEMENT_TOLERANCE)
+/** Whether `metered` sits materially below `live`; see {@link UNDERSTATEMENT_TOLERANCE}. */
+function understates(metered, live) {
+  if (live === undefined || metered === undefined || live <= 0) return false
+  return metered < live * (1 - UNDERSTATEMENT_TOLERANCE)
 }
 
 /**
- * The rate a budget would actually meter this class at: the number the row names, else the one
- * the table derives from its input rate.
+ * The rate a budget would actually meter this class at in one band: the number the band names,
+ * else the one the table derives from that band's own input rate.
  *
- * Returns `undefined` where there is nothing to compare, and the two reasons for that are
- * different facts kept apart on purpose. A class with no multiplier (input, output) simply has no
- * derived form, so an absent pin is an absent row. A CACHE class on a route that does not cache on
- * a request this platform builds has a derived number, and it is unreachable: no hit lands, so the
- * figure is never metered and reporting it against a published rate would be a finding about
- * arithmetic rather than about money.
+ * Returns `undefined` where there is nothing to compare, and the reasons for that are different
+ * facts kept apart on purpose. A class with no multiplier (input, output) has no derived form, so
+ * an absent number is an absent row. A CACHE class on a route that does not cache on a request
+ * this platform builds is never metered AT ALL, named or derived: no hit lands, so comparing the
+ * figure against a published rate would be a finding about arithmetic rather than about money.
+ * `pricing.test.ts` holds the other half of that agreement, refusing a pinned cache rate whose
+ * route the policy map has never been asked about.
  */
-export function effectiveRate(pin, field, cacheMultipliers, cachingPrefixes) {
-  const named = pin[field]
+export function effectiveRate(band, spec, { slug, cacheMultipliers, cachingPrefixes }) {
+  if (spec.multiplier && !cachingPrefixes.has(vendorPrefix(slug))) return undefined
+  const named = band[spec.field]
   if (named !== undefined) return { rate: named, derived: false }
-  const spec = RATE_FIELDS.find((f) => f.field === field)
-  if (!spec?.multiplier || pin.inputPerMillion === undefined) return undefined
-  if (!cachingPrefixes.has(vendorPrefix(pin.slug))) return undefined
-  return { rate: pin.inputPerMillion * cacheMultipliers[spec.multiplier], derived: true }
+  if (!spec.multiplier || band.inputPerMillion === undefined) return undefined
+  return { rate: band.inputPerMillion * cacheMultipliers[spec.multiplier], derived: true }
+}
+
+/**
+ * The bands of one pin, each with the live figure it is answerable for.
+ *
+ * A row carrying a `longBand` covers two: its base rates against what the route bills before any
+ * threshold, and the band against the dearest thing the route bills at all. A row carrying ONE
+ * price is compared once, against the dearest, because it has no second slot for a long prompt to
+ * be metered in. Running both comparisons on such a row would report every field twice.
+ */
+function pinBands(pin) {
+  if (!pin.longBand) return [{ prefix: '', rates: pin, live: dearestBandRate }]
+  return [
+    { prefix: '', rates: pin, live: baseBandRate },
+    { prefix: 'longBand.', rates: pin.longBand, live: dearestBandRate },
+  ]
 }
 
 /**
  * Compare each pin against the live catalogue.
  *
  * `served` / `withdrawn` answer "is this route still there"; `understated` answers "would this row
- * UNDER-charge a budget". Only the first can fail the run, for the reason in the header: the table
- * is meant to sit above the live rate, so overstating is the design and understating is the bug.
+ * UNDER-charge a budget", and `lateBands` asks that of a threshold rather than of a rate. Only the
+ * first can fail the run, for the reason in the header: the table is meant to sit above the live
+ * rate, so overstating is the design and understating is the bug.
  *
  * `cacheMultipliers` and `cachingPrefixes` come from the two source reads rather than from
  * defaults, so a caller that skipped them would silently check less than it appears to.
@@ -272,6 +475,7 @@ export function comparePins(pins, catalogue, { cacheMultipliers, cachingPrefixes
   const served = []
   const withdrawn = []
   const understated = []
+  const lateBands = []
   for (const pin of pins) {
     const model = catalogue.get(pin.slug)
     if (!model) {
@@ -279,19 +483,48 @@ export function comparePins(pins, catalogue, { cacheMultipliers, cachingPrefixes
       continue
     }
     served.push(pin.slug)
-    // Only a rate materially BELOW the live one is reported: a budget metering less than the call
-    // costs. Above it is the table's intended margin and says nothing.
-    const under = []
-    for (const { field, priceKey } of RATE_FIELDS) {
-      const effective = effectiveRate(pin, field, cacheMultipliers, cachingPrefixes)
-      const live = dearestBandRate(model.pricing, priceKey)
-      if (effective && understates(effective.rate, live)) {
-        under.push({ field, pinned: effective.rate, live, derived: effective.derived })
-      }
-    }
+    const under = understatedFields(pin, model.pricing, { cacheMultipliers, cachingPrefixes })
     if (under.length > 0) understated.push({ slug: pin.slug, fields: under })
+    const late = lateBand(pin, model.pricing)
+    if (late) lateBands.push({ slug: pin.slug, ...late })
   }
-  return { served, withdrawn, understated }
+  return { served, withdrawn, understated, lateBands }
+}
+
+/**
+ * Every class of every band where this row meters below what the route bills.
+ *
+ * Only a rate materially BELOW the live one is reported: a budget metering less than the call
+ * costs. Above it is the table's intended margin and says nothing.
+ */
+function understatedFields(pin, pricing, options) {
+  const under = []
+  for (const { prefix, rates, live } of pinBands(pin)) {
+    for (const spec of RATE_FIELDS) {
+      const effective = effectiveRate(rates, spec, { slug: pin.slug, ...options })
+      const liveRate = live(pricing, spec.priceKey, spec.fallbackPriceKey)
+      if (!effective || !understates(effective.rate, liveRate)) continue
+      under.push({
+        field: `${prefix}${spec.field}`,
+        metered: effective.rate,
+        live: liveRate,
+        derived: effective.derived,
+      })
+    }
+  }
+  return under
+}
+
+/**
+ * A pinned threshold sitting ABOVE the live one, which is the same undercount as a rate: every
+ * request between the two meters in the base band the vendor has stopped billing. Below the live
+ * one is the conservative direction and says nothing, as with every other figure here.
+ */
+function lateBand(pin, pricing) {
+  const pinned = pin.longBand?.minPromptTokens
+  const live = lowestBandThreshold(pricing)
+  if (pinned === undefined || live === undefined || pinned <= live) return undefined
+  return { pinned, live }
 }
 
 /**
@@ -314,7 +547,7 @@ function nearMatches(slug, catalogue) {
     .slice(0, 5)
 }
 
-/** Fetch the live catalogue as a slug→model map. No API key: `/models` answers unauthenticated. */
+/** Fetch the live catalogue as a slug-to-model map. No API key: `/models` answers unauthenticated. */
 async function loadCatalogue(baseUrl, timeoutMs) {
   const url = `${baseUrl.replace(/\/+$/, '')}/models`
   const res = await fetch(url, {
@@ -382,7 +615,7 @@ function report(result, pinCount) {
         // A derived rate is labelled, because the fix differs: a named number is re-read off the
         // vendor, while a derived one has to be NAMED before it can be corrected at all.
         const how = f.derived ? ' [derived from inputPerMillion]' : ''
-        lines.push(`  ${slug} ${f.field}: ${f.pinned}, live ${f.live} (EUR/1M)${how}`)
+        lines.push(`  ${slug} ${f.field}: ${f.metered}, live ${f.live} (EUR/1M)${how}`)
       }
     }
     lines.push(
@@ -390,7 +623,22 @@ function report(result, pinCount) {
       'Advisory. The table is deliberately conservative, so sitting ABOVE the live rate is the',
       'design; only these UNDER-charge a budget. Enabling the model in a workspace’s OpenRouter',
       'catalog overrides the table entirely. A [derived] finding is fixed by NAMING the class on',
-      'that row, not by moving its input rate, which every other class follows.',
+      'that band, not by moving the input rate every other class of the band follows.',
+    )
+  }
+  if (result.lateBands.length > 0) {
+    lines.push(
+      '',
+      `Late band (${result.lateBands.length}): the row keeps billing its base rates past the point`,
+      'the route reprices:',
+    )
+    for (const b of result.lateBands) {
+      lines.push(`  ${b.slug} longBand.minPromptTokens: ${b.pinned}, live ${b.live} tokens`)
+    }
+    lines.push(
+      '',
+      'Advisory, and the same undercount as a rate: every request between the two thresholds',
+      'meters in a band the vendor has stopped charging. Lower the pin to the live figure.',
     )
   }
   return lines.join('\n')

@@ -4,6 +4,7 @@ import {
   CACHE_READ_MULTIPLIER,
   CACHE_WRITE_MULTIPLIER,
   DEFAULT_SPEND_PRICING,
+  bandFor,
   budgetCapsOverlay,
   effectiveTierLimit,
   estimateClassedCost,
@@ -15,6 +16,7 @@ import {
   startOfMonthUtc,
   startOfNextMonthUtc,
   withDynamicPrices,
+  type ModelPrice,
   type SpendPricing,
 } from './pricing.js'
 
@@ -35,6 +37,26 @@ const pricing: SpendPricing = {
       outputPerMillion: 40,
       cacheReadPerMillion: 3,
       cacheWritePerMillion: 20,
+    },
+    // A vendor that reprices the WHOLE request past a prompt threshold: two bands on one entry.
+    // The long band names its own cache read, which is the trap worth a fixture of its own, since
+    // borrowing the base band's 3 would price a long-context cache hit at under half its rate.
+    'acme:banded': {
+      inputPerMillion: 10,
+      outputPerMillion: 40,
+      cacheReadPerMillion: 3,
+      longBand: {
+        minPromptTokens: 1_000,
+        inputPerMillion: 20,
+        outputPerMillion: 75,
+        cacheReadPerMillion: 8,
+      },
+    },
+    // The same shape with neither band naming a cache tier, so both derive from their OWN input.
+    'acme:banded-derived': {
+      inputPerMillion: 10,
+      outputPerMillion: 40,
+      longBand: { minPromptTokens: 1_000, inputPerMillion: 20, outputPerMillion: 75 },
     },
     acme: { inputPerMillion: 5, outputPerMillion: 20 },
   },
@@ -114,6 +136,63 @@ describe('ratesFor', () => {
       cacheWritePerMillion: 20,
     })
   })
+
+  it('resolves a two-band entry in the band the input size lands in', () => {
+    const ref = { provider: 'acme', model: 'banded' }
+    // Below the threshold: the base band, with its own named read and a write derived from it.
+    expect(ratesFor(pricing, ref, 999)).toEqual({
+      inputPerMillion: 10,
+      outputPerMillion: 40,
+      cacheReadPerMillion: 3,
+      cacheWritePerMillion: 12.5,
+    })
+    // At it: the long band, whose cache read is its OWN 8 and not the base band's 3.
+    expect(ratesFor(pricing, ref, 1_000)).toEqual({
+      inputPerMillion: 20,
+      outputPerMillion: 75,
+      cacheReadPerMillion: 8,
+      cacheWritePerMillion: 25,
+    })
+  })
+
+  it('derives a band cache tier from the input rate of THAT band', () => {
+    const ref = { provider: 'acme', model: 'banded-derived' }
+    expect(ratesFor(pricing, ref, 999).cacheReadPerMillion).toBeCloseTo(10 * CACHE_READ_MULTIPLIER)
+    expect(ratesFor(pricing, ref, 1_000).cacheReadPerMillion).toBeCloseTo(
+      20 * CACHE_READ_MULTIPLIER,
+    )
+    expect(ratesFor(pricing, ref, 1_000).cacheWritePerMillion).toBeCloseTo(
+      20 * CACHE_WRITE_MULTIPLIER,
+    )
+  })
+
+  it('resolves the DEARER band for a caller that cannot say how large the prompt was', () => {
+    // The telemetry rollup's rate resolver holds a model and an aggregate, never one call's
+    // counts. Of the two answers available to it, only the dearer one keeps a budget safe.
+    expect(ratesFor(pricing, { provider: 'acme', model: 'banded' })).toEqual(
+      ratesFor(pricing, { provider: 'acme', model: 'banded' }, 1_000),
+    )
+  })
+})
+
+describe('bandFor', () => {
+  const banded = pricing.prices['acme:banded']!
+
+  it('takes the long band at the threshold and the base band below it', () => {
+    expect(bandFor(banded, banded.longBand!.minPromptTokens)).toBe(banded.longBand)
+    expect(bandFor(banded, banded.longBand!.minPromptTokens - 1)).toBe(banded)
+  })
+
+  it('takes the long band when the input size is unknown', () => {
+    expect(bandFor(banded)).toBe(banded.longBand)
+  })
+
+  it('ignores the input size entirely for a single-band entry', () => {
+    const plain = pricing.prices['acme:big']!
+    expect(bandFor(plain, 0)).toBe(plain)
+    expect(bandFor(plain, 10_000_000)).toBe(plain)
+    expect(bandFor(plain)).toBe(plain)
+  })
 })
 
 describe('estimateCost', () => {
@@ -137,6 +216,18 @@ describe('estimateCost', () => {
       outputTokens: 0,
     })
     expect(lumped).toBeGreaterThan(classed)
+  })
+
+  it('bands a LUMPED input count too, since a lump is still a count', () => {
+    const ref = { provider: 'acme', model: 'banded' }
+    // 999 input tokens at the base band's 10/M; 1,000 crosses the threshold and reprices the
+    // WHOLE request at 20/M, which is what "no blending" means on the vendor's side.
+    expect(estimateCost(pricing, ref, { inputTokens: 999, outputTokens: 0 })).toBeCloseTo(
+      (999 / 1_000_000) * 10,
+    )
+    expect(estimateCost(pricing, ref, { inputTokens: 1_000, outputTokens: 0 })).toBeCloseTo(
+      (1_000 / 1_000_000) * 20,
+    )
   })
 
   it('prices per CLASS as soon as the usage carries a split', () => {
@@ -177,6 +268,42 @@ describe('estimateClassedCost', () => {
     // 10 fresh + 2x3 read + 20 write + 0.5x40 output.
     expect(cost).toBeCloseTo(10 + 6 + 20 + 20)
   })
+
+  it('decides the band on the SUM of the three input classes, not on fresh input alone', () => {
+    const ref = { provider: 'acme', model: 'banded' }
+    // 900 fresh + 100 cache reads is a 1,000-token request: the vendor bands on the size of what
+    // it received, so a long prompt served mostly from cache reaches the threshold all the same.
+    // Fresh input alone (900) would keep this in the base band and under-meter both classes.
+    expect(
+      estimateClassedCost(pricing, ref, {
+        promptTokens: 900,
+        cacheReadTokens: 100,
+        cacheWriteTokens: 0,
+        outputTokens: 0,
+      }),
+    ).toBeCloseTo((900 / 1_000_000) * 20 + (100 / 1_000_000) * 8)
+    // One token short of it, every class prices in the base band.
+    expect(
+      estimateClassedCost(pricing, ref, {
+        promptTokens: 899,
+        cacheReadTokens: 100,
+        cacheWriteTokens: 0,
+        outputTokens: 0,
+      }),
+    ).toBeCloseTo((899 / 1_000_000) * 10 + (100 / 1_000_000) * 3)
+  })
+
+  it('counts cache WRITES toward the threshold as well', () => {
+    // All three classes are a partition of the request's input, so leaving any one out of the sum
+    // is a band decision made on part of the prompt.
+    expect(
+      estimateClassedCost(
+        pricing,
+        { provider: 'acme', model: 'banded' },
+        { promptTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 1_000, outputTokens: 0 },
+      ),
+    ).toBeCloseTo((1_000 / 1_000_000) * 20 * CACHE_WRITE_MULTIPLIER)
+  })
 })
 
 describe('modelCostResolver', () => {
@@ -186,6 +313,19 @@ describe('modelCostResolver', () => {
       outputPerMillion: 40,
       currency: 'EUR',
     })
+  })
+
+  it('shows a two-band model its BASE band, where the meter would take the dearer one', () => {
+    // The picker is a human comparing models at a glance, and every other row shows one list
+    // rate: a long band there reads as a model that costs twice what it does. The metering paths
+    // resolve the same entry at 20/75 when they cannot see the prompt size, which is the
+    // difference between a budget that must not undercount and a figure someone reads.
+    expect(modelCostResolver(pricing)({ provider: 'acme', model: 'banded' })).toEqual({
+      inputPerMillion: 10,
+      outputPerMillion: 40,
+      currency: 'EUR',
+    })
+    expect(ratesFor(pricing, { provider: 'acme', model: 'banded' }).inputPerMillion).toBe(20)
   })
 })
 
@@ -207,6 +347,62 @@ describe('mergeSpendPricing', () => {
     const merged = mergeSpendPricing(pricing, { spendCurrency: null, spendMonthlyLimit: null })
     expect(merged.currency).toBe('EUR')
     expect(merged.monthlyLimit).toBe(100)
+  })
+})
+
+// One model reached by two routes is the same price twice, and a rate moved on one half of a pair
+// is invisible: `openai:gpt-5.6-luna` and `openrouter:openai/gpt-5.6-luna` are one OpenAI model
+// billed by a passthrough gateway, so the pair either agrees or one of them is wrong. Derived from
+// the table rather than pinned to a list of numbers, so a new tier is covered by the same
+// assertion the day it is added.
+describe('a direct OpenAI row and its gateway mirror', () => {
+  const mirroredModels = Object.keys(DEFAULT_SPEND_PRICING.prices)
+    .filter((ref) => ref.startsWith('openai:'))
+    .map((ref) => ref.slice('openai:'.length))
+    .filter((model) => `openrouter:openai/${model}` in DEFAULT_SPEND_PRICING.prices)
+
+  it('has pairs to check', () => {
+    // A zero would make the loop below vacuous, which is the failure mode of a derived expectation.
+    expect(mirroredModels.length).toBeGreaterThan(0)
+  })
+
+  it('prices both halves of every pair identically, band for band', () => {
+    for (const model of mirroredModels) {
+      expect(priceFor(DEFAULT_SPEND_PRICING, { provider: 'openai', model })).toEqual(
+        priceFor(DEFAULT_SPEND_PRICING, { provider: 'openrouter', model: `openai/${model}` }),
+      )
+    }
+  })
+})
+
+// A long band exists to be the DEARER of an entry's two prices, so an entry whose band undercuts
+// its own base rates in any class has the two swapped, and the symptom is silent: every request
+// large enough to reach the threshold starts metering below what a short one does. Asserted over
+// the resolved rates rather than the literals, so a band that names no cache tier is checked at
+// the figure it derives.
+describe('every two-band entry in the shipped table', () => {
+  const rates = (price: ModelPrice, inputTokens?: number) =>
+    ratesFor(
+      { ...DEFAULT_SPEND_PRICING, prices: { 'vendor:model': price } },
+      { provider: 'vendor', model: 'model' },
+      inputTokens,
+    )
+  const banded = Object.entries(DEFAULT_SPEND_PRICING.prices).filter(([, p]) => p.longBand)
+
+  it('has rows to check', () => {
+    expect(banded.length).toBeGreaterThan(0)
+  })
+
+  it('prices its long band at or above its base band, in all four classes', () => {
+    for (const [ref, price] of banded) {
+      const threshold = price.longBand!.minPromptTokens
+      expect(threshold, ref).toBeGreaterThan(0)
+      const long = rates(price, threshold)
+      const short = rates(price, threshold - 1)
+      for (const key of Object.keys(long) as (keyof typeof long)[]) {
+        expect(long[key], `${ref} ${key}`).toBeGreaterThanOrEqual(short[key])
+      }
+    }
   })
 })
 
@@ -237,9 +433,14 @@ describe('pinned gateway cache rates against the cache policy', () => {
       'Alibaba caches only on explicit breakpoints, which this path never sends',
   }
 
+  // Either band naming the class is the same evidence that the route bills it, so both are read:
+  // a row that names a cache read only on its long band is still metering one.
   const pinnedCacheReadSlugs = Object.entries(DEFAULT_SPEND_PRICING.prices)
     .filter(
-      ([ref, price]) => ref.startsWith('openrouter:') && price.cacheReadPerMillion !== undefined,
+      ([ref, price]) =>
+        ref.startsWith('openrouter:') &&
+        (price.cacheReadPerMillion !== undefined ||
+          price.longBand?.cacheReadPerMillion !== undefined),
     )
     .map(([ref]) => ref.slice('openrouter:'.length))
 
