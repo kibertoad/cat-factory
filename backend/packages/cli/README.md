@@ -209,7 +209,7 @@ npx @cat-factory/cli init \
   local/                   # backend - @cat-factory/local-server
     package.json
     src/main.ts            # one-line startLocal() entry
-    docker-compose.yml     # local Postgres (creds derived from --db-url)
+    docker-compose.yml     # local Postgres (creds from --db-url, Compose project from --dir)
     tsconfig.json
     .env                   # generated, gitignored: DATABASE_URL, secrets, PAT, harness image
     .env.example           # documented template
@@ -243,6 +243,24 @@ selectable, so no pipeline can start. The quickest is Cloudflare Workers AI over
 `ANTHROPIC_API_KEY`. Put it in `local/.env` before you start, or sign in and add it through the
 UI, whichever you prefer.
 
+### Each deployment gets its own Compose project
+
+`local/docker-compose.yml` declares a `name:`, derived from the deployment directory
+(`--dir`, or the project name when you omit it) plus a `-local` suffix: scaffolding into
+`~/deploy-a` gives the Compose project `deploy-a-local`. That name keys the Postgres container
+and the `deploy-a-local_cat-factory-pg` volume, so `npm run db:up` in one deployment can never
+bring up another's database. Compose's own default is the compose file's directory, which is
+`local/` in every deployment, so without the declared name the second deployment you scaffold
+migrates and serves the first one's data. Two deployment directories with the SAME basename
+still land in one project, so give each deployment its own directory name.
+
+Re-scaffolding an existing deployment with `--force` after changing its directory name moves it
+to a new Compose project. The CLI then prints the project it leaves behind and the
+`docker compose -p <old> down` that stops it: until you do, the old container holds the
+published Postgres port and `npm run db:down` no longer reaches it. The same rule, with the
+recovery step spelled out:
+[One Compose project per deployment](https://www.catfactory.ai/deploy/local.html#one-compose-project-per-deployment).
+
 The generated `README.md` repeats these steps with your chosen values, and links to the full
 [local-mode docs](https://github.com/kibertoad/cat-factory/blob/main/deploy/local/README.md) (container-runtime matrix, repo linking, the
 Tester's Docker-in-Docker / ephemeral environments, the warm container pool, etc.).
@@ -262,10 +280,17 @@ Tester's Docker-in-Docker / ephemeral environments, the warm container pool, etc
 The bin is a thin shell over the package's exported functions, which are pure and reusable:
 
 ```ts
-import { buildPlan, generateSecrets, patCreationUrl } from '@cat-factory/cli'
+import { buildPlan, composeProjectNameFor, generateSecrets, patCreationUrl } from '@cat-factory/cli'
 
+const targetDir = '/home/me/deploy-a'
 const secrets = generateSecrets()
-const files = buildPlan({ projectName: 'my-cats', /* … */ ...secrets })
+const files = buildPlan({
+  projectName: 'my-cats',
+  // Keys the deployment's container + database volume: derive it from the directory you are
+  // about to write into, or two deployments end up sharing one Postgres.
+  composeProjectName: composeProjectNameFor(targetDir, 'cat-factory'),
+  /* … */ ...secrets,
+})
 // files: { path, content, secret? }[] - write them wherever you like
 ```
 

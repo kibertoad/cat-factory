@@ -3,6 +3,7 @@ import { type BootstrapInput, buildPlan } from './plan.js'
 
 const input: BootstrapInput = {
   projectName: 'my-cats',
+  composeProjectName: 'my-cats-local',
   appTitle: 'My Cats',
   provider: 'github',
   token: 'ghp_secret',
@@ -72,30 +73,54 @@ describe('buildPlan', () => {
     expect(env).toMatch(/^LOCAL_HARNESS_IMAGE=ghcr\.io\/x\/y:1\.2\.3$/m)
   })
 
-  for (const { projectName, composeProjectName } of [
-    { projectName: 'todo-list', composeProjectName: 'todo-list-local' },
-    { projectName: 'acme-site', composeProjectName: 'acme-site-local' },
-    { projectName: ' Todo List ', composeProjectName: 'todo-list-local' },
-    { projectName: 'ACME Site', composeProjectName: 'acme-site-local' },
-    { projectName: 'acme.site', composeProjectName: 'acme-site-local' },
-    { projectName: '.__Acme..Site__', composeProjectName: 'acme-site-local' },
-    { projectName: '!!!', composeProjectName: 'cat-factory-local' },
-  ]) {
-    it(`names the Compose project from the setup project name ${projectName}`, () => {
-      const compose = plan({ projectName }).byPath.get('local/docker-compose.yml')?.content ?? ''
-      expect(compose).toContain(`\nname: ${composeProjectName}\n`)
-    })
-  }
+  it('declares the resolved Compose project, and names it in the README', () => {
+    const { byPath } = plan({ composeProjectName: 'deploy-a-local' })
+    // Verbatim: the name arrives already normalized for Compose (composeProjectNameFor), so the
+    // template must not re-derive one of its own.
+    expect(byPath.get('local/docker-compose.yml')?.content ?? '').toContain(
+      '\nname: deploy-a-local\n',
+    )
+    const readme = byPath.get('README.md')?.content ?? ''
+    expect(readme).toContain('docker compose -p deploy-a-local ps')
+    expect(readme).toContain('deploy-a-local_cat-factory-pg')
+  })
 
   it('derives the docker-compose db from the DATABASE_URL', () => {
     const compose =
       plan({ databaseUrl: 'postgres://bob:pw@localhost:6000/mydb' }).byPath.get(
         'local/docker-compose.yml',
       )?.content ?? ''
-    expect(compose).toContain('POSTGRES_USER: bob')
-    expect(compose).toContain('POSTGRES_PASSWORD: pw')
-    expect(compose).toContain('POSTGRES_DB: mydb')
+    expect(compose).toContain('POSTGRES_USER: "bob"')
+    expect(compose).toContain('POSTGRES_PASSWORD: "pw"')
+    expect(compose).toContain('POSTGRES_DB: "mydb"')
     expect(compose).toContain("- '6000:5432'")
+    expect(compose).toContain(`test: ['CMD-SHELL', "pg_isready -U 'bob' -d 'mydb'"]`)
+  })
+
+  for (const { label, password, yaml } of [
+    // A `$` would otherwise be read as a Compose variable reference: the container would come up
+    // with a TRUNCATED password while local/.env still carries the whole one.
+    { label: 'a dollar sign', password: 'pa$s', yaml: '"pa$$s"' },
+    // Bare, these break the YAML parse or turn the value into a flow collection / an alias.
+    { label: 'a colon and space', password: 'pa: s', yaml: '"pa: s"' },
+    { label: 'a leading bracket', password: '[pw]', yaml: '"[pw]"' },
+    { label: 'a leading asterisk', password: '*pw', yaml: '"*pw"' },
+    { label: 'a double quote', password: 'p"w', yaml: '"p\\"w"' },
+  ]) {
+    it(`quotes and escapes a password holding ${label}`, () => {
+      const url = `postgres://cat:${encodeURIComponent(password)}@localhost:5432/catfactory`
+      const compose = plan({ databaseUrl: url }).byPath.get('local/docker-compose.yml')?.content
+      expect(compose).toContain(`POSTGRES_PASSWORD: ${yaml}`)
+    })
+  }
+
+  it('normalizes the Cloudflare Pages project name, which is narrower than the npm name', () => {
+    const toml = plan({ projectName: 'acme.site' }).byPath.get('frontend/wrangler.toml')?.content
+    expect(toml).toContain('name = "acme-site-frontend"')
+    // The npm package names keep the dot, which npm allows.
+    expect(
+      plan({ projectName: 'acme.site' }).byPath.get('frontend/package.json')?.content,
+    ).toContain('"name": "acme.site-frontend"')
   })
 
   it('builds a fresh .gitignore when none exists', () => {

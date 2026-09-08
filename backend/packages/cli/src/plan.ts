@@ -1,3 +1,4 @@
+import { COMPOSE_FILE_PATH } from './composeProject.js'
 import { buildFrontendEnv, buildLocalEnv } from './env.js'
 import { buildGitignore, mergeGitignore } from './gitignore.js'
 import {
@@ -25,6 +26,13 @@ export interface PlannedFile {
 /** Everything the orchestrator needs to render the full project. Fully resolved (no prompting). */
 export interface BootstrapInput {
   projectName: string
+  /**
+   * The Compose project name keying this deployment's container, network and database volume,
+   * resolved by `composeProjectNameFor` from the target DIRECTORY. Required rather than derived
+   * here because the planner never sees that directory, and a defaulted one would silently put
+   * two deployments back in a single Compose project.
+   */
+  composeProjectName: string
   appTitle: string
   provider: VcsProvider
   token: string
@@ -80,8 +88,11 @@ export function buildPlan(input: BootstrapInput): PlannedFile[] {
     { path: 'local/package.json', content: localPackageJson(input.projectName) },
     { path: 'local/src/main.ts', content: localMainTs },
     {
-      path: 'local/docker-compose.yml',
-      content: dockerCompose(input.databaseUrl, input.projectName),
+      path: COMPOSE_FILE_PATH,
+      content: dockerCompose({
+        databaseUrl: input.databaseUrl,
+        composeProjectName: input.composeProjectName,
+      }),
     },
     { path: 'local/tsconfig.json', content: tsconfigJson },
     {
@@ -170,6 +181,12 @@ cd local
 npm run db:up      # start local Postgres (docker compose)
 npm start          # migrate + serve the API on :${input.port}
 \`\`\`
+
+Both scripts act on the Compose project \`${input.composeProjectName}\`, declared as \`name:\` in
+\`local/docker-compose.yml\`, so this deployment's Postgres container and its
+\`${input.composeProjectName}_cat-factory-pg\` volume are its own. Inspect them from anywhere with
+\`docker compose -p ${input.composeProjectName} ps\`. Another deployment scaffolded into a
+directory of the same name would share them, so give each one its own directory name.
 ${dbUpRuntimeNote(input.containerRuntime)}
 At least one **model provider** must be configured or no model is selectable. The simplest is
 Cloudflare Workers AI over REST — set \`CLOUDFLARE_ACCOUNT_ID\` + \`CLOUDFLARE_API_TOKEN\` in

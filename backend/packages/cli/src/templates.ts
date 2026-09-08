@@ -1,4 +1,4 @@
-import { slugifyComposeProjectName } from './slug.js'
+import { pagesProjectName } from './slug.js'
 
 // Static file templates for the scaffolded deployment. These mirror `deploy/local` and
 // `deploy/frontend` in this repo, but depend on the PUBLISHED libraries (not `workspace:*`) so
@@ -92,17 +92,39 @@ startLocal().catch((err: unknown) => {
 })
 `
 
-export const dockerCompose = (dbUrl: string, projectName: string): string => {
+export interface DockerComposeInput {
+  /** The deployment's `DATABASE_URL`: the Postgres credentials/db/port are read back off it. */
+  databaseUrl: string
+  /**
+   * The deployment's Compose project name, ALREADY resolved by `composeProjectNameFor` (it is
+   * derived from the deployment directory, which the templates never see). Written verbatim.
+   */
+  composeProjectName: string
+}
+
+/**
+ * YAML-quote a value read out of the DATABASE_URL and escape it for Compose's OWN `${}`
+ * interpolation. Both halves are load-bearing: as a bare scalar a password holding `: ` breaks
+ * the parse and one starting with `[`/`{`/`*` becomes a flow collection or an alias, and a `$`
+ * in a quoted value is still read as a variable reference, so Compose would create the container
+ * with a password that no longer matches the DATABASE_URL the backend authenticates with.
+ */
+const composeValue = (value: string): string => JSON.stringify(value).replace(/\$/g, '$$$$')
+
+/** Quote a value that reaches a SHELL, inside the healthcheck's `CMD-SHELL` command. */
+const shellArg = (value: string): string => `'${value.replace(/'/g, `'\\''`)}'`
+
+export const dockerCompose = (input: DockerComposeInput): string => {
   // Derive the compose credentials/db from the DATABASE_URL so the two always agree.
   let user = 'cat'
   let password = 'cat'
   let db = 'catfactory'
   let port = '5432'
   try {
-    const u = new URL(dbUrl)
+    const u = new URL(input.databaseUrl)
     user = decodeURIComponent(u.username) || user
     password = decodeURIComponent(u.password) || password
-    db = u.pathname.replace(/^\//, '') || db
+    db = decodeURIComponent(u.pathname.replace(/^\//, '')) || db
     port = u.port || port
   } catch {
     // Keep the defaults if the URL doesn't parse.
@@ -111,21 +133,26 @@ export const dockerCompose = (dbUrl: string, projectName: string): string => {
 # (so it can drive the container runtime to spawn agent containers), so only Postgres lives here.
 #
 #   docker compose up -d postgres   # or: pnpm db:up
-name: ${slugifyComposeProjectName(projectName)}-local
+#
+# The project name below keys this deployment's container, network and database volume. It is
+# declared rather than left to Compose's default (this file's own \`local/\` directory), which
+# every generated deployment shares: two of them would then claim one Postgres volume and the
+# second would serve the first one's data.
+name: ${input.composeProjectName}
 
 services:
   postgres:
     image: postgres:18
     environment:
-      POSTGRES_USER: ${user}
-      POSTGRES_PASSWORD: ${password}
-      POSTGRES_DB: ${db}
+      POSTGRES_USER: ${composeValue(user)}
+      POSTGRES_PASSWORD: ${composeValue(password)}
+      POSTGRES_DB: ${composeValue(db)}
     ports:
       - '${port}:5432'
     volumes:
       - cat-factory-pg:/var/lib/postgresql
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U ${user} -d ${db}']
+      test: ['CMD-SHELL', ${composeValue(`pg_isready -U ${shellArg(user)} -d ${shellArg(db)}`)}]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -307,7 +334,10 @@ export const frontendWranglerToml = (projectName: string): string =>
 # The SPA's backend URL is baked in at BUILD time (NUXT_PUBLIC_API_BASE), NOT here — Pages
 # [vars] only reach Functions at runtime and this is a pure static SPA. Change \`name\` to your
 # own Pages project.
-name = "${projectName}-frontend"
+#
+# Pages project names take lowercase letters, digits and hyphens only, which is narrower than the
+# npm name the rest of the scaffold uses, so this one is normalized separately.
+name = "${pagesProjectName(projectName)}"
 pages_build_output_dir = ".output/public"
 compatibility_date = "2025-06-01"
 `
