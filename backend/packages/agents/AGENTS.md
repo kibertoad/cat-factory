@@ -121,7 +121,11 @@
   where it costs most: a credential state only one of them kept. The ROLES stay separate on
   purpose (a tester judges a CHANGE, a prober judges the SETUP), so each passes its own
   `CredentialGapGuidance` naming how ITS report records a gap. `environment-under-test.test.ts`
-  asserts the pairing per state.
+  asserts the pairing per state, and also over `shared.ts`'s `FALSE_SUCCESS_SHAPES`: the shapes of
+  a pass nobody observed, which the two roles held HALVES of (the prober the HTTP ones, the tester
+  the bare principle, in the role whose greenlight is what merges a change). What stayed apart is
+  as deliberate: a prober never grades and never writes, and the second of those is a security
+  property its dispatch shape enforces.
 - `providers/`, the **AI provisioning facade**: `registry.ts` (`CompositeModelProvider`),
   `resolvers.ts` (the runtime-neutral single-provider resolvers, where `openrouter` alone gets its
   own client via `openRouterResolver` and everything else the generic OpenAI-compatible one; the

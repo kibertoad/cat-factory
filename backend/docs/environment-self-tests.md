@@ -102,6 +102,20 @@ entirely on the two being handed the same facts, so they are handed them by the 
 - **The values** are resolved by one `resolveTestCredentials` (server), which both the step
   dispatcher and the prober call. Its best-effort read is why a sealed store that will not open now
   costs the credentials rather than the step.
+- **What a success has to look like** is `FALSE_SUCCESS_SHAPES` (`prompts/shared.ts`), in all four
+  prompts. Each role had a half of this: the prober named the HTTP shapes of a pass nobody
+  observed, the tester had the principle and none of the shapes, in the role where a false pass is
+  what lets a change merge. The fragment carries the suite shapes too (a command that printed
+  failures and exited 0, a suite that ran zero tests), which is what a tester needs and a prober
+  rarely meets.
+
+Two rules deliberately did NOT move, and they are the line between sharing a rule and merging two
+roles. **Grading**: a prober reports per-operation outcomes and leaves the conclusion to
+`summarizeEnvironmentProbe`, while a tester's whole product is a greenlight. **Writing**: the
+prober's "never change the service, the repository or the environment" is a security property, held
+up by a dispatch that carries no `pr`, `pushBranch` or `newBranch`, where a tester legitimately
+authors tests on the branch in library mode. A single fragment over both would have to weaken the
+first or contradict the second.
 
 What is deliberately NOT shared is the ROLE. A tester judges a CHANGE and rules on whether it is
 safe to release; a prober judges the SETUP and reports what the platform failed to supply. Each

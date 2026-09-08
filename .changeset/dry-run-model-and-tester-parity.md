@@ -39,6 +39,13 @@ weaker: a sealed store that would not open reached it as an absent section, whic
 service has none configured" and sends someone to re-enter secrets that are already there, and an
 unopenable store took the whole dispatch down rather than costing the credentials.
 
+One rule the two held halves of moved with them: the shapes of a success nobody observed (a 200
+carrying an error body, a login page where JSON was expected, a command that printed failures and
+exited 0, a suite that ran zero tests). The prober named the HTTP ones; the tester, whose greenlight
+is what merges a change, had the principle and none of the shapes. Grading and writing deliberately
+did NOT move, because a prober never does either and the second is a security property its dispatch
+shape enforces.
+
 Watch for one behaviour change: a dry run used to run on the deployment's `tester-api` /
 `tester-ui` env routing, and now runs on whatever the workspace's preset names for
 `environment-prober-api` / `environment-prober-ui`, falling back to that same env routing when the

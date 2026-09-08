@@ -1,6 +1,6 @@
 import type { AgentKind, AgentRunContext } from '@cat-factory/kernel'
 import { frameProfile } from '@cat-factory/contracts'
-import { FINAL_ANSWER_IN_REPLY } from './shared.js'
+import { FALSE_SUCCESS_SHAPES, FINAL_ANSWER_IN_REPLY } from './shared.js'
 import { REFERENCE_SCREENSHOT_DIR } from './standard.js'
 import { SERVICE_DISCOVERY_GUIDANCE } from './environment-under-test.js'
 
@@ -79,6 +79,9 @@ const TESTER_SYSTEM_PROMPT = [
   'Rules:',
   "- Make NO commits and open NO pull request — you only assess and report. Fixes are another agent's job (the engine dispatches a fixer when you withhold the greenlight, then re-runs you).",
   '- Base every outcome on something you actually observed. Greenlight ONLY when you have exercised the change and are confident it is correct and safe; any blocking bug or unresolved risk means greenlight=false with the concern listed. Minor, sub-blocking issues go in `concerns` at low/medium severity without necessarily withholding the greenlight.',
+  // The dry run's own false-success shapes, which the greenlight needs more than the prober's
+  // report does: a pass nobody observed is what lets a broken change merge.
+  `- NEVER record an outcome as \`passed\` on a response you did not actually read. ${FALSE_SUCCESS_SHAPES}`,
   '- Record a discrete `outcome` for EVERY area you list in `tested`: each scenario in `tested` MUST have its own entry in `outcomes` (matching name) with a concrete `detail` of what you observed. Do NOT list a scenario in `tested` and then omit its outcome — a `tested` entry with no matching `outcome` reads as an unexplained skip, and describing results only in the prose `summary` does NOT count. If you genuinely did not exercise something, record it as a `"skipped"` outcome with the reason, rather than dropping it. The greenlight covers everything you claimed to test, so leave no claimed scenario unaccounted for.',
   '- A `"failed"` outcome is a blocker: if you record ANY outcome with status `"failed"`, set greenlight=false (the engine treats a failed check as a blocker regardless of the greenlight flag, and will loop the fixer). If a check did not actually fail — it was inapplicable or intentionally not run — mark it `"skipped"`, not `"failed"`; reserve `"failed"` for a genuine failure you want fixed.',
   '- If you CANNOT run a meaningful test at all — the ephemeral environment never came up, a dependency the test needs is unavailable, or the change simply cannot be exercised in this setup — do NOT guess, do NOT greenlight, and do NOT file it as a bug for the fixer (it cannot provision infrastructure). Instead set `abort` with a concise `reason`, set greenlight=false, and stop. The run is handed to a human to resolve and retry.',
@@ -133,6 +136,7 @@ const TESTER_UI_SYSTEM_PROMPT = [
   'Rules:',
   '- Make NO commits and open NO pull request — you only assess, capture and report.',
   '- Base every outcome on something you actually observed in the browser. A blocking bug means greenlight=false with the concern listed.',
+  `- NEVER record an outcome as \`passed\` on a screen you did not actually read. ${FALSE_SUCCESS_SHAPES}`,
   '- Record a discrete `outcome` for EVERY area you list in `tested`: each scenario in `tested` MUST have its own entry in `outcomes` (matching name) with a concrete `detail` of what you observed. Do NOT list a scenario in `tested` and then omit its outcome — a `tested` entry with no matching `outcome` reads as an unexplained skip, and describing results only in the prose `summary` does NOT count. If you genuinely did not exercise something, record it as a `"skipped"` outcome with the reason. The greenlight covers everything you claimed to test.',
   '- A `"failed"` outcome is a blocker: if you record ANY outcome with status `"failed"`, set greenlight=false (the engine treats a failed check as a blocker and will loop the fixer). Mark a check you did not or could not run `"skipped"`, never `"failed"`.',
   '- If you CANNOT run a meaningful test at all — the app/environment never came up or cannot be driven — do NOT greenlight and do NOT file it as a bug for the fixer. Set `abort` with a concise `reason`, set greenlight=false, and stop; the run is handed to a human.',

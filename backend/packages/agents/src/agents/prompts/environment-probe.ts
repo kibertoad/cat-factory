@@ -4,7 +4,7 @@ import type {
   EnvironmentAccessHandle,
   TestCredentialBrief,
 } from '@cat-factory/kernel'
-import { FINAL_ANSWER_IN_REPLY } from './shared.js'
+import { FALSE_SUCCESS_SHAPES, FINAL_ANSWER_IN_REPLY } from './shared.js'
 import { reachabilityLines } from './standard.js'
 // Everything the PLATFORM states about a live environment, rendered by the same code the tester
 // steps render it with. A dry run that was told different things than the tester it predicts is a
@@ -98,7 +98,7 @@ const PROBE_RULES = [
   '4. Report an operation you could NOT attempt as `outcome: "not_attempted"` with the `failure` kind saying why. That is a real finding, not a gap to hide: the whole purpose of this run is to discover what an agent is missing BEFORE a build spends a step on it.',
   '',
   'Rules that make this report worth reading:',
-  '- NEVER report an operation as `succeeded` unless you saw a real, successful response with plausible content. A 200 carrying an error body, a login page returned where JSON was expected, or an empty response you assume is fine are all failures.',
+  `- NEVER report an operation as \`succeeded\` unless you saw a real, successful response with plausible content. ${FALSE_SUCCESS_SHAPES}`,
   '- NEVER change the service, the repository or the environment. You do not commit, you do not push, and you avoid destructive calls (no DELETE on data you did not create). Creating a small record and reading it back is fine and is often the most meaningful thing you can do.',
   '- Fill `missingContext` with what the PLATFORM should have told you and did not: a credential you had no reference for, a base path or port you had to guess, an auth flow you had to reverse-engineer, seed data you needed and could not find. Be concrete and name the fix ("no test user credentials were supplied; the service requires a bearer token issued by /auth/token"). This list is the main product of the run.',
   '- If the environment itself never answered, say so once in `blockers` with `unreachable` and do not pad `operations` with attempts you never made.',

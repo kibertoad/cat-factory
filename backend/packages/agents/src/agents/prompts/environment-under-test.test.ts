@@ -3,8 +3,10 @@ import { describe, expect, it } from 'vitest'
 import { SERVICE_DISCOVERY_GUIDANCE } from './environment-under-test.js'
 import {
   ENVIRONMENT_PROBE_API_SYSTEM_PROMPT,
+  ENVIRONMENT_PROBE_UI_SYSTEM_PROMPT,
   environmentProbeUserPrompt,
 } from './environment-probe.js'
+import { FALSE_SUCCESS_SHAPES } from './shared.js'
 import { testSecretsSection } from './standard.js'
 import { testingSystemPrompt } from './testing.js'
 
@@ -46,6 +48,26 @@ describe('what the tester step and the environment dry run are told', () => {
     // has since diverged from the text either prompt actually carries.
     expect(testingSystemPrompt('tester-api')).toContain(SERVICE_DISCOVERY_GUIDANCE)
     expect(ENVIRONMENT_PROBE_API_SYSTEM_PROMPT).toContain(SERVICE_DISCOVERY_GUIDANCE)
+  })
+
+  it('holds both roles to the same shapes of a success nobody observed', () => {
+    // The rule the two had HALVES of: the prober named the HTTP shapes, the tester had the
+    // principle and no shapes, in the role where a false pass is what lets a change merge. All
+    // four prompts, because a surface is only covered where its own kind carries it.
+    expect(testingSystemPrompt('tester-api')).toContain(FALSE_SUCCESS_SHAPES)
+    expect(testingSystemPrompt('tester-ui')).toContain(FALSE_SUCCESS_SHAPES)
+    expect(ENVIRONMENT_PROBE_API_SYSTEM_PROMPT).toContain(FALSE_SUCCESS_SHAPES)
+    expect(ENVIRONMENT_PROBE_UI_SYSTEM_PROMPT).toContain(FALSE_SUCCESS_SHAPES)
+  })
+
+  // Each role keeps the STATUS WORD its own report shape uses, which is the line between sharing
+  // a rule and merging two roles: the prober reports per-operation outcomes for the platform to
+  // conclude from, the tester rules on the change itself.
+  it('leaves each role its own verdict vocabulary', () => {
+    expect(ENVIRONMENT_PROBE_API_SYSTEM_PROMPT).toContain('`succeeded`')
+    expect(ENVIRONMENT_PROBE_API_SYSTEM_PROMPT).toContain('Do not grade the run')
+    expect(testingSystemPrompt('tester-api')).toContain('`passed`')
+    expect(testingSystemPrompt('tester-api')).toContain('greenlight')
   })
 
   // One case per credential state, asserted on BOTH sides: a state only one of them keeps is a
