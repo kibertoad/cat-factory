@@ -5,6 +5,7 @@
   "ignorePatterns": [
     "**/*.generated.ts",
     "**/CHANGELOG.md",
+    "**/CHANGELOG-ARCHIVE.md",
     "backend/internal/executor-harness/README.md",
     "backend/runtimes/node/drizzle/**",
     "docs/openapi.json"

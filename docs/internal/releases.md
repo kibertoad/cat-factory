@@ -1,9 +1,48 @@
 # Releases: the runner image and new published packages
 
 Versioning is changesets (root `pnpm changeset` / `ci:publish`); the rule that every change to a
-versioned package needs a changeset lives in CLAUDE.md. This doc holds the two release mechanics
-with non-obvious failure modes: rolling out the runner image, and wiring a NEW published package
-so it doesn't ship as an empty shell.
+versioned package needs a changeset lives in CLAUDE.md. This doc holds the release mechanics with
+non-obvious failure modes: how the version commit reaches GitHub, keeping the changelogs it
+rewrites small, rolling out the runner image, and wiring a NEW published package so it doesn't
+ship as an empty shell.
+
+## How the version commit reaches GitHub
+
+`changesets/action` can push the Release PR branch two ways, and only one of them works for a repo
+this size. Its default sends the version commit through the GraphQL `createCommitOnBranch`
+mutation, which carries the FULL base64 content of every changed file. A release rewrites every
+bumped package's CHANGELOG, so that request grew with the accumulated history rather than with the
+diff: ~13 MiB of file bytes, ~18 MiB once encoded, to add ~50 lines of prose. GitHub's edge began
+dropping it, and six release runs died between 2026-08-26 and 2026-09-07.
+
+The signature is worth recognising, because nothing in it mentions a size. The step fails after 8
+to 14 seconds with a bare `##[error]HttpError`, between `Existing pull requests: []` and
+`creating pull request`; the two runs that kept a response body showed nginx's `502 Bad Gateway`.
+`changeset version` has already succeeded by then, so it reads like a PR-creation or permissions
+problem. The tell that it is neither: `changeset-release/main` is left pointing at main's own sha,
+because the action creates that branch at the base commit and only then commits onto it.
+
+`push-with-git-cli: true` in `release.yml` is the fix. Git sends a delta-compressed pack, so the
+push is kilobytes and stays that size however long the history gets. The cost is that the version
+commit is no longer signed with GitHub's GPG key or attributed to the token's owner. The push is
+still made with the PAT, which is what a merged Release PR needs to re-trigger the workflow into
+its publish mode.
+
+## Keeping the changelogs small
+
+`pnpm changelog:archive` moves everything older than the newest 20 releases out of each
+`CHANGELOG.md` into a sibling `CHANGELOG-ARCHIVE.md`, with a pointer footer left behind. Its first
+run took the release-commit payload from 15.6 MiB to 1.4 MiB. Run it again when the changelogs get
+unwieldy, as a maintenance commit of its own; it is never part of a release.
+
+Two facts about the tool that owns those files are what make the split safe, and a change here
+must keep both. `changeset version` PREPENDS an entry by replacing the first newline in the file,
+so it only ever touches the top: the kept entries stay newest-first and the footer stays at the
+bottom, untouched. And nothing writes the archive except the script, so no release rewrites it,
+which is the entire saving. `create-github-releases` reads the entry for the version being
+released off the top of `CHANGELOG.md`, so the kept window has to stay comfortably wider than one
+release. Fixtures: `scripts/archive-changelogs.test.mjs`. Both halves count as frozen history, for
+the doc-link guard (`isFrozenHistory`) and for oxfmt.
 
 ## Rolling out the runner image
 

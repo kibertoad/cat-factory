@@ -123,6 +123,7 @@ test('a link into a non-markdown file is checked for existence only', () => {
 test('CHANGELOGs are frozen history and nothing else is', () => {
   assert.ok(isFrozenHistory('backend/packages/kernel/CHANGELOG.md'))
   assert.ok(isFrozenHistory('CHANGELOG.md'))
+  assert.ok(isFrozenHistory('backend/packages/kernel/CHANGELOG-ARCHIVE.md'))
   assert.equal(isFrozenHistory('backend/docs/auth.md'), false)
   assert.equal(isFrozenHistory('docs/CHANGELOG-notes.md'), false)
 })
