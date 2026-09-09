@@ -456,6 +456,7 @@ export {
   type GitHubModule,
   type DocumentsModule,
   type TasksModule,
+  type AssistantModule,
   type EnvironmentsModule,
   type RunnersModule,
   type ProvisioningLogsModule,

@@ -188,6 +188,17 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   suppression read PROPAGATES its failures where the snapshot's read of the same rows is
   best-effort: this one decides whether a row is written. See
   `backend/docs/reusable-operations.md`.
+- `modules/assistant/`: the IN-APP ASSISTANT: one typed request, one board action. `AssistantService`
+  is everything between the prompt and the side effect (the budget guard, the ONE `generateText`
+  routing call, the reply parse, the catalog lookup, the per-argument descriptor validation) and
+  `actions/` holds the three shipped actions, each taking bound call-backs rather than a service so
+  that a board write here and a tracker read from `@cat-factory/integrations` can be joined in the
+  composition root instead of across a package seam. `assistant.logic.ts` is the part a turn can be
+  WRONG about and the part worth exercising without a model: the reply parse, the service-name match
+  (exact, then punctuation-insensitive, then containment, ambiguity reported with candidates rather
+  than tie-broken) and `issueRepoSlug`. The model NAMES and COPIES; it resolves nothing, and an
+  unresolved name is an OUTCOME rather than an exception, because the answer to it is a question.
+  Built by `container/assistant-module.ts`. See `backend/docs/in-app-assistant.md`.
 - `modules/useCases/`: the public INLINE USE-CASE surface, the non-container sibling of a reusable
   operation. `InlineUseCaseService` holds every rule between an authenticated request and the one
   model call (the model narrowing, the shared descriptor validation, the generation bounds, the

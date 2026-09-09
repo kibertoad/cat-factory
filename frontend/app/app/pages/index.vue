@@ -48,6 +48,7 @@ const TaskSourceConnectModal = defineAsyncView(
 )
 const TaskImportModal = defineAsyncView(() => import('~/components/tasks/TaskImportModal.vue'))
 const BugHuntModal = defineAsyncView(() => import('~/components/tasks/BugHuntModal.vue'))
+const AssistantModal = defineAsyncView(() => import('~/components/assistant/AssistantModal.vue'))
 const RecurringPipelineModal = defineAsyncView(
   () => import('~/components/board/RecurringPipelineModal.vue'),
 )
@@ -501,6 +502,7 @@ watch(
         <TaskSourceConnectModal v-if="ui.taskConnect" />
         <TaskImportModal v-if="ui.taskImport" />
         <BugHuntModal v-if="ui.bugHunt" />
+        <AssistantModal v-if="ui.assistantOpen" />
         <RecurringPipelineModal v-if="ui.addRecurringFrameId" />
         <ObservabilityPanel v-if="ui.observabilityInstanceId" />
         <OperatorDashboardPanel v-if="ui.operatorDashboardOpen" />

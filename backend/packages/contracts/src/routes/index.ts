@@ -4,6 +4,7 @@
 export * from './_shared.js'
 export * from './accounts.js'
 export * from './agent-runs.js'
+export * from './assistant.js'
 export * from './api-keys.js'
 export * from './auth.js'
 export * from './board.js'

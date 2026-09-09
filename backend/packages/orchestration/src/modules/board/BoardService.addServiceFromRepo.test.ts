@@ -93,18 +93,23 @@ describe('BoardService.addServiceFromRepo — shared-service mount', () => {
     return { service: new BoardService(deps), upserts }
   }
 
-  it('mounts the existing account service and returns its frame block', async () => {
+  it('mounts the existing account service, returns its frame block, and SAYS it mounted', async () => {
     const { service, upserts } = build(existingService())
-    const block = await service.addServiceFromRepo(WS, { repoGithubId: 101 })
+    const { block, disposition } = await service.addServiceFromRepo(WS, { repoGithubId: 101 })
     expect(block.id).toBe('frame_shared')
+    // The disposition is the half a caller cannot recover: this frame is homed on another board,
+    // so it was never among THIS board's blocks and a create/mount comparison against them reads
+    // the mount as a fresh import (the assistant's `created` flag rides on exactly this).
+    expect(disposition).toBe('mounted')
     expect(upserts).toHaveLength(1)
     expect(upserts[0]).toMatchObject({ workspaceId: WS, serviceId: 'svc_shared' })
   })
 
   it('is idempotent when the service is already mounted here (no second mount)', async () => {
     const { service, upserts } = build(existingService(), true)
-    const block = await service.addServiceFromRepo(WS, { repoGithubId: 101 })
+    const { block, disposition } = await service.addServiceFromRepo(WS, { repoGithubId: 101 })
     expect(block.id).toBe('frame_shared')
+    expect(disposition).toBe('mounted')
     expect(upserts).toHaveLength(0)
   })
 
@@ -126,7 +131,7 @@ describe('BoardService.addServiceFromRepo — shared-service mount', () => {
     // one the caller can read back, so the ordinary idempotent answer stands. Without this the
     // policy would refuse a provisioning integration its OWN previous run's service.
     const { service } = build(existingService(), true, WS)
-    const block = await service.addServiceFromRepo(WS, { repoGithubId: 101 }, 'refuse')
+    const { block } = await service.addServiceFromRepo(WS, { repoGithubId: 101 }, 'refuse')
     expect(block.id).toBe('frame_shared')
   })
 })

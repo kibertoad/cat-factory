@@ -64,6 +64,7 @@ import { BoardService } from './modules/board/BoardService.js'
 import { ExecutionService } from './modules/execution/ExecutionService.js'
 import { PipelineService } from './modules/pipelines/PipelineService.js'
 import { WorkspaceService } from '@cat-factory/workspaces'
+import type { AssistantModule } from './container/assistant-module.js'
 import { WorkspaceMemberService } from '@cat-factory/workspaces'
 import { AccountService } from '@cat-factory/workspaces'
 import { UserService } from '@cat-factory/workspaces'
@@ -332,6 +333,11 @@ export type {
 // here so existing importers are unaffected.
 export type { FoundationalServiceModule, FragmentLibraryModule, SkillLibraryModule }
 
+// The assistant's module shape lives beside its factory (`container/assistant-module.js`) for the
+// same reason, and is re-exported here so a facade's HTTP layer resolves it off `Core` like any
+// other optional module.
+export type { AssistantModule } from './container/assistant-module.js'
+
 /**
  * The always-present core services every facade wires — the composition root's SPINE. These
  * are unconditional (no `?`): a `Core` never lacks them. Split out from the optional modules
@@ -579,6 +585,12 @@ export interface OptionalCoreModules {
   documents?: DocumentsModule
   /** Present only when the task-source integration is configured (see CoreDependencies). */
   tasks?: TasksModule
+  /**
+   * The in-app assistant: one natural-language prompt routed to one board action. Always built
+   * (its board actions need nothing beyond the board), so an unwired model is reported through
+   * the module's own capability read rather than as an absent module the controller 503s on.
+   */
+  assistant?: AssistantModule
   /** Present only when the environment integration is configured (see CoreDependencies). */
   environments?: EnvironmentsModule
   /**
@@ -847,6 +859,7 @@ export function createCore(injected: CoreDependencies): Core {
     fragmentLibrary,
     documents: platform.documents,
     boardService,
+    workspaceService,
     spend: spendService,
   })
   const { initiativeService, tasks, setInitiativeLoop } = collaborators

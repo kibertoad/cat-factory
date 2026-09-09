@@ -152,6 +152,7 @@
     "collapseSidebar": "Collapse sidebar",
     "commandBar": "Search or run a command…",
     "create": "Create",
+    "assistant": "Assistant",
     "buildPipeline": "Build a pipeline",
     "repositories": "Repositories",
     "addFromRepo": "Add from existing repo",
@@ -705,7 +706,9 @@
         "service_catalog_unreachable": "This workspace's developer portal did not answer, or answered with something this platform cannot read. Nothing here is misconfigured and no change will help: try again once the portal is reachable.",
         "service_catalog_unauthorized": "The developer portal refused the stored credential. It has most likely been rotated or revoked: open the service-catalog settings and enter a current one.",
         "service_catalog_filter_missing": "This connection's entity filter could not be read, so there is nothing to import. Re-save the service-catalog connection to restore it.",
-        "service_catalog_response_too_large": "The developer portal answered with more data than this platform will hold in one response. Open the service-catalog settings and lower the service cap, or turn off importing interface definitions, then import again."
+        "service_catalog_response_too_large": "The developer portal answered with more data than this platform will hold in one response. Open the service-catalog settings and lower the service cap, or turn off importing interface definitions, then import again.",
+        "assistant_generation_failed": "The assistant's model provider did not answer. It is configured correctly and nothing here needs setting up: try the request again in a moment.",
+        "assistant_reply_unreadable": "The assistant's model answered with something that is not a decision this platform can act on. Rephrasing rarely helps: pick a different model for the assistant in the model settings."
       }
     },
     "reason": {
@@ -2710,6 +2713,7 @@
       },
       "cmd": {
         "newPipeline": "Build a pipeline",
+        "assistant": "Open the assistant",
         "addFromRepo": "Add service from existing repo",
         "bootstrapRepo": "Bootstrap a new repo",
         "githubManage": "Manage GitHub connection",
@@ -2737,6 +2741,7 @@
       },
       "keywords": {
         "newPipeline": "pipeline agents chain",
+        "assistant": "ai assistant ask prompt do it for me",
         "addFromRepo": "github import existing",
         "bootstrapRepo": "scaffold create reference architecture",
         "github": "git repos pull requests issues",
@@ -5205,6 +5210,49 @@
     "refusal": {
       "boardFromService": "This tracker scans the repository the chosen service is linked to, so it has no board of its own.",
       "missingBoard": "Pick the board to hunt on."
+    }
+  },
+  "assistant": {
+    "title": "Assistant",
+    "intro": "Describe what you want done and the assistant performs it on the board: declare a dependency between two services, add a service from a repository URL, or file a task from a tracker issue.",
+    "unavailable": "No model is configured on this deployment, so the assistant cannot read a request. Configure a model provider to enable it.",
+    "placeholder": "e.g. the checkout service depends on the payments service",
+    "submit": "Run",
+    "submitHint": "Ctrl+Enter, or Cmd+Enter on a Mac",
+    "examplesTitle": "What you can ask",
+    "showOnBoard": "Show on board",
+    "declined": "None of the assistant's actions match that request. It can declare a dependency between two services, add a service from a repository URL, or file a task from a tracker issue.",
+    "actions": {
+      "declare-service-dependency": {
+        "label": "Declare a service dependency",
+        "example": "the checkout service depends on the payments service"
+      },
+      "add-service-from-repo": {
+        "label": "Add a service from a repository",
+        "example": "add https://github.com/acme/payments as a service"
+      },
+      "create-task-from-issue": {
+        "label": "File a task from an issue",
+        "example": "create a task from https://github.com/acme/payments/issues/12"
+      }
+    },
+    "done": {
+      "dependencyDeclared": "{consumer} now depends on {provider}, so both are started when {consumer} is tested.",
+      "dependencyAlready": "{consumer} already depends on {provider}, so nothing changed.",
+      "serviceAdded": "Added {service}, backed by {repo}.",
+      "serviceMounted": "{repo} already backs a service in this organisation, so {service} was added to this board rather than created again.",
+      "taskCreated": "Filed {issue} as “{task}” under {service}."
+    },
+    "needsInput": {
+      "missing_argument": "That request leaves out something the assistant needs. Say it in full and try again.",
+      "invalid_argument": "One of the values in that request cannot be used. Check it and try again.",
+      "unknown_service": "No service on this board matches that name.",
+      "ambiguous_service": "Several services match that name. Which one did you mean?",
+      "unknown_repository": "This workspace has no connection to that repository. Connect it first, then ask again.",
+      "unreadable_repository_url": "That is not a repository URL the assistant can read. Paste the repository's web address.",
+      "unknown_issue_source": "No connected tracker recognises that issue link. Connect the tracker it belongs to first.",
+      "ambiguous_issue_source": "Two connected trackers recognise that reference. Paste the issue's full web address instead.",
+      "unresolved_issue_service": "The assistant could not tell which service to file this under. Name the service in your request."
     }
   },
   "pipeline": {
