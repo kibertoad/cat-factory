@@ -2712,6 +2712,7 @@
       },
       "cmd": {
         "newPipeline": "Costruisci una pipeline",
+        "assistant": "Apri l'assistente",
         "addFromRepo": "Aggiungi servizio da repo esistente",
         "bootstrapRepo": "Esegui il bootstrap di un nuovo repo",
         "githubManage": "Gestisci la connessione GitHub",
@@ -2739,6 +2740,7 @@
       },
       "keywords": {
         "newPipeline": "pipeline agenti catena",
+        "assistant": "ia assistente chiedere richiesta fallo per me",
         "addFromRepo": "github importa esistente",
         "bootstrapRepo": "scaffold crea architettura di riferimento",
         "github": "git repo pull request issue",
@@ -4514,6 +4516,49 @@
       "missingBoard": "Scegli la board su cui cercare."
     }
   },
+  "assistant": {
+    "title": "Assistente",
+    "intro": "Descrivi cosa vuoi fare e l'assistente lo esegue sulla bacheca: dichiarare una dipendenza fra due servizi, aggiungere un servizio dall'URL di un repository o creare un'attività da una segnalazione del tracker.",
+    "unavailable": "Questo deployment non ha un modello configurato, quindi l'assistente non può leggere una richiesta. Configura un provider di modelli per abilitarlo.",
+    "placeholder": "es. il servizio checkout dipende dal servizio pagamenti",
+    "submit": "Esegui",
+    "submitHint": "Ctrl+Invio, oppure Cmd+Invio su Mac",
+    "examplesTitle": "Cosa puoi chiedere",
+    "showOnBoard": "Mostra sulla bacheca",
+    "declined": "Nessuna azione dell'assistente corrisponde a questa richiesta. Può dichiarare una dipendenza fra due servizi, aggiungere un servizio dall'URL di un repository o creare un'attività da una segnalazione del tracker.",
+    "actions": {
+      "declare-service-dependency": {
+        "label": "Dichiarare una dipendenza fra servizi",
+        "example": "il servizio checkout dipende dal servizio pagamenti"
+      },
+      "add-service-from-repo": {
+        "label": "Aggiungere un servizio da un repository",
+        "example": "aggiungi https://github.com/acme/payments come servizio"
+      },
+      "create-task-from-issue": {
+        "label": "Creare un'attività da una segnalazione",
+        "example": "crea un'attività da https://github.com/acme/payments/issues/12"
+      }
+    },
+    "done": {
+      "dependencyDeclared": "{consumer} ora dipende da {provider}: entrambi vengono avviati quando si testa {consumer}.",
+      "dependencyAlready": "{consumer} dipendeva già da {provider}, non è cambiato nulla.",
+      "serviceAdded": "Aggiunto {service}, basato su {repo}.",
+      "serviceMounted": "{repo} è già alla base di un servizio di questa organizzazione, quindi {service} è stato aggiunto a questa bacheca invece di essere ricreato.",
+      "taskCreated": "{issue} creata come «{task}» in {service}."
+    },
+    "needsInput": {
+      "missing_argument": "Alla richiesta manca qualcosa che serve all'assistente. Scrivila per intero e riprova.",
+      "invalid_argument": "Uno dei valori della richiesta non è utilizzabile. Controllalo e riprova.",
+      "unknown_service": "Nessun servizio su questa bacheca corrisponde a quel nome.",
+      "ambiguous_service": "Più servizi corrispondono a quel nome. Quale intendevi?",
+      "unknown_repository": "Questo workspace non ha alcuna connessione a quel repository. Collegalo e poi richiedilo di nuovo.",
+      "unreadable_repository_url": "Non è un URL di repository che l'assistente sappia leggere. Incolla l'indirizzo web del repository.",
+      "unknown_issue_source": "Nessun tracker collegato riconosce quel link. Collega prima il tracker a cui appartiene.",
+      "ambiguous_issue_source": "Due tracker collegati riconoscono quel riferimento. Incolla invece l'indirizzo web completo della segnalazione.",
+      "unresolved_issue_service": "L'assistente non ha potuto capire sotto quale servizio crearla. Indica il servizio nella richiesta."
+    }
+  },
   "pipeline": {
     "iterationCap": {
       "extraRound": "Un altro giro",
@@ -6095,6 +6140,7 @@
     "collapseSidebar": "Comprimi la barra laterale",
     "commandBar": "Cerca o esegui un comando…",
     "create": "Crea",
+    "assistant": "Assistente",
     "buildPipeline": "Crea una pipeline",
     "repositories": "Repository",
     "addFromRepo": "Aggiungi da un repository esistente",

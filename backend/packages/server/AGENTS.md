@@ -10,6 +10,11 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
 **Where things live:**
 
 - `modules/*/…Controller.ts`: the ~50 Hono controllers, one dir per module.
+- `modules/assistant/AssistantController.ts`: the IN-APP ASSISTANT (a capability read plus one
+  prompt-to-action turn). Member tier and ungated on purpose: a turn does board authoring that is
+  reachable from a button beside the prompt box, so `integrations.manage` would let a member do each
+  action by hand but not ask for it. It catches nothing, because every refusal a turn can raise is
+  already a `DomainError` with its own `details.reason`. See `backend/docs/in-app-assistant.md`.
 - `modules/publicApi/`: the key-authenticated `/api/v1` surface (NOT behind the session gate):
   `PublicApiController` (jobs/board/pipelines/notifications), `PublicDecisionController` (a run's
   parked human decisions: the composer over `publicApi/decisions/`, whose `scope.ts` gates a run

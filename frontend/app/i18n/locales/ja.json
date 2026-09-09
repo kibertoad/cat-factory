@@ -128,6 +128,7 @@
     "collapseSidebar": "サイドバーを折りたたむ",
     "commandBar": "検索またはコマンドを実行…",
     "create": "作成",
+    "assistant": "アシスタント",
     "buildPipeline": "パイプラインを構築",
     "repositories": "リポジトリ",
     "addFromRepo": "既存のリポジトリから追加",
@@ -2561,6 +2562,7 @@
       },
       "cmd": {
         "newPipeline": "パイプラインを構築",
+        "assistant": "アシスタントを開く",
         "addFromRepo": "既存リポジトリからサービスを追加",
         "bootstrapRepo": "新しいリポジトリをブートストラップ",
         "githubManage": "GitHub 接続を管理",
@@ -2588,6 +2590,7 @@
       },
       "keywords": {
         "newPipeline": "pipeline agents chain パイプライン エージェント チェーン",
+        "assistant": "ai アシスタント 依頼 プロンプト 代わりにやって",
         "addFromRepo": "github import existing GitHub インポート 既存",
         "bootstrapRepo": "scaffold create reference architecture スキャフォールド 作成 リファレンスアーキテクチャ",
         "github": "git repos pull requests issues リポジトリ プルリクエスト Issue",
@@ -5020,6 +5023,49 @@
     "refusal": {
       "boardFromService": "このトラッカーは選択したサービスにリンクされたリポジトリを走査するため、独自のボードはありません。",
       "missingBoard": "調査するボードを選択してください。"
+    }
+  },
+  "assistant": {
+    "title": "アシスタント",
+    "intro": "やりたいことを書くと、アシスタントがボード上で実行します。サービス間の依存関係の宣言、リポジトリ URL からのサービス追加、トラッカーのイシューからのタスク作成ができます。",
+    "unavailable": "このデプロイメントにはモデルが設定されていないため、アシスタントは依頼を読み取れません。モデルプロバイダーを設定して有効にしてください。",
+    "placeholder": "例: checkout サービスは payments サービスに依存している",
+    "submit": "実行",
+    "submitHint": "Ctrl+Enter、Mac では Cmd+Enter",
+    "examplesTitle": "依頼できること",
+    "showOnBoard": "ボードで表示",
+    "declined": "この依頼に合う操作はありません。アシスタントができるのは、2 つのサービス間の依存関係の宣言、リポジトリ URL からのサービス追加、トラッカーのイシューからのタスク作成です。",
+    "actions": {
+      "declare-service-dependency": {
+        "label": "サービスの依存関係を宣言",
+        "example": "checkout サービスは payments サービスに依存している"
+      },
+      "add-service-from-repo": {
+        "label": "リポジトリからサービスを追加",
+        "example": "https://github.com/acme/payments をサービスとして追加して"
+      },
+      "create-task-from-issue": {
+        "label": "イシューからタスクを作成",
+        "example": "https://github.com/acme/payments/issues/12 からタスクを作って"
+      }
+    },
+    "done": {
+      "dependencyDeclared": "{consumer} が {provider} に依存するようになりました。{consumer} のテスト時に両方が起動されます。",
+      "dependencyAlready": "{consumer} はすでに {provider} に依存していたため、変更はありません。",
+      "serviceAdded": "{repo} を基に {service} を追加しました。",
+      "serviceMounted": "{repo} はこの組織の既存サービスの基盤です。そのため {service} は新規作成ではなくこのボードに追加されました。",
+      "taskCreated": "{issue} を {service} の「{task}」として作成しました。"
+    },
+    "needsInput": {
+      "missing_argument": "この依頼にはアシスタントに必要な情報が足りません。全体を書いてもう一度お試しください。",
+      "invalid_argument": "この依頼の値のひとつが使用できません。確認してもう一度お試しください。",
+      "unknown_service": "その名前に一致するサービスはこのボードにありません。",
+      "ambiguous_service": "その名前に複数のサービスが一致します。どれでしょうか。",
+      "unknown_repository": "このワークスペースはそのリポジトリに接続されていません。先に接続してからもう一度依頼してください。",
+      "unreadable_repository_url": "アシスタントが読めるリポジトリ URL ではありません。リポジトリの Web アドレスを貼り付けてください。",
+      "unknown_issue_source": "接続済みのトラッカーはこのリンクを認識できません。そのイシューが属するトラッカーを先に接続してください。",
+      "ambiguous_issue_source": "接続済みの 2 つのトラッカーがこの参照を認識します。代わりにイシューの完全な Web アドレスを貼り付けてください。",
+      "unresolved_issue_service": "どのサービスの下に作成するか判断できませんでした。依頼の中でサービス名を指定してください。"
     }
   },
   "pipeline": {

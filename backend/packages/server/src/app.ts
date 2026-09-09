@@ -104,6 +104,7 @@ import {
   linearOAuthController,
   taskSourceController,
 } from './modules/tasks/TaskSourceController.js'
+import { assistantController } from './modules/assistant/AssistantController.js'
 import { bugHuntController } from './modules/bugHunt/BugHuntController.js'
 import { workspaceController } from './modules/workspaces/WorkspaceController.js'
 import { workspaceMemberController } from './modules/workspaces/WorkspaceMemberController.js'
@@ -430,6 +431,9 @@ export const WORKSPACE_CONTROLLERS: readonly ControllerEntry[] = [
   { name: 'documentSource', mount: WORKSPACE_MOUNT, build: () => documentSourceController() },
   { name: 'taskSource', mount: WORKSPACE_MOUNT, build: () => taskSourceController() },
   { name: 'bugHunt', mount: WORKSPACE_MOUNT, build: () => bugHuntController() },
+  // The in-app assistant: a prompt routed to one of the board actions above. Member-tier and
+  // ungated, like the bug hunt beside it (see AssistantController for why).
+  { name: 'assistant', mount: WORKSPACE_MOUNT, build: () => assistantController() },
   { name: 'environment', mount: WORKSPACE_MOUNT, build: () => environmentController() },
   { name: 'runnerPool', mount: WORKSPACE_MOUNT, build: () => runnerPoolController() },
   { name: 'provisioningLog', mount: WORKSPACE_MOUNT, build: () => provisioningLogController() },

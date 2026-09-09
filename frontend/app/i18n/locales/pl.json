@@ -128,6 +128,7 @@
     "collapseSidebar": "Zwiń panel boczny",
     "commandBar": "Wyszukaj lub uruchom polecenie…",
     "create": "Utwórz",
+    "assistant": "Asystent",
     "buildPipeline": "Zbuduj potok",
     "repositories": "Repozytoria",
     "addFromRepo": "Dodaj z istniejącego repozytorium",
@@ -2561,6 +2562,7 @@
       },
       "cmd": {
         "newPipeline": "Zbuduj potok",
+        "assistant": "Otwórz asystenta",
         "addFromRepo": "Dodaj usługę z istniejącego repozytorium",
         "bootstrapRepo": "Zainicjuj nowe repozytorium",
         "githubManage": "Zarządzaj połączeniem GitHub",
@@ -2588,6 +2590,7 @@
       },
       "keywords": {
         "newPipeline": "potok agenci łańcuch pipeline",
+        "assistant": "ai asystent zapytaj polecenie zrób za mnie",
         "addFromRepo": "github importuj istniejące",
         "bootstrapRepo": "rusztowanie utwórz architektura referencyjna",
         "github": "git repozytoria pull requesty zgłoszenia",
@@ -5020,6 +5023,49 @@
     "refusal": {
       "boardFromService": "Ten tracker przeszukuje repozytorium powiązane z wybraną usługą, więc nie ma własnej tablicy.",
       "missingBoard": "Wybierz tablicę, na której chcesz szukać."
+    }
+  },
+  "assistant": {
+    "title": "Asystent",
+    "intro": "Opisz, co ma zostać zrobione, a asystent wykona to na tablicy: zadeklaruje zależność między dwiema usługami, doda usługę z adresu repozytorium albo utworzy zadanie ze zgłoszenia w trackerze.",
+    "unavailable": "W tym wdrożeniu nie skonfigurowano żadnego modelu, więc asystent nie może odczytać prośby. Skonfiguruj dostawcę modeli, aby go włączyć.",
+    "placeholder": "np. usługa checkout zależy od usługi płatności",
+    "submit": "Uruchom",
+    "submitHint": "Ctrl+Enter, na Macu Cmd+Enter",
+    "examplesTitle": "O co możesz poprosić",
+    "showOnBoard": "Pokaż na tablicy",
+    "declined": "Żadne działanie asystenta nie pasuje do tej prośby. Może zadeklarować zależność między dwiema usługami, dodać usługę z adresu repozytorium albo utworzyć zadanie ze zgłoszenia w trackerze.",
+    "actions": {
+      "declare-service-dependency": {
+        "label": "Zadeklaruj zależność między usługami",
+        "example": "usługa checkout zależy od usługi płatności"
+      },
+      "add-service-from-repo": {
+        "label": "Dodaj usługę z repozytorium",
+        "example": "dodaj https://github.com/acme/payments jako usługę"
+      },
+      "create-task-from-issue": {
+        "label": "Utwórz zadanie ze zgłoszenia",
+        "example": "utwórz zadanie z https://github.com/acme/payments/issues/12"
+      }
+    },
+    "done": {
+      "dependencyDeclared": "{consumer} zależy teraz od {provider}, więc obie usługi są uruchamiane przy testowaniu {consumer}.",
+      "dependencyAlready": "{consumer} już zależał od {provider}, nic się nie zmieniło.",
+      "serviceAdded": "Dodano {service} w oparciu o {repo}.",
+      "serviceMounted": "{repo} stoi już za usługą w tej organizacji, więc {service} został dodany do tej tablicy zamiast utworzony od nowa.",
+      "taskCreated": "Utworzono {issue} jako „{task}” w {service}."
+    },
+    "needsInput": {
+      "missing_argument": "W tej prośbie brakuje czegoś, czego potrzebuje asystent. Napisz ją w całości i spróbuj ponownie.",
+      "invalid_argument": "Jednej z wartości w tej prośbie nie da się użyć. Sprawdź ją i spróbuj ponownie.",
+      "unknown_service": "Żadna usługa na tej tablicy nie nosi takiej nazwy.",
+      "ambiguous_service": "Kilka usług pasuje do tej nazwy. Którą masz na myśli?",
+      "unknown_repository": "Ten obszar roboczy nie ma połączenia z tym repozytorium. Najpierw je podłącz, a potem poproś ponownie.",
+      "unreadable_repository_url": "To nie jest adres repozytorium, który asystent potrafi odczytać. Wklej adres WWW repozytorium.",
+      "unknown_issue_source": "Żaden podłączony tracker nie rozpoznaje tego odnośnika. Najpierw podłącz tracker, do którego należy.",
+      "ambiguous_issue_source": "Dwa podłączone trackery rozpoznają to odwołanie. Wklej zamiast tego pełny adres WWW zgłoszenia.",
+      "unresolved_issue_service": "Asystent nie ustalił, pod którą usługą to utworzyć. Podaj usługę w swojej prośbie."
     }
   },
   "pipeline": {

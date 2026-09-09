@@ -742,11 +742,15 @@ must be TOLD what system the work is about; a derived subject never displaces it
 `pl_bugfix`; persists NOTHING. Trap: the rating takes `isOverBudget`, being the platform's first billable
 call no run start gates, and any future un-run-scoped LLM call owes it too. [`bug-hunt.md`](./backend/docs/bug-hunt.md).
 
+**In-app assistant**: one typed request, routed by an inline model to ONE action from a closed catalog
+(declare a service dependency, add a service from a repo URL, file a task from an issue URL) that the
+platform then performs through the board's own services. Trap: the model NAMES and COPIES, never resolves;
+an unmatched or ambiguous name is an outcome carrying candidates, never a guess. [`in-app-assistant.md`](./backend/docs/in-app-assistant.md).
+
 **Bug fishing expedition**: a read-only hunt for the defects nobody reported. ONE `bug-fisher` step,
 dispatched once per ANGLE per platform-computed TERRITORY; a human MARKS what to fix and each mark spawns
 its own task on the board's `bugFishingFixPipelineId`. Trap: marking is accepted MID-hunt, so the state
-survives `resetStepForRerun` (the loop re-arms one step) and every reduction is over the ACCUMULATED
-catch. Doc: [`bug-fishing-expedition.md`](./docs/initiatives/bug-fishing-expedition.md).
+survives `resetStepForRerun` and every reduction is over the ACCUMULATED catch. Doc: [`bug-fishing-expedition.md`](./docs/initiatives/bug-fishing-expedition.md).
 
 **Implementation-fork decision**: an optional two-phase `coder` step that proposes materially different
 implementations and parks for a human BETWEEN two dispatches on the same step (a container job can't
@@ -763,10 +767,8 @@ developer portal. Trap: catalog and CONTRACTS are two separate reads and that sp
 
 **Binary-output steps**: a `binary-output`-trait kind generates artifacts, stored through a foundational
 service its step SELECTS; what MAKES them is `BinaryGeneratorRegistry`, read only via `BinaryGeneratorSource`
-(unreachable ⇒ 503, mothership rule), whose `capabilities` + `accepts` gate the options and, past two producers,
-a human CANDIDATE park. `pl_media` runs the shipped kind against `platform-assets` + `nano-banana`, the one
-service and integration shipped (INJECTING a registry drops it, refusing that preset). Deadliest trap: content
-type is CLOSED and stops deciding at the SECOND producer, so overlaps are STATED, never ranked. Doc: [`binary-output-foundational-storage.md`](./docs/initiatives/binary-output-foundational-storage.md).
+(unreachable ⇒ 503, mothership rule). Deadliest trap: content type is CLOSED and stops deciding at the
+SECOND producer, so overlaps are STATED, never ranked. Doc: [`binary-output-foundational-storage.md`](./docs/initiatives/binary-output-foundational-storage.md).
 
 **Compose layers**: `StackRecipe` / `SharedStack` name an ORDERED list of `ComposeFileRef` layers
 (in-repo path, `inline`, or `repo`), letting a deployment declare infra dependencies in code. Traps: the
@@ -785,9 +787,8 @@ opening (the opposite disposition from validation); the producer's `note` is ren
 
 **Pipeline PR descriptions**: the agent writes its reviewer briefing to `.cat-pr-description.md` and the
 harness lifts it onto `openPullRequest`; when the target repo ships a PR template, the briefing IS that
-template, filled in. Traps: the guidance rides EVERY agent pass; the sentinel is read with
-`titleFromHeading: false`; the coverage test classifies every agent-running mode as PR-opening or not.
-Doc: [`pipeline-pr-descriptions.md`](./backend/docs/pipeline-pr-descriptions.md).
+template, filled in. Trap: the guidance rides EVERY agent pass, so the coverage test classifies every
+agent-running mode as PR-opening or not. Doc: [`pipeline-pr-descriptions.md`](./backend/docs/pipeline-pr-descriptions.md).
 
 **Consensus panels**: an eligible step runs as a multi-model panel (`@cat-factory/consensus`). Traps: a
 panel participant has NO checkout and `dispatchDeliversCheckout` is the one definition every layer asks;

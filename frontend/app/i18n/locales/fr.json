@@ -128,6 +128,7 @@
     "collapseSidebar": "Réduire la barre latérale",
     "commandBar": "Rechercher ou exécuter une commande…",
     "create": "Créer",
+    "assistant": "Assistant",
     "buildPipeline": "Créer un pipeline",
     "repositories": "Dépôts",
     "addFromRepo": "Ajouter depuis un dépôt existant",
@@ -2561,6 +2562,7 @@
       },
       "cmd": {
         "newPipeline": "Créer un pipeline",
+        "assistant": "Ouvrir l'assistant",
         "addFromRepo": "Ajouter un service depuis un dépôt existant",
         "bootstrapRepo": "Initialiser un nouveau dépôt",
         "githubManage": "Gérer la connexion GitHub",
@@ -2588,6 +2590,7 @@
       },
       "keywords": {
         "newPipeline": "pipeline agents chaîne",
+        "assistant": "ia assistant demander invite fais-le pour moi",
         "addFromRepo": "github importer existant",
         "bootstrapRepo": "échafaudage créer architecture de référence",
         "github": "git dépôts pull requests tickets",
@@ -5020,6 +5023,49 @@
     "refusal": {
       "boardFromService": "Ce traqueur analyse le dépôt auquel le service choisi est lié : il n'a donc pas de tableau propre.",
       "missingBoard": "Choisissez le tableau sur lequel chercher."
+    }
+  },
+  "assistant": {
+    "title": "Assistant",
+    "intro": "Décrivez ce que vous voulez faire et l'assistant l'exécute sur le tableau : déclarer une dépendance entre deux services, ajouter un service à partir de l'URL d'un dépôt, ou créer une tâche à partir d'un ticket.",
+    "unavailable": "Aucun modèle n'est configuré sur ce déploiement, l'assistant ne peut donc pas lire une demande. Configurez un fournisseur de modèles pour l'activer.",
+    "placeholder": "ex. le service checkout dépend du service paiements",
+    "submit": "Exécuter",
+    "submitHint": "Ctrl+Entrée, ou Cmd+Entrée sur un Mac",
+    "examplesTitle": "Ce que vous pouvez demander",
+    "showOnBoard": "Afficher sur le tableau",
+    "declined": "Aucune action de l'assistant ne correspond à cette demande. Il peut déclarer une dépendance entre deux services, ajouter un service à partir de l'URL d'un dépôt, ou créer une tâche à partir d'un ticket.",
+    "actions": {
+      "declare-service-dependency": {
+        "label": "Déclarer une dépendance entre services",
+        "example": "le service checkout dépend du service paiements"
+      },
+      "add-service-from-repo": {
+        "label": "Ajouter un service depuis un dépôt",
+        "example": "ajoute https://github.com/acme/payments comme service"
+      },
+      "create-task-from-issue": {
+        "label": "Créer une tâche à partir d'un ticket",
+        "example": "crée une tâche à partir de https://github.com/acme/payments/issues/12"
+      }
+    },
+    "done": {
+      "dependencyDeclared": "{consumer} dépend désormais de {provider} : les deux sont démarrés quand {consumer} est testé.",
+      "dependencyAlready": "{consumer} dépendait déjà de {provider}, rien n'a changé.",
+      "serviceAdded": "{service} ajouté, adossé à {repo}.",
+      "serviceMounted": "{repo} sert déjà de base à un service de cette organisation : {service} a été ajouté à ce tableau plutôt que recréé.",
+      "taskCreated": "{issue} créé comme tâche « {task} » dans {service}."
+    },
+    "needsInput": {
+      "missing_argument": "Il manque à cette demande quelque chose dont l'assistant a besoin. Formulez-la entièrement et réessayez.",
+      "invalid_argument": "L'une des valeurs de cette demande est inutilisable. Vérifiez-la et réessayez.",
+      "unknown_service": "Aucun service de ce tableau ne porte ce nom.",
+      "ambiguous_service": "Plusieurs services correspondent à ce nom. Lequel vouliez-vous dire ?",
+      "unknown_repository": "Cet espace de travail n'a aucune connexion à ce dépôt. Connectez-le, puis redemandez.",
+      "unreadable_repository_url": "Ce n'est pas une URL de dépôt que l'assistant sait lire. Collez l'adresse web du dépôt.",
+      "unknown_issue_source": "Aucun outil de suivi connecté ne reconnaît ce lien. Connectez d'abord celui auquel il appartient.",
+      "ambiguous_issue_source": "Deux outils de suivi connectés reconnaissent cette référence. Collez plutôt l'adresse web complète du ticket.",
+      "unresolved_issue_service": "L'assistant n'a pas pu déterminer dans quel service créer la tâche. Nommez le service dans votre demande."
     }
   },
   "pipeline": {

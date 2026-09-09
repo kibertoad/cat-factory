@@ -196,6 +196,7 @@ export interface NavCommandSpec {
  * dead button. Consumer modules don't use these — they carry their own `run`.
  */
 export const NAV_ACTIONS = [
+  'assistant',
   'buildPipeline',
   'addFromRepo',
   'bootstrapRepo',
@@ -341,6 +342,27 @@ const S = (...s: NavSurface[]) => s as readonly NavSurface[]
  * the whole sidebar costs it nothing it is there to do.
  */
 export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
+  {
+    // The in-app assistant. `intake: true` and not `advanced`, because it is the shortest route
+    // to the two things a narrowed role is on the board to do (put a repository on it, file a
+    // task from a ticket) and it configures nothing: every action behind it is a board write the
+    // member tier already allows, refused server-side for anyone it should not be.
+    id: 'assistant',
+    labelKey: 'nav.assistant',
+    icon: 'i-lucide-sparkles',
+    surfaces: S('sidebar', 'command'),
+    gate: (g) => g.canWriteBoard,
+    action: 'assistant',
+    intake: true,
+    testId: 'nav-assistant',
+    sidebar: { group: 'create', order: 5 },
+    command: {
+      group: 'create',
+      order: 5,
+      labelKey: 'layout.commandBar.cmd.assistant',
+      keywordsKey: 'layout.commandBar.keywords.assistant',
+    },
+  },
   {
     id: 'build-pipeline',
     labelKey: 'nav.buildPipeline',

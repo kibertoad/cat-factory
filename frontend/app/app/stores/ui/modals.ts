@@ -216,6 +216,11 @@ function createDocumentTaskModals(resetHubReturn: ResetHubReturn) {
   // the create-in target AND scopes the issue search to the frame's linked repo.
   // Null → the unscoped "import an issue" surface (workspace-wide search).
   const taskImport = ref<{ source: TaskSourceKind | null; containerId: string | null } | null>(null)
+  // In-app assistant: the prompt box that routes one sentence to one board action. It carries no
+  // subject (a turn resolves every name it needs from the board itself), so a plain flag says
+  // everything the host needs to know.
+  const assistantOpen = ref(false)
+
   // Bug hunt: pick a tracker + one of its boards, rank its open unassigned bugs, adopt one.
   // `containerId` (a service frame or module) preselects where an adopted bug lands; null →
   // opened standalone, and the modal offers every container on the board.
@@ -293,6 +298,13 @@ function createDocumentTaskModals(resetHubReturn: ResetHubReturn) {
   function closeTaskImport() {
     taskImport.value = null
   }
+  function openAssistant() {
+    resetHubReturn()
+    assistantOpen.value = true
+  }
+  function closeAssistant() {
+    assistantOpen.value = false
+  }
   function openBugHunt(source: TaskSourceKind | null = null, containerId: string | null = null) {
     resetHubReturn()
     bugHunt.value = { source, containerId }
@@ -341,6 +353,7 @@ function createDocumentTaskModals(resetHubReturn: ResetHubReturn) {
     spawnPreview,
     taskConnect,
     taskImport,
+    assistantOpen,
     bugHunt,
     startFromDesign,
     addTaskContainerId,
@@ -360,6 +373,8 @@ function createDocumentTaskModals(resetHubReturn: ResetHubReturn) {
     closeTaskConnect,
     openTaskImport,
     closeTaskImport,
+    openAssistant,
+    closeAssistant,
     openBugHunt,
     closeBugHunt,
     openStartFromDesign,

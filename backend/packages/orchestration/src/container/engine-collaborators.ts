@@ -33,6 +33,8 @@ import {
 import type { SpendService } from '@cat-factory/spend'
 import type { ModuleRegistry } from './module-registry.js'
 import type { BoardService } from '../modules/board/BoardService.js'
+import type { WorkspaceService } from '@cat-factory/workspaces'
+import { createAssistantModule } from './assistant-module.js'
 import type { createFragmentLibraryModule } from '../container-content-libraries.js'
 import type { CoreDependencies, DocumentsModule, NotificationsModule } from '../container.js'
 import type { resolveCoreRuntime } from './runtime.js'
@@ -60,6 +62,8 @@ export interface EngineCollaboratorsInput {
    */
   documents: DocumentsModule | undefined
   boardService: BoardService
+  /** The board composition the assistant resolves a service NAME a person typed against. */
+  workspaceService: WorkspaceService
   /** The spend safeguard, so the bug hunt's billable ranking honours the same budget a run does. */
   spend: SpendService
 }
@@ -73,6 +77,7 @@ export function createEngineCollaborators(input: EngineCollaboratorsInput) {
     notifications,
     fragmentLibrary,
     boardService,
+    workspaceService,
     spend,
   } = input
   // Built before the execution engine so the planning pipeline's plan ingest + the
@@ -167,6 +172,13 @@ export function createEngineCollaborators(input: EngineCollaboratorsInput) {
   // read-and-claim intake helper (`tasks.bugIntakeService`). Also feeds the recurring module's
   // schedule intake-config validation below.
   const tasks = modules.build('tasks', () => createTasksModule(dependencies, boardService, spend))
+
+  // The in-app assistant. Registered AFTER `tasks` because its issue action is dropped from the
+  // catalog when the task-source integration is unwired. The catalog is what the model routes
+  // against, so an action this deployment cannot perform must not be in it.
+  modules.build('assistant', () =>
+    createAssistantModule({ dependencies, workspaceService, boardService, tasks, spend }),
+  )
 
   return {
     initiativeService,

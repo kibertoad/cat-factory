@@ -128,6 +128,7 @@
     "collapseSidebar": "Kenar çubuğunu daralt",
     "commandBar": "Arayın veya bir komut çalıştırın…",
     "create": "Oluştur",
+    "assistant": "Asistan",
     "buildPipeline": "Bir işlem hattı oluştur",
     "repositories": "Depolar",
     "addFromRepo": "Mevcut depodan ekle",
@@ -2561,6 +2562,7 @@
       },
       "cmd": {
         "newPipeline": "Boru hattı oluştur",
+        "assistant": "Asistanı aç",
         "addFromRepo": "Mevcut depodan servis ekle",
         "bootstrapRepo": "Yeni depo başlat",
         "githubManage": "GitHub bağlantısını yönet",
@@ -2588,6 +2590,7 @@
       },
       "keywords": {
         "newPipeline": "boru hattı ajanlar zincir",
+        "assistant": "yapay zeka asistan sor istem benim yerime yap",
         "addFromRepo": "github içe aktar mevcut",
         "bootstrapRepo": "iskele oluştur referans mimari",
         "github": "git depolar çekme istekleri sorunlar",
@@ -5020,6 +5023,49 @@
     "refusal": {
       "boardFromService": "Bu izleyici, seçilen hizmete bağlı depoyu tarar; bu yüzden kendine ait bir panosu yoktur.",
       "missingBoard": "Aranacak panoyu seçin."
+    }
+  },
+  "assistant": {
+    "title": "Asistan",
+    "intro": "Ne yapılmasını istediğinizi yazın, asistan bunu panoda gerçekleştirsin: iki servis arasında bağımlılık tanımlamak, bir depo adresinden servis eklemek ya da bir izleyici kaydından görev oluşturmak.",
+    "unavailable": "Bu kurulumda yapılandırılmış bir model yok, bu yüzden asistan isteği okuyamıyor. Etkinleştirmek için bir model sağlayıcısı yapılandırın.",
+    "placeholder": "örn. checkout servisi ödemeler servisine bağlıdır",
+    "submit": "Çalıştır",
+    "submitHint": "Ctrl+Enter, Mac'te Cmd+Enter",
+    "examplesTitle": "Neler isteyebilirsiniz",
+    "showOnBoard": "Panoda göster",
+    "declined": "Asistanın hiçbir eylemi bu istekle eşleşmiyor. İki servis arasında bağımlılık tanımlayabilir, bir depo adresinden servis ekleyebilir ya da bir izleyici kaydından görev oluşturabilir.",
+    "actions": {
+      "declare-service-dependency": {
+        "label": "Servis bağımlılığı tanımla",
+        "example": "checkout servisi ödemeler servisine bağlıdır"
+      },
+      "add-service-from-repo": {
+        "label": "Depodan servis ekle",
+        "example": "https://github.com/acme/payments adresini servis olarak ekle"
+      },
+      "create-task-from-issue": {
+        "label": "Kayıttan görev oluştur",
+        "example": "https://github.com/acme/payments/issues/12 adresinden bir görev oluştur"
+      }
+    },
+    "done": {
+      "dependencyDeclared": "{consumer} artık {provider} servisine bağlı, dolayısıyla {consumer} test edilirken ikisi de başlatılır.",
+      "dependencyAlready": "{consumer} zaten {provider} servisine bağlıydı, hiçbir şey değişmedi.",
+      "serviceAdded": "{repo} deposuna dayanan {service} eklendi.",
+      "serviceMounted": "{repo} bu kuruluşta zaten bir servisin arkasında, bu yüzden {service} yeniden oluşturulmak yerine bu panoya eklendi.",
+      "taskCreated": "{issue}, {service} altında “{task}” olarak oluşturuldu."
+    },
+    "needsInput": {
+      "missing_argument": "Bu istekte asistanın ihtiyaç duyduğu bir şey eksik. Tam olarak yazıp tekrar deneyin.",
+      "invalid_argument": "Bu istekteki değerlerden biri kullanılamıyor. Kontrol edip tekrar deneyin.",
+      "unknown_service": "Bu panoda bu adla eşleşen bir servis yok.",
+      "ambiguous_service": "Bu adla birden fazla servis eşleşiyor. Hangisini kastettiniz?",
+      "unknown_repository": "Bu çalışma alanının o depoyla bağlantısı yok. Önce bağlayın, sonra tekrar isteyin.",
+      "unreadable_repository_url": "Bu, asistanın okuyabileceği bir depo adresi değil. Deponun web adresini yapıştırın.",
+      "unknown_issue_source": "Bağlı hiçbir izleyici bu bağlantıyı tanımıyor. Önce ait olduğu izleyiciyi bağlayın.",
+      "ambiguous_issue_source": "Bağlı iki izleyici de bu referansı tanıyor. Bunun yerine kaydın tam web adresini yapıştırın.",
+      "unresolved_issue_service": "Asistan bunun hangi servis altında oluşturulacağını belirleyemedi. İsteğinizde servisi adıyla belirtin."
     }
   },
   "pipeline": {

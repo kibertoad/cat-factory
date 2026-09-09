@@ -401,60 +401,84 @@ export class WorkspaceService {
     return requireWorkspace(this.workspaceRepository, id)
   }
 
-  async snapshot(id: string): Promise<WorkspaceSnapshot> {
-    const workspace = await this.require(id)
-    const [localBlocks, allPipelines, localExecutions] = await Promise.all([
-      this.blockRepository.listByWorkspace(id),
-      this.pipelineRepository.listByWorkspace(id),
-      this.executionRepository.listByWorkspace(id),
-    ])
+  /**
+   * The board's VISIBLE blocks: the composed board a person is looking at, with the internal
+   * anchors and every archived service's subtree already dropped.
+   *
+   * Its own read rather than "the snapshot, minus the parts you don't want", because a caller that
+   * needs the board and nothing else (the in-app assistant, resolving a service name a person
+   * typed) would otherwise pay for the workspace's pipelines, executions and three built-in
+   * catalogs to read a set of frame titles. It composes through {@link visibleBoard}, the SAME
+   * path the snapshot takes, so a mounted shared service is present here exactly as it is on the
+   * board and no second definition of "what is on this board" exists to drift.
+   */
+  async boardBlocks(id: string): Promise<Block[]> {
+    await this.require(id)
+    return (await this.visibleBoard(id)).blocks
+  }
+
+  /**
+   * Compose the board and apply the two visibility passes both readers share.
+   *
+   * The passes are the subtle half and the reason this is one method rather than a filter each
+   * caller applies: an archived service can be archived on its HOME board while another board
+   * MOUNTS it, so hiding it takes one pass over the local rows and a second over the composed
+   * board. It hands back what it hid, because the snapshot additionally needs the archived frames
+   * (it lists them for restore) and the hidden ids (it drops their executions).
+   */
+  private async visibleBoard(id: string): Promise<{
+    mounts: WorkspaceMount[]
+    blocks: Block[]
+    hiddenBlockIds: Set<string>
+    archivedFrames: Block[]
+  }> {
+    const localBlocks = await this.blockRepository.listByWorkspace(id)
     const mounts =
       this.workspaceMountRepository && this.serviceRepository
         ? await this.workspaceMountRepository.listByWorkspace(id)
         : []
-    // Exclude HEADLESS internal blocks (public-API "initiative" runs) from the board projection —
-    // they exist only to anchor an external run and must never render in the UI. Filtered here, at
-    // the single SPA-facing snapshot read, not in the repository (the engine still sees them). See
-    // BoardService.createInternalTask. Their executions are dropped from `executions` too, so the
-    // external run's brief + LLM output never reach the SPA (the block filter alone would leave an
-    // orphan execution referencing a hidden block). The durable driver never uses the snapshot —
-    // production drives by run id, and the conformance/test harness now enumerates runs via
-    // `executionRepository.listByWorkspace`, not this projection.
+    // HEADLESS internal blocks (public-API "initiative" runs) never render: they exist only to
+    // anchor an external run. Hidden here, at the composition both SPA-facing reads go through,
+    // rather than in the repository, where the engine still sees them. See BoardService.createInternalTask.
     const internalBlockIds = new Set(localBlocks.filter((b) => b.internal).map((b) => b.id))
-    // Archived services: an archived top-level frame plus its whole subtree drop out of the
-    // board projection (like `internal`), but the frame itself is surfaced under
-    // `archivedServices` so the SPA can list + restore it. Restore is a flag flip, so nothing
-    // is destroyed — the subtree reappears on the next refresh.
-    //
-    // This is derived in TWO passes because a service can be SHARED across boards: a frame homed
-    // here (in `localBlocks`) and one archived on its HOME board but mounted here (pulled in only
-    // by `composeBoard` below) must BOTH be hidden — otherwise archiving a shared service leaves
-    // it fully visible on every other board that mounts it.
-    //   Pass 1 (local): hide the internal blocks + every LOCAL archived frame's subtree. This is
-    //   the reliable source for a home board's own archived services and their executions (those
-    //   subtrees never survive into `composed`, so they can't be re-derived from it).
+    // Pass 1 (local): hide the internal blocks + every LOCAL archived frame's subtree. This is the
+    // reliable source for a home board's own archived services and their executions, since those
+    // subtrees never survive into `composed` and cannot be re-derived from it.
     const localArchivedFrames = localBlocks.filter(isArchivedServiceFrame)
     const localHidden = hiddenSubtreeIds(localBlocks, localArchivedFrames, internalBlockIds)
     const visibleBlocks = localBlocks.filter((b) => !localHidden.has(b.id))
     const composed = await this.composeBoard(visibleBlocks, mounts)
-    //   Pass 2 (composed): a FOREIGN service archived on its home board reaches this board only via
-    //   its mount, so `composeBoard` re-fetches its (archived) subtree via `listByServices`. Seed
-    //   the final hide-set with pass 1's ids and grow it over the composed board so that foreign
-    //   frame + subtree are dropped here too. A local frame re-pulled as "foreign" is already in
-    //   `localHidden`, so it is not double-counted as a fresh foreign archive.
+    // Pass 2 (composed): a FOREIGN service archived on its home board reaches this board only via
+    // its mount, so `composeBoard` re-fetches its (archived) subtree via `listByServices`. Seed the
+    // final hide-set with pass 1's ids and grow it over the composed board so that frame + subtree
+    // are dropped here too. A local frame re-pulled as "foreign" is already in `localHidden`, so it
+    // is not double-counted as a fresh foreign archive.
     const foreignArchivedFrames = composed.filter(
       (b) => isArchivedServiceFrame(b) && !localHidden.has(b.id),
     )
     const hiddenBlockIds = hiddenSubtreeIds(composed, foreignArchivedFrames, localHidden)
-    const blocks = composed.filter((b) => !hiddenBlockIds.has(b.id))
-    // Compose over ALL local executions, then drop the hidden ones (local subtree via `localHidden`,
-    // foreign archived subtree via the composed pass) — a foreign archived run reaches this list
-    // through `composeExecutions`' mount pull, so filtering only local executions would leak it.
+    return {
+      mounts,
+      blocks: composed.filter((b) => !hiddenBlockIds.has(b.id)),
+      hiddenBlockIds,
+      archivedFrames: [...localArchivedFrames, ...foreignArchivedFrames],
+    }
+  }
+
+  async snapshot(id: string): Promise<WorkspaceSnapshot> {
+    const workspace = await this.require(id)
+    const [board, allPipelines, localExecutions] = await Promise.all([
+      this.visibleBoard(id),
+      this.pipelineRepository.listByWorkspace(id),
+      this.executionRepository.listByWorkspace(id),
+    ])
+    const { mounts, blocks, hiddenBlockIds, archivedFrames } = board
+    // Compose over ALL local executions, then drop the ones whose block the board hid (an
+    // internal anchor, or an archived service's subtree, local or foreign): a foreign archived
+    // run reaches this list through `composeExecutions`' mount pull, so filtering only local
+    // executions would leak it.
     const composedExecutions = await this.composeExecutions(localExecutions, mounts)
     const executions = composedExecutions.filter((e) => !hiddenBlockIds.has(e.blockId))
-    // Every archived service this board can list/restore: its own homed frames + any shared frame
-    // it mounts that was archived on its home board.
-    const archivedFrames = [...localArchivedFrames, ...foreignArchivedFrames]
     // The current built-in catalog versions, so the SPA can flag a workspace's stale
     // built-in copies and offer a reseed (see WorkspaceSnapshot.pipelineCatalogVersions), plus the
     // companion NAME map, which is the only way the "new built-ins" advisory can name a catalog
