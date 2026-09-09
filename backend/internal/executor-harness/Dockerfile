@@ -123,7 +123,7 @@ RUN echo 'harness:100000:65536' > /etc/subuid \
 # Codex 0.153.0 onward, and an older CLI answers `Unknown model` rather than falling back, so
 # moving this pin below that version silently breaks that catalog entry at dispatch.
 ARG PI_VERSION=0.85.1
-ARG CLAUDE_CODE_VERSION=2.1.263
+ARG CLAUDE_CODE_VERSION=2.1.265
 ARG CODEX_VERSION=0.153.4
 RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
     sh -eu -c 'apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl procps psmisc python3 jq ripgrep && rm -rf /var/lib/apt/lists/*; \

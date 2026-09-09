@@ -85,9 +85,27 @@ export function openCommand(url: string, platform: NodeJS.Platform): OpenBrowser
   }
 }
 
-/** A clack prompt resolved to a cancel symbol (Ctrl-C / Esc): print a notice and exit cleanly. */
+/**
+ * A clack prompt resolved to a cancel symbol (Ctrl-C / Esc): print a notice and exit cleanly. The
+ * ONE seam every prompt result passes through, so it is the only place that has to know about it.
+ *
+ * The guard is TWO conditions, and the second is what keeps the return total with no assertion.
+ * Each prompt is declared as `Promise<T | symbol>`, with the WIDE `symbol`, while `isCancel`
+ * narrows to `value is typeof CANCEL_SYMBOL`, one UNIQUE symbol belonging to the `@clack/core`
+ * module instance that minted it. Control flow cannot subtract a unique symbol from the wide type,
+ * so `isCancel` alone leaves the surviving branch at `T | symbol`; `typeof value === 'symbol'`
+ * subtracts the rest, and TypeScript narrows to `T` on its own.
+ *
+ * That second condition also catches a cancel `isCancel` does not recognise. Two copies of
+ * `@clack/core` in the graph (a direct dependency and a transitive one on a different range) are
+ * two unique symbols, and the guard only knows the one its own copy exported. Asserting `as T`
+ * over that case hands the symbol back as a value: `question` calls `.trim()` on it and dies with
+ * a `TypeError` where this seam exists to exit 130, and `select` returns it as a `T extends string`
+ * for the caller to branch on. Exiting on ANY symbol is right whichever copy produced it, since
+ * none of these prompts resolves to a symbol for any other reason.
+ */
 function bailIfCancelled<T>(value: T | symbol): T {
-  if (isCancel(value)) {
+  if (isCancel(value) || typeof value === 'symbol') {
     cancel('Cancelled.')
     process.exit(130)
   }

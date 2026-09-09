@@ -92,8 +92,9 @@ prerequisites are configured.
   does NOT publish is never modelled: there is no account discount on `/models`, and applying one
   read from elsewhere would under-meter a budget by exactly its fraction.
   `scripts/check-openrouter-pins.mjs` re-reads the live catalogue against the spend table's pinned
-  slugs, all three pinned classes including the cache-read rate a row names only where the vendor
-  departs from the derived floor.
+  slugs: the EFFECTIVE rate for four classes, so a cache tier the table derives from its input rate
+  is compared too (where a hit can land on the route), and band for band, against the same
+  `overrides` fold this file applies.
 - `mcpOAuth/`: the per-workspace OAuth grants a remote (`http`) MCP tool server needs.
   `McpOAuthService.ts` owns the lifecycle (start → sealed state → exchange → refresh → disconnect)
   and `mcpOAuthClient.ts` is the wire half (RFC 9728/8414 endpoint discovery plus the three token

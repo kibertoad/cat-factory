@@ -8,6 +8,8 @@ export {
   type BudgetTierScope,
 } from './SpendService.js'
 export {
+  type BandRates,
+  type LongContextBand,
   type ModelPrice,
   type ResolvedModelPrice,
   type InputTokenClassUsage,
@@ -17,6 +19,7 @@ export {
   DEFAULT_MODEL_PRICES,
   DEFAULT_MONTHLY_LIMIT_EUR,
   DEFAULT_SPEND_PRICING,
+  bandFor,
   budgetCapsOverlay,
   effectiveTierLimit,
   priceFor,
