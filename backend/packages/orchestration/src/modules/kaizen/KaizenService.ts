@@ -21,6 +21,7 @@ import {
   DEFAULT_WORKSPACE_SETTINGS,
   extractJson,
   getErrorMessage,
+  resolveInlineScope,
   resolveScopedModelProvider,
 } from '@cat-factory/kernel'
 import type { PublicKaizenEntry } from '@cat-factory/contracts'
@@ -355,11 +356,13 @@ export class KaizenService {
     blockId: string,
     executionId: string,
   ): Promise<{ provider: ModelProvider; ref: ModelRef }> {
-    // Carry the graded run's execution so a leased-per-run inline subscription backend can lease
-    // its activation. (No initiator id is threaded — the Kaizen grader is a background process;
-    // a pooled vendor needs only the workspace, and an individual vendor's activation is anyway
-    // deleted when the run completed, so it fails loudly rather than silently mis-grading.)
-    const provider = await resolveScopedModelProvider({ workspaceId, executionId }, this.deps)
+    // A run subject with no initiator, and the missing half is a CLAIM rather than an omission:
+    // the Kaizen grader is a background process that runs after the graded run settled, so there
+    // is no signed-in person on the request and the run's own personal activation has already
+    // been deleted. A pooled vendor needs only the workspace; an individual vendor fails loudly
+    // rather than silently mis-grading.
+    const scope = await resolveInlineScope({ kind: 'run', workspaceId, executionId })
+    const provider = await resolveScopedModelProvider(scope, this.deps)
     const ref = await this.modelFor(workspaceId, blockId)
     if (!provider || !ref) throw new Error('No model is configured for the Kaizen agent')
     return { provider, ref }

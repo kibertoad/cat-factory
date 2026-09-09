@@ -9,10 +9,12 @@ import type { SubscriptionVendor } from './provider-subscription-repositories.js
 //   1. PersonalSubscriptionRecord — the credential at rest, DOUBLE-encrypted
 //      (sealed under a password-derived key, then the system SecretCipher). The
 //      server can never decrypt it without the user's password.
-//   2. SubscriptionActivationRecord — a short-lived, per-run copy re-encrypted with
-//      the SYSTEM key only, minted when the user supplies their password at task
-//      start/retry, so the asynchronous container steps of that one run can use the
-//      token without the user present. Deleted when the run finishes.
+//   2. SubscriptionActivationRecord - a short-lived copy re-encrypted with the SYSTEM
+//      key only, minted when the user supplies their password, so work that outlives
+//      the request can use the token without the user present. It is keyed by an
+//      ACTIVATION SCOPE ({@link ActivationScopeId}), of which a run is one kind: an
+//      environment test and a run-less inline surface mint their own, and each is
+//      reclaimed on its own terms.
 //
 // Both runtimes (Cloudflare D1 + Node/local Postgres) implement these so the
 // behaviour is identical everywhere.
@@ -72,7 +74,8 @@ export interface PersonalSubscriptionRepository {
  */
 export interface SubscriptionActivationRecord {
   id: string
-  executionId: string
+  /** The activation scope this copy belongs to. See {@link ActivationScopeId}. */
+  scopeId: ActivationScopeId
   userId: string
   vendor: SubscriptionVendor
   /** System-key-only ciphertext of the raw token. */
@@ -82,17 +85,53 @@ export interface SubscriptionActivationRecord {
 }
 
 export interface SubscriptionActivationRepository {
-  /** The live (unexpired) activation for a run+user+vendor, or null. */
+  /** The live (unexpired) activation for a scope+user+vendor, or null. */
   get(
-    executionId: string,
+    scopeId: ActivationScopeId,
     userId: string,
     vendor: SubscriptionVendor,
     now: number,
   ): Promise<SubscriptionActivationRecord | null>
-  /** Create or replace the activation for a run+user+vendor. */
+  /** Create or replace the activation for a scope+user+vendor. */
   upsert(record: SubscriptionActivationRecord): Promise<void>
-  /** Delete every activation for a finished run. */
-  deleteByExecution(executionId: string): Promise<void>
+  /** Delete every activation for a settled scope (a finished run, a finished test). */
+  deleteByScope(scopeId: ActivationScopeId): Promise<void>
   /** Delete activations whose TTL has passed (the expiry sweep). Returns the count. */
   deleteExpired(now: number): Promise<number>
+}
+
+/**
+ * The key an activation is stored under: an opaque, PREFIXED string naming which kind of scope
+ * minted it, built only by {@link runActivationScope} / {@link userActivationScope}.
+ *
+ * Prefixed rather than a bare id because there is now more than one kind, and they are reclaimed
+ * differently: a run's activations are deleted the moment the run settles, while a user's outlive
+ * any single request and are reclaimed by the TTL sweep alone. An unprefixed key made the first
+ * synthetic scope (an environment test's id) read as a run id that no run would ever settle, and a
+ * second kind on the same footing would make that ambiguity structural.
+ */
+export type ActivationScopeId = string & { readonly __activationScope: unique symbol }
+
+/**
+ * The activation scope of a RUN: its container steps and any inline call it makes lease the
+ * initiator's credential for as long as the run is live, and settling it deletes them all.
+ *
+ * Also the scope an environment test mints under, which is the honest reading: a test is a
+ * run-shaped unit of work with its own id and its own settlement.
+ */
+export function runActivationScope(executionId: string): ActivationScopeId {
+  return `run:${executionId}` as ActivationScopeId
+}
+
+/**
+ * The activation scope of a PERSON: the run-less surfaces (the in-app assistant, the bug hunt)
+ * where a signed-in user asks for something a model answers immediately.
+ *
+ * There is exactly one per user rather than one per request, because the point of an activation is
+ * to spare the person their password on the next interaction, and a per-request scope would ask
+ * again every time. Nothing deletes it explicitly: it expires on the same TTL a run's does, which
+ * is what bounds how long the raw token is recoverable with the system key alone.
+ */
+export function userActivationScope(userId: string): ActivationScopeId {
+  return `user:${userId}` as ActivationScopeId
 }

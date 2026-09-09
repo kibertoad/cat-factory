@@ -123,6 +123,8 @@ export class InlineUseCaseService {
     // NOT caught here, unlike the discovery path: a credential pool that could not be read is not
     // an availability answer, and reporting it as "this model is unavailable" would send the caller
     // to pick another one for a fault that has nothing to do with the model they named.
+    // inline-scope-ok: forwards the scope the public-API controller already resolved from the
+    // key's own binding (workspace + account + acting user); nothing is decided here.
     const session = await generator.forScope(input.scope)
     const availability = session.availability(option)
     if (!availability.available) {
@@ -228,6 +230,8 @@ export class InlineUseCaseService {
     const generator = this.deps.generator
     if (!generator?.enabled) return undefined
     try {
+      // inline-scope-ok: forwards the caller's own `InlineUseCaseScope`, which the public-API
+      // controller resolved from the key's binding; the generator states the subject.
       return await generator.forScope(scope)
     } catch (error) {
       this.deps.logger?.warn('Use-case model availability could not be resolved', {

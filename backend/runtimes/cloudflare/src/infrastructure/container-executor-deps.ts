@@ -9,6 +9,7 @@
 // imported from `container-model-resolver.ts` rather than from the root, so the graph is acyclic.
 
 import {
+  runActivationScope,
   type AgentContextRecorder,
   type AgentExecutor,
   type AppCaches,
@@ -271,7 +272,7 @@ export function buildWorkerJobAuthDeps(args: {
             executionId: string,
             userId: string,
             vendor: SubscriptionVendor,
-          ) => personalSubscriptions.leaseForRun(executionId, userId, vendor),
+          ) => personalSubscriptions.lease(runActivationScope(executionId), userId, vendor),
           hasPersonalSubscription: (userId: string, vendor: SubscriptionVendor) =>
             personalSubscriptions.has(userId, vendor),
         }

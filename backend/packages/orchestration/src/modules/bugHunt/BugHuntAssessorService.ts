@@ -10,6 +10,7 @@ import type {
 import {
   extractJson,
   getErrorMessage,
+  resolveInlineScope,
   resolveScopedModelProvider,
   ValidationError,
 } from '@cat-factory/kernel'
@@ -84,7 +85,7 @@ export class BugHuntAssessorService implements BugHuntAssessor {
   }
 
   async assess(subject: BugHuntSubject): Promise<{ verdicts: unknown; model: string }> {
-    const { modelProvider, ref } = await this.resolveModel(subject.workspaceId)
+    const { modelProvider, ref } = await this.resolveModel(subject)
     const now = this.deps.now?.() ?? Date.now()
     let text: string
     try {
@@ -129,9 +130,18 @@ export class BugHuntAssessorService implements BugHuntAssessor {
   }
 
   private async resolveModel(
-    workspaceId: string,
+    subject: BugHuntSubject,
   ): Promise<{ modelProvider: ModelProvider; ref: ModelRef }> {
-    const modelProvider = await resolveScopedModelProvider({ workspaceId }, this.deps)
+    const { workspaceId } = subject
+    // A hunt rates a tracker board rather than a task, so it has no run and never will. The asker
+    // is the whole of what it can add, and it is the half that decides whether a preset pinned to
+    // an individual-usage subscription is reachable here.
+    const scope = await resolveInlineScope(
+      subject.userId
+        ? { kind: 'user', workspaceId, userId: subject.userId }
+        : { kind: 'workspace', workspaceId },
+    )
+    const modelProvider = await resolveScopedModelProvider(scope, this.deps)
     const ref = await this.modelFor(workspaceId)
     if (!modelProvider || !ref) {
       throw new ValidationError('No model is configured for the bug-hunt ranking')

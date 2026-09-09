@@ -38,6 +38,15 @@ export interface FragmentSelectionContext {
    * generic so the engine need not fetch a diff to make selection useful.
    */
   signals: string[]
+  /**
+   * The run this selection serves, when the caller holds it. Selection is an inline LLM call like
+   * any other, so it answers the same credential question: without these it resolves on a
+   * workspace-only scope and a preset pinned to an individual-usage subscription is unreachable,
+   * silently, because selection is best-effort and falls back to the deterministic picker.
+   */
+  executionId?: string
+  /** The run's initiator, paired with {@link FragmentSelectionContext.executionId}. */
+  userId?: string
 }
 
 export interface FragmentSelector {
@@ -70,6 +79,10 @@ export interface FragmentResolverInput {
   manualIds: string[]
   /** Free-form signals handed to the selector (see {@link FragmentSelectionContext}). */
   signals: string[]
+  /** The run this resolution serves, forwarded to the selector's credential scope. */
+  executionId?: string
+  /** The run's initiator, forwarded with {@link FragmentResolverInput.executionId}. */
+  userId?: string
 }
 
 export interface FragmentRunSelection {

@@ -1,3 +1,4 @@
+import { runActivationScope } from '@cat-factory/kernel'
 import type {
   SubscriptionActivationRecord,
   SubscriptionActivationRepository,
@@ -5,11 +6,11 @@ import type {
 } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 
-// Cross-runtime parity for the per-run personal-subscription activation store
-// (`subscription_activations`: the short-lived, system-key-only credential copy a run leases
-// so its async container steps can use the token without the user present). Each facade
-// persists it in its own store (D1 on Cloudflare, Postgres via Drizzle on Node). This suite
-// drives the SAME upsert → get (live-only) → deleteByExecution → TTL prune assertions through
+// Cross-runtime parity for the personal-subscription activation store
+// (`subscription_activations`: the short-lived, system-key-only credential copy an ACTIVATION
+// SCOPE leases so work outliving the request can use the token without the user present). Each
+// facade persists it in its own store (D1 on Cloudflare, Postgres via Drizzle on Node). This suite
+// drives the SAME upsert → get (live-only) → deleteByScope → TTL prune assertions through
 // whichever real repository a runtime hands it, so a column mapped differently or a filter
 // built differently fails a test instead of shipping. `deleteExpired` is the expiry sweep's
 // write — it must delete activations whose TTL has passed and keep the ones still in force.
@@ -19,7 +20,7 @@ import { describe, expect, it } from 'vitest'
 
 function activation(
   overrides: Partial<SubscriptionActivationRecord> &
-    Pick<SubscriptionActivationRecord, 'id' | 'executionId' | 'userId'>,
+    Pick<SubscriptionActivationRecord, 'id' | 'scopeId' | 'userId'>,
 ): SubscriptionActivationRecord {
   return {
     vendor: 'claude',
@@ -63,14 +64,14 @@ export function defineSubscriptionActivationSuite(
     it('reads back the live activation and treats a lapsed TTL as absent', async () => {
       const { activations, users } = makeRepos()
       const { user, tag } = await ids(users)
-      const exec = `exec-${tag}`
+      const exec = runActivationScope(`exec-${tag}`)
       await activations.upsert(
-        activation({ id: `act-${tag}`, executionId: exec, userId: user, expiresAt: 10_000 }),
+        activation({ id: `act-${tag}`, scopeId: exec, userId: user, expiresAt: 10_000 }),
       )
 
       const live = await activations.get(exec, user, 'claude', 5_000)
       expect(live).toMatchObject({
-        executionId: exec,
+        scopeId: exec,
         userId: user,
         tokenCipher: `cipher-act-${tag}`,
       })
@@ -78,30 +79,30 @@ export function defineSubscriptionActivationSuite(
       expect(await activations.get(exec, user, 'claude', 20_000)).toBeNull()
     })
 
-    it('upsert replaces the activation for the same (execution, user, vendor)', async () => {
+    it('upsert replaces the activation for the same (scope, user, vendor)', async () => {
       const { activations, users } = makeRepos()
       const { user, tag } = await ids(users)
-      const exec = `exec-${tag}`
+      const exec = runActivationScope(`exec-${tag}`)
       await activations.upsert(
-        activation({ id: `act-${tag}-a`, executionId: exec, userId: user, tokenCipher: 'first' }),
+        activation({ id: `act-${tag}-a`, scopeId: exec, userId: user, tokenCipher: 'first' }),
       )
       await activations.upsert(
-        activation({ id: `act-${tag}-b`, executionId: exec, userId: user, tokenCipher: 'second' }),
+        activation({ id: `act-${tag}-b`, scopeId: exec, userId: user, tokenCipher: 'second' }),
       )
       expect((await activations.get(exec, user, 'claude', 5_000))?.tokenCipher).toBe('second')
     })
 
-    it('deleteByExecution clears every activation for a finished run', async () => {
+    it('deleteByScope clears every activation for a settled scope', async () => {
       const { activations, users } = makeRepos()
       const { user, tag } = await ids(users)
-      const exec = `exec-${tag}`
+      const exec = runActivationScope(`exec-${tag}`)
       await activations.upsert(
-        activation({ id: `act-${tag}-c`, executionId: exec, userId: user, vendor: 'claude' }),
+        activation({ id: `act-${tag}-c`, scopeId: exec, userId: user, vendor: 'claude' }),
       )
       await activations.upsert(
-        activation({ id: `act-${tag}-x`, executionId: exec, userId: user, vendor: 'codex' }),
+        activation({ id: `act-${tag}-x`, scopeId: exec, userId: user, vendor: 'codex' }),
       )
-      await activations.deleteByExecution(exec)
+      await activations.deleteByScope(exec)
       expect(await activations.get(exec, user, 'claude', 5_000)).toBeNull()
       expect(await activations.get(exec, user, 'codex', 5_000)).toBeNull()
     })
@@ -109,20 +110,20 @@ export function defineSubscriptionActivationSuite(
     it('prunes activations whose TTL has passed, keeping the ones still in force', async () => {
       const { activations, users } = makeRepos()
       const { user, tag } = await ids(users)
-      const expired = `exec-old-${tag}`
-      const live = `exec-new-${tag}`
-      const edge = `exec-edge-${tag}`
+      const expired = runActivationScope(`exec-old-${tag}`)
+      const live = runActivationScope(`exec-new-${tag}`)
+      const edge = runActivationScope(`exec-edge-${tag}`)
       await activations.upsert(
-        activation({ id: `act-old-${tag}`, executionId: expired, userId: user, expiresAt: 1_000 }),
+        activation({ id: `act-old-${tag}`, scopeId: expired, userId: user, expiresAt: 1_000 }),
       )
       await activations.upsert(
-        activation({ id: `act-new-${tag}`, executionId: live, userId: user, expiresAt: 9_000 }),
+        activation({ id: `act-new-${tag}`, scopeId: live, userId: user, expiresAt: 9_000 }),
       )
       // Exactly ON the cutoff: unlike the other three prunes, `deleteExpired` is INCLUSIVE
       // (`expires_at <= now` — a TTL that lands on `now` has passed), so this must be
       // DELETED — a facade drifted to `<` would keep it and fail here.
       await activations.upsert(
-        activation({ id: `act-edge-${tag}`, executionId: edge, userId: user, expiresAt: 2_000 }),
+        activation({ id: `act-edge-${tag}`, scopeId: edge, userId: user, expiresAt: 2_000 }),
       )
       // Table-wide sweep, so its count can include other cases' rows in the shared DB —
       // assert the scoped, deterministic outcome instead.

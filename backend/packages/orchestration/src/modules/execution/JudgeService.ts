@@ -1,5 +1,6 @@
 import { generateText } from 'ai'
 import type {
+  ResolveBlockRunContext,
   JudgeAssessor,
   JudgeModelPin,
   JudgeSubject,
@@ -8,6 +9,7 @@ import type {
   ModelRef,
 } from '@cat-factory/kernel'
 import {
+  resolveInlineScope,
   extractJson,
   getErrorMessage,
   resolveScopedModelProvider,
@@ -18,7 +20,7 @@ import {
   JUDGE_SYSTEM_PROMPT,
   renderJudgePrompt,
 } from '@cat-factory/agents'
-import { type ResolveBlockRunContext, scopeForBlockRun } from '../../inlineScope.js'
+
 import { type InlineBlockModelDeps, resolveInlineBlockModel } from '../../inlineBlockModel.js'
 
 // ---------------------------------------------------------------------------
@@ -133,7 +135,10 @@ export class JudgeService implements JudgeAssessor {
     subject: JudgeSubject,
   ): Promise<{ modelProvider: ModelProvider; ref: ModelRef; pin?: JudgeModelPin }> {
     const { workspaceId, block } = subject
-    const scope = await scopeForBlockRun(workspaceId, block, this.deps.resolveRunContext)
+    const scope = await resolveInlineScope(
+      { kind: 'block', workspaceId, block },
+      this.deps.resolveRunContext,
+    )
     const modelProvider = await resolveScopedModelProvider(scope, this.deps)
     const { ref, pin } = await resolveInlineBlockModel(
       this.deps,

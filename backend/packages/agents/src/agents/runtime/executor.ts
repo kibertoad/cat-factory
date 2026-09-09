@@ -10,7 +10,7 @@ import type {
   ModelRef,
   ResolveBinaryArtifactStore,
 } from '@cat-factory/kernel'
-import { noopLogger, resolveDesignImageDelivery } from '@cat-factory/kernel'
+import { noopLogger, resolveDesignImageDelivery, resolveInlineScope } from '@cat-factory/kernel'
 import { recordInlineAgentContext } from './inline-context-record.js'
 import { type AgentKindRegistry, defaultAgentKindRegistry } from '../kinds/registry.js'
 import { standardsVerbosityFor, traitDeliveryFor } from '../kinds/traits.js'
@@ -218,20 +218,37 @@ export class AiAgentExecutor implements AgentExecutor {
   /** Resolve the model provider for a run's scope (per-scope DB pool, else the static one). */
   private async providerFor(context: AgentRunContext): Promise<ModelProvider> {
     if (this.modelProviderResolver && context.workspaceId) {
-      return this.modelProviderResolver.forScope({
-        workspaceId: context.workspaceId,
-        userId: context.initiatedByUserId,
-        // The run this inline call belongs to, so a facade that serves a subscription ref
-        // inline through a leased per-run activation (the container inline backend) can lease
-        // the initiator's credential — the inline analogue of the container executor's lease.
-        executionId: context.executionId,
-      })
+      // The run this inline call belongs to, so a facade that serves a subscription ref inline
+      // through a leased per-run activation (the container inline backend) can lease the
+      // initiator's credential: the inline analogue of the container executor's lease. A dispatch
+      // missing either half narrows to the widest tier it can still name rather than passing an
+      // undefined one, which a credential pool reads as a tier that exists and is empty.
+      return this.modelProviderResolver.forScope(
+        await resolveInlineScope(
+          context.executionId
+            ? {
+                kind: 'run',
+                workspaceId: context.workspaceId,
+                executionId: context.executionId,
+                ...(context.initiatedByUserId ? { userId: context.initiatedByUserId } : {}),
+              }
+            : context.initiatedByUserId
+              ? {
+                  kind: 'user',
+                  workspaceId: context.workspaceId,
+                  userId: context.initiatedByUserId,
+                }
+              : { kind: 'workspace', workspaceId: context.workspaceId },
+        ),
+      )
     }
     if (this.modelProvider) return this.modelProvider
     if (this.modelProviderResolver) {
-      // No workspace scope (rare): lease from no scope — only the opt-in registries
+      // No workspace scope (rare): lease from no scope, so only the opt-in registries
       // (Cloudflare/Bedrock) can resolve.
-      return this.modelProviderResolver.forScope({ workspaceId: context.workspaceId ?? '' })
+      return this.modelProviderResolver.forScope(
+        await resolveInlineScope({ kind: 'workspace', workspaceId: context.workspaceId ?? '' }),
+      )
     }
     throw new Error('AiAgentExecutor: no model provider available')
   }

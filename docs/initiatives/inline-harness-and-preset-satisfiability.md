@@ -11,6 +11,13 @@
 > and mothership mode. The prewarmed-container backend (run the inline CLI in a warm container on the
 > leased subscription, so the host CLI need not be installed) is the documented next slice.
 
+> **Update 2026-09-10 (Phase D: the scope seam, and where the container backend runs).** Phase C2
+> made an inline subscription call possible; what decided whether one HAPPENED was the
+> `ModelScope` each caller assembled by hand, and six of them dropped tiers they were holding. The
+> credential scope now goes through ONE seam that makes a caller NAME what it has, run-less
+> surfaces mint their own activation scope, and a repo guard keeps both true. See
+> [Phase D](#phase-d-the-inline-scope-seam--run-less-activation--done-2026-09-10) below.
+
 > Durable source of truth for this change. Read it first before picking up the next slice;
 > update the checklist at the end of each PR.
 
@@ -305,3 +312,71 @@ Original C2 notes (still accurate):
 - **Selection.** With C2 landed, the inline runner picks host-CLI (when `LOCAL_NATIVE_INLINE` names
   the vendor AND the host CLI is present) else the prewarmed-container backend on the leased token,
   so the two backends compose behind one predicate.
+
+## Phase D: the inline scope seam + run-less activation ✅ done (2026-09-10)
+
+Motivation: with C2 landed, an inline call under a subscription preset CAN run. Whether it does is
+decided one layer up, by the `ModelScope` the caller builds, and that was 15 hand-written literals.
+Six of them dropped a tier they were holding, including the in-app assistant (shipped after C2, so
+it never got the threading at all). None of them failed: a caller that drops its run still resolves
+a model, still answers, and lands on the deployment's routing default. The only signal is the bill.
+
+### D1: one seam, and `workspace` becomes a claim
+
+- **`resolveInlineScope(subject, resolveRunContext?)` in KERNEL** (`domain/inline-scope.ts`), moved
+  up from orchestration's `inlineScope.ts` because two of the offenders (`LlmFragmentSelector`,
+  `LlmFragmentBriefGenerator`) live in `@cat-factory/agents`, which cannot import orchestration.
+- The subject is DISCRIMINATED: `block` / `run` / `user` / `workspace`. That is the whole design.
+  A caller can no longer omit a tier; it states which one it holds, so `kind: 'workspace'` is a
+  written claim a reviewer checks against the caller's own inputs.
+- Fixed where a tier was genuinely available and lost: the monorepo adoption advisor (held a
+  REQUIRED `subject.runId` and already stamped it on its own telemetry), the assistant (held
+  `request.userId`), the bug hunt (a user reachable at the controller, threaded through
+  `BugHuntSubject`), and `FragmentSelectionContext`, whose port carried no run fields at all.
+- Kaizen and the fragment-brief generator keep their omissions, which were reasoned and documented:
+  a background pass over a settled run has nobody on the request, and platform housekeeping must
+  not spend a developer's personal quota. Both now SAY so as `kind: 'run'` with no user.
+
+### D2: the run-less activation scope
+
+An individual-usage credential is leased per activation, and only a run minted one, so the
+assistant / bug hunt / sandbox could not lease at all. `subscription_activations.execution_id` was
+never really a run id (an environment test already wrote `envtest_*` into it, and the column has no
+FK), so the concept was renamed to what it is:
+
+- **`ActivationScopeId`** (kernel), built only by `runActivationScope(executionId)` or
+  `userActivationScope(userId)`, both PREFIXED. The prefix matters because the two kinds are
+  reclaimed differently: a run's activations die with the run, a user's on the TTL alone.
+- Column `execution_id` → `scope_id` on both runtimes; the port's `deleteByExecution` →
+  `deleteByScope`; the service's `activateForRun`/`leaseForRun` → `activate`/`lease`. Pre-existing
+  rows are DELETED rather than rewritten: nothing records which kind they were, and an activation
+  is a 12h cache of a credential the user can re-unlock at will.
+- **`activateUserScope(c)`** (server) puts a supplied password to use before a run-less surface
+  resolves its model. It is NOT a gate and refuses nothing: a turn needing no personal credential
+  must never be asked for a password, and one that does is told by the lease's own 428, which is
+  the point at which the client knows to prompt. The freshness skip is `refreshRunActivation`'s,
+  for the same PBKDF2 reason.
+- The SPA rides the existing `withCredential` flow on both surfaces, so the first turn 428s, the
+  modal collects the password, and it rides from the cache after that.
+
+### D3: the guard
+
+`scripts/check-inline-model-scope.mjs` (+ its fixtures) requires every inline caller to build its
+scope through the seam. Two checks, because either alone has a hole: no object literal at the call
+site, and a file that resolves a scope at all must mention the seam (which covers the indirection
+a text scan cannot follow). `// inline-scope-ok: <reason>` is the escape hatch for a genuine
+pass-through, and it demands a sentence.
+
+### Considered and DECLINED: the container inline backend on every facade
+
+The container half of C2 is runtime-neutral in principle. It is HTTP to a harness image that every
+facade already dispatches to, and lifting it out of `runtimes/local` would let stock Node and the
+Worker serve a subscription preset's inline steps too.
+
+**Not done, deliberately, and not a facade-parity gap to close later.** An inline call is a
+per-sentence surface, and the transports the other facades have would each pay a container per
+call: `RunnerPoolTransport` has no harness endpoint and no shared secret AT ALL (by design: a pool
+hands jobs to the workspace's own control plane), `KubernetesRunnerTransport` cold-starts a Pod
+with a 120s readiness wait, and `CloudflareContainerTransport` cold-starts a Durable Object. Local
+and mothership mode are where the warm pool and the host CLI make it cheap, which is where it runs.
+A future iteration proposing to universalise it should start from that cost, not from parity.

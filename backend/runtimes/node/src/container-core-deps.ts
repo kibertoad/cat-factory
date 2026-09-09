@@ -410,7 +410,7 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
     // → the Drizzle repo over `db`. This is NEVER routed through `sourced` (the remote registry):
     // every no-db (mothership) caller injects the override — `buildLocalContainer` in production
     // and `makeMothershipConformanceApp` in tests — so `db` here is always a real Postgres handle,
-    // and routing an activation clear to the mothership (where `deleteByExecution` isn't
+    // and routing an activation clear to the mothership (where `deleteByScope` isn't
     // allow-listed) is a path no caller takes.
     subscriptionActivationRepository:
       options.subscriptionActivationRepository ?? new DrizzleSubscriptionActivationRepository(db),

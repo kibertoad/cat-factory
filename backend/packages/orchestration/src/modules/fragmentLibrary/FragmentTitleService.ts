@@ -1,6 +1,11 @@
 import { generateText } from 'ai'
 import type { ModelProvider, ModelProviderResolver, ModelRef } from '@cat-factory/kernel'
-import { getErrorMessage, resolveScopedModelProvider, ValidationError } from '@cat-factory/kernel'
+import {
+  getErrorMessage,
+  resolveScopedModelProvider,
+  ValidationError,
+  resolveInlineScope,
+} from '@cat-factory/kernel'
 import {
   catFactoryObservability,
   FRAGMENT_TITLE_AGENT_KIND,
@@ -45,7 +50,12 @@ export class FragmentTitleService {
     workspaceId: string,
     input: { body: string; summary?: string },
   ): Promise<{ title: string; model: string }> {
-    const provider = await resolveScopedModelProvider({ workspaceId }, this.deps)
+    // Titling a library fragment is a workspace-level authoring action reached from the library
+    // screen: there is no run, and no per-user credential tier the title would be entitled to.
+    const provider = await resolveScopedModelProvider(
+      await resolveInlineScope({ kind: 'workspace', workspaceId }),
+      this.deps,
+    )
     const ref = this.deps.modelRef
     if (!provider || !ref) {
       throw new ValidationError('No model is configured for fragment-title generation')

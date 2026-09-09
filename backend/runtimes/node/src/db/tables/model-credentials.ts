@@ -148,7 +148,7 @@ export const subscriptionActivations = pgTable(
   'subscription_activations',
   {
     id: text('id').primaryKey(),
-    execution_id: text('execution_id').notNull(),
+    scope_id: text('scope_id').notNull(),
     // ON DELETE RESTRICT: a users row can't be removed while it still has a run activation.
     user_id: text('user_id')
       .notNull()
@@ -159,7 +159,7 @@ export const subscriptionActivations = pgTable(
     expires_at: bigint('expires_at', { mode: 'number' }).notNull(),
   },
   (t) => [
-    uniqueIndex('idx_sub_activations_run').on(t.execution_id, t.user_id, t.vendor),
+    uniqueIndex('idx_sub_activations_scope').on(t.scope_id, t.user_id, t.vendor),
     index('idx_sub_activations_expiry').on(t.expires_at),
   ],
 )

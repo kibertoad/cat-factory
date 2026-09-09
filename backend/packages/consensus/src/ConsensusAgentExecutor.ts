@@ -13,6 +13,7 @@ import {
   getErrorMessage,
   inlineModelRef,
   isAsyncAgentExecutor,
+  resolveInlineScope,
   type Logger,
   type ModelFlavor,
   type ModelProvider,
@@ -151,17 +152,32 @@ export class ConsensusAgentExecutor implements AsyncAgentExecutor {
 
   private async providerFor(context: AgentRunContext): Promise<ModelProvider> {
     if (this.deps.modelProviderResolver && context.workspaceId) {
-      return this.deps.modelProviderResolver.forScope({
-        workspaceId: context.workspaceId,
-        userId: context.initiatedByUserId,
-        // Carry the run so a leased-per-run inline subscription backend can lease the
-        // initiator's activation for a consensus participant's inline call.
-        executionId: context.executionId,
-      })
+      // Carry the run so a leased-per-run inline subscription backend can lease the initiator's
+      // activation for a consensus participant's inline call.
+      return this.deps.modelProviderResolver.forScope(
+        await resolveInlineScope(
+          context.executionId
+            ? {
+                kind: 'run',
+                workspaceId: context.workspaceId,
+                executionId: context.executionId,
+                ...(context.initiatedByUserId ? { userId: context.initiatedByUserId } : {}),
+              }
+            : context.initiatedByUserId
+              ? {
+                  kind: 'user',
+                  workspaceId: context.workspaceId,
+                  userId: context.initiatedByUserId,
+                }
+              : { kind: 'workspace', workspaceId: context.workspaceId },
+        ),
+      )
     }
     if (this.deps.modelProvider) return this.deps.modelProvider
     if (this.deps.modelProviderResolver) {
-      return this.deps.modelProviderResolver.forScope({ workspaceId: context.workspaceId ?? '' })
+      return this.deps.modelProviderResolver.forScope(
+        await resolveInlineScope({ kind: 'workspace', workspaceId: context.workspaceId ?? '' }),
+      )
     }
     throw new Error('ConsensusAgentExecutor: no model provider available')
   }

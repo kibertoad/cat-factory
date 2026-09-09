@@ -7,6 +7,7 @@ import type {
   ModelRef,
 } from '@cat-factory/kernel'
 import {
+  resolveInlineScope,
   getErrorMessage,
   isUsableBrief,
   resolveScopedModelProvider,
@@ -70,7 +71,11 @@ export class LlmFragmentBriefGenerator implements FragmentBriefGenerator {
     // the run was threaded here, and the right one: a developer's Claude login is not a budget
     // the platform may spend on its own housekeeping.
     const provider = await resolveScopedModelProvider(
-      { workspaceId, ...(input.executionId ? { executionId: input.executionId } : {}) },
+      await resolveInlineScope(
+        input.executionId
+          ? { kind: 'run', workspaceId, executionId: input.executionId }
+          : { kind: 'workspace', workspaceId },
+      ),
       this.deps,
     )
     const ref = this.deps.modelRef

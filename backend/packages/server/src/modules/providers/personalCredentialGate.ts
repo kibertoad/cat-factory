@@ -2,7 +2,10 @@ import {
   ALL_SUBSCRIPTION_VENDORS,
   CredentialRequiredError,
   isAmbientNativeVendor,
+  isIndividualVendor,
+  runActivationScope,
   type SubscriptionVendor,
+  userActivationScope,
 } from '@cat-factory/kernel'
 import { PERSONAL_PASSWORD_HEADER } from '@cat-factory/contracts'
 import type { Context } from 'hono'
@@ -110,7 +113,9 @@ async function holdsFreshActivations(
   const personal = container.personalSubscriptions
   if (!personal) return false
   const fresh = await Promise.all(
-    vendors.map((vendor) => personal.hasFreshActivation(executionId, userId, vendor)),
+    vendors.map((vendor) =>
+      personal.hasFreshActivation(runActivationScope(executionId), userId, vendor),
+    ),
   )
   return fresh.every(Boolean)
 }
@@ -174,9 +179,45 @@ function gate(
     initiatedBy: user.id,
     activate: async (executionId) => {
       for (const vendor of vendors) {
-        await personal.activateForRun(executionId, user.id, vendor, password)
+        await personal.activate(runActivationScope(executionId), user.id, vendor, password)
       }
     },
+  }
+}
+
+/**
+ * Ensure the signed-in caller's USER activation scope is live, so a run-less surface (the in-app
+ * assistant, the bug hunt) can run on their personal subscription.
+ *
+ * Called BEFORE such a surface resolves its model, and deliberately vendor-blind: which vendor the
+ * turn will need depends on the model the workspace preset resolves to, which is decided inside the
+ * service. Rather than pre-resolve a model just to learn that, this mints for every individual
+ * vendor the caller actually holds a credential for, which is nought or one for almost everybody.
+ *
+ * NOT a gate: unlike a run start, nothing here refuses. A surface whose model needs no personal
+ * credential must not be made to ask for a password, and a caller who has not supplied one yet is
+ * answered by the LEASE failing with `428 credential_required`, which is the point at which the
+ * client knows to prompt. This only makes sure that a password, once supplied, is put to use.
+ *
+ * The freshness skip is {@link refreshRunActivation}'s and exists for the same reason: each mint
+ * derives the password's key with 210k PBKDF2 iterations, and an assistant turn is a per-keystroke
+ * surface, not a once-per-run one.
+ */
+export async function activateUserScope<E extends AppEnv>(c: Context<E>): Promise<void> {
+  const container = c.get('container')
+  const user = c.get('user')
+  const password = readPersonalPassword(c)
+  const personal = container.personalSubscriptions
+  if (!personal || !user || !password) return
+  const scope = userActivationScope(user.id)
+  const ambient = ambientVendors(container)
+  for (const held of await personal.list(user.id)) {
+    const vendor = held.vendor
+    // An ambient-native vendor is served by the host CLI's own login on this deployment, so it
+    // has no credential to activate; minting one would pay the derivation for nothing.
+    if (ambient.has(vendor) || !isIndividualVendor(vendor)) continue
+    if (await personal.hasFreshActivation(scope, user.id, vendor)) continue
+    await personal.activate(scope, user.id, vendor, password)
   }
 }
 

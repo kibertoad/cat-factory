@@ -19,7 +19,12 @@ import type {
   ProvisioningLogRecorder,
   RunnerBackendRegistry,
 } from '@cat-factory/integrations'
-import { SUBSCRIPTION_VENDORS, composeTraceSinks, isAmbientNativeVendor } from '@cat-factory/kernel'
+import {
+  composeTraceSinks,
+  isAmbientNativeVendor,
+  runActivationScope,
+  SUBSCRIPTION_VENDORS,
+} from '@cat-factory/kernel'
 import type {
   AgentExecutor,
   BlockRepository,
@@ -732,7 +737,7 @@ export function buildNodeJobAuthDeps(deps: {
             executionId: string,
             userId: string,
             vendor: SubscriptionVendor,
-          ) => personalSubscriptions.leaseForRun(executionId, userId, vendor),
+          ) => personalSubscriptions.lease(runActivationScope(executionId), userId, vendor),
           // Route a dual-mode individual model (GLM) to the initiator's own subscription
           // when they have one; otherwise dispatch keeps it on the Cloudflare base.
           hasPersonalSubscription: (userId: string, vendor: SubscriptionVendor) =>

@@ -1,6 +1,17 @@
 import { generateText } from 'ai'
-import type { Block, ModelProvider, ModelProviderResolver, ModelRef } from '@cat-factory/kernel'
-import { getErrorMessage, resolveScopedModelProvider, ValidationError } from '@cat-factory/kernel'
+import type {
+  Block,
+  ModelProvider,
+  ModelProviderResolver,
+  ModelRef,
+  ResolveBlockRunContext,
+} from '@cat-factory/kernel'
+import {
+  getErrorMessage,
+  resolveScopedModelProvider,
+  ValidationError,
+  resolveInlineScope,
+} from '@cat-factory/kernel'
 import {
   catFactoryObservability,
   FORK_CHAT_AGENT_KIND,
@@ -8,7 +19,7 @@ import {
   FORK_CHAT_SYSTEM_PROMPT,
   renderForkChatPrompt,
 } from '@cat-factory/agents'
-import { type ResolveBlockRunContext, scopeForBlockRun } from '../../inlineScope.js'
+
 import { type InlineBlockModelDeps, resolveInlineBlockModelRef } from '../../inlineBlockModel.js'
 
 // ---------------------------------------------------------------------------
@@ -108,7 +119,10 @@ export class ForkChatService {
     workspaceId: string,
     block: Block,
   ): Promise<{ modelProvider: ModelProvider; ref: ModelRef }> {
-    const scope = await scopeForBlockRun(workspaceId, block, this.deps.resolveRunContext)
+    const scope = await resolveInlineScope(
+      { kind: 'block', workspaceId, block },
+      this.deps.resolveRunContext,
+    )
     const modelProvider = await resolveScopedModelProvider(scope, this.deps)
     const ref = await this.modelFor(workspaceId, block)
     if (!modelProvider || !ref) {

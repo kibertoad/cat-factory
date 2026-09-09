@@ -101,8 +101,14 @@ export const useBugHuntStore = defineStore('bugHunt', () => {
     huntError.value = null
     huntErrorReason.value = null
     try {
-      result.value = await api.runBugHunt(workspace.requireId(), source, input)
-      return true
+      // Gated like the adoption below, and for the reason the ranking is the model call: on a
+      // workspace pinned to an individual-usage subscription the scan needs the credential HERE,
+      // not only when a candidate is adopted. A cancelled prompt leaves no result and no error,
+      // which is what `false` with a null `huntError` says.
+      const personal = usePersonalSubscriptionsStore()
+      return await personal.withCredential(async (password) => {
+        result.value = await api.runBugHunt(workspace.requireId(), source, input, password)
+      })
     } catch (e) {
       result.value = null
       huntError.value = e instanceof Error ? e.message : String(e)

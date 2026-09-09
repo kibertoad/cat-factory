@@ -174,6 +174,24 @@ Kaizen and the fixers: it runs an LLM but is not a pipeline step, so it is pinna
 being placeable. Inheriting the base model is the DEFAULT, not the only option, and a kind absent
 from that list inherits with no way to state otherwise.
 
+### Whose credentials it runs on
+
+A turn has no run, so its credential scope is `kind: 'user'` (kernel's `resolveInlineScope`): the
+workspace plus the ASKER. Both halves matter. The asker's own API keys and local model endpoints
+join the pool, and an individual-usage subscription (a Claude preset) is leasable through their
+USER activation scope, which is what lets this surface honour a preset the rest of the workspace
+runs on. A workspace-only scope would resolve, answer, and quietly bill a different model.
+
+That is also why the turn carries the personal password header a run start carries. On a workspace
+pinned to a subscription the FIRST turn answers `428 credential_required`, the SPA's existing
+credential modal collects the password, and it rides from the cache after that. `activateUserScope`
+mints the activation on the way in and refuses nothing: a turn whose model needs no personal
+credential is never asked for a password.
+
+A deployment that serves the vendor from an ambient host CLI login (local mode with `claude` on
+PATH) needs none of this. There is no managed credential to unlock, so nothing prompts, which is
+the correct behaviour rather than a missing gate.
+
 ## The action catalog
 
 An action is a declaration plus a function:

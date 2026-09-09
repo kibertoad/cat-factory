@@ -494,6 +494,16 @@ jobs:
       - name: Guard silent promise drops
         run: node scripts/check-silent-catch.mjs
 
+      # Requires every inline LLM caller to build its credential scope through kernel's
+      # `resolveInlineScope`, naming what it holds (block / run / user / workspace) rather than
+      # hand-building a `{ workspaceId }` literal. A caller that drops the run or user it was
+      # holding still resolves a model and still answers; it just answers on the deployment's
+      # routing default instead of the model the workspace's preset names, and the only symptom
+      # is the bill. Six callers had drifted there. Its fixtures run in the `node --test` step
+      # above. Pure node, no install.
+      - name: Guard inline model scopes
+        run: node scripts/check-inline-model-scope.mjs
+
       # Requires every layer component used in a Vue template to be imported by path. Nuxt
       # registers a component under its path-prefixed name, so a bare tag renders NOTHING —
       # silently, with no typecheck error and no failing test. Seven had shipped that way. Its

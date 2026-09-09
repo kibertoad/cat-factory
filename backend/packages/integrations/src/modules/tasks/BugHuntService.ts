@@ -184,6 +184,7 @@ export class BugHuntService {
     workspaceId: string,
     source: TaskSourceKind,
     input: BugHuntScan,
+    userId?: string,
   ): Promise<BugHuntResult> {
     const provider = this.requireProvider(source)
     // The container is settled BEFORE the vendor read and the ranking call, not left to the
@@ -224,7 +225,7 @@ export class BugHuntService {
     const truncated = found.length > BUG_HUNT_SCAN_LIMIT
     const candidates = truncated ? found.slice(0, BUG_HUNT_SCAN_LIMIT) : found
 
-    const { ranked, analysisStatus, model } = await this.rank(workspaceId, candidates)
+    const { ranked, analysisStatus, model } = await this.rank(workspaceId, candidates, userId)
     return {
       source,
       board: input.board,
@@ -282,6 +283,7 @@ export class BugHuntService {
   private async rank(
     workspaceId: string,
     candidates: BugCandidate[],
+    userId?: string,
   ): Promise<{
     ranked: BugHuntCandidate[]
     analysisStatus: BugHuntAnalysisStatus
@@ -313,6 +315,7 @@ export class BugHuntService {
       const { verdicts, model } = await assessor.assess({
         workspaceId,
         candidates: candidates.map(scrubCandidate),
+        ...(userId ? { userId } : {}),
       })
       return {
         ranked: rankBugCandidates(candidates, parseBugHuntVerdicts(verdicts)),

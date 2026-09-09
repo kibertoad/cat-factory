@@ -2,7 +2,7 @@ import { generateText } from 'ai'
 import type { ModelProvider, ModelProviderResolver, ModelRef } from '@cat-factory/kernel'
 import type { DocumentRecord } from '@cat-factory/kernel'
 import type { DocumentBoardPlan } from '@cat-factory/kernel'
-import { catFactoryObservability, extractJson } from '@cat-factory/kernel'
+import { catFactoryObservability, extractJson, resolveInlineScope } from '@cat-factory/kernel'
 import { isDesignSource } from '@cat-factory/contracts'
 import {
   coercePlan,
@@ -163,8 +163,12 @@ export class DocumentPlannerService {
     }
 
     try {
+      // A document import is triggered by a webhook or a sync sweep, so it has neither a run nor
+      // an asker: the workspace tier is the whole of what it can claim.
       const provider = this.deps.modelProviderResolver
-        ? await this.deps.modelProviderResolver.forScope({ workspaceId: record.workspaceId })
+        ? await this.deps.modelProviderResolver.forScope(
+            await resolveInlineScope({ kind: 'workspace', workspaceId: record.workspaceId }),
+          )
         : this.deps.modelProvider!
       const model = provider.resolve(this.deps.modelRef)
       const { text } = await generateText({

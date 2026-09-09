@@ -15,6 +15,7 @@ import type {
   ModelScope,
 } from '@cat-factory/kernel'
 import {
+  resolveInlineScope,
   describeError,
   getErrorMessage,
   resolveScopedModelProvider,
@@ -116,11 +117,21 @@ function mapFinishReason(reason: unknown): UseCaseFinishReason {
  * an explicit null means "this pool has no account tier". Passing null for an unknown account would
  * silently drop every account-scoped key.
  */
-function modelScopeFor(scope: InlineUseCaseScope): ModelScope {
+function modelScopeFor(scope: InlineUseCaseScope): Promise<ModelScope> {
+  // A public-API request acts AS a user, never inside a run, so `user` is the widest honest claim
+  // here; without an actor it falls to the account/workspace tiers the key itself carries.
+  return resolveInlineScope(
+    scope.userId
+      ? { kind: 'user', ...base(scope), userId: scope.userId }
+      : { kind: 'workspace', ...base(scope) },
+  )
+}
+
+/** The tiers every use-case scope carries, whether or not it names an actor. */
+function base(scope: InlineUseCaseScope): { workspaceId: string; accountId?: string } {
   return {
     workspaceId: scope.workspaceId,
     ...(scope.accountId ? { accountId: scope.accountId } : {}),
-    ...(scope.userId ? { userId: scope.userId } : {}),
   }
 }
 
@@ -276,7 +287,7 @@ export class LlmInlineUseCaseGenerator implements InlineUseCaseGenerator {
    * invocation lets it propagate). Swallowing it here would make both of them guess.
    */
   async forScope(scope: InlineUseCaseScope): Promise<InlineUseCaseSession> {
-    const provider = await resolveScopedModelProvider(modelScopeFor(scope), this.deps)
+    const provider = await resolveScopedModelProvider(await modelScopeFor(scope), this.deps)
     return new ScopedInlineUseCaseSession(this.deps, scope, provider)
   }
 }

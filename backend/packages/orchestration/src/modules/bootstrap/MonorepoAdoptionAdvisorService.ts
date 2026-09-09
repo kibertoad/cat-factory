@@ -12,6 +12,7 @@ import {
   extractJson,
   getErrorMessage,
   noopLogger,
+  resolveInlineScope,
   resolveScopedModelProvider,
   runBestEffort,
   ValidationError,
@@ -122,7 +123,7 @@ export class MonorepoAdoptionAdvisorService implements MonorepoAdoptionAdvisor {
   }
 
   async advise(subject: MonorepoAdoptionSubject): Promise<{ plan: unknown; model: string }> {
-    const { modelProvider, ref } = await this.resolveModel(subject.workspaceId)
+    const { modelProvider, ref } = await this.resolveModel(subject)
     // The SAME sides the tool set is built from, so the prompt cannot promise a repository
     // the model has no tool for.
     const system = monorepoAdoptionSystemPrompt(subject.explorer.sides)
@@ -241,9 +242,19 @@ export class MonorepoAdoptionAdvisorService implements MonorepoAdoptionAdvisor {
   }
 
   private async resolveModel(
-    workspaceId: string,
+    subject: MonorepoAdoptionSubject,
   ): Promise<{ modelProvider: ModelProvider; ref: ModelRef }> {
-    const modelProvider = await resolveScopedModelProvider({ workspaceId }, this.deps)
+    const { workspaceId } = subject
+    // The survey's own run, which the subject carries as a REQUIRED field and this service already
+    // stamps on both telemetry tags below. Passing it here too is what lets a workspace whose
+    // preset pins a subscription model lease the initiator's credential for the survey, instead of
+    // resolving on a workspace-only scope and silently landing on the routing default.
+    const scope = await resolveInlineScope({
+      kind: 'run',
+      workspaceId,
+      executionId: subject.runId,
+    })
+    const modelProvider = await resolveScopedModelProvider(scope, this.deps)
     const ref = await resolveInlineBlockModelRef(
       this.deps,
       workspaceId,

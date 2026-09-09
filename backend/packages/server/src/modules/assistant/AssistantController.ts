@@ -6,6 +6,7 @@ import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
 import { requireCapability } from '../../http/guards.js'
+import { activateUserScope } from '../providers/personalCredentialGate.js'
 import { blockEditAuthority } from '../../http/workspaceAccess.js'
 
 // ---------------------------------------------------------------------------
@@ -45,6 +46,11 @@ export function assistantController(): Hono<AppEnv> {
   // the three OUTCOMES, including the questions it needs answered, which are data.
   buildHonoRoute(app, runAssistantTurnContract, async (c) => {
     const assistant = requireAssistant(c)
+    // Put a supplied personal password to use BEFORE the turn resolves its model, so a workspace
+    // whose preset pins an individual-usage subscription runs the turn on it. Refuses nothing: a
+    // turn needing no personal credential never prompts, and one that does is told so by the
+    // lease's own 428, which is when the client knows to ask.
+    await activateUserScope(c)
     const turn = await assistant.service.run({
       workspaceId: param(c, 'workspaceId'),
       input: c.req.valid('json'),

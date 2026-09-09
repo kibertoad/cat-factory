@@ -762,7 +762,7 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     get: 'local',
     upsert: 'local',
     refresh: 'local',
-    deleteByExecution: 'local',
+    deleteByScope: 'local',
     deleteExpired: 'local',
   },
   userSecretRepository: {

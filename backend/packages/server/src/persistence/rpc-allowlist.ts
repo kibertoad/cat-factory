@@ -30,7 +30,7 @@ import { VCS_PERSISTENCE_METHODS } from './rpc-allowlist-vcs.js'
  *
  * Still EXCLUDED (added in later gate slices, with their own scope rules, or kept
  * mothership-internal):
- *   - `subscriptionActivationRepository.deleteByExecution` — the activation row is the local
+ *   - `subscriptionActivationRepository.deleteByScope`: the activation row is the local
  *     `node:sqlite` bucket (per the per-repo checklist), not the remote surface, so it is not
  *     exposed here.
  *   - Global sweeper methods (`listStale`, `deleteOlderThan`) and high-impact unscoped ops

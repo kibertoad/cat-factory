@@ -520,6 +520,8 @@ export class FragmentLibraryService implements FragmentResolver {
         blockTitle: input.blockTitle,
         blockDescription: input.blockDescription,
         signals: input.signals,
+        ...(input.executionId ? { executionId: input.executionId } : {}),
+        ...(input.userId ? { userId: input.userId } : {}),
       })
     } catch {
       picked = [] // selection never blocks a run; manual pins still apply

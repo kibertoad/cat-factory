@@ -8,7 +8,11 @@ import type {
   ModelRef,
   ModelScope,
 } from '@cat-factory/kernel'
-import { catFactoryObservability } from '@cat-factory/kernel'
+import {
+  catFactoryObservability,
+  runActivationScope,
+  userActivationScope,
+} from '@cat-factory/kernel'
 import {
   CliInlineLanguageModel,
   type InlineCliRequest,
@@ -130,7 +134,12 @@ describe('wrapResolverWithInlineHarness', () => {
       system: 'sys',
       prompt: 'go',
     })) as { text: string }
-    expect(leasePersonalSubscriptionToken).toHaveBeenCalledWith('exec_1', 'usr_1', 'claude')
+    // Leased under the RUN's activation scope, which is what the run's own start minted.
+    expect(leasePersonalSubscriptionToken).toHaveBeenCalledWith(
+      runActivationScope('exec_1'),
+      'usr_1',
+      'claude',
+    )
     expect(runInline).toHaveBeenCalledOnce()
     expect(runInline.mock.calls[0]![0].subscriptionToken).toBe('oat-token')
     expect(result.text).toContain('claude-opus-5')
@@ -159,7 +168,7 @@ describe('wrapResolverWithInlineHarness', () => {
     )
   })
 
-  it("throws for an individual vendor with no run context (can't lease a per-run activation)", async () => {
+  it("throws for an individual vendor with no user (there is nobody's credential to open)", async () => {
     const inner: ModelProvider = { resolve: vi.fn(() => delegated) }
     const wrap = wrapResolverWithInlineHarness({
       inlineHarnesses: ['claude-code'],
@@ -174,8 +183,37 @@ describe('wrapResolverWithInlineHarness', () => {
       }
     ).run
     await expect(runner({ model: 'claude-opus-5', system: '', prompt: 'go' })).rejects.toThrow(
-      /signed-in user and an active run/,
+      /requires a signed-in user/,
     )
+  })
+
+  // The run-less half of the same rule, and the reason the message above no longer demands a run:
+  // an assistant turn or a bug hunt holds no execution, but the person who asked for it has an
+  // activation of their own, minted with their password on the way in.
+  it('leases the USER activation scope for an individual vendor with no run', async () => {
+    const inner: ModelProvider = { resolve: vi.fn(() => delegated) }
+    const runInline = vi.fn(async (_req: InlineContainerRequest): Promise<InlineJobResult> => ({
+      text: 'ranked',
+    }))
+    const leasePersonalSubscriptionToken = vi.fn(async () => ({ secret: 'user-oat' }))
+    const provider = await wrapResolverWithInlineHarness({
+      inlineHarnesses: ['claude-code'],
+      hostCliVendors: new Set(),
+      runInline,
+      leasePersonalSubscriptionToken,
+    })(innerResolver(inner)).forScope({ workspaceId: 'ws', userId: 'usr_1' })
+    const runner = (
+      provider.resolve(CLAUDE_SUB) as unknown as {
+        run: (r: InlineCliRequest) => Promise<unknown>
+      }
+    ).run
+    await runner({ model: 'claude-opus-5', system: '', prompt: 'go' })
+    expect(leasePersonalSubscriptionToken).toHaveBeenCalledWith(
+      userActivationScope('usr_1'),
+      'usr_1',
+      'claude',
+    )
+    expect(runInline.mock.calls[0]![0].subscriptionToken).toBe('user-oat')
   })
 
   // The recorder is what makes the substituted model own its rows instead of leaving them to the

@@ -4,7 +4,7 @@ import type {
   SubscriptionVendor,
 } from '@cat-factory/kernel'
 import { PERSONAL_PASSWORD_HEADER } from '@cat-factory/contracts'
-import { ConflictError } from '@cat-factory/kernel'
+import { ConflictError, runActivationScope } from '@cat-factory/kernel'
 import { Hono } from 'hono'
 import { describe, expect, it, vi } from 'vitest'
 import { handleError } from '../src/http/errorHandler.js'
@@ -73,7 +73,7 @@ function makeApp(
   /** The closure the resolver produced, so a case can mint against a run id and observe it. */
   let resolvedActivation: ((runId: string) => Promise<void>) | undefined
   const probeAgentKind = vi.fn(async () => 'environment-prober-api')
-  const activateForRun = vi.fn(async () => {})
+  const activate = vi.fn(async () => {})
   const container = {
     environments: { environmentTest: { startTest, probeAgentKind } },
     config: { nativeAmbientAuth: over.nativeAmbientAuth ?? [] },
@@ -85,7 +85,7 @@ function makeApp(
       : {
           personalSubscriptions: {
             list: async () => (over.vendors ?? []).map((vendor) => ({ vendor })),
-            activateForRun,
+            activate,
           },
         }),
   } as unknown as ServerContainer
@@ -118,7 +118,7 @@ function makeApp(
     app,
     startTest,
     probeAgentKind,
-    activateForRun,
+    activate,
     activation: () => resolvedActivation,
     container: container as unknown as {
       executionService: { individualVendorsForAgentKind: ReturnType<typeof vi.fn> }
@@ -203,15 +203,20 @@ describe('the personal-credential gate on an agent dry run', () => {
   })
 
   it('hands the run an activation closure once the password is supplied', async () => {
-    const { app, activateForRun, activation } = makeApp({ vendors: ['claude'] })
+    const { app, activate, activation } = makeApp({ vendors: ['claude'] })
     const res = await startProbe(app, { [PERSONAL_PASSWORD_HEADER]: 'correct horse' })
     expect(res.status).toBe(201)
-    const activate = activation()
-    expect(activate).toBeTypeOf('function')
+    const mint = activation()
+    expect(mint).toBeTypeOf('function')
     // Minted against the RUN id, which is the id the prober's dispatch leases against: an
     // activation keyed on anything else is a credential the probe cannot open.
-    await activate!('envtest_1')
-    expect(activateForRun).toHaveBeenCalledWith('envtest_1', 'usr_1', 'claude', 'correct horse')
+    await mint!('envtest_1')
+    expect(activate).toHaveBeenCalledWith(
+      runActivationScope('envtest_1'),
+      'usr_1',
+      'claude',
+      'correct horse',
+    )
   })
 
   it('asks the service NOTHING about credentials until the service asks', async () => {

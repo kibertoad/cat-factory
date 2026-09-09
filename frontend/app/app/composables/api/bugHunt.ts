@@ -16,8 +16,16 @@ export function bugHuntApi({ send, sendWith, ws, pwHeaders }: ApiContext) {
 
     // Scan the board for open, unassigned bugs and rank them by impact vs complexity. A live
     // external call plus a model call, so it can take a while — the modal shows progress.
-    runBugHunt: (workspaceId: string, source: TaskSourceKind, body: RunBugHuntInput) =>
-      send(runBugHuntContract, {
+    // Carries the personal password for the same reason `adoptBugHuntCandidate` below does: the
+    // RANKING is a model call resolved under the workspace's preset, so a subscription-pinned
+    // workspace needs the credential here and not only at adoption.
+    runBugHunt: (
+      workspaceId: string,
+      source: TaskSourceKind,
+      body: RunBugHuntInput,
+      password?: string,
+    ) =>
+      sendWith(pwHeaders(password), runBugHuntContract, {
         pathPrefix: ws(workspaceId),
         pathParams: { source },
         body,
