@@ -1,4 +1,4 @@
-import type { AddServiceFromRepoInput } from '@cat-factory/contracts'
+import type { AddServiceFromRepoInput, Block } from '@cat-factory/contracts'
 import { ValidationError } from '@cat-factory/kernel'
 
 // The rules that decide how a NEW service frame is pinned to the repository behind it, extracted
@@ -26,6 +26,23 @@ import { ValidationError } from '@cat-factory/kernel'
  * 404 on it. Answering with an id like that is worse than refusing, because it reads as success.
  */
 export type SharedServicePolicy = 'mount' | 'refuse'
+
+/**
+ * What an add-from-repo actually DID, which is not derivable from the frame it answers with.
+ *
+ * `mounted` is the account-wide dedupe: the repository already backed a whole-repo service the
+ * org runs, so this board now shares it instead of minting a rival. The frame that comes back is
+ * then one that may never have been on this board before, which is precisely why a caller cannot
+ * tell the two apart by looking for it among the blocks it held a moment ago. Only the operation
+ * knows, so the operation says.
+ */
+export type AddServiceDisposition = 'created' | 'mounted'
+
+/** The frame an add-from-repo produced, and whether it created it or mounted an existing one. */
+export interface AddedServiceFrame {
+  block: Block
+  disposition: AddServiceDisposition
+}
 
 /** How this create pins the new service to its repository, once every guard has passed. */
 export interface ServiceRepoLinkage {

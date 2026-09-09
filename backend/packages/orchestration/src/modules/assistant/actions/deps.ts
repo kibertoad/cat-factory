@@ -8,6 +8,7 @@ import type {
   UpdateBlockInput,
 } from '@cat-factory/contracts'
 import type { Service } from '@cat-factory/kernel'
+import type { AddedServiceFrame } from '../../board/serviceRepoLinkage.js'
 
 // ---------------------------------------------------------------------------
 // What the built-in assistant actions need from the platform, as bound call-backs.
@@ -48,8 +49,18 @@ export interface AssistantBoardDeps {
 export interface AssistantRepoDeps {
   /** The repositories this workspace projects, for resolving a pasted URL to one. */
   listRepos(workspaceId: string): Promise<GitHubRepo[]>
-  /** Create (or mount) the service frame backed by a projected repository. */
-  addServiceFromRepo(workspaceId: string, input: AddServiceFromRepoInput): Promise<Block>
+  /**
+   * Create (or mount) the service frame backed by a projected repository.
+   *
+   * Answers with the DISPOSITION beside the frame, because the two are different facts about the
+   * board and the turn reports which one happened. Reading it off the returned block is not
+   * possible: a first-time mount answers with a frame this board has never held, which is exactly
+   * what a fresh create looks like from the outside.
+   */
+  addServiceFromRepo(
+    workspaceId: string,
+    input: AddServiceFromRepoInput,
+  ): Promise<AddedServiceFrame>
   /** The account-owned services behind a set of frames, for the repo → frame linkage. */
   listServicesForFrames(frameBlockIds: string[]): Promise<Service[]>
 }

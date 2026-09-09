@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import type { AssistantCapability, AssistantTurn } from '~/types/domain'
+import type { AssistantAnswer, AssistantCapability, AssistantTurn } from '~/types/domain'
 import { useWorkspaceStore } from '~/stores/workspace'
 
 /**
@@ -22,8 +22,6 @@ export const useAssistantStore = defineStore('assistant', () => {
   const capability = ref<AssistantCapability | null>(null)
   const turn = ref<AssistantTurn | null>(null)
   const running = ref(false)
-  /** The prompt the last turn ran on, so a clarification can be re-asked with it in the box. */
-  const lastPrompt = ref('')
 
   /** Whether a model is wired at all; unknown (not yet read) reads as unavailable. */
   const available = computed(() => capability.value?.available === true)
@@ -39,10 +37,22 @@ export const useAssistantStore = defineStore('assistant', () => {
    * outcomes (performed / needs_input / declined) come back as the resolved value.
    */
   async function run(prompt: string): Promise<AssistantTurn> {
+    return record(() => api.runAssistantTurn(workspace.requireId(), prompt))
+  }
+
+  /**
+   * Answer the question the last turn asked, by re-running its action with the chosen value in the
+   * field it named. Same outcomes, same funnel, and no model call.
+   */
+  async function answer(chosen: AssistantAnswer): Promise<AssistantTurn> {
+    return record(() => api.answerAssistantTurn(workspace.requireId(), chosen))
+  }
+
+  /** The half both turns share: hold `running`, keep the outcome, let a refusal through. */
+  async function record(send: () => Promise<AssistantTurn>): Promise<AssistantTurn> {
     running.value = true
-    lastPrompt.value = prompt
     try {
-      const result = await api.runAssistantTurn(workspace.requireId(), prompt)
+      const result = await send()
       turn.value = result
       return result
     } finally {
@@ -55,5 +65,5 @@ export const useAssistantStore = defineStore('assistant', () => {
     turn.value = null
   }
 
-  return { capability, turn, running, lastPrompt, available, actions, loadCapability, run, reset }
+  return { capability, turn, running, available, actions, loadCapability, run, answer, reset }
 })

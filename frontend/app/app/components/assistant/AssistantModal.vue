@@ -9,15 +9,16 @@
 //
 // Two of the three outcomes are not failures and must not look like one:
 //   - `needs_input` is a QUESTION. Where the platform had candidates (two services matching the
-//     name, a repository under a different owner) they are offered as chips that edit the prompt,
-//     so the answer is one click plus submit rather than a retyped sentence.
+//     name, a repository under a different owner, two trackers that both read the reference) each
+//     is a chip that ANSWERS it: one click re-runs the same action with that value in the field
+//     the platform named, with no model call and nothing retyped.
 //   - `declined` means nothing in the catalog matches. It renders the catalog, because "I can't
 //     do that" without saying what it CAN do is the least useful answer this surface can give.
 // Everything that IS a failure (no model wired, the budget spent, an unconfigured tracker, an
 // issue already filed) arrives as an error and goes through the shared toast funnel with its
 // reason, its detail and its request id, the same path a failed button press takes.
 import type { AssistantActionId, AssistantOutcome } from '~/types/domain'
-import { revealTarget } from './AssistantModal.logic'
+import { answerFor, revealTarget } from './AssistantModal.logic'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -78,13 +79,21 @@ function useExample(example: string): void {
 /**
  * Answer a clarification with one of the candidates the platform offered.
  *
- * It appends rather than replaces, because the candidate answers ONE argument of a request whose
- * other half the person already typed; replacing the sentence with a service name would throw
- * away what they asked for.
+ * Submitted as DATA, not as more prose: the turn re-runs the action it was already heading for
+ * with the chosen value in the field it named. Appending the candidate to the sentence and asking
+ * the model again is what this replaces, and it could not settle the question (see `answerFor`).
+ * The prompt box is left exactly as the person typed it, because the request has not changed.
  */
-function useCandidate(candidate: string): void {
-  prompt.value = `${assistant.lastPrompt} (${candidate})`
-  assistant.reset()
+async function useCandidate(
+  question: Extract<AssistantOutcome, { status: 'needs_input' }>,
+  candidate: string,
+): Promise<void> {
+  if (assistant.running) return
+  try {
+    await assistant.answer(answerFor(question, candidate))
+  } catch (error) {
+    present(error, 'assistant.title')
+  }
 }
 
 /** Select what a performed turn produced, and close, so the board shows it straight away. */
@@ -223,7 +232,9 @@ function reveal(blockId: string): void {
                       :key="candidate"
                       size="xs"
                       variant="soft"
-                      @click="useCandidate(candidate)"
+                      :disabled="assistant.running"
+                      data-testid="assistant-candidate"
+                      @click="useCandidate(outcome, candidate)"
                     >
                       {{ candidate }}
                     </UButton>

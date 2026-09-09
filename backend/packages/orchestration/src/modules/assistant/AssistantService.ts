@@ -6,8 +6,11 @@ import {
   renderAssistantPrompt,
 } from '@cat-factory/agents'
 import type {
+  AssistantActionId,
+  AssistantAnswer,
   AssistantCapability,
   AssistantTurn,
+  AssistantTurnInput,
   BlockEditAuthority,
   DescriptorField,
   DescriptorFieldValues,
@@ -28,7 +31,7 @@ import {
   keepDeclaredArguments,
   readAssistantSelection,
 } from './assistant.logic.js'
-import type { AssistantActionDefinition } from './types.js'
+import type { AssistantActionDefinition, AssistantActionOutcome } from './types.js'
 
 // ---------------------------------------------------------------------------
 // The IN-APP ASSISTANT: one prompt, one inline model call that ROUTES it, one action performed by
@@ -87,8 +90,8 @@ export interface AssistantServiceDeps extends InlineBlockModelDeps {
 /** One turn's request. */
 export interface AssistantTurnRequest {
   workspaceId: string
-  /** What the person typed. */
-  prompt: string
+  /** What the person typed, or the answer to a question a previous turn asked. */
+  input: AssistantTurnInput
   /** Whose tier every board write the chosen action makes is judged under (ADR 0037). */
   editor: BlockEditAuthority
   /** The acting user, recorded as the author of what the action creates. */
@@ -112,12 +115,13 @@ export class AssistantService {
   }
 
   /**
-   * Run one turn.
+   * Run one turn: route a sentence and perform what it named, or perform the ANSWER to the
+   * question the last turn asked.
    *
-   * The refusal ORDER is cheapest-first, on the same reading as the inline use-case surface: a
-   * request that was never going to run should spend nothing. An empty catalog and a missing
-   * provider are answered from memory; the budget probe reads the spend ledger; only then does a
-   * vendor see a token.
+   * The two halves share everything after the action is known (argument validation, the run, the
+   * outcome) and nothing before it. An ANSWER reaches no model, which is not an optimisation: a
+   * clarification whose answer went back through the router could route somewhere else, and a
+   * question the platform asked deserves an answer the platform honours literally.
    */
   async run(request: AssistantTurnRequest): Promise<AssistantTurn> {
     const { actions } = this.deps
@@ -127,6 +131,40 @@ export class AssistantService {
         'assistant_no_actions',
       )
     }
+    return request.input.kind === 'answer'
+      ? this.answer(request, request.input.answer)
+      : this.route(request, request.input.prompt)
+  }
+
+  /**
+   * Perform what a previous turn's question was heading for, with the answered field filled in.
+   *
+   * No model, so no budget probe either: nothing here is billable. The arguments are the ones the
+   * platform itself put on that outcome, and they are re-validated anyway, so what a client may
+   * ask for is exactly what the prompt path could already have produced.
+   */
+  private async answer(
+    request: AssistantTurnRequest,
+    answer: AssistantAnswer,
+  ): Promise<AssistantTurn> {
+    const action = this.deps.actions.find((candidate) => candidate.actionId === answer.actionId)
+    if (!action) {
+      // The deployment's catalog changed under a question it had already asked (an integration
+      // unwired between the two turns). Reported as the same decline a hallucinated id gets,
+      // because it means the same thing to the person: this deployment no longer does that.
+      return { outcome: { status: 'declined', reason: 'no_matching_action' }, model: null }
+    }
+    return { outcome: await this.perform(request, action, answer.arguments), model: null }
+  }
+
+  /**
+   * Read a sentence, name one action, perform it.
+   *
+   * The refusal ORDER is cheapest-first, on the same reading as the inline use-case surface: a
+   * request that was never going to run should spend nothing. A missing provider is answered from
+   * memory; the budget probe reads the spend ledger; only then does a vendor see a token.
+   */
+  private async route(request: AssistantTurnRequest, prompt: string): Promise<AssistantTurn> {
     const { modelProvider, ref } = await this.resolveModel(request.workspaceId)
     if (await this.deps.isOverBudget?.(request.workspaceId)) {
       // Its OWN refusal rather than a generic failure, and fail-CLOSED so no vendor call is made:
@@ -140,7 +178,7 @@ export class AssistantService {
 
     const model = { provider: ref.provider, model: ref.model }
     const selection = readAssistantSelection(
-      extractJson(await this.route(request, modelProvider, ref)),
+      extractJson(await this.generate(request.workspaceId, prompt, modelProvider, ref)),
     )
     if (selection.kind === 'unreadable') {
       // An empty visible reply means the model answered only into its private reasoning channel
@@ -160,7 +198,7 @@ export class AssistantService {
     if (selection.kind === 'none') {
       return { outcome: { status: 'declined', reason: 'no_matching_action' }, model }
     }
-    const action = actions.find((candidate) => candidate.actionId === selection.actionId)
+    const action = this.deps.actions.find((candidate) => candidate.actionId === selection.actionId)
     if (!action) {
       // An id outside the catalog it was shown. Reported as "nothing here does that" rather than
       // as a model failure, because that is what it means to the person: whatever the model
@@ -171,20 +209,30 @@ export class AssistantService {
       })
       return { outcome: { status: 'declined', reason: 'no_matching_action' }, model }
     }
+    return { outcome: await this.perform(request, action, selection.arguments), model }
+  }
 
-    const args = keepDeclaredArguments(action.parameters, selection.arguments)
+  /**
+   * Everything between a NAMED action and the turn's outcome: validate, run, report.
+   *
+   * The one path both halves of `run` share, and deliberately so. A routed turn and an answered
+   * one differ only in where the arguments came from, and letting the answer skip a rule the
+   * router applies is how a second, weaker door gets built beside the first.
+   */
+  private async perform(
+    request: AssistantTurnRequest,
+    action: AssistantActionDefinition,
+    supplied: Record<string, string>,
+  ): Promise<AssistantTurn['outcome']> {
+    const args = keepDeclaredArguments(action.parameters, supplied)
     const invalid = firstInvalidArgument(action.parameters, args)
     if (invalid) {
-      return {
-        outcome: {
-          status: 'needs_input',
-          actionId: action.actionId,
-          reason: 'invalid_argument',
-          field: invalid,
-          candidates: [],
-        },
-        model,
-      }
+      return clarification(action.actionId, args, {
+        status: 'needs_input',
+        reason: 'invalid_argument',
+        field: invalid,
+        candidates: [],
+      })
     }
     const outcome = await action.run({
       workspaceId: request.workspaceId,
@@ -192,24 +240,15 @@ export class AssistantService {
       editor: request.editor,
       userId: request.userId,
     })
-    return {
-      outcome:
-        outcome.status === 'performed'
-          ? { status: 'performed', result: outcome.result }
-          : {
-              status: 'needs_input',
-              actionId: action.actionId,
-              reason: outcome.reason,
-              field: outcome.field,
-              candidates: outcome.candidates,
-            },
-      model,
-    }
+    return outcome.status === 'performed'
+      ? { status: 'performed', result: outcome.result }
+      : clarification(action.actionId, args, outcome)
   }
 
   /** The one model call: the catalog and the request in, the raw reply out. */
-  private async route(
-    request: AssistantTurnRequest,
+  private async generate(
+    workspaceId: string,
+    prompt: string,
     modelProvider: ModelProvider,
     ref: ModelRef,
   ): Promise<string> {
@@ -217,21 +256,18 @@ export class AssistantService {
       const result = await generateText({
         model: modelProvider.resolve(ref),
         system: ASSISTANT_SYSTEM_PROMPT,
-        prompt: renderAssistantPrompt(assistantActionBriefs(this.deps.actions), request.prompt),
+        prompt: renderAssistantPrompt(assistantActionBriefs(this.deps.actions), prompt),
         temperature: TEMPERATURE,
         maxOutputTokens: MAX_OUTPUT_TOKENS,
         providerOptions: catFactoryObservability({
           agentKind: ASSISTANT_AGENT_KIND,
-          workspaceId: request.workspaceId,
+          workspaceId,
         }),
       })
       return result.text
     } catch (error) {
       const message = `The assistant model (${ref.provider}:${ref.model}) failed: ${getErrorMessage(error)}`
-      this.deps.logger?.warn(message, {
-        workspaceId: request.workspaceId,
-        ...describeError(error),
-      })
+      this.deps.logger?.warn(message, { workspaceId, ...describeError(error) })
       throw new UnavailableError(message, 'assistant_generation_failed')
     }
   }
@@ -256,6 +292,45 @@ export class AssistantService {
     }
     return { modelProvider, ref }
   }
+}
+
+/**
+ * A clarification as it goes on the wire: the action it was heading for, plus the arguments the
+ * turn resolved, so the next turn can answer it instead of re-reading a rewritten sentence.
+ *
+ * One place rather than two literals, because the ARGUMENTS are the half that is easy to forget
+ * and impossible to notice missing: the outcome still renders, the chips still appear, and every
+ * one of them answers into an empty argument bag.
+ */
+function clarification(
+  actionId: AssistantActionId,
+  args: DescriptorFieldValues,
+  outcome: Extract<AssistantActionOutcome, { status: 'needs_input' }>,
+): AssistantTurn['outcome'] {
+  return {
+    status: 'needs_input',
+    actionId,
+    reason: outcome.reason,
+    field: outcome.field,
+    candidates: outcome.candidates,
+    arguments: stringArguments(args),
+  }
+}
+
+/**
+ * The validated arguments as the wire shape, dropping any value that is not a string.
+ *
+ * `DescriptorFieldValues` admits booleans and numbers for the field types that declare them; the
+ * assistant's own parameters are all strings today, and a value with no string form is left OUT
+ * rather than stringified, because a `"false"` coming back as an answer would be a value nobody
+ * chose.
+ */
+function stringArguments(args: DescriptorFieldValues): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const [key, value] of Object.entries(args)) {
+    if (typeof value === 'string') out[key] = value
+  }
+  return out
 }
 
 /**

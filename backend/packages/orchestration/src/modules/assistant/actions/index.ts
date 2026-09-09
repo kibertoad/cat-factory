@@ -29,7 +29,7 @@ export type {
  */
 export function createAssistantActions(deps: AssistantActionDeps): AssistantActionDefinition[] {
   const actions: AssistantActionDefinition[] = [declareServiceDependencyAction(deps.board)]
-  if (deps.repos) actions.push(addServiceFromRepoAction(deps.board, deps.repos))
+  if (deps.repos) actions.push(addServiceFromRepoAction(deps.repos))
   if (deps.issues) {
     actions.push(createTaskFromIssueAction(deps.board, deps.issues, deps.repos))
   }

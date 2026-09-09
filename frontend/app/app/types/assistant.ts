@@ -12,6 +12,8 @@
 export type {
   AssistantActionId,
   AssistantActionResult,
+  AssistantAnswer,
+  AssistantArguments,
   AssistantCapability,
   AssistantClarificationReason,
   AssistantDeclineReason,

@@ -742,10 +742,10 @@ must be TOLD what system the work is about; a derived subject never displaces it
 `pl_bugfix`; persists NOTHING. Trap: the rating takes `isOverBudget`, being the platform's first billable
 call no run start gates, and any future un-run-scoped LLM call owes it too. [`bug-hunt.md`](./backend/docs/bug-hunt.md).
 
-**In-app assistant**: one typed request, routed by an inline model to ONE action from a closed catalog
-(declare a service dependency, add a service from a repo URL, file a task from an issue URL) that the
-platform then performs through the board's own services. Trap: the model NAMES and COPIES, never resolves;
-an unmatched or ambiguous name is an outcome carrying candidates, never a guess. [`in-app-assistant.md`](./backend/docs/in-app-assistant.md).
+**In-app assistant**: one typed request, routed by an inline model that NAMES and COPIES and resolves
+nothing, to ONE action from a closed catalog the platform then performs through the board's own services.
+Deadliest trap: a `needs_input` CANDIDATE is answered back as DATA into the field the outcome names, so an
+action offering one its own next turn refuses asks a question that never terminates. [`in-app-assistant.md`](./backend/docs/in-app-assistant.md).
 
 **Bug fishing expedition**: a read-only hunt for the defects nobody reported. ONE `bug-fisher` step,
 dispatched once per ANGLE per platform-computed TERRITORY; a human MARKS what to fix and each mark spawns

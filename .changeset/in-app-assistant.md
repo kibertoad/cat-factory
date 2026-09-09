@@ -35,6 +35,19 @@ every sentence a person reads is rendered by the SPA from the i18n catalog. Putt
 explanation on the wire would have made the surface untranslatable and put unreviewed model text on
 screen.
 
+A QUESTION is answered as data too. A turn that could not resolve an argument carries the action it
+was heading for and the arguments it did resolve, so clicking one of the candidates re-runs that
+action with the chosen value in the field the platform named: no model call, nothing billed, and no
+chance of the answer routing somewhere else. The rule that comes with it binds any action added
+later: a candidate has to be a legal VALUE for the field the question names, or the person is being
+offered an answer the next turn refuses.
+
+`BoardService.addServiceFromRepo` now answers with the frame AND the disposition that produced it
+(`created` or `mounted`), an internal signature change with no wire effect. The account-wide dedupe
+answers with a frame either way, and only the operation knows which path it took: a caller comparing
+the returned frame against the board it read a moment ago sees a service homed on another board as a
+fresh import, which is the one case the distinction exists to report.
+
 Two alternatives were considered and rejected. A TOOL-CALLING loop (let the model call the board's
 own methods) would have put the model inside the write path, where a wrong argument is a wrong write
 rather than a wrong question, and would have made "which service did you mean?" unanswerable without

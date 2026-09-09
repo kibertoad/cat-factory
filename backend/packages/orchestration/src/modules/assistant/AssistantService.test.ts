@@ -99,9 +99,20 @@ function serviceWith(
 
 const REQUEST = {
   workspaceId: 'ws_1',
-  prompt: 'checkout depends on payments',
+  input: { kind: 'prompt', prompt: 'checkout depends on payments' },
   editor: UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
   userId: 'u_1',
+} as const
+
+/** The same request, answering a question a previous turn asked instead of typing a sentence. */
+function answering(args: Record<string, string>) {
+  return {
+    ...REQUEST,
+    input: {
+      kind: 'answer',
+      answer: { actionId: 'declare-service-dependency', arguments: args },
+    },
+  } as const
 }
 
 describe('AssistantService.capability', () => {
@@ -177,6 +188,9 @@ describe('AssistantService.run', () => {
       reason: 'ambiguous_service',
       field: 'consumer',
       candidates: ['Payments API', 'API Gateway'],
+      // The arguments ride along, because they are what makes the question ANSWERABLE: the next
+      // turn re-runs this action with `consumer` replaced and everything else carried over.
+      arguments: { consumer: 'api' },
     })
   })
 
@@ -192,6 +206,7 @@ describe('AssistantService.run', () => {
       reason: 'invalid_argument',
       field: 'directory',
       candidates: [],
+      arguments: { consumer: 'A', directory: '../../etc' },
     })
     expect(seen).toEqual([])
   })
@@ -235,5 +250,64 @@ describe('AssistantService.run', () => {
   it('refuses when the deployment registered no actions at all', async () => {
     const { service } = serviceWith('{}', [])
     await expect(service.run(REQUEST)).rejects.toBeInstanceOf(UnavailableError)
+  })
+})
+
+describe('AssistantService.run — answering a clarification', () => {
+  it('performs the named action with the supplied arguments, reaching no model at all', async () => {
+    const { action, seen } = fakeAction()
+    const { service, prompts } = serviceWith('{"action":"none","arguments":{}}', [action])
+    const turn = await service.run(answering({ consumer: 'Payments API' }))
+    expect(turn.outcome.status).toBe('performed')
+    expect(seen).toEqual([{ consumer: 'Payments API' }])
+    // The whole point: no vendor call, so a question the platform asked costs nothing to answer
+    // and cannot re-route to a different action on the way back.
+    expect(prompts).toEqual([])
+    // And nothing to attribute: reporting the previous turn's model would name a call that this
+    // turn never made.
+    expect(turn.model).toBeNull()
+  })
+
+  it('is not billable, so it runs even when the workspace is over budget', async () => {
+    const { action, seen } = fakeAction()
+    const { service } = serviceWith('{}', [action], { isOverBudget: async () => true })
+    expect((await service.run(answering({ consumer: 'Payments API' }))).outcome.status).toBe(
+      'performed',
+    )
+    expect(seen).toEqual([{ consumer: 'Payments API' }])
+  })
+
+  it('holds an answer to the SAME rules a routed turn passes, dropping undeclared keys', async () => {
+    const { action, seen } = fakeAction()
+    const { service } = serviceWith('{}', [action])
+    await service.run(answering({ consumer: 'Payments API', sudo: 'yes' }))
+    // `sudo` is not a declared parameter, so it never reaches the action: an answer is not a way
+    // past the validation a model's own reply goes through.
+    expect(seen).toEqual([{ consumer: 'Payments API' }])
+  })
+
+  it('refuses an answer whose value the descriptor rules reject, exactly as a routed turn does', async () => {
+    const { action, seen } = fakeAction()
+    const { service } = serviceWith('{}', [action])
+    expect(
+      (await service.run(answering({ consumer: 'A', directory: '../../etc' }))).outcome,
+    ).toMatchObject({ status: 'needs_input', reason: 'invalid_argument', field: 'directory' })
+    expect(seen).toEqual([])
+  })
+
+  it('declines when the answered action is no longer in the catalog', async () => {
+    // The deployment unwired the integration between the question and its answer.
+    const { service } = serviceWith('{}', [fakeAction().action])
+    const request = {
+      ...REQUEST,
+      input: {
+        kind: 'answer',
+        answer: { actionId: 'add-service-from-repo', arguments: { repoUrl: 'acme/payments' } },
+      },
+    } as const
+    expect((await service.run(request)).outcome).toEqual({
+      status: 'declined',
+      reason: 'no_matching_action',
+    })
   })
 })

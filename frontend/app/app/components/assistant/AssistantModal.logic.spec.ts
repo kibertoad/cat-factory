@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { revealTarget } from './AssistantModal.logic'
+import { answerFor, revealTarget } from './AssistantModal.logic'
 
 describe('revealTarget', () => {
   it('reveals the CONSUMER of a declared dependency, the frame the edge was written onto', () => {
@@ -33,5 +33,48 @@ describe('revealTarget', () => {
         issue: { source: 'github', externalId: 'acme/payments#12', url: 'https://example.test' },
       }),
     ).toBe('t1')
+  })
+})
+
+describe('answerFor', () => {
+  it('puts the chosen candidate in the field the platform named, keeping the rest', () => {
+    expect(
+      answerFor(
+        {
+          status: 'needs_input',
+          actionId: 'declare-service-dependency',
+          reason: 'ambiguous_service',
+          field: 'consumer',
+          candidates: ['Payments API', 'API Gateway'],
+          arguments: { consumer: 'api', provider: 'Ledger', description: 'reads balances' },
+        },
+        'Payments API',
+      ),
+    ).toEqual({
+      actionId: 'declare-service-dependency',
+      arguments: {
+        consumer: 'Payments API',
+        provider: 'Ledger',
+        description: 'reads balances',
+      },
+    })
+  })
+
+  it('answers a field the failed turn never resolved a value for', () => {
+    // The ambiguous-tracker case: `source` is absent from the arguments precisely because the
+    // request never named one, and the answer is what supplies it.
+    expect(
+      answerFor(
+        {
+          status: 'needs_input',
+          actionId: 'create-task-from-issue',
+          reason: 'ambiguous_issue_source',
+          field: 'source',
+          candidates: ['jira', 'linear'],
+          arguments: { issueUrl: 'PROJ-12' },
+        },
+        'jira',
+      ).arguments,
+    ).toEqual({ issueUrl: 'PROJ-12', source: 'jira' })
   })
 })

@@ -440,6 +440,8 @@ const REASON_DESCRIPTION_KEYS: Record<UnavailableReason | BootstrapReferenceReas
   service_catalog_filter_missing: 'errors.unavailable.description.service_catalog_filter_missing',
   service_catalog_response_too_large:
     'errors.unavailable.description.service_catalog_response_too_large',
+  assistant_generation_failed: 'errors.unavailable.description.assistant_generation_failed',
+  assistant_reply_unreadable: 'errors.unavailable.description.assistant_reply_unreadable',
 }
 
 /**

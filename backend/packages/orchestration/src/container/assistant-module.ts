@@ -90,21 +90,50 @@ function repoDeps(
 /** The tracker half: which sources recognise a URL, the import, and the task it becomes. */
 function issueDeps(tasks: TasksModule): AssistantIssueDeps {
   return {
-    matchIssueSources: async (workspaceId, ref) => {
-      // Asked of every ENABLED source rather than guessed from the URL's host: which tracker a
-      // reference belongs to is the providers' own judgement (a self-managed GitLab is on the
-      // deployment's domain, and a bare key is both a Jira and a Linear identifier), and a host
-      // table here would be a second, silently drifting copy of `parseRef`.
-      const matches: AssistantIssueMatch[] = []
-      for (const provider of tasks.registry.list()) {
-        const source: TaskSourceKind = provider.descriptor.source
-        if (!(await tasks.connectionService.isEnabled(workspaceId, source))) continue
-        const externalId = provider.parseRef(ref)
-        if (externalId) matches.push({ source, externalId })
-      }
-      return matches
-    },
+    matchIssueSources: (workspaceId, ref) => matchIssueSources(tasks, workspaceId, ref),
     importIssue: (workspaceId, source, ref) => tasks.importService.import(workspaceId, source, ref),
     createTaskFromIssue: (request) => tasks.linkService.createTaskFromIssue(request),
   }
+}
+
+/** What {@link matchIssueSources} reads: exported so the predicate can be pinned without a container. */
+export type IssueSourceMatchDeps = Pick<TasksModule, 'registry' | 'connectionService'>
+
+/**
+ * Every OFFERED task source whose provider recognises this reference.
+ *
+ * Asked of the providers rather than guessed from the URL's host: which tracker a reference belongs
+ * to is their own judgement (a self-managed GitLab is on the deployment's domain, and a bare key is
+ * both a Jira and a Linear identifier), and a host table here would be a second, silently drifting
+ * copy of `parseRef`.
+ *
+ * OFFERED is `available && enabled`, read through the ONE batched `listSourceStates` the settings
+ * and import surfaces read. Two things ride on that, and each was a bug:
+ *
+ *  - `isEnabled` alone is the wrong PREDICATE. It defaults to true when a source has no settings
+ *    row, which is every source nobody has connected, so a deployment that registers Jira and
+ *    Linear and connects only Jira counts both as offered: a bare `PROJ-12` becomes an ambiguity
+ *    with no real second answer, and a Linear-shaped reference routes an import at a source with
+ *    no credential to read it with. `isOffered` is the predicate that says so, and its own doc
+ *    comment warns about exactly this.
+ *  - `isOffered` PER PROVIDER would be the N+1 this repo bans, once per registered source on every
+ *    turn. One call over the whole registry is the fix for both.
+ */
+export async function matchIssueSources(
+  tasks: IssueSourceMatchDeps,
+  workspaceId: string,
+  ref: string,
+): Promise<AssistantIssueMatch[]> {
+  const states = await tasks.connectionService.listSourceStates(workspaceId)
+  const offered = new Set<TaskSourceKind>(
+    states.filter((state) => state.available && state.enabled).map((state) => state.source),
+  )
+  const matches: AssistantIssueMatch[] = []
+  for (const provider of tasks.registry.list()) {
+    const source: TaskSourceKind = provider.descriptor.source
+    if (!offered.has(source)) continue
+    const externalId = provider.parseRef(ref)
+    if (externalId) matches.push({ source, externalId })
+  }
+  return matches
 }

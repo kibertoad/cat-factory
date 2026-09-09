@@ -35,15 +35,19 @@ export function assistantController(): Hono<AppEnv> {
     return c.json(requireAssistant(c).service.capability(), 200)
   })
 
-  // Run one turn. Errors are NOT caught: a spent budget, an unconfigured integration and an issue
-  // already filed as a task are the same refusals the equivalent button raises, and they reach the
-  // SPA through the one error funnel with their `details.reason` intact. What a turn answers with
-  // instead is the three OUTCOMES, including the questions it needs answered, which are data.
+  // Run one turn: a sentence to route, or the ANSWER to the question the last turn asked. Both are
+  // the same route because both perform one catalog action under the same tier; only where the
+  // arguments came from differs, and the service is what knows that.
+  //
+  // Errors are NOT caught: a spent budget, an unconfigured integration and an issue already filed
+  // as a task are the same refusals the equivalent button raises, and they reach the SPA through
+  // the one error funnel with their `details.reason` intact. What a turn answers with instead is
+  // the three OUTCOMES, including the questions it needs answered, which are data.
   buildHonoRoute(app, runAssistantTurnContract, async (c) => {
     const assistant = requireAssistant(c)
     const turn = await assistant.service.run({
       workspaceId: param(c, 'workspaceId'),
-      prompt: c.req.valid('json').prompt,
+      input: c.req.valid('json'),
       // The asker's own tier, exactly as the inspector's own create/edit forms carry it (ADR 0037).
       editor: blockEditAuthority(c),
       userId: c.get('user')?.id ?? null,

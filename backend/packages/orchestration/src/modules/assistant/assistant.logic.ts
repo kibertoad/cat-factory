@@ -1,5 +1,6 @@
 import type { AssistantActionBrief } from '@cat-factory/agents'
 import type { DescriptorField, DescriptorFieldValues } from '@cat-factory/contracts'
+import { isSafeRepoDirPath, parseRepoWebUrl } from '@cat-factory/contracts'
 import type { Block } from '@cat-factory/kernel'
 import type { AssistantActionDefinition } from './types.js'
 
@@ -94,15 +95,91 @@ export function keepDeclaredArguments(
   return kept
 }
 
+/** A repository a request named, plus the subtree the reference itself pointed into. */
+export interface AssistantRepoRef {
+  owner: string
+  repo: string
+  /**
+   * The repo-root-relative subdirectory the reference named, when it named one.
+   *
+   * Only a URL that points INTO the tree (`/tree/<ref>/packages/api`) carries this, and it is
+   * already checked against the shared path rule here, because a value recovered from a link has
+   * been through no validator on the way in.
+   */
+  directory?: string
+}
+
+/**
+ * The repository a person named: a pasted web URL, or the bare `owner/repo` slug.
+ *
+ * The URL is the primary form and is parsed by the SHARED parser, the same one the repository
+ * picker resolves a paste with, so GitHub and GitLab shapes (subgroups, `/-/`, `/tree/<ref>/…`)
+ * and self-managed hosts are understood identically on both surfaces.
+ *
+ * The SLUG is accepted here and deliberately NOT in that shared parser, which declines it on
+ * purpose (a slug has no host, so the picker cannot tell one from a search term). This surface
+ * has the opposite problem: when a URL names a repository the workspace does not project, the
+ * turn answers with the projected repositories of the same NAME under other owners, and those
+ * near-misses are slugs. Offering `acme/payments` as the answer to "which repository did you
+ * mean?" and then refusing it as unreadable would be a question with no acceptable answer.
+ */
+export function parseRepoRef(input: string): AssistantRepoRef | null {
+  const url = parseRepoWebUrl(input)
+  if (url) {
+    const directory = url.kind === 'dir' && url.path !== '' ? url.path : undefined
+    return {
+      owner: url.owner,
+      repo: url.repo,
+      ...(directory !== undefined && isSafeRepoDirPath(directory) ? { directory } : {}),
+    }
+  }
+  return parseRepoSlug(input)
+}
+
+/** One `owner/repo` path segment, matching the shared URL parser's own segment grammar. */
+const SLUG_SEGMENT = /^[A-Za-z0-9._-]+$/
+
+/**
+ * A bare `owner/repo` (or GitLab's `group/subgroup/project`) slug, or null.
+ *
+ * Strict on purpose: it runs only after the URL parse has declined, so anything it accepts is
+ * something a person typed INSTEAD of a link, and a loose rule here would read a sentence
+ * fragment as a repository name.
+ */
+function parseRepoSlug(input: string): AssistantRepoRef | null {
+  const trimmed = input.trim().replace(/^\/+|\/+$/g, '')
+  if (trimmed === '' || /\s/.test(trimmed)) return null
+  const segments = trimmed.split('/')
+  if (segments.length < 2 || !segments.every((segment) => SLUG_SEGMENT.test(segment))) return null
+  const repo = segments[segments.length - 1]!.replace(/\.git$/i, '')
+  if (repo === '') return null
+  return { owner: segments.slice(0, -1).join('/'), repo }
+}
+
 /** A service frame a name matched, or why it did not match exactly one. */
 export type ServiceMatch =
   | { kind: 'one'; frame: Block }
   | { kind: 'none' }
   | { kind: 'many'; candidates: string[] }
 
-/** Fold a title to the form two people would agree name the same service. */
+/**
+ * Fold a title to the form two people would agree name the same service.
+ *
+ * Lossy by construction, and one of its losses is TOTAL: a title written in a non-Latin script,
+ * in emoji, or in punctuation alone folds to the empty string, because the fold keeps only ASCII
+ * alphanumerics. That is a legitimate title (`決済サービス` names a service someone runs), so the
+ * empty fold is a value the matcher has to REFUSE to reason about rather than a case that cannot
+ * arise: `''` is a substring of every string, so a frame that folds to nothing would otherwise
+ * match every name anybody types.
+ */
 function foldTitle(title: string): string {
   return title.toLowerCase().replace(/[^a-z0-9]+/g, '')
+}
+
+/** A frame with its title folded ONCE, rather than re-folded by each pass that looks at it. */
+interface FoldedFrame {
+  frame: Block
+  folded: string
 }
 
 /**
@@ -117,22 +194,37 @@ function foldTitle(title: string): string {
  * A pass that matches SEVERAL is reported as ambiguous with their titles rather than resolved by a
  * tiebreak, because every available tiebreak (shortest, first, most recently created) picks a
  * service on grounds the person never stated. Ambiguity is a question, not a coin toss.
+ *
+ * BOTH sides of the two folded passes are checked for an empty fold, and each of the two is a
+ * separate bug the guard closes. An empty fold on the QUERY side would match everything; an empty
+ * fold on the FRAME side would make that one frame match everything, which is worse, because it
+ * turns every other name on the board into a false `ambiguous_service` and the frame itself is
+ * still unreachable except by its exact title. A title with nothing to fold is matched by pass 1
+ * alone, which compares the real characters and needs no fold at all.
  */
 export function matchServiceByName(frames: readonly Block[], name: string): ServiceMatch {
   const wanted = name.trim()
   if (wanted === '') return { kind: 'none' }
+  const lowered = wanted.toLowerCase()
   const folded = foldTitle(wanted)
-  const passes: ((frame: Block) => boolean)[] = [
-    (frame) => frame.title.trim().toLowerCase() === wanted.toLowerCase(),
-    (frame) => folded !== '' && foldTitle(frame.title) === folded,
-    (frame) =>
+  const candidates: FoldedFrame[] = frames.map((frame) => ({
+    frame,
+    folded: foldTitle(frame.title),
+  }))
+  const passes: ((candidate: FoldedFrame) => boolean)[] = [
+    ({ frame }) => frame.title.trim().toLowerCase() === lowered,
+    (candidate) => folded !== '' && candidate.folded === folded,
+    (candidate) =>
       folded !== '' &&
-      (foldTitle(frame.title).includes(folded) || folded.includes(foldTitle(frame.title))),
+      candidate.folded !== '' &&
+      (candidate.folded.includes(folded) || folded.includes(candidate.folded)),
   ]
   for (const matches of passes) {
-    const hits = frames.filter(matches)
-    if (hits.length === 1) return { kind: 'one', frame: hits[0]! }
-    if (hits.length > 1) return { kind: 'many', candidates: hits.map((frame) => frame.title) }
+    const hits = candidates.filter(matches)
+    if (hits.length === 1) return { kind: 'one', frame: hits[0]!.frame }
+    if (hits.length > 1) {
+      return { kind: 'many', candidates: hits.map(({ frame }) => frame.title) }
+    }
   }
   return { kind: 'none' }
 }

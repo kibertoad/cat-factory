@@ -5,6 +5,7 @@ import {
   issueRepoSlug,
   keepDeclaredArguments,
   matchServiceByName,
+  parseRepoRef,
   readAssistantSelection,
   serviceFramesOf,
 } from './assistant.logic.js'
@@ -120,6 +121,73 @@ describe('matchServiceByName', () => {
   it('reports no match for a name nothing resembles, and for an empty one', () => {
     expect(matchServiceByName(frames, 'billing')).toEqual({ kind: 'none' })
     expect(matchServiceByName(frames, '  ')).toEqual({ kind: 'none' })
+  })
+
+  it('a title with nothing to fold matches nothing but itself, and poisons no other name', () => {
+    // A non-Latin title folds to the empty string, and `''` is a substring of everything: left
+    // unguarded, this one frame matches EVERY name typed on this board. The damage is not that it
+    // over-matches itself, it is that every other service on the board stops resolving, because a
+    // unique hit becomes a two-way `ambiguous_service` nobody can answer.
+    const board = [frame('f1', '決済サービス'), frame('f2', 'Payments API')]
+    expect(matchServiceByName(board, 'payments')).toMatchObject({
+      kind: 'one',
+      frame: { id: 'f2' },
+    })
+    expect(matchServiceByName(board, 'gateway')).toEqual({ kind: 'none' })
+    // Reachable by the pass that needs no fold: its real characters.
+    expect(matchServiceByName(board, '決済サービス')).toMatchObject({
+      kind: 'one',
+      frame: { id: 'f1' },
+    })
+  })
+
+  it('two unfoldable titles do not become ambiguous with each other', () => {
+    const board = [frame('f1', '決済'), frame('f2', '🚀')]
+    expect(matchServiceByName(board, 'anything')).toEqual({ kind: 'none' })
+  })
+})
+
+describe('parseRepoRef', () => {
+  it('reads a pasted web URL, on either provider shape', () => {
+    expect(parseRepoRef('https://github.com/acme/payments')).toEqual({
+      owner: 'acme',
+      repo: 'payments',
+    })
+    expect(parseRepoRef('https://gitlab.com/acme/platform/billing/-/tree/main/svc')).toEqual({
+      owner: 'acme/platform',
+      repo: 'billing',
+      directory: 'svc',
+    })
+  })
+
+  it('recovers the subtree a URL points into, and refuses an unsafe one rather than passing it on', () => {
+    expect(parseRepoRef('https://github.com/acme/mono/tree/main/packages/api')).toEqual({
+      owner: 'acme',
+      repo: 'mono',
+      directory: 'packages/api',
+    })
+    expect(parseRepoRef('https://github.com/acme/mono/tree/main/../../etc')).toEqual({
+      owner: 'acme',
+      repo: 'mono',
+    })
+  })
+
+  it('accepts the bare slug the shared URL parser declines, because a candidate IS one', () => {
+    // `nearMisses` offers `owner/name`, so a turn that could not read one back would be asking a
+    // question whose own answer it refuses.
+    expect(parseRepoRef('acme/payments')).toEqual({ owner: 'acme', repo: 'payments' })
+    expect(parseRepoRef('acme/platform/billing.git')).toEqual({
+      owner: 'acme/platform',
+      repo: 'billing',
+    })
+  })
+
+  it('refuses prose, a lone name, and anything with a segment that is not one', () => {
+    expect(parseRepoRef('the payments repo')).toBeNull()
+    expect(parseRepoRef('payments')).toBeNull()
+    expect(parseRepoRef('acme/pay ments')).toBeNull()
+    expect(parseRepoRef('acme//payments')).toBeNull()
+    expect(parseRepoRef('  ')).toBeNull()
   })
 })
 

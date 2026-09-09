@@ -78,6 +78,8 @@ function harness(
     repos?: GitHubRepo[]
     services?: Service[]
     matches?: AssistantIssueMatch[]
+    /** What the board service says it DID, the only thing that tells a mount from a create. */
+    disposition?: 'created' | 'mounted'
     withRepos?: boolean
     withIssues?: boolean
   } = {},
@@ -98,7 +100,7 @@ function harness(
     listRepos: async () => over.repos ?? [repo(10, 'acme', 'payments')],
     addServiceFromRepo: async (_ws: string, input: AddServiceFromRepoInput) => {
       added.push(input)
-      return frame('f3', 'payments')
+      return { block: frame('f3', 'payments'), disposition: over.disposition ?? 'created' }
     },
     listServicesForFrames: async () => over.services ?? [],
   }
@@ -273,12 +275,35 @@ describe('add-service-from-repo', () => {
   it('reports an existing service the board now MOUNTS as created: false', async () => {
     // `addServiceFromRepo` dedupes a whole-repo service across the account and mounts the existing
     // one; a caller told only "here is your service" would read that as a fresh import.
-    const h = harness({ blocks: [frame('f3', 'payments')] })
+    //
+    // The board here holds NEITHER the mounted frame nor anything else, which is the case that
+    // matters: an org service homed on another board was never among this board's blocks, so a
+    // create/mount comparison against them reports the mount as a create. Only the disposition the
+    // operation itself answers with says otherwise.
+    const h = harness({ blocks: [], disposition: 'mounted' })
     expect(
       await actionOf(h.deps, 'add-service-from-repo').run(
         context({ repoUrl: 'https://github.com/acme/payments' }),
       ),
     ).toMatchObject({ status: 'performed', result: { created: false } })
+  })
+
+  it('reports a fresh import as created even when the board already held other frames', async () => {
+    const h = harness({ blocks: [frame('f1', 'Checkout')], disposition: 'created' })
+    expect(
+      await actionOf(h.deps, 'add-service-from-repo').run(
+        context({ repoUrl: 'https://github.com/acme/payments' }),
+      ),
+    ).toMatchObject({ status: 'performed', result: { created: true } })
+  })
+
+  it('accepts an owner/name slug, which is the shape of the candidates it offers', async () => {
+    // The near-miss chips a person clicks are slugs, so the next turn has to be able to read one.
+    const h = harness()
+    expect(
+      await actionOf(h.deps, 'add-service-from-repo').run(context({ repoUrl: 'ACME/Payments' })),
+    ).toMatchObject({ status: 'performed', result: { repo: { owner: 'acme', name: 'payments' } } })
+    expect(h.added).toEqual([{ repoGithubId: 10 }])
   })
 
   it('names the near-misses when the workspace has not connected that repository', async () => {
@@ -368,9 +393,63 @@ describe('create-task-from-issue', () => {
     ).toEqual({
       status: 'needs_input',
       reason: 'ambiguous_issue_source',
-      field: 'issueUrl',
+      // The `source` field, not `issueUrl`: the URL was fine, and the tracker ids offered as
+      // candidates have to be a legal value for the field the question names, or the answer the
+      // person clicks is one the next turn cannot accept.
+      field: 'source',
       candidates: ['jira', 'linear'],
     })
+  })
+
+  it('files under the tracker the request named, settling an otherwise ambiguous reference', async () => {
+    const h = harness({
+      blocks: [frame('f1', 'Checkout')],
+      matches: [
+        { source: 'jira', externalId: 'PROJ-12' },
+        { source: 'linear', externalId: 'PROJ-12' },
+      ],
+    })
+    expect(
+      await actionOf(h.deps, 'create-task-from-issue').run(
+        context({ issueUrl: 'PROJ-12', source: 'jira', service: 'Checkout' }),
+      ),
+    ).toMatchObject({ status: 'performed' })
+    expect(h.filed).toEqual([{ containerId: 'f1', externalId: 'acme/payments#12' }])
+  })
+
+  it('a named tracker BREAKS A TIE, so a wrong one cannot make a readable reference unreadable', async () => {
+    // The model labelling a pasted URL with the wrong tracker must not turn the turn into "no
+    // connected tracker recognises that link": that is false, and its remedy (go and connect one)
+    // fixes nothing. Which trackers can read a reference is the providers' answer, not a caller's.
+    const h = harness({
+      blocks: [frame('f1', 'Checkout')],
+      matches: [{ source: 'jira', externalId: 'PROJ-12' }],
+    })
+    expect(
+      await actionOf(h.deps, 'create-task-from-issue').run(
+        context({ issueUrl: 'PROJ-12', source: 'linear', service: 'Checkout' }),
+      ),
+    ).toMatchObject({ status: 'performed', result: { issue: { source: 'jira' } } })
+  })
+
+  it('re-asks with the real candidates when a named tracker matches none of several', async () => {
+    const h = harness({
+      matches: [
+        { source: 'jira', externalId: 'PROJ-12' },
+        { source: 'linear', externalId: 'PROJ-12' },
+      ],
+    })
+    expect(
+      await actionOf(h.deps, 'create-task-from-issue').run(
+        context({ issueUrl: 'PROJ-12', source: 'bitbucket' }),
+      ),
+    ).toEqual({
+      status: 'needs_input',
+      reason: 'ambiguous_issue_source',
+      field: 'source',
+      candidates: ['jira', 'linear'],
+    })
+    expect(h.filed).toEqual([])
   })
 
   it('says no connected tracker recognises the reference', async () => {

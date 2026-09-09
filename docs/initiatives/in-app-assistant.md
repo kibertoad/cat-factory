@@ -28,6 +28,9 @@ how a turn is bounded:
   declaration the validator enforces.
 - A turn answers with DATA in all three outcomes. No model prose is on the wire, so every sentence the
   SPA shows comes out of the i18n catalog.
+- A QUESTION is answered with data too. `needs_input` carries the action and the arguments it
+  resolved, so the SPA posts the same action back with the chosen candidate in the field the platform
+  named: no model, nothing billed, and no chance of routing somewhere else on the way back.
 - The billable call answers to the workspace budget before any vendor is reached, the standing rule
   for a model call no run start gates.
 
@@ -35,17 +38,18 @@ how a turn is bounded:
 
 ### Phase 1: the surface and the first three actions
 
-| Item                                                                                        | Status |
-| ------------------------------------------------------------------------------------------- | ------ |
-| Contracts: `assistant.ts` (outcome variant, reason vocabularies) + the two route contracts  | done   |
-| Prompt: `agents/prompts/assistant.ts` (system prompt, catalog rendering, delimited request) | done   |
-| Engine: `AssistantService` + `assistant.logic.ts` (selection parse, name match, repo slug)  | done   |
-| Actions: dependency edge, service from repo URL, task from issue URL                        | done   |
-| Wiring: `createAssistantModule` in the composition root; `AssistantController`, member tier | done   |
-| `WorkspaceService.boardBlocks` (the composed board without the snapshot's other four reads) | done   |
-| SPA: `AssistantModal.vue`, `stores/assistant.ts`, nav contribution (`intake`, basic tier)   | done   |
-| i18n: `assistant.*` + `nav.assistant` + the palette entry, all ten locales                  | done   |
-| Design doc + this tracker + the CLAUDE.md flow entry                                        | done   |
+| Item                                                                                          | Status |
+| --------------------------------------------------------------------------------------------- | ------ |
+| Contracts: `assistant.ts` (outcome variant, reason vocabularies) + the two route contracts    | done   |
+| Prompt: `agents/prompts/assistant.ts` (system prompt, catalog rendering, delimited request)   | done   |
+| Engine: `AssistantService` + `assistant.logic.ts` (selection parse, name match, repo slug)    | done   |
+| Actions: dependency edge, service from repo URL, task from issue URL                          | done   |
+| Wiring: `createAssistantModule` in the composition root; `AssistantController`, member tier   | done   |
+| `WorkspaceService.boardBlocks` (the composed board without the snapshot's other four reads)   | done   |
+| SPA: `AssistantModal.vue`, `stores/assistant.ts`, nav contribution (`intake`, basic tier)     | done   |
+| i18n: `assistant.*` + `nav.assistant` + the palette entry, all ten locales                    | done   |
+| The ANSWER half of a turn (`kind: 'answer'`), so a clarification terminates deterministically | done   |
+| Design doc + this tracker + the CLAUDE.md flow entry                                          | done   |
 
 ### Phase 2: open the catalog to deployments (not started)
 
@@ -83,9 +87,21 @@ catch is a repository read behaving differently under D1 and Postgres inside a t
   workspace's projection, and adding one would be the wrong fix: a repository the connection cannot
   see is one whose clones will fail.
 - **`addServiceFromRepo` answers with a frame whether it created one or MOUNTED an existing account
-  service.** `created` is derived by reading the board's frames BEFORE the write; reading the response
-  alone cannot tell the two apart, and a person told only "here is your service" reads the second as
-  the first.
+  service**, so it now reports the DISPOSITION beside it. Deriving `created` by reading the board's
+  frames before the write looks right and is wrong in exactly the case the flag exists for: the
+  account-wide dedupe answers with the frame of a service homed on ANOTHER board, which was never
+  among this board's blocks, so a first-time mount read as a fresh import. Only the operation knows
+  which path it took.
+- **A CANDIDATE is an answer, so it must be a legal value for the field the question names.** This
+  is why the near-misses an unknown repository offers are `owner/name` slugs AND why the action
+  accepts a slug beside a URL, and why an ambiguous tracker names the `source` argument rather than
+  the `issueUrl` that was fine. Two of the first three actions offered candidates their own next turn
+  would have refused, which is a question with no acceptable answer: the loop could not terminate.
+- **`TaskConnectionService.isEnabled` is not "is this tracker connected".** It defaults to TRUE for a
+  source with no settings row, which is every source nobody ever connected, so gating on it counts
+  every REGISTERED tracker as available. `isOffered` (`available && enabled`) is the predicate, and
+  reading it per provider would be an N+1: `listSourceStates` answers for the whole registry in one
+  read, which is the fix for both.
 - **A container for a new task must be homed in the REQUEST workspace.** `createTaskFromIssue` asserts
   it, so a service this board merely MOUNTS is not a valid target; that refusal is the service's own
   404 rather than something the action pre-empts.

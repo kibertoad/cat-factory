@@ -31,6 +31,11 @@ prompt ─▶ AssistantService
              ├─ catalog lookup by id                 ← unknown id ⇒ declined
              ├─ descriptor validation per argument   ← unusable value ⇒ needs_input
              └─ action.run(...)                      ← board write, through the board's own service
+
+answer  ─▶ AssistantService
+             ├─ catalog lookup by id                 ← same lookup, no model, no budget probe
+             ├─ descriptor validation per argument   ← the SAME rules a routed turn passes
+             └─ action.run(...)                      ← the same write
 ```
 
 Everything after the model call is deterministic, which is what makes the surface safe to point at
@@ -64,12 +69,42 @@ A turn answers with a variant, not a status code:
 retypes the whole sentence anyway, and the second question is usually answered by whatever settles
 the first.
 
+### Answering a question, and why it is not another prompt
+
+A `needs_input` carries the ACTION it was heading for and the ARGUMENTS it resolved alongside the
+field and the candidates, and the SPA answers it by posting the same action back with the chosen
+value in that field (`kind: 'answer'`). No model runs, nothing is billed, and the turn cannot route
+somewhere else on the way back.
+
+The surface first answered a clarification by appending the candidate to the sentence and routing
+it again, and that cannot converge. The words that produced the question are still in the prompt, so
+"add https://github.com/wrong-org/payments as a service (acme/payments)" hands the model two
+repositories and no rule for choosing. Worse, a candidate the chosen action has no declared argument
+for is simply dropped: the tracker ids an ambiguous reference offers had nowhere to land, so
+clicking one re-asked the identical question forever.
+
+Two rules follow, and they bind every action added later:
+
+- **A candidate must be a legal VALUE for the field the question names.** This is why an unknown
+  repository's near-misses are `owner/name` slugs AND why `add-service-from-repo` accepts a slug
+  beside a web URL, and why an ambiguous tracker names the `source` field rather than the `issueUrl`
+  that was fine. A candidate the next turn would refuse is a question with no acceptable answer.
+- **An answer is held to the same rules as a routed reply.** Undeclared keys are dropped, values go
+  through the shared descriptor validation, every name is re-resolved against the board, and the
+  action runs under the caller's own tier. The answer path grants nothing the prompt path could not
+  already have produced, which is what keeps it from becoming a second, weaker door.
+
 Everything that is a genuine FAILURE stays an error and goes through the one error funnel with its
 `details.reason` intact, exactly as the equivalent button's failure does: no model configured
 (`assistant_model_unavailable`), the workspace budget spent (`budget_exhausted`), a reply that
 carried no decision (`assistant_reply_unreadable`), the vendor failing (`assistant_generation_failed`),
 plus every refusal the services underneath already raise (an unconfigured tracker, an issue already
 filed as a task, a board rule).
+
+The last two are members of `UNAVAILABLE_REASONS`, so they carry their own translated copy: the
+generic 503 wording commits to "this deployment has not configured the capability", which is the
+misattribution itself for a provider that IS wired and is either down or answering unusably. The
+other two are left on the generic copy on purpose, because for them it is exactly right.
 
 ## The action catalog
 
@@ -100,7 +135,7 @@ Exceptions keep their usual meaning: a refusal by the service underneath.
 | ---------------------------- | -------------------------------------- | --------------------------------------------------------------------- |
 | `declare-service-dependency` | `consumer`, `provider`, `description?` | `BoardService.updateBlock` with the frame's `serviceConnections`      |
 | `add-service-from-repo`      | `repoUrl`, `directory?`                | `BoardService.addServiceFromRepo`                                     |
-| `create-task-from-issue`     | `issueUrl`, `service?`                 | `TaskImportService.import` then `TaskLinkService.createTaskFromIssue` |
+| `create-task-from-issue`     | `issueUrl`, `service?`, `source?`      | `TaskImportService.import` then `TaskLinkService.createTaskFromIssue` |
 
 Each is the operation a board button already performs, so the assistant adds a way to ASK for it
 rather than a capability nobody could otherwise reach. Nothing here restates a board rule: a
@@ -117,17 +152,33 @@ What the actions DO own is the resolution the board button gets from a form and 
   tie-broken, because every available tiebreak picks a service on grounds the person never stated.
 - **A repository URL → a projected repo.** Through the shared `parseRepoWebUrl`, the same parser the
   repository picker resolves a pasted URL with, so GitHub and GitLab shapes (subgroups, `/-/`,
-  `/tree/<ref>/<path>`) are understood identically on both surfaces. The repository must already be
-  projected for the workspace: a URL that is not is either a repository the deployment has no
-  credential for or one whose connection has not synced, and inventing a link for it would create a
-  service frame whose every run fails at clone time.
-- **An issue URL → a tracker, and a service.** Which tracker is answered by asking every ENABLED
-  source's own `parseRef`; two answers is a question, never a pick, so the registry's ordering can
-  never decide which tracker a person's issue came from. Which service is the one whose linked
-  repository the issue lives in (`Service.repoGithubId`, the sole repo ⇄ frame linkage), read for the
-  whole board in one batched query. A tracker with no repository (Jira, Linear), a repository this
-  workspace does not project, and a monorepo repository backing several services all land on the
-  same question, because the person's next move is the same in all three.
+  `/tree/<ref>/<path>`) are understood identically on both surfaces. A bare `owner/name` slug is
+  accepted beside it (`parseRepoRef`), and deliberately NOT in the shared parser, which declines one
+  on purpose: without a host the picker cannot tell a slug from a search term, while this surface
+  OFFERS slugs as the answer to "which repository did you mean?". The repository must already be
+  projected for the workspace: a reference that is not names either a repository the deployment has
+  no credential for or one whose connection has not synced, and inventing a link for it would create
+  a service frame whose every run fails at clone time.
+- **An add → CREATED or MOUNTED.** `addServiceFromRepo` dedupes a whole-repo service across the
+  account, so it answers with a frame either way and the turn reports which happened. The
+  disposition comes from the board service itself rather than from comparing the returned frame
+  against the board as it stood: the mount answers with the frame of a service homed on ANOTHER
+  board, which was never among this board's blocks, so that comparison read exactly the case the
+  flag exists for as a fresh import.
+- **An issue URL → a tracker, and a service.** Which tracker is answered by asking every OFFERED
+  source's own `parseRef`; two answers is a question about the `source` argument, never a pick, so
+  the registry's ordering can never decide which tracker a person's issue came from. A stated
+  `source` only BREAKS THAT TIE: naming a tracker none of the providers claims says the name was
+  wrong, not that the reference is unreadable, so it is ignored rather than allowed to collapse the
+  answer to nothing. OFFERED means
+  `available && enabled`, read through the one batched `listSourceStates`: the per-source `enabled`
+  toggle defaults ON when nobody has connected the source, so gating on it alone would count every
+  REGISTERED tracker as connected and turn a bare `PROJ-12` into an ambiguity with no real second
+  answer. Which service is the one whose linked repository the issue lives in
+  (`Service.repoGithubId`, the sole repo ⇄ frame linkage), read for the whole board in one batched
+  query. A tracker with no repository (Jira, Linear), a repository this workspace does not project,
+  and a monorepo repository backing several services all land on the same question, because the
+  person's next move is the same in all three.
 
 ### Why the catalog is not a registry
 
@@ -155,7 +206,9 @@ The call is tagged `agentKind: 'assistant'` through `catFactoryObservability`, s
 the same rollups every other inline call does and an operator can see what the assistant spends.
 
 It answers to the workspace BUDGET (`SpendService.isOverBudget`), like every billable model call no
-run start gates. The guard runs BEFORE the vendor call and fails closed with `budget_exhausted`.
+run start gates. The guard runs BEFORE the vendor call and fails closed with `budget_exhausted`. An
+ANSWERED clarification skips it, because it reaches no vendor: refusing to settle a question the
+platform itself asked, over a budget the answer does not spend, would strand the person mid-request.
 
 ## Authorization
 

@@ -1,4 +1,4 @@
-import type { AssistantActionResult } from '~/types/domain'
+import type { AssistantActionResult, AssistantAnswer, AssistantOutcome } from '~/types/domain'
 
 /**
  * The block a performed turn should reveal on the board.
@@ -20,5 +20,26 @@ export function revealTarget(result: AssistantActionResult): string {
       return result.service.blockId
     case 'create-task-from-issue':
       return result.task.blockId
+  }
+}
+
+/**
+ * The answer to a clarification, once a person has picked one of its candidates.
+ *
+ * The chosen value REPLACES the field the platform named and everything else is carried over
+ * untouched, so the next turn re-runs the same action with the one unresolved argument settled.
+ *
+ * Appending the candidate to the prompt and routing it again is what this replaces, and it could
+ * not terminate: the words that produced the question are still in the sentence (a repository
+ * under the wrong owner sits there beside the right one), and a candidate with no declared
+ * argument to land in is dropped on the way through.
+ */
+export function answerFor(
+  outcome: Extract<AssistantOutcome, { status: 'needs_input' }>,
+  candidate: string,
+): AssistantAnswer {
+  return {
+    actionId: outcome.actionId,
+    arguments: { ...outcome.arguments, [outcome.field]: candidate },
   }
 }

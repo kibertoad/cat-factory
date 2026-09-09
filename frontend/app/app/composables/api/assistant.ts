@@ -1,4 +1,5 @@
 import { getAssistantCapabilityContract, runAssistantTurnContract } from '@cat-factory/contracts'
+import type { AssistantAnswer } from '~/types/domain'
 import type { ApiContext } from './context'
 
 /** In-app assistant: what it can do here, and one prompt-to-action turn. */
@@ -12,6 +13,17 @@ export function assistantApi({ send, ws }: ApiContext) {
     // Run one turn. A live model call plus a board write, so it can take a couple of seconds:
     // the modal shows progress and the outcome is rendered from the returned data.
     runAssistantTurn: (workspaceId: string, prompt: string) =>
-      send(runAssistantTurnContract, { pathPrefix: ws(workspaceId), body: { prompt } }),
+      send(runAssistantTurnContract, {
+        pathPrefix: ws(workspaceId),
+        body: { kind: 'prompt', prompt },
+      }),
+
+    // Answer a question the last turn asked. The same endpoint, and deliberately: it performs one
+    // catalog action exactly as a prompt does. It reaches no model, so it is the fast half.
+    answerAssistantTurn: (workspaceId: string, answer: AssistantAnswer) =>
+      send(runAssistantTurnContract, {
+        pathPrefix: ws(workspaceId),
+        body: { kind: 'answer', answer },
+      }),
   }
 }

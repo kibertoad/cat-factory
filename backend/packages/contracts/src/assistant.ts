@@ -18,7 +18,9 @@ import { taskSourceKindSchema } from './tasks.js'
 //                 SPA can link straight to the frame or task the turn produced.
 //   needs_input: the platform could not resolve one argument to a board entity (no service by
 //                 that name, two that match, a repository this workspace has not connected). It
-//                 names the FIELD and, where it has them, the CANDIDATES it was choosing between.
+//                 names the FIELD, the CANDIDATES it was choosing between where it has them, and
+//                 the ARGUMENTS it resolved, which together are everything the next turn needs to
+//                 ANSWER it without a model and without the sentence being retyped.
 //   declined:    no action in the catalog matches what was asked for.
 //
 // A refusal that belongs to the deployment rather than to the sentence (no model wired, the
@@ -162,6 +164,16 @@ export const assistantClarificationReasonSchema = v.picklist([
 ])
 export type AssistantClarificationReason = v.InferOutput<typeof assistantClarificationReasonSchema>
 
+/**
+ * One action's arguments on the wire: declared keys, string values.
+ *
+ * Capped per value at the same length as a prompt, because they come back INTO the platform when a
+ * clarification is answered, and an unbounded value there would be a bigger input than the sentence
+ * that produced it.
+ */
+export const assistantArgumentsSchema = v.record(v.string(), v.pipe(v.string(), v.maxLength(2000)))
+export type AssistantArguments = v.InferOutput<typeof assistantArgumentsSchema>
+
 /** Why no action ran at all. */
 export const assistantDeclineReasonSchema = v.picklist([
   /** The prompt does not ask for anything in the catalog. */
@@ -183,10 +195,24 @@ export const assistantOutcomeSchema = v.variant('status', [
     status: v.literal('needs_input'),
     actionId: assistantActionIdSchema,
     reason: assistantClarificationReasonSchema,
-    /** The argument key that could not be resolved (`consumer`, `repoUrl`, `issueUrl`, …). */
+    /** The argument key that could not be resolved (`consumer`, `repoUrl`, `source`, …). */
     field: v.string(),
-    /** What the platform was choosing between, at most a handful. Empty ⇒ nothing matched. */
+    /**
+     * What the platform was choosing between, at most a handful. Empty ⇒ nothing matched.
+     *
+     * Every entry is a legal VALUE for {@link field}, not a label describing one, because the
+     * clarification is answered by putting a candidate in that field (see
+     * {@link assistantAnswerSchema}). An action offering a candidate its own next turn would
+     * refuse is a question with no acceptable answer, which is why the near-misses an unknown
+     * repository reports are `owner/name` slugs and the trackers an ambiguous reference reports
+     * are source ids.
+     */
     candidates: v.array(v.string()),
+    /**
+     * The arguments the turn resolved, so the answer can be a RESUMPTION rather than a retyped
+     * sentence. Declared keys only, already validated, and the person's own words either way.
+     */
+    arguments: assistantArgumentsSchema,
   }),
   v.object({ status: v.literal('declined'), reason: assistantDeclineReasonSchema }),
 ])
@@ -195,15 +221,54 @@ export type AssistantOutcome = v.InferOutput<typeof assistantOutcomeSchema>
 /** One turn: what the platform did, and which model read the prompt to decide it. */
 export const assistantTurnSchema = v.object({
   outcome: assistantOutcomeSchema,
-  /** The model that chose the action, so a turn can be traced to the route that produced it. */
-  model: v.object({ provider: v.string(), model: v.string() }),
+  /**
+   * The model that chose the action, so a turn can be traced to the route that produced it.
+   *
+   * NULL for an ANSWERED clarification, which runs no model at all. Reporting the model the
+   * previous turn used would attribute a deterministic re-run to a call that never happened, and
+   * an absent value is the only honest way to say a turn spent nothing.
+   */
+  model: v.nullable(v.object({ provider: v.string(), model: v.string() })),
 })
 export type AssistantTurn = v.InferOutput<typeof assistantTurnSchema>
 
-/** The prompt a turn runs on. */
-export const assistantTurnInputSchema = v.object({
-  prompt: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(2000)),
+/**
+ * Answering a question a previous turn asked, as DATA rather than as more prose.
+ *
+ * This is what makes a clarification terminate. The alternative the surface started with was to
+ * append the chosen candidate to the sentence and route it through the model again, and that
+ * cannot converge: the original words are still in the prompt (a repository under the wrong owner
+ * stays there beside the right one), and a candidate the model has no declared argument to put it
+ * in is simply dropped. Re-running the same action with the same arguments and the one field
+ * replaced is exact, terminates in one step, and bills nothing.
+ *
+ * It grants no authority the prompt path does not. The arguments are re-validated by the same
+ * descriptor rules, undeclared keys are dropped exactly as they are for a model's reply, every
+ * name is re-resolved against the board, and the action is the same one a button performs under
+ * the caller's own tier.
+ */
+export const assistantAnswerSchema = v.object({
+  /** The action the question was asked on behalf of, as its outcome named it. */
+  actionId: assistantActionIdSchema,
+  /** That turn's arguments, with the answered field replaced by the value the person chose. */
+  arguments: assistantArgumentsSchema,
 })
+export type AssistantAnswer = v.InferOutput<typeof assistantAnswerSchema>
+
+/**
+ * What a turn runs on: a sentence to route, or the answer to the question the last one asked.
+ *
+ * Discriminated rather than "a prompt plus an optional answer", because the two share no field: an
+ * answered turn has no sentence to read and never reaches a model, and a shape carrying a required
+ * prompt beside it would make every answer invent one.
+ */
+export const assistantTurnInputSchema = v.variant('kind', [
+  v.object({
+    kind: v.literal('prompt'),
+    prompt: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(2000)),
+  }),
+  v.object({ kind: v.literal('answer'), answer: assistantAnswerSchema }),
+])
 export type AssistantTurnInput = v.InferOutput<typeof assistantTurnInputSchema>
 
 /**

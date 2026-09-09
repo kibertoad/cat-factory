@@ -1,9 +1,8 @@
 import type { DescriptorField, GitHubRepo } from '@cat-factory/contracts'
-import { isSafeRepoDirPath, parseRepoWebUrl } from '@cat-factory/contracts'
-import { serviceFramesOf } from '../assistant.logic.js'
+import { parseRepoRef } from '../assistant.logic.js'
 import type { AssistantActionDefinition, AssistantActionOutcome } from '../types.js'
 import { needsInput, performed } from '../types.js'
-import type { AssistantBoardDeps, AssistantRepoDeps } from './deps.js'
+import type { AssistantRepoDeps } from './deps.js'
 import { readArgument } from './shared.js'
 
 // ---------------------------------------------------------------------------
@@ -13,7 +12,9 @@ import { readArgument } from './shared.js'
 //
 // The URL is parsed by the SHARED parser (`repo-url.ts`), the same one the repository picker
 // resolves a pasted URL with, so GitHub and GitLab shapes (subgroups, `/-/`, `/tree/<ref>/<path>`)
-// are understood identically on both surfaces and a self-managed host is not a special case.
+// are understood identically on both surfaces and a self-managed host is not a special case. A
+// bare `owner/name` slug is accepted beside it, because that is the shape of the near-misses this
+// action itself offers when a URL names a repository the workspace cannot see (`parseRepoRef`).
 //
 // The repository must already be PROJECTED for this workspace. That is not a shortcut: the
 // projection is what the workspace's VCS connection can reach, so a URL that is not in it names
@@ -26,7 +27,7 @@ const PARAMETERS: readonly DescriptorField[] = [
   {
     key: 'repoUrl',
     label: 'Repository URL',
-    help: 'The web URL of the GitHub or GitLab repository, copied verbatim, e.g. https://github.com/acme/payments.',
+    help: 'The web URL of the GitHub or GitLab repository, copied verbatim, e.g. https://github.com/acme/payments. An owner/name slug such as acme/payments is accepted too.',
     required: true,
   },
   {
@@ -37,7 +38,14 @@ const PARAMETERS: readonly DescriptorField[] = [
   },
 ]
 
-/** Repositories whose NAME matches, under any owner: what a wrong-owner URL most often meant. */
+/**
+ * Repositories whose NAME matches, under any owner: what a wrong-owner URL most often meant.
+ *
+ * `owner/name` slugs, and that shape is load-bearing rather than cosmetic: they are offered as the
+ * ANSWER to "which repository did you mean?", so each one has to be a value this action's own
+ * `repoUrl` argument accepts (see `parseRepoRef`). A candidate the next turn would refuse as
+ * unreadable is a question with no acceptable answer.
+ */
 function nearMisses(repos: readonly GitHubRepo[], name: string, limit = 5): string[] {
   const wanted = name.toLowerCase()
   return repos
@@ -46,10 +54,7 @@ function nearMisses(repos: readonly GitHubRepo[], name: string, limit = 5): stri
     .map((repo) => `${repo.owner}/${repo.name}`)
 }
 
-export function addServiceFromRepoAction(
-  board: AssistantBoardDeps,
-  deps: AssistantRepoDeps,
-): AssistantActionDefinition {
+export function addServiceFromRepoAction(deps: AssistantRepoDeps): AssistantActionDefinition {
   return {
     actionId: 'add-service-from-repo',
     purpose:
@@ -64,7 +69,7 @@ export function addServiceFromRepoAction(
     async run({ workspaceId, arguments: args }): Promise<AssistantActionOutcome> {
       const url = readArgument(args, 'repoUrl')
       if (url === undefined) return needsInput('missing_argument', 'repoUrl')
-      const parsed = parseRepoWebUrl(url)
+      const parsed = parseRepoRef(url)
       if (!parsed) return needsInput('unreadable_repository_url', 'repoUrl')
 
       const repos = await deps.listRepos(workspaceId)
@@ -77,28 +82,20 @@ export function addServiceFromRepoAction(
         return needsInput('unknown_repository', 'repoUrl', nearMisses(repos, parsed.repo))
       }
 
-      // The subdirectory comes from the argument when the person named one, else from the URL
-      // itself when it points INTO the tree (`/tree/<ref>/packages/api`). A URL that deep is a
-      // statement about which part of the repository is meant, and dropping it would silently
-      // create a whole-repo service for a request that named a subtree.
-      // A stated directory has already been through the shared `path` validator (the turn refuses
-      // an unsafe one before any action runs); one recovered from the URL has not, so it is
-      // checked here against the same rule rather than trusted for having come from a link.
-      const stated = readArgument(args, 'directory')
-      const fromUrl =
-        parsed.kind === 'dir' && parsed.path !== '' && isSafeRepoDirPath(parsed.path)
-          ? parsed.path
-          : undefined
-      const directory = stated ?? fromUrl
+      // The subdirectory comes from the argument when the person named one, else from the
+      // reference itself when it points INTO the tree (`/tree/<ref>/packages/api`). A URL that
+      // deep is a statement about which part of the repository is meant, and dropping it would
+      // silently create a whole-repo service for a request that named a subtree. Both have been
+      // through the shared path rule by the time they get here: the stated one through the turn's
+      // own descriptor validation, the recovered one inside `parseRepoRef`.
+      const directory = readArgument(args, 'directory') ?? parsed.directory
 
-      // Read BEFORE the write, so `created` is derived from what the board held rather than
-      // guessed from the response: `addServiceFromRepo` answers with a frame either way, and the
-      // one case it MOUNTS an existing org service is exactly the one a person needs told apart
-      // from a fresh import.
-      const before = new Set(
-        serviceFramesOf(await board.listBoardBlocks(workspaceId)).map((f) => f.id),
-      )
-      const block = await deps.addServiceFromRepo(workspaceId, {
+      // `created` comes from the board service's own DISPOSITION, never from comparing the
+      // returned frame against the board as it stood a moment ago. That comparison was wrong in
+      // the one case the flag exists for: the account-wide dedupe answers with the frame of a
+      // service homed on ANOTHER board, which was never among this board's blocks, so a
+      // first-time mount read as a fresh create. Only the operation knows which path it took.
+      const { block, disposition } = await deps.addServiceFromRepo(workspaceId, {
         repoGithubId: repo.githubId,
         // The monorepo flag rides the add request, as it does from the import modal: naming a
         // subdirectory IS the statement that the repository hosts more than one service.
@@ -108,7 +105,7 @@ export function addServiceFromRepoAction(
         actionId: 'add-service-from-repo',
         service: { blockId: block.id, title: block.title },
         repo: { owner: repo.owner, name: repo.name, directory: directory ?? null },
-        created: !before.has(block.id),
+        created: disposition === 'created',
       })
     },
   }

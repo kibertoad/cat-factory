@@ -15,7 +15,10 @@ import { readArgument, resolveNamedService, serviceTitles } from './shared.js'
 // guessed:
 //
 //  - WHICH TRACKER the URL belongs to is answered by the providers themselves, by asking every
-//    enabled source to parse it. Two answers is a question, never a pick (see `matchIssueSources`).
+//    OFFERED source to parse it. Two answers is a question, never a pick (see `matchIssueSources`),
+//    asked about the `source` argument: a request may state it outright ("file PROJ-7 from Jira")
+//    and an answered clarification fills it in. It only ever BREAKS A TIE among the providers'
+//    own answers, so naming a tracker cannot conjure one that does not read the reference.
 //  - WHICH SERVICE the task is filed under is the one whose linked repository the issue lives in,
 //    when the issue is repo-backed and exactly one service is linked to that repository. Anything
 //    else (a Jira ticket with no repository in its URL, a monorepo repository backing several
@@ -39,6 +42,11 @@ const PARAMETERS: readonly DescriptorField[] = [
     key: 'service',
     label: 'Service',
     help: 'The name of the service to file the task under. Omit it when the request does not say, and the platform uses the service backed by the issue’s own repository.',
+  },
+  {
+    key: 'source',
+    label: 'Tracker',
+    help: 'Which tracker the issue lives in, e.g. jira, linear, github, gitlab. Only worth stating when the reference could belong to more than one, such as a bare ticket key. Omit it and the connected trackers are asked which of them recognises the reference.',
   },
 ]
 
@@ -96,12 +104,27 @@ export function createTaskFromIssueAction(
       const url = readArgument(args, 'issueUrl')
       if (url === undefined) return needsInput('missing_argument', 'issueUrl')
 
-      const matches = await deps.matchIssueSources(workspaceId, url)
-      if (matches.length === 0) return needsInput('unknown_issue_source', 'issueUrl')
+      const recognised = await deps.matchIssueSources(workspaceId, url)
+      if (recognised.length === 0) return needsInput('unknown_issue_source', 'issueUrl')
+
+      // `source` is a TIE-BREAK among the trackers that recognised the reference, never a filter
+      // over them. WHICH trackers can read a reference is the providers' answer and nobody else's,
+      // so a stated name that is none of them says the NAME was wrong, not that the reference is
+      // unreadable: dropping to zero there would turn a pasted GitHub URL the model labelled
+      // `jira` into "no connected tracker recognises that link", which is both false and a remedy
+      // (go and connect one) that fixes nothing. Ignored, the answer is the one the providers gave.
+      const stated = readArgument(args, 'source')?.toLowerCase()
+      const chosen =
+        stated === undefined ? recognised : recognised.filter((match) => match.source === stated)
+      const matches = chosen.length === 0 ? recognised : chosen
       if (matches.length > 1) {
+        // The question names the `source` FIELD, not the URL that was fine: a bare `PROJ-12` is
+        // legitimately both a Jira key and a Linear identifier, and what is missing is which
+        // tracker was meant. Naming `issueUrl` here would offer tracker ids as the answer to a
+        // question about a URL, and the next turn has no `issueUrl` reading that accepts one.
         return needsInput(
           'ambiguous_issue_source',
-          'issueUrl',
+          'source',
           matches.map((match) => match.source),
         )
       }
