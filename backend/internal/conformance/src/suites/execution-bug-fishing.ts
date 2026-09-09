@@ -116,8 +116,10 @@ export function defineBugFishingSuite(harness: ConformanceHarness): void {
       expect(findings.slice(0, 2).map((f) => f.severity)).toEqual(['critical', 'low'])
       expect(findings[0]!.evidence).toContain('caches.session.invalidate')
 
-      // With no board setting, the default a mark takes is the built-in bug-fix preset.
-      expect(state.defaultFixPipelineId).toBe('pl_bugfix')
+      // With no board setting, the default a mark takes is the built-in TEST-VERIFIED bug-fix
+      // preset: a fished defect has no reporter to reproduce it with, so the committed regression
+      // test is the deliverable.
+      expect(state.defaultFixPipelineId).toBe('pl_bugfix_tested')
 
       // The park raised the triage card, counting what is left to decide rather than the total.
       const snap = await call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
@@ -166,7 +168,7 @@ export function defineBugFishingSuite(harness: ConformanceHarness): void {
       )
       expect(marked.status).toBe(200)
       const spawn = marked.body.findings?.find((f) => f.id === findings[0]!.id)?.spawn
-      expect(spawn?.pipelineId).toBe('pl_bugfix')
+      expect(spawn?.pipelineId).toBe('pl_bugfix_tested')
       expect(spawn?.taskId).toBeTruthy()
       // SETTLED, not merely present. The record is written first as a `pending` claim (which is
       // what makes two markings of one finding safe), so a caller that read only its presence
@@ -181,7 +183,7 @@ export function defineBugFishingSuite(harness: ConformanceHarness): void {
       expect(spawned.expeditionId).toBe(task.body.id)
       expect(spawned.parentId).toBe('blk_auth')
       expect(spawned.taskType).toBe('bug')
-      expect(spawned.pipelineId).toBe('pl_bugfix')
+      expect(spawned.pipelineId).toBe('pl_bugfix_tested')
       // The finding's own body reaches the fix task, so its investigator starts from what the
       // expedition found rather than from a title.
       expect(spawned.description).toContain('src/session.ts')

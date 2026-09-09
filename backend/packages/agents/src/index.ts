@@ -501,6 +501,13 @@ export {
   bugFixGuidanceFor,
 } from './agents/kinds/repro-test.js'
 export {
+  INTEGRATION_TEST_KIND,
+  INTEGRATION_TEST_AGENT_KINDS,
+  integrationTestOutcome,
+  type IntegrationTestOutcome,
+  registerIntegrationTestAgent,
+} from './agents/kinds/integration-test.js'
+export {
   RALPH_AGENT_KIND,
   RALPH_AGENT_KINDS,
   RALPH_VALIDATION_COMMAND_CONFIG_ID,

@@ -139,6 +139,36 @@ describe('composePrVerificationReport', () => {
     expect(report.tests.fixerAttempts).toBe(1)
   })
 
+  it('distinguishes a run that verified through COMMITTED tests from one that verified nothing', () => {
+    // The tester section is absent either way, and the two absences mean opposite things. A
+    // reviewer told only "no tester step" reads the change as unexercised, which is exactly what a
+    // preset that commits its own coverage (`pl_bugfix_tested`) did not do.
+    const verified = composePrVerificationReport(
+      instance([
+        step({ agentKind: 'coder' }),
+        step({
+          agentKind: 'integration-test',
+          custom: {
+            outcome: 'partial',
+            testPaths: ['test/billing/refund.spec.ts', 'test/billing/webhook.spec.ts'],
+            mocks: ['mocks/mappings/psp-refund.json'],
+            uncovered: ['the settlement window: needs production data'],
+          },
+        }),
+      ]),
+      INPUTS,
+    )
+    expect(verified.tests.status).toBe('absent')
+    expect(verified.tests.note).toContain('verified the change from the repository')
+    // Counts are COMPUTED from the step's own lists, so the note cannot claim more than it stated.
+    expect(verified.tests.note).toContain('2 test files, 1 stated gap')
+
+    // And with no such step, the note stays the plain absence.
+    const bare = composePrVerificationReport(instance([step({ agentKind: 'coder' })]), INPUTS)
+    expect(bare.tests.note).toContain('No tester step in this pipeline')
+    expect(bare.tests.note).not.toContain('repository')
+  })
+
   it('reports the deployer fan-out and whether the environments were torn down', () => {
     const deployed = step({
       agentKind: 'deployer',

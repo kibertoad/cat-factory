@@ -14,7 +14,8 @@ import * as v from 'valibot'
 // each marked finding spawns its OWN bug-fix task (a separate block + run) linked
 // back to the expedition. The pipeline those spawned tasks run is the workspace's
 // `bugFishingFixPipelineId` setting, overridable per marking request, defaulting to
-// the built-in `pl_bugfix`.
+// the built-in `pl_bugfix_tested` (the bug-fix preset that verifies through committed
+// tests and mocks rather than through a live environment).
 //
 // All expedition state rides the run's `bug-fisher` step (`PipelineStep.bugFishing`)
 // — no side table — so it is runtime-symmetric by construction, exactly like
@@ -575,9 +576,10 @@ export const bugFishingStepStateSchema = v.object({
   model: v.optional(v.nullable(v.string())),
   /**
    * The pipeline a marked finding's spawned task runs when the marking names none: the
-   * workspace's `bugFishingFixPipelineId`, else the built-in bug-fix preset. Resolved when the
-   * expedition is planned and recorded here, so the window can state the default it will use
-   * without a second read and the record says which default a spawn actually took.
+   * workspace's `bugFishingFixPipelineId`, else the built-in test-verified bug-fix preset.
+   * Resolved when the expedition is planned and recorded here, so the window can state the
+   * default it will use without a second read and the record says which default a spawn
+   * actually took.
    */
   defaultFixPipelineId: v.optional(v.nullable(v.string())),
 })
@@ -653,7 +655,7 @@ export type BugFishingAgentOutput = v.InferOutput<typeof bugFishingAgentOutputSc
  *
  * `pipelineId` overrides, for THIS request only, the pipeline the spawned tasks run; omitted
  * ⇒ the expedition's resolved default (the workspace's `bugFishingFixPipelineId`, else the
- * built-in bug-fix preset).
+ * built-in test-verified bug-fix preset).
  */
 export const addressBugFishingFindingsSchema = v.object({
   /** The findings to act on. At least one; an unknown or already-spawned id is refused. */

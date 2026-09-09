@@ -109,9 +109,15 @@ describe('validatePipelineShape', () => {
   })
 
   it('every bugfix preset writes a failing reproduction test BEFORE the fix', () => {
-    const byId = new Map(seedPipelines().map((p) => [p.id, p]))
-    for (const id of ['pl_bugfix', 'pl_bug_triage']) {
-      const kinds = byId.get(id)!.agentKinds
+    // Derived from the classifier rather than a named list, because what is being pinned is a
+    // property of the CLASS: a preset built around a defect report has a red test before the fix,
+    // whichever way it goes on to verify the fix afterwards. A named list would leave the next
+    // bugfix preset outside the claim while reading as though it were inside it.
+    const bugfix = seedPipelines().filter((p) => p.purpose === 'bugfix')
+    expect(bugfix.length, 'the catalog must ship bugfix presets').toBeGreaterThan(0)
+    for (const preset of bugfix) {
+      const id = preset.id
+      const kinds = preset.agentKinds
       const repro = kinds.indexOf('repro-test')
       const coder = kinds.indexOf('coder')
       expect(repro, `${id} must write a reproduction test`).toBeGreaterThanOrEqual(0)

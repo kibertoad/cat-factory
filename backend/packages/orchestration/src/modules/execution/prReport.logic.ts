@@ -23,7 +23,13 @@ import {
   tallyRequirements,
   unmatchedVerdictIds,
 } from '@cat-factory/contracts'
-import { CI_AGENT_KIND, MERGER_AGENT_KIND, isTesterKind } from './ci.logic.js'
+import {
+  CI_AGENT_KIND,
+  INTEGRATION_TEST_KIND,
+  MERGER_AGENT_KIND,
+  isTesterKind,
+} from './ci.logic.js'
+import { integrationTestVerificationNote } from './integrationTest.logic.js'
 import {
   type PrReportEnvironmentInputs,
   composeEnvironments,
@@ -262,9 +268,19 @@ function composeTests(
     (s) => s.test?.lastReport != null,
   )
   if (!step) {
+    // Two different absences, and only one of them means the change went unexercised. A pipeline
+    // that verifies through COMMITTED tests (`pl_bugfix_tested`) ran a suite and put it in the
+    // diff, so its note says that instead of claiming no test run happened.
+    const committed = findStep(
+      instance,
+      (s) => s.agentKind === INTEGRATION_TEST_KIND,
+      (s) => s.custom !== undefined,
+    )
     return {
       status: 'absent',
-      note: 'No tester step in this pipeline — no test run was performed by the platform.',
+      note:
+        integrationTestVerificationNote(committed?.custom) ??
+        'No tester step in this pipeline, so the platform exercised nothing itself.',
       tested: [],
       outcomes: [],
       concerns: [],

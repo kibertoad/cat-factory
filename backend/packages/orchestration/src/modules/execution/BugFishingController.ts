@@ -18,9 +18,9 @@ import type {
 } from '@cat-factory/kernel'
 import {
   BUG_FISHING_DEFAULT_PASS_BUDGET,
-  BUGFIX_PIPELINE_ID,
   ConflictError,
   NotFoundError,
+  TEST_VERIFIED_BUGFIX_PIPELINE_ID,
   ValidationError,
   getErrorMessage,
   noopLogger,
@@ -702,7 +702,16 @@ export class BugFishingController {
   }
 
   /**
-   * The workspace's configured fix pipeline, else the built-in bug-fix preset.
+   * The workspace's configured fix pipeline, else the built-in TEST-VERIFIED bug-fix preset
+   * (`pl_bugfix_tested`).
+   *
+   * That preset rather than the plain `pl_bugfix` because of what a FISHED finding is: nobody
+   * reported it, so there are no human reproduction steps to work from and no live environment
+   * anybody is watching it in. What a run can leave behind is a committed regression test with the
+   * mocks it needs, which is exactly the shape that preset verifies through, plus its launch check
+   * for the one thing a test cannot say. A workspace that wants a different one names it in
+   * `bugFishingFixPipelineId`, and a single marking overrides both through the request's
+   * `pipelineId`.
    *
    * A settings read that THROWS is deliberately NOT swallowed into the built-in default: an
    * unreachable settings store and a workspace that configured nothing are opposite facts, and
@@ -711,9 +720,9 @@ export class BugFishingController {
    * default", so that one answers the built-in.
    */
   private async resolveDefaultFixPipelineId(workspaceId: string): Promise<string> {
-    if (!this.deps.workspaceSettingsRepository) return BUGFIX_PIPELINE_ID
+    if (!this.deps.workspaceSettingsRepository) return TEST_VERIFIED_BUGFIX_PIPELINE_ID
     const settings = await this.deps.workspaceSettingsRepository.get(workspaceId)
-    return settings?.bugFishingFixPipelineId?.trim() || BUGFIX_PIPELINE_ID
+    return settings?.bugFishingFixPipelineId?.trim() || TEST_VERIFIED_BUGFIX_PIPELINE_ID
   }
 
   /**
