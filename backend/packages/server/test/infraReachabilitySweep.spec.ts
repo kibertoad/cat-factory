@@ -133,7 +133,7 @@ function makeContainer(opts: {
               },
               clearByType: async (workspaceId: string) => {
                 clears.push(workspaceId)
-                return {}
+                return [{}]
               },
             },
           },

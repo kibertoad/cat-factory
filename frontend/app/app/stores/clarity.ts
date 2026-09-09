@@ -83,8 +83,13 @@ export const useClarityStore = defineStore('clarity', () => {
     return allSettled(review) && answeredCount(review) === 0
   }
 
+  /**
+   * Write one block's review into the cache, IN PLACE: per-key, never a whole-record clone.
+   * `reviews` is a deep reactive ref, so replacing the record retriggered every consumer keyed on
+   * an UNCHANGED block; assigning the key retriggers only the block that actually changed.
+   */
   function store(review: ClarityReview) {
-    reviews.value = { ...reviews.value, [review.blockId]: review }
+    reviews.value[review.blockId] = review
   }
 
   /** Patch the cache from a live `clarity` stream event (newest wins per block). */
@@ -125,7 +130,9 @@ export const useClarityStore = defineStore('clarity', () => {
       try {
         const review = await api.getClarityReview(workspace.requireId(), blockId)
         available.value = true
-        reviews.value = { ...reviews.value, [blockId]: review }
+        // By key like `store()`, and directly because a load resolving to "none exists" caches a
+        // null the getter reads as "fetched, absent".
+        reviews.value[blockId] = review
       } catch {
         // 503 (feature off) or any error → hide the UI entry points.
         available.value = false

@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/local-server",
-  "version": "0.148.0",
+  "version": "0.148.1",
   "description": "Local-mode runtime facade for the Agent Architecture Board: the @cat-factory/node-server stack with agent jobs run as local Docker/Podman containers and GitHub accessed via a personal access token — a developer can run the whole product on their own machine.",
   "repository": {
     "type": "git",
@@ -52,7 +52,7 @@
   "devDependencies": {
     "@cat-factory/conformance": "workspace:*",
     "@cat-factory/gates": "workspace:*",
-    "@types/node": "^26.4.1",
+    "@types/node": "^26.5.0",
     "@types/ws": "^8.18.1",
     "typescript": "7.0.2",
     "vitest": "^4.1.11"

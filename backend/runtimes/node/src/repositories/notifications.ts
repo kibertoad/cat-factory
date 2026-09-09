@@ -73,6 +73,21 @@ export class DrizzleNotificationRepository implements NotificationRepository {
     return rows.map(rowToNotification)
   }
 
+  async listOpenByBlock(workspaceId: string, blockId: string): Promise<Notification[]> {
+    const rows = await this.db
+      .select()
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.workspace_id, workspaceId),
+          eq(notifications.block_id, blockId),
+          eq(notifications.status, 'open'),
+        ),
+      )
+      .orderBy(desc(notifications.created_at))
+    return rows.map(rowToNotification)
+  }
+
   async findOpenByBlock(
     workspaceId: string,
     blockId: string,
@@ -239,6 +254,29 @@ export class DrizzleNotificationRepository implements NotificationRepository {
           eq(notifications.status, 'open'),
           or(eq(notifications.severity, 'normal'), isNull(notifications.severity)),
           lte(notifications.created_at, cutoff),
+        ),
+      )
+      .returning()
+    return rows.map(rowToNotification)
+  }
+
+  async dismissOpenByType(
+    workspaceId: string,
+    type: NotificationType,
+    resolvedAt: number,
+  ): Promise<Notification[]> {
+    // One statement settles the whole set, so a workspace that raced two open block-less cards
+    // of this type (NULL block_id is exempt from the partial unique index, so `raise`'s
+    // read-before-write can still stack them) leaves none behind. Mirrors the D1 twin.
+    const rows = await this.db
+      .update(notifications)
+      .set({ status: 'dismissed', resolved_at: resolvedAt })
+      .where(
+        and(
+          eq(notifications.workspace_id, workspaceId),
+          isNull(notifications.block_id),
+          eq(notifications.type, type),
+          eq(notifications.status, 'open'),
         ),
       )
       .returning()

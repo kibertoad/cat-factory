@@ -285,7 +285,7 @@ interface SettleInput {
  * function rather than two. The sweep's alert state IS the card row: `raise` reuses an open card's
  * id while an incident lasts and mints a new one for the next incident, so the id is the INCIDENT
  * half of a receiver's dedupe key, the ordinal counted on that same row is the TRANSITION half,
- * and `clearByType` returning null is exactly "there was nothing open, so no recovery happened
+ * and `clearByType` returning nothing is exactly "there was nothing open, so no recovery happened
  * here".
  */
 async function settleWorkspace(deps: SettleDeps, input: SettleInput): Promise<WorkspaceOutcome> {
@@ -361,7 +361,9 @@ async function settleWorkspace(deps: SettleDeps, input: SettleInput): Promise<Wo
     return 'raised'
   }
 
-  const dismissed = await deps.notifications.clearByType(workspaceId, 'platform_health')
+  // Newest first, so the reported id is the card `findOpenByType` would have named. A second row
+  // can only exist where two sweeps raced the block-less raise; it is settled by the same call.
+  const [dismissed] = await deps.notifications.clearByType(workspaceId, 'platform_health')
   if (!dismissed) return 'none'
   await announce(deps, workspaceId, {
     event: 'platform_health.resolved',

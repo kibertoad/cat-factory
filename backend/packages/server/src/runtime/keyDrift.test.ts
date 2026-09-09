@@ -42,7 +42,10 @@ function fakeContainer(refs: SealedSecretRef[]) {
       input: { type: string; blockId: null; payload: { driftAffected: unknown[] } },
     ) => Promise<void>
   >(async () => {})
-  const clearByType = vi.fn(async () => true)
+  // The real seam returns the cards it settled (plural: a block-less raise has no unique index
+  // behind it, so a raced pair is possible and the clear heals it). The sweep counts a clear only
+  // when something was actually open.
+  const clearByType = vi.fn(async () => [{ id: 'n1' }])
   const listOpenByType = vi.fn(async (ids: string[]) => new Map(ids.map((id) => [id, 'n1'])))
   const container = {
     sealedSecretInventory: inventory,

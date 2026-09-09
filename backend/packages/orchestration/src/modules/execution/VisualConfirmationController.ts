@@ -563,11 +563,8 @@ export class VisualConfirmationController {
   private async clearReadyNotification(workspaceId: string, blockId: string): Promise<void> {
     const svc = this.deps.notificationService
     if (!svc) return
-    const open = await svc.listOpen(workspaceId)
-    for (const card of open) {
-      if (card.type === 'visual_confirmation_ready' && card.blockId === blockId) {
-        await svc.resolve(workspaceId, card.id, 'act')
-      }
-    }
+    // `act`, not `dismiss`: the human did the thing the card asked for. One indexed
+    // (block, type) lookup and one write, never a scan of the workspace's open inbox.
+    await svc.clearOnBlock(workspaceId, blockId, 'visual_confirmation_ready', 'act')
   }
 }

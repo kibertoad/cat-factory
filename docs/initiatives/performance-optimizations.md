@@ -1,6 +1,6 @@
 # Initiative: performance optimizations (prioritized)
 
-**Status:** in progress; items 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 21, 23, 25, 26, 27, 28, 29, 30 landed (20 partly) (emit metrics rollup · gate-poll GitHub reads · live-run projection · parallel dispatch waves · targeted board events · spend/workspace-settings/account-settings cache slices · GitHub-sync + fan-out-publisher parallelism · reuse-the-loaded-list batch across autoStart/initiative-spawn/blueprint-reconcile/block-delete · agent-context single frame-walk + parallel wave · password-reset-token expiry index · risk-policy merge-preset cache slice · board RAF loops driven by an activity pulse · per-block execution index · shared lane derivations with structural sharing · the one refresh funnel · the lean board-snapshot execution projection with its by-id read · bounded observability/kaizen caches · a shallow `execution.instances` · the store/composable hygiene group) · frontend deep re-audit 2026-08-14, after the task-swimlanes rework (#1777): items 5/10/19/20 re-verified and refreshed, PR links backfilled, items 25-30 added · **Owner:** core · **Started:** 2026-07-09
+**Status:** in progress; items 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 21, 23, 25, 26, 27, 28, 29, 30 landed (20 partly) (emit metrics rollup · gate-poll GitHub reads · live-run projection · parallel dispatch waves · targeted board events · spend/workspace-settings/account-settings cache slices · GitHub-sync + fan-out-publisher parallelism · reuse-the-loaded-list batch across autoStart/initiative-spawn/blueprint-reconcile/block-delete · agent-context single frame-walk + parallel wave · password-reset-token expiry index · risk-policy merge-preset cache slice · board RAF loops driven by an activity pulse · per-block execution index · shared lane derivations with structural sharing · the one refresh funnel · the lean board-snapshot execution projection with its by-id read · bounded observability/kaizen caches · a shallow `execution.instances` · the store/composable hygiene group · narrow notification reads on the run-park paths · per-key review-store writes) · frontend deep re-audit 2026-08-14, after the task-swimlanes rework (#1777): items 5/10/19/20 re-verified and refreshed, PR links backfilled, items 25-30 added · **Owner:** core · **Started:** 2026-07-09
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
 > picking up the next slice; update the checklist at the end of each PR.
@@ -53,7 +53,7 @@ symmetric" (CLAUDE.md).
 | 2   | P1  | gateways     | Gate polls: uncached `repoId()` + PAT re-resolved per `request()` + `listCommits` head lookup                                       | ✅ done | [#993](https://github.com/kibertoad/cat-factory/pull/993)   |
 | 3   | P1  | persistence  | Execution lists `SELECT *` (incl. `detail` JSON) + JS status filter on dispatch guard; missing `(workspace_id, kind, status)` index | ✅ done | [#996](https://github.com/kibertoad/cat-factory/pull/996)   |
 | 4   | P1  | dispatch     | `buildJobBody` serializes ~6 independent I/O steps per dispatch                                                                     | ✅ done | [#1051](https://github.com/kibertoad/cat-factory/pull/1051) |
-| 5   | P1  | frontend     | Board snapshot embeds full step outputs the board never reads (re-verified 2026-08-14: unstarted, refs refreshed)                   | ✅ done | this PR                                                     |
+| 5   | P1  | frontend     | Board snapshot embeds full step outputs the board never reads (re-verified 2026-08-14: unstarted, refs refreshed)                   | ✅ done | [#2072](https://github.com/kibertoad/cat-factory/pull/2072) |
 | 6   | P1  | frontend     | Coarse `board` event forces full-snapshot refresh; payload already carries `blockId`                                                | ✅ done | [#1759](https://github.com/kibertoad/cat-factory/pull/1759) |
 | 7   | P2  | caching      | `SpendService` three banned TTL `Map`s (pricing / account / user limits)                                                            | ✅ done | [#1060](https://github.com/kibertoad/cat-factory/pull/1060) |
 | 8   | P2  | caching      | `AccountSettingsService` legacy 30s `Map` (the named anti-pattern)                                                                  | ✅ done | [#1068](https://github.com/kibertoad/cat-factory/pull/1068) |
@@ -67,18 +67,18 @@ symmetric" (CLAUDE.md).
 | 16  | P3  | engine       | `InitiativeLoopService.spawnItem`: per-item pipeline point-read in loop                                                             | ✅ done | [#1078](https://github.com/kibertoad/cat-factory/pull/1078) |
 | 17  | P3  | board        | `BoardScanService` reconcile: `addModule` re-lists whole board per module                                                           | ✅ done | [#1078](https://github.com/kibertoad/cat-factory/pull/1078) |
 | 18  | P3  | board        | Block delete: teardown + remove each re-list the whole board                                                                        | ✅ done | [#1078](https://github.com/kibertoad/cat-factory/pull/1078) |
-| 19  | P3  | persistence  | `notifications.listOpen` unbounded `SELECT *` (body+payload) on snapshot                                                            | ⬜ todo |                                                             |
-| 20  | P3  | frontend     | Hydrate stringify (now WeakMap-cached), gate-map rebuilds per event, no viewport culling, z-index in `nodes` computed               | 🟡 part | this PR                                                     |
+| 19  | P3  | persistence  | Unbounded `listOpen` on the ENGINE's run-park paths (the finding's own snapshot halves, projection + LIMIT, are REFUSED: see below) | ✅ done | [#2212](https://github.com/kibertoad/cat-factory/pull/2212) |
+| 20  | P3  | frontend     | Hydrate stringify (now WeakMap-cached), gate-map rebuilds per event, no viewport culling, z-index in `nodes` computed               | 🟡 part | [#2072](https://github.com/kibertoad/cat-factory/pull/2072) |
 | 21  | P3  | persistence  | `password_reset_tokens.deleteExpired` full-table scan (no `expires_at` index)                                                       | ✅ done | [#1143](https://github.com/kibertoad/cat-factory/pull/1143) |
 | 22  | P3  | spend        | `isOverBudget`: up to 3 live SUM aggregates per proxied LLM call (design decision)                                                  | ⬜ todo |                                                             |
 | 23  | P3  | engine       | `resolveRiskPolicy` re-reads merge preset per gate evaluation (optional slice)                                                      | ✅ done | [#1143](https://github.com/kibertoad/cat-factory/pull/1143) |
 | 24  | P2  | gateways     | Dispatch GH client: no single-flight / throttle; concurrent same-run steps duplicate token mint + branch probe                      | ⬜ todo |                                                             |
 | 25  | P1  | frontend     | `execution.getByBlock` full scan per call on the card/lane/measurement paths; cards scan global gate lists                          | ✅ done | [#2023](https://github.com/kibertoad/cat-factory/pull/2023) |
-| 26  | P2  | frontend     | Activity pulse re-wakes the DOM-measuring loops on every card re-render, so a busy board never parks them                           | ✅ done | this PR                                                     |
-| 27  | P2  | frontend     | Observability/kaizen stores grow unbounded per session and survive board switches                                                   | ✅ done | this PR                                                     |
+| 26  | P2  | frontend     | Activity pulse re-wakes the DOM-measuring loops on every card re-render, so a busy board never parks them                           | ✅ done | [#2043](https://github.com/kibertoad/cat-factory/pull/2043) |
+| 27  | P2  | frontend     | Observability/kaizen stores grow unbounded per session and survive board switches                                                   | ✅ done | [#2072](https://github.com/kibertoad/cat-factory/pull/2072) |
 | 28  | P2  | frontend     | ~35 direct `refresh()` call sites + starvable trailing-only debounce + stacking retry chains                                        | ✅ done | [#2023](https://github.com/kibertoad/cat-factory/pull/2023) |
-| 29  | P3  | frontend     | Deep reactivity over `execution.instances` (shallowRef viable) and `board.blocks` (blocked by in-place writes)                      | ✅ done | this PR                                                     |
-| 30  | P3  | frontend     | Identity churn, uncached derived counts, per-invocation timers, drag/viewport listener leaks (grouped)                              | ✅ done | this PR                                                     |
+| 29  | P3  | frontend     | Deep reactivity over `execution.instances` (shallowRef viable) and `board.blocks` (blocked by in-place writes)                      | ✅ done | [#2072](https://github.com/kibertoad/cat-factory/pull/2072) |
+| 30  | P3  | frontend     | Identity churn, uncached derived counts, per-invocation timers, drag/viewport listener leaks (grouped)                              | ✅ done | [#2072](https://github.com/kibertoad/cat-factory/pull/2072) |
 
 ## Detailed findings
 
@@ -714,6 +714,56 @@ consumer constrains the projection: the snapshot controller reuses the SAME list
 must survive for that read (or it gets its own narrow query). The SPA-side derivation over
 the list is item 10's `collectReviewDebt` hoist and item 30's `byBlock` churn.
 
+**LANDED, with the premise corrected: the snapshot was the SMALL half.** Investigating the
+read found five OTHER callers of the same unbounded `listOpen`, all on run-state transitions
+rather than on board load, and each pulling every open card's `body` + `payload` JSON to test a
+one-row predicate in JS: `ensureWaitingNotification` (does a card already point at this run),
+`raiseBudgetPaused` / `clearBudgetPaused` (is the workspace-wide card open), and the two
+"ready for review/testing" clears in `HumanTestController` / `VisualConfirmationController`.
+Those are the hot, unbounded ones: they run per park and per gate pass, and their cost grows
+with what humans have NOT actioned. They now read narrowly, three of them through seams that
+already existed (`findOpenByBlock`, `findOpenByType`, `clearByType`, all exposed on
+`NotificationService`), and `ensureWaitingNotification` through a new
+`NotificationRepository.listOpenByBlock(workspaceId, blockId)`: every open card on ONE block, of
+ANY type, mirrored D1 ⇄ Drizzle with a conformance assertion, served by the existing
+`(workspace_id, block_id, type, status)` index on its leading columns and allow-listed `remote`
+for mothership mode. `type` is deliberately not a parameter: the caller asks whether ANY card
+points at the block, so narrowing to one type would raise a duplicate beside a card of another
+type. `RunStateMachine.ensureWaitingNotification.test.ts` counts inbox scans and pins zero.
+
+The block-LESS clear had to grow a plural to make the swap safe. `clearBudgetPaused` was a loop
+over the open inbox dismissing every `budget_paused` card, and the obvious replacement,
+`clearByType`, settled at most one. That is not equivalent: a block-less card is exempt from the
+partial unique index behind the block-scoped raise (NULLs are distinct in a unique index), so
+`raise` still de-dupes it with a read-before-write, and two runs pausing in one tick can leave two
+open rows. The old loop healed that on resume; the point-read would have left one open forever,
+escalated red for a budget the operator had already raised. So `clearByType` now settles the whole
+set through one indexed `UPDATE … RETURNING` (`NotificationRepository.dismissOpenByType`, mirrored
+D1 ⇄ Drizzle with a conformance case seeding the raced pair), which is also one round trip fewer
+than the find-then-upsert it replaced. Its siblings on the block get the same treatment for the
+duplication rather than the race: `clearOnBlock` is the one find-then-settle both "ready for
+review/testing" clears and `clearWaitingDecision` share.
+
+`raiseBudgetPaused` KEEPS its `findOpenByType` guard, which reads like a duplicate of the read
+`raise` performs one line later and is not. `raise` persists the re-raise whether or not the card
+changed, and this runs once per paused run per step for as long as the budget stays exhausted: on
+the steady-state path the guard trades that write for a read. The card's title and body are
+constant, so there is no content refresh to lose by skipping it.
+
+**The two halves the finding actually proposed are REFUSED, not deferred**, so nobody
+re-proposes them blind:
+
+- **Projecting away `body`/`payload`: refused on its own premise.** The finding's condition
+  ("if the inbox list renders only title/severity/type until a card opens") is false: the inbox
+  renders `body` on every row and reads `payload.prUrl`, `payload.changeClass` and
+  `payload.platformFailingRuns` inline. Projecting them away would buy the snapshot a smaller
+  payload and cost a per-card fetch on a surface that renders every card at once.
+- **A LIMIT: refused, and the codebase had already argued it.** `PublicApiController`'s
+  notifications route states the reason at the site: the OPEN set is bounded by human action,
+  which is why it is unpaginated. A silent cap would also make the toolbar's count lie, and a
+  truthful one is a wire-shape plus translated overflow copy for a list nothing has been observed
+  to overflow. The unbounded read that DID matter was the engine's, and that is what landed.
+
 ### 20. Frontend hydrate/derived-state costs (grouped, P3; states refreshed 2026-08-14)
 
 - `frontend/app/app/stores/board.ts:90-123`: `hydrate`'s stringify compare is now WeakMap-cached
@@ -1144,9 +1194,24 @@ blocks in place across three modules.
 - **Derived counts**: `requirements`' five composing predicates share one tally memoised on the
   review OBJECT (`store` replaces it on every write, so identity self-invalidates), and
   `backgroundStage`'s recommendation scan is a computed `Set` instead of a per-card pass.
-- **Whole-record clones are NOT done.** The review-family stores and `notifications.byBlock` still
-  rebuild a record/array per event. Sharing structure there means changing what each store hands
-  its consumers, which is a bigger change than the rest of this group and wants its own slice.
+- **Whole-record clones: LANDED as a later slice**, and smaller than the group expected. Every
+  one of them (`requirements`, `clarity`, `brainstorm`, `consensus`, `docInterview`,
+  `initiative`) writes its key IN PLACE now. The record is a deep reactive ref, so
+  `x.value = { ...x.value, [k]: v }` is a write to the REF, a dependency every reader shares:
+  one review event woke every card on the board. Assigning the key keeps the invalidation on the
+  block that changed. It needed no change to what the stores hand their consumers, which is the
+  shape this group expected to be forced into. `initiative.hydrate` still replaces wholesale, because a
+  snapshot is authoritative for EXISTENCE. `notifications.byBlock` was DELETED rather than fixed:
+  the per-block badge it was built for reads `reviewDebtByBlock` now, and nothing had consumed it
+  since. Pinned in `perKeyWrites.spec.ts`, one table over all six, by counting a `computed`'s
+  evaluations across an event for a DIFFERENT block (plus the first write to a key a reader read
+  while it was absent, the half an in-place write could plausibly lose).
+- **The write was only half of it in `requirements`.** `backgroundStage` is what every card
+  actually reads, and its pending-recommendation half came from a `computed` over the whole
+  `reviews` record, which tracks every key: one event still re-evaluated every card's stage, the
+  exact fan-out the per-key write removes. It answers off the block's own review object now,
+  memoised on that object like the settlement tallies beside it. Any per-card getter that reduces
+  over the record is the same bug wearing the store's own clothes.
 
 ## Conventions & gotchas (carry between slices)
 
@@ -1225,8 +1290,15 @@ blocks in place across three modules.
    rendering, see item 20), the hydrate stringify (needs a per-block revision on the wire), and
    whole-record clone removal in the review-family stores (changes what those stores hand their
    consumers).
-9. Items 19, 21 as small both-runtime persistence PRs (19 pairs naturally with 5).
-10. Items 22, 24 last among backend; each needs a short design note before code.
+   8d. The review-family per-key writes went with item 19, not with 8c's group: the pairing the
+   tracker itself named (19's note pointed at 30's `byBlock` churn) turned out to be the real one,
+   since both are "the board pays for notification/review state nothing is looking at" and
+   `byBlock` was the dead end of the same path. Nothing frontend-shaped is left that is not
+   refused or waiting on something outside this initiative (item 20's three).
+9. Items 19, 21 as small both-runtime persistence PRs (19 pairs naturally with 5). Both landed;
+   19's own premise was corrected on the way (see its section) and it grew an engine half.
+10. Items 22, 24 last among backend; each needs a short design note before code. **These two are
+    all that remains open in this initiative**, plus item 20's three refused/blocked halves.
 
 ## Out of scope
 
