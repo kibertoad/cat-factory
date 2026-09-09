@@ -175,15 +175,21 @@ export type AssistantClarificationReason = v.InferOutput<typeof assistantClarifi
 export const ASSISTANT_PROMPT_MAX = 2000
 
 /**
- * One action's arguments on the wire: declared keys, string values.
+ * How long ONE argument value may be.
  *
- * Capped per value at the same length as a prompt, because they come back INTO the platform when a
- * clarification is answered, and an unbounded value there would be a bigger input than the sentence
- * that produced it.
+ * Its own number, not the prompt's, because the two are bounded for different reasons and only one
+ * of them is ever stated to a person. An argument comes back INTO the platform when a clarification
+ * is answered, so the cap is there to keep what a client may hand back no bigger than the sentence
+ * that produced it; the prompt cap is a promise the box renders. Pointing both at one constant
+ * makes either one unmovable: raising the box's limit would silently widen every argument value,
+ * and lowering it would start refusing legitimate answers with copy about request length.
  */
+export const ASSISTANT_ARGUMENT_MAX = 2000
+
+/** One action's arguments on the wire: declared keys, string values, each bounded. */
 export const assistantArgumentsSchema = v.record(
   v.string(),
-  v.pipe(v.string(), v.maxLength(ASSISTANT_PROMPT_MAX)),
+  v.pipe(v.string(), v.maxLength(ASSISTANT_ARGUMENT_MAX)),
 )
 export type AssistantArguments = v.InferOutput<typeof assistantArgumentsSchema>
 

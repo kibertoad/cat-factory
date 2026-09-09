@@ -5033,6 +5033,7 @@
     "unavailable": "Bu kurulumda yapılandırılmış bir model yok, bu yüzden asistan isteği okuyamıyor. Etkinleştirmek için bir model sağlayıcısı yapılandırın.",
     "reading": "Asistanın burada neler yapabileceği denetleniyor…",
     "unreadable": "Asistanın burada neler yapabileceği denetlenemedi, bu yüzden istek alanı şimdilik gizli. Birazdan yeniden deneyin.",
+    "noActions": "Bu kurulumdaki asistan için yapılandırılmış bir eylem yok, bu yüzden hiçbir şey gerçekleştiremiyor. Etkinleştirmek için eylemlerini yapılandırın.",
     "placeholder": "örn. checkout servisi ödemeler servisine bağlıdır",
     "submit": "Çalıştır",
     "submitHint": "Ctrl+Enter, Mac'te Cmd+Enter",

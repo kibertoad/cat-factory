@@ -229,8 +229,7 @@ const request = computed(() =>
 )
 const canHunt = computed(() => request.value !== null)
 
-watch(open, (isOpen) => {
-  if (!isOpen) return
+onModalOpen(open, () => {
   hunt.reset()
   boardId.value = ''
   issueType.value = ''

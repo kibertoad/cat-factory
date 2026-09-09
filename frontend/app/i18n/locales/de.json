@@ -4522,6 +4522,7 @@
     "unavailable": "Für diese Installation ist kein Modell konfiguriert, daher kann der Assistent keine Anfrage lesen. Richten Sie einen Modellanbieter ein, um ihn zu aktivieren.",
     "reading": "Es wird geprüft, was der Assistent hier tun kann…",
     "unreadable": "Es konnte nicht geprüft werden, was der Assistent hier tun kann, daher ist das Anfragefeld vorerst ausgeblendet. Versuche es in einem Moment erneut.",
+    "noActions": "Für den Assistenten dieser Installation sind keine Aktionen konfiguriert, daher kann er nichts ausführen. Konfigurieren Sie seine Aktionen, um ihn zu aktivieren.",
     "placeholder": "z. B. der Checkout-Service hängt vom Payments-Service ab",
     "submit": "Ausführen",
     "submitHint": "Strg+Enter, auf dem Mac Cmd+Enter",

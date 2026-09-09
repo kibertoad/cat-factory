@@ -228,8 +228,7 @@ const intakeIssueTypeApplies = computed(() =>
   appliesIntakePredicate(intakeSourceState.value, 'issueType'),
 )
 
-watch(open, (isOpen) => {
-  if (!isOpen) return
+onModalOpen(open, () => {
   name.value = ''
   description.value = ''
   // Default to the first schedulable pipeline, which is the ladder's own default rung. There is no

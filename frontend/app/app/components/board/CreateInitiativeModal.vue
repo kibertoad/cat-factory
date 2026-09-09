@@ -15,7 +15,7 @@
 // planning pipeline then reads: the interviewer stops asking what an attached document already
 // answers, and the analyst and planner ground the plan in it. Linking needs a block id, so picks
 // are staged and committed once the initiative exists (the add-task flow's shared orchestration).
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import {
   sanitizeInitiativePresetInputs,
   validateInitiativePresetInputs,
@@ -112,8 +112,7 @@ function selectPreset(id: string): void {
   applyPreset()
 }
 
-watch(open, (o) => {
-  if (!o) return
+onModalOpen(open, () => {
   title.value = ''
   description.value = ''
   submitting.value = false

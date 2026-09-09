@@ -1,4 +1,5 @@
 import { reactive } from 'vue'
+import type { LoadState } from '~/types/load-state'
 import { useWorkspaceStore } from '~/stores/workspace'
 
 /**
@@ -15,7 +16,7 @@ import { useWorkspaceStore } from '~/stores/workspace'
  * Both the visual-confirmation gate and the test-report window use this, so neither has to
  * own blob plumbing or depend on the other's Pinia store.
  */
-export type ArtifactBlobStatus = 'idle' | 'loading' | 'ready' | 'error'
+export type ArtifactBlobStatus = LoadState
 
 export function useArtifactBlobs() {
   const ws = useWorkspaceStore()

@@ -311,3 +311,85 @@ describe('AssistantService.run — answering a clarification', () => {
     })
   })
 })
+
+describe('AssistantService: the model a turn runs on', () => {
+  /**
+   * A turn under a workspace preset, with the refs each resolution step could produce kept
+   * distinct so the one that WON is identifiable rather than inferred.
+   */
+  function servicePinning(over: {
+    presetModelId: string
+    pinnedForKind?: boolean
+    catalog: Record<string, ModelRef>
+    routingDefault: ModelRef
+  }) {
+    const asked: { agentKind?: string; modelId?: string } = {}
+    // A reply that DECLINES: the routing decision is not what these cases are about, and a
+    // decline reaches it through the same resolve-then-generate path an accepted one does.
+    const { provider } = scriptedProvider('{"action":"none","arguments":{}}')
+    const service = new AssistantService({
+      actions: [fakeAction().action],
+      modelProvider: provider,
+      modelRef: over.routingDefault,
+      resolveBlockModel: (modelId) => {
+        asked.modelId = modelId
+        return modelId ? over.catalog[modelId] : undefined
+      },
+      resolvePresetRouting: async (_workspaceId, agentKind) => {
+        asked.agentKind = agentKind
+        return { modelId: over.presetModelId, pinnedForKind: over.pinnedForKind ?? false }
+      },
+    })
+    return { service, asked, provider }
+  }
+
+  const ROUTING_DEFAULT: ModelRef = { provider: 'openai', model: 'routing-default' }
+  const BASE: ModelRef = { provider: 'openai', model: 'preset-base' }
+
+  it("runs on the workspace preset's BASE model, like every other kind that declares no override", async () => {
+    // A preset states one base model for every agent kind, and the assistant is not special: it
+    // pins no model of its own and selects no preset, so what it resolves is exactly what a
+    // pipeline step under the same preset resolves. Falling through to the deployment's routing
+    // default instead would put the assistant on a different model from everything the same
+    // workspace runs, silently, and only the token bill would ever say so.
+    const { service, asked } = servicePinning({
+      presetModelId: 'preset-base',
+      catalog: { 'preset-base': BASE },
+      routingDefault: ROUTING_DEFAULT,
+    })
+
+    await service.run(REQUEST)
+
+    expect(asked.agentKind).toBe('assistant')
+    expect(asked.modelId).toBe('preset-base')
+  })
+
+  it("honours a preset override that NAMES the assistant, over that preset's base", async () => {
+    // The other half of the same rule: an operator who pins a model for this kind gets it, which
+    // is why the kind is listed in the Model Defaults panel rather than only inheriting.
+    const { service, asked } = servicePinning({
+      presetModelId: 'assistant-override',
+      pinnedForKind: true,
+      catalog: { 'assistant-override': { provider: 'openai', model: 'assistant-override' } },
+      routingDefault: ROUTING_DEFAULT,
+    })
+
+    await service.run(REQUEST)
+
+    expect(asked.modelId).toBe('assistant-override')
+  })
+
+  it('degrades to the routing default when the deployment cannot serve the preset model', async () => {
+    // An empty catalog stands for a preset naming a model this deployment has no route to. The
+    // turn still runs: a workspace preset naming a model the deployment cannot serve is a
+    // configuration gap, not a reason to refuse a request the person just typed.
+    const { service: pinned, asked } = servicePinning({
+      presetModelId: 'unservable',
+      catalog: {},
+      routingDefault: ROUTING_DEFAULT,
+    })
+
+    expect((await pinned.run(REQUEST)).outcome.status).toBe('declined')
+    expect(asked.modelId).toBe('unservable')
+  })
+})

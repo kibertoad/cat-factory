@@ -5033,6 +5033,7 @@
     "unavailable": "Este despliegue no tiene ningún modelo configurado, así que el asistente no puede leer una petición. Configura un proveedor de modelos para habilitarlo.",
     "reading": "Comprobando qué puede hacer el asistente aquí…",
     "unreadable": "No se pudo comprobar qué puede hacer el asistente aquí, así que por ahora el cuadro de solicitud está oculto. Vuelve a intentarlo en un momento.",
+    "noActions": "El asistente de este despliegue no tiene ninguna acción configurada, así que no puede realizar nada. Configura sus acciones para habilitarlo.",
     "placeholder": "p. ej. el servicio de checkout depende del servicio de pagos",
     "submit": "Ejecutar",
     "submitHint": "Ctrl+Intro, o Cmd+Intro en un Mac",

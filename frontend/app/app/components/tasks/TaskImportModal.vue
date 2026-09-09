@@ -70,13 +70,11 @@ const title = computed(() =>
   pinnedContainer.value ? t('tasks.import.titleCreate') : t('tasks.import.titleBrowse'),
 )
 
-watch(open, (isOpen) => {
-  if (isOpen) {
-    ref_.value = ''
-    source.value = ui.taskImport?.source ?? tasks.offeredSources[0]?.source ?? undefined
-    resetContainer()
-    tasks.loadTasks().catch(() => {})
-  }
+onModalOpen(open, () => {
+  ref_.value = ''
+  source.value = ui.taskImport?.source ?? tasks.offeredSources[0]?.source ?? undefined
+  resetContainer()
+  tasks.loadTasks().catch(() => {})
 })
 
 // Choosing an issue in the picker hands off to the add-task form, prefilled with the

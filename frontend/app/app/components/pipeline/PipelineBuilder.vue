@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import { DEPLOYER_AGENT_KIND } from '@cat-factory/contracts'
 import type { AgentKind, Pipeline } from '~/types/domain'
 import AgentPalette from '~/components/palettes/AgentPalette.vue'
@@ -247,20 +247,20 @@ const open = computed({
 // Refresh the observability-integration state whenever the builder opens so the palette
 // knows whether to offer the post-release-health gate (it's loaded on demand, not from
 // the snapshot). Best-effort: a failure just leaves the gate hidden.
-watch(open, (isOpen) => {
-  if (isOpen) releaseHealth.load().catch(() => {})
+onModalOpen(open, () => {
+  releaseHealth.load().catch(() => {})
   // The prompt-override index badges the steps whose agent no longer runs the shipped prompt.
   // Best-effort: the builder is fully usable without it, and a deployment that wires no
   // override store answers 503 here.
-  if (isOpen) agentPrompts.loadIndex().catch(() => {})
+  agentPrompts.loadIndex().catch(() => {})
   // The workspace's per-kind output ceilings, which the per-step field shows as its inherited
   // placeholder and the prompt editor edits. Best-effort on the same terms as the prompt index.
-  if (isOpen) agentSettings.load().catch(() => {})
+  agentSettings.load().catch(() => {})
   // The resolved foundational-services catalog, which the binary-output picker offers from.
   // Single-flighted per workspace, so this shares the panel's load rather than adding one. A
   // failure is not swallowed into an empty picker: the store records `available: false`, and
   // the picker says the catalog is unreachable rather than "no services exist".
-  if (isOpen) void foundational.ensureProbed()
+  void foundational.ensureProbed()
 })
 
 function add(kind: AgentKind) {

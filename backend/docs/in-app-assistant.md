@@ -108,33 +108,71 @@ other two are left on the generic copy on purpose, because for them it is exactl
 
 ## Before the box: what the capability read decides
 
-The prompt box is offered only once `GET /assistant` has ANSWERED that a model is wired. Four
-states, and the SPA renders each one differently (`assistantSurface` in `AssistantModal.logic.ts`,
-over the store's `capabilityRead`):
+`GET /assistant` answers two independent facts (is a model wired, and what can it be asked to do),
+and the SPA renders four surfaces from them plus the read's own progress (`assistantSurface` in
+`AssistantModal.logic.ts`, over the store's `capabilityRead`):
 
-| State        | What it means                            | What the modal shows                     |
-| ------------ | ---------------------------------------- | ---------------------------------------- |
-| `reading`    | The read is in flight, or nobody asked.  | A waiting line. It clears itself.        |
-| `unreadable` | The read FAILED.                         | That it failed, plus a retry.            |
-| `unwired`    | It answered, and no model is configured. | The configuration this deployment needs. |
-| `ready`      | It answered, and a model is wired.       | The box, the examples, the Run button.   |
+| Surface      | What it means                                         | What the modal shows                     |
+| ------------ | ----------------------------------------------------- | ---------------------------------------- |
+| `prompt`     | A model is wired with a catalog, or nobody knows yet. | The box, the examples, the Run button.   |
+| `unreadable` | The read FAILED.                                      | That it failed, plus a retry.            |
+| `unwired`    | It answered, and no model is configured.              | The configuration this deployment needs. |
+| `no_actions` | It answered, and the catalog is empty.                | That there is nothing it can perform.    |
 
-Four states rather than a nullable capability, because a null one is not a single fact: an outage,
-a deployment that wired no provider and a read nobody has performed are indistinguishable once they
-collapse into one absent value, and only the last of them is temporary. Offering the prompt box for
-any of the first three offers a Run button that cannot submit, over an examples list that is empty
-because the catalog was never read.
+Three reasons rather than one absent capability, because they need different fixes: an outage a
+retry may clear, a deployment with no provider, and a deployment whose catalog is empty (every
+submit against which is refused with `assistant_no_actions`). Collapsed into "not available" they
+all render as the prompt box with a Run button that cannot submit, over an examples list that is
+empty because there was nothing to list. That is the failure this shape exists to prevent.
 
-The unread state is the trap worth naming, because it binds every lazily mounted panel: the page
-mounts this modal only WHILE its open flag is set (`<AssistantModal v-if="ui.assistantOpen">`), so
-`open` is already true at setup and a change-only `watch` never fires. The capability read rides an
-`{ immediate: true }` watcher for that reason.
+A read still IN FLIGHT is deliberately NOT one of the three. It shows the box, with the Run button
+disabled and the wait STATED beside it, because the modal is opened from the sidebar and from the
+command palette: the hands are already on the keyboard, and a textarea that only mounts once the
+read lands is not focused yet, so every character typed in the gap is dropped. The box is withheld
+only once the read has ANSWERED that it cannot be submitted. On a re-open the previous answer is
+kept while the re-read runs, so a second open shows the box rather than a spinner over a fact the
+store can already state.
 
-A disabled Run button owes a reason on the same principle. The two it can have are the empty box,
-which its own placeholder and the examples answer, and a request over `ASSISTANT_PROMPT_MAX`, which
-nothing on screen would otherwise state, so it names both numbers. That cap is exported from the
-contracts package rather than restated in the SPA: a box that promised a different limit from the
-one the schema holds would refuse a request the backend would have taken, or take one it refuses.
+The read carries its own deadline (`CAPABILITY_DEADLINE_MS`) and ABORTS what it gives up on. The
+shared client sets no timeout, so a connection that is accepted and never answered would otherwise
+leave the modal with no answer, no failure, and therefore no retry either: the retry lives in what
+a FAILED read puts on screen. Two overlapping reads settle in the order they STARTED rather than
+the order they answer, so a slow success cannot re-offer the box on an answer older than the
+failure that superseded it.
+
+The failure is reported IN PLACE rather than through the toast funnel. The panel is where the
+person is looking and where the retry is; a toast as well would stack a second, non-dismissing copy
+of the same sentence over it, once per retry.
+
+A disabled Run button owes a reason on the same principle. Three states can disable it and two are
+stated: a request over `ASSISTANT_PROMPT_MAX`, which nothing on screen would otherwise name, and a
+capability read still in flight, since a button that will start working on its own in a moment
+otherwise reads as one that is broken. (An empty box is answered by its own placeholder and the
+examples under it, and a turn in flight by the button's spinner.) The line is a live region named
+by the button it explains, so a reader who cannot see it is not left with a dead button and no
+reason. That cap is exported from the contracts package rather than restated in the SPA: a box that
+promised a different limit from the one the schema holds would refuse a request the backend would
+have taken, or take one it refuses. The per-ARGUMENT cap is its own constant
+(`ASSISTANT_ARGUMENT_MAX`), because it bounds what a client may hand back when answering a
+clarification, which is a different question from how long a request may be.
+
+The lazily-mounted-panel trap this was found through binds every modal in the SPA, and the rule
+lives where a modal author reads it:
+[`frontend/app/README.md`](../../frontend/app/README.md#a-panel-that-seeds-state-on-open-uses-onmodalopen-never-a-bare-watchopen).
+
+## Which model a turn runs on
+
+The same one every other agent kind in the workspace runs on. A turn resolves through
+`resolveInlineBlockModelRef` under the kind `assistant`, with an EMPTY selection (a turn routes a
+sentence, not a task, so nothing pins a model or picks a preset), which lands on the workspace's
+DEFAULT preset: its per-kind override where an operator wrote one, else that preset's BASE model,
+else the deployment's routing default. The route ORDER comes off the same preset row, so a preset
+pinned to a residency-guaranteed route gets it here too.
+
+The kind is listed in the SPA's Model Defaults panel (`MODEL_CONFIGURABLE_SYSTEM_KINDS`) beside
+Kaizen and the fixers: it runs an LLM but is not a pipeline step, so it is pinnable without ever
+being placeable. Inheriting the base model is the DEFAULT, not the only option, and a kind absent
+from that list inherits with no way to state otherwise.
 
 ## The action catalog
 

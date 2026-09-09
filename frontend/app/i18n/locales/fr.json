@@ -5033,6 +5033,7 @@
     "unavailable": "Aucun modèle n'est configuré sur ce déploiement, l'assistant ne peut donc pas lire une demande. Configurez un fournisseur de modèles pour l'activer.",
     "reading": "Vérification de ce que l'assistant peut faire ici…",
     "unreadable": "Impossible de vérifier ce que l'assistant peut faire ici, le champ de demande est donc masqué pour l'instant. Réessayez dans un instant.",
+    "noActions": "Aucune action n'est configurée pour l'assistant de ce déploiement, il ne peut donc rien exécuter. Configurez ses actions pour l'activer.",
     "placeholder": "ex. le service checkout dépend du service paiements",
     "submit": "Exécuter",
     "submitHint": "Ctrl+Entrée, ou Cmd+Entrée sur un Mac",

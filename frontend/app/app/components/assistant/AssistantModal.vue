@@ -14,11 +14,13 @@
 //     the platform named, with no model call and nothing retyped.
 //   - `declined` means nothing in the catalog matches. It renders the catalog, because "I can't
 //     do that" without saying what it CAN do is the least useful answer this surface can give.
-// Everything that IS a failure (no model wired, the budget spent, an unconfigured tracker, an
-// issue already filed) arrives as an error and goes through the shared toast funnel with its
-// reason, its detail and its request id, the same path a failed button press takes.
+// Everything that IS a failure of a TURN (the budget spent, an unconfigured tracker, an issue
+// already filed) arrives as an error and goes through the shared toast funnel with its reason, its
+// detail and its request id, the same path a failed button press takes. What the CAPABILITY read
+// finds is not on that path: an unwired deployment, an empty catalog and a read that failed are
+// each a panel here, in place of the box, because that is where the person is looking and where
+// the retry belongs.
 import type { AssistantActionId, AssistantOutcome } from '~/types/domain'
-import { ASSISTANT_PROMPT_MAX } from '~/types/domain'
 import { answerFor, assistantSurface, revealTarget, submitGate } from './AssistantModal.logic'
 
 const { t } = useI18n()
@@ -46,57 +48,64 @@ const examples = computed(() =>
 )
 
 /**
- * Read the capability whenever the modal is open, INCLUDING the render it mounts on.
+ * Read the capability on every open, INCLUDING the render the modal mounts on.
  *
- * `immediate` is load-bearing: the page mounts this component only while the open flag is set
- * (`<AssistantModal v-if="ui.assistantOpen">`), so `open` is already true at setup and a
- * change-only watcher never fires at all. Without it nothing reads the capability, and the modal
- * offers a box with no examples over a Run button that can never submit. Re-reading on each open
- * is what lets a provider wired while the tab is open be picked up with no reload.
+ * `onModalOpen` rather than a bare `watch` because the page mounts this component only while the
+ * open flag is set (`<AssistantModal v-if="ui.assistantOpen">`), so `open` is already true at
+ * setup and a change-only watcher never fires at all. Re-reading on each open is what lets a
+ * provider wired while the tab is open be picked up with no reload; the previous answer is kept
+ * while that re-read is in flight, so a second open shows the box rather than a spinner.
  */
-watch(
-  open,
-  (isOpen) => {
-    if (!isOpen) return
-    assistant.reset()
-    void load()
-  },
-  { immediate: true },
-)
+onModalOpen(open, () => {
+  assistant.reset()
+  void assistant.loadCapability()
+})
 
-/** Read what the assistant can do here. The failure is BOTH recorded and toasted. */
-async function load(): Promise<void> {
-  try {
-    await assistant.loadCapability()
-  } catch (error) {
-    present(error, 'assistant.title')
-  }
-}
-
-/** What the modal shows: the box, or the reason there is none. */
-const surface = computed(() => assistantSurface(assistant.capabilityRead, assistant.available))
+/**
+ * What the modal shows: the box, or the reason there is none.
+ *
+ * A read still in flight shows the BOX, disabled, rather than a spinner in its place: this modal is
+ * opened from the sidebar and from the command palette, so the hands are already on the keyboard,
+ * and a textarea that only mounts once the read lands would swallow whatever was typed in between.
+ */
+const surface = computed(() => assistantSurface(assistant.capabilityRead, assistant.capability))
 
 /** Whether the request can be sent. */
-const gate = computed(() => submitGate(prompt.value, assistant.running, ASSISTANT_PROMPT_MAX))
+const gate = computed(() =>
+  submitGate({
+    read: assistant.capabilityRead,
+    capability: assistant.capability,
+    prompt: prompt.value,
+    running: assistant.running,
+  }),
+)
 
 /**
  * Why Run is disabled, where that is not already on screen.
  *
  * An empty box is answered by its own placeholder and the examples under it, and a turn in flight
- * by the button's spinner. A refused LENGTH is the one nothing else states, so it names both
- * numbers: a person who pasted a page has no way to see that it is 143 characters too long.
+ * by the button's spinner. Two are stated: a refused LENGTH, because a person who pasted a page has
+ * no way to see that it is 143 characters too long, and a capability read still in flight, because
+ * a button that will start working on its own in a moment otherwise reads as one that is broken.
+ * The line is a live region tied to the button, so the reason reaches a reader that cannot see it.
  */
 const submitReason = computed<string | null>(() => {
   const state = gate.value
-  return state.state === 'too_long'
-    ? t('assistant.tooLong', { length: state.length, limit: state.limit })
-    : null
+  if (state.state === 'too_long') {
+    return t('assistant.tooLong', { length: state.length, limit: state.limit })
+  }
+  return state.state === 'checking' ? t('assistant.reading') : null
 })
 
 /** Editing the prompt clears the previous answer, so an outcome never sits under a new question. */
 watch(prompt, () => {
   if (outcome.value) assistant.reset()
 })
+
+/** Re-read the capability, from the retry a failed read offers. */
+function retry(): void {
+  void assistant.loadCapability()
+}
 
 async function submit(): Promise<void> {
   if (gate.value.state !== 'ready') return
@@ -147,22 +156,12 @@ function reveal(blockId: string): void {
       <div class="space-y-4">
         <p class="text-sm text-slate-400">{{ t('assistant.intro') }}</p>
 
-        <!-- The capability read is still in flight. The only one of the three no-box states that
-             clears itself, so it is the only one that may look like waiting. -->
-        <div
-          v-if="surface === 'reading'"
-          class="flex items-center gap-2 text-sm text-slate-400"
-          data-testid="assistant-reading"
-        >
-          <UIcon name="i-lucide-loader-circle" class="h-4 w-4 shrink-0 animate-spin" />
-          <span>{{ t('assistant.reading') }}</span>
-        </div>
-
         <!-- The read FAILED: this deployment may well have a model, and nobody can tell from here.
              So it offers the read again instead of explaining a configuration that may be fine. -->
         <div
-          v-else-if="surface === 'unreadable'"
+          v-if="surface === 'unreadable'"
           class="flex items-start gap-2 rounded-md bg-slate-800/60 p-3 text-sm text-slate-300"
+          data-testid="assistant-unreadable"
         >
           <UIcon name="i-lucide-unplug" class="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
           <div class="space-y-2">
@@ -172,7 +171,7 @@ function reveal(blockId: string): void {
               variant="soft"
               icon="i-lucide-refresh-cw"
               data-testid="assistant-retry"
-              @click="load"
+              @click="retry"
             >
               {{ t('common.retry') }}
             </UButton>
@@ -183,9 +182,21 @@ function reveal(blockId: string): void {
         <div
           v-else-if="surface === 'unwired'"
           class="flex items-start gap-2 rounded-md bg-slate-800/60 p-3 text-sm text-slate-300"
+          data-testid="assistant-unwired"
         >
           <UIcon name="i-lucide-plug" class="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
           <span>{{ t('assistant.unavailable') }}</span>
+        </div>
+
+        <!-- A model, and nothing for it to do: a different deployment fault with a different fix,
+             and every submit against it would be refused with `assistant_no_actions`. -->
+        <div
+          v-else-if="surface === 'no_actions'"
+          class="flex items-start gap-2 rounded-md bg-slate-800/60 p-3 text-sm text-slate-300"
+          data-testid="assistant-no-actions"
+        >
+          <UIcon name="i-lucide-list-x" class="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
+          <span>{{ t('assistant.noActions') }}</span>
         </div>
 
         <template v-else>
@@ -212,20 +223,33 @@ function reveal(blockId: string): void {
               icon="i-lucide-sparkles"
               :loading="assistant.running"
               :disabled="gate.state !== 'ready'"
+              aria-describedby="assistant-submit-reason"
               data-testid="assistant-submit"
               @click="submit"
             >
               {{ t('assistant.submit') }}
             </UButton>
-            <!-- The stated reason takes the keyboard hint's place while it applies. -->
+            <!-- The stated reason takes the keyboard hint's place while it applies. ONE element
+                 for both, named by the button it explains and present from the first render: a
+                 disabled button is out of the tab order and announces nothing, so a reason that
+                 only appears in a span nothing points at leaves the one reader who cannot see it
+                 with a Run that does nothing and no reason given. It announces only while it is
+                 carrying a REASON; the keyboard hint is standing information, not news. -->
             <span
-              v-if="submitReason"
-              class="text-xs text-amber-400"
-              data-testid="assistant-submit-reason"
+              id="assistant-submit-reason"
+              role="status"
+              :aria-live="submitReason ? 'polite' : 'off'"
+              class="flex items-center gap-1 text-xs"
+              :class="submitReason ? 'text-amber-400' : 'text-slate-500'"
+              data-testid="assistant-submit-status"
             >
-              {{ submitReason }}
+              <UIcon
+                v-if="gate.state === 'checking'"
+                name="i-lucide-loader-circle"
+                class="h-3 w-3 shrink-0 animate-spin"
+              />
+              {{ submitReason ?? t('assistant.submitHint') }}
             </span>
-            <span v-else class="text-xs text-slate-500">{{ t('assistant.submitHint') }}</span>
           </div>
 
           <!-- What it can do, always visible: the catalog is the affordance. -->
