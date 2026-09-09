@@ -1175,9 +1175,11 @@ cost nothing; the container path tags such a step `'subscription'` and the inlin
   fields with plausible values: `turnIndex` null (no job-scoped counter), `httpStatus` null (the
   SDK owns the transport, so a failure arrives as an exception whose message is the cause),
   `phase` `''` (phases are boundaries the container harness owns; an inline call sits outside
-  all of them), `streaming` false, and `upstreamMs === totalMs` so the derived overhead is a real
-  0 instead of a fabricated transport split. Conformance pins all of these on both runtimes'
-  real stores, because each is one a store could plausibly flatten.
+  all of them), and `upstreamMs === totalMs` so the derived overhead is a real 0 instead of a
+  fabricated transport split. Conformance pins all of these on both runtimes' real stores,
+  because each is one a store could plausibly flatten. `streaming` is NOT among them: it was a
+  constant `false` here while nothing inline could stream, and it is now the producer's own
+  answer, since the instrumented provider records a streamed call rather than refusing one.
 - **No new bucket decision.** `llm_call_metrics` is already `telemetry` (local-first) for
   mothership mode and no repository METHOD was added, so the Node wiring threads
   `repos.llmCallMetricRepository` from the composition root rather than rebuilding it off `db`:

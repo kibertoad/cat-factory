@@ -1,3 +1,8 @@
+import type {
+  LanguageModelV4CallOptions,
+  LanguageModelV4StreamPart,
+  LanguageModelV4StreamResult,
+} from '@ai-sdk/provider'
 import type { LanguageModelMiddleware } from 'ai'
 import type { LanguageModel } from 'ai'
 import type {
@@ -318,37 +323,146 @@ export class InstrumentedModelProvider implements ModelProvider {
         const startedAt = this.now()
         try {
           const result = await doGenerate()
-          this.emit(ref, params, result, startedAt, true, null)
+          this.emit({
+            ref,
+            params,
+            result,
+            startedAt,
+            ok: true,
+            errMessage: null,
+            streaming: false,
+          })
           return result
         } catch (err) {
-          this.emit(ref, params, undefined, startedAt, false, getErrorMessage(err))
+          this.emit({
+            ref,
+            params,
+            result: undefined,
+            startedAt,
+            ok: false,
+            errMessage: getErrorMessage(err),
+            streaming: false,
+          })
           throw err
         }
       },
-      // Every inline site calls `generateText`, never `streamText`, an invariant the recorder
-      // states too by hard-coding `streaming: false` on the row it writes. This is what keeps
-      // the invariant from being a comment: a streamed call would pass through the wrap with no
-      // `wrapStream` and reach no sink, so its tokens would be spent, its OpenRouter usage
-      // accounting paid for, and nothing written anywhere. That is invisible downstream, where
-      // an unrecorded call and a step that spent nothing are the same absence, and it undercounts
-      // the budget the spend gate reads. Refusing costs nothing today and names the two things a
-      // streaming caller has to build.
-      wrapStream: async () => {
-        throw new Error(
-          'InstrumentedModelProvider does not record streamed calls: implement wrapStream (fold the final stream part into `emit`) and thread `streaming` through the inline recorder before calling streamText.',
-        )
-      },
+      wrapStream: ({ doStream, params }) => this.wrapStream(ref, doStream, params),
     }
   }
 
-  private emit(
+  /**
+   * Record a STREAMED call, which has to be assembled from what a buffered one hands over whole:
+   * the text, the usage, the finish reason and the provider metadata each arrive as their own
+   * part, and only the last of them can settle the row.
+   *
+   * The parts are folded into a result shaped like a generate result, so `readUsage`,
+   * `readFinishReason`, `readOutputText` and `readMetadataGatewayReport` parse a stream through
+   * the SAME code that parses a buffered reply. A second set of readers here is how the two
+   * would come to disagree about the same call.
+   *
+   * Every exit settles exactly once, `settled` being what enforces it:
+   *
+   * - the stream ENDS: the ordinary case, recorded with whatever the finish part carried.
+   * - the caller ABANDONS it: the tokens up to that point were still spent, so the row is filed
+   *     and NAMED as cancelled rather than left to read as a model failure or, worse, as a step
+   *     that spent nothing.
+   * - it FAILS, either before opening or mid-flight: recorded with the cause, which is the only
+   *     place that cause is legible once the exception has propagated.
+   */
+  private async wrapStream(
     ref: ModelRef,
-    params: unknown,
-    result: unknown,
-    startedAt: number,
-    ok: boolean,
-    errMessage: string | null,
-  ): void {
+    doStream: () => PromiseLike<LanguageModelV4StreamResult>,
+    params: LanguageModelV4CallOptions,
+  ): Promise<LanguageModelV4StreamResult> {
+    const startedAt = this.now()
+    let settled = false
+    const settle = (result: unknown, ok: boolean, errMessage: string | null): void => {
+      if (settled) return
+      settled = true
+      this.emit({ ref, params, result, startedAt, ok, errMessage, streaming: true })
+    }
+
+    let streamed: LanguageModelV4StreamResult
+    try {
+      streamed = await doStream()
+    } catch (err) {
+      settle(undefined, false, getErrorMessage(err))
+      throw err
+    }
+
+    let text = ''
+    let reasoning = ''
+    let usage: unknown
+    let finishReason: unknown
+    let providerMetadata: unknown
+    let streamError: unknown
+    const observe = (part: LanguageModelV4StreamPart): void => {
+      if (part.type === 'text-delta') text += part.delta
+      else if (part.type === 'reasoning-delta') reasoning += part.delta
+      else if (part.type === 'error') streamError = part.error
+      else if (part.type === 'finish') {
+        usage = part.usage
+        finishReason = part.finishReason
+        if (part.providerMetadata) providerMetadata = part.providerMetadata
+      }
+    }
+    /** What the stream said so far, in the shape the buffered readers already parse. */
+    const folded = () => ({
+      content: [
+        ...(reasoning ? [{ type: 'reasoning', text: reasoning }] : []),
+        { type: 'text', text },
+      ],
+      usage,
+      finishReason,
+      ...(providerMetadata === undefined ? {} : { providerMetadata }),
+    })
+
+    // A hand-driven reader rather than a `TransformStream`: a transformer's `flush` sees the end
+    // of a stream but not a consumer that walked away from it, and `cancel` is the exit that
+    // decides whether an abandoned stream is recorded or silently lost.
+    const reader = streamed.stream.getReader()
+    const stream = new ReadableStream<LanguageModelV4StreamPart>({
+      async pull(controller) {
+        try {
+          const { done, value } = await reader.read()
+          if (done) {
+            settle(
+              folded(),
+              streamError === undefined,
+              streamError === undefined ? null : getErrorMessage(streamError),
+            )
+            controller.close()
+            return
+          }
+          observe(value)
+          controller.enqueue(value)
+        } catch (err) {
+          settle(folded(), false, getErrorMessage(err))
+          throw err
+        }
+      },
+      cancel(reason) {
+        settle(folded(), false, `stream cancelled: ${getErrorMessage(reason)}`)
+        return reader.cancel(reason)
+      },
+    })
+    return { ...streamed, stream }
+  }
+
+  private emit(observed: {
+    ref: ModelRef
+    params: unknown
+    /** The reply, or a stream folded into its shape. Absent for a call that never settled. */
+    result: unknown
+    startedAt: number
+    ok: boolean
+    errMessage: string | null
+    /** Which wrap observed the call. The row states it rather than assuming either shape. */
+    streaming: boolean
+  }): void {
+    // Named rather than positional: the two wraps hand over seven values, three of which read as
+    // `(true, null, false)` at the call site.
+    const { ref, params, result, startedAt, ok, errMessage, streaming } = observed
     const endedAt = this.now()
     // The call's own tag first, then the credential scope this provider was built for — the ONE
     // shared precedence, because a self-reporting model files rows through the same rule (see
@@ -381,6 +495,7 @@ export class InstrumentedModelProvider implements ModelProvider {
         finishReason,
         ok,
         errMessage,
+        streaming,
       })
       return
     }
@@ -452,6 +567,7 @@ export class InstrumentedModelProvider implements ModelProvider {
       finishReason: string | null
       ok: boolean
       errMessage: string | null
+      streaming: boolean
     },
   ): void {
     const { workspaceId, executionId, ref, params, result, usage, ok } = call
@@ -465,6 +581,7 @@ export class InstrumentedModelProvider implements ModelProvider {
           agentKind: call.agentKind,
           provider: ref.provider,
           model: ref.model,
+          streaming: call.streaming,
           messageCount: readMessageCount(params),
           toolCount: readToolCount(params),
           requestMaxTokens: readRequestMaxTokens(params),

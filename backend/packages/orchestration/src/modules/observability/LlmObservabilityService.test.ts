@@ -866,6 +866,7 @@ describe('makeInlineCallRecorder', () => {
       agentKind: 'doc-researcher',
       provider: 'anthropic',
       model: 'claude-opus-4-8',
+      streaming: false,
       messageCount: 2,
       toolCount: 0,
       requestMaxTokens: 4096,
@@ -906,7 +907,6 @@ describe('makeInlineCallRecorder', () => {
     expect(row.completionTokens).toBe(60)
     expect(row.requestMaxTokens).toBe(4096)
     expect(row.responseText).toBe('brief')
-    // Every inline site calls `generateText`, never `streamText`.
     expect(row.streaming).toBe(false)
     // The duration IS the upstream time — there is no proxy hop to split out — so the
     // derived overhead is a real 0 rather than a fabricated transport slice.
@@ -919,6 +919,24 @@ describe('makeInlineCallRecorder', () => {
     // No job-scoped counter (like the proxy) and no HTTP status (the SDK owns the transport).
     expect(row.turnIndex).toBeNull()
     expect(row.httpStatus).toBeNull()
+  })
+
+  it('files a STREAMED inline call as streamed', async () => {
+    // The flag is the producer's to state and this mapping's to carry. It was a constant `false`
+    // here while nothing inline could stream, so a streamed call now has to arrive as one: a
+    // constant would report every streamed inline call as buffered and nothing would fail.
+    const repo = new MemoryRepo()
+    const record = makeInlineCallRecorder(
+      new LlmObservabilityService({
+        llmCallMetricRepository: repo,
+        idGenerator: seqIdGenerator,
+        clock: seqClock,
+      }),
+    )
+
+    await record(call({ streaming: true }))
+
+    expect(repo.recorded[0]!.streaming).toBe(true)
   })
 
   it('chains consecutive calls of one inline conversation as a prompt delta', async () => {

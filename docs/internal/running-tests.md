@@ -17,8 +17,8 @@ of it needs no setup; two packages are the exception, the Node and Local facades
 test against a real Postgres and with no server reachable fail with `DATABASE_URL is
 required to run the local conformance tests` while every other task passes: read that
 as "no database here", not as a broken merge. Not in `pnpm test:run` at all: Playwright
-(`backend/internal/e2e`, needing Postgres and a browser) and mutation testing (nightly
-CI only, see [`mutation-testing.md`](./mutation-testing.md)).
+(`backend/internal/e2e`, Postgres and a browser), the gateway lane (Docker; server's
+`test:integration`) and mutation testing (nightly, [`mutation-testing.md`](./mutation-testing.md)).
 
 ## Run a SCOPE, never the tree
 

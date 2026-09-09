@@ -490,7 +490,8 @@ export class CliInlineLanguageModel
       | 'executionId'
       | 'agentKind'
       | 'provider'
-      // Constant across every row this model files — see the two below for why.
+      // Constant across every row this model files: see the three below for why.
+      | 'streaming'
       | 'toolCount'
       | 'requestMaxTokens'
     >,
@@ -518,6 +519,11 @@ export class CliInlineLanguageModel
           executionId,
           agentKind,
           provider: this.provider,
+          // Each row is one model call the CLI made and reported off its own event stream, which
+          // is the same fact `makeHarnessCallRecorder` states as `true` for the container half of
+          // this producer. The buffered-looking SDK call around it is this class's envelope, not
+          // how the vendor answered.
+          streaming: true,
           // 0 because the REQUEST offered none: the tools this loop used are the CLI's own, and
           // claiming them here would count an agentic run's toolbox as ours.
           toolCount: 0,

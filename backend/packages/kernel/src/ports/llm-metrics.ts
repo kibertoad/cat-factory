@@ -466,6 +466,16 @@ export interface InlineLlmCall {
   agentKind: string
   provider: string
   model: string
+  /**
+   * Whether the response was STREAMED rather than buffered, as {@link LlmCallMetric.streaming}
+   * means it.
+   *
+   * REQUIRED rather than defaulted. It was a constant `false` for as long as no inline path
+   * could stream, and a default carrying that forward would have filed the first streamed call
+   * as buffered with nothing failing: the producer that made the call is the only thing that
+   * knows, so it says.
+   */
+  streaming: boolean
   /** Number of chat messages in the request. */
   messageCount: number
   /** Number of tools offered in the request (0 = the model can't call anything). */

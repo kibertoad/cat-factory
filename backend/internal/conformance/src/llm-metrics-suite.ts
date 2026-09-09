@@ -601,6 +601,7 @@ function registerMetricProducerTests(
       agentKind: 'doc-researcher',
       provider: 'anthropic',
       model: 'claude-opus-4-8',
+      streaming: false,
       messageCount: 2,
       toolCount: 0,
       requestMaxTokens: 4096,
@@ -639,6 +640,10 @@ function registerMetricProducerTests(
         messageCount: 3,
         responseText: () => 'outline',
         agentKind: 'doc-researcher',
+        // The one STREAMED row in the suite. Every other fixture here records `false`, so
+        // without this a store that dropped the flag (a boolean crossing SQLite as 0/1 on two
+        // runtimes) would round-trip every assertion in this file and still be wrong.
+        streaming: true,
         promptTokens: 400,
         completionTokens: 20,
         totalTokens: 420,
@@ -669,6 +674,8 @@ function registerMetricProducerTests(
     expect(first.phase).toBe('')
     // Consecutive calls of one inline conversation chain as a prompt delta like any other.
     expect(byResp['outline']!.promptPrefixCount).toBe(2)
+    // The streamed one comes back streamed: the flag is the producer's, not the store's.
+    expect(byResp['outline']!.streaming).toBe(true)
     // And the rollup sees them, which is what puts an inline step's spend on the board.
     const summary = await repo.summarizeByExecution(ws, e1)
     const cell = summary.find((s) => s.agentKind === 'doc-researcher' && s.phase === '')
