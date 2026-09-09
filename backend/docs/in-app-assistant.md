@@ -106,6 +106,36 @@ generic 503 wording commits to "this deployment has not configured the capabilit
 misattribution itself for a provider that IS wired and is either down or answering unusably. The
 other two are left on the generic copy on purpose, because for them it is exactly right.
 
+## Before the box: what the capability read decides
+
+The prompt box is offered only once `GET /assistant` has ANSWERED that a model is wired. Four
+states, and the SPA renders each one differently (`assistantSurface` in `AssistantModal.logic.ts`,
+over the store's `capabilityRead`):
+
+| State        | What it means                            | What the modal shows                     |
+| ------------ | ---------------------------------------- | ---------------------------------------- |
+| `reading`    | The read is in flight, or nobody asked.  | A waiting line. It clears itself.        |
+| `unreadable` | The read FAILED.                         | That it failed, plus a retry.            |
+| `unwired`    | It answered, and no model is configured. | The configuration this deployment needs. |
+| `ready`      | It answered, and a model is wired.       | The box, the examples, the Run button.   |
+
+Four states rather than a nullable capability, because a null one is not a single fact: an outage,
+a deployment that wired no provider and a read nobody has performed are indistinguishable once they
+collapse into one absent value, and only the last of them is temporary. Offering the prompt box for
+any of the first three offers a Run button that cannot submit, over an examples list that is empty
+because the catalog was never read.
+
+The unread state is the trap worth naming, because it binds every lazily mounted panel: the page
+mounts this modal only WHILE its open flag is set (`<AssistantModal v-if="ui.assistantOpen">`), so
+`open` is already true at setup and a change-only `watch` never fires. The capability read rides an
+`{ immediate: true }` watcher for that reason.
+
+A disabled Run button owes a reason on the same principle. The two it can have are the empty box,
+which its own placeholder and the examples answer, and a request over `ASSISTANT_PROMPT_MAX`, which
+nothing on screen would otherwise state, so it names both numbers. That cap is exported from the
+contracts package rather than restated in the SPA: a box that promised a different limit from the
+one the schema holds would refuse a request the backend would have taken, or take one it refuses.
+
 ## The action catalog
 
 An action is a declaration plus a function:

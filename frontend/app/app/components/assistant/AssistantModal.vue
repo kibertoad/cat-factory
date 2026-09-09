@@ -18,7 +18,8 @@
 // issue already filed) arrives as an error and goes through the shared toast funnel with its
 // reason, its detail and its request id, the same path a failed button press takes.
 import type { AssistantActionId, AssistantOutcome } from '~/types/domain'
-import { answerFor, revealTarget } from './AssistantModal.logic'
+import { ASSISTANT_PROMPT_MAX } from '~/types/domain'
+import { answerFor, assistantSurface, revealTarget, submitGate } from './AssistantModal.logic'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -44,12 +45,52 @@ const examples = computed(() =>
   })),
 )
 
-// Read the capability on open rather than on mount: the modal is lazily loaded, and a deployment
-// that wires a provider while the tab is open should not have to be reloaded to offer the box.
-watch(open, (isOpen) => {
-  if (!isOpen) return
-  assistant.reset()
-  void assistant.loadCapability().catch((error: unknown) => present(error, 'assistant.title'))
+/**
+ * Read the capability whenever the modal is open, INCLUDING the render it mounts on.
+ *
+ * `immediate` is load-bearing: the page mounts this component only while the open flag is set
+ * (`<AssistantModal v-if="ui.assistantOpen">`), so `open` is already true at setup and a
+ * change-only watcher never fires at all. Without it nothing reads the capability, and the modal
+ * offers a box with no examples over a Run button that can never submit. Re-reading on each open
+ * is what lets a provider wired while the tab is open be picked up with no reload.
+ */
+watch(
+  open,
+  (isOpen) => {
+    if (!isOpen) return
+    assistant.reset()
+    void load()
+  },
+  { immediate: true },
+)
+
+/** Read what the assistant can do here. The failure is BOTH recorded and toasted. */
+async function load(): Promise<void> {
+  try {
+    await assistant.loadCapability()
+  } catch (error) {
+    present(error, 'assistant.title')
+  }
+}
+
+/** What the modal shows: the box, or the reason there is none. */
+const surface = computed(() => assistantSurface(assistant.capabilityRead, assistant.available))
+
+/** Whether the request can be sent. */
+const gate = computed(() => submitGate(prompt.value, assistant.running, ASSISTANT_PROMPT_MAX))
+
+/**
+ * Why Run is disabled, where that is not already on screen.
+ *
+ * An empty box is answered by its own placeholder and the examples under it, and a turn in flight
+ * by the button's spinner. A refused LENGTH is the one nothing else states, so it names both
+ * numbers: a person who pasted a page has no way to see that it is 143 characters too long.
+ */
+const submitReason = computed<string | null>(() => {
+  const state = gate.value
+  return state.state === 'too_long'
+    ? t('assistant.tooLong', { length: state.length, limit: state.limit })
+    : null
 })
 
 /** Editing the prompt clears the previous answer, so an outcome never sits under a new question. */
@@ -57,12 +98,8 @@ watch(prompt, () => {
   if (outcome.value) assistant.reset()
 })
 
-const canSubmit = computed(
-  () => assistant.available && !assistant.running && prompt.value.trim().length > 0,
-)
-
 async function submit(): Promise<void> {
-  if (!canSubmit.value) return
+  if (gate.value.state !== 'ready') return
   try {
     await assistant.run(prompt.value.trim())
   } catch (error) {
@@ -110,9 +147,41 @@ function reveal(blockId: string): void {
       <div class="space-y-4">
         <p class="text-sm text-slate-400">{{ t('assistant.intro') }}</p>
 
+        <!-- The capability read is still in flight. The only one of the three no-box states that
+             clears itself, so it is the only one that may look like waiting. -->
+        <div
+          v-if="surface === 'reading'"
+          class="flex items-center gap-2 text-sm text-slate-400"
+          data-testid="assistant-reading"
+        >
+          <UIcon name="i-lucide-loader-circle" class="h-4 w-4 shrink-0 animate-spin" />
+          <span>{{ t('assistant.reading') }}</span>
+        </div>
+
+        <!-- The read FAILED: this deployment may well have a model, and nobody can tell from here.
+             So it offers the read again instead of explaining a configuration that may be fine. -->
+        <div
+          v-else-if="surface === 'unreadable'"
+          class="flex items-start gap-2 rounded-md bg-slate-800/60 p-3 text-sm text-slate-300"
+        >
+          <UIcon name="i-lucide-unplug" class="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+          <div class="space-y-2">
+            <p>{{ t('assistant.unreadable') }}</p>
+            <UButton
+              size="xs"
+              variant="soft"
+              icon="i-lucide-refresh-cw"
+              data-testid="assistant-retry"
+              @click="load"
+            >
+              {{ t('common.retry') }}
+            </UButton>
+          </div>
+        </div>
+
         <!-- No model wired: say so, rather than offering a box whose every submit would 503. -->
         <div
-          v-if="assistant.capability && !assistant.available"
+          v-else-if="surface === 'unwired'"
           class="flex items-start gap-2 rounded-md bg-slate-800/60 p-3 text-sm text-slate-300"
         >
           <UIcon name="i-lucide-plug" class="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
@@ -120,10 +189,16 @@ function reveal(blockId: string): void {
         </div>
 
         <template v-else>
+          <!-- Full width and roomy: a request is a sentence or three, and the box it is typed in
+               is the whole surface. `autoresize` grows it with the text up to `maxrows`, after
+               which it scrolls rather than pushing the examples and the outcome off the modal. -->
           <UTextarea
             v-model="prompt"
-            :rows="3"
+            :rows="6"
+            autoresize
+            :maxrows="14"
             autofocus
+            class="w-full"
             :disabled="assistant.running"
             :placeholder="t('assistant.placeholder')"
             data-testid="assistant-prompt"
@@ -136,13 +211,21 @@ function reveal(blockId: string): void {
               color="primary"
               icon="i-lucide-sparkles"
               :loading="assistant.running"
-              :disabled="!canSubmit"
+              :disabled="gate.state !== 'ready'"
               data-testid="assistant-submit"
               @click="submit"
             >
               {{ t('assistant.submit') }}
             </UButton>
-            <span class="text-xs text-slate-500">{{ t('assistant.submitHint') }}</span>
+            <!-- The stated reason takes the keyboard hint's place while it applies. -->
+            <span
+              v-if="submitReason"
+              class="text-xs text-amber-400"
+              data-testid="assistant-submit-reason"
+            >
+              {{ submitReason }}
+            </span>
+            <span v-else class="text-xs text-slate-500">{{ t('assistant.submitHint') }}</span>
           </div>
 
           <!-- What it can do, always visible: the catalog is the affordance. -->

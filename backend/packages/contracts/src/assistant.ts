@@ -165,13 +165,26 @@ export const assistantClarificationReasonSchema = v.picklist([
 export type AssistantClarificationReason = v.InferOutput<typeof assistantClarificationReasonSchema>
 
 /**
+ * How long a request may be.
+ *
+ * Exported because the SPA has to state the same cap: a prompt box that refuses a submission on
+ * length owes the person the number, and a box that silently truncated a paste would drop words
+ * the model then never sees. Both sides read this one value, so neither can promise a limit the
+ * other does not hold to.
+ */
+export const ASSISTANT_PROMPT_MAX = 2000
+
+/**
  * One action's arguments on the wire: declared keys, string values.
  *
  * Capped per value at the same length as a prompt, because they come back INTO the platform when a
  * clarification is answered, and an unbounded value there would be a bigger input than the sentence
  * that produced it.
  */
-export const assistantArgumentsSchema = v.record(v.string(), v.pipe(v.string(), v.maxLength(2000)))
+export const assistantArgumentsSchema = v.record(
+  v.string(),
+  v.pipe(v.string(), v.maxLength(ASSISTANT_PROMPT_MAX)),
+)
 export type AssistantArguments = v.InferOutput<typeof assistantArgumentsSchema>
 
 /** Why no action ran at all. */
@@ -265,7 +278,7 @@ export type AssistantAnswer = v.InferOutput<typeof assistantAnswerSchema>
 export const assistantTurnInputSchema = v.variant('kind', [
   v.object({
     kind: v.literal('prompt'),
-    prompt: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(2000)),
+    prompt: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(ASSISTANT_PROMPT_MAX)),
   }),
   v.object({ kind: v.literal('answer'), answer: assistantAnswerSchema }),
 ])

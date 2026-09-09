@@ -4,6 +4,16 @@ import type { AssistantAnswer, AssistantCapability, AssistantTurn } from '~/type
 import { useWorkspaceStore } from '~/stores/workspace'
 
 /**
+ * How far the capability read has got.
+ *
+ * Four states rather than a nullable capability, because "not read yet", "read, and this
+ * deployment wired no model" and "the read itself failed" need three different answers on screen
+ * and only the first is temporary. Collapsed into one absent value they all render as a prompt box
+ * whose Run button is disabled with nothing on screen saying why.
+ */
+export type CapabilityRead = 'unread' | 'reading' | 'read' | 'failed'
+
+/**
  * In-app assistant state: what this deployment's assistant can do, and the last turn's outcome.
  *
  * Nothing is persisted server-side and nothing accumulates here: a turn is one prompt and one
@@ -20,16 +30,32 @@ export const useAssistantStore = defineStore('assistant', () => {
   const workspace = useWorkspaceStore()
 
   const capability = ref<AssistantCapability | null>(null)
+  const capabilityRead = ref<CapabilityRead>('unread')
   const turn = ref<AssistantTurn | null>(null)
   const running = ref(false)
 
-  /** Whether a model is wired at all; unknown (not yet read) reads as unavailable. */
+  /** Whether a model is wired at all. Only meaningful once `capabilityRead` says `read`. */
   const available = computed(() => capability.value?.available === true)
   const actions = computed(() => capability.value?.actions ?? [])
 
-  /** Read what the assistant can do here. Idempotent: re-reading replaces the answer. */
+  /**
+   * Read what the assistant can do here. Idempotent: re-reading replaces the answer.
+   *
+   * The read's own progress is tracked separately from its ANSWER, because a null capability is
+   * three different facts (nobody asked, the read is in flight, the read failed) and only the
+   * middle one may look like waiting. The failure is re-thrown as well as recorded: the caller
+   * hands it to the error funnel, which is what carries the reason and the request id.
+   */
   async function loadCapability(): Promise<void> {
-    capability.value = await api.getAssistantCapability(workspace.requireId())
+    capabilityRead.value = 'reading'
+    try {
+      capability.value = await api.getAssistantCapability(workspace.requireId())
+      capabilityRead.value = 'read'
+    } catch (error) {
+      capability.value = null
+      capabilityRead.value = 'failed'
+      throw error
+    }
   }
 
   /**
@@ -65,5 +91,16 @@ export const useAssistantStore = defineStore('assistant', () => {
     turn.value = null
   }
 
-  return { capability, turn, running, available, actions, loadCapability, run, answer, reset }
+  return {
+    capability,
+    capabilityRead,
+    turn,
+    running,
+    available,
+    actions,
+    loadCapability,
+    run,
+    answer,
+    reset,
+  }
 })
