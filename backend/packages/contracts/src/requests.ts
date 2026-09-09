@@ -176,6 +176,16 @@ export const addModuleSchema = v.object({
 })
 export type AddModuleInput = v.InferOutput<typeof addModuleSchema>
 
+/**
+ * Cap, in characters, on a service frame's freeform testing context.
+ *
+ * Named and exported because the inspector's textarea counts against the SAME number: the SPA has
+ * to say how much room is left before the request is sent, and a cap restated on each side is one
+ * the two drift on. Sized like the other standing-guidance prose fields (a bootstrap instruction,
+ * an initiative brief) rather than like a description: a model reads it on every tester dispatch.
+ */
+export const TESTING_CONTEXT_MAX_LENGTH = 8000
+
 export const updateBlockSchema = v.partial(
   v.object({
     title: v.pipe(v.string(), v.trim(), v.maxLength(200)),
@@ -224,10 +234,12 @@ export const updateBlockSchema = v.partial(
     // docs/initiatives/per-service-provision-types.md.
     provisioning: serviceProvisioningSchema,
     // Service-level (frame): the operator's freeform testing context, injected verbatim into
-    // every tester prompt for the service; an empty string clears it. Capped at the length the
-    // bootstrap instructions field uses: it is standing prose a model reads on every tester
-    // dispatch, so it is budgeted like guidance rather than like a description.
-    testingContext: v.pipe(v.string(), v.maxLength(8000)),
+    // every tester prompt for the service; an empty string clears it. Trimmed BEFORE the cap, so
+    // the cap governs the prose that reaches a prompt and, more importantly, so a textarea holding
+    // nothing but whitespace arrives as the empty string the mapper nulls: without that, a row
+    // could hold a third spelling of "no testing context" that every reader trims away while the
+    // inspector shows a filled box.
+    testingContext: v.pipe(v.string(), v.trim(), v.maxLength(TESTING_CONTEXT_MAX_LENGTH)),
     // Service-level (frame): the cloud provider this service's jobs run on.
     cloudProvider: cloudProviderSchema,
     // Service-level (frame): the abstract instance size for this service's jobs.

@@ -363,9 +363,14 @@ function registerTesterPipelineTests(harness: ConformanceHarness): void {
     expect(saved.body.testingContext).toBe(prose)
 
     // Frame-only at the write boundary: stored on a task it would be dead data no prompt renders.
+    // The STATUS is asserted first and that is not ceremony: narrowing empties this patch outright
+    // (the field is its only key), so the request also exercises the empty-UPDATE path, and a
+    // facade that threw there would answer an error envelope whose `testingContext` is undefined
+    // too, i.e. would read to the assertion below exactly like the field being dropped.
     const onTask = await app.call<Block>('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
       testingContext: 'nope',
     })
+    expect(onTask.status).toBe(200)
     expect(onTask.body.testingContext).toBeUndefined()
 
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {

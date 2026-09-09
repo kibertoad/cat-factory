@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { TESTING_CONTEXT_MAX_LENGTH } from '@cat-factory/contracts'
 import type { Block } from '~/types/domain'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
+import { rehydratedDraft } from '~/components/panels/inspector/ServiceTestingContext.logic'
+import { showOverrideField } from '~/utils/uiMode'
 
 // Per-service (frame) TESTING CONTEXT: freeform prose about how this service is tested, which
 // the engine injects verbatim into every tester prompt for it: the pipeline testers and the
@@ -17,37 +20,49 @@ import InspectorSection from '~/components/panels/inspector/InspectorSection.vue
 const props = defineProps<{ block: Block }>()
 
 const board = useBoardStore()
+const uiMode = useUiModeStore()
 const toast = useToast()
 const { t } = useI18n()
 
-/** Mirrors the contract's `updateBlockSchema.testingContext` cap. */
-const MAX = 8000
-
 const busy = ref(false)
-const draft = ref('')
+const draft = ref(props.block.testingContext ?? '')
 
-// Re-hydrate from the block whenever the persisted value changes. A live board event carrying
-// another tab's edit lands here too, and an in-flight draft is not clobbered because the value
-// only changes when the server confirmed one.
+// Re-hydrate from the block when the persisted value moves, but never over what the operator has
+// typed (`rehydratedDraft` owns the rule and its spec states each case). The board store patches
+// optimistically and ROLLS BACK on a rejected write, so a failed save arrives here looking exactly
+// like a teammate's edit; taking it would erase the prose the toast is telling the operator to try
+// saving again.
 watch(
   () => props.block.testingContext ?? '',
-  (value) => {
-    draft.value = value
+  (incoming, previous) => {
+    draft.value = rehydratedDraft({ draft: draft.value, previous, incoming, saving: busy.value })
   },
-  { immediate: true },
 )
 
 const saved = computed(() => props.block.testingContext ?? '')
-const tooLong = computed(() => draft.value.length > MAX)
-const dirty = computed(() => draft.value !== saved.value)
+// What a save would SEND, which is what the server would store: the request trims before it caps,
+// so trailing whitespace is neither length spent nor a change worth a request.
+const outgoing = computed(() => draft.value.trim())
+const tooLong = computed(() => outgoing.value.length > TESTING_CONTEXT_MAX_LENGTH)
+const dirty = computed(() => outgoing.value !== saved.value)
 const canSave = computed(() => !busy.value && dirty.value && !tooLong.value)
+
+// Standing per-service configuration, not part of the everyday delivery loop: a service is briefed
+// once and every task then ships without anyone opening this. Absent, every tester prompt is
+// byte-identical to one written before the field existed, which is what makes hiding it honest at
+// the basic tier. `showOverrideField` (not a bare `isAdvanced`) because a service that HAS been
+// briefed must show its prose to whoever opens the inspector: nothing else in the SPA surfaces
+// what the testers are being told, so hiding a filled box would leave a basic-tier user unable to
+// read, correct or clear it. The ROLE axis needs no separate answer: `intake` is capped at basic
+// and never configures the platform, so this reaches the same people the tier bar admits.
+const show = computed(() => showOverrideField(uiMode.isAdvanced, saved.value))
 
 async function save() {
   busy.value = true
   try {
     // `updateBlock` reports its own failure (it rolls back and toasts), so only the success
     // needs saying here; announcing it unconditionally would claim a save the rollback undid.
-    const persisted = await board.updateBlock(props.block.id, { testingContext: draft.value })
+    const persisted = await board.updateBlock(props.block.id, { testingContext: outgoing.value })
     if (persisted) {
       toast.add({
         title: t('inspector.testingContext.savedToast'),
@@ -67,6 +82,7 @@ function revert() {
 
 <template>
   <InspectorSection
+    v-if="show"
     :title="t('inspector.testingContext.title')"
     :hint="t('inspector.testingContext.sectionHint')"
     data-testid="service-testing-context"
@@ -89,7 +105,12 @@ function revert() {
 
     <div class="flex items-center justify-between gap-2">
       <p class="text-[11px] text-slate-500" :class="{ 'text-error-400': tooLong }">
-        {{ t('inspector.testingContext.length', { count: draft.length, max: MAX }) }}
+        {{
+          t('inspector.testingContext.length', {
+            count: outgoing.length,
+            max: TESTING_CONTEXT_MAX_LENGTH,
+          })
+        }}
       </p>
       <div class="flex items-center gap-2">
         <UButton

@@ -142,6 +142,21 @@ export function testCredentialLines(
 }
 
 /**
+ * What the platform established about the testing context BEFORE any of it is rendered: whether a
+ * service frame owns this work at all, and what its team wrote on it if one does.
+ *
+ * Two states rather than a nullable string, because "the owning service left this blank" and "no
+ * service on the board owns this work" are opposite facts that an agent acts on differently, and
+ * collapsing them is how a tester comes to file a gap against a service that was never resolved
+ * (the same distinction kernel's `describeOwnService` draws about the work's own subject).
+ */
+export type TestingContextBrief =
+  /** A service frame resolved; `context` is the prose its team wrote there, if any. */
+  | { service: 'resolved'; context?: string }
+  /** No service frame owns this work, so there is no team and no field to have filled in. */
+  | { service: 'unresolved' }
+
+/**
  * The service's own TESTING CONTEXT, as its team wrote it on the board.
  *
  * Shared for the same reason the two sections above are: the dry run exists to predict whether a
@@ -154,9 +169,21 @@ export function testCredentialLines(
  * exists and is empty", so it either files no finding at all or files one against the service. The
  * text is operator-authored prose and is passed through verbatim; anything secret belongs in the
  * sealed credential store, whose keys this prose refers to.
+ *
+ * The ONE place blank prose is judged to be no prose: the write boundary trims what it stores, and
+ * every caller hands this whatever the row held, so the question "is there anything to state" is
+ * answered here or it is answered differently by each reader.
  */
-export function testingContextLines(context: string | undefined): string[] {
-  const text = context?.trim()
+export function testingContextLines(brief: TestingContextBrief): string[] {
+  if (brief.service === 'unresolved') {
+    return [
+      'NO SERVICE ON THE BOARD OWNS THIS WORK, so there is no team that could have written one ' +
+        'and no field standing empty. Everything about how this is tested has to come from the ' +
+        'repository and from the sections above. Report what you had to work out for yourself, ' +
+        'but do NOT report a service as having left its testing context blank: none was resolved.',
+    ]
+  }
+  const text = brief.context?.trim()
   if (!text) {
     return [
       'NONE RECORDED. Nobody has written a testing context for this service on the board, so what ' +

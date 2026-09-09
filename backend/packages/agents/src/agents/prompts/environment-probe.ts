@@ -180,6 +180,10 @@ export interface EnvironmentProbeBrief {
    * has. Rendered either way ({@link testingContextLines}): a prober that does not know the field
    * exists cannot file "nobody told me how this is tested" in `missingContext`, which is the
    * finding the whole run is for.
+   *
+   * A plain optional rather than the renderer's own two-state brief, because a dry run is always
+   * ABOUT a service frame: the stage that composes this reads the field off the frame it just
+   * loaded, so the "no service owns this work" state the tester steps can be in cannot arise here.
    */
   testingContext?: string
   repo: { owner: string; name: string; branch: string; serviceDirectory?: string }
@@ -224,7 +228,7 @@ export function environmentProbeUserPrompt(brief: EnvironmentProbeBrief): string
   lines.push('', '## Credentials your shell carries', '')
   lines.push(...testCredentialLines(brief.testSecrets, PROBE_GAP_GUIDANCE))
   lines.push('', "## What this service's own team says about testing it", '')
-  lines.push(...testingContextLines(brief.testingContext))
+  lines.push(...testingContextLines({ service: 'resolved', context: brief.testingContext }))
   lines.push(
     '',
     '## The repository',

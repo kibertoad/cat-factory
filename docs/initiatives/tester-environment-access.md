@@ -165,22 +165,28 @@ name its variable here" the shape of the split.
   `testCredentialLines` in `environment-under-test.ts`), so the tester step and the dry run's prober
   are told the same text in the same words. That is the same reason the credential states are
   shared, and it is what a dry run's predictive claim rests on.
-- **The EMPTY case is stated, never omitted.** An agent that was never shown the field exists cannot
-  report that nobody filled it in, so it files the gap as its own ignorance or not at all. This is
-  the "absent and zero must not render the same" rule, applied to the one field whose emptiness a
-  human is meant to act on.
+- **The EMPTY case is stated, never omitted, and the NO-SERVICE case is a THIRD state.** An agent
+  that was never shown the field exists cannot report that nobody filled it in, so it files the gap
+  as its own ignorance or not at all. This is the "absent and zero must not render the same" rule,
+  applied to the one field whose emptiness a human is meant to act on. Which is why "the owning
+  service left it blank" may not be said about work no service owns: a tester step can run on a task
+  outside every frame, and `testingContextSection` reads `ownService` (the discriminated result, not
+  the nullable value) to tell the two apart, exactly as `ownServiceSection` does for the subject.
+- **Blank prose is judged in ONE place.** The write boundary trims what it stores, so a row holds
+  NULL or real prose and never a third spelling; every reader below carries the value through, and
+  the renderer answers "is there anything to state" for both of them.
 
-| Unit                                                                                                | Status | PR   |
-| --------------------------------------------------------------------------------------------------- | ------ | ---- |
-| Contracts: `blockSchema.testingContext` + `updateBlockSchema` (capped at 8000, empty string clears) | done   | this |
-| D1 `0103_service_testing_context` + Drizzle column/migration + the shared field-table mapper entry  | done   | this |
-| Write boundary: `blockPatchNarrowing.testingContext` drops it on any non-frame block                | done   | this |
-| Engine: `AgentContextBuilder.serviceConfigFrom` → `AgentRunContext.service.testingContext`          | done   | this |
-| Prompts: shared `testingContextLines` + `testingContextSection` (tester kinds only) + the prober    | done   | this |
-| Dry run: `EnvironmentProbeRequest.testingContext` (probe stage reads the frame it already loaded)   | done   | this |
-| Cross-runtime conformance (frame-chain walk + the frame-only drop, on both stores)                  | done   | this |
-| Frontend: `ServiceTestingContext.vue` inspector panel below the credentials + i18n in all locales   | done   | this |
-| Website page (the operator-facing half, merged first)                                               | done   | web  |
+| Unit                                                                                                                | Status | PR   |
+| ------------------------------------------------------------------------------------------------------------------- | ------ | ---- |
+| Contracts: `blockSchema.testingContext` + `updateBlockSchema` (trimmed, `TESTING_CONTEXT_MAX_LENGTH`, empty clears) | done   | this |
+| D1 `0103_service_testing_context` + Drizzle column/migration + the shared field-table mapper entry                  | done   | this |
+| Write boundary: `blockPatchNarrowing.testingContext` drops it on any non-frame block                                | done   | this |
+| Engine: `AgentContextBuilder.serviceConfigFrom` → `AgentRunContext.service.testingContext`                          | done   | this |
+| Prompts: shared `testingContextLines` + `testingContextSection` (tester kinds only) + the prober                    | done   | this |
+| Dry run: `EnvironmentProbeRequest.testingContext` (probe stage reads the frame it already loaded)                   | done   | this |
+| Cross-runtime conformance (frame-chain walk + the frame-only drop, on both stores)                                  | done   | this |
+| Frontend: `ServiceTestingContext.vue` panel below the credentials (advanced tier, revealed once set) + i18n         | done   | this |
+| Website page (the operator-facing half, merged first)                                                               | done   | web  |
 
 ### Slice D: Test Data Seeder agent (follow-up; NOT in this PR)
 
