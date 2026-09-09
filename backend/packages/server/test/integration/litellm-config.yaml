@@ -1,0 +1,23 @@
+# LiteLLM proxy config for the gateway integration lane (`litellm.it.spec.ts`).
+#
+# Everything that varies per run arrives through `os.environ/...`, which LiteLLM expands for any
+# `litellm_params` value: the stub upstream's base URL carries a per-run ephemeral port, and the
+# two keys are minted per run rather than being shared constants, so a key leaking from one hop
+# to the other is observable instead of matching either way.
+#
+# `model_name` is deliberately NOT the underlying model id, and that gap IS what the lane exists
+# to pin. A deployment reaches LiteLLM by the operator's own alias, while what the upstream is
+# asked for is the `model:` below. Neither of our own tests can show that, because both names
+# only exist once a real LiteLLM is doing the mapping.
+model_list:
+  - model_name: cat-factory-it-alias
+    litellm_params:
+      model: openai/stub-upstream-model
+      api_base: os.environ/CAT_FACTORY_IT_UPSTREAM_BASE
+      api_key: os.environ/CAT_FACTORY_IT_UPSTREAM_KEY
+
+litellm_settings:
+  # A retry would re-send to the stub and break every per-call request assertion, and the lane
+  # wants a stub error to arrive as itself rather than as a timeout three attempts later.
+  num_retries: 0
+  request_timeout: 30

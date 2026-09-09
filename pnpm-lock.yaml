@@ -899,6 +899,9 @@ importers:
       '@types/node':
         specifier: ^26.5.0
         version: 26.5.0
+      ai:
+        specifier: ^7.0.93
+        version: 7.0.93(zod@4.5.4)
       typescript:
         specifier: 7.0.2
         version: 7.0.2
