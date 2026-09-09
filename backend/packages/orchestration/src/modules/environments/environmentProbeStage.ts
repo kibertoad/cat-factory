@@ -228,6 +228,9 @@ export class EnvironmentProbeStage {
         title: frame.title,
         ...(frame.description?.trim() ? { description: frame.description.trim() } : {}),
       },
+      // Read off the frame this tick already loaded, and carried exactly as the engine carries it
+      // to a tester step: the dry run's whole claim is that it is told what the tester will be.
+      ...(frame.testingContext ? { testingContext: frame.testingContext } : {}),
       initiatedBy: record.initiatedBy,
     })
   }

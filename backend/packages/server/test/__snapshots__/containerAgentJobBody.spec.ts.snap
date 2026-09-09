@@ -772,6 +772,9 @@ Run mode: local — the service’s infra dependencies have been stood up on loc
 Sensitive test credentials for this service:
 NONE, AND NONE ARE POSSIBLE HERE. This deployment has no sealed credential store wired, so no service on this board can be handed test credentials. The only auth material you have is whatever the environment section states and whatever the repository documents. If an operation needs a credential, record it as a failure and name the credential that is needed, and say that the DEPLOYMENT has no credential store, rather than asking for this service to be reconfigured.
 
+Testing context for this service:
+NONE RECORDED. Nobody has written a testing context for this service on the board, so what matters here, which accounts exist and what the data means all have to come from the repository and from the sections above. If you end up guessing at something the service's own team could have told you in a sentence, say so in your report: that is exactly what this field is for.
+
 Produce your contribution. Be concise and concrete.",
     "webSearch": true,
     "webToolsGuidance": "

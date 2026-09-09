@@ -17,7 +17,7 @@ import {
 // The ONE deriver of an environment URL's host/port/scheme, in contracts because the platform has
 // to DIAL exactly what this prompt tells the agent to dial: a second parser here is how the route
 // proof and the Tester's coordinates come to disagree about the same string.
-import { deriveEnvironmentCoordinates } from '@cat-factory/contracts'
+import { deriveEnvironmentCoordinates, isTesterKind } from '@cat-factory/contracts'
 import { PLATFORM_DELIVERY_CONTRACT } from './delivery-contract.js'
 import { renderOpenFindings } from './review-rounds.js'
 import { FINAL_ANSWER_IN_REPLY } from './shared.js'
@@ -28,6 +28,8 @@ import {
   IMPLEMENTER_CREDENTIAL_GAP_GUIDANCE,
   environmentAccessLines,
   testCredentialLines,
+  testingContextLines,
+  type TestingContextBrief,
 } from './environment-under-test.js'
 // "Is this kind's deliverable its reply, or a pushed commit?": the declaration that decides where
 // it can record a credential gap at all.
@@ -418,6 +420,47 @@ export function testSecretsSection(context: AgentRunContext): string {
   if (!brief) return ''
   const lines = ['', 'Sensitive test credentials for this service:']
   return [...lines, ...testCredentialLines(brief)].join('\n')
+}
+
+/**
+ * Render the service's own TESTING CONTEXT: the prose its team wrote on the board about how this
+ * service is tested, injected verbatim.
+ *
+ * Gated on the KIND rather than on the value, unlike its neighbours: the context rides
+ * `context.service` (service-frame configuration, resolved for every dispatch), so the decision
+ * about who is told it belongs here. Only the testers are, which is what keeps every other prompt
+ * byte-identical, and the environment dry run's prober is told the same text through the same
+ * renderer so its verdict predicts theirs.
+ *
+ * The EMPTY case is rendered too, for the reason {@link testingContextLines} states: an agent that
+ * was never told the field exists cannot report that nobody filled it in. Which is why the
+ * NO-SERVICE case may not borrow that wording, and why the heading moves with it: work that sits
+ * under no service frame has nobody who could have left the field blank, and told otherwise a
+ * tester files the platform's own gap as some service's negligence.
+ */
+export function testingContextSection(context: AgentRunContext): string {
+  if (!isTesterKind(context.agentKind)) return ''
+  const brief = testingContextBrief(context)
+  const heading =
+    brief.service === 'resolved' ? 'Testing context for this service:' : 'Testing context:'
+  return ['', heading, ...testingContextLines(brief)].join('\n')
+}
+
+/**
+ * Which of the renderer's states this run is in, read off `ownService`: the DISCRIMINATED result
+ * the engine derives from the same ancestry walk that resolves `service`, and the only field that
+ * tells "no frame was found" from "the frame recorded nothing".
+ *
+ * `block-is-the-service` counts as RESOLVED: a frame-level run's own block IS the service, so the
+ * prose, and its absence, belong to it. An `ownService` missing altogether counts as resolved too,
+ * matching what that field's contract says about a caller which never populates it: the engine
+ * always does, so the only contexts affected are hand-built ones, and there the blank-field
+ * wording is what this section rendered before the third branch existed.
+ */
+function testingContextBrief(context: AgentRunContext): TestingContextBrief {
+  const own = context.ownService
+  if (own && !own.stated && own.reason === 'not-under-a-service') return { service: 'unresolved' }
+  return { service: 'resolved', context: context.service?.testingContext }
 }
 
 /**

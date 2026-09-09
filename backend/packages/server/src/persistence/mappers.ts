@@ -110,6 +110,8 @@ export interface BlockRow {
   pipeline_id: string | null
   /** Task-level agent-contributed config values, JSON id→value map. */
   agent_config: string | null
+  /** Service-frame-level: the operator's freeform testing context, injected into tester prompts. */
+  testing_context?: string | null
   /** Service-level: cloud provider the service's jobs run on. */
   cloud_provider: string | null
   /** Service-level: abstract instance size for the service's jobs. */
@@ -544,6 +546,8 @@ const blockFields: FieldMapper<Block, BlockPatch>[] = [
   },
   // Service-owned provisioning config (the "what + where") — a JSON object on frame blocks.
   optJsonField('provisioning'),
+  // Service-frame prose fed to the tester prompts; an empty string clears it, like `modelId`.
+  optField('testingContext', { clearOnEmpty: true }),
   optField('cloudProvider'),
   optField('instanceSize'),
   // Frontend-frame-level config (build/serve/mock + backend bindings) — a JSON object.

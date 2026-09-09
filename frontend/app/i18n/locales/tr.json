@@ -1051,6 +1051,16 @@
       "configNoun": "hassas test kimlik bilgileri",
       "duplicateKey": "Her değişken adı benzersiz olmalıdır."
     },
+    "testingContext": {
+      "title": "Test bağlamı",
+      "sectionHint": "Bu servisin nasıl test edildiğine dair serbest notlar: hangi akışlar önemli, hangi test hesapları var ve bunlarla nasıl oturum açılır, yüklü veriler ne anlama geliyor, neye dokunulmamalı. Bu servis için her Test Edici çalışması bu metni harfi harfine alır; ortamın deneme çalışması da öyle.",
+      "notSecret": "Bu metin doğrudan Test Edici'nin istemine girer, bu yüzden gerçek sırları buraya yazmayın. Onları yukarıdaki «Test kimlik bilgileri» bölümüne kaydedin ve burada yalnızca değişken adıyla anın.",
+      "placeholder": "ör. $DEMO_USER olarak oturum açın; yüklü kiracı üç projeli Acme'dir; faturalama akışını asla çalıştırmayın, gerçek bir kartı borçlandırır.",
+      "length": "{count} / {max} karakter",
+      "save": "Test bağlamını kaydet",
+      "revert": "Değişiklikleri geri al",
+      "savedToast": "Test bağlamı kaydedildi"
+    },
     "testConfig": {
       "title": "Test altyapısı",
       "hint": "Bir pipeline bu servisi çalıştırmak istediğinde test ortamının nasıl kurulacağı: altyapısız, bir Docker Compose dosyası, Kubernetes manifestoları veya özel bir manifest türü.",

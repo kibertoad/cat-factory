@@ -118,6 +118,10 @@ export const blocks = pgTable(
     // Carries the provision type + in-repo specifics; the Tester's infra stand-up + the
     // deployer read it. The cloud provider and abstract instance size follow.
     provisioning: text('provisioning'),
+    // Service-frame-level: the operator's freeform TESTING CONTEXT (how to test this service),
+    // injected verbatim into every tester prompt for it (the pipeline testers and the environment
+    // dry run's prober). Non-sensitive by contract; secrets live in `test_secrets`.
+    testing_context: text('testing_context'),
     cloud_provider: text('cloud_provider'),
     instance_size: text('instance_size'),
     // Frontend-frame-level (`type: 'frontend'`): serialized FrontendConfig — how to

@@ -1051,6 +1051,16 @@
       "configNoun": "las credenciales de prueba sensibles",
       "duplicateKey": "Cada nombre de variable debe ser único."
     },
+    "testingContext": {
+      "title": "Contexto de pruebas",
+      "sectionHint": "Notas libres sobre cómo se prueba este servicio: qué flujos importan, qué cuentas de prueba existen y cómo iniciar sesión con ellas, qué significan los datos precargados y qué no hay que tocar. Cada ejecución del Tester para este servicio recibe este texto tal cual, igual que la prueba en seco del entorno.",
+      "notSecret": "Este texto se envía tal cual al prompt del Tester, así que no pongas secretos reales aquí. Guárdalos arriba, en «Credenciales de prueba», y menciónalos aquí solo por el nombre de la variable.",
+      "placeholder": "p. ej. inicia sesión como $DEMO_USER; el inquilino precargado es Acme con tres proyectos; nunca ejecutes el flujo de facturación, cobra a una tarjeta real.",
+      "length": "{count} de {max} caracteres",
+      "save": "Guardar contexto de pruebas",
+      "revert": "Descartar cambios",
+      "savedToast": "Contexto de pruebas guardado"
+    },
     "testConfig": {
       "title": "Infraestructura de pruebas",
       "hint": "Cómo se levanta un entorno de prueba para este servicio cuando un pipeline necesita ejecutarlo: sin infraestructura, un archivo de Docker Compose, manifiestos de Kubernetes o un tipo de manifiesto personalizado.",
