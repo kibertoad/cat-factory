@@ -74,6 +74,14 @@ export function openAiCompatibleResolver(opts: {
     baseURL: opts.baseURL,
     ...(opts.fetch ? { fetch: opts.fetch } : {}),
     supportsStructuredOutputs: opts.supportsStructuredOutputs ?? false,
+    // Ask for the usage chunk on a STREAMED call (`stream_options: { include_usage: true }`),
+    // which this client omits by default and which an OpenAI-compatible upstream then never
+    // sends: the reply ends and the call is metered at zero. The proxied path has always sent
+    // it for these same upstreams (`LlmProxyController`'s `relayUpstream`), so leaving it off
+    // here meant one platform metering the same vendor two different ways depending on which
+    // path reached it. Inert on a buffered call: the SDK only sets `stream_options` in
+    // `doStream`, and the integration lane pins both halves against a real gateway.
+    includeUsage: true,
   })
   return (ref) => provider(ref.model)
 }

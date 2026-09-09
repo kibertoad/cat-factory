@@ -145,7 +145,7 @@ describe.skipIf(!docker)(`litellm gateway (${LITELLM_IMAGE})`, () => {
     expect(result.usage.outputTokens).toBe(5)
   })
 
-  it('streams a reply, but asks for no usage with it (a latent gap, pinned)', async () => {
+  it('carries the token counts through a STREAMED reply too', async () => {
     upstream.reply({
       content: 'streamed through litellm',
       usage: { prompt_tokens: 12, completion_tokens: 4, total_tokens: 16 },
@@ -159,26 +159,17 @@ describe.skipIf(!docker)(`litellm gateway (${LITELLM_IMAGE})`, () => {
     expect(assembled).toBe('streamed through litellm')
     expect(calls.sole().stream).toBe(true)
 
-    // READ THIS BEFORE "FIXING" THE ASSERTION BELOW.
-    //
-    // The stub emits a usage chunk on every stream, and LiteLLM DROPS it unless the client asked
-    // for one with `stream_options: { include_usage: true }`. Verified against this image both
-    // ways: with the option the final chunk carries the counts, without it no usage chunk is
-    // emitted at all. `openAiCompatibleResolver` never sets the SDK's `includeUsage`, so a
-    // streamed call through any OpenAI-compatible provider (both operator-hosted gateways, plus
-    // qwen / deepseek / moonshot / xai and the Cloudflare REST resolver) would carry none.
-    //
-    // NOTHING INLINE STREAMS TODAY, which is what makes this a latent gap rather than a live
-    // metering hole. The spec reaches it only by resolving a model raw; every production
-    // resolution goes through `InstrumentedModelProvider`, whose `wrapStream` THROWS rather than
-    // let a streamed call reach the sinks unrecorded. That refusal and this missing option are
-    // halves of the same unfinished work: the first inline caller that wants to stream has to
-    // implement `wrapStream`, thread `streaming` through the inline recorder, AND ask for usage,
-    // or it books what it spends at zero. The evidence that the absence is an oversight rather
-    // than a policy is that the CONTAINER path already sets exactly this option for the same
-    // upstreams, unconditionally, so that it can meter them (`LlmProxyController.ts`,
-    // `relayUpstream`). When that work lands, this assertion is the one that should flip.
-    expect((await result.usage).outputTokens).toBeUndefined()
+    // This is the assertion the lane was built for, and it read `toBeUndefined()` until the
+    // resolver was fixed. LiteLLM DROPS the upstream's usage chunk unless the client asked for
+    // one with `stream_options: { include_usage: true }`, and `openAiCompatibleResolver` never
+    // set the SDK's `includeUsage`: every streamed call through an OpenAI-compatible provider
+    // (both operator-hosted gateways, plus qwen / deepseek / moonshot / xai and the Cloudflare
+    // REST resolver) would have been metered at zero, silently, since an unrecorded token and a
+    // step that spent nothing are the same absence downstream. Verified against this image both
+    // ways, which is the only way to see it: the option changes nothing about a BUFFERED call,
+    // so no unit test and no other lane can tell the two settings apart.
+    expect((await result.usage).inputTokens).toBe(12)
+    expect((await result.usage).outputTokens).toBe(4)
   })
 
   it('passes a tool definition upstream and returns the call the upstream made', async () => {

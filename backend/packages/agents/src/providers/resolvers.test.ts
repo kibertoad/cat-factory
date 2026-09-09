@@ -90,6 +90,33 @@ describe('openAiCompatibleResolver', () => {
     expect(seen[0]).toContain('http://localhost:11434/v1')
   })
 
+  // The opt-in that decides whether a STREAMED call is metered at all. An OpenAI-compatible
+  // upstream sends its usage chunk only when the request asks for one, and this client omits the
+  // ask by default, so the stream ends carrying no counts and the call books zero tokens: an
+  // absence indistinguishable downstream from a step that spent nothing. Both call shapes are
+  // asserted because the option is a NO-OP on a buffered request, which is what let it stay
+  // missing: nothing short of a real gateway (`litellm.it.spec.ts`) could tell the two settings
+  // apart, and this is the cheap half of that pair.
+  it('asks for usage on a streamed request, and leaves a buffered one alone', async () => {
+    const model = () =>
+      asModel(
+        openAiCompatibleResolver({
+          name: 'qwen',
+          apiKey: 'k',
+          baseURL: 'https://vendor.test/v1',
+        })({ provider: 'qwen', model: 'qwen-max' }),
+      )
+    const prompt = [
+      { role: 'user' as const, content: [{ type: 'text' as const, text: 'hi' }] },
+    ] satisfies LanguageModelV3CallOptions['prompt']
+
+    const streamed = await onTheWire(() => model().doStream({ prompt }))
+    expect(streamed[0]?.stream_options).toEqual({ include_usage: true })
+
+    const buffered = await onTheWire(() => model().doGenerate({ prompt }))
+    expect(buffered[0]).not.toHaveProperty('stream_options')
+  })
+
   // The whole reason the flag is threaded through: WITHOUT it the SDK rewrites a schema-carrying
   // request to `{ type: 'json_object' }` and DROPS the schema, recording only a warning nothing
   // in this repo reads. Both halves are pinned, so a future default flip is visible here rather
