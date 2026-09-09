@@ -1,5 +1,8 @@
 import * as v from 'valibot'
+import type { AgentRunResult, RunnerJobResult } from '@cat-factory/kernel'
+import { INTEGRATION_TEST_AGENT_KIND } from '@cat-factory/contracts'
 import { defineStructuredOutput } from './structured-output.js'
+import { summaryOr } from './built-in-results.js'
 import { FINAL_ANSWER_IN_REPLY } from '../prompts/shared.js'
 import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
 import { BRIEF_STANDARDS_TRAIT, CODE_AWARE_TRAIT, SPEC_AWARE_TRAIT } from './traits.js'
@@ -30,41 +33,108 @@ import { BRIEF_STANDARDS_TRAIT, CODE_AWARE_TRAIT, SPEC_AWARE_TRAIT } from './tra
 // (`backend/docs/test-verified-bugfix.md`).
 // ---------------------------------------------------------------------------
 
-export const INTEGRATION_TEST_KIND = 'integration-test'
+/**
+ * Re-exported from `@cat-factory/contracts` for the same reason {@link TESTER_AGENT_KIND} is: the
+ * slug is read by both reductions of a run's test evidence (the PR verification report's note and
+ * the outcome summary's gap), and one of them is compiled into the SPA, which cannot see this
+ * package. The REGISTRATION stays here.
+ */
+export { INTEGRATION_TEST_AGENT_KIND as INTEGRATION_TEST_KIND } from '@cat-factory/contracts'
+
+/** The coverage verdicts the step may report, most covered first. */
+const INTEGRATION_TEST_OUTCOMES = ['covered', 'partial', 'uncovered'] as const
 
 /**
- * The step's structured outcome. Lenient (`v.fallback`/`v.optional`) exactly like
- * `reproTestOutcome`, so a partially-malformed reply degrades in place rather than failing a step
- * whose commits are already pushed. An unreadable `outcome` reads as `uncovered`, the conservative
- * choice: a reader is then told there is no coverage to rely on rather than handed a claim the
- * reply never made.
+ * What the AGENT returns, and nothing else: the half of the record a model authors.
+ *
+ * Split out from the persisted record below so the shape hint the harness shows the model on a
+ * malformed reply describes exactly the fields it is being asked for. A platform-owned field in
+ * that hint is an invitation to fill it in.
+ */
+const integrationTestReply = v.object({
+  /** Whether the changed behaviour ended up covered by committed, passing tests. */
+  outcome: v.fallback(v.picklist(INTEGRATION_TEST_OUTCOMES), 'uncovered'),
+  /** The test file(s) this run added or extended. */
+  testPaths: v.fallback(v.array(v.fallback(v.string(), '')), []),
+  /**
+   * The test doubles the tests run against, by path or by the upstream each stands in for: what
+   * this run added plus what it reused. Named rather than implied because the next person to
+   * touch these tests has to know which stubs they lean on, and because a set of integration
+   * tests naming NO double is either reaching a real third party or not integrating anything.
+   */
+  mocks: v.fallback(v.array(v.fallback(v.string(), '')), []),
+  /**
+   * Behaviour this run deliberately did NOT cover, each entry carrying its reason. The honest
+   * half of the report, and the reason `outcome` alone is not the deliverable: `partial` with an
+   * empty list states a gap while hiding what it is, which reads to a reviewer exactly like
+   * coverage nobody got round to describing.
+   */
+  uncovered: v.fallback(v.array(v.fallback(v.string(), '')), []),
+  /** What the committed tests exercise, and the command or CI job that runs them. */
+  notes: v.fallback(v.optional(v.string()), undefined),
+})
+
+/**
+ * The step's structured outcome as it is PERSISTED: the agent's reply plus the one fact about it
+ * the platform can establish itself.
+ *
+ * Lenient (`v.fallback`/`v.optional`) exactly like `reproTestOutcome`, so a partially-malformed
+ * reply degrades in place rather than failing a step whose commits are already pushed. An
+ * unreadable `outcome` reads as `uncovered`, the conservative choice: a reader is then told there
+ * is no coverage to rely on rather than handed a claim the reply never made.
  */
 export const integrationTestOutcome = defineStructuredOutput(
   v.object({
-    /** Whether the changed behaviour ended up covered by committed, passing tests. */
-    outcome: v.fallback(v.picklist(['covered', 'partial', 'uncovered']), 'uncovered'),
-    /** The test file(s) this run added or extended. */
-    testPaths: v.fallback(v.array(v.fallback(v.string(), '')), []),
+    ...integrationTestReply.entries,
     /**
-     * The test doubles the tests run against, by path or by the upstream each stands in for: what
-     * this run added plus what it reused. Named rather than implied because the next person to
-     * touch these tests has to know which stubs they lean on, and because a set of integration
-     * tests naming NO double is either reaching a real third party or not integrating anything.
+     * Whether the run that produced this report actually COMMITTED anything, computed by
+     * {@link integrationTestResult} from the harness's own push result and never read off the
+     * reply (a value the model supplies is overwritten there).
+     *
+     * It exists because `outcome: 'covered'` is otherwise an unchecked claim about files. The
+     * step tolerates a no-op, so a run that read the code, decided the behaviour was already
+     * covered and committed nothing settles exactly as clean as one that wrote a suite. Every
+     * reader downstream (the merge assessment, the pull-request report, the human at the merge
+     * gate) was then shown "Covered by committed tests" over a diff containing none. The
+     * reproduction step avoids this by making the platform RUN the proof; there is no equivalent
+     * here, so what the platform can state is whether the commits exist.
+     *
+     * `undefined` means the harness reported no push outcome at all (a non-coding dispatch, an
+     * older image): unknown, which is a third fact and is rendered as neither of the other two.
      */
-    mocks: v.fallback(v.array(v.fallback(v.string(), '')), []),
-    /**
-     * Behaviour this run deliberately did NOT cover, each entry carrying its reason. The honest
-     * half of the report, and the reason `outcome` alone is not the deliverable: `partial` with an
-     * empty list states a gap while hiding what it is, which reads to a reviewer exactly like
-     * coverage nobody got round to describing.
-     */
-    uncovered: v.fallback(v.array(v.fallback(v.string(), '')), []),
-    /** What the committed tests exercise, and the command or CI job that runs them. */
-    notes: v.fallback(v.optional(v.string()), undefined),
+    committed: v.fallback(v.optional(v.boolean()), undefined),
   }),
+  // The model's half only. Derived rather than hand-written so it cannot drift from the reply
+  // schema above.
+  { shapeHint: defineStructuredOutput(integrationTestReply).spec.shapeHint },
 )
 
 export type IntegrationTestOutcome = ReturnType<typeof integrationTestOutcome.parse>
+
+/**
+ * Fold the platform's own finding onto the agent's parsed reply: did this run commit anything.
+ *
+ * Written LAST, so a reply that supplied `committed` itself cannot decide the question it is
+ * being checked against. A multi-repo fan-out counts a peer pull request as work, because
+ * `pushed` describes the PRIMARY repo alone and a defect spanning services has its tests land
+ * wherever the seam is.
+ */
+export function integrationTestResult(result: RunnerJobResult): AgentRunResult {
+  const committed =
+    result.pushed === undefined
+      ? undefined
+      : result.pushed || (result.peerPullRequests?.length ?? 0) > 0
+  return {
+    output: summaryOr(result, 'Integration tests complete.'),
+    custom: {
+      ...(typeof result.custom === 'object' && result.custom !== null ? result.custom : {}),
+      // Written unconditionally, `undefined` included: a run whose push outcome is unknown must
+      // erase a `committed` the reply supplied, not inherit it. Leaving the model's value standing
+      // in the one case the platform cannot check is the whole failure this field exists to close.
+      committed,
+    },
+  }
+}
 
 const INTEGRATION_TEST_SYSTEM_PROMPT = [
   'You are an integration-test engineer. A fix for a reported defect has just been committed on this branch, and your job is to leave behind the automated tests that prove the fixed behaviour holds and that fail again if it ever regresses.',
@@ -95,7 +165,7 @@ const INTEGRATION_TEST_SYSTEM_PROMPT = [
 
 export const INTEGRATION_TEST_AGENT_KINDS: AgentKindDefinition[] = [
   {
-    kind: INTEGRATION_TEST_KIND,
+    kind: INTEGRATION_TEST_AGENT_KIND,
     systemPrompt: INTEGRATION_TEST_SYSTEM_PROMPT,
     // Writes test code to the service's own conventions, so the task's best-practice fragments are
     // folded in, in their CONDENSED form: this is a long agentic loop (write, run, read the
@@ -114,6 +184,9 @@ export const INTEGRATION_TEST_AGENT_KINDS: AgentKindDefinition[] = [
     // coder do.
     fanOutMultiRepo: true,
     structuredOutput: integrationTestOutcome,
+    // The one built-in mapping that is not about routing the reply into a typed engine channel:
+    // it CHECKS the reply against the job that produced it. See `committed` above.
+    mapStructuredResult: integrationTestResult,
     presentation: {
       label: 'Integration Tests',
       icon: 'i-lucide-test-tubes',

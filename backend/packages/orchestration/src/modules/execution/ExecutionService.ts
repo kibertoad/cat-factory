@@ -642,7 +642,9 @@ export class ExecutionService {
       resolveRiskPolicy: (ws, block, run) => this.resolveRiskPolicy(ws, block, run),
       dispatchIterationCap: (ws, blockId, choice, handlers) =>
         this.runActions.iterationCap.dispatchIterationCap(ws, blockId, choice, handlers),
-      pipelineRepository: deps.pipelineRepository,
+      // The READ-ONLY half of adoption, so a bug-fishing spawn validates its fix pipeline against
+      // the catalog a run would actually resolve rather than against the workspace's rows.
+      resolvePipelineDefinition: (ws, id) => this.pipelineAdoption.resolveDefinition(ws, id),
       workspaceSettingsRepository: deps.workspaceSettingsRepository,
       serviceRepository: deps.serviceRepository,
       taskTypeRegistry: deps.taskTypeRegistry,

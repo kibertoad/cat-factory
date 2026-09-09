@@ -20,15 +20,11 @@ import {
   isRequirementRegression,
   joinSpecRequirements,
   PR_VERIFICATION_REPORT_VERSION,
+  selectCommittedTestStep,
   tallyRequirements,
   unmatchedVerdictIds,
 } from '@cat-factory/contracts'
-import {
-  CI_AGENT_KIND,
-  INTEGRATION_TEST_KIND,
-  MERGER_AGENT_KIND,
-  isTesterKind,
-} from './ci.logic.js'
+import { CI_AGENT_KIND, MERGER_AGENT_KIND, isTesterKind } from './ci.logic.js'
 import { integrationTestVerificationNote } from './integrationTest.logic.js'
 import {
   type PrReportEnvironmentInputs,
@@ -271,15 +267,22 @@ function composeTests(
     // Two different absences, and only one of them means the change went unexercised. A pipeline
     // that verifies through COMMITTED tests (`pl_bugfix_tested`) ran a suite and put it in the
     // diff, so its note says that instead of claiming no test run happened.
-    const committed = findStep(
-      instance,
-      (s) => s.agentKind === INTEGRATION_TEST_KIND,
-      (s) => s.custom !== undefined,
-    )
+    //
+    // The selection is `selectCommittedTestStep` in contracts, shared with the run outcome
+    // summary's `verified_by_committed_tests` gap: the two documents reduce the same absence and
+    // may not answer it differently. Whether an enabled `ci` gate exists travels with it, because
+    // the note's closing clause names CI as what RUNS those tests and nothing obliges a pipeline
+    // carrying this step to carry that gate.
+    const committed = selectCommittedTestStep(instance.steps)
+    // Presence, not evidence: the note promises that CI will run the committed tests, which is
+    // true of a gate that has not reached its first poll. A step disabled in the pipeline never
+    // reaches `instance.steps` at all (`RunLifecycleController` filters them at start), so being
+    // here is what "enabled" means.
+    const hasCiGate = instance.steps.some((s) => s.agentKind === CI_AGENT_KIND)
     return {
       status: 'absent',
       note:
-        integrationTestVerificationNote(committed?.custom) ??
+        integrationTestVerificationNote(committed?.custom, hasCiGate) ??
         'No tester step in this pipeline, so the platform exercised nothing itself.',
       tested: [],
       outcomes: [],

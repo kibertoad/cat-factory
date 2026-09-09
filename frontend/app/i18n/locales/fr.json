@@ -3856,7 +3856,7 @@
       "bugFishing": {
         "heading": "Pipeline de correction de la pêche aux bogues",
         "body": "La pipeline sur laquelle s'exécute une tâche de correction lorsque vous marquez une constatation issue d'une pêche aux bogues. Chaque constatation marquée devient sa propre tâche sur cette pipeline ; la personne qui marque peut changer ce choix pour un lot.",
-        "builtInDefault": "Utiliser le préréglage de correction intégré"
+        "builtInDefault": "Utiliser la valeur par défaut de la plateforme (le préréglage de correction vérifiée par des tests)"
       }
     },
     "localModelEndpoints": {
@@ -6293,7 +6293,8 @@
       },
       "gap": {
         "no_tester_step": "Ce pipeline ne comporte aucune étape de test, rien n'a donc été exercé.",
-        "tester_not_reported": "Le testeur n'a pas encore rendu son rapport."
+        "tester_not_reported": "Le testeur n'a pas encore rendu son rapport.",
+        "verified_by_committed_tests": "Ce pipeline ne comporte volontairement aucune étape de test : le changement est couvert par des tests livrés avec lui, que la CI exécute."
       }
     },
     "visuals": {

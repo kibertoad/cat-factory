@@ -17,6 +17,7 @@ public enum GetPublicRunOutcomeResponseTestsVariant0Gap {
     RUN_UNAVAILABLE("run_unavailable"),
     NO_TESTER_STEP("no_tester_step"),
     TESTER_NOT_REPORTED("tester_not_reported"),
+    VERIFIED_BY_COMMITTED_TESTS("verified_by_committed_tests"),
 
     /**
      * A value this SDK release does not know.

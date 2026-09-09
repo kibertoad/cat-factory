@@ -395,8 +395,17 @@ touching this composer now:
 
 - **A rule BOTH documents state lives in `@cat-factory/contracts` `run-evidence.ts`**, never in this
   file: `isTesterKind`, `selectEvidenceStep`, `indexRequirementVerdicts`, `joinSpecRequirements`,
-  `isRequirementRegression`, `tallyRequirements`. This file keeps what is genuinely its own, which is
-  the BOUNDARY treatment (scrubbing, cell clamping, the severity-first cap) and its absence prose.
+  `isRequirementRegression`, `tallyRequirements`, `selectCommittedTestStep`. This file keeps what is
+  genuinely its own, which is the BOUNDARY treatment (scrubbing, cell clamping, the severity-first
+  cap) and its absence prose.
+- **An ABSENCE is a rule too, and that is the trap the split invites.** The two documents differ in
+  how they SAY a section is missing (prose here, a machine-readable `gap` there), which makes it
+  read as presentation and tempts a branch into one side only. It is not: WHICH absence a run is in
+  is a fact about the run. A pipeline that verifies through tests it commits
+  ([`test-verified-bugfix.md`](../../backend/docs/test-verified-bugfix.md)) has no tester section on
+  either surface, and the two absences available there ("a suite ran and is in the diff" against
+  "nothing exercised this") are opposite readings of one change. Both documents select through
+  `selectCommittedTestStep` and answer from it; only the wording is each one's own.
 - **The two read one run's evidence once**, through `RunEvidenceLoader` (block + `spec/`, gated on a
   tester report and memoised per run). Sharing the rules while reading twice would move the drift one
   layer down.

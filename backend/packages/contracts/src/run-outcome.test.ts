@@ -143,6 +143,34 @@ describe('composeRunOutcome', () => {
     expect(silent.tests).toEqual({ status: 'absent', gap: 'tester_not_reported' })
   })
 
+  it('keeps a run verified by COMMITTED tests apart from one nothing exercised', () => {
+    // Two absences with opposite meanings, and `no_tester_step` translates as "nothing was
+    // exercised". A preset that verifies through tests it commits (`pl_bugfix_tested`) has its PR
+    // report say a suite ran and is in the diff, so answering the same absence with that copy is
+    // the two reductions of one run contradicting each other on the surface a person reads.
+    const committed = composeRunOutcome({
+      block: block(),
+      instance: run([
+        step(),
+        step({
+          agentKind: 'integration-test',
+          custom: { outcome: 'covered', testPaths: ['test/a.spec.ts'] },
+        }),
+      ]),
+    })
+    expect(committed.tests).toEqual({ status: 'absent', gap: 'verified_by_committed_tests' })
+    // Requirement coverage deliberately does NOT split: committed integration tests produce no
+    // per-requirement verdicts, so "no requirement was checked" is exactly what happened.
+    expect(committed.requirements).toEqual({ status: 'absent', gap: 'no_tester_step' })
+
+    // A step that has not produced its outcome yet is not evidence of anything.
+    const pending = composeRunOutcome({
+      block: block(),
+      instance: run([step(), step({ agentKind: 'integration-test' })]),
+    })
+    expect(pending.tests).toEqual({ status: 'absent', gap: 'no_tester_step' })
+  })
+
   it('keeps a tester that could not run apart from one that raised concerns', () => {
     const aborted = composeRunOutcome({
       block: block(),

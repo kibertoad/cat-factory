@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   BUILTIN_TASK_TYPES,
+  ENV_CONSUMER_AGENT_KINDS,
   isPipelinePurpose,
   pipelineAllowedForBlockLevel,
   pipelineAllowedForTaskType,
@@ -31,7 +32,10 @@ import {
 
 const byId = () => new Map(seedPipelines().map((p) => [p.id, p]))
 
-const ENV_CONSUMERS = new Set(['tester-api', 'tester-ui', 'playwright', 'human-test'])
+// DERIVED from the same list the engine's lifecycle rules read, never a hand-written copy of it.
+// A fifth consumer kind added to contracts and dropped into a preset is precisely what these
+// assertions exist to catch, and a copy here would have passed on it while claiming otherwise.
+const ENV_CONSUMERS = new Set(ENV_CONSUMER_AGENT_KINDS)
 
 describe('seedPipelines — named-gate lowering', () => {
   it('keeps gates/enabled index-aligned with agentKinds for every pipeline', () => {

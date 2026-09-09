@@ -18,6 +18,7 @@ import {
   isTesterKind,
   joinSpecRequirements,
   runEnvironmentObservations,
+  selectCommittedTestStep,
   selectTesterReportStep,
   tallyRequirements,
   tallyTestOutcomes,
@@ -212,6 +213,18 @@ export const testsGapSchema = v.picklist([
   runUnavailableGap,
   'no_tester_step',
   'tester_not_reported',
+  /**
+   * No tester step, and none was wanted: this pipeline verifies through tests COMMITTED beside
+   * the change (an `integration-test` step) which the CI gate runs, so the platform exercised
+   * nothing itself and the change is not unexercised either.
+   *
+   * Its own member rather than `no_tester_step` because the two call for opposite reactions, and
+   * the copy `no_tester_step` carries ("nothing was exercised") is the misreading this section
+   * exists to prevent. It is also what keeps this summary and the PR verification report quoting
+   * the same run: the report renders a note naming the committed suite, and until this member
+   * existed the summary answered the same absence with the opposite verdict.
+   */
+  'verified_by_committed_tests',
 ])
 export type TestsGap = v.InferOutput<typeof testsGapSchema>
 
@@ -603,8 +616,18 @@ function composeRequirements(
   }
 }
 
-function composeTests(step: PipelineStep | undefined): OutcomeTests {
-  if (!step) return { status: 'absent', gap: 'no_tester_step' }
+function composeTests(
+  steps: readonly PipelineStep[],
+  step: PipelineStep | undefined,
+): OutcomeTests {
+  // Two different absences, and only one of them means the change went unexercised. Same
+  // selection the PR verification report's note makes (`selectCommittedTestStep`), so the two
+  // documents cannot describe the same run in opposite terms.
+  if (!step) {
+    return selectCommittedTestStep(steps)
+      ? { status: 'absent', gap: 'verified_by_committed_tests' }
+      : { status: 'absent', gap: 'no_tester_step' }
+  }
   const report = step.test?.lastReport
   if (!report) return { status: 'absent', gap: 'tester_not_reported' }
 
@@ -1045,7 +1068,7 @@ export function composeRunOutcome({ block, instance, spec }: ComposeRunOutcomeIn
   return {
     ...asked,
     requirements: composeRequirements(steps, spec),
-    tests: composeTests(tester),
+    tests: composeTests(steps, tester),
     visuals: composeVisuals(steps, tester),
     environments: composeEnvironments(steps),
     sources: composeSources(steps),

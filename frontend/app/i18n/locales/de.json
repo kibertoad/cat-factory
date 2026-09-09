@@ -1179,7 +1179,7 @@
       "bugFishing": {
         "heading": "Pipeline für Fehlerbehebungen aus der Fehlersuche",
         "body": "Die Pipeline, auf der eine Behebungsaufgabe läuft, wenn Sie einen Befund aus einer Fehlersuche markieren. Jeder markierte Befund wird zu einer eigenen Aufgabe auf dieser Pipeline; wer markiert, kann die Auswahl für einen Durchgang überschreiben.",
-        "builtInDefault": "Die integrierte Fehlerbehebungs-Vorlage verwenden"
+        "builtInDefault": "Standard der Plattform verwenden (die testverifizierte Bugfix-Vorlage)"
       }
     },
     "localModelEndpoints": {
@@ -7023,7 +7023,8 @@
       },
       "gap": {
         "no_tester_step": "Diese Pipeline hat keinen Test-Schritt, es wurde also nichts ausgeführt.",
-        "tester_not_reported": "Der Tester hat noch nicht berichtet."
+        "tester_not_reported": "Der Tester hat noch nicht berichtet.",
+        "verified_by_committed_tests": "Diese Pipeline hat bewusst keinen Test-Schritt: Die Änderung ist durch Tests abgedeckt, die zusammen mit ihr committet wurden und in der CI laufen."
       }
     },
     "visuals": {

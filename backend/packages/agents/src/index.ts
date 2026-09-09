@@ -504,6 +504,7 @@ export {
   INTEGRATION_TEST_KIND,
   INTEGRATION_TEST_AGENT_KINDS,
   integrationTestOutcome,
+  integrationTestResult,
   type IntegrationTestOutcome,
   registerIntegrationTestAgent,
 } from './agents/kinds/integration-test.js'

@@ -11,7 +11,7 @@ import type {
   ExecutionRepository,
   IdGenerator,
   Logger,
-  PipelineRepository,
+  Pipeline,
   PipelineStep,
   ServiceRepository,
   WorkspaceSettingsRepository,
@@ -65,7 +65,13 @@ const UNREADABLE_PASS_REASON =
 export interface BugFishingControllerDeps {
   executionRepository: ExecutionRepository
   blockRepository: BlockRepository
-  pipelineRepository: PipelineRepository
+  /**
+   * `PipelineAdoption.resolveDefinition`, bound: the definition a run under this id WOULD use,
+   * which is the stored row when the workspace holds one and the un-adopted catalog entry when it
+   * does not. See {@link BugFishingController.resolveSpawnPipelineId} for why a repository read
+   * is the wrong door here.
+   */
+  resolvePipelineDefinition: (workspaceId: string, pipelineId: string) => Promise<Pipeline | null>
   /**
    * Where a board's default fix pipeline lives. Optional for the same reason the verification
    * report's read of it is: a deployment that wires no settings store has no configured default,
@@ -681,6 +687,14 @@ export class BugFishingController {
    * ids a human typed or picked, and a workspace can delete the pipeline it named. Spawning onto
    * a missing pipeline would create tasks that cannot start, so the refusal NAMES the pipeline
    * instead: which one is missing is the whole content of the fix.
+   *
+   * Validated through `PipelineAdoption.resolveDefinition`, NEVER a bare `pipelineRepository.get`.
+   * Built-ins are copied into a workspace at creation, so a board older than a preset holds no row
+   * for it and a point read answers "deleted" for a pipeline nobody has ever been offered. That is
+   * not hypothetical here: the DEFAULT this resolves to is a built-in, so a plain read refused
+   * every marking on every board created before it shipped. The read-only half is the right one
+   * (the start path adopts for real, and the same rule it uses answers here), so validating a
+   * marking never writes a row for a spawn that then fails admission.
    */
   private async resolveSpawnPipelineId(
     workspaceId: string,
@@ -691,10 +705,10 @@ export class BugFishingController {
       override?.trim() ||
       state.defaultFixPipelineId ||
       (await this.resolveDefaultFixPipelineId(workspaceId))
-    const pipeline = await this.deps.pipelineRepository.get(workspaceId, wanted)
+    const pipeline = await this.deps.resolvePipelineDefinition(workspaceId, wanted)
     if (!pipeline) {
       throw new ValidationError(
-        `Pipeline "${wanted}" no longer exists — pick another for the spawned fix tasks.`,
+        `Pipeline "${wanted}" no longer exists: pick another for the spawned fix tasks.`,
         { reason: 'pipeline_not_found', pipelineId: wanted },
       )
     }

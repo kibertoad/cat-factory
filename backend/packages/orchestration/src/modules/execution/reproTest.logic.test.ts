@@ -9,7 +9,7 @@ describe('renderReproDigest', () => {
       notes: 'Fails with an unhandled rejection on empty email.',
     })!
     expect(digest).toContain('## Reproduction test')
-    expect(digest).toContain('Reproduced — a failing test was committed')
+    expect(digest).toContain('Reproduced: a failing test was committed')
     expect(digest).toContain('`test/submit.test.ts`')
     // The blank path is dropped.
     expect(digest).not.toContain('- ``')
@@ -23,7 +23,7 @@ describe('renderReproDigest', () => {
       testPaths: [],
       notes: 'Needs production data to trigger.',
     })!
-    expect(digest).toContain('Not reproducible — no failing test was committed')
+    expect(digest).toContain('Not reproducible: no failing test was committed')
     expect(digest).not.toContain('### Tests')
     expect(digest).toContain('Needs production data to trigger.')
   })
@@ -38,5 +38,21 @@ describe('renderReproDigest', () => {
   it('returns undefined for a non-object (unparseable) result so the raw reply is kept', () => {
     expect(renderReproDigest('not json')).toBeUndefined()
     expect(renderReproDigest(null)).toBeUndefined()
+  })
+
+  it('neutralises markdown and scrubs secrets in the model-authored holes', () => {
+    // `step.output` is read by every later agent and rendered in the SPA, so it is not an inert
+    // string sink: an unbalanced fence swallows whatever the engine writes after it, and a
+    // captured command tail can carry a credential into a persisted row.
+    const digest = renderReproDigest({
+      outcome: 'reproduced',
+      testPaths: ['test/a.spec.ts'],
+      notes: ['```sh', 'AUTHORIZATION: Bearer sk-ant-api03-AAAABBBBCCCCDDDDEEEEFFFFGGGG'].join(
+        '\n',
+      ),
+    })!
+    expect(digest).not.toContain('sk-ant-api03-AAAABBBBCCCCDDDDEEEEFFFFGGGG')
+    // The fence the notes left open is closed again, so the sections after it survive.
+    expect(digest.match(/```/g)?.length ?? 0).toBe(2)
   })
 })

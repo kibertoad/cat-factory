@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { systemPromptFor } from '../catalog.js'
-import { INTEGRATION_TEST_KIND, integrationTestOutcome } from './integration-test.js'
+import {
+  INTEGRATION_TEST_KIND,
+  integrationTestOutcome,
+  integrationTestResult,
+} from './integration-test.js'
 import { defaultAgentKindRegistry } from './registry.js'
 import { BRIEF_STANDARDS_TRAIT, CODE_AWARE_TRAIT, SPEC_AWARE_TRAIT, hasTrait } from './traits.js'
 
@@ -66,6 +70,7 @@ describe('integration-test agent kind', () => {
       mocks: [],
       uncovered: [],
       notes: undefined,
+      committed: undefined,
     })
     const parsed = integrationTestOutcome.safeParse({
       outcome: 'partial',
@@ -76,5 +81,32 @@ describe('integration-test agent kind', () => {
     })
     expect(parsed?.outcome).toBe('partial')
     expect(parsed?.uncovered).toEqual(['the 3-day settlement window: needs production data'])
+  })
+
+  it('never asks the model for the field the platform owns', () => {
+    // `committed` is written by `integrationTestResult` from the harness's push outcome. Listing
+    // it in the shape hint (what the harness shows the model when it repairs a malformed reply)
+    // would invite the model to decide the question it is being checked against.
+    expect(integrationTestOutcome.spec.shapeHint).toContain('"outcome"')
+    expect(integrationTestOutcome.spec.shapeHint).not.toContain('committed')
+  })
+
+  it('records whether the run committed anything, over whatever the reply claimed', () => {
+    const claim = { outcome: 'covered', testPaths: ['test/a.spec.ts'], committed: true }
+    // A no-op run: `noChangesTolerated` lets it settle clean, so nothing else can tell a report of
+    // committed tests from the same report over an empty diff.
+    const noop = integrationTestResult({ custom: claim, pushed: false } as never)
+    expect((noop.custom as { committed?: boolean }).committed).toBe(false)
+    // A run whose tests landed in a CONNECTED service's repo did commit: `pushed` describes the
+    // primary repo alone.
+    const peer = integrationTestResult({
+      custom: claim,
+      pushed: false,
+      peerPullRequests: [{ repo: 'acme/api', prUrl: 'https://host/pr/3' }],
+    } as never)
+    expect((peer.custom as { committed?: boolean }).committed).toBe(true)
+    // Unknown stays unknown: a dispatch that reported no push outcome is a third fact.
+    const silent = integrationTestResult({ custom: claim } as never)
+    expect((silent.custom as { committed?: boolean }).committed).toBeUndefined()
   })
 })
