@@ -110,7 +110,7 @@ export async function sweepKeyDriftAndRaise(
       raised += 1
     } else if (
       withOpenCard.has(workspaceId) &&
-      (await notifications.service.clearByType(workspaceId, 'key_drift'))
+      (await notifications.service.clearByType(workspaceId, 'key_drift')).length > 0
     ) {
       cleared += 1
     }

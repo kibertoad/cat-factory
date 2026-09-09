@@ -16,8 +16,8 @@ import { useWorkspaceStore } from '~/stores/workspace'
  * Open, human-actionable notifications surfaced on the board (a PR awaiting a
  * merge decision, a completed pipeline awaiting confirmation, CI that gave up).
  * Hydrated from the workspace snapshot and patched live by the `notification`
- * WorkspaceEvent (see `useWorkspaceStream`). The board renders an inbox + a
- * per-block badge from `open` / `byBlock`.
+ * WorkspaceEvent (see `useWorkspaceStream`). The board renders an inbox from `open`, and the
+ * per-block review-wait stamps the swimlanes need from {@link reviewDebtByBlock}.
  */
 export const useNotificationsStore = defineStore('notifications', () => {
   const api = useApi()
@@ -109,16 +109,6 @@ export const useNotificationsStore = defineStore('notifications', () => {
     }
     upsertOpen(notification)
   }
-
-  /** Open notifications for a given block (for the board card badge). */
-  const byBlock = computed<Record<string, Notification[]>>(() => {
-    const map: Record<string, Notification[]> = {}
-    for (const n of open.value) {
-      if (!n.blockId) continue
-      ;(map[n.blockId] ??= []).push(n)
-    }
-    return map
-  })
 
   /**
    * Per-block "waiting since", derived from the open review-wait cards by the same
@@ -213,7 +203,6 @@ export const useNotificationsStore = defineStore('notifications', () => {
     hydrate,
     hydrateBaseline,
     upsert,
-    byBlock,
     reviewDebtByBlock,
     count,
     act,

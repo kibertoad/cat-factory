@@ -687,11 +687,8 @@ export class HumanTestController {
   private async clearReadyNotification(workspaceId: string, blockId: string): Promise<void> {
     const svc = this.deps.notificationService
     if (!svc) return
-    const open = await svc.listOpen(workspaceId)
-    for (const n of open) {
-      if (n.type === 'human_test_ready' && n.blockId === blockId) {
-        await svc.resolve(workspaceId, n.id, 'act')
-      }
-    }
+    // `act`, not `dismiss`: the human did the thing the card asked for. One indexed
+    // (block, type) lookup and one write, never a scan of the workspace's open inbox.
+    await svc.clearOnBlock(workspaceId, blockId, 'human_test_ready', 'act')
   }
 }

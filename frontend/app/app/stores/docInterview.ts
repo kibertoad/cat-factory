@@ -30,7 +30,9 @@ export const useDocInterviewStore = defineStore('docInterview', () => {
   function upsert(session: DocInterviewSession) {
     const existing = byBlock.value[session.blockId]
     if (existing && existing.updatedAt > session.updatedAt) return
-    byBlock.value = { ...byBlock.value, [session.blockId]: session }
+    // Per-key, never a whole-record clone: `byBlock` is a deep reactive ref, so replacing the
+    // record retriggered every consumer keyed on an UNCHANGED block.
+    byBlock.value[session.blockId] = session
   }
 
   /** Re-fetch one block's session (the interview window's load path). */

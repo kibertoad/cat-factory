@@ -193,6 +193,37 @@ export class NotificationService {
   }
 
   /**
+   * Every open card on ONE block, newest first, of any type. The narrow read the engine's
+   * "has this block already been surfaced to a human" checks take instead of scanning the
+   * workspace's whole open inbox.
+   */
+  async listOpenByBlock(workspaceId: string, blockId: string): Promise<Notification[]> {
+    return this.notifications.listOpenByBlock(workspaceId, blockId)
+  }
+
+  /**
+   * The open card of `type` on `blockId`, if any (at most one exists: the partial unique index
+   * behind {@link raise} enforces it). The dedup read, exposed so a caller CLEARING such a card
+   * can find it without listing the inbox.
+   */
+  async findOpenByBlock(
+    workspaceId: string,
+    blockId: string,
+    type: NotificationType,
+  ): Promise<Notification | null> {
+    return this.notifications.findOpenByBlock(workspaceId, blockId, type)
+  }
+
+  /**
+   * The open, BLOCK-LESS card of `type` for a workspace, if any. The single-workspace sibling of
+   * {@link listOpenByType}: a caller asking "did we already raise this workspace-wide card"
+   * reads one indexed row rather than the whole open inbox.
+   */
+  async findOpenByType(workspaceId: string, type: NotificationType): Promise<Notification | null> {
+    return this.notifications.findOpenByType(workspaceId, type)
+  }
+
+  /**
    * Batched: the open, block-less card of `type` for each of `workspaceIds` that has one. The
    * platform-health sweep uses this ONCE up front to learn which workspaces already hold a card,
    * so it can skip the `clearByType` point-read for the (steady-state common) healthy workspaces
@@ -218,19 +249,55 @@ export class NotificationService {
   }
 
   /**
-   * Auto-resolve the open, block-less card of `type` for a workspace (dismiss it), if one is
-   * open. The self-clearing counterpart to a periodic sweep that raises a block-less card while
-   * a condition holds (today `platform_health`): when the condition clears the sweep calls this
-   * so the stale alert leaves the inbox instead of lingering (and being escalated red for a
-   * problem that has since resolved). Idempotent + best-effort: a no-op when no such card is
-   * open. Returns the dismissed card, or null when there was nothing to clear.
+   * Auto-resolve the open, block-less cards of `type` for a workspace (dismiss them). The
+   * self-clearing counterpart to a periodic sweep that raises a block-less card while a condition
+   * holds (`platform_health`, `key_drift`, `infra_unreachable`, and the spend pause): when the
+   * condition clears the sweep calls this so the stale alert leaves the inbox instead of lingering
+   * (and being escalated red for a problem that has since resolved). Idempotent + best-effort: a
+   * no-op when none is open. Returns the dismissed cards, newest first, or an empty array.
+   *
+   * PLURAL, in one statement. A block-less card is exempt from the partial unique index that
+   * makes the block-scoped raise atomic (NULLs are distinct), so `raise` still de-dupes it with a
+   * read-before-write and two racing sweeps can leave two open rows. Settling only the newest
+   * would leave the other open forever, red and un-clearable, which is precisely what this clear
+   * exists to prevent. The clear IS the heal.
+   *
+   * Ordered here rather than in SQL, because neither engine can `ORDER BY` an `UPDATE … RETURNING`.
+   * A caller that reports the settled card (the platform-health sweep's `resolved` edge quotes its
+   * id) needs the SAME row `findOpenByType` would have picked, or a receiver's dedupe key moves
+   * for reasons nothing in the incident explains.
    */
-  async clearByType(workspaceId: string, type: NotificationType): Promise<Notification | null> {
-    const existing = await this.notifications.findOpenByType(workspaceId, type)
+  async clearByType(workspaceId: string, type: NotificationType): Promise<Notification[]> {
+    const dismissed = await this.notifications.dismissOpenByType(
+      workspaceId,
+      type,
+      this.clock.now(),
+    )
+    dismissed.sort((a, b) => b.createdAt - a.createdAt || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0))
+    for (const card of dismissed) await this.deliver(workspaceId, card, 'settled')
+    return dismissed
+  }
+
+  /**
+   * Auto-resolve the open card of `type` on ONE block, if one is open, with the action that
+   * describes WHY it is leaving the inbox (`dismiss`: the condition passed; `act`: the human did
+   * the thing the card asked for). The block-scoped sibling of {@link clearByType}, and the seam
+   * every "the run settled this itself" clear goes through, so none of them re-implements
+   * find-then-settle or reaches for the whole open inbox. At most one card can match: the partial
+   * unique index behind {@link raise} enforces one open card per (workspace, block, type).
+   * Idempotent + best-effort: a no-op when none is open. Returns the settled card, or null.
+   */
+  async clearOnBlock(
+    workspaceId: string,
+    blockId: string,
+    type: NotificationType,
+    action: ResolveNotificationAction = 'dismiss',
+  ): Promise<Notification | null> {
+    const existing = await this.notifications.findOpenByBlock(workspaceId, blockId, type)
     if (!existing) return null
     const resolved: Notification = {
       ...existing,
-      status: 'dismissed',
+      status: action === 'act' ? 'acted' : 'dismissed',
       resolvedAt: this.clock.now(),
     }
     await this.notifications.upsert(workspaceId, resolved)
@@ -255,15 +322,7 @@ export class NotificationService {
       'fork_decision_pending',
       'pr_review_ready',
     ] as const) {
-      const existing = await this.notifications.findOpenByBlock(workspaceId, blockId, type)
-      if (!existing) continue
-      const resolved: Notification = {
-        ...existing,
-        status: 'dismissed',
-        resolvedAt: this.clock.now(),
-      }
-      await this.notifications.upsert(workspaceId, resolved)
-      await this.deliver(workspaceId, resolved, 'settled')
+      await this.clearOnBlock(workspaceId, blockId, type)
     }
   }
 

@@ -84,6 +84,18 @@ export class D1NotificationRepository implements NotificationRepository {
     return results.map(rowToNotification)
   }
 
+  async listOpenByBlock(workspaceId: string, blockId: string): Promise<Notification[]> {
+    const { results } = await this.db
+      .prepare(
+        `SELECT * FROM notifications
+           WHERE workspace_id = ? AND block_id = ? AND status = 'open'
+           ORDER BY created_at DESC`,
+      )
+      .bind(workspaceId, blockId)
+      .all<NotificationRow>()
+    return (results ?? []).map(rowToNotification)
+  }
+
   async findOpenByBlock(
     workspaceId: string,
     blockId: string,
@@ -238,6 +250,25 @@ export class D1NotificationRepository implements NotificationRepository {
          RETURNING *`,
       )
       .bind(workspaceId, cutoff)
+      .all<NotificationRow>()
+    return (results ?? []).map(rowToNotification)
+  }
+
+  async dismissOpenByType(
+    workspaceId: string,
+    type: NotificationType,
+    resolvedAt: number,
+  ): Promise<Notification[]> {
+    // One statement settles the whole set, so a workspace that raced two open block-less cards
+    // of this type (NULL block_id is exempt from the partial unique index, so `raise`'s
+    // read-before-write can still stack them) leaves none behind. Never a per-row upsert loop.
+    const { results } = await this.db
+      .prepare(
+        `UPDATE notifications SET status = 'dismissed', resolved_at = ?
+           WHERE workspace_id = ? AND block_id IS NULL AND type = ? AND status = 'open'
+         RETURNING *`,
+      )
+      .bind(resolvedAt, workspaceId, type)
       .all<NotificationRow>()
     return (results ?? []).map(rowToNotification)
   }
