@@ -460,6 +460,12 @@ export {
   renderBugHuntPrompt,
 } from './agents/prompts/bug-hunt.js'
 export {
+  ASSISTANT_AGENT_KIND,
+  ASSISTANT_SYSTEM_PROMPT,
+  renderAssistantPrompt,
+} from './agents/prompts/assistant.js'
+export type { AssistantActionBrief, AssistantArgumentBrief } from './agents/prompts/assistant.js'
+export {
   bootstrapPrTitle,
   monorepoAdoptionSystemPrompt,
   renderMonorepoAdoptionPrompt,

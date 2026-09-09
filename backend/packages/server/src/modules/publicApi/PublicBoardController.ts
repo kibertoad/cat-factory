@@ -171,7 +171,13 @@ async function createService(
   //
   // `refuse` is what makes this surface's own reads honest about the answer: see
   // `SharedServicePolicy`.
-  return container.boardService.addServiceFromRepo(
+  //
+  // The BLOCK only: the disposition the board service also answers with is not on this published
+  // response body, and adding it would be a public-API change of its own rather than a detail of
+  // this one. `refuse` already removes the case that most needs telling apart (a frame homed on
+  // another board), and what remains is an idempotent re-add of a service homed HERE, which a
+  // caller sees for itself in the id it gets back.
+  const { block } = await container.boardService.addServiceFromRepo(
     workspaceId,
     {
       ...authored,
@@ -181,6 +187,7 @@ async function createService(
     },
     'refuse',
   )
+  return block
 }
 
 function registerDependencyRoutes(app: Hono<AppEnv>): void {

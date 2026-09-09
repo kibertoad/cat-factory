@@ -2712,6 +2712,7 @@
       },
       "cmd": {
         "newPipeline": "Eine Pipeline bauen",
+        "assistant": "Assistenten öffnen",
         "addFromRepo": "Service aus vorhandenem Repo hinzufügen",
         "bootstrapRepo": "Ein neues Repo bootstrappen",
         "githubManage": "GitHub-Verbindung verwalten",
@@ -2739,6 +2740,7 @@
       },
       "keywords": {
         "newPipeline": "pipeline agents chain",
+        "assistant": "ki assistent fragen eingabe für mich erledigen",
         "addFromRepo": "github import existing",
         "bootstrapRepo": "scaffold create reference architecture",
         "github": "git repos pull requests issues",
@@ -4514,6 +4516,49 @@
       "missingBoard": "Wähle das Board aus, auf dem gesucht werden soll."
     }
   },
+  "assistant": {
+    "title": "Assistent",
+    "intro": "Beschreiben Sie, was erledigt werden soll, und der Assistent führt es auf dem Board aus: eine Abhängigkeit zwischen zwei Services erklären, einen Service über eine Repository-URL hinzufügen oder eine Aufgabe aus einem Tracker-Ticket anlegen.",
+    "unavailable": "Für diese Installation ist kein Modell konfiguriert, daher kann der Assistent keine Anfrage lesen. Richten Sie einen Modellanbieter ein, um ihn zu aktivieren.",
+    "placeholder": "z. B. der Checkout-Service hängt vom Payments-Service ab",
+    "submit": "Ausführen",
+    "submitHint": "Strg+Enter, auf dem Mac Cmd+Enter",
+    "examplesTitle": "Das können Sie fragen",
+    "showOnBoard": "Auf dem Board zeigen",
+    "declined": "Keine Aktion des Assistenten passt zu dieser Anfrage. Er kann eine Abhängigkeit zwischen zwei Services erklären, einen Service über eine Repository-URL hinzufügen oder eine Aufgabe aus einem Tracker-Ticket anlegen.",
+    "actions": {
+      "declare-service-dependency": {
+        "label": "Service-Abhängigkeit erklären",
+        "example": "der Checkout-Service hängt vom Payments-Service ab"
+      },
+      "add-service-from-repo": {
+        "label": "Service aus einem Repository hinzufügen",
+        "example": "füge https://github.com/acme/payments als Service hinzu"
+      },
+      "create-task-from-issue": {
+        "label": "Aufgabe aus einem Ticket anlegen",
+        "example": "erstelle eine Aufgabe aus https://github.com/acme/payments/issues/12"
+      }
+    },
+    "done": {
+      "dependencyDeclared": "{consumer} hängt jetzt von {provider} ab, beide werden also gestartet, wenn {consumer} getestet wird.",
+      "dependencyAlready": "{consumer} hängt bereits von {provider} ab, es hat sich nichts geändert.",
+      "serviceAdded": "{service} hinzugefügt, gestützt auf {repo}.",
+      "serviceMounted": "{repo} liegt bereits einem Service dieser Organisation zugrunde, deshalb wurde {service} auf dieses Board gelegt statt neu angelegt.",
+      "taskCreated": "{issue} als „{task}“ unter {service} angelegt."
+    },
+    "needsInput": {
+      "missing_argument": "In dieser Anfrage fehlt etwas, das der Assistent braucht. Formulieren Sie sie vollständig und versuchen Sie es erneut.",
+      "invalid_argument": "Einer der Werte in dieser Anfrage ist nicht verwendbar. Prüfen Sie ihn und versuchen Sie es erneut.",
+      "unknown_service": "Kein Service auf diesem Board trägt diesen Namen.",
+      "ambiguous_service": "Mehrere Services passen zu diesem Namen. Welchen meinen Sie?",
+      "unknown_repository": "Dieser Workspace hat keine Verbindung zu diesem Repository. Verbinden Sie es zuerst und fragen Sie dann erneut.",
+      "unreadable_repository_url": "Das ist keine Repository-URL, die der Assistent lesen kann. Fügen Sie die Webadresse des Repositorys ein.",
+      "unknown_issue_source": "Kein verbundener Tracker erkennt diesen Ticket-Link. Verbinden Sie zuerst den zugehörigen Tracker.",
+      "ambiguous_issue_source": "Zwei verbundene Tracker erkennen diese Angabe. Fügen Sie stattdessen die vollständige Webadresse des Tickets ein.",
+      "unresolved_issue_service": "Der Assistent konnte nicht erkennen, unter welchem Service das angelegt werden soll. Nennen Sie den Service in Ihrer Anfrage."
+    }
+  },
   "pipeline": {
     "iterationCap": {
       "extraRound": "Noch eine Runde",
@@ -6095,6 +6140,7 @@
     "collapseSidebar": "Seitenleiste einklappen",
     "commandBar": "Suchen oder einen Befehl ausführen…",
     "create": "Erstellen",
+    "assistant": "Assistent",
     "buildPipeline": "Eine Pipeline erstellen",
     "repositories": "Repositories",
     "addFromRepo": "Aus vorhandenem Repo hinzufügen",
@@ -6144,7 +6190,9 @@
         "service_catalog_unreachable": "Das Entwicklerportal dieses Boards hat nicht geantwortet oder eine Antwort geliefert, die diese Plattform nicht lesen kann. Hier ist nichts falsch konfiguriert und keine Änderung hilft: versuche es erneut, sobald das Portal erreichbar ist.",
         "service_catalog_unauthorized": "Das Entwicklerportal hat die gespeicherte Zugangsdaten abgelehnt. Sie wurden wahrscheinlich rotiert oder widerrufen: öffne die Servicekatalog-Einstellungen und trage aktuelle ein.",
         "service_catalog_filter_missing": "Der Entitätsfilter dieser Verbindung konnte nicht gelesen werden, es gibt also nichts zu importieren. Speichere die Servicekatalog-Verbindung erneut, um ihn wiederherzustellen.",
-        "service_catalog_response_too_large": "Das Entwicklerportal hat mit mehr Daten geantwortet, als diese Plattform in einer Antwort aufnimmt. Öffne die Servicekatalog-Einstellungen und senke das Service-Limit oder deaktiviere den Import von Schnittstellendefinitionen, und importiere dann erneut."
+        "service_catalog_response_too_large": "Das Entwicklerportal hat mit mehr Daten geantwortet, als diese Plattform in einer Antwort aufnimmt. Öffne die Servicekatalog-Einstellungen und senke das Service-Limit oder deaktiviere den Import von Schnittstellendefinitionen, und importiere dann erneut.",
+        "assistant_generation_failed": "Der Modellanbieter des Assistenten hat nicht geantwortet. Er ist korrekt konfiguriert und hier muss nichts eingerichtet werden: Versuchen Sie die Anfrage gleich noch einmal.",
+        "assistant_reply_unreadable": "Das Modell des Assistenten hat etwas geantwortet, das diese Plattform nicht als Entscheidung ausführen kann. Eine Umformulierung hilft selten: Wählen Sie in den Modelleinstellungen ein anderes Modell für den Assistenten."
       }
     },
     "reason": {

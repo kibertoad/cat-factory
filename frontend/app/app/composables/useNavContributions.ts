@@ -40,6 +40,7 @@ export function useNavContributions() {
   // with no catalog entry) is a compile error, not a silently dead button.
   // Consumer items bypass this map entirely via their own `run` closure.
   const actions: Record<NavActionId, () => void> = {
+    assistant: () => ui.openAssistant(),
     buildPipeline: () => ui.openBuilder(),
     addFromRepo: () => ui.openAddService(),
     bootstrapRepo: () => ui.openBootstrap(),

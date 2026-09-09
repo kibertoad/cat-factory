@@ -219,6 +219,8 @@ describe('navSlotFilter', () => {
     // surface has quietly stopped being simple. The table is the claim; adding `intake: true`
     // fails here until the reason is written down.
     const REASON: Record<string, string> = {
+      assistant:
+        'the shortest route to the two things this role is here to do (put a repository on the board, file a task from a ticket) and it configures nothing',
       tutorial: 'the walkthroughs - the surface with the fewest destinations needs them most',
       'keyboard-shortcuts': 'the cheatsheet covers the board and the palette, which every role has',
       'ui-role': 'the way BACK out of the narrowed role',

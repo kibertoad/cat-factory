@@ -74,10 +74,14 @@ import type { PresetPinGuard } from './presetPinGuard.js'
 import type { RiskPolicySelectionGuard } from './riskPolicySelectionGuard.js'
 import { createBoardPolicyGuards } from './boardPolicyGuards.js'
 import { createSharedServiceMount } from './sharedServiceMount.js'
-import type { SharedServicePolicy } from './serviceRepoLinkage.js'
+import type { AddedServiceFrame, SharedServicePolicy } from './serviceRepoLinkage.js'
 import { resolveServiceRepoLinkage } from './serviceRepoLinkage.js'
 
-export type { SharedServicePolicy } from './serviceRepoLinkage.js'
+export type {
+  AddedServiceFrame,
+  AddServiceDisposition,
+  SharedServicePolicy,
+} from './serviceRepoLinkage.js'
 export type { ReviewFrictionNotificationReader } from './reviewFrictionGuard.js'
 export type { WorkspaceSettingsReader } from './workspaceSettingsReader.js'
 
@@ -687,6 +691,12 @@ export class BoardService {
    * ANOTHER board means here; see {@link SharedServicePolicy}. It defaults to the app's `mount`,
    * so only a caller that cannot address a foreign-homed frame has to say so.
    *
+   * Answers with the frame AND the {@link AddServiceDisposition} that produced it. The two are a
+   * pair because the second is not recoverable from the first: a mount answers with a frame this
+   * board may never have held, so a caller comparing the returned id against the blocks it read a
+   * moment ago reads a first-time mount as a fresh create, which is the one case the distinction
+   * exists to report.
+   *
    * NOTHING is written until every guard has passed — including the repository's own `isMonorepo`
    * flag, which this call may change. See `serviceRepoLinkage.ts` for why that ordering is the
    * rule and not an accident.
@@ -695,7 +705,7 @@ export class BoardService {
     workspaceId: string,
     input: AddServiceFromRepoInput,
     sharedService: SharedServicePolicy = 'mount',
-  ): Promise<Block> {
+  ): Promise<AddedServiceFrame> {
     await this.requireWorkspace(workspaceId)
     if (!this.repoProjectionRepository) {
       throw new ValidationError('GitHub integration is not configured')
@@ -735,7 +745,7 @@ export class BoardService {
           input.position,
         )
         await this.sharedServiceMount.persistMonorepoFlag(workspaceId, repo, linkage)
-        return mounted
+        return { block: mounted, disposition: 'mounted' }
       }
     }
     const blocks = await this.blockRepository.listByWorkspace(workspaceId)
@@ -781,7 +791,7 @@ export class BoardService {
     await this.blockRepository.insert(workspaceId, block, serviceId)
     // A service FRAME, so no payload (see `addBlock`).
     await this.emitBoardChanged(workspaceId, { reason: 'block-added', blockId: block.id })
-    return block
+    return { block, disposition: 'created' }
   }
 
   /**

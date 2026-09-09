@@ -67,7 +67,13 @@ export function boardController(): Hono<AppEnv> {
         )
       }
     }
-    const block = await container.boardService.addServiceFromRepo(workspaceId, c.req.valid('json'))
+    // The frame alone: this route's 201 body is the BLOCK, and whether the add created it or
+    // mounted an org service the board already shared is a fact the SPA reads off the board it
+    // already holds. The assistant, which has no such board in hand, reads the disposition.
+    const { block } = await container.boardService.addServiceFromRepo(
+      workspaceId,
+      c.req.valid('json'),
+    )
     return c.json(block, 201)
   })
 

@@ -57,14 +57,18 @@ const ACCESSOR_DEFINITION = 'server:http/workspaceAccess.ts'
  * resolved tier because a write on a mounted foreign service decides in that service's home, and
  * the acting board's role answers for that workspace only by coincidence.
  *
- * All four are HTTP routes, and that is not a coincidence: the acting tier is a fact about the
- * REQUEST, so the only layer that can answer honestly is the one holding a request.
+ * Every one is an HTTP route, and that is not a coincidence: the acting tier is a fact about the
+ * REQUEST, so the only layer that can answer honestly is the one holding a request. That is also
+ * what settles the assistant, whose write is chosen by a model: the turn runs under the tier of
+ * the person who typed it, so asking for a board change can never reach past what its asker could
+ * do from the board itself.
  */
 const ATTRIBUTED = [
   'server:modules/board/BoardController.ts',
   'server:modules/tasks/TaskSourceController.ts',
   'server:modules/documents/DocumentSourceController.ts',
   'server:modules/bugHunt/BugHuntController.ts',
+  'server:modules/assistant/AssistantController.ts',
 ]
 
 /**

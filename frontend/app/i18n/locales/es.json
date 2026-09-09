@@ -128,6 +128,7 @@
     "collapseSidebar": "Contraer barra lateral",
     "commandBar": "Buscar o ejecutar un comando…",
     "create": "Crear",
+    "assistant": "Asistente",
     "buildPipeline": "Crear una canalización",
     "repositories": "Repositorios",
     "addFromRepo": "Añadir desde un repositorio existente",
@@ -633,7 +634,9 @@
         "service_catalog_unreachable": "El portal de desarrollo de este espacio no respondió, o respondió con algo que esta plataforma no puede leer. Aquí no hay nada mal configurado y ningún cambio ayudará: vuelve a intentarlo cuando el portal esté accesible.",
         "service_catalog_unauthorized": "El portal de desarrollo rechazó las credenciales guardadas. Lo más probable es que se hayan rotado o revocado: abre los ajustes del catálogo de servicios e introduce unas vigentes.",
         "service_catalog_filter_missing": "No se pudo leer el filtro de entidades de esta conexión, así que no hay nada que importar. Vuelve a guardar la conexión del catálogo de servicios para restaurarlo.",
-        "service_catalog_response_too_large": "El portal de desarrollo respondió con más datos de los que esta plataforma admite en una sola respuesta. Abre la configuración del catálogo de servicios y reduce el límite de servicios, o desactiva la importación de definiciones de interfaz, y vuelve a importar."
+        "service_catalog_response_too_large": "El portal de desarrollo respondió con más datos de los que esta plataforma admite en una sola respuesta. Abre la configuración del catálogo de servicios y reduce el límite de servicios, o desactiva la importación de definiciones de interfaz, y vuelve a importar.",
+        "assistant_generation_failed": "El proveedor de modelos del asistente no respondió. Está configurado correctamente y aquí no hay nada que configurar: vuelve a intentar la solicitud en un momento.",
+        "assistant_reply_unreadable": "El modelo del asistente respondió con algo que esta plataforma no puede ejecutar como decisión. Reformular rara vez ayuda: elige otro modelo para el asistente en la configuración de modelos."
       }
     },
     "reason": {
@@ -2561,6 +2564,7 @@
       },
       "cmd": {
         "newPipeline": "Crear una canalización",
+        "assistant": "Abrir el asistente",
         "addFromRepo": "Añadir servicio desde un repositorio existente",
         "bootstrapRepo": "Iniciar un repositorio nuevo",
         "githubManage": "Gestionar la conexión de GitHub",
@@ -2588,6 +2592,7 @@
       },
       "keywords": {
         "newPipeline": "canalización agentes cadena pipeline",
+        "assistant": "ia asistente preguntar indicación házlo por mí",
         "addFromRepo": "github importar existente",
         "bootstrapRepo": "andamiaje crear arquitectura de referencia",
         "github": "git repositorios pull requests incidencias",
@@ -5020,6 +5025,49 @@
     "refusal": {
       "boardFromService": "Este rastreador analiza el repositorio al que está vinculado el servicio elegido, así que no tiene un tablero propio.",
       "missingBoard": "Elige el tablero en el que buscar."
+    }
+  },
+  "assistant": {
+    "title": "Asistente",
+    "intro": "Describe lo que quieres hacer y el asistente lo ejecuta en el tablero: declarar una dependencia entre dos servicios, añadir un servicio a partir de la URL de un repositorio o crear una tarea desde una incidencia del rastreador.",
+    "unavailable": "Este despliegue no tiene ningún modelo configurado, así que el asistente no puede leer una petición. Configura un proveedor de modelos para habilitarlo.",
+    "placeholder": "p. ej. el servicio de checkout depende del servicio de pagos",
+    "submit": "Ejecutar",
+    "submitHint": "Ctrl+Intro, o Cmd+Intro en un Mac",
+    "examplesTitle": "Qué puedes pedir",
+    "showOnBoard": "Ver en el tablero",
+    "declined": "Ninguna acción del asistente encaja con esa petición. Puede declarar una dependencia entre dos servicios, añadir un servicio a partir de la URL de un repositorio o crear una tarea desde una incidencia del rastreador.",
+    "actions": {
+      "declare-service-dependency": {
+        "label": "Declarar una dependencia entre servicios",
+        "example": "el servicio de checkout depende del servicio de pagos"
+      },
+      "add-service-from-repo": {
+        "label": "Añadir un servicio desde un repositorio",
+        "example": "añade https://github.com/acme/payments como servicio"
+      },
+      "create-task-from-issue": {
+        "label": "Crear una tarea desde una incidencia",
+        "example": "crea una tarea a partir de https://github.com/acme/payments/issues/12"
+      }
+    },
+    "done": {
+      "dependencyDeclared": "{consumer} ahora depende de {provider}, así que ambos se levantan cuando se prueba {consumer}.",
+      "dependencyAlready": "{consumer} ya dependía de {provider}, no ha cambiado nada.",
+      "serviceAdded": "Se ha añadido {service}, respaldado por {repo}.",
+      "serviceMounted": "{repo} ya respalda un servicio de esta organización, así que {service} se ha añadido a este tablero en lugar de crearse otra vez.",
+      "taskCreated": "{issue} creada como «{task}» en {service}."
+    },
+    "needsInput": {
+      "missing_argument": "A esa petición le falta algo que el asistente necesita. Escríbela completa e inténtalo de nuevo.",
+      "invalid_argument": "Uno de los valores de esa petición no se puede usar. Revísalo e inténtalo de nuevo.",
+      "unknown_service": "Ningún servicio de este tablero coincide con ese nombre.",
+      "ambiguous_service": "Varios servicios coinciden con ese nombre. ¿Cuál querías decir?",
+      "unknown_repository": "Este espacio de trabajo no tiene conexión con ese repositorio. Conéctalo primero y vuelve a pedirlo.",
+      "unreadable_repository_url": "Esa no es una URL de repositorio que el asistente pueda leer. Pega la dirección web del repositorio.",
+      "unknown_issue_source": "Ningún rastreador conectado reconoce ese enlace. Conecta primero el rastreador al que pertenece.",
+      "ambiguous_issue_source": "Dos rastreadores conectados reconocen esa referencia. Pega la dirección web completa de la incidencia.",
+      "unresolved_issue_service": "El asistente no ha podido saber en qué servicio crearla. Indica el servicio en tu petición."
     }
   },
   "pipeline": {

@@ -351,6 +351,23 @@ export type ConflictReason = (typeof CONFLICT_REASONS)[number]
  *                                        interface definitions), so it must not read as the
  *                                        outage `service_catalog_unreachable` describes.
  *
+ *  - `assistant_generation_failed`     : the assistant's own model provider refused or did not
+ *                                        answer. An OUTAGE (or a rejected key) in a provider the
+ *                                        deployment HAS wired, which is the one thing the generic
+ *                                        copy denies, and the remedy is to retry rather than to go
+ *                                        looking for a registration that is already there.
+ *  - `assistant_reply_unreadable`      : the model answered, and what came back was not a routing
+ *                                        decision (an empty visible reply from a model that spoke
+ *                                        only into its reasoning channel, or non-JSON prose).
+ *                                        Distinct from the reason above because nothing failed:
+ *                                        the remedy is a different model for the assistant, not a
+ *                                        retry of the same one.
+ *
+ * The assistant's other two 503 reasons (`assistant_model_unavailable`, `assistant_no_actions`) are
+ * deliberately NOT here, on the same reading as `vcs_client_unconfigured` below: both ARE the wiring
+ * gap the generic copy describes, so restating it under their own key would add a translation
+ * without adding a fact.
+ *
  * Its sibling `vcs_client_unconfigured` (no client wired for the routed connection's provider) is
  * deliberately NOT here. That one IS a wiring gap, so the generic copy states it correctly, and
  * this list is a short set of exceptions to that copy rather than a second vocabulary mirroring
@@ -368,6 +385,8 @@ export const UNAVAILABLE_REASONS = [
   'service_catalog_unauthorized',
   'service_catalog_filter_missing',
   'service_catalog_response_too_large',
+  'assistant_generation_failed',
+  'assistant_reply_unreadable',
 ] as const
 
 export type UnavailableReason = (typeof UNAVAILABLE_REASONS)[number]
