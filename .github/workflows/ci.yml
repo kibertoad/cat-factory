@@ -1459,11 +1459,12 @@ jobs:
       # The suite removes its own container on both exits, but a cancelled or timed-out job never
       # reaches that code. Sweeping by the name prefix the harness mints costs nothing on an
       # ephemeral runner and is what keeps a self-hosted one from accumulating live proxies.
+      # `xargs -r` rather than a shell variable: the id list has to word-split to remove more than
+      # one container, and an unquoted expansion is what shellcheck reads (rightly, in general) as
+      # an accident. It also does nothing at all when the list is empty, which is the normal case.
       - name: Remove leftover gateway containers
         if: ${{ always() }}
-        run: |
-          leftovers="$(docker ps -aq --filter 'name=cat-factory-litellm-it-')"
-          if [ -n "$leftovers" ]; then docker rm -f $leftovers; fi
+        run: docker ps -aq --filter 'name=cat-factory-litellm-it-' | xargs -r docker rm -f
 
   # The Cloudflare OS Gatekeeper, in real workerd: the machinery package's own suite, plus the
   # template that installs it. NON-BLOCKING (deliberately NOT in the aggregated `Test` gate's
