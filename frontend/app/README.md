@@ -263,6 +263,27 @@ The still-open remainder is the INLINE family: `error.value = e.message` rendere
 surface rather than a toast, and are tracked as G4 in
 [`error-message-coverage.md`](https://github.com/kibertoad/cat-factory/blob/main/docs/initiatives/error-message-coverage.md).
 
+### A panel that seeds state on open uses `onModalOpen`, never a bare `watch(open)`
+
+**Work done on the way IN to a modal goes through `onModalOpen(open, fn)`
+(`composables/useModalOpen.ts`).** A hand-written `watch(open, (isOpen) => { if (isOpen) … })` is
+wrong in this SPA and reads as right.
+
+`pages/index.vue` mounts most panels only WHILE their flag is set
+(`<AssistantModal v-if="ui.assistantOpen" />`), so `open` is already `true` when the component sets
+up and a change-only watcher never fires at all. Whatever the body does never happens: the picker
+keeps its unselected default, the read that fills a catalog is never issued, and the panel opens
+with a confirm button that cannot be pressed. Nothing throws and nothing warns, which is why four
+modals carried it at once and the assistant shipped with a Run button that could never submit.
+
+The helper is `{ immediate: true }` plus the open check, and it is correct for an always-mounted
+panel too: that one passes a `false` on the first run and the body is skipped. So nobody has to know
+which kind of panel they are writing, which is the point of it being shared rather than a flag
+remembered per site.
+
+A watcher acting on the CLOSE edge (emitting `close`, revoking object URLs) stays a plain `watch`:
+it has nothing to do at mount, and running it there would announce a close that never happened.
+
 ### Type a chip map with `BadgeColor`, never `string`
 
 A status → chip map feeding a `<UBadge :color="…">` types its values as `BadgeColor` (`utils/badge.ts`), which is derived from `UBadge`'s own prop type rather than restated as a literal union. Typed `string`, the binding does not compile and the reflex is `as any` at each call site: seven of them had accumulated. That cast also accepts a colour Nuxt UI does not define, which renders as an unstyled badge with nothing failing.

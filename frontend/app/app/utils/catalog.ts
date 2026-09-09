@@ -862,6 +862,24 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
     description:
       'Grades each completed agent step (smooth vs chaotic) after a run and recommends prompt/model improvements.',
   },
+  // The in-app assistant routes ONE typed sentence to one action from a closed catalog. Not a
+  // pipeline step (it declares no `category`, so it is never in the palette), but it runs an LLM
+  // on every request, so it needs display metadata here and a per-workspace model in Model
+  // Configuration. Without an entry it inherits the preset's base model like any unnamed kind,
+  // which is the right default; what it lacked was the row an operator pins a different one on,
+  // and a label anywhere a spend rollup names the kind that spent it.
+  assistant: {
+    kind: 'assistant',
+    // Intermediate, not advanced like `kaizen`: the assistant is a surface a person OPENS and
+    // spends on deliberately, several times a day, where Kaizen grades in the background on its
+    // own schedule. A kind whose cost someone can feel should not sit two levels down.
+    tier: 'intermediate',
+    label: 'Assistant',
+    icon: 'i-lucide-sparkles',
+    color: '#38bdf8',
+    description:
+      'Routes a typed request to one action the platform performs on the board (declare a dependency, add a service from a repository, file a task from a tracker issue).',
+  },
   // A polling gate (no model of its own) that watches the released PR's observability
   // signals after merge and escalates to the on-call agent on a regression. NOT in any
   // default pipeline and NOT a standing palette archetype — the palette surfaces it
@@ -913,6 +931,9 @@ export const MODEL_CONFIGURABLE_SYSTEM_KINDS: AgentArchetype[] = [
     // The PR-review Challenge Investigator — pinnable to its own (stronger) model, separately
     // from the reviewer that produced the findings.
     'challenge-investigator',
+    // The in-app assistant: one inline model call per typed request, on the workspace's preset
+    // like every other kind, and pinnable away from it here.
+    'assistant',
   ].map((kind) => SYSTEM_AGENT_META[kind]!),
   // Companions run LLMs but aren't palette-addable (they're producer toggles), so include
   // them here to keep their per-workspace default model pinnable in the Model Defaults panel.

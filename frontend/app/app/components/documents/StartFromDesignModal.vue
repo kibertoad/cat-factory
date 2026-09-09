@@ -52,8 +52,7 @@ const claimant = ref<DocumentSourceKind | null>(null)
  */
 const resolvedFor = ref<string | null>(null)
 
-watch(open, (isOpen) => {
-  if (!isOpen) return
+onModalOpen(open, () => {
   pasted.value = ''
   state.value = { status: 'none' }
   claimant.value = null

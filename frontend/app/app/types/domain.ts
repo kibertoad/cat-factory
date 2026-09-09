@@ -125,6 +125,10 @@ import type { AgentCategory, AgentKind, AgentTier, PipelinePurpose } from '@cat-
 // single source of truth lives in the contracts package.
 export { DOC_KINDS, DOC_KIND_FIELDS } from '@cat-factory/contracts'
 
+// The assistant's prompt cap is a runtime value too: the box states the limit and refuses a
+// submission over it, and the wire schema holds the same number.
+export { ASSISTANT_PROMPT_MAX } from '@cat-factory/contracts'
+
 /** A draggable agent definition shown in the agent palette. Frontend-only. */
 export interface AgentArchetype {
   kind: AgentKind

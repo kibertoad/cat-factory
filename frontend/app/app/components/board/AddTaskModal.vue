@@ -613,8 +613,7 @@ async function resolvePendingIssueBodies() {
 
 // Reset the form whenever the modal opens for a (new) container, and refresh the
 // imported docs/issues so the quick-pick list is current.
-watch(open, (isOpen) => {
-  if (!isOpen) return
+onModalOpen(open, () => {
   title.value = ''
   description.value = ''
   saving.value = false

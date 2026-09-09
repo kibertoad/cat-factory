@@ -4,7 +4,7 @@
 // personalSubscriptions store's `pending` state, which is set when the server replies 428
 // credential_required. On submit it transparently retries the gated action and caches the
 // password. The copy follows the pending vendor (Claude / GLM / ChatGPT-Codex).
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import SecretInput from '~/components/common/SecretInput.vue'
 
 const { t } = useI18n()
@@ -45,8 +45,8 @@ const vendorLabel = computed(() => {
   }
 })
 
-watch(open, (isOpen) => {
-  if (isOpen) password.value = ''
+onModalOpen(open, () => {
+  password.value = ''
 })
 
 const title = computed(() => {

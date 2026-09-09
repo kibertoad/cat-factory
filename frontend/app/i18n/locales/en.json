@@ -5216,9 +5216,16 @@
     "title": "Assistant",
     "intro": "Describe what you want done and the assistant performs it on the board: declare a dependency between two services, add a service from a repository URL, or file a task from a tracker issue.",
     "unavailable": "No model is configured on this deployment, so the assistant cannot read a request. Configure a model provider to enable it.",
+    "reading": "Checking what the assistant can do here…",
+    "unreadable": "Could not check what the assistant can do here, so the request box is hidden for now. Try again in a moment.",
+    "noActions": "This deployment's assistant has no actions configured, so there is nothing it can perform. Configure its actions to enable it.",
+    "@noActions": {
+      "description": "Shown in place of the request box when the deployment wired a model but registered no ACTIONS for the assistant to choose from: the operations it can perform on the board, not buttons in the interface. Distinct from the no-model case above."
+    },
     "placeholder": "e.g. the checkout service depends on the payments service",
     "submit": "Run",
     "submitHint": "Ctrl+Enter, or Cmd+Enter on a Mac",
+    "tooLong": "That request is {length} characters and the assistant reads up to {limit}. Shorten it and run again.",
     "examplesTitle": "What you can ask",
     "showOnBoard": "Show on board",
     "declined": "None of the assistant's actions match that request. It can declare a dependency between two services, add a service from a repository URL, or file a task from a tracker issue.",

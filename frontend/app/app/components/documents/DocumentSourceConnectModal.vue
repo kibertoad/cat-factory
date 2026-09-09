@@ -64,8 +64,8 @@ async function connectWithOAuth() {
   }
 }
 
-watch(open, (isOpen) => {
-  if (isOpen) values.value = {}
+onModalOpen(open, () => {
+  values.value = {}
 })
 
 const canSubmit = computed(() => {

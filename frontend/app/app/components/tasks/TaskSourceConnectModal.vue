@@ -45,8 +45,8 @@ const values = ref<Record<string, string>>({})
 const saving = ref(false)
 const togglingEnabled = ref(false)
 
-watch(open, (isOpen) => {
-  if (isOpen) values.value = {}
+onModalOpen(open, () => {
+  values.value = {}
 })
 
 const canSubmit = computed(() => {

@@ -226,8 +226,7 @@ function onKeydown(event: KeyboardEvent) {
 
 // Reset the query each time the bar opens, and focus the input.
 const inputRef = ref<{ inputRef?: HTMLInputElement } | null>(null)
-watch(open, (isOpen) => {
-  if (!isOpen) return
+onModalOpen(open, () => {
   query.value = ''
   activeIndex.value = 0
   void documents.probe()

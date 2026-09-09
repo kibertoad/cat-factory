@@ -6,9 +6,11 @@ import type { ApiContext } from './context'
 export function assistantApi({ send, ws }: ApiContext) {
   return {
     // Whether a model is wired and which actions this deployment offers. Read before the prompt
-    // box is shown, so an unconfigured deployment says so instead of failing on submit.
-    getAssistantCapability: (workspaceId: string) =>
-      send(getAssistantCapabilityContract, { pathPrefix: ws(workspaceId) }),
+    // box is shown, so an unconfigured deployment says so instead of failing on submit. `signal`
+    // is what lets the store put a deadline on it: the client sets no timeout of its own, and a
+    // read that never settles is a modal with no answer, no failure and so no retry either.
+    getAssistantCapability: (workspaceId: string, signal?: AbortSignal) =>
+      send(getAssistantCapabilityContract, { pathPrefix: ws(workspaceId), signal }),
 
     // Run one turn. A live model call plus a board write, so it can take a couple of seconds:
     // the modal shows progress and the outcome is rendered from the returned data.
