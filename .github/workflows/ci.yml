@@ -151,10 +151,17 @@ jobs:
             # a stubbed model upstream, so it runs when either half of what it covers moves: the
             # OpenAI-compatible resolvers and the endpoint table that decides what each provider
             # may claim, or the lane's own harness, pinned gateway config and vitest project.
+            # The AI SDK is in here too, and not incidentally: both behaviours the lane
+            # characterises (the `json_object` downgrade, and usage being absent from a stream) are
+            # the SDK's defaults rather than ours, so an `@ai-sdk/openai-compatible` bump that
+            # flipped either would otherwise skip the only test that can see it.
             litellm:
               - 'backend/packages/agents/src/providers/**'
+              - 'backend/packages/agents/package.json'
               - 'backend/packages/server/test/integration/**'
               - 'backend/packages/server/vitest.integration.config.ts'
+              - 'backend/packages/server/package.json'
+              - 'pnpm-lock.yaml'
               - '.github/workflows/ci.yml'
             # The Cloudflare OS Gatekeeper (`test-gatekeeper`) is a CONSUMER of the published
             # surface, not part of the backend: `@cat-factory/gatekeeper-worker` and the template
@@ -1416,8 +1423,11 @@ jobs:
   # whether token counts survive the hop into the spend rollup.
   #
   # BLOCKING (in the aggregated `Test` gate, the shape `test-k8s` has, not the advisory shape
-  # `test-eks` has): the image is pinned and the upstream is a local stub, so there is no emulator
-  # and no third-party service whose drift could red this lane for reasons outside the repo.
+  # `test-eks` has): the image is pinned and the upstream is a local stub, so no emulator and no
+  # third party's DRIFT can red this lane for reasons outside the repo. Its one third-party reach
+  # is fetching that pinned image from GHCR, where a 429 or a timeout is the runner's weather
+  # rather than a verdict on the code, so the harness retries the pull up to three times, exactly
+  # as `test-k8s` retries `k3d cluster create` and for the same reason.
   test-litellm:
     name: Test LiteLLM gateway
     needs: changes
@@ -1440,11 +1450,20 @@ jobs:
       - name: Build libraries
         run: pnpm build
 
-      # The image tag lives in the suite's own harness and the suite pulls it, so it is written
-      # once. A pre-pull step here would be that same version in a second place, and the copy no
-      # one runs locally is the one that goes stale.
+      # The image tag lives in the suite's own harness and the suite pulls it (with its own bounded
+      # retry), so it is written once. A pre-pull step here would be that same version in a second
+      # place, and the copy no one runs locally is the one that goes stale.
       - name: LiteLLM gateway integration tests
         run: pnpm --filter @cat-factory/server run test:integration
+
+      # The suite removes its own container on both exits, but a cancelled or timed-out job never
+      # reaches that code. Sweeping by the name prefix the harness mints costs nothing on an
+      # ephemeral runner and is what keeps a self-hosted one from accumulating live proxies.
+      - name: Remove leftover gateway containers
+        if: ${{ always() }}
+        run: |
+          leftovers="$(docker ps -aq --filter 'name=cat-factory-litellm-it-')"
+          if [ -n "$leftovers" ]; then docker rm -f $leftovers; fi
 
   # The Cloudflare OS Gatekeeper, in real workerd: the machinery package's own suite, plus the
   # template that installs it. NON-BLOCKING (deliberately NOT in the aggregated `Test` gate's

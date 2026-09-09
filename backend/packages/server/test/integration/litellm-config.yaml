@@ -5,10 +5,15 @@
 # two keys are minted per run rather than being shared constants, so a key leaking from one hop
 # to the other is observable instead of matching either way.
 #
+# The two model names below are the ones an OPERATOR chooses, so this file declares them and the
+# harness reads them back out (`GATEWAY_ALIAS`, `UPSTREAM_MODEL` in `litellm-gateway.ts`). They
+# cannot be restated there: only the copy the proxy loads is real, and the other one would go
+# stale on the first edit that forgot it.
+#
 # `model_name` is deliberately NOT the underlying model id, and that gap IS what the lane exists
 # to pin. A deployment reaches LiteLLM by the operator's own alias, while what the upstream is
-# asked for is the `model:` below. Neither of our own tests can show that, because both names
-# only exist once a real LiteLLM is doing the mapping.
+# asked for is the `model:` below, minus the `openai/` routing prefix. Neither of our own tests
+# can show that, because both names only exist once a real LiteLLM is doing the mapping.
 model_list:
   - model_name: cat-factory-it-alias
     litellm_params:
@@ -16,8 +21,15 @@ model_list:
       api_base: os.environ/CAT_FACTORY_IT_UPSTREAM_BASE
       api_key: os.environ/CAT_FACTORY_IT_UPSTREAM_KEY
 
-litellm_settings:
+router_settings:
   # A retry would re-send to the stub and break every per-call request assertion, and the lane
   # wants a stub error to arrive as itself rather than as a timeout three attempts later.
+  #
+  # It belongs to the ROUTER, not to `litellm_settings`: a proxy driving a `model_list` retries
+  # through the router, whose own default is not zero. What holds this honest is the suite, which
+  # asserts the exact set of requests one call produced rather than reading the last one, so a
+  # retry that this failed to turn off arrives as a failing test rather than as silence.
   num_retries: 0
+
+litellm_settings:
   request_timeout: 30

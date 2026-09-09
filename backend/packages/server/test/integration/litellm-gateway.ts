@@ -1,6 +1,14 @@
 import { execFileSync } from 'node:child_process'
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
-import { type AddressInfo, createServer as createSocketServer } from 'node:net'
+import { readFileSync } from 'node:fs'
+import {
+  createServer,
+  type IncomingHttpHeaders,
+  type IncomingMessage,
+  type Server,
+  type ServerResponse,
+} from 'node:http'
+import type { AddressInfo } from 'node:net'
+import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 
 // Support for the LiteLLM gateway integration lane (`litellm.it.spec.ts`): a canned
@@ -24,15 +32,54 @@ import { fileURLToPath } from 'node:url'
  */
 export const LITELLM_IMAGE = 'ghcr.io/berriai/litellm:v1.100.0'
 
-/** The `model_name` the committed config declares: the operator's own alias. */
-export const GATEWAY_ALIAS = 'cat-factory-it-alias'
+const CONFIG_PATH = fileURLToPath(new URL('./litellm-config.yaml', import.meta.url))
+const CONFIG_SOURCE = readFileSync(CONFIG_PATH, 'utf8')
 
-/** The model that alias maps onto, which is what the upstream is actually asked for. */
-export const UPSTREAM_MODEL = 'stub-upstream-model'
+/**
+ * Read one value out of the committed proxy config.
+ *
+ * Both model names are the operator's, so the config file is where they are declared and this
+ * harness reads them back instead of repeating them. Written twice they would need a lockstep
+ * edit, and the copy the proxy does not load is the one that goes stale. A shape change in the
+ * config fails here, naming the key it could no longer find.
+ */
+function fromConfig(pattern: RegExp, what: string): string {
+  const found = CONFIG_SOURCE.match(pattern)?.[1]
+  if (!found) throw new Error(`litellm-config.yaml declares no ${what} (${String(pattern)})`)
+  return found
+}
+
+/** The `model_name` the committed config declares: the operator's own alias. */
+export const GATEWAY_ALIAS = fromConfig(/^[ \t]*-[ \t]*model_name:[ \t]*(\S+)/m, 'model_name')
+
+/**
+ * The model that alias maps onto, which is what the upstream is actually asked for. The `openai/`
+ * prefix in the config is LiteLLM's provider routing and is stripped before the upstream call, so
+ * what the stub sees is only the part after it.
+ */
+export const UPSTREAM_MODEL = fromConfig(/^[ \t]*model:[ \t]*openai\/(\S+)/m, 'openai/ model')
+
+/**
+ * Every synchronous docker call carries its own timeout, because `execFileSync` blocks the event
+ * loop: vitest's `hookTimeout` timer cannot fire while one is running, so a wedged daemon or a
+ * stalled registry would otherwise hang the worker with only the CI job's own limit to end it.
+ */
+const DOCKER_TIMEOUTS = {
+  info: 20_000,
+  inspect: 15_000,
+  pull: 180_000,
+  run: 120_000,
+  logs: 30_000,
+  remove: 60_000,
+} as const
+
+function dockerCli(args: string[], timeoutMs: number): string {
+  return execFileSync('docker', args, { encoding: 'utf8', stdio: 'pipe', timeout: timeoutMs })
+}
 
 export function dockerAvailable(): boolean {
   try {
-    execFileSync('docker', ['info'], { stdio: 'ignore' })
+    dockerCli(['info'], DOCKER_TIMEOUTS.info)
     return true
   } catch {
     return false
@@ -46,11 +93,18 @@ export interface StubReply {
   usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number }
 }
 
-/** One request the upstream received, reduced to the fields the lane asserts on. */
+/** One request the upstream received. */
 export interface StubRequest {
+  method: string
   path: string
-  /** The credential the UPSTREAM was shown, never the caller's gateway key. That gap is the point. */
-  authorization: string | undefined
+  /**
+   * EVERY header, not only `authorization`. What the lane asserts is that the caller's gateway key
+   * never reaches the upstream, and a proxy forwarding it on some other header (LiteLLM has used
+   * `x-litellm-api-key` for pass-through metadata) would sail past a check that reads one field.
+   */
+  headers: IncomingHttpHeaders
+  /** The body as received, for the same reason: a key can ride a field as easily as a header. */
+  raw: string
   model: unknown
   stream: boolean
   responseFormat: unknown
@@ -59,10 +113,30 @@ export interface StubRequest {
 
 export interface UpstreamStub {
   port: number
+  /**
+   * Every request, recorded BEFORE the route is decided, so one the stub could not route is
+   * visible instead of absent. Left unrecorded, a call on an unexpected path would leave the
+   * previous test's entry as the newest one, and assertions would pass against a request that
+   * never happened.
+   */
   requests: StubRequest[]
+  /**
+   * Transport-level failures: an aborted request, a write to a peer that has gone away, a body
+   * that is not JSON. Recorded rather than thrown, because an uncaught exception in a request
+   * handler takes the whole vitest worker down instead of failing the test that provoked it. An
+   * assertion over {@link requests} is only as good as this staying empty, which the suite checks.
+   */
+  errors: string[]
   /** Script the next reply. It applies to every subsequent call until changed. */
   reply(next: StubReply): void
   close(): Promise<void>
+}
+
+interface ChatCompletionBody {
+  model?: unknown
+  stream?: boolean
+  response_format?: unknown
+  tools?: { function?: { name?: string } }[]
 }
 
 const DEFAULT_USAGE = { prompt_tokens: 11, completion_tokens: 7, total_tokens: 18 }
@@ -71,7 +145,8 @@ const DEFAULT_REPLY: StubReply = { content: 'stub upstream reply', usage: DEFAUL
 
 /**
  * A canned OpenAI-compatible upstream, bound on 0.0.0.0 so the LiteLLM container can reach it
- * through `host.docker.internal`.
+ * through `host.docker.internal`. That is the one bind here that has to be wide: the gateway's own
+ * published port is loopback-only, because nothing dials IT from off the host.
  *
  * It answers `/v1/models` as well as `/v1/chat/completions`. A 404 there is harmless today, but it
  * would make a future LiteLLM startup probe look like a broken upstream, which reads as this
@@ -79,54 +154,94 @@ const DEFAULT_REPLY: StubReply = { content: 'stub upstream reply', usage: DEFAUL
  */
 export async function startUpstreamStub(): Promise<UpstreamStub> {
   const requests: StubRequest[] = []
+  const errors: string[] = []
   let scripted: StubReply = DEFAULT_REPLY
 
+  const note = (phase: string, error: unknown) => {
+    errors.push(`${phase}: ${String(error)}`)
+  }
+
   const server: Server = createServer((req, res) => {
+    // Without these two listeners an aborted request, or a write to a peer that has gone away
+    // (the gateway container is force-removed while its sockets are still live), is an uncaught
+    // exception: it kills the worker rather than failing an assertion.
+    req.on('error', (error) => note('request', error))
+    res.on('error', (error) => note('response', error))
+
+    // Decode as text rather than concatenating Buffers: `raw += chunk` stringifies each chunk on
+    // its own, so a multi-byte character split across two TCP reads arrives as U+FFFD.
+    req.setEncoding('utf8')
     let raw = ''
-    req.on('data', (chunk) => {
+    req.on('data', (chunk: string) => {
       raw += chunk
     })
     req.on('end', () => {
       const path = req.url ?? ''
-      if (req.method === 'GET' && path.endsWith('/models')) {
-        res.writeHead(200, { 'content-type': 'application/json' })
-        res.end(JSON.stringify({ object: 'list', data: [{ id: UPSTREAM_MODEL, object: 'model' }] }))
-        return
-      }
-      if (req.method !== 'POST' || !path.endsWith('/chat/completions')) {
-        res.writeHead(404, { 'content-type': 'application/json' })
-        res.end(JSON.stringify({ error: { message: `stub upstream has no route for ${path}` } }))
-        return
+      const method = req.method ?? ''
+      let body: ChatCompletionBody = {}
+      let parsed = true
+      if (raw.length > 0) {
+        try {
+          body = JSON.parse(raw) as ChatCompletionBody
+        } catch (error) {
+          parsed = false
+          note('body', error)
+        }
       }
 
-      const body = JSON.parse(raw || '{}') as {
-        model?: unknown
-        stream?: boolean
-        response_format?: unknown
-        tools?: { function?: { name?: string } }[]
-      }
       requests.push({
+        method,
         path,
-        authorization: req.headers.authorization,
+        headers: req.headers,
+        raw,
         model: body.model,
         stream: body.stream === true,
         responseFormat: body.response_format,
         toolNames: (body.tools ?? []).map((tool) => tool.function?.name ?? '<unnamed>'),
       })
 
+      if (!parsed) {
+        writeError(res, 400, 'stub upstream could not parse the request body')
+        return
+      }
+      if (method === 'GET' && path.endsWith('/models')) {
+        res.writeHead(200, { 'content-type': 'application/json' })
+        res.end(JSON.stringify({ object: 'list', data: [{ id: UPSTREAM_MODEL, object: 'model' }] }))
+        return
+      }
+      if (method !== 'POST' || !path.endsWith('/chat/completions')) {
+        writeError(res, 404, `stub upstream has no route for ${method} ${path}`)
+        return
+      }
+
       if (body.stream === true) writeStream(res, scripted)
       else writeJson(res, scripted)
     })
   })
 
-  await new Promise<void>((ready) => server.listen(0, '0.0.0.0', ready))
+  await new Promise<void>((ready, failed) => {
+    server.once('error', failed)
+    server.listen(0, '0.0.0.0', () => {
+      server.off('error', failed)
+      server.on('error', (error) => note('server', error))
+      ready()
+    })
+  })
   return {
     port: (server.address() as AddressInfo).port,
     requests,
+    errors,
     reply: (next) => {
       scripted = next
     },
-    close: () => new Promise<void>((closed) => server.close(() => closed())),
+    close: () =>
+      new Promise<void>((closed) => {
+        // The gateway container is force-removed before this runs, so its keep-alive sockets to
+        // us never send a FIN, and `server.close()` on its own would wait for them: teardown
+        // hangs to the hook timeout instead of ending the suite.
+        server.closeAllConnections()
+        server.close(() => closed())
+      }),
   }
 }
 
@@ -137,6 +252,11 @@ function toolCallPayloads(reply: StubReply) {
     type: 'function' as const,
     function: { name: call.name, arguments: JSON.stringify(call.args) },
   }))
+}
+
+function writeError(res: ServerResponse<IncomingMessage>, status: number, message: string): void {
+  res.writeHead(status, { 'content-type': 'application/json' })
+  res.end(JSON.stringify({ error: { message } }))
 }
 
 function writeJson(res: ServerResponse<IncomingMessage>, reply: StubReply): void {
@@ -203,12 +323,47 @@ export interface LiteLlmGateway {
   stop(): void
 }
 
-/** Claim a free host port and release it, so the published port is unlikely to collide. */
-async function reservePort(): Promise<number> {
-  const socket = createSocketServer()
-  await new Promise<void>((ready) => socket.listen(0, '127.0.0.1', ready))
-  const { port } = socket.address() as AddressInfo
-  await new Promise<void>((closed) => socket.close(() => closed()))
+const PULL_ATTEMPTS = 3
+
+/**
+ * Put the pinned image on the host, pulling it with a bounded retry when it is absent.
+ *
+ * The pull is the one thing in this lane that reaches a third party, and the lane is a REQUIRED
+ * check, so a 429 or a connection timeout from GHCR must not red a PR that nothing else touched.
+ * Same reasoning, and the same shape, as the `test-k8s` job's retry around `k3d cluster create`.
+ *
+ * Separating the pull from `docker run` is also what makes the run step's timeout meaningful: a
+ * bare `run` that pulls is one call whose duration is a registry's to decide.
+ */
+async function ensureImage(): Promise<void> {
+  try {
+    dockerCli(['image', 'inspect', LITELLM_IMAGE], DOCKER_TIMEOUTS.inspect)
+    return
+  } catch {
+    // Not on this host yet, which is the normal state of a cold runner.
+  }
+  let last = ''
+  for (let attempt = 1; attempt <= PULL_ATTEMPTS; attempt++) {
+    try {
+      dockerCli(['pull', LITELLM_IMAGE], DOCKER_TIMEOUTS.pull)
+      return
+    } catch (error) {
+      last = `${String(error)}\n${(error as { stderr?: string }).stderr ?? ''}`
+      if (attempt < PULL_ATTEMPTS) await delay(5_000)
+    }
+  }
+  throw new Error(`could not pull ${LITELLM_IMAGE} in ${PULL_ATTEMPTS} attempts: ${last}`)
+}
+
+/** The host port Docker published the gateway on, read back rather than chosen in advance. */
+function readPublishedPort(name: string): number {
+  const mapping = dockerCli(['port', name, '4000/tcp'], DOCKER_TIMEOUTS.inspect).trim()
+  const port = Number(mapping.split('\n')[0]?.trim().split(':').at(-1))
+  if (!Number.isInteger(port) || port <= 0) {
+    throw new Error(
+      `could not read the published port of ${name}: \`docker port\` said ${mapping || '<nothing>'}`,
+    )
+  }
   return port
 }
 
@@ -227,18 +382,16 @@ export async function startLiteLlmGateway(opts: { upstreamPort: number }): Promi
   const name = `cat-factory-litellm-it-${suffix}`
   const masterKey = `sk-gateway-${suffix}`
   const upstreamKey = `sk-upstream-${suffix}`
-  const hostPort = await reservePort()
-  const configPath = fileURLToPath(new URL('./litellm-config.yaml', import.meta.url))
+  await ensureImage()
 
-  // `docker run` pulls the image when it is absent, which is what makes {@link LITELLM_IMAGE} the
-  // single source of the pinned tag: a CI step that pre-pulled it would be the same version
-  // written twice, and the copy nobody runs locally is the one that goes stale. The cost is that a
-  // cold pull happens inside this call, which is what `hookTimeout` in the integration config is
-  // sized for. stderr is captured rather than discarded so a pull or daemon failure arrives as
-  // itself instead of as a bare non-zero exit.
+  // `-p 127.0.0.1::4000` lets Docker pick the host port, which is then read back off the running
+  // container. Claiming a free port here and releasing it before the run would be a race whose
+  // window stretches across container startup: anything taking an ephemeral port meanwhile wins,
+  // and `docker run` fails with `port is already allocated`. Loopback rather than every interface,
+  // because only this process dials it, and a wider bind puts a live proxy on whatever network the
+  // machine running the suite happens to be attached to.
   try {
-    execFileSync(
-      'docker',
+    dockerCli(
       [
         'run',
         '-d',
@@ -246,7 +399,7 @@ export async function startLiteLlmGateway(opts: { upstreamPort: number }): Promi
         name,
         '--add-host=host.docker.internal:host-gateway',
         '-p',
-        `${hostPort}:4000`,
+        '127.0.0.1::4000',
         '-e',
         `LITELLM_MASTER_KEY=${masterKey}`,
         '-e',
@@ -254,12 +407,12 @@ export async function startLiteLlmGateway(opts: { upstreamPort: number }): Promi
         '-e',
         `CAT_FACTORY_IT_UPSTREAM_KEY=${upstreamKey}`,
         '-v',
-        `${configPath}:/app/config.yaml:ro`,
+        `${CONFIG_PATH}:/app/config.yaml:ro`,
         LITELLM_IMAGE,
         '--config',
         '/app/config.yaml',
       ],
-      { stdio: 'pipe', encoding: 'utf8' },
+      DOCKER_TIMEOUTS.run,
     )
   } catch (error) {
     const stderr = (error as { stderr?: string }).stderr ?? ''
@@ -268,43 +421,66 @@ export async function startLiteLlmGateway(opts: { upstreamPort: number }): Promi
 
   const logs = () => {
     try {
-      return execFileSync('docker', ['logs', name], { encoding: 'utf8', stdio: 'pipe' })
+      return dockerCli(['logs', name], DOCKER_TIMEOUTS.logs)
     } catch (error) {
       return `could not read container logs: ${String(error)}`
     }
   }
   const stop = () => {
     try {
-      execFileSync('docker', ['rm', '-f', name], { stdio: 'ignore' })
+      dockerCli(['rm', '-f', name], DOCKER_TIMEOUTS.remove)
     } catch {
       // Already gone, which is the state `stop` exists to reach.
     }
   }
+  // Only an explicit `false` counts as exited. A `docker inspect` that fails transiently must not
+  // be read as a dead container, or the suite reports a cause it never observed.
+  const hasExited = () => {
+    try {
+      const running = dockerCli(
+        ['inspect', '-f', '{{.State.Running}}', name],
+        DOCKER_TIMEOUTS.inspect,
+      )
+      return running.trim() === 'false'
+    } catch {
+      return false
+    }
+  }
 
   try {
-    await waitForReady(`http://127.0.0.1:${hostPort}/health/readiness`)
+    const hostPort = readPublishedPort(name)
+    await waitForReady(`http://127.0.0.1:${hostPort}/health/readiness`, hasExited)
+    return { baseUrl: `http://127.0.0.1:${hostPort}/v1`, masterKey, upstreamKey, logs, stop }
   } catch (error) {
     // The container's own log is the only thing that says WHY. A readiness timeout on its own is
     // unactionable in CI, because a bad mount and an unreachable upstream time out identically.
     const detail = logs()
     stop()
-    throw new Error(
-      `LiteLLM did not become ready: ${String(error)}\n--- container logs ---\n${detail}`,
-    )
+    throw new Error(`LiteLLM did not come up: ${String(error)}\n--- container logs ---\n${detail}`)
   }
-  return { baseUrl: `http://127.0.0.1:${hostPort}/v1`, masterKey, upstreamKey, logs, stop }
 }
 
-async function waitForReady(url: string, timeoutMs = 120_000): Promise<void> {
+async function waitForReady(
+  url: string,
+  hasExited: () => boolean,
+  timeoutMs = 120_000,
+): Promise<void> {
   const deadline = Date.now() + timeoutMs
   for (;;) {
     try {
       const res = await fetch(url)
+      // Drain even a response we are not going to accept: an unread body holds its connection
+      // open, and this loop runs once a second until the deadline.
+      await res.arrayBuffer()
       if (res.ok) return
     } catch {
-      // Not listening yet. The deadline below is what ends this loop.
+      // Not listening yet. The two checks below are what end this loop.
     }
+    // A container that has EXITED will never answer, and the likeliest causes (an unparseable
+    // config, a bad mount) exit within a second. Polling out the full timeout to say so is the
+    // slowest possible path to the most common failure.
+    if (hasExited()) throw new Error(`${url} never answered: the gateway container exited`)
     if (Date.now() >= deadline) throw new Error(`${url} did not answer within ${timeoutMs}ms`)
-    await new Promise((resolve) => setTimeout(resolve, 1_000))
+    await delay(1_000)
   }
 }
