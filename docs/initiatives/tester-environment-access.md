@@ -6,7 +6,9 @@
 > test credentials** (a 3rd-party API token a Tester needs, delivered out of band), and
 > **Slice D; the Test Data Seeder agent** (checks/seeds test data before the Tester, with a
 > human-intervention park loop). Slice C is the SEALED counterpart of Slice B and shares its
-> per-service-frame model; Slice D consumes BOTH cred stores.
+> per-service-frame model; Slice D consumes BOTH cred stores. **Slice E** adds the third thing a
+> Tester is handed about a service beside its coordinates and its credentials: the freeform
+> **testing context** its team writes on the board.
 
 > **What this tracker does NOT cover.** Slice A standardized the coordinates by RE-PARSING the
 > environment's one URL, which answers "where do I aim" and never "can anything get there". The
@@ -142,6 +144,43 @@ each is for. Per-service-frame + frame-chain resolution, exactly like Slice B / 
 | Cross-runtime conformance assertion (seal via API, read-back refs, no values leak) on both stores                                                        | done   | this |
 | Frontend: `stores/testSecrets.ts` + `ServiceTestSecrets.vue` inspector panel (SENSITIVE warning banner) + i18n in all locales                            | done   | fe   |
 | Changesets (per touched published package)                                                                                                               | done   | this |
+
+### Slice E: Per-service TESTING CONTEXT (freeform prose)
+
+The third thing a Tester is handed about a service, beside the mechanical coordinates (Slice A) and
+the credentials (Slices B/C): what a human would say to whoever tests it. Which flows matter, which
+test accounts exist and how to sign in as one, what the seeded data means, what to leave alone. It
+is stored as a plain nullable `blocks.testing_context` column rather than a table of its own, for
+the reason `provisioning` and `service_connections` are columns: one service-frame-owned value the
+engine reads off the frame it has ALREADY walked to, so a table would buy a second read, a second
+repository and a mothership routing decision for nothing.
+
+Non-sensitive by contract, like the Slice B pools and unlike Slice C: it is rendered INTO the
+prompt, which is what the panel's banner says and what makes "put the secret in the sealed store and
+name its variable here" the shape of the split.
+
+**The two rules that bind a change here:**
+
+- **It is rendered through ONE shared renderer** (`testingContextLines`, beside
+  `testCredentialLines` in `environment-under-test.ts`), so the tester step and the dry run's prober
+  are told the same text in the same words. That is the same reason the credential states are
+  shared, and it is what a dry run's predictive claim rests on.
+- **The EMPTY case is stated, never omitted.** An agent that was never shown the field exists cannot
+  report that nobody filled it in, so it files the gap as its own ignorance or not at all. This is
+  the "absent and zero must not render the same" rule, applied to the one field whose emptiness a
+  human is meant to act on.
+
+| Unit                                                                                                | Status | PR   |
+| --------------------------------------------------------------------------------------------------- | ------ | ---- |
+| Contracts: `blockSchema.testingContext` + `updateBlockSchema` (capped at 8000, empty string clears) | done   | this |
+| D1 `0103_service_testing_context` + Drizzle column/migration + the shared field-table mapper entry  | done   | this |
+| Write boundary: `blockPatchNarrowing.testingContext` drops it on any non-frame block                | done   | this |
+| Engine: `AgentContextBuilder.serviceConfigFrom` → `AgentRunContext.service.testingContext`          | done   | this |
+| Prompts: shared `testingContextLines` + `testingContextSection` (tester kinds only) + the prober    | done   | this |
+| Dry run: `EnvironmentProbeRequest.testingContext` (probe stage reads the frame it already loaded)   | done   | this |
+| Cross-runtime conformance (frame-chain walk + the frame-only drop, on both stores)                  | done   | this |
+| Frontend: `ServiceTestingContext.vue` inspector panel below the credentials + i18n in all locales   | done   | this |
+| Website page (the operator-facing half, merged first)                                               | done   | web  |
 
 ### Slice D: Test Data Seeder agent (follow-up; NOT in this PR)
 

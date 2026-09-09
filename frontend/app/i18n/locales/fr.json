@@ -1051,6 +1051,16 @@
       "configNoun": "les identifiants de test sensibles",
       "duplicateKey": "Chaque nom de variable doit être unique."
     },
+    "testingContext": {
+      "title": "Contexte de test",
+      "sectionHint": "Notes libres sur la façon de tester ce service : quels parcours comptent, quels comptes de test existent et comment s'y connecter, ce que signifient les données préchargées, ce qu'il ne faut pas toucher. Chaque exécution du testeur pour ce service reçoit ce texte mot pour mot, tout comme l'essai à blanc de l'environnement.",
+      "notSecret": "Ce texte part tel quel dans l'invite du testeur : n'y mettez pas de véritables secrets. Saisissez-les au-dessus, dans « Identifiants de test », et n'y faites référence ici que par le nom de la variable.",
+      "placeholder": "ex. connectez-vous en tant que $DEMO_USER ; le locataire préchargé est Acme avec trois projets ; ne lancez jamais le parcours de facturation, il débite une vraie carte.",
+      "length": "{count} sur {max} caractères",
+      "save": "Enregistrer le contexte de test",
+      "revert": "Annuler les modifications",
+      "savedToast": "Contexte de test enregistré"
+    },
     "testConfig": {
       "title": "Infrastructure de test",
       "hint": "Comment un environnement de test est mis en place pour ce service quand un pipeline doit l'exécuter : sans infrastructure, un fichier Docker Compose, des manifestes Kubernetes ou un type de manifeste personnalisé.",

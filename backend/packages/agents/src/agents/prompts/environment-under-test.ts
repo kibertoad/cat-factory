@@ -142,6 +142,39 @@ export function testCredentialLines(
 }
 
 /**
+ * The service's own TESTING CONTEXT, as its team wrote it on the board.
+ *
+ * Shared for the same reason the two sections above are: the dry run exists to predict whether a
+ * tester handed this environment could operate the service, and a prober that was never shown the
+ * one place a human states "sign in as demo@acme.test, the seeded tenant is Acme, never touch the
+ * billing sandbox" reports a gap the tester will not have.
+ *
+ * The absence is STATED rather than skipped, and that is the whole value of the empty case: an
+ * agent told nothing cannot tell "this platform has nowhere to write that down" from "the place
+ * exists and is empty", so it either files no finding at all or files one against the service. The
+ * text is operator-authored prose and is passed through verbatim; anything secret belongs in the
+ * sealed credential store, whose keys this prose refers to.
+ */
+export function testingContextLines(context: string | undefined): string[] {
+  const text = context?.trim()
+  if (!text) {
+    return [
+      'NONE RECORDED. Nobody has written a testing context for this service on the board, so what ' +
+        'matters here, which accounts exist and what the data means all have to come from the ' +
+        'repository and from the sections above. If you end up guessing at something the ' +
+        "service's own team could have told you in a sentence, say so in your report: that is " +
+        'exactly what this field is for.',
+    ]
+  }
+  return [
+    'Written by the people who own this service, for whoever tests it. Treat it as authoritative ' +
+      'about their conventions, and as a starting point rather than a limit on what you exercise:',
+    '',
+    text,
+  ]
+}
+
+/**
  * How to work out how to OPERATE a service from its repository: where its address, its protocol
  * and its authentication are actually written down.
  *

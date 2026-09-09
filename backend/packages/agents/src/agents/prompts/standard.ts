@@ -17,7 +17,7 @@ import {
 // The ONE deriver of an environment URL's host/port/scheme, in contracts because the platform has
 // to DIAL exactly what this prompt tells the agent to dial: a second parser here is how the route
 // proof and the Tester's coordinates come to disagree about the same string.
-import { deriveEnvironmentCoordinates } from '@cat-factory/contracts'
+import { deriveEnvironmentCoordinates, isTesterKind } from '@cat-factory/contracts'
 import { PLATFORM_DELIVERY_CONTRACT } from './delivery-contract.js'
 import { renderOpenFindings } from './review-rounds.js'
 import { FINAL_ANSWER_IN_REPLY } from './shared.js'
@@ -28,6 +28,7 @@ import {
   IMPLEMENTER_CREDENTIAL_GAP_GUIDANCE,
   environmentAccessLines,
   testCredentialLines,
+  testingContextLines,
 } from './environment-under-test.js'
 // "Is this kind's deliverable its reply, or a pushed commit?": the declaration that decides where
 // it can record a credential gap at all.
@@ -418,6 +419,25 @@ export function testSecretsSection(context: AgentRunContext): string {
   if (!brief) return ''
   const lines = ['', 'Sensitive test credentials for this service:']
   return [...lines, ...testCredentialLines(brief)].join('\n')
+}
+
+/**
+ * Render the service's own TESTING CONTEXT: the prose its team wrote on the board about how this
+ * service is tested, injected verbatim.
+ *
+ * Gated on the KIND rather than on the value, unlike its neighbours: the context rides
+ * `context.service` (service-frame configuration, resolved for every dispatch), so the decision
+ * about who is told it belongs here. Only the testers are, which is what keeps every other prompt
+ * byte-identical, and the environment dry run's prober is told the same text through the same
+ * renderer so its verdict predicts theirs.
+ *
+ * The EMPTY case is rendered too, for the reason {@link testingContextLines} states: an agent that
+ * was never told the field exists cannot report that nobody filled it in.
+ */
+export function testingContextSection(context: AgentRunContext): string {
+  if (!isTesterKind(context.agentKind)) return ''
+  const lines = ['', 'Testing context for this service:']
+  return [...lines, ...testingContextLines(context.service?.testingContext)].join('\n')
 }
 
 /**

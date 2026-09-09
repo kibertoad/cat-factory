@@ -890,6 +890,11 @@ export class AgentContextBuilder {
     // is defined whenever a frame resolves (its only consumers read specific fields off it).
     service.type = frame.type
     if (frame.provisioning) service.provisioning = frame.provisioning
+    // Trimmed here rather than at the renderer: whitespace typed into the inspector and left
+    // there is not a testing context, and the prompt asks a single question of this field
+    // (is there anything to state) that both readers must answer the same way.
+    const testingContext = frame.testingContext?.trim()
+    if (testingContext) service.testingContext = testingContext
     if (frame.cloudProvider) service.cloudProvider = frame.cloudProvider
     else {
       // No per-service override: fall back to the owning account's default provider

@@ -53,6 +53,7 @@ export const INSPECTOR_PANEL_IDS = [
   'service-connections',
   'service-test-config',
   'service-test-secrets',
+  'service-testing-context',
   'service-fragments',
   'service-release-health',
   'service-validation-checks',
@@ -146,6 +147,10 @@ export const INSPECTOR_PANEL_SPECS: readonly InspectorPanelSpec[] = [
   { id: 'service-connections', order: 130, when: (b) => isFrame(b) && b.type === 'service' },
   { id: 'service-test-config', order: 140, when: isDeployableFrame },
   { id: 'service-test-secrets', order: 150, when: isDeployableFrame },
+  // Immediately after the credentials: the prose that says what to DO with them, and the other
+  // half of what a tester is handed about this service. Same gate for the same reason (a doc
+  // repo runs no tester at all).
+  { id: 'service-testing-context', order: 155, when: isDeployableFrame },
   { id: 'service-fragments', order: 160, when: isFrame },
   { id: 'service-release-health', order: 170, when: isDeployableFrame },
   // Pre-PR validation checks: the commands the harness runs before opening this service's PRs.

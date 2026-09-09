@@ -223,6 +223,11 @@ export const updateBlockSchema = v.partial(
     // produces + in-repo specifics (the "what + where"). See
     // docs/initiatives/per-service-provision-types.md.
     provisioning: serviceProvisioningSchema,
+    // Service-level (frame): the operator's freeform testing context, injected verbatim into
+    // every tester prompt for the service; an empty string clears it. Capped at the length the
+    // bootstrap instructions field uses: it is standing prose a model reads on every tester
+    // dispatch, so it is budgeted like guidance rather than like a description.
+    testingContext: v.pipe(v.string(), v.maxLength(8000)),
     // Service-level (frame): the cloud provider this service's jobs run on.
     cloudProvider: cloudProviderSchema,
     // Service-level (frame): the abstract instance size for this service's jobs.

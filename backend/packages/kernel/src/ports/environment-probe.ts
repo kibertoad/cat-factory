@@ -66,6 +66,14 @@ export interface EnvironmentProbeRequest {
   environment: EnvironmentProbeTarget
   /** The frame's own title and description, so the prompt names the system under test. */
   service: { title: string; description?: string }
+  /**
+   * The frame's freeform TESTING CONTEXT, as the board holds it: what matters when testing this
+   * service, which accounts exist, what the data means. The SAME text the tester steps are handed
+   * (`AgentRunContext.service.testingContext`), through the same renderer, because a dry run's
+   * claim is that it predicts what a tester will be able to do here. Absent ⇒ the frame recorded
+   * none, which the prompt STATES rather than omits.
+   */
+  testingContext?: string
   /** Who started the run, for per-user credential leasing and attribution. Null for a system run. */
   initiatedBy: string | null
 }

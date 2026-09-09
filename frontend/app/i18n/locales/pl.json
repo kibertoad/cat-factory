@@ -1051,6 +1051,16 @@
       "configNoun": "wrażliwe poświadczenia testowe",
       "duplicateKey": "Każda nazwa zmiennej musi być unikalna."
     },
+    "testingContext": {
+      "title": "Kontekst testowania",
+      "sectionHint": "Dowolne notatki o tym, jak testuje się tę usługę: które przepływy są ważne, jakie konta testowe istnieją i jak się na nie zalogować, co oznaczają wgrane dane i czego nie ruszać. Każde uruchomienie Testera dla tej usługi dostaje ten tekst dosłownie, tak samo jak próbne uruchomienie środowiska.",
+      "notSecret": "Ten tekst trafia wprost do promptu Testera, więc nie wpisuj tu prawdziwych sekretów. Zapisz je wyżej, w „Poświadczeniach testowych”, i odwołuj się do nich tutaj tylko przez nazwę zmiennej.",
+      "placeholder": "np. zaloguj się jako $DEMO_USER; wgrany najemca to Acme z trzema projektami; nigdy nie uruchamiaj przepływu płatności, obciąża prawdziwą kartę.",
+      "length": "{count} z {max} znaków",
+      "save": "Zapisz kontekst testowania",
+      "revert": "Odrzuć zmiany",
+      "savedToast": "Zapisano kontekst testowania"
+    },
     "testConfig": {
       "title": "Infrastruktura testowa",
       "hint": "Jak stawiane jest środowisko testowe dla tej usługi, gdy potok musi ją uruchomić: bez infrastruktury, plik Docker Compose, manifesty Kubernetes lub niestandardowy typ manifestu.",

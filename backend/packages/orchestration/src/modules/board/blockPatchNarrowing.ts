@@ -59,6 +59,16 @@ export function createBlockPatchNarrowing(deps: BlockPatchNarrowingDeps) {
     },
 
     /**
+     * `testingContext` is service-frame prose the engine only ever reads off the owning service
+     * frame (the same walk `serviceFragmentIds` is resolved by), so it is dropped on anything
+     * else: stored on a task it would be dead data that no tester prompt ever renders.
+     */
+    testingContext(patch: UpdateBlockInput, block: Block): UpdateBlockInput {
+      if (patch.testingContext === undefined || block.level === 'frame') return patch
+      return without(patch, 'testingContext')
+    },
+
+    /**
      * `referenceRepos` is a DOCUMENT-task-only attachment (read-only reference repos for the
      * `doc-writer` agent): the inspector shows the picker only for `taskType === 'document'`, and
      * the executor consumes it only for the doc-writer kind. Dropped on any other block. The repo

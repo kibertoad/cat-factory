@@ -13,6 +13,7 @@ import {
   SERVICE_DISCOVERY_GUIDANCE,
   environmentAccessLines,
   testCredentialLines,
+  testingContextLines,
   type CredentialGapGuidance,
 } from './environment-under-test.js'
 
@@ -174,6 +175,13 @@ export interface EnvironmentProbeBrief {
     reachability?: EnvironmentReachabilityNote
   }
   testSecrets: EnvironmentProbeSecretsBrief
+  /**
+   * The service's own testing prose as its team wrote it on the board, or undefined when nobody
+   * has. Rendered either way ({@link testingContextLines}): a prober that does not know the field
+   * exists cannot file "nobody told me how this is tested" in `missingContext`, which is the
+   * finding the whole run is for.
+   */
+  testingContext?: string
   repo: { owner: string; name: string; branch: string; serviceDirectory?: string }
 }
 
@@ -215,6 +223,8 @@ export function environmentProbeUserPrompt(brief: EnvironmentProbeBrief): string
   lines.push(...environmentAccessLines(brief.environment.access, PROBE_GAP_GUIDANCE))
   lines.push('', '## Credentials your shell carries', '')
   lines.push(...testCredentialLines(brief.testSecrets, PROBE_GAP_GUIDANCE))
+  lines.push('', "## What this service's own team says about testing it", '')
+  lines.push(...testingContextLines(brief.testingContext))
   lines.push(
     '',
     '## The repository',

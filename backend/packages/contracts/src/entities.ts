@@ -364,6 +364,19 @@ export const blockSchema = v.object({
    */
   provisioning: v.optional(serviceProvisioningSchema),
   /**
+   * Service-level (frame-only): freeform prose the operator writes about how to TEST this
+   * service, injected verbatim into every tester prompt for it (the pipeline testers and the
+   * environment dry run's prober alike). What belongs here is the standing knowledge no
+   * credential and no repository read supplies: which flows matter, which test accounts exist
+   * and how to sign in as one, what data the environment is seeded with, what to leave alone.
+   *
+   * Non-sensitive by contract, exactly like the environment access handle: it is rendered into
+   * the prompt, so a real secret belongs in the sealed test-credential store instead (its keys
+   * are what this prose refers to). Absent / empty ⇒ every tester prompt is byte-identical to
+   * one written before this field existed.
+   */
+  testingContext: v.optional(v.string()),
+  /**
    * Service-level (frame-only): the cloud provider this service's container jobs
    * run on. Absent means the owning account's `defaultCloudProvider`.
    */

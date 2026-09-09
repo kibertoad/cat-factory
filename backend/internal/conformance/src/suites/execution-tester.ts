@@ -1,4 +1,5 @@
 import {
+  type AgentRunContext,
   type Block,
   type EnvironmentProvider,
   type ExecutionInstance,
@@ -341,6 +342,45 @@ function registerTesterPipelineTests(harness: ConformanceHarness): void {
     const exec = ticked.find((e) => e.blockId === 'task_login')!
     const testerStep = exec.steps.find((s) => s.agentKind === 'tester-api')!
     expect(testerStep.test?.infraSetup).toEqual(infraSetup)
+  })
+
+  it('carries the service frame’s TESTING CONTEXT onto the dispatched tester', async () => {
+    // Both stores map the column, and the frame-chain walk is the thing under test: the prose is
+    // written on the FRAME and the run is on a TASK inside it, so a facade that keyed resolution
+    // off the run block would resolve nothing and the tester prompt would silently lose it.
+    const contexts: AgentRunContext[] = []
+    const app = harness.makeApp({ onContext: (c) => contexts.push(c) })
+    const { workspace } = await app.createWorkspace()
+    const wsId = workspace.id
+    const prose = 'Sign in as $DEMO_USER. Seeded tenant: Acme. The billing flow charges a card.'
+
+    const blocks = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body.blocks
+    const frameId = blocks.find((b) => b.id === 'task_login')!.parentId!
+    const saved = await app.call<Block>('PATCH', `/workspaces/${wsId}/blocks/${frameId}`, {
+      testingContext: prose,
+    })
+    expect(saved.status).toBe(200)
+    expect(saved.body.testingContext).toBe(prose)
+
+    // Frame-only at the write boundary: stored on a task it would be dead data no prompt renders.
+    const onTask = await app.call<Block>('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
+      testingContext: 'nope',
+    })
+    expect(onTask.body.testingContext).toBeUndefined()
+
+    const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+      name: 'Code + test',
+      purpose: 'build',
+      agentKinds: ['coder', 'deployer', 'tester-api', 'disposer'],
+    })
+    const started = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+      pipelineId: pipeline.body.id,
+    })
+    expect(started.status).toBe(201)
+    await app.drive(wsId)
+
+    const tester = contexts.find((c) => c.agentKind === 'tester-api')
+    expect(tester?.service?.testingContext).toBe(prose)
   })
 
   registerFrontendTesterGateTests(harness)

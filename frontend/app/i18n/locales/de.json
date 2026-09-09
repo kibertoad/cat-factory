@@ -1596,6 +1596,16 @@
       "configNoun": "die sensiblen Test-Anmeldedaten",
       "duplicateKey": "Jeder Variablenname muss eindeutig sein."
     },
+    "testingContext": {
+      "title": "Testkontext",
+      "sectionHint": "Freitext dazu, wie dieser Service getestet wird: welche Abläufe wichtig sind, welche Testkonten es gibt und wie man sich damit anmeldet, was die eingespielten Daten bedeuten, was unangetastet bleiben soll. Jeder Tester-Lauf für diesen Service bekommt diesen Text wörtlich, der Probelauf der Umgebung ebenso.",
+      "notSecret": "Dieser Text geht unverändert in den Prompt des Testers. Echte Geheimnisse gehören nicht hierher: Trage sie oben unter „Test-Anmeldedaten“ ein und verweise hier nur über den Variablennamen darauf.",
+      "placeholder": "z. B. als $DEMO_USER anmelden; der eingespielte Mandant ist Acme mit drei Projekten; den Abrechnungsablauf nie ausführen, er belastet eine echte Karte.",
+      "length": "{count} von {max} Zeichen",
+      "save": "Testkontext speichern",
+      "revert": "Änderungen verwerfen",
+      "savedToast": "Testkontext gespeichert"
+    },
     "testConfig": {
       "title": "Testinfrastruktur",
       "hint": "Wie eine Testumgebung für diesen Service aufgesetzt wird, wenn eine Pipeline ihn ausführen muss: keine Infrastruktur, eine Docker-Compose-Datei, Kubernetes-Manifeste oder ein benutzerdefinierter Manifesttyp.",

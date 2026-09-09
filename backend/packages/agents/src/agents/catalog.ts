@@ -41,6 +41,7 @@ import {
   renderStandardUserPrompt,
   standardSystemPrompt,
   testSecretsSection,
+  testingContextSection,
 } from './prompts/standard.js'
 
 // Prompt construction for the built-in agent kinds: turns an agent kind + block
@@ -694,20 +695,7 @@ function buildBaseUserPrompt(
     const spikeSection = spikeContextSection(context)
     if (spikeSection) lines.push(spikeSection)
   }
-  const envSection = environmentSection(context, registry)
-  if (envSection) lines.push(envSection)
-  const involvedSection = involvedServicesSection(context)
-  if (involvedSection) lines.push(involvedSection)
-  const approachSection = testApproachSection(context)
-  if (approachSection) lines.push(approachSection)
-  const targetSection = e2eTargetSection(context)
-  if (targetSection) lines.push(targetSection)
-  const testerEnv = testerEnvironmentSection(context)
-  if (testerEnv) lines.push(testerEnv)
-  const testSecrets = testSecretsSection(context)
-  if (testSecrets) lines.push(testSecrets)
-  const mockFrontend = mockFrontendSection(context)
-  if (mockFrontend) lines.push(mockFrontend)
+  lines.push(...systemUnderTestSections(context, registry))
   const allDecisions = resolvedDecision ? [...decisions, resolvedDecision] : decisions
   if (allDecisions.length) {
     lines.push('', 'Resolved decisions:')
@@ -731,6 +719,34 @@ function buildBaseUserPrompt(
   // ends the prompt.
   const suffix = registry.userPromptSuffix(context, dispatch)
   return { prompt: lines.join('\n'), ...(suffix ? { suffix } : {}) }
+}
+
+/**
+ * Everything the platform states about the RUNNING SYSTEM a step may be pointed at, in the order a
+ * reader needs it: where the environment is, which peers are up beside it, how this step is meant
+ * to test it, which credentials its shell carries, what the service's own team says about testing
+ * it, and what stands in for a backend that is not there.
+ *
+ * One collaborator rather than eight `const`/`if` pairs inline, because they are one concern and
+ * the run of them is what pushed `buildBaseUserPrompt` past its statement budget. Each section
+ * decides for itself whether it applies (most return `''` for every kind but one), so the order
+ * here is the only thing this owns; empties are dropped rather than pushed, which is what keeps a
+ * prompt that gains no section byte-for-byte unchanged. One of them answers `undefined` rather
+ * than `''` for "does not apply", so the filter narrows as well as drops.
+ */
+function systemUnderTestSections(context: AgentRunContext, registry: AgentKindRegistry): string[] {
+  const sections: (string | undefined)[] = [
+    environmentSection(context, registry),
+    involvedServicesSection(context),
+    testApproachSection(context),
+    e2eTargetSection(context),
+    testerEnvironmentSection(context),
+    testSecretsSection(context),
+    // The service's own standing testing prose, right after the credentials it refers to by key.
+    testingContextSection(context),
+    mockFrontendSection(context),
+  ]
+  return sections.filter((section): section is string => Boolean(section))
 }
 
 /**

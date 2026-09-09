@@ -49,6 +49,7 @@ function fullBlock(): Block {
     pipelineId: 'pl_1',
     agentConfig: { 'playwright.e2eTarget': 'ci' },
     provisioning: { type: 'docker-compose', composePath: 'docker-compose.yml', localDevOnly: true },
+    testingContext: 'Sign in as $DEMO_USER; the seeded tenant is Acme.',
     cloudProvider: 'aws',
     instanceSize: 'large',
   } as Block
@@ -131,6 +132,15 @@ describe('blockPatchToColumns', () => {
   it('treats an empty serviceFragmentIds array as "clear it" on patch', () => {
     expect(blockPatchToColumns({ serviceFragmentIds: [] }).service_fragment_ids).toBeNull()
     expect(blockPatchToColumns({ serviceFragmentIds: ['f'] }).service_fragment_ids).toBe('["f"]')
+  })
+
+  it('treats an empty testingContext as "clear it" on patch', () => {
+    // The inspector's textarea sends '' for "I emptied this", and two spellings of "no testing
+    // context" (NULL and '') would leave every reader to remember both.
+    expect(blockPatchToColumns({ testingContext: '' }).testing_context).toBeNull()
+    expect(blockPatchToColumns({ testingContext: 'how to test' }).testing_context).toBe(
+      'how to test',
+    )
   })
 
   it('clears an empty agentConfig map on patch', () => {
