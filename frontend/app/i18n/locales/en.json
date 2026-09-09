@@ -4167,7 +4167,7 @@
       "bugFishing": {
         "heading": "Bug-fishing fix pipeline",
         "body": "The pipeline a bug-fix task runs when you mark a finding from a bug-fishing expedition. Each marked finding becomes its own task on this pipeline; whoever marks it can override the choice for one batch.",
-        "builtInDefault": "Use the built-in bug-fix preset"
+        "builtInDefault": "Use the platform default (the test-verified bug-fix preset)"
       }
     },
     "localModelEndpoints": {
@@ -6663,7 +6663,8 @@
       },
       "gap": {
         "no_tester_step": "This pipeline has no tester step, so nothing was exercised.",
-        "tester_not_reported": "The tester has not reported yet."
+        "tester_not_reported": "The tester has not reported yet.",
+        "verified_by_committed_tests": "This pipeline has no tester step by design: the change is covered by tests committed alongside it, which CI runs."
       }
     },
     "visuals": {

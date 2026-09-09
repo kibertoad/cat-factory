@@ -1179,7 +1179,7 @@
       "bugFishing": {
         "heading": "Pipeline di correzione della pesca di bug",
         "body": "La pipeline con cui viene eseguita un'attività di correzione quando contrassegna un rilievo di una pesca di bug. Ogni rilievo contrassegnato diventa una sua attività su questa pipeline; chi contrassegna può cambiare la scelta per un singolo lotto.",
-        "builtInDefault": "Usa il preset di correzione integrato"
+        "builtInDefault": "Usa l'impostazione predefinita della piattaforma (il preset di correzione verificata dai test)"
       }
     },
     "localModelEndpoints": {
@@ -7071,7 +7071,8 @@
       },
       "gap": {
         "no_tester_step": "Questa pipeline non ha un passo di test, quindi non è stato eseguito nulla.",
-        "tester_not_reported": "Il tester non ha ancora riportato nulla."
+        "tester_not_reported": "Il tester non ha ancora riportato nulla.",
+        "verified_by_committed_tests": "Questa pipeline non ha un passo di test per scelta: la modifica è coperta da test aggiunti insieme a essa, che la CI esegue."
       }
     },
     "visuals": {

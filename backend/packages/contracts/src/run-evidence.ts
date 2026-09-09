@@ -65,6 +65,18 @@ export const DEPLOY_FIXER_AGENT_KIND = 'deploy-fixer'
 export const DISPOSER_AGENT_KIND = 'disposer'
 
 /**
+ * The agent kind that commits the integration tests (and the doubles they run against) proving a
+ * change, with no environment behind it: the OTHER way a run can have exercised its work, and the
+ * reason a missing tester step is two different facts rather than one.
+ *
+ * Here rather than beside its registration in `@cat-factory/agents` for the same reason
+ * {@link TESTER_AGENT_KIND} is: both reductions of a run's test evidence key off it, and one of
+ * them (the run outcome summary) is compiled into the SPA, which cannot see that package. The
+ * REGISTRATION stays there.
+ */
+export const INTEGRATION_TEST_AGENT_KIND = 'integration-test'
+
+/**
  * Whether an agent kind is one of the tester gate kinds (API or UI).
  *
  * Here rather than in each consumer because every reduction of a run's test evidence starts by
@@ -73,6 +85,29 @@ export const DISPOSER_AGENT_KIND = 'disposer'
  */
 export function isTesterKind(kind: string): boolean {
   return kind === TESTER_AGENT_KIND || kind === UI_TESTER_AGENT_KIND
+}
+
+/**
+ * The step whose COMMITTED tests stand in for a tester on this run, or undefined when the run has
+ * none: the last `integration-test` step that reported a structured outcome.
+ *
+ * Both reductions ask it, and they must agree. The PR verification report renders a note saying
+ * the change was verified from the repository; the outcome summary answers the same absence with
+ * a machine-readable gap the SPA translates. Two hand-written copies of "is there an
+ * integration-test step with a result on it" is exactly how one document came to say a suite ran
+ * while the other said nothing was exercised.
+ *
+ * Evidence is `custom !== undefined`, the step's structured outcome, not merely a settled step: a
+ * step that was authored and never reached has nothing to say, and reporting it would claim a
+ * verification the run has not performed yet.
+ */
+export function selectCommittedTestStep(steps: readonly PipelineStep[]): PipelineStep | undefined {
+  const step = selectEvidenceStep(
+    steps,
+    (s) => s.agentKind === INTEGRATION_TEST_AGENT_KIND,
+    (s) => s.custom !== undefined,
+  )
+  return step?.custom !== undefined ? step : undefined
 }
 
 /**

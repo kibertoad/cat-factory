@@ -27,6 +27,7 @@ import { registerPrReviewerAgent } from './pr-reviewer.js'
 import { registerChallengeInvestigatorAgent } from './challenge-investigator.js'
 import { registerDeployFixerAgent } from './deploy-fixer.js'
 import { registerReproTestAgent } from './repro-test.js'
+import { registerIntegrationTestAgent } from './integration-test.js'
 import { registerRalphAgent } from './ralph.js'
 import { registerDocumentAgents } from './document.js'
 import { registerCodeCommenterAgent } from './code-commenter.js'
@@ -749,6 +750,7 @@ export function defaultAgentKindRegistry(): AgentKindRegistry {
   registerPrReviewerAgent(registry)
   registerChallengeInvestigatorAgent(registry)
   registerReproTestAgent(registry)
+  registerIntegrationTestAgent(registry)
   registerDeployFixerAgent(registry)
   registerRalphAgent(registry)
   registerDocumentAgents(registry)

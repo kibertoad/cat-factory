@@ -104,6 +104,15 @@ as a defect.
   through the same `fragmentIdsFor` seam (a task-level run folds only its own `fragmentIds` and
   never re-unions the service's), and `createdBy` from whoever marked the finding, without which
   the "notify the task creator" audience of every notification the fix run raises is empty.
+- **What a marked finding runs is a THREE-tier answer, and the platform tier is the test-verified
+  preset.** The marking request's `pipelineId` wins, then the board's `bugFishingFixPipelineId`,
+  then `pl_bugfix_tested` ([`test-verified-bugfix.md`](../../backend/docs/test-verified-bugfix.md)).
+  The platform tier is that one rather than `pl_bugfix` because of what a fished finding is: nobody
+  reported it, so there is no reporter to reproduce it with and no live environment anybody is
+  watching it in, and the regression test committed beside the fix is the whole deliverable. The
+  resolved default is recorded on the expedition when it is PLANNED, so the window states what a
+  mark will run before anything is created, and a later change to the board setting never rewrites
+  what an earlier spawn took.
 - **The input gate had to learn about it.** A bug-fishing task legitimately has no description:
   its input is the codebase. `description_missing` is BLOCKING, so every expedition would have
   parked at step 0 before ever dispatching. The exemption is its own set

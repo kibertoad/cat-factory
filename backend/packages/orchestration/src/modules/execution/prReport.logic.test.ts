@@ -139,6 +139,78 @@ describe('composePrVerificationReport', () => {
     expect(report.tests.fixerAttempts).toBe(1)
   })
 
+  it('distinguishes a run that verified through COMMITTED tests from one that verified nothing', () => {
+    // The tester section is absent either way, and the two absences mean opposite things. A
+    // reviewer told only "no tester step" reads the change as unexercised, which is exactly what a
+    // preset that commits its own coverage (`pl_bugfix_tested`) did not do.
+    const verified = composePrVerificationReport(
+      instance([
+        step({ agentKind: 'coder' }),
+        step({
+          agentKind: 'integration-test',
+          custom: {
+            outcome: 'partial',
+            testPaths: ['test/billing/refund.spec.ts', 'test/billing/webhook.spec.ts'],
+            mocks: ['mocks/mappings/psp-refund.json'],
+            uncovered: ['the settlement window: needs production data'],
+          },
+        }),
+      ]),
+      INPUTS,
+    )
+    expect(verified.tests.status).toBe('absent')
+    expect(verified.tests.note).toContain('verified the change from the repository')
+    // Counts are COMPUTED from the step's own lists, so the note cannot claim more than it stated.
+    expect(verified.tests.note).toContain('2 test files, 1 stated gap')
+
+    // And with no such step, the note stays the plain absence.
+    const bare = composePrVerificationReport(instance([step({ agentKind: 'coder' })]), INPUTS)
+    expect(bare.tests.note).toContain('No tester step in this pipeline')
+    expect(bare.tests.note).not.toContain('repository')
+  })
+
+  it('withholds the verification claim when the integration-test step committed nothing', () => {
+    // `uncovered` is the step's documented tolerated outcome AND what an unparseable reply
+    // degrades to, so a run reaches this by degrading rather than by failing. Opening with "this
+    // run verified the change from the repository" over it would be a stronger overclaim than the
+    // plain no-tester line it replaced.
+    const report = composePrVerificationReport(
+      instance([
+        step({ agentKind: 'coder' }),
+        step({
+          agentKind: 'integration-test',
+          custom: { outcome: 'uncovered', testPaths: [], mocks: [], uncovered: [] },
+        }),
+      ]),
+      INPUTS,
+    )
+    expect(report.tests.status).toBe('absent')
+    expect(report.tests.note).not.toContain('verified the change from the repository')
+    expect(report.tests.note).toContain('committed no coverage')
+  })
+
+  it('promises the CI gate only when the pipeline carries one', () => {
+    // The clause naming CI as what runs the committed tests is the enforcement half of the claim.
+    // Nothing stops an author dropping the gate, and a report asserting a check that will never
+    // run is the same defect the branch above exists to close.
+    const committed = step({
+      agentKind: 'integration-test',
+      custom: { outcome: 'covered', committed: true, testPaths: ['test/a.spec.ts'], mocks: [] },
+    })
+    const withGate = composePrVerificationReport(
+      instance([step({ agentKind: 'coder' }), committed, step({ agentKind: 'ci', gate: null })]),
+      INPUTS,
+    )
+    expect(withGate.tests.note).toContain('the CI gate is what runs those tests')
+
+    const withoutGate = composePrVerificationReport(
+      instance([step({ agentKind: 'coder' }), committed]),
+      INPUTS,
+    )
+    expect(withoutGate.tests.note).toContain('verified the change from the repository')
+    expect(withoutGate.tests.note).not.toContain('CI gate')
+  })
+
   it('reports the deployer fan-out and whether the environments were torn down', () => {
     const deployed = step({
       agentKind: 'deployer',

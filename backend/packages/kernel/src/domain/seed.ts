@@ -534,6 +534,59 @@ function buildOtherDeliveryPipelines(): Pipeline[] {
         'merger',
       ],
     }),
+    // The TEST-VERIFIED bug fix: `pl_bugfix`'s investigate → triage → reproduce → fix spine, with
+    // the verification moved OFF the ephemeral environment and into the repository. It is the
+    // preset for a deployment whose preview environments are slow, costly or unrepresentative
+    // enough that gating a fix on an agent probing one buys less than a test that ships with it,
+    // and it is the DEFAULT a marked bug-fishing finding spawns onto
+    // (`BugFishingController.resolveDefaultFixPipelineId`), because a defect nobody reported comes
+    // with no human reproduction steps and a regression test is the whole deliverable.
+    //
+    // Two decisions make it what it is, and both are about what the environment is FOR:
+    //
+    //   - `mocker` then `integration-test` are the verification. The mock step stands the service's
+    //     external dependencies up as stubs the repository owns; the integration step commits the
+    //     tests that drive the fix through the seam a caller uses, against those stubs, and states
+    //     what it could NOT cover. Neither is handed environment coordinates, so the tests cannot
+    //     quietly come to depend on a live URL. The `ci` gate below re-runs them for real, which is
+    //     what makes them a check rather than a claim.
+    //   - `deployer` then `disposer`, with NOTHING between them, is a LAUNCH CHECK. The deployer
+    //     provisions the task's pull-request branch and settles on a reachability verdict, so a
+    //     service that no longer starts, or starts unreachable, fails here; a service that stands
+    //     nothing up (`infraless`, or `docker-compose` with no handler) records a clean no-op. That
+    //     verdict is the only thing this preset asks an environment for, which is why the reclaim
+    //     is adjacent rather than terminal: every other preset keeps the environment alive to the
+    //     end because a later step may still read it, and here nothing does, so holding it through
+    //     the merge tail would bill for a URL no step is going to open.
+    //
+    // Adding a tester (or any other env consumer) between the two turns it into a different
+    // pipeline: the launch check becomes a provisioning step something reads, and the fix is
+    // established by an agent probing a live environment again, which is how every rung of the
+    // build ladder already verifies. Anyone who wants that has the builder.
+    definePipeline({
+      id: 'pl_bugfix_tested',
+      name: 'Fix bug, verified by tests',
+      purpose: 'bugfix',
+      version: 1,
+      description:
+        'Investigate a bug report, triage it for fixability with you, write a failing reproduction test, then fix it and leave behind the mocks and integration tests that prove the fix. The ephemeral environment is stood up only to confirm the service still launches, never to test through, and is reclaimed as soon as it has answered.',
+      steps: [
+        'bug-investigator',
+        { kind: 'clarity-review', gate: true },
+        'spec-writer',
+        'architect',
+        'repro-test',
+        'coder',
+        'reviewer',
+        'mocker',
+        'integration-test',
+        'deployer',
+        'disposer',
+        'conflicts',
+        'ci',
+        'merger',
+      ],
+    }),
     // The BUG-FISHING EXPEDITION: a read-only, multi-angle hunt for latent defects. One step,
     // dispatched once per ANGLE by the engine's phase loop, each pass reading the same codebase
     // with a different question (control flow, failure handling, boundaries, concurrency,
@@ -1284,12 +1337,26 @@ export const BUG_TRIAGE_PIPELINE_ID = 'pl_bug_triage'
 export const BUGFIX_PIPELINE_ID = 'pl_bugfix'
 
 /**
+ * Pipeline id of the TEST-VERIFIED bug-fix preset: {@link BUGFIX_PIPELINE_ID}'s spine with the
+ * verification in the repository (a `mocker` + `integration-test` pair) instead of on a live
+ * environment, and a `deployer` + `disposer` pair standing an environment up only long enough to
+ * confirm the service still launches.
+ *
+ * The default a marked BUG-FISHING finding spawns onto, which is the difference between the two
+ * presets in practice: a fished defect arrives with no reporter to reproduce it with and no
+ * environment story of its own, so the committed regression test IS the deliverable. A workspace
+ * that wants the other one says so through `bugFishingFixPipelineId`, and a single marking says so
+ * through the request's `pipelineId`.
+ */
+export const TEST_VERIFIED_BUGFIX_PIPELINE_ID = 'pl_bugfix_tested'
+
+/**
  * Pipeline id of the BUG-FISHING EXPEDITION (`bug-fisher`, dispatched once per angle). The
  * DEFAULT pipeline a `taskType: 'bug-fishing'` task is pinned to at creation
  * ({@link defaultPipelineIdForTaskType}) — the full-build pipeline makes no sense for a hunt
  * that changes nothing and opens no PR. Also the pipeline a RECURRING expedition schedule
  * fires. Findings are acted on by spawning bug-fix tasks, whose pipeline is the workspace's
- * `bugFishingFixPipelineId` (defaulting to {@link BUGFIX_PIPELINE_ID}).
+ * `bugFishingFixPipelineId` (defaulting to {@link TEST_VERIFIED_BUGFIX_PIPELINE_ID}).
  */
 export const BUG_FISHING_PIPELINE_ID = 'pl_bug_fishing'
 

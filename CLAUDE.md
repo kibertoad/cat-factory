@@ -749,8 +749,8 @@ action offering one its own next turn refuses asks a question that never termina
 
 **Bug fishing expedition**: a read-only hunt for the defects nobody reported. ONE `bug-fisher` step,
 dispatched once per ANGLE per platform-computed TERRITORY; a human MARKS what to fix and each mark spawns
-its own task on the board's `bugFishingFixPipelineId`. Trap: marking is accepted MID-hunt, so the state
-survives `resetStepForRerun` and every reduction is over the ACCUMULATED catch. Doc: [`bug-fishing-expedition.md`](./docs/initiatives/bug-fishing-expedition.md).
+its own task on the board's `bugFishingFixPipelineId`, else `pl_bugfix_tested`. Trap: marking is accepted
+MID-hunt, so the state survives `resetStepForRerun` and every reduction is over the ACCUMULATED catch. Doc: [`bug-fishing-expedition.md`](./docs/initiatives/bug-fishing-expedition.md).
 
 **Implementation-fork decision**: an optional two-phase `coder` step that proposes materially different
 implementations and parks for a human BETWEEN two dispatches on the same step (a container job can't

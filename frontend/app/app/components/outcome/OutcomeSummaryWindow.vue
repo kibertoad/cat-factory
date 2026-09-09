@@ -141,6 +141,7 @@ const TESTS_GAP_KEYS: Record<TestsGap, string> = {
   run_unavailable: RUN_UNAVAILABLE_KEY,
   no_tester_step: 'outcome.tests.gap.no_tester_step',
   tester_not_reported: 'outcome.tests.gap.tester_not_reported',
+  verified_by_committed_tests: 'outcome.tests.gap.verified_by_committed_tests',
 }
 const SOURCES_GAP_KEYS: Record<SourcesGap, string> = {
   run_unavailable: RUN_UNAVAILABLE_KEY,

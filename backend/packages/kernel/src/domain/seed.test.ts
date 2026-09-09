@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   BUILTIN_TASK_TYPES,
+  ENV_CONSUMER_AGENT_KINDS,
   isPipelinePurpose,
   pipelineAllowedForBlockLevel,
   pipelineAllowedForTaskType,
@@ -15,6 +16,7 @@ import {
   MEDIA_PIPELINE_ID,
   BUG_FISHING_PIPELINE_ID,
   SPIKE_PIPELINE_ID,
+  TEST_VERIFIED_BUGFIX_PIPELINE_ID,
   defaultPipelineIdForTaskType,
   retiredPipelines,
   REVIEW_PIPELINE_ID,
@@ -30,7 +32,10 @@ import {
 
 const byId = () => new Map(seedPipelines().map((p) => [p.id, p]))
 
-const ENV_CONSUMERS = new Set(['tester-api', 'tester-ui', 'playwright', 'human-test'])
+// DERIVED from the same list the engine's lifecycle rules read, never a hand-written copy of it.
+// A fifth consumer kind added to contracts and dropped into a preset is precisely what these
+// assertions exist to catch, and a copy here would have passed on it while claiming otherwise.
+const ENV_CONSUMERS = new Set(ENV_CONSUMER_AGENT_KINDS)
 
 describe('seedPipelines — named-gate lowering', () => {
   it('keeps gates/enabled index-aligned with agentKinds for every pipeline', () => {
@@ -510,18 +515,20 @@ describe('seedPipelines — purpose classification is total and matches the engi
     ]) {
       expect(forFeature, `${id} must not be offered on a feature task`).not.toContain(id)
     }
-    // A `bug` task gets the same set PLUS the two bugfix presets, and that is the ONLY thing the
-    // two programmatic types differ on: "Triage & fix bug" investigates a defect REPORT and writes
-    // a failing reproduction test, neither of which a feature can supply.
+    // A `bug` task gets the same set PLUS the bugfix presets, and that is the ONLY thing the two
+    // programmatic types differ on: each of them investigates a defect REPORT and writes a failing
+    // reproduction test, neither of which a feature can supply.
     //
-    // The pair is NAMED rather than re-derived from `purpose === 'bugfix'`. Deriving it from the
+    // The set is NAMED rather than re-derived from `purpose === 'bugfix'`. Deriving it from the
     // same classifier the gate reads makes the assertion hold by construction (it cannot fail on
     // any catalog edit), where the mistake worth catching is precisely a classifier one:
     // reclassifying a triage preset back to `build` puts it in front of every feature task, and
-    // the derived form passes because both sides move together. A third bugfix preset joining the
-    // list is the decision this is meant to surface, not an accident it should absorb.
+    // the derived form passes because both sides move together. So a bugfix preset joining the
+    // list is a decision this surfaces, not an accident it absorbs, and `pl_bugfix_tested` (the
+    // preset that verifies through committed tests rather than a live environment) arrived by
+    // being written down here.
     const bugOnly = offered('bug').filter((id) => !forFeature.includes(id))
-    expect(bugOnly).toEqual(['pl_bugfix', 'pl_bug_triage'])
+    expect(bugOnly).toEqual(['pl_bugfix', 'pl_bugfix_tested', 'pl_bug_triage'])
     // ...and the bug picker is otherwise a strict SUPERSET. `arrayContaining` rather than
     // `.every(...).toBe(true)`, which prints "expected false to be true" and names no id.
     expect(offered('bug')).toEqual(expect.arrayContaining(forFeature))
@@ -654,5 +661,30 @@ describe('seedPipelines — environment lifecycle', () => {
         p.agentKinds.lastIndexOf('deployer'),
       )
     }
+  })
+
+  it('stands a launch-check environment up in the test-verified bugfix preset, read by nothing', () => {
+    // The one thing that makes `pl_bugfix_tested` a different preset rather than a re-ordering of
+    // `pl_bugfix`: it provisions an environment and reclaims it with NO step in between. That is
+    // the whole claim, and it is only visible as an absence, which is why it is written down: a
+    // tester dropped between the two reads as a tidy addition and quietly turns the launch check
+    // into the thing the run establishes the fix through, which is the pipeline this one exists
+    // not to be.
+    const tested = seedPipelines().find((p) => p.id === TEST_VERIFIED_BUGFIX_PIPELINE_ID)
+    expect(tested, 'pl_bugfix_tested must be a built-in seed pipeline').toBeTruthy()
+    const kinds = tested!.agentKinds
+    const deployer = kinds.indexOf('deployer')
+    const disposer = kinds.indexOf('disposer')
+    expect(deployer, 'it must stand an environment up').toBeGreaterThanOrEqual(0)
+    expect(disposer, 'it must reclaim that environment next').toBe(deployer + 1)
+    expect(
+      kinds.filter((k) => ENV_CONSUMERS.has(k)),
+      'nothing may read the environment',
+    ).toEqual([])
+    // What replaces the tester: the mocks and the committed integration tests, both after the fix
+    // they cover and both before the CI gate that re-runs them for real.
+    const order = ['coder', 'mocker', 'integration-test', 'ci'].map((k) => kinds.indexOf(k))
+    expect(order, `${kinds.join(' → ')}`).toEqual([...order].sort((a, b) => a - b))
+    expect(Math.min(...order), 'every step of the chain must be present').toBeGreaterThanOrEqual(0)
   })
 })

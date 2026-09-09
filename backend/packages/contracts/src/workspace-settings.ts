@@ -318,8 +318,8 @@ export const workspaceSettingsSchema = v.object({
   allowInitiatorPat: v.boolean(),
   /**
    * The pipeline a bug-fix task spawned from a BUG-FISHING EXPEDITION finding runs, when the
-   * person marking the finding names none. Null ⇒ the built-in bug-fix preset (`pl_bugfix`),
-   * which is what every workspace gets until it sets one.
+   * person marking the finding names none. Null ⇒ the built-in TEST-VERIFIED bug-fix preset
+   * (`pl_bugfix_tested`), which is what every workspace gets until it sets one.
    *
    * A board-level setting rather than a per-expedition field because it is a property of how
    * this team fixes bugs, not of the hunt that found them: a workspace whose bug work goes

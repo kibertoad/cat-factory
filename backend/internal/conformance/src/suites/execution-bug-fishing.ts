@@ -1,3 +1,4 @@
+import { PipelineRegistry } from '@cat-factory/kernel'
 import {
   type Block,
   type BugFishingStepState,
@@ -116,8 +117,10 @@ export function defineBugFishingSuite(harness: ConformanceHarness): void {
       expect(findings.slice(0, 2).map((f) => f.severity)).toEqual(['critical', 'low'])
       expect(findings[0]!.evidence).toContain('caches.session.invalidate')
 
-      // With no board setting, the default a mark takes is the built-in bug-fix preset.
-      expect(state.defaultFixPipelineId).toBe('pl_bugfix')
+      // With no board setting, the default a mark takes is the built-in TEST-VERIFIED bug-fix
+      // preset: a fished defect has no reporter to reproduce it with, so the committed regression
+      // test is the deliverable.
+      expect(state.defaultFixPipelineId).toBe('pl_bugfix_tested')
 
       // The park raised the triage card, counting what is left to decide rather than the total.
       const snap = await call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
@@ -166,7 +169,7 @@ export function defineBugFishingSuite(harness: ConformanceHarness): void {
       )
       expect(marked.status).toBe(200)
       const spawn = marked.body.findings?.find((f) => f.id === findings[0]!.id)?.spawn
-      expect(spawn?.pipelineId).toBe('pl_bugfix')
+      expect(spawn?.pipelineId).toBe('pl_bugfix_tested')
       expect(spawn?.taskId).toBeTruthy()
       // SETTLED, not merely present. The record is written first as a `pending` claim (which is
       // what makes two markings of one finding safe), so a caller that read only its presence
@@ -181,7 +184,7 @@ export function defineBugFishingSuite(harness: ConformanceHarness): void {
       expect(spawned.expeditionId).toBe(task.body.id)
       expect(spawned.parentId).toBe('blk_auth')
       expect(spawned.taskType).toBe('bug')
-      expect(spawned.pipelineId).toBe('pl_bugfix')
+      expect(spawned.pipelineId).toBe('pl_bugfix_tested')
       // The finding's own body reaches the fix task, so its investigator starts from what the
       // expedition found rather than from a title.
       expect(spawned.description).toContain('src/session.ts')
@@ -298,6 +301,75 @@ export function defineBugFishingSuite(harness: ConformanceHarness): void {
         { findingIds: [findings[1]!.id], pipelineId: 'pl_bugfix' },
       )
       expect(second.body.findings?.[1]?.spawn?.pipelineId).toBe('pl_bugfix')
+    })
+
+    it('spawns onto a fix pipeline the board was never seeded with', async () => {
+      // The regression this exists for: built-ins are COPIED into a workspace at creation, so a
+      // board older than a preset holds no row for it, and the fix pipeline a mark resolves to is
+      // a built-in. Validating it with a point read at the repository therefore answered "deleted"
+      // for a pipeline nobody had ever been offered, and refused every marking on every board that
+      // predated the preset. It resolves through `PipelineAdoption` instead, which is the same
+      // rule the start path adopts by.
+      //
+      // Driven as two apps over ONE store, the `agent-task-types` adoption pattern: a board seeded
+      // while the pipeline does not exist, then an app that knows it. A board created afterwards
+      // would hold the row and prove nothing.
+      const before = harness.makeApp({ customResult: fisherOutput })
+      const { workspace } = await before.createWorkspace({ seed: true })
+      const wsId = workspace.id
+
+      const registry = new PipelineRegistry()
+      registry.register({
+        id: 'pl_conf_unadopted_fix',
+        name: 'Unadopted fix',
+        purpose: 'bugfix',
+        builtin: true,
+        version: 1,
+        agentKinds: ['coder'],
+      })
+      const { call, drive } = harness.makeApp(
+        { customResult: fisherOutput },
+        { pipelineRegistry: registry },
+      )
+      const unadopted = await call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+      expect(unadopted.body.pipelines.map((p) => p.id)).not.toContain('pl_conf_unadopted_fix')
+
+      const settings = await call('PUT', `/workspaces/${wsId}/settings`, {
+        bugFishingFixPipelineId: 'pl_conf_unadopted_fix',
+      })
+      expect(settings.status).toBe(200)
+
+      const task = await call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+        title: 'Fish for bugs',
+        taskType: 'bug-fishing',
+        taskTypeFields: { fishingPhaseIds: ['control-flow'] },
+      })
+      await call('POST', `/workspaces/${wsId}/blocks/${task.body.id}/executions`, {
+        pipelineId: 'pl_bug_fishing',
+      })
+      const parked = (await drive(wsId)).find((e) => e.blockId === task.body.id)!
+      const state = parked.steps.find((s) => s.agentKind === 'bug-fisher')!.bugFishing!
+      const findings = state.findings ?? []
+
+      const marked = await call<BugFishingStepState>(
+        'POST',
+        `/workspaces/${wsId}/executions/${parked.id}/bug-fishing/address`,
+        { findingIds: [findings[0]!.id] },
+      )
+      expect(marked.status).toBe(200)
+      expect(marked.body.findings?.[0]?.spawn?.pipelineId).toBe('pl_conf_unadopted_fix')
+      expect(marked.body.findings?.[0]?.spawn?.executionId).toBeTruthy()
+
+      // Starting it ADOPTED the row, so the board's own library can now show what ran. An id
+      // NOTHING defines is still refused, which is the case the read must keep answering.
+      const after = await call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+      expect(after.body.pipelines.map((p) => p.id)).toContain('pl_conf_unadopted_fix')
+      const bogus = await call(
+        'POST',
+        `/workspaces/${wsId}/executions/${parked.id}/bug-fishing/address`,
+        { findingIds: [findings[1]!.id], pipelineId: 'pl_nothing_defines_this' },
+      )
+      expect(bogus.status).toBe(422)
     })
 
     // The territory half of the flow is its own suite: same harness, same describe-level

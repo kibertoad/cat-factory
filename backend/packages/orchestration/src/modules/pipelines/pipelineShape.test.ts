@@ -108,37 +108,6 @@ describe('validatePipelineShape', () => {
     }
   })
 
-  it('every bugfix preset writes a failing reproduction test BEFORE the fix', () => {
-    const byId = new Map(seedPipelines().map((p) => [p.id, p]))
-    for (const id of ['pl_bugfix', 'pl_bug_triage']) {
-      const kinds = byId.get(id)!.agentKinds
-      const repro = kinds.indexOf('repro-test')
-      const coder = kinds.indexOf('coder')
-      expect(repro, `${id} must write a reproduction test`).toBeGreaterThanOrEqual(0)
-      // Order is the whole content of the step: it SEEDS the shared work branch the coder then
-      // resumes, so a red test exists before the fix does. It is also the declaration seam the
-      // reproduction proof reads — after the coder there would be no pre-fix tree left to prove
-      // anything against.
-      expect(repro, `${id} must reproduce before it fixes`).toBeLessThan(coder)
-    }
-  })
-
-  it('the reproduction step is gatable but no built-in preset gates it', () => {
-    // The step is the most expensive thing a small bugfix pays for, so an author may gate it off
-    // a task estimate. That is deliberately OPT-IN: shipping a preset that gates it would change
-    // what every existing bugfix run costs AND silently drop the evidence on whichever tasks the
-    // model happened to score low, which is a decision for whoever owns the pipeline.
-    expect(BUILTIN_GATABLE_KINDS.has('repro-test')).toBe(true)
-    for (const pipeline of seedPipelines()) {
-      const index = pipeline.agentKinds.indexOf('repro-test')
-      if (index < 0) continue
-      expect(
-        pipeline.gating?.[index] ?? null,
-        `${pipeline.id} must ship the reproduction step ungated`,
-      ).toBeNull()
-    }
-  })
-
   it('the adaptive build pipeline is estimate-gated off a leading task-estimator', () => {
     const full = seedPipelines().find((p) => p.id === 'pl_full')
     expect(full, 'pl_full must be a built-in seed pipeline').toBeTruthy()
@@ -404,6 +373,73 @@ describe('validatePipelineShape', () => {
         }),
       ).not.toThrow()
     })
+  })
+})
+
+/**
+ * The BUGFIX presets read as a class, rather than one preset at a time.
+ *
+ * Its own `describe` because these assert properties of the shipped CATALOG (which presets carry
+ * which steps, in which order, gated how) where the block above asserts what
+ * `validatePipelineShape` refuses about an arbitrary step list. Different question, different
+ * input, and only one of them fails when somebody edits the catalog.
+ */
+describe('the bugfix presets as a class', () => {
+  it('every bugfix preset writes a failing reproduction test BEFORE the fix', () => {
+    // Derived from the classifier rather than a named list, because what is being pinned is a
+    // property of the CLASS: a preset built around a defect report has a red test before the fix,
+    // whichever way it goes on to verify the fix afterwards. A named list would leave the next
+    // bugfix preset outside the claim while reading as though it were inside it.
+    const bugfix = seedPipelines().filter((p) => p.purpose === 'bugfix')
+    expect(bugfix.length, 'the catalog must ship bugfix presets').toBeGreaterThan(0)
+    for (const preset of bugfix) {
+      const id = preset.id
+      const kinds = preset.agentKinds
+      const repro = kinds.indexOf('repro-test')
+      const coder = kinds.indexOf('coder')
+      expect(repro, `${id} must write a reproduction test`).toBeGreaterThanOrEqual(0)
+      // Order is the whole content of the step: it SEEDS the shared work branch the coder then
+      // resumes, so a red test exists before the fix does. It is also the declaration seam the
+      // reproduction proof reads: after the coder there would be no pre-fix tree left to prove
+      // anything against.
+      expect(repro, `${id} must reproduce before it fixes`).toBeLessThan(coder)
+    }
+  })
+
+  it('the reproduction step is gatable but no built-in preset gates it', () => {
+    // The step is the most expensive thing a small bugfix pays for, so an author may gate it off
+    // a task estimate. That is deliberately OPT-IN: shipping a preset that gates it would change
+    // what every existing bugfix run costs AND silently drop the evidence on whichever tasks the
+    // model happened to score low, which is a decision for whoever owns the pipeline.
+    expect(BUILTIN_GATABLE_KINDS.has('repro-test')).toBe(true)
+    for (const pipeline of seedPipelines()) {
+      const index = pipeline.agentKinds.indexOf('repro-test')
+      if (index < 0) continue
+      expect(
+        pipeline.gating?.[index] ?? null,
+        `${pipeline.id} must ship the reproduction step ungated`,
+      ).toBeNull()
+    }
+  })
+
+  it('keeps the bugfix verification PAIR gatable together, so nobody can gate half of it', () => {
+    // The mocker stands the doubles up and the integration step writes the tests that run against
+    // them. Gating one and not the other is not a smaller pipeline, it is a broken one: the tests
+    // are then authored against stubs the skipped mocker never created. `validatePipelineShape`
+    // refuses gating on a kind outside this set at save AND at run start, so leaving either out
+    // makes the split the only configuration an author can reach.
+    for (const kind of ['mocker', 'integration-test']) {
+      expect(BUILTIN_GATABLE_KINDS.has(kind), `${kind} must be gatable`).toBe(true)
+    }
+    // Gatable, and shipped ungated for the same reason the reproduction step is.
+    for (const pipeline of seedPipelines()) {
+      const index = pipeline.agentKinds.indexOf('integration-test')
+      if (index < 0) continue
+      expect(
+        pipeline.gating?.[index] ?? null,
+        `${pipeline.id} must ship the integration-test step ungated`,
+      ).toBeNull()
+    }
   })
 })
 

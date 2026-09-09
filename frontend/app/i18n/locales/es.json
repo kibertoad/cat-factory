@@ -3861,7 +3861,7 @@
       "bugFishing": {
         "heading": "Pipeline de corrección de la pesca de errores",
         "body": "La pipeline con la que se ejecuta una tarea de corrección cuando marca un hallazgo de una pesca de errores. Cada hallazgo marcado se convierte en su propia tarea sobre esta pipeline; quien lo marca puede cambiar la elección para un lote.",
-        "builtInDefault": "Usar la plantilla de corrección integrada"
+        "builtInDefault": "Usar el valor predeterminado de la plataforma (el preset de corrección verificada por pruebas)"
       }
     },
     "localModelEndpoints": {
@@ -6341,7 +6341,8 @@
       },
       "gap": {
         "no_tester_step": "Esta canalización no tiene paso de pruebas, así que no se ejercitó nada.",
-        "tester_not_reported": "El tester aún no ha informado."
+        "tester_not_reported": "El tester aún no ha informado.",
+        "verified_by_committed_tests": "Esta canalización no tiene paso de pruebas a propósito: el cambio está cubierto por pruebas incluidas junto a él, que ejecuta la CI."
       }
     },
     "visuals": {

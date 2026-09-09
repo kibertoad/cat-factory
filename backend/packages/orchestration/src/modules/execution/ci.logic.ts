@@ -59,6 +59,16 @@ export const BUG_INVESTIGATOR_AGENT_KIND = 'bug-investigator'
  */
 export const REPRO_TEST_AGENT_KIND = 'repro-test'
 
+// The `integration-test` container kind: a structured `container-coding` step that commits the
+// integration tests (and the test doubles they run against) proving a fix, then reports
+// `{ outcome, testPaths, mocks, uncovered, notes }`. It stands NO environment up and is handed
+// none, which is the whole point of the preset built around it (`pl_bugfix_tested`): the fix is
+// established by tests the `ci` gate re-runs for real, not by an agent probing a preview
+// environment. Producing no test never fails the run; the gap is reported as `uncovered`.
+// DEFINED in `@cat-factory/agents` beside the registration (agents cannot import orchestration)
+// and re-exported here for the engine's own call sites.
+export { INTEGRATION_TEST_KIND } from '@cat-factory/agents'
+
 // The `spec-writer` + `blueprints` container kinds are now real `registerAgentKind` entries in
 // `@cat-factory/agents` (`agents/kinds/spec-blueprints.ts`, refactoring-candidates.md #5), so
 // their ids are DEFINED there — next to the definition — and re-exported here for the engine's

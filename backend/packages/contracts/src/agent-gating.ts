@@ -80,6 +80,17 @@ export const BUILTIN_GATABLE_KINDS: ReadonlySet<string> = new Set<string>([
   // Shipped GATABLE but ungated: no built-in preset carries `gating` on it, so the default cost
   // is unchanged and an author who wants a trivial bugfix to skip the reproduction opts in.
   'repro-test',
+  // The bugfix verification tests, on the same argument as `repro-test` and `mocker` (which sits
+  // immediately before it in `pl_bugfix_tested`). It is another `container-coding` dispatch, and
+  // nothing reads its declaration structurally: the digest resolver no-ops on a step that never
+  // ran, the PR report's note and the outcome summary's gap both key off a step carrying a
+  // result, and both answer the plain absence when there is none. So its skip THINS a run.
+  //
+  // Gatable together with the mocker before it, deliberately: an author who gates one and not the
+  // other splits a pair, leaving integration tests to be written against doubles the gated-out
+  // mocker never created. Leaving this one out of the set is what made that split the only
+  // reachable configuration.
+  'integration-test',
   // Documentation of work already done.
   'documenter',
   'business-documenter',

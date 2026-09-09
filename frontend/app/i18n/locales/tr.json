@@ -4003,7 +4003,7 @@
       "bugFishing": {
         "heading": "Hata avı düzeltme hattı",
         "body": "Bir hata avı bulgusunu işaretlediğinizde düzeltme görevinin çalışacağı hat. İşaretlenen her bulgu bu hat üzerinde kendi görevine dönüşür; işaretleyen kişi bu seçimi tek bir grup için değiştirebilir.",
-        "builtInDefault": "Yerleşik hata düzeltme şablonunu kullan"
+        "builtInDefault": "Platform varsayılanını kullan (testle doğrulanan hata düzeltme hazır ayarı)"
       }
     },
     "localModelEndpoints": {
@@ -6341,7 +6341,8 @@
       },
       "gap": {
         "no_tester_step": "Bu hatta test adımı yok, bu yüzden hiçbir şey çalıştırılmadı.",
-        "tester_not_reported": "Testçi henüz rapor vermedi."
+        "tester_not_reported": "Testçi henüz rapor vermedi.",
+        "verified_by_committed_tests": "Bu hat bilinçli olarak test adımı içermez: değişiklik, onunla birlikte işlenen ve CI'nın çalıştırdığı testlerle kapsanır."
       }
     },
     "visuals": {

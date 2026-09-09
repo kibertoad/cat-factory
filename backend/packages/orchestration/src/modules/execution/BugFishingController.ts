@@ -11,16 +11,16 @@ import type {
   ExecutionRepository,
   IdGenerator,
   Logger,
-  PipelineRepository,
+  Pipeline,
   PipelineStep,
   ServiceRepository,
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
 import {
   BUG_FISHING_DEFAULT_PASS_BUDGET,
-  BUGFIX_PIPELINE_ID,
   ConflictError,
   NotFoundError,
+  TEST_VERIFIED_BUGFIX_PIPELINE_ID,
   ValidationError,
   getErrorMessage,
   noopLogger,
@@ -65,7 +65,13 @@ const UNREADABLE_PASS_REASON =
 export interface BugFishingControllerDeps {
   executionRepository: ExecutionRepository
   blockRepository: BlockRepository
-  pipelineRepository: PipelineRepository
+  /**
+   * `PipelineAdoption.resolveDefinition`, bound: the definition a run under this id WOULD use,
+   * which is the stored row when the workspace holds one and the un-adopted catalog entry when it
+   * does not. See {@link BugFishingController.resolveSpawnPipelineId} for why a repository read
+   * is the wrong door here.
+   */
+  resolvePipelineDefinition: (workspaceId: string, pipelineId: string) => Promise<Pipeline | null>
   /**
    * Where a board's default fix pipeline lives. Optional for the same reason the verification
    * report's read of it is: a deployment that wires no settings store has no configured default,
@@ -681,6 +687,14 @@ export class BugFishingController {
    * ids a human typed or picked, and a workspace can delete the pipeline it named. Spawning onto
    * a missing pipeline would create tasks that cannot start, so the refusal NAMES the pipeline
    * instead: which one is missing is the whole content of the fix.
+   *
+   * Validated through `PipelineAdoption.resolveDefinition`, NEVER a bare `pipelineRepository.get`.
+   * Built-ins are copied into a workspace at creation, so a board older than a preset holds no row
+   * for it and a point read answers "deleted" for a pipeline nobody has ever been offered. That is
+   * not hypothetical here: the DEFAULT this resolves to is a built-in, so a plain read refused
+   * every marking on every board created before it shipped. The read-only half is the right one
+   * (the start path adopts for real, and the same rule it uses answers here), so validating a
+   * marking never writes a row for a spawn that then fails admission.
    */
   private async resolveSpawnPipelineId(
     workspaceId: string,
@@ -691,10 +705,10 @@ export class BugFishingController {
       override?.trim() ||
       state.defaultFixPipelineId ||
       (await this.resolveDefaultFixPipelineId(workspaceId))
-    const pipeline = await this.deps.pipelineRepository.get(workspaceId, wanted)
+    const pipeline = await this.deps.resolvePipelineDefinition(workspaceId, wanted)
     if (!pipeline) {
       throw new ValidationError(
-        `Pipeline "${wanted}" no longer exists — pick another for the spawned fix tasks.`,
+        `Pipeline "${wanted}" no longer exists: pick another for the spawned fix tasks.`,
         { reason: 'pipeline_not_found', pipelineId: wanted },
       )
     }
@@ -702,7 +716,16 @@ export class BugFishingController {
   }
 
   /**
-   * The workspace's configured fix pipeline, else the built-in bug-fix preset.
+   * The workspace's configured fix pipeline, else the built-in TEST-VERIFIED bug-fix preset
+   * (`pl_bugfix_tested`).
+   *
+   * That preset rather than the plain `pl_bugfix` because of what a FISHED finding is: nobody
+   * reported it, so there are no human reproduction steps to work from and no live environment
+   * anybody is watching it in. What a run can leave behind is a committed regression test with the
+   * mocks it needs, which is exactly the shape that preset verifies through, plus its launch check
+   * for the one thing a test cannot say. A workspace that wants a different one names it in
+   * `bugFishingFixPipelineId`, and a single marking overrides both through the request's
+   * `pipelineId`.
    *
    * A settings read that THROWS is deliberately NOT swallowed into the built-in default: an
    * unreachable settings store and a workspace that configured nothing are opposite facts, and
@@ -711,9 +734,9 @@ export class BugFishingController {
    * default", so that one answers the built-in.
    */
   private async resolveDefaultFixPipelineId(workspaceId: string): Promise<string> {
-    if (!this.deps.workspaceSettingsRepository) return BUGFIX_PIPELINE_ID
+    if (!this.deps.workspaceSettingsRepository) return TEST_VERIFIED_BUGFIX_PIPELINE_ID
     const settings = await this.deps.workspaceSettingsRepository.get(workspaceId)
-    return settings?.bugFishingFixPipelineId?.trim() || BUGFIX_PIPELINE_ID
+    return settings?.bugFishingFixPipelineId?.trim() || TEST_VERIFIED_BUGFIX_PIPELINE_ID
   }
 
   /**

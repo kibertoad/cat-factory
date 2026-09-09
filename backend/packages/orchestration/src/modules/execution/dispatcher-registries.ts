@@ -55,12 +55,14 @@ import {
 } from '../estimation/estimate.logic.js'
 import { renderInvestigationDigest } from './bugInvestigation.logic.js'
 import { renderReproDigest } from './reproTest.logic.js'
+import { renderIntegrationTestDigest } from './integrationTest.logic.js'
 import {
   ARCHITECTURE_BRAINSTORM_AGENT_KIND,
   BLUEPRINTS_AGENT_KIND,
   BUG_INVESTIGATOR_AGENT_KIND,
   CLARITY_REVIEW_AGENT_KIND,
   HUMAN_TEST_AGENT_KIND,
+  INTEGRATION_TEST_KIND,
   isTesterKind,
   MERGER_AGENT_KIND,
   REPRO_TEST_AGENT_KIND,
@@ -900,6 +902,21 @@ export function buildStepResolverRegistry(
       applies: (result) => result.custom !== undefined,
       resolve: async ({ result }) => {
         const digest = renderReproDigest(result.custom)
+        if (digest) return { output: digest }
+      },
+    },
+    // An `integration-test` step returns its STRUCTURED coverage outcome as `result.custom` (kept
+    // on `step.custom` for the generic-structured view). Render a digest into `step.output` at the
+    // post-completion slot so the merge assessment and the human at the merge gate read what the
+    // fix is covered by, and what it is NOT, through `priorOutputs` (which carries only
+    // `step.output`). Committing no test never fails the run (`noChangesTolerated`), so this only
+    // reshapes the output. An unparseable result leaves the raw reply on `step.output`.
+    {
+      kind: INTEGRATION_TEST_KIND,
+      phase: 'post-completion',
+      applies: (result) => result.custom !== undefined,
+      resolve: async ({ result }) => {
+        const digest = renderIntegrationTestDigest(result.custom)
         if (digest) return { output: digest }
       },
     },

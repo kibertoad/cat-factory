@@ -16,7 +16,7 @@ import type {
   Clock,
   ExecutionRepository,
   IdGenerator,
-  PipelineRepository,
+  Pipeline,
   ServiceRepository,
   WorkRunner,
   WorkspaceSettingsRepository,
@@ -85,8 +85,12 @@ export interface GateWindowControllerDeps {
   issueWriteback: ExecutionServiceDependencies['issueWriteback']
   /** Facade logger for that best-effort echo. */
   logger: ExecutionServiceDependencies['logger']
-  /** Pipeline catalog — a bug-fishing spawn validates its fix pipeline against it. */
-  pipelineRepository: PipelineRepository
+  /**
+   * `PipelineAdoption.resolveDefinition`, bound: a bug-fishing spawn validates its fix pipeline
+   * through it rather than against the workspace's rows, because the platform DEFAULT it resolves
+   * to is a built-in and a board older than that built-in holds no row for it.
+   */
+  resolvePipelineDefinition: (workspaceId: string, pipelineId: string) => Promise<Pipeline | null>
   /** Workspace settings — where the board's default fix pipeline for spawned tasks lives. */
   workspaceSettingsRepository: WorkspaceSettingsRepository | undefined
   /** Service rows, so a spawned fix task lands in the same service the expedition fished. */
@@ -253,7 +257,7 @@ export function buildGateWindowControllers(deps: GateWindowControllerDeps) {
   const bugFishingController = new BugFishingController({
     executionRepository,
     blockRepository,
-    pipelineRepository: deps.pipelineRepository,
+    resolvePipelineDefinition: deps.resolvePipelineDefinition,
     // Built here rather than injected, so the spawn path reads the rule from the SAME factory
     // `BoardService` builds its own from: the seam is the rule, and a second implementation of
     // "what does a new bug task get" is what would let the two answers drift apart.

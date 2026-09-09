@@ -191,3 +191,20 @@ descriptors gains a stepper that agrees with the server.
 
 Nothing that used to succeed now fails: a fractional value for either field was already refused,
 one layer further in and less legibly.
+
+## 1.71.0
+
+`tests.gap` on `GET /api/v1/runs/{runId}/outcome` gains `verified_by_committed_tests`: the run
+carries no tester step and none was wanted, because its pipeline verifies through tests COMMITTED
+beside the change (an `integration-test` step) which the CI gate runs.
+
+Additive (one new value in a closed vocabulary the SDKs already tolerate unknown members of), and
+it exists because the value it splits off from was answering a question with the opposite fact.
+`no_tester_step` translates as "nothing was exercised", which is what a reader of the outcome card
+saw for a run whose pull-request report said, in the same breath, that the change had been verified
+from the repository. A consumer branching on `no_tester_step` keeps working and simply stops seeing
+it for those runs; one that wants the old grouping treats both members as "no tester".
+
+Requirement coverage deliberately keeps answering `no_tester_step` on the same runs. Committed
+integration tests produce no per-requirement verdicts, so "no requirement was checked" is exactly
+what happened there, and splitting it would state a distinction that has no consequence.

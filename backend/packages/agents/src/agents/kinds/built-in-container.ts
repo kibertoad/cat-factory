@@ -95,6 +95,26 @@ const WORK_BRANCH_CODING: AgentKindDefinition['agent'] = {
 }
 
 /**
+ * The mocker's dispatch shape: {@link WORK_BRANCH_CODING}, plus a tolerated no-op.
+ *
+ * A repository whose upstreams are ALREADY stubbed is the ordinary state of a mature service, and
+ * the mocker's own prompt tells it to add stubs only for calls that are not mocked yet. So "no
+ * file changes" is the correct outcome of a mocker run more often than it is a failure, and the
+ * harness cannot tell the two apart: it sees an empty diff either way. Without this the step fails
+ * the run, and it fails it LATE: the coder has already pushed the fix and opened the pull request
+ * by the time a mocker step runs in any preset that carries one, so the failure throws that work
+ * away rather than reporting a gap.
+ *
+ * Nothing is lost by tolerating it. The check was never evidence that the mocks are right; what
+ * proves them is the suite that runs against them (the `ci` gate, and the tester where a preset
+ * has one), and that is unchanged.
+ */
+const MOCKER_CODING: AgentKindDefinition['agent'] = {
+  ...WORK_BRANCH_CODING,
+  noChangesTolerated: true,
+}
+
+/**
  * The in-place fixer's dispatch shape: clone the PR head branch, push the fixes back onto it and
  * open NO new pull request, so the gate that dispatched the fixer re-checks the real signal on
  * the same PR. `requirePr` because a fixer with no PR has nothing to fix, and the generic
@@ -116,7 +136,7 @@ export const BUILT_IN_CONTAINER_AGENT_KINDS: AgentKindDefinition[] = [
     // repo, so a change that spans services lands as one coordinated set.
     fanOutMultiRepo: true,
   },
-  { kind: MOCKER_AGENT_KIND, agent: WORK_BRANCH_CODING },
+  { kind: MOCKER_AGENT_KIND, agent: MOCKER_CODING },
   { kind: PLAYWRIGHT_AGENT_KIND, agent: WORK_BRANCH_CODING },
   { kind: BUSINESS_DOCUMENTER_AGENT_KIND, agent: WORK_BRANCH_CODING },
 

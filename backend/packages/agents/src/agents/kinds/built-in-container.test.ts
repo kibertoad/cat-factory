@@ -8,6 +8,7 @@ import {
   BUILT_IN_CONTAINER_AGENT_KINDS,
   IMPLEMENTER_AGENT_KIND,
   MERGER_AGENT_KIND,
+  MOCKER_AGENT_KIND,
   TESTER_AGENT_KIND,
 } from './built-in-container.js'
 import { TASK_REASSESSOR_AGENT_KIND, TRIAGE_JSON_CONTRACT } from '../prompts/roles.js'
@@ -98,6 +99,17 @@ describe('the declarations the engine relies on', () => {
 
   it('gives the merger no standards at all — it judges a diff, it does not write one', () => {
     expect(registry.standardsDelivery(MERGER_AGENT_KIND)).toBe('none')
+  })
+
+  it('lets the mocker settle clean on a repository whose upstreams are already stubbed', () => {
+    // Its own prompt tells it to add stubs ONLY for calls not mocked yet, so an empty diff is the
+    // ordinary outcome on a mature service, and the harness cannot tell that apart from an agent
+    // that did nothing. Failing there is late as well as wrong: every preset carrying a mocker
+    // runs it AFTER the coder has pushed and opened the pull request, so the failure throws that
+    // work away rather than reporting a gap.
+    expect(registry.agentStep(MOCKER_AGENT_KIND)?.noChangesTolerated).toBe(true)
+    // The implementer keeps the opposite default: a coder that produced nothing has failed.
+    expect(registry.agentStep(IMPLEMENTER_AGENT_KIND)?.noChangesTolerated).toBeUndefined()
   })
 
   it('gives the task-reassessor a PR precondition and the prefetched head, never a base fallback', () => {

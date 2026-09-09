@@ -3861,7 +3861,7 @@
       "bugFishing": {
         "heading": "Potok naprawczy polowania na błędy",
         "body": "Potok, w którym uruchamia się zadanie naprawcze, gdy oznaczysz znalezisko z polowania na błędy. Każde oznaczone znalezisko staje się osobnym zadaniem w tym potoku; osoba oznaczająca może zmienić ten wybór dla jednej partii.",
-        "builtInDefault": "Użyj wbudowanego szablonu naprawy błędów"
+        "builtInDefault": "Użyj domyślnego ustawienia platformy (szablon poprawki błędu weryfikowanej testami)"
       }
     },
     "localModelEndpoints": {
@@ -6341,7 +6341,8 @@
       },
       "gap": {
         "no_tester_step": "Ten potok nie ma kroku testowego, więc niczego nie sprawdzono.",
-        "tester_not_reported": "Tester jeszcze nie zgłosił raportu."
+        "tester_not_reported": "Tester jeszcze nie zgłosił raportu.",
+        "verified_by_committed_tests": "Ten potok celowo nie ma kroku testowego: zmianę pokrywają testy złożone razem z nią, które uruchamia CI."
       }
     },
     "visuals": {
