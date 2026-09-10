@@ -70,7 +70,7 @@ export function definePublicFragmentConformance(harness: ConformanceHarness): vo
       }
     })
 
-    it('pins a listed standard on a review task, and reads back the union it froze', async () => {
+    it('pins a listed standard on a task, and reads back the union it froze', async () => {
       const app = harness.makeApp()
       const { workspace } = await app.createOrgWorkspace()
       const admin = await mintPublicApiKey(app, workspace.id, 'admin', 'fragments')
