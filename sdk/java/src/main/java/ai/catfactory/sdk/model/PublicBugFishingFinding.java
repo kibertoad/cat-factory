@@ -27,7 +27,7 @@ import org.jspecify.annotations.Nullable;
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record PublicBugFishingFinding(
-    @JsonProperty("confidence") PublicReviewFindingSeverity confidence,
+    @JsonProperty("confidence") PublicBugFishingConfidence confidence,
 
     @JsonProperty("detail") String detail,
 
@@ -76,7 +76,7 @@ public record PublicBugFishingFinding(
      * shape that reads naturally from both languages.
      */
     public static final class Builder {
-        private @Nullable PublicReviewFindingSeverity confidence;
+        private @Nullable PublicBugFishingConfidence confidence;
         private @Nullable String detail;
         private @Nullable Boolean dismissed;
         private @Nullable String evidence;
@@ -93,7 +93,7 @@ public record PublicBugFishingFinding(
         private @Nullable String title;
 
         /** Set {@code confidence}. */
-        public Builder confidence(@Nullable PublicReviewFindingSeverity confidence) {
+        public Builder confidence(@Nullable PublicBugFishingConfidence confidence) {
             this.confidence = confidence;
             return this;
         }

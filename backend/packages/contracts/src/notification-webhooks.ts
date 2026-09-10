@@ -70,13 +70,14 @@ export const notificationWebhookIdSchema = v.pipe(
  * event like the rest of the family, so an endpoint already subscribed to the three edges hears
  * nothing new until it asks.
  *
- * Mirrors kernel's `RUN_LIFECYCLE_EVENTS`; keep the member lists in step.
+ * Mirrors kernel's `RUN_LIFECYCLE_EVENTS`, member ORDER included, and a new member is APPENDED
+ * there for the reason stated there: this list is what the generated clients publish as an enum.
  */
 export const runLifecycleEventSchema = v.picklist([
   'run.started',
-  'run.step_completed',
   'run.completed',
   'run.failed',
+  'run.step_completed',
 ])
 export type RunLifecycleEventName = v.InferOutput<typeof runLifecycleEventSchema>
 
@@ -249,10 +250,10 @@ export type NotificationWebhookDelivery = v.InferOutput<typeof notificationWebho
  * signature headers. `event` is what a receiver switches on — a notification delivery carries
  * `notification`, this one carries `run`, so the two are told apart by shape as well as by name.
  *
- * `deliveryId` is `<runId>:<event>`, with the step index appended on `run.step_completed`
- * (`<runId>:run.step_completed:<index>`, since one run emits many): stable across retries AND
- * across a re-delivery, which is the dedupe key a receiver MUST use. Delivery is AT-LEAST-ONCE by
- * design. The terminal events are pushed from the engine's terminal-emit funnel, the same place the
+ * `deliveryId` is `<runId>:<event>`, with the step index AND its attempt appended on
+ * `run.step_completed` (`<runId>:run.step_completed:<index>:<attempt>`, since one run emits many
+ * and re-runs a step in place): stable across retries AND across a re-delivery, which is the dedupe
+ * key a receiver MUST use. Delivery is AT-LEAST-ONCE by design. The terminal events are pushed from the engine's terminal-emit funnel, the same place the
  * run's other terminal hooks live, because a run reaches `done` from four independent sites and a
  * hook at each would silently drift the day a fifth is added. A durable replay can therefore
  * re-emit a settled run, and a re-driven step can re-emit its own boundary.
@@ -308,6 +309,13 @@ export const runWebhookDeliverySchema = v.object({
         index: v.number(),
         agentKind: v.string(),
         outcome: v.picklist(['completed', 'skipped']),
+        /**
+         * Which OCCURRENCE of this step's boundary the delivery is, 1-based. The engine re-runs a
+         * step in place (a companion bouncing its producer for rework, a gate rewinding to an
+         * upstream step), so the index alone does not identify a boundary and the dedupe key would
+         * collapse a whole rework loop onto its first cycle.
+         */
+        attempt: v.number(),
         /** True when this was the run's LAST step, so a terminal event follows. */
         final: v.boolean(),
       }),

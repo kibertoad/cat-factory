@@ -6287,6 +6287,7 @@
         "adoption_plan_unavailable": "Non c’è alcun piano da approvare",
         "monorepo_directory_taken": "Quella cartella esiste già",
         "no_expedition": "Questa esecuzione non contiene una pesca di bug",
+        "expedition_settled": "Questa spedizione è già terminata",
         "not_awaiting_triage": "Questa spedizione non è in attesa di triage",
         "already_addressed": "Alcuni rilievi hanno già un'attività di correzione",
         "no_host_frame": "Questa spedizione non si trova sotto un servizio"
@@ -6340,6 +6341,7 @@
         "adoption_plan_unavailable": "L'analisi non è riuscita a produrne uno, quindi non ci sono decisioni da inviare.",
         "monorepo_directory_taken": "Un bootstrap crea un nuovo servizio. Scegli una cartella che non esiste ancora, o importa quella esistente come servizio.",
         "no_expedition": "L'esecuzione che sta guardando non porta alcuno stato di spedizione, quindi non c'è nulla da valutare. Ricarichi l'esecuzione e riprovi.",
+        "expedition_settled": "L'esecuzione ha già superato il passo di pesca dei bug, quindi non c'è più nulla da contrassegnare o scartare. Ricarichi l'esecuzione per vedere che cosa ha trovato e su quali risultati si è intervenuti.",
         "not_awaiting_triage": "O sta ancora esplorando un'altra angolazione o è già stata conclusa. Ricarichi l'esecuzione per vedere a che punto è.",
         "already_addressed": "Un'attività di correzione era già stata creata per essi, quindi non è stato creato nulla di nuovo. Apra il rilievo per raggiungere l'attività esistente.",
         "no_host_frame": "Un'attività di correzione ha bisogno di un servizio in cui vivere e di un repository da correggere. Sposti l'attività della spedizione sotto un frame di servizio e riprovi."

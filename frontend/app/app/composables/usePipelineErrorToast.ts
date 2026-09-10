@@ -130,14 +130,20 @@ const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason>, Conf
     titleKey: 'errors.conflict.title.kaizen_entry_not_settled',
     descriptionKey: 'errors.conflict.description.kaizen_entry_not_settled',
   },
-  // The four bug-fishing-expedition refusals. `no_expedition` / `not_awaiting_triage` are the
-  // "wrong run" / "already finished" pair (the window refreshes rather than re-offering the
-  // control); `already_addressed` names findings that already have a fix task, so a second
-  // request cannot double-spawn; `no_host_frame` is a board-shape problem the operator fixes by
-  // putting the expedition under a service.
+  // The five bug-fishing-expedition refusals. `no_expedition` / `expedition_settled` /
+  // `not_awaiting_triage` are the three "you are not where you think you are" causes, and they
+  // take different fixes: the run never had an expedition, the run has moved past the one it had,
+  // or the expedition is alive but not parked (so a triage cannot be finished yet).
+  // `already_addressed` names findings that already have a fix task, so a second request cannot
+  // double-spawn; `no_host_frame` is a board-shape problem the operator fixes by putting the
+  // expedition under a service.
   no_expedition: {
     titleKey: 'errors.conflict.title.no_expedition',
     descriptionKey: 'errors.conflict.description.no_expedition',
+  },
+  expedition_settled: {
+    titleKey: 'errors.conflict.title.expedition_settled',
+    descriptionKey: 'errors.conflict.description.expedition_settled',
   },
   not_awaiting_triage: {
     titleKey: 'errors.conflict.title.not_awaiting_triage',

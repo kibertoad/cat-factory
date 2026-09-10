@@ -9,6 +9,7 @@ import {
   createDecisionAnnouncer,
   createParkAnnouncer,
   isParked,
+  reduceDecisionsForStream,
   reduceRunForStream,
 } from './publicApiStream.js'
 import { loadPublicJob, toPublicJob, toPublicRun } from './runProjection.js'
@@ -101,7 +102,11 @@ export function registerRunDecisionStreamRoute(app: Hono<AppEnv>): void {
           blockId,
           execution,
         )
-        const data = JSON.stringify(list)
+        // Reduced for the same reason `reduceRunForStream` reduces beside it: the frame carries the
+        // WHOLE list and is re-sent whenever any part of it moves, so a park holding eighty
+        // model-authored findings would repeat all of them for the rest of the run. The list itself
+        // is never narrowed: only the prose inside it is clipped, and `truncated` says so.
+        const data = JSON.stringify(reduceDecisionsForStream(list))
         if (changed.shouldAnnounce(data)) {
           await stream.writeSSE({ event: 'decision-state', data })
         }

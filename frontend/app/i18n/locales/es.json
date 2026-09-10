@@ -717,6 +717,7 @@
         "adoption_plan_unavailable": "No hay ningún plan que aprobar",
         "monorepo_directory_taken": "Ese directorio ya existe",
         "no_expedition": "Esta ejecución no tiene una pesca de errores",
+        "expedition_settled": "Esta expedición ya ha finalizado",
         "not_awaiting_triage": "Esta expedición no está esperando triaje",
         "already_addressed": "Algunos hallazgos ya tienen tarea de corrección",
         "no_host_frame": "Esta expedición no está bajo un servicio"
@@ -770,6 +771,7 @@
         "adoption_plan_unavailable": "El análisis no pudo producir uno, así que no hay decisiones que enviar.",
         "monorepo_directory_taken": "Un bootstrap crea un servicio nuevo. Elige un directorio que aún no exista, o importa el existente como servicio.",
         "no_expedition": "La ejecución que está viendo no lleva estado de expedición, así que no hay nada que triar. Recargue la ejecución e inténtelo de nuevo.",
+        "expedition_settled": "La ejecución ya ha superado su paso de pesca de errores, así que no queda nada que marcar ni descartar. Recargue la ejecución para ver qué encontró y sobre qué hallazgos se actuó.",
         "not_awaiting_triage": "O sigue explorando otro ángulo o ya se ha terminado. Recargue la ejecución para ver en qué punto está.",
         "already_addressed": "Ya se creó antes una tarea de corrección para ellos, así que no se ha creado nada nuevo. Abra el hallazgo para llegar a la tarea que ya tiene.",
         "no_host_frame": "Una tarea de corrección necesita un servicio donde vivir y un repositorio que arreglar. Mueva la tarea de la expedición bajo un marco de servicio e inténtelo de nuevo."

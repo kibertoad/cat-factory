@@ -1157,6 +1157,23 @@ export const publicDecisionListSchema = v.object({
    * it here would read as a demand for a human that nobody has to meet.
    */
   unanswerable: v.array(publicUnanswerableWaitSchema),
+  /**
+   * Whether model-authored TEXT in this payload was clipped to a preview.
+   *
+   * Always `false` from `GET /api/v1/runs/{runId}/decisions`, which serves every field whole. The
+   * SSE decision channel re-sends the whole list on every change, and what the list carries is
+   * model-authored prose in quantity (a deep review parks with a finding per issue, each with its
+   * own detail, evidence and suggested fix), so an unreduced frame repeats all of it for as long
+   * as the run keeps moving. The stream clips the long strings and says so here; the point read is
+   * where a caller goes for the whole thing.
+   *
+   * A flag rather than a per-field marker, because the reduction is kind-AGNOSTIC (it clips by
+   * length, wherever the text sits) and so covers a decision kind that grows a field with no edit.
+   * What it must never mean is that a DECISION was left out: the list itself is always complete,
+   * since an empty `decisions` that means "narrowed" and one that means "nothing is being asked"
+   * are opposite facts.
+   */
+  truncated: v.boolean(),
 })
 export type PublicDecisionList = v.InferOutput<typeof publicDecisionListSchema>
 

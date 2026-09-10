@@ -6997,9 +6997,9 @@ class NotificationWebhookRunEvent(StrEnum):
     a release it was never told about.
     """
     RUN_STARTED = "run.started"
-    RUN_STEP_COMPLETED = "run.step_completed"
     RUN_COMPLETED = "run.completed"
     RUN_FAILED = "run.failed"
+    RUN_STEP_COMPLETED = "run.step_completed"
 
 
 @dataclass(frozen=True, slots=True)
@@ -9371,6 +9371,21 @@ class PublicBrainstormDecisionStage(StrEnum):
     ARCHITECTURE = "architecture"
 
 
+class PublicBugFishingConfidence(StrEnum):
+    """The `PublicBugFishingConfidence` vocabulary.
+    A `StrEnum`, so a member IS its wire string: it compares equal to it, formats as it in
+    an f-string, and serialises as it. A plain `(str, Enum)` would satisfy the first of
+    those and silently fail the other two — `str(TaskStatus.PLANNED)` is
+    "TaskStatus.PLANNED", which is the value that ends up in a log line or a report.
+    An UNKNOWN value decodes to the plain string rather than raising: this surface is
+    additive, and a client that refused a value the server legitimately added would break on
+    a release it was never told about.
+    """
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+
+
 @dataclass(frozen=True, slots=True)
 class PublicBugFishingDecision:
     """`PublicBugFishingDecision`, as carried on the wire."""
@@ -9447,7 +9462,7 @@ class PublicBugFishingDecisionStatus(StrEnum):
 class PublicBugFishingFinding:
     """`PublicBugFishingFinding`, as carried on the wire."""
 
-    confidence: PublicReviewFindingSeverity
+    confidence: PublicBugFishingConfidence
     detail: str
     dismissed: bool
     finding_id: str
@@ -9479,7 +9494,7 @@ class PublicBugFishingFinding:
         """Decode a `PublicBugFishingFinding` from its JSON object."""
         known = {"confidence", "detail", "dismissed", "findingId", "kind", "path", "phaseId", "severity", "title", "evidence", "failureScenario", "line", "spawn", "suggestedFix", "territoryId"}
         return cls(
-            confidence=_enum(PublicReviewFindingSeverity, data.get("confidence")),
+            confidence=_enum(PublicBugFishingConfidence, data.get("confidence")),
             detail=data.get("detail"),
             dismissed=data.get("dismissed"),
             finding_id=data.get("findingId"),
@@ -9877,6 +9892,7 @@ class PublicDecisionList:
     run_id: str
     status: RunStatus
     task_id: str
+    truncated: bool
     unanswerable: list[PublicUnanswerableWait]
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
@@ -9887,13 +9903,14 @@ class PublicDecisionList:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicDecisionList":
         """Decode a `PublicDecisionList` from its JSON object."""
-        known = {"decisions", "parked", "runId", "status", "taskId", "unanswerable"}
+        known = {"decisions", "parked", "runId", "status", "taskId", "truncated", "unanswerable"}
         return cls(
             decisions=[PublicDecision.from_dict(item) for item in data.get("decisions") or []],
             parked=data.get("parked"),
             run_id=data.get("runId"),
             status=_enum(RunStatus, data.get("status")),
             task_id=data.get("taskId"),
+            truncated=data.get("truncated"),
             unanswerable=[PublicUnanswerableWait.from_dict(item) for item in data.get("unanswerable") or []],
             extra={k: v for k, v in data.items() if k not in known},
         )
@@ -9906,6 +9923,7 @@ class PublicDecisionList:
         out["runId"] = self.run_id
         out["status"] = _encode(self.status)
         out["taskId"] = self.task_id
+        out["truncated"] = self.truncated
         out["unanswerable"] = [_encode(item) for item in self.unanswerable]
         return out
 

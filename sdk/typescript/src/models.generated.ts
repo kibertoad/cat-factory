@@ -1698,10 +1698,10 @@ export type NotificationWebhookAlertEvent = 'platform_health.firing' | 'platform
 /** Every `NotificationWebhookAlertEvent` value, for exhaustive handling and runtime validation. */
 export const NOTIFICATION_WEBHOOK_ALERT_EVENT_VALUES = ['platform_health.firing', 'platform_health.resolved'] as const
 
-export type NotificationWebhookRunEvent = 'run.started' | 'run.step_completed' | 'run.completed' | 'run.failed'
+export type NotificationWebhookRunEvent = 'run.started' | 'run.completed' | 'run.failed' | 'run.step_completed'
 
 /** Every `NotificationWebhookRunEvent` value, for exhaustive handling and runtime validation. */
-export const NOTIFICATION_WEBHOOK_RUN_EVENT_VALUES = ['run.started', 'run.step_completed', 'run.completed', 'run.failed'] as const
+export const NOTIFICATION_WEBHOOK_RUN_EVENT_VALUES = ['run.started', 'run.completed', 'run.failed', 'run.step_completed'] as const
 
 export interface PrReportCheck {
   /** Always present; `null` when the server has no value for it. */
@@ -2245,6 +2245,11 @@ export type PublicBrainstormDecisionStage = 'requirements' | 'architecture'
 /** Every `PublicBrainstormDecisionStage` value, for exhaustive handling and runtime validation. */
 export const PUBLIC_BRAINSTORM_DECISION_STAGE_VALUES = ['requirements', 'architecture'] as const
 
+export type PublicBugFishingConfidence = 'high' | 'medium' | 'low'
+
+/** Every `PublicBugFishingConfidence` value, for exhaustive handling and runtime validation. */
+export const PUBLIC_BUG_FISHING_CONFIDENCE_VALUES = ['high', 'medium', 'low'] as const
+
 export interface PublicBugFishingDecision {
   currentPhaseIndex: number
   /** Always present; `null` when the server has no value for it. */
@@ -2267,7 +2272,7 @@ export type PublicBugFishingDecisionStatus = 'fishing' | 'awaiting_triage' | 'do
 export const PUBLIC_BUG_FISHING_DECISION_STATUS_VALUES = ['fishing', 'awaiting_triage', 'done'] as const
 
 export interface PublicBugFishingFinding {
-  confidence: PublicReviewFindingSeverity
+  confidence: PublicBugFishingConfidence
   detail: string
   dismissed: boolean
   /** Always present; `null` when the server has no value for it. */
@@ -2399,6 +2404,7 @@ export interface PublicDecisionList {
   runId: string
   status: RunStatus
   taskId: string
+  truncated: boolean
   unanswerable: PublicUnanswerableWait[]
 }
 

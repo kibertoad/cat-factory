@@ -818,9 +818,9 @@
             "items": {
               "enum": [
                 "run.started",
-                "run.step_completed",
                 "run.completed",
-                "run.failed"
+                "run.failed",
+                "run.step_completed"
               ],
               "type": "string"
             },
@@ -3876,6 +3876,9 @@
           "taskId": {
             "type": "string"
           },
+          "truncated": {
+            "type": "boolean"
+          },
           "unanswerable": {
             "items": {
               "$ref": "#/components/schemas/PublicUnanswerableWait"
@@ -3889,7 +3892,8 @@
           "status",
           "parked",
           "decisions",
-          "unanswerable"
+          "unanswerable",
+          "truncated"
         ],
         "type": "object"
       },
@@ -6860,9 +6864,9 @@
             "items": {
               "enum": [
                 "run.started",
-                "run.step_completed",
                 "run.completed",
-                "run.failed"
+                "run.failed",
+                "run.step_completed"
               ],
               "type": "string"
             },

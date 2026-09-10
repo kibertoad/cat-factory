@@ -150,16 +150,35 @@ const INLINE_ENUM_NAMES = {
   'api,database,document,environment,external,frontend,integration,library,queue,service':
     'PublicServiceType',
   // A reviewer finding's SEVERITY, published by the requirements/clarity/brainstorm decisions.
-  // Pinned after the fact, and it bit the moment a second vocabulary with the same three words
-  // arrived: the bug-fishing decision's `confidence` is `high|medium|low`, the signature is
-  // value-SORTED so member order does not separate them, and `PublicBugFishing…` walks first
-  // alphabetically, so adding the expedition surface retyped `PublicReviewFinding.severity` and
-  // deleted `PublicReviewFindingSeverity` from four released SDKs, as a clean generated diff.
+  // Both halves are pinned because both are published: the NAME because the signature is
+  // value-SORTED, so any three-word vocabulary spelled the same way would otherwise take this type
+  // over and rename it in four released SDKs; the ORDER because a name-only pin still lets the
+  // members be re-declared in the other vocabulary's sequence, which is a Java `ordinal()` shift
+  // and a re-sequenced `*_VALUES` array in three more languages.
   'high,low,medium': { name: 'PublicReviewFindingSeverity', values: ['low', 'medium', 'high'] },
   // The tier a resolved standard won on. Pinned on arrival rather than after the fact: a
   // three-member set this ordinary is a matter of time before something else carries it, and the
   // rename it would cause is the one this table exists to prevent.
   'account,builtin,workspace': 'PublicPromptFragmentTier',
+}
+
+/**
+ * Enum value-sets that must NOT be deduped onto a same-signature neighbour, keyed by the positional
+ * HINT of the property that carries them and mapping to the name the distinct type takes.
+ *
+ * The table above answers "which of these vocabularies owns the shared type"; this one answers
+ * "these are not the same vocabulary at all". Sharing an emitted type is right when two surfaces
+ * publish the SAME closed set and a caller may pass one where the other is expected. It is wrong
+ * when the words merely coincide, because the type NAME is then an assertion about what the field
+ * means: bug-fishing's `confidence` is the agent's own judgement of how sure it is, and it sits two
+ * fields away from a real `severity`, so publishing it as `PublicReviewFindingSeverity` tells four
+ * generated clients something untrue about it.
+ *
+ * Keyed by hint rather than by signature because the whole point is to separate two vocabularies
+ * one signature cannot tell apart. Every entry must be used, the same as the table above.
+ */
+const DISTINCT_ENUM_TYPES = {
+  PublicBugFishingFindingConfidence: 'PublicBugFishingConfidence',
 }
 
 /** OpenAPI/JSON-Schema scalar → IR primitive. */
@@ -214,6 +233,33 @@ function enumSignature(values) {
 }
 
 /**
+ * The members a vocabulary publishes: the pin's order when one fixes it, else the spec's own.
+ *
+ * A pin may fix the member ORDER as well as the name, and one that does is honoured even when the
+ * colliding vocabulary is the one the walk reached first. Without it the pin is only half a pin:
+ * the type keeps its published name and its members are re-declared in the other vocabulary's
+ * order, which is a Java `ordinal()` shift and a re-sequenced `*_VALUES` array in three more
+ * languages, arriving as a diff that reads like generated churn.
+ *
+ * An order pin is CHECKED to be a permutation of the real set, because it is otherwise free to be
+ * wrong in a way nothing catches. The members are stored verbatim, so a typo or a dropped member
+ * emits an SDK enum missing a value the API really sends AND registers it under a signature that
+ * no longer matches the one it was looked up by, so the next vocabulary carrying the real set mints
+ * a second, positionally-named type beside it. Both halves arrive as ordinary generated churn.
+ */
+export function pinnedEnumMembers(pin, values) {
+  const members = (typeof pin === 'object' && pin?.values) || values
+  if (enumSignature(members) !== enumSignature(values)) {
+    throw new Error(
+      `SDK IR: the order pin for '${pin.name}' lists members [${members.join(', ')}], which is ` +
+        `not a permutation of the vocabulary it pins [${[...values].sort().join(', ')}]. ` +
+        'Fix the `values` in INLINE_ENUM_NAMES (scripts/sdk/ir.mjs).',
+    )
+  }
+  return members
+}
+
+/**
  * A structural fingerprint used to COLLAPSE two identically-shaped inline schemas onto one
  * emitted type. Key-sorted so property order in the spec cannot split a type in two, and it
  * covers the whole subtree — two shapes that differ only in a nested field stay distinct.
@@ -243,6 +289,9 @@ class TypeRegistry {
     /** Explicit-name tables, consumed as they are hit so a stale entry is detectable. */
     this.unusedObjectNames = new Set(Object.keys(INLINE_TYPE_NAMES))
     this.unusedEnumNames = new Set(Object.keys(INLINE_ENUM_NAMES))
+    this.unusedDistinctEnums = new Set(Object.keys(DISTINCT_ENUM_TYPES))
+    /** Names minted by {@link DISTINCT_ENUM_TYPES}, excluded from the signature collapse below. */
+    this.distinctEnumNames = new Set()
   }
 
   /** Register a type under `name`, refusing a second, structurally different claim on it. */
@@ -420,22 +469,28 @@ class TypeRegistry {
 
   defineEnum(values, hint) {
     const signature = enumSignature(values)
+    // Asked BEFORE the signature collapse: a vocabulary declared distinct must not be handed the
+    // type its same-signature neighbour already minted, and must not become the type the
+    // neighbour is then handed either, which is what the exclusion in the scan below is for.
+    const distinct = DISTINCT_ENUM_TYPES[hint]
+    if (distinct) {
+      this.unusedDistinctEnums.delete(hint)
+      this.distinctEnumNames.add(distinct)
+      return this.define(distinct, { kind: 'enum', values }, `enum:${distinct}`)
+    }
     const pin = INLINE_ENUM_NAMES[signature]
     if (pin) this.unusedEnumNames.delete(signature)
     const existing = [...this.types.values()].find(
-      (t) => t.kind === 'enum' && enumSignature(t.values) === signature,
+      (t) =>
+        t.kind === 'enum' &&
+        !this.distinctEnumNames.has(t.name) &&
+        enumSignature(t.values) === signature,
     )
     if (existing) return existing.name
     const chosen = typeof pin === 'string' ? pin : pin?.name
-    // A pin may fix the member ORDER as well as the name, and one that does is honoured even when
-    // the colliding vocabulary is the one the walk reached first. Without it the pin is only half
-    // a pin: the type keeps its published name and its members are re-declared in the other
-    // vocabulary's order, which is a Java `ordinal()` shift and a re-sequenced `*_VALUES` array in
-    // three more languages, arriving as a diff that reads like generated churn.
-    const members = (typeof pin === 'object' && pin.values) || values
     return this.define(
       chosen ?? pascal(hint),
-      { kind: 'enum', values: members },
+      { kind: 'enum', values: pinnedEnumMembers(pin, values) },
       `enum:${signature}`,
     )
   }
@@ -580,10 +635,15 @@ export async function buildIr(doc) {
 
   assertNoDefaultedRequestField(registry, operations)
 
-  if (registry.unusedObjectNames.size > 0 || registry.unusedEnumNames.size > 0) {
+  if (
+    registry.unusedObjectNames.size > 0 ||
+    registry.unusedEnumNames.size > 0 ||
+    registry.unusedDistinctEnums.size > 0
+  ) {
     throw new Error(
       'SDK IR: stale explicit names in scripts/sdk/ir.mjs — no schema in the spec has the ' +
-        `signature(s): ${[...registry.unusedObjectNames, ...registry.unusedEnumNames].join(' | ')}`,
+        `signature(s): ${[...registry.unusedObjectNames, ...registry.unusedEnumNames].join(' | ')}` +
+        `${registry.unusedDistinctEnums.size > 0 ? ` | hint(s): ${[...registry.unusedDistinctEnums].join(' | ')}` : ''}`,
     )
   }
 

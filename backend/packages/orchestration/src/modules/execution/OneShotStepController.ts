@@ -171,6 +171,14 @@ export class OneShotStepController {
    * `pipeline_complete` "confirm + merge the PR" notification. This fire did NO work and opened NO
    * PR, so that card would be spurious (and its payload would reference a STALE PR carried over from
    * a prior fire). Setting the terminal status inline keeps the no-op silent, as documented.
+   *
+   * The outbound STEP BOUNDARIES are published all the same, through
+   * {@link RunStateMachine.publishStepsCompleted} and after the run's own terminal edge. This is
+   * the one path that settles more than one step at a time, and skipping it is what would make
+   * `run.step_completed` approximate rather than trustworthy: a receiver would be told the run
+   * completed with no boundary at all for it, and would never learn the tail was skipped. A gated
+   * skip already delivers one edge per skipped step through `settleStepAndAdvance`, so this
+   * reports the same shape for the same thing.
    */
   private async completeRunSkippingRemaining(
     workspaceId: string,
@@ -178,6 +186,7 @@ export class OneShotStepController {
     step: PipelineStep,
     summary: string,
   ): Promise<AdvanceResult> {
+    const settledIndexes = [instance.currentStep]
     step.output = summary
     step.progress = 1
     step.subtasks = undefined
@@ -185,6 +194,7 @@ export class OneShotStepController {
     for (let i = instance.currentStep + 1; i < instance.steps.length; i++) {
       const remaining = instance.steps[i]
       if (!remaining) continue
+      settledIndexes.push(i)
       remaining.skipped = true
       // Nothing about THIS step decided it: the run ended above it. Recorded so the surfaces do
       // not fall back to the bare "did not run" line, which reads as a step whose reason was lost.
@@ -205,6 +215,7 @@ export class OneShotStepController {
     }
     await this.deps.runStateMachine.persistAndEmit(workspaceId, instance)
     await this.deps.runStateMachine.stopRunContainer(workspaceId, instance)
+    await this.deps.runStateMachine.publishStepsCompleted(workspaceId, instance, settledIndexes)
     return { kind: 'done' }
   }
 

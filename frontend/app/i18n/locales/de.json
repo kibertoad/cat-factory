@@ -6287,6 +6287,7 @@
         "adoption_plan_unavailable": "Es gibt keinen Plan zum Freigeben",
         "monorepo_directory_taken": "Dieses Verzeichnis existiert bereits",
         "no_expedition": "Dieser Lauf enthält keine Fehlersuch-Expedition",
+        "expedition_settled": "Diese Expedition ist bereits abgeschlossen",
         "not_awaiting_triage": "Diese Expedition wartet nicht auf eine Sichtung",
         "already_addressed": "Für einige Befunde gibt es bereits eine Behebungsaufgabe",
         "no_host_frame": "Diese Expedition liegt unter keinem Service"
@@ -6340,6 +6341,7 @@
         "adoption_plan_unavailable": "Die Analyse konnte keinen erstellen, also gibt es keine Entscheidungen zum Absenden.",
         "monorepo_directory_taken": "Ein Bootstrap legt einen neuen Service an. Wähle ein noch nicht vorhandenes Verzeichnis oder importiere das bestehende als Service.",
         "no_expedition": "Der Lauf, den Sie ansehen, enthält keinen Expeditionszustand, es gibt also nichts zu sichten. Laden Sie den Lauf neu und versuchen Sie es erneut.",
+        "expedition_settled": "Der Lauf hat den Fehlersuch-Schritt bereits hinter sich, es lässt sich also nichts mehr markieren oder verwerfen. Laden Sie den Lauf neu, um zu sehen, was gefunden und welche Befunde bearbeitet wurden.",
         "not_awaiting_triage": "Sie untersucht entweder noch einen weiteren Blickwinkel oder wurde bereits abgeschlossen. Laden Sie den Lauf neu, um den Stand zu sehen.",
         "already_addressed": "Dafür wurde bereits früher eine Behebungsaufgabe erstellt, es wurde also nichts neu angelegt. Öffnen Sie den Befund, um zur vorhandenen Aufgabe zu gelangen.",
         "no_host_frame": "Eine Behebungsaufgabe braucht einen Service als Zuhause und ein Repository zum Beheben. Verschieben Sie die Expeditionsaufgabe unter einen Service-Rahmen und versuchen Sie es erneut."

@@ -1,4 +1,9 @@
-import type { ExecutionStatus, PublicRun, PublicRunStep } from '@cat-factory/contracts'
+import type {
+  ExecutionStatus,
+  PublicDecisionList,
+  PublicRun,
+  PublicRunStep,
+} from '@cat-factory/contracts'
 
 // The pure decisions the public SSE streams share: when a park is announced, when a decision list
 // counts as moved, and how a frame is reduced for the wire. The loops themselves are in
@@ -125,4 +130,53 @@ function reduceStepForStream(step: PublicRunStep): PublicRunStep {
     data: withheld ? null : step.data,
     truncated: true,
   }
+}
+
+/**
+ * Per-string character cap on the model-authored text a DECISION frame carries.
+ *
+ * Smaller than {@link STREAM_DELIVERABLE_PREVIEW_CHARS}, which bounds the same class of content on
+ * the run streams, and the difference is what the cap is paid PER. The run stream pays it once per
+ * step, so a pipeline's length bounds the frame; a decision list pays it once per string in a list
+ * the RUN sizes (a deep review parks with one finding per issue it found, each carrying a detail,
+ * an evidence quote and a suggested fix), so the same number would still let one frame reach
+ * hundreds of kilobytes and be re-sent on every change.
+ *
+ * Sized as a preview a caller can act on: enough to recognise what a finding is about and decide
+ * whether to fetch it whole, which is what `GET /api/v1/runs/{runId}/decisions` is for.
+ */
+export const STREAM_DECISION_TEXT_PREVIEW_CHARS = 1_000
+
+/**
+ * Reduce a decision list for an SSE frame: clip every over-long string to a preview and report the
+ * clip on the list's own `truncated` flag.
+ *
+ * Kind-AGNOSTIC by construction, for the same reason {@link createDecisionAnnouncer} compares the
+ * serialized payload rather than a field of it: what a decision kind carries is decided by that
+ * kind, so a rule written per kind is one a new kind (or a new field on an old one) silently
+ * escapes. Clipping by LENGTH wherever the text sits covers all fourteen with no edit, and the ids,
+ * statuses, counts and enums a caller routes on are short by construction, so nothing it acts on
+ * is what gets clipped.
+ *
+ * What is NEVER reduced is the list itself. Every decision the run is asking is in every frame,
+ * because an empty `decisions` that means "this payload was narrowed" and one that means "nothing
+ * is being asked" are opposite facts, and telling them apart is the whole job of this surface.
+ */
+export function reduceDecisionsForStream(list: PublicDecisionList): PublicDecisionList {
+  let clipped = false
+  const clip = (value: unknown): unknown => {
+    if (typeof value === 'string') {
+      if (value.length <= STREAM_DECISION_TEXT_PREVIEW_CHARS) return value
+      clipped = true
+      return value.slice(0, STREAM_DECISION_TEXT_PREVIEW_CHARS)
+    }
+    if (Array.isArray(value)) return value.map(clip)
+    if (value && typeof value === 'object') {
+      return Object.fromEntries(Object.entries(value).map(([key, v]) => [key, clip(v)]))
+    }
+    return value
+  }
+  const decisions = clip(list.decisions) as PublicDecisionList['decisions']
+  const unanswerable = clip(list.unanswerable) as PublicDecisionList['unanswerable']
+  return { ...list, decisions, unanswerable, truncated: clipped }
 }

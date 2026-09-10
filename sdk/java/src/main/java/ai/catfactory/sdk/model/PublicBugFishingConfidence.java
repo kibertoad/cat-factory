@@ -8,16 +8,15 @@ import com.fasterxml.jackson.annotation.JsonValue;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The {@code NotificationWebhookRunEvent} vocabulary.
+ * The {@code PublicBugFishingConfidence} vocabulary.
  * Decoding an unrecognised value yields {@link #UNRECOGNIZED} rather than throwing, and {@link
  * #wireValue()} still returns what the server actually sent. This surface is additive, so refusing
  * a value the server legitimately added would break a caller on a release it was never told about.
  */
-public enum NotificationWebhookRunEvent {
-    RUN_STARTED("run.started"),
-    RUN_COMPLETED("run.completed"),
-    RUN_FAILED("run.failed"),
-    RUN_STEP_COMPLETED("run.step_completed"),
+public enum PublicBugFishingConfidence {
+    HIGH("high"),
+    MEDIUM("medium"),
+    LOW("low"),
 
     /**
      * A value this SDK release does not know.
@@ -31,7 +30,7 @@ public enum NotificationWebhookRunEvent {
 
     private final String wire;
 
-    NotificationWebhookRunEvent(String wire) {
+    PublicBugFishingConfidence(String wire) {
         this.wire = wire;
     }
 
@@ -43,8 +42,8 @@ public enum NotificationWebhookRunEvent {
 
     /** Decode from the wire, tolerating a value this release does not know. */
     @JsonCreator
-    public static NotificationWebhookRunEvent fromWire(@Nullable String wire) {
-        for (NotificationWebhookRunEvent candidate : values()) {
+    public static PublicBugFishingConfidence fromWire(@Nullable String wire) {
+        for (PublicBugFishingConfidence candidate : values()) {
             if (candidate.wire.equals(wire)) {
                 return candidate;
             }

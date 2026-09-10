@@ -1,10 +1,17 @@
 import { describe, expect, it } from 'vitest'
-import type { PublicRun, PublicRunStep } from '@cat-factory/contracts'
+import type {
+  PublicDecision,
+  PublicDecisionList,
+  PublicRun,
+  PublicRunStep,
+} from '@cat-factory/contracts'
 import {
   createDecisionAnnouncer,
   createParkAnnouncer,
   isParked,
+  reduceDecisionsForStream,
   reduceRunForStream,
+  STREAM_DECISION_TEXT_PREVIEW_CHARS,
   STREAM_DELIVERABLE_PREVIEW_CHARS,
 } from './publicApiStream.js'
 
@@ -164,5 +171,82 @@ describe('createDecisionAnnouncer', () => {
     expect(changed.shouldAnnounce('parked')).toBe(true)
     expect(changed.shouldAnnounce('working')).toBe(true)
     expect(changed.shouldAnnounce('parked')).toBe(true)
+  })
+})
+
+describe('reduceDecisionsForStream', () => {
+  /** A parked review carrying `count` findings, each with a `detail` of `detailChars`. */
+  function reviewList(count: number, detailChars: number): PublicDecisionList {
+    return {
+      runId: 'exec_1',
+      taskId: 'task_1',
+      status: 'blocked',
+      parked: true,
+      decisions: [
+        {
+          kind: 'pr-review',
+          findings: Array.from({ length: count }, (_, i) => ({
+            findingId: `f_${i}`,
+            detail: 'd'.repeat(detailChars),
+          })),
+        } as unknown as PublicDecision,
+      ],
+      unanswerable: [],
+      truncated: false,
+    }
+  }
+
+  it('leaves a list that already fits untouched and unflagged', () => {
+    // `truncated` means exactly "something was left out of THIS frame", not "this frame came from
+    // the stream": a caller that indexed a clipped preview as the whole detail would then have a
+    // tail that is absent in a way that reads as never written.
+    const list = reviewList(3, 40)
+    expect(reduceDecisionsForStream(list)).toEqual(list)
+  })
+
+  it('clips over-long model text to a preview and reports the clip', () => {
+    const reduced = reduceDecisionsForStream(reviewList(1, STREAM_DECISION_TEXT_PREVIEW_CHARS * 4))
+    const finding = (reduced.decisions[0] as unknown as { findings: { detail: string }[] })
+      .findings[0]!
+    expect(finding.detail).toHaveLength(STREAM_DECISION_TEXT_PREVIEW_CHARS)
+    expect(reduced.truncated).toBe(true)
+  })
+
+  it('never drops a DECISION, however much prose it carries', () => {
+    // The one thing the reduction may not do, and the reason the flag sits on the list rather than
+    // standing in for entries left out: an empty `decisions` that means "narrowed" and one that
+    // means "nothing is being asked" are opposite facts, and telling them apart is the whole job of
+    // this surface.
+    const reduced = reduceDecisionsForStream(reviewList(80, 5_000))
+    expect(reduced.decisions).toHaveLength(1)
+    const findings = (reduced.decisions[0] as unknown as { findings: unknown[] }).findings
+    expect(findings).toHaveLength(80)
+  })
+
+  it('bounds a park holding a whole review of findings', () => {
+    // The point of reducing at all. The frame is re-sent whenever any part of the list moves, so an
+    // unreduced park of eighty model-authored findings repeats hundreds of kilobytes for the rest
+    // of the run. A RELATION over the frame's own shape rather than a pinned byte count, which
+    // would be re-pinned unread the first time a decision kind grows a field.
+    const list = reviewList(80, STREAM_DECISION_TEXT_PREVIEW_CHARS * 5)
+    const before = JSON.stringify(list).length
+    const after = JSON.stringify(reduceDecisionsForStream(list)).length
+    expect(after).toBeLessThan(before / 4)
+    expect(after).toBeLessThan(80 * (STREAM_DECISION_TEXT_PREVIEW_CHARS + 200))
+  })
+
+  it('clips text anywhere in the payload, including a named wait', () => {
+    // Kind-AGNOSTIC on purpose: what a decision carries is decided by the kind, so a rule written
+    // per kind is one the fifteenth kind escapes silently. `unanswerable[]` carries model-adjacent
+    // prose too and is part of the same frame.
+    const reduced = reduceDecisionsForStream({
+      ...reviewList(0, 0),
+      unanswerable: [
+        { reason: 'curation_gate', detail: 'w'.repeat(9_000) },
+      ] as unknown as PublicDecisionList['unanswerable'],
+    })
+    const wait = reduced.unanswerable[0] as unknown as { detail: string }
+    expect(wait.detail).toHaveLength(STREAM_DECISION_TEXT_PREVIEW_CHARS)
+    expect(reduced.truncated).toBe(true)
   })
 })

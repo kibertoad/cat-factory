@@ -1134,18 +1134,6 @@ function sortDeep(value) {
 }
 
 /**
- * Add the three `/api/v1` routes that are NOT route contracts, documented by hand.
- *
- * A contract needs a JSON request/response pair to describe; these three have none (two SSE
- * streams and an image), so their entries are written out here instead of derived. That is also
- * why each carries a hand-written `x-min-scope` literal restating what its handler enforces:
- * there is no `withMinScope` to read it off, and no type that would catch the two drifting.
- *
- * Kept out of `buildOpenApiDoc` because it is a self-contained block of literals rather than
- * part of that function's derivation, and it is where every future raw route lands.
- */
-
-/**
  * The personal-unlock header parameter (`withPersonalUnlock`), for the routes that start, retry or
  * answer a run. It is a real request input, so leaving it out published an operation whose `428` no
  * consumer could satisfy from the document alone. Optional everywhere: a poolable run needs no

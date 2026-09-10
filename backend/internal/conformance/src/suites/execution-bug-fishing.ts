@@ -524,6 +524,25 @@ function definePublicTriageCase(harness: ConformanceHarness): void {
     await app.drive(wsId)
     const board = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
     expect(board.body.blocks.find((b) => b.id === task.body.id)?.status).toBe('done')
+
+    // …and a finding id kept from BEFORE the resolve cannot be replayed into work. A caller holds
+    // these from its first read, and the expedition leaving `decisions[]` is the only thing that
+    // stops it asking again, which is not a guard: a retry or a second caller does exactly that.
+    // Marking is deliberately accepted while an expedition is still fishing later angles, so
+    // "settled" is the state each verb has to check, and the refusal is asserted with the board:
+    // this route CREATES tasks and starts their runs, so an accepted replay is a bug task filed
+    // against an expedition nothing is left to link it to.
+    const before = board.body.blocks.length
+    const replayed = await app.call<{ error: { code: string; details?: { reason?: string } } }>(
+      'POST',
+      `/api/v1/runs/${parked.id}/decisions/bug-fishing/address`,
+      { findingIds: [expedition.findings[1]!.findingId] },
+      decideAuth,
+    )
+    expect(replayed.status).toBe(409)
+    expect(replayed.body.error.details?.reason).toBe('expedition_settled')
+    const afterReplay = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+    expect(afterReplay.body.blocks).toHaveLength(before)
   })
 
   it('refuses the triage verbs for a key that cannot decide', async () => {

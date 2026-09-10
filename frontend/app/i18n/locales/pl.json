@@ -717,6 +717,7 @@
         "adoption_plan_unavailable": "Nie ma planu do zatwierdzenia",
         "monorepo_directory_taken": "Ten katalog już istnieje",
         "no_expedition": "To uruchomienie nie zawiera polowania na błędy",
+        "expedition_settled": "Ta wyprawa już się zakończyła",
         "not_awaiting_triage": "Ta wyprawa nie czeka na segregację",
         "already_addressed": "Część znalezisk ma już zadanie naprawcze",
         "no_host_frame": "Ta wyprawa nie znajduje się pod żadną usługą"
@@ -770,6 +771,7 @@
         "adoption_plan_unavailable": "Analiza nie zdołała go utworzyć, więc nie ma decyzji do wysłania.",
         "monorepo_directory_taken": "Bootstrap tworzy nową usługę. Wybierz katalog, który jeszcze nie istnieje, albo zaimportuj istniejący jako usługę.",
         "no_expedition": "Uruchomienie, które oglądasz, nie niesie stanu wyprawy, więc nie ma czego segregować. Odśwież uruchomienie i spróbuj ponownie.",
+        "expedition_settled": "Uruchomienie minęło już krok polowania na błędy, więc nie ma czego oznaczać ani odrzucać. Odśwież uruchomienie, aby zobaczyć, co znalazło i którymi ustaleniami się zajęto.",
         "not_awaiting_triage": "Albo wciąż przeszukuje kolejną perspektywę, albo zostało już zakończone. Odśwież uruchomienie, aby zobaczyć jego stan.",
         "already_addressed": "Zadanie naprawcze powstało dla nich wcześniej, więc nic nie utworzono ponownie. Otwórz znalezisko, aby przejść do istniejącego zadania.",
         "no_host_frame": "Zadanie naprawcze potrzebuje usługi, pod którą będzie żyć, i repozytorium do naprawy. Przenieś zadanie wyprawy pod ramkę usługi i spróbuj ponownie."

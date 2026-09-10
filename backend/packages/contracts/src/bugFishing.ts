@@ -541,6 +541,23 @@ export const bugFishingStatusSchema = v.picklist(['fishing', 'awaiting_triage', 
 export type BugFishingStatus = v.InferOutput<typeof bugFishingStatusSchema>
 
 /**
+ * Whether an expedition still accepts curation: marking a finding to be addressed, dismissing one,
+ * finishing the triage.
+ *
+ * `fishing` and `awaiting_triage` both do, which is the flow's own shape rather than a
+ * convenience: each angle records its findings the moment its pass lands, and marking one is
+ * accepted while later angles are still being fished (see the `triaging`-state note above). `done`
+ * is settled (the run has advanced past the step), and every verb must refuse it, because a
+ * mark accepted there spawns fix tasks against an expedition nothing is left to report them on.
+ *
+ * The ONE rule, read by the engine's verbs and by the public projection that decides whether to
+ * offer them, so a caller can never be shown a decision the write path would refuse.
+ */
+export function bugFishingAcceptsCuration(status: BugFishingStatus): boolean {
+  return status !== 'done'
+}
+
+/**
  * Live bug-fishing state carried on the run's `bug-fisher` step. Created by the engine when
  * the step first runs (planning the phases from the task's selection), extended by each
  * phase's completion, and mutated by the human's markings.

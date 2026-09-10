@@ -3051,13 +3051,13 @@ type NotificationWebhookRunEvent string
 
 const (
 	NotificationWebhookRunEventRunStarted       NotificationWebhookRunEvent = "run.started"
-	NotificationWebhookRunEventRunStepCompleted NotificationWebhookRunEvent = "run.step_completed"
 	NotificationWebhookRunEventRunCompleted     NotificationWebhookRunEvent = "run.completed"
 	NotificationWebhookRunEventRunFailed        NotificationWebhookRunEvent = "run.failed"
+	NotificationWebhookRunEventRunStepCompleted NotificationWebhookRunEvent = "run.step_completed"
 )
 
 // NotificationWebhookRunEventValues lists every NotificationWebhookRunEvent this SDK release knows.
-var NotificationWebhookRunEventValues = []NotificationWebhookRunEvent{NotificationWebhookRunEventRunStarted, NotificationWebhookRunEventRunStepCompleted, NotificationWebhookRunEventRunCompleted, NotificationWebhookRunEventRunFailed}
+var NotificationWebhookRunEventValues = []NotificationWebhookRunEvent{NotificationWebhookRunEventRunStarted, NotificationWebhookRunEventRunCompleted, NotificationWebhookRunEventRunFailed, NotificationWebhookRunEventRunStepCompleted}
 
 // PrReportCheck is the `PrReportCheck` wire model.
 type PrReportCheck struct {
@@ -3942,6 +3942,21 @@ const (
 // PublicBrainstormDecisionStageValues lists every PublicBrainstormDecisionStage this SDK release knows.
 var PublicBrainstormDecisionStageValues = []PublicBrainstormDecisionStage{PublicBrainstormDecisionStageRequirements, PublicBrainstormDecisionStageArchitecture}
 
+// PublicBugFishingConfidence is the `PublicBugFishingConfidence` vocabulary as carried on the wire.
+// A string type rather than an int enum: the wire form IS the string, and an unknown value must
+// round-trip rather than fail to decode — this surface is additive, so a client that refused a
+// value the server legitimately added would break on a release it was never told about.
+type PublicBugFishingConfidence string
+
+const (
+	PublicBugFishingConfidenceHigh   PublicBugFishingConfidence = "high"
+	PublicBugFishingConfidenceMedium PublicBugFishingConfidence = "medium"
+	PublicBugFishingConfidenceLow    PublicBugFishingConfidence = "low"
+)
+
+// PublicBugFishingConfidenceValues lists every PublicBugFishingConfidence this SDK release knows.
+var PublicBugFishingConfidenceValues = []PublicBugFishingConfidence{PublicBugFishingConfidenceHigh, PublicBugFishingConfidenceMedium, PublicBugFishingConfidenceLow}
+
 // PublicBugFishingDecision is the `PublicBugFishingDecision` wire model.
 type PublicBugFishingDecision struct {
 	CurrentPhaseIndex float64 `json:"currentPhaseIndex"`
@@ -3976,9 +3991,9 @@ var PublicBugFishingDecisionStatusValues = []PublicBugFishingDecisionStatus{Publ
 
 // PublicBugFishingFinding is the `PublicBugFishingFinding` wire model.
 type PublicBugFishingFinding struct {
-	Confidence PublicReviewFindingSeverity `json:"confidence"`
-	Detail     string                      `json:"detail"`
-	Dismissed  bool                        `json:"dismissed"`
+	Confidence PublicBugFishingConfidence `json:"confidence"`
+	Detail     string                     `json:"detail"`
+	Dismissed  bool                       `json:"dismissed"`
 	// Evidence always present; nil when the server has no value for it.
 	Evidence *string `json:"evidence"`
 	// FailureScenario always present; nil when the server has no value for it.
@@ -4340,6 +4355,7 @@ type PublicDecisionList struct {
 	RunID        string                   `json:"runId"`
 	Status       RunStatus                `json:"status"`
 	TaskID       string                   `json:"taskId"`
+	Truncated    bool                     `json:"truncated"`
 	Unanswerable []PublicUnanswerableWait `json:"unanswerable"`
 }
 

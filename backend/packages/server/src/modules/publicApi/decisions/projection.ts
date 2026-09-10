@@ -5,6 +5,7 @@ import {
   CURATION_GATE_TRAIT,
   hasTrait,
   REQUIREMENTS_BRAINSTORM_AGENT_KIND,
+  REQUIREMENTS_REVIEW_AGENT_KIND,
 } from '@cat-factory/agents'
 import {
   dedicatedParkSurface,
@@ -564,8 +565,14 @@ export async function buildDecisionList<E extends AppEnv>(
  * This is the WHOLE list, dialogue and interview reads included, and a stream must not narrow it
  * to the parts that are free: `decisions: []` from a run holding a live requirements review is
  * byte-for-byte the answer a run with nothing to ask gives, which is the one confusion this
- * surface's `unanswerable` field exists to prevent. What the stream may choose is whether to ask
- * at all (see `wantsDecisionChannel`), never how much of the answer to believe.
+ * surface's `unanswerable` field exists to prevent. What a stream may reduce is how much of the
+ * model-authored PROSE one frame carries (`reduceDecisionsForStream`, which says so on the list's
+ * `truncated` flag), never which decisions are in it.
+ *
+ * What the projection itself chooses is which reads to ISSUE, and the run's own STEP CHAIN decides
+ * that: a pipeline carrying no step that can produce a given park is not holding one, so the read
+ * is skipped. It matters most here, since this is the per-tick body of a poll that runs once a
+ * second for up to five minutes.
  */
 export async function projectDecisionList<E extends AppEnv>(
   c: Context<E>,
@@ -620,6 +627,10 @@ export async function projectDecisionList<E extends AppEnv>(
       interview.unwiredGate,
       answeredStepIndexes(decisions),
     ),
+    // This projection serves every field whole. The SSE channel is the one reader that reduces, and
+    // it re-stamps the flag itself (`reduceDecisionsForStream`), so nothing here has to know
+    // whether it is being polled or streamed.
+    truncated: false,
   }
 }
 
@@ -664,8 +675,8 @@ function answeredStepIndexes(decisions: readonly PublicDecision[]): ReadonlySet<
  * of a second list beside it. Both SHIPPED curating kinds now have public verbs and are therefore
  * `decisions[]` entries rather than named waits: `pr-reviewer` (resolve / dismiss / challenge /
  * resume) and `bug-fisher` (address / dismiss / resolve). What is left for this to report is a
- * curating kind a DEPLOYMENT registered, whose marking lives wherever that deployment put it.
- * and adding its verbs is one edit to that map, which both the refusal and this report follow.
+ * curating kind a DEPLOYMENT registered, whose marking lives wherever that deployment put it, and
+ * adding one's verbs is a single edit to that map, which both the refusal and this report follow.
  *
  * The step also carries an ordinary pending approval, which this response DOES offer, and that is
  * why the detail says what resolving it means. Ending a curation is an exit, not an answer: it
@@ -820,8 +831,16 @@ async function liveDialogueDecisions<E extends AppEnv>(
   // Each read is against a different store with nothing to say to the others, so they are issued
   // together rather than chained. The RESULT order is fixed by the tuple, not by which store
   // answered first, so a caller's decision list does not reshuffle between two polls of one run.
+  //
+  // Every one of them is gated on the run's own STEP CHAIN, which is what bounds this by what the
+  // run can produce rather than by what the deployment happens to have wired. Each park is driven
+  // by the review gate on a step of its own kind, so a pipeline without that step cannot be holding
+  // it, and the read would be a round-trip per poll tick answering "no" for the life of a
+  // connection.
   const [requirementsReview, clarityReview, brainstormSessions] = await Promise.all([
-    requirements ? requirements.service.getForBlock(workspaceId, blockId) : null,
+    requirements && kinds.has(REQUIREMENTS_REVIEW_AGENT_KIND)
+      ? requirements.service.getForBlock(workspaceId, blockId)
+      : null,
     clarity && kinds.has(CLARITY_REVIEW_AGENT_KIND)
       ? clarity.service.getForBlock(workspaceId, blockId)
       : null,
@@ -902,12 +921,24 @@ async function liveInterviewDecisions<E extends AppEnv>(
   }
 }
 
-/** The run's implementation-fork park, which the engine stores behind its own service read. */
+/**
+ * The run's implementation-fork park, which the engine stores behind its own service read.
+ *
+ * Gated on the instance ALREADY IN HAND, which can answer "there is nothing to read" outright: fork
+ * state lives on a coder step (`PipelineStep.forkDecision`, no side table), so a run carrying none
+ * has no fork decision by construction and the service read would re-fetch this very row to say so,
+ * once a second for as long as the decision channel stays open.
+ *
+ * The read is still MADE rather than the state projected from here, because which of a pipeline's
+ * coder steps is the active one is the engine's rule, and a second site deciding that is a second
+ * site that can decide it differently.
+ */
 async function liveForkDecisions<E extends AppEnv>(
   c: Context<E>,
   workspaceId: string,
   execution: ExecutionInstance,
 ): Promise<PublicDecision[]> {
+  if (!execution.steps.some((step) => step.forkDecision)) return []
   const fork = await c
     .get('container')
     .executionService.decisions.getForkDecision(workspaceId, execution.id)

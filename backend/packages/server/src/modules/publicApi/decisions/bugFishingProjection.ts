@@ -1,3 +1,4 @@
+import { bugFishingAcceptsCuration } from '@cat-factory/contracts'
 import type {
   BugFishingFinding,
   BugFishingPhase,
@@ -33,9 +34,13 @@ import type {
  * expedition once it parked would sit out exactly the overlap the separate passes create.
  *
  * `done` is settled and carries no question.
+ *
+ * Read off the contracts' own rule rather than re-stated here, so what this surface OFFERS and
+ * what the engine's three verbs ACCEPT cannot diverge: a listed expedition is answerable and an
+ * unlisted one is refused, both because of the same line.
  */
 export function isLiveBugFishing(state: BugFishingStepState): boolean {
-  return state.status !== 'done'
+  return bugFishingAcceptsCuration(state.status)
 }
 
 /** Project a live expedition onto the external decision resource. */

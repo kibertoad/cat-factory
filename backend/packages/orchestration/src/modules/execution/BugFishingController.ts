@@ -32,6 +32,7 @@ import type { NotificationService } from '../notifications/NotificationService.j
 import type { AdvanceResult } from './advance.js'
 import {
   type BugFishingPassScope,
+  bugFishingAcceptsCuration,
   bugFishingSpawnIsClaimable,
   claimBugFishingSpawn,
   coerceBugFishingFindings,
@@ -50,6 +51,23 @@ import type { StepGraph } from './StepGraph.js'
 
 /** The step kind the bug-fishing phase loop runs on (the read-only expedition agent). */
 export const BUG_FISHING_STEP_KIND = BUG_FISHER_KIND
+
+/**
+ * Refuse a curation verb against an expedition the run has already advanced past.
+ *
+ * The three verbs guard the SAME liveness rule the public projection decides by
+ * ({@link bugFishingAcceptsCuration}), so a caller is never offered a decision the write path
+ * would refuse and a stale finding id cannot be replayed into one. {@link resolve} needs no call:
+ * it asks the stricter question already, since finishing a triage requires the park itself.
+ *
+ * Its own cause rather than `no_expedition`, which the two need different fixes for: a settled
+ * expedition means reload this run and read what it caught, where `no_expedition` means the run
+ * being addressed never had one.
+ */
+function assertExpeditionAcceptsCuration(state: BugFishingStepState): void {
+  if (bugFishingAcceptsCuration(state.status)) return
+  throw new ConflictError('This bug-fishing expedition has already finished.', 'expedition_settled')
+}
 
 /**
  * What a phase records when its pass came back with no readable findings report.
@@ -379,7 +397,9 @@ export class BugFishingController {
    * MARK findings to be addressed: spawn a bug-fix task per finding, linked to the expedition.
    *
    * Accepted while the expedition is still fishing later angles as well as once it has parked —
-   * see the class doc for why that is the point rather than a convenience.
+   * see the class doc for why that is the point rather than a convenience. A SETTLED expedition is
+   * refused: {@link resolve} advances the run past the step, and marking after that spawns fix
+   * tasks nothing is left to link them to.
    *
    * Order of operations per finding, and why: the spawn record is CLAIMED under the run's
    * compare-and-swap first, with the task id it is about to create, and only then is the block
@@ -407,6 +427,7 @@ export class BugFishingController {
     if (!step || !state) {
       throw new ConflictError('This run has no bug-fishing expedition to triage.', 'no_expedition')
     }
+    assertExpeditionAcceptsCuration(state)
     const requested = new Set(input.findingIds)
     const targets = (state.findings ?? []).filter((f) => requested.has(f.id))
     const missing = [...requested].filter((id) => !targets.some((f) => f.id === id))
@@ -589,6 +610,7 @@ export class BugFishingController {
             'no_expedition',
           )
         }
+        assertExpeditionAcceptsCuration(step.bugFishing)
         const finding = (step.bugFishing.findings ?? []).find((f) => f.id === findingId)
         if (!finding) {
           throw new ValidationError('That finding is no longer part of this expedition.', {

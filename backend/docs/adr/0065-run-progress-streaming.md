@@ -68,6 +68,21 @@ It was rejected: `decisions: []` from a run holding a live requirements review i
 answer a run with nothing to ask gives, and telling those apart is the entire job of the
 `unanswerable[]` field beside it.
 
+**What a frame does reduce is the PROSE, and it says so.** The list is re-sent whenever any part of
+it moves, and what it carries is model-authored text in quantity: a deep review parks with one
+finding per issue, each with a detail, an evidence quote and a suggested fix. Over-long strings are
+clipped to a preview and `truncated: true` reports the clip, mirroring `publicRunStep.truncated` on
+the run streams and the point read that serves the whole thing. The reduction is kind-AGNOSTIC (it
+clips by length wherever text sits), for the reason the frame's change detector compares the
+serialized payload rather than a field of it: a rule written per decision kind is one the fifteenth
+kind escapes silently.
+
+**And a tick only issues the reads the run's own step chain can need.** The loop polls once a second
+for up to five minutes, and the decision projection is the body of that poll. Every separately-stored
+park is gated on a step that could produce it: the dialogue reads on the review-gate kinds, the fork
+read on a step actually carrying `forkDecision`, the interview read on the run being parked on one.
+An ordinary `coder → ci → merger` run therefore pays one read per tick instead of four.
+
 **`read` scope, matching the point read.** Watching what a run is waiting on is a monitoring
 concern; answering is what needs `decide`.
 
@@ -99,13 +114,36 @@ through `RunStateMachine.settleStepAndAdvance` or `settleAdvancedGate`; twelve c
 boundary through those two. This is the lesson the terminal edge already learned (a run reaches
 `done` from four sites, so the emit hangs off the emit funnel), applied one level down.
 
-**`deliveryId` carries the step index.** The family's contract is `<runId>:<event>`, and this is the
-one event a single run emits repeatedly: on the two-part key a receiver following the documented
-dedupe rule would see step 0 and nothing else for the rest of the pipeline.
+**Published LAST at each seam, after the run's own state is durable.** The two settle methods and
+the one-shot path all announce the boundary after their compare-and-swap write and after any run
+edge the same settle pushes. Announcing first is a delivery for an advance that can still lose its
+CAS, and on a final step it is the run's last step reported complete while the run still reads
+running. The block read the projection needs is best-effort and its failure publishes nothing, so a
+notification concern cannot derail the advance that called it.
+
+**`deliveryId` carries the step index AND its attempt.** The family's contract is `<runId>:<event>`,
+and this is the one event a single run emits repeatedly, along two axes. On the two-part key a
+receiver following the documented dedupe rule sees step 0 and nothing else for the rest of the
+pipeline. On the three-part key it sees each step once and every RE-RUN of one discarded, which is
+not an edge case: a companion bounces its producer for rework, a human-test gate rewinds to its
+upstream `deployer`, a `request-changes` loops a range, and a three-cycle rework loop then arrives
+as one boundary. `step.attempt` is the step's own start count, so a durable REPLAY of one settle
+still reports the same number and still collapses.
 
 **`outcome` distinguishes `skipped` from `completed`.** The engine skips a gated step by marking it
 done with no output, which is byte-for-byte a step that ran and reported nothing. It says WHETHER and
 not WHY, matching `publicRunStep.skipped`: which axis skipped a step is a vocabulary the engine grows.
+
+**Every boundary is delivered, the skipped tail included.** A `bug-intake` step that finds no issue
+to work ends the run early, marking every remaining step `skipped` and finalizing without touching
+either settle method. It publishes its own boundaries (the step that decided, then one per skipped
+step), because the alternative is a `run.completed` with no boundary at all for the run, which reads
+as a pipeline that never had steps rather than as one whose tail was cut.
+
+**The member is APPENDED to `runEvents`, not slotted in beside the edge it belongs with.** The
+vocabulary's ORDER is published: Java emits it as an enum whose `ordinal()` an integration may have
+persisted, and three more clients expose a `*_VALUES` array in the same sequence. Inserting
+re-sequences all four, as a diff that reads like generated churn.
 
 ## Rationale
 
@@ -137,7 +175,17 @@ a single coder step would deliver hundreds of events.
   `PublicReviewFinding.severity`. `INLINE_ENUM_NAMES` already existed for exactly this and had bitten
   three times before; it now accepts `{ name, values }`, because a pin that fixes the name and lets
   the members be re-declared in the other vocabulary's order is half a pin (a Java `ordinal()` shift
-  and a re-sequenced `*_VALUES` array in three more languages, arriving as generated churn).
+  and a re-sequenced `*_VALUES` array in three more languages, arriving as generated churn). A pin's
+  `values` is checked to be a permutation of the real set, because `define` stores it verbatim: a
+  typo would emit an enum missing a value the API sends AND re-register it under a signature nothing
+  looks it up by, both as ordinary generated churn.
+- **Sharing an emitted enum is now a decision with two answers**, and `DISTINCT_ENUM_TYPES` is the
+  second. A shared type is right when two surfaces publish the same closed SET; it is wrong when the
+  words merely coincide, because the type NAME asserts what the field means. Bug-fishing's
+  `confidence` is the agent's own judgement of how sure it is, sitting two fields from a real
+  `severity`, so it is emitted as `PublicBugFishingConfidence` rather than borrowing a reviewer
+  finding's severity type. Keyed by the property HINT, since separating two vocabularies is exactly
+  what one signature cannot do.
 - **A deployment with the webhook module wired pays one block read per step boundary**, guarded on
   the sink being present so a deployment without it pays nothing. A step boundary is once per step
   against a run that has just spent minutes in a container.

@@ -351,7 +351,13 @@ needs to know a park happened.
 
 The frame carries the WHOLE list, `unanswerable[]` included, never a delta or a subset: an empty
 `decisions` that means "I asked and nothing is being asked" and one that means "this payload was
-narrowed" are opposite facts, and telling them apart is what the field beside it exists for.
+narrowed" are opposite facts, and telling them apart is what the field beside it exists for. What a
+frame MAY reduce is how much of the model-authored prose inside it rides the wire: a deep review
+parks with one finding per issue it found, each with a detail, an evidence quote and a suggested
+fix, and the frame is re-sent whenever any part of the list moves. Over-long strings are clipped to
+a preview and `truncated: true` says so, exactly as `publicRunStep.truncated` does on the run
+streams; `GET /api/v1/runs/{runId}/decisions` serves every field whole and always answers
+`truncated: false`.
 
 `bug-fishing` is the second CURATING park to gain verbs, and the first thing a caller notices is
 what STOPS happening: a parked expedition used to arrive in `unanswerable[]` as a `curation_gate`,
@@ -364,9 +370,17 @@ deployment surfaced it. Both shipped curating kinds are answerable here.
 `run.step_completed` is the narrowing of the per-step feed [ADR 0030](./adr/0030-public-api-surface.md)
 rejected, not a reversal of it. That rejection was about a PROGRESS feed, which the engine emits on
 every container poll; this fires once per step BOUNDARY, so a ten-step pipeline delivers ten events
-over however many hours it runs. Two things a receiver must read: `deliveryId` is
-`<runId>:run.step_completed:<index>` rather than the two-part key the run edges use, because this is
-the one event a single run emits repeatedly and the run-scoped key would collapse a whole pipeline
-onto its first step; and `step.outcome` distinguishes `skipped` from `completed`, because the engine
-skips a gated step by marking it done with no output, which is otherwise byte-for-byte a step that
-ran and reported nothing.
+over however many hours it runs. Two things a receiver must read. `deliveryId` is
+`<runId>:run.step_completed:<index>:<attempt>` rather than the two-part key the run edges use,
+because this is the one event a single run emits repeatedly and it does so along BOTH axes: the
+run-scoped key would collapse a whole pipeline onto its first step, and an index-scoped one would
+collapse a step's rework cycles onto its first pass, which is what a companion bouncing its producer
+or a gate rewinding to an upstream step produces. And `step.outcome` distinguishes `skipped` from
+`completed`, because the engine skips a gated step by marking it done with no output, which is
+otherwise byte-for-byte a step that ran and reported nothing.
+
+The `runEvents` member is APPENDED to the vocabulary rather than slotted in beside the edge it
+belongs with. The list's order is published: the Java client emits it as an enum whose `ordinal()`
+an integration may have persisted, and three more clients expose a `*_VALUES` array in the same
+sequence. An insertion is therefore an in-place re-sequencing of four released clients, arriving as
+generated churn.

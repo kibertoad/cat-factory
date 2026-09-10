@@ -3111,17 +3111,17 @@ respectively.
     "startedAt": 1722599000000, "occurredAt": 1722600000000,
     "pullRequestUrl": "https://github.com/…/pull/42",   // null is a real answer on a terminal event
     "failure": { "kind": "…", "message": "…", "reason": null },  // run.failed only; null otherwise
-    "step": { "index": 3, "agentKind": "ci", "outcome": "completed", "final": false }  // run.step_completed only
+    "step": { "index": 3, "agentKind": "ci", "outcome": "completed", "attempt": 1, "final": false }  // run.step_completed only
   }
 }
 
-// …and the step edge, whose dedupe key carries the index because one run emits many
+// …and the step edge, whose dedupe key carries the step because one run emits many
 {
-  "deliveryId": "exec_9:run.step_completed:3",   // <runId>:<event>:<stepIndex>
+  "deliveryId": "exec_9:run.step_completed:3:1",   // <runId>:<event>:<stepIndex>:<attempt>
   "sentAt": 1722599500000,
   "workspaceId": "ws_1",
   "event": "run.step_completed",
-  "run": { "…": "as above", "step": { "index": 3, "agentKind": "ci", "outcome": "completed", "final": false } }
+  "run": { "…": "as above", "step": { "index": 3, "agentKind": "ci", "outcome": "completed", "attempt": 1, "final": false } }
 }
 
 // Platform-health alert (carries `event` + `alert`)
@@ -3151,12 +3151,21 @@ Semantics your receiver must honour:
   construction; the terminal events are **at-least-once** (a durable replay can re-emit a settled
   run), and a replay re-stamps `sentAt` / `occurredAt`, so two deliveries of one transition are not
   byte-identical. One id comparison collapses them. Rationale: [ADR 0030](./adr/0030-public-api-surface.md).
-- **`run.step_completed` keys on `<runId>:<event>:<stepIndex>`**, because it is the one event a
-  single run emits repeatedly: on the two-part key a whole pipeline would collapse onto its first
-  step at any receiver following the rule above. It is also at-least-once (a re-driven step
-  re-emits its own boundary), and `step.outcome` distinguishes `skipped` from `completed`, because
-  the engine skips a gated step by marking it done with no output. Counting deliveries as work done
-  without reading it scores an estimate-gated tester exactly like one that ran and found nothing.
+- **`run.step_completed` keys on `<runId>:<event>:<stepIndex>:<attempt>`**, because it is the one
+  event a single run emits repeatedly, and it does so along two axes. Without the INDEX a whole
+  pipeline collapses onto its first step at any receiver following the rule above; without the
+  ATTEMPT a step the engine re-runs in place does the same. Re-runs are ordinary: a companion
+  bounces its producer for rework, a human-test gate rewinds to the `deployer` that built the
+  environment, a `request-changes` loops a range. Each settles the same index again, one cycle
+  later, and `step.attempt` is what makes each of those its own delivery while a durable REPLAY of
+  one boundary (same attempt) still collapses. It is at-least-once for that reason, and
+  `step.outcome` distinguishes `skipped` from `completed`, because the engine skips a gated step by
+  marking it done with no output. Counting deliveries as work done without reading it scores an
+  estimate-gated tester exactly like one that ran and found nothing.
+- **Every boundary is delivered, including the ones nothing ran for.** A step whose decision ends
+  the run early (a `bug-intake` that finds no issue to work) settles the tail as `skipped`, and each
+  of those skipped steps is its own delivery: a `run.completed` arriving with no boundaries at all
+  would read as a run whose pipeline never had steps.
 - A `retry` / restart mints a **fresh run id** and announces it as a new `run.started`.
 - Headless initiative jobs emit **no** lifecycle events (their anchor block is internal;
   `GET /api/v1/jobs/:id` and its SSE stream already serve them).

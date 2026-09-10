@@ -456,39 +456,81 @@ export class RunStateMachine {
   }
 
   /**
-   * Push a STEP BOUNDARY outward: one `run.step_completed` per step that finished and moved the
-   * run's cursor.
+   * Push a STEP BOUNDARY outward: one `run.step_completed` for the step at `stepIndex`.
    *
-   * Called from the two methods every such path funnels through, and that is what makes the event
-   * trustworthy rather than approximately right. `settleStepAndAdvance` settles a step that RAN
-   * (an agent result, a companion, a one-shot, a gated skip); `settleAdvancedGate` settles one a
-   * human or a resolver just released. Twelve callers reach the boundary through those two, and a
-   * hook at each is exactly the drift the terminal edge already learned to avoid: the day a
-   * thirteenth lands, it inherits this by construction.
-   *
-   * A BLOCK READ is paid here, and only when a sink is wired, because the projection needs the
-   * same `internal` / title / PR fields the run edges carry and a step boundary is not a hot path
-   * (once per step, against a run that just spent minutes in a container). Guarding on the sink
-   * first is what keeps a deployment with no webhook module paying nothing at all.
+   * See {@link publishStepsCompleted}, which this is the single-step spelling of.
    */
   async publishStepCompleted(
     workspaceId: string,
     instance: ExecutionInstance,
     stepIndex: number,
   ): Promise<void> {
-    if (!this.runLifecycleSink) return
-    const step = instance.steps[stepIndex]
-    if (!step) return
-    const block = await this.blockRepository.get(workspaceId, instance.blockId)
-    await this.publishRunLifecycle(workspaceId, instance, block, 'run.step_completed', {
-      index: stepIndex,
-      agentKind: step.agentKind,
-      // Derived HERE rather than passed by each caller: `skipped` is the engine's own record of a
-      // step it decided against running, and a second site deciding what to call that is a second
-      // site that can call it something else.
-      outcome: step.skipped ? 'skipped' : 'completed',
-      final: stepIndex === instance.steps.length - 1,
-    })
+    await this.publishStepsCompleted(workspaceId, instance, [stepIndex])
+  }
+
+  /**
+   * Push one `run.step_completed` per settled step, in the order given.
+   *
+   * Called from the three methods every path that finishes a step and moves the run's cursor
+   * funnels through, and that is what makes the event trustworthy rather than approximately right.
+   * `settleStepAndAdvance` settles a step that RAN (an agent result, a companion, a one-shot, a
+   * gated skip); `settleAdvancedGate` settles one a human or a resolver just released;
+   * `OneShotStepController.completeRunSkippingRemaining` settles a step plus the tail its decision
+   * skipped, which is the one path that moves the cursor by more than one and therefore the one
+   * that needs a LIST. A hook per call site is exactly the drift the terminal edge already learned
+   * to avoid.
+   *
+   * **Published LAST at every one of those sites**, after the run's own state is durable and after
+   * any run edge the same settle pushes. Announcing first is a delivery for an advance that can
+   * still lose its compare-and-swap, and on the final step it is the run's last step reported
+   * complete while the run still reads running.
+   *
+   * A BLOCK READ is paid here, ONCE for the whole batch and only when a sink is wired, because the
+   * projection needs the same `internal` / title / PR fields the run edges carry and a step
+   * boundary is not a hot path (once per step, against a run that just spent minutes in a
+   * container). Guarding on the sink first is what keeps a deployment with no webhook module
+   * paying nothing at all.
+   *
+   * The read is best-effort and its failure publishes NOTHING, wrapped so that "the row says no
+   * block" and "the read did not answer" stay different facts: a headless run is suppressed by
+   * `block.internal`, so a failed read that fell through to a null block would push a step edge
+   * for a job anchor no external receiver can address anything with. Publishing is a notification
+   * concern either way and may not derail the advance that called it, which is the whole reason
+   * `publishRunStarted` takes its block as a parameter rather than reading one.
+   */
+  async publishStepsCompleted(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    stepIndexes: readonly number[],
+  ): Promise<void> {
+    if (!this.runLifecycleSink || stepIndexes.length === 0) return
+    const read = await runBestEffort(
+      this.log,
+      'execution.publishStepCompleted',
+      async () => ({ block: await this.blockRepository.get(workspaceId, instance.blockId) }),
+      { workspaceId, executionId: instance.id },
+    )
+    if (!read) return
+    for (const stepIndex of stepIndexes) {
+      const step = instance.steps[stepIndex]
+      if (!step) continue
+      await this.publishRunLifecycle(workspaceId, instance, read.block, 'run.step_completed', {
+        index: stepIndex,
+        agentKind: step.agentKind,
+        // Derived HERE rather than passed by each caller: `skipped` is the engine's own record of a
+        // step it decided against running, and a second site deciding what to call that is a second
+        // site that can call it something else.
+        outcome: step.skipped ? 'skipped' : 'completed',
+        // Which OCCURRENCE of this boundary the delivery is, so a step the engine re-runs for
+        // rework is a second delivery rather than one the receiver's mandatory `deliveryId` dedupe
+        // discards. `attempts` counts fresh starts and survives `resetStepForRerun`, which is
+        // exactly the grain: a durable REPLAY of one settle re-reports the same number (nothing
+        // restarted the step), where a bounce-and-re-run reports the next one. A step that never
+        // started (the tail a one-shot decision skips) settles once and reads as attempt 1.
+        attempt: step.attempts ?? 1,
+        final: stepIndex === instance.steps.length - 1,
+      })
+    }
   }
 
   /**
@@ -703,7 +745,6 @@ export class RunStateMachine {
       await this.publishStepCompleted(workspaceId, instance, settledIndex)
       return { kind: 'done' }
     }
-    await this.publishStepCompleted(workspaceId, instance, settledIndex)
     instance.currentStep += 1
     const next = instance.steps[instance.currentStep]
     if (next) this.stepGraph.startStep(next)
@@ -717,6 +758,10 @@ export class RunStateMachine {
     } else {
       await this.persistAndEmit(workspaceId, instance, { blockStatus: 'in_progress' })
     }
+    // LAST, for the same reason the final branch above publishes after its terminal edge: the CAS
+    // write is what makes this advance real, and a delivery pushed ahead of it describes a step
+    // boundary a lost race then un-does.
+    await this.publishStepCompleted(workspaceId, instance, settledIndex)
     return { kind: 'continue' }
   }
 
@@ -782,9 +827,6 @@ export class RunStateMachine {
     stepIndex: number,
   ): Promise<void> {
     const decisionId = instance.steps[stepIndex]!.approval!.id
-    // The gate's own step is what finished here, and `advanceRunPastGate` has already moved the
-    // cursor past it, which is why the index is a parameter rather than read off the instance.
-    await this.publishStepCompleted(workspaceId, instance, stepIndex)
     if (stepIndex === instance.steps.length - 1) {
       await this.finalizeBlock(workspaceId, instance, undefined)
       await this.stopRunContainer(workspaceId, instance)
@@ -797,6 +839,13 @@ export class RunStateMachine {
     }
     await this.workRunner.signalDecision(workspaceId, instance.id, decisionId, 'approved')
     await this.emitInstance(workspaceId, instance)
+    // LAST, matching {@link settleStepAndAdvance}: the instance write already landed under CAS
+    // before this method ran, and a gate released on the run's FINAL step pushes its terminal
+    // edge through the emit above, so a receiver never reads the run's last step complete while
+    // the run still reads running. The gate's own step is what finished here, and
+    // `advanceRunPastGate` has already moved the cursor past it, which is why the index is a
+    // parameter rather than read off the instance.
+    await this.publishStepCompleted(workspaceId, instance, stepIndex)
   }
 
   /**

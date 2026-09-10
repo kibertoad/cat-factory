@@ -23,14 +23,21 @@
  *
  * The boundary is a single seam rather than a hook per settle site: every path that finishes a step
  * and moves the run's cursor funnels through `RunStateMachine`'s `settleStepAndAdvance` (the agent
- * result, a skip, a companion, a one-shot) or `settleAdvancedGate` (a resolved gate). A hook at
- * each of the twelve callers is the drift the run's terminal emit already learned to avoid.
+ * result, a skip, a companion, a one-shot), `settleAdvancedGate` (a resolved gate) or
+ * `publishStepsCompleted` directly (the one path that settles a step and the tail its decision
+ * skipped). A hook at each of the twelve callers is the drift the run's terminal emit already
+ * learned to avoid.
+ *
+ * A new member is APPENDED, never inserted. The list's order is published: the Java client emits it
+ * as an enum whose `ordinal()` an integration may have persisted, and the TypeScript, Python and Go
+ * clients each expose a `*_VALUES` array in the same sequence. Inserting re-sequences all four as a
+ * diff that reads like generated churn.
  */
 export const RUN_LIFECYCLE_EVENTS = [
   'run.started',
-  'run.step_completed',
   'run.completed',
   'run.failed',
+  'run.step_completed',
 ] as const
 export type RunLifecycleEventKind = (typeof RUN_LIFECYCLE_EVENTS)[number]
 
@@ -56,6 +63,17 @@ export interface RunLifecycleStep {
   agentKind: string
   /** `completed` for a step that ran, `skipped` for one the pipeline decided against running. */
   outcome: 'completed' | 'skipped'
+  /**
+   * Which OCCURRENCE of this step's boundary the event is, 1-based.
+   *
+   * The engine re-runs a step in place: a companion bounces its producer for rework, a human-test
+   * gate rewinds to its upstream `deployer`, a `request-changes` loops a range. Each of those
+   * settles the SAME index again, so the index alone does not identify a boundary and a receiver
+   * following the family's mandatory `deliveryId` dedupe would discard every re-completion and
+   * report a three-cycle rework loop as one. This is what makes each boundary its own delivery,
+   * and it is stable under a durable REPLAY of one settle, which reports the same number.
+   */
+  attempt: number
   /** Whether this was the run's LAST step, so a receiver can expect a terminal event next. */
   final: boolean
 }
