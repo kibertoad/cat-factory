@@ -652,6 +652,18 @@ export interface AgentRunContext {
      * localhost (see `testerInfraSpec`), NOT a deployable environment.
      */
     provisioning?: ServiceProvisioning
+    /**
+     * The operator's freeform TESTING CONTEXT for this service, as written on the board: which
+     * flows matter, which test accounts exist and how to sign in as one, what the environment is
+     * seeded with. Standing knowledge no credential and no repository read supplies, so a tester
+     * that is not handed it re-derives it badly or reports the gap as the service's fault.
+     *
+     * Carried for every kind because it is service-frame configuration like its neighbours here,
+     * but RENDERED only into the tester prompts and the environment dry run's prober (which is
+     * told the same text, in the same words, so its verdict predicts the tester's). Absent when
+     * the service recorded none, which keeps every existing prompt byte-identical.
+     */
+    testingContext?: string
     cloudProvider?: CloudProvider
     instanceSize?: InstanceSize
   }

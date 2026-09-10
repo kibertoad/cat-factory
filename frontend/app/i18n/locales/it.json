@@ -1596,6 +1596,16 @@
       "configNoun": "le credenziali di test sensibili",
       "duplicateKey": "Ogni nome di variabile deve essere univoco."
     },
+    "testingContext": {
+      "title": "Contesto di test",
+      "sectionHint": "Note libere su come si testa questo servizio: quali flussi contano, quali account di prova esistono e come accedervi, che cosa significano i dati precaricati, che cosa non va toccato. Ogni esecuzione del Tester per questo servizio riceve questo testo alla lettera, così come la prova a vuoto dell'ambiente.",
+      "notSecret": "Questo testo finisce così com'è nel prompt del Tester, quindi non inserirci segreti veri. Mettili sopra, in «Credenziali di test», e qui richiamali solo con il nome della variabile.",
+      "placeholder": "es. accedi come $DEMO_USER; il tenant precaricato è Acme con tre progetti; non eseguire mai il flusso di fatturazione, addebita una carta vera.",
+      "length": "{count} di {max} caratteri",
+      "save": "Salva il contesto di test",
+      "revert": "Annulla le modifiche",
+      "savedToast": "Contesto di test salvato"
+    },
     "testConfig": {
       "title": "Infrastruttura di test",
       "hint": "Come viene predisposto un ambiente di test per questo servizio quando una pipeline deve eseguirlo: nessuna infrastruttura, un file Docker Compose, manifest Kubernetes, o un tipo di manifest personalizzato.",

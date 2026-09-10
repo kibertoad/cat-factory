@@ -1242,6 +1242,7 @@ export class BoardService {
     // validated against them. One collaborator (`blockPatchNarrowing.ts`) owns all of it.
     const narrow = this.patchNarrowing
     let effective = narrow.serviceFragmentIds(patch, block)
+    effective = narrow.testingContext(effective, block)
     effective = await narrow.serviceConnections(effective, block, id, homeWorkspaceId, workspaceId)
     effective = await narrow.involvedServiceIds(effective, block, homeWorkspaceId, workspaceId)
     effective = narrow.referenceRepos(effective, block)

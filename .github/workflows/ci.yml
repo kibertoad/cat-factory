@@ -45,6 +45,7 @@ jobs:
       deployHarness: ${{ steps.filter.outputs.deployHarness }}
       eks: ${{ steps.filter.outputs.eks }}
       gatekeeper: ${{ steps.filter.outputs.gatekeeper }}
+      litellm: ${{ steps.filter.outputs.litellm }}
       sdk: ${{ steps.filter.outputs.sdk }}
       # Coarse test-lane gating (computed in the `scope` step below):
       #   backendCode — backend source OR a root build/dependency input changed. Gates the
@@ -145,6 +146,22 @@ jobs:
               - 'backend/packages/contracts/src/environments.ts'
               - 'backend/packages/contracts/src/primitives.ts'
               - 'backend/packages/integrations/src/modules/kubernetes/**'
+              - '.github/workflows/ci.yml'
+            # The LiteLLM gateway lane (`test-litellm`) runs a REAL LiteLLM proxy in Docker against
+            # a stubbed model upstream, so it runs when either half of what it covers moves: the
+            # OpenAI-compatible resolvers and the endpoint table that decides what each provider
+            # may claim, or the lane's own harness, pinned gateway config and vitest project.
+            # The AI SDK is in here too, and not incidentally: both behaviours the lane
+            # characterises (the `json_object` downgrade, and usage being absent from a stream) are
+            # the SDK's defaults rather than ours, so an `@ai-sdk/openai-compatible` bump that
+            # flipped either would otherwise skip the only test that can see it.
+            litellm:
+              - 'backend/packages/agents/src/providers/**'
+              - 'backend/packages/agents/package.json'
+              - 'backend/packages/server/test/integration/**'
+              - 'backend/packages/server/vitest.integration.config.ts'
+              - 'backend/packages/server/package.json'
+              - 'pnpm-lock.yaml'
               - '.github/workflows/ci.yml'
             # The Cloudflare OS Gatekeeper (`test-gatekeeper`) is a CONSUMER of the published
             # surface, not part of the backend: `@cat-factory/gatekeeper-worker` and the template
@@ -1405,6 +1422,60 @@ jobs:
         if: ${{ always() }}
         run: docker rm -f floci || true
 
+  # Our `litellm` resolver against a REAL LiteLLM proxy in Docker, which calls a canned
+  # OpenAI-compatible upstream stood up by the suite itself. No provider key is configured and no
+  # tokens are billed: the gateway is real, only the model behind it is stubbed.
+  #
+  # It exists because `litellm` and `bifrost` are OPERATOR-HOSTED gateways with no public endpoint,
+  # which is exactly what makes them the two providers our other tests can say the least about. A
+  # unit test can assert what the endpoint table says; only a live instance shows the alias being
+  # rewritten in both directions, the upstream credential being substituted for the caller's, and
+  # whether token counts survive the hop into the spend rollup.
+  #
+  # BLOCKING (in the aggregated `Test` gate, the shape `test-k8s` has, not the advisory shape
+  # `test-eks` has): the image is pinned and the upstream is a local stub, so no emulator and no
+  # third party's DRIFT can red this lane for reasons outside the repo. Its one third-party reach
+  # is fetching that pinned image from GHCR, where a 429 or a timeout is the runner's weather
+  # rather than a verdict on the code, so the harness retries the pull up to three times, exactly
+  # as `test-k8s` retries `k3d cluster create` and for the same reason.
+  test-litellm:
+    name: Test LiteLLM gateway
+    needs: changes
+    if: ${{ needs.changes.outputs.litellm == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup pnpm + Node + install
+        uses: ./.github/actions/setup
+        with:
+          turbo-cache: 'true'
+
+      # The suite imports the built `dist` of the workspace libraries.
+      - name: Build libraries
+        run: pnpm build
+
+      # The image tag lives in the suite's own harness and the suite pulls it (with its own bounded
+      # retry), so it is written once. A pre-pull step here would be that same version in a second
+      # place, and the copy no one runs locally is the one that goes stale.
+      - name: LiteLLM gateway integration tests
+        run: pnpm --filter @cat-factory/server run test:integration
+
+      # The suite removes its own container on both exits, but a cancelled or timed-out job never
+      # reaches that code. Sweeping by the name prefix the harness mints costs nothing on an
+      # ephemeral runner and is what keeps a self-hosted one from accumulating live proxies.
+      # `xargs -r` rather than a shell variable: the id list has to word-split to remove more than
+      # one container, and an unquoted expansion is what shellcheck reads (rightly, in general) as
+      # an accident. It also does nothing at all when the list is empty, which is the normal case.
+      - name: Remove leftover gateway containers
+        if: ${{ always() }}
+        run: docker ps -aq --filter 'name=cat-factory-litellm-it-' | xargs -r docker rm -f
+
   # The Cloudflare OS Gatekeeper, in real workerd: the machinery package's own suite, plus the
   # template that installs it. NON-BLOCKING (deliberately NOT in the aggregated `Test` gate's
   # `needs`, the shape `test-eks` and `test-e2e` have): this Worker tracks a partner protocol that
@@ -1485,7 +1556,7 @@ jobs:
   # required status.
   test-gate:
     name: Test
-    needs: [changes, test-worker, test-units, test-db, test-k8s, sdk-smoketest]
+    needs: [changes, test-worker, test-units, test-db, test-k8s, test-litellm, sdk-smoketest]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -1505,18 +1576,21 @@ jobs:
           UNITS: ${{ needs.test-units.result }}
           DB: ${{ needs.test-db.result }}
           K8S: ${{ needs.test-k8s.result }}
+          # The LiteLLM gateway lane. It gates rather than advises because nothing external can
+          # move under it: the gateway image is pinned and the model upstream is a local stub.
+          LITELLM: ${{ needs.test-litellm.result }}
           # The cross-SDK smoketest. It is the ONLY check that can see the four clients
           # disagree, so it gates like any other lane rather than being advisory — a client
           # that decodes a field differently or maps a refusal to the wrong class must not be
           # mergeable. Skipped (no `sdk` changes) counts as a pass exactly like the rest.
           SDK: ${{ needs.sdk-smoketest.result }}
         run: |
-          echo "changes: $CHANGES | worker: $WORKER | units: $UNITS | db: $DB | k8s: $K8S | sdk: $SDK"
+          echo "changes: $CHANGES | worker: $WORKER | units: $UNITS | db: $DB | k8s: $K8S | litellm: $LITELLM | sdk: $SDK"
           if [ "$CHANGES" != 'success' ]; then
             echo "::error::change detection did not succeed; refusing to pass the test gate"
             exit 1
           fi
-          for lane in "$WORKER" "$UNITS" "$DB" "$K8S" "$SDK"; do
+          for lane in "$WORKER" "$UNITS" "$DB" "$K8S" "$LITELLM" "$SDK"; do
             case "$lane" in
               success | skipped) ;;
               *)

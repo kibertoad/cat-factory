@@ -181,6 +181,16 @@ proxied call would sort to the front of its phase. A harness-CLI row likewise sa
 and `requestMaxTokens` null, because the CLIs expose no per-call timing and apply their own
 ceiling, so this step's elapsed time or our ignored ask would both be fabrications.
 
+`streaming` is the same rule applied to a field that used to be a constant. The inline recorder
+hard-coded `false` while no inline path could stream, so the flag stated the invariant rather than
+the call; it is now the PRODUCER's answer, and the instrumented provider records a streamed call
+by folding its parts into the shape the buffered readers already parse. A streamed inline call
+also has to ASK for its usage (`stream_options: { include_usage: true }`, set once in
+`openAiCompatibleResolver`): an OpenAI-compatible upstream sends the usage chunk only on request,
+so without it the stream ends carrying no counts and the call books zero tokens, which downstream
+is the same absence as a step that spent nothing. The buffered path never needed it, which is why
+only a real gateway can tell the two settings apart (`litellm.it.spec.ts`).
+
 ## The input side is THREE orthogonal classes, never a lump
 
 `promptTokens` is FRESH input with `cacheReadTokens` + `cacheWriteTokens` beside it, priced ~1x /

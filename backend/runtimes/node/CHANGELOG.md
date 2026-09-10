@@ -1,5 +1,90 @@
 # @cat-factory/node-server
 
+## 0.230.0
+
+### Minor Changes
+
+- b75fa3c: Let a service say, in its own words, how it should be tested
+  
+  A Tester was handed two things about a service it did not stand up: where to reach it, and which
+  credentials its shell carries. Neither says which flows matter, which of the seeded accounts is the
+  one to sign in as, what the demo data means, or which flow charges a real card. That knowledge
+  exists, it is short, and until now there was nowhere to put it, so every Tester run rediscovered it
+  from the repository or guessed.
+  
+  **Testing context** is a freeform text box on the service frame's inspector, directly beneath the
+  sealed test credentials (advanced interface tier, and shown at either tier once a service records
+  one, so nobody is left unable to read or clear what their testers are being told). It is stored on
+  the service and injected verbatim into every tester prompt for it. The environment self-test's agent dry run is handed the same text through the same renderer:
+  a dry run's whole claim is that it predicts what a real Tester will be able to do here, and it cannot
+  predict that from a different briefing.
+  
+  Three decisions worth knowing:
+  
+  - **It is non-sensitive by contract**, because it is rendered INTO the prompt. Secrets stay in the
+    sealed panel above, which never renders a value into a prompt or into telemetry, and this prose
+    refers to them by variable name. The panel says so.
+  - **The empty case is stated to the agent, never omitted.** A Tester told nothing cannot tell "this
+    platform has nowhere to write that down" from "the place exists and nobody filled it in", so it
+    either reports no gap at all or reports one against the service. Told, it reports what it had to
+    guess at, which is what tells an operator what to type. A tester running on work that sits under
+    no service frame is told THAT instead, so an empty field and an absent owner cannot be reported
+    as the same neglect.
+  - **It is a `blocks` column, not a table**, for the reason `provisioning` and `service_connections`
+    are columns: one service-frame-owned value the engine reads off the frame it has already walked
+    to. Both runtimes gain the column and a conformance assertion drives the frame-chain walk on both
+    stores; the write boundary drops the field on any non-frame block rather than persisting dead data.
+  
+  Only the two tester kinds are handed it, so every other agent's prompt is byte-for-byte unchanged,
+  and a service that records nothing keeps the prompts it had.
+
+### Patch Changes
+
+- Updated dependencies [b75fa3c]
+  - @cat-factory/contracts@0.352.0
+  - @cat-factory/kernel@0.345.0
+  - @cat-factory/agents@0.163.0
+  - @cat-factory/orchestration@0.309.0
+  - @cat-factory/server@0.321.0
+  - @cat-factory/binary-generators@0.3.47
+  - @cat-factory/consensus@0.17.47
+  - @cat-factory/eks@0.1.386
+  - @cat-factory/gates@0.11.47
+  - @cat-factory/gitlab@0.23.10
+  - @cat-factory/integrations@0.172.16
+  - @cat-factory/observability-otel@0.23.40
+  - @cat-factory/prompt-fragments@1.1.43
+  - @cat-factory/spend@0.21.5
+  - @cat-factory/caching@0.20.81
+  - @cat-factory/observability-langfuse@0.11.47
+  - @cat-factory/provider-bedrock@0.7.538
+  - @cat-factory/provider-cloudflare@0.7.539
+  - @cat-factory/provider-s3@0.2.454
+
+## 0.229.2
+
+### Patch Changes
+
+- Updated dependencies [bba4beb]
+  - @cat-factory/kernel@0.344.0
+  - @cat-factory/agents@0.162.0
+  - @cat-factory/orchestration@0.308.0
+  - @cat-factory/binary-generators@0.3.46
+  - @cat-factory/caching@0.20.80
+  - @cat-factory/consensus@0.17.46
+  - @cat-factory/eks@0.1.385
+  - @cat-factory/gates@0.11.46
+  - @cat-factory/gitlab@0.23.9
+  - @cat-factory/integrations@0.172.15
+  - @cat-factory/observability-langfuse@0.11.46
+  - @cat-factory/observability-otel@0.23.39
+  - @cat-factory/prompt-fragments@1.1.42
+  - @cat-factory/provider-bedrock@0.7.537
+  - @cat-factory/provider-cloudflare@0.7.538
+  - @cat-factory/provider-s3@0.2.453
+  - @cat-factory/server@0.320.2
+  - @cat-factory/spend@0.21.4
+
 ## 0.229.1
 
 ### Patch Changes

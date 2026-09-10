@@ -28,6 +28,7 @@ import FrontendConfig from '~/components/panels/inspector/FrontendConfig.vue'
 import ServiceConnections from '~/components/panels/inspector/ServiceConnections.vue'
 import ServiceTestConfig from '~/components/panels/inspector/ServiceTestConfig.vue'
 import ServiceTestSecrets from '~/components/panels/inspector/ServiceTestSecrets.vue'
+import ServiceTestingContext from '~/components/panels/inspector/ServiceTestingContext.vue'
 import ServiceFragments from '~/components/panels/inspector/ServiceFragments.vue'
 import ServiceReleaseHealthConfig from '~/components/panels/inspector/ServiceReleaseHealthConfig.vue'
 import ServiceValidationConfig from '~/components/panels/inspector/ServiceValidationConfig.vue'
@@ -83,6 +84,7 @@ const COMPONENTS: Record<InspectorPanelId, Component> = {
   'service-connections': ServiceConnections,
   'service-test-config': ServiceTestConfig,
   'service-test-secrets': ServiceTestSecrets,
+  'service-testing-context': ServiceTestingContext,
   'service-fragments': ServiceFragments,
   'service-release-health': ServiceReleaseHealthConfig,
   'service-validation-checks': ServiceValidationConfig,

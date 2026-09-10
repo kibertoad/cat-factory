@@ -12,7 +12,7 @@ import {
   environmentProbeUserPrompt,
 } from './environment-probe.js'
 import { FALSE_SUCCESS_SHAPES } from './shared.js'
-import { environmentSection, testSecretsSection } from './standard.js'
+import { environmentSection, testSecretsSection, testingContextSection } from './standard.js'
 import { testingSystemPrompt } from './testing.js'
 
 // ---------------------------------------------------------------------------
@@ -23,7 +23,7 @@ import { testingSystemPrompt } from './testing.js'
 // structurally cannot make.
 // ---------------------------------------------------------------------------
 
-function testerContext(testSecrets: TestCredentialBrief): AgentRunContext {
+function testerContext(testSecrets: TestCredentialBrief, testingContext?: string): AgentRunContext {
   return {
     agentKind: 'tester-api',
     pipelineName: 'Build & test',
@@ -34,15 +34,17 @@ function testerContext(testSecrets: TestCredentialBrief): AgentRunContext {
     decisions: [],
     resolvedDecision: null,
     testSecrets,
+    ...(testingContext ? { service: { testingContext } } : {}),
   }
 }
 
-function proberPrompt(testSecrets: TestCredentialBrief): string {
+function proberPrompt(testSecrets: TestCredentialBrief, testingContext?: string): string {
   return environmentProbeUserPrompt({
     surface: 'api',
     service: { title: 'Grass API' },
     environment: { url: 'https://env.example.com', status: 'ready' },
     testSecrets,
+    ...(testingContext ? { testingContext } : {}),
     repo: { owner: 'acme', name: 'grass', branch: 'envtest/1' },
   })
 }
@@ -106,6 +108,24 @@ describe('what the tester step and the environment dry run are told', () => {
       expect(proberPrompt(state.brief)).toContain(state.shared)
     })
   }
+
+  // The service's own testing prose is the other half of what a tester is handed about a live
+  // service, and it moves the same way the credentials do: a prober told less than the tester
+  // predicts a run that was better briefed than the one it stood in for.
+  it('hands both roles the service’s own testing prose, verbatim', () => {
+    const prose = 'Sign in as $DEMO_USER. The seeded tenant is Acme. Never run the billing flow.'
+    const brief: TestCredentialBrief = { status: 'resolved', refs: [] }
+    expect(testingContextSection(testerContext(brief, prose))).toContain(prose)
+    expect(proberPrompt(brief, prose)).toContain(prose)
+  })
+
+  it('tells both roles when nobody wrote one, rather than omitting the section', () => {
+    // The empty case is the one worth stating: an agent that was never shown the field exists
+    // reports the gap as its own ignorance, or not at all.
+    const brief: TestCredentialBrief = { status: 'resolved', refs: [] }
+    expect(testingContextSection(testerContext(brief))).toContain('NONE RECORDED')
+    expect(proberPrompt(brief)).toContain('NONE RECORDED')
+  })
 
   it('never puts a credential VALUE in either prompt', () => {
     const brief: TestCredentialBrief = {

@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/server",
-  "version": "0.320.1",
+  "version": "0.321.0",
   "description": "Runtime-neutral HTTP layer for the Agent Architecture Board: the Hono controllers, middleware (auth/authz/CORS/error), request helpers and the gateway seams shared by every deployment facade (Cloudflare Worker, Node service).",
   "repository": {
     "type": "git",
@@ -28,7 +28,8 @@
     "prepublishOnly": "pnpm run build",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
     "test": "vitest run",
-    "test:run": "vitest run"
+    "test:run": "vitest run",
+    "test:integration": "vitest run -c vitest.integration.config.ts"
   },
   "dependencies": {
     "@cat-factory/agents": "workspace:*",
@@ -48,6 +49,7 @@
   },
   "devDependencies": {
     "@types/node": "^26.5.0",
+    "ai": "^7.0.93",
     "typescript": "7.0.2",
     "undici": "^8.10.2",
     "vitest": "^4.1.11"

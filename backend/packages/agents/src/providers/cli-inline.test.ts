@@ -147,6 +147,10 @@ describe('CliInlineLanguageModel', () => {
         agentKind: 'doc-researcher',
         provider: 'anthropic',
         model: 'claude-opus-4-8',
+        // Each row is one model call the CLI reported off its own stream, which is what the
+        // container half of this producer (`makeHarnessCallRecorder`) files them as too. The
+        // buffered-looking `doGenerate` around them is this class's envelope, not the vendor hop.
+        streaming: true,
         promptTokens: 10,
         cacheReadTokens: 900,
         cacheWriteTokens: 90,

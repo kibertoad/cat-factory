@@ -257,6 +257,24 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   the platform's own backends; a store the DEPLOYMENT registered is resolved here, so custom stores
   work identically on every runtime with neither facade knowing about them
   ([`custom-binary-stores.md`](../../docs/custom-binary-stores.md)).
+- `test/integration/` + `vitest.integration.config.ts`: the GATEWAY lane, a separate vitest project
+  (`pnpm --filter @cat-factory/server test:integration`, CI's `Test LiteLLM gateway`). It drives our
+  `litellm` resolver over real HTTP against a REAL LiteLLM proxy in Docker, which calls a canned
+  OpenAI-compatible upstream the suite stands up on the host: the gateway is real, only the model
+  behind it is stubbed, so no key is configured and no tokens are billed. It exists because the two
+  operator-hosted gateways have no public endpoint, which makes them the providers every other test
+  can say least about; only a live instance shows the alias rewritten in BOTH directions (the
+  upstream is asked for the mapped model, the reply carries the operator's alias back), the upstream
+  credential substituted for the caller's, and whether usage survives the hop. Traps: it is excluded
+  from `vitest.config.ts` BY NAME, since `test/**/*.spec.ts` would otherwise sweep it into the unit
+  run and hand every Docker-less contributor a silent skip that reads as coverage, and the same skip
+  is a FAILURE under `CI`, where the lane is a required job; the two model names live in the
+  committed `litellm-config.yaml` and the harness reads them back, since only the copy the proxy
+  loads is real; the pinned image tag lives ONLY in `litellm-gateway.ts` and the suite pulls it, so
+  `hookTimeout` (not `testTimeout`) is the one sized for a cold pull, and every docker call carries
+  its own timeout because a synchronous one would leave that timer unable to fire; and the
+  streamed-usage test pins a LATENT gap (nothing inline streams today) rather than a desired
+  behaviour, with the evidence in its own comment.
 - `test/coverageScan.ts` + the `*.coverage.spec.ts` beside it: the guards for the rules a
   typecheck cannot hold, where a field must stay OPTIONAL because one caller is entitled to the
   default (`initiatedByRole`, `intakeOrigin`). Each classifies every call site and fails on a new

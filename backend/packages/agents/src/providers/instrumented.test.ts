@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { generateText, jsonSchema, tool } from 'ai'
-import { MockLanguageModelV3 } from 'ai/test'
+import { generateText, jsonSchema, streamText, tool } from 'ai'
+import { convertArrayToReadableStream, MockLanguageModelV3 } from 'ai/test'
+import type { LanguageModelV3StreamPart } from '@ai-sdk/provider'
 import type { LanguageModel } from 'ai'
 import { createRecordingLogger } from '@cat-factory/kernel'
 import type {
@@ -671,26 +672,6 @@ describe('InstrumentedModelProvider: gateway attribution', () => {
     }
   })
 
-  // The invariant that keeps every inline row honest: nothing here streams, and a streamed call
-  // would pass the wrap, reach no sink and record nothing. Downstream that is indistinguishable
-  // from a step that spent nothing, and it under-meters the budget the spend gate reads, so it
-  // refuses instead. If this ever starts failing, the fix is a real `wrapStream` plus a
-  // `streaming` flag through the inline recorder, not a deletion.
-  it('refuses to stream rather than passing an unrecorded call through', async () => {
-    const c = collectors()
-    const instrumented = new InstrumentedModelProvider({
-      inner: mockProvider('done'),
-      recordCall: c.recordCall,
-      workspaceBodiesEnabled: allowBodies,
-    })
-    const model = instrumented.resolve({ provider: 'openrouter', model: 'a/b' })
-    if (typeof model === 'string') throw new Error('expected a model instance')
-    await expect(
-      model.doStream({ prompt: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }] }),
-    ).rejects.toThrow(/does not record streamed calls/)
-    expect(c.recorded).toEqual([])
-  })
-
   it('files nothing from a failed call, which has no result to read', async () => {
     const c = collectors()
     const instrumented = new InstrumentedModelProvider({
@@ -710,5 +691,186 @@ describe('InstrumentedModelProvider: gateway attribution', () => {
 
     expect(c.recorded[0]).toMatchObject({ ok: false })
     expect(c.recorded[0]).not.toHaveProperty('reportedCostUsd')
+  })
+})
+
+// A STREAMED call reaches the same two exits as a buffered one, and has to be assembled to get
+// there: the text, the usage and the finish reason each arrive as their own part. The wrap
+// REFUSED to stream until the first caller needed it, precisely so that none of this could
+// happen silently: an unrecorded call and a step that spent nothing are the same absence
+// downstream, and the budget the spend gate reads is the thing that goes quietly wrong.
+describe('InstrumentedModelProvider: a STREAMED call', () => {
+  const textParts = (text: string, reasoning?: string): LanguageModelV3StreamPart[] => [
+    { type: 'stream-start', warnings: [] },
+    ...(reasoning
+      ? ([
+          { type: 'reasoning-start', id: 'r' },
+          { type: 'reasoning-delta', id: 'r', delta: reasoning },
+          { type: 'reasoning-end', id: 'r' },
+        ] as LanguageModelV3StreamPart[])
+      : []),
+    { type: 'text-start', id: '0' },
+    ...text.split(' ').map((word, index): LanguageModelV3StreamPart => ({
+      type: 'text-delta',
+      id: '0',
+      delta: index === 0 ? word : ` ${word}`,
+    })),
+    { type: 'text-end', id: '0' },
+    { type: 'finish', usage: USAGE, finishReason: { unified: 'stop', raw: 'stop' } },
+  ]
+
+  /** A model that answers by streaming `parts`. */
+  const streamingProvider = (parts: LanguageModelV3StreamPart[]): ModelProvider => {
+    const model: LanguageModel = new MockLanguageModelV3({
+      doStream: async () => ({ stream: convertArrayToReadableStream(parts) }),
+    })
+    return { resolve: (_ref: ModelRef) => model }
+  }
+
+  const tag = catFactoryObservability({
+    agentKind: 'judge',
+    workspaceId: 'ws_1',
+    executionId: 'exec_1',
+  })
+
+  it('records it as STREAMED, with the text and usage folded out of the parts', async () => {
+    const c = collectors()
+    const provider = new InstrumentedModelProvider({
+      inner: streamingProvider(textParts('one two three', 'thinking')),
+      recordCall: c.recordCall,
+      workspaceBodiesEnabled: allowBodies,
+      now: (() => {
+        let t = 1000
+        return () => (t += 500)
+      })(),
+    })
+
+    const result = streamText({ model: provider.resolve(ref), prompt: 'hi', providerOptions: tag })
+    let assembled = ''
+    for await (const delta of result.textStream) assembled += delta
+    await flushEmit()
+
+    // The stream itself is untouched: instrumentation observes, it never edits.
+    expect(assembled).toBe('one two three')
+    expect(c.recorded).toHaveLength(1)
+    const call = c.recorded[0]!
+    expect(call).toMatchObject({
+      workspaceId: 'ws_1',
+      executionId: 'exec_1',
+      agentKind: 'judge',
+      // The whole point: a streamed row says so, where a constant `false` reported every one of
+      // these as buffered.
+      streaming: true,
+      promptTokens: 100,
+      cacheReadTokens: 40,
+      cacheWriteTokens: 10,
+      completionTokens: 40,
+      totalTokens: 190,
+      finishReason: 'stop',
+      durationMs: 500,
+      ok: true,
+      errorMessage: null,
+    })
+    // Folded from the deltas, through the SAME readers a buffered reply goes through.
+    const bodies = bodiesOf(call)
+    expect(bodies.responseText).toBe('one two three')
+    expect(bodies.reasoningText).toBe('thinking')
+  })
+
+  it('records a stream the caller ABANDONS, whose tokens were spent all the same', async () => {
+    const c = collectors()
+    const instrumented = new InstrumentedModelProvider({
+      inner: streamingProvider(textParts('one two three')),
+      recordCall: c.recordCall,
+      workspaceBodiesEnabled: allowBodies,
+    })
+    const model = instrumented.resolve(ref)
+    if (typeof model === 'string') throw new Error('expected a model instance')
+
+    // Driven through the model rather than `streamText`, because what is under test is this
+    // wrap's own cancel path: which of the SDK's derived streams forwards a cancel is the SDK's
+    // business, and a test that went through it would be asserting that instead.
+    const { stream } = await model.doStream({
+      prompt: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+      providerOptions: tag,
+    })
+    const reader = stream.getReader()
+    await reader.read()
+    await reader.cancel('caller walked away')
+    await flushEmit()
+
+    const call = c.recorded[0]!
+    expect(call.streaming).toBe(true)
+    // NOT `ok`, and named: an abandoned stream is neither a clean call nor a model failure, and
+    // a row that says which is the difference between "we stopped reading" and "it broke".
+    expect(call.ok).toBe(false)
+    expect(call.errorMessage).toMatch(/stream cancelled/)
+  })
+
+  it('records a stream that never opens, which is where its cause is legible', async () => {
+    const c = collectors()
+    const failing: ModelProvider = {
+      resolve: () =>
+        new MockLanguageModelV3({
+          doStream: async () => {
+            throw new Error('upstream refused the stream')
+          },
+        }),
+    }
+    const instrumented = new InstrumentedModelProvider({
+      inner: failing,
+      recordCall: c.recordCall,
+      workspaceBodiesEnabled: allowBodies,
+    })
+    const model = instrumented.resolve(ref)
+    if (typeof model === 'string') throw new Error('expected a model instance')
+
+    await expect(
+      model.doStream({
+        prompt: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+        providerOptions: tag,
+      }),
+    ).rejects.toThrow(/upstream refused the stream/)
+    await flushEmit()
+
+    expect(c.recorded[0]).toMatchObject({
+      streaming: true,
+      ok: false,
+      errorMessage: 'upstream refused the stream',
+    })
+  })
+
+  it('records an error PART as a failed call, keeping the usage it had already spent', async () => {
+    const c = collectors()
+    const instrumented = new InstrumentedModelProvider({
+      inner: streamingProvider([
+        { type: 'stream-start', warnings: [] },
+        { type: 'text-start', id: '0' },
+        { type: 'text-delta', id: '0', delta: 'half an ans' },
+        { type: 'error', error: new Error('upstream died mid-stream') },
+        { type: 'finish', usage: USAGE, finishReason: { unified: 'error', raw: 'error' } },
+      ]),
+      recordCall: c.recordCall,
+      workspaceBodiesEnabled: allowBodies,
+    })
+    const model = instrumented.resolve(ref)
+    if (typeof model === 'string') throw new Error('expected a model instance')
+
+    const { stream } = await model.doStream({
+      prompt: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+      providerOptions: tag,
+    })
+    const reader = stream.getReader()
+    for (;;) {
+      const { done } = await reader.read()
+      if (done) break
+    }
+    await flushEmit()
+
+    const call = c.recorded[0]!
+    expect(call.ok).toBe(false)
+    expect(call.errorMessage).toMatch(/upstream died mid-stream/)
+    // The tokens were spent before it broke, so they are counted. A failed call is not a free one.
+    expect(call.totalTokens).toBe(190)
   })
 })

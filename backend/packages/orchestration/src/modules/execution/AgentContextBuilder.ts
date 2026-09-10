@@ -890,6 +890,10 @@ export class AgentContextBuilder {
     // is defined whenever a frame resolves (its only consumers read specific fields off it).
     service.type = frame.type
     if (frame.provisioning) service.provisioning = frame.provisioning
+    // Carried verbatim: the write boundary trims what it stores and the prompt renderer answers
+    // the one question anybody asks of this field (is there anything to state), so a third
+    // normalisation here would be one more copy of that rule to keep in step.
+    if (frame.testingContext) service.testingContext = frame.testingContext
     if (frame.cloudProvider) service.cloudProvider = frame.cloudProvider
     else {
       // No per-service override: fall back to the owning account's default provider

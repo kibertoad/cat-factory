@@ -1147,6 +1147,22 @@
       "configNoun": "the sensitive test credentials",
       "duplicateKey": "Each variable name must be unique."
     },
+    "testingContext": {
+      "title": "Testing context",
+      "@title": {
+        "description": "Section header for the freeform notes a team writes about how their service should be tested. 'Context' here means background information for whoever tests it, not a programming context object."
+      },
+      "sectionHint": "Freeform notes about how this service is tested: which flows matter, which test accounts exist and how to sign in as one, what the seeded data means, what to leave alone. Every tester run for this service is handed this text word for word, and so is the environment dry run.",
+      "notSecret": "This text goes straight into the tester's prompt, so keep real secrets out of it. Put a secret in Test credentials above and refer to it here by its variable name.",
+      "placeholder": "e.g. sign in as $DEMO_USER; the seeded tenant is Acme with three projects; never run the billing flow, it charges a real card.",
+      "length": "{count} of {max} characters",
+      "@length": {
+        "description": "Character counter under a long text box. {count} is how many characters are typed so far, {max} the limit."
+      },
+      "save": "Save testing context",
+      "revert": "Discard changes",
+      "savedToast": "Testing context saved"
+    },
     "testConfig": {
       "title": "Test infrastructure",
       "hint": "How a test environment is stood up for this service when a pipeline needs to run it: no infrastructure, a Docker Compose file, Kubernetes manifests, or a custom manifest type.",

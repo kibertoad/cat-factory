@@ -301,6 +301,9 @@ export class ContainerEnvironmentProbeAgent implements EnvironmentProbeAgent {
         service: request.service,
         environment,
         testSecrets: secrets.brief,
+        // Carried straight from the request, which read it off the frame: the prober is told
+        // what the tester will be told, which is the only reason its verdict predicts theirs.
+        ...(request.testingContext ? { testingContext: request.testingContext } : {}),
         repo: {
           owner: repo.owner,
           name: repo.name,

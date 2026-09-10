@@ -587,7 +587,9 @@ export function makeHarnessCallRecorder(
  *   the row share one, and the harness derives one from `(jobId, seq)` so a durable replay is
  *   idempotent. An inline call has neither: it is a single awaited SDK call inside one service
  *   method, so there is no second channel to reconcile with and nothing to re-record.
- * - `streaming` is false — every inline site calls `generateText`, never `streamText`.
+ * - `streaming` is the PRODUCER's answer, passed through. It was a constant `false` here while
+ *   nothing inline could stream; the instrumented provider now wraps `streamText` as well as
+ *   `generateText`, and a constant would have filed the first streamed call as a buffered one.
  * - `phase` is left absent ⇒ the unattributed `''` slice. Phases are boundaries the HARNESS
  *   owns inside a container run; an inline call sits outside all of them, and stamping one
  *   would file it under a loop it never ran in.
@@ -624,7 +626,7 @@ export function makeInlineCallRecorder(
       agentKind: call.agentKind,
       provider: call.provider,
       model: call.model,
-      streaming: false,
+      streaming: call.streaming,
       turnIndex: call.turnIndex ?? null,
       spendOnly: call.spendOnly === true,
       reportedCostUsd: call.reportedCostUsd ?? null,
