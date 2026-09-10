@@ -1257,6 +1257,40 @@ func (s *TaskTypesService) List(ctx context.Context) (*ListPublicTaskTypesRespon
 	return &out, nil
 }
 
+// PromptFragmentsService the best-practice standards this workspace holds its agents to: the deployment's shipped
+// catalog merged with the account's library and this board's own, each with the title an agent
+// cites it by, its one-line summary, its tags and which tier it came from. The id is what a task
+// pins as a `fragmentIds` member, and a review reports how closely it judged the change to follow
+// each standard it was given. The guidance text itself is not served: what a caller needs in
+// order to name a standard is its identity.
+type PromptFragmentsService struct {
+	client *Client
+}
+
+// List list the workspace's best-practice standards
+// List the best-practice standards the key’s workspace resolves: the deployment’s shipped catalog
+// merged with the account’s library and this board’s own, with later tiers overriding earlier
+// ones by id and a tombstoned entry absent. The discovery half of `fragmentIds` on task creation,
+// so the `fragmentId` read here is what a task pins, and an id this list does not carry is
+// refused by the create rather than dropped. Each entry carries what a picker (or a model)
+// decides from (title, category, one-line summary, tags, the `appliesTo` hint and which tier it
+// won on) and deliberately NOT the guidance body, which is the authored text of the org’s
+// standards rather than something a caller has to read in order to name one. A `review` task’s
+// reviewer additionally reports its ADHERENCE to every standard it was given, so what is named on
+// the create comes back rated on the run.
+// GET /api/v1/prompt-fragments (operation listPublicPromptFragments).
+func (s *PromptFragmentsService) List(ctx context.Context) (*PublicPromptFragmentList, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   "/api/v1/prompt-fragments",
+	}
+	var out PublicPromptFragmentList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // UseCasesService the deployment's own non-container model operations: what it will generate for you, on which
 // models, from which parameters, and running one. Each use case narrows the models it may run on
 // and declares the form it accepts, so a wrapper renders a picker from the catalog rather than

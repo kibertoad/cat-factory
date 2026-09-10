@@ -83,6 +83,7 @@ import type {
   PublicNotificationWebhook,
   PublicNotificationWebhookList,
   PublicPipelineList,
+  PublicPromptFragmentList,
   PublicRejectStep,
   PublicReplyFinding,
   PublicRequestGateFix,
@@ -779,6 +780,28 @@ export class TaskTypesResource {
     return this.#transport.request<ListPublicTaskTypesResponse>({
       method: 'GET',
       path: `/api/v1/task-types`,
+      options,
+    })
+  }
+}
+
+/** The best-practice standards this workspace holds its agents to: the deployment's shipped catalog merged with the account's library and this board's own, each with the title an agent cites it by, its one-line summary, its tags and which tier it came from. The id is what a task pins as a `fragmentIds` member, and a review reports how closely it judged the change to follow each standard it was given. The guidance text itself is not served: what a caller needs in order to name a standard is its identity. */
+export class PromptFragmentsResource {
+  readonly #transport: Transport
+
+  constructor(transport: Transport) {
+    this.#transport = transport
+  }
+
+  /**
+   * List the workspace's best-practice standards
+   * List the best-practice standards the key’s workspace resolves: the deployment’s shipped catalog merged with the account’s library and this board’s own, with later tiers overriding earlier ones by id and a tombstoned entry absent. The discovery half of `fragmentIds` on task creation, so the `fragmentId` read here is what a task pins, and an id this list does not carry is refused by the create rather than dropped. Each entry carries what a picker (or a model) decides from (title, category, one-line summary, tags, the `appliesTo` hint and which tier it won on) and deliberately NOT the guidance body, which is the authored text of the org’s standards rather than something a caller has to read in order to name one. A `review` task’s reviewer additionally reports its ADHERENCE to every standard it was given, so what is named on the create comes back rated on the run.
+   * `GET /api/v1/prompt-fragments` — operation `listPublicPromptFragments`.
+   */
+  list(options: RequestOptions = {}): Promise<PublicPromptFragmentList> {
+    return this.#transport.request<PublicPromptFragmentList>({
+      method: 'GET',
+      path: `/api/v1/prompt-fragments`,
       options,
     })
   }
@@ -2315,6 +2338,8 @@ export abstract class CatFactoryResources {
   readonly pipelines: PipelinesResource
   /** What a task can be created AS in this workspace (the built-in kinds plus the operations the deployment registered), and the fields each one accepts. */
   readonly taskTypes: TaskTypesResource
+  /** The best-practice standards this workspace holds its agents to: the deployment's shipped catalog merged with the account's library and this board's own, each with the title an agent cites it by, its one-line summary, its tags and which tier it came from. The id is what a task pins as a `fragmentIds` member, and a review reports how closely it judged the change to follow each standard it was given. The guidance text itself is not served: what a caller needs in order to name a standard is its identity. */
+  readonly promptFragments: PromptFragmentsResource
   /** The deployment's own non-container model operations: what it will generate for you, on which models, from which parameters, and running one. Each use case narrows the models it may run on and declares the form it accepts, so a wrapper renders a picker from the catalog rather than from a hard-coded copy; a model listed as unavailable says whether the deployment cannot serve it at all or has yet to configure the credential. Discovery takes a `read` key, invoking a `write` one: an invocation spends model tokens and returns text, and starts no run. */
   readonly useCases: UseCasesResource
   /** The workspace's human-actionable inbox: list, act on, or dismiss a run tail. */
@@ -2358,6 +2383,7 @@ export abstract class CatFactoryResources {
     this.tasks = new TasksResource(transport)
     this.pipelines = new PipelinesResource(transport)
     this.taskTypes = new TaskTypesResource(transport)
+    this.promptFragments = new PromptFragmentsResource(transport)
     this.useCases = new UseCasesResource(transport)
     this.notifications = new NotificationsResource(transport)
     this.environments = new EnvironmentsResource(transport)

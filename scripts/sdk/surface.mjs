@@ -80,6 +80,14 @@ const SURFACE = {
   // ---- Task types: what a task may be created AS, and the form each one accepts -----------
   listPublicTaskTypes: { group: 'taskTypes', method: 'list' },
 
+  // ---- Best-practice standards: what a task's agents are held TO --------------------------
+  // Its own group rather than a method on `taskTypes`: a task type says what a task IS and which
+  // form it accepts, where a standard is a rule the work is judged against, and the two are picked
+  // by different people for different reasons. `promptFragments` and not `standards`, because
+  // `fragmentIds` is what a caller sends and one vocabulary for one concept beats a prettier name
+  // on one side of the round trip.
+  listPublicPromptFragments: { group: 'promptFragments', method: 'list' },
+
   // ---- Inline use cases: the deployment's own NON-CONTAINER model operations ---------------
   // Their own group rather than methods on `models`: `models.list` answers what this deployment
   // could dispatch to at all, while a use case is a named piece of work with its own narrowed
@@ -343,6 +351,8 @@ export const GROUP_DOCS = {
   pipelines: 'The pipelines a task can be started with, and whether each is headless-startable.',
   taskTypes:
     'What a task can be created AS in this workspace (the built-in kinds plus the operations the deployment registered), and the fields each one accepts.',
+  promptFragments:
+    "The best-practice standards this workspace holds its agents to: the deployment's shipped catalog merged with the account's library and this board's own, each with the title an agent cites it by, its one-line summary, its tags and which tier it came from. The id is what a task pins as a `fragmentIds` member, and a review reports how closely it judged the change to follow each standard it was given. The guidance text itself is not served: what a caller needs in order to name a standard is its identity.",
   useCases:
     "The deployment's own non-container model operations: what it will generate for you, on which models, from which parameters, and running one. Each use case narrows the models it may run on and declares the form it accepts, so a wrapper renders a picker from the catalog rather than from a hard-coded copy; a model listed as unavailable says whether the deployment cannot serve it at all or has yet to configure the credential. Discovery takes a `read` key, invoking a `write` one: an invocation spends model tokens and returns text, and starts no run.",
   notifications: "The workspace's human-actionable inbox: list, act on, or dismiss a run tail.",

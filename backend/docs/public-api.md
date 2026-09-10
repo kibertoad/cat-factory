@@ -1525,6 +1525,82 @@ would have on the workspace default. And pinning a risk policy is a real authori
 in `docs/initiatives/role-scoped-risk-policy-admission.md`: an API key is `UNATTRIBUTED` at the merge
 exits (ADR 0037), so no role-scoped bar narrows what it may select today.
 
+#### Choosing the standards a task is judged against
+
+A workspace curates **best-practice standards**: short pieces of guidance folded into its agents'
+prompts, merged across the deployment's shipped catalog, the account's library and the board's own.
+An agent working under one is held to it, and a reviewer additionally rates how closely the change
+followed each. Which standards apply is a real per-task question (a security sweep, a migration, a
+pull request in a repository whose rules differ from its service's), and until `fragmentIds` a
+headless caller could only take whatever the enclosing service happened to carry.
+
+Read the catalog, then name ids from it:
+
+```http
+GET /api/v1/prompt-fragments
+```
+
+```json
+{
+  "fragments": [
+    {
+      "fragmentId": "node.performance",
+      "title": "Node.js performance",
+      "category": "Node",
+      "summary": "Avoid the allocation and event-loop traps that dominate service latency.",
+      "version": "1.2.0",
+      "tier": "builtin",
+      "tags": [],
+      "appliesTo": { "blockTypes": ["service", "api"] }
+    },
+    {
+      "fragmentId": "acme.security-review",
+      "title": "Security review checklist",
+      "category": "Security",
+      "summary": "What a change touching authentication or tenancy has to satisfy here.",
+      "version": "3.0.0",
+      "tier": "account",
+      "tags": ["security", "auth"]
+    }
+  ]
+}
+```
+
+```http
+POST /api/v1/services/svc_api/tasks
+{ "title": "Review #4558", "taskType": "review",
+  "fields": { "prNumber": 4558 },
+  "fragmentIds": ["acme.security-review", "node.performance"] }
+```
+
+Four rules govern it:
+
+- **`tier` says whose standard it is**, which is what tells an account-wide rule you should not touch
+  apart from one this board authored. Later tiers override earlier ones by id, and a standard a tier
+  has suppressed is simply absent.
+- **The guidance BODY is not served.** What a caller needs in order to name a standard is its
+  identity, and the authored text of an organisation's engineering guidelines is a different thing to
+  publish than a list of what it has written down. That is also why the read sits at `read` while the
+  preset libraries sit at `admin`: a `write` key that may name a standard can read the vocabulary it
+  is naming from.
+- **`appliesTo` is a hint, not a gate.** Nothing refuses a standard whose hint does not name the task
+  it is pinned onto; the platform's own picker uses it to narrow what it OFFERS.
+- **An id the board does not resolve is refused**, `422` with `details.reason:
+'prompt_fragment_not_found'` and `details.fragmentIds` naming every one that missed. A run drops a
+  standard deleted after its task was filed rather than failing, on purpose, and that disposition is
+  wrong at the door: a typo would answer `201` for a review that folded nothing, which reads
+  afterwards exactly like a review nobody asked to be judged against anything. A deployment with no
+  standards library at all answers `503` (`'prompt_fragments_unwired'`), and only to a caller that
+  named standards.
+
+What the task ends up holding is the UNION of what you named with the enclosing service's standing
+standards and the task type's own defaults, and `GET /api/v1/tasks/:taskId` reads it back as
+`fragmentIds`. So an empty create still comes back carrying its service's standards, sending an empty
+array clears that inheritance, and the set is FROZEN at creation: it is what the run folds however the
+library moves afterwards, which is what keeps a finished review's standards readable rather than
+re-derived. There is deliberately no way to change it on the patch, matching what an edit through the
+app does.
+
 ### Task runs & streaming
 
 | Method / path                      | Scope  | Behaviour                                                                         |
@@ -1580,10 +1656,11 @@ poll; for push at scale, register the [outbound webhook](#outbound-webhooks-push
 
 ### Pipelines & task types (discovery)
 
-| Method / path            | Scope  | Behaviour                                                                                                                                        |
-| ------------------------ | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `GET /api/v1/pipelines`  | `read` | The workspace's pipelines (archived excluded): the pipeline projection.                                                                          |
-| `GET /api/v1/task-types` | `read` | What a task may be created as here, and the form each accepts. See [Filling a task type's form](#filling-a-task-types-form) for the field rules. |
+| Method / path                  | Scope  | Behaviour                                                                                                                                        |
+| ------------------------------ | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET /api/v1/pipelines`        | `read` | The workspace's pipelines (archived excluded): the pipeline projection.                                                                          |
+| `GET /api/v1/task-types`       | `read` | What a task may be created as here, and the form each accepts. See [Filling a task type's form](#filling-a-task-types-form) for the field rules. |
+| `GET /api/v1/prompt-fragments` | `read` | The best-practice standards this board holds its agents to. See [Choosing the standards](#choosing-the-standards-a-task-is-judged-against).      |
 
 `public` marks the pipelines `POST /jobs` accepts. `headlessStartable` means every enabled
 step is inline **and** nothing can park on a human: the pipeline can run end-to-end with no
@@ -1891,8 +1968,11 @@ verb below is `decide`.
 #    reference at creation, so a typo'd PR fails HERE rather than as a run that clones a repo and
 #    finds nothing. A `prUrl` naming a DIFFERENT repository than the service reviews is refused
 #    (`review_pr_repo_mismatch`) rather than silently reviewing whatever PR carries that number.
+#    `fragmentIds` names which of the team's own standards this review is judged against, from
+#    `GET /api/v1/prompt-fragments`; omit it to inherit the service's standing set.
 curl -sX POST "$BASE/api/v1/tasks" -H "Authorization: Bearer $KEY" -H 'content-type: application/json'   -d '{"serviceId":"blk_svc","title":"Review #4558","taskType":"review",
-       "fields":{"prUrl":"https://github.com/acme/api/pull/4558"}}'
+       "fields":{"prUrl":"https://github.com/acme/api/pull/4558"},
+       "fragmentIds":["acme.security-review"]}'
 
 # 2. Start it. `review` tasks are pinned to the PR-review pipeline at creation, so the body can be
 #    empty; pass `pipelineId` only to override. The response carries the `runId` step 3 polls.
@@ -1903,6 +1983,10 @@ curl -sX POST "$BASE/api/v1/tasks/$TASK/start" -H "Authorization: Bearer $KEY" -
 #    investigator re-examining one finding, `posting` a publish in progress.
 curl -s "$BASE/api/v1/runs/$RUN/decisions" -H "Authorization: Bearer $KEY"
 ```
+
+Each finding is anchored, prioritised and grouped, and the reviewer also reports its ADHERENCE to
+every standard the task named, so the ids sent on the create come back rated on the run rather than
+only folded into a prompt.
 
 The `pr-review` entry is what you render: `findings` ordered blocker → nit, each with a stable
 `findingId`, its `path`/`line`/`side` anchor, `severity`, `category`, `title`, `detail` and any

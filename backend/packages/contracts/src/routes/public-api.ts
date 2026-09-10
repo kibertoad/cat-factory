@@ -27,6 +27,7 @@ import {
   updatePublicTaskSchema,
 } from '../public-api.js'
 import { publicSpendQuerySchema, publicSpendSchema } from '../public-spend.js'
+import { publicPromptFragmentListSchema } from '../public-fragments.js'
 import { publicTaskTypeListSchema } from '../public-task-types.js'
 import { errorResponses, singleStringParam, withMinScope, withPersonalUnlock } from './_shared.js'
 
@@ -271,6 +272,27 @@ export const listPublicTaskTypesContract = withMinScope(
     method: 'get',
     pathResolver: () => '/api/v1/task-types',
     responsesByStatusCode: { 200: publicTaskTypeListSchema, ...errorResponses },
+  }),
+)
+
+/**
+ * List the best-practice standards this key's workspace resolves, merged across the deployment's
+ * shipped catalog, the account library and the board's own. The discovery half of
+ * `createPublicTaskSchema.fragmentIds`, exactly as the task-type list is of `fields`.
+ *
+ * `read`, like its two discovery siblings and unlike the preset libraries: naming a standard is
+ * something a `write` key does, so a floor above `write` would publish a field whose vocabulary the
+ * key that fills it cannot read, which is the gap `public-provisioning.ts` records against its own
+ * `admin` lists. The projection is what makes that floor honest: it carries each standard's
+ * identity and NOT its `body`, so a `read` key learns what the org has written down without being
+ * served the text of it.
+ */
+export const listPublicPromptFragmentsContract = withMinScope(
+  'read',
+  defineApiContract({
+    method: 'get',
+    pathResolver: () => '/api/v1/prompt-fragments',
+    responsesByStatusCode: { 200: publicPromptFragmentListSchema, ...errorResponses },
   }),
 )
 

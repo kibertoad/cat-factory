@@ -62,7 +62,7 @@ const API_PREFIX = '/api/v1'
 // it against `origin/main` after every merge rather than trusting a clean one, and write the new
 // entry in the history doc, which is what makes the next collision arrive as a conflict.
 
-const API_VERSION = '1.72.0'
+const API_VERSION = '1.73.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a
@@ -120,6 +120,12 @@ const COMPONENT_SCHEMAS = {
   AcknowledgeKaizenEntry: 'acknowledgeKaizenEntrySchema',
   PublicPipeline: 'publicPipelineSchema',
   PublicPipelineList: 'publicPipelineListSchema',
+  // The best-practice standard a task pins, hoisted for the reason the spend rows are: it is a
+  // RESOURCE an integrator writes code against (the `fragmentId` it reads here is the value it
+  // sends back on a create), and left inline it would ship as `ListPublicPromptFragmentsResponse`
+  // / `…ResponseFragment` in four languages.
+  PublicPromptFragment: 'publicPromptFragmentSchema',
+  PublicPromptFragmentList: 'publicPromptFragmentListSchema',
   Notification: 'notificationSchema',
   PublicNotificationList: 'publicNotificationListSchema',
   // The outbound webhook's own configuration, shared with the session-authed surface: the read
@@ -510,6 +516,12 @@ const OPERATION_DOCS = {
     summary: 'List the task types this workspace may create',
     description:
       'List the task types a task can be created as in the key’s workspace (the built-in ones plus any the deployment registered), each with the fields it accepts. Fill those fields through `fields` on task creation; the descriptors here are what that call validates against, so a caller reads the form rather than guessing it. A type a workspace admin has hidden is absent.',
+  },
+  listPublicPromptFragments: {
+    tag: 'Best-practice standards',
+    summary: "List the workspace's best-practice standards",
+    description:
+      'List the best-practice standards the key’s workspace resolves: the deployment’s shipped catalog merged with the account’s library and this board’s own, with later tiers overriding earlier ones by id and a tombstoned entry absent. The discovery half of `fragmentIds` on task creation, so the `fragmentId` read here is what a task pins, and an id this list does not carry is refused by the create rather than dropped. Each entry carries what a picker (or a model) decides from (title, category, one-line summary, tags, the `appliesTo` hint and which tier it won on) and deliberately NOT the guidance body, which is the authored text of the org’s standards rather than something a caller has to read in order to name one. A `review` task’s reviewer additionally reports its ADHERENCE to every standard it was given, so what is named on the create comes back rated on the run.',
   },
   listPublicPipelines: {
     tag: 'Pipelines',

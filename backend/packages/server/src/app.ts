@@ -127,6 +127,7 @@ import { publicSpecController } from './modules/publicApi/PublicSpecController.j
 import { publicMergeEvidenceController } from './modules/publicApi/PublicMergeEvidenceController.js'
 import { publicKaizenController } from './modules/publicApi/PublicKaizenController.js'
 import { publicDiscoveryController } from './modules/publicApi/PublicDiscoveryController.js'
+import { publicFragmentController } from './modules/publicApi/PublicFragmentController.js'
 import { publicUseCaseController } from './modules/publicApi/PublicUseCaseController.js'
 import { publicSpendController } from './modules/publicApi/PublicSpendController.js'
 import { publicKeyController } from './modules/publicApi/PublicKeyController.js'
@@ -223,6 +224,10 @@ function registerPublicApiControllers<E extends AppEnv>(app: Hono<E>): void {
   // deployment's own copy of the spec — the two reads an integration makes before anything else,
   // each of which used to be answerable only by guessing. `read` scope, the floor of the ladder.
   app.route('/', publicDiscoveryController())
+  // The public BEST-PRACTICE-STANDARD catalog (`/api/v1/prompt-fragments`): the workspace's merged
+  // standards library, which is the discovery half of `fragmentIds` on task creation. `read` scope,
+  // and identity-only, the projection carrying no guidance body.
+  app.route('/', publicFragmentController())
   // The public INLINE USE-CASE surface (`/api/v1/use-cases`): the deployment's own non-container
   // model operations, their discovery catalog and the one synchronous invocation. `read` to
   // discover, `write` to run. See backend/docs/inline-use-cases.md.

@@ -42,6 +42,10 @@ export function toPublicTask(block: Block, serviceId: string): PublicTask {
     // The row spells "unpinned" as absent OR as the empty string (`addTask` treats both alike).
     modelPresetId: block.modelPresetId || null,
     riskPolicyId: block.riskPolicyId || null,
+    // The UNION the creation froze (the caller's picks, its service's standing standards and the
+    // task type's defaults), never the caller's own list: what a run folds is this row. Absent on a
+    // task that ended up with none, which is the same fact as an empty selection.
+    fragmentIds: block.fragmentIds ?? [],
   }
 }
 

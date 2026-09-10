@@ -119,6 +119,14 @@ expectMutuallyAssignable<
   sdk.PublicPipelineList,
   v.InferOutput<typeof contracts.publicPipelineListSchema>
 >()
+expectMutuallyAssignable<
+  sdk.PublicPromptFragment,
+  v.InferOutput<typeof contracts.publicPromptFragmentSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicPromptFragmentList,
+  v.InferOutput<typeof contracts.publicPromptFragmentListSchema>
+>()
 expectMutuallyAssignable<sdk.Notification, v.InferOutput<typeof contracts.notificationSchema>>()
 expectMutuallyAssignable<
   sdk.PublicNotificationList,
@@ -481,6 +489,8 @@ const ASSERTED_COMPONENTS = [
   'AcknowledgeKaizenEntry',
   'PublicPipeline',
   'PublicPipelineList',
+  'PublicPromptFragment',
+  'PublicPromptFragmentList',
   'Notification',
   'PublicNotificationList',
   'NotificationWebhook',

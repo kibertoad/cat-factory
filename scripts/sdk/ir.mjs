@@ -133,6 +133,18 @@ const INLINE_ENUM_NAMES = {
   // adding an unrelated field. Nothing in the diff said so; it read as generated churn.
   'follow_up,question': 'PublicFollowUpItemKind',
   'answered,closed,dismissed,filed,pending,queued': 'PublicFollowUpItemStatus',
+  // A board block's TYPE, published by `publicService.type` and now shared verbatim by a
+  // best-practice standard's `appliesTo.blockTypes`, which is walked first alphabetically. Same
+  // precedent as the follow-up pair directly above, and it bit the same way: adding the standards
+  // catalog respelled `PublicServiceType` as `PublicPromptFragmentAppliesToBlockType` in four
+  // released SDKs (the Java model file moved, every Go constant was renamed) and the diff read as
+  // generated churn.
+  'api,database,document,environment,external,frontend,integration,library,queue,service':
+    'PublicServiceType',
+  // The tier a resolved standard won on. Pinned on arrival rather than after the fact: a
+  // three-member set this ordinary is a matter of time before something else carries it, and the
+  // rename it would cause is the one this table exists to prevent.
+  'account,builtin,workspace': 'PublicPromptFragmentTier',
 }
 
 /** OpenAPI/JSON-Schema scalar → IR primitive. */
