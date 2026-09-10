@@ -5,7 +5,6 @@ import {
   CURATION_GATE_TRAIT,
   hasTrait,
   REQUIREMENTS_BRAINSTORM_AGENT_KIND,
-  REQUIREMENTS_REVIEW_AGENT_KIND,
 } from '@cat-factory/agents'
 import {
   dedicatedParkSurface,
@@ -832,15 +831,13 @@ async function liveDialogueDecisions<E extends AppEnv>(
   // together rather than chained. The RESULT order is fixed by the tuple, not by which store
   // answered first, so a caller's decision list does not reshuffle between two polls of one run.
   //
-  // Every one of them is gated on the run's own STEP CHAIN, which is what bounds this by what the
-  // run can produce rather than by what the deployment happens to have wired. Each park is driven
-  // by the review gate on a step of its own kind, so a pipeline without that step cannot be holding
-  // it, and the read would be a round-trip per poll tick answering "no" for the life of a
-  // connection.
+  // Clarity and the brainstorms are gated on the run's own STEP CHAIN, which bounds them by what
+  // the run can produce rather than by what the deployment happens to have wired: each is driven
+  // by the review gate on a step of its own kind, so a pipeline without that step cannot be
+  // holding one, and the read would be a round-trip per poll tick answering "no" for the life of
+  // a connection. Requirements is read whatever the chain carries, for the reason above.
   const [requirementsReview, clarityReview, brainstormSessions] = await Promise.all([
-    requirements && kinds.has(REQUIREMENTS_REVIEW_AGENT_KIND)
-      ? requirements.service.getForBlock(workspaceId, blockId)
-      : null,
+    requirements ? requirements.service.getForBlock(workspaceId, blockId) : null,
     clarity && kinds.has(CLARITY_REVIEW_AGENT_KIND)
       ? clarity.service.getForBlock(workspaceId, blockId)
       : null,

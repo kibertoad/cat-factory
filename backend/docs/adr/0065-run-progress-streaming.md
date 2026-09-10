@@ -77,11 +77,14 @@ clips by length wherever text sits), for the reason the frame's change detector 
 serialized payload rather than a field of it: a rule written per decision kind is one the fifteenth
 kind escapes silently.
 
-**And a tick only issues the reads the run's own step chain can need.** The loop polls once a second
-for up to five minutes, and the decision projection is the body of that poll. Every separately-stored
-park is gated on a step that could produce it: the dialogue reads on the review-gate kinds, the fork
+**And a tick issues few reads.** The loop polls once a second for up to five minutes, and the
+decision projection is the body of that poll. Each separately-stored park it can gate is gated on a
+step that could produce it: the clarity and brainstorm reads on their review-gate kinds, the fork
 read on a step actually carrying `forkDecision`, the interview read on the run being parked on one.
-An ordinary `coder → ci → merger` run therefore pays one read per tick instead of four.
+The requirements review is the exception, read whatever the chain carries, because that read has
+also served an off-path review started from the block inspector since this surface shipped and
+narrowing it would take capability away from a live integration. An ordinary `coder → ci → merger`
+run therefore pays that one read per tick rather than four.
 
 **`read` scope, matching the point read.** Watching what a run is waiting on is a monitoring
 concern; answering is what needs `decide`.
