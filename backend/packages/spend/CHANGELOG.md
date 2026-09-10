@@ -1,5 +1,13 @@
 # @cat-factory/spend
 
+## 0.21.8
+
+### Patch Changes
+
+- Updated dependencies [2cf867d]
+  - @cat-factory/contracts@0.354.0
+  - @cat-factory/kernel@0.346.2
+
 ## 0.21.7
 
 ### Patch Changes
