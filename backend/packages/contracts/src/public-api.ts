@@ -5,6 +5,7 @@ import { descriptorFieldValuesSchema } from './form-fields.js'
 import { notificationSchema } from './notifications.js'
 import { blockTypeSchema, createTaskTypeSchema, taskTypeSchema } from './primitives.js'
 import { publicApiScopeSchema } from './public-api-keys.js'
+import { MAX_FRAGMENT_ID_LENGTH } from './fragment-library.js'
 import { MAX_TASK_FRAGMENTS } from './public-fragments.js'
 import { cursorSchema, epochMsQuerySchema, pageLimitSchema } from './public-paging.js'
 import { taskSourceKindSchema } from './tasks.js'
@@ -503,7 +504,13 @@ export const createPublicTaskSchema = v.object({
   /**
    * The best-practice standards this task's agents are held to, as `fragmentId`s from
    * `GET /api/v1/prompt-fragments`. Omitted ⇒ the enclosing service's standing standards, exactly
-   * as before; an EMPTY array clears that inheritance and pins nothing.
+   * as before; an EMPTY array clears that inheritance.
+   *
+   * Clearing the inheritance is not the same as holding the task to nothing. The chosen
+   * `taskType`'s own defaults still apply on top (a `document` task keeps the platform's writing
+   * standards whatever this field says), because those are what the type MEANS here rather than
+   * something the service passed down. Read back what actually landed on
+   * {@link publicTaskSchema} `fragmentIds`.
    *
    * The discovery pairing is the one `fields` has with `GET /api/v1/task-types`: a caller reads the
    * catalog and names ids from it. What it buys is the choice a review most often needs and could
@@ -525,7 +532,17 @@ export const createPublicTaskSchema = v.object({
    */
   fragmentIds: v.optional(
     v.pipe(
-      v.array(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120))),
+      // The per-id ceiling is the library's own (`MAX_FRAGMENT_ID_LENGTH`), never a tighter number
+      // invented at this door: the catalog read above publishes the ids this field names back, and
+      // a sourced standard's id carries a `src:<sourceId>:` namespace plus its slugified path, so
+      // a shorter cap here would refuse ids the same API had just offered, as a generic length
+      // error, not as the `prompt_fragment_not_found` a caller could act on.
+      v.array(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(MAX_FRAGMENT_ID_LENGTH))),
+      // Deduped BEFORE the cap, so the cap bounds DISTINCT standards, which is what it claims to
+      // bound. Counting repeats would let one id sent a hundred times through while refusing a
+      // genuine selection of {@link MAX_TASK_FRAGMENTS}+1, and would repeat each duplicate in the
+      // `details.fragmentIds` of a refusal a client renders one row per entry from.
+      v.transform((ids) => [...new Set(ids)]),
       v.maxLength(MAX_TASK_FRAGMENTS),
     ),
   ),

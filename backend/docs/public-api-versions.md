@@ -285,13 +285,20 @@ the model, and could not say which of the team's own standards the reviewer was 
 against. The only lever it had was the enclosing SERVICE's standing set, which is the right
 default and aims any change at every other task under that service.
 
-Two decisions a consumer can see. The catalog read carries each standard's identity and NOT its
+Three decisions a consumer can see. The catalog read carries each standard's identity and NOT its
 `body`: naming a standard needs the id, the title, the category, the one-line summary and the
 tags, which is also exactly what the platform's own relevance selector decides from, where the
-body is the authored text of an organisation's guidelines. That is what puts the read at `read`
-rather than at the `admin` the preset libraries take, and it has to be the lower floor of the
-two, because a `write` key may name a standard and a floor above `write` would publish a field
-whose vocabulary the key filling it cannot read.
+body is the authored text of an organisation's guidelines. It still sits at `write` rather than
+`read`, because a standard imported from a repo of Markdown guidelines has no authored summary of
+its own and the importer derives one from the opening of the file: for those entries the summary
+is a capped slice of the guidance, which does not belong behind the most widely handed-out kind of
+key. `write` is exactly the scope that names a standard on a task, so the discovery pairing stays
+whole, and it stays below the `admin` the preset libraries take.
+
+The list is keyset-paginated from this first release (`?limit=`, `?cursor=`, `nextCursor`),
+ordered by `fragmentId`. A tier can link a whole repo directory of guidelines and get one standard
+per Markdown file, so the catalog has no natural ceiling: shipping it unbounded would have left
+only a `/v2` or a silent truncation as the way to add the bound later.
 
 And an id the board does not resolve is REFUSED (`422`, `details.reason:
 'prompt_fragment_not_found'`, `details.fragmentIds` naming every one that missed) where the run
@@ -303,7 +310,8 @@ library, and it fires only for a caller that named standards.
 
 What a caller NOTICES beyond the new field: `PublicTask.fragmentIds` is the UNION the creation
 froze, not an echo of what was sent. A create that names nothing still reads back its service's
-standards, and an empty array is how inheritance is cleared. It is create-only for the reason
-`pipelineId` is, plus one of its own: the frozen set is what the run folds however the library
-moves afterwards, which is what keeps a finished review's standards readable rather than
-re-derived.
+standards, and an empty array clears that inheritance without holding the task to nothing (the
+chosen task type's own defaults still apply, which is visible on a `document` task). It is
+create-only for the reason `pipelineId` is, plus one of its own: the frozen set is what the run
+folds however the library moves afterwards, which is what keeps a finished review's standards
+readable rather than re-derived.

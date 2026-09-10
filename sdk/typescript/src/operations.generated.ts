@@ -225,6 +225,12 @@ export type KaizenListEntriesQuery = {
   since?: number
 }
 
+/** Query parameters for `client.promptFragments.list()`. */
+export type PromptFragmentsListQuery = {
+  limit?: number
+  cursor?: string
+}
+
 /** Query parameters for `client.tasks.listByService()`. */
 export type TasksListByServiceQuery = {
   limit?: number
@@ -795,13 +801,14 @@ export class PromptFragmentsResource {
 
   /**
    * List the workspace's best-practice standards
-   * List the best-practice standards the key’s workspace resolves: the deployment’s shipped catalog merged with the account’s library and this board’s own, with later tiers overriding earlier ones by id and a tombstoned entry absent. The discovery half of `fragmentIds` on task creation, so the `fragmentId` read here is what a task pins, and an id this list does not carry is refused by the create rather than dropped. Each entry carries what a picker (or a model) decides from (title, category, one-line summary, tags, the `appliesTo` hint and which tier it won on) and deliberately NOT the guidance body, which is the authored text of the org’s standards rather than something a caller has to read in order to name one. A `review` task’s reviewer additionally reports its ADHERENCE to every standard it was given, so what is named on the create comes back rated on the run.
+   * List the best-practice standards the key’s workspace resolves: the deployment’s shipped catalog merged with the account’s library and this board’s own, with later tiers overriding earlier ones by id and a tombstoned entry absent. The discovery half of `fragmentIds` on task creation, so the `fragmentId` read here is what a task pins, and an id this list does not carry is refused by the create rather than dropped. Each entry carries what a picker (or a model) decides from (title, category, one-line summary, tags, the `appliesTo` hint and which tier it won on) and deliberately NOT the guidance body, which is the authored text of the org’s standards rather than something a caller has to read in order to name one. Keyset-paginated and ordered by `fragmentId`: a tier can link a whole repo directory of guidelines and get one standard per file, so page with `cursor` until `nextCursor` is null. The scope floor is `write`, the same scope that names a standard on a task, because an imported standard’s one-line summary is derived from the opening of its file, so this list is not free of the org’s own guidance text even without the body. A `review` task’s reviewer additionally reports its ADHERENCE to every standard it was given, so what is named on the create comes back rated on the run.
    * `GET /api/v1/prompt-fragments` — operation `listPublicPromptFragments`.
    */
-  list(options: RequestOptions = {}): Promise<PublicPromptFragmentList> {
+  list(query: PromptFragmentsListQuery = {}, options: RequestOptions = {}): Promise<PublicPromptFragmentList> {
     return this.#transport.request<PublicPromptFragmentList>({
       method: 'GET',
       path: `/api/v1/prompt-fragments`,
+      query,
       options,
     })
   }

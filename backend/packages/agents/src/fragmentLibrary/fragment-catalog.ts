@@ -90,6 +90,11 @@ function recordToEntry(record: PromptFragmentRecord, tier: FragmentTier): Resolv
  * stable id (workspace > account > built-in); a tombstoned record at any tier
  * *suppresses* the id outright. Returns live entries sorted by id.
  *
+ * Sorted by CODE UNIT rather than `localeCompare`, which is ICU- and locale-dependent: workerd and
+ * Node would order the same catalog differently for the same workspace, and `/api/v1` pages this
+ * list with a keyset cursor whose sort key is the id. A cursor is only sound while the order it
+ * was minted under is the order the next page is read in.
+ *
  * `scope` is the resolving workspace and its account, needed only to place a
  * `builtin`-tier entry's generated-brief scope (see {@link CatalogBriefScope}); a managed
  * row carries its own owner, so an override's brief follows the row, not the reader.
@@ -104,7 +109,7 @@ export function mergeCatalog(
   for (const b of builtins) byId.set(b.id, builtinToEntry(b, scope))
   applyTier(byId, accountRows, 'account')
   applyTier(byId, workspaceRows, 'workspace')
-  return [...byId.values()].sort((a, b) => a.id.localeCompare(b.id))
+  return [...byId.values()].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
 }
 
 function applyTier(

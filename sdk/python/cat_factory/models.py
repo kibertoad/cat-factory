@@ -10952,6 +10952,8 @@ class PublicPromptFragmentList:
     """`PublicPromptFragmentList`, as carried on the wire."""
 
     fragments: list[PublicPromptFragment]
+    #: Always present; ``None`` when the server has no value for it.
+    next_cursor: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
     #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
@@ -10961,9 +10963,10 @@ class PublicPromptFragmentList:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicPromptFragmentList":
         """Decode a `PublicPromptFragmentList` from its JSON object."""
-        known = {"fragments"}
+        known = {"fragments", "nextCursor"}
         return cls(
             fragments=[PublicPromptFragment.from_dict(item) for item in data.get("fragments") or []],
+            next_cursor=data.get("nextCursor"),
             extra={k: v for k, v in data.items() if k not in known},
         )
 
@@ -10971,6 +10974,7 @@ class PublicPromptFragmentList:
         """Encode back to the JSON object shape the API expects."""
         out: dict[str, Any] = dict(self.extra)
         out["fragments"] = [_encode(item) for item in self.fragments]
+        out["nextCursor"] = self.next_cursor
         return out
 
 

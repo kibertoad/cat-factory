@@ -2632,6 +2632,8 @@ export interface PublicPromptFragmentAppliesTo {
 
 export interface PublicPromptFragmentList {
   fragments: PublicPromptFragment[]
+  /** Always present; `null` when the server has no value for it. */
+  nextCursor: string | null
 }
 
 export type PublicPromptFragmentTier = 'builtin' | 'account' | 'workspace'

@@ -35,9 +35,22 @@ const tagsSchema = v.array(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLen
  */
 const briefSchema = v.pipe(v.string(), v.trim(), v.maxLength(4000))
 
+/**
+ * The longest a fragment id may be, ANYWHERE one is authored, minted or named.
+ *
+ * One constant rather than a number per surface, because the id vocabulary crosses a boundary the
+ * separate numbers cannot see: `GET /api/v1/prompt-fragments` publishes ids that a task creation
+ * then names back, so a door capping them tighter than the library mints them refuses ids the same
+ * API just offered, and does it as a generic length error rather than as the "no such standard"
+ * the caller could act on. Every producer is held to this (the hand-authored `id` below, the
+ * repo-source mint in `fragment-source.logic.ts`), which is what makes "the catalog serves it ⇒ the
+ * create accepts it" structural rather than a coincidence of two numbers.
+ */
+export const MAX_FRAGMENT_ID_LENGTH = 200
+
 /** Create a hand-authored fragment at a tier. `id` defaults to a slug of the title. */
 export const createPromptFragmentSchema = v.object({
-  id: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200))),
+  id: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(MAX_FRAGMENT_ID_LENGTH))),
   title: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200)),
   category: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(100))),
   summary: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)),
@@ -94,7 +107,7 @@ export const createDocumentFragmentSchema = v.object({
   source: documentSourceKindSchema,
   /** A page id or full page/file URL, resolved by the source's provider. */
   ref: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)),
-  id: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200))),
+  id: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(MAX_FRAGMENT_ID_LENGTH))),
   category: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(100))),
   tags: v.optional(tagsSchema),
   appliesTo: v.optional(appliesToSchema),

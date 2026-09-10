@@ -27,7 +27,10 @@ import {
   updatePublicTaskSchema,
 } from '../public-api.js'
 import { publicSpendQuerySchema, publicSpendSchema } from '../public-spend.js'
-import { publicPromptFragmentListSchema } from '../public-fragments.js'
+import {
+  listPublicPromptFragmentsQuerySchema,
+  publicPromptFragmentListSchema,
+} from '../public-fragments.js'
 import { publicTaskTypeListSchema } from '../public-task-types.js'
 import { errorResponses, singleStringParam, withMinScope, withPersonalUnlock } from './_shared.js'
 
@@ -280,18 +283,25 @@ export const listPublicTaskTypesContract = withMinScope(
  * shipped catalog, the account library and the board's own. The discovery half of
  * `createPublicTaskSchema.fragmentIds`, exactly as the task-type list is of `fields`.
  *
- * `read`, like its two discovery siblings and unlike the preset libraries: naming a standard is
- * something a `write` key does, so a floor above `write` would publish a field whose vocabulary the
- * key that fills it cannot read, which is the gap `public-provisioning.ts` records against its own
- * `admin` lists. The projection is what makes that floor honest: it carries each standard's
- * identity and NOT its `body`, so a `read` key learns what the org has written down without being
- * served the text of it.
+ * `write`, where its two discovery siblings sit at `read`, and the reason is what an entry
+ * CARRIES rather than what the endpoint does. The projection withholds each standard's `body`, but
+ * an imported standard's one-line `summary` is derived from the opening of that body, so this is
+ * not a body-free surface in the strict sense and a `read` floor would put a slice of an org's
+ * authored guidelines behind its most widely handed-out key. `write` is the scope that names a
+ * standard on a task, so the pairing stays exact (a key that can fill `fragmentIds` can read the
+ * vocabulary it fills it from) with nothing published below it. Still under the `admin` the preset
+ * libraries take: naming a standard is not managing one.
+ *
+ * Bounded and keyset-paginated from the first release, unlike the two sibling discovery lists: a
+ * tier can link a repo directory and get one standard per Markdown file, so this catalog has no
+ * natural ceiling the way a deployment's task types do.
  */
 export const listPublicPromptFragmentsContract = withMinScope(
-  'read',
+  'write',
   defineApiContract({
     method: 'get',
     pathResolver: () => '/api/v1/prompt-fragments',
+    requestQuerySchema: listPublicPromptFragmentsQuerySchema,
     responsesByStatusCode: { 200: publicPromptFragmentListSchema, ...errorResponses },
   }),
 )

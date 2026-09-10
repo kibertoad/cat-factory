@@ -425,6 +425,28 @@ func (q *KaizenListEntriesQuery) values() map[string]string {
 	return out
 }
 
+// PromptFragmentsListQuery holds the query parameters for PromptFragmentsService.List.
+type PromptFragmentsListQuery struct {
+	// Limit zero value means "not sent".
+	Limit *int
+	// Cursor zero value means "not sent".
+	Cursor *string
+}
+
+func (q *PromptFragmentsListQuery) values() map[string]string {
+	out := map[string]string{}
+	if q == nil {
+		return out
+	}
+	if q.Limit != nil {
+		out["limit"] = fmt.Sprintf("%v", *q.Limit)
+	}
+	if q.Cursor != nil {
+		out["cursor"] = fmt.Sprintf("%v", *q.Cursor)
+	}
+	return out
+}
+
 // TasksListByServiceQuery holds the query parameters for TasksService.ListByService.
 type TasksListByServiceQuery struct {
 	// Limit zero value means "not sent".
@@ -1275,14 +1297,20 @@ type PromptFragmentsService struct {
 // refused by the create rather than dropped. Each entry carries what a picker (or a model)
 // decides from (title, category, one-line summary, tags, the `appliesTo` hint and which tier it
 // won on) and deliberately NOT the guidance body, which is the authored text of the org’s
-// standards rather than something a caller has to read in order to name one. A `review` task’s
-// reviewer additionally reports its ADHERENCE to every standard it was given, so what is named on
-// the create comes back rated on the run.
+// standards rather than something a caller has to read in order to name one. Keyset-paginated and
+// ordered by `fragmentId`: a tier can link a whole repo directory of guidelines and get one
+// standard per file, so page with `cursor` until `nextCursor` is null. The scope floor is
+// `write`, the same scope that names a standard on a task, because an imported standard’s
+// one-line summary is derived from the opening of its file, so this list is not free of the org’s
+// own guidance text even without the body. A `review` task’s reviewer additionally reports its
+// ADHERENCE to every standard it was given, so what is named on the create comes back rated on
+// the run.
 // GET /api/v1/prompt-fragments (operation listPublicPromptFragments).
-func (s *PromptFragmentsService) List(ctx context.Context) (*PublicPromptFragmentList, error) {
+func (s *PromptFragmentsService) List(ctx context.Context, query *PromptFragmentsListQuery) (*PublicPromptFragmentList, error) {
 	req := requestSpec{
 		Method: "GET",
 		Path:   "/api/v1/prompt-fragments",
+		Query:  query.values(),
 	}
 	var out PublicPromptFragmentList
 	if err := s.client.request(ctx, req, &out); err != nil {

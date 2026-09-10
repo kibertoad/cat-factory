@@ -143,7 +143,7 @@
           },
           "fragmentIds": {
             "items": {
-              "maxLength": 120,
+              "maxLength": 200,
               "minLength": 1,
               "type": "string"
             },
@@ -4907,10 +4907,21 @@
               "$ref": "#/components/schemas/PublicPromptFragment"
             },
             "type": "array"
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
-          "fragments"
+          "fragments",
+          "nextCursor"
         ],
         "type": "object"
       },
@@ -14121,8 +14132,31 @@
     },
     "/api/v1/prompt-fragments": {
       "get": {
-        "description": "List the best-practice standards the key’s workspace resolves: the deployment’s shipped catalog merged with the account’s library and this board’s own, with later tiers overriding earlier ones by id and a tombstoned entry absent. The discovery half of `fragmentIds` on task creation, so the `fragmentId` read here is what a task pins, and an id this list does not carry is refused by the create rather than dropped. Each entry carries what a picker (or a model) decides from (title, category, one-line summary, tags, the `appliesTo` hint and which tier it won on) and deliberately NOT the guidance body, which is the authored text of the org’s standards rather than something a caller has to read in order to name one. A `review` task’s reviewer additionally reports its ADHERENCE to every standard it was given, so what is named on the create comes back rated on the run.",
+        "description": "List the best-practice standards the key’s workspace resolves: the deployment’s shipped catalog merged with the account’s library and this board’s own, with later tiers overriding earlier ones by id and a tombstoned entry absent. The discovery half of `fragmentIds` on task creation, so the `fragmentId` read here is what a task pins, and an id this list does not carry is refused by the create rather than dropped. Each entry carries what a picker (or a model) decides from (title, category, one-line summary, tags, the `appliesTo` hint and which tier it won on) and deliberately NOT the guidance body, which is the authored text of the org’s standards rather than something a caller has to read in order to name one. Keyset-paginated and ordered by `fragmentId`: a tier can link a whole repo directory of guidelines and get one standard per file, so page with `cursor` until `nextCursor` is null. The scope floor is `write`, the same scope that names a standard on a task, because an imported standard’s one-line summary is derived from the opening of its file, so this list is not free of the org’s own guidance text even without the body. A `review` task’s reviewer additionally reports its ADHERENCE to every standard it was given, so what is named on the create comes back rated on the run.",
         "operationId": "listPublicPromptFragments",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "maximum": 100,
+              "minimum": 1,
+              "pattern": "^\\d+$",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -14159,7 +14193,7 @@
         "tags": [
           "Best-practice standards"
         ],
-        "x-min-scope": "read"
+        "x-min-scope": "write"
       }
     },
     "/api/v1/repos": {

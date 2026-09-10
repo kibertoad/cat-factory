@@ -11,10 +11,14 @@ import org.jspecify.annotations.Nullable;
 /**
  * The {@code PublicPromptFragmentList} wire model.
  * @param fragments the {@code fragments} field.
+ * @param nextCursor Always present; {@code null} when the server has no value for it.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record PublicPromptFragmentList(
-    @JsonProperty("fragments") List<PublicPromptFragment> fragments
+    @JsonProperty("fragments") List<PublicPromptFragment> fragments,
+
+    /** Always present; {@code null} when the server has no value for it. */
+    @JsonProperty("nextCursor") @Nullable String nextCursor
 ) {
 
     /** A new builder for {@link PublicPromptFragmentList}. */
@@ -30,6 +34,7 @@ public record PublicPromptFragmentList(
      */
     public static final class Builder {
         private @Nullable List<PublicPromptFragment> fragments;
+        private @Nullable String nextCursor;
 
         /** Set {@code fragments}. */
         public Builder fragments(@Nullable List<PublicPromptFragment> fragments) {
@@ -37,9 +42,15 @@ public record PublicPromptFragmentList(
             return this;
         }
 
+        /** Set {@code nextCursor}. */
+        public Builder nextCursor(@Nullable String nextCursor) {
+            this.nextCursor = nextCursor;
+            return this;
+        }
+
         /** Build the {@link PublicPromptFragmentList}. */
         public PublicPromptFragmentList build() {
-            return new PublicPromptFragmentList(fragments);
+            return new PublicPromptFragmentList(fragments, nextCursor);
         }
     }
 }

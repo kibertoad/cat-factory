@@ -136,6 +136,10 @@ const QUERY_TASKS_LIST_BY_SERVICE: readonly QueryParam[] = [
   { name: 'cursor', required: false },
   { name: 'status', required: false },
 ]
+const QUERY_PROMPT_FRAGMENTS_LIST: readonly QueryParam[] = [
+  { name: 'limit', required: false },
+  { name: 'cursor', required: false },
+]
 const QUERY_USAGE_SPEND: readonly QueryParam[] = [
   { name: 'dimension', required: true },
   { name: 'window', required: false },
@@ -563,10 +567,10 @@ export const CAT_FACTORY_TOOLS: readonly CatFactoryTool[] = [
     group: 'prompt_fragments',
     operationId: 'listPublicPromptFragments',
     readOnly: true,
-    description: 'List the workspace\'s best-practice standards\n\nList the best-practice standards the key’s workspace resolves: the deployment’s shipped catalog merged with the account’s library and this board’s own, with later tiers overriding earlier ones by id and a tombstoned entry absent. The discovery half of `fragmentIds` on task creation, so the `fragmentId` read here is what a task pins, and an id this list does not carry is refused by the create rather than dropped. Each entry carries what a picker (or a model) decides from (title, category, one-line summary, tags, the `appliesTo` hint and which tier it won on) and deliberately NOT the guidance body, which is the authored text of the org’s standards rather than something a caller has to read in order to name one. A `review` task’s reviewer additionally reports its ADHERENCE to every standard it was given, so what is named on the create comes back rated on the run.\n\nCalls `GET /api/v1/prompt-fragments` (operation `listPublicPromptFragments`).',
-    inputSchema: {"type":"object","properties":{},"additionalProperties":false},
-    outputSchema: {"type":"object","properties":{"fragments":{"type":"array","items":{"type":"object","properties":{"appliesTo":{"type":"object","properties":{"agentKinds":{"type":"array","items":{"type":"string"}},"blockTypes":{"type":"array","items":{"type":"string","description":"One of: frontend, service, library, document, api, database, queue, integration, external, environment. A newer deployment may report a member not in this list."}}}},"category":{"type":"string"},"fragmentId":{"type":"string"},"summary":{"type":"string"},"tags":{"type":"array","items":{"type":"string"}},"tier":{"type":"string","description":"One of: builtin, account, workspace. A newer deployment may report a member not in this list."},"title":{"type":"string"},"version":{"type":"string"}}}}}},
-    invoke: (client, args) => client.promptFragments.list(),
+    description: 'List the workspace\'s best-practice standards\n\nList the best-practice standards the key’s workspace resolves: the deployment’s shipped catalog merged with the account’s library and this board’s own, with later tiers overriding earlier ones by id and a tombstoned entry absent. The discovery half of `fragmentIds` on task creation, so the `fragmentId` read here is what a task pins, and an id this list does not carry is refused by the create rather than dropped. Each entry carries what a picker (or a model) decides from (title, category, one-line summary, tags, the `appliesTo` hint and which tier it won on) and deliberately NOT the guidance body, which is the authored text of the org’s standards rather than something a caller has to read in order to name one. Keyset-paginated and ordered by `fragmentId`: a tier can link a whole repo directory of guidelines and get one standard per file, so page with `cursor` until `nextCursor` is null. The scope floor is `write`, the same scope that names a standard on a task, because an imported standard’s one-line summary is derived from the opening of its file, so this list is not free of the org’s own guidance text even without the body. A `review` task’s reviewer additionally reports its ADHERENCE to every standard it was given, so what is named on the create comes back rated on the run.\n\nCalls `GET /api/v1/prompt-fragments` (operation `listPublicPromptFragments`).',
+    inputSchema: {"type":"object","properties":{"limit":{"type":"integer"},"cursor":{"type":"string"}},"additionalProperties":false},
+    outputSchema: {"type":"object","properties":{"fragments":{"type":"array","items":{"type":"object","properties":{"appliesTo":{"type":"object","properties":{"agentKinds":{"type":"array","items":{"type":"string"}},"blockTypes":{"type":"array","items":{"type":"string","description":"One of: frontend, service, library, document, api, database, queue, integration, external, environment. A newer deployment may report a member not in this list."}}}},"category":{"type":"string"},"fragmentId":{"type":"string"},"summary":{"type":"string"},"tags":{"type":"array","items":{"type":"string"}},"tier":{"type":"string","description":"One of: builtin, account, workspace. A newer deployment may report a member not in this list."},"title":{"type":"string"},"version":{"type":"string"}}}},"nextCursor":{"anyOf":[{"type":"string"},{"type":"null"}]}}},
+    invoke: (client, args) => client.promptFragments.list(pick(args, QUERY_PROMPT_FRAGMENTS_LIST)),
   },
   {
     name: 'use_cases_get',

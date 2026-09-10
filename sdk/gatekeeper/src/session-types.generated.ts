@@ -196,8 +196,8 @@ export const SESSION_METHOD_SIGNATURES: readonly SessionMethodSignature[] = [
   },
   {
     name: 'prompt_fragments_list',
-    doc: '  /**\n   * List the workspace\'s best-practice standards\n   *\n   * `GET /api/v1/prompt-fragments`, scope floor `read`.\n   */\n',
-    signature: '  prompt_fragments_list(): Promise<unknown>\n',
+    doc: '  /**\n   * List the workspace\'s best-practice standards\n   *\n   * `GET /api/v1/prompt-fragments`, scope floor `write`.\n   */\n',
+    signature: '  prompt_fragments_list(args?: { limit?: string | number | boolean; cursor?: string | number | boolean }): Promise<unknown>\n',
   },
   {
     name: 'use_cases_get',

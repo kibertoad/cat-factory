@@ -300,6 +300,7 @@ export function createFragmentLibraryModule(
           // invalidation through the library so the eviction policy stays in one place.
           invalidateCatalog: (ownerKind, ownerId) =>
             libraryService.invalidateCatalogTier(ownerKind, ownerId),
+          logger: deps.logger,
         })
       : undefined
 

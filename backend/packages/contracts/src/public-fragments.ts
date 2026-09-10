@@ -1,6 +1,7 @@
 import * as v from 'valibot'
 import { fragmentTierSchema } from './fragment-library.js'
 import { blockTypeSchema } from './primitives.js'
+import { cursorSchema, pageLimitSchema } from './public-paging.js'
 
 // ---------------------------------------------------------------------------
 // The PUBLIC best-practice-standard surface: what `GET /api/v1/prompt-fragments` serves, and the
@@ -16,10 +17,17 @@ import { blockTypeSchema } from './primitives.js'
 //
 // This is a PROJECTION of the merged catalog (built-in ∪ account ∪ workspace, override-by-id,
 // tombstones applied), not the catalog rows: it carries the metadata a picker decides from and NOT
-// the `body`, which is the guidance text itself. That split is the reason the read sits at `read`
-// rather than at the `admin` its sibling libraries take: what a caller needs in order to name a
-// standard is the standard's identity, and the authored text of an org's engineering guidelines is
-// a different thing to publish than a list of what it has written down.
+// the `body`, which is the guidance text itself.
+//
+// Withholding the body is NOT what sets the scope floor, and the difference matters. A standard
+// imported from a repo of Markdown guidelines carries no authored `summary` of its own, so the
+// importer derives one from the first line of the file: for those entries the one-line summary IS
+// the opening of the org's guidance, capped, and a floor argued on "identity, not guidance" would
+// have been argued on a premise that holds for a hand-authored standard and not for an imported
+// one. So the floor is `write`, the scope that NAMES a standard on a task, which keeps the
+// discovery pairing exact (any key that can fill `fragmentIds` can read the vocabulary it fills it
+// from) and puts nothing derived from an org's guidelines behind a read-only key. It stays below
+// the `admin` its sibling libraries take, because naming a standard is not managing one.
 //
 // It is also exactly the shape the platform's OWN relevance selector picks from (kernel's
 // `SelectableFragment`), plus the tier and version a person reads. So a caller choosing standards
@@ -68,11 +76,37 @@ export const publicPromptFragmentSchema = v.object({
 })
 export type PublicPromptFragment = v.InferOutput<typeof publicPromptFragmentSchema>
 
-/** The merged catalog as `GET /api/v1/prompt-fragments` serves it. */
+/** The merged catalog as `GET /api/v1/prompt-fragments` serves it: ONE keyset-paginated page. */
 export const publicPromptFragmentListSchema = v.object({
   fragments: v.array(publicPromptFragmentSchema),
+  /**
+   * Cursor to pass as `?cursor=` for the next page, or null when this was the last page. Same
+   * contract as every other bounded list here: a non-null cursor means "there may be more".
+   *
+   * Paginated from the FIRST release rather than added later, because a catalog is not
+   * self-limiting: a tier can link a repo directory of guidelines and get one standard per
+   * Markdown file, so an org with a few hundred of them would otherwise be served all of them on
+   * every poll. Retrofitting the bound onto a published `{ fragments }` would mean either a `/v2`
+   * or a list that silently starts truncating, which is the one thing this surface may not do.
+   */
+  nextCursor: v.nullable(v.string()),
 })
 export type PublicPromptFragmentList = v.InferOutput<typeof publicPromptFragmentListSchema>
+
+/**
+ * Query params for `GET /api/v1/prompt-fragments`. Ordering is by the stable `fragmentId`, which
+ * is also the cursor's sort key: ids are the merge's own key, so the order is deterministic across
+ * runtimes and pages cannot drift under a concurrent library edit.
+ */
+export const listPublicPromptFragmentsQuerySchema = v.object({
+  /** Rows per page (1..100); omitted → 100. */
+  limit: v.optional(pageLimitSchema),
+  /** Opaque cursor from a previous page's `nextCursor`. */
+  cursor: v.optional(cursorSchema),
+})
+export type ListPublicPromptFragmentsQuery = v.InferOutput<
+  typeof listPublicPromptFragmentsQuerySchema
+>
 
 /**
  * Standards ONE task creation may name.

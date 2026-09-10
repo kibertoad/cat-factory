@@ -174,6 +174,10 @@ const QUERY_TASKS_LIST_BY_SERVICE: readonly GatekeeperQueryParam[] = [
   { name: 'cursor', required: false },
   { name: 'status', required: false },
 ]
+const QUERY_PROMPT_FRAGMENTS_LIST: readonly GatekeeperQueryParam[] = [
+  { name: 'limit', required: false },
+  { name: 'cursor', required: false },
+]
 const QUERY_USAGE_SPEND: readonly GatekeeperQueryParam[] = [
   { name: 'dimension', required: true },
   { name: 'window', required: false },
@@ -798,13 +802,13 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     httpMethod: 'GET',
     path: '/api/v1/prompt-fragments',
     summary: 'List the workspace\'s best-practice standards',
-    minScope: 'read',
+    minScope: 'write',
     readOnly: true,
     result: 'value',
     pathParams: [],
-    queryParams: [],
+    queryParams: QUERY_PROMPT_FRAGMENTS_LIST,
     hasBody: false,
-    invoke: async (client, args) => client.promptFragments.list(),
+    invoke: async (client, args) => client.promptFragments.list(pick(args, QUERY_PROMPT_FRAGMENTS_LIST)),
   },
   {
     name: 'use_cases_get',

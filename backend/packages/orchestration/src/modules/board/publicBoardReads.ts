@@ -190,10 +190,12 @@ export class PublicBoardReads {
    *
    * Separate from {@link addServiceTask} so a caller doing PREPARATORY work for the create can
    * apply the same rule first, without duplicating it or having to create the task to find out.
-   * `POST /api/v1/services/:serviceId/tasks` with a `ticket` is the case: it resolves the tracker
-   * issue before the block exists, and resolving one is an outbound call to the workspace's
-   * tracker, so a bad `serviceId` would otherwise cost a live third-party fetch and be answered
-   * by the 404 it could have had first.
+   * `POST /api/v1/services/:serviceId/tasks` opens with it for two reasons. It resolves tracker
+   * issues and source documents before the block exists, and each is an outbound call to the
+   * workspace's own tracker/wiki that a bad `serviceId` should not have to pay for. And it is the
+   * refusal a caller must READ first regardless of cost: every other check on that route presumes
+   * a service that exists, so one answering ahead of this 404 (an unknown standard, an unfillable
+   * field) describes a request nobody made and sends the integrator to fix the wrong end.
    */
   async assertTaskContainer(workspaceId: string, serviceId: string): Promise<Block> {
     await this.deps.requireWorkspace(workspaceId)

@@ -4695,6 +4695,8 @@ type PublicPromptFragmentAppliesTo struct {
 // PublicPromptFragmentList is the `PublicPromptFragmentList` wire model.
 type PublicPromptFragmentList struct {
 	Fragments []PublicPromptFragment `json:"fragments"`
+	// NextCursor always present; nil when the server has no value for it.
+	NextCursor *string `json:"nextCursor"`
 }
 
 // PublicPromptFragmentTier is the `PublicPromptFragmentTier` vocabulary as carried on the wire.

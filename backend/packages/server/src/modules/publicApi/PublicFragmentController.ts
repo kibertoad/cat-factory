@@ -1,9 +1,10 @@
-import { listPublicPromptFragmentsContract } from '@cat-factory/contracts'
+import { PUBLIC_MAX_PAGE_LIMIT, listPublicPromptFragmentsContract } from '@cat-factory/contracts'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { authorizeOrThrow } from './publicApiAuth.js'
-import { requireFragmentLibrary, toPublicPromptFragment } from './fragmentCatalog.js'
+import { catalogPage, requireFragmentLibrary } from './fragmentCatalog.js'
+import { decodeCursor, encodeCursor } from './publicApiPaging.js'
 
 // The public BEST-PRACTICE-STANDARD catalog: `GET /api/v1/prompt-fragments`.
 //
@@ -19,17 +20,49 @@ import { requireFragmentLibrary, toPublicPromptFragment } from './fragmentCatalo
 // mid-day, and a caller told to pick from an hour-old copy would name an id the create then
 // refuses. The tenant merge behind it is already cached server-side, per workspace, and invalidated
 // by every tier write.
+
+/**
+ * Rows per page when a caller names none. The ceiling rather than a smaller number, because a
+ * catalog is read ONCE to populate a picker and most workspaces fit in a single page: defaulting
+ * lower would make the common case two round trips to learn there was nothing more.
+ */
+const DEFAULT_FRAGMENT_PAGE = PUBLIC_MAX_PAGE_LIMIT
+
 export function publicFragmentController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
   buildHonoRoute(app, listPublicPromptFragmentsContract, async (c) => {
     const auth = await authorizeOrThrow(c, listPublicPromptFragmentsContract.minScope)
     const library = requireFragmentLibrary(c.get('container').fragmentLibrary)
-    const catalog = await library.libraryService.resolvedCatalog(auth.workspaceId)
-    // Catalog order, which is the merge's own (built-in tier first, then the tenant tiers): stable
-    // across calls and the same order the resolved standards reach an agent in, so a caller
-    // rendering this list and a reviewer citing one are reading the same sequence.
-    return c.json({ fragments: catalog.map(toPublicPromptFragment) }, 200)
+    const query = c.req.valid('query')
+    // A malformed cursor is a 400, never a silent page 1 (see the jobs list for the rationale).
+    let afterId: string | undefined
+    if (query.cursor) {
+      const decoded = decodeCursor(query.cursor)
+      if (!decoded) {
+        return c.json({ error: { code: 'invalid_cursor', message: 'Malformed cursor' } }, 400)
+      }
+      afterId = decoded.id
+    }
+    // Catalog order is the merge's own, which is by `fragmentId`, NOT tier-grouped: an entry's
+    // tier says whose standard it is, and a workspace override of a built-in keeps the id it
+    // overrides, so grouping by tier would move a standard around the list on an edit that changed
+    // nothing about it. Ordering by the id is also what makes the keyset cursor sound, since it is
+    // the merge's own key and therefore stable under a concurrent library write.
+    const page = await catalogPage(library, auth.workspaceId, {
+      limit: query.limit ?? DEFAULT_FRAGMENT_PAGE,
+      afterId,
+    })
+    const last = page.fragments[page.fragments.length - 1]
+    return c.json(
+      {
+        fragments: page.fragments,
+        // The sort key IS the id here, so the cursor carries it in both halves, keeping one
+        // cursor shape across every list on this surface.
+        nextCursor: page.hasMore && last ? encodeCursor(last.fragmentId, last.fragmentId) : null,
+      },
+      200,
+    )
   })
 
   return app

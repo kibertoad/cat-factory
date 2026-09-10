@@ -1,3 +1,4 @@
+import { MAX_FRAGMENT_ID_LENGTH } from '@cat-factory/contracts'
 import type { AgentKind, BlockType } from '@cat-factory/kernel'
 import type { FragmentAppliesTo } from '@cat-factory/kernel'
 import { parseSimpleYaml, splitFrontmatter, str, strArray } from '../repoSourceSync/frontmatter.js'
@@ -52,6 +53,39 @@ export function slugFromPath(path: string): string {
 /** Whether a listing entry is a Markdown file we should parse. */
 export function isMarkdownFile(name: string): boolean {
   return /\.md$/i.test(name)
+}
+
+/** Digest length the truncating branch of {@link mintSourcedFragmentId} reserves: `-` + 8 hex. */
+const PATH_DIGEST_CHARS = 9
+
+/**
+ * The id a repo-sourced file gets when it declares none: `src:<sourceId>:<slug>`, namespaced so
+ * two sources cannot collide (an explicit frontmatter `id` instead SHADOWS a built-in, ADR 0006).
+ *
+ * Bounded by {@link MAX_FRAGMENT_ID_LENGTH}, which is what keeps the id the public catalog
+ * publishes one the public create can name back. A deep directory of guidelines reaches that
+ * ceiling on ordinary paths, so the over-long case truncates the slug and appends a digest of the
+ * whole of it: truncation ALONE would be the wrong shape here, because sibling files in a deep tree
+ * share their leading path and differ in the filename, which is exactly the half a prefix cut
+ * throws away. The prefix is `src:` plus a minted source id (~36 chars), so the readable head keeps
+ * the bulk of the budget.
+ */
+export function mintSourcedFragmentId(sourceId: string, path: string): string {
+  const prefix = `src:${sourceId}:`
+  const slug = slugFromPath(path)
+  if (prefix.length + slug.length <= MAX_FRAGMENT_ID_LENGTH) return prefix + slug
+  const head = slug.slice(0, MAX_FRAGMENT_ID_LENGTH - prefix.length - PATH_DIGEST_CHARS)
+  return `${prefix}${head}-${digest(slug)}`
+}
+
+/** FNV-1a/32 as 8 hex chars: a stable, dependency-free disambiguator, never a security claim. */
+function digest(value: string): string {
+  let hash = 0x811c9dc5
+  for (let i = 0; i < value.length; i++) {
+    hash ^= value.charCodeAt(i)
+    hash = Math.imul(hash, 0x01000193) >>> 0
+  }
+  return hash.toString(16).padStart(8, '0')
 }
 
 /**

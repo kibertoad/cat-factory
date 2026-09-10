@@ -29,6 +29,13 @@ public final class PromptFragmentsClient {
     }
 
     /**
+     * List the workspace's best-practice standards (no query parameters).
+     */
+    public PublicPromptFragmentList list() {
+        return list(PromptFragmentsListQuery.none());
+    }
+
+    /**
      * List the workspace's best-practice standards
      * List the best-practice standards the key’s workspace resolves: the deployment’s shipped
      * catalog merged with the account’s library and this board’s own, with later tiers overriding
@@ -37,12 +44,17 @@ public final class PromptFragmentsClient {
      * not carry is refused by the create rather than dropped. Each entry carries what a picker (or
      * a model) decides from (title, category, one-line summary, tags, the `appliesTo` hint and
      * which tier it won on) and deliberately NOT the guidance body, which is the authored text of
-     * the org’s standards rather than something a caller has to read in order to name one. A
-     * `review` task’s reviewer additionally reports its ADHERENCE to every standard it was given,
-     * so what is named on the create comes back rated on the run.
+     * the org’s standards rather than something a caller has to read in order to name one.
+     * Keyset-paginated and ordered by `fragmentId`: a tier can link a whole repo directory of
+     * guidelines and get one standard per file, so page with `cursor` until `nextCursor` is null.
+     * The scope floor is `write`, the same scope that names a standard on a task, because an
+     * imported standard’s one-line summary is derived from the opening of its file, so this list
+     * is not free of the org’s own guidance text even without the body. A `review` task’s reviewer
+     * additionally reports its ADHERENCE to every standard it was given, so what is named on the
+     * create comes back rated on the run.
      * {@code GET /api/v1/prompt-fragments} (operation {@code listPublicPromptFragments}).
      */
-    public PublicPromptFragmentList list() {
-        return transport.request("GET", "/api/v1/prompt-fragments", null, Map.of(), new TypeReference<PublicPromptFragmentList>() {});
+    public PublicPromptFragmentList list(PromptFragmentsListQuery query) {
+        return transport.request("GET", "/api/v1/prompt-fragments", null, query.toQuery(), new TypeReference<PublicPromptFragmentList>() {});
     }
 }

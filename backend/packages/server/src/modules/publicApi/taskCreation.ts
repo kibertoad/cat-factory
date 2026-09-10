@@ -14,8 +14,13 @@ import { resolveTicket } from './ticketLinkage.js'
 // until the block exists (a link column can only name a row that is there) and refusals that must
 // all land before one does. The rule the sequence below encodes, in one sentence:
 //
-//   everything refusable is refused before the board changes, and everything that can only name
-//   an existing block runs after, taking the task back off the board if it does not land.
+//   everything refusable is refused before the board changes, the container first of all, and
+//   everything that can only name an existing block runs after, taking the task back off the
+//   board if it does not land.
+//
+// "The container first of all" is a rule about which refusal a caller READS. Every other check
+// here presumes a service that exists, so any of them answering ahead of the 404 describes a
+// request the caller did not make.
 //
 // The failure it exists to prevent is not a lost write, it is a QUIET one: a `201` for a task the
 // caller believes carries its ticket and its spec, running on its title alone, with an agent
@@ -77,9 +82,18 @@ export async function createTaskWithAttachments(
   // is a pure, deterministic refusal, so it must land ahead of the outbound ticket/document
   // fetches, exactly like the container check below.
   const taskTypeFields = resolveTaskTypeFields(body, deps.taskTypeRegistry)
-  // Same rule, same place: a standard the workspace does not resolve is refused before anything is
-  // fetched or written. See `fragmentCatalog.ts` for why the run path's "drop a stale id" is the
-  // wrong disposition for a list a caller just named.
+  // The container is checked before anything is fetched, read per workspace, or written, and
+  // UNCONDITIONALLY, not only when there is an outbound fetch to save. A `serviceId` that names
+  // nothing is the caller's most basic mistake, and every refusal that runs ahead of it answers a
+  // request about a service that does not exist by complaining about something else: a typo'd
+  // path carrying an unknown standard would come back `422 prompt_fragment_not_found`, telling the
+  // integrator its service was fine and sending it to fix the wrong end. `addServiceTask`
+  // re-applies the same rule (it is the one that must hold at the moment of the write); this moves
+  // the cheap, deterministic half of it in front of everything.
+  await deps.boardService.assertTaskContainer(workspaceId, serviceId)
+  // Then the standards: one the workspace does not resolve is refused before anything is fetched
+  // or written. See `fragmentCatalog.ts` for why the run path's "drop a stale id" is the wrong
+  // disposition for a list a caller just named.
   await assertFragmentsResolvable(deps.fragmentLibrary, workspaceId, body.fragmentIds)
   // `modelPresetId`, `riskPolicyId` and `fragmentIds` ride the spread because the public surface
   // spells each exactly as `AddTaskInput` does, which is the ONE reason a spread is safe here and
@@ -87,14 +101,6 @@ export async function createTaskWithAttachments(
   // `addServiceTask`'s to refuse, on the service where every other door reaches it too
   // (`presetPinGuard.ts`); the standards were settled a few lines up, at this door.
   const input = { ...rest, ...(taskTypeFields ? { taskTypeFields } : {}) }
-  if (ticket || documents?.length) {
-    // The container is checked FIRST because resolving a ticket or a source document is an
-    // outbound call to the workspace's own tracker/wiki: a bad `serviceId` should be answered by
-    // the 404 it could have had for free, not paid for with a live third-party fetch.
-    // `addServiceTask` re-applies the same rule (it is the one that must hold at the moment of the
-    // write); this only moves the cheap, deterministic half of it in front of the expensive work.
-    await deps.boardService.assertTaskContainer(workspaceId, serviceId)
-  }
   const linkage = ticket ? await resolveTicket(deps, workspaceId, ticket) : null
   const attachment = documents?.length ? await resolveDocuments(deps, workspaceId, documents) : null
 

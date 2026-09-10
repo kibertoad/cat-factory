@@ -852,7 +852,7 @@ class PromptFragmentsResource:
     def __init__(self, transport: Transport) -> None:
         self._transport = transport
 
-    def list(self, *, timeout: float | None = None) -> PublicPromptFragmentList:
+    def list(self, *, limit: int | None = None, cursor: str | None = None, timeout: float | None = None) -> PublicPromptFragmentList:
         """List the workspace's best-practice standards
         List the best-practice standards the key’s workspace resolves: the deployment’s
         shipped catalog merged with the account’s library and this board’s own, with later
@@ -862,15 +862,21 @@ class PromptFragmentsResource:
         dropped. Each entry carries what a picker (or a model) decides from (title,
         category, one-line summary, tags, the `appliesTo` hint and which tier it won on) and
         deliberately NOT the guidance body, which is the authored text of the org’s
-        standards rather than something a caller has to read in order to name one. A
-        `review` task’s reviewer additionally reports its ADHERENCE to every standard it was
-        given, so what is named on the create comes back rated on the run.
+        standards rather than something a caller has to read in order to name one.
+        Keyset-paginated and ordered by `fragmentId`: a tier can link a whole repo directory
+        of guidelines and get one standard per file, so page with `cursor` until
+        `nextCursor` is null. The scope floor is `write`, the same scope that names a
+        standard on a task, because an imported standard’s one-line summary is derived from
+        the opening of its file, so this list is not free of the org’s own guidance text
+        even without the body. A `review` task’s reviewer additionally reports its ADHERENCE
+        to every standard it was given, so what is named on the create comes back rated on
+        the run.
         `GET /api/v1/prompt-fragments` (operation `listPublicPromptFragments`).
         """
         raw = self._transport.request(
             "GET",
             f"/api/v1/prompt-fragments",
-            query=None,
+            query={"limit": limit, "cursor": cursor},
             timeout=timeout,
         )
         return PublicPromptFragmentList.from_dict(raw)
