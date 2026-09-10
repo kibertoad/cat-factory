@@ -717,6 +717,7 @@
         "adoption_plan_unavailable": "Aucun plan à approuver",
         "monorepo_directory_taken": "Ce répertoire existe déjà",
         "no_expedition": "Cette exécution ne comporte aucune pêche aux bogues",
+        "expedition_settled": "Cette expédition est déjà terminée",
         "not_awaiting_triage": "Cette expédition n'attend pas de tri",
         "already_addressed": "Certaines constatations ont déjà une tâche de correction",
         "no_host_frame": "Cette expédition n'est sous aucun service"
@@ -770,6 +771,7 @@
         "adoption_plan_unavailable": "L’analyse n’a pas pu en produire, il n’y a donc aucune décision à envoyer.",
         "monorepo_directory_taken": "Un bootstrap crée un nouveau service. Choisissez un répertoire qui n’existe pas encore, ou importez l’existant comme service.",
         "no_expedition": "L'exécution que vous consultez ne porte aucun état d'expédition : il n'y a rien à trier. Rechargez l'exécution et réessayez.",
+        "expedition_settled": "L'exécution a dépassé son étape de pêche aux bogues : il n'y a plus rien à marquer ni à écarter. Rechargez l'exécution pour voir ce qu'elle a trouvé et quels constats ont été traités.",
         "not_awaiting_triage": "Soit elle explore encore un autre angle, soit elle est déjà terminée. Rechargez l'exécution pour voir où elle en est.",
         "already_addressed": "Une tâche de correction a déjà été créée pour elles ; rien n'a donc été recréé. Ouvrez la constatation pour rejoindre la tâche existante.",
         "no_host_frame": "Une tâche de correction a besoin d'un service où vivre et d'un dépôt à corriger. Déplacez la tâche d'expédition sous un cadre de service et réessayez."

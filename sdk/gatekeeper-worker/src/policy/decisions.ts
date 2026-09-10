@@ -80,6 +80,17 @@ export interface DecisionField {
   required: boolean
   /** The closed set of values, when there is one. */
   choices?: readonly string[]
+  /**
+   * What SHAPE the value takes. Absent reads as `text`, which is what every field but the two
+   * finding selections is.
+   *
+   * Declared rather than inferred from the name, for the two readers that cannot guess it. A
+   * gadget rendering the form needs to offer a multi-select where the platform expects a list,
+   * and a caller handed a single-value box would send the one id it could type. The argument
+   * suite needs it to compose an answer a verb accepts at all: a required list filled with a
+   * string is refused by the verb before the check under test ever sees the bag.
+   */
+  shape?: 'text' | 'list'
   detail: string
 }
 
@@ -138,6 +149,22 @@ function choice(input: AnswerFields, field: string, allowed: readonly string[]):
 /** A required id the caller picks out of the decision (an item, a finding, a question). */
 function pick(input: AnswerFields, field: string, from: string): string {
   return text(input, field, `the id of the ${from} this answer addresses`)
+}
+
+/**
+ * A required, non-empty list of ids.
+ *
+ * Its own reader rather than an `Array.isArray` at the call site, because the EMPTY array is the
+ * case worth naming: the platform refuses it with a schema message about `minLength`, and a caller
+ * that sent `[]` meaning "all of them" would read that as a shape problem rather than as the
+ * platform declining to guess which findings it was asked to act on.
+ */
+function idList(input: AnswerFields, field: string, from: string): string[] {
+  const value = input[field]
+  if (!Array.isArray(value) || value.length === 0 || value.some((id) => typeof id !== 'string')) {
+    refuse(field, `a non-empty list of ${from} ids`)
+  }
+  return value as string[]
 }
 
 /** A string field of the live decision, or a refusal naming what the platform did not send. */
@@ -558,6 +585,7 @@ const ANSWERERS = {
           {
             name: 'findingIds',
             required: false,
+            shape: 'list',
             detail:
               'The findings to act on. Omitted reads as an empty selection, which only `finish` accepts.',
           },
@@ -604,6 +632,65 @@ const ANSWERERS = {
             body: optionalText(input, 'question'),
           },
         }),
+      },
+    ],
+  },
+  'bug-fishing': {
+    summary:
+      'A read-only expedition has been hunting a codebase and is waiting for its catch to be ' +
+      'triaged. Marking a finding SPAWNS a bug-fix task and starts its run.',
+    // Both live states, not just the park. Marking is accepted while later angles are still being
+    // fished, which is the whole reason the angles run as separate passes: a completed angle's
+    // findings are actionable the moment they land. Written as an explicit pair rather than
+    // `!== 'done'`, so a status added later reads as NOT pending, which is the rule this field's
+    // contract states.
+    pending: (decision) => decision.status === 'awaiting_triage' || decision.status === 'fishing',
+    verbs: [
+      {
+        action: 'address',
+        binding: 'decisions_address_bug_fishing_findings',
+        summary: 'Mark findings to be fixed. Each one spawns its own bug-fix task and starts it.',
+        fields: [
+          {
+            name: 'findingIds',
+            required: true,
+            shape: 'list',
+            detail: 'The findings to act on. At least one; each spawns a task of its own.',
+          },
+          {
+            name: 'pipelineId',
+            required: false,
+            detail:
+              'Pipeline the spawned tasks run. Omitted uses the expedition’s own default, which ' +
+              'it publishes as `defaultFixPipelineId`.',
+          },
+        ],
+        call: (_decision, input) => ({
+          binding: 'decisions_address_bug_fishing_findings',
+          args: {
+            body: {
+              findingIds: idList(input, 'findingIds', 'finding'),
+              ...optionalText(input, 'pipelineId'),
+            },
+          },
+        }),
+      },
+      {
+        action: 'dismiss-finding',
+        binding: 'decisions_dismiss_bug_fishing_finding',
+        summary: 'Drop one finding from triage. It stays on the record and the run stays put.',
+        fields: [{ name: 'findingId', required: true, detail: 'The finding’s stable id.' }],
+        call: (_decision, input) => ({
+          binding: 'decisions_dismiss_bug_fishing_finding',
+          args: { findingId: pick(input, 'findingId', 'finding') },
+        }),
+      },
+      {
+        action: 'resolve',
+        binding: 'decisions_resolve_bug_fishing',
+        summary: 'Finish triaging and advance the run. Anything still unmarked stays unacted on.',
+        fields: [],
+        call: () => ({ binding: 'decisions_resolve_bug_fishing', args: {} }),
       },
     ],
   },

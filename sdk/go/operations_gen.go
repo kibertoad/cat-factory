@@ -627,7 +627,9 @@ func (s *JobsService) ListAll(ctx context.Context, query *JobsListQuery) iter.Se
 
 // Stream stream a job (SSE)
 // Server-sent events for a headless job run: `progress` frames until a terminal
-// `done`/`error`/`stopped`/`timeout` event. Authenticated by the API key header.
+// `done`/`error`/`stopped`/`timeout` event, plus a `decision` frame announcing each park. For
+// what the run is asking, and how a chunked operation is progressing through it, stream `GET
+// /api/v1/runs/{runId}/decision-events` beside this. Authenticated by the API key header.
 // GET /api/v1/jobs/{id}/events (operation streamPublicJobEvents).
 func (s *JobsService) Stream(ctx context.Context, id string) (*EventStream, error) {
 	req := requestSpec{
@@ -1199,8 +1201,10 @@ func (s *TasksService) Stop(ctx context.Context, taskID string) (*PublicTask, er
 
 // Stream stream a task run (SSE)
 // Server-sent events for a board task run: `progress` frames (the rich run projection) until a
-// terminal `done`/`error` event, or a `timeout` when the connection cap is reached. Authenticated
-// by the API key header.
+// terminal `done`/`error` event, or a `timeout` when the connection cap is reached, plus a
+// `decision` frame announcing each park. For what the run is asking, and how a chunked operation
+// is progressing through it, stream `GET /api/v1/runs/{runId}/decision-events` beside this.
+// Authenticated by the API key header.
 // GET /api/v1/tasks/{taskId}/events (operation streamPublicTaskRun).
 func (s *TasksService) Stream(ctx context.Context, taskID string) (*EventStream, error) {
 	req := requestSpec{
@@ -1944,6 +1948,29 @@ type DecisionsService struct {
 	client *Client
 }
 
+// AddressBugFishingFindings mark bug-fishing findings to be addressed
+// Spawn one bug-fix task per named finding, each linked back to the expedition and started
+// immediately. Accepted while the expedition is still fishing later angles as well as once it
+// parks, because the findings of a completed angle are actionable the moment they land.
+// `pipelineId` overrides, for this request only, the pipeline the spawned tasks run; omitting it
+// uses the default the expedition resolved, which the decision publishes as
+// `defaultFixPipelineId`. An unknown id, or one whose finding already has a live spawn, is
+// refused rather than skipped. Requires a `decide`-scope key.
+// POST /api/v1/runs/{runId}/decisions/bug-fishing/address (operation
+// addressPublicRunBugFishingFindings).
+func (s *DecisionsService) AddressBugFishingFindings(ctx context.Context, runID string, body AddressPublicRunBugFishingFindingsRequest) (*PublicDecisionList, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/bug-fishing/address", pathEscape(runID)),
+		Body:   body,
+	}
+	var out PublicDecisionList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // AnswerAgentDecision answer an agent-raised decision
 // Answer a question an agent raised mid-work. Resolving RE-RUNS the asking step with the choice
 // folded in, rather than advancing past it. The choice is taken verbatim, so it may be one of the
@@ -2109,6 +2136,24 @@ func (s *DecisionsService) ContinueInterview(ctx context.Context, runID string) 
 	req := requestSpec{
 		Method: "POST",
 		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/interview/continue", pathEscape(runID)),
+	}
+	var out PublicDecisionList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// DismissBugFishingFinding dismiss a bug-fishing finding
+// Drop one finding from triage. It stays on the record of the expedition, struck through, and is
+// no longer markable. Curation rather than a resolution: the run stays exactly where it is.
+// Requires a `decide`-scope key.
+// POST /api/v1/runs/{runId}/decisions/bug-fishing/findings/{findingId}/dismiss (operation
+// dismissPublicRunBugFishingFinding).
+func (s *DecisionsService) DismissBugFishingFinding(ctx context.Context, runID string, findingID string) (*PublicDecisionList, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/bug-fishing/findings/%s/dismiss", pathEscape(runID), pathEscape(findingID)),
 	}
 	var out PublicDecisionList
 	if err := s.client.request(ctx, req, &out); err != nil {
@@ -2525,6 +2570,23 @@ func (s *DecisionsService) ResolveBrainstormExceeded(ctx context.Context, runID 
 	return &out, nil
 }
 
+// ResolveBugFishing finish a bug-fishing expedition
+// Finish triaging and advance the run past the step. Anything still unmarked stays unacted on,
+// which is why this is a separate verb rather than something marking implies. Requires a
+// `decide`-scope key.
+// POST /api/v1/runs/{runId}/decisions/bug-fishing/resolve (operation resolvePublicRunBugFishing).
+func (s *DecisionsService) ResolveBugFishing(ctx context.Context, runID string) (*PublicDecisionList, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/bug-fishing/resolve", pathEscape(runID)),
+	}
+	var out PublicDecisionList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // ResolveClarityExceeded resolve a clarity review at its iteration cap
 // Pick how a clarity review that exhausted its pass budget proceeds: one more round, proceed with
 // the last clarified report, or stop and reset the task. Requires a `decide`-scope key.
@@ -2728,6 +2790,22 @@ func (s *DecisionsService) SetFindingStatus(ctx context.Context, runID string, i
 		return nil, err
 	}
 	return &out, nil
+}
+
+// Stream stream a run’s parked decisions (SSE)
+// Server-sent events over the run’s whole decision list: a `decision-state` frame carrying the
+// same payload `GET /api/v1/runs/{runId}/decisions` serves, pushed whenever it changes, then a
+// terminal `done` when the run settles or a `timeout` at the connection cap. This is how a
+// chunked operation reports progress: a PR deep review’s slice count, a bug-fishing angle landing
+// and a challenge verdict all move the decision list without moving the run, so they produce no
+// `progress` frame on the run streams. Authenticated by the API key header.
+// GET /api/v1/runs/{runId}/decision-events (operation streamPublicRunDecisions).
+func (s *DecisionsService) Stream(ctx context.Context, runID string) (*EventStream, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   fmt.Sprintf("/api/v1/runs/%s/decision-events", pathEscape(runID)),
+	}
+	return s.client.stream(ctx, req)
 }
 
 // DebugService a run's recorded telemetry: LLM calls, the context each agent was given, the tool calls it

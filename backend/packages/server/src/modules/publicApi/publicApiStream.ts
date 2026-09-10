@@ -1,11 +1,19 @@
-import type { ExecutionStatus, PublicRun, PublicRunStep } from '@cat-factory/contracts'
+import type {
+  ExecutionStatus,
+  PublicDecisionList,
+  PublicRun,
+  PublicRunStep,
+} from '@cat-factory/contracts'
 
-// Park announcement for the public SSE streams (`/api/v1/jobs/:id/events` and the board task
-// stream). Extracted from `PublicApiController` because BOTH streams need identical behaviour and
-// the state is exactly the kind that drifts when copy-pasted: one loop re-arming on resume and the
-// other not is invisible in review and only shows up as a second park nobody was told about.
+// The pure decisions the public SSE streams share: when a park is announced, when a decision list
+// counts as moved, and how a frame is reduced for the wire. The loops themselves are in
+// `publicApiStreamRoutes.ts`.
 //
-// It is also the only part of the stream loop that is unit-testable at all — everything around it
+// Split out because BOTH streams need identical behaviour and this is exactly the kind of state
+// that drifts when copy-pasted: one loop re-arming on resume and the other not is invisible in
+// review and only shows up as a second park nobody was told about.
+//
+// It is also the only part of the stream loop that is unit-testable at all: everything around it
 // is a live poll over the store behind a hijacked response.
 
 /**
@@ -42,6 +50,35 @@ export function createParkAnnouncer(): {
       }
       if (announced) return false
       announced = true
+      return true
+    },
+  }
+}
+
+/**
+ * Tracks the last DECISION payload written, so a `decision-state` frame is emitted only when the
+ * run's decision list actually moved.
+ *
+ * The counterpart of {@link createParkAnnouncer}, and it fails the same two invisible ways. A
+ * detector that always fires turns a park into an unbounded stream of identical payloads, since a
+ * park lasts as long as a human takes and the projection is rebuilt every tick. One that latches
+ * and never re-arms delivers the first state and then goes quiet, which is the failure the channel
+ * exists to prevent: a review whose slices report one by one would report the first and nothing
+ * after it, and a caller cannot tell that from a reviewer that stopped.
+ *
+ * Compared on the SERIALIZED payload rather than a field of it, for the reason the progress frames
+ * beside it are: what counts as "moved" is decided by the whole projection, so a decision kind that
+ * grows a field is covered with no edit here.
+ */
+export function createDecisionAnnouncer(): {
+  /** Feed each tick's serialized decision list; true exactly when it should be written. */
+  shouldAnnounce: (payload: string) => boolean
+} {
+  let last: string | null = null
+  return {
+    shouldAnnounce(payload: string): boolean {
+      if (payload === last) return false
+      last = payload
       return true
     },
   }
@@ -93,4 +130,53 @@ function reduceStepForStream(step: PublicRunStep): PublicRunStep {
     data: withheld ? null : step.data,
     truncated: true,
   }
+}
+
+/**
+ * Per-string character cap on the model-authored text a DECISION frame carries.
+ *
+ * Smaller than {@link STREAM_DELIVERABLE_PREVIEW_CHARS}, which bounds the same class of content on
+ * the run streams, and the difference is what the cap is paid PER. The run stream pays it once per
+ * step, so a pipeline's length bounds the frame; a decision list pays it once per string in a list
+ * the RUN sizes (a deep review parks with one finding per issue it found, each carrying a detail,
+ * an evidence quote and a suggested fix), so the same number would still let one frame reach
+ * hundreds of kilobytes and be re-sent on every change.
+ *
+ * Sized as a preview a caller can act on: enough to recognise what a finding is about and decide
+ * whether to fetch it whole, which is what `GET /api/v1/runs/{runId}/decisions` is for.
+ */
+export const STREAM_DECISION_TEXT_PREVIEW_CHARS = 1_000
+
+/**
+ * Reduce a decision list for an SSE frame: clip every over-long string to a preview and report the
+ * clip on the list's own `truncated` flag.
+ *
+ * Kind-AGNOSTIC by construction, for the same reason {@link createDecisionAnnouncer} compares the
+ * serialized payload rather than a field of it: what a decision kind carries is decided by that
+ * kind, so a rule written per kind is one a new kind (or a new field on an old one) silently
+ * escapes. Clipping by LENGTH wherever the text sits covers all fourteen with no edit, and the ids,
+ * statuses, counts and enums a caller routes on are short by construction, so nothing it acts on
+ * is what gets clipped.
+ *
+ * What is NEVER reduced is the list itself. Every decision the run is asking is in every frame,
+ * because an empty `decisions` that means "this payload was narrowed" and one that means "nothing
+ * is being asked" are opposite facts, and telling them apart is the whole job of this surface.
+ */
+export function reduceDecisionsForStream(list: PublicDecisionList): PublicDecisionList {
+  let clipped = false
+  const clip = (value: unknown): unknown => {
+    if (typeof value === 'string') {
+      if (value.length <= STREAM_DECISION_TEXT_PREVIEW_CHARS) return value
+      clipped = true
+      return value.slice(0, STREAM_DECISION_TEXT_PREVIEW_CHARS)
+    }
+    if (Array.isArray(value)) return value.map(clip)
+    if (value && typeof value === 'object') {
+      return Object.fromEntries(Object.entries(value).map(([key, v]) => [key, clip(v)]))
+    }
+    return value
+  }
+  const decisions = clip(list.decisions) as PublicDecisionList['decisions']
+  const unanswerable = clip(list.unanswerable) as PublicDecisionList['unanswerable']
+  return { ...list, decisions, unanswerable, truncated: clipped }
 }

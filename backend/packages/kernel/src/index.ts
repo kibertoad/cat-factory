@@ -48,6 +48,7 @@ export {
   BUG_FISHING_DEFAULT_PASS_BUDGET,
   BUG_FISHING_MAX_PASS_BUDGET,
   WHOLE_CODEBASE_TERRITORY_ID,
+  bugFishingAcceptsCuration,
   bugFishingSpawnIsClaimable,
   describeBugFishingPhase,
 } from '@cat-factory/contracts'

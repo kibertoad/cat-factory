@@ -862,6 +862,7 @@ export type {
   RunLifecycleEventKind,
   RunLifecycleFailure,
   RunLifecycleSink,
+  RunLifecycleStep,
 } from './run-lifecycle.js'
 export { RUN_LIFECYCLE_EVENTS, isRunLifecycleEventKind } from './run-lifecycle.js'
 export type {

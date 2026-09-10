@@ -60,8 +60,17 @@ function event(overrides: Partial<RunLifecycleEvent> = {}): RunLifecycleEvent {
     occurredAt: 1_700_000_000_000,
     pullRequestUrl: 'https://vcs.test/pr/7',
     failure: null,
+    step: null,
     ...overrides,
   }
+}
+
+/** A settled step boundary, at `index` on its `attempt`-th run. */
+function stepEvent(index: number, attempt = 1): RunLifecycleEvent {
+  return event({
+    event: 'run.step_completed',
+    step: { index, agentKind: 'coder', outcome: 'completed', attempt, final: false },
+  })
 }
 
 /** A fetch stub that records every call and replays a queued sequence of responses. */
@@ -136,6 +145,59 @@ describe('WebhookRunLifecycleSink', () => {
     expect(body.run.taskId).toBe('task_login')
     expect(body.run.pullRequestUrl).toBe('https://vcs.test/pr/7')
     expect(body.run.failure).toBeNull()
+  })
+
+  it('scopes a step edge dedupe id by STEP, since one run emits many', async () => {
+    // The one event a single run delivers repeatedly, and therefore the one the run-scoped key
+    // cannot carry: `<runId>:run.step_completed` is the same string for every step, so a receiver
+    // following the documented contract would collapse a ten-step pipeline onto its first step and
+    // hear nothing more. The step index is what keeps each boundary its own delivery.
+    const { sink: s, calls } = sink(webhook({ runEvents: ['run.step_completed'] }))
+    await s.runTransitioned('ws1', stepEvent(0))
+    await s.runTransitioned('ws1', stepEvent(1))
+
+    const ids = calls.map((call) => (JSON.parse(call.body) as { deliveryId: string }).deliveryId)
+    expect(ids).toEqual(['exec_1:run.step_completed:0:1', 'exec_1:run.step_completed:1:1'])
+    // …and the step itself rides the run envelope, so a receiver reads which step finished without
+    // a follow-up call.
+    const body = JSON.parse(calls[0]!.body) as { run: { step: unknown } }
+    expect(body.run.step).toEqual({
+      index: 0,
+      agentKind: 'coder',
+      outcome: 'completed',
+      attempt: 1,
+      final: false,
+    })
+  })
+
+  it('keeps a RE-RUN of one step its own delivery, since the index alone repeats', async () => {
+    // The second axis, and the one an index-scoped key silently loses. A companion bouncing its
+    // producer for rework re-runs the SAME index, so both boundaries key on `…:2` and a receiver
+    // following the mandatory dedupe reports a three-cycle rework loop as one step completing.
+    // The attempt is the step's own start count, which is why a durable REPLAY of one settle
+    // reports the same attempt and still collapses, where only a genuine re-run does not.
+    const { sink: s, calls } = sink(webhook({ runEvents: ['run.step_completed'] }))
+    await s.runTransitioned('ws1', stepEvent(2, 1))
+    await s.runTransitioned('ws1', stepEvent(2, 2))
+    await s.runTransitioned('ws1', stepEvent(2, 2))
+
+    const ids = calls.map((call) => (JSON.parse(call.body) as { deliveryId: string }).deliveryId)
+    expect(ids).toEqual([
+      'exec_1:run.step_completed:2:1',
+      'exec_1:run.step_completed:2:2',
+      'exec_1:run.step_completed:2:2',
+    ])
+    expect(new Set(ids).size).toBe(2)
+  })
+
+  it('leaves the run edges step-less and run-scoped', async () => {
+    // The other half: a `run.completed` is about the run, so it carries no step and keeps the
+    // two-part key a receiver has been deduping on since the family shipped.
+    const { sink: s, calls } = sink(webhook())
+    await s.runTransitioned('ws1', event())
+    const body = JSON.parse(calls[0]!.body) as { deliveryId: string; run: { step: unknown } }
+    expect(body.deliveryId).toBe('exec_1:run.completed')
+    expect(body.run.step).toBeNull()
   })
 
   it('re-delivers one transition under the SAME id but a re-stamped sentAt', async () => {

@@ -275,6 +275,12 @@ export const CONFLICT_REASONS = [
   // an expedition, or its step has been re-run away. The remedy is "you are looking at the wrong
   // run", so the SPA refreshes rather than re-offering the triage controls.
   'no_expedition',
+  // A caller tried to MARK or DISMISS a finding on an expedition the run has already advanced
+  // past. Its own reason rather than `no_expedition`, which describes a run that never had one:
+  // here the expedition and its catch are still readable, and the remedy is to reload this run and
+  // see what was acted on. Curation is deliberately accepted while an expedition is still fishing
+  // later angles, so "settled" is the only state that refuses it, and this is what says so.
+  'expedition_settled',
   // Some of the findings named for a fix ALREADY have one. Its own reason rather than a silent
   // skip: a second spawn would put two tasks on one defect, and a caller that believed the request
   // succeeded would never learn that the tasks it thinks it created are somebody else's.

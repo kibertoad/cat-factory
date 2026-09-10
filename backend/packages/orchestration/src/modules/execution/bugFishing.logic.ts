@@ -15,7 +15,11 @@ import {
 // The one rule both this engine and the triage window judge a finding by ("is anything being
 // done about it") lives in contracts, so the window cannot come to offer a mark this refuses.
 // Re-exported so a caller in this module's own layer keeps one import.
-export { BUG_FISHING_SPAWN_CLAIM_TTL_MS, bugFishingSpawnIsClaimable } from '@cat-factory/kernel'
+export {
+  BUG_FISHING_SPAWN_CLAIM_TTL_MS,
+  bugFishingAcceptsCuration,
+  bugFishingSpawnIsClaimable,
+} from '@cat-factory/kernel'
 
 // ---------------------------------------------------------------------------
 // Pure reductions over a bug-fishing expedition's step state. Everything here is a

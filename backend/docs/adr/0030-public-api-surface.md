@@ -181,6 +181,9 @@ routes on and an empty title is honest about what could be read.
   re-claim TTL and a sweeper on both facades.
 - **Per-step lifecycle events.** A firehose: the engine emits on every container poll. The SSE
   endpoints already serve a caller that wants step-level detail, bounded by their own poll.
+  _(Narrowed by [ADR 0065](./0065-run-progress-streaming.md), which ships `run.step_completed` on
+  the step BOUNDARY rather than the poll: once per step, opt-in per event. The rejection above
+  stands as written for a progress feed, which is what it was about.)_
 - **A `since` filter on the TASK list.** Not deliverable: `blocks` carries no creation or update
   timestamp, so a time filter would have to be faked from something that is not one. The list is
   ordered by the stable block id instead: deterministic and safe to page over, but carrying no

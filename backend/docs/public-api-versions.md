@@ -315,3 +315,72 @@ chosen task type's own defaults still apply, which is visible on a `document` ta
 create-only for the reason `pipelineId` is, plus one of its own: the frozen set is what the run
 folds however the library moves afterwards, which is what keeps a finished review's standards
 readable rather than re-derived.
+
+## 1.74.0
+
+Three additions, all serving one gap: what a run is DOING while it works.
+
+`GET /api/v1/runs/{runId}/decision-events` streams the run's decision list over SSE.
+`publicDecisionKindSchema` gains `bug-fishing`, with three routes under
+`/api/v1/runs/{runId}/decisions/bug-fishing/`. The outbound webhook's `runEvents` family gains
+`run.step_completed`.
+
+Additive on every count: a new endpoint, a new decision kind (the SDKs tolerate unknown enum values
+by design), three new routes, and an opt-in event on a filter whose empty value already means NONE.
+
+What it closes is a gap the run streams had by construction rather than by omission. A frame is
+emitted when the RUN projection changes, and the state a chunked operation moves through does not
+live on it: a PR deep review's slice count, its challenge verdicts and its post report ride
+`step.prReview`, an expedition's angles ride `step.bugFishing`, and neither is `step.custom`. So a
+seventeen-minute review produced no frame at all for its whole duration and then one `decision` at
+the park, while this repo's own documentation told a caller to poll `/runs/{runId}/decisions` for
+exactly the progress the stream could not give it.
+
+**The decision stream is its own endpoint rather than a flag on the two run streams, and that is
+the decision worth reading.** A `?decisions=true` was built first and rejected on the SDKs: a query
+parameter added to an existing operation is emitted as a positional argument ahead of the trailing
+options bag, so `client.tasks.stream(taskId, options)` becomes
+`client.tasks.stream(taskId, query, options)` and Go's `Stream(ctx, taskID)` grows an argument. That
+is an in-place retype of four released clients, which this surface does not do, and a TypeScript
+caller passing `{ headers }` would have gone on compiling against the wrong parameter for a release.
+A new operation is the additive shape, and it is the better one: it is keyed by RUN like the list it
+streams, so one endpoint serves a board task and a headless job where the flag needed adding to two,
+and the run streams stay progress channels. The cost a consumer sees is one more connection to watch
+both, which the run streams' own `decision` frame still makes unnecessary for a caller that only
+needs to know a park happened.
+
+The frame carries the WHOLE list, `unanswerable[]` included, never a delta or a subset: an empty
+`decisions` that means "I asked and nothing is being asked" and one that means "this payload was
+narrowed" are opposite facts, and telling them apart is what the field beside it exists for. What a
+frame MAY reduce is how much of the model-authored prose inside it rides the wire: a deep review
+parks with one finding per issue it found, each with a detail, an evidence quote and a suggested
+fix, and the frame is re-sent whenever any part of the list moves. Over-long strings are clipped to
+a preview and `truncated: true` says so, exactly as `publicRunStep.truncated` does on the run
+streams; `GET /api/v1/runs/{runId}/decisions` serves every field whole and always answers
+`truncated: false`.
+
+`bug-fishing` is the second CURATING park to gain verbs, and the first thing a caller notices is
+what STOPS happening: a parked expedition used to arrive in `unanswerable[]` as a `curation_gate`,
+saying the marking had to be done in the app. It is now a `decisions[]` entry, and the start
+surface's refusal promises the answer path instead of withholding it, so a `decide` key that could
+previously only END an expedition can now act on what it caught. `curation_gate` survives with a
+narrower population: a curating kind a DEPLOYMENT registered, whose marking lives wherever that
+deployment surfaced it. Both shipped curating kinds are answerable here.
+
+`run.step_completed` is the narrowing of the per-step feed [ADR 0030](./adr/0030-public-api-surface.md)
+rejected, not a reversal of it. That rejection was about a PROGRESS feed, which the engine emits on
+every container poll; this fires once per step BOUNDARY, so a ten-step pipeline delivers ten events
+over however many hours it runs. Two things a receiver must read. `deliveryId` is
+`<runId>:run.step_completed:<index>:<attempt>` rather than the two-part key the run edges use,
+because this is the one event a single run emits repeatedly and it does so along BOTH axes: the
+run-scoped key would collapse a whole pipeline onto its first step, and an index-scoped one would
+collapse a step's rework cycles onto its first pass, which is what a companion bouncing its producer
+or a gate rewinding to an upstream step produces. And `step.outcome` distinguishes `skipped` from
+`completed`, because the engine skips a gated step by marking it done with no output, which is
+otherwise byte-for-byte a step that ran and reported nothing.
+
+The `runEvents` member is APPENDED to the vocabulary rather than slotted in beside the edge it
+belongs with. The list's order is published: the Java client emits it as an enum whose `ordinal()`
+an integration may have persisted, and three more clients expose a `*_VALUES` array in the same
+sequence. An insertion is therefore an in-place re-sequencing of four released clients, arriving as
+generated churn.

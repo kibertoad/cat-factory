@@ -14,6 +14,7 @@
 import {
   type AgentKindRegistry,
   ARCHITECTURE_BRAINSTORM_AGENT_KIND,
+  BUG_FISHER_KIND,
   CLARITY_REVIEW_AGENT_KIND,
   CURATION_GATE_TRAIT,
   INTERVIEW_GATE_TRAIT,
@@ -221,6 +222,10 @@ export const PUBLICLY_ANSWERABLE_PARK_SURFACES = new Map<string, PublicDecisionK
   // The PR deep review's finding curation: `…/decisions/pr-review/resolve` (finish / fix / post),
   // plus per-finding dismiss, challenge and resume.
   [PR_REVIEWER_KIND, 'pr-review'],
+  // The bug-fishing expedition's triage: `…/decisions/bug-fishing/address` (one bug-fix task per
+  // marked finding), plus per-finding dismiss and `…/resolve` to finish. The second curating kind
+  // to gain verbs, which is why `curationWait` now names only a deployment's OWN curating kinds.
+  [BUG_FISHER_KIND, 'bug-fishing'],
 ])
 
 /** The pipeline shape admission reasons about: the step chain plus its parallel flag arrays. */

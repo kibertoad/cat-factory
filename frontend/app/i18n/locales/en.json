@@ -795,6 +795,7 @@
         "adoption_plan_unavailable": "There is no adoption plan to approve",
         "monorepo_directory_taken": "That directory already exists",
         "no_expedition": "This run has no bug-fishing expedition",
+        "expedition_settled": "This expedition has already finished",
         "not_awaiting_triage": "This expedition is not waiting on triage",
         "already_addressed": "Some findings already have a fix task",
         "no_host_frame": "This expedition is not under a service"
@@ -851,6 +852,7 @@
         "adoption_plan_unavailable": "The survey could not produce one, so there are no decisions to submit.",
         "monorepo_directory_taken": "Bootstrapping creates a new service. Pick a directory that does not exist yet, or import the existing one as a service.",
         "no_expedition": "The run you are looking at carries no expedition state, so there is nothing to triage. Refresh the run and try again.",
+        "expedition_settled": "The run has moved past its bug-fishing step, so there is nothing left to mark or dismiss. Reload the run to see what it caught and which findings were acted on.",
         "not_awaiting_triage": "It is either still fishing a later angle or it has already been finished. Refresh the run to see where it is.",
         "already_addressed": "A fix task was created for them earlier, so nothing was created again. Open the finding to reach the task it already has.",
         "no_host_frame": "A fix task needs a service to live under and a repository to fix. Move the expedition task under a service frame and try again."

@@ -1220,6 +1220,10 @@ function registerScopeAndCancelTests(harness: ConformanceHarness): void {
     expect(refused.body.error.code).toBe('insufficient_scope')
   })
 
+  it('scopes the decision STREAM to exactly the runs the decision list answers', () => {
+    return scopesTheDecisionStream(harness)
+  })
+
   it("scopes a run's decisions to the key's workspace", async () => {
     // The surface is keyed by RUN id, so the workspace scoping is the only thing standing
     // between one tenant's key and another tenant's parked run. A foreign run must be a 404
@@ -1333,4 +1337,72 @@ function registerScopeAndCancelTests(harness: ConformanceHarness): void {
     expect(denied.status).toBe(404)
     expect(denied.body.error.code).toBe('not_found')
   })
+}
+
+/**
+ * The DECISION STREAM resolves exactly the population its point-read sibling answers.
+ *
+ * `GET /api/v1/runs/:runId/decision-events` is the push twin of `GET /api/v1/runs/:runId/decisions`
+ * and pushes the identical payload, so the two must admit the identical set of runs: a board task
+ * run or a headless job anchor in the key's workspace, and a 404 for anything else. They resolve
+ * through one loader, and this is what pins that they go on doing so, because the stream is a RAW
+ * Hono route with no contract to type it against its sibling.
+ *
+ * Scoping is the half worth asserting on a real facade rather than in a unit test: the surface is
+ * keyed by RUN id, so this refusal is the only thing between one tenant's key and another tenant's
+ * parked run, and the key store it reads is a per-runtime table.
+ *
+ * The LIVE path is deliberately not driven here. It holds a connection open to its five-minute cap
+ * against a run that is still working, which no request-response harness can assert against; what
+ * it emits is covered where it can be, on the projection every case in this file already reads and
+ * on the pure change detector in `publicApiStream.test.ts`.
+ */
+async function scopesTheDecisionStream(harness: ConformanceHarness): Promise<void> {
+  const app = harness.makeApp()
+  const { workspace: a } = await app.createOrgWorkspace({ seed: true })
+  const { workspace: b } = await app.createOrgWorkspace({ seed: true })
+
+  const pipeline = await app.call<Pipeline>('POST', `/workspaces/${a.id}/pipelines`, {
+    name: 'Coder only',
+    purpose: 'build',
+    agentKinds: ['coder'],
+  })
+  const started = await app.call<ExecutionInstance>(
+    'POST',
+    `/workspaces/${a.id}/blocks/task_login/executions`,
+    { pipelineId: pipeline.body.id },
+  )
+  expect(started.status).toBe(201)
+
+  // A key from ANOTHER workspace gets the same 404 the decision list gives it, never a 403, which
+  // would confirm the run exists.
+  const foreignAuth = await mintPublicApiKey(app, b.id, 'read', 'decision-stream')
+  const denied = await app.call<{ error: { code: string } }>(
+    'GET',
+    `/api/v1/runs/${started.body.id}/decision-events`,
+    undefined,
+    foreignAuth,
+  )
+  expect(denied.status).toBe(404)
+  expect(denied.body.error.code).toBe('not_found')
+
+  // …and a run id that names nothing at all is the same answer, from the key that COULD read it.
+  const ownAuth = await mintPublicApiKey(app, a.id, 'read', 'decision-stream')
+  const missing = await app.call<{ error: { code: string } }>(
+    'GET',
+    '/api/v1/runs/exec_nothing/decision-events',
+    undefined,
+    ownAuth,
+  )
+  expect(missing.status).toBe(404)
+
+  // `read`, matching the list: watching what a run is waiting on is a monitoring concern, and it
+  // would be a strange surface that let a key read the decisions and not subscribe to them.
+  const listed = await app.call(
+    'GET',
+    `/api/v1/runs/${started.body.id}/decisions`,
+    undefined,
+    ownAuth,
+  )
+  expect(listed.status).toBe(200)
 }

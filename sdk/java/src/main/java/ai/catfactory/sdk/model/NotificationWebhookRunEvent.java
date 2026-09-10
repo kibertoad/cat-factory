@@ -17,6 +17,7 @@ public enum NotificationWebhookRunEvent {
     RUN_STARTED("run.started"),
     RUN_COMPLETED("run.completed"),
     RUN_FAILED("run.failed"),
+    RUN_STEP_COMPLETED("run.step_completed"),
 
     /**
      * A value this SDK release does not know.

@@ -2,6 +2,7 @@ import { ContractNoBody, defineApiContract, withObjectKeys } from '@toad-contrac
 import * as v from 'valibot'
 import { brainstormStageSchema } from '../brainstorm.js'
 import {
+  publicAddressBugFishingFindingsSchema,
   publicAnswerFollowUpSchema,
   publicAnswerInterviewSchema,
   publicApproveStepSchema,
@@ -491,6 +492,72 @@ export const challengePublicRunPrReviewFindingContract = decides(
     pathResolver: ({ runId, findingId }) =>
       `/api/v1/runs/${runId}/decisions/pr-review/findings/${findingId}/challenge`,
     requestBodySchema: publicChallengePrReviewFindingSchema,
+    responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+  }),
+)
+
+// ---- Bug-fishing expedition -------------------------------------------------
+//
+// The second CURATING kind, and it is answered here rather than only in the app because the
+// alternative is a run this surface can start, can watch, and can only END. `bug-fisher` is
+// container-backed, so an expedition is reachable through `POST /api/v1/tasks/:taskId/start`
+// alone; every verb below is `decide`, since marking a finding STARTS a run.
+//
+// Three verbs and no fourth. The expedition's state is read off the run's decision list like every
+// other park, and there is deliberately no public counterpart of the app's per-angle re-dispatch:
+// the angles are planned once, against a pass budget the task itself set.
+
+/**
+ * Mark findings to be addressed. Each one spawns its OWN bug-fix task, linked back to the
+ * expedition, and STARTS its run, which is why this is `decide` rather than `write` and why it
+ * runs under the expedition's own initiator.
+ *
+ * Deliberately accepted while the expedition is still fishing later angles, not only once it
+ * parks: a completed angle's findings are actionable the moment they land, and making a caller
+ * wait for the last angle is exactly the delay running the angles as separate passes removes.
+ *
+ * An unknown id, or one whose finding already has a live spawn claim, is refused rather than
+ * silently skipped: a marking that reports success for a finding it did not act on would have the
+ * caller believe a fix task exists.
+ */
+export const addressPublicRunBugFishingFindingsContract = decides(
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: runIdParams,
+    pathResolver: ({ runId }) => `/api/v1/runs/${runId}/decisions/bug-fishing/address`,
+    requestBodySchema: publicAddressBugFishingFindingsSchema,
+    responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+  }),
+)
+
+/**
+ * Dismiss one finding: it stays on the expedition's record, struck through, and is not markable.
+ * Curation rather than a resolution, so the run stays exactly where it is.
+ */
+export const dismissPublicRunBugFishingFindingContract = decides(
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: runFindingParams,
+    pathResolver: ({ runId, findingId }) =>
+      `/api/v1/runs/${runId}/decisions/bug-fishing/findings/${findingId}/dismiss`,
+    requestBodySchema: ContractNoBody,
+    responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+  }),
+)
+
+/**
+ * Finish the expedition: the caller is done triaging and the run advances past the step.
+ *
+ * Takes no body because every marking already happened through its own request, so there is no
+ * curated selection left to carry. It is also the one verb here that is irreversible in the way
+ * that matters: anything still unmarked when this lands stays unacted on, on the record.
+ */
+export const resolvePublicRunBugFishingContract = decides(
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: runIdParams,
+    pathResolver: ({ runId }) => `/api/v1/runs/${runId}/decisions/bug-fishing/resolve`,
+    requestBodySchema: ContractNoBody,
     responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
   }),
 )

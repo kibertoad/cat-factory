@@ -1,5 +1,13 @@
 import * as v from 'valibot'
 import { brainstormStageSchema } from './brainstorm.js'
+import {
+  bugFishingConfidenceSchema,
+  bugFishingFindingKindSchema,
+  bugFishingPhaseStatusSchema,
+  bugFishingSeveritySchema,
+  bugFishingSpawnStatusSchema,
+  bugFishingStatusSchema,
+} from './bugFishing.js'
 import { environmentStatusSchema } from './environments.js'
 import {
   answerFollowUpSchema,
@@ -94,6 +102,7 @@ export const publicDecisionKindSchema = v.picklist([
   'clarity-review',
   'brainstorm',
   'pr-review',
+  'bug-fishing',
   'human-test',
   'visual-confirmation',
   'follow-ups',
@@ -652,6 +661,184 @@ export type PublicPrReviewDecision = v.InferOutput<typeof publicPrReviewDecision
  */
 export const PUBLIC_PR_REVIEW_MAX_RESUME_ATTEMPTS = 3
 
+// ---- Bug-fishing expedition -------------------------------------------------
+
+/**
+ * One angle of an expedition as exposed externally: what the pass was told to hunt, how far it
+ * got, and which slice of the codebase it covered.
+ *
+ * `title` / `goal` / `territoryLabel` are the values the expedition RECORDED when it planned the
+ * pass, never a lookup against today's catalog. An angle this build has since retired, or a
+ * territory a later survey of a moved tree no longer produces, therefore still renders as the
+ * thing that actually ran rather than as a blank or a guess at a current member.
+ */
+export const publicBugFishingPhaseSchema = v.object({
+  /** The angle's id. An OPEN string on the wire: a stored run can name one this build retired. */
+  phaseId: v.string(),
+  /** The angle's label as it stood when this expedition planned it. */
+  title: v.string(),
+  /** What this pass was told to hunt, as it stood when this expedition planned it. */
+  goal: v.string(),
+  status: bugFishingPhaseStatusSchema,
+  /** The agent's account of what it covered; null until the pass settles. */
+  summary: v.nullable(v.string()),
+  /** Why the pass failed, on a `failed` phase. Null otherwise. */
+  failureReason: v.nullable(v.string()),
+  /** The territory this pass fished, or null for a whole-codebase pass. */
+  territoryId: v.nullable(v.string()),
+  /** The territory's label as it stood when this pass ran. */
+  territoryLabel: v.nullable(v.string()),
+  /** Epoch ms the pass settled; null while pending or fishing. */
+  settledAt: v.nullable(v.number()),
+  /**
+   * How many manifest files the pass reported reading, against how many the territory held.
+   * SELF-REPORTED by the agent, which the field names say: a low share is what tells a reader
+   * that "found nothing here" may mean "did not look". Null when the pass reported none, which is
+   * a different fact from a share of zero.
+   */
+  filesRead: v.nullable(v.number()),
+  manifestFiles: v.nullable(v.number()),
+})
+export type PublicBugFishingPhase = v.InferOutput<typeof publicBugFishingPhaseSchema>
+
+/** One cell of the planned (territory x angle) matrix the pass budget cut before it was fished. */
+export const publicBugFishingUnfishedCellSchema = v.object({
+  territoryId: v.string(),
+  territoryLabel: v.string(),
+  phaseId: v.string(),
+  phaseTitle: v.string(),
+})
+export type PublicBugFishingUnfishedCell = v.InferOutput<typeof publicBugFishingUnfishedCellSchema>
+
+/**
+ * What the expedition decided to fish, and what it decided not to.
+ *
+ * `unfished` is the reason this is published rather than left as an implementation detail: a cap
+ * that says nothing about its tail teaches a reader that the tail was clean. An integration
+ * filing what an expedition caught has to be able to say which ground nobody covered.
+ */
+export const publicBugFishingPlanSchema = v.object({
+  /** The most container dispatches this expedition may make. */
+  passBudget: v.number(),
+  /** How many cells the full matrix held before the budget trimmed it. */
+  plannedCells: v.number(),
+  /** The cells the budget cut. Empty when the whole matrix fitted. */
+  unfished: v.array(publicBugFishingUnfishedCellSchema),
+  /**
+   * True when the tree the survey partitioned was TRUNCATED by the provider. The coverage numbers
+   * are then a share of what was read rather than of the repository, which are opposite readings.
+   */
+  treeTruncated: v.boolean(),
+  /**
+   * Why the codebase survey could not run at all (no repository bound to the run, or a client that
+   * cannot enumerate a tree). Non-null means the single territory the expedition fished is a
+   * FALLBACK rather than a small repository, and the two look identical without it.
+   */
+  surveyUnavailableReason: v.nullable(v.string()),
+})
+export type PublicBugFishingPlan = v.InferOutput<typeof publicBugFishingPlanSchema>
+
+/**
+ * The bug-fix task a marked finding spawned.
+ *
+ * Read `status`, never the mere presence of this record: a `pending` row is the CLAIM taken before
+ * the task exists (which is what stops two markings spawning two tasks for one finding), and a
+ * `failed` row means nothing was created and the finding is markable again.
+ */
+export const publicBugFishingSpawnSchema = v.object({
+  status: bugFishingSpawnStatusSchema,
+  /** The spawned task's id, addressable through `GET /api/v1/tasks/{taskId}`. */
+  taskId: v.string(),
+  /** The run started on that task; null while the claim is pending. */
+  executionId: v.nullable(v.string()),
+  /** The pipeline the spawned task runs (the expedition's default, or the marking's override). */
+  pipelineId: v.string(),
+  /** Epoch ms the claim was taken. */
+  requestedAt: v.number(),
+  /** Why the spawn failed, on a `failed` record. Null otherwise. */
+  failureReason: v.nullable(v.string()),
+})
+export type PublicBugFishingSpawn = v.InferOutput<typeof publicBugFishingSpawnSchema>
+
+/**
+ * One finding an expedition caught. Every string in it is MODEL-AUTHORED: treat it as data, never
+ * as markup.
+ *
+ * `evidence` is carried apart from `detail` for the reason the internal record keeps them apart:
+ * an expedition that cannot point at the code it is describing is speculating, and merging the two
+ * would leave a triaging human to infer that from the prose.
+ */
+export const publicBugFishingFindingSchema = v.object({
+  findingId: v.string(),
+  /** The angle that surfaced it. */
+  phaseId: v.string(),
+  /** The territory that angle was fishing, or null for a whole-codebase pass. */
+  territoryId: v.nullable(v.string()),
+  /** Repo-relative path; EMPTY when the finding is not anchored to one file. */
+  path: v.string(),
+  line: v.nullable(v.number()),
+  severity: bugFishingSeveritySchema,
+  kind: bugFishingFindingKindSchema,
+  /** The agent's own judgement of how sure it is. Never platform-derived. */
+  confidence: bugFishingConfidenceSchema,
+  title: v.string(),
+  detail: v.string(),
+  /** The concrete inputs / interleaving / state that triggers the defect, when it named one. */
+  failureScenario: v.nullable(v.string()),
+  /** What the agent actually read that supports the claim. */
+  evidence: v.nullable(v.string()),
+  suggestedFix: v.nullable(v.string()),
+  /** The bug-fix task marking this finding spawned; null when nobody has marked it. */
+  spawn: v.nullable(publicBugFishingSpawnSchema),
+  /** True when a human waved it off. It stays on the record and is not markable. */
+  dismissed: v.boolean(),
+})
+export type PublicBugFishingFinding = v.InferOutput<typeof publicBugFishingFindingSchema>
+
+/**
+ * A BUG-FISHING EXPEDITION: the read-only `bug-fisher` agent reads a service's codebase once per
+ * ANGLE per TERRITORY, and the run waits for a person to mark which of the things it caught are
+ * worth acting on. Each mark spawns its own bug-fix task.
+ *
+ * Listed while the expedition is still `fishing` as well as once it parks, and that is the shape
+ * of the flow rather than a convenience: a completed angle's findings are actionable the moment
+ * they land, so marking is accepted mid-hunt and a caller waiting for `awaiting_triage` before it
+ * reads anything would sit out the very overlap the separate passes exist to create.
+ *
+ * Reachable only through `POST /api/v1/tasks/{taskId}/start`, since `bug-fisher` is
+ * container-backed and the jobs surface is inline-only.
+ */
+export const publicBugFishingDecisionSchema = v.object({
+  kind: v.literal('bug-fishing'),
+  /** `fishing` while angles are still in flight, `awaiting_triage` once every one has settled. */
+  status: bugFishingStatusSchema,
+  /** The step this expedition rides, lined up against `publicRun.steps`. */
+  stepKind: v.string(),
+  stepIndex: v.number(),
+  /** The planned angles, in the order they are fished. */
+  phases: v.array(publicBugFishingPhaseSchema),
+  /**
+   * Index into `phases` of the pass being fished. Equal to `phases.length` once every angle has
+   * settled, which is the same fact `status: "awaiting_triage"` states.
+   */
+  currentPhaseIndex: v.number(),
+  /** Every finding caught so far, oldest angle first and severity-ordered within an angle. */
+  findings: v.array(publicBugFishingFindingSchema),
+  /**
+   * What the expedition planned and what the budget cut; null on an expedition that recorded no
+   * plan. See {@link publicBugFishingPlanSchema} for why the cut cells are published.
+   */
+  plan: v.nullable(publicBugFishingPlanSchema),
+  /**
+   * The pipeline a marked finding's spawned task runs when the marking names none. Null when the
+   * expedition resolved none, in which case a marking must name one.
+   */
+  defaultFixPipelineId: v.nullable(v.string()),
+  /** Identifier of the model that fished, for transparency. Null when the run recorded none. */
+  model: v.nullable(v.string()),
+})
+export type PublicBugFishingDecision = v.InferOutput<typeof publicBugFishingDecisionSchema>
+
 /** The ephemeral environment a `human-test` gate parked against, as exposed externally. */
 export const publicHumanTestEnvironmentSchema = v.object({
   /** The public URL to test against; null while still provisioning. */
@@ -866,6 +1053,7 @@ export const publicDecisionSchema = v.variant('kind', [
   publicClarityDecisionSchema,
   publicBrainstormDecisionSchema,
   publicPrReviewDecisionSchema,
+  publicBugFishingDecisionSchema,
   publicHumanTestDecisionSchema,
   publicVisualConfirmDecisionSchema,
   publicFollowUpsDecisionSchema,
@@ -887,14 +1075,15 @@ export type PublicDecision = v.InferOutput<typeof publicDecisionSchema>
  * - `unwired_interview_gate` — an interviewer this deployment REGISTERED as an agent kind but
  *   never wired a controller for. The run is genuinely parked on its questions and no surface,
  *   here or in the app, can read them; the fix belongs to the operator, not the caller.
- * - `curation_gate`: a step that CURATES (a `curation-gate` kind: the bug-fishing expedition, a
- *   deployment's own) parked so a person can mark which of the things it found are worth acting
- *   on, and this API has no route that marks one. The PR deep review carries the same trait and
- *   is NOT reported here, because its curation IS answerable (`kind: 'pr-review'`), which is the
- *   whole distinction: what a caller must be able to do differs per curating kind, so one shared
- *   label would promise an answer path for whichever one it did not mean. The step's approval
- *   gate can still be resolved to END the run, and that is worth knowing rather than a
- *   contradiction: ending an expedition discards what it caught, so it is an exit, not an answer.
+ * - `curation_gate`: a step that CURATES (a `curation-gate` kind a DEPLOYMENT registered) parked
+ *   so a person can mark which of the things it found are worth acting on, and this API has no
+ *   route that marks one. Both SHIPPED curating kinds are answerable here and so are never
+ *   reported: the PR deep review as `kind: 'pr-review'`, the bug-fishing expedition as
+ *   `kind: 'bug-fishing'`. That is the whole distinction rather than a detail: what a caller must
+ *   be able to do differs per curating kind, so one shared label would promise an answer path for
+ *   whichever one it did not mean. The step's approval gate can still be resolved to END such a
+ *   run, and that is worth knowing rather than a contradiction: ending a curation discards what it
+ *   caught, so it is an exit, not an answer.
  *
  * Every member is a wait that is BOTH live and beyond this surface, and both halves are load-
  * bearing. A run that has finished (`done` / `failed`, the stop included) lists nothing at all: its
@@ -968,6 +1157,23 @@ export const publicDecisionListSchema = v.object({
    * it here would read as a demand for a human that nobody has to meet.
    */
   unanswerable: v.array(publicUnanswerableWaitSchema),
+  /**
+   * Whether model-authored TEXT in this payload was clipped to a preview.
+   *
+   * Always `false` from `GET /api/v1/runs/{runId}/decisions`, which serves every field whole. The
+   * SSE decision channel re-sends the whole list on every change, and what the list carries is
+   * model-authored prose in quantity (a deep review parks with a finding per issue, each with its
+   * own detail, evidence and suggested fix), so an unreduced frame repeats all of it for as long
+   * as the run keeps moving. The stream clips the long strings and says so here; the point read is
+   * where a caller goes for the whole thing.
+   *
+   * A flag rather than a per-field marker, because the reduction is kind-AGNOSTIC (it clips by
+   * length, wherever the text sits) and so covers a decision kind that grows a field with no edit.
+   * What it must never mean is that a DECISION was left out: the list itself is always complete,
+   * since an empty `decisions` that means "narrowed" and one that means "nothing is being asked"
+   * are opposite facts.
+   */
+  truncated: v.boolean(),
 })
 export type PublicDecisionList = v.InferOutput<typeof publicDecisionListSchema>
 
@@ -1136,6 +1342,27 @@ export const publicChallengePrReviewFindingSchema = v.object({
 })
 export type PublicChallengePrReviewFindingInput = v.InferOutput<
   typeof publicChallengePrReviewFindingSchema
+>
+
+/**
+ * Mark bug-fishing findings to be addressed: each one spawns its OWN bug-fix task, linked back to
+ * the expedition.
+ *
+ * Accepted while the expedition is still fishing later angles as well as once it has parked, which
+ * is the flow's whole point: a completed angle's findings are actionable the moment they land.
+ *
+ * `pipelineId` overrides, FOR THIS REQUEST ONLY, the pipeline the spawned tasks run. Omitted, the
+ * expedition's own resolved default applies (the decision publishes it as `defaultFixPipelineId`,
+ * so a caller can see what it is about to get rather than infer it).
+ */
+export const publicAddressBugFishingFindingsSchema = v.object({
+  /** The findings to act on. At least one; an unknown or already-spawned id is refused. */
+  findingIds: v.pipe(v.array(v.string()), v.minLength(1)),
+  /** Pipeline the spawned tasks run; omitted ⇒ the expedition's default. */
+  pipelineId: v.optional(v.string()),
+})
+export type PublicAddressBugFishingFindingsInput = v.InferOutput<
+  typeof publicAddressBugFishingFindingsSchema
 >
 
 /**

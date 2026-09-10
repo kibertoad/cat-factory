@@ -13,6 +13,7 @@ import type {
   AcknowledgeKaizenEntry,
   ActPublicNotificationRequest,
   AddPublicTaskDependencyRequest,
+  AddressPublicRunBugFishingFindingsRequest,
   AttachPublicTaskDocumentRequest,
   ConnectPublicEnvironmentRequest,
   ConnectPublicEnvironmentResponse,
@@ -318,7 +319,7 @@ export class JobsResource {
 
   /**
    * Stream a job (SSE)
-   * Server-sent events for a headless job run: `progress` frames until a terminal `done`/`error`/`stopped`/`timeout` event. Authenticated by the API key header.
+   * Server-sent events for a headless job run: `progress` frames until a terminal `done`/`error`/`stopped`/`timeout` event, plus a `decision` frame announcing each park. For what the run is asking, and how a chunked operation is progressing through it, stream `GET /api/v1/runs/{runId}/decision-events` beside this. Authenticated by the API key header.
    * `GET /api/v1/jobs/{id}/events` — operation `streamPublicJobEvents`.
    */
   stream(id: string, options: RequestOptions = {}): Promise<EventStream> {
@@ -721,7 +722,7 @@ export class TasksResource {
 
   /**
    * Stream a task run (SSE)
-   * Server-sent events for a board task run: `progress` frames (the rich run projection) until a terminal `done`/`error` event, or a `timeout` when the connection cap is reached. Authenticated by the API key header.
+   * Server-sent events for a board task run: `progress` frames (the rich run projection) until a terminal `done`/`error` event, or a `timeout` when the connection cap is reached, plus a `decision` frame announcing each park. For what the run is asking, and how a chunked operation is progressing through it, stream `GET /api/v1/runs/{runId}/decision-events` beside this. Authenticated by the API key header.
    * `GET /api/v1/tasks/{taskId}/events` — operation `streamPublicTaskRun`.
    */
   stream(taskId: string, options: RequestOptions = {}): Promise<EventStream> {
@@ -1268,6 +1269,20 @@ export class DecisionsResource {
   }
 
   /**
+   * Mark bug-fishing findings to be addressed
+   * Spawn one bug-fix task per named finding, each linked back to the expedition and started immediately. Accepted while the expedition is still fishing later angles as well as once it parks, because the findings of a completed angle are actionable the moment they land. `pipelineId` overrides, for this request only, the pipeline the spawned tasks run; omitting it uses the default the expedition resolved, which the decision publishes as `defaultFixPipelineId`. An unknown id, or one whose finding already has a live spawn, is refused rather than skipped. Requires a `decide`-scope key.
+   * `POST /api/v1/runs/{runId}/decisions/bug-fishing/address` — operation `addressPublicRunBugFishingFindings`.
+   */
+  addressBugFishingFindings(runId: string, body: AddressPublicRunBugFishingFindingsRequest, options: RequestOptions = {}): Promise<PublicDecisionList> {
+    return this.#transport.request<PublicDecisionList>({
+      method: 'POST',
+      path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/bug-fishing/address`,
+      body,
+      options,
+    })
+  }
+
+  /**
    * Answer an agent-raised decision
    * Answer a question an agent raised mid-work. Resolving RE-RUNS the asking step with the choice folded in, rather than advancing past it. The choice is taken verbatim, so it may be one of the offered options or a steer of your own. Requires a `decide`-scope key.
    * `POST /api/v1/runs/{runId}/decisions/questions/{decisionId}/answer` — operation `resolvePublicRunAgentDecision`.
@@ -1386,6 +1401,19 @@ export class DecisionsResource {
     return this.#transport.request<PublicDecisionList>({
       method: 'POST',
       path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/interview/continue`,
+      options,
+    })
+  }
+
+  /**
+   * Dismiss a bug-fishing finding
+   * Drop one finding from triage. It stays on the record of the expedition, struck through, and is no longer markable. Curation rather than a resolution: the run stays exactly where it is. Requires a `decide`-scope key.
+   * `POST /api/v1/runs/{runId}/decisions/bug-fishing/findings/{findingId}/dismiss` — operation `dismissPublicRunBugFishingFinding`.
+   */
+  dismissBugFishingFinding(runId: string, findingId: string, options: RequestOptions = {}): Promise<PublicDecisionList> {
+    return this.#transport.request<PublicDecisionList>({
+      method: 'POST',
+      path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/bug-fishing/findings/${encodePathSegment(findingId)}/dismiss`,
       options,
     })
   }
@@ -1688,6 +1716,19 @@ export class DecisionsResource {
   }
 
   /**
+   * Finish a bug-fishing expedition
+   * Finish triaging and advance the run past the step. Anything still unmarked stays unacted on, which is why this is a separate verb rather than something marking implies. Requires a `decide`-scope key.
+   * `POST /api/v1/runs/{runId}/decisions/bug-fishing/resolve` — operation `resolvePublicRunBugFishing`.
+   */
+  resolveBugFishing(runId: string, options: RequestOptions = {}): Promise<PublicDecisionList> {
+    return this.#transport.request<PublicDecisionList>({
+      method: 'POST',
+      path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/bug-fishing/resolve`,
+      options,
+    })
+  }
+
+  /**
    * Resolve a clarity review at its iteration cap
    * Pick how a clarity review that exhausted its pass budget proceeds: one more round, proceed with the last clarified report, or stop and reset the task. Requires a `decide`-scope key.
    * `POST /api/v1/runs/{runId}/decisions/clarity/resolve-exceeded` — operation `resolvePublicRunClarityExceeded`.
@@ -1835,6 +1876,19 @@ export class DecisionsResource {
       method: 'PATCH',
       path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/requirements/findings/${encodePathSegment(itemId)}`,
       body,
+      options,
+    })
+  }
+
+  /**
+   * Stream a run’s parked decisions (SSE)
+   * Server-sent events over the run’s whole decision list: a `decision-state` frame carrying the same payload `GET /api/v1/runs/{runId}/decisions` serves, pushed whenever it changes, then a terminal `done` when the run settles or a `timeout` at the connection cap. This is how a chunked operation reports progress: a PR deep review’s slice count, a bug-fishing angle landing and a challenge verdict all move the decision list without moving the run, so they produce no `progress` frame on the run streams. Authenticated by the API key header.
+   * `GET /api/v1/runs/{runId}/decision-events` — operation `streamPublicRunDecisions`.
+   */
+  stream(runId: string, options: RequestOptions = {}): Promise<EventStream> {
+    return this.#transport.stream({
+      method: 'GET',
+      path: `/api/v1/runs/${encodePathSegment(runId)}/decision-events`,
       options,
     })
   }

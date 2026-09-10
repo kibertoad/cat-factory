@@ -251,6 +251,34 @@ expectMutuallyAssignable<
   v.InferOutput<typeof contracts.publicResolvePrReviewSchema>
 >()
 expectMutuallyAssignable<
+  sdk.PublicBugFishingDecision,
+  v.InferOutput<typeof contracts.publicBugFishingDecisionSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicBugFishingPhase,
+  v.InferOutput<typeof contracts.publicBugFishingPhaseSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicBugFishingPlan,
+  v.InferOutput<typeof contracts.publicBugFishingPlanSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicBugFishingUnfishedCell,
+  v.InferOutput<typeof contracts.publicBugFishingUnfishedCellSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicBugFishingFinding,
+  v.InferOutput<typeof contracts.publicBugFishingFindingSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicBugFishingSpawn,
+  v.InferOutput<typeof contracts.publicBugFishingSpawnSchema>
+>()
+expectMutuallyAssignable<
+  sdk.AddressPublicRunBugFishingFindingsRequest,
+  v.InferOutput<typeof contracts.publicAddressBugFishingFindingsSchema>
+>()
+expectMutuallyAssignable<
   sdk.PublicChallengePrReviewFinding,
   v.InferOutput<typeof contracts.publicChallengePrReviewFindingSchema>
 >()
@@ -527,6 +555,12 @@ const ASSERTED_COMPONENTS = [
   'PublicBrainstormDecision',
   'PublicPrReviewDecision',
   'PublicResolvePrReview',
+  'PublicBugFishingDecision',
+  'PublicBugFishingPhase',
+  'PublicBugFishingPlan',
+  'PublicBugFishingUnfishedCell',
+  'PublicBugFishingFinding',
+  'PublicBugFishingSpawn',
   'PublicChallengePrReviewFinding',
   'PublicHumanTestEnvironment',
   'PublicHumanTestDecision',

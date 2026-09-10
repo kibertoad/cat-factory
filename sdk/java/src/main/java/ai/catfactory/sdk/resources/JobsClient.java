@@ -96,7 +96,9 @@ public final class JobsClient {
     /**
      * Stream a job (SSE)
      * Server-sent events for a headless job run: `progress` frames until a terminal
-     * `done`/`error`/`stopped`/`timeout` event. Authenticated by the API key header.
+     * `done`/`error`/`stopped`/`timeout` event, plus a `decision` frame announcing each park. For
+     * what the run is asking, and how a chunked operation is progressing through it, stream `GET
+     * /api/v1/runs/{runId}/decision-events` beside this. Authenticated by the API key header.
      * {@code GET /api/v1/jobs/{id}/events} (operation {@code streamPublicJobEvents}).
      */
     public EventStream stream(String id) {

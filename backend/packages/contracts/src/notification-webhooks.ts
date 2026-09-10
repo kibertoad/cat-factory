@@ -61,13 +61,24 @@ export const notificationWebhookIdSchema = v.pipe(
 /**
  * The RUN-LIFECYCLE events the same endpoint can subscribe to: the ordinary lifecycle of work an
  * integration queued, none of which raises a notification. A task whose pipeline carries a
- * `merger` merges its own PR and settles with an empty inbox — the happy path, and the one a CI
- * system most wants to hear about. Deliberately only the EDGES: a per-step feed would be a
- * firehose (the engine emits on every container poll), which is what the SSE endpoints are for.
+ * `merger` merges its own PR and settles with an empty inbox: the happy path, and the one a CI
+ * system most wants to hear about.
  *
- * Mirrors kernel's `RUN_LIFECYCLE_EVENTS`; keep the member lists in step.
+ * The three run edges, plus one STEP edge. A per-step PROGRESS feed would be a firehose (the
+ * engine emits on every container poll) and is what the SSE endpoints are for; `run.step_completed`
+ * is the narrowing of that rather than a reversal, firing once per step BOUNDARY. It is opt-in per
+ * event like the rest of the family, so an endpoint already subscribed to the three edges hears
+ * nothing new until it asks.
+ *
+ * Mirrors kernel's `RUN_LIFECYCLE_EVENTS`, member ORDER included, and a new member is APPENDED
+ * there for the reason stated there: this list is what the generated clients publish as an enum.
  */
-export const runLifecycleEventSchema = v.picklist(['run.started', 'run.completed', 'run.failed'])
+export const runLifecycleEventSchema = v.picklist([
+  'run.started',
+  'run.completed',
+  'run.failed',
+  'run.step_completed',
+])
 export type RunLifecycleEventName = v.InferOutput<typeof runLifecycleEventSchema>
 
 /**
@@ -239,11 +250,13 @@ export type NotificationWebhookDelivery = v.InferOutput<typeof notificationWebho
  * signature headers. `event` is what a receiver switches on — a notification delivery carries
  * `notification`, this one carries `run`, so the two are told apart by shape as well as by name.
  *
- * `deliveryId` is `<runId>:<event>`: stable across retries AND across a re-delivery, which is the
- * dedupe key a receiver MUST use. Delivery is AT-LEAST-ONCE by design. The terminal events are
- * pushed from the engine's terminal-emit funnel — the same place the run's other terminal hooks
- * live — because a run reaches `done` from four independent sites and a hook at each would
- * silently drift the day a fifth is added. A durable replay can therefore re-emit a settled run.
+ * `deliveryId` is `<runId>:<event>`, with the step index AND its attempt appended on
+ * `run.step_completed` (`<runId>:run.step_completed:<index>:<attempt>`, since one run emits many
+ * and re-runs a step in place): stable across retries AND across a re-delivery, which is the dedupe
+ * key a receiver MUST use. Delivery is AT-LEAST-ONCE by design. The terminal events are pushed from the engine's terminal-emit funnel, the same place the
+ * run's other terminal hooks live, because a run reaches `done` from four independent sites and a
+ * hook at each would silently drift the day a fifth is added. A durable replay can therefore
+ * re-emit a settled run, and a re-driven step can re-emit its own boundary.
  *
  * **Dedupe on `deliveryId`, never on the body.** A re-delivery describes the same settled run, but
  * `sentAt` and `run.occurredAt` are re-stamped from the clock when it is produced, so two
@@ -279,6 +292,32 @@ export const runWebhookDeliverySchema = v.object({
         kind: v.string(),
         message: v.string(),
         reason: v.nullable(v.string()),
+      }),
+    ),
+    /**
+     * Present only on `run.step_completed`; null on the run edges, which are about the run rather
+     * than about any one step of it.
+     *
+     * `outcome` is what keeps a SKIPPED step from reading as work that happened: the engine skips
+     * a gated step by marking it done with no output, which is byte-for-byte a step that ran and
+     * reported nothing. It is the wire twin of `publicRunStep.skipped` and says WHETHER rather
+     * than WHY, because which axis skipped a step is a vocabulary the engine grows.
+     */
+    step: v.nullable(
+      v.object({
+        /** Position in the run's step chain, lined up against `publicRun.steps`. */
+        index: v.number(),
+        agentKind: v.string(),
+        outcome: v.picklist(['completed', 'skipped']),
+        /**
+         * Which OCCURRENCE of this step's boundary the delivery is, 1-based. The engine re-runs a
+         * step in place (a companion bouncing its producer for rework, a gate rewinding to an
+         * upstream step), so the index alone does not identify a boundary and the dedupe key would
+         * collapse a whole rework loop onto its first cycle.
+         */
+        attempt: v.number(),
+        /** True when this was the run's LAST step, so a terminal event follows. */
+        final: v.boolean(),
       }),
     ),
   }),

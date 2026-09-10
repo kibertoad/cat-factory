@@ -15,6 +15,8 @@ import { writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { toJsonSchema, toJsonSchemaDefs } from '@valibot/to-json-schema'
+import { addHandDocumentedRoutes } from './openapi/hand-documented-routes.mjs'
+import { API_PREFIX, STATUS_DESCRIPTIONS } from './openapi/spec-constants.mjs'
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const CONTRACTS_DIST = resolve(repoRoot, 'backend/packages/contracts/dist/index.js')
@@ -40,8 +42,6 @@ export const SERVED_OPENAPI_PATH = resolve(
   'backend/packages/server/src/modules/publicApi/openapiDocument.generated.ts',
 )
 
-const API_PREFIX = '/api/v1'
-
 // The document's `info.version` describes the PUBLIC API surface (`/api/v1`), NOT the npm package
 // release: the surface's own version, and the ONE place it is set. Its history (what every number
 // added, and the collisions several of them survived) is `backend/docs/public-api-versions.md`,
@@ -62,28 +62,7 @@ const API_PREFIX = '/api/v1'
 // it against `origin/main` after every merge rather than trusting a clean one, and write the new
 // entry in the history doc, which is what makes the next collision arrive as a conflict.
 
-const API_VERSION = '1.73.0'
-
-/**
- * The media types the artifact-blob route can answer with: the image allow-list it clamps a
- * stored content type to, plus the octet-stream it falls back to for a row it does not recognise
- * (which it also serves as an attachment, so nothing executes).
- *
- * Stated here because the blob endpoint is documented by hand rather than from a route contract,
- * and kept honest by `blobMediaTypes.spec.ts`, which asserts this set IS the server's own
- * allow-list. A spec that names one type while the server sends another is a lie a third-party
- * client generated from this document would act on.
- */
-const BLOB_MEDIA_TYPES = [
-  'image/png',
-  'image/jpeg',
-  'image/webp',
-  'image/gif',
-  'application/octet-stream',
-]
-
-/** OpenAPI's spelling of "opaque bytes". */
-const BINARY_SCHEMA = { type: 'string', format: 'binary' }
+const API_VERSION = '1.74.0'
 
 /**
  * Named DTOs hoisted into `components.schemas` (so client codegen gets named types and
@@ -158,6 +137,12 @@ const COMPONENT_SCHEMAS = {
   PublicClarityDecision: 'publicClarityDecisionSchema',
   PublicBrainstormDecision: 'publicBrainstormDecisionSchema',
   PublicPrReviewDecision: 'publicPrReviewDecisionSchema',
+  PublicBugFishingPhase: 'publicBugFishingPhaseSchema',
+  PublicBugFishingUnfishedCell: 'publicBugFishingUnfishedCellSchema',
+  PublicBugFishingPlan: 'publicBugFishingPlanSchema',
+  PublicBugFishingSpawn: 'publicBugFishingSpawnSchema',
+  PublicBugFishingFinding: 'publicBugFishingFindingSchema',
+  PublicBugFishingDecision: 'publicBugFishingDecisionSchema',
   PublicHumanTestEnvironment: 'publicHumanTestEnvironmentSchema',
   PublicHumanTestDecision: 'publicHumanTestDecisionSchema',
   PublicVisualConfirmDecision: 'publicVisualConfirmDecisionSchema',
@@ -785,6 +770,24 @@ const OPERATION_DOCS = {
     description:
       'Dispatch a read-only investigator to re-examine one finding against the full source, optionally with a specific concern. It upholds, strengthens or retracts the finding, and the review re-parks carrying the verdict. Requires a `decide`-scope key.',
   },
+  addressPublicRunBugFishingFindings: {
+    tag: 'Decisions',
+    summary: 'Mark bug-fishing findings to be addressed',
+    description:
+      'Spawn one bug-fix task per named finding, each linked back to the expedition and started immediately. Accepted while the expedition is still fishing later angles as well as once it parks, because the findings of a completed angle are actionable the moment they land. `pipelineId` overrides, for this request only, the pipeline the spawned tasks run; omitting it uses the default the expedition resolved, which the decision publishes as `defaultFixPipelineId`. An unknown id, or one whose finding already has a live spawn, is refused rather than skipped. Requires a `decide`-scope key.',
+  },
+  dismissPublicRunBugFishingFinding: {
+    tag: 'Decisions',
+    summary: 'Dismiss a bug-fishing finding',
+    description:
+      'Drop one finding from triage. It stays on the record of the expedition, struck through, and is no longer markable. Curation rather than a resolution: the run stays exactly where it is. Requires a `decide`-scope key.',
+  },
+  resolvePublicRunBugFishing: {
+    tag: 'Decisions',
+    summary: 'Finish a bug-fishing expedition',
+    description:
+      'Finish triaging and advance the run past the step. Anything still unmarked stays unacted on, which is why this is a separate verb rather than something marking implies. Requires a `decide`-scope key.',
+  },
   confirmPublicRunHumanTest: {
     tag: 'Decisions',
     summary: 'Confirm a human-test gate',
@@ -1031,16 +1034,6 @@ const TAG_DESCRIPTIONS = {
     'A run’s recorded telemetry, for diagnosing one that went wrong: the model calls it made, the context each agent was provided, the searches it ran, the tools it invoked and how its infrastructure came up. Read-only (`read` scope), and every response’s size is bounded before the request is made.',
 }
 
-/** Human descriptions for the response status codes we emit (OpenAPI requires a description). */
-const STATUS_DESCRIPTIONS = {
-  200: 'Success',
-  201: 'Created',
-  202: 'Accepted — the run has started',
-  204: 'No content',
-  '4XX': 'Client error (validation, unauthorized, not found, conflict, rate limit)',
-  '5XX': 'Server error',
-}
-
 /**
  * Rewrite `@valibot/to-json-schema`'s `#/$defs/<X>` refs to OpenAPI `#/components/schemas/<X>`, and
  * drop `$schema` and `$defs`.
@@ -1138,111 +1131,6 @@ function sortDeep(value) {
     )
   }
   return value
-}
-
-/**
- * Add the three `/api/v1` routes that are NOT route contracts, documented by hand.
- *
- * A contract needs a JSON request/response pair to describe; these three have none (two SSE
- * streams and an image), so their entries are written out here instead of derived. That is also
- * why each carries a hand-written `x-min-scope` literal restating what its handler enforces:
- * there is no `withMinScope` to read it off, and no type that would catch the two drifting.
- *
- * Kept out of `buildOpenApiDoc` because it is a self-contained block of literals rather than
- * part of that function's derivation, and it is where every future raw route lands.
- */
-function addHandDocumentedRoutes(paths, tags) {
-  // The raw SSE routes that are NOT contracts (streaming Hono routes), documented by hand.
-  tags.add('Jobs')
-  paths[`${API_PREFIX}/jobs/{id}/events`] = {
-    get: {
-      operationId: 'streamPublicJobEvents',
-      // Hand-documented route: the handler's own `authorize(c, 'read')` literal, restated here
-      // because there is no contract to read it off. Keep the two in step.
-      'x-min-scope': 'read',
-      tags: ['Jobs'],
-      summary: 'Stream a job (SSE)',
-      description:
-        'Server-sent events for a headless job run: `progress` frames until a terminal `done`/`error`/`stopped`/`timeout` event. Authenticated by the API key header.',
-      parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
-      responses: {
-        200: {
-          description: 'An event stream of job updates',
-          content: { 'text/event-stream': { schema: { type: 'string' } } },
-        },
-        '4XX': {
-          description: STATUS_DESCRIPTIONS['4XX'],
-          content: {
-            'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } },
-          },
-        },
-      },
-    },
-  }
-  tags.add('Tasks')
-  paths[`${API_PREFIX}/tasks/{taskId}/events`] = {
-    get: {
-      operationId: 'streamPublicTaskRun',
-      // Hand-documented route: the handler's own `authorize(c, 'read')` literal, restated here
-      // because there is no contract to read it off. Keep the two in step.
-      'x-min-scope': 'read',
-      tags: ['Tasks'],
-      summary: 'Stream a task run (SSE)',
-      description:
-        'Server-sent events for a board task run: `progress` frames (the rich run projection) until a terminal `done`/`error` event, or a `timeout` when the connection cap is reached. Authenticated by the API key header.',
-      parameters: [{ name: 'taskId', in: 'path', required: true, schema: { type: 'string' } }],
-      responses: {
-        200: {
-          description: 'An event stream of run updates',
-          content: { 'text/event-stream': { schema: { type: 'string' } } },
-        },
-        '4XX': {
-          description: STATUS_DESCRIPTIONS['4XX'],
-          content: {
-            'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } },
-          },
-        },
-      },
-    },
-  }
-
-  // The artifact BYTES: not a route contract, because the response is an image rather than JSON.
-  // Documented by hand for the same reason the two SSE routes above are, and named in the SDK
-  // surface table so all four clients expose it (each transport reads the body as bytes).
-  tags.add('Evidence')
-  paths[`${API_PREFIX}/artifacts/{artifactId}/blob`] = {
-    get: {
-      operationId: 'getPublicArtifactBlob',
-      // Hand-documented route: the handler's own `authorize(c, 'read')` literal, restated here
-      // because there is no contract to read it off. Keep the two in step.
-      'x-min-scope': 'read',
-      tags: ['Evidence'],
-      summary: "Download an artifact's bytes",
-      description:
-        'The stored bytes of one artifact listed by the run-artifacts endpoint, served with the recorded image content type (`nosniff`, never inline active content). Authenticated like every other call: the bytes are workspace-scoped, so a report that links here on a public repository leaks nothing to a reader without a key. 404 when the id is unknown to the key’s workspace, and separately when the metadata row survives but its bytes are gone from the blob backend.',
-      parameters: [{ name: 'artifactId', in: 'path', required: true, schema: { type: 'string' } }],
-      responses: {
-        200: {
-          description: 'The artifact bytes',
-          // Every type the route can actually answer with, not one standing in for the rest: the
-          // handler serves the artifact's RECORDED type clamped to the image allow-list, and
-          // falls back to octet-stream only for a stored row it does not recognise. Declaring a
-          // single type would tell anyone generating a client from this document to expect a
-          // media type the endpoint never sends. `blobMediaTypes.spec.ts` pins this set to the
-          // server's own allow-list, so the two cannot drift.
-          content: Object.fromEntries(
-            BLOB_MEDIA_TYPES.map((media) => [media, { schema: BINARY_SCHEMA }]),
-          ),
-        },
-        '4XX': {
-          description: STATUS_DESCRIPTIONS['4XX'],
-          content: {
-            'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } },
-          },
-        },
-      },
-    },
-  }
 }
 
 /**

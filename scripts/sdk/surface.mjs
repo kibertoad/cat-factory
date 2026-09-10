@@ -181,6 +181,10 @@ const SURFACE = {
   resolvePublicRunPrReview: { group: 'decisions', method: 'resolvePrReview' },
   resumePublicRunPrReview: { group: 'decisions', method: 'resumePrReview' },
   dismissPublicRunPrReviewFinding: { group: 'decisions', method: 'dismissPrReviewFinding' },
+  addressPublicRunBugFishingFindings: { group: 'decisions', method: 'addressBugFishingFindings' },
+  dismissPublicRunBugFishingFinding: { group: 'decisions', method: 'dismissBugFishingFinding' },
+  resolvePublicRunBugFishing: { group: 'decisions', method: 'resolveBugFishing' },
+  streamPublicRunDecisions: { group: 'decisions', method: 'stream' },
   challengePublicRunPrReviewFinding: { group: 'decisions', method: 'challengePrReviewFinding' },
   confirmPublicRunHumanTest: { group: 'decisions', method: 'confirmHumanTest' },
   requestPublicRunHumanTestFix: { group: 'decisions', method: 'requestHumanTestFix' },
@@ -285,6 +289,9 @@ export const MCP_OMITTED_OPERATIONS = {
   streamPublicJobEvents:
     'A tool call returns one result, so it has no channel to stream an open-ended event feed ' +
     'over. Poll `jobs_get` instead, or consume the SSE endpoint through an SDK.',
+  streamPublicRunDecisions:
+    'A tool call returns one result, so it has no channel to stream a decision list over. ' +
+    'Poll `decisions_list` instead, or consume the SSE endpoint through an SDK.',
   streamPublicTaskRun:
     'A tool call returns one result, so it has no channel to stream a run over. Poll ' +
     '`tasks_get_run` instead (a parked run waits for a human indefinitely, so a bounded "wait ' +

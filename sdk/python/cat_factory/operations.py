@@ -21,6 +21,7 @@ from .models import (
     AcknowledgeKaizenEntry,
     ActPublicNotificationRequest,
     AddPublicTaskDependencyRequest,
+    AddressPublicRunBugFishingFindingsRequest,
     AttachPublicTaskDocumentRequest,
     ConnectPublicEnvironmentRequest,
     ConnectPublicEnvironmentResponse,
@@ -226,7 +227,10 @@ class JobsResource:
     def stream(self, id: str, *, timeout: float | None = None) -> EventStream:
         """Stream a job (SSE)
         Server-sent events for a headless job run: `progress` frames until a terminal
-        `done`/`error`/`stopped`/`timeout` event. Authenticated by the API key header.
+        `done`/`error`/`stopped`/`timeout` event, plus a `decision` frame announcing each
+        park. For what the run is asking, and how a chunked operation is progressing through
+        it, stream `GET /api/v1/runs/{runId}/decision-events` beside this. Authenticated by
+        the API key header.
         `GET /api/v1/jobs/{id}/events` (operation `streamPublicJobEvents`).
         """
         return self._transport.stream(
@@ -761,7 +765,10 @@ class TasksResource:
         """Stream a task run (SSE)
         Server-sent events for a board task run: `progress` frames (the rich run projection)
         until a terminal `done`/`error` event, or a `timeout` when the connection cap is
-        reached. Authenticated by the API key header.
+        reached, plus a `decision` frame announcing each park. For what the run is asking,
+        and how a chunked operation is progressing through it, stream `GET
+        /api/v1/runs/{runId}/decision-events` beside this. Authenticated by the API key
+        header.
         `GET /api/v1/tasks/{taskId}/events` (operation `streamPublicTaskRun`).
         """
         return self._transport.stream(
@@ -1506,6 +1513,28 @@ class DecisionsResource:
     def __init__(self, transport: Transport) -> None:
         self._transport = transport
 
+    def address_bug_fishing_findings(self, run_id: str, body: AddressPublicRunBugFishingFindingsRequest, *, timeout: float | None = None) -> PublicDecisionList:
+        """Mark bug-fishing findings to be addressed
+        Spawn one bug-fix task per named finding, each linked back to the expedition and
+        started immediately. Accepted while the expedition is still fishing later angles as
+        well as once it parks, because the findings of a completed angle are actionable the
+        moment they land. `pipelineId` overrides, for this request only, the pipeline the
+        spawned tasks run; omitting it uses the default the expedition resolved, which the
+        decision publishes as `defaultFixPipelineId`. An unknown id, or one whose finding
+        already has a live spawn, is refused rather than skipped. Requires a `decide`-scope
+        key.
+        `POST /api/v1/runs/{runId}/decisions/bug-fishing/address` (operation
+        `addressPublicRunBugFishingFindings`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/runs/{_quote(run_id)}/decisions/bug-fishing/address",
+            body=_encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return PublicDecisionList.from_dict(raw)
+
     def answer_agent_decision(self, run_id: str, decision_id: str, body: PublicResolveAgentDecision, *, timeout: float | None = None) -> PublicDecisionList:
         """Answer an agent-raised decision
         Answer a question an agent raised mid-work. Resolving RE-RUNS the asking step with
@@ -1653,6 +1682,22 @@ class DecisionsResource:
         raw = self._transport.request(
             "POST",
             f"/api/v1/runs/{_quote(run_id)}/decisions/interview/continue",
+            query=None,
+            timeout=timeout,
+        )
+        return PublicDecisionList.from_dict(raw)
+
+    def dismiss_bug_fishing_finding(self, run_id: str, finding_id: str, *, timeout: float | None = None) -> PublicDecisionList:
+        """Dismiss a bug-fishing finding
+        Drop one finding from triage. It stays on the record of the expedition, struck
+        through, and is no longer markable. Curation rather than a resolution: the run stays
+        exactly where it is. Requires a `decide`-scope key.
+        `POST /api/v1/runs/{runId}/decisions/bug-fishing/findings/{findingId}/dismiss`
+        (operation `dismissPublicRunBugFishingFinding`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/runs/{_quote(run_id)}/decisions/bug-fishing/findings/{_quote(finding_id)}/dismiss",
             query=None,
             timeout=timeout,
         )
@@ -2020,6 +2065,22 @@ class DecisionsResource:
         )
         return PublicDecisionList.from_dict(raw)
 
+    def resolve_bug_fishing(self, run_id: str, *, timeout: float | None = None) -> PublicDecisionList:
+        """Finish a bug-fishing expedition
+        Finish triaging and advance the run past the step. Anything still unmarked stays
+        unacted on, which is why this is a separate verb rather than something marking
+        implies. Requires a `decide`-scope key.
+        `POST /api/v1/runs/{runId}/decisions/bug-fishing/resolve` (operation
+        `resolvePublicRunBugFishing`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/runs/{_quote(run_id)}/decisions/bug-fishing/resolve",
+            query=None,
+            timeout=timeout,
+        )
+        return PublicDecisionList.from_dict(raw)
+
     def resolve_clarity_exceeded(self, run_id: str, body: PublicResolveExceeded, *, timeout: float | None = None) -> PublicDecisionList:
         """Resolve a clarity review at its iteration cap
         Pick how a clarity review that exhausted its pass budget proceeds: one more round,
@@ -2209,6 +2270,24 @@ class DecisionsResource:
             timeout=timeout,
         )
         return PublicDecisionList.from_dict(raw)
+
+    def stream(self, run_id: str, *, timeout: float | None = None) -> EventStream:
+        """Stream a run’s parked decisions (SSE)
+        Server-sent events over the run’s whole decision list: a `decision-state` frame
+        carrying the same payload `GET /api/v1/runs/{runId}/decisions` serves, pushed
+        whenever it changes, then a terminal `done` when the run settles or a `timeout` at
+        the connection cap. This is how a chunked operation reports progress: a PR deep
+        review’s slice count, a bug-fishing angle landing and a challenge verdict all move
+        the decision list without moving the run, so they produce no `progress` frame on the
+        run streams. Authenticated by the API key header.
+        `GET /api/v1/runs/{runId}/decision-events` (operation `streamPublicRunDecisions`).
+        """
+        return self._transport.stream(
+            "GET",
+            f"/api/v1/runs/{_quote(run_id)}/decision-events",
+            query=None,
+            timeout=timeout,
+        )
 
 
 class DebugResource:

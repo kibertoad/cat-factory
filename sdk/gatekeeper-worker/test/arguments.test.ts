@@ -92,9 +92,23 @@ const SYNTHETIC_DECISION = {
   stage: 'diverge',
 }
 
-/** An answer naming each field given, with a value inside its choices where it has any. */
-function inputFor(fields: readonly { name: string; choices?: readonly string[] }[]) {
-  return Object.fromEntries(fields.map((field) => [field.name, field.choices?.[0] ?? 'text']))
+/**
+ * An answer naming each field given: a value inside its choices where it has any, and a
+ * single-element LIST where the field declares one.
+ *
+ * The shape is read off the field rather than guessed from its name, which is why the descriptor
+ * carries it: a required list filled with a string is refused by the verb itself, so this suite
+ * would report "no answer is accepted" for a verb that is perfectly well formed.
+ */
+function inputFor(
+  fields: readonly { name: string; choices?: readonly string[]; shape?: 'text' | 'list' }[],
+) {
+  return Object.fromEntries(
+    fields.map((field) => {
+      const value = field.choices?.[0] ?? 'text'
+      return [field.name, field.shape === 'list' ? [value] : value]
+    }),
+  )
 }
 
 /**

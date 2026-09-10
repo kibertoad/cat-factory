@@ -717,6 +717,7 @@
         "adoption_plan_unavailable": "Onaylanacak bir plan yok",
         "monorepo_directory_taken": "Bu dizin zaten var",
         "no_expedition": "Bu çalıştırmada hata avı yok",
+        "expedition_settled": "Bu sefer zaten tamamlandı",
         "not_awaiting_triage": "Bu sefer triyaj beklemiyor",
         "already_addressed": "Bazı bulguların zaten bir düzeltme görevi var",
         "no_host_frame": "Bu sefer bir hizmetin altında değil"
@@ -770,6 +771,7 @@
         "adoption_plan_unavailable": "İnceleme bir plan üretemedi, bu yüzden gönderilecek karar yok.",
         "monorepo_directory_taken": "Bootstrap yeni bir servis oluşturur. Henüz var olmayan bir dizin seç ya da mevcut olanı servis olarak içe aktar.",
         "no_expedition": "Baktığınız çalıştırma sefer durumu taşımıyor, dolayısıyla triyaj edilecek bir şey yok. Çalıştırmayı yenileyip yeniden deneyin.",
+        "expedition_settled": "Çalıştırma hata avı adımını çoktan geçti, dolayısıyla işaretlenecek veya yok sayılacak bir şey kalmadı. Neyin bulduğunu ve hangi bulgulara müdahale edildiğini görmek için çalıştırmayı yenileyin.",
         "not_awaiting_triage": "Ya hâlâ başka bir açıyı tarıyor ya da çoktan bitirilmiş. Nerede olduğunu görmek için çalıştırmayı yenileyin.",
         "already_addressed": "Daha önce onlar için bir düzeltme görevi oluşturulmuştu, bu yüzden yeniden bir şey oluşturulmadı. Mevcut göreve ulaşmak için bulguyu açın.",
         "no_host_frame": "Bir düzeltme görevinin altında yaşayacağı bir hizmete ve düzeltilecek bir depoya ihtiyacı var. Sefer görevini bir hizmet çerçevesinin altına taşıyıp yeniden deneyin."

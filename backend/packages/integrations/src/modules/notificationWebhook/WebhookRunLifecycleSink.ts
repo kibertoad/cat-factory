@@ -46,6 +46,29 @@ export interface WebhookRunLifecycleSinkDependencies {
   ) => void
 }
 
+/**
+ * The delivery's dedupe key: `<runId>:<event>`, plus the step index AND its attempt on the one
+ * event a run emits repeatedly.
+ *
+ * BOTH halves of the step's identity, because the index alone is not one. A run re-runs a step in
+ * place: a companion bounces its producer for rework, a human-test gate rewinds to its upstream
+ * `deployer`, a `request-changes` loops a range. Each of those settles the same index again, so on
+ * the index alone a receiver following the family's mandatory `deliveryId` dedupe discards every
+ * re-completion, so a three-cycle rework loop arrives as one step boundary. The attempt is what
+ * keeps each boundary its own delivery while a durable REPLAY of one settle, which reports the same
+ * attempt, still collapses.
+ *
+ * Keyed off the event's own `step` rather than off its NAME, so the discriminator and the payload
+ * cannot disagree: a `run.step_completed` projected with no step would otherwise produce
+ * `…:run.step_completed:undefined` for every step of the run, collapsing them all onto one key at
+ * the receiver. Falling back to the run-scoped key is the honest answer there, and the engine's
+ * projection never takes it.
+ */
+function stepScopedDeliveryId(event: RunLifecycleEvent): string {
+  const base = `${event.runId}:${event.event}`
+  return event.step ? `${base}:${event.step.index}:${event.step.attempt}` : base
+}
+
 export class WebhookRunLifecycleSink implements RunLifecycleSink {
   constructor(private readonly deps: WebhookRunLifecycleSinkDependencies) {}
 
@@ -72,11 +95,16 @@ export class WebhookRunLifecycleSink implements RunLifecycleSink {
     if (endpoints.length === 0) return
 
     const body: RunWebhookDelivery = {
-      // `<runId>:<event>` — stable across retries AND across a re-delivery, so it is the dedupe
-      // key a receiver uses. Delivery is at-least-once by design (see the contract doc), and the
-      // key has to carry that job alone: `sentAt` below and the projection's `occurredAt` are
+      // `<runId>:<event>`, stable across retries AND across a re-delivery, so it is the dedupe key
+      // a receiver uses. Delivery is at-least-once by design (see the contract doc), and the key
+      // has to carry that job alone: `sentAt` below and the projection's `occurredAt` are
       // re-stamped on a replay, so a receiver hashing the BODY would not collapse the repeat.
-      deliveryId: `${event.runId}:${event.event}`,
+      //
+      // The STEP INDEX and its ATTEMPT join it on `run.step_completed`, because that is the one
+      // event a single run emits more than once: without the index every step of a run would
+      // dedupe onto the first one delivered, and without the attempt every re-run of one step
+      // would dedupe onto that step's first cycle.
+      deliveryId: stepScopedDeliveryId(event),
       sentAt: this.deps.clock.now(),
       workspaceId,
       event: event.event,
@@ -90,6 +118,7 @@ export class WebhookRunLifecycleSink implements RunLifecycleSink {
         occurredAt: event.occurredAt,
         pullRequestUrl: event.pullRequestUrl,
         failure: event.failure,
+        step: event.step,
       },
     }
     await fanOutSignedWebhook(
