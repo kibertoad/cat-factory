@@ -1,5 +1,22 @@
 # @cat-factory/local-server
 
+## 0.151.1
+
+### Patch Changes
+
+- Updated dependencies [5dc7506]
+  - @cat-factory/contracts@0.353.0
+  - @cat-factory/agents@0.165.0
+  - @cat-factory/orchestration@0.311.0
+  - @cat-factory/server@0.323.0
+  - @cat-factory/executor-harness@1.157.0
+  - @cat-factory/binary-generators@0.3.49
+  - @cat-factory/gitlab@0.23.12
+  - @cat-factory/integrations@0.173.1
+  - @cat-factory/kernel@0.346.1
+  - @cat-factory/prompt-fragments@1.1.45
+  - @cat-factory/node-server@0.231.1
+
 ## 0.151.0
 
 ### Minor Changes
