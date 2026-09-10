@@ -14,6 +14,9 @@ import { requireCapability } from '../../http/guards.js'
 // alone would refuse exactly the account- and workspace-tier standards a team authored, and admit
 // a built-in the board has tombstoned.
 
+/** How many missing ids the human-readable refusal names before it counts the rest. */
+const MESSAGE_ID_CAP = 5
+
 /** The fragment library, or the 503 naming what this deployment has not wired. */
 export function requireFragmentLibrary(
   library: FragmentLibraryModule | undefined,
@@ -53,9 +56,9 @@ export function toPublicPromptFragment(entry: ResolvedFragment): PublicPromptFra
  * Deliberately at THIS door rather than on `BoardService` beside the preset-pin guard, which is
  * where a repository-read refusal otherwise belongs. The app's create form seeds its picker from
  * the enclosing service's standing set and submits it verbatim, so that list is a MIX of what a
- * person picked and what the task inherited, so one library id gone stale on a service would
- * then refuse every task filed under it. What separates the two is not the store being read but
- * WHO named the ids: everything here was named by the caller, in the same request cycle it read
+ * person picked and what the task inherited: one library id gone stale on a service would then
+ * refuse every task filed under it. What separates the two is not the store being read but WHO
+ * named the ids, and everything here was named by the caller, in the same request cycle it read
  * the catalog in.
  *
  * Fires only for a caller that named standards, so a deployment with no library wired keeps
@@ -71,13 +74,19 @@ export async function assertFragmentsResolvable(
   const known = new Set(catalog.map((entry) => entry.id))
   const missing = fragmentIds.filter((id) => !known.has(id))
   if (missing.length === 0) return
-  // Every id that missed, not the first: a caller assembling a selection from configuration wants
-  // one round trip to fix all of them. Naming them is safe here (and useful) where the preset
-  // guard withholds its library, because this catalog is readable at `read`: a floor BELOW the
-  // `write` that creates a task, so a caller told which of its own ids missed learns nothing it
-  // could not have listed.
+  // EVERY id that missed rides `details`, not the first: a caller assembling a selection from
+  // configuration wants one round trip to fix all of them. Naming them at all is safe here (and
+  // useful) where the preset guard withholds its library, because this catalog is readable at
+  // `read`, a floor BELOW the `write` that creates a task: a caller told which of its OWN ids
+  // missed learns nothing it could not have listed.
+  //
+  // The prose half is capped and SAYS it is capped, because the array is bounded at
+  // `MAX_TASK_FRAGMENTS` and a message naming a hundred ids is one nobody reads. The machine-
+  // readable list is what a client acts on and stays whole.
+  const named = missing.slice(0, MESSAGE_ID_CAP).join(', ')
+  const rest = missing.length - MESSAGE_ID_CAP
   throw new ValidationError(
-    `No best-practice standard in this workspace for: ${missing.join(', ')}.`,
+    `No best-practice standard in this workspace for: ${named}${rest > 0 ? ` (and ${rest} more)` : ''}.`,
     { reason: 'prompt_fragment_not_found', fragmentIds: missing },
   )
 }
