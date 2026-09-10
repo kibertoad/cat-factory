@@ -243,6 +243,9 @@ routes on and an empty title is honest about what could be read.
   refusal originally told the operator a `decide` key answers the park through
   `/api/v1/runs/:runId/decisions`, which held for one of the five parks it named: selling a scope
   upgrade that buys a run whose only exit is cancel. It is now built from the pipeline's actual park
-  surfaces against `PUBLICLY_ANSWERABLE_PARK_SURFACES` (`publicApiAdmission.ts`), a set kept
+  surfaces against `PUBLICLY_ANSWERABLE_PARK_SURFACES` (`publicApiAdmission.ts`), a table kept
   deliberately apart from `PARKING_INLINE_KINDS` so the gap is machine-readable and each slice that
-  closes one updates the message by adding a member. Admission itself is unchanged.
+  closes one updates the message by adding a member. It maps each answerable surface to the
+  `decisions[]` KIND that answers it, because three of them are spelled differently in the two
+  places (a `pr-reviewer` step is answered by a `pr-review` decision, both brainstorm kinds by one
+  `brainstorm`) and the message points a caller at that field. Admission itself is unchanged.
