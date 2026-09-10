@@ -46,6 +46,7 @@ import type {
 } from '@cat-factory/contracts'
 import type { Context } from 'hono'
 import type { AppEnv } from '../../../http/env.js'
+import { isLiveBugFishing, toBugFishingDecision } from './bugFishingProjection.js'
 import { PUBLICLY_ANSWERABLE_PARK_SURFACES } from '../publicApiAdmission.js'
 import type { ScopedRun } from './scope.js'
 
@@ -549,15 +550,39 @@ export async function buildDecisionList<E extends AppEnv>(
   const container = c.get('container')
   const execution =
     (await container.executionRepository.get(workspaceId, scoped.execution.id)) ?? scoped.execution
+  return projectDecisionList(c, workspaceId, scoped.blockId, execution)
+}
+
+/**
+ * {@link buildDecisionList} minus the re-read: project a decision list from an instance the
+ * caller is already holding.
+ *
+ * Split out for the SSE decision channel, which polls the run once per tick and would otherwise
+ * read it twice per frame. Every mutating route still goes through {@link buildDecisionList},
+ * because there the re-read is the point.
+ *
+ * This is the WHOLE list, dialogue and interview reads included, and a stream must not narrow it
+ * to the parts that are free: `decisions: []` from a run holding a live requirements review is
+ * byte-for-byte the answer a run with nothing to ask gives, which is the one confusion this
+ * surface's `unanswerable` field exists to prevent. What the stream may choose is whether to ask
+ * at all (see `wantsDecisionChannel`), never how much of the answer to believe.
+ */
+export async function projectDecisionList<E extends AppEnv>(
+  c: Context<E>,
+  workspaceId: string,
+  blockId: string,
+  execution: ExecutionInstance,
+): Promise<PublicDecisionList> {
+  const container = c.get('container')
 
   // The dialogue reads and the fork read are INDEPENDENT point lookups in separate stores, so they
   // are issued together: this projection is on the poll path AND rebuilt after every answer, and
   // awaiting them in sequence made its latency the sum of every park kind a run could carry rather
   // than the slowest one. The concatenation order below is still deterministic.
   const [dialogue, fork, interview] = await Promise.all([
-    liveDialogueDecisions(c, workspaceId, scoped.blockId, execution),
+    liveDialogueDecisions(c, workspaceId, blockId, execution),
     liveForkDecisions(c, workspaceId, execution),
-    liveInterviewDecisions(c, workspaceId, scoped.blockId, execution),
+    liveInterviewDecisions(c, workspaceId, blockId, execution),
   ])
   const decisions: PublicDecision[] = [
     ...dialogue,
@@ -577,7 +602,7 @@ export async function buildDecisionList<E extends AppEnv>(
 
   return {
     runId: execution.id,
-    taskId: scoped.blockId,
+    taskId: blockId,
     status: execution.status,
     // `blocked` IS the parked state — the run is waiting on a human and will not move until one
     // of these decisions is answered. Read from the run itself rather than inferred from the
@@ -636,12 +661,14 @@ function answeredStepIndexes(decisions: readonly PublicDecision[]): ReadonlySet<
  *
  * Whether it belongs in the wait report is the SAME question the refusal at the start surface
  * answers, so it is asked of the same set ({@link PUBLICLY_ANSWERABLE_PARK_SURFACES}) rather than
- * of a second list beside it: `pr-reviewer` has public verbs (resolve / dismiss / challenge /
- * resume) and is a `decisions[]` entry, `bug-fisher` has none and is named here. A slice that
- * lands the marking route moves the member and both the refusal and this report follow.
+ * of a second list beside it. Both SHIPPED curating kinds now have public verbs and are therefore
+ * `decisions[]` entries rather than named waits: `pr-reviewer` (resolve / dismiss / challenge /
+ * resume) and `bug-fisher` (address / dismiss / resolve). What is left for this to report is a
+ * curating kind a DEPLOYMENT registered, whose marking lives wherever that deployment put it.
+ * and adding its verbs is one edit to that map, which both the refusal and this report follow.
  *
  * The step also carries an ordinary pending approval, which this response DOES offer, and that is
- * why the detail says what resolving it means. Ending an expedition is an exit, not an answer: it
+ * why the detail says what resolving it means. Ending a curation is an exit, not an answer: it
  * advances the run past the step while everything it caught goes unacted on, and a caller told
  * only "here is an approval" would take the one for the other.
  */
@@ -659,9 +686,10 @@ function curationWait(
     stepIndex,
     detail:
       `The run is parked on the '${step.agentKind}' step so a person can mark which of the ` +
-      'things it found are worth acting on. No call on this API marks one, so that choice has to ' +
-      "be made in the app. Resolving the step's approval gate from here ENDS the run instead, " +
-      'leaving everything it found unacted on.',
+      'things it found are worth acting on. This deployment registered that kind and no call on ' +
+      'this API marks one, so the marking lives wherever the deployment surfaced it. Resolving ' +
+      "the step's approval gate from here ENDS the run instead, leaving everything it found " +
+      'unacted on.',
   }
 }
 
@@ -913,6 +941,9 @@ function liveStepDecisions(
     }
     if (step.prReview && isLivePrReview(step.prReview)) {
       decisions.push(toPrReviewDecision(step.prReview, step))
+    }
+    if (step.bugFishing && isLiveBugFishing(step.bugFishing)) {
+      decisions.push(toBugFishingDecision(step.bugFishing, step, index))
     }
     if (step.humanTest && isLiveHumanTest(step.humanTest)) {
       decisions.push(toHumanTestDecision(step.humanTest))

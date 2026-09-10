@@ -14,16 +14,50 @@
 // free of any orchestration type, so kernel stays the bottom layer.
 
 /**
- * The lifecycle transitions an external receiver can subscribe to. Deliberately only the
- * EDGES a caller cannot already infer cheaply — a per-step feed would be a firehose (the engine
- * emits on every container poll) and is what the SSE endpoints are for.
+ * The lifecycle transitions an external receiver can subscribe to.
+ *
+ * The three run edges, plus one STEP edge. A per-step PROGRESS feed would be a firehose (the
+ * engine emits on every container poll) and is what the SSE endpoints are for; `run.step_completed`
+ * is the narrowing of that, not a reversal of it. It fires once per step BOUNDARY, so a ten-step
+ * pipeline produces ten deliveries over however many hours it runs rather than one per poll.
+ *
+ * The boundary is a single seam rather than a hook per settle site: every path that finishes a step
+ * and moves the run's cursor funnels through `RunStateMachine`'s `settleStepAndAdvance` (the agent
+ * result, a skip, a companion, a one-shot) or `settleAdvancedGate` (a resolved gate). A hook at
+ * each of the twelve callers is the drift the run's terminal emit already learned to avoid.
  */
-export const RUN_LIFECYCLE_EVENTS = ['run.started', 'run.completed', 'run.failed'] as const
+export const RUN_LIFECYCLE_EVENTS = [
+  'run.started',
+  'run.step_completed',
+  'run.completed',
+  'run.failed',
+] as const
 export type RunLifecycleEventKind = (typeof RUN_LIFECYCLE_EVENTS)[number]
 
 /** Whether `value` is one of the known lifecycle events (a lenient decode for a stored filter). */
 export function isRunLifecycleEventKind(value: unknown): value is RunLifecycleEventKind {
   return typeof value === 'string' && (RUN_LIFECYCLE_EVENTS as readonly string[]).includes(value)
+}
+
+/**
+ * The step a `run.step_completed` event is about.
+ *
+ * `outcome` is what stops a skipped step reading as work that happened: the engine skips a gated
+ * step by marking it done with no output, which is byte-for-byte a step that ran and reported
+ * nothing, and a receiver counting completed steps would score the two the same. It is the wire
+ * twin of `publicRunStep.skipped`, and it says WHETHER rather than WHY for the same reason that
+ * field does: which axis skipped a step is a vocabulary the engine grows, and a published enum is
+ * a promise not to.
+ */
+export interface RunLifecycleStep {
+  /** Position in the run's own step chain, lined up against `publicRun.steps`. */
+  index: number
+  /** The step's agent kind (`coder`, `ci`, `merger`, a deployment's own). */
+  agentKind: string
+  /** `completed` for a step that ran, `skipped` for one the pipeline decided against running. */
+  outcome: 'completed' | 'skipped'
+  /** Whether this was the run's LAST step, so a receiver can expect a terminal event next. */
+  final: boolean
 }
 
 /** The failure a `run.failed` event carries — the same record the run row keeps. */
@@ -64,6 +98,11 @@ export interface RunLifecycleEvent {
   pullRequestUrl: string | null
   /** Present only on `run.failed`; null on the others. */
   failure: RunLifecycleFailure | null
+  /**
+   * Present only on `run.step_completed`; null on the run edges, which are about the run rather
+   * than about any one step of it.
+   */
+  step: RunLifecycleStep | null
 }
 
 /**

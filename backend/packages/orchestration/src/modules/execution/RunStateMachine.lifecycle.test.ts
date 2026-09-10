@@ -102,6 +102,10 @@ describe('RunStateMachine — outbound run-lifecycle push', () => {
       occurredAt: 1_700_000_000_000,
       pullRequestUrl: 'https://vcs.test/pr/7',
       failure: null,
+      // A RUN edge is about the run, so it names no step. Asserted as part of the whole shape
+      // rather than skipped, because this projection is what leaves the deployment: a field that
+      // started carrying a value here would reach an operator's endpoint with nothing failing.
+      step: null,
     })
   })
 

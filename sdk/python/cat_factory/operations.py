@@ -21,6 +21,7 @@ from .models import (
     AcknowledgeKaizenEntry,
     ActPublicNotificationRequest,
     AddPublicTaskDependencyRequest,
+    AddressPublicRunBugFishingFindingsRequest,
     AttachPublicTaskDocumentRequest,
     ConnectPublicEnvironmentRequest,
     ConnectPublicEnvironmentResponse,
@@ -111,6 +112,7 @@ from .models import (
     PublicSpend,
     PublicSpendDimension,
     PublicSpendWindow,
+    PublicStreamDecisionChannel,
     PublicTask,
     PublicTaskList,
     PublicUsage,
@@ -223,16 +225,18 @@ class JobsResource:
                 raise _repeated_cursor()
             page_cursor = page.next_cursor
 
-    def stream(self, id: str, *, timeout: float | None = None) -> EventStream:
+    def stream(self, id: str, *, decisions: PublicStreamDecisionChannel | None = None, timeout: float | None = None) -> EventStream:
         """Stream a job (SSE)
         Server-sent events for a headless job run: `progress` frames until a terminal
-        `done`/`error`/`stopped`/`timeout` event. Authenticated by the API key header.
+        `done`/`error`/`stopped`/`timeout` event, plus a `decision` frame announcing each
+        park. Pass `?decisions=true` to add `decision-state` frames carrying what the run is
+        asking. Authenticated by the API key header.
         `GET /api/v1/jobs/{id}/events` (operation `streamPublicJobEvents`).
         """
         return self._transport.stream(
             "GET",
             f"/api/v1/jobs/{_quote(id)}/events",
-            query=None,
+            query={"decisions": decisions},
             timeout=timeout,
         )
 
@@ -757,17 +761,19 @@ class TasksResource:
         )
         return PublicTask.from_dict(raw)
 
-    def stream(self, task_id: str, *, timeout: float | None = None) -> EventStream:
+    def stream(self, task_id: str, *, decisions: PublicStreamDecisionChannel | None = None, timeout: float | None = None) -> EventStream:
         """Stream a task run (SSE)
         Server-sent events for a board task run: `progress` frames (the rich run projection)
         until a terminal `done`/`error` event, or a `timeout` when the connection cap is
-        reached. Authenticated by the API key header.
+        reached, plus a `decision` frame announcing each park. Pass `?decisions=true` to add
+        `decision-state` frames carrying what the run is asking. Authenticated by the API
+        key header.
         `GET /api/v1/tasks/{taskId}/events` (operation `streamPublicTaskRun`).
         """
         return self._transport.stream(
             "GET",
             f"/api/v1/tasks/{_quote(task_id)}/events",
-            query=None,
+            query={"decisions": decisions},
             timeout=timeout,
         )
 
@@ -1506,6 +1512,28 @@ class DecisionsResource:
     def __init__(self, transport: Transport) -> None:
         self._transport = transport
 
+    def address_bug_fishing_findings(self, run_id: str, body: AddressPublicRunBugFishingFindingsRequest, *, timeout: float | None = None) -> PublicDecisionList:
+        """Mark bug-fishing findings to be addressed
+        Spawn one bug-fix task per named finding, each linked back to the expedition and
+        started immediately. Accepted while the expedition is still fishing later angles as
+        well as once it parks, because the findings of a completed angle are actionable the
+        moment they land. `pipelineId` overrides, for this request only, the pipeline the
+        spawned tasks run; omitting it uses the default the expedition resolved, which the
+        decision publishes as `defaultFixPipelineId`. An unknown id, or one whose finding
+        already has a live spawn, is refused rather than skipped. Requires a `decide`-scope
+        key.
+        `POST /api/v1/runs/{runId}/decisions/bug-fishing/address` (operation
+        `addressPublicRunBugFishingFindings`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/runs/{_quote(run_id)}/decisions/bug-fishing/address",
+            body=_encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return PublicDecisionList.from_dict(raw)
+
     def answer_agent_decision(self, run_id: str, decision_id: str, body: PublicResolveAgentDecision, *, timeout: float | None = None) -> PublicDecisionList:
         """Answer an agent-raised decision
         Answer a question an agent raised mid-work. Resolving RE-RUNS the asking step with
@@ -1653,6 +1681,22 @@ class DecisionsResource:
         raw = self._transport.request(
             "POST",
             f"/api/v1/runs/{_quote(run_id)}/decisions/interview/continue",
+            query=None,
+            timeout=timeout,
+        )
+        return PublicDecisionList.from_dict(raw)
+
+    def dismiss_bug_fishing_finding(self, run_id: str, finding_id: str, *, timeout: float | None = None) -> PublicDecisionList:
+        """Dismiss a bug-fishing finding
+        Drop one finding from triage. It stays on the record of the expedition, struck
+        through, and is no longer markable. Curation rather than a resolution: the run stays
+        exactly where it is. Requires a `decide`-scope key.
+        `POST /api/v1/runs/{runId}/decisions/bug-fishing/findings/{findingId}/dismiss`
+        (operation `dismissPublicRunBugFishingFinding`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/runs/{_quote(run_id)}/decisions/bug-fishing/findings/{_quote(finding_id)}/dismiss",
             query=None,
             timeout=timeout,
         )
@@ -2015,6 +2059,22 @@ class DecisionsResource:
             "POST",
             f"/api/v1/runs/{_quote(run_id)}/decisions/brainstorm/{_quote(stage)}/resolve-exceeded",
             body=_encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return PublicDecisionList.from_dict(raw)
+
+    def resolve_bug_fishing(self, run_id: str, *, timeout: float | None = None) -> PublicDecisionList:
+        """Finish a bug-fishing expedition
+        Finish triaging and advance the run past the step. Anything still unmarked stays
+        unacted on, which is why this is a separate verb rather than something marking
+        implies. Requires a `decide`-scope key.
+        `POST /api/v1/runs/{runId}/decisions/bug-fishing/resolve` (operation
+        `resolvePublicRunBugFishing`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/runs/{_quote(run_id)}/decisions/bug-fishing/resolve",
             query=None,
             timeout=timeout,
         )

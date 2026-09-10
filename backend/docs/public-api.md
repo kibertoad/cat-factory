@@ -39,6 +39,9 @@ This is the **how-to and reference**. Its siblings each own a different slice:
   `read` scope), for walking a run's telemetry from outside the browser.
 - [ADR 0043](./adr/0043-public-decision-surface.md): why the decision surface answers what it
   answers, and what it deliberately cannot. Read it before building on parked decisions.
+- [ADR 0065](./adr/0065-run-progress-streaming.md): how a run that works in CHUNKS reports
+  progress: the opt-in SSE decision channel, the bug-fishing verbs, and the step-boundary webhook
+  event. Read it before building a poller.
 - [`sdk/README.md`](../../sdk/README.md): the **official SDK clients** (TypeScript, Python, Go,
   Java+Kotlin), generated from the spec below. Reach for one before hand-rolling HTTP: see
   [Client SDKs](#client-sdks).
@@ -548,8 +551,8 @@ ways a pipeline parks:
 Any of them needs a `decide`-scope key (`403 pipeline_requires_decide_scope`; the refusal names this
 surface's exit, `POST /tasks/:taskId/stop`). The refusal lists the park SURFACES it found and then
 names the `decisions[]` **kinds** that answer them, which are not always spelled the same: a
-`pr-reviewer` step is answered by a `pr-review` decision, and both brainstorm kinds by one
-`brainstorm`.
+`pr-reviewer` step is answered by a `pr-review` decision, a `bug-fisher` step by a `bug-fishing`
+decision, and both brainstorm kinds by one `brainstorm`.
 
 **`POST /tasks/:taskId/retry` applies the rule too**, asked of the run's STORED steps, since that is
 what a retry re-drives. Starting a run is not the only way to set a park in motion: without it a
@@ -1654,17 +1657,51 @@ Both `/events` endpoints are `text/event-stream` responses driven by a 1-second 
 persisted run. Frames are **de-duplicated** (a frame is sent only when the payload changed) and
 there is **no heartbeat**, so a quiet run produces a quiet stream. Event names:
 
-| Event      | Meaning                                                                                                                                                      |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `progress` | The run advanced; data is the job / run projection (same shape as the GET, with a run's step deliverables reduced — see above).                              |
-| `decision` | The run just **parked** on a human decision. Answer via `/runs/:runId/decisions`; the stream stays open, and a later park after a resume is announced again. |
-| `done`     | Terminal success. Stream closes.                                                                                                                             |
-| `error`    | Terminal failure. Stream closes.                                                                                                                             |
-| `stopped`  | (Jobs stream only) the run ended in a state that still projects as `running` (e.g. cancelled). Stream closes.                                                |
-| `timeout`  | The stream hit its **5-minute** cap; data `{}`. Nothing is wrong; reconnect to keep watching.                                                                |
+| Event            | Meaning                                                                                                                                                      |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `progress`       | The run advanced; data is the job / run projection (same shape as the GET, with a run's step deliverables reduced; see above).                               |
+| `decision`       | The run just **parked** on a human decision. Answer via `/runs/:runId/decisions`; the stream stays open, and a later park after a resume is announced again. |
+| `decision-state` | Opt-in (`?decisions=true`). The run's decision list changed; data is what `GET /runs/:runId/decisions` would answer. See below.                              |
+| `done`           | Terminal success. Stream closes.                                                                                                                             |
+| `error`          | Terminal failure. Stream closes.                                                                                                                             |
+| `stopped`        | (Jobs stream only) the run ended in a state that still projects as `running` (e.g. cancelled). Stream closes.                                                |
+| `timeout`        | The stream hit its **5-minute** cap; data `{}`. Nothing is wrong; reconnect to keep watching.                                                                |
 
 A revoked key cuts a live stream within ~5 seconds. Streams are per-run reads bounded by their own
 poll; for push at scale, register the [outbound webhook](#outbound-webhooks-push) instead.
+
+##### The decision channel (`?decisions=true`)
+
+**A `progress` frame is emitted when the RUN projection changes, and what a chunked operation does
+while it works is not on it.** A PR deep review's slice count, its challenge verdicts and its post
+report ride the reviewer's own step state; an expedition's angles and findings ride its own; neither
+is `steps[].data`, which carries a step's structured result. So a seventeen-minute review emits no
+frame at all for its whole duration and then a single `decision` at the park, and the progress worth
+watching is readable only by polling `/runs/:runId/decisions`, which is what
+[Reviewing a pull request end to end](#reviewing-a-pull-request-end-to-end) tells you to do.
+
+`?decisions=true` closes that. Each tick projects the run's decision list and a `decision-state`
+frame carries it whenever it changed: a slice reporting, a review moving `reviewing → challenging`,
+a `postReport` landing, an expedition's angle settling with new findings. The payload is exactly
+what `GET /runs/:runId/decisions` serves, `unanswerable[]` included, so a caller renders one shape
+whichever way it arrived.
+
+Three things to count on:
+
+- **It is opt-in, and off by default.** A decision list is not derivable from the run in hand: the
+  three iterative reviews, the fork and an interview each live in their own store, so projecting one
+  costs point reads per tick. A consumer that wants progress alone goes on paying nothing for this.
+- **The frame is the WHOLE list, never a delta or a subset.** `decisions: []` from a run holding a
+  live requirements review would be byte-for-byte the answer a run with nothing to ask gives, which
+  is the confusion `unanswerable[]` exists to prevent.
+- **A `decisions` value other than `true`, `false`, `1` or `0` is refused** with `422`,
+  `code: "validation"` and `details.reason: "invalid_query_parameter"`, rather than read as off.
+  The channel is silent on a run with nothing to ask, so a typo'd `?decisions=yes` served as a
+  working stream is indistinguishable from a quiet one, and the caller would conclude the run never
+  parked.
+
+`decision` (singular) is unchanged: it still announces a park once and carries the run. The two are
+complementary, and a caller can listen for either or both.
 
 ### Pipelines & task types (discovery)
 
@@ -1741,12 +1778,12 @@ Every action returns the run's **whole decision list**, re-read after the action
 apart.** Some waits this surface genuinely cannot answer, and each one it can detect is NAMED
 there rather than left as an empty list:
 
-| `reason`                 | What is holding the run                                                                                                                               | What to do                                                                                                                                                                   |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `human_wait_gate`        | A shipped gate whose poll has no deadline because a PERSON is the gate (`human-review`)                                                               | Nothing here: it clears when a reviewer approves the pull request on the VCS host. Escalate to that person, or `…/tasks/:id/stop`.                                           |
-| `unclassified_gate`      | A gate **this deployment registered itself**                                                                                                          | Whether its poll ever ends is declared where the gate was built and is unreadable at request time. Its answer lives wherever the deployment surfaced it.                     |
-| `unwired_interview_gate` | An interviewer registered as an agent kind with no controller wired                                                                                   | An operator's fix, not a caller's: the questions are readable from no surface until the deployment wires it.                                                                 |
-| `curation_gate`          | A step that CURATES parked so a person can mark what it found is worth acting on, and marking has no route here (`bug-fisher`, or a deployment's own) | The marking has to happen in the app. The step's approval gate can be resolved from here, but that ENDS the run with everything it found unacted on: an exit, not an answer. |
+| `reason`                 | What is holding the run                                                                                                                                                                                                                 | What to do                                                                                                                                                                                     |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `human_wait_gate`        | A shipped gate whose poll has no deadline because a PERSON is the gate (`human-review`)                                                                                                                                                 | Nothing here: it clears when a reviewer approves the pull request on the VCS host. Escalate to that person, or `…/tasks/:id/stop`.                                                             |
+| `unclassified_gate`      | A gate **this deployment registered itself**                                                                                                                                                                                            | Whether its poll ever ends is declared where the gate was built and is unreadable at request time. Its answer lives wherever the deployment surfaced it.                                       |
+| `unwired_interview_gate` | An interviewer registered as an agent kind with no controller wired                                                                                                                                                                     | An operator's fix, not a caller's: the questions are readable from no surface until the deployment wires it.                                                                                   |
+| `curation_gate`          | A step that CURATES parked so a person can mark what it found is worth acting on, and marking has no route here. Both SHIPPED curating kinds are answerable (`pr-review`, `bug-fishing`), so this is now a kind a DEPLOYMENT registered | The marking lives wherever that deployment surfaced it. The step's approval gate can be resolved from here, but that ENDS the run with everything it found unacted on: an exit, not an answer. |
 
 Each entry carries `stepKind` and `stepIndex` (line them up with `publicRun.steps`) plus a prose
 `detail`. It is deliberately **not** gated on `parked`: an unbounded wait gate keeps the run
@@ -1764,11 +1801,13 @@ field to demand a person nobody has to send:
   reviewer for work that is over.
 - **A wait this same response answers.** A deployment's own gate that spends its attempt budget
   parks on an ordinary approval, which arrives as a `decisions[]` entry; it is not also reported as
-  unanswerable, so the two halves of one payload never contradict each other. The `pr-reviewer`
-  step is the same rule one level up: it curates like `bug-fisher` does, but its curation IS
-  answerable here (`kind: "pr-review"`), so it is a decision rather than a named wait. Which
-  curating kinds fall on which side is read from the one table the start-surface refusal is built
-  from, so the two can never disagree.
+  unanswerable, so the two halves of one payload never contradict each other. The two CURATING
+  kinds are the same rule one level up: `pr-reviewer` and `bug-fisher` both park for a person to
+  mark what they found, and both curations are answerable here (`kind: "pr-review"` and
+  `kind: "bug-fishing"`), so each is a decision rather than a named wait. Which curating kinds fall
+  on which side is read from the one table the start-surface refusal is built from, so the two can
+  never disagree; what is left for `curation_gate` to report is a curating kind a DEPLOYMENT
+  registered.
 
 The same blind spot applies one step earlier, at admission; see [Pick the right scope](#2-pick-the-right-scope) below.
 
@@ -1795,6 +1834,9 @@ The same blind spot applies one step earlier, at admission; see [Pick the right 
 | `POST …/pr-review/resume`                             | `decide` | Re-dispatch a review wedged mid-`reviewing` for only the slices that never reported. `409` unless the review is still in progress, or once the review has spent `maxResumeAttempts`.                               |
 | `POST …/pr-review/findings/:findingId/dismiss`        | `decide` | Drop one finding from the review. Curation, not a resolution: the run stays parked.                                                                                                                                |
 | `POST …/pr-review/findings/:findingId/challenge`      | `decide` | Dispatch a read-only investigator to uphold, strengthen or retract the finding.                                                                                                                                    |
+| `POST …/bug-fishing/address`                          | `decide` | Body `{ findingIds, pipelineId? }`; mark expedition findings to be addressed. Each spawns its OWN bug-fix task and STARTS its run. Accepted mid-hunt, not only once the expedition parks.                          |
+| `POST …/bug-fishing/findings/:findingId/dismiss`      | `decide` | Drop one finding from triage. Curation, not a resolution: the run stays where it is.                                                                                                                               |
+| `POST …/bug-fishing/resolve`                          | `decide` | Finish triaging and advance the run. Anything still unmarked stays unacted on.                                                                                                                                     |
 | `POST …/human-test/confirm`                           | `decide` | The change works in the ephemeral environment: it is torn down and the run advances.                                                                                                                               |
 | `POST …/human-test/request-fix`                       | `decide` | Dispatch a fixer against the tested environment, then rebuild it.                                                                                                                                                  |
 | `POST …/visual-confirmation/approve`                  | `decide` | Approve the captured screenshots against the reference designs and advance.                                                                                                                                        |
@@ -1807,7 +1849,7 @@ The same blind spot applies one step earlier, at admission; see [Pick the right 
 | `POST …/interview/continue`                           | `decide` | Submit the answers and resume; the interviewer may ask more. **Asynchronous** (the pass runs in the durable driver).                                                                                               |
 | `POST …/interview/proceed`                            | `decide` | Stop the questions: the interviewer converges on what it has and the run advances. Also asynchronous.                                                                                                              |
 
-Thirteen decision kinds appear in `decisions[]`, discriminated by `kind`:
+Fourteen decision kinds appear in `decisions[]`, discriminated by `kind`:
 
 - **`approval-gate`**: a step marked `requiresApproval` finished and the run is holding its output
   up for a person — the simplest park, and the one any pipeline can carry. Carries the
@@ -1916,6 +1958,38 @@ Thirteen decision kinds appear in `decisions[]`, discriminated by `kind`:
   verdict: the heartbeat freezes on a long silent turn, so nothing on either side of this API can
   tell a wedged reviewer from a quiet-but-working one.
 
+- **`bug-fishing`**: a read-only expedition has been reading the service's codebase, once per
+  ANGLE per TERRITORY, and the run is waiting for someone to mark which of the things it caught are
+  worth fixing. Each mark spawns its OWN bug-fix task, so this park is the one whose answer creates
+  work rather than releasing it. Carries the `phases` (with each pass's self-reported coverage), the
+  `findings`, the `plan` and `defaultFixPipelineId`. Reachable only through
+  `POST /tasks/:taskId/start`, since a `bug-fisher` step is container-backed.
+
+  **It is listed while the expedition is still `fishing`, and marking is accepted then too.** That
+  is the flow rather than a convenience: the angles run as separate container passes precisely so a
+  completed angle's findings are actionable the moment they land, and a caller that waited for
+  `awaiting_triage` before reading anything would sit out the overlap the design exists to create.
+
+  **`spawn.status` is the read, never the presence of the record.** A `pending` row is the CLAIM
+  taken before the task exists, which is what stops two markings (or a retried request) spawning two
+  tasks for one finding; a `failed` row means nothing was created and the finding is markable again;
+  only `spawned` means a fix task exists. `taskId` on it addresses
+  `GET /api/v1/tasks/{taskId}` like any other task, which is how an integration follows the work its
+  own marking created.
+
+  **`plan.unfished` is the tail the pass budget cut**, by territory and angle, and it is published
+  for the reason every cap here states what it dropped: an expedition that reports nothing for a
+  module nobody fished reads exactly like one that fished it and found it clean.
+  `plan.surveyUnavailableReason` is the sharper case of the same thing: non-null, the single
+  territory is a FALLBACK (no repository bound, or a client that cannot enumerate a tree) rather
+  than a small codebase, and the two are otherwise identical.
+
+  **Finishing is its own verb.** `…/bug-fishing/resolve` advances the run past the step, and
+  everything unmarked at that moment stays unacted on, on the record. Resolving the step's ordinary
+  approval gate does the same thing with none of this read first, which is what the surface used to
+  offer and why the expedition was reported as an unanswerable `curation_gate` until these routes
+  existed.
+
 - **`human-test`**: a live ephemeral `environment` is up and the run is waiting for someone to
   exercise it. `degradedReason` non-null means no environment was provisioned and the change has
   to be tested against the PR branch by hand.
@@ -1990,10 +2064,14 @@ curl -sX POST "$BASE/api/v1/tasks" -H "Authorization: Bearer $KEY" -H 'content-t
 #    empty; pass `pipelineId` only to override. The response carries the `runId` step 3 polls.
 curl -sX POST "$BASE/api/v1/tasks/$TASK/start" -H "Authorization: Bearer $KEY" -d '{}'
 
-# 3. Poll until the `pr-review` decision reports `awaiting_selection`. Earlier statuses are work in
-#    flight and worth surfacing: `reviewing` is the reviewer slicing the diff, `challenging` an
+# 3. Watch until the `pr-review` decision reports `awaiting_selection`. Earlier statuses are work
+#    in flight and worth surfacing: `reviewing` is the reviewer slicing the diff, `challenging` an
 #    investigator re-examining one finding, `posting` a publish in progress.
 curl -s "$BASE/api/v1/runs/$RUN/decisions" -H "Authorization: Bearer $KEY"
+
+#    Or take the same payload by push, which is what a review that runs for twenty minutes is worth
+#    doing: `decision-state` frames carry each slice as it reports rather than one park at the end.
+curl -sN "$BASE/api/v1/tasks/$TASK/events?decisions=true" -H "Authorization: Bearer $KEY"
 ```
 
 Each finding is anchored, prioritised and grouped, and the reviewer also reports its ADHERENCE to
@@ -2872,7 +2950,8 @@ endpoints and subscribe each to any of three delivery families:
 - **Notification cards**: the same cards as `GET /api/v1/notifications`, pushed as they are raised
   and again as they are resolved.
 - **Run-lifecycle events**: `run.started` / `run.completed` / `run.failed`, one delivery per
-  transition, including the happy path that raises no card.
+  transition, including the happy path that raises no card, plus `run.step_completed`, one per
+  step BOUNDARY for a caller that wants to see a long pipeline advance.
 - **Platform-health alerts**: `platform_health.firing` / `platform_health.resolved`, the deployment
   watching **itself**. This is the family to wire an on-call rotation to.
 
@@ -2889,7 +2968,7 @@ curl -s -X PUT -H "Authorization: Bearer cf_live_pak_…" -H 'content-type: appl
     "url": "https://hooks.example.com/cat-factory",
     "secret": "<16-200 chars, used to sign deliveries>",
     "types": [],
-    "runEvents": ["run.started", "run.completed", "run.failed"],
+    "runEvents": ["run.started", "run.step_completed", "run.completed", "run.failed"],
     "alertEvents": ["platform_health.firing", "platform_health.resolved"],
     "enabled": true
   }' \
@@ -3027,8 +3106,18 @@ respectively.
     "pipelineId": "pl_standard_build", "pipelineName": "Standard build",
     "startedAt": 1722599000000, "occurredAt": 1722600000000,
     "pullRequestUrl": "https://github.com/…/pull/42",   // null is a real answer on a terminal event
-    "failure": { "kind": "…", "message": "…", "reason": null }   // run.failed only; null otherwise
+    "failure": { "kind": "…", "message": "…", "reason": null },  // run.failed only; null otherwise
+    "step": { "index": 3, "agentKind": "ci", "outcome": "completed", "final": false }  // run.step_completed only
   }
+}
+
+// …and the step edge, whose dedupe key carries the index because one run emits many
+{
+  "deliveryId": "exec_9:run.step_completed:3",   // <runId>:<event>:<stepIndex>
+  "sentAt": 1722599500000,
+  "workspaceId": "ws_1",
+  "event": "run.step_completed",
+  "run": { "…": "as above", "step": { "index": 3, "agentKind": "ci", "outcome": "completed", "final": false } }
 }
 
 // Platform-health alert (carries `event` + `alert`)
@@ -3058,6 +3147,12 @@ Semantics your receiver must honour:
   construction; the terminal events are **at-least-once** (a durable replay can re-emit a settled
   run), and a replay re-stamps `sentAt` / `occurredAt`, so two deliveries of one transition are not
   byte-identical. One id comparison collapses them. Rationale: [ADR 0030](./adr/0030-public-api-surface.md).
+- **`run.step_completed` keys on `<runId>:<event>:<stepIndex>`**, because it is the one event a
+  single run emits repeatedly: on the two-part key a whole pipeline would collapse onto its first
+  step at any receiver following the rule above. It is also at-least-once (a re-driven step
+  re-emits its own boundary), and `step.outcome` distinguishes `skipped` from `completed`, because
+  the engine skips a gated step by marking it done with no output. Counting deliveries as work done
+  without reading it scores an estimate-gated tester exactly like one that ran and found nothing.
 - A `retry` / restart mints a **fresh run id** and announces it as a new `run.started`.
 - Headless initiative jobs emit **no** lifecycle events (their anchor block is internal;
   `GET /api/v1/jobs/:id` and its SSE stream already serve them).

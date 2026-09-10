@@ -474,6 +474,52 @@ func (q *TasksListByServiceQuery) values() map[string]string {
 	return out
 }
 
+// JobsStreamQuery holds the query parameters for JobsService.Stream.
+type JobsStreamQuery struct {
+	// Decisions set to `true` to add `decision-state` frames carrying the whole decision list for the run (the
+	// same payload `GET /api/v1/runs/{runId}/decisions` serves), pushed whenever it changes. This is
+	// how a chunked operation reports progress: a PR deep review slice count, a bug-fishing angle
+	// landing and a challenge verdict all move the decision list without moving the run, so they
+	// produce no `progress` frame. A value other than `true`, `false`, `1` or `0` is refused with
+	// `422 validation` (`details.reason: "invalid_query_parameter"`) rather than read as off.
+	// Zero value means "not sent".
+	Decisions *PublicStreamDecisionChannel
+}
+
+func (q *JobsStreamQuery) values() map[string]string {
+	out := map[string]string{}
+	if q == nil {
+		return out
+	}
+	if q.Decisions != nil {
+		out["decisions"] = fmt.Sprintf("%v", *q.Decisions)
+	}
+	return out
+}
+
+// TasksStreamQuery holds the query parameters for TasksService.Stream.
+type TasksStreamQuery struct {
+	// Decisions set to `true` to add `decision-state` frames carrying the whole decision list for the run (the
+	// same payload `GET /api/v1/runs/{runId}/decisions` serves), pushed whenever it changes. This is
+	// how a chunked operation reports progress: a PR deep review slice count, a bug-fishing angle
+	// landing and a challenge verdict all move the decision list without moving the run, so they
+	// produce no `progress` frame. A value other than `true`, `false`, `1` or `0` is refused with
+	// `422 validation` (`details.reason: "invalid_query_parameter"`) rather than read as off.
+	// Zero value means "not sent".
+	Decisions *PublicStreamDecisionChannel
+}
+
+func (q *TasksStreamQuery) values() map[string]string {
+	out := map[string]string{}
+	if q == nil {
+		return out
+	}
+	if q.Decisions != nil {
+		out["decisions"] = fmt.Sprintf("%v", *q.Decisions)
+	}
+	return out
+}
+
 // ListDebugAgentContextResponseItem is the element type of ListDebugAgentContextResponse.Snapshots.
 // An alias rather than a second declaration, so the pager cannot drift from the list it pages
 // over.
@@ -627,12 +673,15 @@ func (s *JobsService) ListAll(ctx context.Context, query *JobsListQuery) iter.Se
 
 // Stream stream a job (SSE)
 // Server-sent events for a headless job run: `progress` frames until a terminal
-// `done`/`error`/`stopped`/`timeout` event. Authenticated by the API key header.
+// `done`/`error`/`stopped`/`timeout` event, plus a `decision` frame announcing each park. Pass
+// `?decisions=true` to add `decision-state` frames carrying what the run is asking. Authenticated
+// by the API key header.
 // GET /api/v1/jobs/{id}/events (operation streamPublicJobEvents).
-func (s *JobsService) Stream(ctx context.Context, id string) (*EventStream, error) {
+func (s *JobsService) Stream(ctx context.Context, id string, query *JobsStreamQuery) (*EventStream, error) {
 	req := requestSpec{
 		Method: "GET",
 		Path:   fmt.Sprintf("/api/v1/jobs/%s/events", pathEscape(id)),
+		Query:  query.values(),
 	}
 	return s.client.stream(ctx, req)
 }
@@ -1199,13 +1248,15 @@ func (s *TasksService) Stop(ctx context.Context, taskID string) (*PublicTask, er
 
 // Stream stream a task run (SSE)
 // Server-sent events for a board task run: `progress` frames (the rich run projection) until a
-// terminal `done`/`error` event, or a `timeout` when the connection cap is reached. Authenticated
-// by the API key header.
+// terminal `done`/`error` event, or a `timeout` when the connection cap is reached, plus a
+// `decision` frame announcing each park. Pass `?decisions=true` to add `decision-state` frames
+// carrying what the run is asking. Authenticated by the API key header.
 // GET /api/v1/tasks/{taskId}/events (operation streamPublicTaskRun).
-func (s *TasksService) Stream(ctx context.Context, taskID string) (*EventStream, error) {
+func (s *TasksService) Stream(ctx context.Context, taskID string, query *TasksStreamQuery) (*EventStream, error) {
 	req := requestSpec{
 		Method: "GET",
 		Path:   fmt.Sprintf("/api/v1/tasks/%s/events", pathEscape(taskID)),
+		Query:  query.values(),
 	}
 	return s.client.stream(ctx, req)
 }
@@ -1944,6 +1995,29 @@ type DecisionsService struct {
 	client *Client
 }
 
+// AddressBugFishingFindings mark bug-fishing findings to be addressed
+// Spawn one bug-fix task per named finding, each linked back to the expedition and started
+// immediately. Accepted while the expedition is still fishing later angles as well as once it
+// parks, because the findings of a completed angle are actionable the moment they land.
+// `pipelineId` overrides, for this request only, the pipeline the spawned tasks run; omitting it
+// uses the default the expedition resolved, which the decision publishes as
+// `defaultFixPipelineId`. An unknown id, or one whose finding already has a live spawn, is
+// refused rather than skipped. Requires a `decide`-scope key.
+// POST /api/v1/runs/{runId}/decisions/bug-fishing/address (operation
+// addressPublicRunBugFishingFindings).
+func (s *DecisionsService) AddressBugFishingFindings(ctx context.Context, runID string, body AddressPublicRunBugFishingFindingsRequest) (*PublicDecisionList, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/bug-fishing/address", pathEscape(runID)),
+		Body:   body,
+	}
+	var out PublicDecisionList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // AnswerAgentDecision answer an agent-raised decision
 // Answer a question an agent raised mid-work. Resolving RE-RUNS the asking step with the choice
 // folded in, rather than advancing past it. The choice is taken verbatim, so it may be one of the
@@ -2109,6 +2183,24 @@ func (s *DecisionsService) ContinueInterview(ctx context.Context, runID string) 
 	req := requestSpec{
 		Method: "POST",
 		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/interview/continue", pathEscape(runID)),
+	}
+	var out PublicDecisionList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// DismissBugFishingFinding dismiss a bug-fishing finding
+// Drop one finding from triage. It stays on the record of the expedition, struck through, and is
+// no longer markable. Curation rather than a resolution: the run stays exactly where it is.
+// Requires a `decide`-scope key.
+// POST /api/v1/runs/{runId}/decisions/bug-fishing/findings/{findingId}/dismiss (operation
+// dismissPublicRunBugFishingFinding).
+func (s *DecisionsService) DismissBugFishingFinding(ctx context.Context, runID string, findingID string) (*PublicDecisionList, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/bug-fishing/findings/%s/dismiss", pathEscape(runID), pathEscape(findingID)),
 	}
 	var out PublicDecisionList
 	if err := s.client.request(ctx, req, &out); err != nil {
@@ -2517,6 +2609,23 @@ func (s *DecisionsService) ResolveBrainstormExceeded(ctx context.Context, runID 
 		Method: "POST",
 		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/brainstorm/%s/resolve-exceeded", pathEscape(runID), pathEscape(stage)),
 		Body:   body,
+	}
+	var out PublicDecisionList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ResolveBugFishing finish a bug-fishing expedition
+// Finish triaging and advance the run past the step. Anything still unmarked stays unacted on,
+// which is why this is a separate verb rather than something marking implies. Requires a
+// `decide`-scope key.
+// POST /api/v1/runs/{runId}/decisions/bug-fishing/resolve (operation resolvePublicRunBugFishing).
+func (s *DecisionsService) ResolveBugFishing(ctx context.Context, runID string) (*PublicDecisionList, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/bug-fishing/resolve", pathEscape(runID)),
 	}
 	var out PublicDecisionList
 	if err := s.client.request(ctx, req, &out); err != nil {

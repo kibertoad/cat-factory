@@ -1220,6 +1220,10 @@ function registerScopeAndCancelTests(harness: ConformanceHarness): void {
     expect(refused.body.error.code).toBe('insufficient_scope')
   })
 
+  it('refuses an unrecognised `?decisions=` value on the run stream rather than ignoring it', () => {
+    return refusesTheDecisionChannelTypo(harness)
+  })
+
   it("scopes a run's decisions to the key's workspace", async () => {
     // The surface is keyed by RUN id, so the workspace scoping is the only thing standing
     // between one tenant's key and another tenant's parked run. A foreign run must be a 404
@@ -1333,4 +1337,44 @@ function registerScopeAndCancelTests(harness: ConformanceHarness): void {
     expect(denied.status).toBe(404)
     expect(denied.body.error.code).toBe('not_found')
   })
+}
+
+/**
+ * The SSE decision channel's one refusal, driven against the real route.
+ *
+ * Here rather than only against the pure parser because what is under test is the DISPOSITION: the
+ * flag is read before the response is hijacked, so the refusal has to travel through the facade's
+ * own `handleError` and come back as the surface's ordinary envelope. A route that read the flag
+ * after `streamSSE` would answer 200 with an empty stream, and a caller would take a channel it
+ * never opened for a run with nothing to say.
+ *
+ * The happy path is deliberately NOT driven here: it holds the connection open for its five-minute
+ * cap, which no request-response harness can assert against. What it emits is covered where it can
+ * be, on the projection every case in this file already reads and on the pure change detector.
+ */
+async function refusesTheDecisionChannelTypo(harness: ConformanceHarness): Promise<void> {
+  const app = harness.makeApp()
+  const { workspace } = await app.createOrgWorkspace({ seed: true })
+  const wsId = workspace.id
+  const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+    name: 'Coder only',
+    purpose: 'build',
+    agentKinds: ['coder'],
+  })
+  await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+    pipelineId: pipeline.body.id,
+  })
+  const readAuth = await mintPublicApiKey(app, wsId, 'read', 'decision-channel')
+
+  const refused = await app.call<{ error: { code: string; details?: { reason?: string } } }>(
+    'GET',
+    '/api/v1/tasks/task_login/events?decisions=yes',
+    undefined,
+    readAuth,
+  )
+  expect(refused.status).toBe(422)
+  expect(refused.body.error.code).toBe('validation')
+  // The machine-readable cause, which is the whole reason this throws rather than hand-building a
+  // body: a caller branches on the reason, not on the prose.
+  expect(refused.body.error.details?.reason).toBe('invalid_query_parameter')
 }

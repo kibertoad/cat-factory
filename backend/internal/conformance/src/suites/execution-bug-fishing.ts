@@ -9,6 +9,7 @@ import {
 } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import type { ConformanceHarness } from '../harness.js'
+import { mintPublicApiKey } from './shared.js'
 
 // Bug-fishing expedition: the per-ANGLE phase loop, the park, and the triage that spawns a bug-fix
 // task per marked finding — asserted identically against every facade.
@@ -48,6 +49,36 @@ const fisherOutput = {
       detail: 'A caller passing an inverted range gets an empty result rather than an error.',
     },
   ],
+}
+
+/**
+ * The `bug-fishing` decision as `/api/v1` serves it, plus the list it arrives in.
+ *
+ * Declared structurally here rather than imported, on the same footing as the PR review's twin:
+ * this package depends on kernel and not on the public contracts, and a suite that asserted
+ * against the very schema the projection is built from would pass on a projection that dropped
+ * half of it. What is written out is what an integrator reads.
+ */
+type PublicBugFishingDecision = {
+  kind: string
+  status: string
+  stepIndex: number
+  phases: { phaseId: string; title: string; status: string }[]
+  findings: {
+    findingId: string
+    path: string
+    severity: string
+    evidence: string | null
+    dismissed: boolean
+    spawn: { status: string; taskId: string; pipelineId: string } | null
+  }[]
+  defaultFixPipelineId: string | null
+}
+
+type PublicDecisionListBody = {
+  parked: boolean
+  decisions: (PublicBugFishingDecision & { kind: string })[]
+  unanswerable: { reason: string }[]
 }
 
 /**
@@ -374,8 +405,160 @@ export function defineBugFishingSuite(harness: ConformanceHarness): void {
 
     // The territory half of the flow is its own suite: same harness, same describe-level
     // contract, split out because one function may not carry both and a suite that grows a
-    // dimension is exactly what the budget is a trigger for.
+    // dimension is exactly what the budget is a trigger for. The public-API half is split for the
+    // same reason and answers a different question: not what the expedition does, but what an
+    // integration outside the app can do with it.
     defineTerritoryCases(harness)
+    definePublicTriageCase(harness)
+  })
+}
+
+/**
+ * The same expedition, triaged entirely through `/api/v1`: the door an integration that renders a
+ * catch in its own tracker actually uses.
+ *
+ * Here rather than only in a unit test for the reason the PR review's public case gives, and one
+ * more of its own. Everything AROUND the shared projection is per-facade: the expedition rides the
+ * run's step JSON through each facade's own execution mapper, and the key store the `decide` scope
+ * is read from is a per-runtime table, so a facade that mounted the routes and mapped the step
+ * differently would answer with an empty catch while the shared projection stayed green. And the
+ * verb under test CREATES work: marking a finding inserts a board block and starts its run, which
+ * is the half that crosses the board repository and the run-start funnel.
+ *
+ * The last assertion is the one that closes the gap this surface had. A parked expedition used to
+ * be reported in `unanswerable[]` as a `curation_gate` while its ordinary approval WAS offered, so
+ * the only thing an integration could do with it was end it and lose the catch.
+ */
+function definePublicTriageCase(harness: ConformanceHarness): void {
+  it('serves the catch, marks a finding and finishes triage over /api/v1', async () => {
+    const app = harness.makeApp({ customResult: fisherOutput })
+    const { workspace } = await app.createOrgWorkspace({ seed: true })
+    const wsId = workspace.id
+    const task = await app.call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+      title: 'Fish for bugs in auth',
+      taskType: 'bug-fishing',
+      taskTypeFields: { fishingPhaseIds: ['control-flow'] },
+    })
+    await app.call('POST', `/workspaces/${wsId}/blocks/${task.body.id}/executions`, {
+      pipelineId: 'pl_bug_fishing',
+    })
+    const parked = (await app.drive(wsId)).find((e) => e.blockId === task.body.id)!
+    const decideAuth = await mintPublicApiKey(app, wsId, 'decide', 'bug-fishing')
+
+    const readCatch = async () => {
+      const listed = await app.call<PublicDecisionListBody>(
+        'GET',
+        `/api/v1/runs/${parked.id}/decisions`,
+        undefined,
+        decideAuth,
+      )
+      expect(listed.status).toBe(200)
+      return listed.body
+    }
+
+    const first = await readCatch()
+    const expedition = first.decisions.find((d) => d.kind === 'bug-fishing')!
+    expect(expedition.status).toBe('awaiting_triage')
+    // Severity-ordered and id-stamped, with the evidence carried apart from the prose: a caller
+    // triaging has to be able to see which findings the agent could point at code for.
+    expect(expedition.findings.map((f) => f.severity)).toEqual(['critical', 'low'])
+    expect(expedition.findings[0]!.evidence).toContain('src/session.ts:42')
+    expect(expedition.findings[0]!.spawn).toBeNull()
+    expect(expedition.phases.map((p) => p.phaseId)).toEqual(['control-flow'])
+    expect(expedition.defaultFixPipelineId).toBe('pl_bugfix_tested')
+    // The gap this closes: a parked expedition is a DECISION here, not a wait the surface names
+    // and cannot answer. Both halves are asserted, because the two are built from one table and a
+    // regression that re-listed it would also go on offering these verbs.
+    expect(first.unanswerable.map((w) => w.reason)).not.toContain('curation_gate')
+
+    // MARK one finding. The response is the whole decision list re-read, so the spawn is visible
+    // without a follow-up call.
+    const marked = await app.call<PublicDecisionListBody>(
+      'POST',
+      `/api/v1/runs/${parked.id}/decisions/bug-fishing/address`,
+      { findingIds: [expedition.findings[0]!.findingId] },
+      decideAuth,
+    )
+    expect(marked.status).toBe(200)
+    const afterMark = marked.body.decisions.find((d) => d.kind === 'bug-fishing')!
+    const spawn = afterMark.findings.find(
+      (f) => f.findingId === expedition.findings[0]!.findingId,
+    )!.spawn
+    // SETTLED, not merely present: the record is written first as a `pending` claim, so a caller
+    // reading only its presence could not tell a fix task that exists from one being made.
+    expect(spawn?.status).toBe('spawned')
+    expect(spawn?.pipelineId).toBe('pl_bugfix_tested')
+    // …and the task it names is addressable through this same API, which is how an integration
+    // follows the work its own marking created.
+    const spawned = await app.call<{ taskId: string }>(
+      'GET',
+      `/api/v1/tasks/${spawn!.taskId}`,
+      undefined,
+      decideAuth,
+    )
+    expect(spawned.status).toBe(200)
+
+    // Dismissing leaves the finding on the record, struck through, and the run parked.
+    const dismissed = await app.call<PublicDecisionListBody>(
+      'POST',
+      `/api/v1/runs/${parked.id}/decisions/bug-fishing/findings/${expedition.findings[1]!.findingId}/dismiss`,
+      undefined,
+      decideAuth,
+    )
+    expect(dismissed.status).toBe(200)
+    const afterDismiss = dismissed.body.decisions.find((d) => d.kind === 'bug-fishing')!
+    expect(afterDismiss.findings).toHaveLength(2)
+    expect(afterDismiss.findings[1]!.dismissed).toBe(true)
+    expect(afterDismiss.status).toBe('awaiting_triage')
+
+    // Finishing advances the run past the read-only step, and the expedition leaves the decision
+    // list because there is nothing left to answer.
+    const resolved = await app.call<PublicDecisionListBody>(
+      'POST',
+      `/api/v1/runs/${parked.id}/decisions/bug-fishing/resolve`,
+      undefined,
+      decideAuth,
+    )
+    expect(resolved.status).toBe(200)
+    expect(resolved.body.decisions.find((d) => d.kind === 'bug-fishing')).toBeUndefined()
+    await app.drive(wsId)
+    const board = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+    expect(board.body.blocks.find((b) => b.id === task.body.id)?.status).toBe('done')
+  })
+
+  it('refuses the triage verbs for a key that cannot decide', async () => {
+    // Marking a finding STARTS a run, so it sits at `decide` beside every other park answer rather
+    // than at the `write` that authors tasks. Asserted on the surface an integrator actually meets:
+    // a `write` key reads the catch and is refused the moment it acts on one.
+    const app = harness.makeApp({ customResult: fisherOutput })
+    const { workspace } = await app.createOrgWorkspace({ seed: true })
+    const wsId = workspace.id
+    const task = await app.call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+      title: 'Fish for bugs in auth',
+      taskType: 'bug-fishing',
+      taskTypeFields: { fishingPhaseIds: ['control-flow'] },
+    })
+    await app.call('POST', `/workspaces/${wsId}/blocks/${task.body.id}/executions`, {
+      pipelineId: 'pl_bug_fishing',
+    })
+    const parked = (await app.drive(wsId)).find((e) => e.blockId === task.body.id)!
+    const writeAuth = await mintPublicApiKey(app, wsId, 'write', 'bug-fishing')
+
+    const listed = await app.call<PublicDecisionListBody>(
+      'GET',
+      `/api/v1/runs/${parked.id}/decisions`,
+      undefined,
+      writeAuth,
+    )
+    expect(listed.status).toBe(200)
+    const findings = listed.body.decisions.find((d) => d.kind === 'bug-fishing')!.findings
+    const refused = await app.call(
+      'POST',
+      `/api/v1/runs/${parked.id}/decisions/bug-fishing/address`,
+      { findingIds: [findings[0]!.findingId] },
+      writeAuth,
+    )
+    expect(refused.status).toBe(403)
   })
 }
 

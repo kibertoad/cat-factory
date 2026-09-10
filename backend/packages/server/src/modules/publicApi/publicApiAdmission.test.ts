@@ -551,36 +551,30 @@ describe('public-API admission: what the refusal promises', () => {
       }
     })
 
-    it('promises the answer path for a PR review, and withholds it for an expedition', () => {
-      // The two curation surfaces answer OPPOSITELY, which is why they are named by kind rather
-      // than sharing one label. A parked PR review has real verbs here (resolve / dismiss /
-      // challenge / resume), so the refusal is worth acting on: mint a `decide` key. A parked
-      // expedition has none, so the same message under a shared label would send an operator
-      // after a key that still cannot mark a single finding.
-      const review = parkingRefusalMessage(
-        publicRunParkSurfaces({ agentKinds: ['pr-reviewer'] }, registries, {
-          inputGateBlocks: false,
-        }),
-        { cancelPath: PUBLIC_TASK_STOP_PATH },
-      )
-      // The park surface is `pr-reviewer` (the step kind, which is what the first sentence lists)
-      // and the decision that answers it is `pr-review`. The promise names the DECISION KIND,
-      // because the sentence points at `decisions[]` and that is the field a caller looks the
-      // entry up by: naming the step kind sent an integration hunting for an entry never in it.
-      expect(review).toContain('This pipeline can park on a human decision (pr-reviewer).')
-      expect(review).toContain(
-        "Start it with a 'decide'-scope key, which can answer pr-review through /api/v1/runs/:runId/decisions.",
-      )
-      expect(review).not.toContain('cannot answer')
-
-      const fishing = parkingRefusalMessage(
-        publicRunParkSurfaces({ agentKinds: ['bug-fisher'] }, registries, {
-          inputGateBlocks: false,
-        }),
-        { cancelPath: PUBLIC_TASK_STOP_PATH },
-      )
-      expect(fishing).toContain('cannot answer bug-fisher yet')
-      expect(fishing).toContain(PUBLIC_TASK_STOP_PATH)
+    it('promises the answer path for BOTH curation surfaces, naming the decision kind', () => {
+      // A refusal is only worth acting on if the key it asks for can actually answer what the run
+      // will stop at, so the message is built per SURFACE rather than under one shared label for
+      // "curation". Both shipped curating kinds now have verbs, so both promise the decisions
+      // endpoint; `bug-fisher` is the one that changed, and the pairing is kept as one case
+      // because the day a third curating kind ships without routes it must read like neither.
+      for (const [kind, decisionKind] of [
+        ['pr-reviewer', 'pr-review'],
+        ['bug-fisher', 'bug-fishing'],
+      ]) {
+        const message = parkingRefusalMessage(
+          publicRunParkSurfaces({ agentKinds: [kind!] }, registries, { inputGateBlocks: false }),
+          { cancelPath: PUBLIC_TASK_STOP_PATH },
+        )
+        // The park surface is the STEP KIND (which is what the first sentence lists) and the thing
+        // that answers it is the DECISION KIND. The promise names the decision kind, because the
+        // sentence points at `decisions[]` and that is the field a caller looks the entry up by:
+        // naming the step kind sent an integration hunting for an entry never in it.
+        expect(message, kind).toContain(`This pipeline can park on a human decision (${kind}).`)
+        expect(message, kind).toContain(
+          `Start it with a 'decide'-scope key, which can answer ${decisionKind} through /api/v1/runs/:runId/decisions.`,
+        )
+        expect(message, kind).not.toContain('cannot answer')
+      }
     })
 
     it('names the candidate park as unanswerable, and points at the cancel route instead', () => {

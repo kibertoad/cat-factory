@@ -315,3 +315,53 @@ chosen task type's own defaults still apply, which is visible on a `document` ta
 create-only for the reason `pipelineId` is, plus one of its own: the frozen set is what the run
 folds however the library moves afterwards, which is what keeps a finished review's standards
 readable rather than re-derived.
+
+## 1.74.0
+
+Three additions, all serving one gap: what a run is DOING while it works.
+
+The two SSE endpoints take `?decisions=true`, which adds a `decision-state` frame carrying the
+run's whole decision list whenever it changes. `publicDecisionKindSchema` gains `bug-fishing`, with
+three routes under `/api/v1/runs/{runId}/decisions/bug-fishing/`. The outbound webhook's
+`runEvents` family gains `run.step_completed`.
+
+Additive on every count: a new query parameter, a new decision kind (the SDKs tolerate unknown
+enum values by design), three new routes, and an opt-in event on a filter whose empty value already
+means NONE.
+
+What it closes is a gap the stream had by construction rather than by omission. A frame is emitted
+when the RUN projection changes, and the state a chunked operation moves through does not live on
+it: a PR deep review's slice count, its challenge verdicts and its post report ride
+`step.prReview`, an expedition's angles ride `step.bugFishing`, and neither is `step.custom`. So a
+seventeen-minute review produced no frame at all for its whole duration and then one `decision` at
+the park, while this repo's own documentation told a caller to poll `/runs/{runId}/decisions` for
+exactly the progress the stream could not give it.
+
+Three decisions a consumer can see. The channel is OPT-IN, because a decision list is not derivable
+from the run in hand: the three iterative reviews, the fork and an interview each live in their own
+store, so projecting one costs point reads per tick that every existing consumer would have started
+paying for a channel it never reads. A value other than `true`/`false`/`1`/`0` is refused with
+`422 validation` and `details.reason: "invalid_query_parameter"` rather than read as off, because
+the channel is silent on a run with nothing to ask and a typo served as a working stream is
+indistinguishable from a quiet one. And it
+is a NEW event name rather than a richer `decision` frame: `decision` is published, it carries the
+run and announces a park once, and re-pointing its payload at a different resource would break
+every consumer built on it.
+
+`bug-fishing` is the second CURATING park to gain verbs, and the first thing a caller notices is
+what STOPS happening: a parked expedition used to arrive in `unanswerable[]` as a `curation_gate`,
+saying the marking had to be done in the app. It is now a `decisions[]` entry, and the start
+surface's refusal promises the answer path instead of withholding it, so a `decide` key that could
+previously only END an expedition can now act on what it caught. `curation_gate` survives with a
+narrower population: a curating kind a DEPLOYMENT registered, whose marking lives wherever that
+deployment surfaced it. Both shipped curating kinds are answerable here.
+
+`run.step_completed` is the narrowing of the per-step feed [ADR 0030](./adr/0030-public-api-surface.md)
+rejected, not a reversal of it. That rejection was about a PROGRESS feed, which the engine emits on
+every container poll; this fires once per step BOUNDARY, so a ten-step pipeline delivers ten events
+over however many hours it runs. Two things a receiver must read: `deliveryId` is
+`<runId>:run.step_completed:<index>` rather than the two-part key the run edges use, because this is
+the one event a single run emits repeatedly and the run-scoped key would collapse a whole pipeline
+onto its first step; and `step.outcome` distinguishes `skipped` from `completed`, because the engine
+skips a gated step by marking it done with no output, which is otherwise byte-for-byte a step that
+ran and reported nothing.

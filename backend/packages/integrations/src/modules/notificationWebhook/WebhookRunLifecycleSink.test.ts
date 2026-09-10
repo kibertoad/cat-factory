@@ -60,6 +60,7 @@ function event(overrides: Partial<RunLifecycleEvent> = {}): RunLifecycleEvent {
     occurredAt: 1_700_000_000_000,
     pullRequestUrl: 'https://vcs.test/pr/7',
     failure: null,
+    step: null,
     ...overrides,
   }
 }
@@ -136,6 +137,43 @@ describe('WebhookRunLifecycleSink', () => {
     expect(body.run.taskId).toBe('task_login')
     expect(body.run.pullRequestUrl).toBe('https://vcs.test/pr/7')
     expect(body.run.failure).toBeNull()
+  })
+
+  it('scopes a step edge dedupe id by STEP, since one run emits many', async () => {
+    // The one event a single run delivers repeatedly, and therefore the one the run-scoped key
+    // cannot carry: `<runId>:run.step_completed` is the same string for every step, so a receiver
+    // following the documented contract would collapse a ten-step pipeline onto its first step and
+    // hear nothing more. The step index is what keeps each boundary its own delivery.
+    const { sink: s, calls } = sink(webhook({ runEvents: ['run.step_completed'] }))
+    const stepEvent = (index: number) =>
+      event({
+        event: 'run.step_completed',
+        step: { index, agentKind: 'coder', outcome: 'completed', final: false },
+      })
+    await s.runTransitioned('ws1', stepEvent(0))
+    await s.runTransitioned('ws1', stepEvent(1))
+
+    const ids = calls.map((call) => (JSON.parse(call.body) as { deliveryId: string }).deliveryId)
+    expect(ids).toEqual(['exec_1:run.step_completed:0', 'exec_1:run.step_completed:1'])
+    // …and the step itself rides the run envelope, so a receiver reads which step finished without
+    // a follow-up call.
+    const body = JSON.parse(calls[0]!.body) as { run: { step: unknown } }
+    expect(body.run.step).toEqual({
+      index: 0,
+      agentKind: 'coder',
+      outcome: 'completed',
+      final: false,
+    })
+  })
+
+  it('leaves the run edges step-less and run-scoped', async () => {
+    // The other half: a `run.completed` is about the run, so it carries no step and keeps the
+    // two-part key a receiver has been deduping on since the family shipped.
+    const { sink: s, calls } = sink(webhook())
+    await s.runTransitioned('ws1', event())
+    const body = JSON.parse(calls[0]!.body) as { deliveryId: string; run: { step: unknown } }
+    expect(body.deliveryId).toBe('exec_1:run.completed')
+    expect(body.run.step).toBeNull()
   })
 
   it('re-delivers one transition under the SAME id but a re-stamped sentAt', async () => {

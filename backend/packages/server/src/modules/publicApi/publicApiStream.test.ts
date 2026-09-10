@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import type { PublicRun, PublicRunStep } from '@cat-factory/contracts'
 import {
+  createDecisionAnnouncer,
   createParkAnnouncer,
   isParked,
   reduceRunForStream,
   STREAM_DELIVERABLE_PREVIEW_CHARS,
+  wantsDecisionChannel,
 } from './publicApiStream.js'
 
 // The public SSE streams' park announcement. Both stream loops share this, and both of its rules
@@ -127,5 +129,66 @@ describe('reduceRunForStream', () => {
       reduceRunForStream(run(Array.from({ length: 12 }, () => step({ output: long })))),
     )
     expect(frame.length).toBeLessThan(12 * (STREAM_DELIVERABLE_PREVIEW_CHARS + 500))
+  })
+})
+
+describe('wantsDecisionChannel', () => {
+  it('is OFF unless the caller asks', () => {
+    // Opt-in because the channel is not free: a decision list costs point reads in several stores
+    // per tick, and every consumer that predates it wants progress alone.
+    expect(wantsDecisionChannel(undefined)).toBe(false)
+    expect(wantsDecisionChannel('')).toBe(false)
+    expect(wantsDecisionChannel('false')).toBe(false)
+    expect(wantsDecisionChannel('0')).toBe(false)
+  })
+
+  it('accepts the two spellings of yes', () => {
+    expect(wantsDecisionChannel('true')).toBe(true)
+    expect(wantsDecisionChannel('1')).toBe(true)
+  })
+
+  it('REFUSES a value it does not recognise rather than reading it as off', () => {
+    // The case this exists for. The channel is silent on a run with nothing to ask, so a typo'd
+    // `?decisions=yes` served as a working stream is indistinguishable from a quiet one, and the
+    // caller concludes the run never parked. A 400 is the only answer that says otherwise.
+    expect(wantsDecisionChannel('yes')).toBe('invalid')
+    expect(wantsDecisionChannel('TRUE')).toBe('invalid')
+    expect(wantsDecisionChannel('2')).toBe('invalid')
+  })
+})
+
+describe('createDecisionAnnouncer', () => {
+  it('writes a frame only when the decision list moved', () => {
+    // The park case, and the reason the detector exists: a park lasts as long as a human takes and
+    // the projection is rebuilt every tick, so an always-fire channel is an unbounded stream of
+    // identical payloads for however long nobody answers.
+    const changed = createDecisionAnnouncer()
+    expect(changed.shouldAnnounce('{"decisions":[]}')).toBe(true)
+    expect(changed.shouldAnnounce('{"decisions":[]}')).toBe(false)
+    expect(changed.shouldAnnounce('{"decisions":[]}')).toBe(false)
+  })
+
+  it('keeps firing as the SAME live decision advances', () => {
+    // The other direction, and the failure the channel exists to prevent. A review reports its
+    // slices one at a time, so a latch that fired once would deliver the first state and go quiet:
+    // a caller cannot tell that from a reviewer that stopped, which is exactly what it was polling
+    // the decisions endpoint to find out.
+    const changed = createDecisionAnnouncer()
+    const slices = (reported: number) =>
+      `{"decisions":[{"kind":"pr-review","reportedSlices":${reported}}]}`
+    expect(changed.shouldAnnounce(slices(0))).toBe(true)
+    expect(changed.shouldAnnounce(slices(1))).toBe(true)
+    expect(changed.shouldAnnounce(slices(1))).toBe(false)
+    expect(changed.shouldAnnounce(slices(2))).toBe(true)
+  })
+
+  it('announces a list that returns to a payload it held earlier', () => {
+    // Compared against the LAST payload rather than every one seen, which is what a run that parks,
+    // resumes and parks again on the same question produces. Remembering the whole history would
+    // swallow the second park, which is the same bug the park announcer re-arms to avoid.
+    const changed = createDecisionAnnouncer()
+    expect(changed.shouldAnnounce('parked')).toBe(true)
+    expect(changed.shouldAnnounce('working')).toBe(true)
+    expect(changed.shouldAnnounce('parked')).toBe(true)
   })
 })

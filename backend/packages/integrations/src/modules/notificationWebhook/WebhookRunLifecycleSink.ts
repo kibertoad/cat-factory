@@ -46,6 +46,21 @@ export interface WebhookRunLifecycleSinkDependencies {
   ) => void
 }
 
+/**
+ * The delivery's dedupe key: `<runId>:<event>`, plus the step index on the one event a run emits
+ * repeatedly.
+ *
+ * Keyed off the event's own `step` rather than off its NAME, so the discriminator and the payload
+ * cannot disagree: a `run.step_completed` projected with no step would otherwise produce
+ * `…:run.step_completed:undefined` for every step of the run, collapsing them all onto one key at
+ * the receiver. Falling back to the run-scoped key is the honest answer there, and the engine's
+ * projection never takes it.
+ */
+function stepScopedDeliveryId(event: RunLifecycleEvent): string {
+  const base = `${event.runId}:${event.event}`
+  return event.step ? `${base}:${event.step.index}` : base
+}
+
 export class WebhookRunLifecycleSink implements RunLifecycleSink {
   constructor(private readonly deps: WebhookRunLifecycleSinkDependencies) {}
 
@@ -72,11 +87,16 @@ export class WebhookRunLifecycleSink implements RunLifecycleSink {
     if (endpoints.length === 0) return
 
     const body: RunWebhookDelivery = {
-      // `<runId>:<event>` — stable across retries AND across a re-delivery, so it is the dedupe
-      // key a receiver uses. Delivery is at-least-once by design (see the contract doc), and the
-      // key has to carry that job alone: `sentAt` below and the projection's `occurredAt` are
+      // `<runId>:<event>`, stable across retries AND across a re-delivery, so it is the dedupe key
+      // a receiver uses. Delivery is at-least-once by design (see the contract doc), and the key
+      // has to carry that job alone: `sentAt` below and the projection's `occurredAt` are
       // re-stamped on a replay, so a receiver hashing the BODY would not collapse the repeat.
-      deliveryId: `${event.runId}:${event.event}`,
+      //
+      // The STEP INDEX joins it on `run.step_completed`, because that is the one event a single
+      // run emits more than once: without it every step of a run would dedupe onto the first one
+      // delivered, and a receiver following the ordinary contract would see step 0 and nothing
+      // else for the rest of the pipeline.
+      deliveryId: stepScopedDeliveryId(event),
       sentAt: this.deps.clock.now(),
       workspaceId,
       event: event.event,
@@ -90,6 +110,7 @@ export class WebhookRunLifecycleSink implements RunLifecycleSink {
         occurredAt: event.occurredAt,
         pullRequestUrl: event.pullRequestUrl,
         failure: event.failure,
+        step: event.step,
       },
     }
     await fanOutSignedWebhook(

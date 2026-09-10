@@ -25,6 +25,22 @@ public final class DecisionsClient {
     }
 
     /**
+     * Mark bug-fishing findings to be addressed
+     * Spawn one bug-fix task per named finding, each linked back to the expedition and started
+     * immediately. Accepted while the expedition is still fishing later angles as well as once it
+     * parks, because the findings of a completed angle are actionable the moment they land.
+     * `pipelineId` overrides, for this request only, the pipeline the spawned tasks run; omitting
+     * it uses the default the expedition resolved, which the decision publishes as
+     * `defaultFixPipelineId`. An unknown id, or one whose finding already has a live spawn, is
+     * refused rather than skipped. Requires a `decide`-scope key.
+     * {@code POST /api/v1/runs/{runId}/decisions/bug-fishing/address} (operation {@code
+     * addressPublicRunBugFishingFindings}).
+     */
+    public PublicDecisionList addressBugFishingFindings(String runId, AddressPublicRunBugFishingFindingsRequest body) {
+        return transport.request("POST", "/api/v1/runs/" + Transport.pathSegment(runId) + "/decisions/bug-fishing/address", body, Map.of(), new TypeReference<PublicDecisionList>() {});
+    }
+
+    /**
      * Answer an agent-raised decision
      * Answer a question an agent raised mid-work. Resolving RE-RUNS the asking step with the
      * choice folded in, rather than advancing past it. The choice is taken verbatim, so it may be
@@ -151,6 +167,18 @@ public final class DecisionsClient {
      */
     public PublicDecisionList continueInterview(String runId) {
         return transport.request("POST", "/api/v1/runs/" + Transport.pathSegment(runId) + "/decisions/interview/continue", null, Map.of(), new TypeReference<PublicDecisionList>() {});
+    }
+
+    /**
+     * Dismiss a bug-fishing finding
+     * Drop one finding from triage. It stays on the record of the expedition, struck through, and
+     * is no longer markable. Curation rather than a resolution: the run stays exactly where it is.
+     * Requires a `decide`-scope key.
+     * {@code POST /api/v1/runs/{runId}/decisions/bug-fishing/findings/{findingId}/dismiss}
+     * (operation {@code dismissPublicRunBugFishingFinding}).
+     */
+    public PublicDecisionList dismissBugFishingFinding(String runId, String findingId) {
+        return transport.request("POST", "/api/v1/runs/" + Transport.pathSegment(runId) + "/decisions/bug-fishing/findings/" + Transport.pathSegment(findingId) + "/dismiss", null, Map.of(), new TypeReference<PublicDecisionList>() {});
     }
 
     /**
@@ -437,6 +465,18 @@ public final class DecisionsClient {
      */
     public PublicDecisionList resolveBrainstormExceeded(String runId, String stage, PublicResolveExceeded body) {
         return transport.request("POST", "/api/v1/runs/" + Transport.pathSegment(runId) + "/decisions/brainstorm/" + Transport.pathSegment(stage) + "/resolve-exceeded", body, Map.of(), new TypeReference<PublicDecisionList>() {});
+    }
+
+    /**
+     * Finish a bug-fishing expedition
+     * Finish triaging and advance the run past the step. Anything still unmarked stays unacted on,
+     * which is why this is a separate verb rather than something marking implies. Requires a
+     * `decide`-scope key.
+     * {@code POST /api/v1/runs/{runId}/decisions/bug-fishing/resolve} (operation {@code
+     * resolvePublicRunBugFishing}).
+     */
+    public PublicDecisionList resolveBugFishing(String runId) {
+        return transport.request("POST", "/api/v1/runs/" + Transport.pathSegment(runId) + "/decisions/bug-fishing/resolve", null, Map.of(), new TypeReference<PublicDecisionList>() {});
     }
 
     /**

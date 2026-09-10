@@ -206,14 +206,22 @@ public final class TasksClient {
     }
 
     /**
-     * Stream a task run (SSE)
-     * Server-sent events for a board task run: `progress` frames (the rich run projection) until a
-     * terminal `done`/`error` event, or a `timeout` when the connection cap is reached.
-     * Authenticated by the API key header.
-     * {@code GET /api/v1/tasks/{taskId}/events} (operation {@code streamPublicTaskRun}).
+     * Stream a task run (SSE) (no query parameters).
      */
     public EventStream stream(String taskId) {
-        return transport.stream("GET", "/api/v1/tasks/" + Transport.pathSegment(taskId) + "/events", Map.of());
+        return stream(taskId, TasksStreamQuery.none());
+    }
+
+    /**
+     * Stream a task run (SSE)
+     * Server-sent events for a board task run: `progress` frames (the rich run projection) until a
+     * terminal `done`/`error` event, or a `timeout` when the connection cap is reached, plus a
+     * `decision` frame announcing each park. Pass `?decisions=true` to add `decision-state` frames
+     * carrying what the run is asking. Authenticated by the API key header.
+     * {@code GET /api/v1/tasks/{taskId}/events} (operation {@code streamPublicTaskRun}).
+     */
+    public EventStream stream(String taskId, TasksStreamQuery query) {
+        return transport.stream("GET", "/api/v1/tasks/" + Transport.pathSegment(taskId) + "/events", query.toQuery());
     }
 
     /**

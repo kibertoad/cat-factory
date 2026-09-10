@@ -15,6 +15,7 @@ import org.jspecify.annotations.Nullable;
  */
 public enum NotificationWebhookRunEvent {
     RUN_STARTED("run.started"),
+    RUN_STEP_COMPLETED("run.step_completed"),
     RUN_COMPLETED("run.completed"),
     RUN_FAILED("run.failed"),
 

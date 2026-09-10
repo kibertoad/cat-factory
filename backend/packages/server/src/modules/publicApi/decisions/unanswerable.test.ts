@@ -84,6 +84,17 @@ function waitsFor(
   )
 }
 
+/**
+ * A registry carrying a DEPLOYMENT's own curating kind, which is the only population the curation
+ * wait still reports: both shipped curating kinds are answerable through `decisions[]`.
+ */
+function curatingRegistry(): AgentKindRegistry {
+  const own = defaultAgentKindRegistry()
+  own.registerTrait({ id: CURATION_GATE_TRAIT })
+  own.assignTraits('acme-triage', [CURATION_GATE_TRAIT])
+  return own
+}
+
 /** A step parked on the generic decision-wait, which is how every curating kind stops a run. */
 const parked = (agentKind: string): PipelineStep =>
   step(agentKind, {
@@ -211,41 +222,41 @@ describe('unanswerableWaits', () => {
     ).toEqual([])
   })
 
-  it('names a parked bug-fishing expedition, whose CURATION has no public route', () => {
-    // The gap this closes. `pl_bug_fishing` is one `bug-fisher` step that parks so a person can
-    // mark which of the bugs it found are worth fixing, and no call on this API marks one. The
-    // step's own pending approval IS offered (approving ends the run), so a caller reading only
-    // `decisions[]` would take an exit for an answer and finish an expedition unacted on.
-    const [wait, ...rest] = waitsFor([parked('bug-fisher')])
-    expect(rest).toEqual([])
-    expect(wait).toMatchObject({ reason: 'curation_gate', stepKind: 'bug-fisher', stepIndex: 0 })
-    expect(wait!.detail).toContain('mark which of the')
-    expect(wait!.detail).toContain('in the app')
-  })
-
-  it('stays silent about a parked PR review, whose curation IS answerable here', () => {
-    // The other half of the same rule, and why the two curating kinds are not one label: a parked
-    // `pr-reviewer` is a `pr-review` decision with real verbs (resolve / dismiss / challenge /
-    // resume), so naming it as unanswerable would send a caller looking for a person to do what
-    // the same response is handing them.
+  it('stays silent about both SHIPPED curating kinds, whose curation IS answerable here', () => {
+    // The rule this report is built on, and why the curating kinds are not one label: each parked
+    // step here arrives as a `decisions[]` entry with real verbs (`pr-reviewer` as `pr-review`
+    // (resolve / dismiss / challenge / resume), `bug-fisher` as `bug-fishing` (address / dismiss /
+    // resolve), so naming either as unanswerable would send a caller looking for a person to do
+    // what the same response is handing them.
+    //
+    // `bug-fisher` was the case that made the distinction necessary: it parked with only its own
+    // approval offered, and a caller reading `decisions[]` alone would take that exit for an answer
+    // and finish an expedition with everything it caught unacted on. Both halves are now routes.
     expect(waitsFor([parked('pr-reviewer')])).toEqual([])
+    expect(waitsFor([parked('bug-fisher')])).toEqual([])
   })
 
-  it("names a DEPLOYMENT's own curating kind, like the built-in it has never heard of", () => {
+  it("names a DEPLOYMENT's own curating kind, which is the whole remaining population", () => {
     // Read off the registered trait, the same declaration public admission enumerates, so a
-    // deployment that curates through its own kind is named with no edit to either.
-    const own = defaultAgentKindRegistry()
-    own.registerTrait({ id: CURATION_GATE_TRAIT })
-    own.assignTraits('acme-triage', [CURATION_GATE_TRAIT])
-    const [wait] = waitsFor([parked('acme-triage')], { agentKinds: own })
-    expect(wait).toMatchObject({ reason: 'curation_gate', stepKind: 'acme-triage' })
+    // deployment that curates through its own kind is named with no edit to either. With both
+    // shipped kinds answerable, this is now the ONLY way to reach a `curation_gate` wait, and the
+    // detail has to say where the marking lives rather than pointing at an app that has no window
+    // for a kind it never shipped.
+    const [wait, ...rest] = waitsFor([parked('acme-triage')], { agentKinds: curatingRegistry() })
+    expect(rest).toEqual([])
+    expect(wait).toMatchObject({ reason: 'curation_gate', stepKind: 'acme-triage', stepIndex: 0 })
+    expect(wait!.detail).toContain('mark which of the')
+    expect(wait!.detail).toContain('wherever the deployment surfaced it')
   })
 
   it('ignores a curating step that is not PARKED', () => {
     // A curating step is an ordinary container step until its completion parks the run, so
-    // reading the kind alone would demand a human of every review run while its reviewer worked.
-    expect(waitsFor([step('bug-fisher')])).toEqual([])
-    expect(waitsFor([step('bug-fisher', { state: 'done' })])).toEqual([])
+    // reading the kind alone would demand a human of every expedition while its agent worked.
+    // Asked of a kind that CAN reach the report, so a pass here is the parking check doing the
+    // work rather than the answerable-surfaces exclusion above making every case vacuous.
+    const own = curatingRegistry()
+    expect(waitsFor([step('acme-triage')], { agentKinds: own })).toEqual([])
+    expect(waitsFor([step('acme-triage', { state: 'done' })], { agentKinds: own })).toEqual([])
   })
 
   it('still names an unanswered wait beside an answered one', () => {

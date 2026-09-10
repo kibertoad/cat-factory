@@ -97,7 +97,15 @@ const INLINE_TYPE_NAMES = {
   'agentKind,calls,failureRate,failures': 'DebugToolCallKindRollup',
 }
 
-/** Enum value-sets that deserve a chosen name rather than a positional one. */
+/**
+ * Enum value-sets that deserve a chosen name rather than a positional one.
+ *
+ * An entry is the NAME, or `{ name, values }` when the published member ORDER has to be pinned
+ * too. Both halves are properties a released SDK exposes and neither is decided by this file
+ * otherwise: the signature is value-SORTED, so which vocabulary a deduped enum takes its spelling
+ * and its declaration order from is whichever the walk reached first, which moves whenever an
+ * unrelated resource is added alphabetically ahead of it.
+ */
 const INLINE_ENUM_NAMES = {
   'blocked,done,in_progress,planned,pr_ready,ready': 'TaskStatus',
   'blocked,done,failed,paused,running': 'RunStatus',
@@ -141,6 +149,18 @@ const INLINE_ENUM_NAMES = {
   // generated churn.
   'api,database,document,environment,external,frontend,integration,library,queue,service':
     'PublicServiceType',
+  // A reviewer finding's SEVERITY, published by the requirements/clarity/brainstorm decisions.
+  // Pinned after the fact, and it bit the moment a second vocabulary with the same three words
+  // arrived: the bug-fishing decision's `confidence` is `high|medium|low`, the signature is
+  // value-SORTED so member order does not separate them, and `PublicBugFishing…` walks first
+  // alphabetically, so adding the expedition surface retyped `PublicReviewFinding.severity` and
+  // deleted `PublicReviewFindingSeverity` from four released SDKs, as a clean generated diff.
+  'high,low,medium': { name: 'PublicReviewFindingSeverity', values: ['low', 'medium', 'high'] },
+  // The SSE streams' `?decisions=` flag, shared verbatim by both stream operations. Pinned on
+  // arrival rather than after the fact, on the precedent below and more sharply: four booleans
+  // spelled two ways is the most ordinary value set on this surface, so leaving it to the
+  // positional hint would name a shared type after whichever operation happens to walk first.
+  '0,1,false,true': 'PublicStreamDecisionChannel',
   // The tier a resolved standard won on. Pinned on arrival rather than after the fact: a
   // three-member set this ordinary is a matter of time before something else carries it, and the
   // rename it would cause is the one this table exists to prevent.
@@ -405,14 +425,24 @@ class TypeRegistry {
 
   defineEnum(values, hint) {
     const signature = enumSignature(values)
-    const chosen = INLINE_ENUM_NAMES[signature]
-    if (chosen) this.unusedEnumNames.delete(signature)
+    const pin = INLINE_ENUM_NAMES[signature]
+    if (pin) this.unusedEnumNames.delete(signature)
     const existing = [...this.types.values()].find(
       (t) => t.kind === 'enum' && enumSignature(t.values) === signature,
     )
     if (existing) return existing.name
-    const name = chosen ?? pascal(hint)
-    return this.define(name, { kind: 'enum', values }, `enum:${signature}`)
+    const chosen = typeof pin === 'string' ? pin : pin?.name
+    // A pin may fix the member ORDER as well as the name, and one that does is honoured even when
+    // the colliding vocabulary is the one the walk reached first. Without it the pin is only half
+    // a pin: the type keeps its published name and its members are re-declared in the other
+    // vocabulary's order, which is a Java `ordinal()` shift and a re-sequenced `*_VALUES` array in
+    // three more languages, arriving as a diff that reads like generated churn.
+    const members = (typeof pin === 'object' && pin.values) || values
+    return this.define(
+      chosen ?? pascal(hint),
+      { kind: 'enum', values: members },
+      `enum:${signature}`,
+    )
   }
 }
 

@@ -94,12 +94,21 @@ public final class JobsClient {
     }
 
     /**
-     * Stream a job (SSE)
-     * Server-sent events for a headless job run: `progress` frames until a terminal
-     * `done`/`error`/`stopped`/`timeout` event. Authenticated by the API key header.
-     * {@code GET /api/v1/jobs/{id}/events} (operation {@code streamPublicJobEvents}).
+     * Stream a job (SSE) (no query parameters).
      */
     public EventStream stream(String id) {
-        return transport.stream("GET", "/api/v1/jobs/" + Transport.pathSegment(id) + "/events", Map.of());
+        return stream(id, JobsStreamQuery.none());
+    }
+
+    /**
+     * Stream a job (SSE)
+     * Server-sent events for a headless job run: `progress` frames until a terminal
+     * `done`/`error`/`stopped`/`timeout` event, plus a `decision` frame announcing each park. Pass
+     * `?decisions=true` to add `decision-state` frames carrying what the run is asking.
+     * Authenticated by the API key header.
+     * {@code GET /api/v1/jobs/{id}/events} (operation {@code streamPublicJobEvents}).
+     */
+    public EventStream stream(String id, JobsStreamQuery query) {
+        return transport.stream("GET", "/api/v1/jobs/" + Transport.pathSegment(id) + "/events", query.toQuery());
     }
 }

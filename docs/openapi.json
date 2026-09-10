@@ -818,6 +818,7 @@
             "items": {
               "enum": [
                 "run.started",
+                "run.step_completed",
                 "run.completed",
                 "run.failed"
               ],
@@ -3152,6 +3153,429 @@
         ],
         "type": "object"
       },
+      "PublicBugFishingDecision": {
+        "properties": {
+          "currentPhaseIndex": {
+            "type": "number"
+          },
+          "defaultFixPipelineId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/PublicBugFishingFinding"
+            },
+            "type": "array"
+          },
+          "kind": {
+            "const": "bug-fishing"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "phases": {
+            "items": {
+              "$ref": "#/components/schemas/PublicBugFishingPhase"
+            },
+            "type": "array"
+          },
+          "plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublicBugFishingPlan"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "fishing",
+              "awaiting_triage",
+              "done"
+            ],
+            "type": "string"
+          },
+          "stepIndex": {
+            "type": "number"
+          },
+          "stepKind": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "status",
+          "stepKind",
+          "stepIndex",
+          "phases",
+          "currentPhaseIndex",
+          "findings",
+          "plan",
+          "defaultFixPipelineId",
+          "model"
+        ],
+        "type": "object"
+      },
+      "PublicBugFishingFinding": {
+        "properties": {
+          "confidence": {
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ],
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "dismissed": {
+            "type": "boolean"
+          },
+          "evidence": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "failureScenario": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "findingId": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "bug",
+              "logic-gap",
+              "edge-case",
+              "footgun",
+              "requirement-gap",
+              "other"
+            ],
+            "type": "string"
+          },
+          "line": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "path": {
+            "type": "string"
+          },
+          "phaseId": {
+            "type": "string"
+          },
+          "severity": {
+            "enum": [
+              "critical",
+              "high",
+              "medium",
+              "low"
+            ],
+            "type": "string"
+          },
+          "spawn": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublicBugFishingSpawn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "suggestedFix": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "territoryId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "findingId",
+          "phaseId",
+          "territoryId",
+          "path",
+          "line",
+          "severity",
+          "kind",
+          "confidence",
+          "title",
+          "detail",
+          "failureScenario",
+          "evidence",
+          "suggestedFix",
+          "spawn",
+          "dismissed"
+        ],
+        "type": "object"
+      },
+      "PublicBugFishingPhase": {
+        "properties": {
+          "failureReason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "filesRead": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "goal": {
+            "type": "string"
+          },
+          "manifestFiles": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "phaseId": {
+            "type": "string"
+          },
+          "settledAt": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "fishing",
+              "completed",
+              "failed"
+            ],
+            "type": "string"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "territoryId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "territoryLabel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "phaseId",
+          "title",
+          "goal",
+          "status",
+          "summary",
+          "failureReason",
+          "territoryId",
+          "territoryLabel",
+          "settledAt",
+          "filesRead",
+          "manifestFiles"
+        ],
+        "type": "object"
+      },
+      "PublicBugFishingPlan": {
+        "properties": {
+          "passBudget": {
+            "type": "number"
+          },
+          "plannedCells": {
+            "type": "number"
+          },
+          "surveyUnavailableReason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "treeTruncated": {
+            "type": "boolean"
+          },
+          "unfished": {
+            "items": {
+              "$ref": "#/components/schemas/PublicBugFishingUnfishedCell"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "passBudget",
+          "plannedCells",
+          "unfished",
+          "treeTruncated",
+          "surveyUnavailableReason"
+        ],
+        "type": "object"
+      },
+      "PublicBugFishingSpawn": {
+        "properties": {
+          "executionId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "failureReason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pipelineId": {
+            "type": "string"
+          },
+          "requestedAt": {
+            "type": "number"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "spawned",
+              "failed"
+            ],
+            "type": "string"
+          },
+          "taskId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "taskId",
+          "executionId",
+          "pipelineId",
+          "requestedAt",
+          "failureReason"
+        ],
+        "type": "object"
+      },
+      "PublicBugFishingUnfishedCell": {
+        "properties": {
+          "phaseId": {
+            "type": "string"
+          },
+          "phaseTitle": {
+            "type": "string"
+          },
+          "territoryId": {
+            "type": "string"
+          },
+          "territoryLabel": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "territoryId",
+          "territoryLabel",
+          "phaseId",
+          "phaseTitle"
+        ],
+        "type": "object"
+      },
       "PublicChallengePrReviewFinding": {
         "properties": {
           "question": {
@@ -3407,6 +3831,9 @@
           },
           {
             "$ref": "#/components/schemas/PublicPrReviewDecision"
+          },
+          {
+            "$ref": "#/components/schemas/PublicBugFishingDecision"
           },
           {
             "$ref": "#/components/schemas/PublicHumanTestDecision"
@@ -6433,6 +6860,7 @@
             "items": {
               "enum": [
                 "run.started",
+                "run.step_completed",
                 "run.completed",
                 "run.failed"
               ],
@@ -6751,7 +7179,7 @@
       "name": "MIT"
     },
     "title": "cat-factory Public API",
-    "version": "1.73.0"
+    "version": "1.74.0"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -12129,7 +12557,7 @@
                 }
               }
             },
-            "description": "Accepted — the run has started"
+            "description": "Accepted, the run has started"
           },
           "4XX": {
             "content": {
@@ -12267,7 +12695,7 @@
     },
     "/api/v1/jobs/{id}/events": {
       "get": {
-        "description": "Server-sent events for a headless job run: `progress` frames until a terminal `done`/`error`/`stopped`/`timeout` event. Authenticated by the API key header.",
+        "description": "Server-sent events for a headless job run: `progress` frames until a terminal `done`/`error`/`stopped`/`timeout` event, plus a `decision` frame announcing each park. Pass `?decisions=true` to add `decision-state` frames carrying what the run is asking. Authenticated by the API key header.",
         "operationId": "streamPublicJobEvents",
         "parameters": [
           {
@@ -12275,6 +12703,21 @@
             "name": "id",
             "required": true,
             "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Set to `true` to add `decision-state` frames carrying the whole decision list for the run (the same payload `GET /api/v1/runs/{runId}/decisions` serves), pushed whenever it changes. This is how a chunked operation reports progress: a PR deep review slice count, a bug-fishing angle landing and a challenge verdict all move the decision list without moving the run, so they produce no `progress` frame. A value other than `true`, `false`, `1` or `0` is refused with `422 validation` (`details.reason: \"invalid_query_parameter\"`) rather than read as off.",
+            "in": "query",
+            "name": "decisions",
+            "required": false,
+            "schema": {
+              "enum": [
+                "true",
+                "false",
+                "1",
+                "0"
+              ],
               "type": "string"
             }
           }
@@ -16195,6 +16638,225 @@
           }
         },
         "summary": "Resolve a brainstorm at its iteration cap",
+        "tags": [
+          "Decisions"
+        ],
+        "x-min-scope": "decide"
+      }
+    },
+    "/api/v1/runs/{runId}/decisions/bug-fishing/address": {
+      "post": {
+        "description": "Spawn one bug-fix task per named finding, each linked back to the expedition and started immediately. Accepted while the expedition is still fishing later angles as well as once it parks, because the findings of a completed angle are actionable the moment they land. `pipelineId` overrides, for this request only, the pipeline the spawned tasks run; omitting it uses the default the expedition resolved, which the decision publishes as `defaultFixPipelineId`. An unknown id, or one whose finding already has a live spawn, is refused rather than skipped. Requires a `decide`-scope key.",
+        "operationId": "addressPublicRunBugFishingFindings",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "findingIds": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "minItems": 1,
+                    "type": "array"
+                  },
+                  "pipelineId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "findingIds"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicDecisionList"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Mark bug-fishing findings to be addressed",
+        "tags": [
+          "Decisions"
+        ],
+        "x-min-scope": "decide"
+      }
+    },
+    "/api/v1/runs/{runId}/decisions/bug-fishing/findings/{findingId}/dismiss": {
+      "post": {
+        "description": "Drop one finding from triage. It stays on the record of the expedition, struck through, and is no longer markable. Curation rather than a resolution: the run stays exactly where it is. Requires a `decide`-scope key.",
+        "operationId": "dismissPublicRunBugFishingFinding",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "findingId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicDecisionList"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Dismiss a bug-fishing finding",
+        "tags": [
+          "Decisions"
+        ],
+        "x-min-scope": "decide"
+      }
+    },
+    "/api/v1/runs/{runId}/decisions/bug-fishing/resolve": {
+      "post": {
+        "description": "Finish triaging and advance the run past the step. Anything still unmarked stays unacted on, which is why this is a separate verb rather than something marking implies. Requires a `decide`-scope key.",
+        "operationId": "resolvePublicRunBugFishing",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicDecisionList"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Finish a bug-fishing expedition",
         "tags": [
           "Decisions"
         ],
@@ -20925,7 +21587,7 @@
     },
     "/api/v1/tasks/{taskId}/events": {
       "get": {
-        "description": "Server-sent events for a board task run: `progress` frames (the rich run projection) until a terminal `done`/`error` event, or a `timeout` when the connection cap is reached. Authenticated by the API key header.",
+        "description": "Server-sent events for a board task run: `progress` frames (the rich run projection) until a terminal `done`/`error` event, or a `timeout` when the connection cap is reached, plus a `decision` frame announcing each park. Pass `?decisions=true` to add `decision-state` frames carrying what the run is asking. Authenticated by the API key header.",
         "operationId": "streamPublicTaskRun",
         "parameters": [
           {
@@ -20933,6 +21595,21 @@
             "name": "taskId",
             "required": true,
             "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Set to `true` to add `decision-state` frames carrying the whole decision list for the run (the same payload `GET /api/v1/runs/{runId}/decisions` serves), pushed whenever it changes. This is how a chunked operation reports progress: a PR deep review slice count, a bug-fishing angle landing and a challenge verdict all move the decision list without moving the run, so they produce no `progress` frame. A value other than `true`, `false`, `1` or `0` is refused with `422 validation` (`details.reason: \"invalid_query_parameter\"`) rather than read as off.",
+            "in": "query",
+            "name": "decisions",
+            "required": false,
+            "schema": {
+              "enum": [
+                "true",
+                "false",
+                "1",
+                "0"
+              ],
               "type": "string"
             }
           }
@@ -20998,7 +21675,7 @@
                 }
               }
             },
-            "description": "Accepted — the run has started"
+            "description": "Accepted, the run has started"
           },
           "4XX": {
             "content": {
@@ -21123,7 +21800,7 @@
                 }
               }
             },
-            "description": "Accepted — the run has started"
+            "description": "Accepted, the run has started"
           },
           "4XX": {
             "content": {

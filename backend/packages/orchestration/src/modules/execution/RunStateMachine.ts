@@ -14,6 +14,7 @@ import type {
   PipelineStep,
   RunLifecycleEventKind,
   RunLifecycleSink,
+  RunLifecycleStep,
   SubscriptionActivationRepository,
   WorkRunner,
 } from '@cat-factory/kernel'
@@ -406,6 +407,8 @@ export class RunStateMachine {
     instance: ExecutionInstance,
     block: Block | null | undefined,
     event: RunLifecycleEventKind,
+    /** The step a `run.step_completed` is about; omitted on the three run edges. */
+    step?: RunLifecycleStep,
   ): Promise<void> {
     const sink = this.runLifecycleSink
     if (!sink) return
@@ -446,9 +449,46 @@ export class RunStateMachine {
                   reason: instance.failure.reason ?? null,
                 }
               : null,
+          step: step ?? null,
         }),
       { workspaceId, executionId: instance.id, event },
     )
+  }
+
+  /**
+   * Push a STEP BOUNDARY outward: one `run.step_completed` per step that finished and moved the
+   * run's cursor.
+   *
+   * Called from the two methods every such path funnels through, and that is what makes the event
+   * trustworthy rather than approximately right. `settleStepAndAdvance` settles a step that RAN
+   * (an agent result, a companion, a one-shot, a gated skip); `settleAdvancedGate` settles one a
+   * human or a resolver just released. Twelve callers reach the boundary through those two, and a
+   * hook at each is exactly the drift the terminal edge already learned to avoid: the day a
+   * thirteenth lands, it inherits this by construction.
+   *
+   * A BLOCK READ is paid here, and only when a sink is wired, because the projection needs the
+   * same `internal` / title / PR fields the run edges carry and a step boundary is not a hot path
+   * (once per step, against a run that just spent minutes in a container). Guarding on the sink
+   * first is what keeps a deployment with no webhook module paying nothing at all.
+   */
+  async publishStepCompleted(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    stepIndex: number,
+  ): Promise<void> {
+    if (!this.runLifecycleSink) return
+    const step = instance.steps[stepIndex]
+    if (!step) return
+    const block = await this.blockRepository.get(workspaceId, instance.blockId)
+    await this.publishRunLifecycle(workspaceId, instance, block, 'run.step_completed', {
+      index: stepIndex,
+      agentKind: step.agentKind,
+      // Derived HERE rather than passed by each caller: `skipped` is the engine's own record of a
+      // step it decided against running, and a second site deciding what to call that is a second
+      // site that can call it something else.
+      outcome: step.skipped ? 'skipped' : 'completed',
+      final: stepIndex === instance.steps.length - 1,
+    })
   }
 
   /**
@@ -645,6 +685,9 @@ export class RunStateMachine {
     isFinalStep: boolean,
     options: { confidence?: number; resolverOwnsTerminalStatus?: boolean } = {},
   ): Promise<AdvanceResult> {
+    // The step that just settled is the one the cursor still points at: it moves below, and only
+    // when the run has somewhere to move to.
+    const settledIndex = instance.currentStep
     if (isFinalStep) {
       instance.status = 'done'
       await this.finalizeBlock(workspaceId, instance, options.confidence)
@@ -654,8 +697,13 @@ export class RunStateMachine {
       // final step, because all of a pipeline's steps share the one container keyed by the
       // execution id. Best-effort and idempotent.
       await this.stopRunContainer(workspaceId, instance)
+      // AFTER the terminal `run.completed` that `persistAndEmit` above pushed, so a receiver
+      // reading its endpoint's queue in order sees the run settle and then learns which step
+      // settled it, rather than a final step whose run has not finished yet.
+      await this.publishStepCompleted(workspaceId, instance, settledIndex)
       return { kind: 'done' }
     }
+    await this.publishStepCompleted(workspaceId, instance, settledIndex)
     instance.currentStep += 1
     const next = instance.steps[instance.currentStep]
     if (next) this.stepGraph.startStep(next)
@@ -734,6 +782,9 @@ export class RunStateMachine {
     stepIndex: number,
   ): Promise<void> {
     const decisionId = instance.steps[stepIndex]!.approval!.id
+    // The gate's own step is what finished here, and `advanceRunPastGate` has already moved the
+    // cursor past it, which is why the index is a parameter rather than read off the instance.
+    await this.publishStepCompleted(workspaceId, instance, stepIndex)
     if (stepIndex === instance.steps.length - 1) {
       await this.finalizeBlock(workspaceId, instance, undefined)
       await this.stopRunContainer(workspaceId, instance)

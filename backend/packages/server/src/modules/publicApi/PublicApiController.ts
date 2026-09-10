@@ -1,5 +1,4 @@
 import {
-  type Block,
   actPublicNotificationContract,
   cancelPublicJobContract,
   createPublicJobContract,
@@ -21,9 +20,7 @@ import {
   UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
   updatePublicTaskContract,
   type ExecutionInstance,
-  type PublicJob,
   type PublicApiScope,
-  type PublicRun,
 } from '@cat-factory/contracts'
 import {
   CredentialRequiredError,
@@ -37,7 +34,6 @@ import { runnableShapeOf } from '@cat-factory/orchestration'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
-import { streamSSE } from 'hono/streaming'
 import {
   personalGateForBlock,
   personalGateForRun,
@@ -74,8 +70,8 @@ import {
   PUBLIC_JOB_CANCEL_PATH,
   PUBLIC_TASK_STOP_PATH,
 } from './publicApiAdmission.js'
-import { createParkAnnouncer, isParked, reduceRunForStream } from './publicApiStream.js'
-import { viewRunIdentity } from './runIdentityVisibility.js'
+import { registerJobStreamRoute, registerTaskRunStreamRoute } from './publicApiStreamRoutes.js'
+import { loadPublicJob, toPublicJob, toPublicRun } from './runProjection.js'
 import {
   decodeCursor,
   decodeTimeCursor,
@@ -101,12 +97,6 @@ import {
 // `Block` onto small `publicTask`/`publicService` resources; `start` refuses an
 // individual-usage-model task (no headless personal-credential unlock).
 
-/** How often the SSE stream re-reads the job, and the hard cap on how long it stays open. */
-const SSE_POLL_MS = 1000
-const SSE_MAX_MS = 5 * 60 * 1000
-/** Re-verify the caller's key at most this often on a live stream, so a mid-stream revoke cuts it. */
-const SSE_REAUTH_MS = 5000
-
 /** Max headless jobs a single workspace may have in flight at once (a public-API
  *  concurrency backstop: bounds the LLM spend one — possibly leaked — key can drive). */
 const MAX_ACTIVE_JOB_RUNS = 5
@@ -115,133 +105,6 @@ const MAX_ACTIVE_JOB_RUNS = 5
  *  by the query contract, so a caller can never ask for the whole table in one response. */
 const DEFAULT_JOB_PAGE = 25
 const DEFAULT_TASK_PAGE = 50
-
-/**
- * Project a persisted execution onto the external job resource (no block/board internals).
- *
- * Takes the READING key's own identity because the run's pinned one is not visible to every key
- * (`runIdentityVisibility.ts` holds the rule and why there is one). Passed as a parameter rather
- * than read off the context here, so the projection stays a pure function of the run plus the
- * caller and the SSE loops can render frame after frame without re-reading anything.
- */
-function toPublicJob(execution: ExecutionInstance, readerIdentity: string | null): PublicJob {
-  const status = mapStatus(execution.status)
-  const identity = viewRunIdentity(execution.initiatedByExternalIdentity, readerIdentity)
-  // The deliverable is the LAST step that actually produced output — normally the terminal step,
-  // but scanning from the end keeps the result meaningful for a multi-step public pipeline whose
-  // final step is a side-effect-only tail that emits nothing (the built-in initiative pipeline is
-  // single-step, so this simply picks that step). Fall back to the terminal step so a `succeeded`
-  // run always carries a (possibly empty) result rather than null.
-  const withOutput = [...execution.steps]
-    .reverse()
-    .find((s) => (s.output ?? '') !== '' || s.custom != null)
-  const deliverable = withOutput ?? execution.steps[execution.steps.length - 1]
-  const result =
-    status === 'succeeded' && deliverable
-      ? { output: deliverable.output ?? '', data: deliverable.custom ?? null }
-      : null
-  const error =
-    status === 'failed'
-      ? execution.failure
-        ? { code: execution.failure.kind, message: execution.failure.message }
-        : { code: 'run_failed', message: 'The run failed' }
-      : null
-  return {
-    jobId: execution.id,
-    status,
-    pipelineId: execution.pipelineId,
-    // Pinned at admission from the starting key, so it survives that key's revocation and costs
-    // this projection no lookup (`toPublicJob` also renders every row of a paged list). Withheld
-    // from a key that acts for someone else, which the flag STATES rather than blanking to a
-    // `null` that already means "this run names nobody". Named field by field rather than spread,
-    // for the reason `keyProjection.ts` gives: a spread is exempt from excess-property checking,
-    // so a member added to the view type later would reach the wire with nothing to stop it.
-    externalIdentity: identity.externalIdentity,
-    externalIdentityWithheld: identity.externalIdentityWithheld,
-    // The run's own creation stamp — the SAME value the list's keyset cursor is minted from
-    // (`jobSortKey`), so a caller can page and correlate on one consistent number.
-    createdAt: jobSortKey(execution),
-    result,
-    error,
-  }
-}
-
-/**
- * Project a task's persisted run + its block onto the RICH external run resource: per-step
- * state/progress/subtasks, the failure kind+message, and the PR (url + branch). The run's
- * `status` is the raw execution status (`running`/`blocked`/`paused`/`done`/`failed`) — the
- * public run view deliberately surfaces the parked states (unlike the coarse `publicJob`), so
- * a caller can tell an awaiting-a-human `blocked` from a still-`running` step. The PR branch
- * lives on the BLOCK (`block.pullRequest`), not the run, so both are joined here.
- */
-function toPublicRun(
-  execution: ExecutionInstance,
-  block: Block,
-  readerIdentity: string | null,
-): PublicRun {
-  const pr = block.pullRequest
-  const identity = viewRunIdentity(execution.initiatedByExternalIdentity, readerIdentity)
-  return {
-    runId: execution.id,
-    taskId: block.id,
-    status: execution.status,
-    createdAt: jobSortKey(execution),
-    currentStep: execution.currentStep,
-    steps: execution.steps.map((s) => ({
-      agentKind: s.agentKind,
-      state: s.state,
-      progress: s.progress,
-      subtasks: s.subtasks
-        ? {
-            completed: s.subtasks.completed,
-            inProgress: s.subtasks.inProgress,
-            total: s.subtasks.total,
-          }
-        : null,
-      // The step's deliverable. An EMPTY output is projected as null, matching the way
-      // `toPublicJob` reads "produced something": a step that ran and wrote nothing and a step
-      // that has not run yet are the same fact to a caller reading for a result, and the step's
-      // own `state` is what distinguishes them.
-      output: (s.output ?? '') === '' ? null : (s.output ?? null),
-      data: s.custom ?? null,
-      // Only when true: a step that RAN carries no flag at all, so the field never has to be read
-      // as "false, and also this run is old enough to predate the projection".
-      ...(s.skipped ? { skipped: true } : {}),
-    })),
-    // Who the run was started for, as pinned at admission; null for a run the app, a schedule or
-    // an identity-less key started, and withheld (flagged, not blanked) from a key that acts for
-    // someone else. See `runIdentityVisibility.ts`, and `toPublicJob` for why both members are
-    // named rather than spread.
-    externalIdentity: identity.externalIdentity,
-    externalIdentityWithheld: identity.externalIdentityWithheld,
-    pullRequest: pr ? { url: pr.url, branch: pr.branch ?? null } : null,
-    error:
-      execution.status === 'failed'
-        ? execution.failure
-          ? { code: execution.failure.kind, message: execution.failure.message }
-          : { code: 'run_failed', message: 'The run failed' }
-        : null,
-  }
-}
-
-/**
- * Load a public JOB by id for an authenticated key: the persisted execution, but ONLY when it is
- * anchored on a HEADLESS internal block (a run this public surface created). Returns null when no
- * such run exists in the key's workspace OR the id points at a normal board execution — so an
- * external key can never read an arbitrary in-workspace run's output, only its own headless jobs.
- * Runtime-symmetric: one `executionRepository.get` + one `boardService.getInternalTask` point-read.
- */
-async function loadPublicJob<E extends AppEnv>(
-  c: Context<E>,
-  workspaceId: string,
-  id: string,
-): Promise<ExecutionInstance | null> {
-  const container = c.get('container')
-  const execution = await container.executionRepository.get(workspaceId, id)
-  if (!execution) return null
-  const anchor = await container.boardService.getInternalTask(workspaceId, execution.blockId)
-  return anchor ? execution : null
-}
 
 /**
  * Best-effort, event-free rollback of a headless job run: drop the persisted run (the
@@ -614,96 +477,6 @@ function registerJobRoutes(app: Hono<AppEnv>): void {
   })
 
   registerJobStreamRoute(app)
-}
-
-function registerJobStreamRoute(app: Hono<AppEnv>): void {
-  // Stream a job's progress + terminal completion over SSE. Implemented as a bounded poll over the
-  // persisted execution (runtime-symmetric by construction — no per-facade event-hub wiring), so
-  // it serves identically on the Worker and Node. Authenticated by the API key header (an external
-  // client can set headers, unlike a browser EventSource). Not a JSON contract, so a raw route —
-  // and its own registrar, so the job group stays inside the function-size budget.
-  app.get('/api/v1/jobs/:id/events', async (c) => {
-    const gate = await authorize(c, 'read')
-    if ('fail' in gate) {
-      return c.json(
-        { error: { code: gate.fail.code, message: gate.fail.message } },
-        gate.fail.status,
-      )
-    }
-    const { auth } = gate
-    const id = c.req.param('id')
-    const container = c.get('container')
-    // Same headless-job scoping as the poll read: only a headless run this surface created.
-    const initial = await loadPublicJob(c, auth.workspaceId, id)
-    if (!initial) {
-      return c.json({ error: { code: 'not_found', message: 'Job not found' } }, 404)
-    }
-    const keys = container.publicApiKeys
-    return streamSSE(c, async (stream) => {
-      const startedAt = Date.now()
-      let lastAuthCheck = Date.now()
-      let last = ''
-      // Emit the initial state immediately, then poll until terminal / client-gone / revoked /
-      // timeout. A `blocked` run is a PARK awaiting a human decision — no longer a dead end, since
-      // a `decide`-scope caller can answer it over `/api/v1/runs/:runId/decisions` — so the stream
-      // announces the park and keeps watching rather than closing on it.
-      const parks = createParkAnnouncer()
-      for (;;) {
-        if (stream.aborted) break
-        // Re-verify the key periodically so a mid-stream revoke cuts the connection (the key was
-        // only proven once, at open). Cheap non-hashing revocation check, throttled.
-        if (keys && Date.now() - lastAuthCheck > SSE_REAUTH_MS) {
-          if (!(await keys.isActive(auth.keyId))) break
-          lastAuthCheck = Date.now()
-        }
-        const execution = await container.executionRepository.get(auth.workspaceId, id)
-        if (!execution) break
-        const job = toPublicJob(execution, auth.externalIdentity)
-        const data = JSON.stringify(job)
-        if (data !== last) {
-          await stream.writeSSE({
-            event:
-              job.status === 'succeeded' ? 'done' : job.status === 'failed' ? 'error' : 'progress',
-            data,
-          })
-          last = data
-        }
-        // A `blocked` run has PARKED on a human decision. Announce it once (so a caller learns of
-        // the park by push rather than by polling the decisions endpoint on a timer) and keep the
-        // stream open — the park is answerable, and answering resumes the very run being watched,
-        // which the caller should see through the SAME connection. Announced once per park rather
-        // than every tick, so a long park doesn't spam identical frames; re-armed when the run
-        // resumes, so a second park later in the pipeline is announced too.
-        if (parks.shouldAnnounce(execution.status)) {
-          await stream.writeSSE({ event: 'decision', data })
-        }
-        // A `paused` run is NOT terminal — the spend gate pauses a run when the workspace budget
-        // is exhausted and RESUMES it once budget frees up (ExecutionService.evaluateStep), so keep
-        // polling (bounded by SSE_MAX_MS below) rather than signalling a false terminal stop.
-        // `blocked` is likewise non-terminal now (see above).
-        if (
-          execution.status !== 'running' &&
-          execution.status !== 'paused' &&
-          !isParked(execution.status)
-        ) {
-          // The run has stopped. When it ended in a terminal public status (succeeded/failed) the
-          // event above already carried `done`/`error`. A raw status that maps to `running` but is
-          // neither terminal nor a park (a `cancelled` stop lands as `failed`, so this is the
-          // belt-and-braces arm) would otherwise close the stream after a `progress` frame, leaving
-          // the client unable to tell "terminal" from "connection dropped". Emit an explicit
-          // terminal `stopped` frame so every close is unambiguous.
-          if (job.status === 'running') await stream.writeSSE({ event: 'stopped', data })
-          break
-        }
-        if (Date.now() - startedAt > SSE_MAX_MS) {
-          // Bound the connection; the client can reconnect to keep watching.
-          await stream.writeSSE({ event: 'timeout', data: '{}' })
-          break
-        }
-        await stream.sleep(SSE_POLL_MS)
-      }
-    })
-  })
 }
 
 function registerTaskRoutes(app: Hono<AppEnv>): void {
@@ -1181,92 +954,6 @@ function registerTaskLifecycleRoutes(app: Hono<AppEnv>): void {
   })
 
   registerTaskRunStreamRoute(app)
-}
-
-/**
- * The task run SSE stream. Split out of {@link registerTaskLifecycleRoutes} purely for size — the
- * bounded-poll loop is the bulk of that registrar — and registered onto the SAME app instance.
- */
-function registerTaskRunStreamRoute(app: Hono<AppEnv>): void {
-  // Stream a task's run over SSE: the same bounded-poll pattern as the jobs stream (runtime-
-  // symmetric by construction — no per-facade event-hub wiring), re-reading the persisted run
-  // + its block each tick so a mid-run PR-open surfaces. Terminal on `done`/`failed`; a parked
-  // `blocked`/`paused` keeps polling until the run resumes or the connection hits SSE_MAX_MS.
-  app.get('/api/v1/tasks/:taskId/events', async (c) => {
-    const gate = await authorize(c, 'read')
-    if ('fail' in gate) {
-      return c.json(
-        { error: { code: gate.fail.code, message: gate.fail.message } },
-        gate.fail.status,
-      )
-    }
-    const { auth } = gate
-    const taskId = c.req.param('taskId')
-    const container = c.get('container')
-    const found = await container.boardService.getServiceTask(auth.workspaceId, taskId)
-    if (!found) {
-      return c.json({ error: { code: 'not_found', message: 'Task not found' } }, 404)
-    }
-    const run = await container.executionRepository.getByBlock(auth.workspaceId, taskId)
-    if (!run) {
-      return c.json({ error: { code: 'no_run', message: 'Task has not been started' } }, 404)
-    }
-    const runId = run.id
-    const keys = container.publicApiKeys
-    return streamSSE(c, async (stream) => {
-      const startedAt = Date.now()
-      let lastAuthCheck = Date.now()
-      let last = ''
-      // Announce a park once per park (see the jobs stream for the rationale); re-armed on resume
-      // so a later step's park is announced too.
-      const parks = createParkAnnouncer()
-      for (;;) {
-        if (stream.aborted) break
-        if (keys && Date.now() - lastAuthCheck > SSE_REAUTH_MS) {
-          if (!(await keys.isActive(auth.keyId))) break
-          lastAuthCheck = Date.now()
-        }
-        const execution = await container.executionRepository.get(auth.workspaceId, runId)
-        // Re-read the block for the current PR/branch — the run opens the PR mid-flight, so
-        // the block (not the execution) carries it.
-        const block = await container.boardService.getServiceTask(auth.workspaceId, taskId)
-        if (!execution || !block) break
-        // Reduced for the wire: the frame carries the whole run, so an oversized step deliverable
-        // would be re-sent on every change for the rest of the run. See `reduceRunForStream`.
-        const runView = reduceRunForStream(
-          toPublicRun(execution, block.block, auth.externalIdentity),
-        )
-        const data = JSON.stringify(runView)
-        if (data !== last) {
-          await stream.writeSSE({
-            event:
-              runView.status === 'done'
-                ? 'done'
-                : runView.status === 'failed'
-                  ? 'error'
-                  : 'progress',
-            data,
-          })
-          last = data
-        }
-        // A `blocked` run has PARKED on a human decision (a requirements/clarity review, a
-        // brainstorm, an approval gate, a fork choice). Push it as a distinct `decision` frame so
-        // the caller reacts to the park instead of inferring it from a `progress` payload whose
-        // status happens to read `blocked`; `GET /api/v1/runs/:runId/decisions` then carries what
-        // is actually being asked. The stream stays open across the park — answering resumes this
-        // very run, and the caller should see that on the same connection.
-        if (parks.shouldAnnounce(execution.status)) {
-          await stream.writeSSE({ event: 'decision', data })
-        }
-        if (execution.status === 'done' || execution.status === 'failed') break
-        if (Date.now() - startedAt > SSE_MAX_MS) {
-          await stream.writeSSE({ event: 'timeout', data: '{}' })
-          break
-        }
-        await stream.sleep(SSE_POLL_MS)
-      }
-    })
-  })
 }
 
 function registerPipelineRoutes(app: Hono<AppEnv>): void {
