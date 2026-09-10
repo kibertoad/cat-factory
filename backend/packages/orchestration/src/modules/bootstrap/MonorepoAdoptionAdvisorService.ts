@@ -123,7 +123,7 @@ export class MonorepoAdoptionAdvisorService implements MonorepoAdoptionAdvisor {
   }
 
   async advise(subject: MonorepoAdoptionSubject): Promise<{ plan: unknown; model: string }> {
-    const { modelProvider, ref } = await this.resolveModel(subject)
+    const { modelProvider, ref } = await this.resolveModel(subject.workspaceId)
     // The SAME sides the tool set is built from, so the prompt cannot promise a repository
     // the model has no tool for.
     const system = monorepoAdoptionSystemPrompt(subject.explorer.sides)
@@ -242,19 +242,17 @@ export class MonorepoAdoptionAdvisorService implements MonorepoAdoptionAdvisor {
   }
 
   private async resolveModel(
-    subject: MonorepoAdoptionSubject,
+    workspaceId: string,
   ): Promise<{ modelProvider: ModelProvider; ref: ModelRef }> {
-    const { workspaceId } = subject
-    // The survey's own run, which the subject carries as a REQUIRED field and this service already
-    // stamps on both telemetry tags below. Passing it here too is what lets a workspace whose
-    // preset pins a subscription model lease the initiator's credential for the survey, instead of
-    // resolving on a workspace-only scope and silently landing on the routing default.
-    const scope = await resolveInlineScope({
-      kind: 'run',
-      workspaceId,
-      executionId: subject.runId,
-    })
-    const modelProvider = await resolveScopedModelProvider(scope, this.deps)
+    // Workspace-only, and the subject's `runId` does NOT change that. It is a BOOTSTRAP job id: a
+    // telemetry key (which is what the tags below use it for), not an activation scope. Nothing
+    // mints an activation against it (a bootstrap has no personal-credential gate and records no
+    // initiator), so naming it here would claim a lease that resolves against a row no writer
+    // creates, which is a worse answer than the honest workspace tier.
+    const modelProvider = await resolveScopedModelProvider(
+      await resolveInlineScope({ kind: 'workspace', workspaceId }),
+      this.deps,
+    )
     const ref = await resolveInlineBlockModelRef(
       this.deps,
       workspaceId,

@@ -6,6 +6,7 @@ import type {
   TaskSourceProvider,
   TaskSourceRegistry,
 } from '@cat-factory/kernel'
+import { CredentialRequiredError } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import { BUG_HUNT_SCAN_LIMIT, BugHuntService } from './BugHuntService.js'
 
@@ -248,6 +249,30 @@ describe('BugHuntService.hunt ranking degradation', () => {
     expect(assessed).toBe(false)
     expect(result.analysisStatus).toBe('failed')
     expect(result.candidates).toHaveLength(1)
+  })
+
+  it('lets a credential refusal through instead of degrading to an unranked list', async () => {
+    // The ONE assessor failure a person can act on: it says "enter your personal password", which
+    // the client prompts for and retries. Swallowed into `failed`, the hunt answers 200 with the
+    // board's own order presented as a ranking, the modal never opens, and the only trace of the
+    // ranking that never happened is its absence.
+    const { hunt } = service({
+      board: [candidate('PROJ-1')],
+      assessor: {
+        enabled: true,
+        assess: async () => {
+          throw new CredentialRequiredError('enter your personal password', {
+            vendor: 'claude',
+            reason: 'password_required',
+          })
+        },
+      },
+      isOverBudget: async () => false,
+    })
+
+    await expect(hunt.hunt('ws_1', 'jira', scan('PROJ'))).rejects.toBeInstanceOf(
+      CredentialRequiredError,
+    )
   })
 
   it('ranks with no budget guard wired at all', async () => {

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { CredentialRequiredError, runActivationScope } from '@cat-factory/kernel'
+import {
+  CredentialRequiredError,
+  runActivationScope,
+  userActivationScope,
+} from '@cat-factory/kernel'
 import type {
   ActivationScopeId,
   PersonalSecretCipher,
@@ -300,5 +304,29 @@ describe('PersonalSubscriptionService', () => {
       password: 'separatepassword',
     })
     expect(other.vendor).toBe('glm')
+  })
+
+  it('revokes the user-scope activations when the credential is removed', async () => {
+    // The activation is a SECOND copy of the token, re-encrypted with the system key alone, so
+    // deleting the subscription does not revoke it. Left behind, a disconnected subscription stays
+    // leasable from the run-less surfaces for the rest of the ~12h TTL.
+    const { svc } = makeService()
+    await svc.store('usr_7', {
+      vendor: 'claude',
+      label: 'mine',
+      token: 'T',
+      password: 'longpassword',
+    })
+    await svc.activate(userActivationScope('usr_7'), 'usr_7', 'claude', 'longpassword')
+    await svc.activate(runActivationScope('exec_1'), 'usr_7', 'claude', 'longpassword')
+
+    await svc.remove('usr_7', 'claude')
+
+    await expect(svc.lease(userActivationScope('usr_7'), 'usr_7', 'claude')).rejects.toBeInstanceOf(
+      CredentialRequiredError,
+    )
+    // The RUN's copy stays: consent there was given for one run, whose dispatches are already in
+    // flight, and the run settling clears it.
+    expect((await svc.lease(runActivationScope('exec_1'), 'usr_7', 'claude')).secret).toBe('T')
   })
 })

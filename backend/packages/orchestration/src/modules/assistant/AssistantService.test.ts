@@ -1,5 +1,5 @@
 import type { Block, ModelProvider, ModelRef, ModelScope } from '@cat-factory/kernel'
-import { RateLimitedError, UnavailableError } from '@cat-factory/kernel'
+import { CredentialRequiredError, RateLimitedError, UnavailableError } from '@cat-factory/kernel'
 import { UNATTRIBUTED_BLOCK_EDIT_AUTHORITY } from '@cat-factory/contracts'
 import { MockLanguageModelV3 } from 'ai/test'
 import { describe, expect, it } from 'vitest'
@@ -250,6 +250,29 @@ describe('AssistantService.run', () => {
   it('refuses when the deployment registered no actions at all', async () => {
     const { service } = serviceWith('{}', [])
     await expect(service.run(REQUEST)).rejects.toBeInstanceOf(UnavailableError)
+  })
+
+  it('lets a credential refusal through instead of reporting the model as broken', async () => {
+    // The lease raises this from INSIDE the model call when the asker's personal password has not
+    // been supplied, and it is the 428 the SPA branches on to open its password modal. Re-mapped
+    // to the surface's 503 it becomes "the assistant model failed", which is both untrue and
+    // unanswerable: the whole credential flow is unreachable behind it.
+    const { action } = fakeAction()
+    const refusing: ModelProvider = {
+      resolve() {
+        throw new CredentialRequiredError('enter your personal password', {
+          vendor: 'claude',
+          reason: 'password_required',
+        })
+      },
+    }
+    const service = new AssistantService({
+      actions: [action],
+      modelProvider: refusing,
+      modelRef: { provider: 'openai', model: 'gpt-test' },
+    })
+
+    await expect(service.run(REQUEST)).rejects.toBeInstanceOf(CredentialRequiredError)
   })
 })
 

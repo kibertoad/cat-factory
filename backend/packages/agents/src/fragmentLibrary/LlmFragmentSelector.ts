@@ -4,7 +4,6 @@ import {
   type ModelProvider,
   type ModelProviderResolver,
   type ModelRef,
-  type ModelScope,
   resolveInlineScope,
   type SelectableFragment,
 } from '@cat-factory/kernel'
@@ -82,8 +81,15 @@ export class LlmFragmentSelector implements FragmentSelector {
     if (candidates.length === 0) return []
     const fallback = () => selectDeterministic(candidates, context)
     try {
+      // Workspace-only, and a CLAIM rather than an omission: relevance selection is a
+      // management-surface leftover that the run path no longer drives (the engine resolves
+      // already-selected ids through `resolveBodiesForRun`), so no caller holds a run or an asker
+      // to name. Re-driving it from a run means carrying those on the context FIRST: threading
+      // them here while nothing populates them would only look like the tier was covered.
       const provider = this.deps.modelProviderResolver
-        ? await this.deps.modelProviderResolver.forScope(await scopeFor(context))
+        ? await this.deps.modelProviderResolver.forScope(
+            await resolveInlineScope({ kind: 'workspace', workspaceId: context.workspaceId }),
+          )
         : this.deps.modelProvider
       if (!provider) return fallback()
       const model = provider.resolve(this.deps.modelRef)
@@ -109,22 +115,4 @@ export class LlmFragmentSelector implements FragmentSelector {
       return fallback()
     }
   }
-}
-
-/**
- * The credential scope one selection runs on: the run when the caller supplied it, else the
- * workspace. Selection falls back to the deterministic picker on any failure, so a scope that
- * quietly lost its run would show up as slightly worse fragment choices and nothing else.
- */
-function scopeFor(context: FragmentSelectionContext): Promise<ModelScope> {
-  return resolveInlineScope(
-    context.executionId
-      ? {
-          kind: 'run',
-          workspaceId: context.workspaceId,
-          executionId: context.executionId,
-          ...(context.userId ? { userId: context.userId } : {}),
-        }
-      : { kind: 'workspace', workspaceId: context.workspaceId },
-  )
 }

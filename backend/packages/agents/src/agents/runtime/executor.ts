@@ -10,7 +10,12 @@ import type {
   ModelRef,
   ResolveBinaryArtifactStore,
 } from '@cat-factory/kernel'
-import { noopLogger, resolveDesignImageDelivery, resolveInlineScope } from '@cat-factory/kernel'
+import {
+  agentRunScopeSubject,
+  noopLogger,
+  resolveDesignImageDelivery,
+  resolveInlineScope,
+} from '@cat-factory/kernel'
 import { recordInlineAgentContext } from './inline-context-record.js'
 import { type AgentKindRegistry, defaultAgentKindRegistry } from '../kinds/registry.js'
 import { standardsVerbosityFor, traitDeliveryFor } from '../kinds/traits.js'
@@ -220,25 +225,16 @@ export class AiAgentExecutor implements AgentExecutor {
     if (this.modelProviderResolver && context.workspaceId) {
       // The run this inline call belongs to, so a facade that serves a subscription ref inline
       // through a leased per-run activation (the container inline backend) can lease the
-      // initiator's credential: the inline analogue of the container executor's lease. A dispatch
-      // missing either half narrows to the widest tier it can still name rather than passing an
-      // undefined one, which a credential pool reads as a tier that exists and is empty.
+      // initiator's credential: the inline analogue of the container executor's lease. The fold
+      // is kernel's, shared with the consensus executor, so the two cannot come to different
+      // answers about which pool one step's participants draw on.
       return this.modelProviderResolver.forScope(
         await resolveInlineScope(
-          context.executionId
-            ? {
-                kind: 'run',
-                workspaceId: context.workspaceId,
-                executionId: context.executionId,
-                ...(context.initiatedByUserId ? { userId: context.initiatedByUserId } : {}),
-              }
-            : context.initiatedByUserId
-              ? {
-                  kind: 'user',
-                  workspaceId: context.workspaceId,
-                  userId: context.initiatedByUserId,
-                }
-              : { kind: 'workspace', workspaceId: context.workspaceId },
+          agentRunScopeSubject({
+            workspaceId: context.workspaceId,
+            ...(context.executionId ? { executionId: context.executionId } : {}),
+            ...(context.initiatedByUserId ? { initiatedByUserId: context.initiatedByUserId } : {}),
+          }),
         ),
       )
     }

@@ -46,6 +46,11 @@ const SKIP_DIRS = new Set(['node_modules', 'dist', '.turbo', 'coverage', 'drizzl
 /**
  * Files that define or transport the seam rather than consuming it, so the "must import it" half
  * does not apply. Each is a place a `ModelScope` is a PARAMETER, never a thing being decided.
+ *
+ * It exempts that half and NOT the hand-built-literal one. A whole-file pass would have made
+ * these the three places a `{ workspaceId }` literal could live unflagged forever, and one of
+ * them is where the activation scopes are built and `scope.userId` is read: the likeliest home
+ * for the next such literal, and the file the guard would have agreed never to read.
  */
 const DEFINERS = new Set([
   // The port itself: `resolveScopedModelProvider` IS the function under discussion.
@@ -83,9 +88,9 @@ const failures = []
 for (const root of SCAN_ROOTS) {
   for (const abs of sourceFiles(join(repoRoot, root))) {
     const rel = relative(repoRoot, abs).replaceAll('\\', '/')
-    if (isTestPath(rel) || DEFINERS.has(rel)) continue
+    if (isTestPath(rel)) continue
     const src = readFileSync(abs, 'utf8')
-    for (const finding of findUnseamedScopes(src)) {
+    for (const finding of findUnseamedScopes(src, { seamOptional: DEFINERS.has(rel) })) {
       const detail =
         finding.reason === 'literal'
           ? 'a hand-built scope literal'

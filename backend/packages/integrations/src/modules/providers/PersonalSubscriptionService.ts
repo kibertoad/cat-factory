@@ -10,7 +10,12 @@ import type {
   SubscriptionActivationRepository,
   SubscriptionVendor,
 } from '@cat-factory/kernel'
-import { CredentialRequiredError, isIndividualVendor, ValidationError } from '@cat-factory/kernel'
+import {
+  CredentialRequiredError,
+  isIndividualVendor,
+  userActivationScope,
+  ValidationError,
+} from '@cat-factory/kernel'
 import type {
   PersonalSubscriptionStatus,
   StorePersonalSubscriptionInput,
@@ -184,9 +189,24 @@ export class PersonalSubscriptionService {
     )
   }
 
-  /** Remove the user's personal credential for a vendor. */
+  /**
+   * Remove the user's personal credential for a vendor, and drop the USER-scope activations it
+   * could still be leased through.
+   *
+   * The activation is a separate copy of the same token, re-encrypted with the system key alone,
+   * so soft-deleting the subscription does not revoke it: without this, disconnecting a
+   * subscription would leave it usable from the run-less surfaces for the rest of the ~12h TTL,
+   * with nothing but the sweep to reclaim it.
+   *
+   * The whole user scope goes, not the vendor's row alone. A user's credentials share ONE
+   * password, so removing one is usually the first half of re-sealing them all, and a re-mint
+   * costs the next request that carries the password nothing but the derivation it would have
+   * paid anyway. RUN activations are deliberately left: consent there was given for a specific
+   * run whose dispatches are already in flight, and the run settling clears them itself.
+   */
   async remove(userId: string, vendor: SubscriptionVendor): Promise<void> {
     await this.deps.personalSubscriptionRepository.softDelete(userId, vendor, this.deps.clock.now())
+    await this.clearScope(userActivationScope(userId))
   }
 
   /**
@@ -337,7 +357,7 @@ export class PersonalSubscriptionService {
     return this.hasActivation(scopeId, userId, vendor, this.activationTtlMs / 2)
   }
 
-  /** Delete every activation for a settled scope (called when a run terminates). */
+  /** Delete every activation for a settled scope (a removed credential; a run that terminated). */
   async clearScope(scopeId: ActivationScopeId): Promise<void> {
     await this.deps.subscriptionActivationRepository.deleteByScope(scopeId)
   }

@@ -57,6 +57,42 @@ interface InlineScopeBase {
 }
 
 /**
+ * What a DISPATCH holds, as the two optional halves an {@link AgentRunContext} carries.
+ *
+ * Structural rather than the context type itself, so a caller building the fold in a test does
+ * not have to fabricate a pipeline name and a step index to say "a run, started by nobody".
+ */
+export interface AgentRunScopeContext {
+  workspaceId: string
+  executionId?: string
+  initiatedByUserId?: string
+}
+
+/**
+ * Fold a dispatch's run context into the subject it can claim: the run when there is one (with
+ * its initiator, when the run records one), else the initiator alone, else the workspace.
+ *
+ * Kernel-level and shared, because the two executors that dispatch an inline agent step (the
+ * plain one and the consensus panel) have to agree about it. Written out at each of them, the
+ * precedence is a thing a later change lands in one copy of, and the symptom is a consensus
+ * participant drawing on a different credential pool from the same step run alone: two answers to
+ * "whose model is this", neither of them failing.
+ */
+export function agentRunScopeSubject(context: AgentRunScopeContext): InlineScopeSubject {
+  const { workspaceId, executionId, initiatedByUserId } = context
+  if (executionId) {
+    return {
+      kind: 'run',
+      workspaceId,
+      executionId,
+      ...(initiatedByUserId ? { userId: initiatedByUserId } : {}),
+    }
+  }
+  if (initiatedByUserId) return { kind: 'user', workspaceId, userId: initiatedByUserId }
+  return { kind: 'workspace', workspaceId }
+}
+
+/**
  * Build the model scope for an inline call.
  *
  * `resolveRunContext` is read for a `block` subject only, and its absence (tests, or a caller with

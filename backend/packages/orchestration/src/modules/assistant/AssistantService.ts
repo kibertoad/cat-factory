@@ -18,6 +18,7 @@ import type {
 import { validateDescriptorFields } from '@cat-factory/contracts'
 import type { Logger, ModelProvider, ModelProviderResolver, ModelRef } from '@cat-factory/kernel'
 import {
+  CredentialRequiredError,
   describeError,
   extractJson,
   getErrorMessage,
@@ -267,6 +268,12 @@ export class AssistantService {
       })
       return result.text
     } catch (error) {
+      // A missing/withheld personal password is a re-promptable GATE condition, not a broken
+      // model: the lease raises it from inside this call, and it is the 428 the client answers by
+      // collecting the password and retrying. Re-mapping it to a 503 would strand the whole
+      // credential flow. The SPA branches on `credential_required`, and a status class carrying
+      // `assistant_generation_failed` tells the person their model is down instead.
+      if (error instanceof CredentialRequiredError) throw error
       const message = `The assistant model (${ref.provider}:${ref.model}) failed: ${getErrorMessage(error)}`
       this.deps.logger?.warn(message, { workspaceId, ...describeError(error) })
       throw new UnavailableError(message, 'assistant_generation_failed')

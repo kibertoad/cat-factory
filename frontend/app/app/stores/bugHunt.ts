@@ -6,6 +6,12 @@ import { useWorkspaceStore } from '~/stores/workspace'
 import { usePersonalSubscriptionsStore } from '~/stores/personalSubscriptions'
 
 /**
+ * What one attempt did. `cancelled` is distinct from `failed` because the surface reports a
+ * failure: a dismissed credential prompt is the person's own decision, not an outcome to toast.
+ */
+export type BugHuntAttempt = 'ran' | 'cancelled' | 'failed'
+
+/**
  * Bug-hunt state: the boards of the tracker being browsed, the last hunt's ranked candidates,
  * and the actions behind the three steps (list boards → run the hunt → adopt one candidate).
  *
@@ -95,25 +101,36 @@ export const useBugHuntStore = defineStore('bugHunt', () => {
     boardsLoading.value = false
   }
 
-  /** Run a hunt and keep its ranked result. Returns false when the scan itself failed. */
-  async function hunt(source: TaskSourceKind, input: RunBugHuntInput): Promise<boolean> {
+  /**
+   * Run a hunt and keep its ranked result.
+   *
+   * Three outcomes, not two, because the caller reports a failure and only a failure. `cancelled`
+   * is a hunt that never ran: the person dismissed the credential prompt (or the prompt's own
+   * retry failed and the credential modal already said so), so there is nothing to tell them that
+   * they did not just do. Collapsing it into `failed` is an error toast for an action they
+   * cancelled, with no description to put in it.
+   */
+  async function hunt(source: TaskSourceKind, input: RunBugHuntInput): Promise<BugHuntAttempt> {
     hunting.value = true
     huntError.value = null
     huntErrorReason.value = null
+    // A new scan supersedes whatever is on screen the moment it starts. Clearing HERE rather than
+    // on each way out is what keeps a cancelled prompt from leaving the previous board's ranking
+    // under the current selection, where adopting one would file a task against the wrong board.
+    result.value = null
     try {
       // Gated like the adoption below, and for the reason the ranking is the model call: on a
       // workspace pinned to an individual-usage subscription the scan needs the credential HERE,
-      // not only when a candidate is adopted. A cancelled prompt leaves no result and no error,
-      // which is what `false` with a null `huntError` says.
+      // not only when a candidate is adopted.
       const personal = usePersonalSubscriptionsStore()
-      return await personal.withCredential(async (password) => {
+      const ran = await personal.withCredential(async (password) => {
         result.value = await api.runBugHunt(workspace.requireId(), source, input, password)
       })
+      return ran ? 'ran' : 'cancelled'
     } catch (e) {
-      result.value = null
       huntError.value = e instanceof Error ? e.message : String(e)
       huntErrorReason.value = apiErrorReason(e)
-      return false
+      return 'failed'
     } finally {
       hunting.value = false
     }

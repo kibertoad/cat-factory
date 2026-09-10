@@ -115,3 +115,24 @@ test('masking preserves offsets and newlines so line numbers stay true', () => {
   equal(masked.length, src.length)
   equal(masked.split('\n').length, src.split('\n').length)
 })
+
+test('seamOptional lets a forwarding definer through without the seam', () => {
+  // A resolver decorator: it is handed a scope and passes it on, so it never calls the seam and
+  // there is nothing for it to state.
+  const src = `forScope(scope) { return this.inner.forScope(scope) }`
+  deepEqual(
+    findUnseamedScopes(src, { seamOptional: true }).map((f) => f.reason),
+    [],
+  )
+})
+
+test('seamOptional still flags a hand-built literal in a definer', () => {
+  // The half the exemption must NOT cover. These files build activation scopes and read
+  // `scope.userId`, so a literal is likelier there than anywhere, and a whole-file pass would
+  // make them the one place it can never be seen.
+  const src = `await this.inner.forScope({ workspaceId })`
+  deepEqual(
+    findUnseamedScopes(src, { seamOptional: true }).map((f) => f.reason),
+    ['literal'],
+  )
+})

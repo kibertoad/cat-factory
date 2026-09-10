@@ -115,7 +115,11 @@ interface ResolvedFixture {
 export class SandboxRunService {
   constructor(private readonly deps: SandboxRunServiceDependencies) {}
 
-  async launch(workspaceId: string, experimentId: string): Promise<SandboxExperimentDetail> {
+  async launch(
+    workspaceId: string,
+    experimentId: string,
+    launchedByUserId?: string,
+  ): Promise<SandboxExperimentDetail> {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)
     const experiment = assertFound(
       await this.deps.sandboxExperimentRepository.get(workspaceId, experimentId),
@@ -127,7 +131,7 @@ export class SandboxRunService {
     }
     const meta = assertSandboxRunnable(experiment.agentKind)
 
-    const provider = await this.providerFor(workspaceId)
+    const provider = await this.providerFor(workspaceId, launchedByUserId)
     const prompts = await this.resolvePrompts(workspaceId, experiment)
     const fixtures = await this.resolveFixtures(workspaceId, experiment, meta)
     const rubric = rubricFor(meta.rubric)
@@ -384,13 +388,22 @@ export class SandboxRunService {
     return map
   }
 
-  /** The model provider for a workspace's scope (per-scope DB pool, else the static one). */
-  private async providerFor(workspaceId: string): Promise<ModelProvider> {
-    // Sandbox experiments are not runs (no execution/initiator), so the scope is workspace-only.
-    // An inline subscription ref therefore resolves through a POOLED lease (Kimi/DeepSeek); an
-    // individual-vendor ref has no activation to lease here and fails loudly.
+  /** The model provider for a launch's scope (per-scope DB pool, else the static one). */
+  private async providerFor(
+    workspaceId: string,
+    launchedByUserId?: string,
+  ): Promise<ModelProvider> {
+    // A sandbox experiment is not a run, so there is no execution to name. There IS a person,
+    // though: a launch is a member's own request, and their API keys and local model endpoints
+    // are part of the pool it should draw on. An inline subscription ref still resolves through a
+    // POOLED lease (Kimi/DeepSeek); an individual-vendor ref needs an activation this surface does
+    // not mint, so it fails loudly rather than quietly running on someone else's credential.
     const provider = await resolveScopedModelProvider(
-      await resolveInlineScope({ kind: 'workspace', workspaceId }),
+      await resolveInlineScope(
+        launchedByUserId
+          ? { kind: 'user', workspaceId, userId: launchedByUserId }
+          : { kind: 'workspace', workspaceId },
+      ),
       this.deps,
     )
     if (!provider) throw new ValidationError('No model provider is configured for the Sandbox')

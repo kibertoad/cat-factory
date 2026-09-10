@@ -133,7 +133,14 @@ CREATE TABLE IF NOT EXISTS subscription_activations (
 
 /** Open (creating if absent) the local credential SQLite database and ensure its schema. */
 function openLocalCredentialDb(path: string): DatabaseSync {
-  return openSqliteDb(path, SCHEMA)
+  // `subscription_activations` is the one table here whose content is re-creatable: each row is a
+  // 12-hour system-key copy of a credential its owner can re-mint by entering their password, and
+  // the TTL sweep discards them anyway. So a shape change (`execution_id` became `scope_id`) is
+  // answered by rebuilding the table rather than by refusing to open the store, which is what an
+  // additive-only reconcile has to do with a renamed NOT NULL column, on a developer's machine,
+  // for state that would have expired by tomorrow. Every OTHER table here holds the only copy of
+  // a credential and is deliberately absent from this list.
+  return openSqliteDb(path, SCHEMA, { rebuildable: ['subscription_activations'] })
 }
 
 // ---------------------------------------------------------------------------

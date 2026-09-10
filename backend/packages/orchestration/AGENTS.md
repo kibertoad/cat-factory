@@ -291,11 +291,12 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   look the value up under the same key, and different keys behind one name is refused here rather
   than arbitrated at dispatch.
 
-Two top-level helpers sit beside `modules/` because every INLINE LLM caller shares them, and both
-are about resolving ONE thing consistently rather than about any one feature:
-`src/inlineScope.ts` (the `ModelScope` for a call on a block, folding in its active run so a leased
-per-run credential can be used) and `src/inlineBlockModel.ts` (`resolveInlineBlockModelRef`: WHICH
-model that call runs, with the same block-pin → preset default → routing-default precedence the
+Every INLINE LLM caller answers two questions the same way, and neither belongs to any one
+feature. WHOSE credentials a call runs on is kernel's (`domain/inline-scope.ts`
+`resolveInlineScope`, whose subject names the tier the caller holds); this package's
+`container/blockRunContext.ts` supplies the block half of it, resolving a block's active run so a
+leased per-run credential can be used. WHICH model it runs on is `src/inlineBlockModel.ts`
+(`resolveInlineBlockModelRef`: the same block-pin → preset default → routing-default precedence the
 dispatch path uses, the preset's route ORDER, and the container-only-subscription degrade). It
 replaced eight byte-identical private `modelFor` methods; wire it through
 `container/inline-model-deps.ts`, which hands over the model and the route order as ONE

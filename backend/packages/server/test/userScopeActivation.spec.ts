@@ -16,21 +16,31 @@ import { activateUserScope } from '../src/modules/providers/personalCredentialGa
 // the point where the client knows to prompt. So the cases below are mostly about staying quiet.
 
 function makeApp(over: {
+  /** The vendors the asker holds a LIVE credential for (what `liveVendors` answers). */
   vendors?: string[]
   fresh?: boolean
   user?: string | null
   personalStore?: false
   ambient?: string[]
+  /** Whether this deployment can serve a subscription ref inline, i.e. lease what is minted. */
+  inlineHarness?: false
+  /** Make every mint fail, to pin that a mint failure is not the request's refusal. */
+  activateThrows?: Error
 }) {
-  const activate = vi.fn(async () => {})
+  const activate = vi.fn(async () => {
+    if (over.activateThrows) throw over.activateThrows
+  })
   const hasFresh = vi.fn(async () => over.fresh ?? false)
   const container = {
-    config: { nativeAmbientAuth: over.ambient ?? [] },
+    config: {
+      nativeAmbientAuth: over.ambient ?? [],
+      agents: over.inlineHarness === false ? {} : { inlineHarnessRef: () => true },
+    },
     ...(over.personalStore === false
       ? {}
       : {
           personalSubscriptions: {
-            list: async () => (over.vendors ?? []).map((vendor) => ({ vendor })),
+            liveVendors: async () => new Set(over.vendors ?? []),
             hasFreshActivation: hasFresh,
             activate,
           } as unknown as PersonalSubscriptionService,
@@ -122,5 +132,38 @@ describe('activateUserScope', () => {
 
     const scopes = activate.mock.calls.map((call) => (call as unknown[])[0])
     expect(scopes).toEqual([userActivationScope('usr_1'), userActivationScope('usr_1')])
+  })
+
+  it('stays quiet where nothing could lease what it would mint', async () => {
+    // A user activation is opened by the inline subscription backend and by nothing else, and
+    // that exists only where the deployment can keep a subscription ref inline. Elsewhere the
+    // ref degrades to the routing default before any lease, so the 210k-iteration derivation
+    // would be paid, per turn, for a row no reader has.
+    const { app, activate } = makeApp({ vendors: ['claude'], inlineHarness: false })
+
+    expect((await turn(app, { [PERSONAL_PASSWORD_HEADER]: 'correct horse' })).status).toBe(200)
+    expect(activate).not.toHaveBeenCalled()
+  })
+
+  it('never mints for a credential the asker cannot unlock, whatever they type', async () => {
+    // `liveVendors` excludes an EXPIRED subscription, and that is the point: minting for one
+    // raises `subscription_expired`, which from here would refuse every turn on this surface over
+    // a credential the turn does not need, behind a modal no password can satisfy.
+    const { app, activate } = makeApp({ vendors: [] })
+
+    expect((await turn(app, { [PERSONAL_PASSWORD_HEADER]: 'correct horse' })).status).toBe(200)
+    expect(activate).not.toHaveBeenCalled()
+  })
+
+  it('answers the request even when the mint itself fails', async () => {
+    // A password that opens nothing is a fact about a CREDENTIAL, not about this turn. The lease
+    // is the one refusal, and it fires only where the credential is actually needed; refusing
+    // here would refuse turns that never wanted it.
+    const { app } = makeApp({
+      vendors: ['claude'],
+      activateThrows: new Error('the personal password does not unlock claude'),
+    })
+
+    expect((await turn(app, { [PERSONAL_PASSWORD_HEADER]: 'wrong horse' })).status).toBe(200)
   })
 })

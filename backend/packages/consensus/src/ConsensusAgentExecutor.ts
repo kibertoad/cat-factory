@@ -1,4 +1,5 @@
 import {
+  agentRunScopeSubject,
   type AgentExecutor,
   type AgentJobHandle,
   type AgentJobUpdate,
@@ -153,23 +154,15 @@ export class ConsensusAgentExecutor implements AsyncAgentExecutor {
   private async providerFor(context: AgentRunContext): Promise<ModelProvider> {
     if (this.deps.modelProviderResolver && context.workspaceId) {
       // Carry the run so a leased-per-run inline subscription backend can lease the initiator's
-      // activation for a consensus participant's inline call.
+      // activation for a consensus participant's inline call. The SAME kernel fold the plain
+      // executor uses: a panel participant and the step run alone must draw on one pool.
       return this.deps.modelProviderResolver.forScope(
         await resolveInlineScope(
-          context.executionId
-            ? {
-                kind: 'run',
-                workspaceId: context.workspaceId,
-                executionId: context.executionId,
-                ...(context.initiatedByUserId ? { userId: context.initiatedByUserId } : {}),
-              }
-            : context.initiatedByUserId
-              ? {
-                  kind: 'user',
-                  workspaceId: context.workspaceId,
-                  userId: context.initiatedByUserId,
-                }
-              : { kind: 'workspace', workspaceId: context.workspaceId },
+          agentRunScopeSubject({
+            workspaceId: context.workspaceId,
+            ...(context.executionId ? { executionId: context.executionId } : {}),
+            ...(context.initiatedByUserId ? { initiatedByUserId: context.initiatedByUserId } : {}),
+          }),
         ),
       )
     }

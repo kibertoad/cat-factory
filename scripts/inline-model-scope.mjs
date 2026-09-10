@@ -166,8 +166,14 @@ function annotatedAbove(src, line) {
  *    seam at all. Following the variable would need real analysis; requiring the file to use the
  *    seam SOMEWHERE is the cheap half that closes the indirection, and the residual shape (a
  *    literal assigned to a variable in a file that also uses the seam) is one a reviewer sees.
+ *
+ * `seamOptional` drops the SECOND check only, for the handful of files that define or transport
+ * the seam rather than consuming it (the port itself, the resolver decorators). Those legitimately
+ * never call `resolveInlineScope`, being handed a scope and forwarding it. They are also ordinary
+ * code that can hand-build a literal, and the file where activation scopes are CONSTRUCTED is the
+ * last one worth agreeing never to look at, so the literal check still runs.
  */
-export function findUnseamedScopes(src) {
+export function findUnseamedScopes(src, { seamOptional = false } = {}) {
   const masked = maskLiterals(src)
   const seamed = SEAM.test(masked)
   const findings = []
@@ -176,7 +182,7 @@ export function findUnseamedScopes(src) {
     if (annotatedAbove(src, line)) continue
     const argStart = masked[match.index + match[0].length]
     const literal = argStart === '{'
-    if (!literal && seamed) continue
+    if (!literal && (seamed || seamOptional)) continue
     findings.push({
       line,
       reason: literal ? 'literal' : 'unseamed',

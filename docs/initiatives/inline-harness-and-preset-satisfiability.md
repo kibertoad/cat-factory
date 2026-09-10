@@ -226,9 +226,10 @@ leasePersonal/leasePooled })`; host CLI when the native vendor's binary is prese
 - **Node seam**: `wrapModelProviderResolver(inner, deps)` now receives the lease closures;
   `buildNodeContainer` builds the subscription services before the resolver wrap.
 - **Threading**: `executionId` + initiator `userId` into the inline scope via `scopeForBlockRun`
-  (`inlineScope.ts`); the iterative reviewers, doc/initiative interviewers, tester QC, Kaizen,
-  and the AI/consensus agent executors. `resolveBlockRunContext(deps)` wires it from the block's
-  active run for the engine-driven inline services.
+  (since replaced by kernel's `domain/inline-scope.ts`, phase D); the iterative reviewers,
+  doc/initiative interviewers, tester QC, Kaizen, and the AI/consensus agent executors.
+  `resolveBlockRunContext(deps)` wires it from the block's active run for the engine-driven
+  inline services.
 
 Gotchas surfaced:
 
@@ -329,13 +330,24 @@ a model, still answers, and lands on the deployment's routing default. The only 
 - The subject is DISCRIMINATED: `block` / `run` / `user` / `workspace`. That is the whole design.
   A caller can no longer omit a tier; it states which one it holds, so `kind: 'workspace'` is a
   written claim a reviewer checks against the caller's own inputs.
-- Fixed where a tier was genuinely available and lost: the monorepo adoption advisor (held a
-  REQUIRED `subject.runId` and already stamped it on its own telemetry), the assistant (held
-  `request.userId`), the bug hunt (a user reachable at the controller, threaded through
-  `BugHuntSubject`), and `FragmentSelectionContext`, whose port carried no run fields at all.
+- Fixed where a tier was genuinely available and lost, all of them an ASKER on a member's own
+  synchronous request: the assistant (held `request.userId`), the bug hunt (a user reachable at
+  the controller, threaded through `BugHuntSubject`), the document planner (its `plan`/`spawn`
+  routes are a member pressing a button; only the IMPORT arrives on a webhook), and the sandbox
+  launch (not a run, but always a person).
+- **`agentRunScopeSubject(context)`** (kernel, beside the seam) is the dispatch fold both agent
+  executors use, so a consensus participant and the same step run alone cannot come to different
+  answers about whose pool they draw on.
 - Kaizen and the fragment-brief generator keep their omissions, which were reasoned and documented:
   a background pass over a settled run has nobody on the request, and platform housekeeping must
   not spend a developer's personal quota. Both now SAY so as `kind: 'run'` with no user.
+- Two more stay `workspace` and now say WHY, because the tier a reviewer might expect is not
+  actually there. The monorepo adoption advisor's `subject.runId` is a BOOTSTRAP job id: a
+  telemetry key, not an activation scope, and nothing mints an activation against it (a bootstrap
+  has no personal-credential gate and records no initiator), so naming it would claim a lease
+  against a row no writer creates. `LlmFragmentSelector`'s context carries no run because the run
+  path does not drive relevance selection at all (the engine resolves already-selected ids through
+  `resolveBodiesForRun`); threading fields nothing populates would only look like coverage.
 
 ### D2: the run-less activation scope
 
@@ -352,12 +364,31 @@ FK), so the concept was renamed to what it is:
   rows are DELETED rather than rewritten: nothing records which kind they were, and an activation
   is a 12h cache of a credential the user can re-unlock at will.
 - **`activateUserScope(c)`** (server) puts a supplied password to use before a run-less surface
-  resolves its model. It is NOT a gate and refuses nothing: a turn needing no personal credential
-  must never be asked for a password, and one that does is told by the lease's own 428, which is
-  the point at which the client knows to prompt. The freshness skip is `refreshRunActivation`'s,
-  for the same PBKDF2 reason.
+  resolves its model. It is NOT a gate and refuses NOTHING, which takes three rules rather than
+  one sentence: it mints only for LIVE credentials (an expired one cannot be unlocked at any
+  price, so minting for it would raise `subscription_expired` on every turn, over a credential the
+  turn does not need, with a modal no password can satisfy); each mint is `runBestEffort`, so a
+  password that opens nothing is logged and left for the lease to speak about; and it skips
+  entirely where no inline personal lease exists (`config.agents.inlineHarnessRef`, local mode),
+  since elsewhere an inline call degrades a subscription ref before any lease is attempted and the
+  mint would pay 210k PBKDF2 iterations for a row nobody reads. The freshness skip is
+  `refreshRunActivation`'s, for that same reason.
+- The one refusal is the LEASE's own 428, and it has to REACH the client: the assistant's
+  `generate` and the bug hunt's assessor + `rank` both re-map or swallow failures by design, so
+  each now rethrows `CredentialRequiredError` first. Without that the surface answers 503 "the
+  model failed" (assistant) or 200 with an unranked list (hunt), and the modal never opens.
+- **Removing a subscription clears the USER-scope activations**, or disconnecting one would leave
+  it leasable for the rest of the ~12h TTL with only the sweep to reclaim it. Run activations are
+  deliberately left: consent there was given for a specific run whose dispatches are in flight.
+- The local-sqlite credential store declares `subscription_activations` REBUILDABLE
+  (`openSqliteDb`'s new option), so the rename reaches an existing file. That reconcile is
+  additive by design and reads a rename as adding a `NOT NULL` column with no default, which
+  SQLite refuses on a populated table: without this, the whole store stops opening on any laptop
+  that ran local mode before, over state that expires in hours.
 - The SPA rides the existing `withCredential` flow on both surfaces, so the first turn 428s, the
-  modal collects the password, and it rides from the cache after that.
+  modal collects the password, and it rides from the cache after that. A CANCELLED prompt is not a
+  failure: the bug hunt reports `cancelled` distinctly (the modal toasts only a real failure) and
+  clears the previous board's ranking, and the assistant returns null with the box untouched.
 
 ### D3: the guard
 
@@ -365,7 +396,9 @@ FK), so the concept was renamed to what it is:
 scope through the seam. Two checks, because either alone has a hole: no object literal at the call
 site, and a file that resolves a scope at all must mention the seam (which covers the indirection
 a text scan cannot follow). `// inline-scope-ok: <reason>` is the escape hatch for a genuine
-pass-through, and it demands a sentence.
+pass-through, and it demands a sentence. The handful of files that DEFINE or forward the seam are
+exempt from the second check only: they can still hand-build a literal, and one of them is where
+activation scopes are constructed, which makes it the last file worth agreeing never to read.
 
 ### Considered and DECLINED: the container inline backend on every facade
 

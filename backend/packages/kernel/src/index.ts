@@ -720,8 +720,12 @@ export {
 // The scope half of inline model resolution: which credentials serve a non-container LLM call.
 // Kernel-level because callers span agents, orchestration and the facades, and a copy per layer
 // is exactly how the run context went missing at six of them. See `domain/inline-scope.ts`.
-export { resolveInlineScope } from './domain/inline-scope.js'
-export type { InlineScopeSubject, ResolveBlockRunContext } from './domain/inline-scope.js'
+export { agentRunScopeSubject, resolveInlineScope } from './domain/inline-scope.js'
+export type {
+  AgentRunScopeContext,
+  InlineScopeSubject,
+  ResolveBlockRunContext,
+} from './domain/inline-scope.js'
 
 // Environment-failure classification, shared by every environment provider (the built-in backends
 // and any a deployment registers). See `domain/environment-failure.ts` for why it lives here

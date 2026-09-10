@@ -8,6 +8,7 @@ import type {
   ModelRef,
 } from '@cat-factory/kernel'
 import {
+  CredentialRequiredError,
   extractJson,
   getErrorMessage,
   resolveInlineScope,
@@ -102,6 +103,11 @@ export class BugHuntAssessorService implements BugHuntAssessor {
       })
       text = result.text
     } catch (e) {
+      // The lease raises `credential_required` from inside the call, and it is the ONE failure
+      // here the person can act on: it means "enter your personal password", which the client
+      // prompts for and retries. Flattening it into a ranking failure would leave the hunt
+      // reporting the board's own order as a recommendation, with nothing said about why.
+      if (e instanceof CredentialRequiredError) throw e
       throw this.fail(subject, ref, `generation failed: ${getErrorMessage(e)}`)
     }
     const verdicts = extractJson(text)

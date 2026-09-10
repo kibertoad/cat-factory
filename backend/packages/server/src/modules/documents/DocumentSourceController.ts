@@ -237,7 +237,9 @@ export function documentSourceController(): Hono<AppEnv> {
     const target = frameId
       ? await documents.linkService.resolvePlanTarget(workspaceId, frameId)
       : undefined
-    return c.json(await documents.plannerService.plan(record, target), 200)
+    // The asker: this route is a member's own request, so the plan's model call draws on their
+    // credential tier rather than on the workspace's alone.
+    return c.json(await documents.plannerService.plan(record, target, c.get('user')?.id), 200)
   })
 
   // Apply a page's structure to the board (new frames, or into an existing one).
@@ -256,7 +258,7 @@ export function documentSourceController(): Hono<AppEnv> {
     const target = frameId
       ? await documents.linkService.resolvePlanTarget(workspaceId, frameId)
       : undefined
-    const plan = await documents.plannerService.plan(record, target)
+    const plan = await documents.plannerService.plan(record, target, c.get('user')?.id)
     // The plan comes from an imported document, but the board write is the member's: they asked
     // for the spawn on their own board, so it is judged under their tier (ADR 0037).
     const result = await documents.linkService.spawn(

@@ -16,6 +16,7 @@ import type {
   TrackerBoard,
 } from '@cat-factory/kernel'
 import {
+  CredentialRequiredError,
   ValidationError,
   assertFound,
   parseBugHuntVerdicts,
@@ -322,10 +323,17 @@ export class BugHuntService {
         analysisStatus: 'ranked',
         model,
       }
-    } catch {
-      // Deliberately swallowed: `analysisStatus: 'failed'` is what the user acts on, and the
-      // scan they paid for is still in the response. The assessor logs the underlying cause.
-      // A budget probe that threw lands here too — nothing was spent, and the scan survives.
+    } catch (error) {
+      // The one failure that is NOT the assessor's to swallow: `credential_required` says the
+      // asker must enter their personal password, which is a thing they can do and the client
+      // knows how to ask for. Reported as a 200 with `analysisStatus: 'failed'` it becomes the
+      // shape this whole change exists to end: the hunt silently ranks on the board's own order,
+      // and the only signal is the bill for the call that never happened.
+      if (error instanceof CredentialRequiredError) throw error
+      // Everything else is deliberately swallowed: `analysisStatus: 'failed'` is what the user
+      // acts on, and the scan they paid for is still in the response. The assessor logs the
+      // underlying cause. A budget probe that threw lands here too: nothing was spent, and the
+      // scan survives.
       return { ranked: unranked, analysisStatus: 'failed', model: null }
     }
   }

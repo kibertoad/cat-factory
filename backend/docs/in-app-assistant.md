@@ -184,13 +184,26 @@ runs on. A workspace-only scope would resolve, answer, and quietly bill a differ
 
 That is also why the turn carries the personal password header a run start carries. On a workspace
 pinned to a subscription the FIRST turn answers `428 credential_required`, the SPA's existing
-credential modal collects the password, and it rides from the cache after that. `activateUserScope`
-mints the activation on the way in and refuses nothing: a turn whose model needs no personal
-credential is never asked for a password.
+credential modal collects the password, and it rides from the cache after that. Reaching the SPA
+is the part that takes care: `generate` re-maps every model failure to a 503, so the credential
+refusal is rethrown ahead of that, or the person is told their model is down and offered nothing
+to do about it.
+
+`activateUserScope` mints the activation on the way in and refuses NOTHING. It mints only for a
+LIVE credential, best-effort, so a lapsed subscription or a password that opens nothing cannot
+refuse a turn that was never going to use either; the lease is the one refusal, and it fires only
+where the credential is actually needed.
+
+Where it does not mint at all: a deployment that cannot run a subscription ref inline
+(`config.agents.inlineHarnessRef`, which is local mode) has nothing that could ever open a user
+activation, because such a ref degrades to the routing default before any lease is attempted.
+Minting there would pay a 210k-iteration key derivation per turn for a row with no reader. So on
+Node and the Worker this surface answers on the preset's non-subscription model, exactly as every
+other inline call does.
 
 A deployment that serves the vendor from an ambient host CLI login (local mode with `claude` on
-PATH) needs none of this. There is no managed credential to unlock, so nothing prompts, which is
-the correct behaviour rather than a missing gate.
+PATH) needs none of this either. There is no managed credential to unlock, so nothing prompts,
+which is the correct behaviour rather than a missing gate.
 
 ## The action catalog
 
