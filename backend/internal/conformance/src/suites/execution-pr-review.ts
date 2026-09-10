@@ -114,6 +114,60 @@ const seedReviewTask = async (
   }
 }
 
+/**
+ * The `pr-review` decision as `/api/v1` serves it, plus the read that finds it.
+ *
+ * At module scope because two registrars below drive the same surface (the curate/resolve cases
+ * and the resume/retry ones), and a projection each spelled for itself would let one of them go on
+ * asserting a field the other had already watched move.
+ */
+type PublicReviewDecision = {
+  kind: string
+  status: string
+  prUrl: string | null
+  slices: { sliceId: string; paths: string[] }[]
+  findings: {
+    findingId: string
+    sliceId: string | null
+    path: string
+    line: number | null
+    severity: string
+    suggestedFix: string | null
+  }[]
+  selectedFindingIds: string[]
+  postReport: {
+    attempted: number
+    posted: number
+    folded: number
+    bodyPosted: boolean | null
+    attempt: number | null
+    failures: { findingId: string; path: string; line: number | null; reason: string }[]
+  } | null
+  postedFindingIds: string[]
+  postedBody: boolean
+  postAttempts: number
+  resumeAttempts: number
+  maxResumeAttempts: number
+  reportedSlices: number
+  lastActivityAt: number | null
+}
+
+/** The run's `pr-review` decision as `/api/v1` serves it, or undefined once it has settled. */
+const readReview = async (
+  app: ConformanceApp,
+  executionId: string,
+  auth: Record<string, string>,
+): Promise<PublicReviewDecision | undefined> => {
+  const listed = await app.call<{ parked: boolean; decisions: PublicReviewDecision[] }>(
+    'GET',
+    `/api/v1/runs/${executionId}/decisions`,
+    undefined,
+    auth,
+  )
+  expect(listed.status).toBe(200)
+  return listed.body.decisions.find((d) => d.kind === 'pr-review')
+}
+
 export function definePrReviewSuite(harness: ConformanceHarness): void {
   describe('PR deep-review (pr-reviewer park → select → resolve)', () => {
     // The read-only pr-reviewer's structured findings, returned by the fake as `result.custom`.
@@ -123,6 +177,7 @@ export function definePrReviewSuite(harness: ConformanceHarness): void {
     registerReviewChallengeTests(harness)
     registerReviewResolutionTests(harness)
     registerPublicReviewApiTests(harness)
+    registerPublicReviewLoopTests(harness)
   })
 }
 
@@ -693,46 +748,6 @@ function registerReviewResolutionTests(harness: ConformanceHarness): void {
  * projection stayed green.
  */
 function registerPublicReviewApiTests(harness: ConformanceHarness): void {
-  type PublicReviewDecision = {
-    kind: string
-    status: string
-    prUrl: string | null
-    slices: { sliceId: string; paths: string[] }[]
-    findings: {
-      findingId: string
-      sliceId: string | null
-      path: string
-      line: number | null
-      severity: string
-      suggestedFix: string | null
-    }[]
-    selectedFindingIds: string[]
-    postReport: {
-      attempted: number
-      posted: number
-      folded: number
-      bodyPosted: boolean | null
-      failures: { findingId: string; path: string; line: number | null; reason: string }[]
-    } | null
-    postedFindingIds: string[]
-  }
-
-  /** The run's `pr-review` decision as `/api/v1` serves it, or undefined once it has settled. */
-  const readReview = async (
-    app: ConformanceApp,
-    executionId: string,
-    auth: Record<string, string>,
-  ): Promise<PublicReviewDecision | undefined> => {
-    const listed = await app.call<{ parked: boolean; decisions: PublicReviewDecision[] }>(
-      'GET',
-      `/api/v1/runs/${executionId}/decisions`,
-      undefined,
-      auth,
-    )
-    expect(listed.status).toBe(200)
-    return listed.body.decisions.find((d) => d.kind === 'pr-review')
-  }
-
   it('serves the parked findings, curates and resolves them over /api/v1', async () => {
     const recorder: { posted?: { number: number; input: CreateReviewInput }[] } = {}
     const app = harness.makeApp(
@@ -838,6 +853,33 @@ function registerPublicReviewApiTests(harness: ConformanceHarness): void {
     // sticky guard that keeps the retry from duplicating it.
     expect(review.postedFindingIds).toEqual([])
     expect(review.postReport!.bodyPosted).toBe(true)
+    // …and the STICKY flag says so at the decision level, which is what tells a later
+    // `bodyPosted: null` ("suppressed, it already landed") from a review that never had a summary.
+    expect(review.postedBody).toBe(true)
+    // The pass is NUMBERED, on both sides: the report names the pass it describes and the decision
+    // counts the passes requested. Equal ⇒ the report in hand is the one this caller asked for.
+    expect(review.postReport!.attempt).toBe(1)
+    expect(review.postAttempts).toBe(1)
+
+    // Retry the same selection, and fail it the same way. The report comes back byte-identical
+    // except for the pass number, which is the whole point: without it a caller that polls on an
+    // interval and misses the brief `posting` window cannot tell its retry's failure from the
+    // failure it had already read, and either loops or reports success.
+    await app.call(
+      'POST',
+      `/api/v1/runs/${executionId}/decisions/pr-review/resolve`,
+      { action: 'post', findingIds: [findings[0]!.id] },
+      decideAuth,
+    )
+    await app.drive(wsId)
+    const retried = (await readReview(app, executionId, decideAuth))!
+    expect(retried.postAttempts).toBe(2)
+    expect(retried.postReport!.attempt).toBe(2)
+    expect(retried.postReport!.posted).toBe(0)
+    // The summary is suppressed on the retry (it already landed), and the pair of fields states
+    // exactly that rather than leaving `null` to mean two opposite things.
+    expect(retried.postReport!.bodyPosted).toBeNull()
+    expect(retried.postedBody).toBe(true)
   })
 
   it('refuses a review start below `decide`, naming the park and the answer path', async () => {
@@ -867,5 +909,91 @@ function registerPublicReviewApiTests(harness: ConformanceHarness): void {
     const decideAuth = await mintPublicApiKey(app, wsId, 'decide', 'pr-review-admission')
     const started = await app.call('POST', `/api/v1/tasks/${task.body.id}/start`, {}, decideAuth)
     expect(started.status).toBe(202)
+  })
+}
+
+/**
+ * The two ways a key can drive the review loop that are not reading or resolving it: RESUMING a
+ * review that looks wedged, and RETRYING the whole run after it failed.
+ *
+ * Registered as its own function purely to keep each within the per-function line budget.
+ */
+function registerPublicReviewLoopTests(harness: ConformanceHarness): void {
+  it('mounts the resume route on every facade, refusing a review that is not in progress', async () => {
+    // The route's registration, its path, its scope floor and its 409 mapping, none of which the
+    // read/curate/resolve cases above touch. A wrong `pathResolver`, a missing `buildHonoRoute`
+    // registration, or a `ConflictError` that never reaches `handleError` on one facade would all
+    // be invisible otherwise. The SUCCESS path needs a reviewer wedged mid-review, which a
+    // conformance drive cannot produce (the fake reviewer returns inside the same tick), so the
+    // budget rule it enforces is asserted directly in `resumeBudget.test.ts`.
+    const app = harness.makeApp({ customResult: reviewerOutput })
+    const { workspace } = await app.createOrgWorkspace({ seed: true })
+    const wsId = workspace.id
+    const { executionId } = await seedReviewTask(app.call, app.drive, wsId)
+    const decideAuth = await mintPublicApiKey(app, wsId, 'decide', 'pr-review-resume')
+    const writeAuth = await mintPublicApiKey(app, wsId, 'write', 'pr-review-resume')
+
+    // A parked review has its own verbs; re-dispatching it would destroy findings a human may be
+    // mid-selection on, so the engine refuses and the refusal arrives as a 409 rather than a 500.
+    const refused = await app.call<{ error: { code: string; message: string } }>(
+      'POST',
+      `/api/v1/runs/${executionId}/decisions/pr-review/resume`,
+      undefined,
+      decideAuth,
+    )
+    expect(refused.status).toBe(409)
+    expect(refused.body.error.code).toBe('conflict')
+    expect(refused.body.error.message).toMatch(/still in progress/)
+
+    // Same floor as every other decision verb: resuming re-dispatches a container agent.
+    const belowScope = await app.call(
+      'POST',
+      `/api/v1/runs/${executionId}/decisions/pr-review/resume`,
+      undefined,
+      writeAuth,
+    )
+    expect(belowScope.status).toBe(403)
+
+    // And the budget a caller reads BEFORE spending a call is projected on the decision itself.
+    const review = (await readReview(app, executionId, decideAuth))!
+    expect(review.resumeAttempts).toBe(0)
+    expect(review.maxResumeAttempts).toBeGreaterThan(0)
+    expect(review.reportedSlices).toBe(0)
+  })
+
+  it('refuses a RETRY that would re-drive the curation park below `decide`', async () => {
+    // The start paths are not the only way to set a park in motion. A `write` key holding a task
+    // whose review run failed could re-drive the stored `pr-reviewer` step and be holding a parked
+    // run again a moment later, which is exactly the capability the scope ladder says it does not
+    // have. Asked of the run's STORED steps, which is what a retry re-drives.
+    const app = harness.makeApp({ customResult: reviewerOutput })
+    const { workspace } = await app.createOrgWorkspace({ seed: true })
+    const wsId = workspace.id
+    const { taskId, executionId } = await seedReviewTask(app.call, app.drive, wsId)
+    const decideAuth = await mintPublicApiKey(app, wsId, 'decide', 'pr-review-retry')
+    const writeAuth = await mintPublicApiKey(app, wsId, 'write', 'pr-review-retry')
+
+    // Stop the parked run: it settles terminal-but-retryable, which is the state a retry acts on.
+    expect(
+      (await app.call('POST', `/api/v1/tasks/${taskId}/stop`, undefined, decideAuth)).status,
+    ).toBe(200)
+
+    const refused = await app.call<{ error: { code: string; message: string } }>(
+      'POST',
+      `/api/v1/tasks/${taskId}/retry`,
+      undefined,
+      writeAuth,
+    )
+    expect(refused.status).toBe(403)
+    expect(refused.body.error.code).toBe('pipeline_requires_decide_scope')
+    expect(refused.body.error.message).toContain('pr-reviewer')
+    expect(refused.body.error.message).toContain('/api/v1/runs/:runId/decisions')
+
+    // The same call from a key that CAN answer the park is admitted, and re-drives the review.
+    const retried = await app.call('POST', `/api/v1/tasks/${taskId}/retry`, undefined, decideAuth)
+    expect(retried.status).toBe(202)
+    const reparked = (await app.drive(wsId)).find((e) => e.blockId === taskId)!
+    expect(reparked.status).toBe('blocked')
+    expect(reparked.id).not.toBe(executionId)
   })
 }

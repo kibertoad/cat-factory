@@ -1,4 +1,4 @@
-import { CURATION_GATE_TRAIT, defaultAgentKindRegistry } from '@cat-factory/agents'
+import { CURATION_GATE_TRAIT, defaultAgentKindRegistry, hasTrait } from '@cat-factory/agents'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import type { GateDefinition, GatePollExhaustion, GateRegistry } from '@cat-factory/kernel'
 import { defaultGateRegistry, seedPipelines } from '@cat-factory/kernel'
@@ -74,6 +74,20 @@ const withAgentKinds = (agentKinds: AgentKindRegistry): AdmissionRegistries => (
   ...registries,
   agentKinds,
 })
+
+/**
+ * Every kind a registry declares as CURATING, read off the registrations rather than listed.
+ *
+ * That is what makes the answerability guard below total over the sixth park mechanism: the two
+ * shipped curating kinds answer OPPOSITELY (one has public verbs, one has none), and a third one
+ * (a deployment's own, which the trait exists to admit) has to pick a side too.
+ */
+function curatingKinds(agentKinds: AgentKindRegistry): string[] {
+  return agentKinds
+    .all()
+    .map((definition) => definition.kind)
+    .filter((kind) => hasTrait(kind, CURATION_GATE_TRAIT, agentKinds))
+}
 
 describe('public-API admission: the ABSOLUTE half', () => {
   describe('isInlineOnlyPipeline', () => {
@@ -521,7 +535,12 @@ describe('public-API admission: what the refusal promises', () => {
       // a member to PUBLICLY_ANSWERABLE_PARK_SURFACES; until then no message may advertise one.
       // Covers the human-wait gate too, so a future slice that makes one answerable has to move it
       // into the answerable set rather than leaving the message silently wrong.
-      for (const kind of [...PARKING_INLINE_KINDS, 'human-review']) {
+      //
+      // The curating kinds are DERIVED from the registry rather than listed, so a deployment's own
+      // (which the trait exists to make visible) and any future built-in are covered by the same
+      // assertion: naming the two shipped ones here is what left the sixth mechanism's kinds
+      // guarded by nothing when they arrived.
+      for (const kind of [...PARKING_INLINE_KINDS, 'human-review', ...curatingKinds(registry)]) {
         const message = parkingRefusalMessage(
           publicRunParkSurfaces({ agentKinds: [kind] }, registries, { inputGateBlocks: false }),
           { cancelPath: PUBLIC_JOB_CANCEL_PATH },
@@ -544,8 +563,13 @@ describe('public-API admission: what the refusal promises', () => {
         }),
         { cancelPath: PUBLIC_TASK_STOP_PATH },
       )
+      // The park surface is `pr-reviewer` (the step kind, which is what the first sentence lists)
+      // and the decision that answers it is `pr-review`. The promise names the DECISION KIND,
+      // because the sentence points at `decisions[]` and that is the field a caller looks the
+      // entry up by: naming the step kind sent an integration hunting for an entry never in it.
+      expect(review).toContain('This pipeline can park on a human decision (pr-reviewer).')
       expect(review).toContain(
-        "Start it with a 'decide'-scope key, which can answer pr-reviewer through /api/v1/runs/:runId/decisions.",
+        "Start it with a 'decide'-scope key, which can answer pr-review through /api/v1/runs/:runId/decisions.",
       )
       expect(review).not.toContain('cannot answer')
 

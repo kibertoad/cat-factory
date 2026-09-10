@@ -544,7 +544,15 @@ ways a pipeline parks:
   deployment registers.
 
 Any of them needs a `decide`-scope key (`403 pipeline_requires_decide_scope`; the refusal names this
-surface's exit, `POST /tasks/:taskId/stop`). Note that this covers the shipped **Adaptive build**
+surface's exit, `POST /tasks/:taskId/stop`). The refusal lists the park SURFACES it found and then
+names the `decisions[]` **kinds** that answer them, which are not always spelled the same: a
+`pr-reviewer` step is answered by a `pr-review` decision, and both brainstorm kinds by one
+`brainstorm`.
+
+**`POST /tasks/:taskId/retry` applies the rule too**, asked of the run's STORED steps, since that is
+what a retry re-drives. Starting a run is not the only way to set a park in motion: without it a
+`write` key holding a task whose parking run had failed could re-drive it and be holding a parked
+run again a moment later. Note that this covers the shipped **Adaptive build**
 preset, which carries a risk-gated `human-review`, and **Complex build**, whose leading
 requirements review parks for a human by design: a `write`-only key cannot start either. **Standard
 build** and **Simple build** never park and stay `write`-startable — their conditional tester steps
@@ -1644,11 +1652,12 @@ Every action returns the run's **whole decision list**, re-read after the action
 apart.** Some waits this surface genuinely cannot answer, and each one it can detect is NAMED
 there rather than left as an empty list:
 
-| `reason`                 | What is holding the run                                                                 | What to do                                                                                                                                               |
-| ------------------------ | --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `human_wait_gate`        | A shipped gate whose poll has no deadline because a PERSON is the gate (`human-review`) | Nothing here: it clears when a reviewer approves the pull request on the VCS host. Escalate to that person, or `…/tasks/:id/stop`.                       |
-| `unclassified_gate`      | A gate **this deployment registered itself**                                            | Whether its poll ever ends is declared where the gate was built and is unreadable at request time. Its answer lives wherever the deployment surfaced it. |
-| `unwired_interview_gate` | An interviewer registered as an agent kind with no controller wired                     | An operator's fix, not a caller's: the questions are readable from no surface until the deployment wires it.                                             |
+| `reason`                 | What is holding the run                                                                                                                               | What to do                                                                                                                                                                   |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `human_wait_gate`        | A shipped gate whose poll has no deadline because a PERSON is the gate (`human-review`)                                                               | Nothing here: it clears when a reviewer approves the pull request on the VCS host. Escalate to that person, or `…/tasks/:id/stop`.                                           |
+| `unclassified_gate`      | A gate **this deployment registered itself**                                                                                                          | Whether its poll ever ends is declared where the gate was built and is unreadable at request time. Its answer lives wherever the deployment surfaced it.                     |
+| `unwired_interview_gate` | An interviewer registered as an agent kind with no controller wired                                                                                   | An operator's fix, not a caller's: the questions are readable from no surface until the deployment wires it.                                                                 |
+| `curation_gate`          | A step that CURATES parked so a person can mark what it found is worth acting on, and marking has no route here (`bug-fisher`, or a deployment's own) | The marking has to happen in the app. The step's approval gate can be resolved from here, but that ENDS the run with everything it found unacted on: an exit, not an answer. |
 
 Each entry carries `stepKind` and `stepIndex` (line them up with `publicRun.steps`) plus a prose
 `detail`. It is deliberately **not** gated on `parked`: an unbounded wait gate keeps the run
@@ -1666,7 +1675,11 @@ field to demand a person nobody has to send:
   reviewer for work that is over.
 - **A wait this same response answers.** A deployment's own gate that spends its attempt budget
   parks on an ordinary approval, which arrives as a `decisions[]` entry; it is not also reported as
-  unanswerable, so the two halves of one payload never contradict each other.
+  unanswerable, so the two halves of one payload never contradict each other. The `pr-reviewer`
+  step is the same rule one level up: it curates like `bug-fisher` does, but its curation IS
+  answerable here (`kind: "pr-review"`), so it is a decision rather than a named wait. Which
+  curating kinds fall on which side is read from the one table the start-surface refusal is built
+  from, so the two can never disagree.
 
 The same blind spot applies one step earlier, at admission; see [Pick the right scope](#2-pick-the-right-scope) below.
 
@@ -1690,7 +1703,7 @@ The same blind spot applies one step earlier, at admission; see [Pick the right 
 | `POST …/judge/resolve`                                | `decide` | Resolve a parked judge verdict: proceed anyway / bounce for rework / stop the run (same body the SPA sends).                                                                                                       |
 | `POST …/input-gate/resolve`                           | `decide` | Body `{ choice: "recheck" \| "proceed" }`; answer the task's input check. `recheck` re-evaluates the task as it now stands, `proceed` waives the findings.                                                         |
 | `POST …/pr-review/resolve`                            | `decide` | Body `{ action?: "finish" \| "fix" \| "post", findingIds?: string[] }`; record the curated selection. `fix`/`post` need ≥1 finding and **act on the real pull request**.                                           |
-| `POST …/pr-review/resume`                             | `decide` | Re-dispatch a review wedged mid-`reviewing` for only the slices that never reported. `409` unless the review is still in progress.                                                                                 |
+| `POST …/pr-review/resume`                             | `decide` | Re-dispatch a review wedged mid-`reviewing` for only the slices that never reported. `409` unless the review is still in progress, or once the review has spent `maxResumeAttempts`.                               |
 | `POST …/pr-review/findings/:findingId/dismiss`        | `decide` | Drop one finding from the review. Curation, not a resolution: the run stays parked.                                                                                                                                |
 | `POST …/pr-review/findings/:findingId/challenge`      | `decide` | Dispatch a read-only investigator to uphold, strengthen or retract the finding.                                                                                                                                    |
 | `POST …/human-test/confirm`                           | `decide` | The change works in the ephemeral environment: it is torn down and the run advances.                                                                                                                               |
@@ -1790,6 +1803,30 @@ Thirteen decision kinds appear in `decisions[]`, discriminated by `kind`:
   the summary comment are both at-most-once, so nothing double-posts. A review that settles instead
   of re-parking posted everything it attempted, and leaves the decision list.
 
+  **Two fields keep a retry legible.** `postAttempts` counts the `post` passes requested (the one
+  in flight included) and `postReport.attempt` names the pass the report in hand describes, so a
+  retry that failed exactly like the pass before it is still recognisable: without them a caller
+  polling on an interval that missed the brief `posting` window could not tell "my retry ran and
+  failed the same way" from "my retry has not started". `postedBody` is the summary comment's
+  sticky counterpart of `postedFindingIds`, and it is what makes `postReport.bodyPosted: null`
+  readable: with `postedBody` true the summary landed on an earlier pass and this one suppressed
+  it, with it false the review never had a summary to send.
+
+  **The settled pass is the one report you cannot read here.** A `post` where everything landed
+  finishes the review, so the decision leaves the list with it, `folded` included. What that pass
+  did to the pull request is the step's `output` on `GET /api/v1/tasks/{taskId}/run`, which names
+  the folded count and the reason they were folded.
+
+  **`resume` is bounded on this surface**, unlike the same action in the app: `resumeAttempts`
+  against `maxResumeAttempts` says how much budget is left, and at the ceiling the route answers
+  `409`. Each resume stops the running reviewer and starts a fresh container, and a headless caller
+  has no eyes on the review, so a poller resuming on a timer shorter than the review takes would
+  kill it repeatedly just as it was about to finish. Read `reportedSlices` against `slices.length`
+  (equal means every slice is in and the reviewer is on its final aggregation turn, which is the
+  phase a resume exists for) and `lastActivityAt` before spending one. Neither is a staleness
+  verdict: the heartbeat freezes on a long silent turn, so nothing on either side of this API can
+  tell a wedged reviewer from a quiet-but-working one.
+
 - **`human-test`**: a live ephemeral `environment` is up and the run is waiting for someone to
   exercise it. `degradedReason` non-null means no environment was provisioned and the change has
   to be tested against the PR branch by hand.
@@ -1881,7 +1918,7 @@ Then curate, with one call per decision you make:
 | Post the keepers inline       | `POST …/pr-review/resolve` with `{"action":"post","findingIds":[…]}`                                                                                           |
 | Hand them to a fixer instead  | `…/resolve` with `{"action":"fix","findingIds":[…]}`; commits onto the PR's own branch, opens no new PR                                                        |
 | Record the selection and stop | `…/resolve` with `{"action":"finish"}`; no side effect on the PR                                                                                               |
-| Nudge a wedged review         | `POST …/pr-review/resume`, valid only while `reviewing`                                                                                                        |
+| Nudge a wedged review         | `POST …/pr-review/resume`, valid only while `reviewing`, and bounded (see below)                                                                               |
 
 Dismissing is not required before posting: `post` acts on the `findingIds` you name and nothing
 else, so dismissing is for pruning what you render, and the selection is for what lands. A

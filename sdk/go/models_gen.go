@@ -4673,11 +4673,18 @@ type PublicPipelineList struct {
 type PublicPrReviewDecision struct {
 	Findings []PublicPrReviewDecisionFinding `json:"findings"`
 	Kind     string                          `json:"kind"`
+	// LastActivityAt always present; nil when the server has no value for it.
+	LastActivityAt    *float64 `json:"lastActivityAt"`
+	MaxResumeAttempts float64  `json:"maxResumeAttempts"`
+	PostAttempts      float64  `json:"postAttempts"`
 	// PostReport always present; nil when the server has no value for it.
 	PostReport       *PublicPrReviewDecisionPostReport `json:"postReport"`
+	PostedBody       bool                              `json:"postedBody"`
 	PostedFindingIds []string                          `json:"postedFindingIds"`
 	// PRURL always present; nil when the server has no value for it.
 	PRURL              *string                       `json:"prUrl"`
+	ReportedSlices     float64                       `json:"reportedSlices"`
+	ResumeAttempts     float64                       `json:"resumeAttempts"`
 	SelectedFindingIds []string                      `json:"selectedFindingIds"`
 	Slices             []PublicPrReviewDecisionSlice `json:"slices"`
 	Status             PublicPrReviewDecisionStatus  `json:"status"`
@@ -4783,7 +4790,9 @@ var PublicPrReviewDecisionFindingSideValues = []PublicPrReviewDecisionFindingSid
 
 // PublicPrReviewDecisionPostReport is the `PublicPrReviewDecisionPostReport` wire model.
 type PublicPrReviewDecisionPostReport struct {
-	Attempted float64 `json:"attempted"`
+	// Attempt always present; nil when the server has no value for it.
+	Attempt   *float64 `json:"attempt"`
+	Attempted float64  `json:"attempted"`
 	// BodyError always present; nil when the server has no value for it.
 	BodyError *string `json:"bodyError"`
 	// BodyPosted always present; nil when the server has no value for it.
@@ -5686,10 +5695,11 @@ const (
 	PublicUnanswerableWaitReasonHumanWaitGate        PublicUnanswerableWaitReason = "human_wait_gate"
 	PublicUnanswerableWaitReasonUnclassifiedGate     PublicUnanswerableWaitReason = "unclassified_gate"
 	PublicUnanswerableWaitReasonUnwiredInterviewGate PublicUnanswerableWaitReason = "unwired_interview_gate"
+	PublicUnanswerableWaitReasonCurationGate         PublicUnanswerableWaitReason = "curation_gate"
 )
 
 // PublicUnanswerableWaitReasonValues lists every PublicUnanswerableWaitReason this SDK release knows.
-var PublicUnanswerableWaitReasonValues = []PublicUnanswerableWaitReason{PublicUnanswerableWaitReasonHumanWaitGate, PublicUnanswerableWaitReasonUnclassifiedGate, PublicUnanswerableWaitReasonUnwiredInterviewGate}
+var PublicUnanswerableWaitReasonValues = []PublicUnanswerableWaitReason{PublicUnanswerableWaitReasonHumanWaitGate, PublicUnanswerableWaitReasonUnclassifiedGate, PublicUnanswerableWaitReasonUnwiredInterviewGate, PublicUnanswerableWaitReasonCurationGate}
 
 // PublicUsage is the `PublicUsage` wire model.
 type PublicUsage struct {

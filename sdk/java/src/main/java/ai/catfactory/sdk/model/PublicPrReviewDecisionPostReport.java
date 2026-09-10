@@ -10,6 +10,7 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * The {@code PublicPrReviewDecisionPostReport} wire model.
+ * @param attempt Always present; {@code null} when the server has no value for it.
  * @param attempted the {@code attempted} field.
  * @param bodyError Always present; {@code null} when the server has no value for it.
  * @param bodyPosted Always present; {@code null} when the server has no value for it.
@@ -19,6 +20,9 @@ import org.jspecify.annotations.Nullable;
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record PublicPrReviewDecisionPostReport(
+    /** Always present; {@code null} when the server has no value for it. */
+    @JsonProperty("attempt") @Nullable Double attempt,
+
     @JsonProperty("attempted") Double attempted,
 
     /** Always present; {@code null} when the server has no value for it. */
@@ -46,12 +50,19 @@ public record PublicPrReviewDecisionPostReport(
      * shape that reads naturally from both languages.
      */
     public static final class Builder {
+        private @Nullable Double attempt;
         private @Nullable Double attempted;
         private @Nullable String bodyError;
         private @Nullable Boolean bodyPosted;
         private @Nullable List<PublicPrReviewDecisionPostReportFailure> failures;
         private @Nullable Double folded;
         private @Nullable Double posted;
+
+        /** Set {@code attempt}. */
+        public Builder attempt(@Nullable Double attempt) {
+            this.attempt = attempt;
+            return this;
+        }
 
         /** Set {@code attempted}. */
         public Builder attempted(@Nullable Double attempted) {
@@ -91,7 +102,7 @@ public record PublicPrReviewDecisionPostReport(
 
         /** Build the {@link PublicPrReviewDecisionPostReport}. */
         public PublicPrReviewDecisionPostReport build() {
-            return new PublicPrReviewDecisionPostReport(attempted, bodyError, bodyPosted, failures, folded, posted);
+            return new PublicPrReviewDecisionPostReport(attempt, attempted, bodyError, bodyPosted, failures, folded, posted);
         }
     }
 }

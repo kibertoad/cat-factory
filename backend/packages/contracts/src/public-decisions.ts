@@ -524,12 +524,37 @@ export const publicPrReviewPostReportSchema = v.object({
    * selected finding.
    */
   folded: v.number(),
-  /** Whether the summary comment posted; null when there was no body to post on this pass. */
+  /**
+   * Whether the summary comment posted on THIS pass; null when this pass had no body to send.
+   *
+   * Null has two causes and they are opposite facts, so read it beside
+   * {@link publicPrReviewDecisionSchema}'s `postedBody`: with that flag true the summary landed on
+   * an earlier pass and was deliberately suppressed here (the body's at-most-once guard), with it
+   * false the review never had a summary to post at all.
+   */
   bodyPosted: v.nullable(v.boolean()),
   /** The error posting the summary comment, when it failed. */
   bodyError: v.nullable(v.string()),
-  /** Per-finding inline-comment failures, in the order attempted. */
+  /**
+   * Per-finding inline-comment failures, in the order attempted.
+   *
+   * Every `findingId` here resolves against the same decision's `findings`: dismissing a finding
+   * prunes its failure row along with it, so this never names a finding a caller can no longer
+   * see. The count can therefore be smaller than `attempted - posted`, which stays the tally of
+   * the pass as it ran.
+   */
   failures: v.array(publicPrReviewPostFailureSchema),
+  /**
+   * Which `post` pass this report describes, counting from 1; null on a report recorded before
+   * the pass was numbered.
+   *
+   * Compare it to the decision's `postAttempts` to tell a report of YOUR retry from the one the
+   * pass before it left: a retry that fails identically produces the same counts and the same
+   * failures, so without the number a caller polling on an interval that misses the brief
+   * `posting` window cannot tell "the retry ran and failed the same way" from "the retry has not
+   * started yet".
+   */
+  attempt: v.nullable(v.number()),
 })
 export type PublicPrReviewPostReport = v.InferOutput<typeof publicPrReviewPostReportSchema>
 
@@ -559,6 +584,13 @@ export const publicPrReviewDecisionSchema = v.object({
    * What the most recent `post` resolution did, or null when none has run. See
    * {@link publicPrReviewPostReportSchema}: this is how a re-parked review says whether it is
    * parked because nobody has curated it yet, or because the comments failed to land.
+   *
+   * Readable while the review is LIVE, which is every state except a settled one. A post where
+   * every comment landed settles the review, so its report is the one a caller cannot read here:
+   * the decision leaves the list with the loop it belongs to. What that pass did to the pull
+   * request is recorded as the step's `output` on `GET /api/v1/tasks/{taskId}/run`, folded
+   * findings and their reason included, so the fact is on this API even where the structured
+   * report is not.
    */
   postReport: v.nullable(publicPrReviewPostReportSchema),
   /**
@@ -566,8 +598,59 @@ export const publicPrReviewDecisionSchema = v.object({
    * them, so retrying after a partial failure never double-comments. Empty until a `post` runs.
    */
   postedFindingIds: v.array(v.string()),
+  /**
+   * Whether the summary comment has landed on the pull request, on this pass or an earlier one.
+   * The body's counterpart of {@link postedFindingIds}: sticky once true, and what a retry
+   * suppresses so the summary conversation comment is never duplicated.
+   */
+  postedBody: v.boolean(),
+  /**
+   * How many `post` resolutions have been requested on this review, the one in flight included.
+   * Zero until the first. Read it against `postReport.attempt` to know whether the report in hand
+   * describes the pass you asked for.
+   */
+  postAttempts: v.number(),
+  /**
+   * How many times this review has been RESUMED, and the ceiling this API enforces
+   * ({@link PUBLIC_PR_REVIEW_MAX_RESUME_ATTEMPTS}). Equal counts mean the resume route will answer
+   * `409`: this pair is what a caller checks before spending a call, which is why the refusal
+   * carries no reason code of its own.
+   */
+  resumeAttempts: v.number(),
+  maxResumeAttempts: v.number(),
+  /**
+   * How many of the review's slices have reported so far. Read against `slices.length` while the
+   * status is `reviewing`: equal counts mean every slice is in and the reviewer is on its final
+   * aggregation turn, which is the phase a resume exists for.
+   */
+  reportedSlices: v.number(),
+  /**
+   * Epoch ms of the last activity the reviewer's job reported, or null when it has reported none.
+   *
+   * The evidence a headless caller needs before spending a resume, and it is deliberately not a
+   * staleness VERDICT: the heartbeat freezes on a long silent turn, so nothing on either side of
+   * this API can tell a wedged reviewer from a quiet-but-working one. What it can do is stop a
+   * poller resuming on a bare timer, which kills a container that may be seconds from returning.
+   */
+  lastActivityAt: v.nullable(v.number()),
 })
 export type PublicPrReviewDecision = v.InferOutput<typeof publicPrReviewDecisionSchema>
+
+/**
+ * How many times `POST /api/v1/runs/{runId}/decisions/pr-review/resume` will re-dispatch one
+ * review before it refuses.
+ *
+ * A resume STOPS the running reviewer and starts a fresh container, so an uncapped one is an
+ * unbounded spend on a run nobody is watching: a poller resuming every ten minutes on a review
+ * that legitimately takes twenty kills it, forever, each time it is about to finish. Every other
+ * loop the engine runs is bounded (`ciMaxAttempts`, the human-test fix budget, an interview's
+ * `maxRounds`) and this is that rule applied to the one loop a KEY drives.
+ *
+ * The ceiling binds this API, not the app: a person clicking Resume in the review window is
+ * watching what they nudged, which is the judgement a headless caller cannot supply. `slices`,
+ * `reportedSlices` and `lastActivityAt` on the decision are what it reads instead.
+ */
+export const PUBLIC_PR_REVIEW_MAX_RESUME_ATTEMPTS = 3
 
 /** The ephemeral environment a `human-test` gate parked against, as exposed externally. */
 export const publicHumanTestEnvironmentSchema = v.object({
@@ -804,6 +887,14 @@ export type PublicDecision = v.InferOutput<typeof publicDecisionSchema>
  * - `unwired_interview_gate` — an interviewer this deployment REGISTERED as an agent kind but
  *   never wired a controller for. The run is genuinely parked on its questions and no surface,
  *   here or in the app, can read them; the fix belongs to the operator, not the caller.
+ * - `curation_gate`: a step that CURATES (a `curation-gate` kind: the bug-fishing expedition, a
+ *   deployment's own) parked so a person can mark which of the things it found are worth acting
+ *   on, and this API has no route that marks one. The PR deep review carries the same trait and
+ *   is NOT reported here, because its curation IS answerable (`kind: 'pr-review'`), which is the
+ *   whole distinction: what a caller must be able to do differs per curating kind, so one shared
+ *   label would promise an answer path for whichever one it did not mean. The step's approval
+ *   gate can still be resolved to END the run, and that is worth knowing rather than a
+ *   contradiction: ending an expedition discards what it caught, so it is an exit, not an answer.
  *
  * Every member is a wait that is BOTH live and beyond this surface, and both halves are load-
  * bearing. A run that has finished (`done` / `failed`, the stop included) lists nothing at all: its
@@ -817,6 +908,7 @@ export const publicUnanswerableReasonSchema = v.picklist([
   'human_wait_gate',
   'unclassified_gate',
   'unwired_interview_gate',
+  'curation_gate',
 ])
 export type PublicUnanswerableReason = v.InferOutput<typeof publicUnanswerableReasonSchema>
 

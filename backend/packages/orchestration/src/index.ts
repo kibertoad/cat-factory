@@ -114,8 +114,10 @@ export {
 export {
   dedicatedParkSurface,
   findParkedInterviewStep,
+  stepAwaitsDecision,
   type DedicatedParkSurface,
 } from './modules/execution/step-park.logic.js'
+export { runnableShapeOf } from './modules/execution/retry.logic.js'
 export type { InterviewGate, InterviewView } from './modules/execution/InterviewGateController.js'
 export { followUpLoopBudget } from './modules/execution/followUp.logic.js'
 export {

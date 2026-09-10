@@ -4607,10 +4607,36 @@
           "kind": {
             "const": "pr-review"
           },
+          "lastActivityAt": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "maxResumeAttempts": {
+            "type": "number"
+          },
+          "postAttempts": {
+            "type": "number"
+          },
           "postReport": {
             "anyOf": [
               {
                 "properties": {
+                  "attempt": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
                   "attempted": {
                     "type": "number"
                   },
@@ -4680,7 +4706,8 @@
                   "folded",
                   "bodyPosted",
                   "bodyError",
-                  "failures"
+                  "failures",
+                  "attempt"
                 ],
                 "type": "object"
               },
@@ -4688,6 +4715,9 @@
                 "type": "null"
               }
             ]
+          },
+          "postedBody": {
+            "type": "boolean"
           },
           "postedFindingIds": {
             "items": {
@@ -4704,6 +4734,12 @@
                 "type": "null"
               }
             ]
+          },
+          "reportedSlices": {
+            "type": "number"
+          },
+          "resumeAttempts": {
+            "type": "number"
           },
           "selectedFindingIds": {
             "items": {
@@ -4772,7 +4808,13 @@
           "findings",
           "selectedFindingIds",
           "postReport",
-          "postedFindingIds"
+          "postedFindingIds",
+          "postedBody",
+          "postAttempts",
+          "resumeAttempts",
+          "maxResumeAttempts",
+          "reportedSlices",
+          "lastActivityAt"
         ],
         "type": "object"
       },
@@ -6054,7 +6096,8 @@
             "enum": [
               "human_wait_gate",
               "unclassified_gate",
-              "unwired_interview_gate"
+              "unwired_interview_gate",
+              "curation_gate"
             ],
             "type": "string"
           },

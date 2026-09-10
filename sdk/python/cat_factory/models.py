@@ -10864,10 +10864,17 @@ class PublicPrReviewDecision:
 
     findings: list[PublicPrReviewDecisionFinding]
     kind: str
+    max_resume_attempts: float
+    post_attempts: float
+    posted_body: bool
     posted_finding_ids: list[str]
+    reported_slices: float
+    resume_attempts: float
     selected_finding_ids: list[str]
     slices: list[PublicPrReviewDecisionSlice]
     status: PublicPrReviewDecisionStatus
+    #: Always present; ``None`` when the server has no value for it.
+    last_activity_at: float | None = None
     #: Always present; ``None`` when the server has no value for it.
     post_report: PublicPrReviewDecisionPostReport | None = None
     #: Always present; ``None`` when the server has no value for it.
@@ -10883,14 +10890,20 @@ class PublicPrReviewDecision:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicPrReviewDecision":
         """Decode a `PublicPrReviewDecision` from its JSON object."""
-        known = {"findings", "kind", "postedFindingIds", "selectedFindingIds", "slices", "status", "postReport", "prUrl", "summary"}
+        known = {"findings", "kind", "maxResumeAttempts", "postAttempts", "postedBody", "postedFindingIds", "reportedSlices", "resumeAttempts", "selectedFindingIds", "slices", "status", "lastActivityAt", "postReport", "prUrl", "summary"}
         return cls(
             findings=[PublicPrReviewDecisionFinding.from_dict(item) for item in data.get("findings") or []],
             kind=data.get("kind"),
+            max_resume_attempts=data.get("maxResumeAttempts"),
+            post_attempts=data.get("postAttempts"),
+            posted_body=data.get("postedBody"),
             posted_finding_ids=[item for item in data.get("postedFindingIds") or []],
+            reported_slices=data.get("reportedSlices"),
+            resume_attempts=data.get("resumeAttempts"),
             selected_finding_ids=[item for item in data.get("selectedFindingIds") or []],
             slices=[PublicPrReviewDecisionSlice.from_dict(item) for item in data.get("slices") or []],
             status=_enum(PublicPrReviewDecisionStatus, data.get("status")),
+            last_activity_at=data.get("lastActivityAt"),
             post_report=None if data.get("postReport") is None else PublicPrReviewDecisionPostReport.from_dict(data.get("postReport")),
             pr_url=data.get("prUrl"),
             summary=data.get("summary"),
@@ -10902,10 +10915,16 @@ class PublicPrReviewDecision:
         out: dict[str, Any] = dict(self.extra)
         out["findings"] = [_encode(item) for item in self.findings]
         out["kind"] = self.kind
+        out["maxResumeAttempts"] = self.max_resume_attempts
+        out["postAttempts"] = self.post_attempts
+        out["postedBody"] = self.posted_body
         out["postedFindingIds"] = [_encode(item) for item in self.posted_finding_ids]
+        out["reportedSlices"] = self.reported_slices
+        out["resumeAttempts"] = self.resume_attempts
         out["selectedFindingIds"] = [_encode(item) for item in self.selected_finding_ids]
         out["slices"] = [_encode(item) for item in self.slices]
         out["status"] = _encode(self.status)
+        out["lastActivityAt"] = self.last_activity_at
         out["postReport"] = _encode(self.post_report)
         out["prUrl"] = self.pr_url
         out["summary"] = self.summary
@@ -11085,6 +11104,8 @@ class PublicPrReviewDecisionPostReport:
     folded: float
     posted: float
     #: Always present; ``None`` when the server has no value for it.
+    attempt: float | None = None
+    #: Always present; ``None`` when the server has no value for it.
     body_error: str | None = None
     #: Always present; ``None`` when the server has no value for it.
     body_posted: bool | None = None
@@ -11097,12 +11118,13 @@ class PublicPrReviewDecisionPostReport:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicPrReviewDecisionPostReport":
         """Decode a `PublicPrReviewDecisionPostReport` from its JSON object."""
-        known = {"attempted", "failures", "folded", "posted", "bodyError", "bodyPosted"}
+        known = {"attempted", "failures", "folded", "posted", "attempt", "bodyError", "bodyPosted"}
         return cls(
             attempted=data.get("attempted"),
             failures=[PublicPrReviewDecisionPostReportFailure.from_dict(item) for item in data.get("failures") or []],
             folded=data.get("folded"),
             posted=data.get("posted"),
+            attempt=data.get("attempt"),
             body_error=data.get("bodyError"),
             body_posted=data.get("bodyPosted"),
             extra={k: v for k, v in data.items() if k not in known},
@@ -11115,6 +11137,7 @@ class PublicPrReviewDecisionPostReport:
         out["failures"] = [_encode(item) for item in self.failures]
         out["folded"] = self.folded
         out["posted"] = self.posted
+        out["attempt"] = self.attempt
         out["bodyError"] = self.body_error
         out["bodyPosted"] = self.body_posted
         return out
@@ -12934,6 +12957,7 @@ class PublicUnanswerableWaitReason(StrEnum):
     HUMAN_WAIT_GATE = "human_wait_gate"
     UNCLASSIFIED_GATE = "unclassified_gate"
     UNWIRED_INTERVIEW_GATE = "unwired_interview_gate"
+    CURATION_GATE = "curation_gate"
 
 
 @dataclass(frozen=True, slots=True)

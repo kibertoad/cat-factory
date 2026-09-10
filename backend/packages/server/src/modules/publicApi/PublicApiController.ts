@@ -33,6 +33,7 @@ import {
   UnavailableError,
 } from '@cat-factory/kernel'
 import { scopeSatisfies } from '@cat-factory/integrations'
+import { runnableShapeOf } from '@cat-factory/orchestration'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
@@ -1054,6 +1055,31 @@ function registerTaskLifecycleRoutes(app: Hono<AppEnv>): void {
     const run = await container.executionRepository.getByBlock(auth.workspaceId, taskId)
     if (!run) {
       return c.json({ error: { code: 'no_run', message: 'Task has no run to retry' } }, 409)
+    }
+    // The SAME parking rule as the two start paths, asked of the run's STORED steps because that
+    // is what a retry re-drives (`runnableShapeOf`, the engine's own answer to the same question).
+    // A start path is not the only way to set a park in motion: a `write` key holding a task whose
+    // review run failed could re-drive it and be holding a parked run again a moment later, which
+    // is the capability the scope ladder says it does not have. The stored steps are also the
+    // honest subject here: an out-of-band pipeline edit since the run started changes nothing
+    // about what re-executes.
+    //
+    // The input gate is asked about unconditionally: a resumed instance carries no verdict
+    // forward, so a retry that resumes at step 0 re-evaluates it. That over-counts only for a
+    // retry resuming LATER whose task inputs are still thin, which is the safe direction and the
+    // same one the interview-gate check takes.
+    const retryParkRefusal = await unanswerableParkRefusal(
+      container,
+      auth,
+      runnableShapeOf(run.steps),
+      inputGateInputOf(found.block, container.taskTypeRegistry),
+      PUBLIC_TASK_STOP_PATH,
+    )
+    if (retryParkRefusal) {
+      return c.json(
+        { error: { code: 'pipeline_requires_decide_scope', message: retryParkRefusal } },
+        403,
+      )
     }
     const unlock = personalUnlockFor(c, auth)
     let personal: PersonalCredentialGate

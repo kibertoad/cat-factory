@@ -17,6 +17,7 @@ public enum PublicUnanswerableWaitReason {
     HUMAN_WAIT_GATE("human_wait_gate"),
     UNCLASSIFIED_GATE("unclassified_gate"),
     UNWIRED_INTERVIEW_GATE("unwired_interview_gate"),
+    CURATION_GATE("curation_gate"),
 
     /**
      * A value this SDK release does not know.

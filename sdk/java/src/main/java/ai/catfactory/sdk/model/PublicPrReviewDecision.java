@@ -12,9 +12,15 @@ import org.jspecify.annotations.Nullable;
  * The {@code PublicPrReviewDecision} wire model.
  * @param findings the {@code findings} field.
  * @param kind the {@code kind} field.
+ * @param lastActivityAt Always present; {@code null} when the server has no value for it.
+ * @param maxResumeAttempts the {@code maxResumeAttempts} field.
+ * @param postAttempts the {@code postAttempts} field.
  * @param postReport Always present; {@code null} when the server has no value for it.
+ * @param postedBody the {@code postedBody} field.
  * @param postedFindingIds the {@code postedFindingIds} field.
  * @param prUrl Always present; {@code null} when the server has no value for it.
+ * @param reportedSlices the {@code reportedSlices} field.
+ * @param resumeAttempts the {@code resumeAttempts} field.
  * @param selectedFindingIds the {@code selectedFindingIds} field.
  * @param slices the {@code slices} field.
  * @param status the {@code status} field.
@@ -27,12 +33,25 @@ public record PublicPrReviewDecision(
     @JsonProperty("kind") String kind,
 
     /** Always present; {@code null} when the server has no value for it. */
+    @JsonProperty("lastActivityAt") @Nullable Double lastActivityAt,
+
+    @JsonProperty("maxResumeAttempts") Double maxResumeAttempts,
+
+    @JsonProperty("postAttempts") Double postAttempts,
+
+    /** Always present; {@code null} when the server has no value for it. */
     @JsonProperty("postReport") @Nullable PublicPrReviewDecisionPostReport postReport,
+
+    @JsonProperty("postedBody") Boolean postedBody,
 
     @JsonProperty("postedFindingIds") List<String> postedFindingIds,
 
     /** Always present; {@code null} when the server has no value for it. */
     @JsonProperty("prUrl") @Nullable String prUrl,
+
+    @JsonProperty("reportedSlices") Double reportedSlices,
+
+    @JsonProperty("resumeAttempts") Double resumeAttempts,
 
     @JsonProperty("selectedFindingIds") List<String> selectedFindingIds,
 
@@ -58,9 +77,15 @@ public record PublicPrReviewDecision(
     public static final class Builder {
         private @Nullable List<PublicPrReviewDecisionFinding> findings;
         private @Nullable String kind;
+        private @Nullable Double lastActivityAt;
+        private @Nullable Double maxResumeAttempts;
+        private @Nullable Double postAttempts;
         private @Nullable PublicPrReviewDecisionPostReport postReport;
+        private @Nullable Boolean postedBody;
         private @Nullable List<String> postedFindingIds;
         private @Nullable String prUrl;
+        private @Nullable Double reportedSlices;
+        private @Nullable Double resumeAttempts;
         private @Nullable List<String> selectedFindingIds;
         private @Nullable List<PublicPrReviewDecisionSlice> slices;
         private @Nullable PublicPrReviewDecisionStatus status;
@@ -78,9 +103,33 @@ public record PublicPrReviewDecision(
             return this;
         }
 
+        /** Set {@code lastActivityAt}. */
+        public Builder lastActivityAt(@Nullable Double lastActivityAt) {
+            this.lastActivityAt = lastActivityAt;
+            return this;
+        }
+
+        /** Set {@code maxResumeAttempts}. */
+        public Builder maxResumeAttempts(@Nullable Double maxResumeAttempts) {
+            this.maxResumeAttempts = maxResumeAttempts;
+            return this;
+        }
+
+        /** Set {@code postAttempts}. */
+        public Builder postAttempts(@Nullable Double postAttempts) {
+            this.postAttempts = postAttempts;
+            return this;
+        }
+
         /** Set {@code postReport}. */
         public Builder postReport(@Nullable PublicPrReviewDecisionPostReport postReport) {
             this.postReport = postReport;
+            return this;
+        }
+
+        /** Set {@code postedBody}. */
+        public Builder postedBody(@Nullable Boolean postedBody) {
+            this.postedBody = postedBody;
             return this;
         }
 
@@ -93,6 +142,18 @@ public record PublicPrReviewDecision(
         /** Set {@code prUrl}. */
         public Builder prUrl(@Nullable String prUrl) {
             this.prUrl = prUrl;
+            return this;
+        }
+
+        /** Set {@code reportedSlices}. */
+        public Builder reportedSlices(@Nullable Double reportedSlices) {
+            this.reportedSlices = reportedSlices;
+            return this;
+        }
+
+        /** Set {@code resumeAttempts}. */
+        public Builder resumeAttempts(@Nullable Double resumeAttempts) {
+            this.resumeAttempts = resumeAttempts;
             return this;
         }
 
@@ -122,7 +183,7 @@ public record PublicPrReviewDecision(
 
         /** Build the {@link PublicPrReviewDecision}. */
         public PublicPrReviewDecision build() {
-            return new PublicPrReviewDecision(findings, kind, postReport, postedFindingIds, prUrl, selectedFindingIds, slices, status, summary);
+            return new PublicPrReviewDecision(findings, kind, lastActivityAt, maxResumeAttempts, postAttempts, postReport, postedBody, postedFindingIds, prUrl, reportedSlices, resumeAttempts, selectedFindingIds, slices, status, summary);
         }
     }
 }

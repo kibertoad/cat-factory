@@ -43,6 +43,7 @@ function review(over: Partial<PrReviewStepState> = {}): PrReviewStepState {
     postReport: null,
     postedFindingIds: [],
     postedBody: false,
+    postAttempts: 0,
     ...over,
   }
 }

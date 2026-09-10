@@ -4,7 +4,41 @@ import type {
   PipelineStep,
   PriorStepOutput,
 } from '@cat-factory/kernel'
+import type { PipelineShape } from '../pipelines/pipelineShape.js'
 import { restartRalphState } from './ralph.logic.js'
+
+/**
+ * The {@link PipelineShape} a retry/restart re-drives: the stored run's steps ARE the enabled,
+ * ordered chain that will run again, so every admission question is asked of exactly what
+ * re-executes rather than of the current pipeline definition (which may have been edited out of
+ * band since the run started). Disabled steps were already filtered out at start, so every stored
+ * step is enabled.
+ *
+ * Pure, and exported, because TWO layers ask it of the same steps: the engine's own runnability
+ * guard, and the public API's parking rule on `POST /api/v1/tasks/:taskId/retry` (a `write` key
+ * must not re-drive a run into a park it cannot answer). A second hand-built literal at the second
+ * call site is how one of them comes to read a field the other has learned to read.
+ */
+export function runnableShapeOf(steps: readonly PipelineStep[]): PipelineShape {
+  return {
+    agentKinds: steps.map((s) => s.agentKind),
+    // The per-step form of the pipeline's `gates[i]`, copied onto the run step at start. Read by
+    // the gating validation to refuse a step carrying both a human gate and an estimate gate, and
+    // by the park enumeration as the approval-gate surface, so a retry re-checks both against
+    // exactly what re-executes.
+    gates: steps.map((s) => s.requiresApproval === true),
+    gating: steps.map((s) => s.gating ?? null),
+    // The QC companion's live step-state carries the same `gating` config the pipeline set, so
+    // the tester-QC gating validation re-runs on a retry against exactly what re-executes.
+    testerQuality: steps.map((s) => s.testerQuality ?? null),
+    // The per-step options bag (a `skill` step's `skillId`, a step's picked agent-kind variant,
+    // a binary step's candidate comparison) is copied onto the run step at start, so the
+    // skill-step, variant and candidate-park checks re-run on retry against what re-executes,
+    // which is how a retry after the deployment withdrew a variant is refused rather than quietly
+    // running the shipped prompt.
+    stepOptions: steps.map((s) => s.stepOptions ?? null),
+  }
+}
 
 /**
  * Plan how a failed run resumes on retry: keep the steps that already completed

@@ -285,7 +285,12 @@ export class PrReviewResolutionController {
       }
     }
 
-    const { report, newlyPostedFindingIds } = buildPrReviewPostReport(built, selected, result)
+    // The pass number comes off the review the RESOLUTION stamped (`resolve` counts the request),
+    // so a report always names the pass a caller asked for. A review resolved before the count
+    // existed reads as pass 1.
+    const { report, newlyPostedFindingIds } = buildPrReviewPostReport(built, selected, result, {
+      attempt: review.postAttempts ?? 1,
+    })
     const postedFindingIds = [...alreadyPosted, ...newlyPostedFindingIds]
     // Sticky: once the summary lands it stays posted, so a further retry keeps suppressing it.
     const postedBody = bodyAlreadyPosted || result.bodyPosted === true

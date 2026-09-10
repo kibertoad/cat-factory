@@ -16,13 +16,15 @@ import {
   ARCHITECTURE_BRAINSTORM_AGENT_KIND,
   CLARITY_REVIEW_AGENT_KIND,
   CURATION_GATE_TRAIT,
-  hasTrait,
   INTERVIEW_GATE_TRAIT,
   isInlineModelStep,
   PR_REVIEWER_KIND,
   REQUIREMENTS_BRAINSTORM_AGENT_KIND,
   REQUIREMENTS_REVIEW_AGENT_KIND,
+  traitsFor,
 } from '@cat-factory/agents'
+import type { AgentTrait } from '@cat-factory/agents'
+import type { PublicDecisionKind } from '@cat-factory/contracts'
 import type { GateRegistry } from '@cat-factory/kernel'
 
 /**
@@ -131,8 +133,8 @@ export const BINARY_CANDIDATE_PARK_SURFACE = 'binary-candidates'
  * Derived from a registration rather than a kind list, like the interview gate and for the same
  * reason: a deployment that curates through its own registered kind is seen with no edit here.
  */
-function isCurationGate(kind: string, agentKinds: AgentKindRegistry): boolean {
-  return hasTrait(kind, CURATION_GATE_TRAIT, agentKinds)
+function isCurationGate(traits: ReadonlySet<AgentTrait>): boolean {
+  return traits.has(CURATION_GATE_TRAIT)
 }
 
 /**
@@ -173,37 +175,52 @@ export const PUBLIC_JOB_CANCEL_PATH = 'POST /api/v1/jobs/:id/cancel'
 export const PUBLIC_TASK_STOP_PATH = 'POST /api/v1/tasks/:taskId/stop'
 
 /**
- * The park surfaces `/api/v1/runs/:runId/decisions` can actually ANSWER today.
+ * The park surfaces `/api/v1/runs/:runId/decisions` can actually ANSWER today, each mapped to the
+ * `decisions[]` entry that answers it.
  *
- * Deliberately a SEPARATE set from {@link PARKING_INLINE_KINDS}, because the asymmetry between the
- * two is the thing worth stating: admission decides what a `decide` key may set in motion, and
+ * Deliberately a SEPARATE table from {@link PARKING_INLINE_KINDS}, because the asymmetry between
+ * the two is the thing worth stating: admission decides what a `decide` key may set in motion, and
  * this decides what the refusal is allowed to PROMISE it can then answer.
  *
  * Keeping the answerable set EXPLICIT rather than implied is what stops the refusal below drifting
- * from what the surface really serves: landing a slice moves a member here and the message it
+ * from what the surface really serves: landing a slice adds a member here and the message it
  * builds updates itself, where a hand-written sentence would keep promising an answer path that
  * does not exist — which is exactly the defect this replaced.
  *
- * TWO members of {@link parkSurfacesOf} are absent, for opposite reasons. `human-review` is not a
- * slice waiting to be built: its answer is a person approving the pull request on the VCS host,
- * not an API call this surface could offer. {@link BINARY_CANDIDATE_PARK_SURFACE} is the other
- * way round, a real route not yet projected onto `/api/v1`. Either way a run parked there is
- * honestly reported as `parked: true` with nothing to answer and the refusal says as much. See
+ * A MAP rather than a set, because a park surface and the decision kind that answers it are not
+ * always spelled the same, and the refusal is read by somebody who then has to FIND the entry:
+ * the `pr-reviewer` step is answered by `kind: 'pr-review'`, and both brainstorm kinds are
+ * answered by the one `kind: 'brainstorm'`. Naming the surface in a message that points at
+ * `decisions[]` sent an integration looking for a kind that is never in it. The values are typed
+ * against {@link PublicDecisionKind}, so a kind that does not exist on the wire fails to compile
+ * and a decision kind renamed on that side breaks the build here rather than the message.
+ *
+ * THREE members of {@link parkSurfacesOf} are absent, for three different reasons:
+ *
+ *  - `human-review` is not a slice waiting to be built: its answer is a person approving the pull
+ *    request on the VCS host, not an API call this surface could offer.
+ *  - {@link BINARY_CANDIDATE_PARK_SURFACE} is the other way round, a real route not yet projected
+ *    onto `/api/v1`.
+ *  - `bug-fisher` (a curating kind, like `pr-reviewer` below, which IS here) parks so a person can
+ *    mark which of the bugs it found are worth fixing, and marking has no public route at all yet.
+ *
+ * Either way a run parked there is honestly reported as `parked: true` with the wait NAMED in
+ * `unanswerable` and nothing offered to answer it, and the refusal says as much. That report is
+ * built from THIS table too (`curationWait`), so what the start surface refuses and what the
+ * decision surface admits it cannot answer are one decision. See
  * `backend/docs/adr/0043-public-decision-surface.md`.
  */
-export const PUBLICLY_ANSWERABLE_PARK_SURFACES = new Set<string>([
-  REQUIREMENTS_REVIEW_AGENT_KIND,
-  CLARITY_REVIEW_AGENT_KIND,
-  REQUIREMENTS_BRAINSTORM_AGENT_KIND,
-  ARCHITECTURE_BRAINSTORM_AGENT_KIND,
-  INPUT_GATE_PARK_SURFACE,
-  APPROVAL_GATE_PARK_SURFACE,
-  INTERVIEW_PARK_SURFACE,
+export const PUBLICLY_ANSWERABLE_PARK_SURFACES = new Map<string, PublicDecisionKind>([
+  [REQUIREMENTS_REVIEW_AGENT_KIND, 'requirements-review'],
+  [CLARITY_REVIEW_AGENT_KIND, 'clarity-review'],
+  [REQUIREMENTS_BRAINSTORM_AGENT_KIND, 'brainstorm'],
+  [ARCHITECTURE_BRAINSTORM_AGENT_KIND, 'brainstorm'],
+  [INPUT_GATE_PARK_SURFACE, 'input-gate'],
+  [APPROVAL_GATE_PARK_SURFACE, 'approval-gate'],
+  [INTERVIEW_PARK_SURFACE, 'interview'],
   // The PR deep review's finding curation: `…/decisions/pr-review/resolve` (finish / fix / post),
-  // plus per-finding dismiss, challenge and resume. `bug-fisher` carries the same
-  // `curation-gate` trait and is deliberately NOT here: marking a catch for fixing has no public
-  // route yet, so an expedition that parks is honestly reported as parked with nothing to answer.
-  PR_REVIEWER_KIND,
+  // plus per-finding dismiss, challenge and resume.
+  [PR_REVIEWER_KIND, 'pr-review'],
 ])
 
 /** The pipeline shape admission reasons about: the step chain plus its parallel flag arrays. */
@@ -343,14 +360,18 @@ export function parkSurfacesOf(
     if (PARKING_INLINE_KINDS.has(kind) || isHumanWaitGate(kind, registries.gates)) {
       surfaces.add(kind)
     }
-    if (hasTrait(kind, INTERVIEW_GATE_TRAIT, registries.agentKinds)) {
+    // Resolved ONCE per step: `traitsFor` unions the kind's standard traits, its registration's
+    // own and any assigned to it into a fresh Set on every call, and two trait questions asking it
+    // twice doubles that per step of every pipeline the discovery list projects.
+    const traits = traitsFor(kind, registries.agentKinds)
+    if (traits.has(INTERVIEW_GATE_TRAIT)) {
       surfaces.add(INTERVIEW_PARK_SURFACE)
     }
     // Named by the KIND, the way the inline review/brainstorm kinds are, rather than by one shared
     // label: what a caller has to be able to answer differs per curation kind (a PR review's
     // findings have public verbs, an expedition's catch does not), so collapsing them would make
     // the refusal promise an answer path for whichever one it did not mean.
-    if (isCurationGate(kind, registries.agentKinds)) surfaces.add(kind)
+    if (isCurationGate(traits)) surfaces.add(kind)
     if (pipeline.stepOptions?.[i]?.binaryOutput?.comparison) {
       surfaces.add(BINARY_CANDIDATE_PARK_SURFACE)
     }
@@ -368,10 +389,17 @@ export function parkSurfacesOf(
  * got a run whose only exit is `POST /api/v1/jobs/:id/cancel` — the platform's degrade-loudly rule
  * inverted, since the refusal was confidently describing a capability it does not have.
  *
- * Both public start paths apply the parking rule now: `POST /jobs` always has, and
- * `POST /tasks/:taskId/start` adopted it with the API-stability commitment (the tracker's open
- * question, settled): a `write` key must not be able to set in motion a park it is by definition
- * not trusted to answer.
+ * Every public path that sets a run in motion applies the parking rule now: `POST /jobs` always
+ * has, `POST /tasks/:taskId/start` adopted it with the API-stability commitment (the tracker's
+ * open question, settled), and `POST /tasks/:taskId/retry` re-drives the run's STORED steps under
+ * the same rule. A `write` key must not be able to set in motion a park it is by definition not
+ * trusted to answer, and which of the three calls started it makes no difference to that.
+ *
+ * The park surfaces are listed verbatim (they are what a reader matches against the pipeline's own
+ * steps) while the answer promise names DECISION KINDS, out of
+ * {@link PUBLICLY_ANSWERABLE_PARK_SURFACES}. Three surfaces are spelled differently in the two
+ * places, so naming the surface in a sentence that points at `decisions[]` told an integration to
+ * look for a `pr-reviewer` entry that is never there.
  *
  * `cancelPath` is REQUIRED rather than defaulted, because which route frees an abandoned park is a
  * property of the START SURFACE and every surface answers differently: a headless job is cancelled
@@ -383,7 +411,18 @@ export function parkSurfacesOf(
  */
 export function parkingRefusalMessage(surfaces: string[], options: { cancelPath: string }): string {
   const { cancelPath } = options
-  const answerable = surfaces.filter((s) => PUBLICLY_ANSWERABLE_PARK_SURFACES.has(s))
+  // The ANSWERABLE half is named by DECISION KIND, deduped, because the sentence points a caller
+  // at `decisions[]` and that is the field it will look the entry up by. The surfaces are still
+  // listed verbatim in the first sentence, which is where a reader matches the message against
+  // the pipeline's own step chain.
+  const answerable = [
+    ...new Set(
+      surfaces.flatMap((s) => {
+        const kind = PUBLICLY_ANSWERABLE_PARK_SURFACES.get(s)
+        return kind ? [kind] : []
+      }),
+    ),
+  ]
   const unanswerable = surfaces.filter((s) => !PUBLICLY_ANSWERABLE_PARK_SURFACES.has(s))
   const parts = [`This pipeline can park on a human decision (${surfaces.join(', ')}).`]
   parts.push(

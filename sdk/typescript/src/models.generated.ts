@@ -2617,10 +2617,17 @@ export interface PublicPrReviewDecision {
   findings: PublicPrReviewDecisionFinding[]
   kind: 'pr-review'
   /** Always present; `null` when the server has no value for it. */
+  lastActivityAt: number | null
+  maxResumeAttempts: number
+  postAttempts: number
+  /** Always present; `null` when the server has no value for it. */
   postReport: PublicPrReviewDecisionPostReport | null
+  postedBody: boolean
   postedFindingIds: string[]
   /** Always present; `null` when the server has no value for it. */
   prUrl: string | null
+  reportedSlices: number
+  resumeAttempts: number
   selectedFindingIds: string[]
   slices: PublicPrReviewDecisionSlice[]
   status: PublicPrReviewDecisionStatus
@@ -2676,6 +2683,8 @@ export type PublicPrReviewDecisionFindingSide = 'LEFT' | 'RIGHT'
 export const PUBLIC_PR_REVIEW_DECISION_FINDING_SIDE_VALUES = ['LEFT', 'RIGHT'] as const
 
 export interface PublicPrReviewDecisionPostReport {
+  /** Always present; `null` when the server has no value for it. */
+  attempt: number | null
   attempted: number
   /** Always present; `null` when the server has no value for it. */
   bodyError: string | null
@@ -3120,10 +3129,10 @@ export interface PublicUnanswerableWait {
   stepKind: string
 }
 
-export type PublicUnanswerableWaitReason = 'human_wait_gate' | 'unclassified_gate' | 'unwired_interview_gate'
+export type PublicUnanswerableWaitReason = 'human_wait_gate' | 'unclassified_gate' | 'unwired_interview_gate' | 'curation_gate'
 
 /** Every `PublicUnanswerableWaitReason` value, for exhaustive handling and runtime validation. */
-export const PUBLIC_UNANSWERABLE_WAIT_REASON_VALUES = ['human_wait_gate', 'unclassified_gate', 'unwired_interview_gate'] as const
+export const PUBLIC_UNANSWERABLE_WAIT_REASON_VALUES = ['human_wait_gate', 'unclassified_gate', 'unwired_interview_gate', 'curation_gate'] as const
 
 export interface PublicUsage {
   budget: PublicUsageBudget
