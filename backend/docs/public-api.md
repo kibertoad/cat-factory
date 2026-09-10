@@ -525,7 +525,7 @@ Task `status` is the real lifecycle (`planned` / `ready` / `in_progress` / `bloc
 `done`): a decoupled public mirror of the board status, stable even if the board grows internal
 states.
 
-Board-task `start` applies the **same parking rule** as `POST /jobs`, and the rule recognises four
+Board-task `start` applies the **same parking rule** as `POST /jobs`, and the rule recognises six
 ways a pipeline parks:
 
 - an **approval gate** on an enabled step;
@@ -535,7 +535,13 @@ ways a pipeline parks:
   a person (the shipped `human-review`, and any a deployment registers with
   `pollExhaustion: 'rearm'`, which the rule reads off the gate's own registration);
 - an **interview gate**: a step whose kind carries the `interview-gate` trait (the planning and
-  document interviewers, plus any a deployment registers), which asks a batch of questions and waits.
+  document interviewers, plus any a deployment registers), which asks a batch of questions and waits;
+- a **binary-candidate comparison**: a generating step configured to render several candidates per
+  subject and wait for someone to keep the good ones (the shipped **Generate media** preset);
+- a **curation gate**: a step whose kind carries the `curation-gate` trait, whose completion parks
+  the run so a person can pick which of what it found is worth acting on. The built-ins are
+  `pr-reviewer` (**Review a pull request**) and `bug-fisher` (**Bug fishing expedition**), plus any a
+  deployment registers.
 
 Any of them needs a `decide`-scope key (`403 pipeline_requires_decide_scope`; the refusal names this
 surface's exit, `POST /tasks/:taskId/stop`). Note that this covers the shipped **Adaptive build**
@@ -1684,6 +1690,7 @@ The same blind spot applies one step earlier, at admission; see [Pick the right 
 | `POST …/judge/resolve`                                | `decide` | Resolve a parked judge verdict: proceed anyway / bounce for rework / stop the run (same body the SPA sends).                                                                                                       |
 | `POST …/input-gate/resolve`                           | `decide` | Body `{ choice: "recheck" \| "proceed" }`; answer the task's input check. `recheck` re-evaluates the task as it now stands, `proceed` waives the findings.                                                         |
 | `POST …/pr-review/resolve`                            | `decide` | Body `{ action?: "finish" \| "fix" \| "post", findingIds?: string[] }`; record the curated selection. `fix`/`post` need ≥1 finding and **act on the real pull request**.                                           |
+| `POST …/pr-review/resume`                             | `decide` | Re-dispatch a review wedged mid-`reviewing` for only the slices that never reported. `409` unless the review is still in progress.                                                                                 |
 | `POST …/pr-review/findings/:findingId/dismiss`        | `decide` | Drop one finding from the review. Curation, not a resolution: the run stays parked.                                                                                                                                |
 | `POST …/pr-review/findings/:findingId/challenge`      | `decide` | Dispatch a read-only investigator to uphold, strengthen or retract the finding.                                                                                                                                    |
 | `POST …/human-test/confirm`                           | `decide` | The change works in the ephemeral environment: it is torn down and the run advances.                                                                                                                               |
@@ -1768,7 +1775,21 @@ Thirteen decision kinds appear in `decisions[]`, discriminated by `kind`:
   someone to curate which findings matter. Carries the `slices`, the severity-ordered `findings`
   (each with its path/line anchor, `suggestedFix` and any `challenge` verdict) and the current
   `selectedFindingIds`. Reachable only through `POST /tasks/:taskId/start`, since a `pr-reviewer`
-  step is container-backed.
+  step is container-backed. Walkthrough:
+  [Reviewing a pull request end to end](#reviewing-a-pull-request-end-to-end).
+
+  **Read `postReport` before you conclude a `post` worked.** Resolving with `post` is asynchronous:
+  the review goes to `posting`, and if any comment fails to land the run RE-PARKS at
+  `awaiting_selection` with `resolution` cleared, which is otherwise byte-for-byte the state it was
+  in before you resolved. `postReport` is what tells those apart: `attempted`/`posted` and a
+  `failures[]` naming each finding the provider rejected and why, `folded` counting the findings
+  that had a line but were put in the summary comment instead (the line is outside the PR diff, so
+  nothing can anchor an inline comment there, or the branch moved after the review started and the
+  frozen line numbers can no longer be trusted), and `bodyPosted`/`bodyError` for the summary
+  comment itself. Retrying is "resolve with `post` again, same selection": `postedFindingIds` and
+  the summary comment are both at-most-once, so nothing double-posts. A review that settles instead
+  of re-parking posted everything it attempted, and leaves the decision list.
+
 - **`human-test`**: a live ephemeral `environment` is up and the run is waiting for someone to
   exercise it. `degradedReason` non-null means no environment was provisioned and the change has
   to be tested against the PR branch by hand.
@@ -1821,6 +1842,55 @@ side. That sharing is also why the list only ever offers you verbs the engine wi
 specialised parks ride the same internal approval flag as a plain gate, and each is reported as
 **its own** kind rather than as `approval-gate`, because the engine refuses the generic
 approve/request-changes/reject on them.
+
+#### Reviewing a pull request end to end
+
+The whole loop an integration that wants "review this PR, show me the findings, post the ones I
+keep" runs, with nothing app-only in it. It needs a **`decide`** key: the review parks, and every
+verb below is `decide`.
+
+```bash
+# 1. File the review against the service whose repo holds the PR. The task type validates the
+#    reference at creation, so a typo'd PR fails HERE rather than as a run that clones a repo and
+#    finds nothing. A `prUrl` naming a DIFFERENT repository than the service reviews is refused
+#    (`review_pr_repo_mismatch`) rather than silently reviewing whatever PR carries that number.
+curl -sX POST "$BASE/api/v1/tasks" -H "Authorization: Bearer $KEY" -H 'content-type: application/json'   -d '{"serviceId":"blk_svc","title":"Review #4558","taskType":"review",
+       "fields":{"prUrl":"https://github.com/acme/api/pull/4558"}}'
+
+# 2. Start it. `review` tasks are pinned to the PR-review pipeline at creation, so the body can be
+#    empty; pass `pipelineId` only to override. The response carries the `runId` step 3 polls.
+curl -sX POST "$BASE/api/v1/tasks/$TASK/start" -H "Authorization: Bearer $KEY" -d '{}'
+
+# 3. Poll until the `pr-review` decision reports `awaiting_selection`. Earlier statuses are work in
+#    flight and worth surfacing: `reviewing` is the reviewer slicing the diff, `challenging` an
+#    investigator re-examining one finding, `posting` a publish in progress.
+curl -s "$BASE/api/v1/runs/$RUN/decisions" -H "Authorization: Bearer $KEY"
+```
+
+The `pr-review` entry is what you render: `findings` ordered blocker → nit, each with a stable
+`findingId`, its `path`/`line`/`side` anchor, `severity`, `category`, `title`, `detail` and any
+`suggestedFix`, grouped under the `slices` the reviewer actually reasoned in. Every string in it is
+model-authored: treat it as data, never as markup.
+
+Then curate, with one call per decision you make:
+
+| You want to                   | Call                                                                                                                                                           |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Drop a finding entirely       | `POST …/pr-review/findings/:findingId/dismiss`; the run stays parked                                                                                           |
+| Push back on one              | `POST …/pr-review/findings/:findingId/challenge` with an optional `question`; poll for the `challenge` verdict (`upheld` / `amended` / `retracted` / `failed`) |
+| Post the keepers inline       | `POST …/pr-review/resolve` with `{"action":"post","findingIds":[…]}`                                                                                           |
+| Hand them to a fixer instead  | `…/resolve` with `{"action":"fix","findingIds":[…]}`; commits onto the PR's own branch, opens no new PR                                                        |
+| Record the selection and stop | `…/resolve` with `{"action":"finish"}`; no side effect on the PR                                                                                               |
+| Nudge a wedged review         | `POST …/pr-review/resume`, valid only while `reviewing`                                                                                                        |
+
+Dismissing is not required before posting: `post` acts on the `findingIds` you name and nothing
+else, so dismissing is for pruning what you render, and the selection is for what lands. A
+`retracted` finding is never selectable, whether or not you pass its id.
+
+`post` publishes one advisory `COMMENT` review on GitHub, or one diff discussion per finding on
+GitLab, plus a summary comment. It is **asynchronous** and its outcome is `postReport` on the next
+read of the decision. See the `pr-review` bullet above for why a re-parked review and an unresolved
+one are otherwise the same value.
 
 ### Notification inbox
 

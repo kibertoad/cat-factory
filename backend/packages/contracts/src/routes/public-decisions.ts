@@ -446,6 +446,31 @@ export const resolvePublicRunPrReviewContract = decides(
   }),
 )
 
+/**
+ * Re-trigger a review stuck mid-`reviewing`, re-reviewing ONLY the slices that never reported and
+ * re-aggregating from the ones that did.
+ *
+ * The reviewer fans its slices out across parallel subagents and only emits findings in a final
+ * aggregation turn, so a review can sit with every slice finished and that turn wedged: the
+ * progress guard is event-driven, the inactivity watchdog is fed by any transcript byte, and the
+ * only backstop is a 60-minute kill that DISCARDS the finished slices. Without this a headless
+ * caller's only exit is stopping the task, which throws the same work away.
+ *
+ * No body: which slices to redo is derived from the run's own captured per-slice reports, never
+ * supplied by the caller, so the request cannot ask for work that contradicts what was observed.
+ * 409 unless the review is still `reviewing`: a parked review has its own verbs, and
+ * re-dispatching one would destroy findings a caller may be mid-curation on.
+ */
+export const resumePublicRunPrReviewContract = decides(
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: runIdParams,
+    pathResolver: ({ runId }) => `/api/v1/runs/${runId}/decisions/pr-review/resume`,
+    requestBodySchema: ContractNoBody,
+    responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+  }),
+)
+
 /** Drop one finding from the parked review entirely (curation; the run stays parked). */
 export const dismissPublicRunPrReviewFindingContract = decides(
   defineApiContract({

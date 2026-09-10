@@ -15,9 +15,11 @@ import {
   type AgentKindRegistry,
   ARCHITECTURE_BRAINSTORM_AGENT_KIND,
   CLARITY_REVIEW_AGENT_KIND,
+  CURATION_GATE_TRAIT,
   hasTrait,
   INTERVIEW_GATE_TRAIT,
   isInlineModelStep,
+  PR_REVIEWER_KIND,
   REQUIREMENTS_BRAINSTORM_AGENT_KIND,
   REQUIREMENTS_REVIEW_AGENT_KIND,
 } from '@cat-factory/agents'
@@ -114,6 +116,26 @@ const INTERVIEW_PARK_SURFACE = 'interview'
 export const BINARY_CANDIDATE_PARK_SURFACE = 'binary-candidates'
 
 /**
+ * Whether a step's kind CURATES: its completion parks the run so a person can pick which of the
+ * things it found are worth acting on, read off the kind's registered `curation-gate` trait.
+ *
+ * A SIXTH mechanism, and the one that shows the enumeration's lesson has not run out. Every check
+ * above reads a park the engine raises through shared machinery (an approval flag, an inline
+ * review, a gate's `pollExhaustion`, an interview gate, a step option). A curation step raises its
+ * own: each kind's completion interceptor writes its own state shape (`step.prReview`,
+ * `step.bugFishing`) and parks from there, so there was no shared declaration to read and the park
+ * was invisible here. `pl_review` and `pl_bug_fishing` are single-step pipelines built out of
+ * exactly those kinds, so both reported NO park surface and a plain `write` key could start either
+ * and then hold a run whose every verb needs `decide`.
+ *
+ * Derived from a registration rather than a kind list, like the interview gate and for the same
+ * reason: a deployment that curates through its own registered kind is seen with no edit here.
+ */
+function isCurationGate(kind: string, agentKinds: AgentKindRegistry): boolean {
+  return hasTrait(kind, CURATION_GATE_TRAIT, agentKinds)
+}
+
+/**
  * Whether a polling-GATE kind parks the run on a human, read off the gate's OWN registration.
  *
  * A third mechanism beside {@link PARKING_INLINE_KINDS} and {@link APPROVAL_GATE_PARK_SURFACE},
@@ -177,6 +199,11 @@ export const PUBLICLY_ANSWERABLE_PARK_SURFACES = new Set<string>([
   INPUT_GATE_PARK_SURFACE,
   APPROVAL_GATE_PARK_SURFACE,
   INTERVIEW_PARK_SURFACE,
+  // The PR deep review's finding curation: `…/decisions/pr-review/resolve` (finish / fix / post),
+  // plus per-finding dismiss, challenge and resume. `bug-fisher` carries the same
+  // `curation-gate` trait and is deliberately NOT here: marking a catch for fixing has no public
+  // route yet, so an expedition that parks is honestly reported as parked with nothing to answer.
+  PR_REVIEWER_KIND,
 ])
 
 /** The pipeline shape admission reasons about: the step chain plus its parallel flag arrays. */
@@ -248,9 +275,10 @@ export function admissionRegistries(source: {
 
 /**
  * Whether a pipeline can PARK the run on a human decision: an approval gate on an enabled step, one
- * of the {@link PARKING_INLINE_KINDS} review/brainstorm kinds, or a gate that waits on a person
- * with no deadline ({@link isHumanWaitGate}). Parking is not a defect: it is the clarification
- * loop. It just needs an answerer, which is what the `decide` scope asserts.
+ * of the {@link PARKING_INLINE_KINDS} review/brainstorm kinds, a gate that waits on a person with
+ * no deadline ({@link isHumanWaitGate}), or a step that curates ({@link isCurationGate}). Parking
+ * is not a defect: it is the clarification loop. It just needs an answerer, which is what the
+ * `decide` scope asserts.
  */
 export function canParkOnHuman(
   pipeline: AdmissiblePipelineShape,
@@ -261,7 +289,7 @@ export function canParkOnHuman(
 
 /**
  * Every park surface an ENABLED step of `pipeline` can put the run on, in step order and deduped.
- * Five mechanisms, each a separate check because each parks for a different reason:
+ * Six mechanisms, each a separate check because each parks for a different reason:
  *
  *  1. an approval gate flag on the step ({@link APPROVAL_GATE_PARK_SURFACE});
  *  2. the step's own kind being an inline review/brainstorm ({@link PARKING_INLINE_KINDS});
@@ -269,19 +297,24 @@ export function canParkOnHuman(
  *     ({@link isHumanWaitGate});
  *  4. the step's own kind carrying the `interview-gate` TRAIT ({@link INTERVIEW_PARK_SURFACE});
  *  5. the step's OPTIONS configuring a binary-candidate comparison
- *     ({@link BINARY_CANDIDATE_PARK_SURFACE}).
+ *     ({@link BINARY_CANDIDATE_PARK_SURFACE});
+ *  6. the step's own kind carrying the `curation-gate` TRAIT ({@link isCurationGate}).
  *
  * This is the single enumeration {@link canParkOnHuman} derives its boolean from, so the predicate
  * and the explanation a caller is given can never disagree about what parks.
  *
- * Cases 4 and 5 each arrived after the earlier ones had shipped, which is the lesson the human-wait
- * gates already taught repeating itself: an enumeration written against the park mechanisms
- * somebody thought of misses the ones they did not, so ask what each entry is DERIVED from. Cases
- * 2, 3 and 4 derive from a declaration a deployment's own registrations flow through (a kind list,
- * a gate's registered `pollExhaustion`, a registered trait). Case 5 derives from the step's stored
- * configuration, which is the same property one level down: it is what a deployment AUTHORS rather
- * than what it registers, and it was invisible here until a shipped preset finally set it.
- * Whatever is added next should be derivable too.
+ * Cases 4, 5 and 6 each arrived after the earlier ones had shipped, which is the lesson the
+ * human-wait gates already taught repeating itself: an enumeration written against the park
+ * mechanisms somebody thought of misses the ones they did not, so ask what each entry is DERIVED
+ * from. Cases 2, 3, 4 and 6 derive from a declaration a deployment's own registrations flow
+ * through (a kind list, a gate's registered `pollExhaustion`, a registered trait). Case 5 derives
+ * from the step's stored configuration, which is the same property one level down: it is what a
+ * deployment AUTHORS rather than what it registers, and it was invisible here until a shipped
+ * preset finally set it. Whatever is added next should be derivable too.
+ *
+ * Case 6 is the one that had been missed LONGEST, and the shape of the miss is worth keeping: the
+ * two kinds that carry it park through machinery of their OWN rather than through anything shared,
+ * so there was no declaration to read until the trait was added to make one.
  *
  * TWO THINGS ARE DELIBERATELY NOT HERE, and they are absent for two different reasons:
  *
@@ -313,6 +346,11 @@ export function parkSurfacesOf(
     if (hasTrait(kind, INTERVIEW_GATE_TRAIT, registries.agentKinds)) {
       surfaces.add(INTERVIEW_PARK_SURFACE)
     }
+    // Named by the KIND, the way the inline review/brainstorm kinds are, rather than by one shared
+    // label: what a caller has to be able to answer differs per curation kind (a PR review's
+    // findings have public verbs, an expedition's catch does not), so collapsing them would make
+    // the refusal promise an answer path for whichever one it did not mean.
+    if (isCurationGate(kind, registries.agentKinds)) surfaces.add(kind)
     if (pipeline.stepOptions?.[i]?.binaryOutput?.comparison) {
       surfaces.add(BINARY_CANDIDATE_PARK_SURFACE)
     }

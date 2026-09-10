@@ -208,3 +208,31 @@ it for those runs; one that wants the old grouping treats both members as "no te
 Requirement coverage deliberately keeps answering `no_tester_step` on the same runs. Committed
 integration tests produce no per-requirement verdicts, so "no requirement was checked" is exactly
 what happened there, and splitting it would state a distinction that has no consequence.
+
+## 1.72.0
+
+Three additions around the PR deep review, so the whole "review this pull request, curate the
+findings, post the ones we keep" loop is drivable from outside the app.
+
+`POST /api/v1/runs/{runId}/decisions/pr-review/resume` re-dispatches a review wedged mid-review for
+only the slices that never reported, re-aggregating from the reports already captured. `409` unless
+the review is still in progress. Without it a headless caller's only exit from a stalled review was
+stopping the task, which throws away every slice that had finished.
+
+The `pr-review` decision gains `postReport` and `postedFindingIds`. A `post` resolution that partly
+or wholly fails re-parks the review at `awaiting_selection` with its resolution cleared, which was
+byte-for-byte a review nobody had resolved yet: a caller that posted seven comments and landed none
+saw the state it had a moment before. `postReport` states what the pull request actually received
+(`attempted`, `posted`, `folded`, `failures[]`, `bodyPosted`/`bodyError`) and `postedFindingIds`
+names what a retry will skip.
+
+Both are additive. The behaviour change beside them is not, and it is stated here rather than left
+to be discovered: **starting the `pl_review` or `pl_bug_fishing` presets now requires a `decide`
+key**, where a `write` key was admitted before. Both are single-step pipelines whose step parks the
+run for a person to curate what it found, and admission could not see that park because the two
+kinds park through machinery of their own rather than through anything a registry declared. So a
+`write` key could start either and then hold a run whose every verb needs `decide`, with the SPA or
+`POST /tasks/:taskId/stop` as the only way out. The refusal is the existing
+`403 pipeline_requires_decide_scope`, and it now names the surface: `pr-reviewer` as answerable
+here, `bug-fisher` as not (marking a catch for fixing has no public route yet). No run that could
+be finished through this API stops being startable; what is refused is a run that could not.

@@ -12,6 +12,8 @@ import org.jspecify.annotations.Nullable;
  * The {@code PublicPrReviewDecision} wire model.
  * @param findings the {@code findings} field.
  * @param kind the {@code kind} field.
+ * @param postReport Always present; {@code null} when the server has no value for it.
+ * @param postedFindingIds the {@code postedFindingIds} field.
  * @param prUrl Always present; {@code null} when the server has no value for it.
  * @param selectedFindingIds the {@code selectedFindingIds} field.
  * @param slices the {@code slices} field.
@@ -23,6 +25,11 @@ public record PublicPrReviewDecision(
     @JsonProperty("findings") List<PublicPrReviewDecisionFinding> findings,
 
     @JsonProperty("kind") String kind,
+
+    /** Always present; {@code null} when the server has no value for it. */
+    @JsonProperty("postReport") @Nullable PublicPrReviewDecisionPostReport postReport,
+
+    @JsonProperty("postedFindingIds") List<String> postedFindingIds,
 
     /** Always present; {@code null} when the server has no value for it. */
     @JsonProperty("prUrl") @Nullable String prUrl,
@@ -51,6 +58,8 @@ public record PublicPrReviewDecision(
     public static final class Builder {
         private @Nullable List<PublicPrReviewDecisionFinding> findings;
         private @Nullable String kind;
+        private @Nullable PublicPrReviewDecisionPostReport postReport;
+        private @Nullable List<String> postedFindingIds;
         private @Nullable String prUrl;
         private @Nullable List<String> selectedFindingIds;
         private @Nullable List<PublicPrReviewDecisionSlice> slices;
@@ -66,6 +75,18 @@ public record PublicPrReviewDecision(
         /** Set {@code kind}. */
         public Builder kind(@Nullable String kind) {
             this.kind = kind;
+            return this;
+        }
+
+        /** Set {@code postReport}. */
+        public Builder postReport(@Nullable PublicPrReviewDecisionPostReport postReport) {
+            this.postReport = postReport;
+            return this;
+        }
+
+        /** Set {@code postedFindingIds}. */
+        public Builder postedFindingIds(@Nullable List<String> postedFindingIds) {
+            this.postedFindingIds = postedFindingIds;
             return this;
         }
 
@@ -101,7 +122,7 @@ public record PublicPrReviewDecision(
 
         /** Build the {@link PublicPrReviewDecision}. */
         public PublicPrReviewDecision build() {
-            return new PublicPrReviewDecision(findings, kind, prUrl, selectedFindingIds, slices, status, summary);
+            return new PublicPrReviewDecision(findings, kind, postReport, postedFindingIds, prUrl, selectedFindingIds, slices, status, summary);
         }
     }
 }

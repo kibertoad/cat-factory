@@ -1,4 +1,4 @@
-import { defaultAgentKindRegistry } from '@cat-factory/agents'
+import { CURATION_GATE_TRAIT, defaultAgentKindRegistry } from '@cat-factory/agents'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import type { GateDefinition, GatePollExhaustion, GateRegistry } from '@cat-factory/kernel'
 import { defaultGateRegistry, seedPipelines } from '@cat-factory/kernel'
@@ -27,11 +27,11 @@ import {
 //  - parking is a SCOPE question — a pipeline that can park needs a caller able to answer, which
 //    is exactly what a `decide` key asserts.
 //
-// The parking half enumerates FIVE mechanisms (approval-gate flag, inline review/brainstorm kind,
-// unbounded human-wait gate, interview-gate trait, binary-candidate comparison). The third and the
-// fifth were both missed on a first pass and are asserted against the real seed catalog below,
-// because a synthetic step chain cannot show that the gap was reachable through a pipeline the
-// product actually ships.
+// The parking half enumerates SIX mechanisms (approval-gate flag, inline review/brainstorm kind,
+// unbounded human-wait gate, interview-gate trait, binary-candidate comparison, curation-gate
+// trait). The third, fifth and sixth were each missed on an earlier pass and are asserted against
+// the real seed catalog below, because a synthetic step chain cannot show that the gap was
+// reachable through a pipeline the product actually ships.
 //
 // These live here rather than in the cross-runtime conformance suite because the built-in public
 // pipeline is read-only: there is no way to construct a public-and-parking pipeline over HTTP, so
@@ -355,6 +355,49 @@ describe('public-API admission: the SCOPE half (parking)', () => {
       expect(parkSurfacesOf(media!, registries)).toEqual([BINARY_CANDIDATE_PARK_SURFACE])
     })
 
+    it('treats the shipped PR-review preset as parking, on the CURATION trait', () => {
+      // The sixth mechanism against the real catalog, and the longest-lived miss. `pl_review` is
+      // one `pr-reviewer` step: no gate flag, no parking kind, no wait gate, no interview trait,
+      // no step options, so every earlier check said it never stops, while every run of it parks
+      // at `awaiting_selection` waiting for somebody to pick which findings to act on. A plain
+      // `write` key could start it and then hold a run whose only verbs need `decide`.
+      const review = seedPipelines().find((p) => p.id === 'pl_review')
+      expect(review, 'pl_review must exist in the built-in catalog').toBeTruthy()
+      expect(review!.agentKinds).toEqual(['pr-reviewer'])
+      expect(review!.gates ?? []).not.toContain(true)
+      expect(canParkOnHuman(review!, registries)).toBe(true)
+      expect(parkSurfacesOf(review!, registries)).toEqual(['pr-reviewer'])
+    })
+
+    it('treats the shipped bug-fishing preset as parking too', () => {
+      // The same trait on the other built-in that curates. Named separately from the PR review
+      // rather than sharing one label, because only one of the two has public verbs: see the
+      // answerability cases below.
+      const fishing = seedPipelines().find((p) => p.id === 'pl_bug_fishing')
+      expect(fishing, 'pl_bug_fishing must exist in the built-in catalog').toBeTruthy()
+      expect(fishing!.agentKinds).toEqual(['bug-fisher'])
+      expect(parkSurfacesOf(fishing!, registries)).toEqual(['bug-fisher'])
+    })
+
+    it('sees a curation kind the DEPLOYMENT registered, not just the built-in two', () => {
+      // Derived from the registration, like the interview gate and the wait gate: a deployment
+      // that curates through its own kind is seen here with no edit to admission.
+      const own = defaultAgentKindRegistry()
+      own.registerTrait({ id: CURATION_GATE_TRAIT })
+      own.assignTraits('acme-triage', [CURATION_GATE_TRAIT])
+      const withOwnKind: AdmissionRegistries = { agentKinds: own, gates: registries.gates }
+      expect(parkSurfacesOf({ agentKinds: ['acme-triage'] }, withOwnKind)).toEqual(['acme-triage'])
+    })
+
+    it('ignores a curation kind on a disabled step', () => {
+      expect(
+        canParkOnHuman(
+          { agentKinds: ['coder', 'pr-reviewer'], enabled: [true, false] },
+          registries,
+        ),
+      ).toBe(false)
+    })
+
     it('leaves the unconditional build presets startable by a plain write key', () => {
       // The other side of the same change: widening the enumeration must not sweep up the presets
       // whose whole selling point is that they never pause. If this flips, every `write`-key
@@ -487,6 +530,33 @@ describe('public-API admission: what the refusal promises', () => {
           PUBLICLY_ANSWERABLE_PARK_SURFACES.has(kind),
         )
       }
+    })
+
+    it('promises the answer path for a PR review, and withholds it for an expedition', () => {
+      // The two curation surfaces answer OPPOSITELY, which is why they are named by kind rather
+      // than sharing one label. A parked PR review has real verbs here (resolve / dismiss /
+      // challenge / resume), so the refusal is worth acting on: mint a `decide` key. A parked
+      // expedition has none, so the same message under a shared label would send an operator
+      // after a key that still cannot mark a single finding.
+      const review = parkingRefusalMessage(
+        publicRunParkSurfaces({ agentKinds: ['pr-reviewer'] }, registries, {
+          inputGateBlocks: false,
+        }),
+        { cancelPath: PUBLIC_TASK_STOP_PATH },
+      )
+      expect(review).toContain(
+        "Start it with a 'decide'-scope key, which can answer pr-reviewer through /api/v1/runs/:runId/decisions.",
+      )
+      expect(review).not.toContain('cannot answer')
+
+      const fishing = parkingRefusalMessage(
+        publicRunParkSurfaces({ agentKinds: ['bug-fisher'] }, registries, {
+          inputGateBlocks: false,
+        }),
+        { cancelPath: PUBLIC_TASK_STOP_PATH },
+      )
+      expect(fishing).toContain('cannot answer bug-fisher yet')
+      expect(fishing).toContain(PUBLIC_TASK_STOP_PATH)
     })
 
     it('names the candidate park as unanswerable, and points at the cancel route instead', () => {

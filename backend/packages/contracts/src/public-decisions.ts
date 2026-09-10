@@ -481,6 +481,59 @@ export const publicPrReviewFindingSchema = v.object({
 export type PublicPrReviewFinding = v.InferOutput<typeof publicPrReviewFindingSchema>
 
 /**
+ * One selected finding whose inline comment could NOT be posted, with the reason the provider
+ * gave. `line` is the anchor that was rejected.
+ */
+export const publicPrReviewPostFailureSchema = v.object({
+  /** The finding whose comment failed. */
+  findingId: v.string(),
+  /** The path the comment anchored to. */
+  path: v.string(),
+  /** The line the comment anchored to, when it had one. */
+  line: v.nullable(v.number()),
+  /** The provider's own error, verbatim. Treat it as data. */
+  reason: v.string(),
+})
+export type PublicPrReviewPostFailure = v.InferOutput<typeof publicPrReviewPostFailureSchema>
+
+/**
+ * What the most recent `post` resolution actually DID to the pull request.
+ *
+ * It exists because without it the two outcomes a caller has to tell apart are the same value.
+ * A `post` that partly or wholly fails RE-PARKS the review at `awaiting_selection` with its
+ * resolution cleared, which is byte-for-byte a review nobody has resolved yet, so a caller that
+ * posted seven comments and landed none saw a decision identical to the one it had a moment
+ * before, and either looped or reported success. The report is what states the difference.
+ *
+ * Retrying is at-most-once per finding: a re-`post` skips everything in
+ * {@link publicPrReviewDecisionSchema}'s `postedFindingIds`, and the summary comment once it has
+ * landed. So the retry is "resolve with `post` again, same selection", not a diff the caller has
+ * to compute.
+ */
+export const publicPrReviewPostReportSchema = v.object({
+  /** Inline comments attempted this pass: the selected findings with an in-diff line to anchor to. */
+  attempted: v.number(),
+  /** How many of those the provider accepted. */
+  posted: v.number(),
+  /**
+   * Findings that HAD a line but were folded into the summary comment instead, because that line
+   * falls outside the PR diff (nothing to anchor an inline comment to) or because the branch moved
+   * after the review started, so the frozen line numbers can no longer be trusted. A finding that
+   * never had a line is summarised too but is NOT counted here: it could never have been an inline
+   * comment. `attempted` + `folded` therefore counts the findings that carried a line, not every
+   * selected finding.
+   */
+  folded: v.number(),
+  /** Whether the summary comment posted; null when there was no body to post on this pass. */
+  bodyPosted: v.nullable(v.boolean()),
+  /** The error posting the summary comment, when it failed. */
+  bodyError: v.nullable(v.string()),
+  /** Per-finding inline-comment failures, in the order attempted. */
+  failures: v.array(publicPrReviewPostFailureSchema),
+})
+export type PublicPrReviewPostReport = v.InferOutput<typeof publicPrReviewPostReportSchema>
+
+/**
  * A parked PR DEEP REVIEW as exposed externally: the read-only reviewer sliced an open pull
  * request and the run is waiting for a person to CURATE which findings matter, then say what to
  * do with them (record them, hand them to a fixer, or post them on the PR).
@@ -502,6 +555,17 @@ export const publicPrReviewDecisionSchema = v.object({
   findings: v.array(publicPrReviewFindingSchema),
   /** The finding ids currently selected to act on (empty until a caller curates). */
   selectedFindingIds: v.array(v.string()),
+  /**
+   * What the most recent `post` resolution did, or null when none has run. See
+   * {@link publicPrReviewPostReportSchema}: this is how a re-parked review says whether it is
+   * parked because nobody has curated it yet, or because the comments failed to land.
+   */
+  postReport: v.nullable(publicPrReviewPostReportSchema),
+  /**
+   * The findings whose inline comment has already landed on the pull request. A re-`post` skips
+   * them, so retrying after a partial failure never double-comments. Empty until a `post` runs.
+   */
+  postedFindingIds: v.array(v.string()),
 })
 export type PublicPrReviewDecision = v.InferOutput<typeof publicPrReviewDecisionSchema>
 

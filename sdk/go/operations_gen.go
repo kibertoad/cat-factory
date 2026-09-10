@@ -2578,6 +2578,24 @@ func (s *DecisionsService) ResolveStepExceeded(ctx context.Context, runID string
 	return &out, nil
 }
 
+// ResumePrReview resume a stalled PR deep review
+// Re-dispatch the reviewer for only the slices that never reported, re-aggregating the findings
+// from the slice reports already captured, so a review whose final aggregation turn wedged is
+// recovered without throwing away the work that finished. Refused with 409 unless the review is
+// still in progress. Requires a `decide`-scope key.
+// POST /api/v1/runs/{runId}/decisions/pr-review/resume (operation resumePublicRunPrReview).
+func (s *DecisionsService) ResumePrReview(ctx context.Context, runID string) (*PublicDecisionList, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/pr-review/resume", pathEscape(runID)),
+	}
+	var out PublicDecisionList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // SendBackFollowUp send a follow-up item back to the Coder
 // Fold one `follow_up` item into another Coder pass (the item records as `queued`). Once every
 // item is decided the run loops the Coder for the ones sent back, within the `maxLoops` budget

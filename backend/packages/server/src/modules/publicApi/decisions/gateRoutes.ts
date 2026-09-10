@@ -6,6 +6,7 @@ import {
   requestPublicRunHumanTestFixContract,
   requestPublicRunVisualConfirmFixContract,
   resolvePublicRunPrReviewContract,
+  resumePublicRunPrReviewContract,
 } from '@cat-factory/contracts'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import type { Hono } from 'hono'
@@ -71,6 +72,25 @@ export function registerPrReviewDecisionRoutes(app: Hono<AppEnv>): void {
         scoped.execution.id,
         findingId,
       )
+    return c.json(await buildDecisionList(c, workspaceId, scoped), 200)
+  })
+
+  // Nudge a review wedged mid-`reviewing`: re-dispatch the reviewer for only the slices that never
+  // reported. Dispatches a container job, so it runs under the run's own initiator. A review that
+  // is not `reviewing` is a 409 from the service, through `handleError` like the other conflicts
+  // this surface raises.
+  buildHonoRoute(app, resumePublicRunPrReviewContract, async (c) => {
+    const { runId } = c.req.valid('param')
+    const gated = await gateDecisionAction(c, runId)
+    if ('fail' in gated) {
+      return c.json(failureBody(gated.fail), gated.fail.status)
+    }
+    const { workspaceId, scoped } = gated
+    await runWithInitiator({ workspaceId, initiatedBy: scoped.execution.initiatedBy }, () =>
+      c
+        .get('container')
+        .executionService.decisions.resumePrReview(workspaceId, scoped.execution.id),
+    )
     return c.json(await buildDecisionList(c, workspaceId, scoped), 200)
   })
 

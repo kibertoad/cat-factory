@@ -522,6 +522,19 @@ public final class DecisionsClient {
     }
 
     /**
+     * Resume a stalled PR deep review
+     * Re-dispatch the reviewer for only the slices that never reported, re-aggregating the
+     * findings from the slice reports already captured, so a review whose final aggregation turn
+     * wedged is recovered without throwing away the work that finished. Refused with 409 unless
+     * the review is still in progress. Requires a `decide`-scope key.
+     * {@code POST /api/v1/runs/{runId}/decisions/pr-review/resume} (operation {@code
+     * resumePublicRunPrReview}).
+     */
+    public PublicDecisionList resumePrReview(String runId) {
+        return transport.request("POST", "/api/v1/runs/" + Transport.pathSegment(runId) + "/decisions/pr-review/resume", null, Map.of(), new TypeReference<PublicDecisionList>() {});
+    }
+
+    /**
      * Send a follow-up item back to the Coder
      * Fold one `follow_up` item into another Coder pass (the item records as `queued`). Once every
      * item is decided the run loops the Coder for the ones sent back, within the `maxLoops` budget

@@ -2085,6 +2085,24 @@ class DecisionsResource:
         )
         return PublicDecisionList.from_dict(raw)
 
+    def resume_pr_review(self, run_id: str, *, timeout: float | None = None) -> PublicDecisionList:
+        """Resume a stalled PR deep review
+        Re-dispatch the reviewer for only the slices that never reported, re-aggregating the
+        findings from the slice reports already captured, so a review whose final
+        aggregation turn wedged is recovered without throwing away the work that finished.
+        Refused with 409 unless the review is still in progress. Requires a `decide`-scope
+        key.
+        `POST /api/v1/runs/{runId}/decisions/pr-review/resume` (operation
+        `resumePublicRunPrReview`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/runs/{_quote(run_id)}/decisions/pr-review/resume",
+            query=None,
+            timeout=timeout,
+        )
+        return PublicDecisionList.from_dict(raw)
+
     def send_back_follow_up(self, run_id: str, item_id: str, *, timeout: float | None = None) -> PublicDecisionList:
         """Send a follow-up item back to the Coder
         Fold one `follow_up` item into another Coder pass (the item records as `queued`).

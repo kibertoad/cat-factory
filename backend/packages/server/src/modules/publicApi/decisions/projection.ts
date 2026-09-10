@@ -24,11 +24,13 @@ import type {
   JudgeStepState,
   PipelineStep,
   PrReviewFinding,
+  PrReviewPostReport,
   PrReviewSlice,
   PrReviewStepState,
   PublicDecision,
   PublicDecisionList,
   PublicPrReviewFinding,
+  PublicPrReviewPostReport,
   PublicPrReviewSlice,
   PublicUnanswerableWait,
   RequirementReview,
@@ -209,6 +211,32 @@ function toPrReviewDecision(state: PrReviewStepState): PublicDecision {
     slices: (state.slices ?? []).map(toPrReviewSlice),
     findings: (state.findings ?? []).map(toPrReviewFinding),
     selectedFindingIds: state.selectedFindingIds ?? [],
+    postReport: state.postReport ? toPrReviewPostReport(state.postReport) : null,
+    postedFindingIds: state.postedFindingIds ?? [],
+  }
+}
+
+/**
+ * What the last `post` did, externally.
+ *
+ * Projected rather than passed through for the reason the rest of this file is, plus one specific
+ * to it: the internal report leaves `folded` / `failures` optional-with-a-default and `bodyPosted`
+ * `optional | null`, and a caller reading a partial post must not have to tell an ABSENT key from
+ * a zero. Both collapse to always-present here.
+ */
+function toPrReviewPostReport(report: PrReviewPostReport): PublicPrReviewPostReport {
+  return {
+    attempted: report.attempted,
+    posted: report.posted,
+    folded: report.folded ?? 0,
+    bodyPosted: report.bodyPosted ?? null,
+    bodyError: report.bodyError ?? null,
+    failures: (report.failures ?? []).map((failure) => ({
+      findingId: failure.findingId,
+      path: failure.path,
+      line: failure.line ?? null,
+      reason: failure.reason,
+    })),
   }
 }
 
