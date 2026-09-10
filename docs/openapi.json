@@ -4607,6 +4607,124 @@
           "kind": {
             "const": "pr-review"
           },
+          "lastActivityAt": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "maxResumeAttempts": {
+            "type": "number"
+          },
+          "postAttempts": {
+            "type": "number"
+          },
+          "postReport": {
+            "anyOf": [
+              {
+                "properties": {
+                  "attempt": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "attempted": {
+                    "type": "number"
+                  },
+                  "bodyError": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "bodyPosted": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "failures": {
+                    "items": {
+                      "properties": {
+                        "findingId": {
+                          "type": "string"
+                        },
+                        "line": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "path": {
+                          "type": "string"
+                        },
+                        "reason": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "findingId",
+                        "path",
+                        "line",
+                        "reason"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "folded": {
+                    "type": "number"
+                  },
+                  "posted": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "attempted",
+                  "posted",
+                  "folded",
+                  "bodyPosted",
+                  "bodyError",
+                  "failures",
+                  "attempt"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "postedBody": {
+            "type": "boolean"
+          },
+          "postedFindingIds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "prUrl": {
             "anyOf": [
               {
@@ -4616,6 +4734,12 @@
                 "type": "null"
               }
             ]
+          },
+          "reportedSlices": {
+            "type": "number"
+          },
+          "resumeAttempts": {
+            "type": "number"
           },
           "selectedFindingIds": {
             "items": {
@@ -4682,7 +4806,15 @@
           "prUrl",
           "slices",
           "findings",
-          "selectedFindingIds"
+          "selectedFindingIds",
+          "postReport",
+          "postedFindingIds",
+          "postedBody",
+          "postAttempts",
+          "resumeAttempts",
+          "maxResumeAttempts",
+          "reportedSlices",
+          "lastActivityAt"
         ],
         "type": "object"
       },
@@ -5964,7 +6096,8 @@
             "enum": [
               "human_wait_gate",
               "unclassified_gate",
-              "unwired_interview_gate"
+              "unwired_interview_gate",
+              "curation_gate"
             ],
             "type": "string"
           },
@@ -6504,7 +6637,7 @@
       "name": "MIT"
     },
     "title": "cat-factory Public API",
-    "version": "1.71.0"
+    "version": "1.72.0"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -17392,6 +17525,68 @@
           }
         },
         "summary": "Resolve a parked PR deep review",
+        "tags": [
+          "Decisions"
+        ],
+        "x-min-scope": "decide"
+      }
+    },
+    "/api/v1/runs/{runId}/decisions/pr-review/resume": {
+      "post": {
+        "description": "Re-dispatch the reviewer for only the slices that never reported, re-aggregating the findings from the slice reports already captured, so a review whose final aggregation turn wedged is recovered without throwing away the work that finished. Refused with 409 unless the review is still in progress. Requires a `decide`-scope key.",
+        "operationId": "resumePublicRunPrReview",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicDecisionList"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Resume a stalled PR deep review",
         "tags": [
           "Decisions"
         ],

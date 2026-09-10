@@ -62,6 +62,8 @@ describe('initialPrReviewState', () => {
       postReport: null,
       postedFindingIds: [],
       postedBody: false,
+      // …and nothing has been posted from it, which is what makes its first `post` pass 1.
+      postAttempts: 0,
     })
   })
 
@@ -344,8 +346,13 @@ describe('buildPrReviewPostReport', () => {
       comments: [{ posted: true }, { posted: false, error: 'Line could not be resolved' }],
       bodyPosted: true,
     }
-    const { report, newlyPostedFindingIds } = buildPrReviewPostReport(built, selected, result)
+    const { report, newlyPostedFindingIds } = buildPrReviewPostReport(built, selected, result, {
+      attempt: 2,
+    })
     expect(report.attempted).toBe(2)
+    // The pass number is what tells this report apart from the one the pass before it left: a
+    // retry that fails identically differs in nothing else.
+    expect(report.attempt).toBe(2)
     expect(report.posted).toBe(1)
     expect(report.bodyPosted).toBe(true)
     expect(report.failures).toEqual([
@@ -358,7 +365,7 @@ describe('buildPrReviewPostReport', () => {
   it('reports a fully-successful attempt as complete', () => {
     const built = buildPrReviewPost([selected[0]!], null)
     const result: CreateReviewResult = { comments: [{ posted: true }], bodyPosted: null }
-    const { report } = buildPrReviewPostReport(built, [selected[0]!], result)
+    const { report } = buildPrReviewPostReport(built, [selected[0]!], result, { attempt: 1 })
     expect(report.posted).toBe(1)
     expect(report.failures).toEqual([])
     expect(isPrReviewPostComplete(report)).toBe(true)
@@ -382,6 +389,7 @@ const parkedState = (findings: PrReviewFinding[]): PrReviewStepState => ({
   postReport: null,
   postedFindingIds: [],
   postedBody: false,
+  postAttempts: 0,
 })
 
 describe('dismissFinding', () => {
@@ -393,6 +401,38 @@ describe('dismissFinding', () => {
     expect(next.findings?.map((f) => f.id)).toEqual(['prf_b'])
     expect(next.selectedFindingIds).toEqual(['prf_b'])
     expect(next.postedFindingIds).toEqual([])
+  })
+
+  it("prunes the finding's row from the last post's FAILURES, keeping the others", () => {
+    // The failure row's `findingId` is the anchor a window (and an API consumer) joins back to the
+    // findings, so a row left behind renders as a failure about a finding nothing resolves. The
+    // pass's own counts stay as they were: a later dismissal does not change what the post did.
+    const a = finding({ id: 'prf_a', path: 'a.ts', line: 12 })
+    const b = finding({ id: 'prf_b', path: 'b.ts', line: 9 })
+    const state: PrReviewStepState = {
+      ...parkedState([a, b]),
+      postReport: {
+        attempted: 2,
+        posted: 0,
+        folded: 0,
+        bodyPosted: true,
+        bodyError: null,
+        attempt: 1,
+        failures: [
+          { findingId: 'prf_a', path: 'a.ts', line: 12, reason: 'Line could not be resolved' },
+          { findingId: 'prf_b', path: 'b.ts', line: 9, reason: 'Line could not be resolved' },
+        ],
+      },
+    }
+    const next = dismissFinding(state, 'prf_a')
+    expect(next.postReport?.failures?.map((f) => f.findingId)).toEqual(['prf_b'])
+    expect(next.postReport?.attempted).toBe(2)
+    expect(next.postReport?.attempt).toBe(1)
+  })
+
+  it('leaves a review with no post report alone', () => {
+    const a = finding({ id: 'prf_a' })
+    expect(dismissFinding(parkedState([a]), 'prf_a').postReport).toBeNull()
   })
 
   it('is a no-op for an unknown id', () => {

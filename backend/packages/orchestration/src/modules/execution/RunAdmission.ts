@@ -48,6 +48,7 @@ import type { FoundationalServiceResolver } from './run-foundational-services.js
 import type { EnvironmentProvisioningService } from '@cat-factory/integrations'
 import type { SpendService } from '@cat-factory/spend'
 import { validatePipelineShape, type PipelineShape } from '../pipelines/pipelineShape.js'
+import { runnableShapeOf } from './retry.logic.js'
 import { assertInitiativeShapeAllowed } from '../initiative/initiative.logic.js'
 import { isTesterKind } from './ci.logic.js'
 import { chainHasConditionalStep, resolveScopeForRun } from './runServiceScope.js'
@@ -321,29 +322,11 @@ export class RunAdmission {
   }
 
   /**
-   * The {@link PipelineShape} a retry/restart re-drives: the stored run's steps ARE the enabled,
-   * ordered chain that will run again, so {@link assertRunnable} validates exactly what
-   * re-executes rather than the current pipeline definition (which may have been edited out of
-   * band since the run started). Disabled steps were already filtered out at start, so every
-   * stored step is enabled.
+   * The shape {@link assertRunnable} validates a retry/restart against: a thin delegate to the
+   * pure {@link runnableShapeOf}, which the public API's retry path asks the same question of.
    */
   runnableShapeOf(steps: readonly PipelineStep[]): PipelineShape {
-    return {
-      agentKinds: steps.map((s) => s.agentKind),
-      // The per-step form of the pipeline's `gates[i]`, copied onto the run step at start. Read by
-      // the gating validation to refuse a step carrying both a human gate and an estimate gate, so
-      // a retry re-checks that against exactly what re-executes.
-      gates: steps.map((s) => s.requiresApproval === true),
-      gating: steps.map((s) => s.gating ?? null),
-      // The QC companion's live step-state carries the same `gating` config the pipeline set, so
-      // the tester-QC gating validation re-runs on a retry against exactly what re-executes.
-      testerQuality: steps.map((s) => s.testerQuality ?? null),
-      // The per-step options bag (a `skill` step's `skillId`, a step's picked agent-kind variant)
-      // is copied onto the run step at start, so the skill-step and variant validations re-run on
-      // retry against what re-executes — which is how a retry after the deployment withdrew a
-      // variant is refused rather than quietly running the shipped prompt.
-      stepOptions: steps.map((s) => s.stepOptions ?? null),
-    }
+    return runnableShapeOf(steps)
   }
 
   /**

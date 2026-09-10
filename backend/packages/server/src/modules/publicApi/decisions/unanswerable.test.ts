@@ -2,6 +2,11 @@ import { describe, expect, it } from 'vitest'
 import type { ExecutionStatus, GateStepState, PipelineStep } from '@cat-factory/contracts'
 import type { GateDefinition, GatePollExhaustion } from '@cat-factory/kernel'
 import { defaultGateRegistry } from '@cat-factory/kernel'
+import {
+  type AgentKindRegistry,
+  CURATION_GATE_TRAIT,
+  defaultAgentKindRegistry,
+} from '@cat-factory/agents'
 import type { UnwiredInterviewGate } from './projection.js'
 import { unanswerableWaits } from './projection.js'
 
@@ -53,15 +58,19 @@ const gates = (() => {
   return registry
 })()
 
+/** The built-in agent kinds, which is where the `curation-gate` trait comes from. */
+const agentKinds = defaultAgentKindRegistry()
+
 /**
- * Ask the question the projection asks. Both extra inputs default to "nothing else is going on"
- * (a live run, no unwired interviewer, no step answerable through `decisions[]`), so each case
- * below states only the fact it is about.
+ * Ask the question the projection asks. Every extra input defaults to "nothing else is going on"
+ * (a live run, the built-in kinds, no unwired interviewer, no step answerable through
+ * `decisions[]`), so each case below states only the fact it is about.
  */
 function waitsFor(
   steps: PipelineStep[],
   over: {
     status?: ExecutionStatus
+    agentKinds?: AgentKindRegistry
     unwiredGate?: UnwiredInterviewGate | null
     answered?: ReadonlySet<number>
   } = {},
@@ -69,10 +78,18 @@ function waitsFor(
   return unanswerableWaits(
     { status: over.status ?? 'blocked', steps },
     gates,
+    over.agentKinds ?? agentKinds,
     over.unwiredGate ?? null,
     over.answered ?? new Set(),
   )
 }
+
+/** A step parked on the generic decision-wait, which is how every curating kind stops a run. */
+const parked = (agentKind: string): PipelineStep =>
+  step(agentKind, {
+    state: 'waiting_decision',
+    approval: { id: 'appr_1', status: 'pending', proposal: '' },
+  })
 
 describe('unanswerableWaits', () => {
   it('names a live human-wait gate and says where the answer lives', () => {
@@ -192,6 +209,43 @@ describe('unanswerableWaits', () => {
         answered: new Set([0]),
       }),
     ).toEqual([])
+  })
+
+  it('names a parked bug-fishing expedition, whose CURATION has no public route', () => {
+    // The gap this closes. `pl_bug_fishing` is one `bug-fisher` step that parks so a person can
+    // mark which of the bugs it found are worth fixing, and no call on this API marks one. The
+    // step's own pending approval IS offered (approving ends the run), so a caller reading only
+    // `decisions[]` would take an exit for an answer and finish an expedition unacted on.
+    const [wait, ...rest] = waitsFor([parked('bug-fisher')])
+    expect(rest).toEqual([])
+    expect(wait).toMatchObject({ reason: 'curation_gate', stepKind: 'bug-fisher', stepIndex: 0 })
+    expect(wait!.detail).toContain('mark which of the')
+    expect(wait!.detail).toContain('in the app')
+  })
+
+  it('stays silent about a parked PR review, whose curation IS answerable here', () => {
+    // The other half of the same rule, and why the two curating kinds are not one label: a parked
+    // `pr-reviewer` is a `pr-review` decision with real verbs (resolve / dismiss / challenge /
+    // resume), so naming it as unanswerable would send a caller looking for a person to do what
+    // the same response is handing them.
+    expect(waitsFor([parked('pr-reviewer')])).toEqual([])
+  })
+
+  it("names a DEPLOYMENT's own curating kind, like the built-in it has never heard of", () => {
+    // Read off the registered trait, the same declaration public admission enumerates, so a
+    // deployment that curates through its own kind is named with no edit to either.
+    const own = defaultAgentKindRegistry()
+    own.registerTrait({ id: CURATION_GATE_TRAIT })
+    own.assignTraits('acme-triage', [CURATION_GATE_TRAIT])
+    const [wait] = waitsFor([parked('acme-triage')], { agentKinds: own })
+    expect(wait).toMatchObject({ reason: 'curation_gate', stepKind: 'acme-triage' })
+  })
+
+  it('ignores a curating step that is not PARKED', () => {
+    // A curating step is an ordinary container step until its completion parks the run, so
+    // reading the kind alone would demand a human of every review run while its reviewer worked.
+    expect(waitsFor([step('bug-fisher')])).toEqual([])
+    expect(waitsFor([step('bug-fisher', { state: 'done' })])).toEqual([])
   })
 
   it('still names an unanswered wait beside an answered one', () => {

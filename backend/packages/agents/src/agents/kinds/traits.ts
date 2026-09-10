@@ -104,6 +104,26 @@ export const DESIGN_IMAGES_TRAIT: AgentTrait = 'design-images'
 export const INTERVIEW_GATE_TRAIT: AgentTrait = 'interview-gate'
 
 /**
+ * CURATION kinds: the ones whose own completion parks the run so a person can pick which of the
+ * things it found are worth acting on. `pr-reviewer` (findings → select → finish / fix / post) and
+ * `bug-fisher` (catch → mark what to fix) are the built-ins.
+ *
+ * A pure MARKER trait, and unlike its siblings the only reader is ADMISSION: `parkSurfacesOf`
+ * asks it whether a pipeline built out of such a step can stop for a human, which decides whether
+ * a public-API key needs the `decide` rung to start one. The ENGINE still parks off the step kind
+ * (each kind's completion interceptor owns its own state shape, so there is nothing generic to
+ * share there), which is exactly why admission could not see the park: the park was declared
+ * nowhere a registry could read it, so a pipeline whose ONLY step was a curation step reported no
+ * park surface at all and a plain `write` key could start a run it then had no verb to answer.
+ *
+ * Carried by the kind rather than listed in admission for the reason the interview gate is: a
+ * deployment that curates through its OWN registered kind is then visible to the rule with no edit
+ * there. Being visible is not the same as being ANSWERABLE (only `pr-reviewer` has public routes
+ * today), and `PUBLICLY_ANSWERABLE_PARK_SURFACES` keeps that second question separate.
+ */
+export const CURATION_GATE_TRAIT: AgentTrait = 'curation-gate'
+
+/**
  * REVIEW-QUEUE kinds: the ones a review task's queued skills reach.
  *
  * A `review` task carries an ordered queue of account-catalog skills (`taskTypeFields
@@ -377,6 +397,8 @@ export const STANDARD_TRAIT_DEFINITIONS: readonly AgentTraitDefinition[] = [
   { id: DOC_AWARE_TRAIT },
   { id: SPEC_AWARE_TRAIT, guidance: SPEC_AWARE_GUIDANCE },
   { id: INTERVIEW_GATE_TRAIT },
+  // A marker read only by public-API admission (see the trait's own doc): nothing to fold.
+  { id: CURATION_GATE_TRAIT },
   { id: BRIEF_STANDARDS_TRAIT },
   // A marker: the queued skills each render their own prompt section through the shared skill
   // delivery, so there is nothing static to fold for a kind that carries it.

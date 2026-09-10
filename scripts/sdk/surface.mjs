@@ -171,6 +171,7 @@ const SURFACE = {
   proceedPublicRunBrainstorm: { group: 'decisions', method: 'proceedBrainstorm' },
   resolvePublicRunBrainstormExceeded: { group: 'decisions', method: 'resolveBrainstormExceeded' },
   resolvePublicRunPrReview: { group: 'decisions', method: 'resolvePrReview' },
+  resumePublicRunPrReview: { group: 'decisions', method: 'resumePrReview' },
   dismissPublicRunPrReviewFinding: { group: 'decisions', method: 'dismissPrReviewFinding' },
   challengePublicRunPrReviewFinding: { group: 'decisions', method: 'challengePrReviewFinding' },
   confirmPublicRunHumanTest: { group: 'decisions', method: 'confirmHumanTest' },

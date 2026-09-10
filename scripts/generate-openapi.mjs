@@ -62,7 +62,7 @@ const API_PREFIX = '/api/v1'
 // it against `origin/main` after every merge rather than trusting a clean one, and write the new
 // entry in the history doc, which is what makes the next collision arrive as a conflict.
 
-const API_VERSION = '1.71.0'
+const API_VERSION = '1.72.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a
@@ -754,6 +754,12 @@ const OPERATION_DOCS = {
     summary: 'Resolve a parked PR deep review',
     description:
       'Record the curated finding selection and say what to do with it: `finish` completes the read-only review, `fix` hands the selected findings to a fixer that commits onto the reviewed PR branch, `post` publishes them as inline PR review comments. `fix` and `post` need at least one selected finding and act on the real pull request. Requires a `decide`-scope key.',
+  },
+  resumePublicRunPrReview: {
+    tag: 'Decisions',
+    summary: 'Resume a stalled PR deep review',
+    description:
+      'Re-dispatch the reviewer for only the slices that never reported, re-aggregating the findings from the slice reports already captured, so a review whose final aggregation turn wedged is recovered without throwing away the work that finished. Refused with 409 unless the review is still in progress. Requires a `decide`-scope key.',
   },
   dismissPublicRunPrReviewFinding: {
     tag: 'Decisions',

@@ -63,7 +63,10 @@ drift.
   GitHub, not to constrain board work.)
 - **What the surface still cannot answer is NAMED at run time**, not left as silence. The decision
   list carries `unanswerable[]`, each entry a closed `reason`, the step holding the run, and prose
-  saying where the answer lives: `human_wait_gate`, `unclassified_gate`, `unwired_interview_gate`.
+  saying where the answer lives: `human_wait_gate`, `unclassified_gate`, `unwired_interview_gate`,
+  `curation_gate`. The last reads the SAME answerable table the refusal is built from, so a
+  curating kind whose curation this API can answer (`pr-reviewer`) is a decision while one it
+  cannot (`bug-fisher`) is a named wait, and neither half can drift into contradicting the other.
 - **The other half of "what can a headless consumer not do here" closed too**: run EVIDENCE
   (`/runs/:runId/report`, `/artifacts`, the artifact blob), key introspection (`/me`), the served
   spec (`/openapi.json`), notification-webhook management, headless key provisioning, and ticket +

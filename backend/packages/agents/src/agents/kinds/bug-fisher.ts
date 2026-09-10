@@ -4,7 +4,7 @@ import { CONTEXT_DIR } from '../prompts/standard.js'
 import { standardsAsContextFilesPreOp } from './pr-review-context.js'
 import { defineStructuredOutput } from './structured-output.js'
 import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
-import { CODE_AWARE_TRAIT, SPEC_AWARE_TRAIT } from './traits.js'
+import { CODE_AWARE_TRAIT, CURATION_GATE_TRAIT, SPEC_AWARE_TRAIT } from './traits.js'
 
 // ---------------------------------------------------------------------------
 // The `bug-fisher` agent kind — the read-only, multi-angle hunt for latent defects in an
@@ -356,8 +356,10 @@ export const BUG_FISHER_AGENT_KINDS: AgentKindDefinition[] = [
     // against, and without the trait the task's chosen standards are silently dropped by
     // `AgentContextBuilder.resolveFragments`. Where they are then delivered is
     // `standardsDelivery`, below. Spec-aware for the requirements angle: the committed specs are
-    // the other half of "what was this supposed to do".
-    traits: [CODE_AWARE_TRAIT, SPEC_AWARE_TRAIT],
+    // the other half of "what was this supposed to do". Curation-gate because the expedition
+    // ENDS by parking for a person to mark which of the catch is worth fixing, which is what
+    // tells public-API admission the pipeline needs a caller able to answer it.
+    traits: [CODE_AWARE_TRAIT, CURATION_GATE_TRAIT, SPEC_AWARE_TRAIT],
     // The task's best-practice standards arrive as `.cat-context/` FILES rather than folded into
     // the system prompt (the PR reviewer's precedent). A `code-aware` kind folds them by default,
     // and an agentic loop re-sends its whole system prompt on every turn of every pass: across

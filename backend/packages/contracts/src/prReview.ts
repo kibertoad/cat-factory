@@ -242,8 +242,23 @@ export const prReviewPostReportSchema = v.object({
   bodyPosted: v.optional(v.nullable(v.boolean())),
   /** The error posting the summary/body comment, when it failed. */
   bodyError: v.optional(v.nullable(v.string())),
-  /** Per-finding inline-comment failures, in the order attempted. */
+  /**
+   * Per-finding inline-comment failures, in the order attempted. A finding DISMISSED after the
+   * pass loses its row here with it (see `dismissFinding`), so this can be shorter than
+   * `attempted - posted`: it lists the failures still worth acting on, never an id nothing else
+   * in the review resolves.
+   */
   failures: v.optional(v.array(prReviewPostFailureSchema), []),
+  /**
+   * Which `post` pass produced this report, counting from 1 (the review's `postAttempts` at the
+   * moment the pass ran). Absent on a report recorded before the pass was numbered.
+   *
+   * It is what tells a RETRY apart from the pass before it. A retry that fails identically writes
+   * a byte-identical report, so a reader that polls on an interval and misses the brief `posting`
+   * window cannot otherwise tell "the retry ran and failed the same way" from "the retry has not
+   * started". That is the same ambiguity this report exists to remove, one level in.
+   */
+  attempt: v.optional(v.number()),
 })
 export type PrReviewPostReport = v.InferOutput<typeof prReviewPostReportSchema>
 
@@ -333,6 +348,12 @@ export const prReviewStepStateSchema = v.object({
    * a body that FAILED is retried.
    */
   postedBody: v.optional(v.boolean(), false),
+  /**
+   * How many `post` resolutions have been requested on this review, the one in flight included.
+   * Zero until the first. Stamped onto each pass's {@link prReviewPostReportSchema} `attempt`, so
+   * a reader can tell which pass the report it is holding describes.
+   */
+  postAttempts: v.optional(v.number(), 0),
 })
 export type PrReviewStepState = v.InferOutput<typeof prReviewStepStateSchema>
 

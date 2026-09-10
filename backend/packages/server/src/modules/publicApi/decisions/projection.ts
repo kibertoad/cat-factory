@@ -2,16 +2,22 @@ import {
   type AgentKindRegistry,
   ARCHITECTURE_BRAINSTORM_AGENT_KIND,
   CLARITY_REVIEW_AGENT_KIND,
+  CURATION_GATE_TRAIT,
+  hasTrait,
   REQUIREMENTS_BRAINSTORM_AGENT_KIND,
 } from '@cat-factory/agents'
 import {
   dedicatedParkSurface,
   findParkedInterviewStep,
   followUpLoopBudget,
+  stepAwaitsDecision,
 } from '@cat-factory/orchestration'
 import type { InterviewView } from '@cat-factory/orchestration'
 import type { GateRegistry } from '@cat-factory/kernel'
-import { blockingReviewComments } from '@cat-factory/contracts'
+import {
+  blockingReviewComments,
+  PUBLIC_PR_REVIEW_MAX_RESUME_ATTEMPTS,
+} from '@cat-factory/contracts'
 import type {
   BrainstormSession,
   BrainstormStage,
@@ -24,11 +30,13 @@ import type {
   JudgeStepState,
   PipelineStep,
   PrReviewFinding,
+  PrReviewPostReport,
   PrReviewSlice,
   PrReviewStepState,
   PublicDecision,
   PublicDecisionList,
   PublicPrReviewFinding,
+  PublicPrReviewPostReport,
   PublicPrReviewSlice,
   PublicUnanswerableWait,
   RequirementReview,
@@ -38,6 +46,7 @@ import type {
 } from '@cat-factory/contracts'
 import type { Context } from 'hono'
 import type { AppEnv } from '../../../http/env.js'
+import { PUBLICLY_ANSWERABLE_PARK_SURFACES } from '../publicApiAdmission.js'
 import type { ScopedRun } from './scope.js'
 
 // The run → `PublicDecisionList` projection: what a parked run is currently asking a human, as
@@ -200,7 +209,7 @@ function toAgentDecision(step: PipelineStep, decision: Decision): PublicDecision
  * published ones must not move, and the `optional | null` internals collapse to always-present
  * nullables so four generated clients have one shape to check.
  */
-function toPrReviewDecision(state: PrReviewStepState): PublicDecision {
+function toPrReviewDecision(state: PrReviewStepState, step: PipelineStep): PublicDecision {
   return {
     kind: 'pr-review',
     status: state.status,
@@ -209,6 +218,48 @@ function toPrReviewDecision(state: PrReviewStepState): PublicDecision {
     slices: (state.slices ?? []).map(toPrReviewSlice),
     findings: (state.findings ?? []).map(toPrReviewFinding),
     selectedFindingIds: state.selectedFindingIds ?? [],
+    postReport: state.postReport ? toPrReviewPostReport(state.postReport) : null,
+    postedFindingIds: state.postedFindingIds ?? [],
+    postedBody: state.postedBody === true,
+    postAttempts: state.postAttempts ?? 0,
+    resumeAttempts: state.resumeAttempts ?? 0,
+    maxResumeAttempts: PUBLIC_PR_REVIEW_MAX_RESUME_ATTEMPTS,
+    // How many slices have REPORTED, counted here rather than passing the per-slice reports
+    // through: those are the engine's recovery plumbing (a slice's verbatim in-flight prose,
+    // superseded by the aggregated findings), while the count is the one thing a caller deciding
+    // whether to resume can act on.
+    reportedSlices: (state.sliceReviews ?? []).filter((r) => r.status === 'completed').length,
+    // Off the STEP, because that is where the engine folds the harness heartbeat: the review state
+    // records what the reviewer said, not when it last said anything.
+    lastActivityAt: step.lastActivityAt ?? null,
+  }
+}
+
+/**
+ * What the last `post` did, externally.
+ *
+ * Projected rather than passed through for the reason the rest of this file is, plus one specific
+ * to it: the internal report leaves `folded` / `failures` optional-with-a-default and `bodyPosted`
+ * `optional | null`, and a caller reading a partial post must not have to tell an ABSENT key from
+ * a zero. Both collapse to always-present here.
+ */
+function toPrReviewPostReport(report: PrReviewPostReport): PublicPrReviewPostReport {
+  return {
+    attempted: report.attempted,
+    posted: report.posted,
+    folded: report.folded ?? 0,
+    bodyPosted: report.bodyPosted ?? null,
+    bodyError: report.bodyError ?? null,
+    failures: (report.failures ?? []).map((failure) => ({
+      findingId: failure.findingId,
+      path: failure.path,
+      line: failure.line ?? null,
+      reason: failure.reason,
+    })),
+    // NULL rather than a defaulted 1: a report recorded before the pass was numbered cannot say
+    // which pass it was, and a caller comparing it against `postAttempts` to recognise its own
+    // retry would read the guess as an answer.
+    attempt: report.attempt ?? null,
   }
 }
 
@@ -540,6 +591,7 @@ export async function buildDecisionList<E extends AppEnv>(
     unanswerable: unanswerableWaits(
       execution,
       container.gateRegistry,
+      container.agentKindRegistry,
       interview.unwiredGate,
       answeredStepIndexes(decisions),
     ),
@@ -574,6 +626,46 @@ function answeredStepIndexes(decisions: readonly PublicDecision[]): ReadonlySet<
 }
 
 /**
+ * A parked CURATION step whose curation this surface cannot perform, or null.
+ *
+ * A curating kind parks the run so a person can MARK which of the things it found are worth
+ * acting on, and it does so through machinery of its own rather than through anything shared (each
+ * writes its own state shape and parks from there), which is why this is read off the kind's
+ * registered `curation-gate` TRAIT: the same declaration public admission enumerates, so a
+ * deployment's own curating kind is named here with no edit.
+ *
+ * Whether it belongs in the wait report is the SAME question the refusal at the start surface
+ * answers, so it is asked of the same set ({@link PUBLICLY_ANSWERABLE_PARK_SURFACES}) rather than
+ * of a second list beside it: `pr-reviewer` has public verbs (resolve / dismiss / challenge /
+ * resume) and is a `decisions[]` entry, `bug-fisher` has none and is named here. A slice that
+ * lands the marking route moves the member and both the refusal and this report follow.
+ *
+ * The step also carries an ordinary pending approval, which this response DOES offer, and that is
+ * why the detail says what resolving it means. Ending an expedition is an exit, not an answer: it
+ * advances the run past the step while everything it caught goes unacted on, and a caller told
+ * only "here is an approval" would take the one for the other.
+ */
+function curationWait(
+  step: PipelineStep,
+  stepIndex: number,
+  agentKinds: AgentKindRegistry,
+): PublicUnanswerableWait | null {
+  if (!stepAwaitsDecision(step)) return null
+  if (!hasTrait(step.agentKind, CURATION_GATE_TRAIT, agentKinds)) return null
+  if (PUBLICLY_ANSWERABLE_PARK_SURFACES.has(step.agentKind)) return null
+  return {
+    reason: 'curation_gate',
+    stepKind: step.agentKind,
+    stepIndex,
+    detail:
+      `The run is parked on the '${step.agentKind}' step so a person can mark which of the ` +
+      'things it found are worth acting on. No call on this API marks one, so that choice has to ' +
+      "be made in the app. Resolving the step's approval gate from here ENDS the run instead, " +
+      'leaving everything it found unacted on.',
+  }
+}
+
+/**
  * Every wait holding this run that the decision surface cannot answer, named.
  *
  * Read entirely off the instance already in hand, because each cause is visible in the step chain:
@@ -586,6 +678,12 @@ function answeredStepIndexes(decisions: readonly PublicDecision[]): ReadonlySet<
  * its job, and listing it would read as a demand for a human nobody has to meet. Shipped and
  * deployment-registered gates go through the one rule, where this used to name the built-ins from a
  * hand-kept constant and report every gate a deployment registered as unclassifiable.
+ *
+ * A CURATION park is the one member that is not a gate at all ({@link curationWait}): a step whose
+ * kind curates parks the run for a person to mark what it found, and the marking has no public
+ * route unless the kind's surface does. It is read off the same trait admission enumerates, so the
+ * refusal a start surface gives and the wait this reports can never disagree about which curating
+ * kinds are answerable.
  *
  * `unclassified_gate` survives that change with a NARROWER meaning, and it is still reachable: a
  * step whose kind this process has no gate registration for at all. A run outlives a registration
@@ -606,6 +704,8 @@ export function unanswerableWaits(
   execution: Pick<ExecutionInstance, 'status' | 'steps'>,
   /** The app-owned gate registry: the authority for what a spent poll budget means per kind. */
   gates: GateRegistry,
+  /** The app-owned agent-kind registry: the authority for which kinds CURATE. */
+  agentKinds: AgentKindRegistry,
   unwiredGate: UnwiredInterviewGate | null,
   /**
    * Required rather than defaulted, because it is half of the question: "unanswerable" is a claim
@@ -617,6 +717,8 @@ export function unanswerableWaits(
   if (execution.status === 'done' || execution.status === 'failed') return []
   const waits: PublicUnanswerableWait[] = []
   execution.steps.forEach((step, stepIndex) => {
+    const curation = curationWait(step, stepIndex, agentKinds)
+    if (curation) waits.push(curation)
     if (!step.gate || step.state === 'done' || answered.has(stepIndex)) return
     const pollExhaustion = gates.pollExhaustion(step.agentKind)
     if (pollExhaustion === 'rearm') {
@@ -810,7 +912,7 @@ function liveStepDecisions(
       decisions.push(toJudgeDecision(step.agentKind, step.judge))
     }
     if (step.prReview && isLivePrReview(step.prReview)) {
-      decisions.push(toPrReviewDecision(step.prReview))
+      decisions.push(toPrReviewDecision(step.prReview, step))
     }
     if (step.humanTest && isLiveHumanTest(step.humanTest)) {
       decisions.push(toHumanTestDecision(step.humanTest))

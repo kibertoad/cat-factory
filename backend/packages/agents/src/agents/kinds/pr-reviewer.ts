@@ -1,7 +1,7 @@
 import { prReviewAgentOutputSchema } from '@cat-factory/contracts'
 import { defineStructuredOutput } from './structured-output.js'
 import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
-import { CODE_AWARE_TRAIT, REVIEW_SKILLS_TRAIT } from './traits.js'
+import { CODE_AWARE_TRAIT, CURATION_GATE_TRAIT, REVIEW_SKILLS_TRAIT } from './traits.js'
 import { FRAGMENT_ADHERENCE_GUIDANCE_CONTEXT_FILES } from '../prompts/shared.js'
 import {
   prReviewerDiffPreOp,
@@ -273,7 +273,12 @@ export const PR_REVIEWER_AGENT_KINDS: AgentKindDefinition[] = [
     // Review, a Security Review) onto this dispatch: the engine resolves the task's
     // `reviewSkillIds` onto the run context, and the harness installs them exactly as it installs
     // a `skill` step's pick. Without the trait the queue resolves for nobody.
-    traits: [CODE_AWARE_TRAIT, REVIEW_SKILLS_TRAIT],
+    // `curation-gate` is what tells public-API admission that a pipeline built out of this step
+    // STOPS for a person: the reviewer's completion parks the run at `awaiting_selection` until
+    // somebody picks which findings to act on. The engine parks off the step kind, so without the
+    // trait `pl_review` reported no park surface and a plain `write` key could start a run whose
+    // only verbs (resolve / dismiss / challenge) need the `decide` rung.
+    traits: [CODE_AWARE_TRAIT, CURATION_GATE_TRAIT, REVIEW_SKILLS_TRAIT],
     // ...but they are delivered as `.cat-context/standard-<id>.md` FILES rather than folded into
     // this kind's system prompt. The parent reviewer delegates the actual reading to per-slice
     // subagents, so folding charged it for every standard on every one of its turns while the

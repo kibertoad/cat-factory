@@ -150,6 +150,7 @@ export class PrReviewController {
         postReport: null,
         postedFindingIds: [],
         postedBody: false,
+        postAttempts: 0,
       }
       return null
     }
@@ -169,6 +170,7 @@ export class PrReviewController {
       postReport: null,
       postedFindingIds: [],
       postedBody: false,
+      postAttempts: 0,
     }
     await this.raisePrReviewReady(workspaceId, instance, block, findings.length, slices.length)
     return this.deps.stateMachine.parkStepOnDecision(workspaceId, instance, step)
@@ -319,6 +321,11 @@ export class PrReviewController {
           status: action === 'fix' ? 'fixing' : 'posting',
           resolution: action,
           selectedFindingIds,
+          // Counted at the RESOLUTION rather than where the pass records its report, because the
+          // number has to exist before the pass runs: it is what the report is stamped with, and
+          // what a caller polling a retry compares its own request against. A `fix` leaves it
+          // alone, having nothing to post.
+          ...(action === 'post' ? { postAttempts: (step.prReview!.postAttempts ?? 0) + 1 } : {}),
         }
         if (action === 'post') step.pendingPrReviewPost = true
         this.deps.stepGraph.resetStepForRerun(step)

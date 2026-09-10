@@ -75,6 +75,9 @@ export function initialPrReviewState(
     postReport: null,
     postedFindingIds: [],
     postedBody: false,
+    // Nothing has been posted from this review yet either. The count is what stamps each `post`
+    // pass's report, so a fresh review starting at zero is what makes the first pass `attempt: 1`.
+    postAttempts: 0,
   }
 }
 
@@ -353,11 +356,16 @@ export interface PrReviewPostSummary {
  * already-posted findings on a retry. Pure + total. `built` supplies the finding→comment mapping;
  * `selected` resolves each failing finding's path/line for the report. `result` may be null when
  * no VCS write ran (nothing to post) — reported as an all-folded/no-op attempt.
+ *
+ * `attempt` is which `post` pass this is (the review's `postAttempts`), stamped onto the report so
+ * a reader can tell a retry's outcome from the one before it: a retry that fails the same way
+ * produces identical counts and identical failures, and the number is the only thing that differs.
  */
 export function buildPrReviewPostReport(
   built: BuiltPrReviewPost,
   selected: PrReviewFinding[],
   result: CreateReviewResult | null,
+  options: { attempt: number },
 ): PrReviewPostSummary {
   const byId = new Map(selected.map((f) => [f.id, f]))
   const failures: PrReviewPostReport['failures'] = []
@@ -385,6 +393,7 @@ export function buildPrReviewPostReport(
       bodyPosted: result?.bodyPosted ?? null,
       bodyError: result?.bodyError ?? null,
       failures,
+      attempt: options.attempt,
     },
     newlyPostedFindingIds,
   }
@@ -403,16 +412,32 @@ export function isPrReviewPostComplete(report: PrReviewPostReport): boolean {
 
 /**
  * Remove a finding from the parked review entirely (the "Dismiss" action), pruning it from the
- * live findings AND from every id list that referenced it (the selection + the already-posted
- * set), so nothing downstream can act on a finding the human deleted. Total — an unknown id is a
- * no-op. The review stays `awaiting_selection`.
+ * live findings AND from every id list that referenced it (the selection, the already-posted set,
+ * and the last post's per-finding failures), so nothing downstream can act on (or point at) a
+ * finding the human deleted. Total: an unknown id is a no-op. The review stays
+ * `awaiting_selection`.
+ *
+ * The failure list is the one that reads as history rather than state, and it is pruned for the
+ * same reason as the rest: its `findingId` is the anchor a window or an API consumer JOINS back to
+ * the findings, so a row left behind renders as a failure about a finding nothing resolves. The
+ * pass's own counts (`attempted` / `posted`) are NOT rewritten, because what the pass did is not
+ * changed by a later dismissal.
  */
 export function dismissFinding(state: PrReviewStepState, findingId: string): PrReviewStepState {
+  const report = state.postReport
   return {
     ...state,
     findings: (state.findings ?? []).filter((f) => f.id !== findingId),
     selectedFindingIds: (state.selectedFindingIds ?? []).filter((id) => id !== findingId),
     postedFindingIds: (state.postedFindingIds ?? []).filter((id) => id !== findingId),
+    ...(report
+      ? {
+          postReport: {
+            ...report,
+            failures: (report.failures ?? []).filter((f) => f.findingId !== findingId),
+          },
+        }
+      : {}),
   }
 }
 

@@ -208,3 +208,66 @@ it for those runs; one that wants the old grouping treats both members as "no te
 Requirement coverage deliberately keeps answering `no_tester_step` on the same runs. Committed
 integration tests produce no per-requirement verdicts, so "no requirement was checked" is exactly
 what happened there, and splitting it would state a distinction that has no consequence.
+
+## 1.72.0
+
+Three additions around the PR deep review, so the whole "review this pull request, curate the
+findings, post the ones we keep" loop is drivable from outside the app.
+
+`POST /api/v1/runs/{runId}/decisions/pr-review/resume` re-dispatches a review wedged mid-review for
+only the slices that never reported, re-aggregating from the reports already captured. `409` unless
+the review is still in progress. Without it a headless caller's only exit from a stalled review was
+stopping the task, which throws away every slice that had finished.
+
+The `pr-review` decision gains `postReport` and `postedFindingIds`. A `post` resolution that partly
+or wholly fails re-parks the review at `awaiting_selection` with its resolution cleared, which was
+byte-for-byte a review nobody had resolved yet: a caller that posted seven comments and landed none
+saw the state it had a moment before. `postReport` states what the pull request actually received
+(`attempted`, `posted`, `folded`, `failures[]`, `bodyPosted`/`bodyError`) and `postedFindingIds`
+names what a retry will skip.
+
+`postReport` also carries `attempt` (which `post` pass it describes) beside the decision's
+`postAttempts` (how many have been requested), because a retry that fails identically to the pass
+before it produces an otherwise byte-identical report: a caller polling on an interval that missed
+the brief `posting` window could not tell its retry's failure from the one it had already read. The
+decision gains `postedBody` too, the summary comment's sticky counterpart of `postedFindingIds`,
+which is what makes `bodyPosted: null` readable ("suppressed, it already landed" versus "there was
+never a summary to send").
+
+The `pr-review` decision also states what a caller needs before it spends a resume:
+`resumeAttempts` / `maxResumeAttempts`, `reportedSlices` (against `slices`, so a reviewer on its
+final aggregation turn is recognisable) and `lastActivityAt`. **The resume route is bounded on this
+API** at `maxResumeAttempts`, answering `409` past it. Each resume stops the running reviewer and
+dispatches a fresh container, and a headless caller has no eyes on the review, so a poller resuming
+on a timer shorter than the review takes would kill it repeatedly just as it was about to finish.
+The app's own resume stays uncapped: a person clicking Resume is watching what they nudged.
+
+`unanswerable[]` gains the `curation_gate` reason, for a run parked on a step that CURATES where
+marking what it found has no route here. That is the honest report the refusal below promises: a
+parked expedition is `parked: true` with the wait NAMED, rather than an empty list, and the entry
+says why resolving the step's approval gate is an exit rather than an answer (it ends the run with
+everything the expedition caught unacted on). A parked `pr-reviewer` is deliberately NOT reported
+there, because its curation IS answerable (`kind: "pr-review"`), and both halves read the same
+table the start refusal is built from.
+
+Every addition above is additive. The behaviour change beside them is not, and it is stated here
+rather than left to be discovered: **starting the `pl_review` or `pl_bug_fishing` presets now
+requires a `decide` key**, where a `write` key was admitted before. Both are single-step pipelines whose step parks the
+run for a person to curate what it found, and admission could not see that park because the two
+kinds park through machinery of their own rather than through anything a registry declared. So a
+`write` key could start either and then hold a run whose every verb needs `decide`, with the SPA or
+`POST /tasks/:taskId/stop` as the only way out. The refusal is the existing
+`403 pipeline_requires_decide_scope`, and it now names the surface: `pr-review` as answerable
+here, `bug-fisher` as not (marking a catch for fixing has no public route yet). The park surfaces
+are listed as the pipeline spells them and the answer promise names `decisions[]` KINDS, which are
+not always the same word: a `pr-reviewer` step is answered by a `pr-review` decision, and both
+brainstorm kinds by one `brainstorm`. Naming the surface in a sentence that points at `decisions[]`
+sent an integration looking for an entry that is never in it.
+
+**`POST /tasks/:taskId/retry` takes the same rule**, asked of the run's stored steps because that is
+what a retry re-drives. It is the same narrowing, for the same reason: a start path is not the only
+way to set a park in motion, and without it a `write` key holding a task whose parking run had
+failed could re-drive it and be holding a parked run again a moment later.
+
+No run that could be finished through this API stops being startable; what is refused is a run that
+could not.
