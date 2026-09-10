@@ -21,6 +21,7 @@ public abstract class Resources {
     private final TasksClient tasks;
     private final PipelinesClient pipelines;
     private final TaskTypesClient taskTypes;
+    private final PromptFragmentsClient promptFragments;
     private final UseCasesClient useCases;
     private final NotificationsClient notifications;
     private final EnvironmentsClient environments;
@@ -47,6 +48,7 @@ public abstract class Resources {
         this.tasks = new TasksClient(transport);
         this.pipelines = new PipelinesClient(transport);
         this.taskTypes = new TaskTypesClient(transport);
+        this.promptFragments = new PromptFragmentsClient(transport);
         this.useCases = new UseCasesClient(transport);
         this.notifications = new NotificationsClient(transport);
         this.environments = new EnvironmentsClient(transport);
@@ -99,6 +101,11 @@ public abstract class Resources {
     /** What a task can be created AS in this workspace (the built-in kinds plus the operations the deployment registered), and the fields each one accepts. */
     public TaskTypesClient taskTypes() {
         return taskTypes;
+    }
+
+    /** The best-practice standards this workspace holds its agents to: the deployment's shipped catalog merged with the account's library and this board's own, each with the title an agent cites it by, its one-line summary, its tags and which tier it came from. The id is what a task pins as a `fragmentIds` member, and a review reports how closely it judged the change to follow each standard it was given. The guidance text itself is not served: what a caller needs in order to name a standard is its identity. */
+    public PromptFragmentsClient promptFragments() {
+        return promptFragments;
     }
 
     /** The deployment's own non-container model operations: what it will generate for you, on which models, from which parameters, and running one. Each use case narrows the models it may run on and declares the form it accepts, so a wrapper renders a picker from the catalog rather than from a hard-coded copy; a model listed as unavailable says whether the deployment cannot serve it at all or has yet to configure the credential. Discovery takes a `read` key, invoking a `write` one: an invocation spends model tokens and returns text, and starts no run. */

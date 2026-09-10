@@ -34,6 +34,7 @@ const DELIVERY_LOOP = [
   'services_list',
   'pipelines_list',
   'task_types_list',
+  'prompt_fragments_list',
   'tasks_list_by_service',
   'tasks_get',
   'tasks_get_run',

@@ -5,6 +5,8 @@ import { descriptorFieldValuesSchema } from './form-fields.js'
 import { notificationSchema } from './notifications.js'
 import { blockTypeSchema, createTaskTypeSchema, taskTypeSchema } from './primitives.js'
 import { publicApiScopeSchema } from './public-api-keys.js'
+import { MAX_FRAGMENT_ID_LENGTH } from './fragment-library.js'
+import { MAX_TASK_FRAGMENTS } from './public-fragments.js'
 import { cursorSchema, epochMsQuerySchema, pageLimitSchema } from './public-paging.js'
 import { taskSourceKindSchema } from './tasks.js'
 
@@ -252,6 +254,22 @@ export const publicTaskSchema = v.object({
   modelPresetId: v.nullable(v.string()),
   /** The risk policy this task pins, or null when it resolves the workspace default. */
   riskPolicyId: v.nullable(v.string()),
+  /**
+   * The best-practice standards this task's agents are held to, as `fragmentId`s from
+   * `GET /api/v1/prompt-fragments`.
+   *
+   * Served because it is the one pin a caller CANNOT predict from what it sent: the platform unions
+   * the list on the create with the enclosing service's standing standards and the task type's own
+   * defaults, and freezes the result on the task. So an empty create still comes back with the
+   * service's standards named here, and a caller that pinned three can see which of them the row
+   * actually holds. Empty for a task under a service with no standing standards that named none of
+   * its own.
+   *
+   * Frozen at creation, and deliberately not on the patch: this is what the run folds however the
+   * library moves afterwards, which is what makes a completed review's standards readable rather
+   * than re-derived.
+   */
+  fragmentIds: v.array(v.string()),
 })
 export type PublicTask = v.InferOutput<typeof publicTaskSchema>
 
@@ -418,6 +436,9 @@ const presetPinSchema = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength
  * So the two knobs are here, discoverable through `GET /api/v1/model-presets` and
  * `GET /api/v1/risk-policies` (the same pairing the pipeline list has with `start`'s `pipelineId`),
  * and read back on {@link publicTaskSchema} so a caller can confirm what a task actually holds.
+ * `fragmentIds` joins them on the same reading and against the same argument: the alternative route
+ * to "hold this review to our security standards" is editing the SERVICE's standing set, which aims
+ * the change at every other task under it.
  * What stays off is what a caller cannot act on meaningfully: per-agent-kind model overrides,
  * consensus wiring, and the rest of the internal agent config, which are workspace-shaped
  * decisions with no per-task question behind them.
@@ -480,6 +501,51 @@ export const createPublicTaskSchema = v.object({
    * what it actually decides.
    */
   fields: v.optional(descriptorFieldValuesSchema),
+  /**
+   * The best-practice standards this task's agents are held to, as `fragmentId`s from
+   * `GET /api/v1/prompt-fragments`. Omitted ⇒ the enclosing service's standing standards, exactly
+   * as before; an EMPTY array clears that inheritance.
+   *
+   * Clearing the inheritance is not the same as holding the task to nothing. The chosen
+   * `taskType`'s own defaults still apply on top (a `document` task keeps the platform's writing
+   * standards whatever this field says), because those are what the type MEANS here rather than
+   * something the service passed down. Read back what actually landed on
+   * {@link publicTaskSchema} `fragmentIds`.
+   *
+   * The discovery pairing is the one `fields` has with `GET /api/v1/task-types`: a caller reads the
+   * catalog and names ids from it. What it buys is the choice a review most often needs and could
+   * not express here (which of the team's own standards this pull request is judged against), and
+   * the reviewer reports its ADHERENCE to each one it was given, so a standard named here comes
+   * back rated on the run's findings rather than only folded into a prompt.
+   *
+   * An id the workspace's merged catalog does not hold is a `422` (`details.reason:
+   * 'prompt_fragment_not_found'`, `details.fragmentIds` naming every one that missed) rather than a
+   * silent drop. The run path drops a stale id on purpose (a standard deleted after a task was
+   * filed must not break the run), and that disposition is wrong at the door: a typo would answer
+   * `201` for a review that folded nothing, which is byte-for-byte a review nobody asked to be
+   * judged against anything. `details.reason: 'prompt_fragments_unwired'` on a `503` is the
+   * separate case of a deployment with no fragment library at all, and it fires only for a caller
+   * that named standards.
+   *
+   * What the task ends up holding is the UNION of this list with the service's standing standards
+   * and the task type's defaults, read back on {@link publicTaskSchema} `fragmentIds`.
+   */
+  fragmentIds: v.optional(
+    v.pipe(
+      // The per-id ceiling is the library's own (`MAX_FRAGMENT_ID_LENGTH`), never a tighter number
+      // invented at this door: the catalog read above publishes the ids this field names back, and
+      // a sourced standard's id carries a `src:<sourceId>:` namespace plus its slugified path, so
+      // a shorter cap here would refuse ids the same API had just offered, as a generic length
+      // error, not as the `prompt_fragment_not_found` a caller could act on.
+      v.array(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(MAX_FRAGMENT_ID_LENGTH))),
+      // Deduped BEFORE the cap, so the cap bounds DISTINCT standards, which is what it claims to
+      // bound. Counting repeats would let one id sent a hundred times through while refusing a
+      // genuine selection of {@link MAX_TASK_FRAGMENTS}+1, and would repeat each duplicate in the
+      // `details.fragmentIds` of a refusal a client renders one row per entry from.
+      v.transform((ids) => [...new Set(ids)]),
+      v.maxLength(MAX_TASK_FRAGMENTS),
+    ),
+  ),
   /**
    * The model preset this task's agent steps run on, from `GET /api/v1/model-presets`. Omitted ⇒
    * the workspace's default preset, exactly as before.

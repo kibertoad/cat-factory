@@ -13,6 +13,7 @@ import org.jspecify.annotations.Nullable;
  * @param autoStartDependents the {@code autoStartDependents} field.
  * @param dependsOn the {@code dependsOn} field.
  * @param description the {@code description} field.
+ * @param fragmentIds the {@code fragmentIds} field.
  * @param modelPresetId Always present; {@code null} when the server has no value for it.
  * @param progress the {@code progress} field.
  * @param pullRequestUrl Always present; {@code null} when the server has no value for it.
@@ -31,6 +32,8 @@ public record PublicTask(
     @JsonProperty("dependsOn") List<String> dependsOn,
 
     @JsonProperty("description") String description,
+
+    @JsonProperty("fragmentIds") List<String> fragmentIds,
 
     /** Always present; {@code null} when the server has no value for it. */
     @JsonProperty("modelPresetId") @Nullable String modelPresetId,
@@ -72,6 +75,7 @@ public record PublicTask(
         private @Nullable Boolean autoStartDependents;
         private @Nullable List<String> dependsOn;
         private @Nullable String description;
+        private @Nullable List<String> fragmentIds;
         private @Nullable String modelPresetId;
         private @Nullable Double progress;
         private @Nullable String pullRequestUrl;
@@ -98,6 +102,12 @@ public record PublicTask(
         /** Set {@code description}. */
         public Builder description(@Nullable String description) {
             this.description = description;
+            return this;
+        }
+
+        /** Set {@code fragmentIds}. */
+        public Builder fragmentIds(@Nullable List<String> fragmentIds) {
+            this.fragmentIds = fragmentIds;
             return this;
         }
 
@@ -163,7 +173,7 @@ public record PublicTask(
 
         /** Build the {@link PublicTask}. */
         public PublicTask build() {
-            return new PublicTask(autoStartDependents, dependsOn, description, modelPresetId, progress, pullRequestUrl, riskPolicyId, runId, serviceId, status, taskId, taskType, title);
+            return new PublicTask(autoStartDependents, dependsOn, description, fragmentIds, modelPresetId, progress, pullRequestUrl, riskPolicyId, runId, serviceId, status, taskId, taskType, title);
         }
     }
 }

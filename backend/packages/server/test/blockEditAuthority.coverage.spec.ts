@@ -257,8 +257,15 @@ describe('the /api/v1 task surface lowers its preset pins by name', () => {
     // body, and still gets the chain the filer chose. It is NOT on the patch, because re-pointing a
     // task's pipeline after the fact is a board judgement about work already described, and the
     // start call already takes a `pipelineId` for the one run a caller wants to redirect.
+    //
+    // `fragmentIds` is create-only on the same reading, and is the one member of the overlap whose
+    // value the public route does NOT simply hand down: `fragmentCatalog.ts` refuses an id the
+    // workspace's merged catalog does not hold before the spread ever reaches `addTask`. The
+    // decision recorded here is that it may ride the spread at all, which it may because both
+    // surfaces spell it identically and the internal schema's own bound is the wider one.
     expect(create).toEqual([
       'description',
+      'fragmentIds',
       'modelPresetId',
       'pipelineId',
       'riskPolicyId',

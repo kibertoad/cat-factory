@@ -79,6 +79,12 @@ top-level files are the domain contracts.
   and widening it is additive. `supersededBuiltinFieldKeys` states which of those keys are alternate
   SPELLINGS of one value (`review`'s `prNumber`/`prUrl`), so a MERGING patch drops the spelling the
   caller did not send rather than merging it back in to outrank the one it did.
+- `public-fragments.ts`: what `GET /api/v1/prompt-fragments` serves and what
+  `createPublicTaskSchema.fragmentIds` names, the same both-directions pairing `public-task-types.ts`
+  has with `fields`. A PROJECTION of the merged tier catalog (`fragment-library.ts`) carrying each
+  standard's identity, its picker metadata and the `tier` it won on, and NOT its `body`: what a
+  caller needs in order to name a standard is the standard's identity, which is also what puts the
+  read a rung below the preset libraries.
 - `agent-failure-kinds.ts`: the closed run FAILURE-KIND vocabulary plus `isAgentFailureKind`,
   the predicate for a string that may name a RETIRED member. A leaf module (valibot only) so
   every layer that must agree about the set can import it: the operator dashboard's breakdown,

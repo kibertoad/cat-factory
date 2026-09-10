@@ -31,7 +31,7 @@ from .errors import (
 )
 
 #: SDK version, stamped into ``User-Agent``. Kept in step with pyproject.toml by ``check:sdk``.
-SDK_VERSION = "0.7.0"
+SDK_VERSION = "0.8.0"
 
 #: Methods that may be replayed after a failure.
 #:

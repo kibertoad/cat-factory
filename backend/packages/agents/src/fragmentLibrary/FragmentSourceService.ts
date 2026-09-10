@@ -5,8 +5,9 @@ import type {
   FragmentSyncResult,
   LinkFragmentSourceInput,
 } from '@cat-factory/kernel'
-import { NotFoundError, ValidationError, assertFound } from '@cat-factory/kernel'
-import type { Clock, IdGenerator } from '@cat-factory/kernel'
+import { MAX_FRAGMENT_ID_LENGTH } from '@cat-factory/contracts'
+import { NotFoundError, ValidationError, assertFound, noopLogger } from '@cat-factory/kernel'
+import type { Clock, IdGenerator, Logger } from '@cat-factory/kernel'
 import type { GitHubClient, RepoContentEntry } from '@cat-factory/kernel'
 import type {
   FragmentSourceRecord,
@@ -14,7 +15,11 @@ import type {
   PromptFragmentRecord,
   PromptFragmentRepository,
 } from '@cat-factory/kernel'
-import { isMarkdownFile, parseFragmentMarkdown, slugFromPath } from './fragment-source.logic.js'
+import {
+  isMarkdownFile,
+  mintSourcedFragmentId,
+  parseFragmentMarkdown,
+} from './fragment-source.logic.js'
 import {
   normalizeDirPath,
   probeRepoSourceStatus,
@@ -46,6 +51,8 @@ export interface FragmentSourceServiceDependencies {
    * Absent (tests) ⇒ no cache to keep coherent.
    */
   invalidateCatalog?: (ownerKind: FragmentOwnerKind, ownerId: string) => Promise<void>
+  /** Where a file this sync declines to import is named; absent (tests) ⇒ the skip is silent. */
+  logger?: Logger
 }
 
 /**
@@ -62,7 +69,11 @@ export interface FragmentSourceServiceDependencies {
  * that stored commit against the current head — no directory listing, no body reads.
  */
 export class FragmentSourceService {
-  constructor(private readonly deps: FragmentSourceServiceDependencies) {}
+  private readonly log: Logger
+
+  constructor(private readonly deps: FragmentSourceServiceDependencies) {
+    this.log = deps.logger ?? noopLogger
+  }
 
   /** Linked sources for a tier + their last-synced state. */
   async list(ownerKind: FragmentOwnerKind, ownerId: string): Promise<FragmentSource[]> {
@@ -267,9 +278,24 @@ export class FragmentSourceService {
     const parsed = parseFragmentMarkdown(entry.path, file.content)
     if (!parsed) return null
 
-    // Sourced ids are namespaced so two sources can't collide; an explicit
-    // frontmatter `id` instead *shadows* a built-in/inherited fragment (ADR 0006).
-    const fragmentId = parsed.id?.trim() || `src:${source.id}:${slugFromPath(entry.path)}`
+    // An explicit frontmatter `id` *shadows* a built-in/inherited fragment (ADR 0006), so it is
+    // the author's own choice and is never rewritten to fit: one over the ceiling declines the
+    // FILE and says so, where quietly shortening it would produce a fragment that shadows nothing
+    // and reads, from the library, exactly like the one the author asked for. Declining leaves any
+    // prior alive, the same disposition an unparseable file gets.
+    const explicitId = parsed.id?.trim()
+    if (explicitId && explicitId.length > MAX_FRAGMENT_ID_LENGTH) {
+      this.log.warn('Skipped a fragment source file whose declared id is over the id ceiling', {
+        sourceId: source.id,
+        path: entry.path,
+        idLength: explicitId.length,
+        maxIdLength: MAX_FRAGMENT_ID_LENGTH,
+      })
+      return null
+    }
+    // Sourced ids are namespaced so two sources can't collide, and bounded so the id this mints is
+    // one the public catalog can publish and a public create can name back.
+    const fragmentId = explicitId || mintSourcedFragmentId(source.id, entry.path)
     // Match the existing row by the id THIS file produces, not by path — so a rename
     // (new path, same explicit id) still inherits the fragment's version + createdAt,
     // while a genuinely new id (a fresh file, or a file whose explicit id changed) starts

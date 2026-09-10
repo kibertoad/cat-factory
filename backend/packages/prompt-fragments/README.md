@@ -26,7 +26,10 @@ relevance selector), the `body` (injected text), an optional condensed `brief`
 ## How it's used
 
 - The Worker serves this catalog **read-only** at `GET /prompt-fragments`; the SPA
-  shows it in the per-block fragment picker.
+  shows it in the per-block fragment picker. `GET /api/v1/prompt-fragments` is the external
+  counterpart, and answers from the MERGED tenant catalog rather than this pool: identity and
+  metadata only, no `body`, so a headless caller can pick the standards a task is held to
+  ([public API](https://github.com/kibertoad/cat-factory/blob/main/backend/docs/public-api.md#choosing-the-standards-a-task-is-judged-against)).
 - A block stores selected `fragmentIds[]`; at run time core composes the chosen
   bodies into the system prompt. Each standard is folded as its **own delimited,
   title-labelled block** (`<best-practice-standard id="…" title="…">`) rather than one

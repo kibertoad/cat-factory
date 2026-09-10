@@ -91,6 +91,7 @@ from .models import (
     PublicNotificationWebhook,
     PublicNotificationWebhookList,
     PublicPipelineList,
+    PublicPromptFragmentList,
     PublicRejectStep,
     PublicReplyFinding,
     PublicRequestGateFix,
@@ -837,6 +838,48 @@ class TaskTypesResource:
             timeout=timeout,
         )
         return ListPublicTaskTypesResponse.from_dict(raw)
+
+
+class PromptFragmentsResource:
+    """The best-practice standards this workspace holds its agents to: the deployment's shipped
+    catalog merged with the account's library and this board's own, each with the title an
+    agent cites it by, its one-line summary, its tags and which tier it came from. The id is
+    what a task pins as a `fragmentIds` member, and a review reports how closely it judged
+    the change to follow each standard it was given. The guidance text itself is not served:
+    what a caller needs in order to name a standard is its identity.
+    """
+
+    def __init__(self, transport: Transport) -> None:
+        self._transport = transport
+
+    def list(self, *, limit: int | None = None, cursor: str | None = None, timeout: float | None = None) -> PublicPromptFragmentList:
+        """List the workspace's best-practice standards
+        List the best-practice standards the key’s workspace resolves: the deployment’s
+        shipped catalog merged with the account’s library and this board’s own, with later
+        tiers overriding earlier ones by id and a tombstoned entry absent. The discovery
+        half of `fragmentIds` on task creation, so the `fragmentId` read here is what a task
+        pins, and an id this list does not carry is refused by the create rather than
+        dropped. Each entry carries what a picker (or a model) decides from (title,
+        category, one-line summary, tags, the `appliesTo` hint and which tier it won on) and
+        deliberately NOT the guidance body, which is the authored text of the org’s
+        standards rather than something a caller has to read in order to name one.
+        Keyset-paginated and ordered by `fragmentId`: a tier can link a whole repo directory
+        of guidelines and get one standard per file, so page with `cursor` until
+        `nextCursor` is null. The scope floor is `write`, the same scope that names a
+        standard on a task, because an imported standard’s one-line summary is derived from
+        the opening of its file, so this list is not free of the org’s own guidance text
+        even without the body. A `review` task’s reviewer additionally reports its ADHERENCE
+        to every standard it was given, so what is named on the create comes back rated on
+        the run.
+        `GET /api/v1/prompt-fragments` (operation `listPublicPromptFragments`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/prompt-fragments",
+            query={"limit": limit, "cursor": cursor},
+            timeout=timeout,
+        )
+        return PublicPromptFragmentList.from_dict(raw)
 
 
 class UseCasesResource:
@@ -2775,6 +2818,7 @@ def build_resources(transport: Transport) -> dict[str, Any]:
         "tasks": TasksResource(transport),
         "pipelines": PipelinesResource(transport),
         "task_types": TaskTypesResource(transport),
+        "prompt_fragments": PromptFragmentsResource(transport),
         "use_cases": UseCasesResource(transport),
         "notifications": NotificationsResource(transport),
         "environments": EnvironmentsResource(transport),

@@ -271,3 +271,47 @@ failed could re-drive it and be holding a parked run again a moment later.
 
 No run that could be finished through this API stops being startable; what is refused is a run that
 could not.
+
+## 1.73.0
+
+`GET /api/v1/prompt-fragments` lists the workspace's best-practice standards, and
+`fragmentIds` on task creation names which of them a task's agents are held to. `PublicTask`
+gains `fragmentIds`, the set the creation froze.
+
+Additive on all three counts. What it closes is a gap with no workaround rather than an awkward
+one: a task's standards were selectable from the app and from the internal API and nowhere else,
+so a caller filing a review headlessly could name the pull request, the focus, the pipeline and
+the model, and could not say which of the team's own standards the reviewer was to judge it
+against. The only lever it had was the enclosing SERVICE's standing set, which is the right
+default and aims any change at every other task under that service.
+
+Three decisions a consumer can see. The catalog read carries each standard's identity and NOT its
+`body`: naming a standard needs the id, the title, the category, the one-line summary and the
+tags, which is also exactly what the platform's own relevance selector decides from, where the
+body is the authored text of an organisation's guidelines. It still sits at `write` rather than
+`read`, because a standard imported from a repo of Markdown guidelines has no authored summary of
+its own and the importer derives one from the opening of the file: for those entries the summary
+is a capped slice of the guidance, which does not belong behind the most widely handed-out kind of
+key. `write` is exactly the scope that names a standard on a task, so the discovery pairing stays
+whole, and it stays below the `admin` the preset libraries take.
+
+The list is keyset-paginated from this first release (`?limit=`, `?cursor=`, `nextCursor`),
+ordered by `fragmentId`. A tier can link a whole repo directory of guidelines and get one standard
+per Markdown file, so the catalog has no natural ceiling: shipping it unbounded would have left
+only a `/v2` or a silent truncation as the way to add the bound later.
+
+And an id the board does not resolve is REFUSED (`422`, `details.reason:
+'prompt_fragment_not_found'`, `details.fragmentIds` naming every one that missed) where the run
+path drops it. The run path is right to drop: a standard deleted after a task was filed must not
+break the run. At the door it is the wrong disposition, because a typo would answer `201` for a
+review that folded nothing, which is byte-for-byte a review nobody asked to be judged against
+anything. `503 prompt_fragments_unwired` is the separate case of a deployment with no standards
+library, and it fires only for a caller that named standards.
+
+What a caller NOTICES beyond the new field: `PublicTask.fragmentIds` is the UNION the creation
+froze, not an echo of what was sent. A create that names nothing still reads back its service's
+standards, and an empty array clears that inheritance without holding the task to nothing (the
+chosen task type's own defaults still apply, which is visible on a `document` task). It is
+create-only for the reason `pipelineId` is, plus one of its own: the frozen set is what the run
+folds however the library moves afterwards, which is what keeps a finished review's standards
+readable rather than re-derived.
