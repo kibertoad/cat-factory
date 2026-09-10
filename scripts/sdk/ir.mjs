@@ -156,11 +156,6 @@ const INLINE_ENUM_NAMES = {
   // alphabetically, so adding the expedition surface retyped `PublicReviewFinding.severity` and
   // deleted `PublicReviewFindingSeverity` from four released SDKs, as a clean generated diff.
   'high,low,medium': { name: 'PublicReviewFindingSeverity', values: ['low', 'medium', 'high'] },
-  // The SSE streams' `?decisions=` flag, shared verbatim by both stream operations. Pinned on
-  // arrival rather than after the fact, on the precedent below and more sharply: four booleans
-  // spelled two ways is the most ordinary value set on this surface, so leaving it to the
-  // positional hint would name a shared type after whichever operation happens to walk first.
-  '0,1,false,true': 'PublicStreamDecisionChannel',
   // The tier a resolved standard won on. Pinned on arrival rather than after the fact: a
   // three-member set this ordinary is a matter of time before something else carries it, and the
   // rename it would cause is the one this table exists to prevent.

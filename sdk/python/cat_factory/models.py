@@ -13244,22 +13244,6 @@ class PublicSpendWindow(StrEnum):
     VALUE_90D = "90d"
 
 
-class PublicStreamDecisionChannel(StrEnum):
-    """The `PublicStreamDecisionChannel` vocabulary.
-    A `StrEnum`, so a member IS its wire string: it compares equal to it, formats as it in
-    an f-string, and serialises as it. A plain `(str, Enum)` would satisfy the first of
-    those and silently fail the other two — `str(TaskStatus.PLANNED)` is
-    "TaskStatus.PLANNED", which is the value that ends up in a log line or a report.
-    An UNKNOWN value decodes to the plain string rather than raising: this surface is
-    additive, and a client that refused a value the server legitimately added would break on
-    a release it was never told about.
-    """
-    TRUE = "true"
-    FALSE = "false"
-    VALUE_1 = "1"
-    VALUE_0 = "0"
-
-
 @dataclass(frozen=True, slots=True)
 class PublicTask:
     """`PublicTask`, as carried on the wire."""

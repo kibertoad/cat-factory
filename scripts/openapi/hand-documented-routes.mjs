@@ -21,23 +21,6 @@ import {
   STATUS_DESCRIPTIONS,
 } from './spec-constants.mjs'
 
-/**
- * The opt-in DECISION channel both SSE routes accept.
- *
- * Declared once and shared, because the two streams must accept exactly the same values: a caller
- * that learned the flag on one and had it refused on the other would read the refusal as the run
- * having nothing to say. Opt-in rather than always on because projecting a decision list costs
- * point reads in several stores per tick.
- */
-const DECISION_CHANNEL_PARAMETER = {
-  name: 'decisions',
-  in: 'query',
-  required: false,
-  description:
-    'Set to `true` to add `decision-state` frames carrying the whole decision list for the run (the same payload `GET /api/v1/runs/{runId}/decisions` serves), pushed whenever it changes. This is how a chunked operation reports progress: a PR deep review slice count, a bug-fishing angle landing and a challenge verdict all move the decision list without moving the run, so they produce no `progress` frame. A value other than `true`, `false`, `1` or `0` is refused with `422 validation` (`details.reason: "invalid_query_parameter"`) rather than read as off.',
-  schema: { type: 'string', enum: ['true', 'false', '1', '0'] },
-}
-
 export function addHandDocumentedRoutes(paths, tags) {
   // The raw SSE routes that are NOT contracts (streaming Hono routes), documented by hand.
   tags.add('Jobs')
@@ -50,11 +33,8 @@ export function addHandDocumentedRoutes(paths, tags) {
       tags: ['Jobs'],
       summary: 'Stream a job (SSE)',
       description:
-        'Server-sent events for a headless job run: `progress` frames until a terminal `done`/`error`/`stopped`/`timeout` event, plus a `decision` frame announcing each park. Pass `?decisions=true` to add `decision-state` frames carrying what the run is asking. Authenticated by the API key header.',
-      parameters: [
-        { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
-        DECISION_CHANNEL_PARAMETER,
-      ],
+        'Server-sent events for a headless job run: `progress` frames until a terminal `done`/`error`/`stopped`/`timeout` event, plus a `decision` frame announcing each park. For what the run is asking, and how a chunked operation is progressing through it, stream `GET /api/v1/runs/{runId}/decision-events` beside this. Authenticated by the API key header.',
+      parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
       responses: {
         200: {
           description: 'An event stream of job updates',
@@ -79,14 +59,41 @@ export function addHandDocumentedRoutes(paths, tags) {
       tags: ['Tasks'],
       summary: 'Stream a task run (SSE)',
       description:
-        'Server-sent events for a board task run: `progress` frames (the rich run projection) until a terminal `done`/`error` event, or a `timeout` when the connection cap is reached, plus a `decision` frame announcing each park. Pass `?decisions=true` to add `decision-state` frames carrying what the run is asking. Authenticated by the API key header.',
-      parameters: [
-        { name: 'taskId', in: 'path', required: true, schema: { type: 'string' } },
-        DECISION_CHANNEL_PARAMETER,
-      ],
+        'Server-sent events for a board task run: `progress` frames (the rich run projection) until a terminal `done`/`error` event, or a `timeout` when the connection cap is reached, plus a `decision` frame announcing each park. For what the run is asking, and how a chunked operation is progressing through it, stream `GET /api/v1/runs/{runId}/decision-events` beside this. Authenticated by the API key header.',
+      parameters: [{ name: 'taskId', in: 'path', required: true, schema: { type: 'string' } }],
       responses: {
         200: {
           description: 'An event stream of run updates',
+          content: { 'text/event-stream': { schema: { type: 'string' } } },
+        },
+        '4XX': {
+          description: STATUS_DESCRIPTIONS['4XX'],
+          content: {
+            'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } },
+          },
+        },
+      },
+    },
+  }
+
+  // The DECISION stream: the point read’s push twin, and the one channel on which a chunked
+  // operation (a PR deep review’s slices, an expedition’s angles) reports progress at all. Keyed
+  // by RUN like the list it streams, so it serves a board task and a headless job alike.
+  tags.add('Decisions')
+  paths[`${API_PREFIX}/runs/{runId}/decision-events`] = {
+    get: {
+      operationId: 'streamPublicRunDecisions',
+      // Hand-documented route: the handler's own `authorize(c, 'read')` literal, restated here
+      // because there is no contract to read it off. Keep the two in step.
+      'x-min-scope': 'read',
+      tags: ['Decisions'],
+      summary: 'Stream a run’s parked decisions (SSE)',
+      description:
+        'Server-sent events over the run’s whole decision list: a `decision-state` frame carrying the same payload `GET /api/v1/runs/{runId}/decisions` serves, pushed whenever it changes, then a terminal `done` when the run settles or a `timeout` at the connection cap. This is how a chunked operation reports progress: a PR deep review’s slice count, a bug-fishing angle landing and a challenge verdict all move the decision list without moving the run, so they produce no `progress` frame on the run streams. Authenticated by the API key header.',
+      parameters: [{ name: 'runId', in: 'path', required: true, schema: { type: 'string' } }],
+      responses: {
+        200: {
+          description: 'An event stream of the run’s decision list',
           content: { 'text/event-stream': { schema: { type: 'string' } } },
         },
         '4XX': {

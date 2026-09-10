@@ -1,8 +1,8 @@
 import type { ExecutionStatus, PublicRun, PublicRunStep } from '@cat-factory/contracts'
 
-// The pure decisions the two public SSE streams (`/api/v1/jobs/:id/events` and the board task
-// stream) share: when a park is announced, how a frame is reduced for the wire, and whether the
-// caller asked for the decision channel. The loops themselves are in `publicApiStreamRoutes.ts`.
+// The pure decisions the public SSE streams share: when a park is announced, when a decision list
+// counts as moved, and how a frame is reduced for the wire. The loops themselves are in
+// `publicApiStreamRoutes.ts`.
 //
 // Split out because BOTH streams need identical behaviour and this is exactly the kind of state
 // that drifts when copy-pasted: one loop re-arming on resume and the other not is invisible in
@@ -125,26 +125,4 @@ function reduceStepForStream(step: PublicRunStep): PublicRunStep {
     data: withheld ? null : step.data,
     truncated: true,
   }
-}
-
-/**
- * Whether the caller asked for the DECISION channel (`?decisions=true`), or the value it sent is
- * not one this surface accepts.
- *
- * Opt-IN rather than always on, and the reason is cost rather than taste. A decision list is not
- * derivable from the run: the three iterative reviews, the fork and an interview each live in
- * their own store, so projecting one costs point reads that the run poll does not already pay.
- * Every existing consumer of these streams wants progress, and making them all pay several reads
- * per second for a channel they never read would be a regression shipped as a feature.
- *
- * A value that is neither recognised nor absent is REFUSED rather than read as "off". The channel
- * is silent by nature on a run with nothing to ask, so a typo'd `?decisions=yes` answered with a
- * working stream is indistinguishable from one that is simply quiet, and the caller would conclude
- * the run never parked.
- */
-export function wantsDecisionChannel(raw: string | undefined): boolean | 'invalid' {
-  if (raw === undefined || raw === '') return false
-  if (raw === 'true' || raw === '1') return true
-  if (raw === 'false' || raw === '0') return false
-  return 'invalid'
 }

@@ -1,22 +1,21 @@
-import type { ExecutionInstance, PublicDecisionList } from '@cat-factory/contracts'
-import { ValidationError } from '@cat-factory/kernel'
+import type { PublicDecisionList } from '@cat-factory/contracts'
 import type { Hono } from 'hono'
-import type { Context } from 'hono'
 import { streamSSE } from 'hono/streaming'
-import type { SSEStreamingApi } from 'hono/streaming'
 import type { AppEnv } from '../../http/env.js'
 import { projectDecisionList } from './decisions/projection.js'
+import { loadScopedRun } from './decisions/scope.js'
 import { authorize } from './publicApiAuth.js'
 import {
   createDecisionAnnouncer,
   createParkAnnouncer,
   isParked,
   reduceRunForStream,
-  wantsDecisionChannel,
 } from './publicApiStream.js'
 import { loadPublicJob, toPublicJob, toPublicRun } from './runProjection.js'
 
-// The two public SSE routes: `GET /api/v1/jobs/:id/events` and `GET /api/v1/tasks/:taskId/events`.
+// The public SSE routes: the two RUN streams (`GET /api/v1/jobs/:id/events` and
+// `GET /api/v1/tasks/:taskId/events`) and the DECISION stream beside them
+// (`GET /api/v1/runs/:runId/decision-events`).
 //
 // Both are BOUNDED POLLS over the persisted run rather than a subscription to an event hub, which
 // is what makes them runtime-symmetric by construction: there is nothing per-facade to wire, so
@@ -38,72 +37,89 @@ const SSE_MAX_MS = 5 * 60 * 1000
 const SSE_REAUTH_MS = 5000
 
 /**
- * The DECISION channel: the run's whole `PublicDecisionList`, pushed as a `decision-state` frame
- * whenever it changes, for a caller that asked for it with `?decisions=true`.
+ * `GET /api/v1/runs/:runId/decision-events`: the run's whole `PublicDecisionList`, pushed as a
+ * `decision-state` frame whenever it changes.
  *
- * This is what makes a chunked operation legible on the stream. A run's progress lives on the
+ * This is what makes a chunked operation legible without polling. A run's progress lives on the
  * execution, but what a PR deep review or a bug-fishing expedition is DOING lives on state the run
  * projection does not carry (`step.prReview`, `step.bugFishing`): its own status, how many slices
- * have reported, a challenge verdict landing. None of that moves `publicRun`, so before this
- * channel a review emitted no frame at all for its entire duration and then one `decision` at the
- * park. A caller was told by the docs to poll `/runs/:runId/decisions` for exactly the progress the
- * stream could not give it.
+ * have reported, a challenge verdict landing. None of that moves `publicRun`, so on the two run
+ * streams beside this one a review emits no frame at all for its entire duration and then a single
+ * `decision` at the park. The documentation told a caller to poll `/runs/:runId/decisions` for
+ * exactly the progress those streams could not give it; this serves the same payload by push.
  *
- * A separate EVENT NAME rather than a richer `decision` frame, because `decision` is published:
- * it carries the run and announces a park once, and re-pointing its payload at a different
- * resource would break every consumer built on it. Additive is the only shape available here.
+ * ITS OWN ROUTE rather than a flag on the run streams, and the reason is the published SDKs rather
+ * than taste. A query parameter added to an existing operation is emitted as a positional argument
+ * ahead of the trailing options bag, so `stream(id, options)` becomes `stream(id, query, options)`
+ * in TypeScript and `Stream(ctx, id)` grows an argument in Go: an in-place retype of four released
+ * clients, which this surface does not do. A NEW operation is the additive shape, and it turns out
+ * to be the better one anyway. It is keyed by RUN like the decision list it streams, so one route
+ * serves a board task and a headless job where a flag needed adding to two; and the run streams
+ * stay what they are, which is progress channels.
  *
- * Change-detected on the serialized payload, like the progress frames beside it, so a park that
- * lasts an hour costs one frame rather than 3,600 identical ones.
+ * `read` scope, matching `GET /api/v1/runs/:runId/decisions`: knowing what a run is waiting on is a
+ * monitoring concern, and answering is what needs `decide`.
  */
-class DecisionChannel<E extends AppEnv> {
-  private readonly changed = createDecisionAnnouncer()
-
-  constructor(
-    private readonly c: Context<E>,
-    private readonly workspaceId: string,
-    private readonly blockId: string,
-  ) {}
-
-  /** Project the run's decisions and write a frame if they moved since the last tick. */
-  async push(stream: SSEStreamingApi, execution: ExecutionInstance): Promise<void> {
-    const list: PublicDecisionList = await projectDecisionList(
-      this.c,
-      this.workspaceId,
-      this.blockId,
-      execution,
-    )
-    const data = JSON.stringify(list)
-    if (!this.changed.shouldAnnounce(data)) return
-    await stream.writeSSE({ event: 'decision-state', data })
-  }
-}
-
-/**
- * Resolve the decision channel for a stream, or null when the caller did not ask for it.
- *
- * A value this surface does not recognise THROWS rather than reading as off, and the throw is a
- * `ValidationError` so `handleError` emits the same envelope every other refusal on this API does:
- * `details.reason` is what a client branches on, and a hand-built body structurally cannot carry
- * one. It happens before `streamSSE`, so nothing of the response has been written yet.
- *
- * The refusal itself is the point rather than strictness for its own sake: the channel is silent on
- * a run with nothing to ask, so a typo'd `?decisions=yes` answered with a working stream is
- * indistinguishable from a quiet one, and the caller concludes the run never parked.
- */
-function openDecisionChannel<E extends AppEnv>(
-  c: Context<E>,
-  workspaceId: string,
-  blockId: string,
-): DecisionChannel<E> | null {
-  const wanted = wantsDecisionChannel(c.req.query('decisions'))
-  if (wanted === 'invalid') {
-    throw new ValidationError(
-      "The 'decisions' query parameter accepts only 'true', 'false', '1' or '0'.",
-      { reason: 'invalid_query_parameter', parameter: 'decisions' },
-    )
-  }
-  return wanted ? new DecisionChannel(c, workspaceId, blockId) : null
+export function registerRunDecisionStreamRoute(app: Hono<AppEnv>): void {
+  app.get('/api/v1/runs/:runId/decision-events', async (c) => {
+    const gate = await authorize(c, 'read')
+    if ('fail' in gate) {
+      return c.json(
+        { error: { code: gate.fail.code, message: gate.fail.message } },
+        gate.fail.status,
+      )
+    }
+    const { auth } = gate
+    const runId = c.req.param('runId')
+    const container = c.get('container')
+    // The same resolution the decision ROUTES use, so this streams exactly the population they
+    // answer: a board task run or a headless job anchor in the key's workspace, and anything else
+    // is a 404 indistinguishable from a run that never existed.
+    const scoped = await loadScopedRun(c, auth.workspaceId, runId)
+    if (!scoped) {
+      return c.json({ error: { code: 'not_found', message: 'Run not found' } }, 404)
+    }
+    const { blockId } = scoped
+    const keys = container.publicApiKeys
+    return streamSSE(c, async (stream) => {
+      const startedAt = Date.now()
+      let lastAuthCheck = Date.now()
+      // Change-detected on the serialized payload, like the progress frames on the run streams, so
+      // a park that lasts an hour costs one frame rather than 3,600 identical ones.
+      const changed = createDecisionAnnouncer()
+      for (;;) {
+        if (stream.aborted) break
+        if (keys && Date.now() - lastAuthCheck > SSE_REAUTH_MS) {
+          if (!(await keys.isActive(auth.keyId))) break
+          lastAuthCheck = Date.now()
+        }
+        const execution = await container.executionRepository.get(auth.workspaceId, runId)
+        if (!execution) break
+        const list: PublicDecisionList = await projectDecisionList(
+          c,
+          auth.workspaceId,
+          blockId,
+          execution,
+        )
+        const data = JSON.stringify(list)
+        if (changed.shouldAnnounce(data)) {
+          await stream.writeSSE({ event: 'decision-state', data })
+        }
+        // A finished run asks nothing, so the stream ends rather than holding a connection open
+        // over a list that can no longer move. The LAST frame is written above first, which is what
+        // makes the close readable: a caller sees the decisions empty out and then the terminal.
+        if (execution.status === 'done' || execution.status === 'failed') {
+          await stream.writeSSE({ event: 'done', data })
+          break
+        }
+        if (Date.now() - startedAt > SSE_MAX_MS) {
+          await stream.writeSSE({ event: 'timeout', data: '{}' })
+          break
+        }
+        await stream.sleep(SSE_POLL_MS)
+      }
+    })
+  })
 }
 
 export function registerJobStreamRoute(app: Hono<AppEnv>): void {
@@ -125,8 +141,6 @@ export function registerJobStreamRoute(app: Hono<AppEnv>): void {
     if (!initial) {
       return c.json({ error: { code: 'not_found', message: 'Job not found' } }, 404)
     }
-    // The job's anchor block IS the run's block; a headless job has no board task of its own.
-    const decisions = openDecisionChannel(c, auth.workspaceId, initial.blockId)
     const keys = container.publicApiKeys
     return streamSSE(c, async (stream) => {
       const startedAt = Date.now()
@@ -166,11 +180,6 @@ export function registerJobStreamRoute(app: Hono<AppEnv>): void {
         if (parks.shouldAnnounce(execution.status)) {
           await stream.writeSSE({ event: 'decision', data })
         }
-        // …and the decision channel, when the caller asked for it, is the same news in the shape
-        // it can act on: WHAT is being asked, and how the asking is progressing while the run is
-        // still working. Pushed after the park announcement so a caller reading both frames in
-        // order sees the park declared before the payload that explains it.
-        await decisions?.push(stream, execution)
         // A `paused` run is NOT terminal: the spend gate pauses a run when the workspace budget
         // is exhausted and RESUMES it once budget frees up (ExecutionService.evaluateStep), so keep
         // polling (bounded by SSE_MAX_MS below) rather than signalling a false terminal stop.
@@ -225,7 +234,6 @@ export function registerTaskRunStreamRoute(app: Hono<AppEnv>): void {
       return c.json({ error: { code: 'no_run', message: 'Task has not been started' } }, 404)
     }
     const runId = run.id
-    const decisions = openDecisionChannel(c, auth.workspaceId, taskId)
     const keys = container.publicApiKeys
     return streamSSE(c, async (stream) => {
       const startedAt = Date.now()
@@ -272,9 +280,6 @@ export function registerTaskRunStreamRoute(app: Hono<AppEnv>): void {
         if (parks.shouldAnnounce(execution.status)) {
           await stream.writeSSE({ event: 'decision', data })
         }
-        // …and `decision-state` carries what that endpoint would have answered, so a caller that
-        // opted in never has to go and ask. See {@link DecisionChannel}.
-        await decisions?.push(stream, execution)
         if (execution.status === 'done' || execution.status === 'failed') break
         if (Date.now() - startedAt > SSE_MAX_MS) {
           await stream.writeSSE({ event: 'timeout', data: '{}' })

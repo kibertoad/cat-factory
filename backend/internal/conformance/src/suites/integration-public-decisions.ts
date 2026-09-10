@@ -1220,8 +1220,8 @@ function registerScopeAndCancelTests(harness: ConformanceHarness): void {
     expect(refused.body.error.code).toBe('insufficient_scope')
   })
 
-  it('refuses an unrecognised `?decisions=` value on the run stream rather than ignoring it', () => {
-    return refusesTheDecisionChannelTypo(harness)
+  it('scopes the decision STREAM to exactly the runs the decision list answers', () => {
+    return scopesTheDecisionStream(harness)
   })
 
   it("scopes a run's decisions to the key's workspace", async () => {
@@ -1340,41 +1340,69 @@ function registerScopeAndCancelTests(harness: ConformanceHarness): void {
 }
 
 /**
- * The SSE decision channel's one refusal, driven against the real route.
+ * The DECISION STREAM resolves exactly the population its point-read sibling answers.
  *
- * Here rather than only against the pure parser because what is under test is the DISPOSITION: the
- * flag is read before the response is hijacked, so the refusal has to travel through the facade's
- * own `handleError` and come back as the surface's ordinary envelope. A route that read the flag
- * after `streamSSE` would answer 200 with an empty stream, and a caller would take a channel it
- * never opened for a run with nothing to say.
+ * `GET /api/v1/runs/:runId/decision-events` is the push twin of `GET /api/v1/runs/:runId/decisions`
+ * and pushes the identical payload, so the two must admit the identical set of runs: a board task
+ * run or a headless job anchor in the key's workspace, and a 404 for anything else. They resolve
+ * through one loader, and this is what pins that they go on doing so, because the stream is a RAW
+ * Hono route with no contract to type it against its sibling.
  *
- * The happy path is deliberately NOT driven here: it holds the connection open for its five-minute
- * cap, which no request-response harness can assert against. What it emits is covered where it can
- * be, on the projection every case in this file already reads and on the pure change detector.
+ * Scoping is the half worth asserting on a real facade rather than in a unit test: the surface is
+ * keyed by RUN id, so this refusal is the only thing between one tenant's key and another tenant's
+ * parked run, and the key store it reads is a per-runtime table.
+ *
+ * The LIVE path is deliberately not driven here. It holds a connection open to its five-minute cap
+ * against a run that is still working, which no request-response harness can assert against; what
+ * it emits is covered where it can be, on the projection every case in this file already reads and
+ * on the pure change detector in `publicApiStream.test.ts`.
  */
-async function refusesTheDecisionChannelTypo(harness: ConformanceHarness): Promise<void> {
+async function scopesTheDecisionStream(harness: ConformanceHarness): Promise<void> {
   const app = harness.makeApp()
-  const { workspace } = await app.createOrgWorkspace({ seed: true })
-  const wsId = workspace.id
-  const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+  const { workspace: a } = await app.createOrgWorkspace({ seed: true })
+  const { workspace: b } = await app.createOrgWorkspace({ seed: true })
+
+  const pipeline = await app.call<Pipeline>('POST', `/workspaces/${a.id}/pipelines`, {
     name: 'Coder only',
     purpose: 'build',
     agentKinds: ['coder'],
   })
-  await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
-    pipelineId: pipeline.body.id,
-  })
-  const readAuth = await mintPublicApiKey(app, wsId, 'read', 'decision-channel')
-
-  const refused = await app.call<{ error: { code: string; details?: { reason?: string } } }>(
-    'GET',
-    '/api/v1/tasks/task_login/events?decisions=yes',
-    undefined,
-    readAuth,
+  const started = await app.call<ExecutionInstance>(
+    'POST',
+    `/workspaces/${a.id}/blocks/task_login/executions`,
+    { pipelineId: pipeline.body.id },
   )
-  expect(refused.status).toBe(422)
-  expect(refused.body.error.code).toBe('validation')
-  // The machine-readable cause, which is the whole reason this throws rather than hand-building a
-  // body: a caller branches on the reason, not on the prose.
-  expect(refused.body.error.details?.reason).toBe('invalid_query_parameter')
+  expect(started.status).toBe(201)
+
+  // A key from ANOTHER workspace gets the same 404 the decision list gives it, never a 403, which
+  // would confirm the run exists.
+  const foreignAuth = await mintPublicApiKey(app, b.id, 'read', 'decision-stream')
+  const denied = await app.call<{ error: { code: string } }>(
+    'GET',
+    `/api/v1/runs/${started.body.id}/decision-events`,
+    undefined,
+    foreignAuth,
+  )
+  expect(denied.status).toBe(404)
+  expect(denied.body.error.code).toBe('not_found')
+
+  // …and a run id that names nothing at all is the same answer, from the key that COULD read it.
+  const ownAuth = await mintPublicApiKey(app, a.id, 'read', 'decision-stream')
+  const missing = await app.call<{ error: { code: string } }>(
+    'GET',
+    '/api/v1/runs/exec_nothing/decision-events',
+    undefined,
+    ownAuth,
+  )
+  expect(missing.status).toBe(404)
+
+  // `read`, matching the list: watching what a run is waiting on is a monitoring concern, and it
+  // would be a strange surface that let a key read the decisions and not subscribe to them.
+  const listed = await app.call(
+    'GET',
+    `/api/v1/runs/${started.body.id}/decisions`,
+    undefined,
+    ownAuth,
+  )
+  expect(listed.status).toBe(200)
 }

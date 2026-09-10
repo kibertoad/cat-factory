@@ -5774,22 +5774,6 @@ const (
 // PublicSpendWindowValues lists every PublicSpendWindow this SDK release knows.
 var PublicSpendWindowValues = []PublicSpendWindow{PublicSpendWindow24h, PublicSpendWindow7d, PublicSpendWindow30d, PublicSpendWindow90d}
 
-// PublicStreamDecisionChannel is the `PublicStreamDecisionChannel` vocabulary as carried on the wire.
-// A string type rather than an int enum: the wire form IS the string, and an unknown value must
-// round-trip rather than fail to decode — this surface is additive, so a client that refused a
-// value the server legitimately added would break on a release it was never told about.
-type PublicStreamDecisionChannel string
-
-const (
-	PublicStreamDecisionChannelTrue  PublicStreamDecisionChannel = "true"
-	PublicStreamDecisionChannelFalse PublicStreamDecisionChannel = "false"
-	PublicStreamDecisionChannel1     PublicStreamDecisionChannel = "1"
-	PublicStreamDecisionChannel0     PublicStreamDecisionChannel = "0"
-)
-
-// PublicStreamDecisionChannelValues lists every PublicStreamDecisionChannel this SDK release knows.
-var PublicStreamDecisionChannelValues = []PublicStreamDecisionChannel{PublicStreamDecisionChannelTrue, PublicStreamDecisionChannelFalse, PublicStreamDecisionChannel1, PublicStreamDecisionChannel0}
-
 // PublicTask is the `PublicTask` wire model.
 type PublicTask struct {
 	AutoStartDependents bool     `json:"autoStartDependents"`

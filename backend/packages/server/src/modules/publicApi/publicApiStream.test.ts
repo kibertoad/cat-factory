@@ -6,7 +6,6 @@ import {
   isParked,
   reduceRunForStream,
   STREAM_DELIVERABLE_PREVIEW_CHARS,
-  wantsDecisionChannel,
 } from './publicApiStream.js'
 
 // The public SSE streams' park announcement. Both stream loops share this, and both of its rules
@@ -129,31 +128,6 @@ describe('reduceRunForStream', () => {
       reduceRunForStream(run(Array.from({ length: 12 }, () => step({ output: long })))),
     )
     expect(frame.length).toBeLessThan(12 * (STREAM_DELIVERABLE_PREVIEW_CHARS + 500))
-  })
-})
-
-describe('wantsDecisionChannel', () => {
-  it('is OFF unless the caller asks', () => {
-    // Opt-in because the channel is not free: a decision list costs point reads in several stores
-    // per tick, and every consumer that predates it wants progress alone.
-    expect(wantsDecisionChannel(undefined)).toBe(false)
-    expect(wantsDecisionChannel('')).toBe(false)
-    expect(wantsDecisionChannel('false')).toBe(false)
-    expect(wantsDecisionChannel('0')).toBe(false)
-  })
-
-  it('accepts the two spellings of yes', () => {
-    expect(wantsDecisionChannel('true')).toBe(true)
-    expect(wantsDecisionChannel('1')).toBe(true)
-  })
-
-  it('REFUSES a value it does not recognise rather than reading it as off', () => {
-    // The case this exists for. The channel is silent on a run with nothing to ask, so a typo'd
-    // `?decisions=yes` served as a working stream is indistinguishable from a quiet one, and the
-    // caller concludes the run never parked. A 400 is the only answer that says otherwise.
-    expect(wantsDecisionChannel('yes')).toBe('invalid')
-    expect(wantsDecisionChannel('TRUE')).toBe('invalid')
-    expect(wantsDecisionChannel('2')).toBe('invalid')
   })
 })
 

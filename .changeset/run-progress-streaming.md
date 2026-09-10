@@ -21,16 +21,18 @@ not carry. A seventeen-minute review produced no frame at all and then one `deci
 while the public-API guide told a caller to poll the decisions endpoint for exactly the progress the
 stream could not give it.
 
-Both `/events` endpoints now take `?decisions=true`, which adds a `decision-state` frame carrying
-the run's whole decision list whenever it changes: the same payload
-`GET /api/v1/runs/{runId}/decisions` answers, so a slice reporting, a challenge verdict landing or an
-expedition's angle settling arrives by push. Opt-in because a decision list is not derivable from
-the run in hand and costs point reads per tick; a new event name rather than a richer `decision`,
-which is published and announces a park; and the WHOLE list rather than the free step-derived part,
-because an empty list that means "I did not ask" and one that means "nothing is being asked" are
-opposite facts rendered identically. An unrecognised `?decisions=` value is refused rather than read as
-"off", since the channel is silent by nature and a typo served as a working stream reads as a quiet
-run.
+`GET /api/v1/runs/{runId}/decision-events` streams that decision list: a `decision-state` frame
+carrying the same payload `GET /api/v1/runs/{runId}/decisions` answers, pushed whenever it changes,
+so a slice reporting, a challenge verdict landing or an expedition's angle settling arrives without
+polling. Its own endpoint rather than a `?decisions=true` flag on the run streams, and that is the
+decision worth reading: a query parameter added to an existing operation is emitted as a positional
+argument ahead of the trailing options bag, so `client.tasks.stream(taskId, options)` becomes
+`client.tasks.stream(taskId, query, options)` and Go's `Stream(ctx, taskID)` grows an argument, which
+is an in-place retype of four released clients. A new operation is additive, and it is the better
+shape anyway: keyed by RUN like the list it streams, so one endpoint serves a board task and a
+headless job where the flag needed adding to two. The frame carries the WHOLE list, never a subset,
+because an empty `decisions` that means "nothing is being asked" and one that means "this payload was
+narrowed" are opposite facts.
 
 `bug-fishing` joins the decision surface as a fourteenth kind, with the three verbs the app already
 drives: mark findings to be addressed (one bug-fix task per mark), dismiss one, finish triaging. A

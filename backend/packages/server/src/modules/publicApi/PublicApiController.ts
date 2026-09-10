@@ -70,7 +70,11 @@ import {
   PUBLIC_JOB_CANCEL_PATH,
   PUBLIC_TASK_STOP_PATH,
 } from './publicApiAdmission.js'
-import { registerJobStreamRoute, registerTaskRunStreamRoute } from './publicApiStreamRoutes.js'
+import {
+  registerJobStreamRoute,
+  registerRunDecisionStreamRoute,
+  registerTaskRunStreamRoute,
+} from './publicApiStreamRoutes.js'
 import { loadPublicJob, toPublicJob, toPublicRun } from './runProjection.js'
 import {
   decodeCursor,
@@ -954,6 +958,9 @@ function registerTaskLifecycleRoutes(app: Hono<AppEnv>): void {
   })
 
   registerTaskRunStreamRoute(app)
+  // Keyed by RUN rather than by task, so it serves a headless job and a board task alike, which is
+  // also why it is registered here beside them rather than under either group.
+  registerRunDecisionStreamRoute(app)
 }
 
 function registerPipelineRoutes(app: Hono<AppEnv>): void {

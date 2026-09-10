@@ -1653,55 +1653,58 @@ deliverable already fits rides the stream untouched and unflagged, so `truncated
 
 #### Streaming (SSE)
 
-Both `/events` endpoints are `text/event-stream` responses driven by a 1-second poll of the
-persisted run. Frames are **de-duplicated** (a frame is sent only when the payload changed) and
-there is **no heartbeat**, so a quiet run produces a quiet stream. Event names:
+Three `text/event-stream` endpoints, each driven by a 1-second poll of persisted state. Frames are
+**de-duplicated** (a frame is sent only when the payload changed) and there is **no heartbeat**, so
+a quiet run produces a quiet stream. All three take `read`.
 
-| Event            | Meaning                                                                                                                                                      |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `progress`       | The run advanced; data is the job / run projection (same shape as the GET, with a run's step deliverables reduced; see above).                               |
-| `decision`       | The run just **parked** on a human decision. Answer via `/runs/:runId/decisions`; the stream stays open, and a later park after a resume is announced again. |
-| `decision-state` | Opt-in (`?decisions=true`). The run's decision list changed; data is what `GET /runs/:runId/decisions` would answer. See below.                              |
-| `done`           | Terminal success. Stream closes.                                                                                                                             |
-| `error`          | Terminal failure. Stream closes.                                                                                                                             |
-| `stopped`        | (Jobs stream only) the run ended in a state that still projects as `running` (e.g. cancelled). Stream closes.                                                |
-| `timeout`        | The stream hit its **5-minute** cap; data `{}`. Nothing is wrong; reconnect to keep watching.                                                                |
+| Endpoint                                  | Streams                                                                                  |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `GET /api/v1/tasks/:taskId/events`        | A board task's run projection                                                            |
+| `GET /api/v1/jobs/:id/events`             | A headless job's projection                                                              |
+| `GET /api/v1/runs/:runId/decision-events` | The run's decision list: what it is asking, and how it is progressing through the asking |
+
+Event names:
+
+| Event            | Meaning                                                                                                                                                |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `progress`       | (Run streams) the run advanced; data is the job / run projection (same shape as the GET, with a run's step deliverables reduced; see above).           |
+| `decision`       | (Run streams) the run just **parked**. Answer via `/runs/:runId/decisions`; the stream stays open, and a later park after a resume is announced again. |
+| `decision-state` | (Decision stream) the run's decision list changed; data is exactly what `GET /runs/:runId/decisions` would answer.                                     |
+| `done`           | Terminal. Stream closes.                                                                                                                               |
+| `error`          | (Run streams) terminal failure. Stream closes.                                                                                                         |
+| `stopped`        | (Jobs stream only) the run ended in a state that still projects as `running` (e.g. cancelled). Stream closes.                                          |
+| `timeout`        | The stream hit its **5-minute** cap; data `{}`. Nothing is wrong; reconnect to keep watching.                                                          |
 
 A revoked key cuts a live stream within ~5 seconds. Streams are per-run reads bounded by their own
 poll; for push at scale, register the [outbound webhook](#outbound-webhooks-push) instead.
 
-##### The decision channel (`?decisions=true`)
+##### The decision stream, and why it is a separate endpoint
 
 **A `progress` frame is emitted when the RUN projection changes, and what a chunked operation does
 while it works is not on it.** A PR deep review's slice count, its challenge verdicts and its post
 report ride the reviewer's own step state; an expedition's angles and findings ride its own; neither
-is `steps[].data`, which carries a step's structured result. So a seventeen-minute review emits no
-frame at all for its whole duration and then a single `decision` at the park, and the progress worth
-watching is readable only by polling `/runs/:runId/decisions`, which is what
-[Reviewing a pull request end to end](#reviewing-a-pull-request-end-to-end) tells you to do.
+is `steps[].data`, which carries a step's structured result. So on a run stream a seventeen-minute
+review emits no frame at all for its whole duration and then a single `decision` at the park.
 
-`?decisions=true` closes that. Each tick projects the run's decision list and a `decision-state`
-frame carries it whenever it changed: a slice reporting, a review moving `reviewing → challenging`,
-a `postReport` landing, an expedition's angle settling with new findings. The payload is exactly
-what `GET /runs/:runId/decisions` serves, `unanswerable[]` included, so a caller renders one shape
-whichever way it arrived.
+`GET /api/v1/runs/:runId/decision-events` is the push twin of the decision list, and it is where
+that progress lives: a slice reporting, a review moving `reviewing → challenging`, a `postReport`
+landing, an expedition's angle settling with new findings. Keyed by **run**, like the list it
+streams, so one endpoint serves a board task and a headless job. It ends with a terminal `done`
+when the run settles, because a finished run asks nothing.
 
-Three things to count on:
+Two things to count on:
 
-- **It is opt-in, and off by default.** A decision list is not derivable from the run in hand: the
-  three iterative reviews, the fork and an interview each live in their own store, so projecting one
-  costs point reads per tick. A consumer that wants progress alone goes on paying nothing for this.
-- **The frame is the WHOLE list, never a delta or a subset.** `decisions: []` from a run holding a
-  live requirements review would be byte-for-byte the answer a run with nothing to ask gives, which
-  is the confusion `unanswerable[]` exists to prevent.
-- **A `decisions` value other than `true`, `false`, `1` or `0` is refused** with `422`,
-  `code: "validation"` and `details.reason: "invalid_query_parameter"`, rather than read as off.
-  The channel is silent on a run with nothing to ask, so a typo'd `?decisions=yes` served as a
-  working stream is indistinguishable from a quiet one, and the caller would conclude the run never
-  parked.
+- **The frame is the WHOLE list**, `unanswerable[]` included, never a delta or a subset. A caller
+  renders one shape whichever way it arrived, and `decisions: []` never has to be told apart from a
+  narrowed payload.
+- **The run streams are unchanged.** `decision` still announces a park once and carries the run.
+  Watching both means two connections, which is the honest cost of not re-typing an endpoint that
+  four SDK releases already build on.
 
-`decision` (singular) is unchanged: it still announces a park once and carries the run. The two are
-complementary, and a caller can listen for either or both.
+```bash
+# The review walkthrough below, watched rather than polled.
+curl -sN -H "$AUTH" "$BASE/api/v1/runs/$RUN/decision-events"
+```
 
 ### Pipelines & task types (discovery)
 
@@ -1814,6 +1817,7 @@ The same blind spot applies one step earlier, at admission; see [Pick the right 
 | Method / path (under `/api/v1/runs/:runId/decisions`) | Scope    | Behaviour                                                                                                                                                                                                          |
 | ----------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `GET …`                                               | `read`   | List the currently-parked decisions.                                                                                                                                                                               |
+| `GET /api/v1/runs/:runId/decision-events`             | `read`   | SSE stream of that same list, pushed on every change. See [Streaming](#streaming-sse).                                                                                                                             |
 | `POST …/approvals/:approvalId/approve`                | `decide` | Approve a gated step's proposal and advance. An edit to the proposal replaces the agent's text and is what flows downstream. Refused under an unmet quorum (see below).                                            |
 | `POST …/approvals/:approvalId/request-changes`        | `decide` | The gated step re-runs with the guidance folded in.                                                                                                                                                                |
 | `POST …/approvals/:approvalId/reject`                 | `decide` | The run stops entirely (a terminal `rejected` failure the board can retry).                                                                                                                                        |
@@ -2071,7 +2075,7 @@ curl -s "$BASE/api/v1/runs/$RUN/decisions" -H "Authorization: Bearer $KEY"
 
 #    Or take the same payload by push, which is what a review that runs for twenty minutes is worth
 #    doing: `decision-state` frames carry each slice as it reports rather than one park at the end.
-curl -sN "$BASE/api/v1/tasks/$TASK/events?decisions=true" -H "Authorization: Bearer $KEY"
+curl -sN "$BASE/api/v1/runs/$RUN/decision-events" -H "Authorization: Bearer $KEY"
 ```
 
 Each finding is anchored, prioritised and grouped, and the reviewer also reports its ADHERENCE to

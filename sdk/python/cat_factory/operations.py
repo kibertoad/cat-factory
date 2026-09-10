@@ -112,7 +112,6 @@ from .models import (
     PublicSpend,
     PublicSpendDimension,
     PublicSpendWindow,
-    PublicStreamDecisionChannel,
     PublicTask,
     PublicTaskList,
     PublicUsage,
@@ -225,18 +224,19 @@ class JobsResource:
                 raise _repeated_cursor()
             page_cursor = page.next_cursor
 
-    def stream(self, id: str, *, decisions: PublicStreamDecisionChannel | None = None, timeout: float | None = None) -> EventStream:
+    def stream(self, id: str, *, timeout: float | None = None) -> EventStream:
         """Stream a job (SSE)
         Server-sent events for a headless job run: `progress` frames until a terminal
         `done`/`error`/`stopped`/`timeout` event, plus a `decision` frame announcing each
-        park. Pass `?decisions=true` to add `decision-state` frames carrying what the run is
-        asking. Authenticated by the API key header.
+        park. For what the run is asking, and how a chunked operation is progressing through
+        it, stream `GET /api/v1/runs/{runId}/decision-events` beside this. Authenticated by
+        the API key header.
         `GET /api/v1/jobs/{id}/events` (operation `streamPublicJobEvents`).
         """
         return self._transport.stream(
             "GET",
             f"/api/v1/jobs/{_quote(id)}/events",
-            query={"decisions": decisions},
+            query=None,
             timeout=timeout,
         )
 
@@ -761,19 +761,20 @@ class TasksResource:
         )
         return PublicTask.from_dict(raw)
 
-    def stream(self, task_id: str, *, decisions: PublicStreamDecisionChannel | None = None, timeout: float | None = None) -> EventStream:
+    def stream(self, task_id: str, *, timeout: float | None = None) -> EventStream:
         """Stream a task run (SSE)
         Server-sent events for a board task run: `progress` frames (the rich run projection)
         until a terminal `done`/`error` event, or a `timeout` when the connection cap is
-        reached, plus a `decision` frame announcing each park. Pass `?decisions=true` to add
-        `decision-state` frames carrying what the run is asking. Authenticated by the API
-        key header.
+        reached, plus a `decision` frame announcing each park. For what the run is asking,
+        and how a chunked operation is progressing through it, stream `GET
+        /api/v1/runs/{runId}/decision-events` beside this. Authenticated by the API key
+        header.
         `GET /api/v1/tasks/{taskId}/events` (operation `streamPublicTaskRun`).
         """
         return self._transport.stream(
             "GET",
             f"/api/v1/tasks/{_quote(task_id)}/events",
-            query={"decisions": decisions},
+            query=None,
             timeout=timeout,
         )
 
@@ -2269,6 +2270,24 @@ class DecisionsResource:
             timeout=timeout,
         )
         return PublicDecisionList.from_dict(raw)
+
+    def stream(self, run_id: str, *, timeout: float | None = None) -> EventStream:
+        """Stream a run’s parked decisions (SSE)
+        Server-sent events over the run’s whole decision list: a `decision-state` frame
+        carrying the same payload `GET /api/v1/runs/{runId}/decisions` serves, pushed
+        whenever it changes, then a terminal `done` when the run settles or a `timeout` at
+        the connection cap. This is how a chunked operation reports progress: a PR deep
+        review’s slice count, a bug-fishing angle landing and a challenge verdict all move
+        the decision list without moving the run, so they produce no `progress` frame on the
+        run streams. Authenticated by the API key header.
+        `GET /api/v1/runs/{runId}/decision-events` (operation `streamPublicRunDecisions`).
+        """
+        return self._transport.stream(
+            "GET",
+            f"/api/v1/runs/{_quote(run_id)}/decision-events",
+            query=None,
+            timeout=timeout,
+        )
 
 
 class DebugResource:

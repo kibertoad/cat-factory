@@ -162,9 +162,6 @@ const QUERY_JOBS_LIST: readonly GatekeeperQueryParam[] = [
   { name: 'status', required: false },
   { name: 'since', required: false },
 ]
-const QUERY_JOBS_STREAM: readonly GatekeeperQueryParam[] = [
-  { name: 'decisions', required: false },
-]
 const QUERY_REPOS_GET_FILE: readonly GatekeeperQueryParam[] = [
   { name: 'path', required: true },
   { name: 'ref', required: false },
@@ -176,9 +173,6 @@ const QUERY_TASKS_LIST_BY_SERVICE: readonly GatekeeperQueryParam[] = [
   { name: 'limit', required: false },
   { name: 'cursor', required: false },
   { name: 'status', required: false },
-]
-const QUERY_TASKS_STREAM: readonly GatekeeperQueryParam[] = [
-  { name: 'decisions', required: false },
 ]
 const QUERY_PROMPT_FRAGMENTS_LIST: readonly GatekeeperQueryParam[] = [
   { name: 'limit', required: false },
@@ -328,9 +322,9 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     readOnly: true,
     result: 'stream',
     pathParams: ['id'],
-    queryParams: QUERY_JOBS_STREAM,
+    queryParams: [],
     hasBody: false,
-    invoke: async (client, args) => client.jobs.stream(str(args, 'id'), pick(args, QUERY_JOBS_STREAM)),
+    invoke: async (client, args) => client.jobs.stream(str(args, 'id')),
   },
   {
     name: 'services_create',
@@ -748,9 +742,9 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     readOnly: true,
     result: 'stream',
     pathParams: ['taskId'],
-    queryParams: QUERY_TASKS_STREAM,
+    queryParams: [],
     hasBody: false,
-    invoke: async (client, args) => client.tasks.stream(str(args, 'taskId'), pick(args, QUERY_TASKS_STREAM)),
+    invoke: async (client, args) => client.tasks.stream(str(args, 'taskId')),
   },
   {
     name: 'tasks_update',
@@ -1956,6 +1950,22 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     queryParams: [],
     hasBody: true,
     invoke: async (client, args) => client.decisions.setFindingStatus(str(args, 'runId'), str(args, 'itemId'), args.body as Parameters<CatFactoryClient['decisions']['setFindingStatus']>[2]),
+  },
+  {
+    name: 'decisions_stream',
+    group: 'decisions',
+    method: 'stream',
+    operationId: 'streamPublicRunDecisions',
+    httpMethod: 'GET',
+    path: '/api/v1/runs/{runId}/decision-events',
+    summary: 'Stream a run’s parked decisions (SSE)',
+    minScope: 'read',
+    readOnly: true,
+    result: 'stream',
+    pathParams: ['runId'],
+    queryParams: [],
+    hasBody: false,
+    invoke: async (client, args) => client.decisions.stream(str(args, 'runId')),
   },
   {
     name: 'debug_get_agent_context',

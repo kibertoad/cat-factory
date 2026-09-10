@@ -474,52 +474,6 @@ func (q *TasksListByServiceQuery) values() map[string]string {
 	return out
 }
 
-// JobsStreamQuery holds the query parameters for JobsService.Stream.
-type JobsStreamQuery struct {
-	// Decisions set to `true` to add `decision-state` frames carrying the whole decision list for the run (the
-	// same payload `GET /api/v1/runs/{runId}/decisions` serves), pushed whenever it changes. This is
-	// how a chunked operation reports progress: a PR deep review slice count, a bug-fishing angle
-	// landing and a challenge verdict all move the decision list without moving the run, so they
-	// produce no `progress` frame. A value other than `true`, `false`, `1` or `0` is refused with
-	// `422 validation` (`details.reason: "invalid_query_parameter"`) rather than read as off.
-	// Zero value means "not sent".
-	Decisions *PublicStreamDecisionChannel
-}
-
-func (q *JobsStreamQuery) values() map[string]string {
-	out := map[string]string{}
-	if q == nil {
-		return out
-	}
-	if q.Decisions != nil {
-		out["decisions"] = fmt.Sprintf("%v", *q.Decisions)
-	}
-	return out
-}
-
-// TasksStreamQuery holds the query parameters for TasksService.Stream.
-type TasksStreamQuery struct {
-	// Decisions set to `true` to add `decision-state` frames carrying the whole decision list for the run (the
-	// same payload `GET /api/v1/runs/{runId}/decisions` serves), pushed whenever it changes. This is
-	// how a chunked operation reports progress: a PR deep review slice count, a bug-fishing angle
-	// landing and a challenge verdict all move the decision list without moving the run, so they
-	// produce no `progress` frame. A value other than `true`, `false`, `1` or `0` is refused with
-	// `422 validation` (`details.reason: "invalid_query_parameter"`) rather than read as off.
-	// Zero value means "not sent".
-	Decisions *PublicStreamDecisionChannel
-}
-
-func (q *TasksStreamQuery) values() map[string]string {
-	out := map[string]string{}
-	if q == nil {
-		return out
-	}
-	if q.Decisions != nil {
-		out["decisions"] = fmt.Sprintf("%v", *q.Decisions)
-	}
-	return out
-}
-
 // ListDebugAgentContextResponseItem is the element type of ListDebugAgentContextResponse.Snapshots.
 // An alias rather than a second declaration, so the pager cannot drift from the list it pages
 // over.
@@ -673,15 +627,14 @@ func (s *JobsService) ListAll(ctx context.Context, query *JobsListQuery) iter.Se
 
 // Stream stream a job (SSE)
 // Server-sent events for a headless job run: `progress` frames until a terminal
-// `done`/`error`/`stopped`/`timeout` event, plus a `decision` frame announcing each park. Pass
-// `?decisions=true` to add `decision-state` frames carrying what the run is asking. Authenticated
-// by the API key header.
+// `done`/`error`/`stopped`/`timeout` event, plus a `decision` frame announcing each park. For
+// what the run is asking, and how a chunked operation is progressing through it, stream `GET
+// /api/v1/runs/{runId}/decision-events` beside this. Authenticated by the API key header.
 // GET /api/v1/jobs/{id}/events (operation streamPublicJobEvents).
-func (s *JobsService) Stream(ctx context.Context, id string, query *JobsStreamQuery) (*EventStream, error) {
+func (s *JobsService) Stream(ctx context.Context, id string) (*EventStream, error) {
 	req := requestSpec{
 		Method: "GET",
 		Path:   fmt.Sprintf("/api/v1/jobs/%s/events", pathEscape(id)),
-		Query:  query.values(),
 	}
 	return s.client.stream(ctx, req)
 }
@@ -1249,14 +1202,14 @@ func (s *TasksService) Stop(ctx context.Context, taskID string) (*PublicTask, er
 // Stream stream a task run (SSE)
 // Server-sent events for a board task run: `progress` frames (the rich run projection) until a
 // terminal `done`/`error` event, or a `timeout` when the connection cap is reached, plus a
-// `decision` frame announcing each park. Pass `?decisions=true` to add `decision-state` frames
-// carrying what the run is asking. Authenticated by the API key header.
+// `decision` frame announcing each park. For what the run is asking, and how a chunked operation
+// is progressing through it, stream `GET /api/v1/runs/{runId}/decision-events` beside this.
+// Authenticated by the API key header.
 // GET /api/v1/tasks/{taskId}/events (operation streamPublicTaskRun).
-func (s *TasksService) Stream(ctx context.Context, taskID string, query *TasksStreamQuery) (*EventStream, error) {
+func (s *TasksService) Stream(ctx context.Context, taskID string) (*EventStream, error) {
 	req := requestSpec{
 		Method: "GET",
 		Path:   fmt.Sprintf("/api/v1/tasks/%s/events", pathEscape(taskID)),
-		Query:  query.values(),
 	}
 	return s.client.stream(ctx, req)
 }
@@ -2837,6 +2790,22 @@ func (s *DecisionsService) SetFindingStatus(ctx context.Context, runID string, i
 		return nil, err
 	}
 	return &out, nil
+}
+
+// Stream stream a run’s parked decisions (SSE)
+// Server-sent events over the run’s whole decision list: a `decision-state` frame carrying the
+// same payload `GET /api/v1/runs/{runId}/decisions` serves, pushed whenever it changes, then a
+// terminal `done` when the run settles or a `timeout` at the connection cap. This is how a
+// chunked operation reports progress: a PR deep review’s slice count, a bug-fishing angle landing
+// and a challenge verdict all move the decision list without moving the run, so they produce no
+// `progress` frame on the run streams. Authenticated by the API key header.
+// GET /api/v1/runs/{runId}/decision-events (operation streamPublicRunDecisions).
+func (s *DecisionsService) Stream(ctx context.Context, runID string) (*EventStream, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   fmt.Sprintf("/api/v1/runs/%s/decision-events", pathEscape(runID)),
+	}
+	return s.client.stream(ctx, req)
 }
 
 // DebugService a run's recorded telemetry: LLM calls, the context each agent was given, the tool calls it

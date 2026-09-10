@@ -320,33 +320,38 @@ readable rather than re-derived.
 
 Three additions, all serving one gap: what a run is DOING while it works.
 
-The two SSE endpoints take `?decisions=true`, which adds a `decision-state` frame carrying the
-run's whole decision list whenever it changes. `publicDecisionKindSchema` gains `bug-fishing`, with
-three routes under `/api/v1/runs/{runId}/decisions/bug-fishing/`. The outbound webhook's
-`runEvents` family gains `run.step_completed`.
+`GET /api/v1/runs/{runId}/decision-events` streams the run's decision list over SSE.
+`publicDecisionKindSchema` gains `bug-fishing`, with three routes under
+`/api/v1/runs/{runId}/decisions/bug-fishing/`. The outbound webhook's `runEvents` family gains
+`run.step_completed`.
 
-Additive on every count: a new query parameter, a new decision kind (the SDKs tolerate unknown
-enum values by design), three new routes, and an opt-in event on a filter whose empty value already
-means NONE.
+Additive on every count: a new endpoint, a new decision kind (the SDKs tolerate unknown enum values
+by design), three new routes, and an opt-in event on a filter whose empty value already means NONE.
 
-What it closes is a gap the stream had by construction rather than by omission. A frame is emitted
-when the RUN projection changes, and the state a chunked operation moves through does not live on
-it: a PR deep review's slice count, its challenge verdicts and its post report ride
+What it closes is a gap the run streams had by construction rather than by omission. A frame is
+emitted when the RUN projection changes, and the state a chunked operation moves through does not
+live on it: a PR deep review's slice count, its challenge verdicts and its post report ride
 `step.prReview`, an expedition's angles ride `step.bugFishing`, and neither is `step.custom`. So a
 seventeen-minute review produced no frame at all for its whole duration and then one `decision` at
 the park, while this repo's own documentation told a caller to poll `/runs/{runId}/decisions` for
 exactly the progress the stream could not give it.
 
-Three decisions a consumer can see. The channel is OPT-IN, because a decision list is not derivable
-from the run in hand: the three iterative reviews, the fork and an interview each live in their own
-store, so projecting one costs point reads per tick that every existing consumer would have started
-paying for a channel it never reads. A value other than `true`/`false`/`1`/`0` is refused with
-`422 validation` and `details.reason: "invalid_query_parameter"` rather than read as off, because
-the channel is silent on a run with nothing to ask and a typo served as a working stream is
-indistinguishable from a quiet one. And it
-is a NEW event name rather than a richer `decision` frame: `decision` is published, it carries the
-run and announces a park once, and re-pointing its payload at a different resource would break
-every consumer built on it.
+**The decision stream is its own endpoint rather than a flag on the two run streams, and that is
+the decision worth reading.** A `?decisions=true` was built first and rejected on the SDKs: a query
+parameter added to an existing operation is emitted as a positional argument ahead of the trailing
+options bag, so `client.tasks.stream(taskId, options)` becomes
+`client.tasks.stream(taskId, query, options)` and Go's `Stream(ctx, taskID)` grows an argument. That
+is an in-place retype of four released clients, which this surface does not do, and a TypeScript
+caller passing `{ headers }` would have gone on compiling against the wrong parameter for a release.
+A new operation is the additive shape, and it is the better one: it is keyed by RUN like the list it
+streams, so one endpoint serves a board task and a headless job where the flag needed adding to two,
+and the run streams stay progress channels. The cost a consumer sees is one more connection to watch
+both, which the run streams' own `decision` frame still makes unnecessary for a caller that only
+needs to know a park happened.
+
+The frame carries the WHOLE list, `unanswerable[]` included, never a delta or a subset: an empty
+`decisions` that means "I asked and nothing is being asked" and one that means "this payload was
+narrowed" are opposite facts, and telling them apart is what the field beside it exists for.
 
 `bug-fishing` is the second CURATING park to gain verbs, and the first thing a caller notices is
 what STOPS happening: a parked expedition used to arrive in `unanswerable[]` as a `curation_gate`,

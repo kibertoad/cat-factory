@@ -12695,7 +12695,7 @@
     },
     "/api/v1/jobs/{id}/events": {
       "get": {
-        "description": "Server-sent events for a headless job run: `progress` frames until a terminal `done`/`error`/`stopped`/`timeout` event, plus a `decision` frame announcing each park. Pass `?decisions=true` to add `decision-state` frames carrying what the run is asking. Authenticated by the API key header.",
+        "description": "Server-sent events for a headless job run: `progress` frames until a terminal `done`/`error`/`stopped`/`timeout` event, plus a `decision` frame announcing each park. For what the run is asking, and how a chunked operation is progressing through it, stream `GET /api/v1/runs/{runId}/decision-events` beside this. Authenticated by the API key header.",
         "operationId": "streamPublicJobEvents",
         "parameters": [
           {
@@ -12703,21 +12703,6 @@
             "name": "id",
             "required": true,
             "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Set to `true` to add `decision-state` frames carrying the whole decision list for the run (the same payload `GET /api/v1/runs/{runId}/decisions` serves), pushed whenever it changes. This is how a chunked operation reports progress: a PR deep review slice count, a bug-fishing angle landing and a challenge verdict all move the decision list without moving the run, so they produce no `progress` frame. A value other than `true`, `false`, `1` or `0` is refused with `422 validation` (`details.reason: \"invalid_query_parameter\"`) rather than read as off.",
-            "in": "query",
-            "name": "decisions",
-            "required": false,
-            "schema": {
-              "enum": [
-                "true",
-                "false",
-                "1",
-                "0"
-              ],
               "type": "string"
             }
           }
@@ -15791,6 +15776,49 @@
         "summary": "List a run's captured artifacts",
         "tags": [
           "Evidence"
+        ],
+        "x-min-scope": "read"
+      }
+    },
+    "/api/v1/runs/{runId}/decision-events": {
+      "get": {
+        "description": "Server-sent events over the run’s whole decision list: a `decision-state` frame carrying the same payload `GET /api/v1/runs/{runId}/decisions` serves, pushed whenever it changes, then a terminal `done` when the run settles or a `timeout` at the connection cap. This is how a chunked operation reports progress: a PR deep review’s slice count, a bug-fishing angle landing and a challenge verdict all move the decision list without moving the run, so they produce no `progress` frame on the run streams. Authenticated by the API key header.",
+        "operationId": "streamPublicRunDecisions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "An event stream of the run’s decision list"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          }
+        },
+        "summary": "Stream a run’s parked decisions (SSE)",
+        "tags": [
+          "Decisions"
         ],
         "x-min-scope": "read"
       }
@@ -21587,7 +21615,7 @@
     },
     "/api/v1/tasks/{taskId}/events": {
       "get": {
-        "description": "Server-sent events for a board task run: `progress` frames (the rich run projection) until a terminal `done`/`error` event, or a `timeout` when the connection cap is reached, plus a `decision` frame announcing each park. Pass `?decisions=true` to add `decision-state` frames carrying what the run is asking. Authenticated by the API key header.",
+        "description": "Server-sent events for a board task run: `progress` frames (the rich run projection) until a terminal `done`/`error` event, or a `timeout` when the connection cap is reached, plus a `decision` frame announcing each park. For what the run is asking, and how a chunked operation is progressing through it, stream `GET /api/v1/runs/{runId}/decision-events` beside this. Authenticated by the API key header.",
         "operationId": "streamPublicTaskRun",
         "parameters": [
           {
@@ -21595,21 +21623,6 @@
             "name": "taskId",
             "required": true,
             "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Set to `true` to add `decision-state` frames carrying the whole decision list for the run (the same payload `GET /api/v1/runs/{runId}/decisions` serves), pushed whenever it changes. This is how a chunked operation reports progress: a PR deep review slice count, a bug-fishing angle landing and a challenge verdict all move the decision list without moving the run, so they produce no `progress` frame. A value other than `true`, `false`, `1` or `0` is refused with `422 validation` (`details.reason: \"invalid_query_parameter\"`) rather than read as off.",
-            "in": "query",
-            "name": "decisions",
-            "required": false,
-            "schema": {
-              "enum": [
-                "true",
-                "false",
-                "1",
-                "0"
-              ],
               "type": "string"
             }
           }

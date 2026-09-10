@@ -1625,6 +1625,12 @@ export const CAT_FACTORY_OMITTED_OPERATIONS: readonly CatFactoryOmittedOperation
     reason: 'A tool call returns one result, so it has no channel to stream an open-ended event feed over. Poll `jobs_get` instead, or consume the SSE endpoint through an SDK.',
   },
   {
+    operationId: 'streamPublicRunDecisions',
+    route: 'GET /api/v1/runs/{runId}/decision-events',
+    sdkCall: 'client.decisions.stream()',
+    reason: 'A tool call returns one result, so it has no channel to stream a decision list over. Poll `decisions_list` instead, or consume the SSE endpoint through an SDK.',
+  },
+  {
     operationId: 'streamPublicTaskRun',
     route: 'GET /api/v1/tasks/{taskId}/events',
     sdkCall: 'client.tasks.stream()',

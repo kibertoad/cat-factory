@@ -41,33 +41,35 @@ feed and says nothing about a step BOUNDARY, which fires ten times over a ten-st
 
 Three additions, all additive, shipped together at spec version 1.74.0.
 
-### 1. A `decision-state` SSE frame, opt-in with `?decisions=true`
+### 1. A decision STREAM, beside the decision list it pushes
 
-Both stream loops take a query flag. When set, each tick projects the run's whole
-`PublicDecisionList` and writes a `decision-state` frame whenever the serialized payload changed.
-The payload is byte-identical to what `GET /api/v1/runs/{runId}/decisions` answers.
+`GET /api/v1/runs/{runId}/decision-events`: a `decision-state` frame carrying the run's whole
+`PublicDecisionList` whenever the serialized payload changes, then a terminal `done` when the run
+settles. The payload is byte-identical to what `GET /api/v1/runs/{runId}/decisions` answers.
 
-**Opt-in, because a decision list is not derivable from the run in hand.** The three iterative
-reviews, the fork and an interview each live in their own store, so projecting one costs point reads
-that the run poll does not already pay. Making every existing consumer pay several reads per second
-for a channel it never reads would be a regression shipped as a feature.
+**Its own endpoint rather than a `?decisions=true` flag on the two run streams, and the SDKs are
+what decided it.** The flag was built first, and it broke four released clients: a query parameter
+added to an existing operation is emitted as a positional argument ahead of the trailing options
+bag, so `client.tasks.stream(taskId, options)` became `client.tasks.stream(taskId, query, options)`
+and Go's `Stream(ctx, taskID)` grew an argument. CI caught it as a compile failure in the Go
+smoketest; a TypeScript caller passing `{ headers }` would have gone on compiling against the wrong
+parameter. There is no position that fixes it, because Go has no optional trailing argument, so any
+new input to those operations is an arity change.
 
-**A NEW event name, not a richer `decision`.** `decision` is published: it announces a park once and
-carries the run. Re-pointing its payload at a different resource is exactly the kind of in-place
-re-type `/api/v1` does not do.
+A new operation is the additive shape, and it turns out to be the better design. It is keyed by RUN
+like the list it streams, so one route serves a board task and a headless job where the flag needed
+adding to two; and the run streams stay what they are, which is progress channels. The cost is one
+more connection for a caller that wants both, which the run streams' own `decision` frame already
+makes unnecessary for anyone who only needs to know that a park happened.
 
 **The frame is the WHOLE list, never a subset.** The cheap version of this feature was to ride only
 the step-derived decisions, which are pure over the instance the loop already holds and cost nothing.
 It was rejected: `decisions: []` from a run holding a live requirements review is byte-for-byte the
-answer a run with nothing to ask gives, and telling the two apart is the entire job of the
-`unanswerable[]` field beside it. A stream may choose whether to ASK, never how much of the answer to
-believe. That is why the choice is a flag on the request rather than a narrowing of the payload.
+answer a run with nothing to ask gives, and telling those apart is the entire job of the
+`unanswerable[]` field beside it.
 
-**An unrecognised `?decisions=` value is refused**, not read as "off". The channel is silent on a
-run with nothing to ask, so a typo'd `?decisions=yes` served as a working stream is
-indistinguishable from a quiet one and the caller concludes the run never parked. It throws a
-`ValidationError` like every other refusal on this API rather than hand-building a body, because a
-literal envelope structurally cannot carry the `details.reason` a client branches on.
+**`read` scope, matching the point read.** Watching what a run is waiting on is a monitoring
+concern; answering is what needs `decide`.
 
 ### 2. `bug-fishing` joins the decision surface
 
@@ -109,11 +111,16 @@ not WHY, matching `publicRunStep.skipped`: which axis skipped a step is a vocabu
 
 The shape of all three is the same: the platform already knew the thing, and the surface had no way
 to say it. None of them needed new state, a new store or a new engine concept. What each needed was a
-seam that could not lie by omission, which is why the two rejected shortcuts are worth recording.
+seam that could not lie by omission, which is why the three rejected shortcuts are worth recording.
 
 **A partial decision payload on the stream** would have been free and would have been wrong in the
 one direction this surface spends most of its design on: an empty list that means "I did not ask" and
 an empty list that means "nothing is being asked" are opposite facts rendered identically.
+
+**A `?decisions=true` flag on the run streams** was the obvious shape and is the one that shipped
+first. It reads well in `curl` and it breaks four SDKs, which is the trade this surface does not
+make. Recorded because the reasoning generalises: any input added to an operation four generated
+clients already expose is a signature change, and the additive move is a new operation.
 
 **A `run.stepChanged` event driven off the emit funnel** would have been simpler than finding the two
 settle seams, and it is the firehose ADR 0030 rejected: the funnel fires on every container poll, so
@@ -134,9 +141,16 @@ a single coder step would deliver hundreds of events.
 - **A deployment with the webhook module wired pays one block read per step boundary**, guarded on
   the sink being present so a deployment without it pays nothing. A step boundary is once per step
   against a run that has just spent minutes in a container.
-- **The SSE loops moved out of `PublicApiController`** into `publicApiStreamRoutes.ts`, with the two
-  run projections they share in `runProjection.ts`. The controller was 40 lines under the size
-  ceiling; the split is the concern this change touched, extracted rather than the budget raised.
+- **Two splits, both because the change pushed a file past its ceiling**: the SSE loops moved out of
+  `PublicApiController` into `publicApiStreamRoutes.ts` with the run projections they share in
+  `runProjection.ts`, and the hand-documented (non-contract) spec routes moved out of
+  `generate-openapi.mjs` into `scripts/openapi/`. Each is the concern the change touched, extracted
+  rather than the budget raised.
+- **`sdk/gatekeeper-worker` holds an exhaustive `Record<PublicDecisionKind, DecisionAnswerer>`**, so
+  a new decision kind fails its build until it has verbs. Its `DecisionField` gained `shape`,
+  declaring that a field takes a LIST: the two finding selections are the only ones that do, and
+  neither reader can infer it (a gadget would render a single-value box, and the argument suite
+  composes an answer the verb refuses outright).
 - **A new curating agent kind still has a decision to make**, and the wait report is what states it:
   register its verbs on `PUBLICLY_ANSWERABLE_PARK_SURFACES` or a run parked on it is reported as a
   `curation_gate` nobody here can answer. That is the honest default, and it is now the only way to

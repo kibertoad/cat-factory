@@ -47,7 +47,7 @@ export const SESSION_METHOD_SIGNATURES: readonly SessionMethodSignature[] = [
   {
     name: 'jobs_stream',
     doc: '  /**\n   * Stream a job (SSE)\n   *\n   * `GET /api/v1/jobs/{id}/events`, scope floor `read`.\n   * Result is stream, which a session call cannot carry: this operation is withheld from every tier.\n   */\n',
-    signature: '  jobs_stream(args: { id: string; decisions?: string | number | boolean }): Promise<unknown>\n',
+    signature: '  jobs_stream(args: { id: string }): Promise<unknown>\n',
   },
   {
     name: 'services_create',
@@ -177,7 +177,7 @@ export const SESSION_METHOD_SIGNATURES: readonly SessionMethodSignature[] = [
   {
     name: 'tasks_stream',
     doc: '  /**\n   * Stream a task run (SSE)\n   *\n   * `GET /api/v1/tasks/{taskId}/events`, scope floor `read`.\n   * Result is stream, which a session call cannot carry: this operation is withheld from every tier.\n   */\n',
-    signature: '  tasks_stream(args: { taskId: string; decisions?: string | number | boolean }): Promise<unknown>\n',
+    signature: '  tasks_stream(args: { taskId: string }): Promise<unknown>\n',
   },
   {
     name: 'tasks_update',
@@ -553,6 +553,11 @@ export const SESSION_METHOD_SIGNATURES: readonly SessionMethodSignature[] = [
     name: 'decisions_set_finding_status',
     doc: '  /**\n   * Dismiss or reopen a finding\n   *\n   * `PATCH /api/v1/runs/{runId}/decisions/requirements/findings/{itemId}`, scope floor `decide`.\n   */\n',
     signature: '  decisions_set_finding_status(args: { runId: string; itemId: string; body: unknown }): Promise<unknown>\n',
+  },
+  {
+    name: 'decisions_stream',
+    doc: '  /**\n   * Stream a run’s parked decisions (SSE)\n   *\n   * `GET /api/v1/runs/{runId}/decision-events`, scope floor `read`.\n   * Result is stream, which a session call cannot carry: this operation is withheld from every tier.\n   */\n',
+    signature: '  decisions_stream(args: { runId: string }): Promise<unknown>\n',
   },
   {
     name: 'debug_get_agent_context',

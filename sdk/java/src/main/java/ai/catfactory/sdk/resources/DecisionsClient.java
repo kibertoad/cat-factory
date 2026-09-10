@@ -618,4 +618,19 @@ public final class DecisionsClient {
     public PublicDecisionList setFindingStatus(String runId, String itemId, PublicSetFindingStatus body) {
         return transport.request("PATCH", "/api/v1/runs/" + Transport.pathSegment(runId) + "/decisions/requirements/findings/" + Transport.pathSegment(itemId), body, Map.of(), new TypeReference<PublicDecisionList>() {});
     }
+
+    /**
+     * Stream a run’s parked decisions (SSE)
+     * Server-sent events over the run’s whole decision list: a `decision-state` frame carrying the
+     * same payload `GET /api/v1/runs/{runId}/decisions` serves, pushed whenever it changes, then a
+     * terminal `done` when the run settles or a `timeout` at the connection cap. This is how a
+     * chunked operation reports progress: a PR deep review’s slice count, a bug-fishing angle
+     * landing and a challenge verdict all move the decision list without moving the run, so they
+     * produce no `progress` frame on the run streams. Authenticated by the API key header.
+     * {@code GET /api/v1/runs/{runId}/decision-events} (operation {@code
+     * streamPublicRunDecisions}).
+     */
+    public EventStream stream(String runId) {
+        return transport.stream("GET", "/api/v1/runs/" + Transport.pathSegment(runId) + "/decision-events", Map.of());
+    }
 }

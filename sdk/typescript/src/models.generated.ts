@@ -3207,11 +3207,6 @@ export type PublicSpendWindow = '24h' | '7d' | '30d' | '90d'
 /** Every `PublicSpendWindow` value, for exhaustive handling and runtime validation. */
 export const PUBLIC_SPEND_WINDOW_VALUES = ['24h', '7d', '30d', '90d'] as const
 
-export type PublicStreamDecisionChannel = 'true' | 'false' | '1' | '0'
-
-/** Every `PublicStreamDecisionChannel` value, for exhaustive handling and runtime validation. */
-export const PUBLIC_STREAM_DECISION_CHANNEL_VALUES = ['true', 'false', '1', '0'] as const
-
 export interface PublicTask {
   autoStartDependents: boolean
   dependsOn: string[]
