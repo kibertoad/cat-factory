@@ -2,11 +2,16 @@ import {
   ALL_SUBSCRIPTION_VENDORS,
   CredentialRequiredError,
   isAmbientNativeVendor,
+  isIndividualVendor,
+  runActivationScope,
+  runBestEffort,
   type SubscriptionVendor,
+  userActivationScope,
 } from '@cat-factory/kernel'
 import { PERSONAL_PASSWORD_HEADER } from '@cat-factory/contracts'
 import type { Context } from 'hono'
 import type { AppEnv, ServerContainer } from '../../http/env.js'
+import { requestLogger } from '../../http/requestLogging.js'
 import type { SessionPayload } from '../../auth/signing.js'
 
 /**
@@ -110,7 +115,9 @@ async function holdsFreshActivations(
   const personal = container.personalSubscriptions
   if (!personal) return false
   const fresh = await Promise.all(
-    vendors.map((vendor) => personal.hasFreshActivation(executionId, userId, vendor)),
+    vendors.map((vendor) =>
+      personal.hasFreshActivation(runActivationScope(executionId), userId, vendor),
+    ),
   )
   return fresh.every(Boolean)
 }
@@ -174,9 +181,69 @@ function gate(
     initiatedBy: user.id,
     activate: async (executionId) => {
       for (const vendor of vendors) {
-        await personal.activateForRun(executionId, user.id, vendor, password)
+        await personal.activate(runActivationScope(executionId), user.id, vendor, password)
       }
     },
+  }
+}
+
+/**
+ * Ensure the signed-in caller's USER activation scope is live, so a run-less surface (the in-app
+ * assistant, the bug hunt) can run on their personal subscription.
+ *
+ * Called BEFORE such a surface resolves its model, and deliberately vendor-blind: which vendor the
+ * turn will need depends on the model the workspace preset resolves to, which is decided inside the
+ * service. Rather than pre-resolve a model just to learn that, this mints for every individual
+ * vendor the caller actually holds a LIVE credential for, which is nought or one for almost
+ * everybody.
+ *
+ * NOT a gate: unlike a run start, nothing here refuses. Not for a lapsed subscription, and not for
+ * a password that does not open one. A surface whose model needs no personal credential must not be
+ * made to ask for a password, still less be refused over a credential it was never going to use,
+ * and a caller who has not supplied a usable one is answered by the LEASE failing with
+ * `428 credential_required`, which is the point at which the client knows to prompt. That is the
+ * ONE refusal in this flow, and it fires only where the credential is actually needed. This only
+ * makes sure that a password, once supplied, is put to use; a mint that fails is logged and left
+ * for the lease to speak about.
+ *
+ * The freshness skip is {@link refreshRunActivation}'s and exists for the same reason: each mint
+ * derives the password's key with 210k PBKDF2 iterations, and an assistant turn is a per-keystroke
+ * surface, not a once-per-run one.
+ */
+export async function activateUserScope<E extends AppEnv>(c: Context<E>): Promise<void> {
+  const container = c.get('container')
+  const user = c.get('user')
+  const password = readPersonalPassword(c)
+  const personal = container.personalSubscriptions
+  if (!personal || !user || !password) return
+  // Mint only what something here can OPEN. A user activation is leased by the inline
+  // subscription backend and by nothing else, and that backend exists exactly where the
+  // deployment can keep a subscription harness ref inline (`inlineHarnessRef`, local mode). Where
+  // it cannot, an inline call degrades the ref to the routing default before any lease is
+  // attempted, so minting would pay 210k PBKDF2 iterations per turn for a row nobody reads:
+  // seconds of blocked event loop on Node, a CPU-limit kill on workerd. A facade that gains an
+  // inline personal lease by some other route has to state that capability here too.
+  if (!container.config.agents.inlineHarnessRef) return
+  const scope = userActivationScope(user.id)
+  const ambient = ambientVendors(container)
+  const log = requestLogger(c)
+  // LIVE credentials only. An expired subscription cannot be unlocked at any price, so minting
+  // for one buys a guaranteed `subscription_expired`, which, raised from here, would refuse every
+  // turn on this surface over a credential the turn does not need, behind a modal no password can
+  // satisfy.
+  for (const vendor of await personal.liveVendors(user.id)) {
+    // An ambient-native vendor is served by the host CLI's own login on this deployment, so it
+    // has no credential to activate; minting one would pay the derivation for nothing.
+    if (ambient.has(vendor) || !isIndividualVendor(vendor)) continue
+    await runBestEffort(
+      log,
+      'personal.activateUserScope',
+      async () => {
+        if (await personal.hasFreshActivation(scope, user.id, vendor)) return
+        await personal.activate(scope, user.id, vendor, password)
+      },
+      { userId: user.id, vendor },
+    )
   }
 }
 

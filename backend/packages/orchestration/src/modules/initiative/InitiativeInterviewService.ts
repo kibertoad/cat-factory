@@ -1,5 +1,6 @@
 import { generateText } from 'ai'
 import type {
+  ResolveBlockRunContext,
   Block,
   Initiative,
   ModelProvider,
@@ -8,6 +9,7 @@ import type {
 } from '@cat-factory/kernel'
 import type { InitiativePresetRegistry } from '@cat-factory/kernel'
 import {
+  resolveInlineScope,
   getErrorMessage,
   INITIATIVE_INTERVIEWER_AGENT_KIND,
   resolveScopedModelProvider,
@@ -18,7 +20,7 @@ import {
   codebaseAnalysisLines,
   renderLinkedContext,
 } from '@cat-factory/agents'
-import { type ResolveBlockRunContext, scopeForBlockRun } from '../../inlineScope.js'
+
 import { type InlineBlockModelDeps, resolveInlineBlockModelRef } from '../../inlineBlockModel.js'
 import type { LinkedContext } from '../execution/linked-context.js'
 import { extractJson } from '../requirements/requirements.logic.js'
@@ -457,7 +459,10 @@ export class InitiativeInterviewService {
     workspaceId: string,
     block: Block,
   ): Promise<{ modelProvider: ModelProvider; ref: ModelRef }> {
-    const scope = await scopeForBlockRun(workspaceId, block, this.deps.resolveRunContext)
+    const scope = await resolveInlineScope(
+      { kind: 'block', workspaceId, block },
+      this.deps.resolveRunContext,
+    )
     const modelProvider = await resolveScopedModelProvider(scope, this.deps)
     const ref = await this.modelFor(workspaceId, block)
     if (!modelProvider || !ref) {

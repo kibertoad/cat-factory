@@ -13,6 +13,7 @@ import { BUGFIX_PIPELINE_ID, ValidationError } from '@cat-factory/kernel'
 import type { TasksModule } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
+import { activateUserScope } from '../providers/personalCredentialGate.js'
 import { runInitiatorRole } from '../../http/runAdmission.js'
 import { blockEditAuthority } from '../../http/workspaceAccess.js'
 import { personalGateForBlock, readPersonalPassword } from '../providers/personalCredentialGate.js'
@@ -87,11 +88,17 @@ export function bugHuntController(): Hono<AppEnv> {
     // no linked repository has no issues to hunt, and answering that with an unscoped vendor
     // search would read every repository the credential can reach.
     const resolvedBoard = await resolveHuntBoard(c, provider, { containerId, board })
-    const result = await tasks.bugHuntService.hunt(param(c, 'workspaceId'), source, {
-      board: resolvedBoard,
-      containerId,
-      ...predicates,
-    })
+    // As on the assistant: a supplied personal password is put to use before the ranking call
+    // resolves its model, so a subscription-pinned preset is reachable from a run-less surface.
+    await activateUserScope(c)
+    const result = await tasks.bugHuntService.hunt(
+      param(c, 'workspaceId'),
+      source,
+      { board: resolvedBoard, containerId, ...predicates },
+      // The asker, so the ranking call draws on their own keys and can lease their personal
+      // subscription: a hunt has no run, so this is the only credential tier beyond the workspace.
+      c.get('user')?.id,
+    )
     return c.json(result, 200)
   })
 

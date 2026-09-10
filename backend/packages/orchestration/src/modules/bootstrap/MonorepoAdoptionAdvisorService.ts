@@ -12,6 +12,7 @@ import {
   extractJson,
   getErrorMessage,
   noopLogger,
+  resolveInlineScope,
   resolveScopedModelProvider,
   runBestEffort,
   ValidationError,
@@ -243,7 +244,15 @@ export class MonorepoAdoptionAdvisorService implements MonorepoAdoptionAdvisor {
   private async resolveModel(
     workspaceId: string,
   ): Promise<{ modelProvider: ModelProvider; ref: ModelRef }> {
-    const modelProvider = await resolveScopedModelProvider({ workspaceId }, this.deps)
+    // Workspace-only, and the subject's `runId` does NOT change that. It is a BOOTSTRAP job id: a
+    // telemetry key (which is what the tags below use it for), not an activation scope. Nothing
+    // mints an activation against it (a bootstrap has no personal-credential gate and records no
+    // initiator), so naming it here would claim a lease that resolves against a row no writer
+    // creates, which is a worse answer than the honest workspace tier.
+    const modelProvider = await resolveScopedModelProvider(
+      await resolveInlineScope({ kind: 'workspace', workspaceId }),
+      this.deps,
+    )
     const ref = await resolveInlineBlockModelRef(
       this.deps,
       workspaceId,

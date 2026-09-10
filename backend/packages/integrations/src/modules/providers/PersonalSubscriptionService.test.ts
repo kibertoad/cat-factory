@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { CredentialRequiredError } from '@cat-factory/kernel'
+import {
+  CredentialRequiredError,
+  runActivationScope,
+  userActivationScope,
+} from '@cat-factory/kernel'
 import type {
+  ActivationScopeId,
   PersonalSecretCipher,
   PersonalSubscriptionRecord,
   PersonalSubscriptionRepository,
@@ -75,29 +80,24 @@ class FakeSubs implements PersonalSubscriptionRepository {
 
 class FakeActs implements SubscriptionActivationRepository {
   rows: SubscriptionActivationRecord[] = []
-  async get(executionId: string, userId: string, vendor: SubscriptionVendor, now: number) {
+  async get(scopeId: ActivationScopeId, userId: string, vendor: SubscriptionVendor, now: number) {
     return (
       this.rows.find(
         (r) =>
-          r.executionId === executionId &&
-          r.userId === userId &&
-          r.vendor === vendor &&
-          r.expiresAt > now,
+          r.scopeId === scopeId && r.userId === userId && r.vendor === vendor && r.expiresAt > now,
       ) ?? null
     )
   }
   async upsert(record: SubscriptionActivationRecord) {
     const i = this.rows.findIndex(
       (r) =>
-        r.executionId === record.executionId &&
-        r.userId === record.userId &&
-        r.vendor === record.vendor,
+        r.scopeId === record.scopeId && r.userId === record.userId && r.vendor === record.vendor,
     )
     if (i >= 0) this.rows[i] = { ...record }
     else this.rows.push({ ...record })
   }
-  async deleteByExecution(executionId: string) {
-    this.rows = this.rows.filter((r) => r.executionId !== executionId)
+  async deleteByScope(scopeId: ActivationScopeId) {
+    this.rows = this.rows.filter((r) => r.scopeId !== scopeId)
   }
   async deleteExpired(now: number) {
     const before = this.rows.length
@@ -153,11 +153,13 @@ describe('PersonalSubscriptionService', () => {
       password: 'longpassword',
     })
 
-    await svc.activateForRun('exec_1', 'usr_7', 'claude', 'longpassword')
-    const leased = await svc.leaseForRun('exec_1', 'usr_7', 'claude')
+    await svc.activate(runActivationScope('exec_1'), 'usr_7', 'claude', 'longpassword')
+    const leased = await svc.lease(runActivationScope('exec_1'), 'usr_7', 'claude')
     expect(leased).toEqual({ vendor: 'claude', secret: 'TOKEN' })
 
-    await expect(svc.leaseForRun('exec_other', 'usr_7', 'claude')).rejects.toMatchObject({
+    await expect(
+      svc.lease(runActivationScope('exec_other'), 'usr_7', 'claude'),
+    ).rejects.toMatchObject({
       code: 'credential_required',
       details: { vendor: 'claude', reason: 'password_required' },
     })
@@ -172,7 +174,7 @@ describe('PersonalSubscriptionService', () => {
       password: 'rightpassword',
     })
     await expect(
-      svc.activateForRun('exec_1', 'usr_7', 'claude', 'wrongpassword!!'),
+      svc.activate(runActivationScope('exec_1'), 'usr_7', 'claude', 'wrongpassword!!'),
     ).rejects.toMatchObject({ details: { reason: 'wrong_password' } })
   })
 
@@ -186,7 +188,7 @@ describe('PersonalSubscriptionService', () => {
       expiresAt: 9_000, // already past
     })
     await expect(
-      svc.activateForRun('exec_1', 'usr_7', 'claude', 'longpassword'),
+      svc.activate(runActivationScope('exec_1'), 'usr_7', 'claude', 'longpassword'),
     ).rejects.toMatchObject({
       details: { reason: 'subscription_expired' },
     })
@@ -215,14 +217,14 @@ describe('PersonalSubscriptionService', () => {
   it('clears a run and sweeps expired activations', async () => {
     const { svc, acts } = makeService()
     await svc.store('usr_7', { vendor: 'claude', label: 'm', token: 'T', password: 'longpassword' })
-    await svc.activateForRun('exec_1', 'usr_7', 'claude', 'longpassword')
+    await svc.activate(runActivationScope('exec_1'), 'usr_7', 'claude', 'longpassword')
     expect(acts.rows).toHaveLength(1)
 
-    await svc.clearRun('exec_1')
+    await svc.clearScope(runActivationScope('exec_1'))
     expect(acts.rows).toHaveLength(0)
 
     // A directly-inserted stale activation is swept.
-    await svc.activateForRun('exec_2', 'usr_7', 'claude', 'longpassword')
+    await svc.activate(runActivationScope('exec_2'), 'usr_7', 'claude', 'longpassword')
     acts.rows[0]!.expiresAt = 0
     expect(await svc.sweepExpiredActivations()).toBe(1)
   })
@@ -234,18 +236,20 @@ describe('PersonalSubscriptionService', () => {
     let now = 1000
     const { svc } = makeService(() => now)
     await svc.store('usr_7', { vendor: 'claude', label: 'm', token: 'T', password: 'longpassword' })
-    await svc.activateForRun('exec_1', 'usr_7', 'claude', 'longpassword')
-    expect(await svc.hasFreshActivation('exec_1', 'usr_7', 'claude')).toBe(true)
+    await svc.activate(runActivationScope('exec_1'), 'usr_7', 'claude', 'longpassword')
+    expect(await svc.hasFreshActivation(runActivationScope('exec_1'), 'usr_7', 'claude')).toBe(true)
 
     // Just past halfway: still LIVE, so a dispatch would work — and deliberately no longer fresh,
     // because the point is to re-mint while a caller is present rather than at the edge of expiry.
     now += DEFAULT_ACTIVATION_TTL_MS / 2 + 1
-    expect(await svc.hasFreshActivation('exec_1', 'usr_7', 'claude')).toBe(false)
-    expect(await svc.hasActivation('exec_1', 'usr_7', 'claude')).toBe(true)
+    expect(await svc.hasFreshActivation(runActivationScope('exec_1'), 'usr_7', 'claude')).toBe(
+      false,
+    )
+    expect(await svc.hasActivation(runActivationScope('exec_1'), 'usr_7', 'claude')).toBe(true)
 
     // And past the TTL it is neither.
     now += DEFAULT_ACTIVATION_TTL_MS
-    expect(await svc.hasActivation('exec_1', 'usr_7', 'claude')).toBe(false)
+    expect(await svc.hasActivation(runActivationScope('exec_1'), 'usr_7', 'claude')).toBe(false)
   })
 
   it('computes expiry/renewal status and lists expiring subscriptions', async () => {
@@ -300,5 +304,29 @@ describe('PersonalSubscriptionService', () => {
       password: 'separatepassword',
     })
     expect(other.vendor).toBe('glm')
+  })
+
+  it('revokes the user-scope activations when the credential is removed', async () => {
+    // The activation is a SECOND copy of the token, re-encrypted with the system key alone, so
+    // deleting the subscription does not revoke it. Left behind, a disconnected subscription stays
+    // leasable from the run-less surfaces for the rest of the ~12h TTL.
+    const { svc } = makeService()
+    await svc.store('usr_7', {
+      vendor: 'claude',
+      label: 'mine',
+      token: 'T',
+      password: 'longpassword',
+    })
+    await svc.activate(userActivationScope('usr_7'), 'usr_7', 'claude', 'longpassword')
+    await svc.activate(runActivationScope('exec_1'), 'usr_7', 'claude', 'longpassword')
+
+    await svc.remove('usr_7', 'claude')
+
+    await expect(svc.lease(userActivationScope('usr_7'), 'usr_7', 'claude')).rejects.toBeInstanceOf(
+      CredentialRequiredError,
+    )
+    // The RUN's copy stays: consent there was given for one run, whose dispatches are already in
+    // flight, and the run settling clears it.
+    expect((await svc.lease(runActivationScope('exec_1'), 'usr_7', 'claude')).secret).toBe('T')
   })
 })

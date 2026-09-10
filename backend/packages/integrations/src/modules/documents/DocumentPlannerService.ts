@@ -2,7 +2,7 @@ import { generateText } from 'ai'
 import type { ModelProvider, ModelProviderResolver, ModelRef } from '@cat-factory/kernel'
 import type { DocumentRecord } from '@cat-factory/kernel'
 import type { DocumentBoardPlan } from '@cat-factory/kernel'
-import { catFactoryObservability, extractJson } from '@cat-factory/kernel'
+import { catFactoryObservability, extractJson, resolveInlineScope } from '@cat-factory/kernel'
 import { isDesignSource } from '@cat-factory/contracts'
 import {
   coercePlan,
@@ -155,7 +155,11 @@ export class DocumentPlannerService {
    * caller is about to spawn into one frame and a whole architecture flattened into it is the
    * discarding the target-aware path exists to prevent.
    */
-  async plan(record: DocumentRecord, target?: PlanTarget): Promise<DocumentBoardPlan> {
+  async plan(
+    record: DocumentRecord,
+    target?: PlanTarget,
+    askedByUserId?: string,
+  ): Promise<DocumentBoardPlan> {
     const fallback = () =>
       planFromHeadings(record.source, record.externalId, record.title, record.body, target)
     if (!this.deps.modelRef || (!this.deps.modelProviderResolver && !this.deps.modelProvider)) {
@@ -163,8 +167,19 @@ export class DocumentPlannerService {
     }
 
     try {
+      // The IMPORT arrives on a webhook or a sync sweep; this PLAN does not. It is a member
+      // pressing "preview"/"spawn" on a page, so there is a signed-in asker to name, and naming
+      // them is what puts their own API keys and local model endpoints in the pool. No run, ever:
+      // a plan is a preview, and nothing has been started for it to belong to. An unauthenticated
+      // deployment has no asker, which narrows the pool and is stated rather than defaulted.
       const provider = this.deps.modelProviderResolver
-        ? await this.deps.modelProviderResolver.forScope({ workspaceId: record.workspaceId })
+        ? await this.deps.modelProviderResolver.forScope(
+            await resolveInlineScope(
+              askedByUserId
+                ? { kind: 'user', workspaceId: record.workspaceId, userId: askedByUserId }
+                : { kind: 'workspace', workspaceId: record.workspaceId },
+            ),
+          )
         : this.deps.modelProvider!
       const model = provider.resolve(this.deps.modelRef)
       const { text } = await generateText({

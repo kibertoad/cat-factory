@@ -1,5 +1,6 @@
 import { generateText } from 'ai'
 import type {
+  ResolveBlockRunContext,
   EnvironmentInvestigationSubject,
   EnvironmentInvestigator,
   ModelProvider,
@@ -7,6 +8,7 @@ import type {
   ModelRef,
 } from '@cat-factory/kernel'
 import {
+  resolveInlineScope,
   extractJson,
   getErrorMessage,
   resolveScopedModelProvider,
@@ -19,7 +21,7 @@ import {
   ENVIRONMENT_INVESTIGATION_PROMPT,
   renderEnvironmentInvestigationPrompt,
 } from '@cat-factory/agents'
-import { type ResolveBlockRunContext, scopeForBlockRun } from '../../inlineScope.js'
+
 import { type InlineBlockModelDeps, resolveInlineBlockModel } from '../../inlineBlockModel.js'
 
 // ---------------------------------------------------------------------------
@@ -132,9 +134,8 @@ export class EnvironmentInvestigationService implements EnvironmentInvestigator 
   private async resolveModel(
     subject: EnvironmentInvestigationSubject,
   ): Promise<{ modelProvider: ModelProvider; ref: ModelRef }> {
-    const scope = await scopeForBlockRun(
-      subject.workspaceId,
-      subject.block,
+    const scope = await resolveInlineScope(
+      { kind: 'block', workspaceId: subject.workspaceId, block: subject.block },
       this.deps.resolveRunContext,
     )
     const modelProvider = await resolveScopedModelProvider(scope, this.deps)

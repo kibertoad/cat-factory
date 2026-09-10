@@ -1,5 +1,6 @@
 import { generateText } from 'ai'
 import type {
+  ResolveBlockRunContext,
   Block,
   BlockRepository,
   Clock,
@@ -15,6 +16,7 @@ import type {
   ReviewItemStatus,
 } from '@cat-factory/kernel'
 import {
+  resolveInlineScope,
   assertFound,
   DEFAULT_MAX_REQUIREMENT_ITERATIONS,
   describeOwnService,
@@ -29,7 +31,7 @@ import {
   catFactoryObservability,
   composeBespokePrompt,
 } from '@cat-factory/agents'
-import { type ResolveBlockRunContext, scopeForBlockRun } from '../../inlineScope.js'
+
 import { type InlineBlockModelDeps, resolveInlineBlockModelRef } from '../../inlineBlockModel.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import {
@@ -515,7 +517,10 @@ export abstract class IterativeReviewService<
     workspaceId: string,
     block: Block,
   ): Promise<ModelProvider | undefined> {
-    const scope = await scopeForBlockRun(workspaceId, block, this.deps.resolveRunContext)
+    const scope = await resolveInlineScope(
+      { kind: 'block', workspaceId, block },
+      this.deps.resolveRunContext,
+    )
     return resolveScopedModelProvider(scope, this.deps)
   }
 

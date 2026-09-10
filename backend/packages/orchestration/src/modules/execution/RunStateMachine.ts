@@ -18,6 +18,7 @@ import type {
   WorkRunner,
 } from '@cat-factory/kernel'
 import {
+  runActivationScope,
   assertFound,
   ConflictError,
   dataIntegrityFaultOf,
@@ -332,7 +333,7 @@ export class RunStateMachine {
       (instance.status === 'done' || instance.status === 'failed')
     ) {
       try {
-        await this.subscriptionActivations.deleteByExecution(instance.id)
+        await this.subscriptionActivations.deleteByScope(runActivationScope(instance.id))
       } catch {
         // Swallow — a failure here must never derail the emit. This is not a silent
         // data-loss path: the TTL sweep reclaims the row as a backstop, and the sweep

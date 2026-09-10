@@ -1,4 +1,5 @@
 import {
+  agentRunScopeSubject,
   type AgentExecutor,
   type AgentJobHandle,
   type AgentJobUpdate,
@@ -13,6 +14,7 @@ import {
   getErrorMessage,
   inlineModelRef,
   isAsyncAgentExecutor,
+  resolveInlineScope,
   type Logger,
   type ModelFlavor,
   type ModelProvider,
@@ -151,17 +153,24 @@ export class ConsensusAgentExecutor implements AsyncAgentExecutor {
 
   private async providerFor(context: AgentRunContext): Promise<ModelProvider> {
     if (this.deps.modelProviderResolver && context.workspaceId) {
-      return this.deps.modelProviderResolver.forScope({
-        workspaceId: context.workspaceId,
-        userId: context.initiatedByUserId,
-        // Carry the run so a leased-per-run inline subscription backend can lease the
-        // initiator's activation for a consensus participant's inline call.
-        executionId: context.executionId,
-      })
+      // Carry the run so a leased-per-run inline subscription backend can lease the initiator's
+      // activation for a consensus participant's inline call. The SAME kernel fold the plain
+      // executor uses: a panel participant and the step run alone must draw on one pool.
+      return this.deps.modelProviderResolver.forScope(
+        await resolveInlineScope(
+          agentRunScopeSubject({
+            workspaceId: context.workspaceId,
+            ...(context.executionId ? { executionId: context.executionId } : {}),
+            ...(context.initiatedByUserId ? { initiatedByUserId: context.initiatedByUserId } : {}),
+          }),
+        ),
+      )
     }
     if (this.deps.modelProvider) return this.deps.modelProvider
     if (this.deps.modelProviderResolver) {
-      return this.deps.modelProviderResolver.forScope({ workspaceId: context.workspaceId ?? '' })
+      return this.deps.modelProviderResolver.forScope(
+        await resolveInlineScope({ kind: 'workspace', workspaceId: context.workspaceId ?? '' }),
+      )
     }
     throw new Error('ConsensusAgentExecutor: no model provider available')
   }

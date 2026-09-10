@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { useAssistantStore } from '~/stores/assistant'
 import { useWorkspaceStore } from '~/stores/workspace'
+import { usePersonalSubscriptionsStore } from '~/stores/personalSubscriptions'
 import { ApiError } from '~/composables/api/errors'
 import type { AssistantCapability } from '~/types/domain'
 
@@ -179,5 +180,55 @@ describe('assistant store: the capability read deadline', () => {
 
     expect(aborted).toBe(true)
     expect(store.capabilityRead).toBe('error')
+  })
+})
+
+// The credential half of a turn: a workspace whose preset pins an individual-usage subscription
+// runs this surface on it, which means the turn has to be able to ASK for the password and to
+// survive being refused one.
+describe('assistant store: the personal-credential flow', () => {
+  beforeEach(() => {
+    useWorkspaceStore().workspaceId = 'ws1'
+  })
+
+  function stubTurn(
+    withCredential: (action: (password?: string) => Promise<void>) => Promise<boolean>,
+  ) {
+    const calls: (string | undefined)[] = []
+    vi.stubGlobal('useApi', () => ({
+      getAssistantCapability: async () => ({ available: true, actions: ['add-service-from-repo'] }),
+      runAssistantTurn: async (_ws: string, _prompt: string, password?: string) => {
+        calls.push(password)
+        return { outcome: { status: 'declined', reason: 'no_matching_action' }, model: null }
+      },
+    }))
+    usePersonalSubscriptionsStore().withCredential = withCredential as unknown as ReturnType<
+      typeof usePersonalSubscriptionsStore
+    >['withCredential']
+    return { store: useAssistantStore(), calls }
+  }
+
+  it('carries the password the credential flow supplies into the turn', async () => {
+    // Without it a workspace pinned to a personal subscription could only ever be answered by
+    // some other model, which is the failure this whole path exists to close.
+    const { store, calls } = stubTurn(async (action) => {
+      await action('correct horse')
+      return true
+    })
+
+    const turn = await store.run('add the payments repo')
+
+    expect(calls).toEqual(['correct horse'])
+    expect(turn).not.toBeNull()
+  })
+
+  it('answers null when the person cancels the password prompt', async () => {
+    // A cancel is not a failed turn and not a declined one: nothing ran, so there is no outcome
+    // to render. Reporting it as either would put a refusal on screen that nobody caused.
+    const { store, calls } = stubTurn(async () => false)
+
+    expect(await store.run('add the payments repo')).toBeNull()
+    expect(calls).toEqual([])
+    expect(store.turn).toBeNull()
   })
 })

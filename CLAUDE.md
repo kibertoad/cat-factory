@@ -576,6 +576,7 @@ recipe, release-PR re-sync, new-published-package checklist: [`docs/internal/rel
 
 - `node scripts/check-file-size.mjs`: the file-size ratchet (split, don't raise).
 - `node scripts/check-silent-catch.mjs`: bans `.catch(() => {})` in backend non-test source.
+- `node scripts/check-inline-model-scope.mjs`: every inline LLM caller builds its credential scope through kernel's `resolveInlineScope`, NAMING what it holds (block / run / user / workspace), so a dropped run or asker cannot pass as a decision.
 - `node scripts/check-component-imports.mjs`: every layer component used in a Vue template is imported by path ([`frontend/app/README.md`](./frontend/app/README.md#always-import-a-layer-component-explicitly)).
 - `node scripts/check-reserved-env-keys.mjs`: every variable in `docs/environment-variables.md` is RESERVED, so it can never be named as a capability credential.
 - `node scripts/check-gate-approval-raise.mjs`: every human-gate raise goes through `buildStepApproval`.
@@ -586,8 +587,7 @@ recipe, release-PR re-sync, new-published-package checklist: [`docs/internal/rel
 - `node scripts/check-workspace-bin-scripts.mjs`: no package script spawns a workspace CLI by its bin NAME (that shim cannot link on a fresh checkout), and the by-path spawn that replaces it addresses the path the owning package DECLARES as that bin.
 - `node --test 'scripts/*.test.mjs'` runs each guard's own fixtures (CI runs them all).
 - `pnpm exec changeset status --since=origin/main`: after committing locally.
-- `pnpm lint:monorepo` (sherif): cross-package dependency-version consistency.
-- `pnpm check:publish` (after `pnpm build`): publish-artifact integrity.
+- `pnpm lint:monorepo` (sherif): cross-package dependency-version consistency; `pnpm check:publish` (after `pnpm build`): publish-artifact integrity.
 - `node scripts/check-runner-image-{tag.mjs --since origin/main,paths.mjs}`: whenever anything image-affecting changed.
 - `pnpm exec turbo run typecheck --filter=<touched package>` (it covers tests, which build excludes).
 

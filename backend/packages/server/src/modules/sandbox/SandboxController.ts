@@ -141,7 +141,13 @@ export function sandboxController(): Hono<AppEnv> {
   buildHonoRoute(app, launchSandboxExperimentContract, async (c) => {
     const sandbox = requireSandbox(c)
     return c.json(
-      await sandbox.runService.launch(param(c, 'workspaceId'), c.req.valid('param').experimentId),
+      // The launcher, so every cell's model call draws on their credential tier too: an
+      // experiment has no run, so this is the only tier beyond the workspace it can carry.
+      await sandbox.runService.launch(
+        param(c, 'workspaceId'),
+        c.req.valid('param').experimentId,
+        c.get('user')?.id,
+      ),
       200,
     )
   })

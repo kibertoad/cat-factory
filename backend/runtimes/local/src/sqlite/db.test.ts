@@ -107,6 +107,77 @@ describe('openSqliteDb', () => {
     expect(columnNames(path, 'metrics')).toEqual(['id', 'tokens', 'spend_only', 'note'])
   })
 
+  it('rebuilds a table the store declared rebuildable when its columns moved', () => {
+    // The rename case, which is what a shipped store actually hits: `subscription_activations`
+    // renamed `execution_id` to `scope_id`, and an additive reconcile can only read that as
+    // adding a `NOT NULL` column with no default, which SQLite refuses on a populated table, so
+    // the store would stop opening over state that expires in hours.
+    const path = tempDbPath()
+    const before = `CREATE TABLE IF NOT EXISTS activations (
+      id TEXT PRIMARY KEY,
+      execution_id TEXT NOT NULL,
+      token TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_activations_scope ON activations (execution_id);`
+    const v1 = openSqliteDb(path, before, { rebuildable: ['activations'] })
+    v1.prepare('INSERT INTO activations (id, execution_id, token) VALUES (?, ?, ?)').run(
+      'a',
+      'exec_1',
+      'secret',
+    )
+    v1.close()
+
+    const after = `CREATE TABLE IF NOT EXISTS activations (
+      id TEXT PRIMARY KEY,
+      scope_id TEXT NOT NULL,
+      token TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_activations_scope ON activations (scope_id);`
+    const v2 = openSqliteDb(path, after, { rebuildable: ['activations'] })
+    try {
+      expect(columnNames(path, 'activations')).toEqual(['id', 'scope_id', 'token'])
+      // The rows went with the shape, which is the whole cost of the option: an INSERT naming the
+      // declared columns works, where the leftover `execution_id NOT NULL` would have failed it.
+      expect(v2.prepare('SELECT count(*) AS n FROM activations').get()).toEqual({ n: 0 })
+      v2.prepare('INSERT INTO activations (id, scope_id, token) VALUES (?, ?, ?)').run(
+        'b',
+        'user:usr_1',
+        'secret',
+      )
+    } finally {
+      v2.close()
+    }
+  })
+
+  it('leaves a rebuildable table alone while its columns still match', () => {
+    // Rebuilding is for a shape that MOVED, not for every open: a store that dropped its rows on
+    // each boot would cost a password prompt per restart.
+    const path = tempDbPath()
+    const schema = 'CREATE TABLE IF NOT EXISTS activations (id TEXT PRIMARY KEY, token TEXT);'
+    const v1 = openSqliteDb(path, schema, { rebuildable: ['activations'] })
+    v1.prepare('INSERT INTO activations (id, token) VALUES (?, ?)').run('a', 'secret')
+    v1.close()
+
+    const v2 = openSqliteDb(path, schema, { rebuildable: ['activations'] })
+    try {
+      expect(v2.prepare('SELECT token FROM activations WHERE id = ?').get('a')).toEqual({
+        token: 'secret',
+      })
+    } finally {
+      v2.close()
+    }
+  })
+
+  it('refuses to open when a rebuildable name is not a table the schema declares', () => {
+    // A typo reads as "this table is never rebuilt", which is the failure the option exists to
+    // prevent, arriving later and looking like something else.
+    const path = tempDbPath()
+
+    expect(() => openSqliteDb(path, V1, { rebuildable: ['metric'] })).toThrow(
+      /"metric".*rebuildable/s,
+    )
+  })
+
   it('refuses to open on a column SQLite cannot add, naming the file and the column', () => {
     // `NOT NULL` with no default is the shape `ALTER TABLE ADD COLUMN` rejects once the table holds
     // rows — which is every case that matters, since an empty file would have been created from the

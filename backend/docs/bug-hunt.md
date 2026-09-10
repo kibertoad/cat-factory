@@ -232,6 +232,14 @@ The assessor **logs** the cause before throwing, because the service deliberatel
 error; without that a revoked key would surface to an operator as nothing but a permanently
 unranked hunt.
 
+**One failure is not the assessor's to swallow.** `credential_required` says the asker must enter
+their personal password, which the client knows how to prompt for and retry, so both layers (the
+assessor's own `catch`, and `rank`) rethrow it rather than reporting `failed`. The ranking is a
+model call resolved under the workspace's preset, so on a workspace pinned to an individual-usage
+subscription the scan needs the credential HERE and not only at adoption: the hunt carries the
+personal password header, `activateUserScope` puts it to use, and a 200 with `failed` in its place
+would present the board's own order as a recommendation with nothing said about why.
+
 ## 5. Adopting
 
 `BugHuntService.adopt` imports the issue and materialises it through the existing

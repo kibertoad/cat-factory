@@ -16,6 +16,7 @@ import {
   type ClaudeRunTelemetry,
 } from '@cat-factory/executor-harness/claude-call-aggregator'
 import {
+  type ActivationScopeId,
   describeError,
   describeProcessExit,
   type HarnessCallMetric,
@@ -29,9 +30,11 @@ import {
   type ModelScope,
   nativeVendorForRef,
   redactSecrets,
+  runActivationScope,
   SUBSCRIPTION_VENDORS,
   type SubscriptionVendor,
   subscriptionVendorForRef,
+  userActivationScope,
 } from '@cat-factory/kernel'
 import { logger, parseTimerEnvMs } from '@cat-factory/server'
 import type { InlineContainerRequest } from './LocalContainerRunnerTransport.js'
@@ -953,9 +956,14 @@ type RunInlineInContainer = (req: InlineContainerRequest) => Promise<InlineJobRe
 
 /** The subscription-credential lease seams the container inline path needs (from buildNodeContainer). */
 interface InlineLeaseDeps {
-  /** Lease the run-initiator's activated personal credential (individual vendors). */
+  /**
+   * Lease the owner's activated personal credential (individual vendors), under whichever
+   * ACTIVATION SCOPE the call belongs to: the run for an inline step inside one, the user for a
+   * run-less surface. The scope is chosen HERE rather than by the facade, because only this call
+   * knows which of the two it is; the facade closure just opens what it is handed.
+   */
   leasePersonalSubscriptionToken?: (
-    executionId: string,
+    scopeId: ActivationScopeId,
     userId: string,
     vendor: SubscriptionVendor,
   ) => Promise<{ secret: string }>
@@ -1024,15 +1032,19 @@ function makeContainerRunner(
           `Personal ${vendor} subscriptions are not configured on this deployment (no ENCRYPTION_KEY).`,
         )
       }
-      if (!scope.executionId || !scope.userId) {
-        // An individual credential is owned by a specific user and activated per run; without
-        // the run/user we can't lease it. (Pooled vendors need only the workspace, below.)
-        throw new Error(
-          `Running an inline ${vendor} model requires a signed-in user and an active run.`,
-        )
+      if (!scope.userId) {
+        // An individual credential is owned by a specific person, so without one there is nothing
+        // to open. (Pooled vendors need only the workspace, below.)
+        throw new Error(`Running an inline ${vendor} model requires a signed-in user.`)
       }
+      // The run's scope when this call is inside one, else the user's own. A run-less surface
+      // (the in-app assistant, the bug hunt) is not a degraded run: it holds a real activation
+      // the person minted with their password, and it outlives any single request by design.
+      const activationScope = scope.executionId
+        ? runActivationScope(scope.executionId)
+        : userActivationScope(scope.userId)
       const leased = await deps.leasePersonalSubscriptionToken(
-        scope.executionId,
+        activationScope,
         scope.userId,
         vendor,
       )

@@ -8,7 +8,7 @@ import type {
   RunLifecycleSink,
   SubscriptionActivationRepository,
 } from '@cat-factory/kernel'
-import { createRecordingLogger } from '@cat-factory/kernel'
+import { runActivationScope, createRecordingLogger } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import { RunStateMachine } from './RunStateMachine.js'
 
@@ -217,7 +217,7 @@ describe('RunStateMachine — outbound run-lifecycle push', () => {
       },
       {
         subscriptionActivations: {
-          deleteByExecution: async (id: string) => {
+          deleteByScope: async (id: string) => {
             cleared.push(id)
           },
         } as unknown as SubscriptionActivationRepository,
@@ -228,7 +228,9 @@ describe('RunStateMachine — outbound run-lifecycle push', () => {
     await expect(
       machine.emitInstance('ws_1', makeInstance({ status: 'done' })),
     ).resolves.toBeUndefined()
-    expect(cleared).toEqual(['exec_1'])
+    // Cleared by the RUN's activation scope, not the bare id: a user's own activations
+    // share the table and must survive a run settling.
+    expect(cleared).toEqual([runActivationScope('exec_1')])
     expect(
       logger.lines.some((l) => l.level === 'warn' && l.msg.includes('publishRunLifecycle')),
     ).toBe(true)

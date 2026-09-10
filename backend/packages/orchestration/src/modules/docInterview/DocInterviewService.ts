@@ -1,5 +1,6 @@
 import { generateText } from 'ai'
 import type {
+  ResolveBlockRunContext,
   Block,
   Clock,
   DocInterviewSession,
@@ -10,6 +11,7 @@ import type {
   ModelRef,
 } from '@cat-factory/kernel'
 import {
+  resolveInlineScope,
   DOC_INTERVIEWER_AGENT_KIND,
   extractJson,
   getErrorMessage,
@@ -17,7 +19,7 @@ import {
   ValidationError,
 } from '@cat-factory/kernel'
 import { catFactoryObservability, FINAL_ANSWER_IN_REPLY } from '@cat-factory/agents'
-import { type ResolveBlockRunContext, scopeForBlockRun } from '../../inlineScope.js'
+
 import { type InlineBlockModelDeps, resolveInlineBlockModelRef } from '../../inlineBlockModel.js'
 import {
   answeredDigest,
@@ -265,7 +267,10 @@ export class DocInterviewService {
     workspaceId: string,
     block: Block,
   ): Promise<{ modelProvider: ModelProvider; ref: ModelRef }> {
-    const scope = await scopeForBlockRun(workspaceId, block, this.deps.resolveRunContext)
+    const scope = await resolveInlineScope(
+      { kind: 'block', workspaceId, block },
+      this.deps.resolveRunContext,
+    )
     const modelProvider = await resolveScopedModelProvider(scope, this.deps)
     const ref = await this.modelFor(workspaceId, block)
     if (!modelProvider || !ref) {

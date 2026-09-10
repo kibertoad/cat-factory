@@ -153,7 +153,7 @@ function activationContainer(options: { vendors: string[]; fresh: boolean }): Ac
   const personal = {
     list: async () => options.vendors.map((vendor) => ({ vendor })),
     hasFreshActivation: async () => options.fresh,
-    activateForRun: async (_run: string, _user: string, vendor: string) => {
+    activate: async (_scope: string, _user: string, vendor: string) => {
       activated.push(vendor)
     },
   } as unknown as PersonalSubscriptionService

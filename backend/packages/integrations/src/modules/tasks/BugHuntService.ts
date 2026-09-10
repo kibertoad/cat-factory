@@ -16,6 +16,7 @@ import type {
   TrackerBoard,
 } from '@cat-factory/kernel'
 import {
+  CredentialRequiredError,
   ValidationError,
   assertFound,
   parseBugHuntVerdicts,
@@ -184,6 +185,7 @@ export class BugHuntService {
     workspaceId: string,
     source: TaskSourceKind,
     input: BugHuntScan,
+    userId?: string,
   ): Promise<BugHuntResult> {
     const provider = this.requireProvider(source)
     // The container is settled BEFORE the vendor read and the ranking call, not left to the
@@ -224,7 +226,7 @@ export class BugHuntService {
     const truncated = found.length > BUG_HUNT_SCAN_LIMIT
     const candidates = truncated ? found.slice(0, BUG_HUNT_SCAN_LIMIT) : found
 
-    const { ranked, analysisStatus, model } = await this.rank(workspaceId, candidates)
+    const { ranked, analysisStatus, model } = await this.rank(workspaceId, candidates, userId)
     return {
       source,
       board: input.board,
@@ -282,6 +284,7 @@ export class BugHuntService {
   private async rank(
     workspaceId: string,
     candidates: BugCandidate[],
+    userId?: string,
   ): Promise<{
     ranked: BugHuntCandidate[]
     analysisStatus: BugHuntAnalysisStatus
@@ -313,16 +316,24 @@ export class BugHuntService {
       const { verdicts, model } = await assessor.assess({
         workspaceId,
         candidates: candidates.map(scrubCandidate),
+        ...(userId ? { userId } : {}),
       })
       return {
         ranked: rankBugCandidates(candidates, parseBugHuntVerdicts(verdicts)),
         analysisStatus: 'ranked',
         model,
       }
-    } catch {
-      // Deliberately swallowed: `analysisStatus: 'failed'` is what the user acts on, and the
-      // scan they paid for is still in the response. The assessor logs the underlying cause.
-      // A budget probe that threw lands here too — nothing was spent, and the scan survives.
+    } catch (error) {
+      // The one failure that is NOT the assessor's to swallow: `credential_required` says the
+      // asker must enter their personal password, which is a thing they can do and the client
+      // knows how to ask for. Reported as a 200 with `analysisStatus: 'failed'` it becomes the
+      // shape this whole change exists to end: the hunt silently ranks on the board's own order,
+      // and the only signal is the bill for the call that never happened.
+      if (error instanceof CredentialRequiredError) throw error
+      // Everything else is deliberately swallowed: `analysisStatus: 'failed'` is what the user
+      // acts on, and the scan they paid for is still in the response. The assessor logs the
+      // underlying cause. A budget probe that threw lands here too: nothing was spent, and the
+      // scan survives.
       return { ranked: unranked, analysisStatus: 'failed', model: null }
     }
   }

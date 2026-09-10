@@ -3,7 +3,7 @@ import type { AssistantAnswer } from '~/types/domain'
 import type { ApiContext } from './context'
 
 /** In-app assistant: what it can do here, and one prompt-to-action turn. */
-export function assistantApi({ send, ws }: ApiContext) {
+export function assistantApi({ send, sendWith, ws, pwHeaders }: ApiContext) {
   return {
     // Whether a model is wired and which actions this deployment offers. Read before the prompt
     // box is shown, so an unconfigured deployment says so instead of failing on submit. `signal`
@@ -14,8 +14,12 @@ export function assistantApi({ send, ws }: ApiContext) {
 
     // Run one turn. A live model call plus a board write, so it can take a couple of seconds:
     // the modal shows progress and the outcome is rendered from the returned data.
-    runAssistantTurn: (workspaceId: string, prompt: string) =>
-      send(runAssistantTurnContract, {
+    //
+    // Carries the personal password header, like a run start does, because the turn resolves the
+    // workspace's own preset: a workspace pinned to an individual-usage subscription runs this
+    // surface on it, and without the header it could only ever fall back to another model.
+    runAssistantTurn: (workspaceId: string, prompt: string, password?: string) =>
+      sendWith(pwHeaders(password), runAssistantTurnContract, {
         pathPrefix: ws(workspaceId),
         body: { kind: 'prompt', prompt },
       }),

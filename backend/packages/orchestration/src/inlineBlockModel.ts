@@ -2,7 +2,8 @@ import type { JudgeModelPin, ModelFlavor, ModelRef } from '@cat-factory/kernel'
 import { inlineModelRef } from '@cat-factory/kernel'
 import type { PresetRouting } from './modules/modelPresets/ModelPresetService.js'
 
-// The model half of what the INLINE LLM callers share, the sibling of `inlineScope.ts`'s scope half.
+// The model half of what the INLINE LLM callers share, the sibling of the scope half in kernel's
+// `domain/inline-scope.ts`.
 // The judge, the fork-decision chat, the iterative reviewers, the doc/initiative interviewers, the
 // tester quality companion and the bug-hunt assessor all answer "which model does this inline call
 // run on" with the SAME precedence the dispatch path uses — a block pin, else the workspace's

@@ -16,6 +16,7 @@ import type {
 } from '@cat-factory/kernel'
 import type { PreloadedBlocks } from '@cat-factory/kernel'
 import {
+  runActivationScope,
   assertFound,
   ConflictError,
   DEFAULT_RISK_POLICY,
@@ -265,11 +266,11 @@ export class RunLifecycleController {
     if (this.deps.subscriptionActivations && prior && prior.id !== executionId) {
       // Best-effort + idempotent, mirroring the terminal cleanup in RunStateMachine.emit: a
       // failure here must never derail the start. In mothership mode this repo is remote and
-      // `deleteByExecution` is not yet allow-listed (it throws `unknown_method`), so an
+      // `deleteByScope` is not yet allow-listed (it throws `unknown_method`), so an
       // unguarded call would otherwise break re-running any block; the TTL sweep reclaims the
       // stale activation row as the backstop.
       try {
-        await this.deps.subscriptionActivations.deleteByExecution(prior.id)
+        await this.deps.subscriptionActivations.deleteByScope(runActivationScope(prior.id))
       } catch {
         // Swallow — see above.
       }

@@ -5,8 +5,8 @@ import type { CoreDependencies } from '../container.js'
 // The inline callers' run-context seam, extracted from `modules.ts` (which is at its size budget):
 // every module factory that builds an inline LLM caller — the iterative reviewers, the doc and
 // initiative interviewers, the judges, the fork-decision chat, the tester quality companion —
-// binds this one resolver, and `engine-collaborators.ts` binds it too. See `../inlineScope.ts` for
-// the pure half that turns what this returns into a `ModelScope`.
+// binds this one resolver, and `engine-collaborators.ts` binds it too. Kernel's
+// `domain/inline-scope.ts` is the pure half that turns what this returns into a `ModelScope`.
 
 /**
  * Resolve a block's ACTIVE run (execution id + initiator), so an inline subscription reviewer

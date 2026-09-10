@@ -18,10 +18,12 @@ import type {
 import { validateDescriptorFields } from '@cat-factory/contracts'
 import type { Logger, ModelProvider, ModelProviderResolver, ModelRef } from '@cat-factory/kernel'
 import {
+  CredentialRequiredError,
   describeError,
   extractJson,
   getErrorMessage,
   RateLimitedError,
+  resolveInlineScope,
   resolveScopedModelProvider,
   UnavailableError,
 } from '@cat-factory/kernel'
@@ -165,7 +167,7 @@ export class AssistantService {
    * memory; the budget probe reads the spend ledger; only then does a vendor see a token.
    */
   private async route(request: AssistantTurnRequest, prompt: string): Promise<AssistantTurn> {
-    const { modelProvider, ref } = await this.resolveModel(request.workspaceId)
+    const { modelProvider, ref } = await this.resolveModel(request)
     if (await this.deps.isOverBudget?.(request.workspaceId)) {
       // Its OWN refusal rather than a generic failure, and fail-CLOSED so no vendor call is made:
       // an exhausted budget is not a broken assistant, and the fix (raise the budget, or wait for
@@ -266,6 +268,12 @@ export class AssistantService {
       })
       return result.text
     } catch (error) {
+      // A missing/withheld personal password is a re-promptable GATE condition, not a broken
+      // model: the lease raises it from inside this call, and it is the 428 the client answers by
+      // collecting the password and retrying. Re-mapping it to a 503 would strand the whole
+      // credential flow. The SPA branches on `credential_required`, and a status class carrying
+      // `assistant_generation_failed` tells the person their model is down instead.
+      if (error instanceof CredentialRequiredError) throw error
       const message = `The assistant model (${ref.provider}:${ref.model}) failed: ${getErrorMessage(error)}`
       this.deps.logger?.warn(message, { workspaceId, ...describeError(error) })
       throw new UnavailableError(message, 'assistant_generation_failed')
@@ -280,9 +288,23 @@ export class AssistantService {
    * model and the route order.
    */
   private async resolveModel(
-    workspaceId: string,
+    request: AssistantTurnRequest,
   ): Promise<{ modelProvider: ModelProvider; ref: ModelRef }> {
-    const modelProvider = await resolveScopedModelProvider({ workspaceId }, this.deps)
+    const { workspaceId } = request
+    // A USER subject: a turn has no run, but it always has an asker, and both halves of that
+    // matter. The asker's own API keys and local model endpoints join the credential pool, and an
+    // individual-usage subscription is leasable through their user activation scope, which is the
+    // only reason a Claude-preset workspace can run this surface on the model it picked. A
+    // workspace-only scope would resolve, answer, and quietly bill a different model.
+    const scope = await resolveInlineScope(
+      request.userId
+        ? { kind: 'user', workspaceId, userId: request.userId }
+        : // No signed-in user is reachable on an unauthenticated deployment. Stated rather than
+          // defaulted, so the narrower pool is a readable consequence of that and not of a
+          // forgotten field.
+          { kind: 'workspace', workspaceId },
+    )
+    const modelProvider = await resolveScopedModelProvider(scope, this.deps)
     const ref = await resolveInlineBlockModelRef(this.deps, workspaceId, ASSISTANT_AGENT_KIND, {})
     if (!modelProvider || !ref) {
       throw new UnavailableError(

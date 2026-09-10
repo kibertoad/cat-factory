@@ -274,8 +274,10 @@ function loadBoardsFor(next: TaskSourceKind | undefined) {
 async function runHunt() {
   const input = request.value
   if (!source.value || !input) return
-  const ok = await hunt.hunt(source.value, input)
-  if (!ok && !huntNeedsRepo.value) {
+  // Only a real failure is reported. A cancelled credential prompt leaves nothing to say, and
+  // `repo_not_linked` is worded by the panel itself beside the scope it invalidates.
+  const attempt = await hunt.hunt(source.value, input)
+  if (attempt === 'failed' && !huntNeedsRepo.value) {
     toast.add({
       title: t('bugHunt.huntFailed'),
       description: refusalText(hunt.huntErrorReason, hunt.huntError) ?? undefined,

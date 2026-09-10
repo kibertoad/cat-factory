@@ -13,6 +13,15 @@ import type { BugCandidate } from '../domain/types.js'
 export interface BugHuntSubject {
   workspaceId: string
   candidates: BugCandidate[]
+  /**
+   * The person who asked for the hunt, when the deployment authenticates.
+   *
+   * A hunt has no run, so this is the ONLY half of the credential scope beyond the workspace it
+   * can carry, and it is what lets a workspace whose preset pins an individual-usage subscription
+   * rank on the model it picked rather than on the routing default. Absent on an unauthenticated
+   * deployment, which narrows the pool and is stated rather than defaulted.
+   */
+  userId?: string
 }
 
 export interface BugHuntAssessor {

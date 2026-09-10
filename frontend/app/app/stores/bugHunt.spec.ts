@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { useBugHuntStore } from '~/stores/bugHunt'
 import { useWorkspaceStore } from '~/stores/workspace'
+import { usePersonalSubscriptionsStore } from '~/stores/personalSubscriptions'
 import { ApiError } from '~/composables/api/errors'
 import type { BugHuntResult, TaskSourceKind, TrackerBoardsView } from '~/types/domain'
 
@@ -181,7 +182,7 @@ describe('bug hunt store — scan failures', () => {
     const { store, serveHunt } = stubApi()
     serveHunt(() => Promise.reject(apiError(422, 'validation', { reason: 'repo_not_linked' })))
 
-    expect(await store.hunt('github', SCAN)).toBe(false)
+    expect(await store.hunt('github', SCAN)).toBe('failed')
 
     expect(store.huntErrorReason).toBe('repo_not_linked')
     expect(store.huntError).toBeTruthy()
@@ -192,7 +193,7 @@ describe('bug hunt store — scan failures', () => {
     const { store, serveHunt } = stubApi()
     serveHunt(() => Promise.reject(apiError(502, 'upstream')))
 
-    expect(await store.hunt('jira', { containerId: 'blk_auth', board: 'PROJ' })).toBe(false)
+    expect(await store.hunt('jira', { containerId: 'blk_auth', board: 'PROJ' })).toBe('failed')
 
     expect(store.huntErrorReason).toBeNull()
     expect(store.huntError).toBeTruthy()
@@ -204,7 +205,7 @@ describe('bug hunt store — scan failures', () => {
     await store.hunt('github', SCAN)
 
     serveHunt(() => Promise.resolve(huntResult()))
-    expect(await store.hunt('github', SCAN)).toBe(true)
+    expect(await store.hunt('github', SCAN)).toBe('ran')
 
     expect(store.huntError).toBeNull()
     expect(store.huntErrorReason).toBeNull()
@@ -220,5 +221,30 @@ describe('bug hunt store — scan failures', () => {
 
     expect(store.huntErrorReason).toBeNull()
     expect(store.huntError).toBeNull()
+  })
+})
+
+describe('bug hunt store: a dismissed credential prompt', () => {
+  beforeEach(() => {
+    useWorkspaceStore().workspaceId = 'ws1'
+  })
+
+  it('reports `cancelled` and drops the ranking the previous board left', async () => {
+    // The scan needs the personal password on a subscription-pinned workspace, so the prompt can
+    // be cancelled. Nothing ran: reporting that as a failure raises an error toast with no
+    // description for an action the person themselves called off, and leaving the earlier result
+    // mounted would show one board's candidates under another board's selection.
+    const { store } = stubApi()
+    expect(await store.hunt('github', SCAN)).toBe('ran')
+    expect(store.result).not.toBeNull()
+
+    usePersonalSubscriptionsStore().withCredential = (async () => false) as unknown as ReturnType<
+      typeof usePersonalSubscriptionsStore
+    >['withCredential']
+
+    expect(await store.hunt('github', SCAN)).toBe('cancelled')
+    expect(store.result).toBeNull()
+    expect(store.huntError).toBeNull()
+    expect(store.huntErrorReason).toBeNull()
   })
 })

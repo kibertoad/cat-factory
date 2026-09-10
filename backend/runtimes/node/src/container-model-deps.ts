@@ -268,8 +268,10 @@ export function buildNodeModelDeps(input: NodeModelDepsInput) {
     ? wrapModelProviderResolver(baseModelProviderResolver, {
         ...(personalSubscriptions
           ? {
-              leasePersonalSubscriptionToken: (executionId, userId, vendor) =>
-                personalSubscriptions.leaseForRun(executionId, userId, vendor),
+              // The SCOPE is chosen by the inline caller, not here: an inline step inside a run
+              // opens the run's activation, a run-less surface the user's own.
+              leasePersonalSubscriptionToken: (scopeId, userId, vendor) =>
+                personalSubscriptions.lease(scopeId, userId, vendor),
             }
           : {}),
         ...(subscriptions

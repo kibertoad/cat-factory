@@ -1,5 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite'
 import type {
+  ActivationScopeId,
   ApiKeyProvider,
   ApiKeyScope,
   ApiKeyScopeRef,
@@ -120,19 +121,26 @@ CREATE INDEX IF NOT EXISTS personal_subscriptions_user
 
 CREATE TABLE IF NOT EXISTS subscription_activations (
   id TEXT PRIMARY KEY,
-  execution_id TEXT NOT NULL,
+  scope_id TEXT NOT NULL,
   user_id TEXT NOT NULL,
   vendor TEXT NOT NULL,
   token_cipher TEXT NOT NULL,
   created_at INTEGER NOT NULL,
   expires_at INTEGER NOT NULL,
-  UNIQUE (execution_id, user_id, vendor)
+  UNIQUE (scope_id, user_id, vendor)
 );
 `
 
 /** Open (creating if absent) the local credential SQLite database and ensure its schema. */
 function openLocalCredentialDb(path: string): DatabaseSync {
-  return openSqliteDb(path, SCHEMA)
+  // `subscription_activations` is the one table here whose content is re-creatable: each row is a
+  // 12-hour system-key copy of a credential its owner can re-mint by entering their password, and
+  // the TTL sweep discards them anyway. So a shape change (`execution_id` became `scope_id`) is
+  // answered by rebuilding the table rather than by refusing to open the store, which is what an
+  // additive-only reconcile has to do with a renamed NOT NULL column, on a developer's machine,
+  // for state that would have expired by tomorrow. Every OTHER table here holds the only copy of
+  // a credential and is deliberately absent from this list.
+  return openSqliteDb(path, SCHEMA, { rebuildable: ['subscription_activations'] })
 }
 
 // ---------------------------------------------------------------------------
@@ -823,12 +831,12 @@ class SqlitePersonalSubscriptionRepository implements PersonalSubscriptionReposi
 }
 
 // ---------------------------------------------------------------------------
-// subscription_activations (short-lived, system-key-only per-run copies)
+// subscription_activations (short-lived, system-key-only per-scope copies)
 // ---------------------------------------------------------------------------
 
 interface SubscriptionActivationRow {
   id: string
-  execution_id: string
+  scope_id: string
   user_id: string
   vendor: string
   token_cipher: string
@@ -841,7 +849,7 @@ function subscriptionActivationRowToRecord(
 ): SubscriptionActivationRecord {
   return {
     id: row.id,
-    executionId: row.execution_id,
+    scopeId: row.scope_id as ActivationScopeId,
     userId: row.user_id,
     vendor: row.vendor as SubscriptionVendor,
     tokenCipher: row.token_cipher,
@@ -851,21 +859,22 @@ function subscriptionActivationRowToRecord(
 }
 
 const SUBSCRIPTION_ACTIVATION_COLUMNS =
-  'id, execution_id, user_id, vendor, token_cipher, created_at, expires_at'
+  'id, scope_id, user_id, vendor, token_cipher, created_at, expires_at'
 
 /**
- * Per-run personal-credential activations over `node:sqlite` — the local-sqlite mirror of
+ * Scoped personal-credential activations over `node:sqlite`: the local-sqlite mirror of
  * `DrizzleSubscriptionActivationRepository` / `D1SubscriptionActivationRepository`. A row is a
- * system-key-only re-encryption of the raw token scoped to one execution, minted when the user
- * supplies their password at start/retry so the async local container steps of THAT run can use
- * it without the user present; it is deleted when the run reaches a terminal state (and the TTL
- * sweep is the backstop). Kept LOCAL because it is decrypted by the LOCAL container executor.
+ * system-key-only re-encryption of the raw token scoped to one activation scope, minted when the
+ * user supplies their password so work that outlives the request can use it without them present.
+ * A run's rows are deleted when it reaches a terminal state; a user's expire on the TTL sweep,
+ * which is the backstop for both. Kept LOCAL because it is decrypted by the LOCAL container
+ * executor.
  */
 class SqliteSubscriptionActivationRepository implements SubscriptionActivationRepository {
   constructor(private readonly db: DatabaseSync) {}
 
   async get(
-    executionId: string,
+    scopeId: ActivationScopeId,
     userId: string,
     vendor: SubscriptionVendor,
     now: number,
@@ -873,9 +882,9 @@ class SqliteSubscriptionActivationRepository implements SubscriptionActivationRe
     const row = queryOne<SubscriptionActivationRow>(
       this.db,
       `SELECT ${SUBSCRIPTION_ACTIVATION_COLUMNS} FROM subscription_activations
-         WHERE execution_id = ? AND user_id = ? AND vendor = ? AND expires_at > ?
+         WHERE scope_id = ? AND user_id = ? AND vendor = ? AND expires_at > ?
          LIMIT 1`,
-      executionId,
+      scopeId,
       userId,
       vendor,
       now,
@@ -888,14 +897,14 @@ class SqliteSubscriptionActivationRepository implements SubscriptionActivationRe
       .prepare(
         `INSERT INTO subscription_activations (${SUBSCRIPTION_ACTIVATION_COLUMNS})
          VALUES (?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT (execution_id, user_id, vendor) DO UPDATE SET
+         ON CONFLICT (scope_id, user_id, vendor) DO UPDATE SET
            token_cipher = excluded.token_cipher,
            created_at = excluded.created_at,
            expires_at = excluded.expires_at`,
       )
       .run(
         record.id,
-        record.executionId,
+        record.scopeId,
         record.userId,
         record.vendor,
         record.tokenCipher,
@@ -904,8 +913,8 @@ class SqliteSubscriptionActivationRepository implements SubscriptionActivationRe
       )
   }
 
-  async deleteByExecution(executionId: string): Promise<void> {
-    this.db.prepare('DELETE FROM subscription_activations WHERE execution_id = ?').run(executionId)
+  async deleteByScope(scopeId: ActivationScopeId): Promise<void> {
+    this.db.prepare('DELETE FROM subscription_activations WHERE scope_id = ?').run(scopeId)
   }
 
   async deleteExpired(now: number): Promise<number> {

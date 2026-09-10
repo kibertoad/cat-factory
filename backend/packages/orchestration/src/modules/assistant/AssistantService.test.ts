@@ -1,5 +1,5 @@
-import type { Block, ModelProvider, ModelRef } from '@cat-factory/kernel'
-import { RateLimitedError, UnavailableError } from '@cat-factory/kernel'
+import type { Block, ModelProvider, ModelRef, ModelScope } from '@cat-factory/kernel'
+import { CredentialRequiredError, RateLimitedError, UnavailableError } from '@cat-factory/kernel'
 import { UNATTRIBUTED_BLOCK_EDIT_AUTHORITY } from '@cat-factory/contracts'
 import { MockLanguageModelV3 } from 'ai/test'
 import { describe, expect, it } from 'vitest'
@@ -251,6 +251,29 @@ describe('AssistantService.run', () => {
     const { service } = serviceWith('{}', [])
     await expect(service.run(REQUEST)).rejects.toBeInstanceOf(UnavailableError)
   })
+
+  it('lets a credential refusal through instead of reporting the model as broken', async () => {
+    // The lease raises this from INSIDE the model call when the asker's personal password has not
+    // been supplied, and it is the 428 the SPA branches on to open its password modal. Re-mapped
+    // to the surface's 503 it becomes "the assistant model failed", which is both untrue and
+    // unanswerable: the whole credential flow is unreachable behind it.
+    const { action } = fakeAction()
+    const refusing: ModelProvider = {
+      resolve() {
+        throw new CredentialRequiredError('enter your personal password', {
+          vendor: 'claude',
+          reason: 'password_required',
+        })
+      },
+    }
+    const service = new AssistantService({
+      actions: [action],
+      modelProvider: refusing,
+      modelRef: { provider: 'openai', model: 'gpt-test' },
+    })
+
+    await expect(service.run(REQUEST)).rejects.toBeInstanceOf(CredentialRequiredError)
+  })
 })
 
 describe('AssistantService.run — answering a clarification', () => {
@@ -345,6 +368,49 @@ describe('AssistantService: the model a turn runs on', () => {
 
   const ROUTING_DEFAULT: ModelRef = { provider: 'openai', model: 'routing-default' }
   const BASE: ModelRef = { provider: 'openai', model: 'preset-base' }
+
+  /**
+   * A turn recording the credential SCOPE the provider was resolved for, which is the half the
+   * model resolution above cannot see. Separate from `servicePinning` because the scope is
+   * decided before any preset is read, and conflating them hid the omission for a release.
+   */
+  function serviceRecordingScope() {
+    const scopes: ModelScope[] = []
+    const { provider } = scriptedProvider('{"action":"none","arguments":{}}')
+    const service = new AssistantService({
+      actions: [fakeAction().action],
+      modelProviderResolver: {
+        forScope: async (scope) => {
+          scopes.push(scope)
+          return provider
+        },
+      },
+      modelRef: { provider: 'openai', model: 'routing-default' },
+    })
+    return { service, scopes }
+  }
+
+  it('resolves the provider for the ASKER, not the workspace alone', async () => {
+    // A turn has no run, so the asker is the only credential tier beyond the workspace it can
+    // carry, and it is the one that decides whether a preset pinned to an individual-usage
+    // subscription is reachable here at all. Dropped, the turn still answers: on the deployment's
+    // routing default, billed to nobody, with only the model on the reply to say so.
+    const { service, scopes } = serviceRecordingScope()
+
+    await service.run(REQUEST)
+
+    expect(scopes).toEqual([{ workspaceId: 'ws_1', userId: 'u_1' }])
+  })
+
+  it('claims only the workspace when no user is signed in', async () => {
+    // An unauthenticated deployment. The narrower pool is a consequence of there being nobody to
+    // name, which is a different fact from a caller that had a user and forgot it.
+    const { service, scopes } = serviceRecordingScope()
+
+    await service.run({ ...REQUEST, userId: null })
+
+    expect(scopes).toEqual([{ workspaceId: 'ws_1' }])
+  })
 
   it("runs on the workspace preset's BASE model, like every other kind that declares no override", async () => {
     // A preset states one base model for every agent kind, and the assistant is not special: it

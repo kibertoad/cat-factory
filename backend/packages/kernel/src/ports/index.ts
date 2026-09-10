@@ -724,11 +724,13 @@ export type {
 } from './provider-api-key-repositories.js'
 export type { PublicApiKeyRecord, PublicApiKeyRepository } from './public-api-key-repositories.js'
 export type {
+  ActivationScopeId,
   PersonalSubscriptionRecord,
   PersonalSubscriptionRepository,
   SubscriptionActivationRecord,
   SubscriptionActivationRepository,
 } from './personal-subscription-repositories.js'
+export { runActivationScope, userActivationScope } from './personal-subscription-repositories.js'
 export type {
   LocalModelEndpointRecord,
   LocalModelEndpointRepository,

@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import type { AssistantAnswer, AssistantCapability, AssistantTurn } from '~/types/domain'
 import type { LoadState } from '~/types/load-state'
 import { useWorkspaceStore } from '~/stores/workspace'
+import { usePersonalSubscriptionsStore } from '~/stores/personalSubscriptions'
 
 /**
  * How long the capability read waits before it counts as failed.
@@ -99,10 +100,28 @@ export const useAssistantStore = defineStore('assistant', () => {
 
   /**
    * Run one turn. Throws on a refusal so the caller can hand it to the error funnel; the three
-   * outcomes (performed / needs_input / declined) come back as the resolved value.
+   * outcomes (performed / needs_input / declined) come back as the resolved value, and `null`
+   * when the person cancelled the credential prompt.
    */
-  async function run(prompt: string): Promise<AssistantTurn> {
-    return record(() => api.runAssistantTurn(workspace.requireId(), prompt))
+  async function run(prompt: string): Promise<AssistantTurn | null> {
+    // Through the credential flow, exactly as a run start goes: the turn resolves the workspace's
+    // OWN preset, so on a workspace pinned to an individual-usage subscription the first turn 428s,
+    // the modal collects the password, and it rides transparently from the cache after that.
+    //
+    // `null` for a CANCELLED prompt, the shape every gated surface here uses. A cancel is not a
+    // failed turn and not a declined one either: nothing ran, so there is no outcome to render and
+    // nothing to report. `record` never runs, so the kept `turn` is whatever it already was, which
+    // for the modal is nothing: editing the prompt cleared it before submit.
+    //
+    // The completed turn is captured in a local of its OWN name rather than read back off the
+    // store's `turn` ref, which this would otherwise shadow: two bindings spelled the same in one
+    // function is how a later edit writes to the wrong one with nothing failing.
+    const personal = usePersonalSubscriptionsStore()
+    let completed: AssistantTurn | null = null
+    const ran = await personal.withCredential(async (password) => {
+      completed = await record(() => api.runAssistantTurn(workspace.requireId(), prompt, password))
+    })
+    return ran ? completed : null
   }
 
   /**

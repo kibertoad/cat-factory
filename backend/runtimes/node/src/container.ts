@@ -36,6 +36,7 @@ import {
 import { applyGateProviders, warnUnwiredGates } from '@cat-factory/gates'
 import { GitLabIdentityResolver } from '@cat-factory/gitlab'
 import type {
+  ActivationScopeId,
   AgentContextRecorder,
   ResolveBinaryArtifactStore,
   ResolveRunInitiatorToken,
@@ -127,7 +128,7 @@ function buildNodeVcsIdentityRegistry(config: AppConfig): VcsIdentityRegistry {
  */
 export interface ModelProviderResolverWrapDeps {
   leasePersonalSubscriptionToken?: (
-    executionId: string,
+    scopeId: ActivationScopeId,
     userId: string,
     vendor: SubscriptionVendor,
   ) => Promise<{ secret: string }>
