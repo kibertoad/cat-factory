@@ -319,25 +319,60 @@ export const MODEL_CATALOG: SelectableModel[] = [
   {
     id: 'deepseek',
     family: 'deepseek',
-    label: 'DeepSeek V4 Flash',
+    label: 'DeepSeek V4.1 Flash',
     description:
-      "DeepSeek's cost-efficient 1M-context V4 model when direct, through OpenRouter or on a " +
-      'DeepSeek coding-plan subscription; falls back to the 80K R1 Qwen-32B distill on Cloudflare.',
+      "DeepSeek's cost-efficient 1M-context Flash model, now multimodal: direct, through " +
+      'OpenRouter or on a DeepSeek coding-plan subscription; falls back to the 80K R1 ' +
+      'Qwen-32B distill on Cloudflare.',
+    // The three DeepSeek-served arms moved off `deepseek-v4-flash` on 2026-09-10, and this is
+    // the silent-failure shape the catalog header warns about rather than a routine version
+    // bump. DeepSeek RETIRED V4-Flash and V4-Flash-Vision-Exp that day and made
+    // `deepseek-flash` the canonical, unversioned name; the old id still resolves, but only as
+    // a TEMPORARY compatibility alias that routes to V4.1-Flash and bills at its rate. So
+    // nothing threw and nothing failed to dispatch: the picker simply said "V4 Flash" while a
+    // different model answered, at a rate the spend table did not carry, until the alias is
+    // withdrawn and the route dies outright. Following the alias is exactly what the header's
+    // "declare a flavour only once the route is VERIFIED" rule exists to prevent, so all three
+    // arms name the live model instead.
+    //
+    // `acceptsImages` is new here and is a real capability gain, not a correction: V4.1-Flash
+    // folds the V4-Flash-Vision-Exp line back into the main model with native visual
+    // understanding, which the text-only V4-Flash did not have.
+    //
+    // The entry KEEPS its `deepseek` id. The id is the value a workspace persists against a
+    // block, and this is the same slot pointing at the vendor's own successor on the same
+    // route, so re-minting it would invalidate every stored pick to say nothing new.
+    //
+    // OpenRouter still serves a separate `deepseek/deepseek-v4-flash` at a fifth of the price,
+    // and this entry deliberately does NOT keep it: it is the retired model, its window and
+    // rates belong to a build DeepSeek no longer maintains, and an entry whose direct and
+    // gateway arms named different models is the neighbouring-version trap the header bans.
+    //
+    // V4 Pro is unaffected and keeps its own entry below. The 2026-09-10 release note said
+    // `deepseek-v4-pro` would route to V4.1-Flash from 2026-09-14, which would have silently
+    // demoted that entry; the changelog was re-read rather than trusted, and DeepSeek has since
+    // decided to continue serving V4 Pro with billing unchanged.
     cloudflare: {
       provider: 'workers-ai',
       model: '@cf/deepseek-ai/deepseek-r1-distill-qwen-32b',
       contextTokens: 80_000,
     },
     direct: {
-      ref: { provider: 'deepseek', model: 'deepseek-v4-flash', contextTokens: 1_048_576 },
+      ref: {
+        provider: 'deepseek',
+        model: 'deepseek-flash',
+        contextTokens: 1_048_576,
+        acceptsImages: true,
+      },
       keyEnv: 'DEEPSEEK_API_KEY',
       providerLabel: 'DeepSeek',
     },
     openrouter: {
       ref: {
         provider: 'openrouter',
-        model: 'deepseek/deepseek-v4-flash',
+        model: 'deepseek/deepseek-v4.1-flash',
         contextTokens: 1_048_576,
+        acceptsImages: true,
       },
       keyEnv: 'OPENROUTER_API_KEY',
       providerLabel: 'OpenRouter',
@@ -347,7 +382,7 @@ export const MODEL_CATALOG: SelectableModel[] = [
     subscription: {
       ref: {
         provider: 'deepseek',
-        model: 'deepseek-v4-flash',
+        model: 'deepseek-flash',
         harness: 'claude-code',
         contextTokens: 1_048_576,
       },

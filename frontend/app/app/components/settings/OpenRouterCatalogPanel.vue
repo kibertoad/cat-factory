@@ -42,7 +42,7 @@ const RECOMMENDED_SLUGS = [
   'google/gemini-3.1-pro-preview',
   'google/gemini-3.8-flash',
   'meta/muse-spark-1.3',
-  'deepseek/deepseek-v4-flash',
+  'deepseek/deepseek-v4.1-flash',
   'moonshotai/kimi-k2.7-code',
   'z-ai/glm-5.3',
   'z-ai/glm-5.2',

@@ -59,7 +59,7 @@ describe('subscriptionVendorForRef', () => {
     expect(
       subscriptionVendorForRef({
         provider: 'deepseek',
-        model: 'deepseek-v4-flash',
+        model: 'deepseek-flash',
         harness: 'claude-code',
       }),
     ).toBe('deepseek')

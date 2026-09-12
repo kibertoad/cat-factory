@@ -23,7 +23,7 @@
     "@cat-factory/agents": "workspace:*",
     "@cat-factory/kernel": "workspace:*",
     "@cat-factory/prompt-fragments": "workspace:*",
-    "valibot": "^1.4.2"
+    "valibot": "^1.5.0"
   },
   "devDependencies": {
     "@cat-factory/integrations": "workspace:*",
