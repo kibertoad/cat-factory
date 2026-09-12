@@ -375,6 +375,18 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   // than derived: $0.014/M Flash and $0.044/M Pro at peak (half of each off-peak), against a
   // derived 0.1x floor of $0.044 / $0.132 that over-stated a cache read by ~3x. Peak again,
   // to stay consistent with the fresh rates beside them.
+  //
+  // `deepseek-flash` is V4.1-Flash, the canonical unversioned name since 2026-09-10, and it
+  // reprices the Flash tier DOWN: peak list is $0.30 in / $0.006 cached / $1.20 out, against
+  // V4-Flash's $0.44 / $0.014 / $1.32. `deepseek:deepseek-v4-flash` stays below it because
+  // DeepSeek kept that id alive as a temporary alias onto this same model, so a deployment on
+  // an older catalog still meters, and because historical spend rows recorded against it must
+  // keep costing correctly. Both rows are peak, per the rule above.
+  'deepseek:deepseek-flash': {
+    inputPerMillion: 0.28,
+    outputPerMillion: 1.1,
+    cacheReadPerMillion: 0.006,
+  },
   'deepseek:deepseek-v4-flash': {
     inputPerMillion: 0.4,
     outputPerMillion: 1.21,
@@ -604,6 +616,16 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   // unsafe direction as soon as the cheap upstreams thin again; only an UNDERSTATED pin is
   // re-pinned here. Re-reading the blend is still part of every sweep, because the stamp is the
   // only record of which direction it moved.
+  // OpenRouter passes DeepSeek's own peak/off-peak schedule through on the V4.1 route (its
+  // `overrides` carry the same two UTC windows), so this row is pinned at the peak band for the
+  // same reason the direct rows are: $0.30 in / $0.006 cached / $1.20 out. The retired
+  // `deepseek/deepseek-v4-flash` row below stays: the gateway still serves that slug, so it is a
+  // live route for anyone whose catalog names it, and its rates are unrelated to this one's.
+  'openrouter:deepseek/deepseek-v4.1-flash': {
+    inputPerMillion: 0.28,
+    outputPerMillion: 1.1,
+    cacheReadPerMillion: 0.006,
+  },
   'openrouter:deepseek/deepseek-v4-flash': {
     inputPerMillion: 0.082,
     outputPerMillion: 0.164,

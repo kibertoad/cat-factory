@@ -63,13 +63,13 @@
     "hono": "^4.13.7",
     "layered-loader": "^16.1.1",
     "pg": "^8.23.0",
-    "pg-boss": "^12.30.0",
+    "pg-boss": "^12.31.0",
     "toad-scheduler": "^4.2.0",
     "ws": "^8.21.3"
   },
   "devDependencies": {
     "@cat-factory/conformance": "workspace:*",
-    "@types/node": "^26.5.0",
+    "@types/node": "^26.5.1",
     "@types/pg": "^8.23.1",
     "@types/ws": "^8.18.1",
     "drizzle-kit": "1.0.0-rc.4",

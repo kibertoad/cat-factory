@@ -19,10 +19,10 @@
     "@cat-factory/benchmark-harness": "workspace:*",
     "@cat-factory/executor-harness": "workspace:*",
     "@cat-factory/kernel": "workspace:*",
-    "valibot": "^1.4.2"
+    "valibot": "^1.5.0"
   },
   "devDependencies": {
-    "@types/node": "^26.5.0",
+    "@types/node": "^26.5.1",
     "typescript": "7.0.2",
     "vitest": "^4.1.11"
   }
