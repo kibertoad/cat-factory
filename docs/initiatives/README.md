@@ -49,6 +49,7 @@ a tracker document](../../CLAUDE.md).
 - [Bug-triage pipeline](./bug-triage-pipeline.md)
 - [Configurable per-agent-kind output budgets](./configurable-agent-output-budgets.md)
 - [Custom initiative definitions (org-registered presets)](./custom-initiative-definitions.md)
+- [Delegated executors (embedding lower-level orchestration under cat-factory)](./delegated-executors.md)
 - [Judge registry (the verdict-gate family)](./judge-registry.md)
 - [Library frame support](./library-frame-support.md)
 - [Monorepo service bootstrap (adoption review)](./monorepo-service-bootstrap.md)
