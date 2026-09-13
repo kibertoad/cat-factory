@@ -6,7 +6,12 @@ import {
   projectExecutionForBoard,
   updateWorkspaceContract,
 } from '@cat-factory/contracts'
-import { BINARY_OUTPUT_TRAIT, configContributionCatalog, hasTrait } from '@cat-factory/agents'
+import {
+  BINARY_OUTPUT_TRAIT,
+  configContributionCatalog,
+  delegatedExecutorFor,
+  hasTrait,
+} from '@cat-factory/agents'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import { logger as sharedLogger } from '../../observability/logger.js'
@@ -38,7 +43,13 @@ import {
   runBestEffort,
 } from '@cat-factory/kernel'
 import { suppressedTaskTypeIds } from '@cat-factory/orchestration'
-import type { AccountRole, ModelRef, TaskTypeRegistry, WorkspaceRole } from '@cat-factory/kernel'
+import type {
+  AccountRole,
+  DelegatedExecutorRegistry,
+  ModelRef,
+  TaskTypeRegistry,
+  WorkspaceRole,
+} from '@cat-factory/kernel'
 import type { Workspace } from '@cat-factory/contracts'
 import type { ServerContainer } from '../../http/env.js'
 
@@ -178,6 +189,11 @@ function snapshotCustomAgentKinds(
       ...(registry.isCompanionKind(def.kind)
         ? { companionTargets: registry.companionTargets(def.kind) }
         : {}),
+      // WHICH executor class runs the kind, and, for a delegated one, the executor itself.
+      // Projected here rather than derived in the SPA from `container: false`, because that
+      // boolean answers a two-world question and there are three: an inline judge and a step that
+      // leaves the platform entirely are the same value under it. See `delegatedKindProjection`.
+      ...delegatedKindProjection(def.kind, registry, container.delegatedExecutorRegistry),
     }))
   // Registered JUDGES (the fourth step-taxonomy bucket) reach the palette through the SAME
   // projection: a judge is a step kind the SPA must be able to place and open a result window
@@ -191,12 +207,47 @@ function snapshotCustomAgentKinds(
             kind: judge.kind,
             presentation: { resultView: 'judge' as const, ...judge.presentation },
             container: false,
+            // A judge's assessment is an inline LLM call, always. Stated rather than left to be
+            // inferred from `container: false`, which a delegated kind also carries.
+            executor: 'inline' as const,
           },
         ]
       : [],
   )
   const all = [...kinds, ...judges]
   return all.length > 0 ? all : undefined
+}
+
+/**
+ * WHICH executor class a kind runs on, plus the registered executor when it is a delegated one.
+ *
+ * The `delegatedExecutor` half rides the KIND rather than a parallel snapshot list, because the
+ * pipeline builder's one question is what a step's card says, and a kind whose executor THIS build
+ * no longer registers must read as an unresolvable step rather than silently as a normal one. A
+ * missing registration therefore leaves `executor: 'delegated'` with no executor beside it, which
+ * is the state the SPA renders as "this step's executor is not available here".
+ */
+function delegatedKindProjection(
+  kind: string,
+  registry: AgentKindRegistry,
+  executors: DelegatedExecutorRegistry,
+): Pick<CustomAgentKind, 'executor' | 'delegatedExecutor'> {
+  const executorId = delegatedExecutorFor(kind, registry)
+  if (!executorId) {
+    return { executor: registry.requiresContainer(kind) ? 'container' : 'inline' }
+  }
+  const definition = executors.get(executorId)
+  if (!definition) return { executor: 'delegated' }
+  return {
+    executor: 'delegated',
+    delegatedExecutor: {
+      id: definition.id,
+      label: definition.presentation.label,
+      icon: definition.presentation.icon,
+      description: definition.presentation.description,
+      telemetry: definition.telemetry,
+    },
+  }
 }
 
 /**

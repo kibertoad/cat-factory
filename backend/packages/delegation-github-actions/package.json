@@ -1,0 +1,40 @@
+{
+  "name": "@cat-factory/delegation-github-actions",
+  "version": "0.0.0",
+  "description": "A DelegatedExecutor over GitHub Actions: dispatch a workflow, correlate the run the platform's own key, poll status/conclusion, and read a result back. Solves the three problems every GitHub-hosted deployment hits when plugging its own implement/review/test loop in as the executor of a cat-factory pipeline step.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kibertoad/cat-factory.git",
+    "directory": "backend/packages/delegation-github-actions"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "prepublishOnly": "pnpm run build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest",
+    "test:run": "vitest run"
+  },
+  "dependencies": {
+    "@cat-factory/kernel": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2",
+    "vitest": "^4.1.11"
+  }
+}

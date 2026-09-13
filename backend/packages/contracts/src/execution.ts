@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { runContainerSchema, runDelegationSchema } from './run-execution-surface.js'
 import { intakeOriginSchema, runDiagnosticsSchema, runModeSchema } from './run-provenance.js'
 import { testConcernSchema, testReportSchema, testerInfraSetupSchema } from './testing.js'
 import { consensusStepConfigSchema, stepGatingSchema } from './consensus.js'
@@ -338,40 +339,21 @@ export const runEnvironmentSchema = v.object({
 })
 export type RunEnvironment = v.InferOutput<typeof runEnvironmentSchema>
 
-/**
- * The lifecycle status of the per-run container backing a container agent step:
- * `starting` (dispatching / cold-booting), `up` (running the agent's job),
- * `errored` (the container failed to start, was evicted, or its job faulted), and
- * `destroyed` (the run's container has been reclaimed). The SPA additionally derives
- * `destroyed` for a finished run's container steps (the container is reclaimed as a
- * unit when the run terminates), so the backend only ever persists the first three.
- */
-export const runContainerStatusSchema = v.picklist(['starting', 'up', 'errored', 'destroyed'])
-export type RunContainerStatus = v.InferOutput<typeof runContainerStatusSchema>
-
-/**
- * The compact, non-secret projection of the per-run container a container agent step
- * runs in, so a run's details can show WHAT the container is doing and WHERE it lives
- * instead of a step's "spinning up container…" badge vanishing into a blank "working"
- * state once the container is up. Populated by the engine across the dispatch + poll
- * lifecycle of an async (container) step; only ever set on container-backed steps.
- */
-export const runContainerSchema = v.object({
-  /** The container lifecycle status; see {@link runContainerStatusSchema}. */
-  status: runContainerStatusSchema,
-  /**
-   * The coarse phase the agent's job is in while the container is `up` (`clone` →
-   * `agent` → `push`, seeded `starting`), forwarded from the harness. Lets the details
-   * distinguish "still preparing the checkout" from "the agent is making calls". Absent
-   * until the first poll, or when the runner doesn't report a phase.
-   */
-  phase: v.optional(v.nullable(v.string())),
-  /** Provider container/runner id (Cloudflare DO id, docker container id), when known. */
-  id: v.optional(v.nullable(v.string())),
-  /** A reachable address for the running container (the local docker host URL), when one exists. */
-  url: v.optional(v.nullable(v.string())),
-})
-export type RunContainer = v.InferOutput<typeof runContainerSchema>
+// WHERE a step's work runs: the per-run container, and the external delegation. Their own module
+// (see `run-execution-surface.ts`), re-exported here because a step carries both and every reader
+// of a step reaches for them through this one.
+export {
+  runContainerSchema,
+  runContainerStatusSchema,
+  runDelegationAttemptSchema,
+  runDelegationSchema,
+  runDelegationStatusSchema,
+  type RunContainer,
+  type RunContainerStatus,
+  type RunDelegation,
+  type RunDelegationAttempt,
+  type RunDelegationStatus,
+} from './run-execution-surface.js'
 
 /** The web-search backend a run's container searches through, when search is available. */
 export const webSearchProviderSchema = v.picklist(['brave', 'searxng'])
@@ -605,6 +587,14 @@ export const pipelineStepSchema = v.object({
    * non-container steps and steps not yet dispatched. See {@link runContainerSchema}.
    */
   container: v.optional(v.nullable(runContainerSchema)),
+  /**
+   * The EXTERNAL work a delegated step dispatched: which registered executor, its status, the
+   * link to the executor's own logs, and the per-attempt log. Set the moment the dispatch claim
+   * is committed (before the executor is called) and refined on each poll. Only ever set on
+   * delegated steps; absent on every other step and on steps not yet dispatched. See
+   * {@link runDelegationSchema}.
+   */
+  delegated: v.optional(v.nullable(runDelegationSchema)),
   /**
    * Whether web search was available to this container step, and which upstream backend
    * served it. Set at dispatch (a static per-run fact resolved from the account's

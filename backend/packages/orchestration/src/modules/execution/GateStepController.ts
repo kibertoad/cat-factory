@@ -17,6 +17,7 @@ import type { GateHelperDispatcher } from './GateHelperDispatcher.js'
 import type { RunStateMachine } from './RunStateMachine.js'
 import type { RunPolicyScope } from './policy-types.js'
 import type { SettledGate } from '../observability/GateOutcomeRecorder.js'
+import { awaitingJob } from './awaitingJob.logic.js'
 
 // ---------------------------------------------------------------------------
 // The polling-gate STATE MACHINE: one generic evaluation shared by every registered gate
@@ -99,7 +100,7 @@ export class GateStepController {
   ): Promise<AdvanceResult> {
     // Re-attach after a replay: a helper is already in flight for this gate.
     if (step.gate?.phase === 'working' && step.jobId) {
-      return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
+      return awaitingJob(step, instance.currentStep, step.jobId)
     }
 
     // Provider not wired: the gate is a pass-through so the engine works without it.

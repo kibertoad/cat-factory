@@ -32,6 +32,7 @@ import {
   type CreateSharedStackInput,
   type GateRegistry,
   getErrorMessage,
+  type DelegatedExecutorRegistry,
   type JudgeRegistry,
   type PipelineRegistry,
   PLATFORM_FOUNDATIONAL_SERVICES,
@@ -175,6 +176,13 @@ export interface StartLocalOptions {
    * the empty default (the platform ships no judges).
    */
   judgeRegistry?: JudgeRegistry
+  /**
+   * App-owned DI seam for DELEGATED EXECUTORS (an external system this deployment already runs,
+   * taking one pipeline step): a deployment news a `defaultDelegatedExecutorRegistry()`, registers
+   * its `DelegatedExecutorDefinition`s on it, and passes it here. Threaded through on both paths.
+   * Absent → the empty default (the platform ships none).
+   */
+  delegatedExecutorRegistry?: DelegatedExecutorRegistry
   /**
    * App-owned DI seam for custom STEP COMPLETION RESOLVERS, threaded through on both paths.
    * Absent → the empty default (the built-in `merger` resolver is a privileged engine built-in,
@@ -422,6 +430,7 @@ async function bootLocal(
     pipelineRegistry: options.pipelineRegistry,
     gateRegistry: options.gateRegistry,
     judgeRegistry: options.judgeRegistry,
+    delegatedExecutorRegistry: options.delegatedExecutorRegistry,
     stepResolverRegistry: options.stepResolverRegistry,
     vcsRegistry: options.vcsRegistry,
     promptFragmentRegistry: options.promptFragmentRegistry,
@@ -475,6 +484,63 @@ async function bootLocal(
  * no-pg-boss analogue), so a crash/restart re-drives in-flight runs; telemetry local-first sync
  * remains a later initiative slice (PR 5).
  */
+/**
+ * Say, by name, which of THIS node's own registrations mothership mode ignores.
+ *
+ * In mothership mode the catalog's `builtin` tier and the generative-integration set are read from
+ * the MOTHERSHIP, so anything registered on this node's entry point is not part of any catalog it
+ * resolves. That is the shape a deployment written before those sets crossed the machine API has:
+ * registering on BOTH entry points was the only thing that worked, so the line reads like
+ * deliberate wiring rather than the workaround it became. The registrations are harmless (the same
+ * build registers them on the mothership, where they take effect), but silently ignoring them would
+ * swap one invisible failure for another, which is why each warning names the ids.
+ *
+ * Extracted from {@link startLocalMothership} to keep it under the per-function line budget; the
+ * two warnings move together because they are one observation about one deployment shape.
+ */
+function warnLocalRegistrationsIgnored(container: {
+  foundationalServiceRegistry: { all(): { id: string }[] }
+  binaryGeneratorRegistry: { all(): { id: string }[] }
+}): void {
+  // In mothership mode the catalog's `builtin` tier comes from the MOTHERSHIP, so anything this
+  // node registered locally is not part of any catalog it resolves. Say so, naming the ids: this
+  // is the shape a deployment written before the tier crossed the machine API has (it had to
+  // register on both entry points), and silently ignoring it would swap one invisible failure for
+  // another. The registrations are harmless, since the same build registers them on the mothership,
+  // which is where they take effect.
+  const localEstate = deploymentRegisteredIds(
+    container.foundationalServiceRegistry.all(),
+    PLATFORM_FOUNDATIONAL_SERVICES,
+  )
+  if (localEstate.length > 0) {
+    logger.warn(
+      'local mode: foundational services registered on this node are NOT used in mothership ' +
+        'mode. The catalog’s builtin tier is read from the mothership, which is authoritative ' +
+        'for the deployment’s estate. Register them on the mothership’s own entry point.',
+      { serviceIds: localEstate },
+    )
+  }
+
+  // The same courtesy for the generative integrations, and the one that would have told a
+  // deployment it was carrying a redundant registration: before the set crossed the machine API,
+  // registering on BOTH entry points was the only shape that worked, so the line reads like
+  // deliberate wiring rather than the workaround it was. Naming the ids is what makes it
+  // actionable: silently ignoring them would swap one invisible failure for another.
+  const localGenerators = deploymentRegisteredIds(
+    container.binaryGeneratorRegistry.all(),
+    BUILTIN_BINARY_GENERATORS,
+  )
+  if (localGenerators.length > 0) {
+    logger.warn(
+      'local mode: generative binary integrations registered on this node are NOT used in ' +
+        'mothership mode. A run resolves a step’s generatorIds against the mothership, which ' +
+        'is what the pipeline builder offered them from. Register them on the mothership’s own ' +
+        'entry point.',
+      { binaryGeneratorIds: localGenerators },
+    )
+  }
+}
+
 async function startLocalMothership(
   env: NodeJS.ProcessEnv,
   host: string | undefined,
@@ -503,6 +569,7 @@ async function startLocalMothership(
     pipelineRegistry,
     gateRegistry,
     judgeRegistry,
+    delegatedExecutorRegistry,
     stepResolverRegistry,
     vcsRegistry,
     promptFragmentRegistry,
@@ -538,6 +605,7 @@ async function startLocalMothership(
     pipelineRegistry,
     gateRegistry,
     judgeRegistry,
+    delegatedExecutorRegistry,
     stepResolverRegistry,
     vcsRegistry,
     promptFragmentRegistry,
@@ -570,43 +638,7 @@ async function startLocalMothership(
     escalateWarning: extensions.escalateRegistrationWarning,
   })
 
-  // In mothership mode the catalog's `builtin` tier comes from the MOTHERSHIP, so anything this
-  // node registered locally is not part of any catalog it resolves. Say so, naming the ids: this
-  // is the shape a deployment written before the tier crossed the machine API has (it had to
-  // register on both entry points), and silently ignoring it would swap one invisible failure for
-  // another. The registrations are harmless — the same build registers them on the mothership,
-  // which is where they take effect.
-  const localEstate = deploymentRegisteredIds(
-    container.foundationalServiceRegistry.all(),
-    PLATFORM_FOUNDATIONAL_SERVICES,
-  )
-  if (localEstate.length > 0) {
-    logger.warn(
-      'local mode: foundational services registered on this node are NOT used in mothership ' +
-        'mode. The catalog’s builtin tier is read from the mothership, which is authoritative ' +
-        'for the deployment’s estate. Register them on the mothership’s own entry point.',
-      { serviceIds: localEstate },
-    )
-  }
-
-  // The same courtesy for the generative integrations, and the one that would have told a
-  // deployment it was carrying a redundant registration: before the set crossed the machine API,
-  // registering on BOTH entry points was the only shape that worked, so the line reads like
-  // deliberate wiring rather than the workaround it was. Naming the ids is what makes it
-  // actionable: silently ignoring them would swap one invisible failure for another.
-  const localGenerators = deploymentRegisteredIds(
-    container.binaryGeneratorRegistry.all(),
-    BUILTIN_BINARY_GENERATORS,
-  )
-  if (localGenerators.length > 0) {
-    logger.warn(
-      'local mode: generative binary integrations registered on this node are NOT used in ' +
-        'mothership mode. A run resolves a step’s generatorIds against the mothership, which ' +
-        'is what the pipeline builder offered them from. Register them on the mothership’s own ' +
-        'entry point.',
-      { binaryGeneratorIds: localGenerators },
-    )
-  }
+  warnLocalRegistrationsIgnored(container)
 
   // The binary artifact STORES are the family member that inverts the rule above, which is why
   // they get a line of their own rather than being folded into the one before it: registering

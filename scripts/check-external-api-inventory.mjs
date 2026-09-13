@@ -202,6 +202,14 @@ const CLASSIFICATION = [
     vendors: ['github'],
   },
   {
+    // The DelegatedExecutor over GitHub Actions: `workflow_dispatch`, the run list it correlates
+    // through, the run read, the cancel, and the pull-request lookup that recovers what a finished
+    // workflow produced. Every one of those is an Actions/REST surface GitHub can change.
+    path: 'backend/packages/delegation-github-actions/src/',
+    kind: 'vendor',
+    vendors: ['github'],
+  },
+  {
     path: 'backend/packages/integrations/src/modules/incidentio/',
     kind: 'vendor',
     vendors: ['incident.io'],

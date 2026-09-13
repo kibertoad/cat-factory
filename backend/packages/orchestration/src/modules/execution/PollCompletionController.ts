@@ -32,7 +32,7 @@ type SettledUpdate = Extract<AgentJobUpdate, { state: 'done' } | { state: 'faile
 
 /**
  * Collaborators + bound call-backs the {@link PollCompletionController} needs. The three
- * `recordBackendDiagnostics` / `recoverContainerEviction` / `markContainerErrored` hooks are bound
+ * `recordBackendDiagnostics` / `recoverContainerEviction` / `markDispatchErrored` hooks are bound
  * methods of the dispatcher so completion still runs against the SAME dispatcher state the inline
  * code did.
  */
@@ -52,10 +52,11 @@ export interface PollCompletionControllerDeps {
     step: PipelineStep,
     failure: ContainerFailureView,
   ) => Promise<AdvanceResult | null>
-  markContainerErrored: (
+  markDispatchErrored: (
     workspaceId: string,
     instance: ExecutionInstance,
     step: PipelineStep,
+    failure?: { error?: string; url?: string },
   ) => Promise<void>
 }
 
@@ -77,7 +78,7 @@ export class PollCompletionController {
   private readonly bugFishingController: BugFishingController
   private readonly recordBackendDiagnostics: PollCompletionControllerDeps['recordBackendDiagnostics']
   private readonly recoverContainerEviction: PollCompletionControllerDeps['recoverContainerEviction']
-  private readonly markContainerErrored: PollCompletionControllerDeps['markContainerErrored']
+  private readonly markDispatchErrored: PollCompletionControllerDeps['markDispatchErrored']
 
   constructor(deps: PollCompletionControllerDeps) {
     this.blockRepository = deps.blockRepository
@@ -90,7 +91,7 @@ export class PollCompletionController {
     this.bugFishingController = deps.bugFishingController
     this.recordBackendDiagnostics = deps.recordBackendDiagnostics
     this.recoverContainerEviction = deps.recoverContainerEviction
-    this.markContainerErrored = deps.markContainerErrored
+    this.markDispatchErrored = deps.markDispatchErrored
   }
 
   /**
@@ -173,7 +174,7 @@ export class PollCompletionController {
     // running branch that normally records it, and an evicted run is exactly the case a
     // post-mortem inspects ("which backend evicted this?"). Idempotent, so it's harmless when
     // the running branch already stamped it; whichever path upserts below persists it — the
-    // eviction re-dispatch/exhausted upsert in recoverContainerEviction, or markContainerErrored
+    // eviction re-dispatch/exhausted upsert in recoverContainerEviction, or markDispatchErrored
     // on a genuine failure (failRun then re-reads from storage).
     this.recordBackendDiagnostics(instance, update.backend)
     // Fold the job's EVIDENCE next, ahead of every recovery below, because a recovered failure
@@ -248,7 +249,10 @@ export class PollCompletionController {
     // above it spends a retry on this failure.
     const shutdown = containerShutdownFailure(update)
     if (shutdown) {
-      await this.markContainerErrored(workspaceId, instance, step)
+      await this.markDispatchErrored(workspaceId, instance, step, {
+        error: shutdown.error,
+        ...(update.delegated?.url ? { url: update.delegated.url } : {}),
+      })
       return { kind: 'job_failed', ...shutdown }
     }
     // Not an eviction: a genuine agent/job failure. Prefer the harness's STRUCTURED cause
@@ -258,11 +262,14 @@ export class PollCompletionController {
     // rather than a generic `agent`. The extended diagnostic surfaces as the failure detail.
     // Mark the container errored and persist so the failed details show it (failRun
     // re-reads from storage, so an in-memory-only mutation would be lost; failRun emits
-    // the terminal frame, so markContainerErrored deliberately doesn't). The two harness reports
+    // the terminal frame, so markDispatchErrored deliberately doesn't). The two harness reports
     // were already folded onto the step above: a red PRE-PR VALIDATION lends its rendered detail
     // to this failure (so the board's card shows WHICH check failed and what it printed), and the
     // reproduction proof never contributes one, the detail belonging to whatever killed the job.
-    await this.markContainerErrored(workspaceId, instance, step)
+    await this.markDispatchErrored(workspaceId, instance, step, {
+      error: update.error,
+      ...(update.delegated?.url ? { url: update.delegated.url } : {}),
+    })
     return {
       kind: 'job_failed',
       error: update.error,

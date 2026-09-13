@@ -125,6 +125,7 @@ import { D1UserRepository } from './repositories/D1UserRepository'
 import { D1WorkspaceMemberRepository } from './repositories/D1WorkspaceMemberRepository'
 import { D1WorkspaceMountRepository } from './repositories/D1WorkspaceMountRepository'
 import { D1WorkspaceRepository } from './repositories/D1WorkspaceRepository'
+import { buildDelegatedAgentExecutor } from '@cat-factory/server'
 import {
   buildAppRegistry,
   buildResolveRepoTarget,
@@ -488,6 +489,16 @@ function selectWorkerCorePersistence(
  */
 function selectWorkerAgentExecutor(
   input: WorkerContainerAssemblyInput,
+  /**
+   * The two seams built LATER in the assembly than the registries are, handed in rather than
+   * re-derived: the engine's checkout-free repo binding (which an external executor may stage its
+   * own context layer through) and the imported-issue projection (which tells the brief WHICH
+   * ticket the work came from, one of the four things a lower-level executor has no way to know).
+   */
+  late: {
+    resolveRunRepoContext?: CoreDependencies['resolveRunRepoContext']
+    taskRepository?: CoreDependencies['taskRepository']
+  },
 ): Pick<CoreDependencies, 'agentExecutor'> {
   const {
     env,
@@ -508,7 +519,21 @@ function selectWorkerAgentExecutor(
     mcpOAuthService,
     eventPublisher,
   } = input
-  const { agentKindRegistry } = registries
+  const { agentKindRegistry, delegatedExecutorRegistry } = registries
+  // The THIRD executor arm: a step whose work runs in a system the deployment already operates.
+  // Built unconditionally and symmetrically with the Node facade (see `buildDelegatedAgentExecutor`
+  // for why an empty registry is not a reason to skip it).
+  const delegated = buildDelegatedAgentExecutor({
+    delegatedExecutorRegistry,
+    agentKindRegistry,
+    resolveRepoTarget: buildResolveRepoTarget(db),
+    ...(late.resolveRunRepoContext ? { resolveRunRepoContext: late.resolveRunRepoContext } : {}),
+    ...(late.taskRepository ? { taskRepository: late.taskRepository } : {}),
+    resolveToolSecrets: toolSecretChain.resolver,
+    ...(agentContextObservability ? { agentContextObservability } : {}),
+    logger,
+    clock,
+  })
 
   return {
     // When a caller injects its own agentExecutor (tests pass a FakeAgentExecutor) skip selection
@@ -526,6 +551,7 @@ function selectWorkerAgentExecutor(
           caches,
           resolveTransport,
           agentKindRegistry,
+          delegated,
           subscriptions,
           personalSubscriptions,
           agentContextObservability,
@@ -548,6 +574,46 @@ function selectWorkerAgentExecutor(
         agentKindRegistry,
         caches,
       }),
+  }
+}
+
+/**
+ * The four collaborators resolved BEFORE the core-dependency literal, because each is read more
+ * than once inside it (or by something else that is).
+ *
+ * Hoisting them is not a style choice: constructing one inline twice would give the two readers
+ * DIFFERENT instances, and for three of the four that is a real fault rather than waste: two audit
+ * services would append to one log through two clients, two task-source sets would let the
+ * recurring selector's writeback dispatch through providers nobody else holds, and two run-repo
+ * bindings would give a delegated executor's context layer its own cache and head memo beside the
+ * one a registered kind's pre-ops write through.
+ *
+ * Extracted from {@link buildWorkerCoreDependencies} to keep it under the per-function line budget
+ * when the fourth member joined; behaviour is identical.
+ */
+function resolveWorkerPrelude(input: WorkerContainerAssemblyInput) {
+  const { env, config, db, clock, idGenerator, caches } = input
+  return {
+    // The Bedrock allow-list that gates `bedrock`-flavour selectability, derived from `env` here
+    // because it is one deployment-level read with nothing per-workspace to resolve: Bedrock is
+    // reached with the deployment's own AWS credentials. `bedrockModelsCapability` also requires a
+    // registered registry that can serve the route.
+    bedrockModels: bedrockModelsCapability(env),
+    // ONE service behind both audit seams (the Node twin does the same, in the same position).
+    // Separate dependencies because the capabilities differ (a domain service records, the
+    // viewer's controller paginates) but the SAME instance, so what one appends the other serves.
+    audit: new AuditService({
+      // The dedicated AUDIT_DB, not `db`: the log is retained for years and must not compete
+      // with live transactional state for the 10 GB per-database ceiling.
+      auditEventRepository: new D1AuditEventRepository({ db: requireAuditDb(env) }),
+      idGenerator,
+      clock,
+      logger,
+    }),
+    // The recurring selector's issue-writeback provider dispatches through these same providers.
+    tasksDeps: selectTasksDeps(env, config, db, clock, idGenerator),
+    // The DELEGATED arm of the agent executor reads the run-repo binding this builds.
+    githubDeps: selectGitHubDeps(env, config, db, clock, idGenerator, caches.repoFiles),
   }
 }
 
@@ -586,6 +652,7 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     agentKindRegistry,
     gateRegistry,
     judgeRegistry,
+    delegatedExecutorRegistry,
     stepResolverRegistry,
     initiativePresetRegistry,
     providerRegistry,
@@ -593,25 +660,7 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     binaryGeneratorRegistry,
     binaryStoreRegistry,
   } = registries
-  // The Bedrock allow-list that gates `bedrock`-flavour selectability, derived from `env` here
-  // (like `baseUrlFor` below) because it is one deployment-level read with nothing
-  // per-workspace to resolve: Bedrock is reached with the deployment's own AWS credentials.
-  // `bedrockModelsCapability` also requires a registered registry that can serve the route.
-  const bedrockModels = bedrockModelsCapability(env)
-  // ONE service behind both audit seams (the Node twin does the same, in the same position).
-  // Separate dependencies because the capabilities differ — a domain service records, the viewer's
-  // controller paginates — but the SAME instance, so what one appends is what the other serves.
-  const audit = new AuditService({
-    // The dedicated AUDIT_DB, not `db`: the log is retained for years and must not compete
-    // with live transactional state for the 10 GB per-database ceiling.
-    auditEventRepository: new D1AuditEventRepository({ db: requireAuditDb(env) }),
-    idGenerator,
-    clock,
-    logger,
-  })
-  // Resolved before the literal below rather than spread inline, because the recurring selector's
-  // issue-writeback provider dispatches through these same providers (see the spread site).
-  const tasksDeps = selectTasksDeps(env, config, db, clock, idGenerator)
+  const { bedrockModels, audit, tasksDeps, githubDeps } = resolveWorkerPrelude(input)
 
   return {
     // The structured logger every domain service emits through. Must be wired on BOTH facades
@@ -649,7 +698,12 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     }),
     idGenerator,
     clock,
-    ...selectWorkerAgentExecutor(input),
+    ...selectWorkerAgentExecutor(input, {
+      ...(githubDeps.resolveRunRepoContext
+        ? { resolveRunRepoContext: githubDeps.resolveRunRepoContext }
+        : {}),
+      taskRepository: tasksDeps.taskRepository,
+    }),
     agentKindRegistry,
     // The app-owned gate + step-resolver registries; the engine's gate machine + completion hub
     // read them, and the gate registry is re-exposed on Core for the boot-time validation.
@@ -657,6 +711,9 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     // The app-owned JUDGE registry (the fourth step-taxonomy bucket); the engine's judge machine
     // reads it, and it is re-exposed on Core for the snapshot's palette projection.
     judgeRegistry,
+    // The app-owned DELEGATED-EXECUTOR registry: the dispatch path builds each executor from it,
+    // and the snapshot names the one a delegated kind runs on.
+    delegatedExecutorRegistry,
     // The app-owned best-practice standards pool (shipped catalog + whatever the deployment
     // registered on the same instance). `createCore` wraps it in the default `PromptFragmentSource`
     // every prompt-assembly site and the catalog endpoint read through.
@@ -693,7 +750,7 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
       ? (ws) => openRouterCatalog.capabilitiesFor(ws)
       : undefined,
     ...selectWorkerDurableJobDeps(input),
-    ...selectGitHubDeps(env, config, db, clock, idGenerator, caches.repoFiles),
+    ...githubDeps,
     ...selectMergeLifecycleDeps({
       env,
       config,

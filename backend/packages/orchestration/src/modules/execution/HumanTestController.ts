@@ -25,6 +25,7 @@ import type { RunStateMachine } from './RunStateMachine.js'
 import type { RunPolicyScope } from './policy-types.js'
 import type { StepGraph } from './StepGraph.js'
 import { recordDispatchedJob } from './step-fold.logic.js'
+import { awaitingJob } from './awaitingJob.logic.js'
 
 /** Render the human's findings as the resolved-context block handed to the fixer. */
 function renderFindingsForFixer(findings: string): string {
@@ -140,7 +141,7 @@ export class HumanTestController {
     // `advance` (the stale-run sweeper, or a durable replay that lost the `awaiting_job`
     // position) keeps polling the job rather than abandoning it.
     if ((ht.phase === 'fixing' || ht.phase === 'resolving_conflicts') && step.jobId) {
-      return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
+      return awaitingJob(step, instance.currentStep, step.jobId)
     }
     return this.deps.stateMachine.parkStepOnDecision(workspaceId, instance, step, this.proposal(ht))
   }
@@ -441,7 +442,7 @@ export class HumanTestController {
       },
     ]
     await this.deps.stateMachine.persistAndEmit(workspaceId, instance)
-    return { kind: 'awaiting_job', jobId: handle.jobId, stepIndex: instance.currentStep }
+    return awaitingJob(step, instance.currentStep, handle.jobId)
   }
 
   /**

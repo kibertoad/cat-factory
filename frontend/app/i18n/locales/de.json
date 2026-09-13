@@ -2129,7 +2129,22 @@
       "promptVariant": "Prompt-Variante",
       "promptVariantAdditionOnly": "Nur die Ergänzung dieser Variante wurde angewendet. Der Workspace-Prompt für diesen Agenten hat ihren Basistext ersetzt.",
       "promptVariantSuperseded": "Diese Variante wurde nicht angewendet. Der Workspace-Prompt für diesen Agenten hatte Vorrang.",
-      "promptVariantWithdrawn": "Diese Variante ist nicht mehr registriert, daher lief der Schritt mit dem ausgelieferten Prompt."
+      "promptVariantWithdrawn": "Diese Variante ist nicht mehr registriert, daher lief der Schritt mit dem ausgelieferten Prompt.",
+      "delegated": {
+        "status": {
+          "cancelled": "Abgebrochen",
+          "done": "Extern abgeschlossen",
+          "failed": "Extern fehlgeschlagen",
+          "running": "Läuft extern",
+          "starting": "Startet extern"
+        },
+        "run": "Externer Lauf",
+        "copyUrl": "Link zum externen Lauf kopieren",
+        "openRun": "Lauf öffnen",
+        "noOutcome": "Kein Ergebnis festgehalten",
+        "earlierAttempts": "Frühere Versuche",
+        "usageNotReported": "Der Tokenverbrauch wird von {executor} nicht gemeldet, dieser Schritt fehlt daher in den Summen oben."
+      }
     },
     "stepDetail": {
       "contents": "Inhalte",
@@ -6206,7 +6221,8 @@
         "service_catalog_filter_missing": "Der Entitätsfilter dieser Verbindung konnte nicht gelesen werden, es gibt also nichts zu importieren. Speichere die Servicekatalog-Verbindung erneut, um ihn wiederherzustellen.",
         "service_catalog_response_too_large": "Das Entwicklerportal hat mit mehr Daten geantwortet, als diese Plattform in einer Antwort aufnimmt. Öffne die Servicekatalog-Einstellungen und senke das Service-Limit oder deaktiviere den Import von Schnittstellendefinitionen, und importiere dann erneut.",
         "assistant_generation_failed": "Der Modellanbieter des Assistenten hat nicht geantwortet. Er ist korrekt konfiguriert und hier muss nichts eingerichtet werden: Versuchen Sie die Anfrage gleich noch einmal.",
-        "assistant_reply_unreadable": "Das Modell des Assistenten hat etwas geantwortet, das diese Plattform nicht als Entscheidung ausführen kann. Eine Umformulierung hilft selten: Wählen Sie in den Modelleinstellungen ein anderes Modell für den Assistenten."
+        "assistant_reply_unreadable": "Das Modell des Assistenten hat etwas geantwortet, das diese Plattform nicht als Entscheidung ausführen kann. Eine Umformulierung hilft selten: Wählen Sie in den Modelleinstellungen ein anderes Modell für den Assistenten.",
+        "delegated_executor_failed": "Der externe Executor konnte diesen Schritt nicht starten. Das Problem liegt im System, das die Arbeit ausführt, nicht in dieser Installation: prüfe dessen Logs und versuche es erneut."
       }
     },
     "reason": {
@@ -6290,7 +6306,8 @@
         "expedition_settled": "Diese Expedition ist bereits abgeschlossen",
         "not_awaiting_triage": "Diese Expedition wartet nicht auf eine Sichtung",
         "already_addressed": "Für einige Befunde gibt es bereits eine Behebungsaufgabe",
-        "no_host_frame": "Diese Expedition liegt unter keinem Service"
+        "no_host_frame": "Diese Expedition liegt unter keinem Service",
+        "delegated_executor_unwired": "Externer Executor nicht registriert"
       },
       "description": {
         "dependencies_unmet": "Diese Aufgabe hängt von anderen ab, die noch nicht abgeschlossen sind. Schließe sie ab oder gib sie frei und starte dann erneut.",
@@ -6344,7 +6361,8 @@
         "expedition_settled": "Der Lauf hat den Fehlersuch-Schritt bereits hinter sich, es lässt sich also nichts mehr markieren oder verwerfen. Laden Sie den Lauf neu, um zu sehen, was gefunden und welche Befunde bearbeitet wurden.",
         "not_awaiting_triage": "Sie untersucht entweder noch einen weiteren Blickwinkel oder wurde bereits abgeschlossen. Laden Sie den Lauf neu, um den Stand zu sehen.",
         "already_addressed": "Dafür wurde bereits früher eine Behebungsaufgabe erstellt, es wurde also nichts neu angelegt. Öffnen Sie den Befund, um zur vorhandenen Aufgabe zu gelangen.",
-        "no_host_frame": "Eine Behebungsaufgabe braucht einen Service als Zuhause und ein Repository zum Beheben. Verschieben Sie die Expeditionsaufgabe unter einen Service-Rahmen und versuchen Sie es erneut."
+        "no_host_frame": "Eine Behebungsaufgabe braucht einen Service als Zuhause und ein Repository zum Beheben. Verschieben Sie die Expeditionsaufgabe unter einen Service-Rahmen und versuchen Sie es erneut.",
+        "delegated_executor_unwired": "Ein Schritt dieser Pipeline läuft auf einem externen Executor, den diese Installation nicht registriert; es gibt also kein Ziel für die Arbeit. Registriere den Executor im Code oder wähle für den Schritt einen, der hier läuft."
       },
       "action": {
         "connectGitHub": "GitHub verbinden",

@@ -254,10 +254,15 @@ export { BUILTIN_GATABLE_KINDS, isGatableKind } from './agents/kinds/gatable.js'
 // composite executor's ROUTING and the engine's preOp context preparation so the two can never
 // disagree about whether an agent can read files or run git.
 export {
+  delegatedExecutorFor,
   deliverableIsReply,
   dispatchDeliversCheckout,
+  runsDelegated,
   runsInContainer,
 } from './agents/kinds/container-surface.js'
+// What a declared surface IMPLIES, as a total table: adding a surface fails the build there rather
+// than falling through to whatever each call site's `else` happened to be.
+export { SURFACE_TRAITS, type SurfaceTraits, surfaceTraits } from './agents/kinds/surface-traits.js'
 export { companionSystemPrompt } from './agents/prompts/companion.js'
 // The document-authoring agent kinds (doc-researcher / doc-outliner / doc-writer /
 // doc-finalizer), registered as a SIDE EFFECT of importing this module so they are

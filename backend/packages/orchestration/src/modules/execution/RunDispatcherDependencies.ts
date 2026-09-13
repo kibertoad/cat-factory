@@ -13,6 +13,7 @@ import type {
   IssueWritebackProvider,
   EnvironmentInvestigator,
   JudgeAssessor,
+  DelegatedExecutorRegistry,
   JudgeRegistry,
   Logger,
   OperationalMetrics,
@@ -94,6 +95,13 @@ export interface RunDispatcherDeps {
   agentExecutor: AgentExecutor
   /** App-owned agent-kind registry: a registered kind's step spec + pre/post-op hooks. */
   agentKindRegistry: AgentKindRegistry
+  /**
+   * The app-owned DELEGATED-EXECUTOR registry: the external systems a deployment plugs in as the
+   * executor of a step. The dispatch reads an executor's declared poll cadence from it and copies
+   * that onto the step's delegation claim; the poll builds the executor itself from the SAME
+   * instance, so a kind's route and its cadence can never come from two different registries.
+   */
+  delegatedExecutorRegistry: DelegatedExecutorRegistry
   /** App-owned polling-gate registry (built-ins installed by the facade via `registerBuiltinGates`). */
   gateRegistry: GateRegistry
   /**

@@ -46,5 +46,23 @@ export function customKindToArchetype(kind: CustomAgentKind): AgentArchetype {
     // the snapshot, and a required step option cannot be gated on something the read model
     // does not carry.
     ...(kind.binaryOutput ? { binaryOutput: true } : {}),
+    // WHERE the kind's work runs, when it leaves the platform. Lifted from the entry rather than
+    // from `presentation` for the reason `binaryOutput` is: it is a fact about how the kind RUNS.
+    //
+    // A `delegated` kind with no executor resolved still carries its ID, so the card can name what
+    // this build cannot: an executor a deployment stopped registering is a step nobody can run,
+    // and rendering it as an ordinary one is how that goes unnoticed until a run refuses.
+    ...(kind.executor === 'delegated'
+      ? {
+          delegatedExecutor: kind.delegatedExecutor
+            ? {
+                id: kind.delegatedExecutor.id,
+                label: kind.delegatedExecutor.label,
+                description: kind.delegatedExecutor.description,
+                telemetry: kind.delegatedExecutor.telemetry,
+              }
+            : { id: '' },
+        }
+      : {}),
   }
 }

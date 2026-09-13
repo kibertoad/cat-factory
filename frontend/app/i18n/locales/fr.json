@@ -636,7 +636,8 @@
         "service_catalog_filter_missing": "Le filtre d'entités de cette connexion n'a pas pu être lu, il n'y a donc rien à importer. Enregistrez à nouveau la connexion au catalogue de services pour le rétablir.",
         "service_catalog_response_too_large": "Le portail développeur a renvoyé plus de données que cette plateforme n'en accepte dans une seule réponse. Ouvrez les paramètres du catalogue de services et abaissez la limite de services, ou désactivez l'import des définitions d'interface, puis relancez l'import.",
         "assistant_generation_failed": "Le fournisseur de modèles de l'assistant n'a pas répondu. Il est correctement configuré et il n'y a rien à paramétrer ici : réessayez la demande dans un instant.",
-        "assistant_reply_unreadable": "Le modèle de l'assistant a répondu quelque chose que cette plateforme ne peut pas exécuter comme décision. Reformuler aide rarement : choisissez un autre modèle pour l'assistant dans les paramètres de modèles."
+        "assistant_reply_unreadable": "Le modèle de l'assistant a répondu quelque chose que cette plateforme ne peut pas exécuter comme décision. Reformuler aide rarement : choisissez un autre modèle pour l'assistant dans les paramètres de modèles.",
+        "delegated_executor_failed": "L’exécuteur externe n’a pas pu démarrer cette étape. Le problème vient du système qui effectue le travail, pas de ce déploiement : consultez ses propres journaux, puis réessayez."
       }
     },
     "reason": {
@@ -720,7 +721,8 @@
         "expedition_settled": "Cette expédition est déjà terminée",
         "not_awaiting_triage": "Cette expédition n'attend pas de tri",
         "already_addressed": "Certaines constatations ont déjà une tâche de correction",
-        "no_host_frame": "Cette expédition n'est sous aucun service"
+        "no_host_frame": "Cette expédition n'est sous aucun service",
+        "delegated_executor_unwired": "Exécuteur externe non enregistré"
       },
       "description": {
         "dependencies_unmet": "Cette tâche dépend d'autres qui ne sont pas encore terminées. Terminez-les ou débloquez-les, puis relancez-la.",
@@ -774,7 +776,8 @@
         "expedition_settled": "L'exécution a dépassé son étape de pêche aux bogues : il n'y a plus rien à marquer ni à écarter. Rechargez l'exécution pour voir ce qu'elle a trouvé et quels constats ont été traités.",
         "not_awaiting_triage": "Soit elle explore encore un autre angle, soit elle est déjà terminée. Rechargez l'exécution pour voir où elle en est.",
         "already_addressed": "Une tâche de correction a déjà été créée pour elles ; rien n'a donc été recréé. Ouvrez la constatation pour rejoindre la tâche existante.",
-        "no_host_frame": "Une tâche de correction a besoin d'un service où vivre et d'un dépôt à corriger. Déplacez la tâche d'expédition sous un cadre de service et réessayez."
+        "no_host_frame": "Une tâche de correction a besoin d'un service où vivre et d'un dépôt à corriger. Déplacez la tâche d'expédition sous un cadre de service et réessayez.",
+        "delegated_executor_unwired": "Une étape de ce pipeline s’exécute sur un exécuteur externe que ce déploiement n’enregistre pas : le travail n’a donc nulle part où aller. Enregistrez l’exécuteur dans le code, ou remplacez l’étape par une qui s’exécute ici."
       },
       "action": {
         "connectGitHub": "Connecter GitHub",
@@ -1586,7 +1589,22 @@
       "promptVariant": "Variante de prompt",
       "promptVariantAdditionOnly": "Seul l'ajout de cette variante a été appliqué. Le prompt de l'espace de travail pour cet agent a remplacé son texte de base.",
       "promptVariantSuperseded": "Cette variante n'a pas été appliquée. Le prompt de l'espace de travail pour cet agent a prévalu.",
-      "promptVariantWithdrawn": "Cette variante n'est plus enregistrée ; l'étape a donc utilisé le prompt d'origine."
+      "promptVariantWithdrawn": "Cette variante n'est plus enregistrée ; l'étape a donc utilisé le prompt d'origine.",
+      "delegated": {
+        "status": {
+          "cancelled": "Annulé",
+          "done": "Terminé à l’extérieur",
+          "failed": "Échec à l’extérieur",
+          "running": "Exécution à l’extérieur",
+          "starting": "Démarrage à l’extérieur"
+        },
+        "run": "Exécution externe",
+        "copyUrl": "Copier le lien de l’exécution externe",
+        "openRun": "Ouvrir l’exécution",
+        "noOutcome": "Aucun résultat enregistré",
+        "earlierAttempts": "Tentatives précédentes",
+        "usageNotReported": "La consommation de jetons n’est pas remontée par {executor} : cette étape manque donc dans les totaux ci-dessus."
+      }
     },
     "stepDetail": {
       "contents": "Contenu",

@@ -29,6 +29,13 @@ export type AgentSurface =
   | 'container-explore'
   /** A container run that edits a working tree and commits + pushes (optionally opens a PR). */
   | 'container-coding'
+  /**
+   * A DELEGATED run: an external system the deployment registered (see kernel's
+   * `DelegatedExecutor`) does the work and the platform observes it. No harness, no checkout of
+   * ours, no proxy (the executor owns all three), so this surface is the one that answers "not
+   * reported" rather than zero on every telemetry surface.
+   */
+  | 'delegated'
 
 /** How an explore agent's reply is consumed. */
 export interface AgentOutputSpec {
@@ -142,6 +149,14 @@ export interface AgentCloneSpec {
 export interface AgentStepSpec {
   surface: AgentSurface
   output?: AgentOutputSpec
+  /**
+   * `delegated` surface only: the id of the registered {@link DelegatedExecutorDefinition} this
+   * kind runs on. REQUIRED there and REFUSED elsewhere, both at boot: a delegated kind with no
+   * executor has nowhere to dispatch, and an executor on a container kind is a declaration
+   * nothing reads, which is how a deployment comes to believe a step left the platform when it
+   * never did.
+   */
+  executor?: string
   /** Container surfaces only: what to clone. */
   clone?: AgentCloneSpec
   /**

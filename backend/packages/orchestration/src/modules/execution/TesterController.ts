@@ -25,6 +25,7 @@ import type { TesterQualityReviewer } from './TesterQualityReviewService.js'
 import { renderQualityFeedbackForTester } from './testerQuality.logic.js'
 import { shouldRunGatedStep } from './stepGating.logic.js'
 import { recordDispatchedJob } from './step-fold.logic.js'
+import { awaitingJob } from './awaitingJob.logic.js'
 
 /** Whether a Tester report raised any concern serious enough to block a release. */
 function hasBlockingConcerns(report: TestReport): boolean {
@@ -363,7 +364,7 @@ export class TesterController {
     const handle = await executor.startJob(context)
     recordDispatchedJob(step, handle, context.agentKind)
     await this.deps.stateMachine.persistAndEmit(workspaceId, instance)
-    return { kind: 'awaiting_job', jobId: handle.jobId, stepIndex: instance.currentStep }
+    return awaitingJob(step, instance.currentStep, handle.jobId)
   }
 
   /**
@@ -557,6 +558,6 @@ export class TesterController {
     const handle = await executor.startJob(context)
     recordDispatchedJob(step, handle, context.agentKind)
     await this.deps.stateMachine.persistAndEmit(workspaceId, instance)
-    return { kind: 'awaiting_job', jobId: handle.jobId, stepIndex: instance.currentStep }
+    return awaitingJob(step, instance.currentStep, handle.jobId)
   }
 }

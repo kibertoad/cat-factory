@@ -1,4 +1,10 @@
-import { sameSubtasks, type AgentJobHandle, type PipelineStep } from '@cat-factory/kernel'
+import {
+  sameSubtasks,
+  type AgentJobHandle,
+  type DelegationHandle,
+  type PipelineStep,
+  type RunDelegation,
+} from '@cat-factory/kernel'
 import type { DispatchToolServers } from '@cat-factory/contracts'
 import { shouldPersistActivity } from './job.logic.js'
 
@@ -44,6 +50,34 @@ export function pollHandleFor(
     model: step.model,
     subscriptionTokenId: step.subscriptionTokenId,
     initiatedByUserId: step.initiatedByUserId,
+    ...delegationHandleSlice(step),
+  }
+}
+
+/**
+ * The `delegated` slice of a rebuilt poll handle: which registered executor the step dispatched to
+ * and what it knows about the external work.
+ *
+ * A delegated step's poll has NOTHING else to route on. The engine's poll site holds a step and a
+ * run; the executor id lives only on this record, and without it `CompositeAgentExecutor.pollJob`
+ * cannot tell a delegated step from a container one and polls a container that was never started.
+ *
+ * The `externalId` FALLS BACK to the step's job id, which is the correlation key by construction
+ * (`stepJobId`), and that fallback is the replay case rather than an edge: the claim is committed
+ * before `start()` is called, so a process that died in between leaves a record with a status and
+ * no external id, and the executor is asked to recover one by correlation instead of the platform
+ * starting a second external run.
+ */
+function delegationHandleSlice(step: PipelineStep): Pick<AgentJobHandle, 'delegated'> {
+  const record = step.delegated
+  if (!record) return {}
+  return {
+    delegated: {
+      executor: record.executor,
+      externalId: record.externalId ?? step.jobId!,
+      ...(record.url ? { url: record.url } : {}),
+      ...(record.branches ? { branches: record.branches } : {}),
+    },
   }
 }
 
@@ -88,6 +122,12 @@ export function recordDispatchAttribution(
   // re-dispatch by an executor that wires no tool servers (the inline path picking up a step a
   // container path started) never erases the container round's record.
   if (handle.toolServers) stampToolServers(step, handle.toolServers, dispatchedKind)
+  // The DELEGATION the dispatch resolved: the external id the executor answered with, and the page
+  // a human watches it on. Folded here, with the rest of the attribution, because the poll site
+  // rebuilds its handle from the step alone and this is the only route from the accepted dispatch
+  // to it. Merged onto the CLAIM rather than replacing it, so the executor id and the attempt log
+  // the claim wrote survive; the status moves to `running` because the executor has answered.
+  if (handle.delegated) stampDelegationDispatch(step, handle.delegated)
   // Order-preserving by FIRST dispatch, counting every one after it: the count is what makes a
   // gate's fourth fixer round visible, so a re-dispatch increments rather than deduplicating.
   const dispatches = step.dispatches ?? []
@@ -245,8 +285,236 @@ export function recordDispatchedJob(
 ): string {
   step.jobId = handle.jobId
   recordDispatchAttribution(step, handle, dispatchedKind)
-  step.container = { status: 'up' }
+  // A DELEGATED dispatch stamps no container, because there is none: the external executor owns
+  // the machine, and `recordDispatchAttribution` above has already moved its own record on.
+  // Stamping one anyway is what would make a delegated step render as a container that never
+  // reports a phase, an id or an address, and be addressed by the reclaim that kills containers
+  // by run.
+  if (!handle.delegated) step.container = { status: 'up' }
   return handle.jobId
+}
+
+/**
+ * Open the delegation record for a dispatch about to happen: the CLAIM, committed BEFORE the
+ * external executor is called.
+ *
+ * This is the whole idempotency story for a delegated step, and the deadliest trap in the flow.
+ * Both durable drivers replay, and an executor asked to start twice produces two external runs and
+ * two pull requests for one task. So the engine takes the claim-before-effect half of the bargain
+ * the port asks the executor for: it writes `starting` with the correlation key as the step's job
+ * id, persists it, and only then dispatches. A replay finds the job id, re-attaches instead of
+ * dispatching, and the poll asks the executor to recover its own run by that key.
+ *
+ * The attempt log APPENDS. A re-run's earlier attempts and their URLs are the evidence for why the
+ * step is being re-run, and the platform holds nothing else about work that happened elsewhere.
+ */
+export function claimDelegation(
+  step: PipelineStep,
+  input: {
+    executor: string
+    correlationKey: string
+    startedAt: number
+    poll: { intervalMs: number; maxDurationMs: number }
+  },
+): void {
+  step.jobId = input.correlationKey
+  const attempts = step.delegated?.attempts ?? []
+  step.delegated = {
+    executor: input.executor,
+    status: 'starting',
+    correlationKey: input.correlationKey,
+    poll: input.poll,
+    externalId: null,
+    url: null,
+    phase: null,
+    attempts: [...attempts, { startedAt: input.startedAt }],
+  }
+}
+
+/** Fold an accepted dispatch onto the claim: the external id, the link, and the attempt it opened. */
+function stampDelegationDispatch(
+  step: PipelineStep,
+  delegated: NonNullable<AgentJobHandle['delegated']>,
+): void {
+  // An accepted dispatch with no claim on the step cannot happen through `AgentDispatchController`
+  // (the claim is what commits before `start()`), but a HELPER dispatch site that forgot to claim
+  // would land here, and inventing a record is better than dropping the only link to the external
+  // run. `startedAt: 0` says the platform never saw this attempt begin.
+  const claim: RunDelegation = step.delegated ?? {
+    executor: delegated.executor,
+    status: 'starting',
+    correlationKey: step.jobId ?? delegated.externalId,
+    // The executor's declared cadence is unreachable from here, and inventing one would have the
+    // driver poll an external system on a number nobody chose. A zero window derives the one-poll
+    // floor `delegatedPollPolicy` guarantees, which settles the step on its next poll rather than
+    // pretending to a budget.
+    poll: { intervalMs: 0, maxDurationMs: 0 },
+    attempts: [{ startedAt: 0 }],
+  }
+  const attempts = claim.attempts.length > 0 ? claim.attempts : [{ startedAt: 0 }]
+  step.delegated = {
+    ...claim,
+    executor: delegated.executor,
+    status: 'running',
+    externalId: delegated.externalId,
+    url: delegated.url ?? claim.url ?? null,
+    // The branches the dispatch resolved. Persisted here, with the rest of the attribution, for
+    // the reason all of it is: the poll rebuilds its handle from the step alone.
+    ...(delegated.branches ? { branches: delegated.branches } : {}),
+    attempts: attempts.map((attempt, index) =>
+      index === attempts.length - 1
+        ? {
+            ...attempt,
+            externalId: delegated.externalId,
+            url: delegated.url ?? attempt.url ?? null,
+          }
+        : attempt,
+    ),
+  }
+}
+
+/**
+ * Fold a RUNNING delegated poll onto the step, returning whether anything changed: the delegated
+ * sibling of {@link applyContainerRunning}.
+ *
+ * Separate from it rather than one fold over both, because the two records share no field beyond a
+ * status whose vocabularies differ. There is no container id to learn and no address to reach, and
+ * the one thing that DOES arrive late here (the external URL, for a system that returns no run id
+ * at start) has no counterpart there.
+ */
+export function applyDelegationRunning(
+  step: PipelineStep,
+  update: { url?: string; phase?: string },
+): boolean {
+  const prev = step.delegated
+  // A running poll for a step with no record is a poll of work this engine never claimed. There is
+  // nothing to fold it onto, and inventing an executor id would be a guess.
+  if (!prev) return false
+  const next = {
+    ...prev,
+    status: 'running' as const,
+    url: update.url ?? prev.url ?? null,
+    phase: update.phase ?? prev.phase ?? null,
+  }
+  if (
+    prev.status === next.status &&
+    (prev.url ?? null) === next.url &&
+    (prev.phase ?? null) === next.phase
+  ) {
+    return false
+  }
+  step.delegated = next
+  return true
+}
+
+/**
+ * Every DELEGATED unit this run still has running somewhere else, as the handles their executors
+ * address them by.
+ *
+ * Read over EVERY step rather than the current one: a run parks on one step at a time, but a
+ * delegated step that failed into a retry, or one the run advanced past while its external work
+ * was still winding down, is exactly the work a teardown must still name. A record that already
+ * settled is excluded, because asking an executor to cancel a finished run is a request it has no
+ * good answer to and the record would then claim a cancellation that did not happen.
+ */
+export function liveDelegations(instance: {
+  id: string
+  steps: readonly PipelineStep[]
+}): DelegationHandle[] {
+  const handles: DelegationHandle[] = []
+  for (const step of instance.steps) {
+    const record = step.delegated
+    if (!record) continue
+    if (record.status !== 'starting' && record.status !== 'running') continue
+    handles.push({
+      executor: record.executor,
+      correlationKey: record.correlationKey,
+      ...(record.externalId ? { externalId: record.externalId } : {}),
+      ...(record.url ? { url: record.url } : {}),
+      workspaceId: '',
+      runId: instance.id,
+      agentKind: step.agentKind,
+    })
+  }
+  return handles
+}
+
+/**
+ * Mark every live delegation `cancelled`, recording WHETHER the external work actually stopped.
+ *
+ * The distinction is the whole point. An executor that declares no `cancel` leaves its run alive:
+ * it will finish, open its pull request and bill its tokens long after the platform has recorded
+ * this run as stopped. Writing `cancelled` with nothing beside it would render a clean teardown
+ * over exactly that, and the person who stopped the run is the one who needs to know to go and
+ * stop it themselves.
+ *
+ * An unreported handle (the executor answered nothing) is treated as NOT cancelled, which is the
+ * fail-safe reading: "we asked" and "it stopped" are different facts and only the executor can
+ * turn the first into the second.
+ */
+export function applyDelegationCancellation(
+  instance: { steps: readonly PipelineStep[] },
+  report: readonly { correlationKey: string; cancelled: boolean; note?: string }[] | undefined,
+): boolean {
+  const byKey = new Map((report ?? []).map((entry) => [entry.correlationKey, entry]))
+  let changed = false
+  for (const step of instance.steps) {
+    const record = step.delegated
+    if (!record) continue
+    if (record.status !== 'starting' && record.status !== 'running') continue
+    const outcome = byKey.get(record.correlationKey)
+    settleDelegation(step, {
+      status: 'cancelled',
+      outcome: outcome?.cancelled
+        ? 'cancelled'
+        : 'cancel requested; the external run may still be running',
+      note:
+        outcome?.note ??
+        (outcome?.cancelled
+          ? undefined
+          : `This run was stopped, but "${record.executor}" could not stop the external work. ` +
+            'It may still be running, and opening a pull request; stop it there if that matters.'),
+    })
+    changed = true
+  }
+  return changed
+}
+
+/**
+ * Settle the delegation record on a terminal outcome, recording WHAT happened on the attempt the
+ * claim opened.
+ *
+ * `outcome` is the executor's own words rather than a platform classification, because this record
+ * is read by a person deciding whether to go and open the external logs, and "the workflow was
+ * cancelled upstream" tells them something `failed` does not.
+ */
+export function settleDelegation(
+  step: PipelineStep,
+  settlement: {
+    status: 'done' | 'failed' | 'cancelled'
+    outcome?: string | undefined
+    url?: string | undefined
+    note?: string | undefined
+  },
+): void {
+  const prev = step.delegated
+  if (!prev) return
+  const attempts = prev.attempts
+  step.delegated = {
+    ...prev,
+    status: settlement.status,
+    ...(settlement.url ? { url: settlement.url } : {}),
+    ...(settlement.note ? { note: settlement.note } : {}),
+    attempts: attempts.map((attempt, index) =>
+      index === attempts.length - 1
+        ? {
+            ...attempt,
+            ...(settlement.outcome ? { outcome: settlement.outcome } : {}),
+            ...(settlement.url ? { url: settlement.url } : {}),
+          }
+        : attempt,
+    ),
+  }
 }
 
 export function applyContainerRunning(

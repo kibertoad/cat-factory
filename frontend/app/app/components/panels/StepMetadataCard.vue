@@ -10,6 +10,7 @@ import type { BadgeColor } from '~/utils/badge'
 import { subtaskIconClass } from '~/utils/pipelineRender'
 import StepModelActivity from '~/components/observability/StepModelActivity.vue'
 import StepContainerStatus from '~/components/panels/StepContainerStatus.vue'
+import StepDelegatedStatus from '~/components/panels/StepDelegatedStatus.vue'
 import CopyButton from '~/components/common/CopyButton.vue'
 import MarkdownProse from '~/components/common/MarkdownProse.vue'
 
@@ -32,7 +33,25 @@ const props = defineProps<{
 }>()
 
 const models = useModelsStore()
+const agents = useAgentsStore()
 const { t, d } = useI18n()
+
+/**
+ * The registered executor behind a DELEGATED step, when this build still registers it.
+ *
+ * Read off the agent catalog rather than the step, because the step persists only the executor's
+ * ID: a card that named that id would show `acme:executor` where a person wants the label the
+ * deployment gave it. Undefined for every other step, and the card renders nothing.
+ */
+const delegatedExecutor = computed(() => {
+  const meta = agents.get(props.step.agentKind)?.delegatedExecutor
+  if (!meta) return undefined
+  return {
+    label: meta.label ?? meta.id,
+    description: meta.description ?? '',
+    telemetry: meta.telemetry ?? ('not-reported' as const),
+  }
+})
 
 const STATE_LABEL_KEYS: Record<AgentState, string> = {
   pending: 'panels.stepMeta.state.pending',
@@ -254,6 +273,12 @@ async function copyRunId() {
       :run-active="runActive"
       class="mt-4"
     />
+
+    <!-- the EXTERNAL work a delegated step dispatched: which executor, what it is doing, the link
+         to its own logs, and what this platform therefore cannot measure. Its own component
+         because the two records share no field: a delegated step has no container to report a
+         phase, an id or an address for. -->
+    <StepDelegatedStatus :step="step" :executor="delegatedExecutor" class="mt-4" />
 
     <!-- live subtask breakdown -->
     <div v-if="step.subtasks && step.subtasks.total > 0" class="mt-4">

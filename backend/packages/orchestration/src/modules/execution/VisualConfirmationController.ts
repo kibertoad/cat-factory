@@ -24,6 +24,7 @@ import type { RunStateMachine } from './RunStateMachine.js'
 import type { RunPolicyScope } from './policy-types.js'
 import type { StepGraph } from './StepGraph.js'
 import { recordDispatchedJob } from './step-fold.logic.js'
+import { awaitingJob } from './awaitingJob.logic.js'
 
 /** Render the human's findings as the resolved-context block handed to the fixer. */
 function renderFindingsForFixer(findings: string): string {
@@ -115,7 +116,7 @@ export class VisualConfirmationController {
     if (!vc) return this.begin(workspaceId, instance, step, block, isFinalStep)
     // A fixer is in flight: re-attach to its job rather than re-parking.
     if (vc.phase === 'fixing' && step.jobId) {
-      return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
+      return awaitingJob(step, instance.currentStep, step.jobId)
     }
     return this.deps.stateMachine.parkStepOnDecision(workspaceId, instance, step, this.proposal(vc))
   }
@@ -342,7 +343,7 @@ export class VisualConfirmationController {
       },
     ]
     await this.deps.stateMachine.persistAndEmit(workspaceId, instance)
-    return { kind: 'awaiting_job', jobId: handle.jobId, stepIndex: instance.currentStep }
+    return awaitingJob(step, instance.currentStep, handle.jobId)
   }
 
   /**

@@ -11,6 +11,7 @@ import type { AdvanceResult } from './advance.js'
 import type { AgentContextBuilder } from './AgentContextBuilder.js'
 import type { RunStateMachine } from './RunStateMachine.js'
 import { recordDispatchAttribution } from './step-fold.logic.js'
+import { awaitingJob } from './awaitingJob.logic.js'
 
 // ---------------------------------------------------------------------------
 // The gate ESCALATION half of the polling-gate machine: when a gate's precheck fails and the
@@ -114,6 +115,6 @@ export class GateHelperDispatcher {
       lastDispatchedInstructions: failureSummary ?? step.gate?.lastDispatchedInstructions ?? null,
     }
     await this.deps.runStateMachine.persistAndEmit(workspaceId, instance)
-    return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
+    return awaitingJob(step, instance.currentStep, step.jobId)
   }
 }

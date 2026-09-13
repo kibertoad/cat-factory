@@ -1,6 +1,7 @@
 import type {
   AgentExecutor,
   AgentJobHandle,
+  DelegatedExecutorRegistry,
   AgentRunContext,
   AgentRunResult,
   Block,
@@ -14,8 +15,15 @@ import type {
 } from '@cat-factory/kernel'
 import { getErrorMessage, isAsyncAgentExecutor, parseLocalModelId } from '@cat-factory/kernel'
 import type { DispatchToolServers } from '@cat-factory/contracts'
+import type { AgentKindRegistry } from '@cat-factory/agents'
 import { PR_REVIEWER_KIND, resolvePrNumber } from '@cat-factory/agents'
-import { recordDispatchedJob, recordInlineToolServers } from './step-fold.logic.js'
+import {
+  claimDelegation,
+  recordDispatchedJob,
+  recordInlineToolServers,
+  settleDelegation,
+} from './step-fold.logic.js'
+import { planDelegatedDispatch } from './delegation.logic.js'
 import { classifyDispatchFailure, type DispatchFailureClassification } from './job.logic.js'
 import { environmentDispatchRefusal } from './environmentDispatch.logic.js'
 import { initialPrReviewState } from './prReview.logic.js'
@@ -25,6 +33,7 @@ import type { RunRepoOpsController } from './RunRepoOpsController.js'
 import type { RunStateMachine } from './RunStateMachine.js'
 import type { StepHandlerContext } from './step-handler-registry.js'
 import type { AdvanceOptions, AdvanceResult } from './advance.js'
+import { awaitingJob } from './awaitingJob.logic.js'
 
 /**
  * What the dispatch side of a step needs: the collaborators that BUILD a job (context,
@@ -33,6 +42,20 @@ import type { AdvanceOptions, AdvanceResult } from './advance.js'
  */
 export interface AgentDispatchDeps {
   agentExecutor: AgentExecutor
+  /**
+   * The app-owned agent-kind registry, for the ONE question the dispatch has to answer before it
+   * contacts anything: does this kind's work leave the platform. It decides which record the step
+   * opens (a container lifecycle, or a delegation claim), and the two are not interchangeable:
+   * a delegated step stamped as a container renders as one that never reports a phase and is
+   * addressed by the reclaim that kills containers by run.
+   */
+  agentKindRegistry: AgentKindRegistry
+  /**
+   * The app-owned delegated-executor registry, read for the executor's declared POLL CADENCE,
+   * which is copied onto the claim. It is on the record rather than looked up per poll because
+   * both durable drivers rebuild everything from the step, in another process.
+   */
+  delegatedExecutorRegistry: DelegatedExecutorRegistry
   blockRepository: BlockRepository
   clock: Clock
   contextBuilder: AgentContextBuilder
@@ -152,11 +175,25 @@ export class AgentDispatchController {
         // dispatch to return. startJob confirms the same value below.
         const previewModel = await this.previewStepModel(context)
         if (previewModel) step.model = previewModel
-        // Surface the explicit container lifecycle for the cold-boot window: dispatch
-        // blocks until the per-run container is up and has accepted the job, so emitting
-        // `starting` now lets the details show the boot (and then the live phase + the
-        // container id/url) instead of a blank "working" state.
-        step.container = { status: 'starting' }
+        // WHICH record this step opens, and the one decision that has to be made before anything
+        // is contacted. A delegated step CLAIMS: it commits `starting` plus the correlation key as
+        // its job id, and only then calls the external executor, so a replay of this dispatch
+        // finds the job id, re-attaches, and asks the executor to recover its own run rather than
+        // starting a second one (two external runs means two pull requests for one task).
+        //
+        // A container step surfaces the explicit cold-boot lifecycle instead: dispatch blocks
+        // until the per-run container is up and has accepted the job, so emitting `starting` now
+        // lets the details show the boot (and then the live phase + the container id/url) instead
+        // of a blank "working" state.
+        const delegation = planDelegatedDispatch(context, {
+          agentKindRegistry: this.deps.agentKindRegistry,
+          delegatedExecutorRegistry: this.deps.delegatedExecutorRegistry,
+        })
+        if (delegation) {
+          claimDelegation(step, { ...delegation, startedAt: this.deps.clock.now() })
+        } else {
+          step.container = { status: 'starting' }
+        }
         // Seed the in-flight PR-review state so a `pr-reviewer` run surfaces a real `reviewing`
         // phase in the deep-review window (the reviewed PR + the live slices-reviewed progress
         // off the step's todo subtasks) instead of an empty panel until the findings land. Only
@@ -192,7 +229,14 @@ export class AgentDispatchController {
           // precondition (e.g. `github_not_connected` — no connected repo) is a `preflight`
           // rejection that surfaces its own actionable message + machine-readable reason
           // instead of the misleading container framing.
-          step.container = { status: 'errored' }
+          // A DELEGATED dispatch has no container to mark: the claim it committed is what the
+          // failure lands on, so the step still says which executor was asked and what happened,
+          // and the attempt log keeps the (possibly still-running) external work visible.
+          if (delegation) {
+            settleDelegation(step, { status: 'failed', outcome: getErrorMessage(error) })
+          } else {
+            step.container = { status: 'errored' }
+          }
           // Hand the classifier the step's run history so a container lost AFTER work began (a
           // failed eviction-recovery re-dispatch, `evictionRecoveries > 0`, or the re-dispatch of a
           // step whose work-branch push was refused) is reported as what it is (an unrecoverable
@@ -223,7 +267,7 @@ export class AgentDispatchController {
         this.recordAcceptedDispatch(instance, handle)
         await this.deps.runStateMachine.persistAndEmit(workspaceId, instance)
       }
-      return { kind: 'awaiting_job', jobId, stepIndex: instance.currentStep }
+      return awaitingJob(step, instance.currentStep, jobId)
     }
 
     // Inline path: the model is resolved before the (blocking) LLM call, so surface

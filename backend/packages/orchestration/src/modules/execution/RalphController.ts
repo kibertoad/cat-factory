@@ -24,6 +24,7 @@ import {
   RALPH_NO_PROGRESS_LIMIT,
 } from './ralph.logic.js'
 import { recordDispatchedJob } from './step-fold.logic.js'
+import { awaitingJob } from './awaitingJob.logic.js'
 
 /** The engine collaborators the ralph loop drives (kept on the engine, injected here). */
 export interface RalphControllerDeps {
@@ -176,7 +177,7 @@ export class RalphController {
     const handle = await executor.startJob(context)
     recordDispatchedJob(step, handle, context.agentKind)
     await this.deps.stateMachine.persistAndEmit(workspaceId, instance)
-    return { kind: 'awaiting_job', jobId: handle.jobId, stepIndex: instance.currentStep }
+    return awaitingJob(step, instance.currentStep, handle.jobId)
   }
 
   /**

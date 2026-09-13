@@ -35,6 +35,7 @@ import {
   toDebugRunSummary,
 } from './debug.logic.js'
 import { toDebugLlmCallMessagesView } from './promptMessages.js'
+import { llmReportingGaps } from './llmReporting.logic.js'
 
 // The read service behind the remote debugging surface (`/api/v1/debug/*`). It owns exactly
 // two responsibilities: issue BOUNDED reads against the run store and the three telemetry
@@ -213,6 +214,10 @@ export class RunDebugService {
         // Only stated where something priced the cells. Labelling a run whose every cost is
         // null with a currency would announce a denomination for numbers that are not there.
         costCurrency: this.deps.costCurrency ?? null,
+        // What those totals DO NOT cover. A delegated step's model calls never touch this
+        // platform's proxy, recorder or drain, so its tokens are absent from every number above
+        // above, and absence in a number is invisible. See `llmReportingGaps`.
+        reporting: llmReportingGaps(execution),
       },
       toolCalls,
       signals: deriveSignals({
@@ -306,13 +311,17 @@ export class RunDebugService {
     runId: string,
     opts: { limit: number; order: 'oldest' | 'newest'; bodyChars: number },
   ): Promise<DebugLlmExport> {
-    const [summaries, page] = await Promise.all([
+    const [summaries, page, execution] = await Promise.all([
       this.deps.priceRollup?.(workspaceId, runId) ?? this.unpricedRollup(workspaceId, runId),
       this.listLlmCalls(workspaceId, runId, {
         limit: opts.limit,
         order: opts.order,
         bodyChars: opts.bodyChars,
       }),
+      // The RUN itself, joined into the same wave: the only thing it contributes is what these
+      // totals do not cover (a delegated step's unreported spend), which is a fact about the run's
+      // STEPS and unreachable from the telemetry rows the rollup folds.
+      this.deps.executionRepository.get(workspaceId, runId),
     ])
     const { totals, byAgentKind, byPhase } = foldLlmRollup(summaries)
     return {
@@ -326,7 +335,16 @@ export class RunDebugService {
       // from a run that made no model calls. The reader here is a model asked why the run went
       // wrong, so an unstated absence reads as a finding.
       available: !!this.deps.llmCallMetricRepository,
-      llm: { totals, byAgentKind, byPhase, costCurrency: this.deps.costCurrency ?? null },
+      llm: {
+        totals,
+        byAgentKind,
+        byPhase,
+        costCurrency: this.deps.costCurrency ?? null,
+        // The SAME fold the overview publishes, for the same reason it does: this document's
+        // reader is a model asked why a run cost what it did, and a total that silently omits a
+        // whole step is the one answer it cannot recover from.
+        reporting: llmReportingGaps(execution),
+      },
       order: opts.order,
       // The page's own peek, not `totals.calls > limit`: the rollup counts every recorded call
       // in the run, while this list is what the page actually holds, and only the page can say

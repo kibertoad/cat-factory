@@ -16,6 +16,18 @@ export {
   type TestResponse,
 } from './harness.js'
 export { FakeRepoBootstrapper } from './FakeRepoBootstrapper.js'
+// The DELEGATED-EXECUTOR fixture plus the seam every facade harness composes it through, so the
+// external-executor arm is under test on each runtime rather than answered by the fake.
+export {
+  CONFORMANCE_DELEGATED_EXECUTOR_ID,
+  CONFORMANCE_DELEGATED_KIND,
+  delegatedKindRegistry,
+  fakeDelegatedExecutor,
+  fakeDelegatedRegistry,
+  withDelegatedArm,
+  type FakeDelegatedExecutorOptions,
+  type FakeDelegationCalls,
+} from './FakeDelegatedExecutor.js'
 export {
   makeFakeCi,
   makeFakeMergeability,

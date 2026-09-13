@@ -24,6 +24,7 @@ import { appendAttemptLog } from './deployer.logic.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import type { RunStateMachine } from './RunStateMachine.js'
 import { recordDispatchAttribution } from './step-fold.logic.js'
+import { awaitingJob } from './awaitingJob.logic.js'
 
 // ---------------------------------------------------------------------------
 // The `deployer`'s REMEDIATION loop: when a provision fails on the task's own service frame for a
@@ -200,7 +201,7 @@ export class DeployFixController {
       lastError: failure.error,
     }
     await this.deps.runStateMachine.persistAndEmit(workspaceId, instance)
-    return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
+    return awaitingJob(step, instance.currentStep, step.jobId)
   }
 
   /**

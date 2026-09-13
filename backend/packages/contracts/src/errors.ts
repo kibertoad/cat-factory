@@ -295,6 +295,12 @@ export const CONFLICT_REASONS = [
   // frame, so there is nowhere to put the fix task and no repository to fix. `details` names
   // nothing further: the remedy is to move the expedition under a service, which is a board edit.
   'no_host_frame',
+  // A step declared the `delegated` surface and names an external executor this deployment does
+  // not register, so there is nowhere to dispatch it. Boot validation catches this on a standalone
+  // deployment; the reason exists because a MOTHERSHIP-MODE node validates none of the kinds it
+  // resolves (they arrive per dispatch, from a process that may be a build ahead), and the only
+  // honest answer there is to refuse. `details.executor` names the id that did not resolve.
+  'delegated_executor_unwired',
 ] as const
 
 export type ConflictReason = (typeof CONFLICT_REASONS)[number]
@@ -393,6 +399,12 @@ export const UNAVAILABLE_REASONS = [
   'service_catalog_response_too_large',
   'assistant_generation_failed',
   'assistant_reply_unreadable',
+  // A registered DELEGATED EXECUTOR could not start the step's work, or started it and could not
+  // say what it started (see `DelegationStart.externalId`). Its own reason rather than the generic
+  // 503, whose wording commits to "this deployment has not configured the capability", which is
+  // the misattribution itself here: the executor IS wired, and what failed is the system it talks
+  // to. `details.executor` names it, so the remedy points at that system rather than at this build.
+  'delegated_executor_failed',
 ] as const
 
 export type UnavailableReason = (typeof UNAVAILABLE_REASONS)[number]

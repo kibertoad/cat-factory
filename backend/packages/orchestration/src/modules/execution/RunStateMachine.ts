@@ -15,6 +15,7 @@ import type {
   RunLifecycleEventKind,
   RunLifecycleSink,
   RunLifecycleStep,
+  RunReclaimReport,
   SubscriptionActivationRepository,
   WorkRunner,
 } from '@cat-factory/kernel'
@@ -42,7 +43,11 @@ import type { MergeTrackRecordService } from '../merge/MergeTrackRecordService.j
 import type { NotificationService } from '../notifications/NotificationService.js'
 import type { LlmObservabilityService } from '../observability/LlmObservabilityService.js'
 import type { AdvanceResult } from './advance.js'
-import { dispatchedAgentKinds } from './step-fold.logic.js'
+import {
+  applyDelegationCancellation,
+  dispatchedAgentKinds,
+  liveDelegations,
+} from './step-fold.logic.js'
 import type { StepGraph } from './StepGraph.js'
 
 /**
@@ -1153,15 +1158,31 @@ export class RunStateMachine {
     // The in-flight step's job id (when a job is parked), so a per-job backend can
     // cancel exactly it; the run-container backends ignore it and use the run id.
     const jobId = instance.steps[instance.currentStep]?.jobId ?? instance.id
+    // Work this run has running in somebody ELSE's system, which the container reclaim above
+    // cannot reach and the executor cannot re-derive: a delegated step's whole identity there is
+    // what its claim persisted. Named here for the same reason the dispatched kinds are: only
+    // the engine holds the steps.
+    const delegations = liveDelegations(instance).map((handle) => ({ ...handle, workspaceId }))
+    let report: RunReclaimReport | undefined
     try {
-      await executor.reclaimRun({
+      const outcome = await executor.reclaimRun({
         jobId,
         runId: instance.id,
         workspaceId,
         agentKinds: dispatchedAgentKinds(instance),
+        ...(delegations.length > 0 ? { delegations } : {}),
       })
+      if (outcome) report = outcome
     } catch {
       // The container may already be gone (eviction/completion) — nothing to reclaim.
+    }
+    // Only a run that actually HELD external work writes again, so nothing changes for a
+    // deployment that delegates nothing. What is written is whether the external run stopped:
+    // an executor with no `cancel` leaves it alive, and the record says so rather than reading
+    // as a clean teardown (see `applyDelegationCancellation`).
+    if (delegations.length === 0) return
+    if (applyDelegationCancellation(instance, report?.delegations)) {
+      await this.casPersist(workspaceId, instance)
     }
   }
 
