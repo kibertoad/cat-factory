@@ -10,7 +10,8 @@ import type { AgentExecutor } from '@cat-factory/kernel'
 import type { AdvanceResult } from './advance.js'
 import type { AgentContextBuilder } from './AgentContextBuilder.js'
 import type { RunStateMachine } from './RunStateMachine.js'
-import { recordDispatchAttribution } from './step-fold.logic.js'
+import { recordDispatchedJob } from './step-fold.logic.js'
+import type { OpenStepDispatch } from './delegation.logic.js'
 import { awaitingJob } from './awaitingJob.logic.js'
 
 // ---------------------------------------------------------------------------
@@ -30,6 +31,13 @@ export interface GateHelperDispatcherDeps {
   agentExecutor: AgentExecutor
   contextBuilder: AgentContextBuilder
   runStateMachine: RunStateMachine
+  /**
+   * Opens and commits the helper dispatch's record before the executor is called. A gate's helper
+   * is an ORDINARY dispatch of an agent kind, so a deployment that runs its `ci-fixer` on its own
+   * external loop reaches this site and needs the same claim-before-effect every other dispatch
+   * takes. See {@link OpenStepDispatch}.
+   */
+  openStepDispatch: OpenStepDispatch
 }
 
 export class GateHelperDispatcher {
@@ -96,9 +104,9 @@ export class GateHelperDispatcher {
           }
         : {}),
     }
+    await this.deps.openStepDispatch({ workspaceId, instance, context, step })
     const handle = await executor.startJob(context)
-    step.jobId = handle.jobId
-    recordDispatchAttribution(step, handle, context.agentKind)
+    const jobId = recordDispatchedJob(step, handle, context.agentKind)
     step.gate = {
       // Preserve the recorded verdict/failure detail (set in evaluateGate) so the UI
       // keeps showing what the helper is fixing while it works.
@@ -115,6 +123,6 @@ export class GateHelperDispatcher {
       lastDispatchedInstructions: failureSummary ?? step.gate?.lastDispatchedInstructions ?? null,
     }
     await this.deps.runStateMachine.persistAndEmit(workspaceId, instance)
-    return awaitingJob(step, instance.currentStep, step.jobId)
+    return awaitingJob(step, instance.currentStep, jobId)
   }
 }

@@ -25,6 +25,7 @@ import type { RunStateMachine } from './RunStateMachine.js'
 import type { RunPolicyScope } from './policy-types.js'
 import type { StepGraph } from './StepGraph.js'
 import { recordDispatchedJob } from './step-fold.logic.js'
+import type { OpenStepDispatch } from './delegation.logic.js'
 import { awaitingJob } from './awaitingJob.logic.js'
 
 /** Render the human's findings as the resolved-context block handed to the fixer. */
@@ -71,6 +72,12 @@ export interface HumanTestControllerDeps {
   ) => Promise<{ ciMaxAttempts: number }>
   /** The async instance/block spine (park/advance/finalize/persist/emit/progress/stop). */
   stateMachine: RunStateMachine
+  /**
+   * Opens and commits this dispatch's record before the executor is called: a delegation claim
+   * for a helper kind whose work leaves the platform, a container cold boot otherwise. See
+   * {@link OpenStepDispatch}.
+   */
+  openStepDispatch: OpenStepDispatch
   /** The pure step mutators (start/finish a step). */
   stepGraph: StepGraph
   clockNow: () => number
@@ -417,6 +424,10 @@ export class HumanTestController {
             ],
           }
         : { ...base, agentKind: helperKind }
+    // The helper's record, opened and committed before the executor is called: a deployment
+    // whose fixer runs on its own external loop reaches this site and needs the same
+    // claim-before-effect every other dispatch takes.
+    await this.deps.openStepDispatch({ workspaceId, instance, context, step })
     const handle = await executor.startJob(context)
     recordDispatchedJob(step, handle, context.agentKind)
     step.subtasks = undefined

@@ -470,21 +470,6 @@ async function bootLocal(
 }
 
 /**
- * Boot the local-mode service in MOTHERSHIP mode: no Postgres, no pg-boss. The container
- * (built by {@link buildLocalContainer}) composes the remote (RPC-backed) org repositories +
- * the local `node:sqlite` credential store, and carries the in-process work runner that drives
- * runs through the same advance/poll loop. This serves the SAME shared Hono app + WebSocket
- * event transport the Node boot does — only the durable-execution + persistence substrate
- * differs.
- *
- * The periodic Postgres-backed sweepers the Node `start()` runs (retention, recurring-pipeline
- * fire, notification escalation, Kaizen) are intentionally NOT started here: they prune/scan
- * stores that live on the mothership (its own cron owns them). Durable execution IS now provided
- * locally — the container's work runner is backed by a file-based `node:sqlite` work queue (the
- * no-pg-boss analogue), so a crash/restart re-drives in-flight runs; telemetry local-first sync
- * remains a later initiative slice (PR 5).
- */
-/**
  * Say, by name, which of THIS node's own registrations mothership mode ignores.
  *
  * In mothership mode the catalog's `builtin` tier and the generative-integration set are read from
@@ -541,6 +526,21 @@ function warnLocalRegistrationsIgnored(container: {
   }
 }
 
+/**
+ * Boot the local-mode service in MOTHERSHIP mode: no Postgres, no pg-boss. The container
+ * (built by {@link buildLocalContainer}) composes the remote (RPC-backed) org repositories +
+ * the local `node:sqlite` credential store, and carries the in-process work runner that drives
+ * runs through the same advance/poll loop. This serves the SAME shared Hono app + WebSocket
+ * event transport the Node boot does; only the durable-execution + persistence substrate
+ * differs.
+ *
+ * The periodic Postgres-backed sweepers the Node `start()` runs (retention, recurring-pipeline
+ * fire, notification escalation, Kaizen) are intentionally NOT started here: they prune/scan
+ * stores that live on the mothership (its own cron owns them). Durable execution IS now provided
+ * locally: the container's work runner is backed by a file-based `node:sqlite` work queue (the
+ * no-pg-boss analogue), so a crash/restart re-drives in-flight runs; telemetry local-first sync
+ * remains a later initiative slice (PR 5).
+ */
 async function startLocalMothership(
   env: NodeJS.ProcessEnv,
   host: string | undefined,

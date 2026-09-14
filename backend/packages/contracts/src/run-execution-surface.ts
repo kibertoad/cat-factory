@@ -133,8 +133,14 @@ export const runDelegationSchema = v.object({
    * park loop has no registry in scope at all. Copying also means an in-flight run keeps the
    * cadence it started under when a deployment re-tunes its executor, which is the honest answer
    * for work already running somewhere else.
+   *
+   * NULL is a real state and not a default: a record opened by a dispatch site that never claimed
+   * has no executor declaration within reach, and the driver then polls the step on the
+   * DEPLOYMENT's own job cadence, exactly as it polls a container job. Recorded as absence rather
+   * than as a zero window, which derived a budget of no polls at all and failed the step as
+   * un-settled before it was ever asked how it was going.
    */
-  poll: v.object({ intervalMs: v.number(), maxDurationMs: v.number() }),
+  poll: v.optional(v.nullable(v.object({ intervalMs: v.number(), maxDurationMs: v.number() }))),
   /** The executor's own id for the work. Absent between the claim and the executor's answer. */
   externalId: v.optional(v.nullable(v.string())),
   /** Where a human watches it. The primary affordance on the step card. */

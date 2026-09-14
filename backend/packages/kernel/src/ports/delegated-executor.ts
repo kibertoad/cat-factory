@@ -6,7 +6,6 @@ import type { AgentTokenUsage } from './agent-executor.js'
 import type { Clock } from './runtime.js'
 import type { Logger } from './logging.js'
 import type { RepoFiles } from './repo-files.js'
-import type { UrlSafetyPolicy } from './url-safety-policy.js'
 
 // ---------------------------------------------------------------------------
 // DELEGATED EXECUTION: the third executor class, beside inline and container.
@@ -127,6 +126,19 @@ export interface DelegationHandle {
    */
   repo?: { owner: string; name: string }
   workspaceId: string
+  /**
+   * The board block the run is for, carried so a poll and a cancel resolve the executor's
+   * credentials through the SAME scope its dispatch did.
+   *
+   * `ToolSecretResolver.resolve` takes the block so a per-service credential store can scope its
+   * lookup, and a delegated executor resolves credentials once per dispatch AND once per call
+   * afterwards (a token that lives an hour cannot be frozen onto a handle for a run that lives
+   * three). Left off, such a deployment starts the external run and then polls it for the rest of
+   * its life with an empty bag: every call fails on a missing credential and the run dies as
+   * "status was unreadable" while the external work carries on. REQUIRED for that reason: the
+   * handle is rebuilt at every call site, and an optional field is one each of them can forget.
+   */
+  blockId: string
   runId: string
   agentKind: string
 }
@@ -231,6 +243,13 @@ export type DelegatedFetch = (
     headers?: Record<string, string>
     body?: string
     signal?: unknown
+    /**
+     * How redirects are handled. Declared because the policy-checking wrapper the composition root
+     * builds follows them BY HAND (`manual`), re-running the guard on every hop: with the default
+     * `follow` the runtime chases a 302 unchecked, and a permitted first host can bounce a
+     * credential-bearing request to an internal address.
+     */
+    redirect?: 'follow' | 'manual'
   },
 ) => Promise<DelegatedFetchResponse>
 
@@ -253,14 +272,18 @@ export type DelegatedRepoFilesResolver = (input: {
 export interface DelegatedExecutorDeps {
   logger: Logger
   clock: Clock
-  /** The runtime's fetch, so an executor never reaches for a global workerd shapes differently. */
-  fetchImpl: DelegatedFetch
   /**
-   * The deployment's outbound-URL policy, the same one the notification webhook sender is held to.
-   * An executor is an outbound HTTP surface the deployment configured, so it answers to the same
-   * SSRF rules rather than to a second set nobody maintains.
+   * The runtime's fetch, so an executor never reaches for a global workerd shapes differently,
+   * ALREADY HELD to the deployment's outbound-URL policy: the composition root wraps it, so every
+   * request an executor makes is scheme- and host-checked on the first URL and on every redirect
+   * hop, exactly as the notification-webhook sender's deliveries are.
+   *
+   * The policy is enforced HERE rather than handed over beside the fetch, and that is the whole
+   * design: an executor is deployment-authored code, so a control it has to remember to apply is a
+   * control that exists only in the types. A refused URL throws a `ValidationError` naming the
+   * host, which the executor's own error path reports like any other refusal.
    */
-  urlSafetyPolicy?: UrlSafetyPolicy
+  fetchImpl: DelegatedFetch
   /**
    * Checkout-free repo access for a run, for an executor that wants to commit its own context
    * layer onto the work branch before starting. Absent when the facade wired no VCS client.

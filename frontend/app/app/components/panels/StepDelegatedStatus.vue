@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { delegationStatusView } from './StepDelegatedStatus.logic'
+import { delegationStatusView, externalRunHref } from './StepDelegatedStatus.logic'
 import type { PipelineStep } from '~/types/execution'
 
 // The EXTERNAL work a delegated step dispatched: which registered executor is running it, what it
@@ -50,6 +50,12 @@ const executorName = computed(() => props.executor?.label || record.value?.execu
 const landedBranch = computed(() => record.value?.branch ?? null)
 
 /**
+ * The run link, only when it is one this SPA may follow. The value comes from an external
+ * system's API, and this is the card's primary affordance; see {@link externalRunHref}.
+ */
+const runHref = computed(() => externalRunHref(record.value?.url))
+
+/**
  * Whether to say the platform is not measuring this step's spend.
  *
  * Shown for an executor that DECLARES it reports nothing, and also for one this build no longer
@@ -95,10 +101,20 @@ const { copy: copyText } = useCopyToClipboard()
         <dt class="shrink-0 text-[11px] uppercase tracking-wide text-slate-500">
           {{ t('panels.stepMeta.delegated.run') }}
         </dt>
+        <!-- Linked only when the executor's URL is `http(s)`. Anything else is shown as the text
+             it is: refusing to follow it is right, and hiding it would report a run that named
+             no link at all. -->
         <dd class="truncate font-mono text-[11px] text-slate-300">
-          <a :href="record.url" target="_blank" rel="noopener noreferrer" class="hover:underline">
+          <a
+            v-if="runHref"
+            :href="runHref"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="hover:underline"
+          >
             {{ record.url }}
           </a>
+          <span v-else>{{ record.url }}</span>
         </dd>
         <UButton
           icon="i-lucide-copy"
@@ -150,8 +166,8 @@ const { copy: copyText } = useCopyToClipboard()
             attempt.outcome || t('panels.stepMeta.delegated.noOutcome')
           }}</span>
           <a
-            v-if="attempt.url"
-            :href="attempt.url"
+            v-if="externalRunHref(attempt.url)"
+            :href="externalRunHref(attempt.url)!"
             target="_blank"
             rel="noopener noreferrer"
             class="ms-auto shrink-0 font-mono hover:underline"

@@ -138,6 +138,35 @@ export function defineDelegatedConformance(harness: ConformanceHarness): void {
       expect(step.delegated?.url).toBe('https://ci.example/run/1')
     })
 
+    it('re-dispatches ONCE when the executor calls its failure survivable', async () => {
+      // An external run cancelled by a runner-pool restart is not a verdict on the work, and the
+      // executor is the only thing that can say so. The re-drive is engine behaviour with nothing
+      // runtime-specific in it, but the state it depends on is entirely in the step store: the
+      // budget counter, the settled first attempt, and the appended second one all round-trip
+      // through a JSON column on one runtime and through another on the other.
+      const { app, calls } = makeApp(harness, {
+        updates: [
+          { state: 'failed', error: 'the runner pool restarted', retryable: true },
+          { state: 'done', result: { summary: 'Implemented on the second attempt.' } },
+        ],
+      })
+      const { workspaceId } = await runDelegated(app)
+      const exec = (await app.drive(workspaceId)).find((e) => e.blockId === 'task_login')!
+      expect(exec.status).toBe('done')
+      // TWO starts, under DIFFERENT correlation keys: the dispatch epoch moved, so the executor
+      // is asked to start a fresh run rather than to recognise the one that just failed.
+      expect(calls.starts).toHaveLength(2)
+      expect(calls.starts[0]?.correlationKey).not.toBe(calls.starts[1]?.correlationKey)
+      const step = delegatedStep(exec)
+      expect(step.delegatedRetries).toBe(1)
+      // The first attempt survives with its own outcome: the platform holds nothing else about
+      // work that happened somewhere else, and a re-driven step that reports one attempt reads
+      // like a step that ran once.
+      expect(step.delegated?.attempts).toHaveLength(2)
+      expect(step.delegated?.attempts[0]?.outcome).toContain('runner pool restarted')
+      expect(step.delegated?.status).toBe('done')
+    })
+
     it('stops the external work when the run gives up on it', async () => {
       // An external run the platform stops waiting for is still RUNNING somewhere. The teardown
       // path every terminal failure funnels through has to reach it, or the run finishes, opens

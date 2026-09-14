@@ -89,6 +89,22 @@ the step's job id) _before_ calling `start`, so a replayed dispatch re-attaches 
 dispatching. The EXECUTOR owes the other half: `start` must be idempotent per
 `brief.correlationKey`. Two workflows working one branch means two pull requests for one task.
 
+The engine's half is ONE function, `openStepDispatch`, and every async dispatch site calls it:
+the step's own dispatch, a gate's helper escalation, the Tester's fixer round, Ralph's next
+iteration, the human-test and visual-confirmation fixers. It decides which record the step opens
+(the claim, or a container cold boot: the two are one question, and a container stamped on a
+delegated step renders it as a machine the platform never started) and commits it. Written out at
+each site instead, the rule held at one of the six, so a deployment pointing its `ci-fixer` at an
+external loop got no claim at all.
+
+**A dispatch that THREW leaves work of unknown liveness.** The claim stays OPEN when the executor's
+own `start()` threw, because a lost response is not the same as a refusal: the teardown then names
+it, asks the executor to cancel by correlation key, and records whether that worked. It SETTLES
+when the platform refused before contacting anything (no linked repository, no such registration),
+because nothing is running and a teardown warning about it would be a false alarm. Either way the
+job id is dropped, so a replay dispatches again under the same correlation key rather than polling
+a job that may never have existed.
+
 **Anything the poll needs is on the step.** A delegated poll rebuilds its handle from the persisted
 step alone, in another process, after a durable replay. The executor id, the external id, the branch
 pair, the TARGET REPO and the poll cadence are all persisted for exactly that reason: a fact the
@@ -109,7 +125,23 @@ settle.
 
 **The cadence is the executor's, not the platform's.** An Actions run of an hour is ordinary where a
 harness job of an hour is a stall, so `poll.intervalMs` / `poll.maxDurationMs` ride the definition,
-are copied onto the claim, and travel to both durable drivers on the `awaiting_job` park.
+are copied onto the claim, and travel to both durable drivers on the `awaiting_job` park. A record
+holding NO cadence (one opened by a dispatch site with no declaration in reach) falls back to the
+deployment's own job cadence, which is the honest answer; a synthesised zero window is not, because
+`ceil(0 / 0)` is `NaN` and a poll loop bounded by `NaN` runs no iterations at all.
+
+**Credentials resolve per call, in the scope the dispatch used.** A poll can run hours after the
+dispatch and a GitHub App token lives one, so nothing is frozen onto the handle. The handle
+therefore carries the BLOCK as well as the workspace: `ToolSecretResolver.resolve` takes it so a
+per-service credential store can scope its lookup, and a poll that drops it resolves an empty bag
+on a deployment with one, failing every status read of a run that is working perfectly.
+
+**An executor's outbound calls answer to the deployment's URL policy.** The `fetchImpl` every
+executor is built over is already wrapped: scheme and host are checked on the first URL and on
+every redirect hop, and a cross-origin hop drops the body and the credential headers. It is the
+same `UrlSafetyPolicy` the notification-webhook sender is held to, enforced in the fetch rather
+than handed over beside it, because a control deployment-authored code has to remember to apply
+is a control that exists only in the types.
 
 **"Absent" and "zero" never render the same.** A delegated step bypasses the LLM proxy, the harness
 call recorder and the tool-trajectory drain, so its tokens are in no total. `telemetry:
@@ -125,12 +157,16 @@ clean teardown. The composite asks BOTH its arms: they are independent resources
 reclaim that throws must not cost the external cancel, which would record every live delegation as
 work the platform could not stop while the executor that could stop it was never asked.
 
-**A delegated failure is not a harness one.** A verdict the external system called final is
-terminal (a second dispatch reaches the same answer and spends the budget getting there), which is
-the disposition the container path's `harnessShutdown` carries. It travels on its own channel,
-`update.delegated.terminal`, and maps to `failureKind: 'delegated_failed'`. Borrowing the container
-flag rendered "Harness shut down" for a step that never had a harness and filed external CI
-verdicts under container eviction in every rollup.
+**A delegated failure is not a harness one, and it has two dispositions.** A verdict the external
+system called final is terminal: a second dispatch reaches the same answer and spends somebody
+else's runner getting there. A failure the executor called `retryable` (a cancelled run, a
+runner-pool restart, a rate limit) buys exactly one fresh dispatch, bounded by the engine's
+`MAX_DELEGATED_RETRIES` rather than by the executor's asking: the platform decides how much of
+somebody else's capacity a blip is worth. Both travel on `update.delegated.disposition`, a closed
+pair rather than an optional flag, and both classify as `failureKind: 'delegated_failed'`:
+retryability and classification are separate axes. Borrowing the container path's `harnessShutdown`
+rendered "Harness shut down" for a step that never had a harness and filed external CI verdicts
+under container eviction in every rollup.
 
 **A successful poll is the sign of life.** Many executors report no activity timestamp, and a quiet
 external run answers identically on every tick, so nothing changes and nothing persists. The

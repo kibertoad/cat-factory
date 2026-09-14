@@ -29,6 +29,7 @@ import type {
 } from '@cat-factory/integrations'
 import { AuditService } from '@cat-factory/integrations'
 import {
+  deploymentRepoOrigin,
   logger,
   mcpAuthServerContainerFields,
   mcpOAuthContainerFields,
@@ -528,6 +529,12 @@ function selectWorkerAgentExecutor(
     delegatedExecutorRegistry,
     agentKindRegistry,
     resolveRepoTarget: buildResolveRepoTarget(db),
+    // WHERE the repo is reached, resolved from the deployment's own VCS configuration like every
+    // other clone path in this assembly. Omitted, every delegated brief named a github.com clone
+    // URL, which on a GitLab deployment points an external executor at a repository that is not
+    // there (or, worse, at a same-named public one) and skips the provider-mismatch refusal that
+    // exists to catch exactly that. Symmetric with the Node facade.
+    resolveRepoOrigin: deploymentRepoOrigin(config),
     // The outbound guard an executor answers to, resolved from the SAME slice the
     // notification-webhook sender uses (undefined ⇒ the strict public-https default). An executor
     // is an outbound HTTP surface the deployment configured, and a second set of SSRF rules is a

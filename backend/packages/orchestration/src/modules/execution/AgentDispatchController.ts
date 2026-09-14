@@ -1,7 +1,6 @@
 import type {
   AgentExecutor,
   AgentJobHandle,
-  DelegatedExecutorRegistry,
   AgentRunContext,
   AgentRunResult,
   Block,
@@ -15,15 +14,13 @@ import type {
 } from '@cat-factory/kernel'
 import { getErrorMessage, isAsyncAgentExecutor, parseLocalModelId } from '@cat-factory/kernel'
 import type { DispatchToolServers } from '@cat-factory/contracts'
-import type { AgentKindRegistry } from '@cat-factory/agents'
 import { PR_REVIEWER_KIND, resolvePrNumber } from '@cat-factory/agents'
 import {
-  claimDelegation,
+  failDelegationDispatch,
   recordDispatchedJob,
   recordInlineToolServers,
-  settleDelegation,
 } from './step-fold.logic.js'
-import { planDelegatedDispatch } from './delegation.logic.js'
+import { delegationContactFailed, type OpenStepDispatch } from './delegation.logic.js'
 import { classifyDispatchFailure, type DispatchFailureClassification } from './job.logic.js'
 import { environmentDispatchRefusal } from './environmentDispatch.logic.js'
 import { initialPrReviewState } from './prReview.logic.js'
@@ -43,19 +40,12 @@ import { awaitingJob } from './awaitingJob.logic.js'
 export interface AgentDispatchDeps {
   agentExecutor: AgentExecutor
   /**
-   * The app-owned agent-kind registry, for the ONE question the dispatch has to answer before it
-   * contacts anything: does this kind's work leave the platform. It decides which record the step
-   * opens (a container lifecycle, or a delegation claim), and the two are not interchangeable:
-   * a delegated step stamped as a container renders as one that never reports a phase and is
-   * addressed by the reclaim that kills containers by run.
+   * Opens (and commits) the record this dispatch is observed through: a delegation CLAIM for a
+   * kind whose work leaves the platform, a container cold boot otherwise. Shared with every other
+   * async dispatch site, which is what makes claim-before-effect structural rather than
+   * remembered. See {@link OpenStepDispatch}.
    */
-  agentKindRegistry: AgentKindRegistry
-  /**
-   * The app-owned delegated-executor registry, read for the executor's declared POLL CADENCE,
-   * which is copied onto the claim. It is on the record rather than looked up per poll because
-   * both durable drivers rebuild everything from the step, in another process.
-   */
-  delegatedExecutorRegistry: DelegatedExecutorRegistry
+  openStepDispatch: OpenStepDispatch
   blockRepository: BlockRepository
   clock: Clock
   contextBuilder: AgentContextBuilder
@@ -175,25 +165,6 @@ export class AgentDispatchController {
         // dispatch to return. startJob confirms the same value below.
         const previewModel = await this.previewStepModel(context)
         if (previewModel) step.model = previewModel
-        // WHICH record this step opens, and the one decision that has to be made before anything
-        // is contacted. A delegated step CLAIMS: it commits `starting` plus the correlation key as
-        // its job id, and only then calls the external executor, so a replay of this dispatch
-        // finds the job id, re-attaches, and asks the executor to recover its own run rather than
-        // starting a second one (two external runs means two pull requests for one task).
-        //
-        // A container step surfaces the explicit cold-boot lifecycle instead: dispatch blocks
-        // until the per-run container is up and has accepted the job, so emitting `starting` now
-        // lets the details show the boot (and then the live phase + the container id/url) instead
-        // of a blank "working" state.
-        const delegation = planDelegatedDispatch(context, {
-          agentKindRegistry: this.deps.agentKindRegistry,
-          delegatedExecutorRegistry: this.deps.delegatedExecutorRegistry,
-        })
-        if (delegation) {
-          claimDelegation(step, { ...delegation, startedAt: this.deps.clock.now() })
-        } else {
-          step.container = { status: 'starting' }
-        }
         // Seed the in-flight PR-review state so a `pr-reviewer` run surfaces a real `reviewing`
         // phase in the deep-review window (the reviewed PR + the live slices-reviewed progress
         // off the step's todo subtasks) instead of an empty panel until the findings land. Only
@@ -216,7 +187,15 @@ export class AgentDispatchController {
         // handle refines this block below with what only the dispatch knows (the repo it
         // resolved, the model it confirmed).
         this.beginDispatchDiagnostics(instance, context, step.model ?? null)
-        await this.deps.runStateMachine.persistAndEmit(workspaceId, instance)
+        // WHICH record this step opens, and the one decision that has to be made before anything
+        // is contacted: a delegation CLAIM for work that leaves the platform, a container cold
+        // boot otherwise. It commits everything staged above, which is what a replay reads.
+        const delegation = await this.deps.openStepDispatch({
+          workspaceId,
+          instance,
+          context,
+          step,
+        })
 
         let handle: AgentJobHandle
         try {
@@ -230,10 +209,17 @@ export class AgentDispatchController {
           // rejection that surfaces its own actionable message + machine-readable reason
           // instead of the misleading container framing.
           // A DELEGATED dispatch has no container to mark: the claim it committed is what the
-          // failure lands on, so the step still says which executor was asked and what happened,
-          // and the attempt log keeps the (possibly still-running) external work visible.
+          // failure lands on, and whether that claim SURVIVES depends on how far the dispatch
+          // got. A throw from the executor's own `start()` leaves work of unknown liveness, so
+          // the claim stays open for the teardown to ask about; anything refused before the call
+          // settles it, because nothing is running. Either way the job id goes, so a replay
+          // re-dispatches under the same correlation key rather than polling a job that may never
+          // have existed. See {@link failDelegationDispatch}.
           if (delegation) {
-            settleDelegation(step, { status: 'failed', outcome: getErrorMessage(error) })
+            failDelegationDispatch(step, {
+              error: getErrorMessage(error),
+              contacted: delegationContactFailed(error),
+            })
           } else {
             step.container = { status: 'errored' }
           }

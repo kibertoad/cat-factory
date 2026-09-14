@@ -16,6 +16,7 @@ import { defaultDelegatedExecutorRegistry, DomainError, noopLogger } from '@cat-
 import { defaultAgentKindRegistry } from '@cat-factory/agents'
 import { describe, expect, it } from 'vitest'
 import { buildDelegatedAgentExecutor } from '../src/agents/delegatedExecutorHost.js'
+import { githubRepoOrigin } from '../src/agents/containerAgentBody.js'
 
 // What the DELEGATED arm does with an executor's answers: how it routes, what it refuses, and what
 // it maps back into the engine's vocabulary. Every assertion below is a place where being wrong is
@@ -68,11 +69,24 @@ function fakeExecutor(behaviour: Partial<DelegatedExecutor> = {}): Fake {
   }
 }
 
+/** A minimal response for a fetch double: the four members `DelegatedFetchResponse` names. */
+function okResponse() {
+  return {
+    ok: true,
+    status: 200,
+    headers: { get: () => null },
+    text: async () => '',
+    json: async () => ({}),
+  }
+}
+
 function build(
   fake: Fake,
   options: {
     credentials?: DelegatedExecutorDefinition['credentials']
     resolveToolSecrets?: ToolSecretResolver
+    /** Capture the bound deps an executor is built over (the guarded fetch lives on them). */
+    onDeps?: (deps: DelegatedExecutorDeps) => void
   } = {},
 ) {
   const agentKindRegistry = defaultAgentKindRegistry()
@@ -88,12 +102,16 @@ function build(
     poll: { intervalMs: 1000, maxDurationMs: 60_000 },
     telemetry: 'not-reported',
     ...(options.credentials ? { credentials: options.credentials } : {}),
-    create: () => fake.executor,
+    create: (deps) => {
+      options.onDeps?.(deps)
+      return fake.executor
+    },
   })
   return buildDelegatedAgentExecutor({
     delegatedExecutorRegistry: executors,
     agentKindRegistry,
     resolveRepoTarget: async () => REPO,
+    resolveRepoOrigin: githubRepoOrigin,
     ...(options.resolveToolSecrets ? { resolveToolSecrets: options.resolveToolSecrets } : {}),
     // Answered explicitly: the host requires an answer so a facade cannot leave the outbound guard
     // declared-but-unwired, which is exactly what both of them had done.
@@ -136,6 +154,7 @@ function handle(): AgentJobHandle {
     jobId: 'ex_1-acme:impl',
     runId: 'ex_1',
     workspaceId: 'ws_1',
+    blockId: 'blk_1',
     agentKind: 'acme:impl',
     delegated: { executor: 'acme:executor', externalId: 'run-99' },
   }
@@ -188,11 +207,12 @@ describe('DelegatedAgentExecutor: dispatch', () => {
     expect(await build(fakeExecutor()).resolveModel(context())).toBeUndefined()
   })
 
-  it('hands the deployment’s OUTBOUND-URL policy to the executor it builds', async () => {
-    // The port declares it as the SSRF control an executor answers to, the same one the
-    // notification-webhook sender is held to. Declared on both sides and passed by neither facade,
-    // it was a guard that existed only in the types; the host option is now required so forgetting
-    // it fails the build, and this pins that it actually reaches `create`.
+  it('ENFORCES the deployment’s outbound-URL policy on every executor call', async () => {
+    // The SSRF control an executor answers to, the same one the notification-webhook sender is
+    // held to. Declared on both sides and read by nobody, it was a guard that existed only in the
+    // types; it now lives in the fetch every executor is built over, which is the only version of
+    // it a deployment's own executor code cannot forget to apply.
+    const reached: string[] = []
     const agentKindRegistry = defaultAgentKindRegistry()
     agentKindRegistry.register({
       kind: 'acme:impl',
@@ -217,11 +237,33 @@ describe('DelegatedAgentExecutor: dispatch', () => {
       delegatedExecutorRegistry: executors,
       agentKindRegistry,
       resolveRepoTarget: async () => REPO,
+      resolveRepoOrigin: githubRepoOrigin,
       urlSafetyPolicy: policy,
       logger: noopLogger,
       clock: { now: () => 0 },
+      // A fetch that records rather than calls: what matters is WHICH urls reach it.
+      fetchImpl: async (url) => {
+        reached.push(url)
+        return okResponse()
+      },
     }).startJob(context())
-    expect(seen?.urlSafetyPolicy).toEqual(policy)
+    // The widened policy admits what the deployment allowed...
+    await expect(seen?.fetchImpl('http://ci.acme/jobs')).resolves.toBeDefined()
+    expect(reached).toEqual(['http://ci.acme/jobs'])
+    // ...and the guard still refuses what it did not, rather than existing only in the types.
+    await expect(seen?.fetchImpl('http://169.254.169.254/latest/meta-data')).rejects.toThrow(
+      /public host/,
+    )
+    expect(reached).toEqual(['http://ci.acme/jobs'])
+  })
+
+  it('refuses a non-https executor endpoint under the default policy', async () => {
+    // The strict default is the notification webhook's, for the same reason: an executor's base
+    // URL is operator-supplied, and its calls carry a credential.
+    const fake = fakeExecutor()
+    let seen: DelegatedExecutorDeps | undefined
+    await build(fake, { onDeps: (deps) => (seen = deps) }).startJob(context())
+    await expect(seen?.fetchImpl('http://ci.acme/jobs')).rejects.toThrow(/must use https/)
   })
 })
 
@@ -259,6 +301,59 @@ describe('DelegatedAgentExecutor: credentials', () => {
     expect(fake.credentials).toEqual([{ ACME_TOKEN: 'token-1' }, { ACME_TOKEN: 'token-2' }])
   })
 
+  it('resolves a poll and a cancel in the SAME scope the dispatch used', async () => {
+    // `ToolSecretResolver.resolve` takes the block so a per-service credential store can scope its
+    // lookup. Dropped on the poll, such a deployment starts the external run fine and then polls
+    // it for the rest of its life with an empty bag: every call fails on a missing credential and
+    // the run dies as "status was unreadable" while the external work carries on.
+    const scopes: (string | undefined)[] = []
+    const fake = fakeExecutor({ cancel: async () => {} })
+    const executor = build(fake, {
+      credentials: [{ key: 'ACME_TOKEN' }],
+      resolveToolSecrets: {
+        resolve: async (input): Promise<Record<string, string>> => {
+          scopes.push(input.blockId)
+          return input.blockId === 'blk_1' ? { ACME_TOKEN: 'secret' } : {}
+        },
+      },
+    })
+    await executor.startJob(context())
+    await executor.pollJob(handle())
+    await executor.reclaimRun({
+      runId: 'ex_1',
+      workspaceId: 'ws_1',
+      jobId: 'ex_1-acme:impl',
+      agentKinds: ['acme:impl'],
+      delegations: [
+        {
+          executor: 'acme:executor',
+          correlationKey: 'ex_1-acme:impl',
+          externalId: 'run-99',
+          workspaceId: 'ws_1',
+          blockId: 'blk_1',
+          runId: 'ex_1',
+          agentKind: 'acme:impl',
+        },
+      ],
+    })
+    // Three resolves (dispatch, poll, cancel), every one of them scoped to the block.
+    expect(scopes).toEqual(['blk_1', 'blk_1', 'blk_1'])
+    // And the two calls that receive a bag got a filled one, which is what an out-of-scope
+    // lookup would not have produced.
+    expect(fake.credentials).toEqual([{ ACME_TOKEN: 'secret' }, { ACME_TOKEN: 'secret' }])
+  })
+
+  it('REFUSES a poll whose handle names no block, rather than resolving out of scope', async () => {
+    // A handle without it was built somewhere the engine does not build handles. Refusing names
+    // that; resolving anyway is a run that dies hours later reporting a timeout.
+    const { blockId: _dropped, ...withoutBlock } = handle()
+    const error = await build(fakeExecutor())
+      .pollJob(withoutBlock as AgentJobHandle)
+      .catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(DomainError)
+    expect((error as DomainError).details?.reason).toBe('delegated_claim_missing')
+  })
+
   it('withholds a reserved platform key rather than handing it over', async () => {
     // The lookup key is a boundary: a resolver reads it off the deployment's own environment, so
     // an executor declaring `ENCRYPTION_KEY` would hand the master sealing key to whatever it posts to.
@@ -291,19 +386,21 @@ describe('DelegatedAgentExecutor: poll mapping', () => {
     // A verdict its own system called final is not something a second dispatch improves on, and
     // the alternative spends the job-failure budget re-running somebody else's CI for it.
     //
-    // Reported as `delegated.terminal`, never as `harnessShutdown`: the two want the same
-    // disposition under different names, and borrowing the container flag put "Harness shut down"
+    // Reported as `delegated.disposition`, never as `harnessShutdown`: the two want the same
+    // handling under different names, and borrowing the container flag put "Harness shut down"
     // in front of an operator whose step never had a harness.
     const update = await poll({ state: 'failed', error: 'the workflow failed' })
-    expect(update).toMatchObject({ state: 'failed', delegated: { terminal: true } })
+    expect(update).toMatchObject({ state: 'failed', delegated: { disposition: 'terminal' } })
     expect(update).not.toHaveProperty('harnessShutdown')
   })
 
-  it('leaves a RETRYABLE failure re-drivable', async () => {
+  it('STATES a retryable failure as such, rather than leaving it to be inferred', async () => {
+    // Both ways round, because the engine branches both ways: `retryable` buys one fresh
+    // dispatch, `terminal` fails the run at once. Read as "absent means retryable", the pair was
+    // one flag with an unstated default and no re-drive behind it at all.
     const update = await poll({ state: 'failed', error: 'runner outage', retryable: true })
-    expect(update).toMatchObject({ state: 'failed' })
+    expect(update).toMatchObject({ state: 'failed', delegated: { disposition: 'retryable' } })
     expect(update).not.toHaveProperty('harnessShutdown')
-    expect(update).not.toMatchObject({ delegated: { terminal: true } })
   })
 
   it('STAMPS a running poll with a sign of life the executor did not report', async () => {
@@ -378,6 +475,7 @@ describe('DelegatedAgentExecutor: reclaim', () => {
         correlationKey: 'ex_1-acme:impl',
         externalId: 'run-99',
         workspaceId: 'ws_1',
+        blockId: 'blk_1',
         runId: 'ex_1',
         agentKind: 'acme:impl',
       },

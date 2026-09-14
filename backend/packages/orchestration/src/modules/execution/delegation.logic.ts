@@ -2,11 +2,16 @@ import type { AgentKindRegistry } from '@cat-factory/agents'
 import { delegatedExecutorFor } from '@cat-factory/agents'
 import {
   ConflictError,
+  DomainError,
   stepJobId,
   type AgentRunContext,
+  type Clock,
   type DelegatedExecutorRegistry,
   type DelegatedPollPolicy,
+  type ExecutionInstance,
+  type PipelineStep,
 } from '@cat-factory/kernel'
+import { claimDelegation } from './step-fold.logic.js'
 
 // ---------------------------------------------------------------------------
 // The ENGINE's half of a delegated dispatch: what it must know and COMMIT before an external
@@ -77,4 +82,67 @@ export function planDelegatedDispatch(
     correlationKey: stepJobId(context.executionId, context.agentKind, context.dispatchEpoch),
     poll: definition.poll,
   }
+}
+
+/**
+ * What every ASYNC dispatch site calls immediately before it contacts anything: open the record
+ * this dispatch will be observed through, and COMMIT it.
+ *
+ * One function rather than the rule written out at each site, because the rule is the whole
+ * idempotency story for a delegated step and a site that forgets it fails silently. Both durable
+ * drivers replay, and an executor asked to start twice produces two external runs and two pull
+ * requests for one task; the platform's half of the bargain is that the claim (`starting`, plus
+ * the correlation key as the step's job id) is on disk BEFORE `start()` is called, so a replay
+ * finds the job id and re-attaches. Written per site, that held at exactly one of the six.
+ *
+ * The container half is here for the same reason it is not a separate decision: a delegated
+ * dispatch must NOT stamp a container (there is none, and a stamped one renders the step as a
+ * machine the platform never started and hands it to the reclaim that kills containers by run),
+ * so "claim" and "cold boot" are two answers to one question, asked once.
+ *
+ * It PERSISTS, and that is the load-bearing half: an in-memory claim a replay cannot see is no
+ * claim at all.
+ */
+export type OpenStepDispatch = (input: {
+  workspaceId: string
+  instance: ExecutionInstance
+  context: AgentRunContext
+  step: PipelineStep
+}) => Promise<DelegatedDispatchPlan | undefined>
+
+/** Bind {@link OpenStepDispatch} over the registries, the clock and the engine's persist. */
+export function buildOpenStepDispatch(deps: {
+  agentKindRegistry: AgentKindRegistry
+  delegatedExecutorRegistry: DelegatedExecutorRegistry
+  clock: Clock
+  persistAndEmit: (workspaceId: string, instance: ExecutionInstance) => Promise<void>
+}): OpenStepDispatch {
+  return async ({ workspaceId, instance, context, step }) => {
+    const plan = planDelegatedDispatch(context, deps)
+    if (plan) {
+      claimDelegation(step, { ...plan, startedAt: deps.clock.now() })
+    } else {
+      // The explicit cold-boot lifecycle: a container dispatch blocks until the per-run container
+      // is up and has accepted the job, so emitting `starting` now shows the boot (and then the
+      // live phase and the container's id/url) instead of a blank "working" state.
+      step.container = { status: 'starting' }
+    }
+    await deps.persistAndEmit(workspaceId, instance)
+    return plan
+  }
+}
+
+/**
+ * Whether a dispatch that threw got as far as CALLING the executor's own system.
+ *
+ * The delegated executor states it: everything it refuses before the call (no linked repository,
+ * no such registration, a step dispatched outside a run) is a conflict of ours, and only a throw
+ * from `start()` itself is re-raised as `delegated_executor_failed`. The engine reads that rather
+ * than inferring it, because the two answers lead to opposite dispositions and neither is safe as
+ * a default: a claim settled when the call may have landed leaves a live external run that no
+ * teardown will ever name, and a claim left open when nothing was contacted has the teardown warn
+ * a human about work that never started.
+ */
+export function delegationContactFailed(error: unknown): boolean {
+  return error instanceof DomainError && error.details?.['reason'] === 'delegated_executor_failed'
 }

@@ -11,6 +11,7 @@ import {
   containerShutdownFailure,
   delegatedTerminalFailure,
   MAX_BRANCH_CONTENTION_RECOVERIES,
+  MAX_DELEGATED_RETRIES,
 } from './job.logic.js'
 import { PR_REVIEWER_KIND } from '@cat-factory/agents'
 import { HUMAN_TEST_AGENT_KIND, isTesterKind, VISUAL_CONFIRM_AGENT_KIND } from './ci.logic.js'
@@ -27,7 +28,7 @@ import {
   validationFailureDetail,
 } from './validation.logic.js'
 import { applyReproductionReport } from './reproductionProof.logic.js'
-import { inFlightDelegation } from './step-fold.logic.js'
+import { inFlightDelegation, settleDelegation } from './step-fold.logic.js'
 
 /** A settled (non-`running`) agent poll — the only states {@link PollCompletionController} acts on. */
 type SettledUpdate = Extract<AgentJobUpdate, { state: 'done' } | { state: 'failed' }>
@@ -210,6 +211,14 @@ export class PollCompletionController {
       update,
     )
     if (resumedAfterContention) return resumedAfterContention
+    // The DELEGATED member of the same family: an external verdict its own executor called
+    // survivable (a run cancelled by a runner-pool restart, a rate limit), which re-dispatches on
+    // a bounded budget instead of failing the run. Sits with the two recoveries above rather than
+    // with the terminal branch below, because the axes are separate: `delegated_failed` is the
+    // classification for BOTH dispositions, and only the disposition decides whether a second
+    // external run is spent.
+    const redispatched = await this.recoverDelegatedFailure(workspaceId, instance, step, update)
+    if (redispatched) return redispatched
     // A read-only Challenge Investigator (dispatched off a parked `pr-reviewer` step when the
     // human challenged ONE finding) failed for real: settle the challenge as `failed` and RE-PARK
     // the review — a non-critical second opinion crashing must not fail the human's in-flight
@@ -335,6 +344,46 @@ export class PollCompletionController {
     // The job's container is finished with; a fresh one boots for the re-dispatch, so the details
     // show it spinning up again rather than a stale "up" (the eviction recovery's reasoning).
     step.container = { status: 'starting' }
+    await this.runStateMachine.persistAndEmit(workspaceId, instance)
+    return { kind: 'continue' }
+  }
+
+  /**
+   * Re-dispatch a DELEGATED step whose executor called its failure RETRYABLE, or null when that is
+   * not what happened (so the caller reports the failure).
+   *
+   * The engine sets the budget, not the executor: an executor asking for a retry is stating a fact
+   * about its own system ("this verdict was not about the work"), and how many times a platform is
+   * willing to spend somebody else's runner on it is a different question, answered once here (see
+   * {@link MAX_DELEGATED_RETRIES}).
+   *
+   * The failed attempt is SETTLED onto the record before the handle is dropped, because the record
+   * is the platform's only account of work that happened elsewhere and the next claim appends to
+   * its log. Clearing `jobId` is what makes the next advance dispatch rather than re-attach, and
+   * the fresh dispatch takes a new correlation key (the dispatch epoch moved), so the executor
+   * starts a new run instead of recognising the failed one.
+   */
+  private async recoverDelegatedFailure(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    update: Extract<AgentJobUpdate, { state: 'failed' }>,
+  ): Promise<AdvanceResult | null> {
+    if (update.delegated?.disposition !== 'retryable') return null
+    // Gated on the in-flight job BEING the delegated one, like every other reader of the record:
+    // a container helper dispatched later on the same step must not be re-driven on this budget.
+    if (!inFlightDelegation(step)) return null
+    const retries = step.delegatedRetries ?? 0
+    if (retries >= MAX_DELEGATED_RETRIES) return null
+    step.delegatedRetries = retries + 1
+    settleDelegation(step, {
+      status: 'failed',
+      outcome: update.error,
+      ...(update.delegated.url ? { url: update.delegated.url } : {}),
+    })
+    step.jobId = undefined
+    step.subtasks = undefined
+    step.progress = 0
     await this.runStateMachine.persistAndEmit(workspaceId, instance)
     return { kind: 'continue' }
   }

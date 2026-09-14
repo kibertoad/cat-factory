@@ -48,6 +48,14 @@ export interface AgentJobHandle {
    */
   workspaceId?: string
   /**
+   * The board block the run is for. Set at the poll site alongside {@link workspaceId}, and read
+   * by the DELEGATED arm, which resolves its executor's credentials on every poll (a token that
+   * lives an hour cannot be frozen onto a handle for a run that lives three) and must resolve them
+   * in the same scope the dispatch did. Absent for a container job, which resolves nothing per
+   * poll. See `DelegationHandle.blockId`.
+   */
+  blockId?: string
+  /**
    * For a subscription-harness job, the id of the pooled token leased for it, so
    * the poll site can attribute the run's usage back to the right pool row
    * (usage-aware rotation). Absent for proxy-metered Pi jobs.
@@ -288,14 +296,19 @@ export type AgentJobUpdate =
        * the failure message is one line and the executor's own logs are the whole post-mortem, so a
        * failed delegated step with no link is a dead end.
        *
-       * `terminal` is the delegated counterpart of {@link harnessShutdown} and deliberately NOT a
-       * reuse of it: the two want the same disposition ("do not spend a recovery budget") and
-       * different names, and only the name reaches a human. Borrowing the container flag reported
+       * `disposition` is the delegated counterpart of {@link harnessShutdown} and deliberately NOT
+       * a reuse of it: `terminal` wants the same handling ("do not spend a recovery budget") under
+       * a different name, and only the name reaches a human. Borrowing the container flag reported
        * every external CI failure as `harness_shutdown`, which renders as "Harness shut down" for a
-       * step that never had a harness. Absent ⇒ the failure is re-driven on the ordinary
-       * job-failure budget, which is what an executor's own `retryable: true` asks for.
+       * step that never had a harness.
+       *
+       * It is a CLOSED pair rather than an optional flag because the engine branches both ways:
+       * `retryable` spends one bounded re-drive on a fresh dispatch (what an executor's own
+       * `retryable: true` asks for), `terminal` fails the run at once. Read as "absent means
+       * retryable" the two were one field with an unstated default, and the retry half was never
+       * written at all.
        */
-      delegated?: { url?: string; terminal?: true }
+      delegated?: { url?: string; disposition: 'terminal' | 'retryable' }
     }
 
 /**

@@ -41,6 +41,7 @@ import type {
 } from '@cat-factory/integrations'
 import type { SpendService } from '@cat-factory/spend'
 import type { AgentContextBuilder, FragmentBodyResolver } from './AgentContextBuilder.js'
+import type { OpenStepDispatch } from './delegation.logic.js'
 import type { CompanionController } from './CompanionController.js'
 import type { BinaryCandidateController } from './BinaryCandidateController.js'
 import type { ForkDecisionController } from './ForkDecisionController.js'
@@ -152,6 +153,12 @@ export interface RunDispatcherDeps {
   stepGraph: StepGraph
   runStateMachine: RunStateMachine
   contextBuilder: AgentContextBuilder
+  /**
+   * The shared pre-dispatch opener, bound by the engine: it commits a delegated step's claim (or
+   * a container step's cold boot) before anything is contacted. Every async dispatch site the
+   * dispatcher owns takes it. See {@link OpenStepDispatch}.
+   */
+  openStepDispatch: OpenStepDispatch
   mergeResolver: MergeResolver
   companionController: CompanionController
   testerController: TesterController

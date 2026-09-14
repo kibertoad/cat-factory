@@ -316,9 +316,14 @@ The pilot reports none of this today; the hooks are what let it start without a 
 
 ### D9. Failure, cancel, reclaim, retry
 
-- `failed` with `retryable: true` is re-driven under the existing job-failure budget; without it
-  the run fails with `failureCause: 'delegated_executor'` and `detail` verbatim from the executor,
-  URL preserved on the record.
+- `failed` carries a DISPOSITION, `terminal` or `retryable`, and the engine branches both ways.
+  `terminal` fails the run at once with the executor's own `error` and `detail`, URL preserved on
+  the record. `retryable` buys one fresh dispatch, bounded by `MAX_DELEGATED_RETRIES` (the ENGINE's
+  number, not the executor's asking: it decides how much of somebody else's runner a blip is
+  worth), settling the failed attempt onto the record first so its log keeps it. Both classify as
+  `delegated_failed`: retryability and classification are separate axes. A closed pair rather than
+  an optional flag, because an unstated default is what made the retry half unimplemented and
+  invisible.
 - `cancelRun` calls `cancel?()` when defined and marks the record `cancelled` either way; an
   executor without `cancel` leaves the external run alive, and the record's `note` says so.
 - `reclaimRun` (the stale-run sweeper) asks `poll()` by correlation before deciding a step is
@@ -395,11 +400,13 @@ like `/v1/artifacts/ingest`, not public API.
 - [ ] **PR 5: push-wake and per-call telemetry ingest** (D7 second half, D8's second and third hooks).
       See "What is still open" below: the first is blocked on the drivers' park machinery, and the
       second has no consumer until an executor reports.
-- [ ] **Website page under `/extend/`** (a separate repo, so a separate PR; ownership follows the
-      reader per ADR 0051). The internal design lives in
-      [`backend/docs/delegated-executors.md`](../../backend/docs/delegated-executors.md); the page
-      owes the part a reader can act on with no checkout: registering an executor, the
-      `workflow_dispatch` `run-name` contract, and what the platform does and does not measure.
+- [x] **Website page under `/extend/`**:
+      [cat-factory-website#92](https://github.com/kibertoad/cat-factory-website/pull/92), a
+      separate repo and so a separate PR, ownership following the reader per ADR 0051. It owns what
+      a reader acts on with no checkout (the three registrations, the `workflow_dispatch`
+      `run-name` contract, the credential and cadence declarations, the two failure dispositions,
+      and what the platform does and does not measure); the internal design stays in
+      [`backend/docs/delegated-executors.md`](../../backend/docs/delegated-executors.md).
 - [ ] **Close-out**: convert to an ADR under `backend/docs/adr/`, `git rm` this tracker. Held until
       PR 5 settles, since the telemetry stance is part of what the ADR records.
 
@@ -433,7 +440,28 @@ counts delegated steps whose step metrics hold no calls, so an executor that dec
   a field on the handle that `recordDispatchAttribution` does not persist is absent in production
   with no error.
 - **Idempotent start, always.** Both drivers replay. Claim before effect; on replay, poll by
-  correlation.
+  correlation. The engine's half goes through ONE function every async dispatch site calls
+  (`openStepDispatch`), because the rule written out per site held at one of six: the step's own
+  dispatch claimed, and a gate helper, a Tester fixer round, a Ralph iteration and the two
+  human-gate fixers did not. It answers the same question the container cold boot answers, which
+  is why the two live together rather than beside each other.
+- **A dispatch that threw is not a dispatch that did nothing.** The claim stays open when the
+  executor's own `start()` threw (liveness unknown, so the teardown asks it to cancel) and settles
+  when the platform refused before contacting anything (nothing is running, so a cancel request
+  would be a false alarm). The engine reads which happened off the refusal's own
+  `delegated_executor_failed` reason rather than inferring it. Both drop the job id, so a replay
+  re-dispatches under the same correlation key instead of polling a job that may not exist.
+- **A cadence the record does not hold falls back to the deployment's job cadence.** Synthesising a
+  zero window instead derives `ceil(0 / 0)` = `NaN`, and a `p < NaN` poll loop runs no iterations:
+  the step fails as un-settled before its first poll.
+- **The handle carries the BLOCK, not only the workspace.** Credentials re-resolve on every poll
+  and every cancel, and `ToolSecretResolver.resolve` takes the block so a per-service store can
+  scope its lookup. Dropped, such a deployment starts the run fine and then reads an empty bag for
+  the rest of its life, dying on "status was unreadable" while the external work carries on.
+- **The URL policy is enforced in the FETCH.** Every executor is built over a wrapped `fetchImpl`
+  that runs the deployment's `UrlSafetyPolicy` on the first URL and on every redirect hop, the same
+  guard the notification-webhook sender uses. Handed over beside the fetch instead, it was declared
+  on the port, documented on both sides and read by nobody.
 - **Credentials re-resolve per poll**, never cached on the handle: a one-hour token dies inside a
   three-hour run.
 - **Absent is not zero, on every surface**: the run-meta card, the outcome summary, the
@@ -467,8 +495,8 @@ counts delegated steps whose step metrics hold no calls, so an executor that dec
   path's `harnessShutdown` carries ("do not spend a recovery budget"), and it borrowed that flag at
   first: every external CI failure then reported `failureKind: 'harness_shutdown'`, rendering as
   "Harness shut down" for a step that never had a harness and filing external verdicts under
-  container eviction in every rollup. It rides `update.delegated.terminal` and maps to
-  `delegated_failed`.
+  container eviction in every rollup. It rides `update.delegated.disposition` and maps to
+  `delegated_failed`, as its `retryable` sibling does.
 - **A successful poll is the sign of life.** The shipped executor's running answer is identical on
   every tick of a quiet run, so nothing changes, nothing persists, and the step's `lastActivityAt`
   freezes at the first poll while the stale-run sweeper re-collects a run that is perfectly alive.

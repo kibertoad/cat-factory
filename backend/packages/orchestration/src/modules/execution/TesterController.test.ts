@@ -32,6 +32,12 @@ function makeController(over: Partial<TesterControllerDeps> = {}) {
     notificationService: { raise },
     agentExecutor: { runsAsync: () => true, startJob, pollJob: vi.fn(), reclaimRun: vi.fn() },
     contextBuilder: { buildContext: vi.fn() },
+    // The shared pre-dispatch opener: this suite drives container kinds, so it answers "not
+    // delegated" and stamps the cold boot the real one does.
+    openStepDispatch: vi.fn(async ({ step }: { step: PipelineStep }) => {
+      step.container = { status: 'starting' }
+      return undefined
+    }),
     resolveRiskPolicy: async () => ({ ciMaxAttempts: 10 }),
     stateMachine: {
       casPersist,

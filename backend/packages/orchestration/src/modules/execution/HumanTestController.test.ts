@@ -65,6 +65,9 @@ function fakeDeps(over: Partial<HumanTestControllerDeps> = {}): HumanTestControl
     executionRepository: { get: vi.fn(async () => null), upsert: vi.fn(async () => {}) } as never,
     workRunner: { signalDecision: vi.fn(async () => {}) } as never,
     agentExecutor: fakeExecutor(),
+    // The shared pre-dispatch opener: this suite drives no delegated kind, so it answers
+    // "not delegated" and the controller takes the container path.
+    openStepDispatch: async () => undefined,
     contextBuilder: {
       buildContext: vi.fn(async () => ({ agentKind: 'human-test', priorOutputs: [] })),
     } as never,

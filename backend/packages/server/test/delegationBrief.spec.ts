@@ -19,6 +19,7 @@ import {
 } from '../src/agents/ContainerAgentExecutor.js'
 import type { ContainerSessionService } from '../src/containers/ContainerSessionService.js'
 import { buildDelegatedAgentExecutor } from '../src/agents/delegatedExecutorHost.js'
+import { githubRepoOrigin } from '../src/agents/containerAgentBody.js'
 
 // THE BRIEF IS THE PRODUCTION PROMPT.
 //
@@ -140,6 +141,7 @@ async function delegationBrief(): Promise<DelegationBrief> {
     delegatedExecutorRegistry: executors,
     agentKindRegistry: registryWithKind('delegated'),
     resolveRepoTarget: async () => REPO,
+    resolveRepoOrigin: githubRepoOrigin,
     urlSafetyPolicy: undefined,
     logger: noopLogger,
     clock: { now: () => 1_700_000_000_000 },
@@ -217,6 +219,7 @@ describe('the brief and the harness job body compose the same instructions', () 
       delegatedExecutorRegistry: executors,
       agentKindRegistry: registryWithKind('delegated'),
       resolveRepoTarget: async () => REPO,
+      resolveRepoOrigin: githubRepoOrigin,
       urlSafetyPolicy: undefined,
       logger: noopLogger,
       clock: { now: () => 0 },

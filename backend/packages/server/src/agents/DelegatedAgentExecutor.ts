@@ -30,7 +30,6 @@ import { composeDelegationBrief, briefRepoProvider } from './brief.js'
 import { recordAgentContextSnapshot } from './agentContextRecord.js'
 import { resolveDelegationCredentials } from './delegationCredentials.js'
 import type { ResolveRepoTarget, ResolveRepoOrigin } from './repoTargeting.js'
-import { githubRepoOrigin } from './containerAgentBody.js'
 
 // ---------------------------------------------------------------------------
 // The THIRD executor class: a step whose work happens in a system the deployment already runs.
@@ -58,8 +57,16 @@ export interface DelegatedAgentExecutorDependencies {
   agentKindRegistry: AgentKindRegistry
   /** The run's repo target (the service↔repo projection), the same resolver the container uses. */
   resolveRepoTarget: ResolveRepoTarget
-  /** Where the repo is reached: the clone URL plus the VCS provider. Defaults to GitHub. */
-  resolveRepoOrigin?: ResolveRepoOrigin
+  /**
+   * Where the repo is reached: the clone URL plus the VCS provider.
+   *
+   * REQUIRED, with no GitHub default. A default is invisible when it is wrong: a GitLab-hosted
+   * deployment whose facade forgot to wire this handed every brief a `https://github.com/...`
+   * clone URL for a repository that does not live there, and the provider-mismatch refusal that
+   * exists to catch exactly that never ran. A facade with genuinely nothing else to resolve
+   * passes `githubRepoOrigin` by name, which says so.
+   */
+  resolveRepoOrigin: ResolveRepoOrigin
   /**
    * Where the work came from, when it came from a tracker. One read per dispatch off the block's
    * linked issues, never a per-issue loop, and never re-read on a poll.
@@ -203,6 +210,10 @@ export class DelegatedAgentExecutor implements AsyncAgentExecutor {
       jobId: correlationKey,
       runId: executionId,
       workspaceId,
+      // The block, so the POLL resolves this executor's credentials in the scope the dispatch
+      // did. The engine re-supplies it from the run, but a handle that answers for itself is
+      // what keeps a non-durable caller (`run()`'s own drive, a test) on the same path.
+      blockId,
       agentKind: context.agentKind,
       ...(context.initiatedByUserId ? { initiatedByUserId: context.initiatedByUserId } : {}),
       repo: {
@@ -248,6 +259,7 @@ export class DelegatedAgentExecutor implements AsyncAgentExecutor {
         'delegated_claim_missing',
       )
     }
+    const blockId = requireHandleBlock(handle)
     const definition = this.requireDefinition(handle.agentKind ?? '', delegated.executor)
     const executor = this.executorFor(definition)
     const jobLog = this.log.child({
@@ -265,12 +277,17 @@ export class DelegatedAgentExecutor implements AsyncAgentExecutor {
       ...(delegated.branches ? { branches: delegated.branches } : {}),
       ...(delegated.repo ? { repo: delegated.repo } : {}),
       workspaceId: handle.workspaceId ?? '',
+      blockId,
       runId: handle.runId ?? handle.jobId,
       agentKind: handle.agentKind ?? '',
     }
     const credentials = await resolveDelegationCredentials({
       definition,
       workspaceId: handle.workspaceId ?? '',
+      // The SAME scope the dispatch resolved in. Dropped here, a deployment whose credential
+      // store is per service resolves an empty bag on every poll of a run it started perfectly
+      // well, and the step dies on an unreadable status while the external work carries on.
+      blockId,
       resolveToolSecrets: this.deps.resolveToolSecrets,
       logger: jobLog,
     })
@@ -343,6 +360,9 @@ export class DelegatedAgentExecutor implements AsyncAgentExecutor {
       const credentials = await resolveDelegationCredentials({
         definition,
         workspaceId: handle.workspaceId,
+        // Scoped like the dispatch and the poll: a cancel resolving an empty bag reports work as
+        // possibly-still-running that this executor could have stopped.
+        blockId: handle.blockId,
         resolveToolSecrets: this.deps.resolveToolSecrets,
         logger: jobLog,
       })
@@ -407,7 +427,7 @@ export class DelegatedAgentExecutor implements AsyncAgentExecutor {
         'github_not_connected',
       )
     }
-    const origin = (this.deps.resolveRepoOrigin ?? githubRepoOrigin)(repo)
+    const origin = this.deps.resolveRepoOrigin(repo)
     const trackerRef = await this.resolveTrackerRef(ids.workspaceId, ids.blockId)
     return composeDelegationBrief(context, this.deps.agentKindRegistry, {
       correlationKey: ids.correlationKey,
@@ -462,6 +482,25 @@ export class DelegatedAgentExecutor implements AsyncAgentExecutor {
 }
 
 /** The delegated dispatch's ids, refused together so a caller cannot proceed on half of them. */
+/**
+ * The block a poll addresses, refused rather than defaulted when the handle carries none.
+ *
+ * Refused because the alternative is silent and permanent: credentials resolved without the
+ * block come back empty on a per-service store, so every poll of a perfectly healthy external run
+ * fails to read its status and the step dies hours later reporting a timeout. The engine supplies
+ * it from the run at the one place a handle is rebuilt (`pollHandleFor`), so an absent one is a
+ * new call site rather than a state a deployment can reach.
+ */
+function requireHandleBlock(handle: AgentJobHandle): string {
+  if (handle.blockId) return handle.blockId
+  throw new ConflictError(
+    'A delegated poll arrived with no block on its handle, so the credentials this executor ' +
+      'declares cannot be resolved in the scope its dispatch used. The engine supplies it from ' +
+      'the run; a handle without it was built somewhere that does not.',
+    'delegated_claim_missing',
+  )
+}
+
 function requireIds(context: AgentRunContext): {
   workspaceId: string
   executionId: string
@@ -545,23 +584,22 @@ function toJobUpdate(
   }
   if (update.state === 'failed') {
     // A NON-retryable failure is TERMINAL: the driver must not spend a recovery budget re-running
-    // somebody else's CI to reach the verdict it already reached. Reported on the DELEGATED channel
-    // rather than as `harnessShutdown`, which is the container path's signal for the same
-    // disposition under a name that misdescribes this one: a delegated step never had a harness,
-    // and the operator was shown "Harness shut down" for an external workflow that simply failed.
-    const terminal = update.retryable !== true
+    // somebody else's CI to reach the verdict it already reached. A retryable one buys exactly one
+    // fresh dispatch (`MAX_DELEGATED_RETRIES`). Reported on the DELEGATED channel rather than as
+    // `harnessShutdown`, which is the container path's signal for the same disposition under a
+    // name that misdescribes this one: a delegated step never had a harness, and the operator was
+    // shown "Harness shut down" for an external workflow that simply failed.
     return {
       state: 'failed',
       error: update.error,
       ...(update.detail ? { detail: update.detail } : {}),
-      ...(update.url || terminal
-        ? {
-            delegated: {
-              ...(update.url ? { url: update.url } : {}),
-              ...(terminal ? { terminal: true as const } : {}),
-            },
-          }
-        : {}),
+      delegated: {
+        ...(update.url ? { url: update.url } : {}),
+        // Stated on every delegated failure, both ways round. Read as "absent means retryable"
+        // the engine had one flag with an unstated default and no re-drive behind it, so an
+        // executor's `retryable: true` was silently the same as a final verdict.
+        disposition: update.retryable === true ? ('retryable' as const) : ('terminal' as const),
+      },
       backend: `delegated:${definition.id}`,
     }
   }

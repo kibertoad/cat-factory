@@ -25,6 +25,7 @@ import type { TesterQualityReviewer } from './TesterQualityReviewService.js'
 import { renderQualityFeedbackForTester } from './testerQuality.logic.js'
 import { shouldRunGatedStep } from './stepGating.logic.js'
 import { recordDispatchedJob } from './step-fold.logic.js'
+import type { OpenStepDispatch } from './delegation.logic.js'
 import { awaitingJob } from './awaitingJob.logic.js'
 
 /** Whether a Tester report raised any concern serious enough to block a release. */
@@ -100,6 +101,12 @@ export interface TesterControllerDeps {
   ) => Promise<{ ciMaxAttempts: number; maxTesterQualityIterations: number }>
   /** The async instance/block spine (container reclaim, instance persist + emit). */
   stateMachine: RunStateMachine
+  /**
+   * Opens and commits the record each dispatch here is observed through, before the executor is
+   * called: a delegation claim, or the container cold boot this used to stamp inline. See
+   * {@link OpenStepDispatch}.
+   */
+  openStepDispatch: OpenStepDispatch
   /**
    * Inline reviewer for the test quality-control companion. When wired (and the Tester step
    * has the companion enabled), each Tester report is audited for coverage BEFORE the
@@ -352,14 +359,13 @@ export class TesterController {
         { agentKind: TESTER_QC_AGENT_KIND, output: qualityFeedback },
       ]
     }
-    // Surface the cold-boot window BEFORE the blocking dispatch (it blocks until the per-run
-    // container is up and accepts the job), so the Tester window shows "spinning up" then the
-    // live phase via the same `container` projection the Coder uses — true parity, instead of
-    // jumping straight to "running".
-    step.container = { status: 'starting' }
     step.subtasks = undefined
     if (step.test) step.test.phase = 'testing'
-    await this.deps.stateMachine.persistAndEmit(workspaceId, instance)
+    // Open and commit this dispatch's record before the blocking call. For a container Tester
+    // that surfaces the cold-boot window (the window shows "spinning up" then the live phase via
+    // the same `container` projection the Coder uses, instead of jumping straight to "running");
+    // for a delegated one it is the claim a replay re-attaches to.
+    await this.deps.openStepDispatch({ workspaceId, instance, context, step })
 
     const handle = await executor.startJob(context)
     recordDispatchedJob(step, handle, context.agentKind)
@@ -539,10 +545,6 @@ export class TesterController {
         { agentKind: TESTER_AGENT_KIND, output: renderReportForFixer(report) },
       ],
     }
-    // Surface the cold-boot window before the blocking dispatch, then `up` once it returns —
-    // same `container` projection the Coder uses, so the Tester window shows the fixer's
-    // container spinning up then running rather than jumping straight to "running".
-    step.container = { status: 'starting' }
     step.subtasks = undefined
     step.test = {
       phase: 'fixing',
@@ -553,7 +555,10 @@ export class TesterController {
       // appended when the fixer finishes (see recordFixerOutcome).
       ...(step.test?.attemptLog ? { attemptLog: step.test.attemptLog } : {}),
     }
-    await this.deps.stateMachine.persistAndEmit(workspaceId, instance)
+    // As in `dispatchTester`: the fixer's record is opened and committed before the blocking
+    // call, which for a container round is the cold-boot window and for a delegated one is the
+    // claim its replay re-attaches to.
+    await this.deps.openStepDispatch({ workspaceId, instance, context, step })
 
     const handle = await executor.startJob(context)
     recordDispatchedJob(step, handle, context.agentKind)

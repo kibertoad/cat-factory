@@ -80,6 +80,17 @@ export interface GitHubActionsExecutorDescription {
   tokenKey?: string
   /** The API base, for GitHub Enterprise. Defaults to `https://api.github.com`. */
   apiBase?: string
+  /**
+   * How many recent `workflow_dispatch` runs the correlation scan reads per look. Defaults to 50.
+   *
+   * A knob rather than a constant because the failure it prevents is the deadliest one in this
+   * seam: a replayed dispatch finds its own run by scanning this page, and a repo that fires more
+   * `workflow_dispatch` runs than fit between a dispatch and its replay pushes the run off the
+   * end, so `start` queues a SECOND workflow and one task gets two pull requests. Raise it on a
+   * high-volume repo. Bounded per look either way, so a miss reads as "not yet" and the caller
+   * keeps asking.
+   */
+  correlationScanSize?: number
 }
 
 /** The `workflow_dispatch` input this helper adds, carrying the platform's correlation key. */
@@ -127,6 +138,7 @@ export function githubActionsDelegatedExecutor(
       repo: description.repo,
       workflowFile: description.workflowFile,
       correlationKey,
+      ...(description.correlationScanSize ? { perPage: description.correlationScanSize } : {}),
     })
 
   return {

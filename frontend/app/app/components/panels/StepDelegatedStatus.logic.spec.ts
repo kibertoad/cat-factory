@@ -5,6 +5,7 @@ import {
   KNOWN_DELEGATION_STATUSES,
   UNKNOWN_DELEGATION_STATUS_META,
   delegationStatusView,
+  externalRunHref,
 } from './StepDelegatedStatus.logic'
 
 /**
@@ -56,5 +57,31 @@ describe('delegation status presentation', () => {
 
   it('treats an absent status as unrecognised rather than throwing', () => {
     expect(delegationStatusView(undefined).status).toBeNull()
+  })
+})
+
+describe('externalRunHref', () => {
+  it('links an ordinary run url', () => {
+    expect(externalRunHref('https://github.com/acme/widgets/actions/runs/99')).toBe(
+      'https://github.com/acme/widgets/actions/runs/99',
+    )
+    // http too: a deployment's own internal CI is reachable, and this is a link a person clicks,
+    // not a request the platform makes.
+    expect(externalRunHref('http://ci.internal/jobs/12')).toBe('http://ci.internal/jobs/12')
+  })
+
+  it('refuses a scheme that would EXECUTE in this origin', () => {
+    // The value comes from an external system's API and lands in the card's primary affordance.
+    // Bound straight into `href`, these run as script in the SPA's own origin when clicked.
+    for (const url of ['javascript:alert(1)', 'JavaScript:alert(1)', 'data:text/html,<script>']) {
+      expect(externalRunHref(url)).toBeNull()
+    }
+  })
+
+  it('refuses what it cannot parse, and says nothing about a record with no url', () => {
+    expect(externalRunHref('/relative/path')).toBeNull()
+    expect(externalRunHref('')).toBeNull()
+    expect(externalRunHref(null)).toBeNull()
+    expect(externalRunHref(undefined)).toBeNull()
   })
 })

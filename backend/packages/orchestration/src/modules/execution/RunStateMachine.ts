@@ -1164,7 +1164,7 @@ export class RunStateMachine {
     // cannot reach and the executor cannot re-derive: a delegated step's whole identity there is
     // what its claim persisted. Named here for the same reason the dispatched kinds are: only
     // the engine holds the steps.
-    const delegations = liveDelegations(instance).map((handle) => ({ ...handle, workspaceId }))
+    const delegations = liveDelegations(instance, workspaceId)
     let report: RunReclaimReport | undefined
     try {
       const outcome = await executor.reclaimRun({

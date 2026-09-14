@@ -36,6 +36,12 @@ function controller(ctx: AgentRunContext) {
     },
     deployer: { attachEnvironmentProjection: async () => false },
     runStateMachine: { persistAndEmit: async () => undefined },
+    // The shared pre-dispatch opener. This suite drives container kinds only, so it answers "not
+    // delegated" and stamps the cold boot the real one does.
+    openStepDispatch: async ({ step }: { step: PipelineStep }) => {
+      step.container = { status: 'starting' }
+      return undefined
+    },
     clock: { now: () => 1_700_000_000_000 },
     agentExecutor: {
       runsAsync: () => true,

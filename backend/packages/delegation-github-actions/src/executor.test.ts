@@ -92,6 +92,7 @@ function handle(overrides: Partial<DelegationHandle> = {}): DelegationHandle {
     correlationKey: 'ex_1-acme:impl',
     externalId: '4242',
     workspaceId: 'ws_1',
+    blockId: 'blk_1',
     runId: 'ex_1',
     agentKind: 'acme:impl',
     branches: { base: 'main', work: 'cat-factory/blk_1' },

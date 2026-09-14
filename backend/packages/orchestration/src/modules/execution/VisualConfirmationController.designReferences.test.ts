@@ -118,6 +118,9 @@ function fakeDeps(over: Partial<VisualConfirmationControllerDeps> = {}) {
     executionRepository: { get: vi.fn(async () => null), upsert: vi.fn(async () => {}) } as never,
     workRunner: { signalDecision: vi.fn(async () => {}) } as never,
     agentExecutor: { runsAsync: () => true, startJob: vi.fn() } as never,
+    // The shared pre-dispatch opener: this suite drives no delegated kind, so it answers
+    // "not delegated" and the controller takes the container path.
+    openStepDispatch: async () => undefined,
     contextBuilder: { buildContext: vi.fn() } as never,
     resolveRiskPolicy: vi.fn(async () => ({ ciMaxAttempts: 3 })),
     stateMachine: {

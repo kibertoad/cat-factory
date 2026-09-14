@@ -246,7 +246,7 @@ describe('delegatedTerminalFailure', () => {
     // never had a harness, and filed external CI verdicts under container eviction in the rollups.
     const failure = delegatedTerminalFailure({
       error: 'The workflow run finished as "failure".',
-      delegated: { terminal: true },
+      delegated: { disposition: 'terminal' },
     })
     expect(failure?.failureKind).toBe('delegated_failed')
     expect(failure?.failureKind).not.toBe('harness_shutdown')
@@ -255,7 +255,7 @@ describe('delegatedTerminalFailure', () => {
   it('falls back to the error as the detail rather than reporting none', () => {
     const failure = delegatedTerminalFailure({
       error: 'the run failed',
-      delegated: { terminal: true },
+      delegated: { disposition: 'terminal' },
     })
     expect(failure?.detail).toBe('the run failed')
   })

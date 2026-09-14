@@ -22,8 +22,9 @@ registration becomes a description of its own workflow (`owner`, `repo`, `workfl
   requests for one task.
 - **Actions' conclusions are not the platform's vocabulary.** `executor.ts` maps them, including
   the three (`cancelled` / `timed_out` / `stale`) that are the only ones a fresh attempt could
-  survive. Everything else is a verdict the workflow itself reached, and re-running it spends the
-  job-failure budget to reach the same one.
+  survive, reported as `retryable: true` so the engine spends its one bounded re-dispatch
+  (`MAX_DELEGATED_RETRIES`) on them. Everything else is a verdict the workflow itself reached, and
+  re-running it burns somebody else's runner to reach the same one.
 - **A `workflow_dispatch` workflow declares no outputs**, so what it PRODUCED is recovered from the
   repository: `result.ts` finds the open pull request whose head is the run's work branch, **in the
   repo the WORK targeted**. Both facts come off the delegation HANDLE, which the platform persists

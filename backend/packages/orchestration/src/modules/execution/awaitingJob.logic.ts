@@ -29,8 +29,10 @@ export function awaitingJob(step: PipelineStep, stepIndex: number, jobId: string
 }
 
 /**
- * The cadence for the job currently in flight on this step, or undefined for the ordinary case
- * (a container job, which every deployment polls on its own configured cadence).
+ * The cadence for the job currently in flight on this step, or undefined when the park carries
+ * none: a container job, and a delegation whose record holds no declared cadence. Both then poll
+ * on the DEPLOYMENT's own configured job cadence, which is the honest answer where the executor's
+ * declaration is out of reach and a far better one than a number nobody chose.
  *
  * Gated on the in-flight job actually BEING the delegated one, through the shared
  * {@link inFlightDelegation}. A step whose own work was delegated can still dispatch a container
@@ -46,9 +48,18 @@ export function delegatedPollPolicy(
   const record = inFlightDelegation(step)
   if (!record) return undefined
   if (record.status !== 'starting' && record.status !== 'running') return undefined
-  const { intervalMs, maxDurationMs } = record.poll
+  const poll = record.poll
+  // A DEGENERATE window answers "no cadence" rather than deriving one from it. The registry
+  // refuses a non-positive declaration, but a mothership node validates nothing it resolves and a
+  // record can predate a claim, and the arithmetic here is unforgiving in exactly the direction
+  // that costs a run: `ceil(0 / 0)` is `NaN`, `max(1, NaN)` is `NaN`, and a `p < NaN` poll loop
+  // runs no iterations at all, so the step fails as un-settled before the first poll.
+  if (!poll || !(poll.intervalMs > 0) || !(poll.maxDurationMs > 0)) return undefined
   // At least one poll, always: an executor whose declared window is shorter than one interval is
-  // refused at registration, but a mothership node validates nothing it resolves, and a budget of
-  // zero would fail the step as un-settled before the platform ever asked how it was going.
-  return { intervalMs, maxPolls: Math.max(1, Math.ceil(maxDurationMs / intervalMs)) }
+  // refused at registration, and a window that survived that would otherwise settle the step
+  // before the platform ever asked how it was going.
+  return {
+    intervalMs: poll.intervalMs,
+    maxPolls: Math.max(1, Math.ceil(poll.maxDurationMs / poll.intervalMs)),
+  }
 }

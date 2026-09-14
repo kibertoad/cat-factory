@@ -1190,6 +1190,17 @@ export const pipelineStepSchema = v.object({
    */
   branchContentionRecoveries: v.optional(v.number()),
   /**
+   * How many times this step's DELEGATED work failed with a verdict its executor called survivable
+   * (a cancelled run, a runner-pool restart, a rate limit) and was recovered by dispatching it
+   * again. Bounded by `MAX_DELEGATED_RETRIES`; past it the run fails with the executor's own
+   * wording. Absent/0 until the first such failure.
+   *
+   * Its own counter rather than a read of `delegated.attempts.length`, because the attempt log is
+   * deliberately kept across a human re-run of the step: counted from it, a step someone re-ran
+   * twice would start its next run with the budget already spent.
+   */
+  delegatedRetries: v.optional(v.number()),
+  /**
    * The transport's post-mortem of the FIRST container to die on this step (its exit state plus
    * a tail of its own logs). Retained across recoveries: a re-dispatch removes the dead
    * container immediately, so evidence from the first death — usually the informative one, the

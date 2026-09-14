@@ -41,11 +41,19 @@ export function pollHandleFor(
   step: PipelineStep,
   workspaceId: string,
   executionId: string,
+  /**
+   * The run's block. A PARAMETER rather than something read off the step, like `workspaceId` and
+   * `executionId` beside it, and load-bearing for the same reason they are: the delegated arm
+   * re-resolves its executor's credentials on every poll, and a lookup a per-service credential
+   * store cannot scope returns nothing, so the step polls for its whole life with an empty bag.
+   */
+  blockId: string,
 ): AgentJobHandle {
   return {
     jobId: step.jobId!,
     runId: executionId,
     workspaceId,
+    blockId,
     agentKind: step.agentKind,
     model: step.model,
     subscriptionTokenId: step.subscriptionTokenId,
@@ -373,11 +381,13 @@ function stampDelegationDispatch(
     executor: delegated.executor,
     status: 'starting',
     correlationKey: step.jobId ?? delegated.externalId,
-    // The executor's declared cadence is unreachable from here, and inventing one would have the
-    // driver poll an external system on a number nobody chose. A zero window derives the one-poll
-    // floor `delegatedPollPolicy` guarantees, which settles the step on its next poll rather than
-    // pretending to a budget.
-    poll: { intervalMs: 0, maxDurationMs: 0 },
+    // NO cadence, stated as absence. The executor's declaration is unreachable from here, and
+    // both ways of papering over it are worse than saying so: a number invented here would have
+    // the driver poll an external system on a figure nobody chose, and the zero window this used
+    // to write derived `maxPolls: NaN`, whose poll loop runs no iterations at all and fails the
+    // step as un-settled before the first poll. Absent, the driver uses the deployment's own job
+    // cadence (see `delegatedPollPolicy`).
+    poll: null,
     attempts: [{ startedAt: 0 }],
   }
   const attempts = claim.attempts.length > 0 ? claim.attempts : [{ startedAt: 0 }]
@@ -399,6 +409,49 @@ function stampDelegationDispatch(
             url: delegated.url ?? attempt.url ?? null,
           }
         : attempt,
+    ),
+  }
+}
+
+/**
+ * Fold a dispatch that THREW onto the step's delegation claim, and drop the handle so the next
+ * advance dispatches rather than polls.
+ *
+ * The handle goes because the claim's job id says "there is an external run to poll", which after
+ * a throw is exactly what nobody knows. Cleared, a replayed advance re-dispatches under the SAME
+ * correlation key (the failed attempt recorded no dispatch, so the epoch has not moved) and the
+ * executor's own idempotency re-attaches to the run if one did start. Left set, the engine polls
+ * a job that may never have existed until the budget is spent and reports a timeout instead of
+ * the dispatch failure that actually happened.
+ *
+ * Whether the CLAIM survives is decided by the caller, and the two answers are different facts:
+ *
+ *  - `contacted: false`: the dispatch failed before the executor's system was reached (no repo
+ *    linked, no executor registered). Nothing is running anywhere, so the record SETTLES as
+ *    failed, and a teardown that asked the executor to cancel would raise a false alarm about
+ *    external work that never started.
+ *  - `contacted: true`: the executor was called and the call threw. The run may be queued, may be
+ *    running, may not exist; only the executor can tell. The claim stays OPEN so the teardown
+ *    names it, asks the executor to cancel by correlation key, and records whether that worked.
+ *    A settled record is invisible to `liveDelegations`, which is how a lost response left a live
+ *    external run to finish and open a pull request on a task the board reported as failed.
+ */
+export function failDelegationDispatch(
+  step: PipelineStep,
+  failure: { error: string; contacted: boolean },
+): void {
+  step.jobId = undefined
+  if (!step.delegated) return
+  if (!failure.contacted) {
+    settleDelegation(step, { status: 'failed', outcome: failure.error })
+    return
+  }
+  const attempts = step.delegated.attempts
+  step.delegated = {
+    ...step.delegated,
+    note: failure.error,
+    attempts: attempts.map((attempt, index) =>
+      index === attempts.length - 1 ? { ...attempt, outcome: failure.error } : attempt,
     ),
   }
 }
@@ -447,10 +500,21 @@ export function applyDelegationRunning(
  * settled is excluded, because asking an executor to cancel a finished run is a request it has no
  * good answer to and the record would then claim a cancellation that did not happen.
  */
-export function liveDelegations(instance: {
-  id: string
-  steps: readonly PipelineStep[]
-}): DelegationHandle[] {
+export function liveDelegations(
+  instance: {
+    id: string
+    blockId: string
+    steps: readonly PipelineStep[]
+  },
+  /**
+   * The workspace the run belongs to. A PARAMETER, because an instance does not carry one and the
+   * handle requires it: the executor re-resolves its credentials to cancel, and a handle built
+   * with a placeholder resolves an empty bag, so every cancel fails on a missing credential and
+   * the record then reports work as possibly-still-running that the executor could have stopped.
+   * Taken here rather than patched on by the caller so there is nothing to forget.
+   */
+  workspaceId: string,
+): DelegationHandle[] {
   const handles: DelegationHandle[] = []
   for (const step of instance.steps) {
     const record = step.delegated
@@ -463,7 +527,8 @@ export function liveDelegations(instance: {
       ...(record.url ? { url: record.url } : {}),
       ...(record.branches ? { branches: record.branches } : {}),
       ...(record.repo ? { repo: record.repo } : {}),
-      workspaceId: '',
+      workspaceId,
+      blockId: instance.blockId,
       runId: instance.id,
       agentKind: step.agentKind,
     })

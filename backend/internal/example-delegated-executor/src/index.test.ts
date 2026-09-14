@@ -104,6 +104,7 @@ describe('the example executor', () => {
       executor: EXAMPLE_EXECUTOR_ID,
       correlationKey: 'ex_1-example',
       workspaceId: 'ws',
+      blockId: 'blk',
       runId: 'ex_1',
       agentKind: EXAMPLE_DELEGATED_KIND,
       branches: { base: 'main', work: 'cat-factory/blk' },

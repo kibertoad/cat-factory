@@ -9,7 +9,11 @@ import {
   type DelegationUpdate,
 } from '@cat-factory/kernel'
 import { defaultAgentKindRegistry, type AgentKindRegistry } from '@cat-factory/agents'
-import { buildDelegatedAgentExecutor, CompositeAgentExecutor } from '@cat-factory/server'
+import {
+  buildDelegatedAgentExecutor,
+  CompositeAgentExecutor,
+  githubRepoOrigin,
+} from '@cat-factory/server'
 
 // The DELEGATED-EXECUTOR fixture the cross-runtime suite drives.
 //
@@ -174,6 +178,9 @@ export function withDelegatedArm(
       name: 'widgets',
       baseBranch: 'main',
     }),
+    // Named rather than defaulted, because the host requires an answer: this harness has no VCS
+    // configuration of its own, so the brief's clone URLs are GitHub's by decision.
+    resolveRepoOrigin: githubRepoOrigin,
     // Answered explicitly, because the host requires an answer: this harness configures no
     // outbound widening, which is the strict public-https default every executor is held to.
     urlSafetyPolicy: undefined,

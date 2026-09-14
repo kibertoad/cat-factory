@@ -387,6 +387,12 @@ const CLASSIFICATION = [
     reason: 'outbound delivery to a subscriber endpoint, on the webhook contract we publish',
   },
   {
+    path: 'backend/packages/server/src/agents/delegatedExecutorHost.ts',
+    kind: 'internal',
+    reason:
+      "the policy-checked fetch every registered delegated executor is built over; it names no host of its own, and each executor's vendor is swept where that executor lives",
+  },
+  {
     path: 'backend/packages/integrations/src/modules/observability/RegistryReleaseHealthProvider.ts',
     kind: 'internal',
     reason:

@@ -103,3 +103,28 @@ export function delegationStatusView(status: string | undefined): DelegationStat
     labelParams: { status: status ?? '' },
   }
 }
+
+/**
+ * The run URL as an `href`, or null when it is not one this SPA may link to.
+ *
+ * Everything on the delegation record comes from an EXTERNAL system: `url` is whatever that
+ * system's API answered with, and this card puts it in the primary affordance a person clicks.
+ * Bound straight into `href`, a `javascript:` value executes in the SPA's own origin, which is the
+ * same boundary `resolveExternalToolUrl` draws for a resolver-supplied URL and the same one
+ * kernel's `hostMarkdown.link` draws server-side.
+ *
+ * A refused value is not dropped: the caller renders it as plain text, because "the executor
+ * reported this link and we will not follow it" is a fact worth showing, and a silently missing
+ * link reads as a run that reported none.
+ */
+export function externalRunHref(url: string | null | undefined): string | null {
+  if (!url) return null
+  try {
+    const parsed = new URL(url)
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:' ? url : null
+  } catch {
+    // A relative or malformed value: not something to link to, and not an error either. The card
+    // shows the raw string, which is what the executor actually said.
+    return null
+  }
+}

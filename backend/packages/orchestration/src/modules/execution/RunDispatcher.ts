@@ -320,8 +320,7 @@ export class RunDispatcher {
     })
     this.agentDispatch = new AgentDispatchController({
       agentExecutor: deps.agentExecutor,
-      agentKindRegistry: deps.agentKindRegistry,
-      delegatedExecutorRegistry: deps.delegatedExecutorRegistry,
+      openStepDispatch: deps.openStepDispatch,
       blockRepository: deps.blockRepository,
       clock: deps.clock,
       contextBuilder: deps.contextBuilder,
@@ -414,6 +413,7 @@ export class RunDispatcher {
         agentExecutor: deps.agentExecutor,
         contextBuilder: deps.contextBuilder,
         runStateMachine: deps.runStateMachine,
+        openStepDispatch: deps.openStepDispatch,
       }),
     )
     this.judgeController = new JudgeStepController({
@@ -611,7 +611,9 @@ export class RunDispatcher {
     // The handle is rebuilt from the STEP — the poll site has no dispatch in scope — so every
     // field the executor reads off it has to have been persisted at dispatch. What each one is
     // for, and what silently breaks without it, lives with its counterpart in `step-fold.logic`.
-    const update = await executor.pollJob(pollHandleFor(step, workspaceId, executionId))
+    const update = await executor.pollJob(
+      pollHandleFor(step, workspaceId, executionId, instance.blockId),
+    )
     if (update.state === 'running') {
       return this.pollRunning.handleRunningPoll(
         workspaceId,

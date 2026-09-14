@@ -24,6 +24,7 @@ import {
   RALPH_NO_PROGRESS_LIMIT,
 } from './ralph.logic.js'
 import { recordDispatchedJob } from './step-fold.logic.js'
+import type { OpenStepDispatch } from './delegation.logic.js'
 import { awaitingJob } from './awaitingJob.logic.js'
 
 /** The engine collaborators the ralph loop drives (kept on the engine, injected here). */
@@ -34,6 +35,12 @@ export interface RalphControllerDeps {
   contextBuilder: AgentContextBuilder
   /** The async instance/block spine (container reclaim, instance persist + emit). */
   stateMachine: RunStateMachine
+  /**
+   * Opens and commits this dispatch's record before the executor is called: a delegation claim
+   * for a helper kind whose work leaves the platform, a container cold boot otherwise. See
+   * {@link OpenStepDispatch}.
+   */
+  openStepDispatch: OpenStepDispatch
   /** Current time (ms) for stamping attempts. Absent → `Date.now()`. */
   clockNow?: () => number
 }
@@ -168,11 +175,11 @@ export class RalphController {
         },
       ]
     }
-    // Surface the cold-boot window before the blocking dispatch (parity with the Coder/Tester):
-    // the ralph result view shows the container spinning up, then the live phase on first poll.
-    step.container = { status: 'starting' }
     step.subtasks = undefined
-    await this.deps.stateMachine.persistAndEmit(workspaceId, instance)
+    // Open and commit this iteration's record before the blocking dispatch (parity with the
+    // Coder/Tester): a container round shows the cold boot and then the live phase on first
+    // poll, a delegated one commits the claim its replay re-attaches to.
+    await this.deps.openStepDispatch({ workspaceId, instance, context, step })
 
     const handle = await executor.startJob(context)
     recordDispatchedJob(step, handle, context.agentKind)

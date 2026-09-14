@@ -2,11 +2,16 @@ import type { AgentJobHandle, AgentRunContext, PipelineStep } from '@cat-factory
 import { defaultDelegatedExecutorRegistry, DomainError } from '@cat-factory/kernel'
 import { defaultAgentKindRegistry } from '@cat-factory/agents'
 import { describe, expect, it } from 'vitest'
-import { planDelegatedDispatch } from './delegation.logic.js'
+import {
+  buildOpenStepDispatch,
+  delegationContactFailed,
+  planDelegatedDispatch,
+} from './delegation.logic.js'
 import {
   applyDelegationCancellation,
   applyDelegationRunning,
   claimDelegation,
+  failDelegationDispatch,
   inFlightDelegation,
   liveDelegations,
   pollHandleFor,
@@ -184,7 +189,7 @@ describe('pollHandleFor', () => {
       } as AgentJobHandle,
       'acme:impl',
     )
-    expect(pollHandleFor(s, 'ws_1', 'run_1').delegated).toEqual({
+    expect(pollHandleFor(s, 'ws_1', 'run_1', 'blk_1').delegated).toEqual({
       executor: 'acme:executor',
       externalId: '99',
     })
@@ -194,7 +199,7 @@ describe('pollHandleFor', () => {
     // The replay case rather than an edge: the claim commits before `start()`, so a process that
     // died in between leaves a record with a status and no external id, and the executor is asked
     // to recover its own run by that key instead of the platform starting a second one.
-    expect(pollHandleFor(claimed(), 'ws_1', 'run_1').delegated).toEqual({
+    expect(pollHandleFor(claimed(), 'ws_1', 'run_1', 'blk_1').delegated).toEqual({
       executor: 'acme:executor',
       externalId: 'run_1-acme:impl',
     })
@@ -215,7 +220,7 @@ describe('pollHandleFor', () => {
       } as AgentJobHandle,
       'acme:impl',
     )
-    expect(pollHandleFor(s, 'ws_1', 'run_1').delegated).toMatchObject({
+    expect(pollHandleFor(s, 'ws_1', 'run_1', 'blk_1').delegated).toMatchObject({
       branches: { base: 'main', work: 'cat-factory/blk_1' },
       repo: { owner: 'acme', name: 'widgets' },
     })
@@ -228,7 +233,7 @@ describe('pollHandleFor', () => {
     // which polls its system for a run that does not exist, while the real container job is never
     // polled at all.
     const s = settledThenContainerJob()
-    expect(pollHandleFor(s, 'ws_1', 'run_1').delegated).toBeUndefined()
+    expect(pollHandleFor(s, 'ws_1', 'run_1', 'blk_1').delegated).toBeUndefined()
   })
 })
 
@@ -281,6 +286,21 @@ describe('delegatedPollPolicy', () => {
     expect(delegatedPollPolicy(s)).toBeUndefined()
   })
 
+  it('falls back to the deployment cadence for a record that declared none', () => {
+    // A dispatch site that never claimed leaves a record with no executor declaration within
+    // reach. Answering undefined hands the step to the deployment's own job cadence; the zero
+    // window this used to synthesise derived `ceil(0/0)` = NaN, whose poll loop runs no
+    // iterations at all and failed the step as un-settled before its first poll.
+    const s = claimed()
+    s.delegated = { ...s.delegated!, poll: null }
+    expect(delegatedPollPolicy(s)).toBeUndefined()
+    expect(awaitingJob(s, 0, s.jobId!)).toEqual({
+      kind: 'awaiting_job',
+      jobId: 'run_1-acme:impl',
+      stepIndex: 0,
+    })
+  })
+
   it('withholds the cadence once the external work has settled', () => {
     const s = claimed()
     settleDelegation(s, { status: 'done' })
@@ -314,7 +334,10 @@ describe('liveDelegations / applyDelegationCancellation', () => {
     const running = claimed()
     const settled = claimed()
     settleDelegation(settled, { status: 'done' })
-    const handles = liveDelegations({ id: 'run_1', steps: [running, settled] })
+    const handles = liveDelegations(
+      { id: 'run_1', blockId: 'blk_1', steps: [running, settled] },
+      'ws_1',
+    )
     expect(handles).toHaveLength(1)
     expect(handles[0]).toMatchObject({
       executor: 'acme:executor',
@@ -347,5 +370,110 @@ describe('liveDelegations / applyDelegationCancellation', () => {
     settleDelegation(s, { status: 'done' })
     expect(applyDelegationCancellation({ steps: [s] }, undefined)).toBe(false)
     expect(s.delegated?.status).toBe('done')
+  })
+})
+
+describe('failDelegationDispatch', () => {
+  it('keeps the claim LIVE when the executor was called and never answered', () => {
+    // The teardown reads `liveDelegations`, which skips a settled record. Settled here, a lost
+    // response left an external run to finish, open its pull request and bill its tokens on a
+    // task the board reported as failed, with nothing anywhere saying it was still alive.
+    const s = claimed()
+    failDelegationDispatch(s, { error: 'fetch failed', contacted: true })
+    expect(s.delegated?.status).toBe('starting')
+    expect(s.delegated?.note).toBe('fetch failed')
+    expect(s.delegated?.attempts.at(-1)?.outcome).toBe('fetch failed')
+    expect(liveDelegations({ id: 'run_1', blockId: 'blk_1', steps: [s] }, 'ws_1')).toHaveLength(1)
+  })
+
+  it('SETTLES the claim when nothing was contacted, so no teardown raises a false alarm', () => {
+    const s = claimed()
+    failDelegationDispatch(s, { error: 'no repository linked', contacted: false })
+    expect(s.delegated?.status).toBe('failed')
+    expect(liveDelegations({ id: 'run_1', blockId: 'blk_1', steps: [s] }, 'ws_1')).toEqual([])
+  })
+
+  it('drops the handle either way, so a replay dispatches instead of polling a ghost', () => {
+    // The failed attempt recorded no dispatch, so the epoch has not moved and the re-dispatch
+    // carries the SAME correlation key: the executor recognises its own run if one started.
+    for (const contacted of [true, false]) {
+      const s = claimed()
+      failDelegationDispatch(s, { error: 'boom', contacted })
+      expect(s.jobId).toBeUndefined()
+    }
+  })
+})
+
+describe('delegationContactFailed', () => {
+  it('reads the executor’s own statement rather than guessing from the throw', () => {
+    expect(
+      delegationContactFailed(
+        new DomainError('unavailable', 'the executor refused', {
+          reason: 'delegated_executor_failed',
+        }),
+      ),
+    ).toBe(true)
+    expect(
+      delegationContactFailed(
+        new DomainError('conflict', 'no repo', { reason: 'github_not_connected' }),
+      ),
+    ).toBe(false)
+    expect(delegationContactFailed(new Error('boom'))).toBe(false)
+  })
+})
+
+describe('buildOpenStepDispatch', () => {
+  function open(persisted: PipelineStep[]) {
+    return buildOpenStepDispatch({
+      ...registries(),
+      clock: { now: () => 1000 },
+      persistAndEmit: async (_ws, instance) => {
+        // Snapshot what a replay would actually READ: a claim only counts once it is on disk.
+        persisted.push(structuredClone(instance.steps[0]!))
+      },
+    })
+  }
+
+  it('commits the claim BEFORE the caller can contact anything', async () => {
+    const persisted: PipelineStep[] = []
+    const s = step()
+    const plan = await open(persisted)({
+      workspaceId: 'ws_1',
+      instance: { id: 'run_1', blockId: 'blk_1', steps: [s] } as never,
+      context,
+      step: s,
+    })
+    expect(plan?.executor).toBe('acme:executor')
+    expect(persisted[0]?.delegated).toMatchObject({
+      status: 'starting',
+      correlationKey: 'run_1-acme:impl',
+    })
+    expect(persisted[0]?.jobId).toBe('run_1-acme:impl')
+  })
+
+  it('stamps NO container on a delegated dispatch', async () => {
+    // A stamped container renders the step as a machine the platform never started, and hands it
+    // to the reclaim that kills containers by run.
+    const s = step()
+    await open([])({
+      workspaceId: 'ws_1',
+      instance: { id: 'run_1', blockId: 'blk_1', steps: [s] } as never,
+      context,
+      step: s,
+    })
+    expect(s.container).toBeUndefined()
+  })
+
+  it('opens the container cold boot for a kind that runs on the platform', async () => {
+    const s = step()
+    const plan = await open([])({
+      workspaceId: 'ws_1',
+      instance: { id: 'run_1', blockId: 'blk_1', steps: [s] } as never,
+      context: { ...context, agentKind: 'coder' },
+      step: s,
+    })
+    expect(plan).toBeUndefined()
+    expect(s.container).toEqual({ status: 'starting' })
+    expect(s.delegated).toBeUndefined()
   })
 })
