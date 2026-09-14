@@ -162,6 +162,42 @@ describe('DelegatedExecutorRegistry.register', () => {
     ).toThrow(DelegatedExecutorRegistrationError)
   })
 
+  it('refuses two credentials that arrive under one name', () => {
+    // The bag handed to `start`/`poll`/`cancel` is keyed by the name the EXECUTOR reads, so two
+    // declarations resolving to one name are one entry and the loser's value is gone with nothing
+    // said: the executor then authenticates against one system with another's credential.
+    expect(() =>
+      defaultDelegatedExecutorRegistry().register({
+        ...EXECUTOR,
+        credentials: [
+          { key: 'ACME_TOKEN_A', envName: 'TOKEN' },
+          { key: 'ACME_TOKEN_B', envName: 'TOKEN' },
+        ],
+      }),
+    ).toThrow(/arrive under one name \(TOKEN\)/)
+  })
+
+  it('refuses a bare key colliding with another declaration’s envName, case-folded', () => {
+    // Environment lookup is case-insensitive on Windows, which is why the comparison folds case
+    // while the injection does not.
+    expect(() =>
+      defaultDelegatedExecutorRegistry().register({
+        ...EXECUTOR,
+        credentials: [{ key: 'TOKEN' }, { key: 'ACME_TOKEN_B', envName: 'token' }],
+      }),
+    ).toThrow(DelegatedExecutorRegistrationError)
+  })
+
+  it('accepts one stored value delivered under two names', () => {
+    // Duplicate LOOKUP keys lose nothing: only a duplicate INJECTION name does.
+    expect(() =>
+      defaultDelegatedExecutorRegistry().register({
+        ...EXECUTOR,
+        credentials: [{ key: 'ACME_TOKEN' }, { key: 'ACME_TOKEN', envName: 'GITHUB_TOKEN' }],
+      }),
+    ).not.toThrow()
+  })
+
   it('lets a later registration replace an earlier one under the same id', () => {
     const registry = defaultDelegatedExecutorRegistry()
     registry.register(EXECUTOR)

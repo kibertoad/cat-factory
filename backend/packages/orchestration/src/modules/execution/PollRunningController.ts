@@ -238,6 +238,10 @@ export class PollRunningController {
     if (inFlightDelegation(s)) {
       if (
         applyDelegationRunning(s, {
+          // The external id a poll RECOVERED, for a system that could not name its run at start.
+          // Folded once and read back on every later poll, which is what stops the executor
+          // re-deriving it by correlation for the life of the run.
+          ...(update.delegated?.externalId ? { externalId: update.delegated.externalId } : {}),
           ...(update.delegated?.url ? { url: update.delegated.url } : {}),
           ...(update.phase ? { phase: update.phase } : {}),
         })

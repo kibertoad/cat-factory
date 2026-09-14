@@ -4,6 +4,7 @@ import type {
   DelegatedExecutorDeps,
   DelegatedExecutorRegistry,
   DelegatedFetch,
+  DelegatedFetchResponse,
   Logger,
   ResolveRunRepoContext,
   TaskRepository,
@@ -12,7 +13,12 @@ import type {
 } from '@cat-factory/kernel'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import { UnavailableError } from '@cat-factory/kernel'
-import { assertSafePublicUrl, safeFetch, DEFAULT_MAX_REDIRECTS } from '@cat-factory/integrations'
+import {
+  assertSafePublicUrl,
+  readCappedText,
+  safeFetch,
+  DEFAULT_MAX_REDIRECTS,
+} from '@cat-factory/integrations'
 import { DelegatedAgentExecutor } from './DelegatedAgentExecutor.js'
 import type { ResolveRepoOrigin, ResolveRepoTarget } from './repoTargeting.js'
 
@@ -122,14 +128,42 @@ function repoFilesResolver(
 }
 
 /**
+ * How long one executor call may take, redirects included, before it is abandoned.
+ *
+ * A delegated executor's own calls are API requests (dispatch, poll, cancel), not the external
+ * WORK, whose hours are bounded by the poll policy instead. Without a deadline a hung endpoint
+ * holds `DelegatedAgentExecutor.pollJob` open for ever, which on Node ties up a pg-boss worker and
+ * on the Worker burns the invocation: the ordinary shape of an outage, and the reason the
+ * notification-webhook sender sets one against this same `safeFetch`. A caller that passes its own
+ * `signal` keeps it.
+ */
+export const DELEGATED_REQUEST_TIMEOUT_MS = 30_000
+
+/**
+ * How much of one response body an executor may read.
+ *
+ * The third protection `safe-fetch` exists for, and the one a wrapper that only re-validates hops
+ * leaves off. An executor is deployment-authored code reading a system's JSON, and a broken or
+ * hostile endpoint answering hundreds of megabytes would otherwise be buffered whole in the
+ * isolate. Generous against the real payloads (a page of Actions runs is a few hundred KB) and
+ * fatal well before an OOM.
+ */
+export const DELEGATED_RESPONSE_MAX_BYTES = 4 * 1024 * 1024
+
+/**
  * The fetch every registered executor is built over: the runtime's own, held to the deployment's
- * outbound-URL policy on the first URL AND on every redirect hop.
+ * outbound-URL policy on the first URL AND on every redirect hop, given a deadline, and capped on
+ * the way back.
  *
  * The SAME guard the notification-webhook sender uses, through the same `safeFetch`, because an
  * executor is the same kind of surface: an operator-supplied base URL, a credential-bearing
  * request, and a receiver free to answer 302. Re-validating each hop is the part a plain
  * scheme check at registration cannot do, and `safeFetch` additionally strips the body and the
  * credential headers when a hop crosses origins.
+ *
+ * All THREE of that module's protections are applied here rather than two, and for the reason the
+ * policy itself is enforced here: an executor is deployment-authored code, and a control every
+ * author has to remember to apply is a control that exists only in the types.
  *
  * A refused URL throws `ValidationError` out of the executor's own call, which its error path
  * reports like any other refusal from its system.
@@ -144,18 +178,52 @@ function policyCheckedFetch(
       label: 'endpoint',
       ...(policy ? { policy } : {}),
     })
-  return (url, init) =>
-    safeFetch(
+  const makeError = (status: number, message: string) =>
+    new UnavailableError(
+      `A delegated executor's request could not be completed: ${message}`,
+      'delegated_executor_failed',
+      { status },
+    )
+  return async (url, init) => {
+    const response = await safeFetch(
       url,
-      (init ?? {}) as Parameters<typeof safeFetch>[1],
+      {
+        ...((init ?? {}) as Parameters<typeof safeFetch>[1]),
+        // The caller's own deadline wins where it set one; otherwise the deployment's. The port
+        // declares `signal` as `unknown` (kernel compiles against no runtime's globals), so the
+        // narrowing happens here, where a real `RequestInit` is being built.
+        signal:
+          (init?.signal as AbortSignal | undefined) ??
+          AbortSignal.timeout(DELEGATED_REQUEST_TIMEOUT_MS),
+      },
       assertSafe,
-      (status, message) =>
-        new UnavailableError(
-          `A delegated executor's request could not be completed: ${message}`,
-          'delegated_executor_failed',
-          { status },
-        ),
+      makeError,
       DEFAULT_MAX_REDIRECTS,
       fetchImpl as unknown as typeof fetch,
     )
+    return cappedResponse(response, makeError)
+  }
+}
+
+/**
+ * The response an executor sees: the real one's status and headers, with the two body readers
+ * routed through the running byte cap.
+ *
+ * A wrapper rather than a rule each executor applies, because the port hands them only `text()`
+ * and `json()` and neither can be bounded from the outside. The cap THROWS rather than truncating,
+ * which is right on this path: a body that overran is not a smaller body, and a JSON reader handed
+ * a prefix would parse a fault as a malformed payload.
+ */
+function cappedResponse(
+  response: Response,
+  makeError: (status: number, message: string) => Error,
+): DelegatedFetchResponse {
+  const read = () => readCappedText(response, DELEGATED_RESPONSE_MAX_BYTES, makeError)
+  return {
+    ok: response.ok,
+    status: response.status,
+    headers: response.headers,
+    text: read,
+    json: async () => JSON.parse(await read()) as unknown,
+  }
 }

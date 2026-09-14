@@ -11,11 +11,17 @@ import {
 //
 // The sibling of `capabilitySecrets.ts`, and deliberately NOT the same function, because the two
 // differ on the thing that shapes all of it: a capability credential becomes an environment
-// VARIABLE of an agent process (so injection names collide, toolchain names hijack, and the whole
-// dispatch has to be planned as one), whereas these are handed to OUR OWN code (the registered
-// executor's `start`/`poll`), and become whatever that code decides, usually an `Authorization`
-// header on a call to the deployment's own system. There is no process to reconfigure and no
-// second capability to collide with, so the planning half has nothing to do here.
+// VARIABLE of an agent process (so toolchain names hijack, a step's whole set of capabilities has
+// to be planned as one, and the collision that matters is between two capabilities a step happens
+// to select together), whereas these are handed to OUR OWN code (the registered executor's
+// `start`/`poll`), and become whatever that code decides, usually an `Authorization` header on a
+// call to the deployment's own system. There is no process to reconfigure and no second
+// capability to meet, so the cross-declaration planning half has nothing to do here.
+//
+// One thing does carry over unchanged, because the bag is still keyed by the name the EXECUTOR
+// reads: two of ONE definition's credentials resolving to the same name would be one entry, and
+// the second value would be gone with nothing said. That is refused where the declaration is
+// written (`DelegatedExecutorRegistry.register`), which is why nothing here arbitrates it.
 //
 // What DOES carry over is the floor, and it carries over for the same reason: the lookup key is a
 // boundary. A resolver reads it off the deployment's own environment, so an executor declaring

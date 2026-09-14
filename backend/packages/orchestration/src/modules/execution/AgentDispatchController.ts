@@ -15,12 +15,8 @@ import type {
 import { getErrorMessage, isAsyncAgentExecutor, parseLocalModelId } from '@cat-factory/kernel'
 import type { DispatchToolServers } from '@cat-factory/contracts'
 import { PR_REVIEWER_KIND, resolvePrNumber } from '@cat-factory/agents'
-import {
-  failDelegationDispatch,
-  recordDispatchedJob,
-  recordInlineToolServers,
-} from './step-fold.logic.js'
-import { delegationContactFailed, type OpenStepDispatch } from './delegation.logic.js'
+import { liveJobId, recordInlineToolServers } from './step-fold.logic.js'
+import type { StartedStepDispatch, StartStepDispatch } from './delegation.logic.js'
 import { classifyDispatchFailure, type DispatchFailureClassification } from './job.logic.js'
 import { environmentDispatchRefusal } from './environmentDispatch.logic.js'
 import { initialPrReviewState } from './prReview.logic.js'
@@ -40,12 +36,11 @@ import { awaitingJob } from './awaitingJob.logic.js'
 export interface AgentDispatchDeps {
   agentExecutor: AgentExecutor
   /**
-   * Opens (and commits) the record this dispatch is observed through: a delegation CLAIM for a
-   * kind whose work leaves the platform, a container cold boot otherwise. Shared with every other
-   * async dispatch site, which is what makes claim-before-effect structural rather than
-   * remembered. See {@link OpenStepDispatch}.
+   * Opens (and commits) the record this dispatch is observed through, calls the executor, and
+   * folds what came back. Shared with every other async dispatch site, which is what makes
+   * claim-before-effect structural rather than remembered. See {@link StartStepDispatch}.
    */
-  openStepDispatch: OpenStepDispatch
+  startStepDispatch: StartStepDispatch
   blockRepository: BlockRepository
   clock: Clock
   contextBuilder: AgentContextBuilder
@@ -101,14 +96,19 @@ export class AgentDispatchController {
 
     // Async (container) steps don't block: dispatch the job and park. The durable
     // driver polls `pollAgentJob` between sleeps so the run can span far longer
-    // than a single durable step's timeout, while each step stays short. A set
-    // `jobId` means a prior (possibly replayed) dispatch already started the job,
-    // so we re-attach instead of starting a duplicate.
+    // than a single durable step's timeout, while each step stays short. A live
+    // job means a prior (possibly replayed) dispatch already started it, so we
+    // re-attach instead of starting a duplicate.
     //
     // `dispatchKind` overrides the dispatched agent kind WITHOUT changing `step.agentKind`
     // — used by the fork-decision phase to dispatch the read-only `fork-proposer` explore
     // job as a HELPER off the coder step (Phase A). The completion still records against the
     // coder step, and the fork-proposal interceptor keys on `step.agentKind` + the fork state.
+
+    // WHICH job this step already holds, and why not `step.jobId`: a delegation claim is
+    // committed before its executor is called, so a bare read takes a claim nothing ever answered
+    // for a live handle and parks the run on it for ever. See {@link liveJobId}.
+    const attached = liveJobId(step)
     const context = await this.deps.contextBuilder.buildContext(
       workspaceId,
       instance,
@@ -117,21 +117,21 @@ export class AgentDispatchController {
       block,
       {
         ...(dispatchKind ? { agentKind: dispatchKind } : {}),
-        // A set `jobId` means this call is a RE-ATTACH, not a dispatch: the job that produced the
+        // An attached job means this call is a RE-ATTACH, not a dispatch: the job that produced the
         // tree already ran, under an earlier resolution. So the step's per-dispatch observability
         // (`selectedFragmentIds`, `validationConfigUnreadable`) must keep describing THAT read
         // rather than this one, or a store that has since recovered silently erases the record
         // that the shipped job ran with no checks.
-        recordsDispatch: !step.jobId,
+        recordsDispatch: !attached,
       },
     )
     // A caller re-dispatching this step under an overriding kind can fold extra context in
     // (e.g. the PR-review `fix` resolution points the Fixer at the reviewed PR's head branch and
     // hands it the selected findings). Runs before pre-ops / dispatch so the job body sees it.
     augmentContext?.(context)
-    // Everything below is FIRST-DISPATCH-only work, gated together on the step not having
-    // dispatched yet so a replay (jobId already set) re-attaches instead of re-running it.
-    if (!step.jobId) {
+    // Everything below is FIRST-DISPATCH-only work, gated together on the step not holding a
+    // live job so a replay re-attaches instead of re-running it.
+    if (!attached) {
       // Refuse, rather than dispatch, a step whose whole brief is an address it was not given.
       // The prompt for a step in ephemeral-environment mode says "test against the environment
       // described above" and then prints `URL: (pending)`; the two are contradictory, and an agent
@@ -157,7 +157,7 @@ export class AgentDispatchController {
     if (isAsyncAgentExecutor(executor) && executor.runsAsync(context)) {
       // Held as a local so the `awaiting_job` report below is a `string` on BOTH paths: this
       // dispatch's own stamp, or the id a Workflows replay re-entered with.
-      let jobId = step.jobId
+      let jobId = attached
       if (!jobId) {
         // The model is fixed the moment its ref resolves (block pin > workspace
         // default > env routing) — long before the container is up — so name it on
@@ -187,19 +187,22 @@ export class AgentDispatchController {
         // handle refines this block below with what only the dispatch knows (the repo it
         // resolved, the model it confirmed).
         this.beginDispatchDiagnostics(instance, context, step.model ?? null)
-        // WHICH record this step opens, and the one decision that has to be made before anything
-        // is contacted: a delegation CLAIM for work that leaves the platform, a container cold
-        // boot otherwise. It commits everything staged above, which is what a replay reads.
-        const delegation = await this.deps.openStepDispatch({
-          workspaceId,
-          instance,
-          context,
-          step,
-        })
 
-        let handle: AgentJobHandle
+        let started: StartedStepDispatch
         try {
-          handle = await executor.startJob(context)
+          // Opens (and commits) the record this dispatch is observed through, calls the executor
+          // and folds what came back. INSIDE the try, which is load-bearing: the opener itself
+          // refuses a delegated kind naming an executor this process does not register
+          // (`delegated_executor_unwired`, the mothership-mode case the reason exists for), and
+          // raised outside it that refusal escaped the classification below entirely, and the
+          // run failed with no `reason` for the SPA to key its translated copy on.
+          started = await this.deps.startStepDispatch({
+            workspaceId,
+            instance,
+            context,
+            step,
+            executor,
+          })
         } catch (error) {
           // Classify the throw (see {@link classifyDispatchFailure}). A genuine container
           // accept failure (HTTP/network/capacity) is framed as `dispatch` ("container failed
@@ -208,21 +211,12 @@ export class AgentDispatchController {
           // precondition (e.g. `github_not_connected` — no connected repo) is a `preflight`
           // rejection that surfaces its own actionable message + machine-readable reason
           // instead of the misleading container framing.
-          // A DELEGATED dispatch has no container to mark: the claim it committed is what the
-          // failure lands on, and whether that claim SURVIVES depends on how far the dispatch
-          // got. A throw from the executor's own `start()` leaves work of unknown liveness, so
-          // the claim stays open for the teardown to ask about; anything refused before the call
-          // settles it, because nothing is running. Either way the job id goes, so a replay
-          // re-dispatches under the same correlation key rather than polling a job that may never
-          // have existed. See {@link failDelegationDispatch}.
-          if (delegation) {
-            failDelegationDispatch(step, {
-              error: getErrorMessage(error),
-              contacted: delegationContactFailed(error),
-            })
-          } else {
-            step.container = { status: 'errored' }
-          }
+          //
+          // The step's own execution-surface record (an errored container, or the delegation
+          // claim settled or left open by how far the dispatch got) is already folded by the
+          // opener, which is what makes that rule structural across all eight dispatch sites
+          // rather than remembered at this one.
+          //
           // Hand the classifier the step's run history so a container lost AFTER work began (a
           // failed eviction-recovery re-dispatch, `evictionRecoveries > 0`, or the re-dispatch of a
           // step whose work-branch push was refused) is reported as what it is (an unrecoverable
@@ -242,15 +236,15 @@ export class AgentDispatchController {
           await this.deps.runStateMachine.persistAndEmit(workspaceId, instance)
           return { kind: 'job_failed', ...classified }
         }
-        jobId = recordDispatchedJob(step, handle, context.agentKind)
+        jobId = started.jobId
         // Surface web-search availability + provider on the step (run details), resolved
         // backend-side at dispatch. A static per-run fact, not gated by prompt telemetry.
-        if (handle.search) step.search = handle.search
+        if (started.handle.search) step.search = started.handle.search
         // Refine the pre-dispatch block with what only the accepted dispatch knows: the repo
         // it resolved and the model it confirmed. The execution backend (native vs. container)
         // is unknown until the transport reports it on the first poll, so `pollAgentJob`
         // fills that in then.
-        this.recordAcceptedDispatch(instance, handle)
+        this.recordAcceptedDispatch(instance, started.handle)
         await this.deps.runStateMachine.persistAndEmit(workspaceId, instance)
       }
       return awaitingJob(step, instance.currentStep, jobId)

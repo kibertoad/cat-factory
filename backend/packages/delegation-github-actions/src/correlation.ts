@@ -105,5 +105,33 @@ export async function findRunByCorrelation(
   // The NEWEST match, because a re-run of the same step reuses the correlation key only when the
   // engine deliberately re-attaches (the dispatch epoch changes otherwise), and the newest is then
   // the one this dispatch queued.
-  return runs.find((run) => runCarriesMarker(run, marker)) ?? null
+  //
+  // Chosen by `created_at` rather than by taking the first element. Newest-first is an
+  // UNDOCUMENTED default of this endpoint: no `sort`/`direction` parameter is passed, nothing
+  // promises it, and a deployment's proxy is free to re-order. Trusting element order, a
+  // correlation that landed on an older completed run carrying the same marker would settle the
+  // step on a workflow that finished hours earlier, which is the one outcome the marker exists to
+  // make impossible.
+  let newest: ActionsRunSummary | null = null
+  for (const run of runs) {
+    if (!runCarriesMarker(run, marker)) continue
+    if (!newest || startedAfter(run, newest)) newest = run
+  }
+  return newest
+}
+
+/**
+ * Whether `run` started after `other`, with the run ID as the tie-break.
+ *
+ * An unparseable or absent `created_at` sorts oldest rather than throwing: the field is an
+ * external system's, and a run that cannot be dated is exactly the one not to prefer. Actions ids
+ * are monotonic per repository, so they settle two runs created in the same second, which
+ * `created_at`'s one-second granularity cannot.
+ */
+function startedAfter(run: ActionsRunSummary, other: ActionsRunSummary): boolean {
+  const a = Date.parse(run.created_at ?? '')
+  const b = Date.parse(other.created_at ?? '')
+  if (Number.isNaN(a)) return false
+  if (Number.isNaN(b)) return true
+  return a === b ? run.id > other.id : a > b
 }

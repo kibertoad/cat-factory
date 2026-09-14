@@ -10,8 +10,7 @@ import type { AgentExecutor } from '@cat-factory/kernel'
 import type { AdvanceResult } from './advance.js'
 import type { AgentContextBuilder } from './AgentContextBuilder.js'
 import type { RunStateMachine } from './RunStateMachine.js'
-import { recordDispatchedJob } from './step-fold.logic.js'
-import type { OpenStepDispatch } from './delegation.logic.js'
+import type { StartStepDispatch } from './delegation.logic.js'
 import { awaitingJob } from './awaitingJob.logic.js'
 
 // ---------------------------------------------------------------------------
@@ -32,12 +31,12 @@ export interface GateHelperDispatcherDeps {
   contextBuilder: AgentContextBuilder
   runStateMachine: RunStateMachine
   /**
-   * Opens and commits the helper dispatch's record before the executor is called. A gate's helper
-   * is an ORDINARY dispatch of an agent kind, so a deployment that runs its `ci-fixer` on its own
-   * external loop reaches this site and needs the same claim-before-effect every other dispatch
-   * takes. See {@link OpenStepDispatch}.
+   * Opens and commits the helper dispatch's record, calls the executor and folds what came back.
+   * A gate's helper is an ORDINARY dispatch of an agent kind, so a deployment that runs its
+   * `ci-fixer` on its own external loop reaches this site and needs the same claim-before-effect
+   * every other dispatch takes. See {@link StartStepDispatch}.
    */
-  openStepDispatch: OpenStepDispatch
+  startStepDispatch: StartStepDispatch
 }
 
 export class GateHelperDispatcher {
@@ -104,9 +103,13 @@ export class GateHelperDispatcher {
           }
         : {}),
     }
-    await this.deps.openStepDispatch({ workspaceId, instance, context, step })
-    const handle = await executor.startJob(context)
-    const jobId = recordDispatchedJob(step, handle, context.agentKind)
+    const { jobId } = await this.deps.startStepDispatch({
+      workspaceId,
+      instance,
+      context,
+      step,
+      executor,
+    })
     step.gate = {
       // Preserve the recorded verdict/failure detail (set in evaluateGate) so the UI
       // keeps showing what the helper is fixing while it works.

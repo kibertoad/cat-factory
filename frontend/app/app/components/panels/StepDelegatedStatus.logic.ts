@@ -1,5 +1,9 @@
-import { isRunDelegationStatus, runDelegationStatusSchema } from '@cat-factory/contracts'
-import type { RunDelegationStatus } from '~/types/execution'
+import {
+  delegatedSpendUnreported,
+  isRunDelegationStatus,
+  runDelegationStatusSchema,
+} from '@cat-factory/contracts'
+import type { PipelineStep, RunDelegationStatus } from '~/types/execution'
 
 // The DELEGATION status vocabulary's presentation. Kept out of the SFC on the same seam as
 // `StepToolServers.logic.ts`, so the rule can be asserted without mounting a component.
@@ -127,4 +131,30 @@ export function externalRunHref(url: string | null | undefined): string | null {
     // shows the raw string, which is what the executor actually said.
     return null
   }
+}
+
+/**
+ * Whether the card says the platform is not measuring this step's spend.
+ *
+ * Two questions, and the split is the whole point. Once the work has SETTLED the answer is
+ * contracts' `delegatedSpendUnreported`, over what actually LANDED, which is the same rule the
+ * backend's reporting-gap fold reads: keying this side on the executor's declared `telemetry`
+ * instead made the two disagree in both directions at once, an executor declaring `self-reported`
+ * that files nothing showing no warning here while the debug overview counted the step, and one
+ * declaring `not-reported` that does fill `DelegationResult.usage` printing "not reported" beside
+ * a real number.
+ *
+ * While the work is IN FLIGHT only the declaration can say anything, because a `self-reported`
+ * executor files with its result and has correctly reported nothing yet. So the line is shown for
+ * one that declares the number is never coming, and for one this build no longer registers, where
+ * nothing here can say otherwise.
+ */
+export function delegatedUsageUnreported(
+  step: Pick<PipelineStep, 'delegated' | 'metrics'>,
+  executor: { telemetry?: 'not-reported' | 'self-reported' } | undefined,
+): boolean {
+  if (delegatedSpendUnreported(step)) return true
+  const status = step.delegated?.status
+  const inFlight = status === 'starting' || status === 'running'
+  return inFlight && executor?.telemetry !== 'self-reported'
 }

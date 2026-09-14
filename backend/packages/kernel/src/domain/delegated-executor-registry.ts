@@ -1,4 +1,8 @@
 import {
+  comparableCredentialInjectionName,
+  uniqueCredentialInjectionNames,
+} from '@cat-factory/contracts'
+import {
   DelegatedExecutorRegistrationError,
   type DelegatedExecutorDefinition,
 } from '../ports/delegated-executor.js'
@@ -73,6 +77,25 @@ export class DelegatedExecutorRegistry {
           `intervalMs=${definition.poll.intervalMs}).`,
       )
     }
+    const credentials = definition.credentials ?? []
+    if (!uniqueCredentialInjectionNames(credentials)) {
+      // Refused rather than resolved, because there is no arbitration that makes it right. The bag
+      // handed to `start`/`poll`/`cancel` is keyed by the name the EXECUTOR reads (`envName` when
+      // declared, else the lookup key), so two declarations resolving to one name are one entry:
+      // whichever the resolver answers last wins, silently, and the executor authenticates against
+      // one system with another's credential. The same floor every other capability that claims a
+      // name is held to (`uniqueCredentialInjectionNames`), applied here because a delegated
+      // executor is registered in code and this is the moment the deployment is holding the
+      // registry. Duplicate LOOKUP keys stay legitimate: one stored value delivered under two
+      // names loses nothing.
+      throw new DelegatedExecutorRegistrationError(
+        `delegated executor ${JSON.stringify(id)} declares two credentials that arrive under one ` +
+          `name (${duplicateInjectionNames(credentials).join(', ')}). Each credential is read by ` +
+          `the executor under its \`envName\`, or its key when it declares none, so one name can ` +
+          `carry only one value: rename one, or declare a single credential if they are the same ` +
+          `secret.`,
+      )
+    }
     this.definitions.set(id, definition)
   }
 
@@ -111,4 +134,18 @@ export class DelegatedExecutorRegistry {
 /** A fresh, EMPTY registry. The platform ships no delegated executor of its own. */
 export function defaultDelegatedExecutorRegistry(): DelegatedExecutorRegistry {
   return new DelegatedExecutorRegistry()
+}
+
+/** The injection names claimed more than once, in the spelling the declaration wrote them. */
+function duplicateInjectionNames(
+  credentials: readonly NonNullable<DelegatedExecutorDefinition['credentials']>[number][],
+): string[] {
+  const seen = new Set<string>()
+  const duplicated: string[] = []
+  for (const credential of credentials) {
+    const comparable = comparableCredentialInjectionName(credential)
+    if (seen.has(comparable)) duplicated.push(credential.envName ?? credential.key)
+    else seen.add(comparable)
+  }
+  return duplicated
 }

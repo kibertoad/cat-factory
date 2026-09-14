@@ -180,6 +180,20 @@ export interface DelegationResult {
 export type DelegationUpdate =
   | {
       state: 'running'
+      /**
+       * The external system's OWN id, when this poll is the first thing that could learn it.
+       *
+       * A system that answers its dispatch with no id (`workflow_dispatch` replies 204) is
+       * expected to return {@link DelegationBrief.correlationKey} from `start` and recover the
+       * real id afterwards, and this is where the recovered one lands. Without it nothing carries
+       * it back: the record keeps the correlation key, so every later poll re-runs the bounded
+       * scan that found the run, and on a busy repository the run eventually scrolls off that page
+       * and a live external run reads as one that never appeared.
+       *
+       * Folded onto the record, never back off it: an executor that already has its id reports
+       * nothing here and the persisted one stands.
+       */
+      externalId?: string
       /** A url that only became known after start (an Actions run id resolved on the first poll). */
       url?: string
       /** A coarse phase for the board, in the executor's own vocabulary. */

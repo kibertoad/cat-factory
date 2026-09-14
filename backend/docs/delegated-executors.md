@@ -89,13 +89,14 @@ the step's job id) _before_ calling `start`, so a replayed dispatch re-attaches 
 dispatching. The EXECUTOR owes the other half: `start` must be idempotent per
 `brief.correlationKey`. Two workflows working one branch means two pull requests for one task.
 
-The engine's half is ONE function, `openStepDispatch`, and every async dispatch site calls it:
-the step's own dispatch, a gate's helper escalation, the Tester's fixer round, Ralph's next
-iteration, the human-test and visual-confirmation fixers. It decides which record the step opens
-(the claim, or a container cold boot: the two are one question, and a container stamped on a
-delegated step renders it as a machine the platform never started) and commits it. Written out at
-each site instead, the rule held at one of the six, so a deployment pointing its `ci-fixer` at an
-external loop got no claim at all.
+The engine's half is ONE function, `startStepDispatch`, and every async dispatch site goes through
+it: the step's own dispatch, a gate's helper escalation, the Tester's fixer round, Ralph's next
+iteration, the human-test and visual-confirmation fixers, the failed deployer's `deploy-fixer`. It
+decides which record the step opens (the claim, or a container cold boot: the two are one question,
+and a container stamped on a delegated step renders it as a machine the platform never started),
+commits it, calls the executor, and folds what came back either way. Written out at each site
+instead, each of those three steps held at a different subset of the eight, so a deployment
+pointing its `ci-fixer` at an external loop got no claim at all.
 
 **A dispatch that THREW leaves work of unknown liveness.** The claim stays OPEN when the executor's
 own `start()` threw, because a lost response is not the same as a refusal: the teardown then names
@@ -104,6 +105,24 @@ when the platform refused before contacting anything (no linked repository, no s
 because nothing is running and a teardown warning about it would be a false alarm. Either way the
 job id is dropped, so a replay dispatches again under the same correlation key rather than polling
 a job that may never have existed.
+
+**A claim the dispatch never ANSWERED is re-dispatched, not polled.** The window between the
+committed claim and `start()` returning is real (a workerd isolate kill, a pg-boss worker restart,
+a deploy drain), and a step left in it holds a job id addressing work that may never have started.
+Read as a live handle the replay skips its whole dispatch block, the executor is asked to recover a
+run by correlation, it answers "not yet" for ever, and the step is failed as a TIMEOUT once the
+poll budget is spent. So every re-attach guard asks `liveJobId(step)`, which answers `undefined`
+for a claim still `starting`: the site re-dispatches under the SAME correlation key, which is
+exactly what the port's idempotency requirement is for. The attempt log does not grow for it,
+because the external system was asked once or not at all.
+
+**A delegated HELPER round settles too.** A gate's `ci-fixer`, an `on-call`, a tester's `fixer` and
+a failed deployer's `deploy-fixer` all ride the step's own `jobId`, and the round they finish is
+routed away from the completion path by `SettledHelperRouter`. So the settle is folded ahead of
+that router rather than after it. Settled only on the completion path, every delegated helper's
+record read `running` for ever: the teardown asked its executor to cancel a run that had finished,
+the spend-gap fold skipped it as still in flight, and the step card said "running externally" over
+a job that was long done.
 
 **Anything the poll needs is on the step.** A delegated poll rebuilds its handle from the persisted
 step alone, in another process, after a durable replay. The executor id, the external id, the branch
@@ -137,18 +156,32 @@ per-service credential store can scope its lookup, and a poll that drops it reso
 on a deployment with one, failing every status read of a run that is working perfectly.
 
 **An executor's outbound calls answer to the deployment's URL policy.** The `fetchImpl` every
-executor is built over is already wrapped: scheme and host are checked on the first URL and on
-every redirect hop, and a cross-origin hop drops the body and the credential headers. It is the
-same `UrlSafetyPolicy` the notification-webhook sender is held to, enforced in the fetch rather
-than handed over beside it, because a control deployment-authored code has to remember to apply
-is a control that exists only in the types.
+executor is built over is already wrapped, with all THREE of `safe-fetch`'s protections: scheme and
+host are checked on the first URL and on every redirect hop (a cross-origin hop drops the body and
+the credential headers), the call carries a deadline so a hung endpoint cannot hold a poll open
+indefinitely, and the response body is read through a running byte cap. It is the same
+`UrlSafetyPolicy` the notification-webhook sender is held to, enforced in the fetch rather than
+handed over beside it, because a control deployment-authored code has to remember to apply is a
+control that exists only in the types.
+
+**A credential arrives under ONE name.** The bag handed to `start`/`poll`/`cancel` is keyed by the
+name the executor reads (`envName` when declared, else the lookup key), so two declarations
+resolving to the same name would be one entry and the loser's value would be gone with nothing
+said, leaving the executor authenticating against one system with another's credential.
+`DelegatedExecutorRegistry.register` refuses that outright, where the declaration is written.
+Duplicate LOOKUP keys stay legitimate: one stored value delivered under two names loses nothing.
 
 **"Absent" and "zero" never render the same.** A delegated step bypasses the LLM proxy, the harness
-call recorder and the tool-trajectory drain, so its tokens are in no total. `telemetry:
-'not-reported'` puts "usage not reported by <executor>" on the step, and the run rollups carry
-`reporting.delegatedStepsWithoutUsage` so a run total is never read as the whole cost. An executor
-that fills `DelegationResult.usage` is metered as `subscription`: recorded, excluded from the
-budget gate, because the tokens were spent on its account rather than this deployment's.
+call recorder and the tool-trajectory drain, so its tokens are in no total. The step card says
+"usage not reported by <executor>" and the run rollups carry
+`reporting.delegatedStepsWithoutUsage`, so a run total is never read as the whole cost. Both answer
+from contracts' `delegatedSpendUnreported`, over what actually LANDED rather than over the
+executor's declared `telemetry`: an executor declaring `self-reported` that silently stops filing
+is precisely the case a declaration-based check reports as covered. The declaration still decides
+what the card says while the work is IN FLIGHT, where nothing has landed yet and a `self-reported`
+executor is correctly silent. An executor that fills `DelegationResult.usage` is metered as
+`subscription`: recorded, excluded from the budget gate, because the tokens were spent on its
+account rather than this deployment's.
 
 **A cancel that could not happen is SAID.** An executor declaring no `cancel` leaves its run alive:
 it will finish, open its pull request and bill its tokens long after the platform recorded this run

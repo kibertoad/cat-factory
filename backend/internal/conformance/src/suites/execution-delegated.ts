@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import type { ExecutionInstance, Pipeline } from '@cat-factory/kernel'
+import type { ExecutionInstance, GateProbe, GateRegistry, Pipeline } from '@cat-factory/kernel'
+import { gateRegistryWithBuiltins } from '@cat-factory/gates'
 import type { ConformanceHarness } from '../harness.js'
 import {
   CONFORMANCE_DELEGATED_EXECUTOR_ID,
+  CONFORMANCE_DELEGATED_HELPER_KIND,
   CONFORMANCE_DELEGATED_KIND,
   delegatedKindRegistry,
   fakeDelegatedExecutor,
@@ -194,6 +196,65 @@ export function defineDelegatedConformance(harness: ConformanceHarness): void {
       const record = delegatedStep(exec).delegated
       expect(record?.status).toBe('cancelled')
       expect(record?.note).toContain('declares no cancel')
+    })
+
+    it('settles the record of a delegated GATE HELPER, whose round never reaches the settle path', async () => {
+      // A helper is an ordinary dispatch of an agent kind, so a deployment whose `ci-fixer` runs
+      // on its own external loop reaches the gate's dispatch site. The round it finishes is routed
+      // away from the completion path by the settled-helper router, which is how every delegated
+      // helper's record came to read `running` for ever: the teardown then asks its executor to
+      // cancel a run that had finished, the spend-gap fold skipped it as still in flight, and the
+      // card said "running externally" over a job that was long done.
+      const { definition, calls } = fakeDelegatedExecutor({
+        updates: [{ state: 'done', result: { summary: 'Fixed it externally.' } }],
+      })
+      const agentKindRegistry = delegatedKindRegistry()
+      const gateRegistry: GateRegistry = gateRegistryWithBuiltins()
+      let probes = 0
+      gateRegistry.register('external-fix-gate', () => ({
+        kind: 'external-fix-gate',
+        helperKind: CONFORMANCE_DELEGATED_HELPER_KIND,
+        wired: () => true,
+        unwiredOutput: 'gate skipped',
+        // Red once, so the helper is dispatched; clean afterwards, so the re-probe advances.
+        probe: async (): Promise<GateProbe> =>
+          probes++ === 0
+            ? { status: 'fail', headSha: 'sha', failureSummary: 'the build is red' }
+            : { status: 'pass', headSha: 'sha', passOutput: 'the build is green' },
+        onExhausted: async () => ({ error: 'still red' }),
+      }))
+      const app = harness.makeApp(
+        {},
+        {
+          agentKindRegistry,
+          gateRegistry,
+          delegatedExecutorRegistry: fakeDelegatedRegistry(definition),
+        },
+      )
+      const { workspace } = await app.createWorkspace()
+      const pipeline = await app.call<Pipeline>('POST', `/workspaces/${workspace.id}/pipelines`, {
+        name: 'Build + external fix gate',
+        purpose: 'build',
+        agentKinds: ['coder', 'external-fix-gate'],
+      })
+      const start = await app.call(
+        'POST',
+        `/workspaces/${workspace.id}/blocks/task_login/executions`,
+        { pipelineId: pipeline.body.id },
+      )
+      expect(start.status).toBe(201)
+
+      const exec = (await app.drive(workspace.id)).find((e) => e.blockId === 'task_login')!
+      expect(exec.status).toBe('done')
+      expect(calls.starts).toHaveLength(1)
+      const gateStep = exec.steps.find((s) => s.agentKind === 'external-fix-gate')!
+      expect(gateStep.state).toBe('done')
+      // The helper's external round is SETTLED, not left live: the gate advanced on its re-probe
+      // and the record is the platform's whole account of work that happened somewhere else.
+      expect(gateStep.delegated?.status).toBe('done')
+      expect(gateStep.delegated?.executor).toBe(CONFORMANCE_DELEGATED_EXECUTOR_ID)
+      // And nothing asked the executor to stop a run it had already finished.
+      expect(calls.cancels).toHaveLength(0)
     })
   })
 }

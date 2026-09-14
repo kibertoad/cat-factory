@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { AgentRunContext, Block, PipelineStep } from '@cat-factory/kernel'
+import { recordDispatchedJob } from './step-fold.logic.js'
+import type { AgentJobHandle, AgentRunContext, Block, PipelineStep } from '@cat-factory/kernel'
 import { AgentDispatchController, type AgentDispatchDeps } from './AgentDispatchController.js'
 import type { StepHandlerContext } from './step-handler-registry.js'
 
@@ -36,11 +37,25 @@ function controller(ctx: AgentRunContext) {
     },
     deployer: { attachEnvironmentProjection: async () => false },
     runStateMachine: { persistAndEmit: async () => undefined },
-    // The shared pre-dispatch opener. This suite drives container kinds only, so it answers "not
-    // delegated" and stamps the cold boot the real one does.
-    openStepDispatch: async ({ step }: { step: PipelineStep }) => {
+    // The shared async dispatch. This suite drives container kinds only, so it stamps the cold
+    // boot the real one does and then calls the executor, which is what counts the dispatch.
+    startStepDispatch: async ({
+      step,
+      context,
+      executor,
+    }: {
+      step: PipelineStep
+      context: { agentKind?: string }
+      // The executor the controller resolved, so a suite that overrides it with a throwing
+      // `startJob` exercises the dispatch failure rather than this fake's happy path.
+      executor: { startJob: (context: never) => Promise<AgentJobHandle> }
+    }) => {
+      // The cold boot the real seam commits before the executor is called.
       step.container = { status: 'starting' }
-      return undefined
+      const handle = await executor.startJob(context as never)
+      // The REAL fold, not a copy of it: the attribution a poll site cannot re-derive is what
+      // these suites assert, and a hand-written stub of it would assert the stub.
+      return { jobId: recordDispatchedJob(step, handle, context.agentKind ?? ''), handle }
     },
     clock: { now: () => 1_700_000_000_000 },
     agentExecutor: {

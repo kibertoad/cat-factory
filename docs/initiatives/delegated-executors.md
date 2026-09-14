@@ -439,12 +439,15 @@ counts delegated steps whose step metrics hold no calls, so an executor that dec
 - **Anything the poll needs is on the step.** `pollHandleFor` rebuilds the handle from the step;
   a field on the handle that `recordDispatchAttribution` does not persist is absent in production
   with no error.
-- **Idempotent start, always.** Both drivers replay. Claim before effect; on replay, poll by
-  correlation. The engine's half goes through ONE function every async dispatch site calls
-  (`openStepDispatch`), because the rule written out per site held at one of six: the step's own
-  dispatch claimed, and a gate helper, a Tester fixer round, a Ralph iteration and the two
-  human-gate fixers did not. It answers the same question the container cold boot answers, which
-  is why the two live together rather than beside each other.
+- **Idempotent start, always.** Both drivers replay. Claim before effect; on replay, re-attach or
+  re-dispatch under the same correlation key. The engine's half goes through ONE function every
+  async dispatch site calls (`startStepDispatch`), which claims, calls the executor and folds the
+  outcome either way, because each of those written out per site held at a different subset of the
+  eight: the step's own dispatch claimed, and a gate helper, a Tester fixer round, a Ralph
+  iteration, the two human-gate fixers and the deploy-fixer did not. It answers the same question
+  the container cold boot answers, which is why the two live together rather than beside each
+  other. A claim the dispatch never ANSWERED is not a live job (`liveJobId`): the re-attach guards
+  re-dispatch it rather than polling a run nobody started.
 - **A dispatch that threw is not a dispatch that did nothing.** The claim stays open when the
   executor's own `start()` threw (liveness unknown, so the teardown asks it to cancel) and settles
   when the platform refused before contacting anything (nothing is running, so a cancel request

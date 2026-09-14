@@ -246,6 +246,56 @@ describe('correlation: which field carries the marker', () => {
     expect(await listing([legacy])).toMatchObject({ state: 'running', url: RUN.html_url })
   })
 
+  it('picks the NEWEST match by `created_at`, never the first element GitHub happened to send', async () => {
+    // Newest-first is an UNDOCUMENTED default of this endpoint: no `sort`/`direction` is passed,
+    // nothing promises it, and a deployment's proxy is free to re-order. Trusting element order,
+    // a re-attach lands on an OLD completed run carrying the same marker and the step settles on
+    // a workflow that finished hours earlier.
+    const older = {
+      ...RUN,
+      id: 1111,
+      created_at: '2026-09-13T00:00:00Z',
+      status: 'completed',
+      conclusion: 'failure',
+    }
+    const newer = {
+      ...RUN,
+      id: 9999,
+      created_at: '2026-09-14T10:00:00Z',
+      html_url: 'https://github.com/acme/widgets/actions/runs/9999',
+      status: 'in_progress',
+      conclusion: null,
+    }
+    // Oldest FIRST, which is exactly the ordering `find` would have taken.
+    expect(await listing([older, newer])).toMatchObject({
+      state: 'running',
+      externalId: '9999',
+      url: newer.html_url,
+    })
+  })
+
+  it('breaks a same-second tie on the run id, which Actions makes monotonic', async () => {
+    // `created_at` has one-second granularity, which is the whole reason the marker exists.
+    const first = { ...RUN, id: 5000, status: 'in_progress', conclusion: null }
+    const second = {
+      ...RUN,
+      id: 5001,
+      html_url: 'https://github.com/acme/widgets/actions/runs/5001',
+      status: 'in_progress',
+      conclusion: null,
+    }
+    expect(await listing([second, first])).toMatchObject({ externalId: '5001' })
+  })
+
+  it('reports the recovered id on EVERY running poll, so the scan stops being re-run', async () => {
+    // `start` answers with the correlation key when the run had not appeared yet. Left uncarried,
+    // the record keeps that key for the life of the run and each poll re-runs the bounded page
+    // scan, which a busy repository eventually pushes the run off the end of.
+    expect(await listing([{ ...RUN, status: 'in_progress', conclusion: null }])).toMatchObject({
+      externalId: '4242',
+    })
+  })
+
   it('does NOT correlate a run of the same workflow started by something else', async () => {
     // The marker is the whole identity: without it, two dispatches in the same second are
     // indistinguishable and the platform settles a step against somebody else's run.

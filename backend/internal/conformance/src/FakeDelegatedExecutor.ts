@@ -125,9 +125,24 @@ export function fakeDelegatedRegistry(
   return registry
 }
 
-/** An agent-kind registry carrying one kind that runs on the fake executor. */
+/**
+ * The gate HELPER kind that runs on the fake executor.
+ *
+ * A helper is an ordinary dispatch of an agent kind, so a deployment whose `ci-fixer` runs on its
+ * own external loop reaches the gate's dispatch site rather than the generic one. That path settles
+ * its round through the helper router, which is where a delegated record was left reading `running`
+ * for ever.
+ */
+export const CONFORMANCE_DELEGATED_HELPER_KIND = 'conformance-delegated-fixer'
+
+/** An agent-kind registry carrying the two kinds that run on the fake executor. */
 export function delegatedKindRegistry(base?: AgentKindRegistry): AgentKindRegistry {
   const registry = base ?? defaultAgentKindRegistry()
+  registry.register({
+    kind: CONFORMANCE_DELEGATED_HELPER_KIND,
+    systemPrompt: 'You fix what the gate reported, in the external system.',
+    agent: { surface: 'delegated', executor: CONFORMANCE_DELEGATED_EXECUTOR_ID },
+  })
   registry.register({
     kind: CONFORMANCE_DELEGATED_KIND,
     systemPrompt: 'You implement the change in the external system.',

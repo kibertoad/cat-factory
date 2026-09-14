@@ -181,3 +181,35 @@ export const runDelegationSchema = v.object({
   note: v.optional(v.nullable(v.string())),
 })
 export type RunDelegation = v.InferOutput<typeof runDelegationSchema>
+
+/**
+ * Whether a delegated step's model spend is MISSING from the platform's totals.
+ *
+ * Here rather than in the engine because both sides have to agree about the answer: the backend
+ * folds it into the debug overview's reporting gaps, and the SPA prints "usage not reported by
+ * <executor>" on the step card. Stated twice, the two drifted in both directions at once, which is
+ * what this seam exists to make impossible (see the contracts rule in CLAUDE.md).
+ *
+ * Read off the STEP's own record, never off the executor's declared `telemetry`. The declaration
+ * is a deployment's INTENTION, and what a reader needs is what actually landed: an executor
+ * declaring `self-reported` that silently stops filing is precisely the case a declaration-based
+ * check reports as covered, and one declaring `not-reported` that does fill
+ * `DelegationResult.usage` would have the card deny a number printed beside it.
+ *
+ * Work still IN FLIGHT is not a gap, and that is the check that keeps the two counts apart: a
+ * `self-reported` executor files with its RESULT, so between the claim and the settlement it has
+ * reported nothing and is supposed to have. Counting it would merge "has not filed yet" with
+ * "never will" on exactly the reads a person takes while watching a run.
+ */
+export function delegatedSpendUnreported(step: {
+  delegated?: { status: string } | null
+  metrics?: { calls: number } | null
+}): boolean {
+  const record = step.delegated
+  if (!record) return false
+  if (record.status === 'starting' || record.status === 'running') return false
+  // `metrics` is the per-step LLM rollup the observability sink folds. Absent, or present with no
+  // calls in it, both mean the same thing here: nothing about this step's model work reached the
+  // platform.
+  return (step.metrics?.calls ?? 0) === 0
+}

@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { delegationStatusView, externalRunHref } from './StepDelegatedStatus.logic'
+import {
+  delegatedUsageUnreported,
+  delegationStatusView,
+  externalRunHref,
+} from './StepDelegatedStatus.logic'
 import type { PipelineStep } from '~/types/execution'
 
 // The EXTERNAL work a delegated step dispatched: which registered executor is running it, what it
@@ -15,7 +19,9 @@ import type { PipelineStep } from '~/types/execution'
 //
 // The second thing it says is what the platform CANNOT see. A delegated step's model calls never
 // touch this deployment's proxy or recorder, so its tokens are in no total on this page, and a
-// missing number is invisible. See `telemetry`.
+// missing number is invisible. See `delegatedUsageUnreported`, which answers a settled step from
+// contracts' own rule, the one the backend's gap fold reads, so the card and the debug overview
+// cannot disagree about one step.
 const props = defineProps<{
   step: PipelineStep
   /**
@@ -55,14 +61,8 @@ const landedBranch = computed(() => record.value?.branch ?? null)
  */
 const runHref = computed(() => externalRunHref(record.value?.url))
 
-/**
- * Whether to say the platform is not measuring this step's spend.
- *
- * Shown for an executor that DECLARES it reports nothing, and also for one this build no longer
- * registers (so nothing here can say otherwise). Withheld only where the executor declares it
- * files its own telemetry, because there the ordinary rollup beside this card is the answer.
- */
-const usageUnreported = computed(() => props.executor?.telemetry !== 'self-reported')
+/** Whether to say the platform is not measuring this step's spend; see the logic sibling. */
+const usageUnreported = computed(() => delegatedUsageUnreported(props.step, props.executor))
 
 /** Earlier attempts, newest last, shown only once there is more than the current one. */
 const priorAttempts = computed(() => {

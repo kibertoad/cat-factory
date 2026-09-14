@@ -4,9 +4,11 @@ import {
   DELEGATION_STATUS_META,
   KNOWN_DELEGATION_STATUSES,
   UNKNOWN_DELEGATION_STATUS_META,
+  delegatedUsageUnreported,
   delegationStatusView,
   externalRunHref,
 } from './StepDelegatedStatus.logic'
+import type { RunDelegationStatus } from '~/types/execution'
 
 /**
  * The status of external work is a CLOSED, PERSISTED vocabulary, which is the pairing that makes an
@@ -83,5 +85,51 @@ describe('externalRunHref', () => {
     expect(externalRunHref('')).toBeNull()
     expect(externalRunHref(null)).toBeNull()
     expect(externalRunHref(undefined)).toBeNull()
+  })
+})
+
+describe('delegatedUsageUnreported', () => {
+  // The two surfaces answering this question have to agree: the backend's reporting-gap fold
+  // counts the same settled steps into `delegatedStepsWithoutUsage`, and a card keyed on the
+  // executor's DECLARATION disagreed with it in both directions at once.
+  const step = (
+    status: RunDelegationStatus,
+    metrics?: { calls: number },
+  ): Parameters<typeof delegatedUsageUnreported>[0] =>
+    ({
+      delegated: {
+        executor: 'acme:executor',
+        status,
+        correlationKey: 'k',
+        poll: null,
+        attempts: [{ startedAt: 0 }],
+      },
+      ...(metrics ? { metrics } : {}),
+    }) as Parameters<typeof delegatedUsageUnreported>[0]
+
+  it('warns on a SETTLED step that reported nothing, whatever the executor declared', () => {
+    expect(delegatedUsageUnreported(step('done'), { telemetry: 'self-reported' })).toBe(true)
+    expect(delegatedUsageUnreported(step('failed'), { telemetry: 'not-reported' })).toBe(true)
+  })
+
+  it('stays silent beside a real number, even from an executor that declared none', () => {
+    expect(
+      delegatedUsageUnreported(step('done', { calls: 4 }), { telemetry: 'not-reported' }),
+    ).toBe(false)
+  })
+
+  it('warns while work is IN FLIGHT only where the declaration says none is coming', () => {
+    // A `self-reported` executor files with its result, so it has correctly reported nothing yet
+    // and the card must not claim a permanent gap while a person watches the step.
+    expect(delegatedUsageUnreported(step('running'), { telemetry: 'self-reported' })).toBe(false)
+    expect(delegatedUsageUnreported(step('running'), { telemetry: 'not-reported' })).toBe(true)
+    // An executor this build no longer registers: nothing here can say otherwise.
+    expect(delegatedUsageUnreported(step('starting'), undefined)).toBe(true)
+  })
+
+  it('says nothing at all about a step that dispatched nowhere external', () => {
+    expect(
+      delegatedUsageUnreported({} as Parameters<typeof delegatedUsageUnreported>[0], undefined),
+    ).toBe(false)
   })
 })

@@ -348,6 +348,7 @@ export {
   runDelegationAttemptSchema,
   runDelegationSchema,
   runDelegationStatusSchema,
+  delegatedSpendUnreported,
   isRunDelegationStatus,
   type RunContainer,
   type RunContainerStatus,

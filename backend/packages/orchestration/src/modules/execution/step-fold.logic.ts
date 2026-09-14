@@ -86,6 +86,31 @@ export function inFlightDelegation(step: PipelineStep): RunDelegation | undefine
 }
 
 /**
+ * The job id a re-entering advance may RE-ATTACH to, or undefined when there is nothing to
+ * re-attach to and the step must dispatch.
+ *
+ * Every dispatch site guards on "does this step already hold a job", and `step.jobId` alone is the
+ * wrong question for a delegated one. The claim is committed BEFORE `start()` is called, so a
+ * process that dies in between (a workerd isolate kill, a pg-boss worker restart, a deploy drain)
+ * leaves a job id addressing work that may never have been started. Read as a live handle, the
+ * replay skips its whole dispatch block and polls: the executor is asked to recover a run by
+ * correlation, answers "not yet" for ever because nothing was ever queued, and the step is failed
+ * as a TIMEOUT once the poll budget is spent, hours later and naming the wrong fault.
+ *
+ * A claim still `starting` is exactly that state and nothing else: {@link stampDelegationDispatch}
+ * moves it to `running` the moment the executor answers, and {@link failDelegationDispatch} drops
+ * the job id when it throws. So the honest answer is "no live job", and the site re-dispatches
+ * under the SAME correlation key (the dispatch epoch has not moved), which is precisely what the
+ * port's idempotency requirement is for: `start` recognises its own run, or starts the one that
+ * never began.
+ */
+export function liveJobId(step: PipelineStep): string | undefined {
+  if (!step.jobId) return undefined
+  if (inFlightDelegation(step)?.status === 'starting') return undefined
+  return step.jobId
+}
+
+/**
  * The `delegated` slice of a rebuilt poll handle: which registered executor the step dispatched to
  * and what it knows about the external work.
  *
@@ -99,10 +124,11 @@ export function inFlightDelegation(step: PipelineStep): RunDelegation | undefine
  * container job is never polled at all.
  *
  * The `externalId` FALLS BACK to the step's job id, which is the correlation key by construction
- * (the gate above makes them the same string), and that fallback is the replay case rather than an
- * edge: the claim is committed before `start()` is called, so a process that died in between
- * leaves a record with a status and no external id, and the executor is asked to recover one by
- * correlation instead of the platform starting a second external run.
+ * (the gate above makes them the same string). A floor rather than a path anything depends on: an
+ * accepted dispatch always records an id (the port refuses a `start` that answers none), and a
+ * claim the dispatch never answered is re-dispatched rather than polled (see {@link liveJobId}).
+ * It survives because a handle with no id at all cannot be addressed, and the correlation key is
+ * the one string the executor was asked to make its run findable by.
  */
 function delegationHandleSlice(step: PipelineStep): Pick<AgentJobHandle, 'delegated'> {
   const record = inFlightDelegation(step)
@@ -344,6 +370,11 @@ export function recordDispatchedJob(
  *
  * The attempt log APPENDS. A re-run's earlier attempts and their URLs are the evidence for why the
  * step is being re-run, and the platform holds nothing else about work that happened elsewhere.
+ * It does NOT append when the claim being re-opened is the SAME one, still unanswered: a dispatch
+ * that died between the claim and `start()` is re-driven under the same correlation key (see
+ * {@link liveJobId}), and the external system was asked once or not at all. Counted as a second
+ * attempt, a process that keeps dying would fill the step's evidence log with rounds that never
+ * reached anybody's runner.
  */
 export function claimDelegation(
   step: PipelineStep,
@@ -354,8 +385,13 @@ export function claimDelegation(
     poll: { intervalMs: number; maxDurationMs: number }
   },
 ): void {
+  const prior = step.delegated
+  // A claim RESUMED rather than opened: same key, still unanswered, so this is the same attempt.
+  const resumed =
+    prior?.status === 'starting' &&
+    prior.correlationKey === input.correlationKey &&
+    prior.attempts.length > 0
   step.jobId = input.correlationKey
-  const attempts = step.delegated?.attempts ?? []
   step.delegated = {
     executor: input.executor,
     status: 'starting',
@@ -364,7 +400,9 @@ export function claimDelegation(
     externalId: null,
     url: null,
     phase: null,
-    attempts: [...attempts, { startedAt: input.startedAt }],
+    attempts: resumed
+      ? prior.attempts
+      : [...(prior?.attempts ?? []), { startedAt: input.startedAt }],
   }
 }
 
@@ -462,12 +500,16 @@ export function failDelegationDispatch(
  *
  * Separate from it rather than one fold over both, because the two records share no field beyond a
  * status whose vocabularies differ. There is no container id to learn and no address to reach, and
- * the one thing that DOES arrive late here (the external URL, for a system that returns no run id
- * at start) has no counterpart there.
+ * the two things that DO arrive late here (the external id and the URL, for a system that returns
+ * neither at start) have no counterpart there.
+ *
+ * The id is folded ONE WAY: a poll that reports none leaves the recorded one standing. An executor
+ * recovers its id once, and re-deriving it on every poll is what the fold exists to stop (the
+ * bounded correlation scan a busy repository eventually pushes the run off the end of).
  */
 export function applyDelegationRunning(
   step: PipelineStep,
-  update: { url?: string; phase?: string },
+  update: { externalId?: string; url?: string; phase?: string },
 ): boolean {
   const prev = step.delegated
   // A running poll for a step with no record is a poll of work this engine never claimed. There is
@@ -476,18 +518,34 @@ export function applyDelegationRunning(
   const next = {
     ...prev,
     status: 'running' as const,
+    externalId: update.externalId ?? prev.externalId ?? null,
     url: update.url ?? prev.url ?? null,
     phase: update.phase ?? prev.phase ?? null,
   }
   if (
     prev.status === next.status &&
+    (prev.externalId ?? null) === next.externalId &&
     (prev.url ?? null) === next.url &&
     (prev.phase ?? null) === next.phase
   ) {
     return false
   }
-  step.delegated = next
+  // The ATTEMPT this poll belongs to learns the same id, so the evidence log names the external
+  // run each round actually became rather than the correlation key it was dispatched under.
+  step.delegated = update.externalId
+    ? { ...next, attempts: withLastAttempt(next.attempts, { externalId: update.externalId }) }
+    : next
   return true
+}
+
+/** Fold a partial onto the LAST attempt, which is always the round in flight. */
+function withLastAttempt<T extends { startedAt: number }>(
+  attempts: readonly T[],
+  patch: Partial<T>,
+): T[] {
+  return attempts.map((attempt, index) =>
+    index === attempts.length - 1 ? { ...attempt, ...patch } : attempt,
+  )
 }
 
 /**
@@ -622,8 +680,8 @@ export function settleDelegation(
 }
 
 /**
- * Settle the step's own DELEGATION on a job that finished successfully, or do nothing when the job
- * that finished was not the delegated one.
+ * Settle the step's own DELEGATION on the job that just finished, whichever disposition it
+ * reached, or do nothing when the job that finished was not the delegated one.
  *
  * Its own function rather than a guard plus a call at the settle site, because the whole rule is
  * the guard: the record outlives the work it describes (its attempt log is the evidence for a
@@ -631,19 +689,37 @@ export function settleDelegation(
  * external outcome with `done`, and that record is the entire account of work that happened
  * somewhere else.
  *
+ * It takes the whole settled update, and BOTH dispositions, because a step's delegated job is not
+ * always its own work: a gate's `ci-fixer`, an `on-call`, a tester's `fixer` and a failed
+ * deployer's `deploy-fixer` all ride the same `step.jobId`, and the round they finish is routed
+ * away from the completion path entirely (see `SettledHelperRouter`). Settling only the success
+ * case, only on that path, left every delegated helper's record reading `running` for ever: the
+ * teardown then asks its executor to cancel a run that finished, the spend-gap fold skips it as
+ * still in flight, and the step card says "running externally" over a job that is long done.
+ *
  * `branch` is folded here because it is the product of an executor that pushed without opening a
  * pull request: a case the port names as legitimate, and one where dropping the branch settles the
  * run as done with nothing to show for it.
  */
 export function settleDelegatedJob(
   step: PipelineStep,
-  delegated: { url?: string; branch?: string } | undefined,
+  update:
+    | { state: 'done'; delegated?: { url?: string; branch?: string } }
+    | { state: 'failed'; error: string; delegated?: { url?: string } },
 ): void {
   if (!inFlightDelegation(step)) return
+  if (update.state === 'failed') {
+    settleDelegation(step, {
+      status: 'failed',
+      outcome: update.error,
+      ...(update.delegated?.url ? { url: update.delegated.url } : {}),
+    })
+    return
+  }
   settleDelegation(step, {
     status: 'done',
-    ...(delegated?.url ? { url: delegated.url } : {}),
-    ...(delegated?.branch ? { branch: delegated.branch } : {}),
+    ...(update.delegated?.url ? { url: update.delegated.url } : {}),
+    ...(update.delegated?.branch ? { branch: update.delegated.branch } : {}),
   })
 }
 

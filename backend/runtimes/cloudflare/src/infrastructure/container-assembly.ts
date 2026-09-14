@@ -521,6 +521,13 @@ function selectWorkerAgentExecutor(
     eventPublisher,
   } = input
   const { agentKindRegistry, delegatedExecutorRegistry } = registries
+  // When a caller injects its own agentExecutor (tests pass a FakeAgentExecutor) skip selection
+  // entirely, BEFORE anything below is built: selectAgentExecutor throws when a sandbox is opted
+  // in but its prerequisites are missing, which is the desired loud failure in production but must
+  // not fire for tests that never reach the real executor. Early rather than a ternary at the
+  // return, so an injected executor also costs no delegated arm, no repo-target resolver over the
+  // db and no policy-checked fetch wrapper, none of which anything then reads.
+  if (overrides.agentExecutor) return { agentExecutor: overrides.agentExecutor }
   const delegatedUrlSafetyPolicy = resolveUrlSafetyPolicy(config.notificationWebhooks)
   // The THIRD executor arm: a step whose work runs in a system the deployment already operates.
   // Built unconditionally and symmetrically with the Node facade (see `buildDelegatedAgentExecutor`
@@ -549,44 +556,38 @@ function selectWorkerAgentExecutor(
   })
 
   return {
-    // When a caller injects its own agentExecutor (tests pass a FakeAgentExecutor) skip selection
-    // entirely: selectAgentExecutor throws when a sandbox is opted in but its prerequisites are
-    // missing, which is the desired loud failure in production but must not fire for tests that
-    // never reach the real executor.
-    agentExecutor:
-      overrides.agentExecutor ??
-      maybeWrapConsensus({
-        standard: selectAgentExecutor({
-          env,
-          config,
-          db,
-          clock,
-          caches,
-          resolveTransport,
-          agentKindRegistry,
-          delegated,
-          subscriptions,
-          personalSubscriptions,
-          agentContextObservability,
-          resolvePackageRegistries: executorPackageRegistries,
-          resolveBinaryArtifactStore,
-          webSearchAccountSettings,
-          resolveToolSecrets: toolSecretChain.resolver,
-          // The OAuth half of the same seam: the sealed grant store plus the chain above, which is
-          // what resolves the OAuth client secret.
-          ...mcpOAuthExecutorDeps({
-            oauth: mcpOAuthService,
-            resolveToolSecrets: toolSecretChain.resolver,
-            logger,
-          }),
-        }),
+    agentExecutor: maybeWrapConsensus({
+      standard: selectAgentExecutor({
         env,
         config,
         db,
-        eventPublisher,
-        agentKindRegistry,
+        clock,
         caches,
+        resolveTransport,
+        agentKindRegistry,
+        delegated,
+        subscriptions,
+        personalSubscriptions,
+        agentContextObservability,
+        resolvePackageRegistries: executorPackageRegistries,
+        resolveBinaryArtifactStore,
+        webSearchAccountSettings,
+        resolveToolSecrets: toolSecretChain.resolver,
+        // The OAuth half of the same seam: the sealed grant store plus the chain above, which is
+        // what resolves the OAuth client secret.
+        ...mcpOAuthExecutorDeps({
+          oauth: mcpOAuthService,
+          resolveToolSecrets: toolSecretChain.resolver,
+          logger,
+        }),
       }),
+      env,
+      config,
+      db,
+      eventPublisher,
+      agentKindRegistry,
+      caches,
+    }),
   }
 }
 

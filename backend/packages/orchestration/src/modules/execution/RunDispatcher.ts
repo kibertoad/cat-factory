@@ -45,6 +45,7 @@ import type { DispatchToolServers, StepSkipReason } from '@cat-factory/contracts
 import {
   applyContainerRunning,
   applySubtaskProgress,
+  liveJobId,
   pollHandleFor,
   settleDelegatedJob,
 } from './step-fold.logic.js'
@@ -320,7 +321,7 @@ export class RunDispatcher {
     })
     this.agentDispatch = new AgentDispatchController({
       agentExecutor: deps.agentExecutor,
-      openStepDispatch: deps.openStepDispatch,
+      startStepDispatch: deps.startStepDispatch,
       blockRepository: deps.blockRepository,
       clock: deps.clock,
       contextBuilder: deps.contextBuilder,
@@ -413,7 +414,7 @@ export class RunDispatcher {
         agentExecutor: deps.agentExecutor,
         contextBuilder: deps.contextBuilder,
         runStateMachine: deps.runStateMachine,
-        openStepDispatch: deps.openStepDispatch,
+        startStepDispatch: deps.startStepDispatch,
       }),
     )
     this.judgeController = new JudgeStepController({
@@ -629,6 +630,14 @@ export class RunDispatcher {
     // `toolServers.logic.ts`). Mutation only; whichever arm runs owns the persist.
     applyObservedToolServers(step, update.toolServers)
 
+    // Settle the step's DELEGATION record on the job that just finished, ahead of the branch tree
+    // below for the same reason the tool-server fold is: a settled HELPER round is routed away
+    // from the completion path entirely, so a record settled only there stayed `running` for ever
+    // on every delegated `ci-fixer` / `on-call` / tester `fixer`. Mutation only; whichever arm
+    // runs owns the persist. A no-op for a container step, and for a container job that ran on a
+    // step whose delegation had already settled. See {@link settleDelegatedJob}.
+    settleDelegatedJob(step, update)
+
     // A settled job that belongs to this step's HELPER (a gate's ci-fixer / conflict-resolver or
     // on-call, a tester's fixer, a failed deployer's deploy-fixer) is a round in the step's own
     // loop, NOT its result: the router settles that round and this path never records one. Null
@@ -647,11 +656,6 @@ export class RunDispatcher {
     // observed completion (the tailer is flushed before the job is marked done), so the
     // completion gate below sees the last items — notably a question that must hold the run.
     this.followUpGate.appendStreamedFollowUps(step, update.followUps)
-    // Settle the DELEGATION record before the result is recorded, so a finished external run keeps
-    // its link: it is the only thing the platform holds about work that happened somewhere else,
-    // and `recordStepResult` clears the job id that addressed it. A no-op for a container step, and
-    // for a container job that ran on a step whose delegation had already settled.
-    settleDelegatedJob(step, update.delegated)
     // Clear the handle before recording so a replay re-attaches to nothing.
     step.jobId = undefined
     return this.recordStepResult(workspaceId, instance, step, isFinalStep, update.result)
@@ -681,8 +685,11 @@ export class RunDispatcher {
     const gate = step ? this.gateFor(step.agentKind) : undefined
     if (!step || !gate) return { kind: 'continue' }
     // A helper job is in flight — the driver should be polling it, not the gate; let
-    // the job-poll loop drive (defensive; a replay could route here).
-    if (step.jobId) return awaitingJob(step, instance.currentStep, step.jobId)
+    // the job-poll loop drive (defensive; a replay could route here). A delegation claim the
+    // executor never answered is not one (see {@link liveJobId}): it falls through to the gate
+    // evaluation, which re-dispatches the helper.
+    const attached = liveJobId(step)
+    if (attached) return awaitingJob(step, instance.currentStep, attached)
     const block = await this.blockRepository.get(workspaceId, instance.blockId)
     if (!block) return { kind: 'noop' }
     const isFinalStep = instance.currentStep === instance.steps.length - 1

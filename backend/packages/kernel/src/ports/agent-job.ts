@@ -209,12 +209,14 @@ export type AgentJobUpdate =
        */
       toolServers?: unknown
       /**
-       * What a DELEGATED executor learned about its own run after starting it: today the external
-       * URL, which many systems cannot supply until the run has an id (`workflow_dispatch` answers
-       * 204). Folded onto the step's delegation record, where it is the primary affordance: the
-       * link a human follows to the executor's own logs. Absent for every container job.
+       * What a DELEGATED executor learned about its own run after starting it: the external URL,
+       * which many systems cannot supply until the run has an id (`workflow_dispatch` answers
+       * 204), and the ID itself for the same reason. Folded onto the step's delegation record,
+       * where the url is the primary affordance (the link a human follows to the executor's own
+       * logs) and the id is what stops every later poll re-deriving it. Absent for every
+       * container job.
        */
-      delegated?: { url?: string }
+      delegated?: { externalId?: string; url?: string }
     }
   /**
    * Finished successfully; `result` carries the work product. `followUps`, when present,

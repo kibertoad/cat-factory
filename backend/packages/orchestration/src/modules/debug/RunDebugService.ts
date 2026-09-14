@@ -215,8 +215,8 @@ export class RunDebugService {
         // null with a currency would announce a denomination for numbers that are not there.
         costCurrency: this.deps.costCurrency ?? null,
         // What those totals DO NOT cover. A delegated step's model calls never touch this
-        // platform's proxy, recorder or drain, so its tokens are absent from every number above
-        // above, and absence in a number is invisible. See `llmReportingGaps`.
+        // platform's proxy, recorder or drain, so its tokens are absent from every number above,
+        // and absence in a number is invisible. See `llmReportingGaps`.
         reporting: llmReportingGaps(execution),
       },
       toolCalls,

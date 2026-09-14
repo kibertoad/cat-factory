@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { AgentRunResult, Block, ExecutionInstance, PipelineStep } from '@cat-factory/kernel'
+import { recordDispatchedJob } from './step-fold.logic.js'
+import type {
+  AgentJobHandle,
+  AgentRunResult,
+  Block,
+  ExecutionInstance,
+  PipelineStep,
+} from '@cat-factory/kernel'
 import { TesterController, type TesterControllerDeps } from './TesterController.js'
 
 const block = (): Block =>
@@ -32,12 +39,28 @@ function makeController(over: Partial<TesterControllerDeps> = {}) {
     notificationService: { raise },
     agentExecutor: { runsAsync: () => true, startJob, pollJob: vi.fn(), reclaimRun: vi.fn() },
     contextBuilder: { buildContext: vi.fn() },
-    // The shared pre-dispatch opener: this suite drives container kinds, so it answers "not
-    // delegated" and stamps the cold boot the real one does.
-    openStepDispatch: vi.fn(async ({ step }: { step: PipelineStep }) => {
-      step.container = { status: 'starting' }
-      return undefined
-    }),
+    // The shared async dispatch: this suite drives container kinds, so it stamps the cold boot
+    // the real one does and then calls the fake executor.
+    startStepDispatch: vi.fn(
+      async ({
+        step,
+        context,
+        executor,
+      }: {
+        step: PipelineStep
+        context: { agentKind?: string }
+        // The executor the controller resolved, so a suite that overrides it with a throwing
+        // `startJob` exercises the dispatch failure rather than this fake's happy path.
+        executor: { startJob: (context: never) => Promise<AgentJobHandle> }
+      }) => {
+        // The cold boot the real seam commits before the executor is called.
+        step.container = { status: 'starting' }
+        const handle = await executor.startJob(context as never)
+        // The REAL fold, not a copy of it: the attribution a poll site cannot re-derive is what
+        // these suites assert, and a hand-written stub of it would assert the stub.
+        return { jobId: recordDispatchedJob(step, handle, context.agentKind ?? ''), handle }
+      },
+    ),
     resolveRiskPolicy: async () => ({ ciMaxAttempts: 10 }),
     stateMachine: {
       casPersist,

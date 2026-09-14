@@ -7,6 +7,7 @@ import type {
   DelegatedExecutor,
   DelegatedExecutorDefinition,
   DelegatedExecutorDeps,
+  DelegatedFetchResponse,
   DelegationBrief,
   DelegationHandle,
   DelegationUpdate,
@@ -70,7 +71,7 @@ function fakeExecutor(behaviour: Partial<DelegatedExecutor> = {}): Fake {
 }
 
 /** A minimal response for a fetch double: the four members `DelegatedFetchResponse` names. */
-function okResponse() {
+function okResponse(): DelegatedFetchResponse {
   return {
     ok: true,
     status: 200,
@@ -80,6 +81,27 @@ function okResponse() {
   }
 }
 
+/**
+ * The GUARDED fetch an executor is actually built over, which is what carries the deadline, the
+ * cap and the URL policy. Reached through the host rather than reimplemented, because an executor
+ * is deployment-authored code and the whole point of the wrapper is that no author applies it.
+ */
+async function guardedFetch(
+  observe?: (url: string, init?: { signal?: unknown }) => void,
+  overrides: Partial<DelegatedFetchResponse> = {},
+) {
+  const fake = fakeExecutor()
+  let seen: DelegatedExecutorDeps | undefined
+  await build(fake, {
+    onDeps: (deps) => (seen = deps),
+    fetchImpl: async (url, init) => {
+      observe?.(url, init)
+      return { ...okResponse(), ...overrides } as never
+    },
+  }).startJob(context())
+  return seen!.fetchImpl
+}
+
 function build(
   fake: Fake,
   options: {
@@ -87,6 +109,8 @@ function build(
     resolveToolSecrets?: ToolSecretResolver
     /** Capture the bound deps an executor is built over (the guarded fetch lives on them). */
     onDeps?: (deps: DelegatedExecutorDeps) => void
+    /** The runtime fetch the guard wraps; absent ⇒ the host's own default is never called. */
+    fetchImpl?: DelegatedExecutorDeps['fetchImpl']
   } = {},
 ) {
   const agentKindRegistry = defaultAgentKindRegistry()
@@ -116,6 +140,7 @@ function build(
     // Answered explicitly: the host requires an answer so a facade cannot leave the outbound guard
     // declared-but-unwired, which is exactly what both of them had done.
     urlSafetyPolicy: undefined,
+    ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
     logger: noopLogger,
     clock: { now: () => 0 },
   })
@@ -264,6 +289,32 @@ describe('DelegatedAgentExecutor: dispatch', () => {
     let seen: DelegatedExecutorDeps | undefined
     await build(fake, { onDeps: (deps) => (seen = deps) }).startJob(context())
     await expect(seen?.fetchImpl('http://ci.acme/jobs')).rejects.toThrow(/must use https/)
+  })
+
+  it('gives every executor call a DEADLINE, and keeps one the caller set', async () => {
+    // Without it a hung endpoint holds `pollJob` open indefinitely, which on Node ties up a
+    // pg-boss worker: the ordinary shape of an outage in somebody else's system.
+    const inits: (AbortSignal | undefined)[] = []
+    const guarded = await guardedFetch((_url, init) => {
+      inits.push(init?.signal as AbortSignal | undefined)
+    })
+    await guarded('https://ci.acme/jobs')
+    expect(inits[0]).toBeInstanceOf(AbortSignal)
+    expect(inits[0]?.aborted).toBe(false)
+    const own = new AbortController().signal
+    await guarded('https://ci.acme/jobs', { signal: own })
+    expect(inits[1]).toBe(own)
+  })
+
+  it('CAPS what one response may return, rather than buffering whatever arrives', async () => {
+    // The third protection `safe-fetch` exists for, and the one a wrapper that only re-validates
+    // redirect hops leaves off: a broken or hostile endpoint answering hundreds of megabytes
+    // would otherwise be read whole into the isolate.
+    const guarded = await guardedFetch(undefined, {
+      headers: { get: (name: string) => (name === 'content-length' ? '999999999' : null) },
+    })
+    const response = await guarded('https://ci.acme/jobs')
+    await expect(response.text()).rejects.toThrow(/too large/i)
   })
 })
 

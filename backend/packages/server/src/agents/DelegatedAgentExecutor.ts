@@ -3,7 +3,6 @@ import {
   UnavailableError,
   describeError,
   getErrorMessage,
-  noopLogger,
   stepJobId,
   type AgentContextRecorder,
   type AgentJobHandle,
@@ -551,6 +550,11 @@ function snapshotBody(brief: {
  * - `usage` rides straight through, and its ABSENCE is the honest state for an executor that does
  *   not report it. Nothing here invents a zero: a zero would be summed into the run's total and
  *   read as work that cost nothing.
+ * - `externalId` and `url` are the two facts a poll can LEARN, for a system that answers its
+ *   dispatch with neither (`workflow_dispatch` replies 204). Carried back so the record stops
+ *   addressing the run by the correlation key: left uncarried, every later poll re-ran the bounded
+ *   scan that recovered it, and on a busy repository the run scrolls off that page mid-flight and
+ *   a live external run reads as one that never appeared.
  * - `lastActivityAt` gains a FLOOR the executor did not report, because the poll itself is the
  *   evidence. This is the one field where "the executor said nothing" and "nothing is happening"
  *   are different facts and only one of them is true.
@@ -566,6 +570,10 @@ function toJobUpdate(
   polledAt: number,
 ): AgentJobUpdate {
   if (update.state === 'running') {
+    const learned = {
+      ...(update.externalId ? { externalId: update.externalId } : {}),
+      ...(update.url ? { url: update.url } : {}),
+    }
     return {
       state: 'running',
       ...(update.phase ? { phase: update.phase } : {}),
@@ -576,7 +584,7 @@ function toJobUpdate(
       // poll, and the stale-run sweeper re-collects a run that is perfectly alive. The engine's
       // existing throttle decides how often that actually lands.
       lastActivityAt: update.lastActivityAt ?? polledAt,
-      ...(update.url ? { delegated: { url: update.url } } : {}),
+      ...(Object.keys(learned).length > 0 ? { delegated: learned } : {}),
       // The executor's own name, so the run diagnostics say where the step ran rather than
       // reporting the container backend a delegated step never had.
       backend: `delegated:${definition.id}`,
@@ -623,6 +631,3 @@ function toJobUpdate(
     ...(result.branch ? { delegated: { branch: result.branch } } : {}),
   }
 }
-
-/** A logger for a delegated executor built with no facade logger wired (tests). */
-export const noopDelegatedLogger: Logger = noopLogger

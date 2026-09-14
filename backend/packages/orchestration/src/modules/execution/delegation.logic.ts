@@ -3,15 +3,21 @@ import { delegatedExecutorFor } from '@cat-factory/agents'
 import {
   ConflictError,
   DomainError,
+  getErrorMessage,
+  noopLogger,
+  runBestEffort,
   stepJobId,
+  type AgentJobHandle,
   type AgentRunContext,
+  type AsyncAgentExecutor,
   type Clock,
   type DelegatedExecutorRegistry,
   type DelegatedPollPolicy,
   type ExecutionInstance,
+  type Logger,
   type PipelineStep,
 } from '@cat-factory/kernel'
-import { claimDelegation } from './step-fold.logic.js'
+import { claimDelegation, failDelegationDispatch, recordDispatchedJob } from './step-fold.logic.js'
 
 // ---------------------------------------------------------------------------
 // The ENGINE's half of a delegated dispatch: what it must know and COMMIT before an external
@@ -84,40 +90,59 @@ export function planDelegatedDispatch(
   }
 }
 
+/** What an accepted async dispatch hands back to the site that asked for it. */
+export interface StartedStepDispatch {
+  /** The stamped job id: this dispatch's own, and what the site parks on. */
+  jobId: string
+  /** The executor's handle, for the facts only the accepting site reads off it. */
+  handle: AgentJobHandle
+}
+
 /**
- * What every ASYNC dispatch site calls immediately before it contacts anything: open the record
- * this dispatch will be observed through, and COMMIT it.
+ * THE async dispatch: open (and COMMIT) the record this job will be observed through, call the
+ * executor, and fold what came back onto the step.
  *
- * One function rather than the rule written out at each site, because the rule is the whole
- * idempotency story for a delegated step and a site that forgets it fails silently. Both durable
- * drivers replay, and an executor asked to start twice produces two external runs and two pull
- * requests for one task; the platform's half of the bargain is that the claim (`starting`, plus
- * the correlation key as the step's job id) is on disk BEFORE `start()` is called, so a replay
- * finds the job id and re-attaches. Written per site, that held at exactly one of the six.
+ * One function rather than the three lines written out at each of the eight sites, because every
+ * one of them is a place to get the ordering wrong and each failure is silent:
  *
- * The container half is here for the same reason it is not a separate decision: a delegated
- * dispatch must NOT stamp a container (there is none, and a stamped one renders the step as a
- * machine the platform never started and hands it to the reclaim that kills containers by run),
- * so "claim" and "cold boot" are two answers to one question, asked once.
+ *  - The CLAIM is the whole idempotency story for a delegated step. Both durable drivers replay,
+ *    and an executor asked to start twice produces two external runs and two pull requests for one
+ *    task; the platform's half of the bargain is that the claim (`starting`, plus the correlation
+ *    key as the step's job id) is on disk BEFORE `start()` is called, so a replay finds it and
+ *    re-attaches. Written per site, that held at exactly one of them.
+ *  - The container half is the same question, not a second one: a delegated dispatch must NOT
+ *    stamp a container (there is none, and a stamped one renders the step as a machine the
+ *    platform never started and hands it to the reclaim that kills containers by run), so "claim"
+ *    and "cold boot" are two answers to one question, asked once.
+ *  - A dispatch that THROWS has to undo the claim it committed, or the run parks on a job that may
+ *    never have started and dies on its poll budget reporting a timeout instead of the dispatch
+ *    failure that actually happened (see {@link failDelegationDispatch}). Inside this function the
+ *    fold cannot be forgotten, and it is PERSISTED before the throw propagates, because the
+ *    durable drivers re-read the run from storage when they fail it.
  *
- * It PERSISTS, and that is the load-bearing half: an in-memory claim a replay cannot see is no
- * claim at all.
+ * It rethrows rather than reporting, so a site that lets its dispatch failures propagate keeps
+ * doing so; the one site that classifies them ({@link AgentDispatchController}) catches the same
+ * throw and now sees the pre-call refusals too, which used to escape its `try` entirely.
  */
-export type OpenStepDispatch = (input: {
+export type StartStepDispatch = (input: {
   workspaceId: string
   instance: ExecutionInstance
   context: AgentRunContext
   step: PipelineStep
-}) => Promise<DelegatedDispatchPlan | undefined>
+  /** The async executor this site resolved; narrowed to the one method this seam calls. */
+  executor: Pick<AsyncAgentExecutor, 'startJob'>
+}) => Promise<StartedStepDispatch>
 
-/** Bind {@link OpenStepDispatch} over the registries, the clock and the engine's persist. */
-export function buildOpenStepDispatch(deps: {
+/** Bind {@link StartStepDispatch} over the registries, the clock and the engine's persist. */
+export function buildStartStepDispatch(deps: {
   agentKindRegistry: AgentKindRegistry
   delegatedExecutorRegistry: DelegatedExecutorRegistry
   clock: Clock
   persistAndEmit: (workspaceId: string, instance: ExecutionInstance) => Promise<void>
-}): OpenStepDispatch {
-  return async ({ workspaceId, instance, context, step }) => {
+  logger?: Logger
+}): StartStepDispatch {
+  const log = deps.logger ?? noopLogger
+  return async ({ workspaceId, instance, context, step, executor }) => {
     const plan = planDelegatedDispatch(context, deps)
     if (plan) {
       claimDelegation(step, { ...plan, startedAt: deps.clock.now() })
@@ -128,7 +153,37 @@ export function buildOpenStepDispatch(deps: {
       step.container = { status: 'starting' }
     }
     await deps.persistAndEmit(workspaceId, instance)
-    return plan
+    let handle: AgentJobHandle
+    try {
+      handle = await executor.startJob(context)
+    } catch (error) {
+      // A DELEGATED dispatch has no container to mark: the claim it committed is what the failure
+      // lands on, and whether that claim SURVIVES depends on how far the dispatch got. A throw
+      // from the executor's own `start()` leaves work of unknown liveness, so the claim stays open
+      // for the teardown to ask about; anything refused before the call settles it, because
+      // nothing is running. Either way the job id goes, so the next advance re-dispatches under
+      // the same correlation key rather than polling a job that may never have existed.
+      if (plan) {
+        failDelegationDispatch(step, {
+          error: getErrorMessage(error),
+          contacted: delegationContactFailed(error),
+        })
+      } else {
+        step.container = { status: 'errored' }
+      }
+      // Best-effort, and deliberately: the caller's own error is the one worth reporting, and a
+      // persist that throws here would replace it with a storage fault. Losing the fold costs the
+      // step's execution-surface record, never its recoverability, because the job id it clears is
+      // re-derived from the claim's own status on the next advance ({@link liveJobId}).
+      await runBestEffort(
+        log,
+        'startStepDispatch.recordFailure',
+        () => deps.persistAndEmit(workspaceId, instance),
+        { workspaceId, executionId: instance.id, agentKind: context.agentKind },
+      )
+      throw error
+    }
+    return { jobId: recordDispatchedJob(step, handle, context.agentKind), handle }
   }
 }
 

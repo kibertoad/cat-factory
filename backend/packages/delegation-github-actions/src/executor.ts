@@ -188,7 +188,18 @@ export function githubActionsDelegatedExecutor(
         return { state: 'running', phase: 'queued' }
       }
       if (run.status !== 'completed') {
-        return { state: 'running', url: run.html_url, phase: run.status ?? 'in_progress' }
+        // The id travels back on EVERY running poll, not only the one that recovered it. `start`
+        // answers with the correlation key when the run had not appeared yet, and without this the
+        // record keeps that key for the life of the run: `resolveRun` then re-runs the bounded
+        // page scan on every poll, and on a repository busy enough to need
+        // `correlationScanSize` the run scrolls off it mid-flight. The engine folds it once and
+        // ignores it thereafter, so repeating it costs nothing.
+        return {
+          state: 'running',
+          externalId: String(run.id),
+          url: run.html_url,
+          phase: run.status ?? 'in_progress',
+        }
       }
       if (run.conclusion !== 'success') {
         return {
