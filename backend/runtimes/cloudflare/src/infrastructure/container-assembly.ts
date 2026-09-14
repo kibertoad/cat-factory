@@ -125,7 +125,7 @@ import { D1UserRepository } from './repositories/D1UserRepository'
 import { D1WorkspaceMemberRepository } from './repositories/D1WorkspaceMemberRepository'
 import { D1WorkspaceMountRepository } from './repositories/D1WorkspaceMountRepository'
 import { D1WorkspaceRepository } from './repositories/D1WorkspaceRepository'
-import { buildDelegatedAgentExecutor } from '@cat-factory/server'
+import { buildDelegatedAgentExecutor, resolveUrlSafetyPolicy } from '@cat-factory/server'
 import {
   buildAppRegistry,
   buildResolveRepoTarget,
@@ -520,6 +520,7 @@ function selectWorkerAgentExecutor(
     eventPublisher,
   } = input
   const { agentKindRegistry, delegatedExecutorRegistry } = registries
+  const delegatedUrlSafetyPolicy = resolveUrlSafetyPolicy(config.notificationWebhooks)
   // The THIRD executor arm: a step whose work runs in a system the deployment already operates.
   // Built unconditionally and symmetrically with the Node facade (see `buildDelegatedAgentExecutor`
   // for why an empty registry is not a reason to skip it).
@@ -527,6 +528,11 @@ function selectWorkerAgentExecutor(
     delegatedExecutorRegistry,
     agentKindRegistry,
     resolveRepoTarget: buildResolveRepoTarget(db),
+    // The outbound guard an executor answers to, resolved from the SAME slice the
+    // notification-webhook sender uses (undefined ⇒ the strict public-https default). An executor
+    // is an outbound HTTP surface the deployment configured, and a second set of SSRF rules is a
+    // set nobody maintains. Symmetric with the Node facade.
+    urlSafetyPolicy: delegatedUrlSafetyPolicy,
     ...(late.resolveRunRepoContext ? { resolveRunRepoContext: late.resolveRunRepoContext } : {}),
     ...(late.taskRepository ? { taskRepository: late.taskRepository } : {}),
     resolveToolSecrets: toolSecretChain.resolver,

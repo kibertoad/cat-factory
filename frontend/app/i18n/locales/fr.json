@@ -722,7 +722,9 @@
         "not_awaiting_triage": "Cette expédition n'attend pas de tri",
         "already_addressed": "Certaines constatations ont déjà une tâche de correction",
         "no_host_frame": "Cette expédition n'est sous aucun service",
-        "delegated_executor_unwired": "Exécuteur externe non enregistré"
+        "delegated_executor_unwired": "Exécuteur externe non enregistré",
+        "delegated_step_async_only": "Cette étape est interrogée, pas attendue",
+        "delegated_claim_missing": "Cette étape n’a aucun travail externe à interroger"
       },
       "description": {
         "dependencies_unmet": "Cette tâche dépend d'autres qui ne sont pas encore terminées. Terminez-les ou débloquez-les, puis relancez-la.",
@@ -777,7 +779,9 @@
         "not_awaiting_triage": "Soit elle explore encore un autre angle, soit elle est déjà terminée. Rechargez l'exécution pour voir où elle en est.",
         "already_addressed": "Une tâche de correction a déjà été créée pour elles ; rien n'a donc été recréé. Ouvrez la constatation pour rejoindre la tâche existante.",
         "no_host_frame": "Une tâche de correction a besoin d'un service où vivre et d'un dépôt à corriger. Déplacez la tâche d'expédition sous un cadre de service et réessayez.",
-        "delegated_executor_unwired": "Une étape de ce pipeline s’exécute sur un exécuteur externe que ce déploiement n’enregistre pas : le travail n’a donc nulle part où aller. Enregistrez l’exécuteur dans le code, ou remplacez l’étape par une qui s’exécute ici."
+        "delegated_executor_unwired": "Une étape de ce pipeline s’exécute sur un exécuteur externe que ce déploiement n’enregistre pas : le travail n’a donc nulle part où aller. Enregistrez l’exécuteur dans le code, ou remplacez l’étape par une qui s’exécute ici.",
+        "delegated_step_async_only": "Cette étape s’exécute sur un exécuteur externe et peut durer des heures : elle est donc lancée puis interrogée, au lieu d’être exécutée dans une seule requête. Démarrez l’exécution depuis le tableau ; si vous arrivez ici depuis votre propre code, pilotez l’étape par la voie asynchrone.",
+        "delegated_claim_missing": "L’enregistrement de ce que l’exécution a envoyé à l’exécuteur externe est absent : il n’y a donc rien à interroger. L’exécuteur lui-même n’a aucun problème. Rechargez l’exécution et relancez l’étape si elle reste bloquée."
       },
       "action": {
         "connectGitHub": "Connecter GitHub",
@@ -1596,9 +1600,11 @@
           "done": "Terminé à l’extérieur",
           "failed": "Échec à l’extérieur",
           "running": "Exécution à l’extérieur",
-          "starting": "Démarrage à l’extérieur"
+          "starting": "Démarrage à l’extérieur",
+          "unrecognised": "Statut non reconnu ({status})"
         },
         "run": "Exécution externe",
+        "branch": "Branche",
         "copyUrl": "Copier le lien de l’exécution externe",
         "openRun": "Ouvrir l’exécution",
         "noOutcome": "Aucun résultat enregistré",
@@ -2024,6 +2030,7 @@
       "timeout": "Délai dépassé",
       "agent": "Agent",
       "job_failed": "Tâche échouée",
+      "delegated_failed": "Échec de l’exécuteur externe",
       "rejected": "Rejetée",
       "companion_rejected": "Compagnon rejeté",
       "stalled": "Bloquée",

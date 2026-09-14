@@ -17,6 +17,7 @@ import {
   type Logger,
   type RepoProjectionRepository,
   type ServiceRepository,
+  type UrlSafetyPolicy,
   type WorkspaceMountRepository,
   createInitiatorPatGate,
 } from '@cat-factory/kernel'
@@ -37,6 +38,7 @@ import {
   toolSecretContainerFields,
   createResolveRunInitiatorToken,
   logger,
+  resolveUrlSafetyPolicy,
 } from '@cat-factory/server'
 
 import type { AgentKindRegistry } from '@cat-factory/agents'
@@ -225,6 +227,13 @@ function selectNodeAgentExecutor(input: {
   tasks: { deps: Partial<CoreDependencies> }
   toolSecretChain: ToolSecretChain
   runServices: ReturnType<typeof buildNodeRunServices>
+  /**
+   * The outbound guard a registered executor answers to, resolved from the SAME config slice the
+   * notification-webhook sender uses. An executor is an outbound HTTP surface the deployment
+   * configured, and a second set of SSRF rules is a set nobody maintains. Symmetric with the
+   * Worker facade.
+   */
+  urlSafetyPolicy: UrlSafetyPolicy | undefined
   clock: Clock
 }): CompositeAgentExecutor {
   const delegated = buildDelegatedAgentExecutor({
@@ -232,6 +241,7 @@ function selectNodeAgentExecutor(input: {
     agentKindRegistry: input.agentKindRegistry,
     resolveRepoTarget: input.resolveRepoTarget,
     resolveRepoOrigin: input.resolveRepoOrigin,
+    urlSafetyPolicy: input.urlSafetyPolicy,
     ...(input.githubGateDeps.resolveRunRepoContext
       ? { resolveRunRepoContext: input.githubGateDeps.resolveRunRepoContext }
       : {}),
@@ -249,6 +259,7 @@ function selectNodeAgentExecutor(input: {
     input.container,
     input.agentKindRegistry,
     delegated,
+    logger,
   )
 }
 
@@ -471,6 +482,7 @@ export function buildNodeRunPlatform({ options, foundation, models }: NodeRunPla
     tasks,
     toolSecretChain,
     runServices,
+    urlSafetyPolicy: resolveUrlSafetyPolicy(config.notificationWebhooks),
     clock,
   })
 

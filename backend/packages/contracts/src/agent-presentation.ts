@@ -221,18 +221,27 @@ export const customAgentKindSchema = v.object({
    * builder's one question is "what does this step's card say", and a kind whose executor the
    * build no longer registers must read as an unresolvable step rather than silently as a normal
    * one. Absent for every other kind.
+   *
+   * The `id` is ALWAYS present for a delegated kind; everything else is absent when this build no
+   * longer registers the executor. That asymmetry is the whole point: the id is what the kind
+   * DECLARES and the platform always knows, while the label and the telemetry declaration belong
+   * to a registration that may be gone. Sending nothing at all for an unregistered executor left
+   * the SPA with no name to show, and the empty string it substituted then defeated its own "name
+   * the id instead" fallback.
    */
   delegatedExecutor: v.optional(
     v.object({
       id: v.string(),
-      label: v.string(),
-      icon: v.string(),
-      description: v.string(),
+      label: v.optional(v.string()),
+      icon: v.optional(v.string()),
+      description: v.optional(v.string()),
       /**
        * Whether the executor files its own LLM telemetry. `not-reported` is what makes the run
-       * views say "usage not reported by <executor>" instead of rendering a zero.
+       * views say "usage not reported by <executor>" instead of rendering a zero. Absent for an
+       * executor this build does not register, where the honest reading is the same as
+       * `not-reported`: nothing here can say otherwise.
        */
-      telemetry: v.picklist(['not-reported', 'self-reported']),
+      telemetry: v.optional(v.picklist(['not-reported', 'self-reported'])),
     }),
   ),
 })

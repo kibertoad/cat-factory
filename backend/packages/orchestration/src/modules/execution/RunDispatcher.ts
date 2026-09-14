@@ -46,7 +46,7 @@ import {
   applyContainerRunning,
   applySubtaskProgress,
   pollHandleFor,
-  settleDelegation,
+  settleDelegatedJob,
 } from './step-fold.logic.js'
 import { applyObservedToolServers } from './toolServers.logic.js'
 import { FORK_PROPOSER_KIND } from '@cat-factory/agents'
@@ -646,12 +646,10 @@ export class RunDispatcher {
     // completion gate below sees the last items — notably a question that must hold the run.
     this.followUpGate.appendStreamedFollowUps(step, update.followUps)
     // Settle the DELEGATION record before the result is recorded, so a finished external run keeps
-    // its link. It is the only thing the platform holds about work that happened somewhere else,
-    // and `recordStepResult` clears the job id that addressed it. A no-op for a container step.
-    settleDelegation(step, {
-      status: 'done',
-      ...(update.delegated?.url ? { url: update.delegated.url } : {}),
-    })
+    // its link: it is the only thing the platform holds about work that happened somewhere else,
+    // and `recordStepResult` clears the job id that addressed it. A no-op for a container step, and
+    // for a container job that ran on a step whose delegation had already settled.
+    settleDelegatedJob(step, update.delegated)
     // Clear the handle before recording so a replay re-attaches to nothing.
     step.jobId = undefined
     return this.recordStepResult(workspaceId, instance, step, isFinalStep, update.result)

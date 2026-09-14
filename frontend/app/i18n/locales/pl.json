@@ -722,7 +722,9 @@
         "not_awaiting_triage": "Ta wyprawa nie czeka na segregację",
         "already_addressed": "Część znalezisk ma już zadanie naprawcze",
         "no_host_frame": "Ta wyprawa nie znajduje się pod żadną usługą",
-        "delegated_executor_unwired": "Zewnętrzny executor nie jest zarejestrowany"
+        "delegated_executor_unwired": "Zewnętrzny executor nie jest zarejestrowany",
+        "delegated_step_async_only": "Ten krok jest odpytywany, a nie oczekiwany",
+        "delegated_claim_missing": "Ten krok nie ma zewnętrznej pracy do sprawdzenia"
       },
       "description": {
         "dependencies_unmet": "To zadanie zależy od innych, które nie zostały jeszcze ukończone. Ukończ je lub odblokuj, a następnie uruchom je ponownie.",
@@ -777,7 +779,9 @@
         "not_awaiting_triage": "Albo wciąż przeszukuje kolejną perspektywę, albo zostało już zakończone. Odśwież uruchomienie, aby zobaczyć jego stan.",
         "already_addressed": "Zadanie naprawcze powstało dla nich wcześniej, więc nic nie utworzono ponownie. Otwórz znalezisko, aby przejść do istniejącego zadania.",
         "no_host_frame": "Zadanie naprawcze potrzebuje usługi, pod którą będzie żyć, i repozytorium do naprawy. Przenieś zadanie wyprawy pod ramkę usługi i spróbuj ponownie.",
-        "delegated_executor_unwired": "Krok tego potoku działa na zewnętrznym executorze, którego ta instalacja nie rejestruje, więc pracy nie ma dokąd wysłać. Zarejestruj executor w kodzie albo zmień krok na taki, który działa tutaj."
+        "delegated_executor_unwired": "Krok tego potoku działa na zewnętrznym executorze, którego ta instalacja nie rejestruje, więc pracy nie ma dokąd wysłać. Zarejestruj executor w kodzie albo zmień krok na taki, który działa tutaj.",
+        "delegated_step_async_only": "Ten krok działa na zewnętrznym wykonawcy i może trwać godzinami, więc jest wysyłany, a następnie odpytywany, zamiast wykonywany w obrębie jednego żądania. Uruchom przebieg z tablicy; jeśli trafiłeś tu z własnego kodu, steruj krokiem ścieżką asynchroniczną.",
+        "delegated_claim_missing": "Brakuje zapisu tego, co przebieg wysłał do zewnętrznego wykonawcy, więc nie ma czego odpytywać. Z samym wykonawcą wszystko jest w porządku. Odśwież przebieg i uruchom krok ponownie, jeśli nadal stoi."
       },
       "action": {
         "connectGitHub": "Połącz GitHub",
@@ -1596,9 +1600,11 @@
           "done": "Zakończone na zewnątrz",
           "failed": "Niepowodzenie na zewnątrz",
           "running": "Działa na zewnątrz",
-          "starting": "Uruchamianie na zewnątrz"
+          "starting": "Uruchamianie na zewnątrz",
+          "unrecognised": "Nierozpoznany status ({status})"
         },
         "run": "Uruchomienie zewnętrzne",
+        "branch": "Gałąź",
         "copyUrl": "Skopiuj link do uruchomienia zewnętrznego",
         "openRun": "Otwórz uruchomienie",
         "noOutcome": "Nie zapisano wyniku",
@@ -2024,6 +2030,7 @@
       "timeout": "Przekroczono czas",
       "agent": "Agent",
       "job_failed": "Zadanie nieudane",
+      "delegated_failed": "Błąd zewnętrznego wykonawcy",
       "rejected": "Odrzucone",
       "companion_rejected": "Towarzysz odrzucony",
       "stalled": "Zawieszone",

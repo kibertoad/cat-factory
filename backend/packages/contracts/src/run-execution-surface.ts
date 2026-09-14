@@ -67,6 +67,26 @@ export const runDelegationStatusSchema = v.picklist([
 ])
 export type RunDelegationStatus = v.InferOutput<typeof runDelegationStatusSchema>
 
+const RUN_DELEGATION_STATUS_SET: ReadonlySet<string> = new Set(runDelegationStatusSchema.options)
+
+/**
+ * Whether a stored status is still a member of this build's vocabulary, DERIVED from the picklist
+ * so it cannot drift from it.
+ *
+ * The vocabulary is CLOSED and PERSISTED, which is the pairing that makes an exhaustive
+ * `Record<RunDelegationStatus, …>` total against the TYPE and partial against the DATA: retiring a
+ * member does not rewrite the rows that hold it, and the reader that meets one first is the step
+ * panel whose whole job is to say what happened to the run. Indexed bare, that is `undefined.cls`
+ * and a white screen over the one surface with the answer on it.
+ *
+ * The negative case is RENDERED as the unrecognised value it is, never guessed onto a current
+ * member: nothing can know which one was meant, and a status silently re-pointed reports the wrong
+ * outcome for external work a person is deciding whether to go and stop.
+ */
+export function isRunDelegationStatus(value: string): value is RunDelegationStatus {
+  return RUN_DELEGATION_STATUS_SET.has(value)
+}
+
 /** One attempt at the external work: when it started, what it was, and where to read about it. */
 export const runDelegationAttemptSchema = v.object({
   startedAt: v.number(),
@@ -128,6 +148,23 @@ export const runDelegationSchema = v.object({
    * guess, and the wrong branch means the wrong pull request recorded on this block.
    */
   branches: v.optional(v.nullable(v.object({ base: v.string(), work: v.string() }))),
+  /**
+   * The repository the work TARGETS, persisted beside the branches and for the same reason: the
+   * poll rebuilds its handle from the step, and the executor's own configured repository is
+   * routinely a different one (an automation repo holding the workflow, dispatching against many
+   * product repos). Without it, an executor reading back what it produced looks in the wrong place
+   * and reports every run as having produced nothing.
+   */
+  repo: v.optional(v.nullable(v.object({ owner: v.string(), name: v.string() }))),
+  /**
+   * The branch the external work actually LANDED on, as the executor reported it at settlement.
+   *
+   * Distinct from `branches.work`, which is what the dispatch ASKED for: this is what came back,
+   * and it is the whole product of a step whose executor pushes without opening a pull request (a
+   * seed-only step, or a policy of letting a later step open the PR). Absent means the executor
+   * reported none, which for a run that opened a pull request is the ordinary case.
+   */
+  branch: v.optional(v.nullable(v.string())),
   /** Every attempt on this step, oldest first. A re-run APPENDS; it never clears. */
   attempts: v.array(runDelegationAttemptSchema),
   /**

@@ -392,7 +392,13 @@ export function selectAgentExecutor(deps: WorkerExecutorDeps): AgentExecutor {
 
   // Always the composite: non-sandbox kinds run inline; sandbox kinds run in the
   // container.
-  return new CompositeAgentExecutor(inline, container, agentKindRegistry, deps.delegated ?? null)
+  return new CompositeAgentExecutor(
+    inline,
+    container,
+    agentKindRegistry,
+    deps.delegated ?? null,
+    logger,
+  )
 }
 
 /** Truthy env flag (`true`/`1`/`yes`). */

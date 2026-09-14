@@ -6,6 +6,9 @@ import {
   type AgentRunResult,
   type AsyncAgentExecutor,
   isAsyncAgentExecutor,
+  type Logger,
+  noopLogger,
+  runBestEffort,
   type RunReclaimReport,
   type RunReclaimTarget,
 } from '@cat-factory/kernel'
@@ -48,6 +51,8 @@ import {
 export class CompositeAgentExecutor implements AsyncAgentExecutor {
   /** The app-owned agent-kind registry: decides whether a registered custom kind needs a container. */
   private readonly registry: AgentKindRegistry
+  /** Normalised once, so the one best-effort site below can log unconditionally (CLAUDE.md). */
+  private readonly log: Logger
 
   constructor(
     private readonly inline: AgentExecutor,
@@ -62,8 +67,10 @@ export class CompositeAgentExecutor implements AsyncAgentExecutor {
     // deployment registered one, and a kind that does with no executor wired fails loudly for the
     // reason an unwired container kind does.
     private readonly delegated: AgentExecutor | null = null,
+    logger?: Logger,
   ) {
     this.registry = registry
+    this.log = logger ?? noopLogger
   }
 
   /**
@@ -200,10 +207,20 @@ export class CompositeAgentExecutor implements AsyncAgentExecutor {
    * container executor) when stopping a run, so the composite must forward the reclaim
    * to the container — otherwise the Layer-2 reclaim silently no-ops and leaks a
    * warm instance. Delegates only when a container that supports it is wired.
+   *
+   * The two arms are INDEPENDENT resources, so the second must not be gated on the first
+   * succeeding. A container reclaim that throws (a DO/EKS API error, a runner-pool timeout: what
+   * "best-effort" here was written for) would otherwise propagate out before the delegated arm
+   * runs, and `applyDelegationCancellation` would then mark every live delegation "could not stop
+   * the external work" while the executor that COULD stop it was never asked. The external run
+   * carries on, opens its pull request and bills its tokens.
    */
   async reclaimRun(target: RunReclaimTarget): Promise<RunReclaimReport | void> {
     if (this.container && isAsyncAgentExecutor(this.container) && this.container.reclaimRun) {
-      await this.container.reclaimRun(target)
+      const reclaim = this.container.reclaimRun.bind(this.container)
+      await runBestEffort(this.log, 'composite.reclaimContainer', () => reclaim(target), {
+        runId: target.runId,
+      })
     }
     // BOTH arms, always, and the second one ANSWERS. A run can hold a container and external work
     // at once (a delegated implementer followed by a container fixer), so reclaiming one is not

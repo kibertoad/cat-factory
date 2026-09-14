@@ -224,8 +224,9 @@ function snapshotCustomAgentKinds(
  * The `delegatedExecutor` half rides the KIND rather than a parallel snapshot list, because the
  * pipeline builder's one question is what a step's card says, and a kind whose executor THIS build
  * no longer registers must read as an unresolvable step rather than silently as a normal one. A
- * missing registration therefore leaves `executor: 'delegated'` with no executor beside it, which
- * is the state the SPA renders as "this step's executor is not available here".
+ * missing registration therefore leaves `executor: 'delegated'` carrying the declared ID and no
+ * presentation, which is the state the SPA renders as "this step's executor is not available
+ * here", naming the id the deployment would have to register.
  */
 function delegatedKindProjection(
   kind: string,
@@ -237,7 +238,11 @@ function delegatedKindProjection(
     return { executor: registry.requiresContainer(kind) ? 'container' : 'inline' }
   }
   const definition = executors.get(executorId)
-  if (!definition) return { executor: 'delegated' }
+  // NAMED even when unresolved. The id is what the kind declares and the platform always knows;
+  // only the presentation belongs to a registration that may be gone. Answering with a bare
+  // `executor: 'delegated'` left the card with nothing to call the step, and the SPA's own "name
+  // the id instead" fallback had no id to fall back to.
+  if (!definition) return { executor: 'delegated', delegatedExecutor: { id: executorId } }
   return {
     executor: 'delegated',
     delegatedExecutor: {

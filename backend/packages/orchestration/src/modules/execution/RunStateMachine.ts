@@ -74,6 +74,8 @@ const EXECUTION_FAILURE_HINTS: Record<AgentFailureKind, string> = {
     'An agent step failed and stopped the run. Whether it had automatic retries left to spend is on the step itself: its attempt count says how many it made, and its failure detail carries what the container reported. Review those, then retry to re-run the pipeline.',
   job_failed:
     'The implementation container reported a failure. Inspect its logs (Cloudflare Workers Observability, filtered by the run id), then retry to spin a fresh container.',
+  delegated_failed:
+    'This step ran on an external executor your deployment registers, and that system reported a failure it called final. The platform did not run the work and holds no logs for it: the step carries the link to the executor’s own run, which is the whole post-mortem. Read it there, fix what failed, then retry to dispatch a fresh external run.',
   evicted:
     'The implementation container kept vanishing mid-run even after automatic fresh-container restarts. Most often this is transient: a deploy / new-version rollout draining the container, in which case simply retrying once the rollout has finished succeeds. If it persists, it points at a memory or crash issue on the run — inspect its logs (Cloudflare Workers Observability, filtered by the run id) and consider a heavier container instance type. Retry to try again.',
   harness_shutdown:

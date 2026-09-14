@@ -446,14 +446,39 @@ counts delegated steps whose step metrics hold no calls, so an executor that dec
   persisted (no container to re-address, no runner to ask), so it is exactly the shape a facade can
   get wrong alone: a nested attempt array round-tripped differently through D1 and Postgres fails
   nothing else.
-- **The brief's branches ride the HANDLE.** Added during PR 2 and not in the original design: an
+- **The brief's branches AND its target repo ride the HANDLE.** Not in the original design: an
   executor reading back what its own system produced (the pull request whose head is the work
   branch) is doing so at POLL time, where only the handle exists. The work branch is named from the
-  BLOCK, so it cannot be derived from a run id, and a guess there puts the wrong pull request on
-  the block, which becomes the `ci` gate's checks and the merger's diff.
-- **A reclaim ANSWERS.** `AsyncAgentExecutor.reclaimRun` may now return a `RunReclaimReport`, because
-  "we asked" and "it stopped" are different facts for work running somewhere else, and only the
-  executor can turn the first into the second.
+  BLOCK, so it cannot be derived from a run id. The REPO is the same trap one level up, and the
+  sharper one: `description.owner/repo` is where the WORKFLOW lives, and a central automation repo
+  dispatching against many product repos is the ordinary shape, so a reader that took its own
+  configured repository found nothing on every run and reported every one as having opened no pull
+  request. A guess on either puts the wrong pull request on the block, which becomes the `ci`
+  gate's checks and the merger's diff.
+- **`step.delegated` is not the question; `inFlightDelegation(step)` is.** The record OUTLIVES the
+  work it describes, deliberately: its attempt log is the evidence for why a step is being re-run,
+  and `resetStepForRerun` clears `jobId` and keeps the record. So a step that delegated its own work
+  and later ran a CONTAINER job (a helper round, a re-run under an overriding kind, a PR-review
+  `fix`) still carries it, and every `if (step.delegated)` read routes that container job's poll at
+  an external system, folds its phase onto work that finished hours ago, and overwrites its outcome
+  on settle. The predicate keys on `step.jobId === record.correlationKey`, which is exactly why the
+  key is persisted.
+- **The executor's TERMINAL failure has its own name.** It is the same disposition the container
+  path's `harnessShutdown` carries ("do not spend a recovery budget"), and it borrowed that flag at
+  first: every external CI failure then reported `failureKind: 'harness_shutdown'`, rendering as
+  "Harness shut down" for a step that never had a harness and filing external verdicts under
+  container eviction in every rollup. It rides `update.delegated.terminal` and maps to
+  `delegated_failed`.
+- **A successful poll is the sign of life.** The shipped executor's running answer is identical on
+  every tick of a quiet run, so nothing changes, nothing persists, and the step's `lastActivityAt`
+  freezes at the first poll while the stale-run sweeper re-collects a run that is perfectly alive.
+  `toJobUpdate` floors `lastActivityAt` at the poll's own clock; the engine's existing throttle
+  decides how often that lands.
+- **A reclaim ANSWERS, and both arms are asked.** `AsyncAgentExecutor.reclaimRun` may now return a
+  `RunReclaimReport`, because "we asked" and "it stopped" are different facts for work running
+  somewhere else, and only the executor can turn the first into the second. The composite's two
+  arms are independent resources: an unguarded container reclaim that throws skipped the external
+  cancel entirely and recorded every live delegation as "could not stop the external work".
 
 ## Deliberately NOT pursued
 

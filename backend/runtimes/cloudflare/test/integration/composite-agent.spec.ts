@@ -255,6 +255,53 @@ describe('CompositeAgentExecutor: delegated kinds', () => {
     expect(report).toEqual({ delegations: [{ correlationKey: 'k', cancelled: true }] })
   })
 
+  it('still cancels the external work when the CONTAINER reclaim throws', async () => {
+    // The two arms are independent resources. An unguarded container reclaim propagated before the
+    // delegated one ran, so `applyDelegationCancellation` recorded every live delegation as
+    // "could not stop the external work" while the executor that could stop it was never asked,
+    // and the external run carried on, opened its pull request and billed its tokens.
+    const container: AgentExecutor = {
+      run: () => Promise.resolve({ output: 'container' }),
+      runsAsync: () => true,
+      startJob: () => Promise.resolve({ jobId: 'j' }),
+      pollJob: () => Promise.resolve({ state: 'running' as const }),
+      reclaimRun: () => Promise.reject(new Error('DO reclaim exploded')),
+    } as AgentExecutor
+    const cancelled: string[] = []
+    const delegated: AgentExecutor = {
+      run: () => Promise.resolve({ output: 'delegated' }),
+      runsAsync: () => true,
+      startJob: () => Promise.resolve({ jobId: 'j' }),
+      pollJob: () => Promise.resolve({ state: 'running' as const }),
+      reclaimRun: (target: RunReclaimTarget) => {
+        for (const handle of target.delegations ?? []) cancelled.push(handle.correlationKey)
+        return Promise.resolve({ delegations: [{ correlationKey: 'k', cancelled: true }] })
+      },
+    } as AgentExecutor
+    const c = new CompositeAgentExecutor(
+      new Tagged('inline'),
+      container,
+      delegatedRegistry(),
+      delegated,
+    )
+    const report = await c.reclaimRun({
+      runId: 'exec-1',
+      jobId: 'exec-1-acme:impl',
+      agentKinds: ['acme:impl'],
+      delegations: [
+        {
+          executor: 'acme:executor',
+          correlationKey: 'k',
+          workspaceId: 'ws',
+          runId: 'exec-1',
+          agentKind: 'acme:impl',
+        },
+      ],
+    })
+    expect(cancelled).toEqual(['k'])
+    expect(report).toEqual({ delegations: [{ correlationKey: 'k', cancelled: true }] })
+  })
+
   it('NAMES external work it cannot stop, instead of reporting a clean teardown', async () => {
     const c = new CompositeAgentExecutor(new Tagged('inline'), null, delegatedRegistry())
     const report = await c.reclaimRun({

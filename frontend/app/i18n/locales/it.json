@@ -2136,9 +2136,11 @@
           "done": "Completato all’esterno",
           "failed": "Non riuscito all’esterno",
           "running": "In esecuzione all’esterno",
-          "starting": "Avvio all’esterno"
+          "starting": "Avvio all’esterno",
+          "unrecognised": "Stato non riconosciuto ({status})"
         },
         "run": "Esecuzione esterna",
+        "branch": "Ramo",
         "copyUrl": "Copia il link dell’esecuzione esterna",
         "openRun": "Apri l’esecuzione",
         "noOutcome": "Nessun esito registrato",
@@ -4050,6 +4052,7 @@
       "timeout": "Timeout",
       "agent": "Agente",
       "job_failed": "Job fallito",
+      "delegated_failed": "Esecutore esterno fallito",
       "rejected": "Rifiutata",
       "companion_rejected": "Companion rifiutato",
       "stalled": "In stallo",
@@ -6307,7 +6310,9 @@
         "not_awaiting_triage": "Questa spedizione non è in attesa di triage",
         "already_addressed": "Alcuni rilievi hanno già un'attività di correzione",
         "no_host_frame": "Questa spedizione non si trova sotto un servizio",
-        "delegated_executor_unwired": "Esecutore esterno non registrato"
+        "delegated_executor_unwired": "Esecutore esterno non registrato",
+        "delegated_step_async_only": "Questo passo viene interrogato, non atteso",
+        "delegated_claim_missing": "Questo passo non ha lavoro esterno da controllare"
       },
       "description": {
         "dependencies_unmet": "Questa attività dipende da altre non ancora completate. Completale o sbloccale, poi avviala di nuovo.",
@@ -6362,7 +6367,9 @@
         "not_awaiting_triage": "O sta ancora esplorando un'altra angolazione o è già stata conclusa. Ricarichi l'esecuzione per vedere a che punto è.",
         "already_addressed": "Un'attività di correzione era già stata creata per essi, quindi non è stato creato nulla di nuovo. Apra il rilievo per raggiungere l'attività esistente.",
         "no_host_frame": "Un'attività di correzione ha bisogno di un servizio in cui vivere e di un repository da correggere. Sposti l'attività della spedizione sotto un frame di servizio e riprovi.",
-        "delegated_executor_unwired": "Un passaggio di questa pipeline viene eseguito su un esecutore esterno che questa installazione non registra, quindi il lavoro non ha una destinazione. Registra l’esecutore nel codice oppure sostituisci il passaggio con uno eseguito qui."
+        "delegated_executor_unwired": "Un passaggio di questa pipeline viene eseguito su un esecutore esterno che questa installazione non registra, quindi il lavoro non ha una destinazione. Registra l’esecutore nel codice oppure sostituisci il passaggio con uno eseguito qui.",
+        "delegated_step_async_only": "Questo passo gira su un esecutore esterno e può durare ore, quindi viene avviato e poi interrogato invece di essere eseguito dentro una sola richiesta. Avvia l’esecuzione dalla board; se sei arrivato qui dal tuo codice, guida il passo attraverso il percorso asincrono.",
+        "delegated_claim_missing": "Manca la registrazione di ciò che l’esecuzione ha inviato all’esecutore esterno, quindi non c’è nulla da interrogare. L’esecutore in sé non ha alcun problema. Ricarica l’esecuzione e rilancia il passo se resta bloccato."
       },
       "action": {
         "connectGitHub": "Collega GitHub",

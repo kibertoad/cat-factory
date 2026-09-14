@@ -43,8 +43,13 @@ export interface DelegatedExecutorHostOptions {
    * The deployment's outbound-URL policy. The SAME one the notification-webhook sender is held to,
    * because an executor is an outbound HTTP surface the deployment configured and a second set of
    * SSRF rules is a set nobody maintains.
+   *
+   * REQUIRED, though its value may be `undefined` (which means the strict public-https default).
+   * Optional, it was declared here, declared on the kernel port, documented on both, and passed by
+   * neither facade: every registered executor was built with an SSRF control that existed only in
+   * the types. A required field makes forgetting it a typecheck failure instead.
    */
-  urlSafetyPolicy?: UrlSafetyPolicy
+  urlSafetyPolicy: UrlSafetyPolicy | undefined
   /** The runtime's fetch. Defaults to the global one, which both runtimes provide. */
   fetchImpl?: DelegatedFetch
   logger: Logger

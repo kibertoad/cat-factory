@@ -32,7 +32,7 @@ export interface ContainerFailureView {
 }
 
 /** A terminal run failure, as the poll paths report one. */
-export interface ContainerShutdownFailure {
+export interface TerminalJobFailure {
   error: string
   failureKind: AgentFailureKind
   detail: string
@@ -50,15 +50,41 @@ export interface ContainerShutdownFailure {
  * agent's own commands: the incident behind this spent the whole eviction budget re-running an
  * agent that killed its container each time), and each attempt costs another full agent run.
  */
-export function containerShutdownFailure(
-  failure: ContainerFailureView,
-): ContainerShutdownFailure | null {
+export function containerShutdownFailure(failure: ContainerFailureView): TerminalJobFailure | null {
   if (!failure.harnessShutdown) return null
   // Kernel's own wording for the fallback, not a second sentence saying the same thing: the
   // transports all report this condition with that constant, and one condition worded two ways
   // is a condition an operator cannot search for.
   const error = failure.error ?? HARNESS_SHUTDOWN_ERROR
   return { error, failureKind: 'harness_shutdown', detail: failure.detail ?? error }
+}
+
+/**
+ * The terminal failure for a DELEGATED job whose executor called its verdict final, or null when
+ * this is not that.
+ *
+ * Its own function rather than a reuse of {@link containerShutdownFailure}, and the separation IS
+ * the fix: borrowing the container path's only "terminal, do not retry" signal made every external
+ * CI failure report `failureKind: 'harness_shutdown'`, which renders to an operator as "Harness
+ * shut down" for a step that never had a harness and buckets delegated verdicts under container
+ * eviction in every failure-kind rollup. The two conditions want the same DISPOSITION and
+ * different NAMES, and only the name reaches a human.
+ *
+ * A retryable delegated failure answers null and falls through to the ordinary job-failure path,
+ * where the budget re-drives it: retryability and classification are separate axes, so
+ * `delegated_failed` is the kind for BOTH and the flag decides only whether a second attempt is
+ * spent (see `DelegationUpdate`'s `retryable`).
+ */
+export function delegatedTerminalFailure(failure: {
+  error?: string
+  detail?: string
+  // The whole delegated channel, not just the flag: the caller forwards the update's own field,
+  // which also carries the external url.
+  delegated?: { url?: string; terminal?: true }
+}): TerminalJobFailure | null {
+  if (!failure.delegated?.terminal) return null
+  const error = failure.error ?? 'The external executor reported a terminal failure.'
+  return { error, failureKind: 'delegated_failed', detail: failure.detail ?? error }
 }
 
 /**

@@ -32,11 +32,35 @@ export function correlationRunName(correlationKey: string): string {
 /** The subset of an Actions run this helper reads. */
 export interface ActionsRunSummary {
   id: number
+  /**
+   * The WORKFLOW's own `name:`, which is NOT where a `run-name:` lands. Read only as a fallback
+   * (see {@link runCarriesMarker}); the marker is what the platform correlates on.
+   */
   name: string | null
+  /**
+   * The run's displayed title, which is where a workflow's evaluated `run-name:` actually lands.
+   * The field the correlation depends on, and the reason it is spelled out here: `name` keeps the
+   * workflow's title whatever `run-name:` renders, so matching the marker against `name` alone
+   * finds nothing, ever.
+   */
+  display_title?: string | null
   html_url: string
   status: string | null
   conclusion: string | null
   created_at: string
+}
+
+/**
+ * Whether this run is the one carrying the platform's marker.
+ *
+ * Both title fields are tested, and the order says which one is the contract: `display_title` is
+ * where GitHub puts the evaluated `run-name:` a caller workflow renders, and `name` is read after
+ * it only so a GitHub Enterprise release that predates `display_title` still correlates. Testing
+ * both costs nothing in precision because the marker is deliberately ugly: a run whose author
+ * typed `cat-factory[<key>]` into either field by accident is not a case worth designing around.
+ */
+function runCarriesMarker(run: ActionsRunSummary, marker: string): boolean {
+  return (run.display_title ?? '').includes(marker) || (run.name ?? '').includes(marker)
 }
 
 /**
@@ -81,5 +105,5 @@ export async function findRunByCorrelation(
   // The NEWEST match, because a re-run of the same step reuses the correlation key only when the
   // engine deliberately re-attaches (the dispatch epoch changes otherwise), and the newest is then
   // the one this dispatch queued.
-  return runs.find((run) => (run.name ?? '').includes(marker)) ?? null
+  return runs.find((run) => runCarriesMarker(run, marker)) ?? null
 }

@@ -722,7 +722,9 @@
         "not_awaiting_triage": "Bu sefer triyaj beklemiyor",
         "already_addressed": "Bazı bulguların zaten bir düzeltme görevi var",
         "no_host_frame": "Bu sefer bir hizmetin altında değil",
-        "delegated_executor_unwired": "Dış yürütücü kayıtlı değil"
+        "delegated_executor_unwired": "Dış yürütücü kayıtlı değil",
+        "delegated_step_async_only": "Bu adım beklenmez, yoklanır",
+        "delegated_claim_missing": "Bu adımın kontrol edilecek harici işi yok"
       },
       "description": {
         "dependencies_unmet": "Bu görev henüz tamamlanmamış başka görevlere bağlı. Onları tamamla veya engelini kaldır, ardından yeniden başlat.",
@@ -777,7 +779,9 @@
         "not_awaiting_triage": "Ya hâlâ başka bir açıyı tarıyor ya da çoktan bitirilmiş. Nerede olduğunu görmek için çalıştırmayı yenileyin.",
         "already_addressed": "Daha önce onlar için bir düzeltme görevi oluşturulmuştu, bu yüzden yeniden bir şey oluşturulmadı. Mevcut göreve ulaşmak için bulguyu açın.",
         "no_host_frame": "Bir düzeltme görevinin altında yaşayacağı bir hizmete ve düzeltilecek bir depoya ihtiyacı var. Sefer görevini bir hizmet çerçevesinin altına taşıyıp yeniden deneyin.",
-        "delegated_executor_unwired": "Bu hattın bir adımı, bu kurulumun kaydetmediği bir dış yürütücüde çalışıyor; dolayısıyla işin gönderileceği bir yer yok. Yürütücüyü kodda kaydedin ya da adımı burada çalışan biriyle değiştirin."
+        "delegated_executor_unwired": "Bu hattın bir adımı, bu kurulumun kaydetmediği bir dış yürütücüde çalışıyor; dolayısıyla işin gönderileceği bir yer yok. Yürütücüyü kodda kaydedin ya da adımı burada çalışan biriyle değiştirin.",
+        "delegated_step_async_only": "Bu adım harici bir yürütücüde çalışır ve saatler sürebilir; bu yüzden tek bir istek içinde çalıştırılmak yerine gönderilip ardından yoklanır. Çalıştırmayı panodan başlatın; buraya kendi kodunuzdan geldiyseniz adımı asenkron yoldan sürün.",
+        "delegated_claim_missing": "Çalıştırmanın harici yürütücüye ne gönderdiğine dair kaydı eksik, dolayısıyla yoklanacak bir şey yok. Yürütücünün kendisinde bir sorun yok. Çalıştırmayı yeniden yükleyin ve adım hâlâ takılıysa yeniden çalıştırın."
       },
       "action": {
         "connectGitHub": "GitHub'ı bağla",
@@ -1596,9 +1600,11 @@
           "done": "Dışarıda tamamlandı",
           "failed": "Dışarıda başarısız oldu",
           "running": "Dışarıda çalışıyor",
-          "starting": "Dışarıda başlatılıyor"
+          "starting": "Dışarıda başlatılıyor",
+          "unrecognised": "Tanınmayan durum ({status})"
         },
         "run": "Dış çalıştırma",
+        "branch": "Dal",
         "copyUrl": "Dış çalıştırma bağlantısını kopyala",
         "openRun": "Çalıştırmayı aç",
         "noOutcome": "Sonuç kaydedilmedi",
@@ -2024,6 +2030,7 @@
       "timeout": "Zaman aşımı",
       "agent": "Aracı",
       "job_failed": "İş başarısız",
+      "delegated_failed": "Harici yürütücü başarısız",
       "rejected": "Reddedildi",
       "companion_rejected": "Yardımcı reddedildi",
       "stalled": "Takıldı",

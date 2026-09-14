@@ -6,6 +6,7 @@ import type {
   RunReclaimReport,
   DelegatedExecutor,
   DelegatedExecutorDefinition,
+  DelegatedExecutorDeps,
   DelegationBrief,
   DelegationHandle,
   DelegationUpdate,
@@ -94,6 +95,9 @@ function build(
     agentKindRegistry,
     resolveRepoTarget: async () => REPO,
     ...(options.resolveToolSecrets ? { resolveToolSecrets: options.resolveToolSecrets } : {}),
+    // Answered explicitly: the host requires an answer so a facade cannot leave the outbound guard
+    // declared-but-unwired, which is exactly what both of them had done.
+    urlSafetyPolicy: undefined,
     logger: noopLogger,
     clock: { now: () => 0 },
   })
@@ -149,6 +153,10 @@ describe('DelegatedAgentExecutor: dispatch', () => {
       // The branch pair rides along because a POLL cannot derive it: a handle carries the run, and
       // the work branch is named from the block.
       branches: { base: 'main', work: 'cat-factory/blk_1' },
+      // So does the TARGET repo, which is routinely not the one holding the executor's own job: an
+      // executor reading back what it produced from its own configured repository would look in
+      // the wrong place on every deployment whose automation lives beside the product repos.
+      repo: { owner: 'acme', name: 'widgets' },
     })
     expect(result.jobId).toBe('ex_1-acme:impl')
   })
@@ -178,6 +186,42 @@ describe('DelegatedAgentExecutor: dispatch', () => {
 
   it('resolves no model, so the board never names one that ran nowhere', async () => {
     expect(await build(fakeExecutor()).resolveModel(context())).toBeUndefined()
+  })
+
+  it('hands the deployment’s OUTBOUND-URL policy to the executor it builds', async () => {
+    // The port declares it as the SSRF control an executor answers to, the same one the
+    // notification-webhook sender is held to. Declared on both sides and passed by neither facade,
+    // it was a guard that existed only in the types; the host option is now required so forgetting
+    // it fails the build, and this pins that it actually reaches `create`.
+    const agentKindRegistry = defaultAgentKindRegistry()
+    agentKindRegistry.register({
+      kind: 'acme:impl',
+      systemPrompt: 'implement it',
+      agent: { surface: 'delegated', executor: 'acme:executor' },
+    })
+    const executors = defaultDelegatedExecutorRegistry()
+    let seen: DelegatedExecutorDeps | undefined
+    const fake = fakeExecutor()
+    executors.register({
+      id: 'acme:executor',
+      presentation: { label: 'Acme', icon: 'i-lucide-bot', description: 'Acme runs it' },
+      poll: { intervalMs: 1000, maxDurationMs: 60_000 },
+      telemetry: 'not-reported',
+      create: (deps) => {
+        seen = deps
+        return fake.executor
+      },
+    })
+    const policy = { schemes: ['https', 'http'], allowHosts: ['ci.acme'] }
+    await buildDelegatedAgentExecutor({
+      delegatedExecutorRegistry: executors,
+      agentKindRegistry,
+      resolveRepoTarget: async () => REPO,
+      urlSafetyPolicy: policy,
+      logger: noopLogger,
+      clock: { now: () => 0 },
+    }).startJob(context())
+    expect(seen?.urlSafetyPolicy).toEqual(policy)
   })
 })
 
@@ -243,17 +287,47 @@ describe('DelegatedAgentExecutor: poll mapping', () => {
     })
   })
 
-  it('treats a failure the executor did not call retryable as TERMINAL', async () => {
+  it('treats a failure the executor did not call retryable as TERMINAL, on its OWN channel', async () => {
     // A verdict its own system called final is not something a second dispatch improves on, and
     // the alternative spends the job-failure budget re-running somebody else's CI for it.
+    //
+    // Reported as `delegated.terminal`, never as `harnessShutdown`: the two want the same
+    // disposition under different names, and borrowing the container flag put "Harness shut down"
+    // in front of an operator whose step never had a harness.
     const update = await poll({ state: 'failed', error: 'the workflow failed' })
-    expect(update).toMatchObject({ state: 'failed', harnessShutdown: true })
+    expect(update).toMatchObject({ state: 'failed', delegated: { terminal: true } })
+    expect(update).not.toHaveProperty('harnessShutdown')
   })
 
   it('leaves a RETRYABLE failure re-drivable', async () => {
     const update = await poll({ state: 'failed', error: 'runner outage', retryable: true })
     expect(update).toMatchObject({ state: 'failed' })
     expect(update).not.toHaveProperty('harnessShutdown')
+    expect(update).not.toMatchObject({ delegated: { terminal: true } })
+  })
+
+  it('STAMPS a running poll with a sign of life the executor did not report', async () => {
+    // A successful poll is itself the evidence. Without this, a long external run whose every poll
+    // answers identically (an Actions run sitting at `in_progress`) folds no change at all, the
+    // step's `lastActivityAt` freezes at the first poll, and the stale-run sweeper re-collects a
+    // run that is perfectly alive.
+    const update = await poll({ state: 'running', phase: 'in_progress' })
+    expect(update).toMatchObject({ state: 'running', lastActivityAt: expect.any(Number) })
+  })
+
+  it('prefers the executor’s OWN activity stamp when it reports one', async () => {
+    const update = await poll({ state: 'running', lastActivityAt: 1_700_000_000_000 })
+    expect(update).toMatchObject({ lastActivityAt: 1_700_000_000_000 })
+  })
+
+  it('carries the branch the work LANDED on when no pull request was opened', async () => {
+    // The port names that case as legitimate (push now, let a later step open the PR), and this is
+    // then the run's entire product: dropped, the step settles done with nothing to show.
+    const update = await poll({
+      state: 'done',
+      result: { summary: 'Pushed the work.', branch: 'cat-factory/blk_1' },
+    })
+    expect(update).toMatchObject({ state: 'done', delegated: { branch: 'cat-factory/blk_1' } })
   })
 
   it('records the summary and the pull request, and NO usage when none was reported', async () => {
@@ -281,8 +355,14 @@ describe('DelegatedAgentExecutor: poll mapping', () => {
     expect(update).toMatchObject({ result: { usage: { inputTokens: 10, outputTokens: 5 } } })
   })
 
-  it('refuses a poll whose handle carries no delegation to address', async () => {
-    await expect(build(fakeExecutor()).pollJob({ jobId: 'x' })).rejects.toBeInstanceOf(DomainError)
+  it('refuses a poll whose handle carries no delegation, NAMING the run state rather than a registration', async () => {
+    // Not `delegated_executor_unwired`: that reason's copy sends an operator to register an
+    // executor that is registered and fine, when what is missing is this run's own claim.
+    const error = await build(fakeExecutor())
+      .pollJob({ jobId: 'x' })
+      .catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(DomainError)
+    expect((error as DomainError).details?.reason).toBe('delegated_claim_missing')
   })
 })
 

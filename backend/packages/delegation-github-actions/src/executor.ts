@@ -39,7 +39,8 @@ export type GitHubActionsRunView = ActionsRunSummary
  * It is handed the HANDLE rather than the brief, and that is the honest shape: a poll can run hours
  * after the dispatch, in a different process, and the brief exists only at dispatch. What the
  * handle carries is what the platform persisted for exactly this purpose: the correlation key, the
- * external id and the branch pair.
+ * external id, the branch pair, and the repository the WORK targeted, which is not necessarily the
+ * one holding the workflow.
  */
 export type GitHubActionsResultReader = (input: {
   handle: DelegationHandle
@@ -262,12 +263,22 @@ export function githubActionsDelegatedExecutor(
   }
 
   /**
-   * The default reading: the open pull request whose head is the run's work branch.
+   * The default reading: the open pull request whose head is the run's work branch, in the repo
+   * the WORK targeted.
+   *
+   * Two facts have to come off the handle, and neither is derivable here. The BRANCH, because a
+   * handle carries the run and the work branch is named from the block. And the REPO, because
+   * `description.owner/repo` is where the WORKFLOW lives, which is routinely not where the work
+   * goes: `description.ref` is documented as a branch that holds the workflow, so a central
+   * automation repo dispatching against many product repos is the ordinary shape, and reading the
+   * result out of the automation repo finds nothing on every run.
    *
    * It REFUSES to guess when the handle carries no branches, which is a record written before they
    * were persisted. Searching without one would have to pick a pull request by some other rule, and
    * every such rule can pick somebody else's, which then becomes the block's pull request, the
-   * `ci` gate's checks and the merger's diff.
+   * `ci` gate's checks and the merger's diff. A missing REPO falls back to the workflow's own,
+   * which is not a guess of the same kind: it is the right answer for the single-repo deployment,
+   * and the branch match still has to hold.
    */
   async function defaultResult(handle: DelegationHandle, token: string): Promise<DelegationResult> {
     const work = handle.branches?.work
@@ -278,11 +289,12 @@ export function githubActionsDelegatedExecutor(
           'may have opened could not be identified: open the run to see.',
       }
     }
+    const target = handle.repo ?? { owner: description.owner, name: description.repo }
     const pullRequest = await pullRequestForBranch(deps.fetchImpl, {
       apiBase,
       token,
-      owner: description.owner,
-      repo: description.repo,
+      owner: target.owner,
+      repo: target.name,
       branch: work,
     })
     return {

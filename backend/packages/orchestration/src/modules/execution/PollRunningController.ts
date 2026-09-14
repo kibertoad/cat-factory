@@ -18,6 +18,7 @@ import {
   applyDelegationRunning,
   applyLastActivity,
   applySubtaskProgress,
+  inFlightDelegation,
   settleDelegation,
 } from './step-fold.logic.js'
 import { applyValidationReport } from './validation.logic.js'
@@ -228,7 +229,13 @@ export class PollRunningController {
     // own vocabulary and a link to somebody else's logs. Folding a delegated poll onto the
     // container record would render the step as a container that never reports an address, and
     // put it in front of the reclaim that kills containers by run.
-    if (s.delegated) {
+    //
+    // Asked of the IN-FLIGHT job rather than of the record's mere presence: a settled delegation
+    // outlives the step (its attempt log is why the step is being re-run), so a later container
+    // job on the same step would otherwise flip a `done` delegation back to `running` and stamp
+    // the container's phase on external work that finished hours ago, while `step.container` never
+    // gains an id or an address at all.
+    if (inFlightDelegation(s)) {
       if (
         applyDelegationRunning(s, {
           ...(update.delegated?.url ? { url: update.delegated.url } : {}),
@@ -429,6 +436,11 @@ export class PollRunningController {
    * The two surfaces are exclusive rather than layered, which is why this branches instead of
    * writing both: a delegated step never had a container, and stamping one would leave the board
    * reporting an errored container for a system the platform does not run.
+   *
+   * WHICH one is decided by the job actually in flight, never by the delegation record's presence.
+   * A step that delegated its own work and later ran a container helper still carries the settled
+   * record, and branching on it would report the external executor as having failed (overwriting
+   * the outcome it really reached) while the container that died is never marked at all.
    */
   async markDispatchErrored(
     workspaceId: string,
@@ -436,7 +448,7 @@ export class PollRunningController {
     step: PipelineStep,
     failure?: { error?: string; url?: string },
   ): Promise<void> {
-    if (step.delegated) {
+    if (inFlightDelegation(step)) {
       settleDelegation(step, {
         status: 'failed',
         ...(failure?.error ? { outcome: failure.error } : {}),

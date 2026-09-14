@@ -4,6 +4,7 @@ import {
   ACTIVITY_PERSIST_THROTTLE_MS,
   classifyDispatchFailure,
   containerShutdownFailure,
+  delegatedTerminalFailure,
   evictionFailureDetail,
   isContainerEvictionError,
   MAX_EVICTION_RECOVERIES,
@@ -228,5 +229,34 @@ describe('containerShutdownFailure', () => {
   it('falls back to the error as the detail rather than reporting none', () => {
     const failure = containerShutdownFailure({ error: 'harness gone', harnessShutdown: true })
     expect(failure?.detail).toBe('harness gone')
+  })
+})
+
+// The DELEGATED sibling: the same disposition under a name that describes the step it happened to.
+describe('delegatedTerminalFailure', () => {
+  it('answers null for a failure that is not a terminal delegated verdict', () => {
+    expect(delegatedTerminalFailure({ error: 'boom' })).toBeNull()
+    expect(
+      delegatedTerminalFailure({ error: 'boom', delegated: { url: 'https://ci/1' } }),
+    ).toBeNull()
+  })
+
+  it('classifies a terminal external verdict under its OWN kind, never as a harness shutdown', () => {
+    // Borrowing `harness_shutdown` put "Harness shut down" in front of an operator whose step
+    // never had a harness, and filed external CI verdicts under container eviction in the rollups.
+    const failure = delegatedTerminalFailure({
+      error: 'The workflow run finished as "failure".',
+      delegated: { terminal: true },
+    })
+    expect(failure?.failureKind).toBe('delegated_failed')
+    expect(failure?.failureKind).not.toBe('harness_shutdown')
+  })
+
+  it('falls back to the error as the detail rather than reporting none', () => {
+    const failure = delegatedTerminalFailure({
+      error: 'the run failed',
+      delegated: { terminal: true },
+    })
+    expect(failure?.detail).toBe('the run failed')
   })
 })

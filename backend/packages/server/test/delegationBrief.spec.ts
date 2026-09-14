@@ -140,6 +140,7 @@ async function delegationBrief(): Promise<DelegationBrief> {
     delegatedExecutorRegistry: executors,
     agentKindRegistry: registryWithKind('delegated'),
     resolveRepoTarget: async () => REPO,
+    urlSafetyPolicy: undefined,
     logger: noopLogger,
     clock: { now: () => 1_700_000_000_000 },
   })
@@ -216,6 +217,7 @@ describe('the brief and the harness job body compose the same instructions', () 
       delegatedExecutorRegistry: executors,
       agentKindRegistry: registryWithKind('delegated'),
       resolveRepoTarget: async () => REPO,
+      urlSafetyPolicy: undefined,
       logger: noopLogger,
       clock: { now: () => 0 },
     })

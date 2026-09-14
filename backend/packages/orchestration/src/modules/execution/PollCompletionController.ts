@@ -9,6 +9,7 @@ import { failureKindFromHarnessCause } from '@cat-factory/kernel'
 import {
   type ContainerFailureView,
   containerShutdownFailure,
+  delegatedTerminalFailure,
   MAX_BRANCH_CONTENTION_RECOVERIES,
 } from './job.logic.js'
 import { PR_REVIEWER_KIND } from '@cat-factory/agents'
@@ -26,6 +27,7 @@ import {
   validationFailureDetail,
 } from './validation.logic.js'
 import { applyReproductionReport } from './reproductionProof.logic.js'
+import { inFlightDelegation } from './step-fold.logic.js'
 
 /** A settled (non-`running`) agent poll — the only states {@link PollCompletionController} acts on. */
 type SettledUpdate = Extract<AgentJobUpdate, { state: 'done' } | { state: 'failed' }>
@@ -239,6 +241,19 @@ export class PollCompletionController {
       )
       if (settled) return settled
     }
+    // A DELEGATED executor that called its verdict FINAL, asked immediately before the container's
+    // own terminal signal and for the same reason it sits below every branch above: both are
+    // "terminal, do not spend a recovery budget", and only the NAME differs. It gets its own
+    // because a delegated step never had a harness, and reporting one tells an operator their
+    // container was stopped and files the verdict under container eviction in every rollup.
+    const delegatedTerminal = delegatedTerminalFailure(update)
+    if (delegatedTerminal) {
+      await this.markDispatchErrored(workspaceId, instance, step, {
+        error: delegatedTerminal.error,
+        ...(update.delegated?.url ? { url: update.delegated.url } : {}),
+      })
+      return { kind: 'job_failed', ...delegatedTerminal }
+    }
     // A harness that exited cleanly mid-job was stopped by something a fresh container meets
     // again, so this fails the run outright rather than spending an eviction budget on it. It is
     // asked HERE, below every branch that settles a job WITHOUT failing the run, because those
@@ -275,7 +290,12 @@ export class PollCompletionController {
       error: update.error,
       // Prefer the harness's structured cause; default to the coarse `agent` when it reported
       // none (the watchdog-phrase string fallback is gone — current images always emit a cause).
-      failureKind: failureKindFromHarnessCause(update.failureCause) ?? 'agent',
+      // A RETRYABLE delegated failure lands here (the terminal branch above answered null for it),
+      // and it is still an external verdict rather than an agent of ours: naming the step's own
+      // executor class is what keeps the run card and the rollups honest about where it ran.
+      failureKind:
+        failureKindFromHarnessCause(update.failureCause) ??
+        (inFlightDelegation(step) ? 'delegated_failed' : 'agent'),
       detail: validationDetail ?? update.detail ?? update.error,
       // Preserve the harness's FINE-GRAINED cause (git / api / no-usable-output / no-changes)
       // that `failureKind` collapses to the coarse `agent` — recorded on the failure's

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { PipelineStep, RunDelegationStatus } from '~/types/execution'
+import { delegationStatusView } from './StepDelegatedStatus.logic'
+import type { PipelineStep } from '~/types/execution'
 
 // The EXTERNAL work a delegated step dispatched: which registered executor is running it, what it
 // is doing, and the link to that system's own logs, which is the affordance everything else here
@@ -30,46 +31,23 @@ const { t } = useI18n()
 
 const record = computed(() => props.step.delegated ?? null)
 
-// Static literal keys (not a runtime-built `t(`…${status}`)`) so the typed-message-keys check
-// covers them; exhaustive over the union so a new status fails the typecheck here.
-const STATUS_KEYS: Record<RunDelegationStatus, string> = {
-  starting: 'panels.stepMeta.delegated.status.starting',
-  running: 'panels.stepMeta.delegated.status.running',
-  done: 'panels.stepMeta.delegated.status.done',
-  failed: 'panels.stepMeta.delegated.status.failed',
-  cancelled: 'panels.stepMeta.delegated.status.cancelled',
-}
-
-const STATUS_META: Record<RunDelegationStatus, { icon: string; spin: boolean; cls: string }> = {
-  starting: {
-    icon: 'i-lucide-loader-circle',
-    spin: true,
-    cls: 'border-sky-900/50 bg-sky-950/30 text-sky-300',
-  },
-  running: {
-    icon: 'i-lucide-radio',
-    spin: false,
-    cls: 'border-indigo-900/50 bg-indigo-950/30 text-indigo-300',
-  },
-  done: {
-    icon: 'i-lucide-circle-check',
-    spin: false,
-    cls: 'border-emerald-900/50 bg-emerald-950/30 text-emerald-300',
-  },
-  failed: {
-    icon: 'i-lucide-circle-x',
-    spin: false,
-    cls: 'border-rose-900/50 bg-rose-950/30 text-rose-300',
-  },
-  cancelled: {
-    icon: 'i-lucide-circle-slash',
-    spin: false,
-    cls: 'border-amber-900/50 bg-amber-950/30 text-amber-300',
-  },
-}
+/**
+ * Everything the card renders for this record's status, narrowed against the vocabulary this build
+ * ships. See `StepDelegatedStatus.logic` for why a bare `Record` lookup cannot be used here.
+ */
+const statusView = computed(() => delegationStatusView(record.value?.status))
 
 /** The executor's own label when this build registers it, else the persisted id. */
-const executorName = computed(() => props.executor?.label ?? record.value?.executor ?? '')
+const executorName = computed(() => props.executor?.label || record.value?.executor || '')
+
+/**
+ * The branch the work LANDED on, shown only when there is no pull request to show instead.
+ *
+ * An executor that pushes and lets a later step open the PR is a case the port names as
+ * legitimate, and then this is the run's entire product: without it the card reports a completed
+ * external run with nothing to point at.
+ */
+const landedBranch = computed(() => record.value?.branch ?? null)
 
 /**
  * Whether to say the platform is not measuring this step's spend.
@@ -93,17 +71,19 @@ const { copy: copyText } = useCopyToClipboard()
   <!-- Single conditional root so a passed-through `class` (e.g. layout margin) applies cleanly.
        Renders nothing for a step that dispatched nowhere external. -->
   <div v-if="record" data-testid="step-delegated-status">
-    <div class="rounded-lg border px-3 py-2 text-[12px]" :class="STATUS_META[record.status].cls">
+    <div class="rounded-lg border px-3 py-2 text-[12px]" :class="statusView.meta.cls">
       <div class="flex items-center gap-2">
         <UIcon
-          :name="STATUS_META[record.status].icon"
+          :name="statusView.meta.icon"
           class="h-4 w-4 shrink-0"
-          :class="STATUS_META[record.status].spin ? 'animate-spin' : ''"
+          :class="statusView.meta.spin ? 'animate-spin' : ''"
         />
-        <span class="font-medium">{{ t(STATUS_KEYS[record.status]) }}</span>
+        <!-- A status this build does not know is NAMED as unrecognised, carrying the stored value,
+             rather than guessed onto a current one or silently dropped. -->
+        <span class="font-medium">{{ t(statusView.labelKey, statusView.labelParams) }}</span>
         <span class="text-slate-500">·</span>
         <span class="truncate" :title="executor?.description">{{ executorName }}</span>
-        <template v-if="record.phase && record.status === 'running'">
+        <template v-if="record.phase && statusView.status === 'running'">
           <span class="text-slate-500">·</span>
           <span>{{ record.phase }}</span>
         </template>
@@ -130,6 +110,16 @@ const { copy: copyText } = useCopyToClipboard()
           :aria-label="t('panels.stepMeta.delegated.copyUrl')"
           @click="copyText(record.url)"
         />
+      </div>
+
+      <!-- The branch the work landed on, for an executor that pushed without opening a pull
+           request. Rendered here because the platform holds nothing else about that run's
+           product. -->
+      <div v-if="landedBranch" class="mt-2 flex items-center gap-2">
+        <dt class="shrink-0 text-[11px] uppercase tracking-wide text-slate-500">
+          {{ t('panels.stepMeta.delegated.branch') }}
+        </dt>
+        <dd class="truncate font-mono text-[11px] text-slate-300">{{ landedBranch }}</dd>
       </div>
 
       <!-- What the platform could not do, stated rather than left to read as a clean outcome:

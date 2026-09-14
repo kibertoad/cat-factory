@@ -91,8 +91,21 @@ dispatching. The EXECUTOR owes the other half: `start` must be idempotent per
 
 **Anything the poll needs is on the step.** A delegated poll rebuilds its handle from the persisted
 step alone, in another process, after a durable replay. The executor id, the external id, the branch
-pair and the poll cadence are all persisted for exactly that reason: a fact the poll cannot derive
-and nobody recorded is absent in production with no error.
+pair, the TARGET REPO and the poll cadence are all persisted for exactly that reason: a fact the
+poll cannot derive and nobody recorded is absent in production with no error. The repo is the least
+obvious of them and the one with the sharpest failure: an executor's own configured repository is
+routinely not the one the work targets (a central automation repo dispatching against many product
+repos is ordinary), so a reader that assumed they were the same found nothing on every run and
+reported every one as having produced no pull request.
+
+**`step.delegated` existing is not the same as the delegated job being in flight.** The record
+OUTLIVES the work it describes, deliberately: its attempt log is the evidence for why a step is
+being re-run, and `resetStepForRerun` clears the job id and keeps the record. A step that delegated
+its own work can still run a CONTAINER job afterwards (a helper round, a re-run under an overriding
+kind), so every read asks `inFlightDelegation(step)`, which keys on
+`step.jobId === record.correlationKey`. A bare truthiness test hands the container job's id to the
+external executor, folds its phase onto work that finished hours ago, and overwrites its outcome on
+settle.
 
 **The cadence is the executor's, not the platform's.** An Actions run of an hour is ordinary where a
 harness job of an hour is a stall, so `poll.intervalMs` / `poll.maxDurationMs` ride the definition,
@@ -108,13 +121,31 @@ budget gate, because the tokens were spent on its account rather than this deplo
 **A cancel that could not happen is SAID.** An executor declaring no `cancel` leaves its run alive:
 it will finish, open its pull request and bill its tokens long after the platform recorded this run
 as stopped. The reclaim reports what it ACHIEVED, and the record says so rather than rendering a
-clean teardown.
+clean teardown. The composite asks BOTH its arms: they are independent resources, so a container
+reclaim that throws must not cost the external cancel, which would record every live delegation as
+work the platform could not stop while the executor that could stop it was never asked.
 
-**A delegated kind is never panel-eligible and never estimate-gated by accident.** It hands out no
-checkout of ours (`dispatchDeliversCheckout` is false), its deliverable is a pushed branch rather
-than a reply (`deliverableIsReply` is false), and it takes no container directives. All four
-answers live in one total `Record<AgentSurface, …>` (`SURFACE_TRAITS`), so a new surface fails the
-build there with every question in front of whoever adds it.
+**A delegated failure is not a harness one.** A verdict the external system called final is
+terminal (a second dispatch reaches the same answer and spends the budget getting there), which is
+the disposition the container path's `harnessShutdown` carries. It travels on its own channel,
+`update.delegated.terminal`, and maps to `failureKind: 'delegated_failed'`. Borrowing the container
+flag rendered "Harness shut down" for a step that never had a harness and filed external CI
+verdicts under container eviction in every rollup.
+
+**A successful poll is the sign of life.** Many executors report no activity timestamp, and a quiet
+external run answers identically on every tick, so nothing changes and nothing persists. The
+delegated arm floors `lastActivityAt` at the poll's own clock; without it the step's
+`lastActivityAt` and the run's `updated_at` freeze at the first poll and the stale-run sweeper
+re-collects a run that is perfectly alive.
+
+**A delegated kind needs a CHECKOUT, just not one of ours.** `SURFACE_TRAITS.delegated.container` is
+false because the platform runs no container for it; `dispatchDeliversCheckout` is TRUE, because the
+executor is handed a repository and a work branch and checks them out itself, which is what
+`composeDelegationBrief` tells the agent. Reading the second off the first had a kind's preOps
+prepare checkout-less context for an agent whose own prompt named the branch it was working on. Its
+deliverable is a pushed branch rather than a reply (`deliverableIsReply` is false) and it takes no
+container directives; those answers live in one total `Record<AgentSurface, …>` (`SURFACE_TRAITS`),
+so a new surface fails the build there with every question in front of whoever adds it.
 
 ## What a mothership node does
 

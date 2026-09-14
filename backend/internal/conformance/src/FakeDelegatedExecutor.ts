@@ -174,8 +174,11 @@ export function withDelegatedArm(
       name: 'widgets',
       baseBranch: 'main',
     }),
+    // Answered explicitly, because the host requires an answer: this harness configures no
+    // outbound widening, which is the strict public-https default every executor is held to.
+    urlSafetyPolicy: undefined,
     logger: noopLogger,
     clock: { now: () => Date.now() },
   })
-  return new CompositeAgentExecutor(fake, fake, agentKindRegistry, delegated)
+  return new CompositeAgentExecutor(fake, fake, agentKindRegistry, delegated, noopLogger)
 }

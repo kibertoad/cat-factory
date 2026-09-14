@@ -2136,9 +2136,11 @@
           "done": "Extern abgeschlossen",
           "failed": "Extern fehlgeschlagen",
           "running": "Läuft extern",
-          "starting": "Startet extern"
+          "starting": "Startet extern",
+          "unrecognised": "Unbekannter Status ({status})"
         },
         "run": "Externer Lauf",
+        "branch": "Branch",
         "copyUrl": "Link zum externen Lauf kopieren",
         "openRun": "Lauf öffnen",
         "noOutcome": "Kein Ergebnis festgehalten",
@@ -4050,6 +4052,7 @@
       "timeout": "Zeitüberschreitung",
       "agent": "Agent",
       "job_failed": "Job fehlgeschlagen",
+      "delegated_failed": "Externer Executor fehlgeschlagen",
       "rejected": "Abgelehnt",
       "companion_rejected": "Begleiter abgelehnt",
       "stalled": "Hängengeblieben",
@@ -6307,7 +6310,9 @@
         "not_awaiting_triage": "Diese Expedition wartet nicht auf eine Sichtung",
         "already_addressed": "Für einige Befunde gibt es bereits eine Behebungsaufgabe",
         "no_host_frame": "Diese Expedition liegt unter keinem Service",
-        "delegated_executor_unwired": "Externer Executor nicht registriert"
+        "delegated_executor_unwired": "Externer Executor nicht registriert",
+        "delegated_step_async_only": "Dieser Schritt wird abgefragt, nicht abgewartet",
+        "delegated_claim_missing": "Für diesen Schritt gibt es keine externe Arbeit zu prüfen"
       },
       "description": {
         "dependencies_unmet": "Diese Aufgabe hängt von anderen ab, die noch nicht abgeschlossen sind. Schließe sie ab oder gib sie frei und starte dann erneut.",
@@ -6362,7 +6367,9 @@
         "not_awaiting_triage": "Sie untersucht entweder noch einen weiteren Blickwinkel oder wurde bereits abgeschlossen. Laden Sie den Lauf neu, um den Stand zu sehen.",
         "already_addressed": "Dafür wurde bereits früher eine Behebungsaufgabe erstellt, es wurde also nichts neu angelegt. Öffnen Sie den Befund, um zur vorhandenen Aufgabe zu gelangen.",
         "no_host_frame": "Eine Behebungsaufgabe braucht einen Service als Zuhause und ein Repository zum Beheben. Verschieben Sie die Expeditionsaufgabe unter einen Service-Rahmen und versuchen Sie es erneut.",
-        "delegated_executor_unwired": "Ein Schritt dieser Pipeline läuft auf einem externen Executor, den diese Installation nicht registriert; es gibt also kein Ziel für die Arbeit. Registriere den Executor im Code oder wähle für den Schritt einen, der hier läuft."
+        "delegated_executor_unwired": "Ein Schritt dieser Pipeline läuft auf einem externen Executor, den diese Installation nicht registriert; es gibt also kein Ziel für die Arbeit. Registriere den Executor im Code oder wähle für den Schritt einen, der hier läuft.",
+        "delegated_step_async_only": "Dieser Schritt läuft auf einem externen Executor und kann Stunden dauern. Er wird deshalb angestoßen und danach abgefragt, statt innerhalb einer Anfrage ausgeführt zu werden. Starte den Lauf über das Board; wenn du aus eigenem Code hierherkommst, steuere den Schritt über den asynchronen Pfad.",
+        "delegated_claim_missing": "Der Eintrag des Laufs darüber, was an den externen Executor geschickt wurde, fehlt, also gibt es nichts abzufragen. Am Executor selbst ist nichts falsch. Lade den Lauf neu und starte den Schritt erneut, falls er weiterhin hängt."
       },
       "action": {
         "connectGitHub": "GitHub verbinden",

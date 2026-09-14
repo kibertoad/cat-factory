@@ -12,10 +12,11 @@ import type { ExecutionInstance, PipelineStep } from '@cat-factory/kernel'
  * sums it; a model asked why it was cheap answers from it. Stating the gap beside the total is the
  * only thing that stops all three.
  *
- * A step counts when it BOTH ran on an external executor and reported no usage back. A step whose
- * executor self-reports and has filed is not a gap, and neither is one that is still running: what
- * this counts is spend that is missing from the totals, which is a question about the step's
- * recorded usage rather than about its status.
+ * A step counts when its external work has SETTLED and it reported no usage back. A step whose
+ * executor self-reports and has filed is not a gap, and neither is one that is still running: the
+ * second is what makes the status check load-bearing rather than decorative, because a
+ * `self-reported` executor files with its result and has therefore reported nothing, correctly, for
+ * the whole time the work is in flight.
  *
  * Zero is a real answer and the field is always present, for the reason this whole fold exists: an
  * ABSENT `reporting` and a zero count are the same JSON value and opposite facts, and a reader that
@@ -44,7 +45,15 @@ export function llmReportingGaps(
  * declaration-based check would report as covered.
  */
 function isUnreportedDelegatedStep(step: PipelineStep): boolean {
-  if (!step.delegated) return false
+  const record = step.delegated
+  if (!record) return false
+  // Work still IN FLIGHT is not a gap, and this is the check that keeps the two counts apart. An
+  // executor that declares `self-reported` files its usage with the result, so between the claim
+  // and the settlement it has reported nothing and is SUPPOSED to have reported nothing. Counting
+  // it would merge "has not filed yet" with "never will", which is the one distinction the field's
+  // own contract insists must survive, and it would do so on exactly the reads a person takes
+  // while watching a run.
+  if (record.status === 'starting' || record.status === 'running') return false
   // `metrics` is the per-step LLM rollup the observability sink folds. Absent, or present with no
   // calls in it, both mean the same thing here: nothing about this step's model work reached the
   // platform.

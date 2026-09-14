@@ -7,6 +7,7 @@ import {
   applyDelegationCancellation,
   applyDelegationRunning,
   claimDelegation,
+  inFlightDelegation,
   liveDelegations,
   pollHandleFor,
   recordDispatchedJob,
@@ -33,6 +34,18 @@ function claimed(): PipelineStep {
     startedAt: 1000,
     poll: POLL,
   })
+  return s
+}
+
+/**
+ * A step whose delegation settled and which is now running a CONTAINER job: the state every
+ * `if (step.delegated)` read gets wrong. `resetStepForRerun` clears `jobId` and deliberately keeps
+ * the record, because its attempt log is the evidence for why the step is being re-run.
+ */
+function settledThenContainerJob(): PipelineStep {
+  const s = claimed()
+  settleDelegation(s, { status: 'done' })
+  s.jobId = 'run_1-fixer'
   return s
 }
 
@@ -185,6 +198,54 @@ describe('pollHandleFor', () => {
       executor: 'acme:executor',
       externalId: 'run_1-acme:impl',
     })
+  })
+
+  it('carries the branch pair AND the target repo, neither of which a poll can derive', () => {
+    const s = claimed()
+    recordDispatchedJob(
+      s,
+      {
+        jobId: 'run_1-acme:impl',
+        delegated: {
+          executor: 'acme:executor',
+          externalId: '99',
+          branches: { base: 'main', work: 'cat-factory/blk_1' },
+          repo: { owner: 'acme', name: 'widgets' },
+        },
+      } as AgentJobHandle,
+      'acme:impl',
+    )
+    expect(pollHandleFor(s, 'ws_1', 'run_1').delegated).toMatchObject({
+      branches: { base: 'main', work: 'cat-factory/blk_1' },
+      repo: { owner: 'acme', name: 'widgets' },
+    })
+  })
+
+  it('routes NOTHING at the external executor once a container job is in flight on the step', () => {
+    // A step whose own work was delegated can still dispatch a container job afterwards (a helper
+    // round, a re-run under an overriding kind), and the delegation record outlives that by
+    // design. Attaching the slice anyway hands the CONTAINER job's id to the external executor,
+    // which polls its system for a run that does not exist, while the real container job is never
+    // polled at all.
+    const s = settledThenContainerJob()
+    expect(pollHandleFor(s, 'ws_1', 'run_1').delegated).toBeUndefined()
+  })
+})
+
+describe('inFlightDelegation', () => {
+  it('answers the record when the job in flight IS the delegated one', () => {
+    expect(inFlightDelegation(claimed())?.executor).toBe('acme:executor')
+  })
+
+  it('answers nothing for a step that never delegated', () => {
+    expect(inFlightDelegation(step({ jobId: 'run_1-coder' }))).toBeUndefined()
+  })
+
+  it('answers nothing once a LATER job supersedes the settled delegation', () => {
+    // The one question every reader of `step.delegated` actually has. Without it a later container
+    // job flips a settled record back to `running`, stamps a container phase on external work that
+    // finished hours ago, and overwrites its outcome on settle.
+    expect(inFlightDelegation(settledThenContainerJob())).toBeUndefined()
   })
 })
 

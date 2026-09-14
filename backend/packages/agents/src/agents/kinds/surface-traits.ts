@@ -19,6 +19,11 @@ export interface SurfaceTraits {
   /**
    * Whether the kind needs one of OUR containers: a checkout the harness clones, edits and pushes.
    * False for `delegated`, which needs a checkout very much: the executor's own.
+   *
+   * So this is NOT the question "will the agent be looking at a working tree", which
+   * `dispatchDeliversCheckout` answers and which a delegated kind answers yes to. Reading one off
+   * the other is how a delegated dispatch came to prepare checkout-less context for an agent whose
+   * prompt already named the branch it was working on.
    */
   container: boolean
   /**

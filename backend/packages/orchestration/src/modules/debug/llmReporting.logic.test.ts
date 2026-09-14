@@ -11,12 +11,16 @@ function step(overrides: Partial<PipelineStep> = {}): PipelineStep {
   return { agentKind: 'coder', state: 'done', progress: 1, ...overrides } as PipelineStep
 }
 
-function delegated(executor: string, overrides: Partial<PipelineStep> = {}): PipelineStep {
+function delegated(
+  executor: string,
+  overrides: Partial<PipelineStep> = {},
+  status: NonNullable<PipelineStep['delegated']>['status'] = 'done',
+): PipelineStep {
   return step({
     agentKind: 'acme:impl',
     delegated: {
       executor,
-      status: 'done',
+      status,
       correlationKey: 'k',
       poll: { intervalMs: 1000, maxDurationMs: 10_000 },
       attempts: [{ startedAt: 0 }],
@@ -67,6 +71,29 @@ describe('llmReportingGaps', () => {
   it('treats a metrics block with no calls in it as nothing reported', () => {
     const empty = delegated('acme:executor', { metrics: { calls: 0 } as PipelineStep['metrics'] })
     expect(llmReportingGaps(run([empty])).delegatedStepsWithoutUsage).toBe(1)
+  })
+
+  it('does NOT count work still in flight, whose executor is supposed to have filed nothing yet', () => {
+    // The one distinction the field's contract insists must survive: "has not filed yet" and
+    // "never will" are different facts, and a `self-reported` executor files with its RESULT. A
+    // read taken while the run is being watched would otherwise report a permanent gap and name an
+    // executor that is about to report.
+    for (const status of ['starting', 'running'] as const) {
+      expect(llmReportingGaps(run([delegated('acme:executor', {}, status)]))).toEqual({
+        delegatedStepsWithoutUsage: 0,
+        executors: [],
+      })
+    }
+  })
+
+  it('DOES count settled work that reported nothing, whatever the outcome', () => {
+    // A failed or cancelled external run still spent tokens somewhere; what makes it a gap is that
+    // none of them reached this platform's totals.
+    for (const status of ['done', 'failed', 'cancelled'] as const) {
+      expect(
+        llmReportingGaps(run([delegated('acme:executor', {}, status)])).delegatedStepsWithoutUsage,
+      ).toBe(1)
+    }
   })
 
   it('answers for a run it could not read at all', () => {

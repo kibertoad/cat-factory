@@ -800,7 +800,9 @@
         "not_awaiting_triage": "This expedition is not waiting on triage",
         "already_addressed": "Some findings already have a fix task",
         "no_host_frame": "This expedition is not under a service",
-        "delegated_executor_unwired": "External executor not registered"
+        "delegated_executor_unwired": "External executor not registered",
+        "delegated_step_async_only": "This step is polled, not awaited",
+        "delegated_claim_missing": "This step has no external work to check"
       },
       "description": {
         "dependencies_unmet": "This task depends on others that aren't finished yet. Complete or unblock them, then start it again.",
@@ -858,7 +860,9 @@
         "not_awaiting_triage": "It is either still fishing a later angle or it has already been finished. Refresh the run to see where it is.",
         "already_addressed": "A fix task was created for them earlier, so nothing was created again. Open the finding to reach the task it already has.",
         "no_host_frame": "A fix task needs a service to live under and a repository to fix. Move the expedition task under a service frame and try again.",
-        "delegated_executor_unwired": "A step in this pipeline runs on an external executor this deployment does not register, so there is nowhere to send the work. Register the executor in code, or change the step to one that runs here."
+        "delegated_executor_unwired": "A step in this pipeline runs on an external executor this deployment does not register, so there is nowhere to send the work. Register the executor in code, or change the step to one that runs here.",
+        "delegated_step_async_only": "This step runs on an external executor, which can take hours, so it is dispatched and then polled rather than run inside one request. Start the run from the board; if you reached this from your own code, drive the step through the async path.",
+        "delegated_claim_missing": "The run’s record of what it sent to the external executor is missing, so there is nothing to poll. Nothing is wrong with the executor itself. Reload the run, and re-run the step if it is still stuck."
       },
       "action": {
         "connectGitHub": "Connect GitHub",
@@ -1717,9 +1721,11 @@
           "done": "Finished externally",
           "failed": "Failed externally",
           "running": "Running externally",
-          "starting": "Starting externally"
+          "starting": "Starting externally",
+          "unrecognised": "Unrecognised status ({status})"
         },
         "run": "External run",
+        "branch": "Branch",
         "copyUrl": "Copy external run link",
         "openRun": "Open run",
         "noOutcome": "No outcome recorded",
@@ -2152,6 +2158,7 @@
       "timeout": "Timeout",
       "agent": "Agent",
       "job_failed": "Job failed",
+      "delegated_failed": "External executor failed",
       "rejected": "Rejected",
       "companion_rejected": "Companion rejected",
       "stalled": "Stalled",

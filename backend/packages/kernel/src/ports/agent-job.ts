@@ -133,6 +133,8 @@ export interface AgentJobHandle {
     url?: string
     /** The branch pair the dispatch resolved; see `DelegationHandle.branches` for why. */
     branches?: { base: string; work: string }
+    /** The repository the WORK targets; see `DelegationHandle.repo` for why it is not derivable. */
+    repo?: { owner: string; name: string }
   }
 }
 
@@ -220,8 +222,17 @@ export type AgentJobUpdate =
       result: AgentRunResult
       followUps?: StreamedFollowUp[]
       toolServers?: unknown
-      /** A DELEGATED executor's external URL, settled onto the record. See the running variant. */
-      delegated?: { url?: string }
+      /**
+       * What a DELEGATED executor settled with: its external URL (see the running variant), and
+       * the branch its work LANDED on when it pushed without opening a pull request.
+       *
+       * The branch is carried rather than dropped because it is the whole product of that case,
+       * which the port names as legitimate (`DelegationResult.branch`): a seed-only step, or an
+       * executor whose policy is to push and let a later step open the PR. Without it the platform
+       * records the run as done with nothing to show for it, which is the "absent and zero must
+       * never render the same" failure one level up from the one this seam already guards.
+       */
+      delegated?: { url?: string; branch?: string }
     }
   /**
    * Finished with a failure (agent error, inactivity/max-duration watchdog, …). When the
@@ -270,12 +281,21 @@ export type AgentJobUpdate =
        */
       toolServers?: unknown
       /**
-       * A DELEGATED executor's external URL, settled onto the record. Carried on the FAILED path
-       * for the reason `toolServers` is, and it matters more here: the failure message is one line
-       * and the executor's own logs are the whole post-mortem, so a failed delegated step with no
-       * link is a dead end.
+       * What a DELEGATED executor failed with: its external URL, and whether the verdict is
+       * TERMINAL.
+       *
+       * The url is carried on this path for the reason `toolServers` is, and it matters more here:
+       * the failure message is one line and the executor's own logs are the whole post-mortem, so a
+       * failed delegated step with no link is a dead end.
+       *
+       * `terminal` is the delegated counterpart of {@link harnessShutdown} and deliberately NOT a
+       * reuse of it: the two want the same disposition ("do not spend a recovery budget") and
+       * different names, and only the name reaches a human. Borrowing the container flag reported
+       * every external CI failure as `harness_shutdown`, which renders as "Harness shut down" for a
+       * step that never had a harness. Absent ⇒ the failure is re-driven on the ordinary
+       * job-failure budget, which is what an executor's own `retryable: true` asks for.
        */
-      delegated?: { url?: string }
+      delegated?: { url?: string; terminal?: true }
     }
 
 /**

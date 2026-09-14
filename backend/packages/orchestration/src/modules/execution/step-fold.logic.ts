@@ -55,6 +55,29 @@ export function pollHandleFor(
 }
 
 /**
+ * The delegation record the step's IN-FLIGHT job belongs to, or undefined when the job in flight is
+ * not that record's.
+ *
+ * The ONE question every reader of `step.delegated` actually has, and asking `if (step.delegated)`
+ * instead is the shape that gets it wrong. A step whose own work was delegated can still dispatch a
+ * CONTAINER job afterwards (a helper round, a re-run under an overriding kind, a PR-review `fix`
+ * resolution), and the delegation record outlives that by design: its attempt log is the evidence
+ * for why the step is being re-run, and `resetStepForRerun` clears `jobId` and deliberately not the
+ * record. So a bare truthiness test routes that container job's poll to an external system, folds
+ * its phase onto external work that finished hours ago, and settles the external record on the
+ * container's outcome: three different systems' facts written onto one another.
+ *
+ * Keyed on the correlation key rather than on the record's status because the status is what the
+ * fold is about to CHANGE; the key is what says whose job this is, which is exactly why it is
+ * persisted (see `runDelegationSchema.correlationKey`).
+ */
+export function inFlightDelegation(step: PipelineStep): RunDelegation | undefined {
+  const record = step.delegated
+  if (!record || step.jobId !== record.correlationKey) return undefined
+  return record
+}
+
+/**
  * The `delegated` slice of a rebuilt poll handle: which registered executor the step dispatched to
  * and what it knows about the external work.
  *
@@ -62,21 +85,27 @@ export function pollHandleFor(
  * run; the executor id lives only on this record, and without it `CompositeAgentExecutor.pollJob`
  * cannot tell a delegated step from a container one and polls a container that was never started.
  *
+ * Gated on {@link inFlightDelegation}, so the slice is attached only when the job being polled IS
+ * the delegated one. Without that gate a container job dispatched later on the same step is handed
+ * to the external executor, which polls its system for a run that does not exist while the real
+ * container job is never polled at all.
+ *
  * The `externalId` FALLS BACK to the step's job id, which is the correlation key by construction
- * (`stepJobId`), and that fallback is the replay case rather than an edge: the claim is committed
- * before `start()` is called, so a process that died in between leaves a record with a status and
- * no external id, and the executor is asked to recover one by correlation instead of the platform
- * starting a second external run.
+ * (the gate above makes them the same string), and that fallback is the replay case rather than an
+ * edge: the claim is committed before `start()` is called, so a process that died in between
+ * leaves a record with a status and no external id, and the executor is asked to recover one by
+ * correlation instead of the platform starting a second external run.
  */
 function delegationHandleSlice(step: PipelineStep): Pick<AgentJobHandle, 'delegated'> {
-  const record = step.delegated
+  const record = inFlightDelegation(step)
   if (!record) return {}
   return {
     delegated: {
       executor: record.executor,
-      externalId: record.externalId ?? step.jobId!,
+      externalId: record.externalId ?? record.correlationKey,
       ...(record.url ? { url: record.url } : {}),
       ...(record.branches ? { branches: record.branches } : {}),
+      ...(record.repo ? { repo: record.repo } : {}),
     },
   }
 }
@@ -358,9 +387,10 @@ function stampDelegationDispatch(
     status: 'running',
     externalId: delegated.externalId,
     url: delegated.url ?? claim.url ?? null,
-    // The branches the dispatch resolved. Persisted here, with the rest of the attribution, for
-    // the reason all of it is: the poll rebuilds its handle from the step alone.
+    // The branches and the TARGET repo the dispatch resolved. Persisted here, with the rest of the
+    // attribution, for the reason all of it is: the poll rebuilds its handle from the step alone.
     ...(delegated.branches ? { branches: delegated.branches } : {}),
+    ...(delegated.repo ? { repo: delegated.repo } : {}),
     attempts: attempts.map((attempt, index) =>
       index === attempts.length - 1
         ? {
@@ -431,6 +461,8 @@ export function liveDelegations(instance: {
       correlationKey: record.correlationKey,
       ...(record.externalId ? { externalId: record.externalId } : {}),
       ...(record.url ? { url: record.url } : {}),
+      ...(record.branches ? { branches: record.branches } : {}),
+      ...(record.repo ? { repo: record.repo } : {}),
       workspaceId: '',
       runId: instance.id,
       agentKind: step.agentKind,
@@ -495,6 +527,12 @@ export function settleDelegation(
     outcome?: string | undefined
     url?: string | undefined
     note?: string | undefined
+    /**
+     * The branch the work LANDED on, when the executor reported one. The product of a step whose
+     * executor pushed without opening a pull request, and recorded here because the platform holds
+     * nothing else about it: dropped, such a run settles as done with nothing to show for it.
+     */
+    branch?: string | undefined
   },
 ): void {
   const prev = step.delegated
@@ -505,6 +543,7 @@ export function settleDelegation(
     status: settlement.status,
     ...(settlement.url ? { url: settlement.url } : {}),
     ...(settlement.note ? { note: settlement.note } : {}),
+    ...(settlement.branch ? { branch: settlement.branch } : {}),
     attempts: attempts.map((attempt, index) =>
       index === attempts.length - 1
         ? {
@@ -515,6 +554,32 @@ export function settleDelegation(
         : attempt,
     ),
   }
+}
+
+/**
+ * Settle the step's own DELEGATION on a job that finished successfully, or do nothing when the job
+ * that finished was not the delegated one.
+ *
+ * Its own function rather than a guard plus a call at the settle site, because the whole rule is
+ * the guard: the record outlives the work it describes (its attempt log is the evidence for a
+ * re-run), so a CONTAINER job run later on the same step would overwrite a `failed` or `cancelled`
+ * external outcome with `done`, and that record is the entire account of work that happened
+ * somewhere else.
+ *
+ * `branch` is folded here because it is the product of an executor that pushed without opening a
+ * pull request: a case the port names as legitimate, and one where dropping the branch settles the
+ * run as done with nothing to show for it.
+ */
+export function settleDelegatedJob(
+  step: PipelineStep,
+  delegated: { url?: string; branch?: string } | undefined,
+): void {
+  if (!inFlightDelegation(step)) return
+  settleDelegation(step, {
+    status: 'done',
+    ...(delegated?.url ? { url: delegated.url } : {}),
+    ...(delegated?.branch ? { branch: delegated.branch } : {}),
+  })
 }
 
 export function applyContainerRunning(

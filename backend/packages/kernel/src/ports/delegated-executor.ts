@@ -112,6 +112,20 @@ export interface DelegationHandle {
    * Absent only on a handle rebuilt from a record written before the branches were persisted.
    */
   branches?: { base: string; work: string }
+  /**
+   * The repository the WORK targets, carried for the same reason {@link branches} is and needed
+   * for the same reading.
+   *
+   * It is routinely NOT the repository the executor's own job lives in: a deployment's automation
+   * repo dispatching against many product repos is the ordinary shape, which is why the GitHub
+   * Actions helper documents its `ref` as "a branch that HOLDS the workflow, not the work". An
+   * executor reading what its run produced (the pull request whose head is the work branch) has to
+   * look in THIS repo, and a reader that took its own configured one would find nothing on every
+   * such deployment and report every run as having opened no pull request.
+   *
+   * Absent only on a handle rebuilt from a record written before it was persisted.
+   */
+  repo?: { owner: string; name: string }
   workspaceId: string
   runId: string
   agentKind: string

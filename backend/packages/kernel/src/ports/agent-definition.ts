@@ -276,8 +276,10 @@ export interface RepoOpContext {
   opensPr: boolean
   /**
    * Whether the agent this op prepares for will have a real CHECKOUT — a filesystem it can read
-   * and run `git` in. True for a container dispatch; false when the step runs as an inline model
-   * call, which today means a consensus panel (its participants have no filesystem and no tools).
+   * and run `git` in. True for a container dispatch and for a DELEGATED one (the external executor
+   * is handed a repository and a work branch and checks them out itself); false when the step runs
+   * as an inline model call, which today means a consensus panel (its participants have no
+   * filesystem and no tools).
    *
    * A preOp that prepares context must branch on this rather than assume a checkout. The
    * `pr-reviewer` diff is the motivating case: past its inline budget it renders a MANIFEST plus
@@ -285,8 +287,8 @@ export interface RepoOpContext {
    * itself and an unreviewable file list for an inline panel — the panel would review from
    * filenames while sounding confident.
    *
-   * Derived by the engine from the SAME predicate the executor routes on
-   * (`dispatchDeliversCheckout`), so the preparation and the routing cannot disagree. REQUIRED,
+   * Derived by the engine from the ONE predicate every layer asks (`dispatchDeliversCheckout`),
+   * so the preparation and what the prompt claims cannot disagree. REQUIRED,
    * not optional: an op that forgets to consider it is the failure this field exists to prevent,
    * and a defaulted `true` would reintroduce it silently.
    */

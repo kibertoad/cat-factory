@@ -219,6 +219,11 @@ export class DelegatedAgentExecutor implements AsyncAgentExecutor {
         // from the BLOCK. An executor reading back what its own system produced needs it, and
         // guessing puts the wrong pull request on the block.
         branches: brief.branches,
+        // The repo the WORK targets, for the same reason and with a sharper edge: it is routinely
+        // not the repo the executor's own job lives in (an automation repo dispatching against many
+        // product repos is the ordinary shape), so an executor reading back what it produced from
+        // its OWN configured repository finds nothing on every such deployment.
+        repo: { owner: brief.repo.owner, name: brief.repo.name },
       },
     }
   }
@@ -237,7 +242,10 @@ export class DelegatedAgentExecutor implements AsyncAgentExecutor {
         'A delegated poll arrived with no delegation on its handle, so there is nothing to ' +
           'address. The step records which executor it dispatched to; a handle without it was ' +
           'rebuilt from a step that never claimed one.',
-        'delegated_executor_unwired',
+        // The fault is in THIS RUN's state, not in what the deployment registers, so it does not
+        // borrow `delegated_executor_unwired`: that copy would send an operator to inspect a
+        // registration with nothing wrong in it.
+        'delegated_claim_missing',
       )
     }
     const definition = this.requireDefinition(handle.agentKind ?? '', delegated.executor)
@@ -255,6 +263,7 @@ export class DelegatedAgentExecutor implements AsyncAgentExecutor {
       externalId: delegated.externalId,
       ...(delegated.url ? { url: delegated.url } : {}),
       ...(delegated.branches ? { branches: delegated.branches } : {}),
+      ...(delegated.repo ? { repo: delegated.repo } : {}),
       workspaceId: handle.workspaceId ?? '',
       runId: handle.runId ?? handle.jobId,
       agentKind: handle.agentKind ?? '',
@@ -266,7 +275,7 @@ export class DelegatedAgentExecutor implements AsyncAgentExecutor {
       logger: jobLog,
     })
     const update = await executor.poll(target, credentials)
-    return toJobUpdate(update, definition)
+    return toJobUpdate(update, definition, this.deps.clock.now())
   }
 
   /**
@@ -297,7 +306,10 @@ export class DelegatedAgentExecutor implements AsyncAgentExecutor {
       new ConflictError(
         `The \`${context.agentKind}\` step runs on an external executor, which is polled rather ` +
           'than awaited. Drive it through the async path (`startJob` / `pollJob`).',
-        'delegated_executor_unwired',
+        // NOT `delegated_executor_unwired`: the executor here is registered and correct, and that
+        // reason's copy tells an operator to go and register it. What is wrong is the drive path
+        // the caller chose.
+        'delegated_step_async_only',
       ),
     )
   }
@@ -490,25 +502,41 @@ function snapshotBody(brief: {
 /**
  * Map an executor's own answer into the engine's poll vocabulary.
  *
- * The two places this is NOT a rename:
+ * The four places this is NOT a rename:
  *
  * - `retryable` decides whether a failure is re-driven on the job-failure budget or is terminal.
  *   An executor that says nothing means TERMINAL, because a verdict its own system called final is
  *   not something a second dispatch improves on, and the alternative spends the budget re-running
- *   somebody else's CI to reach the same answer.
+ *   somebody else's CI to reach the same answer. It travels on the DELEGATED channel, under a name
+ *   that describes a delegated step, never on the container path's `harnessShutdown`.
  * - `usage` rides straight through, and its ABSENCE is the honest state for an executor that does
  *   not report it. Nothing here invents a zero: a zero would be summed into the run's total and
  *   read as work that cost nothing.
+ * - `lastActivityAt` gains a FLOOR the executor did not report, because the poll itself is the
+ *   evidence. This is the one field where "the executor said nothing" and "nothing is happening"
+ *   are different facts and only one of them is true.
+ * - `branch` is carried rather than dropped: it is the entire product of an executor that pushes
+ *   without opening a pull request, a case the port names as legitimate.
+ *
+ * `polledAt` is a parameter rather than a captured clock so this stays a pure mapping the tests can
+ * drive at a fixed instant.
  */
 function toJobUpdate(
   update: DelegationUpdate,
   definition: DelegatedExecutorDefinition,
+  polledAt: number,
 ): AgentJobUpdate {
   if (update.state === 'running') {
     return {
       state: 'running',
       ...(update.phase ? { phase: update.phase } : {}),
-      ...(update.lastActivityAt ? { lastActivityAt: update.lastActivityAt } : {}),
+      // A successful poll IS the sign of life, so the poll's own clock is the floor when the
+      // executor reports no timestamp of its own. Without it a long, quiet external run (an Actions
+      // run sitting at `in_progress` reports an identical answer every time) folds no change at all,
+      // nothing persists, the step's `lastActivityAt` and the run's `updated_at` freeze at the first
+      // poll, and the stale-run sweeper re-collects a run that is perfectly alive. The engine's
+      // existing throttle decides how often that actually lands.
+      lastActivityAt: update.lastActivityAt ?? polledAt,
       ...(update.url ? { delegated: { url: update.url } } : {}),
       // The executor's own name, so the run diagnostics say where the step ran rather than
       // reporting the container backend a delegated step never had.
@@ -516,16 +544,25 @@ function toJobUpdate(
     }
   }
   if (update.state === 'failed') {
+    // A NON-retryable failure is TERMINAL: the driver must not spend a recovery budget re-running
+    // somebody else's CI to reach the verdict it already reached. Reported on the DELEGATED channel
+    // rather than as `harnessShutdown`, which is the container path's signal for the same
+    // disposition under a name that misdescribes this one: a delegated step never had a harness,
+    // and the operator was shown "Harness shut down" for an external workflow that simply failed.
+    const terminal = update.retryable !== true
     return {
       state: 'failed',
       error: update.error,
       ...(update.detail ? { detail: update.detail } : {}),
-      ...(update.url ? { delegated: { url: update.url } } : {}),
+      ...(update.url || terminal
+        ? {
+            delegated: {
+              ...(update.url ? { url: update.url } : {}),
+              ...(terminal ? { terminal: true as const } : {}),
+            },
+          }
+        : {}),
       backend: `delegated:${definition.id}`,
-      // A NON-retryable failure is reported as a harness shutdown, which is the driver's one
-      // "terminal, do not spend a recovery budget on it" signal. A retryable one is left as a
-      // plain failure, which the job-failure budget then re-drives.
-      ...(update.retryable === true ? {} : { harnessShutdown: true as const }),
     }
   }
   const result = update.result
@@ -541,6 +578,11 @@ function toJobUpdate(
       // recorded for the usage report, excluded from every spend rollup.
       ...(result.usage ? { usage: result.usage, usageBilling: 'subscription' as const } : {}),
     },
+    // The branch the work LANDED on, when the executor pushed without opening a pull request. The
+    // port names that case as legitimate, and the engine settles it onto the delegation record:
+    // dropped here, such a run reports done with no product anywhere, which reads exactly like a
+    // run that produced nothing.
+    ...(result.branch ? { delegated: { branch: result.branch } } : {}),
   }
 }
 

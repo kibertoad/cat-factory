@@ -92,6 +92,27 @@ describe('delegated-executor boot validation', () => {
     ).toContain('agent_executor_on_non_delegated_surface')
   })
 
+  it('REPORTS an unrecognised surface instead of dying on it', () => {
+    // A mothership-mode node resolves its kinds from a process that may be a build ahead, and
+    // boot-validates none of them. Indexing the (total-over-THIS-build) surface table directly
+    // threw a bare TypeError inside the very function whose job is to name the offending kind, so
+    // the boot that was meant to report a bad registration died naming nothing.
+    const codes = problems(
+      [
+        {
+          kind: 'acme:impl',
+          systemPrompt: 'implement',
+          agent: {
+            surface: 'from-a-later-build' as never,
+            executor: 'acme:executor',
+          },
+        },
+      ],
+      registryWith(EXECUTOR),
+    )
+    expect(codes).toContain('agent_surface_unknown')
+  })
+
   it('refuses a delegated kind naming an executor nobody registered', () => {
     expect(
       problems(

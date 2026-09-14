@@ -301,6 +301,17 @@ export const CONFLICT_REASONS = [
   // resolves (they arrive per dispatch, from a process that may be a build ahead), and the only
   // honest answer there is to refuse. `details.executor` names the id that did not resolve.
   'delegated_executor_unwired',
+  // A caller tried to drive a DELEGATED step synchronously (`AgentExecutor.run`), which is a shape
+  // an external system answering in hours cannot serve. Its own reason rather than
+  // `delegated_executor_unwired`, which it borrowed: that copy sends an operator to register an
+  // executor they have already registered correctly, and nothing about a registration is wrong
+  // here. The remedy belongs to whoever wrote the caller, so the copy says the step is polled.
+  'delegated_step_async_only',
+  // A delegated poll arrived for a step carrying no delegation to address: the record is gone, or
+  // the step never committed a claim. Split from `delegated_executor_unwired` for the same reason
+  // as the pair above: the executor is registered and fine, and the thing that is wrong is this
+  // run's own state, so "register the executor" is advice about the wrong system entirely.
+  'delegated_claim_missing',
 ] as const
 
 export type ConflictReason = (typeof CONFLICT_REASONS)[number]

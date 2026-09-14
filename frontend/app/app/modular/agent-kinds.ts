@@ -52,16 +52,22 @@ export function customKindToArchetype(kind: CustomAgentKind): AgentArchetype {
     // A `delegated` kind with no executor resolved still carries its ID, so the card can name what
     // this build cannot: an executor a deployment stopped registering is a step nobody can run,
     // and rendering it as an ordinary one is how that goes unnoticed until a run refuses.
-    ...(kind.executor === 'delegated'
+    //
+    // Carried only when the entry actually has one. A synthesised `{ id: '' }` was worse than no
+    // entry at all: the empty string is not nullish, so it satisfied every `??` fallback downstream
+    // and the card rendered a blank name in precisely the case this branch exists to handle.
+    ...(kind.executor === 'delegated' && kind.delegatedExecutor
       ? {
-          delegatedExecutor: kind.delegatedExecutor
-            ? {
-                id: kind.delegatedExecutor.id,
-                label: kind.delegatedExecutor.label,
-                description: kind.delegatedExecutor.description,
-                telemetry: kind.delegatedExecutor.telemetry,
-              }
-            : { id: '' },
+          delegatedExecutor: {
+            id: kind.delegatedExecutor.id,
+            ...(kind.delegatedExecutor.label ? { label: kind.delegatedExecutor.label } : {}),
+            ...(kind.delegatedExecutor.description
+              ? { description: kind.delegatedExecutor.description }
+              : {}),
+            ...(kind.delegatedExecutor.telemetry
+              ? { telemetry: kind.delegatedExecutor.telemetry }
+              : {}),
+          },
         }
       : {}),
   }

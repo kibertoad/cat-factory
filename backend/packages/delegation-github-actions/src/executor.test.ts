@@ -107,9 +107,13 @@ const DESCRIPTION = {
   inputs: (b: DelegationBrief) => ({ spec: b.userPrompt }),
 }
 
+// Shaped as GitHub actually answers: `name` keeps the WORKFLOW's own `name:` whatever the
+// workflow's `run-name:` renders, and the evaluated `run-name:` lands in `display_title`. Modelling
+// the marker on `name` is what let the correlation read the wrong field with a green suite.
 const RUN = {
   id: 4242,
-  name: `Implement ${correlationRunName('ex_1-acme:impl')}`,
+  name: 'Implement',
+  display_title: `Implement ${correlationRunName('ex_1-acme:impl')}`,
   html_url: 'https://github.com/acme/widgets/actions/runs/4242',
   status: 'completed',
   conclusion: 'success',
@@ -213,7 +217,75 @@ describe('poll: conclusions', () => {
   })
 })
 
+describe('correlation: which field carries the marker', () => {
+  const listing = (runs: unknown[]) =>
+    githubActionsDelegatedExecutor(
+      DESCRIPTION,
+      deps(fakeFetch({ '/runs?': () => ({ body: { workflow_runs: runs } }) }).fetchImpl),
+    ).poll(handle({ externalId: 'ex_1-acme:impl' }), CREDS)
+
+  it('correlates on `display_title`, where a workflow’s `run-name:` actually lands', async () => {
+    // `name` stays the workflow's own title, so matching the marker against it finds nothing ever:
+    // no run correlates, `start` loses its idempotency look-up (a replay queues a SECOND workflow
+    // and the task gets two pull requests), and every poll answers "queued" until the budget dies.
+    expect(await listing([{ ...RUN, status: 'in_progress', conclusion: null }])).toMatchObject({
+      state: 'running',
+      url: RUN.html_url,
+    })
+  })
+
+  it('still correlates on `name` alone, for an Enterprise release without `display_title`', async () => {
+    const legacy = {
+      ...RUN,
+      display_title: undefined,
+      name: `Implement ${correlationRunName('ex_1-acme:impl')}`,
+      status: 'in_progress',
+      conclusion: null,
+    }
+    expect(await listing([legacy])).toMatchObject({ state: 'running', url: RUN.html_url })
+  })
+
+  it('does NOT correlate a run of the same workflow started by something else', async () => {
+    // The marker is the whole identity: without it, two dispatches in the same second are
+    // indistinguishable and the platform settles a step against somebody else's run.
+    const other = {
+      ...RUN,
+      display_title: `Implement ${correlationRunName('ex_9-acme:impl')}`,
+      status: 'in_progress',
+      conclusion: null,
+    }
+    expect(await listing([other])).toMatchObject({ state: 'running', phase: 'queued' })
+  })
+})
+
 describe('poll: what the run produced', () => {
+  it('reads the pull request out of the repo the WORK targeted, not the one holding the workflow', async () => {
+    // `description.ref` is a branch that HOLDS the workflow, so a central automation repo
+    // dispatching against many product repos is the ordinary shape. Reading the result out of the
+    // automation repo finds nothing there and reports every run as having opened no pull request.
+    const { fetchImpl, calls } = fakeFetch({
+      '/actions/runs/4242': () => ({ body: RUN }),
+      '/repos/acme/widgets/pulls?': () => ({
+        body: [
+          {
+            number: 9,
+            html_url: 'https://github.com/acme/widgets/pull/9',
+            head: { ref: 'cat-factory/blk_1' },
+          },
+        ],
+      }),
+    })
+    const automation = { ...DESCRIPTION, owner: 'acme', repo: 'automation' }
+    const update = await githubActionsDelegatedExecutor(automation, deps(fetchImpl)).poll(
+      handle({ repo: { owner: 'acme', name: 'widgets' } }),
+      CREDS,
+    )
+    expect(update).toMatchObject({ state: 'done', result: { pullRequest: { number: 9 } } })
+    // The RUN is addressed in the workflow's repo and the RESULT in the work's: two repos, two
+    // reads, and conflating them is the bug.
+    expect(calls.some((c) => c.url.includes('/repos/acme/automation/actions/runs/4242'))).toBe(true)
+  })
+
   it('finds the pull request by the branch the PLATFORM named', async () => {
     const { fetchImpl, calls } = fakeFetch({
       '/actions/runs/4242': () => ({ body: RUN }),

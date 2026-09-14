@@ -1,5 +1,6 @@
 import type { PipelineStep } from '@cat-factory/kernel'
 import type { AdvanceResult } from './advance.js'
+import { inFlightDelegation } from './step-fold.logic.js'
 
 // ---------------------------------------------------------------------------
 // The ONE producer of an `awaiting_job` park.
@@ -31,18 +32,19 @@ export function awaitingJob(step: PipelineStep, stepIndex: number, jobId: string
  * The cadence for the job currently in flight on this step, or undefined for the ordinary case
  * (a container job, which every deployment polls on its own configured cadence).
  *
- * Gated on the in-flight job actually BEING the delegated one. A step whose own work was delegated
- * can still dispatch a container job afterwards (a helper round, a re-run under an overriding
- * kind), and the delegation record outlives that by design (its attempt log is the evidence for
- * the re-run). Reading the cadence off a record without checking would poll a container job on an
- * external system's schedule: at best minutes of dead air per step, at worst a three-hour budget
- * spent on a container the transport gave up on in ten minutes.
+ * Gated on the in-flight job actually BEING the delegated one, through the shared
+ * {@link inFlightDelegation}. A step whose own work was delegated can still dispatch a container
+ * job afterwards (a helper round, a re-run under an overriding kind), and the delegation record
+ * outlives that by design (its attempt log is the evidence for the re-run). Reading the cadence off
+ * a record without checking would poll a container job on an external system's schedule: at best
+ * minutes of dead air per step, at worst a three-hour budget spent on a container the transport
+ * gave up on in ten minutes.
  */
 export function delegatedPollPolicy(
   step: PipelineStep,
 ): { intervalMs: number; maxPolls: number } | undefined {
-  const record = step.delegated
-  if (!record || step.jobId !== record.correlationKey) return undefined
+  const record = inFlightDelegation(step)
+  if (!record) return undefined
   if (record.status !== 'starting' && record.status !== 'running') return undefined
   const { intervalMs, maxDurationMs } = record.poll
   // At least one poll, always: an executor whose declared window is shorter than one interval is

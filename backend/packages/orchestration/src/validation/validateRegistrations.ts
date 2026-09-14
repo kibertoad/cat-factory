@@ -1,5 +1,5 @@
 import type { AgentKindRegistry } from '@cat-factory/agents'
-import { INLINE_ENGINE_SYSTEM_PROMPTS, runsInContainer, SURFACE_TRAITS } from '@cat-factory/agents'
+import { INLINE_ENGINE_SYSTEM_PROMPTS, runsInContainer, surfaceTraits } from '@cat-factory/agents'
 import { checkBinaryGenerators } from './validateBinaryGenerators.js'
 import { inlineUseCaseProblems } from './validateInlineUseCases.js'
 import type {
@@ -661,7 +661,26 @@ function checkDelegatedExecutors(
   for (const definition of registry.all()) {
     const step = definition.agent
     if (!step) continue
-    const delegated = SURFACE_TRAITS[step.surface].delegated
+    // Through the accessor, never the table directly. `SURFACE_TRAITS` is total over the surfaces
+    // THIS build knows, and a registration can name one it does not: a mothership-mode node
+    // resolves kinds from a process that may be a build ahead, and nothing boot-validates them
+    // there. Indexed bare, that is a `TypeError` thrown INSIDE the function whose whole job is to
+    // report a bad registration, so the boot that was meant to name the offending kind dies
+    // instead, naming nothing.
+    const traits = surfaceTraits(step.surface)
+    if (!traits) {
+      problems.push({
+        severity: 'error',
+        code: 'agent_surface_unknown',
+        message:
+          `Agent kind "${definition.kind}" declares the agent surface "${step.surface}", which ` +
+          `this build does not recognise, so nothing can be concluded about how it runs: whether ` +
+          `it needs a checkout, whether its reply is its product, or whether its work leaves the ` +
+          `platform. Name a surface this build ships, or upgrade the deployment that defines it.`,
+      })
+      continue
+    }
+    const delegated = traits.delegated
     if (!delegated) {
       if (step.executor !== undefined) {
         problems.push({

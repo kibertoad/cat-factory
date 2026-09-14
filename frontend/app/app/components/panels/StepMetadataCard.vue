@@ -47,7 +47,9 @@ const delegatedExecutor = computed(() => {
   const meta = agents.get(props.step.agentKind)?.delegatedExecutor
   if (!meta) return undefined
   return {
-    label: meta.label ?? meta.id,
+    // `||`, not `??`: an entry that carried an empty label would otherwise satisfy the fallback and
+    // leave the card with a blank name, which is the one thing naming the id exists to prevent.
+    label: meta.label || meta.id,
     description: meta.description ?? '',
     telemetry: meta.telemetry ?? ('not-reported' as const),
   }

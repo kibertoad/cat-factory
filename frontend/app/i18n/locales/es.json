@@ -722,7 +722,9 @@
         "not_awaiting_triage": "Esta expedición no está esperando triaje",
         "already_addressed": "Algunos hallazgos ya tienen tarea de corrección",
         "no_host_frame": "Esta expedición no está bajo un servicio",
-        "delegated_executor_unwired": "Ejecutor externo no registrado"
+        "delegated_executor_unwired": "Ejecutor externo no registrado",
+        "delegated_step_async_only": "Este paso se consulta, no se espera",
+        "delegated_claim_missing": "Este paso no tiene trabajo externo que consultar"
       },
       "description": {
         "dependencies_unmet": "Esta tarea depende de otras que aún no están terminadas. Complétalas o desbloquéalas y vuelve a iniciarla.",
@@ -777,7 +779,9 @@
         "not_awaiting_triage": "O sigue explorando otro ángulo o ya se ha terminado. Recargue la ejecución para ver en qué punto está.",
         "already_addressed": "Ya se creó antes una tarea de corrección para ellos, así que no se ha creado nada nuevo. Abra el hallazgo para llegar a la tarea que ya tiene.",
         "no_host_frame": "Una tarea de corrección necesita un servicio donde vivir y un repositorio que arreglar. Mueva la tarea de la expedición bajo un marco de servicio e inténtelo de nuevo.",
-        "delegated_executor_unwired": "Un paso de esta canalización se ejecuta en un ejecutor externo que esta instalación no registra, así que no hay dónde enviar el trabajo. Registra el ejecutor en el código o cambia el paso por uno que se ejecute aquí."
+        "delegated_executor_unwired": "Un paso de esta canalización se ejecuta en un ejecutor externo que esta instalación no registra, así que no hay dónde enviar el trabajo. Registra el ejecutor en el código o cambia el paso por uno que se ejecute aquí.",
+        "delegated_step_async_only": "Este paso se ejecuta en un ejecutor externo y puede tardar horas, así que se lanza y luego se consulta en lugar de ejecutarse dentro de una sola petición. Inicia la ejecución desde el tablero; si has llegado aquí desde tu propio código, conduce el paso por la vía asíncrona.",
+        "delegated_claim_missing": "Falta el registro de lo que la ejecución envió al ejecutor externo, así que no hay nada que consultar. El ejecutor en sí no tiene ningún problema. Recarga la ejecución y vuelve a lanzar el paso si sigue atascado."
       },
       "action": {
         "connectGitHub": "Conectar GitHub",
@@ -1596,9 +1600,11 @@
           "done": "Finalizado fuera de la plataforma",
           "failed": "Fallido fuera de la plataforma",
           "running": "Ejecutándose fuera de la plataforma",
-          "starting": "Iniciando fuera de la plataforma"
+          "starting": "Iniciando fuera de la plataforma",
+          "unrecognised": "Estado no reconocido ({status})"
         },
         "run": "Ejecución externa",
+        "branch": "Rama",
         "copyUrl": "Copiar el enlace de la ejecución externa",
         "openRun": "Abrir la ejecución",
         "noOutcome": "Sin resultado registrado",
@@ -2024,6 +2030,7 @@
       "timeout": "Tiempo agotado",
       "agent": "Agente",
       "job_failed": "Trabajo fallido",
+      "delegated_failed": "Fallo del ejecutor externo",
       "rejected": "Rechazada",
       "companion_rejected": "Acompañante rechazado",
       "stalled": "Estancada",
