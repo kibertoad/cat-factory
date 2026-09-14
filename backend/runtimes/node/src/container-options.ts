@@ -29,6 +29,7 @@ import {
 import {
   type CoreDependencies,
   type GateRegistry,
+  type DelegatedExecutorRegistry,
   type JudgeRegistry,
   type StepResolverRegistry,
 } from '@cat-factory/orchestration'
@@ -370,6 +371,15 @@ export interface NodeContainerOptions {
    * pre-loaded one to assert the seam is symmetric across runtimes.
    */
   judgeRegistry?: JudgeRegistry
+  /**
+   * The app-owned DELEGATED-EXECUTOR registry: the external systems this deployment plugs in as
+   * the executor of a pipeline step (a GitHub-Actions implement/review/test loop, an internal job
+   * runner, a vendor's autonomous PR bot). Rides its own option like `judgeRegistry`; defaults to
+   * an EMPTY registry, because the platform ships none. Threaded into `createCore` + re-exposed on
+   * Core (so `start()` passes it to `validateRegistrations`, which refuses a kind naming an
+   * executor nobody registered). See `docs/initiatives/delegated-executors.md`.
+   */
+  delegatedExecutorRegistry?: DelegatedExecutorRegistry
   /**
    * The app-owned step-completion-resolver registry (deployment-registered resolvers). Rides its
    * own option; defaults to an empty registry. Threaded into `createCore`; the conformance suite

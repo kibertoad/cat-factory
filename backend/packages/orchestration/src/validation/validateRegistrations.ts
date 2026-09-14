@@ -1,10 +1,11 @@
 import type { AgentKindRegistry } from '@cat-factory/agents'
-import { INLINE_ENGINE_SYSTEM_PROMPTS, runsInContainer } from '@cat-factory/agents'
+import { INLINE_ENGINE_SYSTEM_PROMPTS, runsInContainer, surfaceTraits } from '@cat-factory/agents'
 import { checkBinaryGenerators } from './validateBinaryGenerators.js'
 import { inlineUseCaseProblems } from './validateInlineUseCases.js'
 import type {
   AgentKind,
   BinaryGeneratorRegistry,
+  DelegatedExecutorRegistry,
   DeploymentDocumentResolver,
   FoundationalServiceRegistry,
   GateRegistry,
@@ -188,6 +189,16 @@ interface ValidatedRegistries {
    * a bad `formPanel`, or a `defaultPipelineId` naming a nonexistent pipeline fails at boot.
    */
   taskTypeRegistry?: TaskTypeRegistry
+  /**
+   * The app-owned DELEGATED-EXECUTOR registry to validate (the facade's injected instance, the
+   * SAME one it threads through `CoreDependencies.delegatedExecutorRegistry`). Optional: when
+   * omitted, a kind's `agent.executor` is still checked for PRESENCE (required on the delegated
+   * surface, refused on every other) but not for resolvability, because this process then has no
+   * set to resolve against and an empty one would report every id as missing. A facade passes it,
+   * so a kind naming an executor nobody registered fails at boot rather than on the first run of
+   * whichever pipeline reaches that step.
+   */
+  delegatedExecutorRegistry?: DelegatedExecutorRegistry
   /**
    * The app-owned inline use-case registry to validate (the facade's injected instance, the SAME
    * one it threads through `CoreDependencies.inlineUseCaseRegistry`). Optional: when omitted, no
@@ -396,6 +407,10 @@ export function collectRegistrationProblems(
 
   //  7b. A kind's declared IMAGE VARIANT: a slug, and never a platform name it may not claim.
   problems.push(...checkAgentImageVariants(registry))
+
+  //  7c. A kind's declared DELEGATED EXECUTOR: required on that surface, refused on every other,
+  //       and resolvable in this build.
+  problems.push(...checkDelegatedExecutors(opts, registry))
 
   // 7. Agent-kind VARIANTS: their base kind must exist and they must actually change the prompt.
   problems.push(...checkAgentKindVariants(opts, registeredKindIds))
@@ -613,6 +628,94 @@ function checkAgentImageVariants(registry: AgentKindRegistry): RegistrationProbl
           `Agent kind "${definition.kind}" declares the executor image "${variant}", which is not a ` +
           `lower-kebab slug. The name is a key in a runner backend's image map and a container's ` +
           `identity, so it is held to the shape every other registered id is.`,
+      })
+    }
+  }
+  return problems
+}
+
+/**
+ * A registered kind's DELEGATED EXECUTOR (`AgentStepSpec.executor`): the declaration that says the
+ * step's work leaves the platform.
+ *
+ * Three faults, and all three are silent at run time in different ways, which is why boot grades
+ * each rather than letting the dispatch discover them:
+ *
+ * - a `delegated` kind with NO executor has nowhere to dispatch. The dispatch throws, hours into
+ *   whichever pipeline reached the step first, with a message about a registration nobody was
+ *   looking at.
+ * - a NON-delegated kind carrying one is the opposite error and the more dangerous: the
+ *   declaration is read by nothing, so the deployment believes a step runs on its own CI while
+ *   every run of it quietly goes through the platform's harness. Refused rather than warned,
+ *   because there is no reading of it under which it does something.
+ * - an executor id this build does not register can never be resolved. Graded only when the
+ *   facade supplied its registry, for the reason every other cross-registry check is: an absent
+ *   registry is "we cannot see the set", not "the set is empty".
+ */
+function checkDelegatedExecutors(
+  opts: ValidateRegistrationsOptions,
+  registry: AgentKindRegistry,
+): RegistrationProblem[] {
+  const executors = opts.registries.delegatedExecutorRegistry
+  const problems: RegistrationProblem[] = []
+  for (const definition of registry.all()) {
+    const step = definition.agent
+    if (!step) continue
+    // Through the accessor, never the table directly. `SURFACE_TRAITS` is total over the surfaces
+    // THIS build knows, and a registration can name one it does not: a mothership-mode node
+    // resolves kinds from a process that may be a build ahead, and nothing boot-validates them
+    // there. Indexed bare, that is a `TypeError` thrown INSIDE the function whose whole job is to
+    // report a bad registration, so the boot that was meant to name the offending kind dies
+    // instead, naming nothing.
+    const traits = surfaceTraits(step.surface)
+    if (!traits) {
+      problems.push({
+        severity: 'error',
+        code: 'agent_surface_unknown',
+        message:
+          `Agent kind "${definition.kind}" declares the agent surface "${step.surface}", which ` +
+          `this build does not recognise, so nothing can be concluded about how it runs: whether ` +
+          `it needs a checkout, whether its reply is its product, or whether its work leaves the ` +
+          `platform. Name a surface this build ships, or upgrade the deployment that defines it.`,
+      })
+      continue
+    }
+    const delegated = traits.delegated
+    if (!delegated) {
+      if (step.executor !== undefined) {
+        problems.push({
+          severity: 'error',
+          code: 'agent_executor_on_non_delegated_surface',
+          message:
+            `Agent kind "${definition.kind}" declares the delegated executor ` +
+            `"${step.executor}" on the "${step.surface}" surface, where nothing reads it. ` +
+            `A kind whose work runs on an external executor declares \`surface: 'delegated'\`; ` +
+            `otherwise remove the executor, because leaving it reads as a step that leaves the ` +
+            `platform when every run of it goes through the harness.`,
+        })
+      }
+      continue
+    }
+    if (!step.executor) {
+      problems.push({
+        severity: 'error',
+        code: 'agent_executor_missing',
+        message:
+          `Agent kind "${definition.kind}" declares the "delegated" surface and names no ` +
+          `executor, so a dispatch of it has nowhere to go. Name a registered ` +
+          `DelegatedExecutorDefinition id on \`agent.executor\`.`,
+      })
+      continue
+    }
+    if (!executors) continue
+    if (!executors.get(step.executor)) {
+      problems.push({
+        severity: 'error',
+        code: 'agent_executor_unknown',
+        message:
+          `Agent kind "${definition.kind}" runs on the delegated executor ` +
+          `"${step.executor}", which this deployment does not register` +
+          (executors.size > 0 ? ` (registered: ${executors.ids().join(', ')}).` : '.'),
       })
     }
   }

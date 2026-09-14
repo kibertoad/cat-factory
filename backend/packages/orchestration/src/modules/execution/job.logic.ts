@@ -32,7 +32,7 @@ export interface ContainerFailureView {
 }
 
 /** A terminal run failure, as the poll paths report one. */
-export interface ContainerShutdownFailure {
+export interface TerminalJobFailure {
   error: string
   failureKind: AgentFailureKind
   detail: string
@@ -50,9 +50,7 @@ export interface ContainerShutdownFailure {
  * agent's own commands: the incident behind this spent the whole eviction budget re-running an
  * agent that killed its container each time), and each attempt costs another full agent run.
  */
-export function containerShutdownFailure(
-  failure: ContainerFailureView,
-): ContainerShutdownFailure | null {
+export function containerShutdownFailure(failure: ContainerFailureView): TerminalJobFailure | null {
   if (!failure.harnessShutdown) return null
   // Kernel's own wording for the fallback, not a second sentence saying the same thing: the
   // transports all report this condition with that constant, and one condition worded two ways
@@ -60,6 +58,47 @@ export function containerShutdownFailure(
   const error = failure.error ?? HARNESS_SHUTDOWN_ERROR
   return { error, failureKind: 'harness_shutdown', detail: failure.detail ?? error }
 }
+
+/**
+ * The terminal failure for a DELEGATED job whose executor called its verdict final, or null when
+ * this is not that.
+ *
+ * Its own function rather than a reuse of {@link containerShutdownFailure}, and the separation IS
+ * the fix: borrowing the container path's only "terminal, do not retry" signal made every external
+ * CI failure report `failureKind: 'harness_shutdown'`, which renders to an operator as "Harness
+ * shut down" for a step that never had a harness and buckets delegated verdicts under container
+ * eviction in every failure-kind rollup. The two conditions want the same DISPOSITION and
+ * different NAMES, and only the name reaches a human.
+ *
+ * A RETRYABLE delegated failure answers null, and its re-drive is
+ * `PollCompletionController.recoverDelegatedFailure` rather than anything here: retryability and
+ * classification are separate axes, so `delegated_failed` is the kind for BOTH and the
+ * disposition decides only whether a second dispatch is spent (see `DelegationUpdate.retryable`
+ * and {@link MAX_DELEGATED_RETRIES}).
+ */
+export function delegatedTerminalFailure(failure: {
+  error?: string
+  detail?: string
+  // The whole delegated channel, not just the disposition: the caller forwards the update's own
+  // field, which also carries the external url.
+  delegated?: { url?: string; disposition?: 'terminal' | 'retryable' }
+}): TerminalJobFailure | null {
+  if (failure.delegated?.disposition !== 'terminal') return null
+  const error = failure.error ?? 'The external executor reported a terminal failure.'
+  return { error, failureKind: 'delegated_failed', detail: failure.detail ?? error }
+}
+
+/**
+ * How many times a DELEGATED step is re-dispatched automatically after its executor called a
+ * failure retryable (a cancelled run, a runner-pool restart, a rate limit).
+ *
+ * One, like {@link MAX_EVICTION_RECOVERIES} and for the same reasoning: a single blip is absorbed
+ * silently, and a second failure of the same step is evidence that the next attempt reaches the
+ * same verdict. The cost of being wrong is higher here than on the container path, because the
+ * attempt runs on somebody else's runner and bills somebody else's account, which is also why the
+ * budget is the engine's to set rather than the executor's to ask for.
+ */
+export const MAX_DELEGATED_RETRIES = 1
 
 /**
  * Compose the failure `detail` for a step whose eviction budget is spent, from the post-mortem

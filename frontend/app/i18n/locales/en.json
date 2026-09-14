@@ -708,7 +708,8 @@
         "service_catalog_filter_missing": "This connection's entity filter could not be read, so there is nothing to import. Re-save the service-catalog connection to restore it.",
         "service_catalog_response_too_large": "The developer portal answered with more data than this platform will hold in one response. Open the service-catalog settings and lower the service cap, or turn off importing interface definitions, then import again.",
         "assistant_generation_failed": "The assistant's model provider did not answer. It is configured correctly and nothing here needs setting up: try the request again in a moment.",
-        "assistant_reply_unreadable": "The assistant's model answered with something that is not a decision this platform can act on. Rephrasing rarely helps: pick a different model for the assistant in the model settings."
+        "assistant_reply_unreadable": "The assistant's model answered with something that is not a decision this platform can act on. Rephrasing rarely helps: pick a different model for the assistant in the model settings.",
+        "delegated_executor_failed": "The external executor could not start this step. The problem is in the system that runs the work, not in this deployment: check its own logs and try again."
       }
     },
     "reason": {
@@ -798,7 +799,10 @@
         "expedition_settled": "This expedition has already finished",
         "not_awaiting_triage": "This expedition is not waiting on triage",
         "already_addressed": "Some findings already have a fix task",
-        "no_host_frame": "This expedition is not under a service"
+        "no_host_frame": "This expedition is not under a service",
+        "delegated_executor_unwired": "External executor not registered",
+        "delegated_step_async_only": "This step is polled, not awaited",
+        "delegated_claim_missing": "This step has no external work to check"
       },
       "description": {
         "dependencies_unmet": "This task depends on others that aren't finished yet. Complete or unblock them, then start it again.",
@@ -855,7 +859,10 @@
         "expedition_settled": "The run has moved past its bug-fishing step, so there is nothing left to mark or dismiss. Reload the run to see what it caught and which findings were acted on.",
         "not_awaiting_triage": "It is either still fishing a later angle or it has already been finished. Refresh the run to see where it is.",
         "already_addressed": "A fix task was created for them earlier, so nothing was created again. Open the finding to reach the task it already has.",
-        "no_host_frame": "A fix task needs a service to live under and a repository to fix. Move the expedition task under a service frame and try again."
+        "no_host_frame": "A fix task needs a service to live under and a repository to fix. Move the expedition task under a service frame and try again.",
+        "delegated_executor_unwired": "A step in this pipeline runs on an external executor this deployment does not register, so there is nowhere to send the work. Register the executor in code, or change the step to one that runs here.",
+        "delegated_step_async_only": "This step runs on an external executor, which can take hours, so it is dispatched and then polled rather than run inside one request. Start the run from the board; if you reached this from your own code, drive the step through the async path.",
+        "delegated_claim_missing": "The run’s record of what it sent to the external executor is missing, so there is nothing to poll. Nothing is wrong with the executor itself. Reload the run, and re-run the step if it is still stuck."
       },
       "action": {
         "connectGitHub": "Connect GitHub",
@@ -1707,7 +1714,24 @@
       "promptVariant": "Prompt variant",
       "promptVariantAdditionOnly": "Only this variant's addition applied. The workspace prompt for this agent replaced its base text.",
       "promptVariantSuperseded": "This variant did not apply. The workspace prompt for this agent took precedence.",
-      "promptVariantWithdrawn": "This variant is no longer registered, so the step ran the shipped prompt."
+      "promptVariantWithdrawn": "This variant is no longer registered, so the step ran the shipped prompt.",
+      "delegated": {
+        "status": {
+          "cancelled": "Cancelled",
+          "done": "Finished externally",
+          "failed": "Failed externally",
+          "running": "Running externally",
+          "starting": "Starting externally",
+          "unrecognised": "Unrecognised status ({status})"
+        },
+        "run": "External run",
+        "branch": "Branch",
+        "copyUrl": "Copy external run link",
+        "openRun": "Open run",
+        "noOutcome": "No outcome recorded",
+        "earlierAttempts": "Earlier attempts",
+        "usageNotReported": "Token usage is not reported by {executor}, so this step is missing from the totals above."
+      }
     },
     "stepDetail": {
       "contents": "Contents",
@@ -2134,6 +2158,7 @@
       "timeout": "Timeout",
       "agent": "Agent",
       "job_failed": "Job failed",
+      "delegated_failed": "External executor failed",
       "rejected": "Rejected",
       "companion_rejected": "Companion rejected",
       "stalled": "Stalled",

@@ -120,7 +120,9 @@ The two edges hook different places because their call graphs differ, and the tr
 - **`run.started`** fires from `insertLiveRunOrConflict`: the ONE funnel that mints a live run,
   whose insert is the atomic claim (a genuinely concurrent double-start loses there). So it is once
   per run by construction, `retry` and `restartFrom` each announce the FRESH run id they mint, and a
-  start path added later inherits it instead of quietly delivering nothing.
+  start path added later inherits it instead of quietly delivering nothing. It is announced LAST,
+  after the claim and the local write have both landed, so a receiver that reacts to the delivery
+  can never read a run the platform has not yet committed.
 - **`run.completed` / `run.failed`** fire from `RunStateMachine.emitInstance`'s terminal branch,
   beside the Kaizen scheduler and the activation cleanup. A run reaches `done` from four
   independent sites, and a hook at each would compile, pass, and silently drift the day a fifth is

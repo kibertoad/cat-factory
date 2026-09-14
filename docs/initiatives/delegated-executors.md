@@ -1,6 +1,6 @@
 # Delegated executors: embedding lower-level orchestration under cat-factory
 
-**Status:** proposal, no code landed · **Owner:** core · **Started:** 2026-09-13
+**Status:** the seam is landed and driven end to end; one slice open · **Owner:** core · **Started:** 2026-09-13
 
 > This is the durable source of truth for a multi-PR initiative. Read it FIRST before picking up
 > the next slice; update the checklist at the end of each PR.
@@ -60,7 +60,7 @@ registered by reference like every other deployment extension.
 - **Delegated kind**: an agent kind whose `agent.surface` is `'delegated'` and which names the
   executor it runs on. Registered on `AgentKindRegistry` exactly like a container kind.
 - **Brief**: the neutral `{ systemPrompt, userPrompt, contextFiles, repo, branches, task,
-  correlationKey }` bundle the engine hands the executor at dispatch. It is what the container
+correlationKey }` bundle the engine hands the executor at dispatch. It is what the container
   path already composes, extracted so it exists as a value outside a harness job body.
 - **Delegation record**: `step.delegated`, the persisted per-step state (executor id, external
   id, external URL, status, attempt log). The delegated sibling of `step.container`.
@@ -130,11 +130,11 @@ A new kernel-owned registry, `DelegatedExecutorRegistry`, holding `DelegatedExec
 
 ```ts
 interface DelegatedExecutorDefinition {
-  id: string                                  // namespaced, 'acme:executor'
+  id: string // namespaced, 'acme:executor'
   presentation: { label: string; icon: string; description: string }
-  credentials?: CapabilityCredential[]        // key NAMES, resolved per dispatch, values never in context
-  poll: { intervalMs: number; maxDurationMs: number }   // per executor, not the harness default
-  telemetry: 'not-reported' | 'self-reported'            // see D8
+  credentials?: CapabilityCredential[] // key NAMES, resolved per dispatch, values never in context
+  poll: { intervalMs: number; maxDurationMs: number } // per executor, not the harness default
+  telemetry: 'not-reported' | 'self-reported' // see D8
   create(deps: DelegatedExecutorDeps): DelegatedExecutor
 }
 
@@ -150,11 +150,11 @@ type DelegationUpdate =
   | { state: 'done'; result: DelegationResult }
   | { state: 'failed'; error: string; url?: string; detail?: string; retryable?: boolean }
 type DelegationResult = {
-  summary: string                              // becomes step.output
+  summary: string // becomes step.output
   pullRequest?: PullRequestRef
   branch?: string
-  custom?: unknown                             // the generic channel, exactly as for a registered kind
-  usage?: AgentTokenUsage                      // D8: only when the executor knows
+  custom?: unknown // the generic channel, exactly as for a registered kind
+  usage?: AgentTokenUsage // D8: only when the executor knows
 }
 ```
 
@@ -180,15 +180,18 @@ the SAME pure builder its production caller uses).
 
 ```ts
 interface DelegationBrief {
-  correlationKey: string        // the cat-factory job id; the executor MUST make it recoverable (D5)
-  workspaceId: string; runId: string; stepIndex: number; agentKind: string
+  correlationKey: string // the cat-factory job id; the executor MUST make it recoverable (D5)
+  workspaceId: string
+  runId: string
+  stepIndex: number
+  agentKind: string
   task: { id: string; title: string; description: string; trackerRef?: { provider; key; url } }
   repo: { owner: string; name: string; cloneUrl: string; provider: VcsProvider; directory?: string }
   branches: { base: string; work: string }
-  systemPrompt: string          // role + standards + trait guidance, overrides applied
+  systemPrompt: string // role + standards + trait guidance, overrides applied
   userPrompt: string
-  contextFiles: InjectedContextFile[]   // .cat-context/*, the foundational catalog, linked docs
-  ownService: OwnServiceDescription     // the discriminated result, never omitted
+  contextFiles: InjectedContextFile[] // .cat-context/*, the foundational catalog, linked docs
+  ownService: OwnServiceDescription // the discriminated result, never omitted
 }
 ```
 
@@ -313,9 +316,14 @@ The pilot reports none of this today; the hooks are what let it start without a 
 
 ### D9. Failure, cancel, reclaim, retry
 
-- `failed` with `retryable: true` is re-driven under the existing job-failure budget; without it
-  the run fails with `failureCause: 'delegated_executor'` and `detail` verbatim from the executor,
-  URL preserved on the record.
+- `failed` carries a DISPOSITION, `terminal` or `retryable`, and the engine branches both ways.
+  `terminal` fails the run at once with the executor's own `error` and `detail`, URL preserved on
+  the record. `retryable` buys one fresh dispatch, bounded by `MAX_DELEGATED_RETRIES` (the ENGINE's
+  number, not the executor's asking: it decides how much of somebody else's runner a blip is
+  worth), settling the failed attempt onto the record first so its log keeps it. Both classify as
+  `delegated_failed`: retryability and classification are separate axes. A closed pair rather than
+  an optional flag, because an unstated default is what made the retry half unimplemented and
+  invisible.
 - `cancelRun` calls `cancel?()` when defined and marks the record `cancelled` either way; an
   executor without `cancel` leaves the external run alive, and the record's `note` says so.
 - `reclaimRun` (the stale-run sweeper) asks `poll()` by correlation before deciding a step is
@@ -347,15 +355,15 @@ it reads an org context layer from a file in the target repo and a repo layer fr
 it publishes a PR whose body links back to the Actions run; it declares no outputs, returns no
 run id, and reports no token usage.
 
-| Seam | Pilot mapping (owned by the company's deployment repo) |
-|---|---|
-| Executor definition | `id: 'acme:executor'`, one dispatch-token credential, `poll: { 60s, 3h }`, `telemetry: 'not-reported'` |
-| `start(brief)` | the shipped GitHub Actions helper: a thin caller workflow in the target repo sets `run-name` from a `correlation` input and forwards `spec`, `pipeline`, `ref` to the reusable workflow |
-| Context | `inputs.spec = brief.userPrompt` plus the context files rendered as sections; a preOp commits `brief.systemPrompt` as the org layer file on the work branch so the standards ride the executor's own context mechanism |
-| Correlation | `run-name` carries `brief.correlationKey`; the helper lists runs by event and finds it |
-| `poll` | Actions `status`/`conclusion`; the run URL is the record's `url` |
-| Result | PR found by head branch recorded as `pullRequest`; the job summary is `summary`; the result artifact's summary file is parsed for `status`/`stopped_stage` into `custom` |
-| Downstream | cat-factory's `ci` gate and `merger` run as usual; Slack and Jira are the existing channels |
+| Seam                | Pilot mapping (owned by the company's deployment repo)                                                                                                                                                                 |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Executor definition | `id: 'acme:executor'`, one dispatch-token credential, `poll: { 60s, 3h }`, `telemetry: 'not-reported'`                                                                                                                 |
+| `start(brief)`      | the shipped GitHub Actions helper: a thin caller workflow in the target repo sets `run-name` from a `correlation` input and forwards `spec`, `pipeline`, `ref` to the reusable workflow                                |
+| Context             | `inputs.spec = brief.userPrompt` plus the context files rendered as sections; a preOp commits `brief.systemPrompt` as the org layer file on the work branch so the standards ride the executor's own context mechanism |
+| Correlation         | `run-name` carries `brief.correlationKey`; the helper lists runs by event and finds it                                                                                                                                 |
+| `poll`              | Actions `status`/`conclusion`; the run URL is the record's `url`                                                                                                                                                       |
+| Result              | PR found by head branch recorded as `pullRequest`; the job summary is `summary`; the result artifact's summary file is parsed for `status`/`stopped_stage` into `custom`                                               |
+| Downstream          | cat-factory's `ci` gate and `merger` run as usual; Slack and Jira are the existing channels                                                                                                                            |
 
 Gaps this exposes on the pilot's side, stated so nobody designs around them here: no correlation
 input (the caller workflow supplies one), no machine-readable PR URL (recovered by head branch),
@@ -371,24 +379,57 @@ like `/v1/artifacts/ingest`, not public API.
 
 ## Per-slice status
 
-- [ ] **PR 0**: this tracker.
-- [ ] **PR 1: the surface and the registry.** `'delegated'` surface, `DelegatedExecutorRegistry`
-      routed on both facades and `startLocal`, the four exhaustive surface switches, boot
-      validation of `agent.executor`, `registry-seams.spec.ts` both files. No executor call yet.
-- [ ] **PR 2: dispatch, poll, settle.** `composeBrief` extracted and consumed by the container
-      body builder; `DelegatedAgentExecutor`; the third arm in `CompositeAgentExecutor`; the
-      `step.delegated` record and handle fields; `ToolSecretSubject` member; per-executor poll
-      cadence on both drivers; cancel/reclaim/retry (D9). Conformance: a fake executor driven
-      through dispatch, poll, settle and PR on the block, on all three facades.
-- [ ] **PR 3: SPA.** `StepDelegatedStatus.vue`, palette labelling, the pipeline-builder kind
-      card, "usage not reported" on the run-meta card and the rollups' `reporting` field, i18n
-      keys with real translations.
-- [ ] **PR 4: the GitHub Actions helper and the example package** (D10), plus the website page
-      under `/extend/` (opened and merged first, named in the PR).
-- [ ] **PR 5: push-wake and telemetry ingest** (D7 second half, D8 hooks): delegation token,
-      the two `/v1/delegations/*` routes, `signalResume` on completion, first-write-wins ids.
-- [ ] **Close-out**: convert to an ADR, `git rm` this tracker, index the flow in `CLAUDE.md`
-      with its single deadliest trap (a replayed `start()` starts a second external run).
+- [x] **PR 0**: this tracker.
+- [x] **PR 1: the surface and the registry.** `'delegated'` surface, `DelegatedExecutorRegistry`
+      routed on both facades and `startLocal`, the surface switches made total through one
+      `Record<AgentSurface, SurfaceTraits>` (`SURFACE_TRAITS`), boot validation of `agent.executor`,
+      `registry-seams.spec.ts` both files.
+- [x] **PR 2: dispatch, poll, settle.** The shared composition extracted as `composeRoleSystemPrompt`
+      and CONSUMED by the container body builder; `composeDelegationBrief`; `DelegatedAgentExecutor`;
+      the third arm in `CompositeAgentExecutor` (and its `pollJob` now ROUTES off the handle rather
+      than hard-routing to the container); `step.delegated` plus the handle fields;
+      `ToolSecretSubject`'s `delegated-executor` member; per-executor poll cadence on both drivers
+      via the `awaiting_job` park; cancel / reclaim / retry (D9). Conformance: a fake executor driven
+      through dispatch, poll, settle and PR-on-the-block on all three facades
+      (`suites/execution-delegated.ts`).
+- [x] **PR 3: SPA.** `StepDelegatedStatus.vue`, the executor on the kind's palette projection
+      (`CustomAgentKind.executor` / `.delegatedExecutor`), "usage not reported by <executor>" on the
+      step card and `llm.reporting` on both run rollups, i18n in all ten locales.
+- [x] **PR 4: the GitHub Actions helper and the example package** (D10):
+      `@cat-factory/delegation-github-actions` and `backend/internal/example-delegated-executor`.
+- [ ] **PR 5: push-wake and per-call telemetry ingest** (D7 second half, D8's second and third hooks).
+      See "What is still open" below: the first is blocked on the drivers' park machinery, and the
+      second has no consumer until an executor reports.
+- [x] **Website page under `/extend/`**:
+      [cat-factory-website#92](https://github.com/kibertoad/cat-factory-website/pull/92), a
+      separate repo and so a separate PR, ownership following the reader per ADR 0051. It owns what
+      a reader acts on with no checkout (the three registrations, the `workflow_dispatch`
+      `run-name` contract, the credential and cadence declarations, the two failure dispositions,
+      and what the platform does and does not measure); the internal design stays in
+      [`backend/docs/delegated-executors.md`](../../backend/docs/delegated-executors.md).
+- [ ] **Close-out**: convert to an ADR under `backend/docs/adr/`, `git rm` this tracker. Held until
+      PR 5 settles, since the telemetry stance is part of what the ADR records.
+
+## What is still open, and why
+
+**Push-wake is blocked on the drivers, not on a route.** D7's second half assumed
+`WorkRunner.signalResume` could shorten the wait. It cannot: both durable drivers SLEEP between polls
+(`step.sleep` on Workflows, a timer on Node) and neither sleep is interruptible by an event:
+`signalResume` wakes a run parked on `waitForEvent`, which an `awaiting_job` step is not. An
+accelerator therefore needs the `awaiting_job` loop to become an event-wait WITH a timeout on both
+drivers, which is a change to the park machinery that every container job also rides. Shipping the
+route without it would be a surface an executor calls and nothing happens sooner.
+
+**Per-call telemetry ingest has no consumer yet.** `DelegationResult.usage` is landed and is what
+makes `telemetry: 'self-reported'` real today: it meters through `recordJobFacts` as
+`usageBilling: 'subscription'` (recorded, excluded from the budget gate, because the tokens were
+spent on the executor's account), and the run views stop saying the data is missing. Individual
+prompts and tool trajectories would need an authenticated ingest route, and no shipped executor
+reports them, and an authenticated write surface nothing calls is a surface to secure for nothing.
+
+**The run-level gap is computed from what LANDED, not from the declaration.** `llmReportingGaps`
+counts delegated steps whose step metrics hold no calls, so an executor that declares
+`self-reported` and silently stops filing is reported as a gap rather than assumed covered.
 
 ## Conventions & gotchas (carry between iterations)
 
@@ -398,17 +439,81 @@ like `/v1/artifacts/ingest`, not public API.
 - **Anything the poll needs is on the step.** `pollHandleFor` rebuilds the handle from the step;
   a field on the handle that `recordDispatchAttribution` does not persist is absent in production
   with no error.
-- **Idempotent start, always.** Both drivers replay. Claim before effect; on replay, poll by
-  correlation.
+- **Idempotent start, always.** Both drivers replay. Claim before effect; on replay, re-attach or
+  re-dispatch under the same correlation key. The engine's half goes through ONE function every
+  async dispatch site calls (`startStepDispatch`), which claims, calls the executor and folds the
+  outcome either way, because each of those written out per site held at a different subset of the
+  eight: the step's own dispatch claimed, and a gate helper, a Tester fixer round, a Ralph
+  iteration, the two human-gate fixers and the deploy-fixer did not. It answers the same question
+  the container cold boot answers, which is why the two live together rather than beside each
+  other. A claim the dispatch never ANSWERED is not a live job (`liveJobId`): the re-attach guards
+  re-dispatch it rather than polling a run nobody started.
+- **A dispatch that threw is not a dispatch that did nothing.** The claim stays open when the
+  executor's own `start()` threw (liveness unknown, so the teardown asks it to cancel) and settles
+  when the platform refused before contacting anything (nothing is running, so a cancel request
+  would be a false alarm). The engine reads which happened off the refusal's own
+  `delegated_executor_failed` reason rather than inferring it. Both drop the job id, so a replay
+  re-dispatches under the same correlation key instead of polling a job that may not exist.
+- **A cadence the record does not hold falls back to the deployment's job cadence.** Synthesising a
+  zero window instead derives `ceil(0 / 0)` = `NaN`, and a `p < NaN` poll loop runs no iterations:
+  the step fails as un-settled before its first poll.
+- **The handle carries the BLOCK, not only the workspace.** Credentials re-resolve on every poll
+  and every cancel, and `ToolSecretResolver.resolve` takes the block so a per-service store can
+  scope its lookup. Dropped, such a deployment starts the run fine and then reads an empty bag for
+  the rest of its life, dying on "status was unreadable" while the external work carries on.
+- **The URL policy is enforced in the FETCH.** Every executor is built over a wrapped `fetchImpl`
+  that runs the deployment's `UrlSafetyPolicy` on the first URL and on every redirect hop, the same
+  guard the notification-webhook sender uses. Handed over beside the fetch instead, it was declared
+  on the port, documented on both sides and read by nobody.
 - **Credentials re-resolve per poll**, never cached on the handle: a one-hour token dies inside a
   three-hour run.
 - **Absent is not zero, on every surface**: the run-meta card, the outcome summary, the
   verification report, the spend rollups. A delegated step with no usage must never be a `0`.
 - **Mothership mode**: the executor runs where the engine runs, credentials resolve through the
   same delegated resolver the tool servers use, and the registry is code on the node; a definition
-  the mothership knows and the node does not is refused at dispatch, never merged.
-- **Runtime symmetry**: both drivers' poll cadence, the `WorkRunner.signalResume` hop, and the
-  step-schema change land together with a conformance group that runs on every facade.
+  the mothership knows and the node does not is refused at dispatch, never merged. Its conformance
+  harness has to COMPOSE the delegated arm like the other three (`withDelegatedArm` plus both
+  registries on the container): without it the suite's delegated kind falls through to the
+  deterministic fake, and eight assertions about an executor that was never called go green on
+  every runtime except the one being tested.
+- **Runtime symmetry**: both drivers' poll cadence and the step-schema change land together with a
+  conformance group that runs on every facade. A delegated step's whole state is what the claim
+  persisted (no container to re-address, no runner to ask), so it is exactly the shape a facade can
+  get wrong alone: a nested attempt array round-tripped differently through D1 and Postgres fails
+  nothing else.
+- **The brief's branches AND its target repo ride the HANDLE.** Not in the original design: an
+  executor reading back what its own system produced (the pull request whose head is the work
+  branch) is doing so at POLL time, where only the handle exists. The work branch is named from the
+  BLOCK, so it cannot be derived from a run id. The REPO is the same trap one level up, and the
+  sharper one: `description.owner/repo` is where the WORKFLOW lives, and a central automation repo
+  dispatching against many product repos is the ordinary shape, so a reader that took its own
+  configured repository found nothing on every run and reported every one as having opened no pull
+  request. A guess on either puts the wrong pull request on the block, which becomes the `ci`
+  gate's checks and the merger's diff.
+- **`step.delegated` is not the question; `inFlightDelegation(step)` is.** The record OUTLIVES the
+  work it describes, deliberately: its attempt log is the evidence for why a step is being re-run,
+  and `resetStepForRerun` clears `jobId` and keeps the record. So a step that delegated its own work
+  and later ran a CONTAINER job (a helper round, a re-run under an overriding kind, a PR-review
+  `fix`) still carries it, and every `if (step.delegated)` read routes that container job's poll at
+  an external system, folds its phase onto work that finished hours ago, and overwrites its outcome
+  on settle. The predicate keys on `step.jobId === record.correlationKey`, which is exactly why the
+  key is persisted.
+- **The executor's TERMINAL failure has its own name.** It is the same disposition the container
+  path's `harnessShutdown` carries ("do not spend a recovery budget"), and it borrowed that flag at
+  first: every external CI failure then reported `failureKind: 'harness_shutdown'`, rendering as
+  "Harness shut down" for a step that never had a harness and filing external verdicts under
+  container eviction in every rollup. It rides `update.delegated.disposition` and maps to
+  `delegated_failed`, as its `retryable` sibling does.
+- **A successful poll is the sign of life.** The shipped executor's running answer is identical on
+  every tick of a quiet run, so nothing changes, nothing persists, and the step's `lastActivityAt`
+  freezes at the first poll while the stale-run sweeper re-collects a run that is perfectly alive.
+  `toJobUpdate` floors `lastActivityAt` at the poll's own clock; the engine's existing throttle
+  decides how often that lands.
+- **A reclaim ANSWERS, and both arms are asked.** `AsyncAgentExecutor.reclaimRun` may now return a
+  `RunReclaimReport`, because "we asked" and "it stopped" are different facts for work running
+  somewhere else, and only the executor can turn the first into the second. The composite's two
+  arms are independent resources: an unguarded container reclaim that throws skipped the external
+  cancel entirely and recorded every live delegation as "could not stop the external work".
 
 ## Deliberately NOT pursued
 

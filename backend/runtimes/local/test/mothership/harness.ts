@@ -17,6 +17,7 @@ import {
   makeToolServerDispatchProbe,
   makeReadyReviewWithOpenItem,
   seedFrameRepoLink,
+  withDelegatedArm,
   type FrameRepoLink,
   type FrameRepoLinkRepositories,
 } from '@cat-factory/conformance'
@@ -62,6 +63,7 @@ import type {
 import { NoopBootstrapRunner, NoopEnvConfigRepairRunner, NoopWorkRunner } from '@cat-factory/kernel'
 import type { LocalRunner, UpsertLocalModelEndpointInput } from '@cat-factory/contracts'
 import type { CoreDependencies } from '@cat-factory/orchestration'
+import type { AgentKindRegistry } from '@cat-factory/agents'
 import { createLocalCredentialStore } from '../../src/sqlite/credentialStore.js'
 import { createLocalTelemetryStore } from '../../src/sqlite/telemetryStore.js'
 import { ENCRYPTION_KEY, SESSION_SECRET, buildMothershipEnv, mintMachineToken } from './setup.js'
@@ -236,6 +238,17 @@ interface MothershipAppOptions {
   judgeRegistry?: CoreDependencies['judgeRegistry']
   judgeAssessor?: CoreDependencies['judgeAssessor']
   detectionConventions?: CoreDependencies['detectionConventions']
+  /**
+   * The app-owned agent-kind registry, and the external-executor registry beside it.
+   *
+   * On THIS harness for the reason mothership mode exists as a topology at all: a node with no
+   * main database resolves the same kinds and runs the same engine, so a step whose work leaves
+   * the platform has to dispatch, poll and settle here exactly as it does on a facade with a
+   * database. Absent, the suite's delegated kind fell through to the deterministic fake and every
+   * delegated assertion passed judgement on nothing.
+   */
+  agentKindRegistry?: AgentKindRegistry
+  delegatedExecutorRegistry?: CoreDependencies['delegatedExecutorRegistry']
 }
 
 /**
@@ -294,10 +307,24 @@ function buildMothershipOverrides(
   agentOptions: FakeAgentOptions | undefined,
   opts: MothershipAppOptions | undefined,
 ): Partial<CoreDependencies> {
+  // The custom-kind suites inject a pre-loaded registry: thread it into BOTH the fake executor
+  // (so it detects the custom kind's structured output) and the container build below.
+  const agentExecutorOptions: FakeAgentOptions = {
+    ...agentOptions,
+    ...(opts?.agentKindRegistry ? { agentKindRegistry: opts.agentKindRegistry } : {}),
+  }
   return {
-    agentExecutor: agentOptions?.asyncKinds?.length
-      ? new AsyncFakeAgentExecutor(agentOptions)
-      : new FakeAgentExecutor(agentOptions),
+    // The deterministic agent, WRAPPED in the production composite when the suite registered an
+    // external executor, so a delegated kind reaches the real `DelegatedAgentExecutor` while
+    // everything else stays on the fake. The same wrapping the other three harnesses do, and
+    // needed here for the same reason: overriding `agentExecutor` wholesale is right for every
+    // other assertion and would make the delegated ones vacuous.
+    agentExecutor: withDelegatedArm(
+      agentOptions?.asyncKinds?.length
+        ? new AsyncFakeAgentExecutor(agentExecutorOptions)
+        : new FakeAgentExecutor(agentExecutorOptions),
+      opts ?? {},
+    ),
     workRunner: new NoopWorkRunner(),
     bootstrapRunner: new NoopBootstrapRunner(),
     repoBootstrapper: new FakeRepoBootstrapper(),
@@ -404,6 +431,14 @@ export function makeMothershipConformanceApp(
     // Inject the app-owned JUDGE registry (pre-loaded in the judge suite) so the SUT container
     // resolves it by reference on this runtime.
     ...(opts?.judgeRegistry ? { judgeRegistry: opts.judgeRegistry } : {}),
+    // The app-owned agent-kind registry and the external-executor registry, resolved by reference
+    // on this runtime like every other registry above. The kind registry is what tells the engine
+    // a kind's work leaves the platform, so the pair travels together: one without the other
+    // composes a container that can never route to the executor.
+    ...(opts?.agentKindRegistry ? { agentKindRegistry: opts.agentKindRegistry } : {}),
+    ...(opts?.delegatedExecutorRegistry
+      ? { delegatedExecutorRegistry: opts.delegatedExecutorRegistry }
+      : {}),
   })
   const app = createApp(container, SUT_ENV)
 

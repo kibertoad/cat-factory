@@ -157,6 +157,20 @@ const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason>, Conf
     titleKey: 'errors.conflict.title.no_host_frame',
     descriptionKey: 'errors.conflict.description.no_host_frame',
   },
+  delegated_executor_unwired: {
+    titleKey: 'errors.conflict.title.delegated_executor_unwired',
+    descriptionKey: 'errors.conflict.description.delegated_executor_unwired',
+  },
+  // The two conditions that are NOT about a missing registration. They had borrowed the reason
+  // above, whose copy sends an operator to register an executor that is registered and fine.
+  delegated_step_async_only: {
+    titleKey: 'errors.conflict.title.delegated_step_async_only',
+    descriptionKey: 'errors.conflict.description.delegated_step_async_only',
+  },
+  delegated_claim_missing: {
+    titleKey: 'errors.conflict.title.delegated_claim_missing',
+    descriptionKey: 'errors.conflict.description.delegated_claim_missing',
+  },
   task_limit_reached: {
     titleKey: 'errors.conflict.title.task_limit_reached',
     descriptionKey: 'errors.conflict.description.task_limit_reached',
@@ -448,6 +462,7 @@ const REASON_DESCRIPTION_KEYS: Record<UnavailableReason | BootstrapReferenceReas
     'errors.unavailable.description.service_catalog_response_too_large',
   assistant_generation_failed: 'errors.unavailable.description.assistant_generation_failed',
   assistant_reply_unreadable: 'errors.unavailable.description.assistant_reply_unreadable',
+  delegated_executor_failed: 'errors.unavailable.description.delegated_executor_failed',
 }
 
 /**

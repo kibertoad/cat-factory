@@ -15,6 +15,10 @@ import type {
   PromptFragment,
   RegistrationProblem,
   RegistrationWarning,
+  DelegatedExecutorDefinition,
+  DelegationBrief,
+  DelegationHandle,
+  DelegationUpdate,
   StepCompletionResolver,
   StepOptions,
   TaskTypeFieldDescriptor,
@@ -74,6 +78,7 @@ const SEAM_ROUTES = {
   agentKindRegistry: 'option',
   gateRegistry: 'option',
   judgeRegistry: 'option',
+  delegatedExecutorRegistry: 'option',
   stepResolverRegistry: 'option',
   pipelineRegistry: 'option',
   taskTypeRegistry: 'option',
@@ -149,6 +154,7 @@ const BOOT_ROUTES = {
   agentKindRegistry: 'entry-point',
   gateRegistry: 'entry-point',
   judgeRegistry: 'entry-point',
+  delegatedExecutorRegistry: 'entry-point',
   stepResolverRegistry: 'entry-point',
   pipelineRegistry: 'entry-point',
   taskTypeRegistry: 'entry-point',
@@ -227,6 +233,7 @@ const SEAM_CONSTRUCTORS = {
   agentKindRegistry: ['AgentKindRegistry', 'defaultAgentKindRegistry'],
   gateRegistry: ['GateRegistry', 'defaultGateRegistry', 'gateRegistryWithBuiltins'],
   judgeRegistry: ['JudgeRegistry', 'defaultJudgeRegistry'],
+  delegatedExecutorRegistry: ['DelegatedExecutorRegistry', 'defaultDelegatedExecutorRegistry'],
   stepResolverRegistry: ['StepResolverRegistry', 'defaultStepResolverRegistry'],
   pipelineRegistry: ['PipelineRegistry', 'defaultPipelineRegistry'],
   taskTypeRegistry: ['TaskTypeRegistry', 'defaultTaskTypeRegistry'],
@@ -273,6 +280,15 @@ const _authoringVocabulary:
       gate: GateDefinition
       judge: JudgeDefinition
       resolver: StepCompletionResolver
+      // The DELEGATED-EXECUTOR authoring half: a deployment writing a registration names its own
+      // executor's shape, what a dispatch hands it, and what it may answer. Four types rather than
+      // one, because an implementation is written against all four and a missing re-export sends
+      // the deployment to `@cat-factory/kernel` for the rest: the duplicate-copy hazard this
+      // block exists to close.
+      delegatedExecutor: DelegatedExecutorDefinition
+      delegationBrief: DelegationBrief
+      delegationHandle: DelegationHandle
+      delegationUpdate: DelegationUpdate
       // The BOOT-VALIDATION half: a deployment writing an `escalateRegistrationWarning` predicate
       // names what it is handed, which is the WARN branch (the one carrying `subject`). The UNION
       // belongs here too, since a deployment collecting problems itself sees the whole one; its

@@ -80,6 +80,22 @@ describe('dispatchDeliversCheckout', () => {
     // so an ineligible-for-consensus container kind still reports false while consensus is on.
     expect(dispatchDeliversCheckout('coder', registry(), { consensusEnabled: true })).toBe(false)
   })
+
+  it('is TRUE for a DELEGATED kind, whose executor checks out the branch itself', () => {
+    // The one place this parts company with `runsInContainer`, which asks whether the work needs
+    // one of OUR containers. `composeDelegationBrief` renders a delegated prompt with
+    // `materialized: true` and names the work branch, so deriving this from the container answer
+    // had a kind's preOps prepare a checkout-less file list for an agent whose own prompt told it
+    // to work on the tree it does have.
+    const reg = registry()
+    reg.register({
+      kind: 'acme:impl',
+      systemPrompt: 'implement it',
+      agent: { surface: 'delegated', executor: 'acme:executor' },
+    })
+    expect(runsInContainer('acme:impl', reg)).toBe(false)
+    expect(dispatchDeliversCheckout('acme:impl', reg)).toBe(true)
+  })
 })
 
 describe('deliverableIsReply', () => {

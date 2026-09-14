@@ -170,6 +170,13 @@ export interface WorkerExecutorDeps {
    * chain plus the description the credential checklist renders.
    */
   resolveToolSecrets: ToolSecretResolver
+  /**
+   * The DELEGATED arm, built by the composition root from the app-owned executor registry. Absent
+   * ⇒ the composite refuses a delegated kind loudly, which is the same disposition an unwired
+   * container gets and for the same reason: the fallback would be an inline LLM call over an
+   * implementer's prompt, producing confident prose and no branch.
+   */
+  delegated?: AgentExecutor
 }
 
 /**
@@ -385,7 +392,13 @@ export function selectAgentExecutor(deps: WorkerExecutorDeps): AgentExecutor {
 
   // Always the composite: non-sandbox kinds run inline; sandbox kinds run in the
   // container.
-  return new CompositeAgentExecutor(inline, container, agentKindRegistry)
+  return new CompositeAgentExecutor(
+    inline,
+    container,
+    agentKindRegistry,
+    deps.delegated ?? null,
+    logger,
+  )
 }
 
 /** Truthy env flag (`true`/`1`/`yes`). */

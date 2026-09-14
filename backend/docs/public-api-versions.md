@@ -384,3 +384,23 @@ belongs with. The list's order is published: the Java client emits it as an enum
 an integration may have persisted, and three more clients expose a `*_VALUES` array in the same
 sequence. An insertion is therefore an in-place re-sequencing of four released clients, arriving as
 generated churn.
+
+## 1.75.0
+
+Two additions for DELEGATED steps, a run's work carried out in a system the deployment already
+operates rather than in this platform's own harness.
+
+`AgentFailureKind` gains `delegated_failed`: an external executor's terminal verdict. It is not a
+new failure so much as one that used to arrive under somebody else's name. The engine had one
+"terminal, do not retry" signal, `harness_shutdown`, so a consumer bucketing failures saw external
+CI verdicts filed under container eviction, and a human saw "Harness shut down" for a step that
+never had a harness. A consumer that maps the vocabulary exhaustively gains a member; one that
+does not keeps parsing, as the clients do by design.
+
+The `llm` totals on `GET /api/v1/debug/runs/{runId}` and `GET /api/v1/debug/runs/{runId}/llm-export`
+gain `reporting`: how many of the run's steps ran on an executor that files no usage, and which
+executors those were. The totals beside it are unchanged and remain correct for what they cover;
+this says what they do NOT cover, which is the whole point. A delegated step's model calls never
+reach this deployment's proxy or recorder, so its tokens are in no total here, and a missing number
+is invisible. A caller reading spend off this surface should treat a non-zero
+`delegatedStepsWithoutUsage` as "this run cost more than this number says", not as a zero.

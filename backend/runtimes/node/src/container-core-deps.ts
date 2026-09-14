@@ -130,6 +130,7 @@ export interface NodeCoreDepsBundle {
   agentKindRegistry: NodeAppRegistriesResult['agentKindRegistry']
   gateRegistry: NodeAppRegistriesResult['gateRegistry']
   judgeRegistry: NodeAppRegistriesResult['judgeRegistry']
+  delegatedExecutorRegistry: NodeAppRegistriesResult['delegatedExecutorRegistry']
   stepResolverRegistry: NodeAppRegistriesResult['stepResolverRegistry']
   initiativePresetRegistry: NodeAppRegistriesResult['initiativePresetRegistry']
   providerRegistry: NodeAppRegistriesResult['providerRegistry']
@@ -282,6 +283,7 @@ function selectNodeRegistryDeps(bundle: NodeCoreDepsBundle) {
     agentKindRegistry,
     gateRegistry,
     judgeRegistry,
+    delegatedExecutorRegistry,
     stepResolverRegistry,
     initiativePresetRegistry,
     providerRegistry,
@@ -299,6 +301,10 @@ function selectNodeRegistryDeps(bundle: NodeCoreDepsBundle) {
     // The app-owned JUDGE registry (the fourth step-taxonomy bucket); the engine's judge machine
     // reads it, and it is re-exposed on Core for the snapshot's palette projection.
     judgeRegistry,
+    // The app-owned DELEGATED-EXECUTOR registry: the dispatch path builds each executor from it,
+    // and it is re-exposed on Core so the boot validation can refuse a kind naming one nobody
+    // registered.
+    delegatedExecutorRegistry,
     stepResolverRegistry,
     // The app-owned provider registry the gate providers were wired onto above; the engine's gate
     // machine reads the SAME instance through its GateContext.
