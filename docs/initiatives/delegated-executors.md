@@ -468,7 +468,11 @@ counts delegated steps whose step metrics hold no calls, so an executor that dec
   verification report, the spend rollups. A delegated step with no usage must never be a `0`.
 - **Mothership mode**: the executor runs where the engine runs, credentials resolve through the
   same delegated resolver the tool servers use, and the registry is code on the node; a definition
-  the mothership knows and the node does not is refused at dispatch, never merged.
+  the mothership knows and the node does not is refused at dispatch, never merged. Its conformance
+  harness has to COMPOSE the delegated arm like the other three (`withDelegatedArm` plus both
+  registries on the container): without it the suite's delegated kind falls through to the
+  deterministic fake, and eight assertions about an executor that was never called go green on
+  every runtime except the one being tested.
 - **Runtime symmetry**: both drivers' poll cadence and the step-schema change land together with a
   conformance group that runs on every facade. A delegated step's whole state is what the claim
   persisted (no container to re-address, no runner to ask), so it is exactly the shape a facade can
