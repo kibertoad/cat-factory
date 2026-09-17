@@ -711,8 +711,9 @@ subset that dead-ends ANY run, or every stored pipeline predating it stops runni
 
 **Repo bootstrap** mirrors the execution pattern: `BootstrapService` → `bootstrap_jobs` →
 `BootstrapWorkflow` polling the idempotent `pollBootstrapJob()`, then links the repo and flips the frame
-`ready`; pre-flights an EMPTY target, its prompt riding Pi's global `AGENTS.md` so it never lands there.
-Targeting a DIRECTORY of an EXISTING repo splits the run into two drives around a human adoption review (a BOUNDED tool-loop survey → park `awaiting_review` → write); `delivery` then picks PR vs push, defaulted per TARGET and PERSISTED (a retry re-dispatches under it). Traps: a parked run is neither `running` nor terminal, so it takes its OWN `driveId`; the plan is checked against the transcript the loop LEFT, never the opening snapshot; only a run that PROMISED a PR fails for reporting none. [Doc](./docs/initiatives/monorepo-service-bootstrap.md).
+`ready`; pre-flights an EMPTY target. Targeting a DIRECTORY of an EXISTING repo splits the run into two
+drives around a human adoption review. Deadliest trap: a PARKED run is neither `running` nor terminal, so
+it takes its OWN `driveId`. [Doc](./docs/initiatives/monorepo-service-bootstrap.md).
 
 **Service blueprints**: a Blueprinter agent decomposes a repo into service → modules and persists it IN
 THE REPO under `blueprints/`: no table, because the files are the truth and the board is the projection.
@@ -720,9 +721,8 @@ The map stops at modules and tasks are authored by people, so `reconcileBlueprin
 missing, refreshes descriptions, and **NEVER deletes or touches authored tasks**.
 
 **In-repo spec implementation state**: `requirementItem.state` (`aspirational` ⇄ `established`) keeps an
-agreed-but-unbuilt requirement out of build prompts. Trap: `specPromotionPostOp` is the ONE author and
-it NEVER demotes; `coerceRequirement` defaults a garbled state to `aspirational`, so a model cannot promote
-by assertion. Doc: [`service-acceptance-criteria.md`](./docs/initiatives/service-acceptance-criteria.md).
+agreed-but-unbuilt requirement out of build prompts. Deadliest trap: `specPromotionPostOp` is the ONE
+author and it NEVER demotes, so a model cannot promote by assertion. Doc: [`service-acceptance-criteria.md`](./docs/initiatives/service-acceptance-criteria.md).
 
 **Pre-dispatch input gate**: a deterministic reduction over a task's OWN authored fields, run at step 0
 before the first dispatch, parking the run for FREE when there is structurally nothing to act on.
@@ -753,13 +753,11 @@ its own task on the board's `bugFishingFixPipelineId`, else `pl_bugfix_tested`. 
 MID-hunt, so the state survives `resetStepForRerun` and every reduction is over the ACCUMULATED catch. Doc: [`bug-fishing-expedition.md`](./docs/initiatives/bug-fishing-expedition.md).
 
 **Implementation-fork decision**: an optional two-phase `coder` step that proposes materially different
-implementations and parks for a human BETWEEN two dispatches on the same step (a container job can't
-pause mid-run). Rides `step.forkDecision`; primary repo only. Doc:
-[ADR 0022](./backend/docs/adr/0022-coder-fork-decision.md).
+implementations and parks for a human BETWEEN two dispatches on the same step (a container job can't pause
+mid-run). Rides `step.forkDecision`. Doc: [ADR 0022](./backend/docs/adr/0022-coder-fork-decision.md).
 
-**Dependency prepopulation**: one declared install command run before the agent's first turn. Trap:
-NEVER a gate; an install is SETUP, so every failure becomes a prompt NOTE and the run continues. Doc:
-[`agent-dependency-prepopulation.md`](./docs/initiatives/agent-dependency-prepopulation.md).
+**Dependency prepopulation**: one declared install command run before the agent's first turn. Deadliest
+trap: NEVER a gate; an install is SETUP, so a failure becomes a prompt NOTE and the run continues. [Doc](./docs/initiatives/agent-dependency-prepopulation.md).
 
 **Foundational services**: a tiered (builtin ⊕ account ⊕ workspace) catalog of the shared capabilities an
 org already runs, injected as `.cat-context/` files; supplied by upload, a linked repo or an IMPORTED
@@ -790,10 +788,15 @@ harness lifts it onto `openPullRequest`; when the target repo ships a PR templat
 template, filled in. Trap: the guidance rides EVERY agent pass, so the coverage test classifies every
 agent-running mode as PR-opening or not. Doc: [`pipeline-pr-descriptions.md`](./backend/docs/pipeline-pr-descriptions.md).
 
-**Consensus panels**: an eligible step runs as a multi-model panel (`@cat-factory/consensus`). Traps: a
-panel participant has NO checkout and `dispatchDeliversCheckout` is the one definition every layer asks;
-the tier is chosen by the ENGINE at dispatch, deterministically. Doc:
-[`consensus-panels.md`](./backend/docs/consensus-panels.md).
+**Delegated executors**: a step runs in a system the DEPLOYMENT already operates, on
+`DelegatedExecutorRegistry` + an `agent.surface: 'delegated'` kind; everything around it (intake,
+standards, `ci`, the merge policy, notifications) is the engine unchanged. Deadliest trap: both drivers
+REPLAY, so the engine commits a delegation CLAIM before `start()` and the executor owes idempotency per
+`correlationKey`, or one task gets two external runs and two PRs. Doc: [`delegated-executors.md`](./backend/docs/delegated-executors.md).
+
+**Consensus panels**: an eligible step runs as a multi-model panel (`@cat-factory/consensus`). Deadliest
+trap: a panel participant has NO checkout, and `dispatchDeliversCheckout` is the one definition every layer
+asks. Doc: [`consensus-panels.md`](./backend/docs/consensus-panels.md).
 
 **Merge lifecycle** turns an open PR into a merged one, gated on REAL CI and a REAL merge, so a task is
 `done` only when its PR actually merged.
@@ -816,21 +819,18 @@ the tier is chosen by the ENGINE at dispatch, deterministically. Doc:
   [ADR 0046](./backend/docs/adr/0046-merge-track-record.md).
 - **Whether a run WAITS is policy too**: `autonomy` answers the parks the engine's loops raise WHEN THEY
   GIVE UP, on the record; a workspace holds TWO defaults for it AND for its pipeline, scoped by
-  `runDefaultScopeFor(intakeOrigin)`. Traps: never a park the PIPELINE asked for; a new give-up park picks
-  a side; a review's QUESTIONS settle only where a SECOND, independent judgement agrees.
+  `runDefaultScopeFor(intakeOrigin)`. Deadliest trap: never a park the PIPELINE asked for.
   [ADR 0053](./backend/docs/adr/0053-unattended-run-autonomy.md), [ADR 0054](./backend/docs/adr/0054-per-scope-pipeline-defaults.md).
 - **Notifications** (`NotificationChannel`) and run-lifecycle events (`RunLifecycleSink`) are built together
   by `buildNotificationWebhookSupport` onto ONE registered endpoint and the ONE `signedDelivery.ts`
-  retry/SSRF/signature core. Traps: the started edge is exactly-once via `handOffLiveRun` (announced LAST,
-  after the claim and the local write); the terminal edges are at-least-once with a `<runId>:<event>` dedupe
-  id a receiver dedupes on, never on the body. [ADR 0030](./backend/docs/adr/0030-public-api-surface.md).
+  retry/SSRF/signature core. Deadliest trap: the started edge is exactly-once via `handOffLiveRun`, the
+  terminal edges at-least-once with a `<runId>:<event>` id a receiver dedupes on, never on the body.
+  [ADR 0030](./backend/docs/adr/0030-public-api-surface.md).
 
 **Run evidence reductions**: the ENGINE keeps a verification report of captured facts on EVERY pull request
 a run opened (marker-delimited body section, idempotent, no persisted state) and reduces the same evidence
-into the OUTCOME summary the SPA card renders and `/api/v1/runs/:runId/outcome` serves. Traps: composing is
-a settlement HOOK reading in-memory state, never a re-probe; a peer's copy WITHHOLDS the own-service-only
-sections, so the write-avoidance cache keys per TARGET; a rule BOTH reductions state (which testers count,
-regressions, coverage) lives in contracts' `run-evidence.ts`. Doc: [`pr-verification-report.md`](./docs/initiatives/pr-verification-report.md).
+into the OUTCOME summary the SPA card renders and `/api/v1/runs/:runId/outcome` serves. Deadliest trap:
+composing is a settlement HOOK reading in-memory state, never a re-probe. Doc: [`pr-verification-report.md`](./docs/initiatives/pr-verification-report.md).
 
 **Environment disposal**: the `disposer` step reclaims what the run provisioned where its author placed
 it, every teardown path re-probes afterwards, and a SAVE refuses a chain that neither reclaims nor says

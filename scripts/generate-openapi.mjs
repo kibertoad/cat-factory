@@ -62,7 +62,7 @@ export const SERVED_OPENAPI_PATH = resolve(
 // it against `origin/main` after every merge rather than trusting a clean one, and write the new
 // entry in the history doc, which is what makes the next collision arrive as a conflict.
 
-const API_VERSION = '1.74.0'
+const API_VERSION = '1.75.0'
 
 /**
  * Named DTOs hoisted into `components.schemas` (so client codegen gets named types and

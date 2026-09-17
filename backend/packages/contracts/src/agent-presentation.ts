@@ -199,8 +199,56 @@ export const customAgentKindSchema = v.object({
    * is every custom kind in the stock product.
    */
   companionTargets: v.optional(v.array(agentKindSchema)),
+  /**
+   * WHICH executor class runs this kind, as one value rather than a growing set of booleans.
+   *
+   * {@link container} answers a two-world question and there are now three, so the SPA needs a name
+   * for the third: a `delegated` kind's work happens in an external system a deployment registered,
+   * which is what the palette labels and what the step card explains when it says the platform is
+   * not reporting the run's token usage.
+   *
+   * Additive, and {@link container} stays beside it: the snapshot is internal wire, so nothing is
+   * owed a migration, but removing the boolean buys nothing this slice and every existing reader
+   * keeps working. Absent ⇒ derive from {@link container}, which is what every pre-delegation
+   * snapshot means.
+   */
+  executor: v.optional(v.picklist(['inline', 'container', 'delegated'])),
+  /**
+   * The registered delegated executor this kind runs on, when {@link executor} is `delegated`:
+   * its id plus the presentation the deployment gave it.
+   *
+   * Carried on the KIND rather than looked up from a second snapshot list, because the pipeline
+   * builder's one question is "what does this step's card say", and a kind whose executor the
+   * build no longer registers must read as an unresolvable step rather than silently as a normal
+   * one. Absent for every other kind.
+   *
+   * The `id` is ALWAYS present for a delegated kind; everything else is absent when this build no
+   * longer registers the executor. That asymmetry is the whole point: the id is what the kind
+   * DECLARES and the platform always knows, while the label and the telemetry declaration belong
+   * to a registration that may be gone. Sending nothing at all for an unregistered executor left
+   * the SPA with no name to show, and the empty string it substituted then defeated its own "name
+   * the id instead" fallback.
+   */
+  delegatedExecutor: v.optional(
+    v.object({
+      id: v.string(),
+      label: v.optional(v.string()),
+      icon: v.optional(v.string()),
+      description: v.optional(v.string()),
+      /**
+       * Whether the executor files its own LLM telemetry. `not-reported` is what makes the run
+       * views say "usage not reported by <executor>" instead of rendering a zero. Absent for an
+       * executor this build does not register, where the honest reading is the same as
+       * `not-reported`: nothing here can say otherwise.
+       */
+      telemetry: v.optional(v.picklist(['not-reported', 'self-reported'])),
+    }),
+  ),
 })
 export type CustomAgentKind = v.InferOutput<typeof customAgentKindSchema>
+
+/** The executor class a step's kind runs on, as the snapshot names it. */
+export type AgentExecutorClass = NonNullable<CustomAgentKind['executor']>
 
 /**
  * A registered VARIATION of an existing agent kind — an alternate prompt a step selects through

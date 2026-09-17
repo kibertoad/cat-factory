@@ -10,31 +10,39 @@
 // must stay BEFORE `applyGateProviders` in the finalize step.
 import {
   type AppCaches,
+  type AgentExecutor,
   type BlockRepository,
   type Clock,
   type GitHubInstallationRepository,
   type Logger,
   type RepoProjectionRepository,
   type ServiceRepository,
+  type UrlSafetyPolicy,
   type WorkspaceMountRepository,
   createInitiatorPatGate,
 } from '@cat-factory/kernel'
 import {
   type AppConfig,
+  buildDelegatedAgentExecutor,
   CompositeAgentExecutor,
   GitHubAppAuth,
   GitHubAppRegistry,
   buildListWorkspaceRunRepos,
   buildResolveRepoTarget,
   buildResolveRepoTargets,
+  type ResolveRepoOrigin,
+  type ResolveRepoTarget,
   type ToolSecretChain,
   buildToolSecretChain,
   mcpOAuthExecutorDeps,
   toolSecretContainerFields,
   createResolveRunInitiatorToken,
   logger,
+  resolveUrlSafetyPolicy,
 } from '@cat-factory/server'
 
+import type { AgentKindRegistry } from '@cat-factory/agents'
+import type { CoreDependencies } from '@cat-factory/orchestration'
 import type { NodeContainerOptions } from './container-options.js'
 import type { resolveNodeContainerFoundation } from './container-foundation.js'
 import type { buildNodeModelDeps } from './container-model-deps.js'
@@ -193,6 +201,98 @@ function buildNodeRepoResolvers(deps: {
   }
 }
 
+/**
+ * How this facade resolves the agent executor: the inline / container / DELEGATED selection, as one
+ * composite. The twin of the Worker's `selectWorkerAgentExecutor`, and its own function for the
+ * same reason: it is the one entry in the platform bundle that RESOLVES rather than names a
+ * collaborator, and keeping the two facades' selections the same shape is what stops the seam being
+ * wired differently on one of them.
+ *
+ * It is called AFTER the GitHub deps, and that ordering is load-bearing: the delegated arm shares
+ * their checkout-free repo binding, so an executor that stages its own context layer writes through
+ * the SAME `RepoFiles` a registered kind's pre-ops do (one cache, one head memo) rather than a
+ * second binding of its own.
+ *
+ * Consensus wraps this LATER (in the finalize step, once the event publisher exists), so live panel
+ * pushes ride the same hub.
+ */
+function selectNodeAgentExecutor(input: {
+  inline: AgentExecutor
+  container: AgentExecutor | null
+  registries: NodeRunPlatformInput['foundation']['registries']
+  agentKindRegistry: AgentKindRegistry
+  resolveRepoTarget: ResolveRepoTarget
+  resolveRepoOrigin: ResolveRepoOrigin
+  githubGateDeps: Partial<CoreDependencies>
+  tasks: { deps: Partial<CoreDependencies> }
+  toolSecretChain: ToolSecretChain
+  runServices: ReturnType<typeof buildNodeRunServices>
+  /**
+   * The outbound guard a registered executor answers to, resolved from the SAME config slice the
+   * notification-webhook sender uses. An executor is an outbound HTTP surface the deployment
+   * configured, and a second set of SSRF rules is a set nobody maintains. Symmetric with the
+   * Worker facade.
+   */
+  urlSafetyPolicy: UrlSafetyPolicy | undefined
+  clock: Clock
+}): CompositeAgentExecutor {
+  const delegated = buildDelegatedAgentExecutor({
+    delegatedExecutorRegistry: input.registries.delegatedExecutorRegistry,
+    agentKindRegistry: input.agentKindRegistry,
+    resolveRepoTarget: input.resolveRepoTarget,
+    resolveRepoOrigin: input.resolveRepoOrigin,
+    urlSafetyPolicy: input.urlSafetyPolicy,
+    ...(input.githubGateDeps.resolveRunRepoContext
+      ? { resolveRunRepoContext: input.githubGateDeps.resolveRunRepoContext }
+      : {}),
+    ...(input.tasks.deps.taskRepository ? { taskRepository: input.tasks.deps.taskRepository } : {}),
+    resolveToolSecrets: input.toolSecretChain.resolver,
+    agentContextObservability: input.runServices.agentContextObservability,
+    logger,
+    clock: input.clock,
+  })
+  // Inline kinds run as one-shot LLM calls; repo-operating kinds route to the container (and fail
+  // loudly when its prerequisites are unconfigured); delegated kinds route to the deployment's own
+  // external executor.
+  return new CompositeAgentExecutor(
+    input.inline,
+    input.container,
+    input.agentKindRegistry,
+    delegated,
+    logger,
+  )
+}
+
+/**
+ * The persistence the container-execution path needs, built from the same db.
+ *
+ * One group rather than four lines in the platform builder, because every member is SHARED by at
+ * least two of the collaborators below it and constructing one twice would give them different
+ * instances: the runner-pool repo also backs the `runners` Core module (so a pool registered
+ * through the API is the one a dispatch resolves), the installation repo backs both token minting
+ * and repo resolution, and the repositories projection is read by `buildResolveRepoTarget` and by
+ * the GitHub sync/webhook module.
+ */
+function selectNodeRunRepositories(
+  options: NodeContainerOptions,
+  sourced: NodeRunPlatformInput['foundation']['sourced'],
+) {
+  return {
+    runnerPoolConnectionRepository: sourced(
+      'runnerPoolConnectionRepository',
+      (d) => new DrizzleRunnerPoolConnectionRepository(d),
+    ),
+    githubInstallationRepository:
+      options.githubInstallationRepository ??
+      sourced('githubInstallationRepository', (d) => new DrizzleGitHubInstallationRepository(d)),
+    repoProjectionRepository: sourced(
+      'repoProjectionRepository',
+      (d) => new DrizzleRepoProjectionRepository(d),
+    ),
+    entityProjectionRepositories: sourceEntityProjections(sourced),
+  }
+}
+
 export function buildNodeRunPlatform({ options, foundation, models }: NodeRunPlatformInput) {
   const {
     env,
@@ -211,23 +311,12 @@ export function buildNodeRunPlatform({ options, foundation, models }: NodeRunPla
   const { runnerBackendRegistry, agentKindRegistry, providerRegistry } = registries
   const { subscriptions, personalSubscriptions, resolveUserGitHubToken, inline } = models
 
-  // Persistence the container-execution path needs (built from the same db). The
-  // runner-pool repo also backs the `runners` Core module so a pool is registrable
-  // via the API; the installation repo backs both token minting and repo resolution.
-  const runnerPoolConnectionRepository = sourced(
-    'runnerPoolConnectionRepository',
-    (d) => new DrizzleRunnerPoolConnectionRepository(d),
-  )
-  const githubInstallationRepository =
-    options.githubInstallationRepository ??
-    sourced('githubInstallationRepository', (d) => new DrizzleGitHubInstallationRepository(d))
-  // The repositories projection (+ sync cursors), shared by `buildResolveRepoTarget`
-  // (block→repo resolution) and the GitHub sync/webhook module below.
-  const repoProjectionRepository = sourced(
-    'repoProjectionRepository',
-    (d) => new DrizzleRepoProjectionRepository(d),
-  )
-  const entityProjectionRepositories = sourceEntityProjections(sourced)
+  const {
+    runnerPoolConnectionRepository,
+    githubInstallationRepository,
+    repoProjectionRepository,
+    entityProjectionRepositories,
+  } = selectNodeRunRepositories(options, sourced)
 
   const appRegistry = buildNodeAppRegistry(env, config, clock, githubInstallationRepository)
 
@@ -345,12 +434,6 @@ export function buildNodeRunPlatform({ options, foundation, models }: NodeRunPla
       runServices.subscriptionQuotaProvider.recordUsage(target, usage),
   })
 
-  // Always a composite: inline kinds run as one-shot LLM calls; repo-operating kinds
-  // route to the container (and fail loudly when its prerequisites are unconfigured).
-  // Optionally wrapped with the consensus mechanism in the finalize step, after the event
-  // publisher is built, so live consensus pushes ride the same hub.
-  const standardAgentExecutor = new CompositeAgentExecutor(inline, container, agentKindRegistry)
-
   // The GitHub-client-dependent slice of the composition root: the engine's GitHub client, the
   // CI / mergeability / review / doc-quality gate-provider wiring (registered onto
   // `providerRegistry` as a side effect — kept BEFORE `applyGateProviders` in finalize), the
@@ -386,6 +469,21 @@ export function buildNodeRunPlatform({ options, foundation, models }: NodeRunPla
     trackerSettingsRepository: repos.trackerSettingsRepository,
     workspaceRepository: repos.workspaceRepository,
     caches: options.caches,
+  })
+
+  const standardAgentExecutor = selectNodeAgentExecutor({
+    inline,
+    container,
+    registries,
+    agentKindRegistry,
+    resolveRepoTarget,
+    resolveRepoOrigin,
+    githubGateDeps,
+    tasks,
+    toolSecretChain,
+    runServices,
+    urlSafetyPolicy: resolveUrlSafetyPolicy(config.notificationWebhooks),
+    clock,
   })
 
   // Repo-bootstrap: the reference-architecture library + the container-dispatching

@@ -42,7 +42,13 @@ import {
 import { buildStepApproval } from './stepApproval.js'
 import { parseBlueprintService, parseSpecDoc } from '@cat-factory/contracts'
 import type { DispatchToolServers, StepSkipReason } from '@cat-factory/contracts'
-import { applyContainerRunning, applySubtaskProgress, pollHandleFor } from './step-fold.logic.js'
+import {
+  applyContainerRunning,
+  applySubtaskProgress,
+  liveJobId,
+  pollHandleFor,
+  settleDelegatedJob,
+} from './step-fold.logic.js'
 import { applyObservedToolServers } from './toolServers.logic.js'
 import { FORK_PROPOSER_KIND } from '@cat-factory/agents'
 import type { AgentKindRegistry } from '@cat-factory/agents'
@@ -115,6 +121,7 @@ import {
   type ResolvedRiskPolicy,
   type RunDispatcherDeps,
 } from './RunDispatcherDependencies.js'
+import { awaitingJob } from './awaitingJob.logic.js'
 
 // The dependency DECLARATIONS live in `RunDispatcherDependencies.ts` (the same move
 // `ExecutionServiceDependencies.ts` is) and are re-exported here, so every existing import site
@@ -314,6 +321,7 @@ export class RunDispatcher {
     })
     this.agentDispatch = new AgentDispatchController({
       agentExecutor: deps.agentExecutor,
+      startStepDispatch: deps.startStepDispatch,
       blockRepository: deps.blockRepository,
       clock: deps.clock,
       contextBuilder: deps.contextBuilder,
@@ -378,8 +386,8 @@ export class RunDispatcher {
         this.recordBackendDiagnostics(instance, backend),
       recoverContainerEviction: (ws, instance, step, failure) =>
         this.pollRunning.recoverContainerEviction(ws, instance, step, failure),
-      markContainerErrored: (ws, instance, step) =>
-        this.pollRunning.markContainerErrored(ws, instance, step),
+      markDispatchErrored: (ws, instance, step, failure) =>
+        this.pollRunning.markDispatchErrored(ws, instance, step, failure),
     })
     this.settledHelpers = new SettledHelperRouter({
       resolveInvestigateHelperCompletion: (ws, instance, step, update) =>
@@ -406,6 +414,7 @@ export class RunDispatcher {
         agentExecutor: deps.agentExecutor,
         contextBuilder: deps.contextBuilder,
         runStateMachine: deps.runStateMachine,
+        startStepDispatch: deps.startStepDispatch,
       }),
     )
     this.judgeController = new JudgeStepController({
@@ -603,7 +612,9 @@ export class RunDispatcher {
     // The handle is rebuilt from the STEP — the poll site has no dispatch in scope — so every
     // field the executor reads off it has to have been persisted at dispatch. What each one is
     // for, and what silently breaks without it, lives with its counterpart in `step-fold.logic`.
-    const update = await executor.pollJob(pollHandleFor(step, workspaceId, executionId))
+    const update = await executor.pollJob(
+      pollHandleFor(step, workspaceId, executionId, instance.blockId),
+    )
     if (update.state === 'running') {
       return this.pollRunning.handleRunningPoll(
         workspaceId,
@@ -618,6 +629,14 @@ export class RunDispatcher {
     // of the branch tree below rather than inside each of its five persisting arms (see
     // `toolServers.logic.ts`). Mutation only; whichever arm runs owns the persist.
     applyObservedToolServers(step, update.toolServers)
+
+    // Settle the step's DELEGATION record on the job that just finished, ahead of the branch tree
+    // below for the same reason the tool-server fold is: a settled HELPER round is routed away
+    // from the completion path entirely, so a record settled only there stayed `running` for ever
+    // on every delegated `ci-fixer` / `on-call` / tester `fixer`. Mutation only; whichever arm
+    // runs owns the persist. A no-op for a container step, and for a container job that ran on a
+    // step whose delegation had already settled. See {@link settleDelegatedJob}.
+    settleDelegatedJob(step, update)
 
     // A settled job that belongs to this step's HELPER (a gate's ci-fixer / conflict-resolver or
     // on-call, a tester's fixer, a failed deployer's deploy-fixer) is a round in the step's own
@@ -666,9 +685,11 @@ export class RunDispatcher {
     const gate = step ? this.gateFor(step.agentKind) : undefined
     if (!step || !gate) return { kind: 'continue' }
     // A helper job is in flight — the driver should be polling it, not the gate; let
-    // the job-poll loop drive (defensive; a replay could route here).
-    if (step.jobId)
-      return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
+    // the job-poll loop drive (defensive; a replay could route here). A delegation claim the
+    // executor never answered is not one (see {@link liveJobId}): it falls through to the gate
+    // evaluation, which re-dispatches the helper.
+    const attached = liveJobId(step)
+    if (attached) return awaitingJob(step, instance.currentStep, attached)
     const block = await this.blockRepository.get(workspaceId, instance.blockId)
     if (!block) return { kind: 'noop' }
     const isFinalStep = instance.currentStep === instance.steps.length - 1

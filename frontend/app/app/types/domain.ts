@@ -170,6 +170,25 @@ export interface AgentArchetype {
    */
   binaryOutput?: boolean
   /**
+   * The registered EXTERNAL executor this kind's work runs on, when it runs on one at all.
+   *
+   * Carried onto the archetype for the reason {@link binaryOutput} is: the pipeline builder and
+   * every run view resolve a step's meta through `agentKindMeta`, not through the snapshot, so a
+   * fact a card has to state cannot live only on the wire entry. What it states is the thing a
+   * person composing a pipeline most needs to see (which of these steps leaves the platform),
+   * and what a run view needs to explain a step with no token usage beside it.
+   *
+   * `label` is absent when the kind declares a delegated surface whose executor THIS build no
+   * longer registers, which is a real state (a deployment can stop registering one while runs that
+   * used it are still on the board) and renders as the id rather than as a normal step.
+   */
+  delegatedExecutor?: {
+    id: string
+    label?: string
+    description?: string
+    telemetry?: 'not-reported' | 'self-reported'
+  }
+  /**
    * The platform dispatches this kind for a flow of its own, so the builder palette never offers
    * it as a placeable block (`narrowAgentPalette` drops it). It still resolves through
    * `agentKindMeta`, because a run of it has to RENDER. Absent ⇒ an ordinary palette block.

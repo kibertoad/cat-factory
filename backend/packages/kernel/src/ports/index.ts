@@ -227,6 +227,7 @@ export type {
   AgentTokenUsage,
   AsyncAgentExecutor,
   ReviewedPoint,
+  RunReclaimReport,
   RunReclaimTarget,
 } from './agent-executor.js'
 export { isAsyncAgentExecutor } from './agent-executor.js'

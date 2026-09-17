@@ -8,6 +8,7 @@ import { eksEnvironmentBackend, eksRunnerBackend } from '@cat-factory/eks'
 import { createBackendRegistries } from '@cat-factory/integrations'
 import { type GitHubClient, defaultProviderRegistry, defaultVcsRegistry } from '@cat-factory/kernel'
 import {
+  defaultDelegatedExecutorRegistry,
   defaultJudgeRegistry,
   defaultStepResolverRegistry,
   resolvePresetModelForKind,
@@ -106,6 +107,11 @@ function resolveNodeAppRegistries(options: NodeContainerOptions) {
     // (conformance / a deployment pre-loads it) else an empty default — the platform ships no
     // built-in judges. See `docs/initiatives/judge-registry.md`.
     judgeRegistry: options.judgeRegistry ?? defaultJudgeRegistry(),
+    // The app-owned DELEGATED-EXECUTOR registry (the external systems a deployment plugs in as the
+    // executor of a step): the injected instance else an empty default: the platform ships none,
+    // exactly like the judges above. See `docs/initiatives/delegated-executors.md`.
+    delegatedExecutorRegistry:
+      options.delegatedExecutorRegistry ?? defaultDelegatedExecutorRegistry(),
     // The app-owned initiative-preset registry: the injected instance else the built-ins-only
     // default (generic / docs-refresh / tech-migration).
     initiativePresetRegistry: options.initiativePresetRegistry ?? defaultInitiativePresetRegistry(),

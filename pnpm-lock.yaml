@@ -261,6 +261,25 @@ importers:
         specifier: ^4.1.11
         version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@26.6.1)(@vitest/coverage-v8@4.1.11)(happy-dom@20.14.5)(msw@2.15.0(@types/node@26.6.1)(typescript@7.0.2))(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
 
+  backend/internal/example-delegated-executor:
+    dependencies:
+      '@cat-factory/agents':
+        specifier: workspace:*
+        version: link:../../packages/agents
+      '@cat-factory/kernel':
+        specifier: workspace:*
+        version: link:../../packages/kernel
+    devDependencies:
+      '@cat-factory/orchestration':
+        specifier: workspace:*
+        version: link:../../packages/orchestration
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+      vitest:
+        specifier: ^4.1.11
+        version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@26.5.1)(@vitest/coverage-v8@4.1.11)(happy-dom@20.14.3)(msw@2.15.0(@types/node@26.5.1)(typescript@7.0.2))(vite@8.2.2(@types/node@26.5.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0))
+
   backend/internal/executor-harness:
     devDependencies:
       '@cat-factory/contracts':
@@ -518,6 +537,19 @@ importers:
       vitest:
         specifier: ^4.1.11
         version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@26.6.1)(@vitest/coverage-v8@4.1.11)(happy-dom@20.14.5)(msw@2.15.0(@types/node@26.6.1)(typescript@7.0.2))(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+
+  backend/packages/delegation-github-actions:
+    dependencies:
+      '@cat-factory/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+    devDependencies:
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+      vitest:
+        specifier: ^4.1.11
+        version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@26.5.1)(@vitest/coverage-v8@4.1.11)(happy-dom@20.14.3)(msw@2.15.0(@types/node@26.5.1)(typescript@7.0.2))(vite@8.2.2(@types/node@26.5.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0))
 
   backend/packages/eks:
     dependencies:

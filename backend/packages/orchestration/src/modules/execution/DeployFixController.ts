@@ -23,7 +23,8 @@ import type { AgentContextBuilder } from './AgentContextBuilder.js'
 import { appendAttemptLog } from './deployer.logic.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import type { RunStateMachine } from './RunStateMachine.js'
-import { recordDispatchAttribution } from './step-fold.logic.js'
+import { awaitingJob } from './awaitingJob.logic.js'
+import type { StartStepDispatch } from './delegation.logic.js'
 
 // ---------------------------------------------------------------------------
 // The `deployer`'s REMEDIATION loop: when a provision fails on the task's own service frame for a
@@ -81,6 +82,14 @@ export interface DeployFixControllerDeps {
   agentExecutor: AgentExecutor
   contextBuilder: AgentContextBuilder
   runStateMachine: RunStateMachine
+  /**
+   * Opens and commits this dispatch's record, calls the executor and folds what came back. The
+   * `deploy-fixer` is an ORDINARY dispatch of an agent kind, so a deployment that runs it on its
+   * own external loop reaches this site: hand-rolled, it took no delegation claim (a replay of the
+   * deploy-fix advance then started a SECOND external run) and stamped a container the platform
+   * never had. See {@link StartStepDispatch}.
+   */
+  startStepDispatch: StartStepDispatch
   clock: Clock
   /**
    * Where the give-up card is raised. Optional for the reason every other controller's is: a
@@ -151,7 +160,7 @@ export class DeployFixController {
     const executor = this.deps.agentExecutor
     if (!isAsyncAgentExecutor(executor)) return null
 
-    let handle
+    let jobId: string
     try {
       const base = await this.deps.contextBuilder.buildContext(
         workspaceId,
@@ -171,7 +180,16 @@ export class DeployFixController {
           { agentKind: DEPLOY_FAILURE_PRIOR_KIND, output: describeDeployFailure(failure) },
         ],
       }
-      handle = await executor.startJob(context)
+      // The shared dispatch: it commits this round's record before the executor is called (the
+      // claim a delegated `deploy-fixer` replay re-attaches to, a container cold boot otherwise),
+      // settles it if the call throws, and stamps the attribution the poll site cannot re-derive.
+      ;({ jobId } = await this.deps.startStepDispatch({
+        workspaceId,
+        instance,
+        context,
+        step,
+        executor,
+      }))
     } catch (error) {
       await runBestEffort(this.log, 'deployFix.dispatch', () => Promise.reject(error), {
         workspaceId,
@@ -182,12 +200,6 @@ export class DeployFixController {
       return null
     }
 
-    step.jobId = handle.jobId
-    // Provisioning settles on the durable poll path, which rebuilds the handle from the STEP
-    // alone, so the resolved model, the leased subscription token and the initiating user have to
-    // be persisted here or attribution lands as "unknown" in production.
-    recordDispatchAttribution(step, handle, DEPLOY_FIXER_AGENT_KIND)
-    step.container = { status: 'up' }
     step.deployFix = {
       ...step.deployFix,
       phase: 'fixing',
@@ -200,7 +212,7 @@ export class DeployFixController {
       lastError: failure.error,
     }
     await this.deps.runStateMachine.persistAndEmit(workspaceId, instance)
-    return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
+    return awaitingJob(step, instance.currentStep, jobId)
   }
 
   /**

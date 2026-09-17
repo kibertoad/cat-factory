@@ -46,6 +46,7 @@ export function buildDeployerFamily(
     agentExecutor: deps.agentExecutor,
     contextBuilder: deps.contextBuilder,
     runStateMachine: deps.runStateMachine,
+    startStepDispatch: deps.startStepDispatch,
     clock: deps.clock,
     notificationService: deps.notificationService,
     logger: deps.logger,

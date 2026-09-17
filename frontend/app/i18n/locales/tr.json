@@ -636,7 +636,8 @@
         "service_catalog_filter_missing": "Bu bağlantının varlık filtresi okunamadı, dolayısıyla aktarılacak bir şey yok. Geri getirmek için servis kataloğu bağlantısını yeniden kaydedin.",
         "service_catalog_response_too_large": "Geliştirici portalı, bu platformun tek bir yanıtta tutacağından daha fazla veri döndürdü. Servis kataloğu ayarlarını açıp servis sınırını düşürün ya da arayüz tanımlarının aktarımını kapatın, sonra yeniden aktarın.",
         "assistant_generation_failed": "Asistanın model sağlayıcısı yanıt vermedi. Doğru yapılandırılmış durumda ve burada kurulacak bir şey yok: isteği birazdan yeniden deneyin.",
-        "assistant_reply_unreadable": "Asistanın modeli, bu platformun karar olarak uygulayamayacağı bir yanıt verdi. Yeniden ifade etmek nadiren işe yarar: model ayarlarından asistan için başka bir model seçin."
+        "assistant_reply_unreadable": "Asistanın modeli, bu platformun karar olarak uygulayamayacağı bir yanıt verdi. Yeniden ifade etmek nadiren işe yarar: model ayarlarından asistan için başka bir model seçin.",
+        "delegated_executor_failed": "Dış yürütücü bu adımı başlatamadı. Sorun bu kurulumda değil, işi yapan sistemde: onun kendi günlüklerine bakıp yeniden deneyin."
       }
     },
     "reason": {
@@ -720,7 +721,10 @@
         "expedition_settled": "Bu sefer zaten tamamlandı",
         "not_awaiting_triage": "Bu sefer triyaj beklemiyor",
         "already_addressed": "Bazı bulguların zaten bir düzeltme görevi var",
-        "no_host_frame": "Bu sefer bir hizmetin altında değil"
+        "no_host_frame": "Bu sefer bir hizmetin altında değil",
+        "delegated_executor_unwired": "Dış yürütücü kayıtlı değil",
+        "delegated_step_async_only": "Bu adım beklenmez, yoklanır",
+        "delegated_claim_missing": "Bu adımın kontrol edilecek harici işi yok"
       },
       "description": {
         "dependencies_unmet": "Bu görev henüz tamamlanmamış başka görevlere bağlı. Onları tamamla veya engelini kaldır, ardından yeniden başlat.",
@@ -774,7 +778,10 @@
         "expedition_settled": "Çalıştırma hata avı adımını çoktan geçti, dolayısıyla işaretlenecek veya yok sayılacak bir şey kalmadı. Neyin bulduğunu ve hangi bulgulara müdahale edildiğini görmek için çalıştırmayı yenileyin.",
         "not_awaiting_triage": "Ya hâlâ başka bir açıyı tarıyor ya da çoktan bitirilmiş. Nerede olduğunu görmek için çalıştırmayı yenileyin.",
         "already_addressed": "Daha önce onlar için bir düzeltme görevi oluşturulmuştu, bu yüzden yeniden bir şey oluşturulmadı. Mevcut göreve ulaşmak için bulguyu açın.",
-        "no_host_frame": "Bir düzeltme görevinin altında yaşayacağı bir hizmete ve düzeltilecek bir depoya ihtiyacı var. Sefer görevini bir hizmet çerçevesinin altına taşıyıp yeniden deneyin."
+        "no_host_frame": "Bir düzeltme görevinin altında yaşayacağı bir hizmete ve düzeltilecek bir depoya ihtiyacı var. Sefer görevini bir hizmet çerçevesinin altına taşıyıp yeniden deneyin.",
+        "delegated_executor_unwired": "Bu hattın bir adımı, bu kurulumun kaydetmediği bir dış yürütücüde çalışıyor; dolayısıyla işin gönderileceği bir yer yok. Yürütücüyü kodda kaydedin ya da adımı burada çalışan biriyle değiştirin.",
+        "delegated_step_async_only": "Bu adım harici bir yürütücüde çalışır ve saatler sürebilir; bu yüzden tek bir istek içinde çalıştırılmak yerine gönderilip ardından yoklanır. Çalıştırmayı panodan başlatın; buraya kendi kodunuzdan geldiyseniz adımı asenkron yoldan sürün.",
+        "delegated_claim_missing": "Çalıştırmanın harici yürütücüye ne gönderdiğine dair kaydı eksik, dolayısıyla yoklanacak bir şey yok. Yürütücünün kendisinde bir sorun yok. Çalıştırmayı yeniden yükleyin ve adım hâlâ takılıysa yeniden çalıştırın."
       },
       "action": {
         "connectGitHub": "GitHub'ı bağla",
@@ -1586,7 +1593,24 @@
       "promptVariant": "İstem varyantı",
       "promptVariantAdditionOnly": "Bu varyantın yalnızca eklentisi uygulandı. Bu ajan için çalışma alanı istemi, temel metnini değiştirdi.",
       "promptVariantSuperseded": "Bu varyant uygulanmadı. Bu ajan için çalışma alanı istemi öncelik kazandı.",
-      "promptVariantWithdrawn": "Bu varyant artık kayıtlı değil, bu nedenle adım varsayılan istemle çalıştı."
+      "promptVariantWithdrawn": "Bu varyant artık kayıtlı değil, bu nedenle adım varsayılan istemle çalıştı.",
+      "delegated": {
+        "status": {
+          "cancelled": "İptal edildi",
+          "done": "Dışarıda tamamlandı",
+          "failed": "Dışarıda başarısız oldu",
+          "running": "Dışarıda çalışıyor",
+          "starting": "Dışarıda başlatılıyor",
+          "unrecognised": "Tanınmayan durum ({status})"
+        },
+        "run": "Dış çalıştırma",
+        "branch": "Dal",
+        "copyUrl": "Dış çalıştırma bağlantısını kopyala",
+        "openRun": "Çalıştırmayı aç",
+        "noOutcome": "Sonuç kaydedilmedi",
+        "earlierAttempts": "Önceki denemeler",
+        "usageNotReported": "{executor} token kullanımını bildirmiyor; bu adım yukarıdaki toplamlarda yok."
+      }
     },
     "stepDetail": {
       "contents": "İçerik",
@@ -2006,6 +2030,7 @@
       "timeout": "Zaman aşımı",
       "agent": "Aracı",
       "job_failed": "İş başarısız",
+      "delegated_failed": "Harici yürütücü başarısız",
       "rejected": "Reddedildi",
       "companion_rejected": "Yardımcı reddedildi",
       "stalled": "Takıldı",

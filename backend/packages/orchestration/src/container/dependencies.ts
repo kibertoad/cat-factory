@@ -79,6 +79,7 @@ import type {
   InitiativeRepository,
   IssueProjectionRepository,
   IssueWritebackProvider,
+  DelegatedExecutorRegistry,
   EnvironmentInvestigator,
   JudgeAssessor,
   JudgeRegistry,
@@ -335,6 +336,15 @@ export interface CoreDependencies extends ContentLibraryDependencies {
    * registers its judges on. See `docs/initiatives/judge-registry.md`.
    */
   judgeRegistry?: JudgeRegistry
+  /**
+   * The app-owned DELEGATED-EXECUTOR registry: the external systems a deployment plugs in as the
+   * executor of a pipeline step (see `docs/initiatives/delegated-executors.md`). Optional +
+   * defaulted to `defaultDelegatedExecutorRegistry()` (EMPTY: the platform ships none, because
+   * shipping one would make the seam about that one). Each facade injects the SAME instance a
+   * deployment registers on, and passes it to `validateRegistrations` so a kind naming an
+   * unregistered executor fails boot rather than failing its first dispatch.
+   */
+  delegatedExecutorRegistry?: DelegatedExecutorRegistry
   /**
    * The verdict producer behind every judge step. Optional: `createCore` builds the inline
    * `JudgeService` from the model-provider dependencies the facade already wires, so judges need
