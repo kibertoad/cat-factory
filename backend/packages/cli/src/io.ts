@@ -89,27 +89,35 @@ export function openCommand(url: string, platform: NodeJS.Platform): OpenBrowser
  * A clack prompt resolved to a cancel symbol (Ctrl-C / Esc): print a notice and exit cleanly. The
  * ONE seam every prompt result passes through, so it is the only place that has to know about it.
  *
- * The guard is TWO conditions, and the second is what keeps the return total with no assertion.
- * Each prompt is declared as `Promise<T | symbol>`, with the WIDE `symbol`, while `isCancel`
- * narrows to `value is typeof CANCEL_SYMBOL`, one UNIQUE symbol belonging to the `@clack/core`
- * module instance that minted it. Control flow cannot subtract a unique symbol from the wide type,
- * so `isCancel` alone leaves the surviving branch at `T | symbol`; `typeof value === 'symbol'`
- * subtracts the rest, and TypeScript narrows to `T` on its own.
+ * It takes the prompt's WHOLE result type and subtracts the symbol arm from it, rather than being
+ * declared `(value: T | symbol): T` to have inference peel that arm off. The difference is not
+ * stylistic: clack spelled every prompt `Promise<Value | symbol>` with the WIDE `symbol` until
+ * 1.8.0 and `Promise<Value | typeof CANCEL_SYMBOL>` from 1.8.1, and a unique symbol does not
+ * match a wide `symbol` parameter slot, so on the newer spelling `T` swallowed the union whole
+ * and every call site went back to holding a symbol it thought it had been rid of. `Exclude` is
+ * indifferent to which spelling arrives, since a unique symbol is a subtype of `symbol` either
+ * way, and it is what clack's own `group()` helper uses on the same values.
  *
- * That second condition also catches a cancel `isCancel` does not recognise. Two copies of
- * `@clack/core` in the graph (a direct dependency and a transitive one on a different range) are
- * two unique symbols, and the guard only knows the one its own copy exported. Asserting `as T`
- * over that case hands the symbol back as a value: `question` calls `.trim()` on it and dies with
- * a `TypeError` where this seam exists to exit 130, and `select` returns it as a `T extends string`
- * for the caller to branch on. Exiting on ANY symbol is right whichever copy produced it, since
- * none of these prompts resolves to a symbol for any other reason.
+ * The guard is still TWO conditions, and the second is not redundant with `isCancel`. That
+ * predicate narrows to one UNIQUE symbol, the one belonging to the `@clack/core` instance that
+ * minted it, so two copies of `@clack/core` in the graph (a direct dependency and a transitive one
+ * on a different range) mint two, and the guard knows only its own. Letting the other through
+ * hands the symbol back as a value: `question` calls `.trim()` on it and dies with a `TypeError`
+ * where this seam exists to exit 130, and `select` returns it as a `T extends string` for the
+ * caller to branch on. Exiting on ANY symbol is right whichever copy produced it, since none of
+ * these prompts resolves to a symbol for any other reason.
+ *
+ * The assertion is what that second condition costs: control flow cannot subtract a symbol from
+ * an unresolved generic, so the narrowing TypeScript did for free under the old signature has to
+ * be stated. It is safe for exactly the reason above — the only way past both conditions is a
+ * value that is not a symbol at all.
  */
-function bailIfCancelled<T>(value: T | symbol): T {
+function bailIfCancelled<T>(value: T): Exclude<T, symbol> {
   if (isCancel(value) || typeof value === 'symbol') {
     cancel('Cancelled.')
     process.exit(130)
   }
-  return value
+  return value as Exclude<T, symbol>
 }
 
 /** The real, console-backed {@link Io}, implemented with `@clack/prompts`. */

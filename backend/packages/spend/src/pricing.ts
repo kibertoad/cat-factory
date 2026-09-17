@@ -290,14 +290,18 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   // is far BELOW the 0.1x floor the derived tier lands on, so the derived tier is
   // left in place: it over-states a cache read, which is the safe direction.
   'workers-ai:deepseek/deepseek-v4-pro': { inputPerMillion: 1.21, outputPerMillion: 3.64 },
-  // Kimi K2.5 / K2.6 / K2.7 likewise run on Workers AI as partner models billed at Workers
-  // AI's published per-token rate, NOT the near-free `workers-ai` neuron rate — without
-  // these explicit entries a Cloudflare-Kimi run (the default coder) would fall back to
-  // 0.1/0.1 and meter as ~0.00. Cloudflare lists K2.6/K2.7 at $0.95 in / $4.00 out and the
-  // older K2.5 at $0.60 in / $3.00 out per 1M (USD→EUR ~0.92). These are NOT a Cloudflare
-  // markup, as this note used to claim: Moonshot's own list moved to the same $0.95 / $4.00
-  // for K2.6, so `moonshot:kimi-k2.6` below now carries the identical rate. See
+  // Kimi K2.6 / K2.7 run on Workers AI as partner models billed at Workers AI's published
+  // per-token rate, NOT the near-free `workers-ai` neuron rate — without these explicit
+  // entries a Cloudflare-Kimi run (the default coder) would fall back to 0.1/0.1 and meter as
+  // ~0.00. Cloudflare lists both at $0.95 in / $4.00 out per 1M (USD→EUR ~0.92). These are NOT
+  // a Cloudflare markup, as this note used to claim: Moonshot's own list moved to the same
+  // $0.95 / $4.00 for K2.6, so `moonshot:kimi-k2.6` below now carries the identical rate. See
   // workers-ai/platform/pricing.
+  //
+  // K2.5 has since LEFT the Workers AI model catalog (the pricing page still lists it at
+  // $0.60 / $3.00; the model index no longer offers it), and no catalog entry routes to it.
+  // Its row stays anyway, for the reason every superseded row here stays: spend rows already
+  // recorded against that ref have to keep costing what they cost.
   //
   // Cloudflare publishes a cached-input rate for all three ($0.10 for K2.5, $0.16 for K2.6,
   // $0.19 for K2.7), and each sits above the 0.1x floor these entries would otherwise derive.
@@ -378,10 +382,14 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   //
   // `deepseek-flash` is V4.1-Flash, the canonical unversioned name since 2026-09-10, and it
   // reprices the Flash tier DOWN: peak list is $0.30 in / $0.006 cached / $1.20 out, against
-  // V4-Flash's $0.44 / $0.014 / $1.32. `deepseek:deepseek-v4-flash` stays below it because
-  // DeepSeek kept that id alive as a temporary alias onto this same model, so a deployment on
-  // an older catalog still meters, and because historical spend rows recorded against it must
-  // keep costing correctly. Both rows are peak, per the rule above.
+  // V4-Flash's $0.44 / $0.014 / $1.32. `deepseek:deepseek-v4-flash` stays below it, but the
+  // reason has narrowed to ONE: DeepSeek now documents `deepseek-v4-flash` as RETIRED, with the
+  // legacy name still ACCEPTED and served by `deepseek-flash` at current Flash pricing. So a
+  // live request on the old id is billed at the row ABOVE this one, and this row covers only
+  // what it always really covered — spend already recorded against that ref, which has to keep
+  // costing what it cost. It is deliberately not re-pointed at the Flash rate: re-pricing a
+  // historical row rewrites history, and a live request on the id over-meters by ~10%, which is
+  // the safe direction. Both rows are peak, per the rule above.
   'deepseek:deepseek-flash': {
     inputPerMillion: 0.28,
     outputPerMillion: 1.1,
@@ -455,9 +463,11 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   // now the published one and the two rows agree by fact rather than by assumption.
   //
   // GLM-5.3 Flash is a different tier entirely, listed at $0.15 in / $0.03 cached / $0.50 out.
-  // PRICED AT THAT LIST, not at the 50% launch promotion Z.ai runs until 2026-09-09: a temporary
-  // discount that lapses would leave the budget gate metering at half the real cost, and the gate
-  // may never undercount (the rule the Gemini Flash row states at length).
+  // This row was PRICED AT THAT LIST while Z.ai ran a 50% launch promotion on it, on the rule
+  // that a temporary discount which lapses leaves the budget gate metering at half the real
+  // cost. The promotion has since lapsed and Z.ai's page now shows the list rate alone, so the
+  // figures below are simply the price and the row needs no such argument any more. It is the
+  // OpenRouter mirror further down that still sits above its route (see that row).
   'zai:glm-5.3-flash': {
     inputPerMillion: 0.14,
     outputPerMillion: 0.46,
@@ -522,11 +532,15 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   },
   // The three Flash rows are ONE band each, which is what makes them the plain case beside the
   // entry above: Google prices them per token regardless of prompt length. All three sit at the
-  // $0.75 / $0.075 cached / $3.75 per 1M the gateway serves today, undiscounted, so these are the
-  // rate actually billed and the derived cache tier is exact.
+  // $0.75 / $0.075 cached / $3.75 per 1M the gateway serves today, so these are the rate
+  // actually billed and the derived cache tier is exact.
   //
-  // Google has published a 100% increase on all three for 2027-01-01, which this table does not
-  // pre-empt: a future price is not the current one, and the sweep after it lands it.
+  // That rate is Google's own DISCOUNT, running to 2026-12-31 and doubling on 2027-01-01, and
+  // this table deliberately carries the discounted figure rather than the announced one. It is
+  // the single place the table prices BELOW a published number, and the exception holds only
+  // because the direction is reversed: everywhere else the risk is a promotion lapsing under a
+  // row and leaving the gate short, while here the row is short only AFTER a date Google has
+  // already fixed. A future price is not the current one; the sweep after 2027-01-01 lands it.
   'openrouter:google/gemini-3.6-flash': { inputPerMillion: 0.69, outputPerMillion: 3.45 },
   'openrouter:google/gemini-3.7-flash': { inputPerMillion: 0.69, outputPerMillion: 3.45 },
   'openrouter:google/gemini-3.8-flash': { inputPerMillion: 0.69, outputPerMillion: 3.45 },
@@ -592,10 +606,13 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   // difference the contributor tier buys, and metering both at the standard rate would hide
   // the one thing a workspace picks between them for.
   //
-  // Neither names a cache-read rate. Meta publishes one ($0.15/M standard, $0.002/M
-  // contributor), but OpenRouter's caching docs carry no Meta section at all, so
-  // `providerCachePolicy` answers `none` for the prefix and this platform reports no cache
-  // class on the route. A pinned rate would assert a hit that nothing here knows how to enter.
+  // Neither names a cache-read rate, and the reason has had to move: the gateway now DOES
+  // publish one on both slugs ($0.15/M standard, $0.002/M contributor), where this note used to
+  // rest on nobody publishing it. What still decides is the other half of that argument, which
+  // is about this platform rather than about Meta: `providerCachePolicy` answers `none` for the
+  // prefix, so no request built here enters the cache and no cache class is ever recorded on the
+  // route. A pinned rate would assert a hit that nothing here knows how to take, which is why
+  // `check-openrouter-pins.mjs` does not report these two either.
   'openrouter:meta/muse-spark-1.3': { inputPerMillion: 1.15, outputPerMillion: 3.91 },
   'openrouter:meta/muse-spark-1.3-contributor': {
     inputPerMillion: 0.092,
@@ -608,14 +625,14 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   // OpenRouter models API actually reported when it was last read, and why re-reading it is
   // part of every pricing sweep rather than something to infer from the vendor's own page.
   //
-  // Observed 2026-09-09 by `scripts/check-openrouter-pins.mjs`: Flash $0.0825 in / $0.0165
-  // cached / $0.1649 out, Pro $0.946 in / $0.0789 cached / $1.893 out per 1M. Both rows are left
-  // where they are: each now sits ABOVE its live rate, which is the margin this table is for, and
-  // Pro has swung $0.556 → $1.60 → $0.946 across three reads in a fortnight. Chasing that blend
-  // down would spend the margin on noise and hand the next reader a number that is wrong in the
-  // unsafe direction as soon as the cheap upstreams thin again; only an UNDERSTATED pin is
-  // re-pinned here. Re-reading the blend is still part of every sweep, because the stamp is the
-  // only record of which direction it moved.
+  // Observed 2026-09-17 by `scripts/check-openrouter-pins.mjs`: Flash $0.0886 in / $0.0177
+  // cached / $0.1772 out, Pro $1.60 in / $0.135 cached / $3.20 out per 1M. Both rows are left
+  // where they are: each still sits at or above its live rate, which is the margin this table is
+  // for, and Pro has now swung $0.556 → $1.60 → $0.946 → $1.60 across four reads in three weeks.
+  // Chasing that blend would spend the margin on noise and hand the next reader a number that is
+  // wrong in the unsafe direction as soon as the cheap upstreams thin again; only an UNDERSTATED
+  // pin is re-pinned here. Re-reading the blend is still part of every sweep, because the stamp
+  // is the only record of which direction it moved.
   // OpenRouter passes DeepSeek's own peak/off-peak schedule through on the V4.1 route (its
   // `overrides` carry the same two UTC windows), so this row is pinned at the peak band for the
   // same reason the direct rows are: $0.30 in / $0.006 cached / $1.20 out. The retired
@@ -641,26 +658,28 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   // conversion gives, because two decimals is the unit every other rate here is written in and
   // 0.17 would sit under the live rate by more than the pin checker's rounding tolerance.
   //
-  // The fresh classes read $0.71 / $3.50 on the gateway's blend today, up ~5% and ~3%: the slug is
-  // served by several upstreams and the cheap end of that pool thinned. Small, and acted on
-  // because the direction is the one this table may not sit on. `moonshotai` is `auto-prefix` on
-  // the gateway, so all three classes on this route are really recorded and really metered.
+  // The fresh classes read $0.7062 in / $3.21 out on the gateway's blend today: input is where it
+  // was at the last sweep, and output has come back DOWN from the $3.50 that moved this row, so
+  // all three classes now sit above their live rate. Left alone for the reason the DeepSeek note
+  // above gives at length — only an understated pin is re-pinned. `moonshotai` is `auto-prefix`
+  // on the gateway, so all three classes on this route are really recorded and really metered.
   'openrouter:moonshotai/kimi-k2.7-code': {
     inputPerMillion: 0.66,
     outputPerMillion: 3.22,
     cacheReadPerMillion: 0.18,
   },
   'openrouter:moonshotai/kimi-k3': { inputPerMillion: 2.76, outputPerMillion: 13.8 },
-  // $1.19 in / $0.221 cached / $3.74 out per 1M, roughly double the $0.63 / $1.98 this row
-  // held: OpenRouter's GLM-5.2 route has converged on Z.ai's own $1.40 / $4.40 list as the
-  // cheap open-weight providers behind the slug dropped out of the blend. The cached rate is
-  // rounded UP: at 0.2 it sat under the live 0.2033, which the pin checker now reports because
-  // it compares this class too.
-  'openrouter:z-ai/glm-5.2': {
-    inputPerMillion: 1.09,
-    outputPerMillion: 3.44,
-    cacheReadPerMillion: 0.21,
-  },
+  // The convergence the previous note SAW COMING has completed: OpenRouter's GLM-5.2 route now
+  // bills Z.ai's own $1.40 in / $0.14 cached / $4.40 out per 1M, and this row's $1.19 / $3.74
+  // was the last of the cheap open-weight blend. `check-openrouter-pins.mjs` reported it as the
+  // single UNDERSTATED pin in the table, which is the one direction a budget gate may not sit
+  // in, so the fresh classes move up to the same figures every other GLM-5.2 row here carries.
+  //
+  // The cached rate is no longer NAMED, and that is the move the row's own rule asks for rather
+  // than an omission: the gateway's $0.14/M is the 0.1x floor that this input rate derives
+  // (0.129 against a live 0.1288), where the retired 0.21 pin was written against a $0.26/M
+  // blend that no longer exists and would now over-state a warm prefix by 63%.
+  'openrouter:z-ai/glm-5.2': { inputPerMillion: 1.29, outputPerMillion: 4.05 },
   // GLM-5.3's open weights landed after the last sweep, so the gateway now serves it and the
   // catalog routes to it. Same $1.40 / $4.40 list as every other GLM-5.3 row here.
   //
@@ -674,16 +693,21 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
     outputPerMillion: 4.05,
     cacheReadPerMillion: 0.24,
   },
-  // The same Z.ai list rates as the `zai:` row above: OpenRouter passes the upstream vendor's
-  // price through, and the launch promotion the slug is served at today is the half-rate this
-  // row deliberately does not carry.
+  // The same Z.ai list rates as the `zai:` row above. Unlike that one, this row still sits ABOVE
+  // its route: Z.ai's own launch promotion has lapsed, but the gateway's blend for the slug reads
+  // $0.09 in / $0.018 cached / $0.30 out, around 60% of list. Left at list deliberately, because
+  // a blend that cheap is upstream capacity rather than a published price and re-pinning to it
+  // would leave the gate short the moment that capacity thins.
   'openrouter:z-ai/glm-5.3-flash': {
     inputPerMillion: 0.14,
     outputPerMillion: 0.46,
     cacheReadPerMillion: 0.03,
   },
-  // OpenRouter's published cache-read rate ($0.01/M) is ABOVE the 0.1x derived floor this
-  // model's cheap input implies ($0.006/M), so it is named rather than derived.
+  // OpenRouter's published cache-read rate ($0.01/M) was ABOVE the 0.1x derived floor this
+  // model's cheap input implies ($0.006/M), so it was named rather than derived. The route now
+  // publishes NO cache rate at all, which is not the same fact as a rate of zero: the named pin
+  // stays, because an unpublished class is the case where a derived floor is a guess and this
+  // one is at least a figure the vendor once stated, on the dear side of the floor.
   'openrouter:z-ai/glm-4.7-flash': {
     inputPerMillion: 0.06,
     outputPerMillion: 0.37,

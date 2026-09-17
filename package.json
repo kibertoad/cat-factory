@@ -33,15 +33,15 @@
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
-    "@changesets/cli": "^3.0.2",
+    "@changesets/cli": "^3.0.3",
     "@stryker-mutator/api": "10.0.0",
-    "@valibot/to-json-schema": "^1.7.1",
+    "@valibot/to-json-schema": "^1.8.0",
     "knip": "^6.35.1",
-    "oxfmt": "^0.67.0",
-    "oxlint": "^1.82.0",
+    "oxfmt": "^0.68.0",
+    "oxlint": "^1.83.0",
     "publint": "^0.3.24",
     "sherif": "^1.13.0",
-    "turbo": "^2.10.12",
+    "turbo": "^2.10.13",
     "typescript": "7.0.2"
   },
   "engines": {
