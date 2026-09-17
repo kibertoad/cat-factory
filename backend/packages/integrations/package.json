@@ -35,10 +35,10 @@
   "dependencies": {
     "@cat-factory/contracts": "workspace:*",
     "@cat-factory/kernel": "workspace:*",
-    "ai": "^7.0.98",
-    "p-map": "^7.0.7",
+    "ai": "^7.0.102",
+    "p-map": "^7.0.8",
     "undici": "^8.10.2",
-    "yaml": "^2.9.0"
+    "yaml": "^2.9.1"
   },
   "devDependencies": {
     "@cat-factory/caching": "workspace:*",

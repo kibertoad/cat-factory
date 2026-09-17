@@ -60,7 +60,7 @@ registered by reference like every other deployment extension.
 - **Delegated kind**: an agent kind whose `agent.surface` is `'delegated'` and which names the
   executor it runs on. Registered on `AgentKindRegistry` exactly like a container kind.
 - **Brief**: the neutral `{ systemPrompt, userPrompt, contextFiles, repo, branches, task,
-  correlationKey }` bundle the engine hands the executor at dispatch. It is what the container
+correlationKey }` bundle the engine hands the executor at dispatch. It is what the container
   path already composes, extracted so it exists as a value outside a harness job body.
 - **Delegation record**: `step.delegated`, the persisted per-step state (executor id, external
   id, external URL, status, attempt log). The delegated sibling of `step.container`.
@@ -130,11 +130,11 @@ A new kernel-owned registry, `DelegatedExecutorRegistry`, holding `DelegatedExec
 
 ```ts
 interface DelegatedExecutorDefinition {
-  id: string                                  // namespaced, 'acme:executor'
+  id: string // namespaced, 'acme:executor'
   presentation: { label: string; icon: string; description: string }
-  credentials?: CapabilityCredential[]        // key NAMES, resolved per dispatch, values never in context
-  poll: { intervalMs: number; maxDurationMs: number }   // per executor, not the harness default
-  telemetry: 'not-reported' | 'self-reported'            // see D8
+  credentials?: CapabilityCredential[] // key NAMES, resolved per dispatch, values never in context
+  poll: { intervalMs: number; maxDurationMs: number } // per executor, not the harness default
+  telemetry: 'not-reported' | 'self-reported' // see D8
   create(deps: DelegatedExecutorDeps): DelegatedExecutor
 }
 
@@ -150,11 +150,11 @@ type DelegationUpdate =
   | { state: 'done'; result: DelegationResult }
   | { state: 'failed'; error: string; url?: string; detail?: string; retryable?: boolean }
 type DelegationResult = {
-  summary: string                              // becomes step.output
+  summary: string // becomes step.output
   pullRequest?: PullRequestRef
   branch?: string
-  custom?: unknown                             // the generic channel, exactly as for a registered kind
-  usage?: AgentTokenUsage                      // D8: only when the executor knows
+  custom?: unknown // the generic channel, exactly as for a registered kind
+  usage?: AgentTokenUsage // D8: only when the executor knows
 }
 ```
 
@@ -180,15 +180,18 @@ the SAME pure builder its production caller uses).
 
 ```ts
 interface DelegationBrief {
-  correlationKey: string        // the cat-factory job id; the executor MUST make it recoverable (D5)
-  workspaceId: string; runId: string; stepIndex: number; agentKind: string
+  correlationKey: string // the cat-factory job id; the executor MUST make it recoverable (D5)
+  workspaceId: string
+  runId: string
+  stepIndex: number
+  agentKind: string
   task: { id: string; title: string; description: string; trackerRef?: { provider; key; url } }
   repo: { owner: string; name: string; cloneUrl: string; provider: VcsProvider; directory?: string }
   branches: { base: string; work: string }
-  systemPrompt: string          // role + standards + trait guidance, overrides applied
+  systemPrompt: string // role + standards + trait guidance, overrides applied
   userPrompt: string
-  contextFiles: InjectedContextFile[]   // .cat-context/*, the foundational catalog, linked docs
-  ownService: OwnServiceDescription     // the discriminated result, never omitted
+  contextFiles: InjectedContextFile[] // .cat-context/*, the foundational catalog, linked docs
+  ownService: OwnServiceDescription // the discriminated result, never omitted
 }
 ```
 
@@ -347,15 +350,15 @@ it reads an org context layer from a file in the target repo and a repo layer fr
 it publishes a PR whose body links back to the Actions run; it declares no outputs, returns no
 run id, and reports no token usage.
 
-| Seam | Pilot mapping (owned by the company's deployment repo) |
-|---|---|
-| Executor definition | `id: 'acme:executor'`, one dispatch-token credential, `poll: { 60s, 3h }`, `telemetry: 'not-reported'` |
-| `start(brief)` | the shipped GitHub Actions helper: a thin caller workflow in the target repo sets `run-name` from a `correlation` input and forwards `spec`, `pipeline`, `ref` to the reusable workflow |
-| Context | `inputs.spec = brief.userPrompt` plus the context files rendered as sections; a preOp commits `brief.systemPrompt` as the org layer file on the work branch so the standards ride the executor's own context mechanism |
-| Correlation | `run-name` carries `brief.correlationKey`; the helper lists runs by event and finds it |
-| `poll` | Actions `status`/`conclusion`; the run URL is the record's `url` |
-| Result | PR found by head branch recorded as `pullRequest`; the job summary is `summary`; the result artifact's summary file is parsed for `status`/`stopped_stage` into `custom` |
-| Downstream | cat-factory's `ci` gate and `merger` run as usual; Slack and Jira are the existing channels |
+| Seam                | Pilot mapping (owned by the company's deployment repo)                                                                                                                                                                 |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Executor definition | `id: 'acme:executor'`, one dispatch-token credential, `poll: { 60s, 3h }`, `telemetry: 'not-reported'`                                                                                                                 |
+| `start(brief)`      | the shipped GitHub Actions helper: a thin caller workflow in the target repo sets `run-name` from a `correlation` input and forwards `spec`, `pipeline`, `ref` to the reusable workflow                                |
+| Context             | `inputs.spec = brief.userPrompt` plus the context files rendered as sections; a preOp commits `brief.systemPrompt` as the org layer file on the work branch so the standards ride the executor's own context mechanism |
+| Correlation         | `run-name` carries `brief.correlationKey`; the helper lists runs by event and finds it                                                                                                                                 |
+| `poll`              | Actions `status`/`conclusion`; the run URL is the record's `url`                                                                                                                                                       |
+| Result              | PR found by head branch recorded as `pullRequest`; the job summary is `summary`; the result artifact's summary file is parsed for `status`/`stopped_stage` into `custom`                                               |
+| Downstream          | cat-factory's `ci` gate and `merger` run as usual; Slack and Jira are the existing channels                                                                                                                            |
 
 Gaps this exposes on the pilot's side, stated so nobody designs around them here: no correlation
 input (the caller workflow supplies one), no machine-readable PR URL (recovered by head branch),

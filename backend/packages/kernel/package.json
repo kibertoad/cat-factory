@@ -33,8 +33,8 @@
   },
   "dependencies": {
     "@cat-factory/contracts": "workspace:*",
-    "ai": "^7.0.98",
-    "yaml": "^2.9.0"
+    "ai": "^7.0.102",
+    "yaml": "^2.9.1"
   },
   "devDependencies": {
     "@stryker-mutator/core": "10.0.0",
