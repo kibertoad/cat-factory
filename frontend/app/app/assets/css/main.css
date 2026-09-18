@@ -17,8 +17,17 @@
  * padding-box edge and ignores the padding). `env(safe-area-inset-bottom)` is 0
  * until the viewport meta carries `viewport-fit=cover` (see nuxt.config.ts), so
  * this collapses to the stock `1rem` on desktop. Assumes the default bottom
- * placement (the app does not configure a top-anchored toaster). */
-[data-slot='viewport'] {
+ * placement (the app does not configure a top-anchored toaster).
+ *
+ * The `ol` in the selector is load-bearing, NOT decoration. Eleven Nuxt UI
+ * components render `data-slot="viewport"` (Select, SelectMenu, InputMenu,
+ * CommandPalette, DropdownMenu, ContextMenu, NavigationMenu, ScrollArea,
+ * ChatMessages, Carousel and the Toaster), and every one of those menu viewports
+ * is `position: relative` inside an `overflow-hidden` content box. A bare
+ * `[data-slot='viewport']` rule therefore shifted every menu list up by 1rem,
+ * clipping its first row and leaving dead space at the bottom. Only the Toaster's
+ * viewport is an `<ol>` (Reka's `ToastViewport`); the rest are `div`s. */
+ol[data-slot='viewport'] {
   bottom: calc(1rem + env(safe-area-inset-bottom));
 }
 
