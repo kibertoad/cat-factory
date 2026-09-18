@@ -23,4 +23,4 @@ Participants run as plain INLINE model calls: no filesystem, no shell, no subage
 kinds are container kinds whose prompt and preOps assume the opposite, so the executor appends
 `INLINE_PANEL_SURFACE` to every participant's system prompt (last, so a workspace override cannot
 drop it) and the engine tells a kind's preOps via `RepoOpContext.deliversCheckout`. See the
-"Consensus panels" section of the root `CLAUDE.md`.
+"Consensus panels" entry of [`docs/flow-index.md`](../../../docs/flow-index.md).

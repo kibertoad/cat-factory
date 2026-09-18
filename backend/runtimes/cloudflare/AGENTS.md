@@ -125,5 +125,6 @@ reachability guard has nothing to say here; what still binds is constructibility
 `test/extension-surface.test.ts`. That list is a SYMMETRY copy of the Node facade's classification
 (no shared dependency could carry one), so a seam added there lands here in the same change.
 
-**See also:** `CLAUDE.md` → "Multi-runtime facades & cross-runtime conformance", "Execution
-flow", "Repo bootstrap flow".
+**See also:** `CLAUDE.md` → "Keep the runtimes symmetric";
+[`docs/execution-state-machine.md`](../../../docs/execution-state-machine.md) and the "Repo
+bootstrap" entry of [`docs/flow-index.md`](../../../docs/flow-index.md).

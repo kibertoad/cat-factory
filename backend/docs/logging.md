@@ -479,3 +479,24 @@ expect(metrics.drain()).toContainEqual({
   value: 1,
 })
 ```
+
+### Four more rules the counter side has cost us
+
+- **A COUNTER counts EVENTS; a standing level is a GAUGE.** The test is whether the producer can
+  see what arrived since the last look. A periodic `SELECT` returning a total cannot: feeding that
+  to a delta counter re-reports the same rows every pass (an hourly sweep turned five dead-lettered
+  jobs into ~120/day), and diffing it in memory tells the same lie after a restart.
+- **Name the dimension at the CALL SITE, never pick it back out of the log fields.**
+  `fields.kind ?? fields.evicted` reads as correct until someone logs one more field and the series
+  silently re-points.
+- **An empty flush sends nothing.** An unflushed zero and a genuine zero are different facts, and
+  only the ABSENCE of a data point states the first one honestly (the same rule as "absent is not
+  zero"). Where a runtime genuinely cannot read a gauge, Cloudflare Queues exposing no backlog to
+  their consumer being the case we hit, it emits no series rather than a `0`.
+- **A background sweep reports its pass through ONE call** on both facades (Node's `startSweeper`
+  takes `SweeperOptions.health`, the Worker's crons go through `SweepTick.run`), landing on
+  `SweepHealthTracker.recordFailure`, which emits the `sweep.failed` RATE and the `sweep_degraded`
+  STREAK together. As two calls per site the facades drifted into tracking disjoint sweeper sets, so
+  a bare `metrics.increment('sweep.failed', …)` is half a report. On the Worker, `SweepTick` also
+  orders the tick's metrics flush AFTER its passes settle: the collector is per isolate, and a
+  cron's counters are otherwise exported by nobody.

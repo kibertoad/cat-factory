@@ -30,8 +30,9 @@ transport, and Node model provisioning.
   (`db/migrate.ts`) bootstraps it idempotently on boot, failing fast with an actionable error on
   a ledger↔schema desync and wrapping apply failures with a recovery hint. `scripts/db-reset.mjs`
   (`pnpm db:reset`) is the destructive clean-slate recovery. Schemas are configurable for a shared
-  database via `DB_SCHEMA` / `DB_MIGRATIONS_SCHEMA` / `DB_PGBOSS_SCHEMA` (see CLAUDE.md →
-  "Migration safety").
+  database via `DB_SCHEMA` (the app tables, relocated through `search_path`),
+  `DB_MIGRATIONS_SCHEMA` (the drizzle ledger) and `DB_PGBOSS_SCHEMA` (pg-boss's), each a plain
+  lowercase identifier and each defaulting to the prior behaviour.
 - `container.ts`: the DI composition root (`buildNodeContainer`, with injected
   `resolveTransport`/`mintInstallationToken`/`githubClient` seams the local facade overrides).
   Cohesive slices of the composition root live in sibling `container-*-deps.ts` modules so the
@@ -122,4 +123,4 @@ rename prompt that can't run in a non-TTY shell). Instead:
 3. Check `migration.sql` still encodes the delta to the merged schema.
 4. Verify with `pnpm db:check`. Keep the symmetric D1 migration in step.
 
-**See also:** `CLAUDE.md` → "Multi-runtime facades", "Migrations".
+**See also:** `CLAUDE.md` → "Keep the runtimes symmetric", "Migrations".

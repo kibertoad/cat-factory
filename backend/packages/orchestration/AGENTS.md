@@ -304,6 +304,6 @@ replaced eight byte-identical private `modelFor` methods; wire it through
 both invited a site to take the model and miss the order (silent: the run works, on the wrong
 provider) and read that row twice per call.
 
-**See also:** `CLAUDE.md` → "Execution flow", "Merge lifecycle flow", "Merge track record",
+**See also:** [`docs/execution-state-machine.md`](../../../docs/execution-state-machine.md), [`docs/flow-index.md`](../../../docs/flow-index.md),
 "Requirements review flow", "Gates vs agents" (the four step buckets, judges included); `docs/execution-state-machine.md`; `docs/internal/modularisation.md` +
 `docs/internal/refactoring-candidates.md` for the god-file backlog.

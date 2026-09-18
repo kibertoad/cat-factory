@@ -56,6 +56,11 @@ would otherwise outdate it.
   variable, and which names are reserved so they can never be resolved into an
   agent process. The canonical list, read by `scripts/check-reserved-env-keys.mjs`
   and rendered onto the website by its `scripts/sync-env-vars.mjs`.
+- [`flow-index.md`](./flow-index.md): one entry per runtime flow, each naming what
+  the flow is, its deadliest trap and the doc that owns it. The map to read
+  before changing a pipeline you have not touched before; the step vocabulary
+  it assumes is
+  [`backend/docs/step-taxonomy.md`](../backend/docs/step-taxonomy.md).
 - [`execution-state-machine.md`](./execution-state-machine.md): the run
   lifecycle, its states and transitions, and why it is not XState.
 - [`benchmarks/`](./benchmarks): agent benchmark runs and candidate models.
