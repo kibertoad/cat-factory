@@ -60,11 +60,11 @@ const isDestructive = computed(() => current.value?.variant === 'destructive')
         <div
           v-if="current?.icon"
           class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
-          :class="isDestructive ? 'bg-red-500/10 text-red-400' : 'bg-slate-700/40 text-slate-300'"
+          :class="isDestructive ? 'bg-red-500/10 text-red-400' : 'bg-accented/40 text-toned'"
         >
           <UIcon :name="current.icon" class="h-5 w-5" />
         </div>
-        <p v-if="current?.description" class="text-sm text-slate-300">
+        <p v-if="current?.description" class="text-sm text-toned">
           {{ current.description }}
         </p>
       </div>

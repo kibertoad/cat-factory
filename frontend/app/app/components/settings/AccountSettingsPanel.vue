@@ -60,7 +60,7 @@ const tabs = computed(() => [
 <template>
   <UModal v-model:open="open" :title="t('settings.account.title')" :ui="{ content: 'max-w-3xl' }">
     <template #body>
-      <p v-if="!accounts.activeAccountId" class="text-sm text-slate-400">
+      <p v-if="!accounts.activeAccountId" class="text-sm text-muted">
         {{ t('settings.account.noAccount') }}
       </p>
       <UTabs

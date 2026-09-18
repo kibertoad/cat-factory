@@ -99,9 +99,9 @@ async function create(input: CreateRiskPolicyInput) {
 
 <template>
   <div class="space-y-4 text-sm" data-testid="account-risk-policy-panel">
-    <p class="text-[11px] text-slate-400">{{ t('layout.accountRiskPolicies.intro') }}</p>
+    <p class="text-[11px] text-muted">{{ t('layout.accountRiskPolicies.intro') }}</p>
 
-    <p v-if="!store.loading && policies.length === 0" class="text-[11px] text-slate-500">
+    <p v-if="!store.loading && policies.length === 0" class="text-[11px] text-dimmed">
       {{ t('layout.accountRiskPolicies.empty') }}
     </p>
 

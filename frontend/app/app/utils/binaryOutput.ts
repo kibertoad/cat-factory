@@ -401,13 +401,13 @@ export const BINARY_OUTPUT_STATE_KEYS: Record<
 > = {
   'not-started': {
     icon: 'i-lucide-clock',
-    tone: 'text-slate-400',
+    tone: 'text-muted',
     summary: 'binaryOutput.state.notStarted.summary',
     detail: 'binaryOutput.state.notStarted.detail',
   },
   configured: {
     icon: 'i-lucide-hourglass',
-    tone: 'text-slate-300',
+    tone: 'text-toned',
     summary: 'binaryOutput.state.configured.summary',
     detail: 'binaryOutput.state.configured.detail',
   },
@@ -425,7 +425,7 @@ export const BINARY_OUTPUT_STATE_KEYS: Record<
   },
   'declared-none': {
     icon: 'i-lucide-circle-slash',
-    tone: 'text-slate-300',
+    tone: 'text-toned',
     summary: 'binaryOutput.state.declaredNone.summary',
     detail: 'binaryOutput.state.declaredNone.detail',
   },

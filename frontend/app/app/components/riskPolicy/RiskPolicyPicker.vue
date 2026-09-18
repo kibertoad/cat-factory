@@ -138,14 +138,14 @@ function choose(id: string) {
         @focusout="onPanelFocusOut"
       >
         <!-- left: selectable options, NAME ONLY -->
-        <ul class="w-1/2 shrink-0 overflow-y-auto border-e border-slate-800 p-1">
+        <ul class="w-1/2 shrink-0 overflow-y-auto border-e border-default p-1">
           <li>
             <button
               type="button"
               class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-start text-sm"
               :class="[
-                refused.has('') ? 'cursor-not-allowed opacity-50' : 'hover:bg-slate-800/60',
-                modelValue ? 'text-slate-300' : 'text-slate-100',
+                refused.has('') ? 'cursor-not-allowed opacity-50' : 'hover:bg-elevated/60',
+                modelValue ? 'text-toned' : 'text-app-100',
               ]"
               :aria-disabled="refused.has('')"
               :title="refusalText('')"
@@ -156,7 +156,7 @@ function choose(id: string) {
             >
               <UIcon
                 :name="refused.has('') ? 'i-lucide-lock' : 'i-lucide-rotate-ccw'"
-                class="h-4 w-4 shrink-0 text-slate-400"
+                class="h-4 w-4 shrink-0 text-muted"
               />
               <span class="flex-1 truncate">{{ noneLabel }}</span>
               <UIcon
@@ -171,8 +171,8 @@ function choose(id: string) {
               type="button"
               class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-start text-sm"
               :class="[
-                refused.has(p.id) ? 'cursor-not-allowed opacity-50' : 'hover:bg-slate-800/60',
-                modelValue === p.id ? 'text-slate-100' : 'text-slate-300',
+                refused.has(p.id) ? 'cursor-not-allowed opacity-50' : 'hover:bg-elevated/60',
+                modelValue === p.id ? 'text-app-100' : 'text-toned',
               ]"
               :aria-disabled="refused.has(p.id)"
               :title="refusalText(p.id)"
@@ -183,7 +183,7 @@ function choose(id: string) {
             >
               <UIcon
                 :name="refused.has(p.id) ? 'i-lucide-lock' : 'i-lucide-git-merge'"
-                class="h-4 w-4 shrink-0 text-slate-400"
+                class="h-4 w-4 shrink-0 text-muted"
               />
               <span class="flex-1 truncate">{{ p.name }}</span>
               <UIcon
@@ -205,15 +205,12 @@ function choose(id: string) {
             >
               {{ t(`riskPolicy.picker.refused.${previewRefusal}`) }}
             </p>
-            <p
-              v-if="preview.viaWorkspaceDefault"
-              class="mb-2 text-[11px] leading-snug text-slate-500"
-            >
+            <p v-if="preview.viaWorkspaceDefault" class="mb-2 text-[11px] leading-snug text-dimmed">
               {{ t('riskPolicy.picker.workspaceDefaultCaption') }}
             </p>
             <RiskPolicyPreview :policy="preview.policy" />
           </template>
-          <div v-else class="text-[12px] leading-snug text-slate-500">
+          <div v-else class="text-[12px] leading-snug text-dimmed">
             {{ t('riskPolicy.picker.noneHint') }}
           </div>
         </div>

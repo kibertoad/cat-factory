@@ -37,7 +37,7 @@ function stepLabel(key: string | undefined): string {
 
 <template>
   <div class="space-y-2" data-testid="env-setup-stepper">
-    <p v-if="total" class="text-[11px] font-medium text-slate-400" data-testid="env-setup-progress">
+    <p v-if="total" class="text-[11px] font-medium text-muted" data-testid="env-setup-progress">
       {{ t('environmentWizard.progress', { index: index + 1, total }) }}
     </p>
     <ol class="flex items-center gap-2 text-[11px]">
@@ -50,19 +50,19 @@ function stepLabel(key: string | undefined): string {
         <span
           class="flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold"
           :class="{
-            'bg-primary-500 text-white': i === index,
-            'bg-emerald-600/70 text-white': i < index,
-            'bg-slate-700 text-slate-300': i > index,
+            'bg-primary-500 text-highlighted': i === index,
+            'bg-emerald-600/70 text-highlighted': i < index,
+            'bg-accented text-toned': i > index,
           }"
           >{{ i + 1 }}</span
         >
-        <span :class="i === index ? 'text-slate-100' : 'text-slate-500'">
+        <span :class="i === index ? 'text-app-100' : 'text-dimmed'">
           {{ stepLabel(step.progressLabel) }}
         </span>
         <UIcon
           v-if="i < steps.length - 1"
           name="i-lucide-chevron-right"
-          class="h-3 w-3 text-slate-600"
+          class="h-3 w-3 text-app-600"
         />
       </li>
     </ol>

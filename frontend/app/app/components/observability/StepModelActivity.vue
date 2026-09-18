@@ -31,7 +31,7 @@ function openObservability() {
 <template>
   <div v-if="instanceId || hasCalls">
     <div class="mb-1 flex items-center justify-between">
-      <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+      <span class="text-[11px] font-semibold uppercase tracking-wide text-dimmed">
         {{ t('observability.modelActivity') }}
       </span>
       <button

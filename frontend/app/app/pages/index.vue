@@ -425,7 +425,7 @@ watch(
   <!-- A COLUMN, so the translation strip below takes its own height instead of covering the
        row: page chrome that overlays the app is how the board's top controls came to be
        buried. Everything else lives in the row beneath it. -->
-  <div class="flex h-screen w-screen flex-col overflow-hidden bg-slate-950 text-slate-100">
+  <div class="flex h-screen w-screen flex-col overflow-hidden bg-app-950 text-app-100">
     <!-- Non-English locale warning (unofficial translation); slim full-width strip above
          everything, in flow. -->
     <TranslationWarningBanner />
@@ -433,7 +433,7 @@ watch(
       <!-- Resolving whether the GitHub App is installed, before we decide what to show. -->
       <div
         v-if="workspace.ready && githubProbePending"
-        class="m-auto flex flex-col items-center gap-3 text-slate-400"
+        class="m-auto flex flex-col items-center gap-3 text-muted"
       >
         <UIcon name="i-lucide-loader" class="h-8 w-8 animate-spin" />
         <span class="text-sm">{{ $t('app.loading') }}</span>
@@ -555,14 +555,14 @@ watch(
       <div v-else-if="workspace.error" class="m-auto max-w-md p-8 text-center">
         <UIcon name="i-lucide-plug-zap" class="mx-auto mb-3 h-10 w-10 text-amber-400" />
         <h1 class="mb-1 text-lg font-semibold">{{ $t('app.backendUnreachable') }}</h1>
-        <p class="mb-4 text-sm text-slate-400">{{ workspace.error }}</p>
+        <p class="mb-4 text-sm text-muted">{{ workspace.error }}</p>
         <UButton color="primary" icon="i-lucide-rotate-ccw" @click="workspace.init()">
           {{ $t('common.retry') }}
         </UButton>
       </div>
 
       <!-- Initial load -->
-      <div v-else class="m-auto flex flex-col items-center gap-3 text-slate-400">
+      <div v-else class="m-auto flex flex-col items-center gap-3 text-muted">
         <UIcon name="i-lucide-loader" class="h-8 w-8 animate-spin" />
         <span class="text-sm">{{ $t('app.loadingBoard') }}</span>
       </div>

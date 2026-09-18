@@ -138,11 +138,11 @@ async function attach(item: PendingContext) {
         :href="issue.url"
         target="_blank"
         rel="noopener"
-        class="flex items-center gap-1.5 rounded-md border border-slate-800 bg-slate-900/60 px-2 py-1.5 text-xs text-slate-300 hover:bg-slate-800/60"
+        class="flex items-center gap-1.5 rounded-md border border-default bg-default/60 px-2 py-1.5 text-xs text-toned hover:bg-elevated/60"
       >
         <UIcon
           :name="tasks.descriptorFor(issue.source)?.icon ?? 'i-lucide-square-check'"
-          class="h-3.5 w-3.5 shrink-0 text-indigo-400"
+          class="h-3.5 w-3.5 shrink-0 text-primary-400"
         />
         <span class="truncate">{{ issue.externalId }} · {{ issue.title }}</span>
         <UBadge color="neutral" variant="soft" size="xs" class="ms-auto shrink-0">
@@ -150,7 +150,7 @@ async function attach(item: PendingContext) {
         </UBadge>
       </a>
     </div>
-    <p v-else class="text-[11px] text-slate-500">
+    <p v-else class="text-[11px] text-dimmed">
       {{ emptyHint }}
     </p>
   </InspectorSection>

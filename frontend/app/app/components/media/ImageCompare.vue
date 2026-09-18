@@ -148,19 +148,19 @@ function onRefInput(e: Event) {
 </script>
 
 <template>
-  <div class="rounded-lg border border-slate-800 bg-slate-900/60 p-3">
+  <div class="rounded-lg border border-default bg-default/60 p-3">
     <div class="mb-2 flex items-center justify-between gap-2">
-      <h3 class="min-w-0 truncate text-[12px] font-semibold text-slate-200">{{ view }}</h3>
+      <h3 class="min-w-0 truncate text-[12px] font-semibold text-default">{{ view }}</h3>
       <!-- Mode switch -->
       <div
         v-if="MODES.length > 1"
-        class="flex items-center gap-0.5 rounded-md border border-slate-800 bg-slate-950/60 p-0.5"
+        class="flex items-center gap-0.5 rounded-md border border-default bg-app-950/60 p-0.5"
       >
         <button
           v-for="m in MODES"
           :key="m.id"
-          class="rounded px-1.5 py-1 text-slate-400 hover:text-slate-200"
-          :class="mode === m.id ? 'bg-slate-800 text-slate-100' : ''"
+          class="rounded px-1.5 py-1 text-muted hover:text-default"
+          :class="mode === m.id ? 'bg-elevated text-app-100' : ''"
           :title="m.label"
           @click="mode = m.id"
         >
@@ -172,12 +172,12 @@ function onRefInput(e: Event) {
     <!-- SIDE BY SIDE -->
     <div v-if="mode === 'side-by-side'" class="grid grid-cols-2 gap-3">
       <figure class="space-y-1">
-        <figcaption class="text-[10px] uppercase tracking-wide text-slate-500">
+        <figcaption class="text-[10px] uppercase tracking-wide text-dimmed">
           {{ t('media.compare.actual') }}
         </figcaption>
         <button
           v-if="actualUrl"
-          class="block w-full overflow-hidden rounded border border-slate-800 hover:border-slate-600"
+          class="block w-full overflow-hidden rounded border border-default hover:border-app-600"
           @click="actualId && emit('expand', actualId)"
         >
           <img
@@ -188,7 +188,7 @@ function onRefInput(e: Event) {
         </button>
         <div
           v-else
-          class="flex h-32 items-center justify-center rounded border border-dashed border-slate-700 text-[11px] text-slate-600"
+          class="flex h-32 items-center justify-center rounded border border-dashed border-muted text-[11px] text-app-600"
         >
           {{
             props.blobs.statusFor(actualId) === 'error'
@@ -201,7 +201,7 @@ function onRefInput(e: Event) {
       </figure>
 
       <figure class="space-y-1">
-        <figcaption class="text-[10px] uppercase tracking-wide text-slate-500">
+        <figcaption class="text-[10px] uppercase tracking-wide text-dimmed">
           {{ t('media.compare.reference') }}
           <span v-if="referenceOrigin === 'design'" class="text-amber-300/80">
             {{ t('media.compare.fromLinkedDesign') }}
@@ -209,7 +209,7 @@ function onRefInput(e: Event) {
         </figcaption>
         <button
           v-if="refUrl"
-          class="group relative block w-full overflow-hidden rounded border border-slate-800 hover:border-slate-600"
+          class="group relative block w-full overflow-hidden rounded border border-default hover:border-app-600"
           @click="referenceId && emit('expand', referenceId)"
         >
           <img
@@ -218,7 +218,7 @@ function onRefInput(e: Event) {
             class="w-full cursor-zoom-in"
           />
           <span
-            class="absolute bottom-1 end-1 rounded bg-slate-950/80 px-1.5 py-0.5 text-[10px] text-slate-300 opacity-0 group-hover:opacity-100"
+            class="absolute bottom-1 end-1 rounded bg-app-950/80 px-1.5 py-0.5 text-[10px] text-toned opacity-0 group-hover:opacity-100"
             @click.stop="refInput?.click()"
           >
             {{ t('media.compare.replace') }}
@@ -231,7 +231,7 @@ function onRefInput(e: Event) {
           :class="
             dragOver
               ? 'border-amber-500 bg-amber-500/5 text-amber-300'
-              : 'border-slate-700 text-slate-600 hover:border-slate-500 hover:text-slate-400'
+              : 'border-muted text-app-600 hover:border-app-500 hover:text-muted'
           "
           @click="refInput?.click()"
           @dragover.prevent="dragOver = true"
@@ -246,7 +246,7 @@ function onRefInput(e: Event) {
 
     <!-- OVERLAY (onion-skin) -->
     <div v-else-if="mode === 'overlay'" class="space-y-2">
-      <div class="relative w-full overflow-hidden rounded border border-slate-800">
+      <div class="relative w-full overflow-hidden rounded border border-default">
         <img :src="refUrl" :alt="t('media.compare.referenceAlt', { view })" class="w-full" />
         <!-- object-contain so a differing aspect ratio onion-skins undistorted over the reference. -->
         <img
@@ -256,7 +256,7 @@ function onRefInput(e: Event) {
           :style="{ opacity: overlayOpacity / 100 }"
         />
       </div>
-      <div class="flex items-center gap-2 text-[10px] uppercase tracking-wide text-slate-500">
+      <div class="flex items-center gap-2 text-[10px] uppercase tracking-wide text-dimmed">
         <span>{{ t('media.compare.reference') }}</span>
         <input
           v-model.number="overlayOpacity"
@@ -273,7 +273,7 @@ function onRefInput(e: Event) {
     <div
       v-else-if="mode === 'swipe'"
       ref="swipeBox"
-      class="relative w-full cursor-ew-resize select-none overflow-hidden rounded border border-slate-800"
+      class="relative w-full cursor-ew-resize select-none overflow-hidden rounded border border-default"
       @pointerdown="onSwipeDown"
       @pointermove="moveSwipe"
       @pointerup="onSwipeUp"
@@ -299,25 +299,25 @@ function onRefInput(e: Event) {
            regions stayed put, mislabeling actual vs reference. -->
       <div class="absolute inset-y-0 w-0.5 bg-amber-400" :style="{ left: `${splitPct}%` }">
         <span
-          class="absolute top-1/2 left-1/2 flex h-6 w-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-amber-400 text-slate-950 shadow"
+          class="absolute top-1/2 left-1/2 flex h-6 w-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-amber-400 text-app-950 shadow"
         >
           <UIcon name="i-lucide-move-horizontal" class="h-3.5 w-3.5" />
         </span>
       </div>
       <span
-        class="absolute left-1 top-1 rounded bg-slate-950/70 px-1 text-[9px] uppercase text-slate-300"
+        class="absolute left-1 top-1 rounded bg-app-950/70 px-1 text-[9px] uppercase text-toned"
         >{{ t('media.compare.actual') }}</span
       >
       <span
-        class="absolute right-1 top-1 rounded bg-slate-950/70 px-1 text-[9px] uppercase text-slate-300"
+        class="absolute right-1 top-1 rounded bg-app-950/70 px-1 text-[9px] uppercase text-toned"
         >{{ t('media.compare.reference') }}</span
       >
     </div>
 
     <!-- DIFF (canvas) -->
     <div v-else-if="mode === 'diff'" class="space-y-1">
-      <canvas ref="diffCanvas" class="w-full rounded border border-slate-800 bg-black" />
-      <p class="text-[10px] text-slate-500">{{ t('media.compare.diffHint') }}</p>
+      <canvas ref="diffCanvas" class="w-full rounded border border-default bg-black" />
+      <p class="text-[10px] text-dimmed">{{ t('media.compare.diffHint') }}</p>
     </div>
 
     <!-- Hidden file input shared by replace/drop zone -->

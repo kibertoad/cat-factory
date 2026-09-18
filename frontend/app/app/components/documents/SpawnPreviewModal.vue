@@ -139,7 +139,7 @@ async function spawn() {
                 : t('documents.spawn.plannerHeadings')
             }}
           </UBadge>
-          <span class="text-xs text-slate-400">{{
+          <span class="text-xs text-muted">{{
             plan.targetFrameId ? t('documents.spawn.intoService') : t('documents.spawn.asTopLevel')
           }}</span>
         </div>
@@ -161,13 +161,13 @@ async function spawn() {
 
         <p
           v-if="needsTarget && !targetFrameId"
-          class="text-xs text-slate-400"
+          class="text-xs text-muted"
           data-testid="spawn-target-required"
         >
           {{ t('documents.spawn.target.required') }}
         </p>
 
-        <div v-if="loadingPlan" class="flex items-center gap-2 text-sm text-slate-400">
+        <div v-if="loadingPlan" class="flex items-center gap-2 text-sm text-muted">
           <UIcon name="i-lucide-loader" class="h-4 w-4 animate-spin" />
           {{ t('documents.spawn.buildingPlan') }}
         </div>
@@ -176,11 +176,11 @@ async function spawn() {
           <div
             v-for="(frame, fi) in plan.frames"
             :key="fi"
-            class="rounded-lg border border-slate-800 bg-slate-900/60 p-3"
+            class="rounded-lg border border-default bg-default/60 p-3"
           >
             <div class="flex items-center gap-2">
-              <UIcon name="i-lucide-box" class="h-4 w-4 text-indigo-400" />
-              <span class="text-sm font-semibold text-white">{{ frame.title }}</span>
+              <UIcon name="i-lucide-box" class="h-4 w-4 text-primary-400" />
+              <span class="text-sm font-semibold text-highlighted">{{ frame.title }}</span>
               <UBadge variant="subtle" size="sm" color="neutral">{{ frame.type }}</UBadge>
             </div>
 
@@ -188,15 +188,15 @@ async function spawn() {
               <li
                 v-for="(task, ti) in frame.tasks"
                 :key="`t-${ti}`"
-                class="flex items-center gap-1.5 text-xs text-slate-300"
+                class="flex items-center gap-1.5 text-xs text-toned"
               >
-                <UIcon name="i-lucide-square-check-big" class="h-3 w-3 text-slate-500" />
+                <UIcon name="i-lucide-square-check-big" class="h-3 w-3 text-dimmed" />
                 {{ task.title }}
               </li>
             </ul>
 
             <div v-for="(mod, mi) in frame.modules" :key="`m-${mi}`" class="mt-2 ps-4">
-              <div class="flex items-center gap-1.5 text-xs font-medium text-slate-200">
+              <div class="flex items-center gap-1.5 text-xs font-medium text-default">
                 <UIcon name="i-lucide-folder" class="h-3.5 w-3.5 text-amber-400" />
                 {{ mod.name }}
               </div>
@@ -204,9 +204,9 @@ async function spawn() {
                 <li
                   v-for="(task, ti) in mod.tasks"
                   :key="`mt-${ti}`"
-                  class="flex items-center gap-1.5 text-xs text-slate-300"
+                  class="flex items-center gap-1.5 text-xs text-toned"
                 >
-                  <UIcon name="i-lucide-square-check-big" class="h-3 w-3 text-slate-500" />
+                  <UIcon name="i-lucide-square-check-big" class="h-3 w-3 text-dimmed" />
                   {{ task.title }}
                 </li>
               </ul>

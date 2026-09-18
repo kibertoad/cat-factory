@@ -501,30 +501,28 @@ function exportJson() {
     <Transition name="obs-fade">
       <div
         v-if="open"
-        class="fixed inset-0 z-[60] flex flex-col bg-slate-950/96 backdrop-blur-sm"
+        class="fixed inset-0 z-[60] flex flex-col bg-app-950/96 backdrop-blur-sm"
         role="dialog"
         aria-modal="true"
       >
-        <header class="flex items-center gap-3 border-b border-slate-800 px-6 py-4">
+        <header class="flex items-center gap-3 border-b border-default px-6 py-4">
           <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sky-500/15">
             <UIcon name="i-lucide-activity" class="h-5 w-5 text-sky-400" />
           </div>
           <div class="min-w-0">
-            <h1 class="truncate text-base font-semibold text-white">
+            <h1 class="truncate text-base font-semibold text-highlighted">
               {{ t('observability.modelActivity') }}
             </h1>
-            <p v-if="block" class="truncate text-xs text-slate-500">
+            <p v-if="block" class="truncate text-xs text-dimmed">
               {{ block.title }} · {{ runSubtitle }}
             </p>
           </div>
           <div class="ms-auto flex items-center gap-1.5">
-            <div class="me-1 flex rounded-lg border border-slate-800 p-0.5 text-[12px]">
+            <div class="me-1 flex rounded-lg border border-default p-0.5 text-[12px]">
               <button
                 class="rounded-md px-2.5 py-1 transition"
                 :class="
-                  view === 'calls'
-                    ? 'bg-slate-800 text-slate-100'
-                    : 'text-slate-400 hover:text-slate-200'
+                  view === 'calls' ? 'bg-elevated text-app-100' : 'text-muted hover:text-default'
                 "
                 @click="view = 'calls'"
               >
@@ -533,9 +531,7 @@ function exportJson() {
               <button
                 class="rounded-md px-2.5 py-1 transition"
                 :class="
-                  view === 'tools'
-                    ? 'bg-slate-800 text-slate-100'
-                    : 'text-slate-400 hover:text-slate-200'
+                  view === 'tools' ? 'bg-elevated text-app-100' : 'text-muted hover:text-default'
                 "
                 @click="openToolsView()"
               >
@@ -544,9 +540,7 @@ function exportJson() {
               <button
                 class="rounded-md px-2.5 py-1 transition"
                 :class="
-                  view === 'context'
-                    ? 'bg-slate-800 text-slate-100'
-                    : 'text-slate-400 hover:text-slate-200'
+                  view === 'context' ? 'bg-elevated text-app-100' : 'text-muted hover:text-default'
                 "
                 @click="view = 'context'"
               >
@@ -555,9 +549,7 @@ function exportJson() {
               <button
                 class="rounded-md px-2.5 py-1 transition"
                 :class="
-                  view === 'search'
-                    ? 'bg-slate-800 text-slate-100'
-                    : 'text-slate-400 hover:text-slate-200'
+                  view === 'search' ? 'bg-elevated text-app-100' : 'text-muted hover:text-default'
                 "
                 @click="view = 'search'"
               >
@@ -602,30 +594,30 @@ function exportJson() {
             />
 
             <!-- run-level summary -->
-            <section class="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+            <section class="rounded-xl border border-default bg-default/50 p-4">
               <dl class="grid grid-cols-2 gap-x-6 gap-y-3 text-[13px] sm:grid-cols-4">
                 <div>
-                  <dt class="text-[11px] uppercase tracking-wide text-slate-500">
+                  <dt class="text-[11px] uppercase tracking-wide text-dimmed">
                     {{ t('observability.summary.calls') }}
                   </dt>
-                  <dd class="mt-0.5 tabular-nums text-slate-200">{{ totals.calls }}</dd>
+                  <dd class="mt-0.5 tabular-nums text-default">{{ totals.calls }}</dd>
                 </div>
                 <div v-if="showCost || !phaseRollup.available">
-                  <dt class="text-[11px] uppercase tracking-wide text-slate-500">
+                  <dt class="text-[11px] uppercase tracking-wide text-dimmed">
                     {{ t('observability.summary.cost') }}
                   </dt>
-                  <dd class="mt-0.5 tabular-nums text-slate-200">
+                  <dd class="mt-0.5 tabular-nums text-default">
                     {{ runCost ?? '—' }}
-                    <span class="mt-0.5 block text-[11px] text-slate-500">
+                    <span class="mt-0.5 block text-[11px] text-dimmed">
                       {{ t(costNoteKey) }}
                     </span>
                   </dd>
                 </div>
                 <div>
-                  <dt class="text-[11px] uppercase tracking-wide text-slate-500">
+                  <dt class="text-[11px] uppercase tracking-wide text-dimmed">
                     {{ t('observability.summary.tokensInOut') }}
                   </dt>
-                  <dd class="mt-0.5 tabular-nums text-slate-200">
+                  <dd class="mt-0.5 tabular-nums text-default">
                     <span :title="t('observability.summary.inputTokensHint')">
                       {{ formatTokens(totals.inputTokens) }} /
                       {{ formatTokens(totals.completionTokens) }}
@@ -634,7 +626,7 @@ function exportJson() {
                       v-if="totals.cacheReadTokens > 0 || totals.cacheWriteTokens > 0"
                       class="mt-0.5 block text-[11px]"
                     >
-                      <span class="text-slate-400" :title="t('observability.summary.freshHint')">
+                      <span class="text-muted" :title="t('observability.summary.freshHint')">
                         {{
                           t('observability.summary.fresh', {
                             tokens: formatTokens(totals.promptTokens),
@@ -642,7 +634,7 @@ function exportJson() {
                         }}
                       </span>
                       <template v-if="totals.cacheReadTokens > 0">
-                        <span class="text-slate-600"> · </span>
+                        <span class="text-app-600"> · </span>
                         <span
                           class="text-emerald-400/80"
                           :title="t('observability.summary.cacheReadHint')"
@@ -655,7 +647,7 @@ function exportJson() {
                         </span>
                       </template>
                       <template v-if="totals.cacheWriteTokens > 0">
-                        <span class="text-slate-600"> · </span>
+                        <span class="text-app-600"> · </span>
                         <span
                           class="text-amber-400/80"
                           :title="t('observability.summary.cacheWriteHint')"
@@ -671,21 +663,21 @@ function exportJson() {
                   </dd>
                 </div>
                 <div>
-                  <dt class="text-[11px] uppercase tracking-wide text-slate-500">
+                  <dt class="text-[11px] uppercase tracking-wide text-dimmed">
                     {{ t('observability.summary.transportOverhead') }}
                   </dt>
-                  <dd class="mt-0.5 tabular-nums text-slate-200">
+                  <dd class="mt-0.5 tabular-nums text-default">
                     <span v-if="totals.transportPct !== null">
                       {{ totals.transportPct }}% · {{ formatMs(totals.overheadMs) }}
                     </span>
-                    <span v-else class="text-slate-500">—</span>
+                    <span v-else class="text-dimmed">—</span>
                   </dd>
                 </div>
                 <div>
-                  <dt class="text-[11px] uppercase tracking-wide text-slate-500">
+                  <dt class="text-[11px] uppercase tracking-wide text-dimmed">
                     {{ t('observability.summary.modelExecution') }}
                   </dt>
-                  <dd class="mt-0.5 tabular-nums text-slate-200">
+                  <dd class="mt-0.5 tabular-nums text-default">
                     {{ formatMs(totals.upstreamMs) }}
                   </dd>
                 </div>
@@ -721,25 +713,25 @@ function exportJson() {
                  capped call list) -->
             <section
               v-if="phaseRows.length || !phaseRollup.available"
-              class="rounded-xl border border-slate-800 bg-slate-900/50 p-4"
+              class="rounded-xl border border-default bg-default/50 p-4"
             >
               <div class="flex items-baseline gap-2">
-                <h2 class="text-[11px] uppercase tracking-wide text-slate-500">
+                <h2 class="text-[11px] uppercase tracking-wide text-dimmed">
                   {{ t('observability.phase.title') }}
                 </h2>
-                <span v-if="phaseRollup.available" class="text-[11px] text-slate-600">
+                <span v-if="phaseRollup.available" class="text-[11px] text-app-600">
                   {{ t('observability.phase.subtitle') }}
                 </span>
               </div>
               <!-- No rollup to fold: said in words, because an absent table and a run that spent
                    nothing look identical, and the calls listed above prove it spent something. -->
-              <p v-if="!phaseRollup.available" class="mt-2 text-[12px] text-slate-400">
+              <p v-if="!phaseRollup.available" class="mt-2 text-[12px] text-muted">
                 {{ t('observability.phase.noRollup') }}
               </p>
               <div v-else class="mt-3 overflow-x-auto">
                 <table class="w-full min-w-[32rem] text-[12px]">
                   <thead>
-                    <tr class="text-[11px] uppercase tracking-wide text-slate-500">
+                    <tr class="text-[11px] uppercase tracking-wide text-dimmed">
                       <th class="py-1 pe-3 text-start font-normal">
                         {{ t('observability.phase.columns.phase') }}
                       </th>
@@ -768,12 +760,12 @@ function exportJson() {
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="p in phaseRows" :key="p.phase" class="border-t border-slate-800/70">
-                      <td class="py-1.5 pe-3 text-slate-200">
-                        <span :class="p.phase ? '' : 'text-slate-400 italic'">
+                    <tr v-for="p in phaseRows" :key="p.phase" class="border-t border-default/70">
+                      <td class="py-1.5 pe-3 text-default">
+                        <span :class="p.phase ? '' : 'text-muted italic'">
                           {{ phaseLabel(p.phase) }}
                         </span>
-                        <span v-if="!p.phase" class="ms-1.5 text-[11px] text-slate-600">
+                        <span v-if="!p.phase" class="ms-1.5 text-[11px] text-app-600">
                           {{ t('observability.phase.unattributedHint') }}
                         </span>
                         <UBadge
@@ -786,21 +778,21 @@ function exportJson() {
                           {{ t('observability.metricsBar.errors', { count: p.errors }, p.errors) }}
                         </UBadge>
                       </td>
-                      <td class="py-1.5 px-3 text-end tabular-nums text-slate-300">
+                      <td class="py-1.5 px-3 text-end tabular-nums text-toned">
                         {{ p.calls }}
                       </td>
-                      <td class="py-1.5 px-3 text-end tabular-nums text-slate-300">
+                      <td class="py-1.5 px-3 text-end tabular-nums text-toned">
                         {{ formatTokens(totalInputTokens(p)) }}↑
                         {{ formatTokens(p.completionTokens) }}↓
                       </td>
-                      <td v-if="showCost" class="py-1.5 px-3 text-end tabular-nums text-slate-300">
+                      <td v-if="showCost" class="py-1.5 px-3 text-end tabular-nums text-toned">
                         <!-- An em dash, not 0: this phase's model had no rate, and a zero here
                              would read as a phase that cost nothing. -->
                         {{ formatCost(p.costEstimate, costCurrency) ?? '—' }}
                       </td>
-                      <td class="py-1.5 ps-3 text-end tabular-nums text-slate-300">
+                      <td class="py-1.5 ps-3 text-end tabular-nums text-toned">
                         {{ formatTokens(p.carryCostTokens) }}
-                        <span v-if="carryShare(p.carryCostTokens) !== null" class="text-slate-600">
+                        <span v-if="carryShare(p.carryCostTokens) !== null" class="text-app-600">
                           · {{ carryShare(p.carryCostTokens) }}%
                         </span>
                       </td>
@@ -813,7 +805,7 @@ function exportJson() {
             <!-- states -->
             <p
               v-if="loading && !calls.length"
-              class="flex items-center gap-2 py-8 text-center text-sm text-slate-500 justify-center"
+              class="flex items-center gap-2 py-8 text-center text-sm text-dimmed justify-center"
             >
               <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
               {{ t('observability.loadingActivity') }}
@@ -836,7 +828,7 @@ function exportJson() {
             </div>
             <p
               v-else-if="!calls.length"
-              class="rounded-lg border border-dashed border-slate-800 py-8 text-center text-sm text-slate-500"
+              class="rounded-lg border border-dashed border-default py-8 text-center text-sm text-dimmed"
             >
               {{ t('observability.noCalls') }}
             </p>
@@ -844,7 +836,7 @@ function exportJson() {
             <!-- per-call list, narrowable by outcome -->
             <template v-else>
               <div class="flex flex-wrap items-center justify-between gap-2">
-                <h2 class="text-[11px] uppercase tracking-wide text-slate-500">
+                <h2 class="text-[11px] uppercase tracking-wide text-dimmed">
                   {{ t('observability.callsTitle') }}
                 </h2>
                 <OutcomeFilterChips v-model="callFilter" :options="callFilterOptions" />
@@ -855,7 +847,7 @@ function exportJson() {
                    are none. -->
               <p
                 v-if="!visibleCalls.length"
-                class="rounded-lg border border-dashed border-slate-800 py-8 text-center text-sm text-slate-500"
+                class="rounded-lg border border-dashed border-default py-8 text-center text-sm text-dimmed"
               >
                 {{ t('observability.noCallsMatching') }}
               </p>
@@ -865,16 +857,16 @@ function exportJson() {
                   v-for="c in visibleCalls"
                   :id="callRowId(c.id)"
                   :key="c.id"
-                  class="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/40"
+                  class="overflow-hidden rounded-xl border border-default bg-default/40"
                   :class="!c.ok ? 'border-rose-900/60' : ''"
                 >
                   <button
-                    class="flex w-full items-center gap-3 px-4 py-2.5 text-start transition hover:bg-slate-900/70"
+                    class="flex w-full items-center gap-3 px-4 py-2.5 text-start transition hover:bg-default/70"
                     @click="toggle(c)"
                   >
                     <UIcon
                       name="i-lucide-chevron-right"
-                      class="h-4 w-4 shrink-0 text-slate-500 transition-transform"
+                      class="h-4 w-4 shrink-0 text-dimmed transition-transform"
                       :class="expanded[c.id] ? 'rotate-90' : ''"
                     />
                     <UIcon
@@ -882,11 +874,9 @@ function exportJson() {
                       class="h-4 w-4 shrink-0"
                       :style="{ color: agentMeta(c.agentKind).color }"
                     />
-                    <span class="text-[13px] text-slate-200">{{
-                      agentMeta(c.agentKind).label
-                    }}</span>
+                    <span class="text-[13px] text-default">{{ agentMeta(c.agentKind).label }}</span>
                     <span
-                      class="hidden truncate text-[11px] text-slate-500 sm:inline"
+                      class="hidden truncate text-[11px] text-dimmed sm:inline"
                       :title="c.model"
                     >
                       {{ c.provider }}:{{ c.model }}
@@ -894,12 +884,12 @@ function exportJson() {
                            reads alike, and an upstream having a bad day cannot be told from the
                            gateway having one. Absent for a direct vendor, where `provider`
                            already names who served the call. -->
-                      <span v-if="c.upstreamProvider" class="text-slate-600">
+                      <span v-if="c.upstreamProvider" class="text-app-600">
                         {{ t('observability.call.viaUpstream', { upstream: c.upstreamProvider }) }}
                       </span>
                     </span>
                     <div
-                      class="ms-auto flex items-center gap-2.5 text-[11px] tabular-nums text-slate-400"
+                      class="ms-auto flex items-center gap-2.5 text-[11px] tabular-nums text-muted"
                     >
                       <span
                         :title="
@@ -942,18 +932,18 @@ function exportJson() {
                       >
                         {{ c.finishReason }}
                       </UBadge>
-                      <span v-else class="text-slate-600">{{
+                      <span v-else class="text-app-600">{{
                         c.finishReason ?? t('observability.call.ok')
                       }}</span>
-                      <span class="hidden text-slate-600 md:inline">{{ clock(c.createdAt) }}</span>
+                      <span class="hidden text-app-600 md:inline">{{ clock(c.createdAt) }}</span>
                     </div>
                   </button>
 
-                  <div v-if="expanded[c.id]" class="border-t border-slate-800 px-4 py-3 space-y-3">
+                  <div v-if="expanded[c.id]" class="border-t border-default px-4 py-3 space-y-3">
                     <p v-if="c.errorMessage" class="text-[12px] text-rose-400">
                       {{ c.errorMessage }}
                     </p>
-                    <div class="flex flex-wrap gap-x-5 gap-y-1 text-[11px] text-slate-500">
+                    <div class="flex flex-wrap gap-x-5 gap-y-1 text-[11px] text-dimmed">
                       <span>{{ t('observability.call.messages', { count: c.messageCount }) }}</span>
                       <span>{{ t('observability.call.tools', { count: c.toolCount }) }}</span>
                       <span>{{
@@ -981,7 +971,7 @@ function exportJson() {
                            is. `!= null` and not truthiness: a reported 0 is a free route saying
                            so, which is a different fact from a producer that reports nothing and
                            must not be hidden as if it were. -->
-                      <span v-if="c.reportedCostUsd != null" class="text-slate-400">
+                      <span v-if="c.reportedCostUsd != null" class="text-muted">
                         {{
                           t('observability.call.reportedCost', {
                             cost: formatCost(c.reportedCostUsd, 'USD'),
@@ -991,12 +981,12 @@ function exportJson() {
                     </div>
                     <div>
                       <div
-                        class="mb-1 flex items-center gap-2 text-[11px] uppercase tracking-wide text-slate-500"
+                        class="mb-1 flex items-center gap-2 text-[11px] uppercase tracking-wide text-dimmed"
                       >
                         <span>{{ t('observability.call.prompt') }}</span>
                         <span
                           v-if="c.promptPrefixCount > 0"
-                          class="normal-case tracking-normal text-slate-600"
+                          class="normal-case tracking-normal text-app-600"
                         >
                           {{
                             t('observability.call.promptPrefixOmitted', {
@@ -1006,23 +996,23 @@ function exportJson() {
                         </span>
                       </div>
                       <pre
-                        class="max-h-72 overflow-auto rounded-lg bg-slate-950/70 p-3 text-[11px] leading-relaxed text-slate-300"
+                        class="max-h-72 overflow-auto rounded-lg bg-app-950/70 p-3 text-[11px] leading-relaxed text-toned"
                         >{{ prettyPrompt(c.promptText) }}</pre>
                     </div>
                     <div>
-                      <div class="mb-1 text-[11px] uppercase tracking-wide text-slate-500">
+                      <div class="mb-1 text-[11px] uppercase tracking-wide text-dimmed">
                         {{ t('observability.call.response') }}
                       </div>
                       <pre
-                        class="max-h-72 overflow-auto rounded-lg bg-slate-950/70 p-3 text-[11px] leading-relaxed text-slate-300"
+                        class="max-h-72 overflow-auto rounded-lg bg-app-950/70 p-3 text-[11px] leading-relaxed text-toned"
                         >{{ c.responseText || '—' }}</pre>
                     </div>
                     <div v-if="c.reasoningText">
-                      <div class="mb-1 text-[11px] uppercase tracking-wide text-slate-500">
+                      <div class="mb-1 text-[11px] uppercase tracking-wide text-dimmed">
                         {{ t('observability.call.reasoning') }}
                       </div>
                       <pre
-                        class="max-h-72 overflow-auto rounded-lg bg-slate-950/70 p-3 text-[11px] leading-relaxed text-slate-400"
+                        class="max-h-72 overflow-auto rounded-lg bg-app-950/70 p-3 text-[11px] leading-relaxed text-muted"
                         >{{ c.reasoningText }}</pre>
                     </div>
                   </div>
@@ -1047,7 +1037,7 @@ function exportJson() {
                  so the survey's absence would otherwise read as a phase that used no tools. -->
             <p
               v-if="bootstrap?.monorepo"
-              class="rounded-lg border border-dashed border-slate-800 px-3 py-2 text-[12px] text-slate-400"
+              class="rounded-lg border border-dashed border-default px-3 py-2 text-[12px] text-muted"
             >
               {{ t('observability.toolCalls.surveyReadsElsewhere') }}
             </p>
@@ -1068,7 +1058,7 @@ function exportJson() {
           <div v-else-if="view === 'context'" class="mx-auto max-w-4xl space-y-5">
             <p
               v-if="contextLoading && !contextSnapshots.length"
-              class="flex items-center justify-center gap-2 py-8 text-center text-sm text-slate-500"
+              class="flex items-center justify-center gap-2 py-8 text-center text-sm text-dimmed"
             >
               <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
               {{ t('observability.loadingContext') }}
@@ -1091,7 +1081,7 @@ function exportJson() {
             </div>
             <p
               v-else-if="!contextSnapshots.length"
-              class="rounded-lg border border-dashed border-slate-800 py-8 text-center text-sm text-slate-500"
+              class="rounded-lg border border-dashed border-default py-8 text-center text-sm text-dimmed"
             >
               {{ t('observability.noContext') }}
             </p>
@@ -1100,15 +1090,15 @@ function exportJson() {
               <li
                 v-for="s in contextSnapshots"
                 :key="s.id"
-                class="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/40"
+                class="overflow-hidden rounded-xl border border-default bg-default/40"
               >
                 <button
-                  class="flex w-full items-center gap-3 px-4 py-2.5 text-start transition hover:bg-slate-900/70"
+                  class="flex w-full items-center gap-3 px-4 py-2.5 text-start transition hover:bg-default/70"
                   @click="toggleCtx(s)"
                 >
                   <UIcon
                     name="i-lucide-chevron-right"
-                    class="h-4 w-4 shrink-0 text-slate-500 transition-transform"
+                    class="h-4 w-4 shrink-0 text-dimmed transition-transform"
                     :class="expandedCtx[s.id] ? 'rotate-90' : ''"
                   />
                   <UIcon
@@ -1116,12 +1106,12 @@ function exportJson() {
                     class="h-4 w-4 shrink-0"
                     :style="{ color: agentMeta(s.agentKind).color }"
                   />
-                  <span class="text-[13px] text-slate-200">{{ agentMeta(s.agentKind).label }}</span>
-                  <span v-if="s.model" class="hidden truncate text-[11px] text-slate-500 sm:inline">
+                  <span class="text-[13px] text-default">{{ agentMeta(s.agentKind).label }}</span>
+                  <span v-if="s.model" class="hidden truncate text-[11px] text-dimmed sm:inline">
                     {{ s.model }}
                   </span>
                   <div
-                    class="ms-auto flex items-center gap-2.5 text-[11px] tabular-nums text-slate-400"
+                    class="ms-auto flex items-center gap-2.5 text-[11px] tabular-nums text-muted"
                   >
                     <span :title="t('observability.context.injectedFiles')">{{
                       t('observability.context.filesCount', { count: s.contextFiles.length })
@@ -1129,66 +1119,66 @@ function exportJson() {
                     <span :title="t('observability.context.bestPracticeFragments')">{{
                       t('observability.context.fragmentsCount', { count: s.fragments.length })
                     }}</span>
-                    <span class="hidden text-slate-600 md:inline">{{ clock(s.createdAt) }}</span>
+                    <span class="hidden text-app-600 md:inline">{{ clock(s.createdAt) }}</span>
                   </div>
                 </button>
 
-                <div v-if="expandedCtx[s.id]" class="border-t border-slate-800 px-4 py-3 space-y-3">
+                <div v-if="expandedCtx[s.id]" class="border-t border-default px-4 py-3 space-y-3">
                   <div>
-                    <div class="mb-1 text-[11px] uppercase tracking-wide text-slate-500">
+                    <div class="mb-1 text-[11px] uppercase tracking-wide text-dimmed">
                       {{ t('observability.context.systemPrompt') }}
                     </div>
                     <pre
-                      class="max-h-72 overflow-auto rounded-lg bg-slate-950/70 p-3 text-[11px] leading-relaxed text-slate-300"
+                      class="max-h-72 overflow-auto rounded-lg bg-app-950/70 p-3 text-[11px] leading-relaxed text-toned"
                       >{{ s.systemPrompt || '—' }}</pre>
                   </div>
                   <div>
-                    <div class="mb-1 text-[11px] uppercase tracking-wide text-slate-500">
+                    <div class="mb-1 text-[11px] uppercase tracking-wide text-dimmed">
                       {{ t('observability.context.userPrompt') }}
                     </div>
                     <pre
-                      class="max-h-72 overflow-auto rounded-lg bg-slate-950/70 p-3 text-[11px] leading-relaxed text-slate-300"
+                      class="max-h-72 overflow-auto rounded-lg bg-app-950/70 p-3 text-[11px] leading-relaxed text-toned"
                       >{{ s.userPrompt || '—' }}</pre>
                   </div>
                   <div v-if="s.fragments.length">
-                    <div class="mb-1 text-[11px] uppercase tracking-wide text-slate-500">
+                    <div class="mb-1 text-[11px] uppercase tracking-wide text-dimmed">
                       {{ t('observability.context.bestPracticeFragments') }}
                     </div>
                     <div
                       v-for="f in s.fragments"
                       :key="f.id"
-                      class="mb-2 rounded-lg bg-slate-950/70 p-3"
+                      class="mb-2 rounded-lg bg-app-950/70 p-3"
                     >
-                      <div class="mb-1 text-[11px] text-slate-400">{{ f.id }}</div>
-                      <pre
-                        class="max-h-48 overflow-auto text-[11px] leading-relaxed text-slate-300"
-                        >{{ f.body }}</pre>
+                      <div class="mb-1 text-[11px] text-muted">{{ f.id }}</div>
+                      <pre class="max-h-48 overflow-auto text-[11px] leading-relaxed text-toned">{{
+                        f.body
+                      }}</pre>
                     </div>
                   </div>
                   <div v-if="s.contextFiles.length">
-                    <div class="mb-1 text-[11px] uppercase tracking-wide text-slate-500">
+                    <div class="mb-1 text-[11px] uppercase tracking-wide text-dimmed">
                       {{ t('observability.context.injectedFiles') }}
                     </div>
                     <div
                       v-for="file in s.contextFiles"
                       :key="file.path"
-                      class="mb-2 rounded-lg bg-slate-950/70 p-3"
+                      class="mb-2 rounded-lg bg-app-950/70 p-3"
                     >
-                      <div class="mb-1 text-[11px] text-slate-400">
+                      <div class="mb-1 text-[11px] text-muted">
                         {{ file.title }}
-                        <span class="text-slate-600">· {{ file.path }}</span>
+                        <span class="text-app-600">· {{ file.path }}</span>
                       </div>
-                      <pre
-                        class="max-h-72 overflow-auto text-[11px] leading-relaxed text-slate-300"
-                        >{{ file.content }}</pre>
+                      <pre class="max-h-72 overflow-auto text-[11px] leading-relaxed text-toned">{{
+                        file.content
+                      }}</pre>
                     </div>
                   </div>
                   <div>
-                    <div class="mb-1 text-[11px] uppercase tracking-wide text-slate-500">
+                    <div class="mb-1 text-[11px] uppercase tracking-wide text-dimmed">
                       {{ t('observability.context.details') }}
                     </div>
                     <pre
-                      class="max-h-48 overflow-auto rounded-lg bg-slate-950/70 p-3 text-[11px] leading-relaxed text-slate-400"
+                      class="max-h-48 overflow-auto rounded-lg bg-app-950/70 p-3 text-[11px] leading-relaxed text-muted"
                       >{{ prettyExtras(s.extras) }}</pre>
                   </div>
                 </div>
@@ -1200,14 +1190,14 @@ function exportJson() {
             <!-- Availability header: a static per-run fact (not telemetry-gated). -->
             <section
               v-if="searchAvailability"
-              class="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-slate-800 bg-slate-900/50 px-4 py-3 text-[13px]"
+              class="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-default bg-default/50 px-4 py-3 text-[13px]"
             >
-              <span class="text-[11px] uppercase tracking-wide text-slate-500">
+              <span class="text-[11px] uppercase tracking-wide text-dimmed">
                 {{ t('observability.webSearch') }}
               </span>
               <span
                 class="inline-flex items-center gap-1.5"
-                :class="searchAvailability.available ? 'text-emerald-300' : 'text-slate-400'"
+                :class="searchAvailability.available ? 'text-emerald-300' : 'text-muted'"
               >
                 <UIcon
                   :name="searchAvailability.available ? 'i-lucide-globe' : 'i-lucide-globe-lock'"
@@ -1219,7 +1209,7 @@ function exportJson() {
                     : t('observability.search.unavailable')
                 }}
               </span>
-              <span v-if="searchAvailability.providers.length" class="text-slate-400 tabular-nums">
+              <span v-if="searchAvailability.providers.length" class="text-muted tabular-nums">
                 {{ t('observability.search.provider') }}:
                 {{ searchAvailability.providers.map(providerLabel).join(', ') }}
               </span>
@@ -1227,27 +1217,27 @@ function exportJson() {
 
             <p
               v-if="searchLoading && !searchQueries.length"
-              class="flex items-center justify-center gap-2 py-8 text-center text-sm text-slate-500"
+              class="flex items-center justify-center gap-2 py-8 text-center text-sm text-dimmed"
             >
               <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
               {{ t('observability.loadingSearch') }}
             </p>
             <p
               v-else-if="!searchQueries.length"
-              class="rounded-lg border border-dashed border-slate-800 py-8 text-center text-sm text-slate-500"
+              class="rounded-lg border border-dashed border-default py-8 text-center text-sm text-dimmed"
             >
               {{ t('observability.noSearch') }}
             </p>
 
             <div v-else>
-              <div class="mb-2 text-[11px] uppercase tracking-wide text-slate-500">
+              <div class="mb-2 text-[11px] uppercase tracking-wide text-dimmed">
                 {{ t('observability.search.queriesTitle') }}
               </div>
               <ul class="space-y-2">
                 <li
                   v-for="q in searchQueries"
                   :key="q.id"
-                  class="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-900/40 px-4 py-2.5"
+                  class="flex items-center gap-3 rounded-xl border border-default bg-default/40 px-4 py-2.5"
                 >
                   <UIcon
                     :name="agentMeta(q.agentKind).icon"
@@ -1255,11 +1245,11 @@ function exportJson() {
                     :style="{ color: agentMeta(q.agentKind).color }"
                     :title="agentMeta(q.agentKind).label"
                   />
-                  <span class="min-w-0 flex-1 truncate text-[13px] text-slate-200" :title="q.query">
+                  <span class="min-w-0 flex-1 truncate text-[13px] text-default" :title="q.query">
                     {{ q.query }}
                   </span>
                   <div
-                    class="flex shrink-0 items-center gap-2.5 text-[11px] tabular-nums text-slate-400"
+                    class="flex shrink-0 items-center gap-2.5 text-[11px] tabular-nums text-muted"
                   >
                     <span v-if="q.provider" class="hidden sm:inline">{{
                       providerLabel(q.provider)
@@ -1271,7 +1261,7 @@ function exportJson() {
                         q.resultCount,
                       )
                     }}</span>
-                    <span class="hidden text-slate-600 md:inline">{{ clock(q.createdAt) }}</span>
+                    <span class="hidden text-app-600 md:inline">{{ clock(q.createdAt) }}</span>
                   </div>
                 </li>
               </ul>

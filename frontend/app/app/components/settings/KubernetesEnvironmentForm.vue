@@ -263,8 +263,8 @@ function optional(label: string): string {
 </script>
 
 <template>
-  <div class="rounded-lg border border-dashed border-slate-700 p-3 space-y-3">
-    <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+  <div class="rounded-lg border border-dashed border-muted p-3 space-y-3">
+    <p class="text-[11px] font-semibold uppercase tracking-wide text-muted">
       {{
         connection?.kind === 'kubernetes'
           ? t('settings.providerConnection.form.updateConfiguration')

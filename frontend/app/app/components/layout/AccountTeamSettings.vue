@@ -200,9 +200,11 @@ async function disconnectEmail() {
 <template>
   <div class="space-y-6 text-sm">
     <!-- personal-account CTA: members/roles/invitations need an organization -->
-    <section v-if="!isOrg" class="rounded-md border border-slate-800 bg-slate-800/40 p-4">
-      <h3 class="mb-1 font-semibold text-white">{{ t('layout.accountTeam.org.ctaTitle') }}</h3>
-      <p class="mb-3 text-slate-400">
+    <section v-if="!isOrg" class="rounded-md border border-default bg-elevated/40 p-4">
+      <h3 class="mb-1 font-semibold text-highlighted">
+        {{ t('layout.accountTeam.org.ctaTitle') }}
+      </h3>
+      <p class="mb-3 text-muted">
         {{ t('layout.accountTeam.org.ctaBody') }}
       </p>
       <form class="flex gap-2" @submit.prevent="createOrganization">
@@ -219,12 +221,14 @@ async function disconnectEmail() {
 
     <!-- members -->
     <section v-if="isOrg">
-      <h3 class="mb-2 font-semibold text-white">{{ t('layout.accountTeam.members.title') }}</h3>
+      <h3 class="mb-2 font-semibold text-highlighted">
+        {{ t('layout.accountTeam.members.title') }}
+      </h3>
       <ul class="space-y-1">
         <li
           v-for="m in accounts.members"
           :key="m.userId"
-          class="flex items-center justify-between rounded-md bg-slate-800/40 px-2 py-1"
+          class="flex items-center justify-between rounded-md bg-elevated/40 px-2 py-1"
         >
           <span class="truncate">{{ m.name || m.email || m.userId }}</span>
           <USelect
@@ -236,7 +240,7 @@ async function disconnectEmail() {
             class="w-44"
             @update:model-value="(r: AccountRole[]) => updateMemberRoles(m.userId, r)"
           />
-          <span v-else class="text-xs uppercase tracking-wide text-slate-400">
+          <span v-else class="text-xs uppercase tracking-wide text-muted">
             {{ m.roles.join(', ') }}
           </span>
           <!-- Offboarding: end every session this member holds, leaving their membership and
@@ -254,7 +258,7 @@ async function disconnectEmail() {
             @click="revokeSessions(m.userId, m.name || m.email || m.userId)"
           />
         </li>
-        <li v-if="accounts.members.length === 0" class="text-slate-500">
+        <li v-if="accounts.members.length === 0" class="text-dimmed">
           {{ t('layout.accountTeam.members.empty') }}
         </li>
       </ul>
@@ -262,7 +266,9 @@ async function disconnectEmail() {
 
     <!-- invitations -->
     <section v-if="isOrg">
-      <h3 class="mb-2 font-semibold text-white">{{ t('layout.accountTeam.invite.title') }}</h3>
+      <h3 class="mb-2 font-semibold text-highlighted">
+        {{ t('layout.accountTeam.invite.title') }}
+      </h3>
       <form class="flex gap-2" @submit.prevent="sendInvite">
         <UInput
           v-model="inviteEmail"
@@ -280,11 +286,11 @@ async function disconnectEmail() {
         <li
           v-for="inv in accounts.invitations"
           :key="inv.id"
-          class="flex items-center justify-between rounded-md bg-slate-800/40 px-2 py-1"
+          class="flex items-center justify-between rounded-md bg-elevated/40 px-2 py-1"
         >
           <span class="truncate">{{ inv.email }}</span>
           <span class="flex items-center gap-2 text-xs">
-            <span class="uppercase tracking-wide text-slate-400">
+            <span class="uppercase tracking-wide text-muted">
               {{ invitationStatusLabel(inv.status) }}
             </span>
             <UButton
@@ -303,14 +309,14 @@ async function disconnectEmail() {
 
     <!-- email sender -->
     <section>
-      <h3 class="mb-2 font-semibold text-white">{{ t('layout.accountTeam.email.title') }}</h3>
-      <p v-if="!accounts.emailConfigured" class="text-slate-500">
+      <h3 class="mb-2 font-semibold text-highlighted">{{ t('layout.accountTeam.email.title') }}</h3>
+      <p v-if="!accounts.emailConfigured" class="text-dimmed">
         {{ t('layout.accountTeam.email.notEnabled') }}
       </p>
       <template v-else>
         <div
           v-if="accounts.emailConnection"
-          class="flex items-center justify-between rounded-md bg-slate-800/40 px-2 py-1.5"
+          class="flex items-center justify-between rounded-md bg-elevated/40 px-2 py-1.5"
         >
           <i18n-t keypath="layout.accountTeam.email.connectedAs" tag="span" scope="global">
             <template #provider>
@@ -344,9 +350,11 @@ async function disconnectEmail() {
 
     <!-- account-wide provider API keys (admin-only): direct vendors + proxy gateways -->
     <section v-if="isAdmin" class="space-y-6">
-      <h3 class="mb-2 font-semibold text-white">{{ t('layout.accountTeam.apiKeys.title') }}</h3>
+      <h3 class="mb-2 font-semibold text-highlighted">
+        {{ t('layout.accountTeam.apiKeys.title') }}
+      </h3>
       <ProvidersApiKeysSection :account-id="accountId" category="direct" />
-      <div class="border-t border-slate-800 pt-6">
+      <div class="border-t border-default pt-6">
         <ProvidersApiKeysSection :account-id="accountId" category="proxy" />
       </div>
     </section>

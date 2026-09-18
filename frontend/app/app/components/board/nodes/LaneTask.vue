@@ -52,13 +52,13 @@ function onHandle(e: PointerEvent) {
          for read-only viewers, for whom the drag is a no-op anyway (see useBlockDrag). -->
     <div
       v-if="access.canWriteBoard.value"
-      class="nodrag nopan flex cursor-grab touch-none items-center justify-center rounded-t-lg border border-b-0 border-slate-700 bg-slate-800/80 py-px active:cursor-grabbing pointer-coarse:py-2"
+      class="nodrag nopan flex cursor-grab touch-none items-center justify-center rounded-t-lg border border-b-0 border-muted bg-elevated/80 py-px active:cursor-grabbing pointer-coarse:py-2"
       :title="t('board.frame.dragTask')"
       @pointerdown="onHandle"
     >
       <UIcon
         name="i-lucide-grip-horizontal"
-        class="h-3 w-3 text-slate-500 pointer-coarse:h-5 pointer-coarse:w-5"
+        class="h-3 w-3 text-dimmed pointer-coarse:h-5 pointer-coarse:w-5"
       />
     </div>
     <TaskCard :task-id="taskId" :class="access.canWriteBoard.value ? '!rounded-t-none' : ''" />

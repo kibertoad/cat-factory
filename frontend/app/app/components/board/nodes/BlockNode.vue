@@ -238,21 +238,21 @@ const ITEM_ICON: Record<string, string> = {
        shows only the internal id + a "Permission denied" placeholder (never the repo). -->
   <div
     v-if="block?.accessDenied"
-    class="w-56 overflow-hidden rounded-xl border border-slate-700 bg-slate-900/90 shadow-xl backdrop-blur"
+    class="w-56 overflow-hidden rounded-xl border border-muted bg-default/90 shadow-xl backdrop-blur"
     :data-block-id="block.id"
     data-testid="frame-access-denied"
   >
-    <div class="flex items-center gap-2 border-b border-slate-800 px-3 py-2">
-      <span class="i-lucide-lock h-4 w-4 shrink-0 text-slate-400" />
-      <span class="truncate text-sm font-semibold text-slate-200">{{
+    <div class="flex items-center gap-2 border-b border-default px-3 py-2">
+      <span class="i-lucide-lock h-4 w-4 shrink-0 text-muted" />
+      <span class="truncate text-sm font-semibold text-default">{{
         t('board.frame.accessDenied.title')
       }}</span>
     </div>
     <div class="px-3 py-3">
-      <p class="text-[11px] leading-snug text-slate-400">
+      <p class="text-[11px] leading-snug text-muted">
         {{ t('board.frame.accessDenied.hint') }}
       </p>
-      <code class="mt-2 block truncate font-mono text-[11px] text-slate-500">{{ block.id }}</code>
+      <code class="mt-2 block truncate font-mono text-[11px] text-dimmed">{{ block.id }}</code>
     </div>
   </div>
 
@@ -291,8 +291,8 @@ const ITEM_ICON: Record<string, string> = {
          and a collapsed summary) went with the header's collapse control, since between them they
          held the only render of the "Shared" badge, which now lives in the header below. -->
     <div
-      class="relative overflow-visible rounded-2xl border bg-slate-900/95 shadow-2xl backdrop-blur"
-      :class="[selected ? 'border-white' : 'border-slate-700', pulseClass]"
+      class="relative overflow-visible rounded-2xl border bg-default/95 shadow-2xl backdrop-blur"
+      :class="[selected ? 'border-white' : 'border-muted', pulseClass]"
     >
       <div class="h-1.5 w-full rounded-t-2xl" :style="{ backgroundColor: accent }" />
       <!-- bootstrap-in-progress banner -->
@@ -414,7 +414,7 @@ const ITEM_ICON: Record<string, string> = {
               </div>
               <div>
                 <div class="flex items-center gap-1.5">
-                  <span class="text-sm font-semibold text-white">{{ block.title }}</span>
+                  <span class="text-sm font-semibold text-highlighted">{{ block.title }}</span>
                   <!-- Mounted on more than one board in the org. On the title row rather than in
                        the action strip, because it qualifies the service's NAME: the work lands in
                        a repo another board also drives. -->
@@ -430,7 +430,7 @@ const ITEM_ICON: Record<string, string> = {
                     {{ t('board.frame.shared') }}
                   </UBadge>
                 </div>
-                <div class="text-[11px] text-slate-400">{{ typeMeta!.label }}</div>
+                <div class="text-[11px] text-muted">{{ typeMeta!.label }}</div>
               </div>
             </div>
             <div class="flex items-center gap-1">
@@ -530,7 +530,7 @@ const ITEM_ICON: Record<string, string> = {
                stays is what the canvas can't show at a glance. -->
           <div
             v-if="modules.length || prTasks"
-            class="flex items-center gap-2 text-[10px] uppercase tracking-wide text-slate-500"
+            class="flex items-center gap-2 text-[10px] uppercase tracking-wide text-dimmed"
           >
             <span v-if="modules.length">{{
               t('board.frame.moduleCount', { count: modules.length }, modules.length)
@@ -549,7 +549,7 @@ const ITEM_ICON: Record<string, string> = {
              through to nothing; each lane body carries the same zone for drops inside it. -->
         <div
           :data-drop-zone="block.id"
-          class="nodrag relative rounded-xl bg-slate-950/40 p-2"
+          class="nodrag relative rounded-xl bg-app-950/40 p-2"
           :style="{ width: canvas.w + 'px', minHeight: canvas.h + 'px' }"
         >
           <!-- Initiatives sit in a wrapping band above the lanes: they are containers of work,
@@ -564,7 +564,7 @@ const ITEM_ICON: Record<string, string> = {
             v-if="!hasTasks && access.canWriteBoard.value"
             type="button"
             data-testid="frame-add-task-empty"
-            class="absolute inset-4 flex items-center justify-center gap-1 rounded-lg border border-dashed border-slate-700 text-[11px] text-slate-500 hover:border-slate-500 hover:text-slate-300"
+            class="absolute inset-4 flex items-center justify-center gap-1 rounded-lg border border-dashed border-muted text-[11px] text-dimmed hover:border-app-500 hover:text-toned"
             @click.stop="addTask"
           >
             <UIcon name="i-lucide-plus" class="h-3.5 w-3.5" /> {{ t('board.frame.addFirstTask') }}

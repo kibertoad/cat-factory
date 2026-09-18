@@ -179,7 +179,7 @@ watch(
         {{ t('github.repoTree.root') }}
       </UButton>
       <template v-for="crumb in breadcrumbs" :key="crumb.path">
-        <span class="text-slate-600">/</span>
+        <span class="text-app-600">/</span>
         <UButton
           size="xs"
           variant="ghost"
@@ -193,14 +193,14 @@ watch(
     </div>
 
     <!-- listing -->
-    <div class="max-h-56 overflow-auto rounded border border-slate-800">
-      <div v-if="loading" class="p-3 text-sm text-slate-400">
+    <div class="max-h-56 overflow-auto rounded border border-default">
+      <div v-if="loading" class="p-3 text-sm text-muted">
         {{ t('github.repoTree.loading') }}
       </div>
-      <div v-else-if="isEmpty" class="p-3 text-sm text-slate-400">
+      <div v-else-if="isEmpty" class="p-3 text-sm text-muted">
         {{ mode === 'dir' ? t('github.repoTree.noSubdirectories') : t('github.repoTree.empty') }}
       </div>
-      <ul v-else class="divide-y divide-slate-800">
+      <ul v-else class="divide-y divide-default">
         <li
           v-for="entry in dirEntries"
           :key="entry.path"
@@ -208,7 +208,7 @@ watch(
         >
           <button
             type="button"
-            class="flex items-center gap-2 truncate text-sm text-slate-200 hover:text-primary-400"
+            class="flex items-center gap-2 truncate text-sm text-default hover:text-primary-400"
             @click="browseTo(entry.path)"
           >
             <UIcon name="i-lucide-folder" class="h-4 w-4 shrink-0 text-amber-400" />
@@ -223,7 +223,7 @@ watch(
           </span>
           <span
             v-else-if="mode === 'dir' && isAdded(entry.path)"
-            class="flex shrink-0 items-center gap-1 text-xs text-slate-500"
+            class="flex shrink-0 items-center gap-1 text-xs text-dimmed"
           >
             <UIcon name="i-lucide-check" class="h-3.5 w-3.5" />
             {{ t('github.repoTree.added') }}
@@ -242,7 +242,7 @@ watch(
           <!-- multiple: a bulk header so a whole directory of documents is one click -->
           <li
             v-if="selectableFiles.length > 1"
-            class="flex items-center gap-2 bg-slate-900/60 px-3 py-1.5"
+            class="flex items-center gap-2 bg-default/60 px-3 py-1.5"
           >
             <UCheckbox
               :model-value="allSelected"
@@ -258,7 +258,7 @@ watch(
             />
             <button
               type="button"
-              class="text-xs text-slate-400 hover:text-primary-400"
+              class="text-xs text-muted hover:text-primary-400"
               @click="toggleAllFiles"
             >
               {{
@@ -285,17 +285,17 @@ watch(
               <button
                 type="button"
                 class="flex items-center gap-2 truncate text-sm hover:text-primary-400"
-                :class="isPicked(entry.path) ? 'text-primary-400' : 'text-slate-300'"
+                :class="isPicked(entry.path) ? 'text-primary-400' : 'text-toned'"
                 :disabled="isAdded(entry.path)"
                 @click="pick(entry.path)"
               >
-                <UIcon name="i-lucide-file" class="h-4 w-4 shrink-0 text-slate-400" />
+                <UIcon name="i-lucide-file" class="h-4 w-4 shrink-0 text-muted" />
                 <span class="truncate">{{ entry.name }}</span>
               </button>
             </div>
             <span
               v-if="isAdded(entry.path)"
-              class="flex shrink-0 items-center gap-1 text-xs text-slate-500"
+              class="flex shrink-0 items-center gap-1 text-xs text-dimmed"
             >
               <UIcon name="i-lucide-check" class="h-3.5 w-3.5" />
               {{ t('github.repoTree.added') }}
@@ -314,16 +314,13 @@ watch(
          (unlike a plain dir pick, where the root means "the whole repo") and the target path
          is spelled out beside the button rather than left to be inferred from the crumbs -->
     <div v-if="placingNewDir" class="mt-2 flex items-center justify-between gap-2">
-      <p
-        class="min-w-0 truncate text-xs"
-        :class="nameTakenHere ? 'text-amber-400' : 'text-slate-400'"
-      >
+      <p class="min-w-0 truncate text-xs" :class="nameTakenHere ? 'text-amber-400' : 'text-muted'">
         <template v-if="nameTakenHere">
           {{ t('github.repoTree.nameTaken', { name: newDirName }) }}
         </template>
         <template v-else>
           {{ t('github.repoTree.newDirTarget') }}
-          <code class="text-slate-200">{{ pickedPathFor(currentPath) }}</code>
+          <code class="text-default">{{ pickedPathFor(currentPath) }}</code>
         </template>
       </p>
       <UButton

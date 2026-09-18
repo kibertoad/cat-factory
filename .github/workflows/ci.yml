@@ -496,6 +496,13 @@ jobs:
       - name: Guard file-size budgets
         run: node scripts/check-file-size.mjs
 
+      # Bans raw Tailwind palette utilities (`bg-slate-900`, `text-indigo-400`) in the SPA: the
+      # theme migration (#2239) moved them onto the `app.config.ts` aliases (`neutral`/`primary`)
+      # so the config actually recolors the app, and a reintroduced raw class silently opts back
+      # out. Its fixtures run in the `node --test` step below. Pure node; no install.
+      - name: Guard SPA theme aliases
+        run: node scripts/check-frontend-palette.mjs
+
       # Bans `.catch(() => {})` in backend non-test source — a swallowed failure with no log and
       # no cause (observability-logging-gaps.md, B1). `runBestEffort` keeps the swallow and adds
       # the evidence; a genuinely-silent drop annotates itself. Pure node; no install.

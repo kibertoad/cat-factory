@@ -189,7 +189,7 @@ async function revokeToken(key: PublicApiKey) {
     </template>
     <template #body>
       <div class="space-y-4" data-testid="api-tokens-panel">
-        <p class="text-sm text-slate-400">
+        <p class="text-sm text-muted">
           {{ t('settings.apiTokens.intro') }}
         </p>
 
@@ -204,11 +204,11 @@ async function revokeToken(key: PublicApiKey) {
             <UIcon name="i-lucide-key-round" class="h-4 w-4 shrink-0" />
             <span>{{ t('settings.apiTokens.secret.heading') }}</span>
           </div>
-          <p class="text-xs text-slate-300">{{ t('settings.apiTokens.secret.warning') }}</p>
+          <p class="text-xs text-toned">{{ t('settings.apiTokens.secret.warning') }}</p>
           <div
-            class="flex items-center gap-2 rounded-md border border-slate-700 bg-slate-950/60 px-3 py-2"
+            class="flex items-center gap-2 rounded-md border border-muted bg-app-950/60 px-3 py-2"
           >
-            <code class="min-w-0 flex-1 truncate font-mono text-xs text-slate-100">{{
+            <code class="min-w-0 flex-1 truncate font-mono text-xs text-app-100">{{
               newSecret
             }}</code>
             <CopyButton :text="newSecret" :label="t('settings.apiTokens.secret.copy')" size="sm" />
@@ -226,14 +226,14 @@ async function revokeToken(key: PublicApiKey) {
           </div>
         </section>
 
-        <section v-if="store.keys.length" class="space-y-2 rounded-lg border border-slate-700 p-3">
+        <section v-if="store.keys.length" class="space-y-2 rounded-lg border border-muted p-3">
           <h3 class="text-sm font-semibold">
             {{ t('settings.apiTokens.list.heading') }}
           </h3>
           <div
             v-for="key in store.keys"
             :key="key.id"
-            class="flex items-center justify-between gap-2 rounded-md border border-slate-800 px-3 py-2"
+            class="flex items-center justify-between gap-2 rounded-md border border-default px-3 py-2"
           >
             <div class="min-w-0 space-y-0.5">
               <div class="flex items-center gap-2">
@@ -259,7 +259,7 @@ async function revokeToken(key: PublicApiKey) {
                   {{ boundLabel(key) }}
                 </UBadge>
               </div>
-              <div class="text-[11px] text-slate-500">
+              <div class="text-[11px] text-dimmed">
                 {{
                   t('settings.apiTokens.list.created', {
                     date: d(new Date(key.createdAt), 'short'),
@@ -291,7 +291,7 @@ async function revokeToken(key: PublicApiKey) {
           </div>
         </section>
 
-        <section class="space-y-3 rounded-lg border border-slate-700 p-3">
+        <section class="space-y-3 rounded-lg border border-muted p-3">
           <h3 class="text-sm font-semibold">
             {{ t('settings.apiTokens.add.heading') }}
           </h3>

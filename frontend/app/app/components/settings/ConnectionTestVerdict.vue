@@ -57,6 +57,6 @@ const detail = computed(() => (causeKey.value ? (props.result?.message ?? '') : 
   </p>
   <div v-else-if="result" class="space-y-0.5" data-testid="connection-test-result">
     <p class="text-xs text-rose-400 break-words">{{ headline }}</p>
-    <p v-if="detail" class="text-[11px] text-slate-400 break-words">{{ detail }}</p>
+    <p v-if="detail" class="text-[11px] text-muted break-words">{{ detail }}</p>
   </div>
 </template>

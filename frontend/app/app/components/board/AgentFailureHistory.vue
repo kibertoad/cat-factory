@@ -15,11 +15,11 @@ const { t } = useI18n()
 <template>
   <details
     v-if="failures.length"
-    class="nodrag rounded-lg border border-slate-700/60 bg-slate-900/40 px-3 py-2"
+    class="nodrag rounded-lg border border-muted/60 bg-default/40 px-3 py-2"
     data-testid="agent-failure-history"
   >
     <summary
-      class="flex cursor-pointer items-center gap-1.5 text-[11px] text-slate-400 hover:text-slate-200"
+      class="flex cursor-pointer items-center gap-1.5 text-[11px] text-muted hover:text-default"
     >
       <UIcon name="i-lucide-history" class="h-3.5 w-3.5 shrink-0" />
       {{ t('board.failure.history.previousErrors', { count: failures.length }, failures.length) }}

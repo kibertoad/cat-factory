@@ -97,7 +97,7 @@ const props = withDefaults(
   }>(),
   {
     icon: 'i-lucide-square',
-    iconClass: 'bg-slate-500/15 text-slate-300',
+    iconClass: 'bg-app-500/15 text-toned',
     subtitle: undefined,
     width: '3xl',
     variant: 'stretch',
@@ -253,11 +253,11 @@ const chipClass = computed(() =>
 )
 
 const backdropClass = computed(() => [
-  'fixed inset-0 z-50 flex max-h-[100dvh] justify-center bg-slate-950/70 backdrop-blur-sm',
+  'fixed inset-0 z-50 flex max-h-[100dvh] justify-center bg-app-950/70 backdrop-blur-sm',
   props.variant === 'centered' ? 'items-center p-4' : 'items-stretch',
 ])
 const panelClass = computed(() => [
-  'flex w-full flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl',
+  'flex w-full flex-col overflow-hidden rounded-2xl border border-default bg-default shadow-2xl',
   RESULT_WINDOW_WIDTH_CLASS[props.width],
   props.variant === 'centered' ? 'max-h-[90dvh]' : 'm-4',
 ])
@@ -280,7 +280,7 @@ const panelClass = computed(() => [
         :aria-label="title"
         :data-testid="testid ?? 'result-window'"
       >
-        <header class="flex items-center gap-3 border-b border-slate-800 px-5 py-3">
+        <header class="flex items-center gap-3 border-b border-default px-5 py-3">
           <span
             class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
             :class="iconClass"
@@ -288,8 +288,8 @@ const panelClass = computed(() => [
             <UIcon :name="icon" class="h-4 w-4" />
           </span>
           <div class="min-w-0 flex-1">
-            <h2 class="truncate text-sm font-semibold text-slate-100">{{ title }}</h2>
-            <p v-if="subtitle" class="truncate text-[11px] text-slate-400">{{ subtitle }}</p>
+            <h2 class="truncate text-sm font-semibold text-app-100">{{ title }}</h2>
+            <p v-if="subtitle" class="truncate text-[11px] text-muted">{{ subtitle }}</p>
           </div>
           <!-- Window-specific header content (status badges, counts). -->
           <slot name="header-extras" />
@@ -300,7 +300,7 @@ const panelClass = computed(() => [
             @restarted="requestClose"
           />
           <button
-            class="rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+            class="rounded-md p-1.5 text-muted hover:bg-elevated hover:text-default"
             data-testid="result-window-close"
             :aria-label="t('common.close')"
             @click="requestClose"
@@ -318,18 +318,18 @@ const panelClass = computed(() => [
              so it can't crowd a window out; expands in place. -->
         <section
           v-if="effortReport"
-          class="shrink-0 border-t border-slate-800 bg-slate-900/60"
+          class="shrink-0 border-t border-default bg-default/60"
           data-testid="result-window-effort"
         >
           <button
             type="button"
-            class="flex w-full items-center gap-2 px-5 py-2 text-start hover:bg-slate-800/40"
+            class="flex w-full items-center gap-2 px-5 py-2 text-start hover:bg-elevated/40"
             :aria-expanded="effortOpen"
             data-testid="result-window-effort-toggle"
             @click="effortOpen = !effortOpen"
           >
-            <UIcon name="i-lucide-gauge" class="h-3.5 w-3.5 shrink-0 text-slate-400" />
-            <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            <UIcon name="i-lucide-gauge" class="h-3.5 w-3.5 shrink-0 text-muted" />
+            <span class="text-[11px] font-semibold uppercase tracking-wide text-muted">
               {{ t('panels.stepDetail.effort.heading') }}
             </span>
             <span
@@ -338,12 +338,12 @@ const panelClass = computed(() => [
             >
               {{ t('panels.stepDetail.effort.outOfTen', { value: effortReport.difficulty }) }}
             </span>
-            <span v-if="hint" class="min-w-0 flex-1 truncate text-[12px] text-slate-400">
+            <span v-if="hint" class="min-w-0 flex-1 truncate text-[12px] text-muted">
               {{ hint }}
             </span>
             <UIcon
               :name="effortOpen ? 'i-lucide-chevron-down' : 'i-lucide-chevron-up'"
-              class="ms-auto h-3.5 w-3.5 shrink-0 text-slate-500"
+              class="ms-auto h-3.5 w-3.5 shrink-0 text-dimmed"
             />
           </button>
           <div v-if="effortOpen" class="max-h-56 overflow-y-auto px-5 pb-3">
@@ -356,12 +356,12 @@ const panelClass = computed(() => [
              red — a failed checkout is the one an operator opened the window to read. -->
         <section
           v-if="validationReport"
-          class="shrink-0 border-t border-slate-800 bg-slate-900/60"
+          class="shrink-0 border-t border-default bg-default/60"
           data-testid="result-window-validation"
         >
           <button
             type="button"
-            class="flex w-full items-center gap-2 px-5 py-2 text-start hover:bg-slate-800/40"
+            class="flex w-full items-center gap-2 px-5 py-2 text-start hover:bg-elevated/40"
             :aria-expanded="validationOpen"
             data-testid="result-window-validation-toggle"
             @click="validationOpen = !validationOpen"
@@ -371,7 +371,7 @@ const panelClass = computed(() => [
               class="h-3.5 w-3.5 shrink-0"
               :class="validationReport.passed ? 'text-emerald-400' : 'text-rose-400'"
             />
-            <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            <span class="text-[11px] font-semibold uppercase tracking-wide text-muted">
               {{ t('panels.stepDetail.validation.heading') }}
             </span>
             <span
@@ -388,7 +388,7 @@ const panelClass = computed(() => [
                   : t('panels.stepDetail.validation.failed')
               }}
             </span>
-            <span class="min-w-0 flex-1 truncate text-[12px] text-slate-400">
+            <span class="min-w-0 flex-1 truncate text-[12px] text-muted">
               {{
                 t('panels.stepDetail.validation.attempts', {
                   attempts: validationReport.attempts,
@@ -398,7 +398,7 @@ const panelClass = computed(() => [
             </span>
             <UIcon
               :name="validationOpen ? 'i-lucide-chevron-down' : 'i-lucide-chevron-up'"
-              class="ms-auto h-3.5 w-3.5 shrink-0 text-slate-500"
+              class="ms-auto h-3.5 w-3.5 shrink-0 text-dimmed"
             />
           </button>
           <div v-if="validationOpen" class="max-h-72 overflow-y-auto px-5 pb-3">
@@ -412,12 +412,12 @@ const panelClass = computed(() => [
              opened the window to read. -->
         <section
           v-if="reproductionReport"
-          class="shrink-0 border-t border-slate-800 bg-slate-900/60"
+          class="shrink-0 border-t border-default bg-default/60"
           data-testid="result-window-reproduction"
         >
           <button
             type="button"
-            class="flex w-full items-center gap-2 px-5 py-2 text-start hover:bg-slate-800/40"
+            class="flex w-full items-center gap-2 px-5 py-2 text-start hover:bg-elevated/40"
             :aria-expanded="reproductionOpen"
             data-testid="result-window-reproduction-toggle"
             @click="reproductionOpen = !reproductionOpen"
@@ -427,7 +427,7 @@ const panelClass = computed(() => [
               class="h-3.5 w-3.5 shrink-0"
               :class="reproductionKeys!.proven ? 'text-emerald-400' : 'text-amber-400'"
             />
-            <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            <span class="text-[11px] font-semibold uppercase tracking-wide text-muted">
               {{ t('panels.stepDetail.reproduction.heading') }}
             </span>
             <span
@@ -440,12 +440,12 @@ const panelClass = computed(() => [
             >
               {{ t(reproductionKeys!.chip) }}
             </span>
-            <span class="min-w-0 flex-1 truncate text-[12px] text-slate-400">
+            <span class="min-w-0 flex-1 truncate text-[12px] text-muted">
               {{ t(reproductionKeys!.verdict) }}
             </span>
             <UIcon
               :name="reproductionOpen ? 'i-lucide-chevron-down' : 'i-lucide-chevron-up'"
-              class="ms-auto h-3.5 w-3.5 shrink-0 text-slate-500"
+              class="ms-auto h-3.5 w-3.5 shrink-0 text-dimmed"
             />
           </button>
           <div v-if="reproductionOpen" class="max-h-72 overflow-y-auto px-5 pb-3">
@@ -460,26 +460,26 @@ const panelClass = computed(() => [
              not all read as. -->
         <section
           v-if="binaryOutputs"
-          class="shrink-0 border-t border-slate-800 bg-slate-900/60"
+          class="shrink-0 border-t border-default bg-default/60"
           data-testid="result-window-binary-outputs"
         >
           <button
             type="button"
-            class="flex w-full items-center gap-2 px-5 py-2 text-start hover:bg-slate-800/40"
+            class="flex w-full items-center gap-2 px-5 py-2 text-start hover:bg-elevated/40"
             :aria-expanded="binaryOutputsOpen"
             data-testid="result-window-binary-outputs-toggle"
             @click="binaryOutputsOpen = !binaryOutputsOpen"
           >
-            <UIcon name="i-lucide-image" class="h-3.5 w-3.5 shrink-0 text-slate-400" />
-            <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            <UIcon name="i-lucide-image" class="h-3.5 w-3.5 shrink-0 text-muted" />
+            <span class="text-[11px] font-semibold uppercase tracking-wide text-muted">
               {{ t('binaryOutput.heading') }}
             </span>
-            <span class="min-w-0 flex-1 truncate text-[12px] text-slate-400">
+            <span class="min-w-0 flex-1 truncate text-[12px] text-muted">
               {{ binaryOutputSummary }}
             </span>
             <UIcon
               :name="binaryOutputsOpen ? 'i-lucide-chevron-down' : 'i-lucide-chevron-up'"
-              class="ms-auto h-3.5 w-3.5 shrink-0 text-slate-500"
+              class="ms-auto h-3.5 w-3.5 shrink-0 text-dimmed"
             />
           </button>
           <div v-if="binaryOutputsOpen && activeStep" class="max-h-72 overflow-y-auto px-5 pb-3">

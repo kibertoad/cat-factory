@@ -111,35 +111,35 @@ async function runProbe(id: string) {
 <template>
   <section v-if="servers.length" class="space-y-3" data-testid="tool-servers-section">
     <div>
-      <h3 class="text-sm font-semibold text-slate-200">
+      <h3 class="text-sm font-semibold text-default">
         {{ t('settings.toolServers.heading') }}
       </h3>
-      <p class="text-xs text-slate-400">{{ t('settings.toolServers.intro') }}</p>
+      <p class="text-xs text-muted">{{ t('settings.toolServers.intro') }}</p>
     </div>
 
     <article
       v-for="server in servers"
       :key="server.id"
-      class="space-y-2 rounded-lg border border-slate-700 p-3"
+      class="space-y-2 rounded-lg border border-muted p-3"
       :data-testid="`tool-server-${server.id}`"
     >
       <div class="flex flex-wrap items-center gap-2">
-        <span class="text-sm font-medium text-slate-200">{{ server.label }}</span>
+        <span class="text-sm font-medium text-default">{{ server.label }}</span>
         <UBadge color="neutral" variant="soft" size="sm">
           {{ TRANSPORT_LABELS[server.transport] }}
         </UBadge>
-        <code class="font-mono text-[11px] text-slate-500">{{ server.id }}</code>
+        <code class="font-mono text-[11px] text-dimmed">{{ server.id }}</code>
       </div>
 
-      <p class="truncate font-mono text-[11px] text-slate-500" :title="server.target">
+      <p class="truncate font-mono text-[11px] text-dimmed" :title="server.target">
         {{ server.target }}
       </p>
-      <p v-if="server.guidance" class="text-xs text-slate-400">{{ server.guidance }}</p>
+      <p v-if="server.guidance" class="text-xs text-muted">{{ server.guidance }}</p>
 
       <!-- Which agents get it. An EMPTY list is a registration attached to nothing: it never reaches
            a dispatch, so the credentials it asks for are keys an operator fills in for no run. Said
            out loud, because no other surface in the platform can see that state. -->
-      <p v-if="server.declaredBy.length" class="text-[11px] text-slate-400">
+      <p v-if="server.declaredBy.length" class="text-[11px] text-muted">
         {{ t('settings.toolServers.declaredBy', { kinds: server.declaredBy.join(', ') }) }}
       </p>
       <p v-else class="text-[11px] text-amber-400" :data-testid="`tool-server-orphan-${server.id}`">
@@ -149,7 +149,7 @@ async function runProbe(id: string) {
       <!-- Which harnesses could serve it. EMPTY means the declaration can never run anywhere (an
            `http` server narrowed to Codex, whose MCP client is stdio-only): it is never dropped FOR
            A REASON on any run, so no prompt and no log line ever mentions it. -->
-      <p v-if="server.servableHarnesses.length" class="text-[11px] text-slate-400">
+      <p v-if="server.servableHarnesses.length" class="text-[11px] text-muted">
         {{
           t('settings.toolServers.servableHarnesses', {
             harnesses: server.servableHarnesses.join(', '),
@@ -160,10 +160,10 @@ async function runProbe(id: string) {
         {{ t('settings.toolServers.servableHarnessesNone') }}
       </p>
 
-      <p v-if="server.allowedTools?.length" class="text-[11px] text-slate-400">
+      <p v-if="server.allowedTools?.length" class="text-[11px] text-muted">
         {{ t('settings.toolServers.allowedTools', { tools: server.allowedTools.join(', ') }) }}
       </p>
-      <p v-if="server.credentials.length" class="text-[11px] text-slate-400">
+      <p v-if="server.credentials.length" class="text-[11px] text-muted">
         {{
           t('settings.toolServers.credentials', {
             keys: server.credentials.map((c) => c.key).join(', '),
@@ -177,7 +177,7 @@ async function runProbe(id: string) {
            producing tokens is exactly the state that reads as working and is not. -->
       <div
         v-if="server.oauth"
-        class="space-y-1 rounded-md border border-slate-800 bg-slate-900/40 p-2"
+        class="space-y-1 rounded-md border border-default bg-default/40 p-2"
         :data-testid="`tool-server-oauth-${server.id}`"
       >
         <div class="flex flex-wrap items-center gap-2">
@@ -195,12 +195,12 @@ async function runProbe(id: string) {
                   : t('settings.toolServers.oauth.machineGrant')
             }}
           </UBadge>
-          <span v-if="server.oauth.connectedBy" class="text-[11px] text-slate-400">
+          <span v-if="server.oauth.connectedBy" class="text-[11px] text-muted">
             {{ t('settings.toolServers.oauth.connectedBy', { user: server.oauth.connectedBy }) }}
           </span>
         </div>
 
-        <p v-if="server.oauth.scopes?.length" class="text-[11px] text-slate-400">
+        <p v-if="server.oauth.scopes?.length" class="text-[11px] text-muted">
           {{ t('settings.toolServers.oauth.scopes', { scopes: server.oauth.scopes.join(', ') }) }}
         </p>
         <!-- A grant with no refresh token works until its access token expires and then needs
@@ -268,7 +268,7 @@ async function runProbe(id: string) {
              verify it from a run, or change the declaration. -->
         <p
           v-else-if="server.notProbeableReason"
-          class="text-[11px] text-slate-500"
+          class="text-[11px] text-dimmed"
           :data-testid="`tool-server-unprobeable-${server.id}`"
         >
           {{ NOT_PROBEABLE_LABELS[server.notProbeableReason] }}
@@ -277,7 +277,7 @@ async function runProbe(id: string) {
 
       <div
         v-if="resultFor(server.id)"
-        class="space-y-1 rounded-md border border-slate-800 bg-slate-900/40 p-2"
+        class="space-y-1 rounded-md border border-default bg-default/40 p-2"
         :data-testid="`tool-server-result-${server.id}`"
       >
         <div class="flex flex-wrap items-center gap-2">
@@ -289,12 +289,12 @@ async function runProbe(id: string) {
           >
             {{ STATUS_LABELS[resultFor(server.id)!.status] }}
           </UBadge>
-          <span v-if="resultFor(server.id)!.httpStatus" class="text-[11px] text-slate-400">
+          <span v-if="resultFor(server.id)!.httpStatus" class="text-[11px] text-muted">
             {{ t('settings.toolServers.httpStatus', { status: resultFor(server.id)!.httpStatus }) }}
           </span>
         </div>
 
-        <p v-if="resultFor(server.id)!.status === 'ok'" class="text-[11px] text-slate-300">
+        <p v-if="resultFor(server.id)!.status === 'ok'" class="text-[11px] text-toned">
           {{
             t('settings.toolServers.okDetail', {
               name: resultFor(server.id)!.serverName || server.id,
@@ -306,7 +306,7 @@ async function runProbe(id: string) {
         </p>
         <!-- A count off a truncated read is a FLOOR, not a total, and the difference decides whether
              the allowedTools verdict below means anything. -->
-        <p v-if="resultFor(server.id)!.toolsComplete === false" class="text-[11px] text-slate-500">
+        <p v-if="resultFor(server.id)!.toolsComplete === false" class="text-[11px] text-dimmed">
           {{ t('settings.toolServers.toolsIncomplete') }}
         </p>
 
@@ -326,7 +326,7 @@ async function runProbe(id: string) {
         </p>
         <p
           v-else-if="resultFor(server.id)!.allowedTools?.checked === false"
-          class="text-[11px] text-slate-500"
+          class="text-[11px] text-dimmed"
         >
           {{ t('settings.toolServers.allowedToolsUnchecked') }}
         </p>
@@ -377,7 +377,7 @@ async function runProbe(id: string) {
           </UButton>
           <pre
             v-if="expanded[server.id]"
-            class="overflow-x-auto rounded bg-slate-950 p-2 font-mono text-[10px] text-slate-400"
+            class="overflow-x-auto rounded bg-app-950 p-2 font-mono text-[10px] text-muted"
             >{{ resultFor(server.id)!.error }}</pre>
         </template>
       </div>

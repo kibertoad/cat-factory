@@ -141,33 +141,31 @@ function backToApp() {
 
 <template>
   <div
-    class="flex min-h-screen w-screen items-center justify-center bg-slate-950 p-4 text-slate-100"
+    class="flex min-h-screen w-screen items-center justify-center bg-app-950 p-4 text-app-100"
     data-testid="mcp-authorize"
   >
-    <div
-      class="w-full max-w-md rounded-xl border border-slate-800 bg-slate-900/80 p-8 backdrop-blur"
-    >
+    <div class="w-full max-w-md rounded-xl border border-default bg-default/80 p-8 backdrop-blur">
       <template v-if="screen === 'loading'">
-        <UIcon name="i-lucide-loader" class="mx-auto h-10 w-10 animate-spin text-indigo-400" />
+        <UIcon name="i-lucide-loader" class="mx-auto h-10 w-10 animate-spin text-primary-400" />
       </template>
 
       <template v-else-if="screen === 'failed'">
         <UIcon name="i-lucide-alert-triangle" class="mx-auto mb-3 h-10 w-10 text-red-400" />
         <h1
-          class="mb-1 text-center text-lg font-semibold text-white"
+          class="mb-1 text-center text-lg font-semibold text-highlighted"
           data-testid="mcp-authorize-failed"
         >
           {{ t('mcpAuthorize.error.title') }}
         </h1>
-        <p class="mb-6 text-center text-sm break-words text-slate-400">{{ detail }}</p>
+        <p class="mb-6 text-center text-sm break-words text-muted">{{ detail }}</p>
         <UButton block color="neutral" variant="subtle" @click="backToApp">
           {{ t('mcpAuthorize.back') }}
         </UButton>
       </template>
 
       <template v-else>
-        <UIcon name="i-lucide-plug-zap" class="mx-auto mb-3 h-10 w-10 text-indigo-400" />
-        <h1 class="mb-1 text-center text-lg font-semibold text-white">
+        <UIcon name="i-lucide-plug-zap" class="mx-auto mb-3 h-10 w-10 text-primary-400" />
+        <h1 class="mb-1 text-center text-lg font-semibold text-highlighted">
           {{ t('mcpAuthorize.title', { client: clientName }) }}
         </h1>
         <!-- The origin is the one fact here an attacker cannot choose: it was matched against what
@@ -176,7 +174,7 @@ function backToApp() {
              The copy reads "It says it is {client}, and …" in every locale, so BOTH holes have to
              be filled: an unpassed `client` renders a sentence naming nobody, on the one screen
              whose whole subject is who is asking. -->
-        <p class="mb-6 text-center text-sm text-slate-400">
+        <p class="mb-6 text-center text-sm text-muted">
           {{ t('mcpAuthorize.subtitle', { client: clientName, origin: redirectOrigin }) }}
         </p>
 
@@ -255,7 +253,7 @@ function backToApp() {
           </UButton>
         </div>
 
-        <p class="mt-4 text-center text-xs text-slate-500">{{ t('mcpAuthorize.revokeHint') }}</p>
+        <p class="mt-4 text-center text-xs text-dimmed">{{ t('mcpAuthorize.revokeHint') }}</p>
       </template>
     </div>
   </div>

@@ -119,7 +119,7 @@ async function removeKey(key: string) {
          only thing on either surface that can say whether the value they typed works. -->
     <ToolServerChecklist />
 
-    <p class="text-sm text-slate-400">
+    <p class="text-sm text-muted">
       {{ t('settings.capabilityCredentials.intro') }}
     </p>
 
@@ -140,7 +140,7 @@ async function removeKey(key: string) {
     <section
       v-for="entry in view?.declared ?? []"
       :key="entry.key"
-      class="space-y-3 rounded-lg border border-slate-700 p-3"
+      class="space-y-3 rounded-lg border border-muted p-3"
       :data-testid="`capability-credential-${entry.key}`"
     >
       <div class="flex flex-wrap items-center gap-2">
@@ -165,15 +165,15 @@ async function removeKey(key: string) {
       <!-- Who wants the value, so an operator can tell what they are about to change. One key is
            routinely wanted by more than one capability (two integrations behind one vendor
            account), which is exactly when a rotation has consequences beyond the row it edits. -->
-      <ul class="space-y-1 text-xs text-slate-400">
+      <ul class="space-y-1 text-xs text-muted">
         <li v-for="declarer in entry.declaredBy" :key="`${declarer.subject}:${declarer.id}`">
-          <span class="text-slate-300">{{ declarer.label }}</span>
-          <span class="text-slate-500"> · {{ SUBJECT_LABELS[declarer.subject] }}</span>
-          <span v-if="declarer.usage" class="block text-slate-500">{{ declarer.usage }}</span>
+          <span class="text-toned">{{ declarer.label }}</span>
+          <span class="text-dimmed"> · {{ SUBJECT_LABELS[declarer.subject] }}</span>
+          <span v-if="declarer.usage" class="block text-dimmed">{{ declarer.usage }}</span>
         </li>
       </ul>
 
-      <p v-if="entry.stored && entry.updatedAt" class="text-[11px] text-slate-500">
+      <p v-if="entry.stored && entry.updatedAt" class="text-[11px] text-dimmed">
         {{
           t('settings.capabilityCredentials.storedAt', {
             date: d(new Date(entry.updatedAt), 'short'),
@@ -191,13 +191,13 @@ async function removeKey(key: string) {
            usual one, but a facade that wired the store and dropped the flag lands here too, and
            blaming a custom resolver would make that wiring bug read as a deliberate configuration
            and send the operator to the one place that cannot explain it. -->
-      <p v-else-if="view?.environmentFallback === true" class="text-[11px] text-slate-500">
+      <p v-else-if="view?.environmentFallback === true" class="text-[11px] text-dimmed">
         {{ t('settings.capabilityCredentials.notStoredWithFallback') }}
       </p>
       <p v-else-if="view?.environmentFallback === false" class="text-[11px] text-amber-400">
         {{ t('settings.capabilityCredentials.notStored') }}
       </p>
-      <p v-else class="text-[11px] text-slate-500">
+      <p v-else class="text-[11px] text-dimmed">
         {{ t('settings.capabilityCredentials.notStoredUnknownFallback') }}
       </p>
 
@@ -241,7 +241,7 @@ async function removeKey(key: string) {
 
     <p
       v-if="view && !view.declared.length && !view.declarationsIncomplete"
-      class="text-sm text-slate-500"
+      class="text-sm text-dimmed"
     >
       {{ t('settings.capabilityCredentials.noneDeclared') }}
     </p>
@@ -258,17 +258,17 @@ async function removeKey(key: string) {
       <h3 class="text-sm font-semibold">
         {{ t('settings.capabilityCredentials.orphaned.heading') }}
       </h3>
-      <p class="text-xs text-slate-400">
+      <p class="text-xs text-muted">
         {{ t('settings.capabilityCredentials.orphaned.body') }}
       </p>
       <div
         v-for="orphan in view.orphaned"
         :key="orphan.key"
-        class="flex items-center justify-between gap-2 rounded-md border border-slate-800 px-3 py-2"
+        class="flex items-center justify-between gap-2 rounded-md border border-default px-3 py-2"
       >
         <div class="min-w-0">
           <code class="font-mono text-sm">{{ orphan.key }}</code>
-          <span class="block text-[11px] text-slate-500">
+          <span class="block text-[11px] text-dimmed">
             {{
               t('settings.capabilityCredentials.storedAt', {
                 date: d(new Date(orphan.updatedAt), 'short'),

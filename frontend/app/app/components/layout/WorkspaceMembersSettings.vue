@@ -139,13 +139,13 @@ function memberLabel(userId: string, name?: string | null, email?: string | null
 <template>
   <div class="space-y-6 text-sm" data-testid="workspace-members-settings">
     <!-- access mode -->
-    <section class="rounded-md border border-slate-800 bg-slate-800/40 p-4">
+    <section class="rounded-md border border-default bg-elevated/40 p-4">
       <div class="flex items-start justify-between gap-4">
         <div>
-          <h3 class="mb-1 font-semibold text-white">
+          <h3 class="mb-1 font-semibold text-highlighted">
             {{ t('layout.workspaceMembers.accessMode.title') }}
           </h3>
-          <p class="text-slate-400">
+          <p class="text-muted">
             {{
               restricted
                 ? t('layout.workspaceMembers.accessMode.restrictedHint')
@@ -161,7 +161,7 @@ function memberLabel(userId: string, name?: string | null, email?: string | null
             data-testid="workspace-restrict-toggle"
             @update:model-value="setAccessMode"
           />
-          <span class="text-xs text-slate-300">
+          <span class="text-xs text-toned">
             {{ t('layout.workspaceMembers.accessMode.restrictToggle') }}
           </span>
         </label>
@@ -170,13 +170,15 @@ function memberLabel(userId: string, name?: string | null, email?: string | null
 
     <!-- roster -->
     <section>
-      <h3 class="mb-2 font-semibold text-white">{{ t('layout.workspaceMembers.roster.title') }}</h3>
-      <p v-if="!rosterReady" class="text-slate-500">{{ t('common.loading') }}</p>
+      <h3 class="mb-2 font-semibold text-highlighted">
+        {{ t('layout.workspaceMembers.roster.title') }}
+      </h3>
+      <p v-if="!rosterReady" class="text-dimmed">{{ t('common.loading') }}</p>
       <ul v-else class="space-y-1" data-testid="workspace-members-roster">
         <li
           v-for="m in members.members"
           :key="m.userId"
-          class="flex items-center justify-between gap-2 rounded-md bg-slate-800/40 px-2 py-1"
+          class="flex items-center justify-between gap-2 rounded-md bg-elevated/40 px-2 py-1"
           data-testid="workspace-member-row"
           :data-user-id="m.userId"
         >
@@ -204,7 +206,7 @@ function memberLabel(userId: string, name?: string | null, email?: string | null
             />
           </span>
         </li>
-        <li v-if="members.members.length === 0" class="text-slate-500">
+        <li v-if="members.members.length === 0" class="text-dimmed">
           {{ t('layout.workspaceMembers.roster.empty') }}
         </li>
       </ul>
@@ -212,8 +214,10 @@ function memberLabel(userId: string, name?: string | null, email?: string | null
 
     <!-- add member -->
     <section>
-      <h3 class="mb-2 font-semibold text-white">{{ t('layout.workspaceMembers.add.title') }}</h3>
-      <p v-if="!accountId" class="text-slate-500">
+      <h3 class="mb-2 font-semibold text-highlighted">
+        {{ t('layout.workspaceMembers.add.title') }}
+      </h3>
+      <p v-if="!accountId" class="text-dimmed">
         {{ t('layout.workspaceMembers.add.noAccount') }}
       </p>
       <template v-else>
@@ -239,7 +243,7 @@ function memberLabel(userId: string, name?: string | null, email?: string | null
             {{ t('layout.workspaceMembers.add.submit') }}
           </UButton>
         </form>
-        <p v-if="candidates.length === 0" class="mt-2 text-slate-500">
+        <p v-if="candidates.length === 0" class="mt-2 text-dimmed">
           {{ t('layout.workspaceMembers.add.allAdded') }}
         </p>
       </template>

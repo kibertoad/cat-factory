@@ -75,17 +75,17 @@ const ENV_STATUS_META = computed<
   },
   expired: {
     label: t('environments.status.expired'),
-    color: 'text-slate-400',
+    color: 'text-muted',
     icon: 'i-lucide-circle-off',
   },
   tearing_down: {
     label: t('environments.status.tearing_down'),
-    color: 'text-slate-400',
+    color: 'text-muted',
     icon: 'i-lucide-loader-circle',
   },
   torn_down: {
     label: t('environments.status.torn_down'),
-    color: 'text-slate-400',
+    color: 'text-muted',
     icon: 'i-lucide-circle-off',
   },
 }))
@@ -105,8 +105,8 @@ const envInTransition = computed(
 </script>
 
 <template>
-  <section class="rounded-lg border border-slate-800 bg-slate-900/60 p-3">
-    <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+  <section class="rounded-lg border border-default bg-default/60 p-3">
+    <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-dimmed">
       {{ t('environments.title') }}
     </h3>
     <div v-if="environment" class="space-y-2">
@@ -133,19 +133,19 @@ const envInTransition = computed(
         <UIcon name="i-lucide-external-link" class="h-3.5 w-3.5 shrink-0" />
         {{ environment.url }}
       </a>
-      <p v-if="environment.expiresAt" class="text-[11px] text-slate-500">
+      <p v-if="environment.expiresAt" class="text-[11px] text-dimmed">
         {{ t('environments.expires', { date: d(new Date(environment.expiresAt), 'long') }) }}
       </p>
       <!-- The resolved provision type + engine recorded at provision time, so a run states
            exactly what was provisioned and how (the what/where ÷ how split). -->
       <dl v-if="provisionTypeLabel || engineLabel" class="flex flex-wrap gap-x-4 gap-y-0.5">
         <div v-if="provisionTypeLabel" class="flex items-center gap-1 text-[11px]">
-          <dt class="text-slate-500">{{ t('environments.provisionTypeLabel') }}</dt>
-          <dd class="text-slate-300">{{ provisionTypeLabel }}</dd>
+          <dt class="text-dimmed">{{ t('environments.provisionTypeLabel') }}</dt>
+          <dd class="text-toned">{{ provisionTypeLabel }}</dd>
         </div>
         <div v-if="engineLabel" class="flex items-center gap-1 text-[11px]">
-          <dt class="text-slate-500">{{ t('environments.engineLabel') }}</dt>
-          <dd class="text-slate-300">{{ engineLabel }}</dd>
+          <dt class="text-dimmed">{{ t('environments.engineLabel') }}</dt>
+          <dd class="text-toned">{{ engineLabel }}</dd>
         </div>
       </dl>
       <!-- The verbatim provider error when the environment failed/expired. -->
@@ -159,12 +159,12 @@ const envInTransition = computed(
            prose. -->
       <p
         v-if="statusNote"
-        class="mt-1 max-h-32 overflow-auto whitespace-pre-wrap break-words text-[11px] text-slate-400"
+        class="mt-1 max-h-32 overflow-auto whitespace-pre-wrap break-words text-[11px] text-muted"
       >
         {{ t('environments.statusNote', { note: statusNote }) }}
       </p>
     </div>
-    <p v-else class="text-[12px] text-slate-500">
+    <p v-else class="text-[12px] text-dimmed">
       {{ degradedReason ?? t('environments.empty') }}
     </p>
   </section>

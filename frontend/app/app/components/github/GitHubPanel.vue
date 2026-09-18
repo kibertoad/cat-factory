@@ -309,15 +309,15 @@ async function merge(pr: GitHubPullRequest) {
         <template v-else>
           <!-- connection header -->
           <div
-            class="flex items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-900/60 px-3 py-2"
+            class="flex items-center justify-between gap-2 rounded-md border border-default bg-default/60 px-3 py-2"
           >
             <div class="flex items-center gap-2 min-w-0">
-              <UIcon :name="providerIcon" class="h-5 w-5 text-slate-300" />
+              <UIcon :name="providerIcon" class="h-5 w-5 text-toned" />
               <div class="min-w-0">
-                <div class="truncate text-sm text-slate-200">
+                <div class="truncate text-sm text-default">
                   {{ github.connection?.accountLogin }}
                 </div>
-                <div class="text-[11px] text-slate-500">{{ connectionMeta }}</div>
+                <div class="text-[11px] text-dimmed">{{ connectionMeta }}</div>
               </div>
             </div>
             <div class="flex items-center gap-1">
@@ -371,7 +371,7 @@ async function merge(pr: GitHubPullRequest) {
             </UButton>
           </div>
 
-          <div v-if="github.loading" class="flex items-center gap-2 py-6 text-sm text-slate-400">
+          <div v-if="github.loading" class="flex items-center gap-2 py-6 text-sm text-muted">
             <UIcon name="i-lucide-loader" class="h-4 w-4 animate-spin" />
             {{ t('github.panel.loading') }}
           </div>
@@ -380,7 +380,7 @@ async function merge(pr: GitHubPullRequest) {
           <section v-else-if="tab === 'repos'" class="space-y-2">
             <!-- manage which repos this board links -->
             <div class="flex items-center justify-between">
-              <span class="text-[11px] uppercase tracking-wide text-slate-500">
+              <span class="text-[11px] uppercase tracking-wide text-dimmed">
                 {{ t('github.panel.linkedToBoard') }}
               </span>
               <UButton
@@ -398,23 +398,20 @@ async function merge(pr: GitHubPullRequest) {
               </UButton>
             </div>
 
-            <div
-              v-if="managing"
-              class="space-y-2 rounded-md border border-slate-700 bg-slate-900/80 p-3"
-            >
-              <p class="text-[12px] text-slate-400">
+            <div v-if="managing" class="space-y-2 rounded-md border border-muted bg-default/80 p-3">
+              <p class="text-[12px] text-muted">
                 {{
                   isAppConnection ? t('vcs.panel.manageHintApp') : t('vcs.panel.manageHintToken')
                 }}
               </p>
               <div
                 v-if="github.loadingAvailable"
-                class="flex items-center gap-2 py-3 text-sm text-slate-400"
+                class="flex items-center gap-2 py-3 text-sm text-muted"
               >
                 <UIcon name="i-lucide-loader" class="h-4 w-4 animate-spin" />
                 {{ t('github.panel.loadingRepos') }}
               </div>
-              <p v-else-if="!github.availableRepos.length" class="py-2 text-sm text-slate-400">
+              <p v-else-if="!github.availableRepos.length" class="py-2 text-sm text-muted">
                 {{
                   isAppConnection
                     ? t('vcs.panel.noAvailableReposApp')
@@ -426,15 +423,15 @@ async function merge(pr: GitHubPullRequest) {
                   v-for="r in github.availableRepos"
                   :key="r.githubId"
                   type="button"
-                  class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-start transition hover:bg-slate-800/60"
+                  class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-start transition hover:bg-elevated/60"
                   @click="toggleSelected(r.githubId)"
                 >
                   <UIcon
                     :name="selected.has(r.githubId) ? 'i-lucide-check-square' : 'i-lucide-square'"
                     class="h-4 w-4 shrink-0"
-                    :class="selected.has(r.githubId) ? 'text-indigo-400' : 'text-slate-500'"
+                    :class="selected.has(r.githubId) ? 'text-primary-400' : 'text-dimmed'"
                   />
-                  <span class="truncate text-sm text-slate-200">{{ r.owner }}/{{ r.name }}</span>
+                  <span class="truncate text-sm text-default">{{ r.owner }}/{{ r.name }}</span>
                   <UBadge v-if="r.private" color="neutral" variant="subtle" size="sm">
                     {{ t('github.panel.private') }}
                   </UBadge>
@@ -465,7 +462,7 @@ async function merge(pr: GitHubPullRequest) {
               </div>
             </div>
 
-            <p v-if="!github.repos.length && !managing" class="py-4 text-sm text-slate-400">
+            <p v-if="!github.repos.length && !managing" class="py-4 text-sm text-muted">
               {{ t('github.panel.noLinkedRepos') }}
             </p>
 
@@ -477,13 +474,13 @@ async function merge(pr: GitHubPullRequest) {
                  with a control whose result is the operator's to act on. -->
             <BranchProtectionPreflight
               v-if="github.repos.length && access.canManageIntegrations.value"
-              class="rounded-md border border-slate-800 bg-slate-900/40 p-3"
+              class="rounded-md border border-default bg-default/40 p-3"
             />
 
             <div
               v-for="repo in github.repos"
               :key="repo.githubId"
-              class="rounded-md border border-slate-800 bg-slate-900/60"
+              class="rounded-md border border-default bg-default/60"
             >
               <div class="flex items-center justify-between gap-2 px-3 py-2">
                 <button
@@ -496,9 +493,9 @@ async function merge(pr: GitHubPullRequest) {
                         ? 'i-lucide-chevron-down'
                         : 'i-lucide-chevron-right'
                     "
-                    class="h-4 w-4 shrink-0 text-slate-500"
+                    class="h-4 w-4 shrink-0 text-dimmed"
                   />
-                  <span class="truncate text-sm text-slate-200">
+                  <span class="truncate text-sm text-default">
                     {{ repo.owner }}/{{ repo.name }}
                   </span>
                   <UBadge v-if="repo.private" color="neutral" variant="subtle" size="sm">
@@ -506,13 +503,13 @@ async function merge(pr: GitHubPullRequest) {
                   </UBadge>
                 </button>
                 <div class="flex items-center gap-2">
-                  <span v-if="repo.defaultBranch" class="text-[11px] text-slate-500">
+                  <span v-if="repo.defaultBranch" class="text-[11px] text-dimmed">
                     {{ repo.defaultBranch }}
                   </span>
                   <ULink
                     :to="github.repoUrl(repo.githubId) ?? '#'"
                     target="_blank"
-                    class="text-[11px] text-indigo-400 hover:underline"
+                    class="text-[11px] text-primary-400 hover:underline"
                   >
                     {{ t('github.panel.open') }}
                   </ULink>
@@ -521,21 +518,21 @@ async function merge(pr: GitHubPullRequest) {
 
               <div
                 v-if="expandedRepo === repo.githubId"
-                class="space-y-2 border-t border-slate-800 px-3 py-2"
+                class="space-y-2 border-t border-default px-3 py-2"
               >
                 <div
                   v-for="b in github.branches[repo.githubId] ?? []"
                   :key="b.name"
                   class="flex items-center justify-between gap-2 text-[12px]"
                 >
-                  <span class="flex items-center gap-1.5 truncate text-slate-300">
-                    <UIcon name="i-lucide-git-branch" class="h-3.5 w-3.5 text-slate-500" />
+                  <span class="flex items-center gap-1.5 truncate text-toned">
+                    <UIcon name="i-lucide-git-branch" class="h-3.5 w-3.5 text-dimmed" />
                     {{ b.name }}
                     <UBadge v-if="b.protected" color="warning" variant="subtle" size="sm">
                       {{ t('github.panel.protected') }}
                     </UBadge>
                   </span>
-                  <code class="text-[10px] text-slate-500">{{ b.headSha.slice(0, 7) }}</code>
+                  <code class="text-[10px] text-dimmed">{{ b.headSha.slice(0, 7) }}</code>
                 </div>
 
                 <!-- new branch -->
@@ -591,7 +588,7 @@ async function merge(pr: GitHubPullRequest) {
 
             <div
               v-if="showPrForm"
-              class="space-y-2 rounded-md border border-slate-700 bg-slate-900/80 p-3"
+              class="space-y-2 rounded-md border border-muted bg-default/80 p-3"
             >
               <UFormField :label="t('github.panel.repository')">
                 <UDropdownMenu :items="repoMenu" :content="{ align: 'start' }">
@@ -635,19 +632,19 @@ async function merge(pr: GitHubPullRequest) {
               </div>
             </div>
 
-            <p v-if="!github.pulls.length" class="py-4 text-sm text-slate-400">
+            <p v-if="!github.pulls.length" class="py-4 text-sm text-muted">
               {{ t(pullTerms.none) }}
             </p>
             <div
               v-for="pr in github.pulls"
               :key="`${pr.repoGithubId}-${pr.number}`"
-              class="flex items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-900/60 px-3 py-2"
+              class="flex items-center justify-between gap-2 rounded-md border border-default bg-default/60 px-3 py-2"
             >
               <div class="min-w-0">
-                <div class="truncate text-sm text-slate-200">
-                  <span class="text-slate-500">#{{ pr.number }}</span> {{ pr.title }}
+                <div class="truncate text-sm text-default">
+                  <span class="text-dimmed">#{{ pr.number }}</span> {{ pr.title }}
                 </div>
-                <div class="truncate text-[11px] text-slate-500">
+                <div class="truncate text-[11px] text-dimmed">
                   {{ github.repoFor(pr.repoGithubId)?.name }} · {{ pr.headRef }} → {{ pr.baseRef }}
                 </div>
               </div>
@@ -672,7 +669,7 @@ async function merge(pr: GitHubPullRequest) {
                 <ULink
                   :to="github.pullUrl(pr) ?? '#'"
                   target="_blank"
-                  class="text-[11px] text-indigo-400 hover:underline"
+                  class="text-[11px] text-primary-400 hover:underline"
                 >
                   {{ t('github.panel.open') }}
                 </ULink>
@@ -682,19 +679,19 @@ async function merge(pr: GitHubPullRequest) {
 
           <!-- issues -->
           <section v-else class="space-y-2">
-            <p v-if="!github.issues.length" class="py-4 text-sm text-slate-400">
+            <p v-if="!github.issues.length" class="py-4 text-sm text-muted">
               {{ t('github.panel.noIssues') }}
             </p>
             <div
               v-for="issue in github.issues"
               :key="`${issue.repoGithubId}-${issue.number}`"
-              class="flex items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-900/60 px-3 py-2"
+              class="flex items-center justify-between gap-2 rounded-md border border-default bg-default/60 px-3 py-2"
             >
               <div class="min-w-0">
-                <div class="truncate text-sm text-slate-200">
-                  <span class="text-slate-500">#{{ issue.number }}</span> {{ issue.title }}
+                <div class="truncate text-sm text-default">
+                  <span class="text-dimmed">#{{ issue.number }}</span> {{ issue.title }}
                 </div>
-                <div class="truncate text-[11px] text-slate-500">
+                <div class="truncate text-[11px] text-dimmed">
                   {{ github.repoFor(issue.repoGithubId)?.name }}
                   <span v-if="issue.labels.length">· {{ issue.labels.join(', ') }}</span>
                 </div>
@@ -710,7 +707,7 @@ async function merge(pr: GitHubPullRequest) {
                 <ULink
                   :to="github.issueUrl(issue) ?? '#'"
                   target="_blank"
-                  class="text-[11px] text-indigo-400 hover:underline"
+                  class="text-[11px] text-primary-400 hover:underline"
                 >
                   {{ t('github.panel.open') }}
                 </ULink>

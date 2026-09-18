@@ -276,15 +276,15 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
     <div class="flex min-h-0 flex-1">
       <!-- main column -->
       <div class="min-w-0 flex-1 overflow-y-auto px-6 py-5">
-        <p class="mb-4 text-sm text-slate-400">
+        <p class="mb-4 text-sm text-muted">
           <i18n-t keypath="brainstorm.intro" tag="span" scope="global">
             <template #subject>{{ subjectNoun }}</template>
             <template #doc>{{ docNoun }}</template>
             <template #choose>
-              <span class="text-slate-300">{{ t('brainstorm.introChoose') }}</span>
+              <span class="text-toned">{{ t('brainstorm.introChoose') }}</span>
             </template>
             <template #dismiss>
-              <span class="text-slate-300">{{ t('brainstorm.introDismiss') }}</span>
+              <span class="text-toned">{{ t('brainstorm.introDismiss') }}</span>
             </template>
           </i18n-t>
         </p>
@@ -292,7 +292,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
         <!-- empty state -->
         <div
           v-if="!session && !busy && !loading"
-          class="rounded-lg border border-dashed border-slate-700 p-8 text-center text-sm text-slate-500"
+          class="rounded-lg border border-dashed border-muted p-8 text-center text-sm text-dimmed"
         >
           {{ t('brainstorm.empty') }}
         </div>
@@ -300,7 +300,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
         <!-- working state (initial fetch on open, or an agent pass running) -->
         <div
           v-else-if="(busy || loading) && !session"
-          class="flex items-center justify-center gap-2 p-8 text-sm text-slate-400"
+          class="flex items-center justify-center gap-2 p-8 text-sm text-muted"
         >
           <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
           {{ loading && !busy ? t('brainstorm.loading') : t('brainstorm.generating') }}
@@ -345,17 +345,17 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
             <div
               v-for="item in sortedItems"
               :key="item.id"
-              class="rounded-lg border border-slate-800 bg-slate-900/60 p-3"
+              class="rounded-lg border border-default bg-default/60 p-3"
               :class="{ 'opacity-60': item.status === 'dismissed' }"
             >
               <div class="flex items-start gap-2">
                 <UIcon
                   :name="CATEGORY_ICON[item.category]"
-                  class="mt-0.5 h-4 w-4 shrink-0 text-slate-400"
+                  class="mt-0.5 h-4 w-4 shrink-0 text-muted"
                 />
                 <div class="min-w-0 flex-1">
                   <div class="flex flex-wrap items-center gap-1.5">
-                    <span class="text-sm font-medium text-white">{{ item.title }}</span>
+                    <span class="text-sm font-medium text-highlighted">{{ item.title }}</span>
                     <UBadge size="xs" variant="subtle" :color="SEVERITY_COLOR[item.severity]">
                       {{ t(SEVERITY_LABELS[item.severity]) }}
                     </UBadge>
@@ -375,16 +375,16 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                        around it takes the span (see the shell's `width` prop: the unit is the
                        paragraph, not the section). The badge row above and the choose/dismiss
                        control below are what the full width is actually for. -->
-                  <p class="mt-1 max-w-3xl whitespace-pre-line text-sm text-slate-400">
+                  <p class="mt-1 max-w-3xl whitespace-pre-line text-sm text-muted">
                     {{ item.detail }}
                   </p>
 
                   <!-- recorded choice -->
                   <div
                     v-if="item.reply"
-                    class="mt-2 max-w-3xl rounded-md border-s-2 border-slate-700 bg-slate-950/40 px-3 py-1.5 text-sm text-slate-300"
+                    class="mt-2 max-w-3xl rounded-md border-s-2 border-muted bg-app-950/40 px-3 py-1.5 text-sm text-toned"
                   >
-                    <span class="text-[10px] uppercase tracking-wide text-slate-500">
+                    <span class="text-[10px] uppercase tracking-wide text-dimmed">
                       {{ t('brainstorm.yourChoice') }}
                     </span>
                     <p class="whitespace-pre-line">{{ item.reply }}</p>
@@ -453,7 +453,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
           </div>
 
           <!-- converged document: the standard-format direction -->
-          <section v-if="outline" class="mt-6 border-t border-slate-800 pt-5">
+          <section v-if="outline" class="mt-6 border-t border-default pt-5">
             <div class="mb-3 flex items-center gap-1.5 text-[11px] text-emerald-400">
               <UIcon name="i-lucide-file-check-2" class="h-3.5 w-3.5" />
               <span class="font-semibold uppercase tracking-wide">
@@ -471,18 +471,18 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
               >
                 <UIcon
                   name="i-lucide-chevron-right"
-                  class="h-3.5 w-3.5 shrink-0 text-slate-500 transition-transform"
+                  class="h-3.5 w-3.5 shrink-0 text-dimmed transition-transform"
                   :class="collapsed[s.id] ? '' : 'rotate-90'"
                 />
                 <span
-                  class="font-semibold text-white"
+                  class="font-semibold text-highlighted"
                   :class="s.depth <= 1 ? 'text-base' : s.depth === 2 ? 'text-sm' : 'text-xs'"
                   v-html="s.titleHtml"
                 />
               </button>
               <div
                 v-show="!s.title || !collapsed[s.id]"
-                class="reader-prose mt-1 ps-5.5 text-[13px] leading-relaxed text-slate-300"
+                class="reader-prose mt-1 ps-5.5 text-[13px] leading-relaxed text-toned"
                 v-html="s.bodyHtml"
               />
             </div>
@@ -491,32 +491,29 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
       </div>
 
       <!-- right action rail -->
-      <aside class="hidden w-72 shrink-0 flex-col border-s border-slate-800 lg:flex">
+      <aside class="hidden w-72 shrink-0 flex-col border-s border-default lg:flex">
         <div class="flex flex-col gap-4 px-4 py-5">
-          <div v-if="session" class="space-y-2 text-xs text-slate-400">
+          <div v-if="session" class="space-y-2 text-xs text-muted">
             <div class="flex items-center justify-between">
               <span>{{ t('brainstorm.rail.options') }}</span>
-              <span class="text-slate-300">{{ session.items.length }}</span>
+              <span class="text-toned">{{ session.items.length }}</span>
             </div>
             <div class="flex items-center justify-between">
               <span>{{ t('brainstorm.rail.open') }}</span>
-              <span class="text-slate-300">{{ openCount }}</span>
+              <span class="text-toned">{{ openCount }}</span>
             </div>
             <div class="flex items-center justify-between">
               <span>{{ t('brainstorm.rail.chosen') }}</span>
-              <span class="text-slate-300">{{ answeredCount }}</span>
+              <span class="text-toned">{{ answeredCount }}</span>
             </div>
             <div v-if="session.model" class="flex items-center justify-between">
               <span>{{ t('brainstorm.rail.model') }}</span>
-              <span class="truncate ps-2 text-slate-500">{{ session.model }}</span>
+              <span class="truncate ps-2 text-dimmed">{{ session.model }}</span>
             </div>
           </div>
 
           <!-- action: ready (choose → incorporate / proceed) -->
-          <div
-            v-if="session && status === 'ready'"
-            class="space-y-2 border-t border-slate-800 pt-4"
-          >
+          <div v-if="session && status === 'ready'" class="space-y-2 border-t border-default pt-4">
             <UButton
               v-if="canProceed"
               color="primary"
@@ -544,7 +541,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
             >
               {{ t('brainstorm.incorporateChoices') }}
             </UButton>
-            <p class="text-[11px] leading-relaxed text-slate-500">
+            <p class="text-[11px] leading-relaxed text-dimmed">
               <template v-if="canProceed">
                 {{ t('brainstorm.hint.allDismissed') }}
               </template>
@@ -556,7 +553,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
           </div>
 
           <!-- action: merged (inspect → re-run / redo) -->
-          <div v-if="session && merged" class="space-y-2 border-t border-slate-800 pt-4">
+          <div v-if="session && merged" class="space-y-2 border-t border-default pt-4">
             <UButton
               color="primary"
               size="sm"
@@ -606,14 +603,14 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                 {{ t('brainstorm.redoWithDirection') }}
               </UButton>
             </div>
-            <p class="text-[11px] leading-relaxed text-slate-500">
+            <p class="text-[11px] leading-relaxed text-dimmed">
               {{ t('brainstorm.mergedHint') }}
             </p>
           </div>
 
           <div
             v-if="session && incorporated"
-            class="border-t border-slate-800 pt-4 text-[11px] leading-relaxed text-slate-500"
+            class="border-t border-default pt-4 text-[11px] leading-relaxed text-dimmed"
           >
             {{ t('brainstorm.incorporatedFooter') }}
           </div>

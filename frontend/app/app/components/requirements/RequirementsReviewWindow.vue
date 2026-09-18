@@ -450,8 +450,8 @@ const ATTENTION_LABELS = computed<Record<FindingAttention, string>>(() => ({
 }))
 const ATTENTION_LABEL_COLOR = {
   action: 'text-amber-300',
-  waiting: 'text-indigo-300',
-  settled: 'text-slate-500',
+  waiting: 'text-primary-300',
+  settled: 'text-dimmed',
 } as const satisfies Record<FindingAttention, string>
 // Whether a finding's recorded reply is the human's OWN answer (vs an untouched auto-generated
 // recommended default). Drives the "User answered" marker on the Answer option.
@@ -699,7 +699,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
   <ResultWindowShell
     :open="open"
     icon="i-lucide-clipboard-check"
-    icon-class="bg-indigo-500/15 text-indigo-300"
+    icon-class="bg-primary-500/15 text-primary-300"
     :title="t('requirements.title')"
     :subtitle="block?.title"
     :step-ref="{ instanceId, stepIndex }"
@@ -716,31 +716,26 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
     <div class="flex min-h-0 flex-1 flex-col lg:flex-row">
       <!-- main column -->
       <div class="min-w-0 flex-1 overflow-y-auto px-6 py-5">
-        <i18n-t
-          keypath="requirements.intro"
-          tag="p"
-          class="mb-4 text-sm text-slate-400"
-          scope="global"
-        >
+        <i18n-t keypath="requirements.intro" tag="p" class="mb-4 text-sm text-muted" scope="global">
           <template #level>{{ block?.level ?? t('requirements.levelFallback') }}</template>
           <template #answer
-            ><span class="text-slate-300">{{ t('requirements.answerVerb') }}</span></template
+            ><span class="text-toned">{{ t('requirements.answerVerb') }}</span></template
           >
           <template #dismiss
-            ><span class="text-slate-300">{{ t('requirements.dismissVerb') }}</span></template
+            ><span class="text-toned">{{ t('requirements.dismissVerb') }}</span></template
           >
         </i18n-t>
 
         <!-- Why the findings never ask a technical question: this gate settles the
                  product/business layer, and the architect/researcher steps settle the rest.
                  Without this a reader reads the missing technical questions as an oversight. -->
-        <p class="mb-4 text-xs text-slate-500">{{ t('requirements.scopeNote') }}</p>
+        <p class="mb-4 text-xs text-dimmed">{{ t('requirements.scopeNote') }}</p>
 
         <!-- empty state — the reviewer runs automatically as the first pipeline
                  gate step, so there's nothing to do here until then -->
         <div
           v-if="!review && !busy && !loading"
-          class="rounded-lg border border-dashed border-slate-700 p-8 text-center text-sm text-slate-500"
+          class="rounded-lg border border-dashed border-muted p-8 text-center text-sm text-dimmed"
         >
           {{ t('requirements.empty') }}
         </div>
@@ -748,7 +743,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
         <!-- working state (initial fetch on open, or a reviewer pass running) -->
         <div
           v-else-if="(busy || loading) && !review"
-          class="flex items-center justify-center gap-2 p-8 text-sm text-slate-400"
+          class="flex items-center justify-center gap-2 p-8 text-sm text-muted"
         >
           <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
           {{ loading && !busy ? t('requirements.loadingReview') : t('requirements.reviewing') }}
@@ -779,7 +774,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                    the human can see which of the two LLM calls is currently in progress. -->
           <div
             v-else-if="working"
-            class="mb-4 flex items-center gap-2 rounded-lg border border-indigo-900/60 bg-indigo-950/30 p-4 text-sm text-indigo-200"
+            class="mb-4 flex items-center gap-2 rounded-lg border border-primary-900/60 bg-primary-950/30 p-4 text-sm text-primary-200"
           >
             <UIcon name="i-lucide-loader-circle" class="h-5 w-5 shrink-0 animate-spin" />
             <span v-if="incorporating">
@@ -809,9 +804,9 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                   >
                     {{ CLASS_LABELS[group] }}
                   </span>
-                  <span class="h-px flex-1 bg-slate-700" />
+                  <span class="h-px flex-1 bg-accented" />
                 </div>
-                <p class="mt-0.5 text-[11px] text-slate-500">{{ CLASS_HINTS[group] }}</p>
+                <p class="mt-0.5 text-[11px] text-dimmed">{{ CLASS_HINTS[group] }}</p>
               </div>
               <div v-if="startsAttentionGroup(index)" class="flex items-center gap-2 pt-1">
                 <span
@@ -820,10 +815,10 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                 >
                   {{ ATTENTION_LABELS[attention] }}
                 </span>
-                <span class="h-px flex-1 bg-slate-800" />
+                <span class="h-px flex-1 bg-elevated" />
               </div>
               <div
-                class="rounded-lg border border-slate-800 bg-slate-900/60 p-3"
+                class="rounded-lg border border-default bg-default/60 p-3"
                 :class="{ 'opacity-60': item.status === 'dismissed' }"
                 data-testid="requirements-finding"
                 :data-finding-status="item.status"
@@ -832,11 +827,11 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                 <div class="flex items-start gap-2">
                   <UIcon
                     :name="CATEGORY_ICON[item.category]"
-                    class="mt-0.5 h-4 w-4 shrink-0 text-slate-400"
+                    class="mt-0.5 h-4 w-4 shrink-0 text-muted"
                   />
                   <div class="min-w-0 flex-1">
                     <div class="flex flex-wrap items-center gap-1.5">
-                      <span class="text-sm font-medium text-white">{{ item.title }}</span>
+                      <span class="text-sm font-medium text-highlighted">{{ item.title }}</span>
                       <UBadge size="xs" variant="subtle" :color="SEVERITY_COLOR[item.severity]">
                         {{ SEVERITY_LABELS[item.severity] }}
                       </UBadge>
@@ -868,7 +863,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                          card around it takes the span (see the shell's `width` prop: the unit is
                          the paragraph, not the section). The badge row above and the mode buttons
                          and textarea below are what the full width is actually for. -->
-                    <p class="mt-1 max-w-3xl whitespace-pre-line text-sm text-slate-400">
+                    <p class="mt-1 max-w-3xl whitespace-pre-line text-sm text-muted">
                       {{ item.detail }}
                     </p>
 
@@ -876,9 +871,9 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                            ones the answer lives in the textarea below, seeded from the reply) -->
                     <div
                       v-if="item.reply && item.status !== 'open' && item.status !== 'answered'"
-                      class="mt-2 max-w-3xl rounded-md border-s-2 border-slate-700 bg-slate-950/40 px-3 py-1.5 text-sm text-slate-300"
+                      class="mt-2 max-w-3xl rounded-md border-s-2 border-muted bg-app-950/40 px-3 py-1.5 text-sm text-toned"
                     >
-                      <span class="text-[10px] uppercase tracking-wide text-slate-500">
+                      <span class="text-[10px] uppercase tracking-wide text-dimmed">
                         {{ t('requirements.answerLabel') }}
                       </span>
                       <p class="whitespace-pre-line">{{ item.reply }}</p>
@@ -917,7 +912,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                                answer; the human can keep it, edit it, or switch modes. -->
                         <div
                           v-if="autoDefaults.get(item.id)"
-                          class="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-indigo-300"
+                          class="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-primary-300"
                         >
                           <UIcon name="i-lucide-sparkles" class="h-3.5 w-3.5 shrink-0" />
                           <span>{{ t('requirements.recommendedDefault') }}</span>
@@ -981,7 +976,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                       <template v-else-if="modeFor(item) === 'recommend'">
                         <div
                           v-if="pendingRecFor(item)"
-                          class="mt-2 flex items-center gap-1.5 text-xs text-indigo-300"
+                          class="mt-2 flex items-center gap-1.5 text-xs text-primary-300"
                         >
                           <UIcon name="i-lucide-loader-circle" class="h-3.5 w-3.5 animate-spin" />
                           {{ t('requirements.generatingSuggestion') }}
@@ -990,7 +985,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                           <div
                             v-for="rec in [readyRecFor(item)!]"
                             :key="rec.id"
-                            class="mt-2 rounded-lg border border-indigo-900/50 bg-indigo-950/20 p-3"
+                            class="mt-2 rounded-lg border border-primary-900/50 bg-primary-950/20 p-3"
                           >
                             <UBadge
                               v-if="rec.groundedInFragment"
@@ -1026,7 +1021,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                             </UBadge>
                             <!-- The Writer's suggested answer — agent prose, so it takes the
                                  measure like the finding's own question above it. -->
-                            <p class="mt-1 max-w-3xl whitespace-pre-line text-sm text-slate-300">
+                            <p class="mt-1 max-w-3xl whitespace-pre-line text-sm text-toned">
                               {{ rec.recommendedText }}
                             </p>
                             <div class="mt-2 flex flex-wrap items-center gap-2">
@@ -1098,7 +1093,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                             :placeholder="t('requirements.guidancePlaceholder')"
                             :disabled="frozen"
                           />
-                          <p class="mt-1 flex items-center gap-1 text-[11px] text-indigo-300/80">
+                          <p class="mt-1 flex items-center gap-1 text-[11px] text-primary-300/80">
                             <UIcon name="i-lucide-wand-2" class="h-3 w-3 shrink-0" />
                             {{ t('requirements.guidanceHint') }}
                           </p>
@@ -1106,7 +1101,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                       </template>
 
                       <!-- DISMISS: nothing to fill in — a short note explains the effect -->
-                      <p v-else class="mt-2 text-[11px] text-slate-500">
+                      <p v-else class="mt-2 text-[11px] text-dimmed">
                         {{ t('requirements.dismissedHint') }}
                       </p>
                     </template>
@@ -1119,7 +1114,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
           <!-- incorporated document: the standard-format requirements. The whole section
                    collapses as a unit (a long doc otherwise pushes the findings/recommendations
                    off-screen); the per-heading toggles below still work when it's expanded. -->
-          <section v-if="outline" class="mt-6 border-t border-slate-800 pt-5">
+          <section v-if="outline" class="mt-6 border-t border-default pt-5">
             <button
               class="mb-3 flex w-full items-center gap-1.5 text-[11px] text-emerald-400"
               @click="toggleDoc"
@@ -1151,18 +1146,18 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                 >
                   <UIcon
                     name="i-lucide-chevron-right"
-                    class="h-3.5 w-3.5 shrink-0 text-slate-500 transition-transform"
+                    class="h-3.5 w-3.5 shrink-0 text-dimmed transition-transform"
                     :class="collapsed[s.id] ? '' : 'rotate-90'"
                   />
                   <span
-                    class="font-semibold text-white"
+                    class="font-semibold text-highlighted"
                     :class="s.depth <= 1 ? 'text-base' : s.depth === 2 ? 'text-sm' : 'text-xs'"
                     v-html="s.titleHtml"
                   />
                 </button>
                 <div
                   v-show="!s.title || !collapsed[s.id]"
-                  class="reader-prose mt-1 ps-5.5 text-[13px] leading-relaxed text-slate-300"
+                  class="reader-prose mt-1 ps-5.5 text-[13px] leading-relaxed text-toned"
                   v-html="s.bodyHtml"
                 />
               </div>
@@ -1176,28 +1171,28 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                tablet, UX-32). The informational stats collapse away below `lg` to keep the
                bottom bar compact; the actions themselves always show. -->
       <aside
-        class="flex w-full shrink-0 flex-col border-t border-slate-800 lg:w-72 lg:border-s lg:border-t-0"
+        class="flex w-full shrink-0 flex-col border-t border-default lg:w-72 lg:border-s lg:border-t-0"
       >
         <div class="flex flex-col gap-4 px-4 py-5">
-          <div v-if="review" class="hidden space-y-2 text-xs text-slate-400 lg:block">
+          <div v-if="review" class="hidden space-y-2 text-xs text-muted lg:block">
             <div class="flex items-center justify-between">
               <span>{{ t('requirements.stats.findings') }}</span>
-              <span class="text-slate-300">{{ review.items.length }}</span>
+              <span class="text-toned">{{ review.items.length }}</span>
             </div>
             <div class="flex items-center justify-between">
               <span>{{ t('requirements.stats.open') }}</span>
-              <span class="text-slate-300">{{ openCount }}</span>
+              <span class="text-toned">{{ openCount }}</span>
             </div>
             <div class="flex items-center justify-between">
               <span>{{ t('requirements.stats.answered') }}</span>
-              <span class="text-slate-300">{{ answeredCount }}</span>
+              <span class="text-toned">{{ answeredCount }}</span>
             </div>
             <!-- awaited recommendations — kept here (always visible) so the human can see what
                      the Writer is still producing / what's waiting on them even while reading the
                      incorporated document or acting elsewhere in the window. -->
             <template v-if="generatingRecommendations.length || readyRecommendations.length">
               <div
-                class="flex items-center gap-1.5 border-t border-slate-800/60 pt-2 text-indigo-300"
+                class="flex items-center gap-1.5 border-t border-default/60 pt-2 text-primary-300"
               >
                 <UIcon name="i-lucide-wand-2" class="h-3 w-3" />
                 <span class="font-medium">{{ t('requirements.stats.recommendations') }}</span>
@@ -1207,16 +1202,16 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                 class="flex items-center justify-between"
               >
                 <span>{{ t('requirements.stats.recsGenerating') }}</span>
-                <span class="text-indigo-300">{{ generatingRecommendations.length }}</span>
+                <span class="text-primary-300">{{ generatingRecommendations.length }}</span>
               </div>
               <div v-if="readyRecommendations.length" class="flex items-center justify-between">
                 <span>{{ t('requirements.stats.recsToReview') }}</span>
-                <span class="text-indigo-300">{{ readyRecommendations.length }}</span>
+                <span class="text-primary-300">{{ readyRecommendations.length }}</span>
               </div>
             </template>
             <div v-if="review.model" class="flex items-center justify-between">
               <span>{{ t('requirements.stats.model') }}</span>
-              <span class="truncate ps-2 text-slate-500">{{
+              <span class="truncate ps-2 text-dimmed">{{
                 models.labelForRef(review.model) ?? review.model
               }}</span>
             </div>
@@ -1230,7 +1225,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                    on the cap decision and a fresh recommendation batch has no path to settle). -->
           <div
             v-if="review && pendingRecommendRequests.length > 0 && (status === 'ready' || merged)"
-            class="border-t border-slate-800 pt-4"
+            class="border-t border-default pt-4"
           >
             <UButton
               color="primary"
@@ -1254,7 +1249,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
           </div>
 
           <!-- action: ready (answer → incorporate / proceed) -->
-          <div v-if="review && status === 'ready'" class="space-y-2 border-t border-slate-800 pt-4">
+          <div v-if="review && status === 'ready'" class="space-y-2 border-t border-default pt-4">
             <UButton
               v-if="canProceed"
               color="primary"
@@ -1284,7 +1279,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
             >
               {{ t('requirements.actions.incorporateAnswers') }}
             </UButton>
-            <p class="text-[11px] leading-relaxed text-slate-500">
+            <p class="text-[11px] leading-relaxed text-dimmed">
               <template v-if="canProceed">
                 {{ t('requirements.help.canProceed') }}
               </template>
@@ -1296,7 +1291,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
           </div>
 
           <!-- action: merged (inspect → re-review / redo) -->
-          <div v-if="review && merged" class="space-y-2 border-t border-slate-800 pt-4">
+          <div v-if="review && merged" class="space-y-2 border-t border-default pt-4">
             <UButton
               color="primary"
               size="sm"
@@ -1348,14 +1343,14 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                 {{ t('requirements.actions.redoWithDirection') }}
               </UButton>
             </div>
-            <p class="text-[11px] leading-relaxed text-slate-500">
+            <p class="text-[11px] leading-relaxed text-dimmed">
               {{ t('requirements.help.merged') }}
             </p>
           </div>
 
           <div
             v-if="review && incorporated"
-            class="border-t border-slate-800 pt-4 text-[11px] leading-relaxed text-slate-500"
+            class="border-t border-default pt-4 text-[11px] leading-relaxed text-dimmed"
           >
             {{ t('requirements.settledFooter') }}
           </div>

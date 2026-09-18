@@ -69,7 +69,7 @@ const STATUS_LABEL_KEYS: Record<string, string> = {
 }
 const STATUS_CLASS: Record<string, string> = {
   running: 'bg-sky-500/15 text-sky-300',
-  synthesizing: 'bg-indigo-500/15 text-indigo-300',
+  synthesizing: 'bg-primary-500/15 text-primary-300',
   done: 'bg-emerald-500/15 text-emerald-300',
   failed: 'bg-rose-500/15 text-rose-300',
 }
@@ -137,17 +137,17 @@ function topScore(c: ConsensusContribution): { label: string; value: number } | 
       </span>
       <span
         class="rounded-full px-2.5 py-1 text-xs font-medium"
-        :class="STATUS_CLASS[session.status] ?? 'bg-slate-700 text-slate-300'"
+        :class="STATUS_CLASS[session.status] ?? 'bg-accented text-toned'"
       >
         {{ statusLabel(session.status) }}
       </span>
     </template>
 
     <div class="flex-1 overflow-y-auto px-6 py-5">
-      <div v-if="loading && !session" class="py-16 text-center text-sm text-slate-500">
+      <div v-if="loading && !session" class="py-16 text-center text-sm text-dimmed">
         {{ t('consensus.loading') }}
       </div>
-      <div v-else-if="!session" class="py-16 text-center text-sm text-slate-500">
+      <div v-else-if="!session" class="py-16 text-center text-sm text-dimmed">
         {{ t('consensus.empty') }}
       </div>
       <template v-else>
@@ -165,7 +165,7 @@ function topScore(c: ConsensusContribution): { label: string; value: number } | 
         <!-- synthesized result -->
         <section v-if="session.synthesis" class="mb-6">
           <div class="mb-2 flex items-center gap-2">
-            <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <h3 class="text-xs font-semibold uppercase tracking-wide text-muted">
               {{ t('consensus.synthesizedResult') }}
             </h3>
             <span
@@ -177,7 +177,7 @@ function topScore(c: ConsensusContribution): { label: string; value: number } | 
           </div>
           <MarkdownProse
             :text="session.synthesis"
-            class="rounded-lg border border-slate-800 bg-slate-950/60 px-4 py-3 text-sm text-slate-200"
+            class="rounded-lg border border-default bg-app-950/60 px-4 py-3 text-sm text-default"
           />
           <ul v-if="session.dissent?.length" class="mt-2 space-y-1">
             <li
@@ -193,20 +193,20 @@ function topScore(c: ConsensusContribution): { label: string; value: number } | 
 
         <!-- participants -->
         <section class="mb-6">
-          <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+          <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
             {{ t('consensus.panel') }}
           </h3>
           <div class="flex flex-wrap gap-2">
             <div
               v-for="(p, i) in session.participants"
               :key="p.id"
-              class="rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-1.5 text-xs"
+              class="rounded-lg border border-default bg-app-950/40 px-3 py-1.5 text-xs"
             >
-              <span class="font-medium text-slate-200">{{
+              <span class="font-medium text-default">{{
                 t('consensus.expert', { letter: String.fromCharCode(65 + i) })
               }}</span>
-              <span class="text-slate-400"> · {{ p.role }}</span>
-              <span v-if="p.modelId" class="ms-1 text-slate-500"
+              <span class="text-muted"> · {{ p.role }}</span>
+              <span v-if="p.modelId" class="ms-1 text-dimmed"
                 >({{ models.labelForRef(p.modelId) ?? p.modelId }})</span
               >
             </div>
@@ -215,7 +215,7 @@ function topScore(c: ConsensusContribution): { label: string; value: number } | 
 
         <!-- rounds -->
         <section v-for="round in session.rounds" :key="round.index" class="mb-5">
-          <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+          <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
             {{ t('consensus.round.heading', { n: round.index + 1 }) }} ·
             {{ roundLabel(round.kind) }}
           </h3>
@@ -223,16 +223,16 @@ function topScore(c: ConsensusContribution): { label: string; value: number } | 
             <div
               v-for="c in round.contributions"
               :key="c.participantId"
-              class="rounded-lg border border-slate-800 bg-slate-950/40 px-4 py-3"
+              class="rounded-lg border border-default bg-app-950/40 px-4 py-3"
             >
               <div class="mb-1 flex items-center gap-2">
-                <span class="text-xs font-semibold text-slate-200">{{
+                <span class="text-xs font-semibold text-default">{{
                   anonLabel(c.participantId)
                 }}</span>
-                <span class="text-xs text-slate-500">{{ roleFor(c.participantId) }}</span>
+                <span class="text-xs text-dimmed">{{ roleFor(c.participantId) }}</span>
                 <span
                   v-if="topScore(c)"
-                  class="ms-auto rounded bg-slate-800 px-1.5 py-0.5 text-xs text-slate-300"
+                  class="ms-auto rounded bg-elevated px-1.5 py-0.5 text-xs text-toned"
                   >{{
                     t('consensus.topScore', {
                       label: topScore(c)!.label,
@@ -242,12 +242,12 @@ function topScore(c: ConsensusContribution): { label: string; value: number } | 
                 >
                 <CopyButton :text="c.text" :class="topScore(c) ? '-my-1' : 'ms-auto -my-1'" />
               </div>
-              <MarkdownProse :text="c.text" class="text-sm text-slate-300" />
+              <MarkdownProse :text="c.text" class="text-sm text-toned" />
               <div v-if="c.scores?.length" class="mt-2 flex flex-wrap gap-1.5">
                 <span
                   v-for="s in c.scores"
                   :key="s.dimension"
-                  class="rounded bg-slate-800/80 px-1.5 py-0.5 text-xs text-slate-400"
+                  class="rounded bg-elevated/80 px-1.5 py-0.5 text-xs text-muted"
                   >{{ s.dimension }}: {{ pct(s.value) }}</span
                 >
               </div>

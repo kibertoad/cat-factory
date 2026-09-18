@@ -339,8 +339,8 @@ const STATUS_KEYS: Record<BugHuntAnalysisStatus, string> = {
     <template #body>
       <!-- No tracker offered (none connected/installed, or all disabled). -->
       <div v-if="!tasks.anyOffered" class="space-y-3 text-center">
-        <UIcon name="i-lucide-plug" class="mx-auto h-8 w-8 text-slate-500" />
-        <p class="text-sm text-slate-400">{{ t('bugHunt.connectFirst') }}</p>
+        <UIcon name="i-lucide-plug" class="mx-auto h-8 w-8 text-dimmed" />
+        <p class="text-sm text-muted">{{ t('bugHunt.connectFirst') }}</p>
         <div class="flex flex-wrap justify-center gap-2">
           <UButton
             v-for="choice in addableSources"
@@ -356,12 +356,12 @@ const STATUS_KEYS: Record<BugHuntAnalysisStatus, string> = {
       </div>
 
       <!-- No service frame yet → nowhere for an adopted bug to land. -->
-      <p v-else-if="!containerItems.length" class="text-center text-xs text-slate-500">
+      <p v-else-if="!containerItems.length" class="text-center text-xs text-dimmed">
         {{ t('bugHunt.needFrameFirst') }}
       </p>
 
       <div v-else class="space-y-4">
-        <p class="text-xs text-slate-400">{{ t('bugHunt.intro') }}</p>
+        <p class="text-xs text-muted">{{ t('bugHunt.intro') }}</p>
 
         <div class="grid gap-3 sm:grid-cols-2">
           <UFormField :label="t('bugHunt.tracker')">
@@ -386,7 +386,7 @@ const STATUS_KEYS: Record<BugHuntAnalysisStatus, string> = {
                 <span class="truncate">{{ descriptor?.label ?? t('bugHunt.pickTracker') }}</span>
               </UButton>
             </UDropdownMenu>
-            <p v-else class="flex items-center gap-1.5 py-1 text-sm text-slate-300">
+            <p v-else class="flex items-center gap-1.5 py-1 text-sm text-toned">
               <UIcon v-if="descriptor?.icon" :name="descriptor.icon" class="h-4 w-4 shrink-0" />
               <span class="truncate">{{ descriptor?.label ?? t('bugHunt.pickTracker') }}</span>
             </p>
@@ -397,10 +397,7 @@ const STATUS_KEYS: Record<BugHuntAnalysisStatus, string> = {
                  STATED rather than asked: the repository the service below is linked to. No
                  control at all, because every value one could offer here is either that repo
                  (nothing to choose) or another one this board holds no service for. -->
-            <p
-              v-if="boardFromService"
-              class="flex items-center gap-1.5 py-1 text-sm text-slate-300"
-            >
+            <p v-if="boardFromService" class="flex items-center gap-1.5 py-1 text-sm text-toned">
               <UIcon name="i-lucide-folder-git-2" class="h-4 w-4 shrink-0" />
               <span class="truncate">{{ scopedRepo ?? t('bugHunt.boardFromService') }}</span>
             </p>
@@ -458,15 +455,15 @@ const STATUS_KEYS: Record<BugHuntAnalysisStatus, string> = {
         <!-- Two blocks rather than one with a computed `keypath`: the i18n extractor reads a
              bound keypath as the key itself, so a dynamic one is a key missing from every
              locale. Every other `<i18n-t>` in the SPA names its key statically for that reason. -->
-        <p v-if="containerStated" class="text-xs text-slate-400">
+        <p v-if="containerStated" class="text-xs text-muted">
           <i18n-t v-if="boardFromService" keypath="bugHunt.huntingIn" tag="span" scope="global">
             <template #container>
-              <span class="font-medium text-slate-200">{{ pinnedContainer!.title }}</span>
+              <span class="font-medium text-default">{{ pinnedContainer!.title }}</span>
             </template>
           </i18n-t>
           <i18n-t v-else keypath="bugHunt.adoptingInto" tag="span" scope="global">
             <template #container>
-              <span class="font-medium text-slate-200">{{ pinnedContainer!.title }}</span>
+              <span class="font-medium text-default">{{ pinnedContainer!.title }}</span>
             </template>
           </i18n-t>
         </p>
@@ -490,22 +487,22 @@ const STATUS_KEYS: Record<BugHuntAnalysisStatus, string> = {
           >
             {{ t('bugHunt.run') }}
           </UButton>
-          <span v-if="hunt.hunting" class="text-xs text-slate-400">
+          <span v-if="hunt.hunting" class="text-xs text-muted">
             {{ t('bugHunt.running') }}
           </span>
         </div>
 
         <!-- Results -->
-        <div v-if="hunt.hasResult" class="space-y-3 border-t border-slate-800 pt-3">
-          <p class="text-xs text-slate-400">
+        <div v-if="hunt.hasResult" class="space-y-3 border-t border-default pt-3">
+          <p class="text-xs text-muted">
             <!-- The board the scan actually ran against, named because on a repo-backed tracker
                  the platform resolved it: the person reading the shortlist should not have to
                  infer which repository it came out of. -->
-            <span class="text-slate-500">
+            <span class="text-dimmed">
               {{ t('bugHunt.scannedBoard', { board: hunt.result!.board }) }}
             </span>
             {{ t(STATUS_KEYS[hunt.result!.analysisStatus]) }}
-            <span v-if="hunt.result!.model" class="text-slate-500">
+            <span v-if="hunt.result!.model" class="text-dimmed">
               {{ t('bugHunt.viaModel', { model: hunt.result!.model }) }}
             </span>
           </p>
@@ -516,7 +513,7 @@ const STATUS_KEYS: Record<BugHuntAnalysisStatus, string> = {
           <div
             v-for="candidate in hunt.candidates"
             :key="candidate.externalId"
-            class="space-y-2 rounded-md border border-slate-800 p-3"
+            class="space-y-2 rounded-md border border-default p-3"
           >
             <div class="flex items-start justify-between gap-3">
               <div class="min-w-0 space-y-1">
@@ -535,12 +532,12 @@ const STATUS_KEYS: Record<BugHuntAnalysisStatus, string> = {
                     :to="candidate.url"
                     target="_blank"
                     rel="noopener noreferrer"
-                    class="truncate text-sm font-medium text-slate-100"
+                    class="truncate text-sm font-medium text-app-100"
                   >
                     {{ candidate.externalId }}: {{ candidate.title }}
                   </ULink>
                 </div>
-                <p v-if="candidate.analysis" class="text-xs text-slate-400">
+                <p v-if="candidate.analysis" class="text-xs text-muted">
                   {{
                     t('bugHunt.ratings', {
                       impact: candidate.analysis.impact,
@@ -549,10 +546,10 @@ const STATUS_KEYS: Record<BugHuntAnalysisStatus, string> = {
                     })
                   }}
                 </p>
-                <p v-if="candidate.analysis?.rationale" class="text-xs text-slate-300">
+                <p v-if="candidate.analysis?.rationale" class="text-xs text-toned">
                   {{ candidate.analysis.rationale }}
                 </p>
-                <div class="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+                <div class="flex flex-wrap items-center gap-2 text-[11px] text-dimmed">
                   <span v-if="candidate.priority">{{ candidate.priority }}</span>
                   <span v-for="label in candidate.labels" :key="label">{{ label }}</span>
                   <span v-if="createdAtDate(candidate.createdAt)">
@@ -582,7 +579,7 @@ const STATUS_KEYS: Record<BugHuntAnalysisStatus, string> = {
             </div>
           </div>
 
-          <p v-if="!hunt.candidates.length" class="text-center text-xs text-slate-500">
+          <p v-if="!hunt.candidates.length" class="text-center text-xs text-dimmed">
             {{ t('bugHunt.noCandidates') }}
           </p>
         </div>

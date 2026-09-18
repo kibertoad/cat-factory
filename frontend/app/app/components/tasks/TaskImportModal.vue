@@ -126,8 +126,8 @@ async function doSpawnEpic() {
     <template #body>
       <!-- Empty state: no source offered (none connected/installed, or all disabled) -->
       <div v-if="!tasks.anyOffered" class="space-y-3 text-center">
-        <UIcon name="i-lucide-plug" class="mx-auto h-8 w-8 text-slate-500" />
-        <p class="text-sm text-slate-400">{{ t('tasks.import.connectFirst') }}</p>
+        <UIcon name="i-lucide-plug" class="mx-auto h-8 w-8 text-dimmed" />
+        <p class="text-sm text-muted">{{ t('tasks.import.connectFirst') }}</p>
         <div class="flex justify-center gap-2">
           <UButton
             v-for="choice in addableSources"
@@ -143,7 +143,7 @@ async function doSpawnEpic() {
       </div>
 
       <!-- No service frame yet → nowhere to create a task. -->
-      <p v-else-if="!containerItems.length" class="text-center text-xs text-slate-500">
+      <p v-else-if="!containerItems.length" class="text-center text-xs text-dimmed">
         {{ t('tasks.import.needFrameFirst') }}
       </p>
 
@@ -152,10 +152,10 @@ async function doSpawnEpic() {
         <!-- Where the new task lands. Stated when there is one legal target (opened from a service
              frame that has no modules); otherwise a real choice, scoped to that frame when the
              modal was opened from one. -->
-        <p v-if="containerStated" class="text-xs text-slate-400">
+        <p v-if="containerStated" class="text-xs text-muted">
           <i18n-t keypath="tasks.import.creatingIn" tag="span" scope="global">
             <template #container>
-              <span class="font-medium text-slate-200">{{ pinnedContainer!.title }}</span>
+              <span class="font-medium text-default">{{ pinnedContainer!.title }}</span>
             </template>
           </i18n-t>
         </p>
@@ -182,8 +182,8 @@ async function doSpawnEpic() {
         </UFormField>
 
         <!-- Secondary: spawn a parent/epic issue as a whole linked task group. -->
-        <div class="space-y-2 border-t border-slate-800 pt-3">
-          <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        <div class="space-y-2 border-t border-default pt-3">
+          <span class="text-[11px] font-semibold uppercase tracking-wide text-muted">
             {{ t('tasks.import.asEpic') }}
           </span>
           <div class="flex items-end gap-2">

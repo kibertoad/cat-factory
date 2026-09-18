@@ -233,7 +233,7 @@ async function onFilePicked(e: Event) {
     <div class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 py-4">
       <div
         v-if="!vc"
-        class="flex flex-col items-center justify-center gap-2 py-10 text-center text-slate-400"
+        class="flex flex-col items-center justify-center gap-2 py-10 text-center text-muted"
       >
         <UIcon name="i-lucide-image-play" class="h-8 w-8 opacity-40" />
         <p class="text-sm">{{ t('visualConfirm.notStarted') }}</p>
@@ -251,14 +251,14 @@ async function onFilePicked(e: Event) {
              reference the reviewer is judging against is never anonymous. -->
         <section
           v-if="design"
-          class="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-[12px] text-slate-300"
+          class="rounded-lg border border-default bg-default/60 px-3 py-2 text-[12px] text-toned"
         >
           <p class="flex items-center gap-1.5">
             <UIcon name="i-lucide-figma" class="h-3.5 w-3.5 shrink-0 text-amber-300" />
             <span>{{
               t('visualConfirm.design.summary', { count: design.images }, design.images)
             }}</span>
-            <span v-if="design.dropped" class="text-slate-500">
+            <span v-if="design.dropped" class="text-dimmed">
               {{ t('visualConfirm.design.dropped', { count: design.dropped }, design.dropped) }}
             </span>
           </p>
@@ -278,7 +278,7 @@ async function onFilePicked(e: Event) {
 
         <p
           v-if="working"
-          class="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2 text-[12px] text-slate-300"
+          class="flex items-center gap-2 rounded-lg border border-default bg-app-950/40 px-3 py-2 text-[12px] text-toned"
         >
           <UIcon name="i-lucide-loader" class="h-3.5 w-3.5 animate-spin text-amber-300" />
           {{ phase ? PHASE_LABEL[phase] : '' }}
@@ -301,7 +301,7 @@ async function onFilePicked(e: Event) {
             <!-- Per-view note (folded into the fixer findings) -->
             <div v-if="awaitingHuman" class="px-1">
               <button
-                class="flex items-center gap-1.5 text-[11px] text-slate-400 hover:text-slate-200"
+                class="flex items-center gap-1.5 text-[11px] text-muted hover:text-default"
                 @click="noteOpen[p.view] = !noteOpen[p.view]"
               >
                 <UIcon
@@ -320,18 +320,18 @@ async function onFilePicked(e: Event) {
                 v-model="perViewNotes[p.view]"
                 rows="2"
                 :placeholder="t('visualConfirm.notePlaceholder', { view: p.view })"
-                class="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-[12px] text-slate-200 placeholder:text-slate-600 focus:border-amber-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/60"
+                class="mt-1 w-full rounded-md border border-muted bg-app-950 px-2 py-1.5 text-[12px] text-default placeholder:text-app-600 focus:border-amber-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/60"
               />
             </div>
           </div>
         </section>
-        <p v-else class="text-[12px] italic text-slate-500">
+        <p v-else class="text-[12px] italic text-dimmed">
           {{ t('visualConfirm.noScreenshots') }}
         </p>
 
         <!-- Upload a reference for any view -->
-        <section class="rounded-lg border border-slate-800 bg-slate-900/60 p-3">
-          <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+        <section class="rounded-lg border border-default bg-default/60 p-3">
+          <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-dimmed">
             {{ t('visualConfirm.upload.heading') }}
           </h3>
           <div class="flex flex-wrap items-center gap-2">
@@ -339,7 +339,7 @@ async function onFilePicked(e: Event) {
               v-model="uploadView"
               list="vc-views"
               :placeholder="t('visualConfirm.upload.viewPlaceholder')"
-              class="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-[12px] text-slate-200 placeholder:text-slate-600"
+              class="rounded-md border border-muted bg-app-950 px-2 py-1 text-[12px] text-default placeholder:text-app-600"
             />
             <datalist id="vc-views">
               <option v-for="p in pairs" :key="p.view" :value="p.view" />
@@ -349,11 +349,11 @@ async function onFilePicked(e: Event) {
               type="file"
               accept="image/png,image/jpeg"
               :disabled="busy || !uploadView.trim()"
-              class="text-[12px] text-slate-300 file:me-2 file:rounded file:border-0 file:bg-slate-800 file:px-2 file:py-1 file:text-slate-200 disabled:opacity-40"
+              class="text-[12px] text-toned file:me-2 file:rounded file:border-0 file:bg-elevated file:px-2 file:py-1 file:text-default disabled:opacity-40"
               @change="onFilePicked"
             />
           </div>
-          <p class="mt-1.5 text-[10px] text-slate-600">
+          <p class="mt-1.5 text-[10px] text-app-600">
             {{
               uploadView.trim()
                 ? t('visualConfirm.upload.tipReady')
@@ -363,21 +363,18 @@ async function onFilePicked(e: Event) {
         </section>
 
         <!-- Request fix -->
-        <section
-          v-if="awaitingHuman"
-          class="rounded-lg border border-slate-800 bg-slate-900/60 p-3"
-        >
-          <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+        <section v-if="awaitingHuman" class="rounded-lg border border-default bg-default/60 p-3">
+          <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-dimmed">
             {{ t('visualConfirm.requestFix.heading') }}
           </h3>
           <textarea
             v-model="globalFindings"
             rows="3"
             :placeholder="t('visualConfirm.requestFix.placeholder')"
-            class="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-[13px] text-slate-200 placeholder:text-slate-600 focus:border-amber-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/60"
+            class="w-full rounded-md border border-muted bg-app-950 px-3 py-2 text-[13px] text-default placeholder:text-app-600 focus:border-amber-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/60"
           />
           <div class="mt-2 flex items-center justify-between">
-            <span class="text-[11px] text-slate-500">
+            <span class="text-[11px] text-dimmed">
               {{ t('visualConfirm.requestFix.foldedHint') }}
             </span>
             <UButton
@@ -397,16 +394,16 @@ async function onFilePicked(e: Event) {
         <!-- Rounds history -->
         <section
           v-if="vc.rounds && vc.rounds.length"
-          class="rounded-lg border border-slate-800 bg-slate-900/60 p-3"
+          class="rounded-lg border border-default bg-default/60 p-3"
         >
-          <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+          <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-dimmed">
             {{ t('visualConfirm.history.heading', { count: vc.attempts }, vc.attempts) }}
           </h3>
           <ol class="space-y-2">
             <li v-for="(r, i) in vc.rounds" :key="i" class="flex items-start gap-2 text-[12px]">
-              <UIcon name="i-lucide-wrench" class="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
+              <UIcon name="i-lucide-wrench" class="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted" />
               <div class="min-w-0 flex-1">
-                <span class="text-slate-200">{{ t('visualConfirm.history.fixRequested') }}</span>
+                <span class="text-default">{{ t('visualConfirm.history.fixRequested') }}</span>
                 <span
                   class="ms-1.5 rounded px-1 text-[10px] uppercase"
                   :class="
@@ -414,14 +411,14 @@ async function onFilePicked(e: Event) {
                       ? 'bg-emerald-500/15 text-emerald-300'
                       : r.outcome === 'failed'
                         ? 'bg-rose-500/15 text-rose-300'
-                        : 'bg-slate-500/15 text-slate-300'
+                        : 'bg-app-500/15 text-toned'
                   "
                 >
                   {{
                     r.outcome ? OUTCOME_LABELS[r.outcome] : t('visualConfirm.outcome.inProgress')
                   }}
                 </span>
-                <p v-if="r.findings" class="whitespace-pre-wrap leading-snug text-slate-400">
+                <p v-if="r.findings" class="whitespace-pre-wrap leading-snug text-muted">
                   {{ r.findings }}
                 </p>
               </div>
@@ -433,7 +430,7 @@ async function onFilePicked(e: Event) {
 
     <footer
       v-if="vc"
-      class="flex items-center justify-between gap-3 border-t border-slate-800 px-5 py-3"
+      class="flex items-center justify-between gap-3 border-t border-default px-5 py-3"
     >
       <StepRunMeta
         v-if="step"

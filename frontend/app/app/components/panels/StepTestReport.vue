@@ -44,8 +44,8 @@ function verdictMeta(status: RequirementVerdictStatus): VerdictMeta {
 <template>
   <section class="mt-4 scroll-mt-4">
     <div class="mb-2 flex items-center gap-1.5 text-[11px]">
-      <UIcon name="i-lucide-flask-conical" class="h-3.5 w-3.5 text-slate-400" />
-      <span class="font-semibold uppercase tracking-wide text-slate-400">
+      <UIcon name="i-lucide-flask-conical" class="h-3.5 w-3.5 text-muted" />
+      <span class="font-semibold uppercase tracking-wide text-muted">
         {{ t('panels.testReport.title') }}
       </span>
       <UBadge :color="report.greenlight ? 'success' : 'warning'" variant="subtle" size="sm">
@@ -53,7 +53,7 @@ function verdictMeta(status: RequirementVerdictStatus): VerdictMeta {
           report.greenlight ? t('panels.testReport.greenlit') : t('panels.testReport.needsFixes')
         }}
       </UBadge>
-      <span v-if="phase && phase.attempts > 0" class="text-[11px] text-slate-500">
+      <span v-if="phase && phase.attempts > 0" class="text-[11px] text-dimmed">
         {{ t('panels.testReport.fixAttempts', { count: phase.attempts, max: phase.maxAttempts })
         }}<span v-if="phase.phase === 'fixing'"> {{ t('panels.testReport.fixing') }}</span>
       </span>
@@ -61,25 +61,25 @@ function verdictMeta(status: RequirementVerdictStatus): VerdictMeta {
     <MarkdownProse
       v-if="report.summary"
       :text="report.summary"
-      class="mb-3 text-[13px] leading-relaxed text-slate-300"
+      class="mb-3 text-[13px] leading-relaxed text-toned"
     />
 
     <div v-if="report.tested.length" class="mb-3">
-      <div class="mb-1 text-[11px] text-slate-500">{{ t('panels.testReport.tested') }}</div>
-      <ul class="space-y-0.5 text-[12px] text-slate-300">
+      <div class="mb-1 text-[11px] text-dimmed">{{ t('panels.testReport.tested') }}</div>
+      <ul class="space-y-0.5 text-[12px] text-toned">
         <li v-for="(item, i) in report.tested" :key="i">• {{ item }}</li>
       </ul>
     </div>
 
     <div v-if="report.outcomes.length" class="mb-3 space-y-1">
-      <div class="text-[11px] text-slate-500">{{ t('panels.testReport.outcomes') }}</div>
+      <div class="text-[11px] text-dimmed">{{ t('panels.testReport.outcomes') }}</div>
       <div v-for="(o, i) in report.outcomes" :key="i" class="flex items-start gap-2 text-[12px]">
         <span
           class="mt-1 h-2 w-2 shrink-0 rounded-full"
           :style="{ backgroundColor: OUTCOME_COLOR[o.status] ?? '#64748b' }"
         />
-        <span class="text-slate-300"
-          >{{ o.name }}<span v-if="o.detail" class="text-slate-500"> — {{ o.detail }}</span></span
+        <span class="text-toned"
+          >{{ o.name }}<span v-if="o.detail" class="text-dimmed"> — {{ o.detail }}</span></span
         >
       </div>
     </div>
@@ -91,7 +91,7 @@ function verdictMeta(status: RequirementVerdictStatus): VerdictMeta {
       class="mb-3 space-y-1"
       data-testid="test-report-requirement-verdicts"
     >
-      <div class="text-[11px] text-slate-500">
+      <div class="text-[11px] text-dimmed">
         {{ t('panels.testReport.requirementVerdicts.title') }}
       </div>
       <div
@@ -103,30 +103,30 @@ function verdictMeta(status: RequirementVerdictStatus): VerdictMeta {
           class="mt-1 h-2 w-2 shrink-0 rounded-full"
           :style="{ backgroundColor: verdictMeta(verdict.status).color }"
         />
-        <span class="text-slate-300">
-          <span class="font-mono text-[11px] text-slate-400">{{ verdict.requirementId }}</span>
-          <span class="text-slate-500"> — {{ verdictMeta(verdict.status).label }}</span>
-          <span v-if="verdict.detail" class="text-slate-500"> · {{ verdict.detail }}</span>
+        <span class="text-toned">
+          <span class="font-mono text-[11px] text-muted">{{ verdict.requirementId }}</span>
+          <span class="text-dimmed"> — {{ verdictMeta(verdict.status).label }}</span>
+          <span v-if="verdict.detail" class="text-dimmed"> · {{ verdict.detail }}</span>
         </span>
       </div>
     </div>
 
     <div v-if="report.concerns.length" class="space-y-1">
-      <div class="text-[11px] text-slate-500">{{ t('panels.testReport.concerns') }}</div>
+      <div class="text-[11px] text-dimmed">{{ t('panels.testReport.concerns') }}</div>
       <div
         v-for="(c, i) in report.concerns"
         :key="i"
-        class="rounded border border-slate-700/60 p-2 text-[12px]"
+        class="rounded border border-muted/60 p-2 text-[12px]"
       >
         <div class="flex items-center gap-1.5">
           <span
-            class="rounded px-1 text-[10px] font-semibold uppercase text-white"
+            class="rounded px-1 text-[10px] font-semibold uppercase text-highlighted"
             :style="{ backgroundColor: SEVERITY_COLOR[c.severity] ?? '#64748b' }"
             >{{ c.severity }}</span
           >
-          <span class="font-medium text-slate-200">{{ c.title }}</span>
+          <span class="font-medium text-default">{{ c.title }}</span>
         </div>
-        <MarkdownProse v-if="c.detail" :text="c.detail" class="mt-1 text-slate-400" />
+        <MarkdownProse v-if="c.detail" :text="c.detail" class="mt-1 text-muted" />
       </div>
     </div>
   </section>

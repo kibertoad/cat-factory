@@ -201,13 +201,13 @@ async function checkSetup(source: TaskSourceKind) {
     <!-- 1. Filing tracker ----------------------------------------------------->
     <section class="space-y-3">
       <div>
-        <h3 class="text-sm font-semibold text-slate-200">
+        <h3 class="text-sm font-semibold text-default">
           {{ t('settings.issueTracker.filing.heading') }}
         </h3>
-        <p class="mt-1 text-[11px] text-slate-400">
+        <p class="mt-1 text-[11px] text-muted">
           <i18n-t keypath="settings.issueTracker.filing.description" tag="span" scope="global">
             <template #none>
-              <span class="text-slate-300">{{ t('settings.issueTracker.filing.none') }}</span>
+              <span class="text-toned">{{ t('settings.issueTracker.filing.none') }}</span>
             </template>
           </i18n-t>
         </p>
@@ -307,7 +307,7 @@ async function checkSetup(source: TaskSourceKind) {
       >
         <UInput v-model="jiraProjectKey" placeholder="ENG" size="sm" class="w-full" />
         <template #help>
-          <span class="text-[11px] text-slate-500">
+          <span class="text-[11px] text-dimmed">
             {{ t('settings.issueTracker.filing.jiraProjectKeyHelp') }}
           </span>
         </template>
@@ -334,7 +334,7 @@ async function checkSetup(source: TaskSourceKind) {
         />
         <UInput v-else v-model="linearTeamId" placeholder="team_…" size="sm" class="w-full" />
         <template #help>
-          <span class="text-[11px] text-slate-500">
+          <span class="text-[11px] text-dimmed">
             {{ t('settings.issueTracker.filing.linearTeamIdHelp') }}
           </span>
         </template>
@@ -344,10 +344,10 @@ async function checkSetup(source: TaskSourceKind) {
     <!-- 2. Linking sources ---------------------------------------------------->
     <section class="space-y-3">
       <div>
-        <h3 class="text-sm font-semibold text-slate-200">
+        <h3 class="text-sm font-semibold text-default">
           {{ t('settings.issueTracker.linking.heading') }}
         </h3>
-        <p class="mt-1 text-[11px] text-slate-400">
+        <p class="mt-1 text-[11px] text-muted">
           {{ t('settings.issueTracker.linking.description') }}
         </p>
       </div>
@@ -364,7 +364,7 @@ async function checkSetup(source: TaskSourceKind) {
         @remedy="openRemedy(source)"
       />
 
-      <p v-if="tasks.sources.length === 0" class="text-[11px] text-slate-500">
+      <p v-if="tasks.sources.length === 0" class="text-[11px] text-dimmed">
         {{ t('settings.issueTracker.linking.none') }}
       </p>
     </section>
@@ -372,49 +372,49 @@ async function checkSetup(source: TaskSourceKind) {
     <!-- 3. Writeback ---------------------------------------------------------->
     <section class="space-y-3">
       <div>
-        <h3 class="text-sm font-semibold text-slate-200">
+        <h3 class="text-sm font-semibold text-default">
           {{ t('settings.issueTracker.writeback.heading') }}
         </h3>
-        <p class="mt-1 text-[11px] text-slate-400">
+        <p class="mt-1 text-[11px] text-muted">
           <i18n-t keypath="settings.issueTracker.writeback.description" tag="span" scope="global">
             <template #done>
-              <span class="text-slate-300">{{ t('settings.issueTracker.writeback.done') }}</span>
+              <span class="text-toned">{{ t('settings.issueTracker.writeback.done') }}</span>
             </template>
           </i18n-t>
         </p>
       </div>
 
-      <label class="flex items-start gap-3 rounded-lg border border-slate-700 bg-slate-800/40 p-3">
+      <label class="flex items-start gap-3 rounded-lg border border-muted bg-elevated/40 p-3">
         <USwitch v-model="commentOnPrOpen" />
         <span class="text-sm">
-          <span class="block text-slate-200">
+          <span class="block text-default">
             {{ t('settings.issueTracker.writeback.commentOnOpen.label') }}
           </span>
-          <span class="block text-xs text-slate-500">
+          <span class="block text-xs text-dimmed">
             {{ t('settings.issueTracker.writeback.commentOnOpen.help') }}
           </span>
         </span>
       </label>
 
-      <label class="flex items-start gap-3 rounded-lg border border-slate-700 bg-slate-800/40 p-3">
+      <label class="flex items-start gap-3 rounded-lg border border-muted bg-elevated/40 p-3">
         <USwitch v-model="resolveOnMerge" />
         <span class="text-sm">
-          <span class="block text-slate-200">
+          <span class="block text-default">
             {{ t('settings.issueTracker.writeback.resolveOnMerge.label') }}
           </span>
-          <span class="block text-xs text-slate-500">
+          <span class="block text-xs text-dimmed">
             {{ t('settings.issueTracker.writeback.resolveOnMerge.help') }}
           </span>
         </span>
       </label>
 
-      <label class="flex items-start gap-3 rounded-lg border border-slate-700 bg-slate-800/40 p-3">
+      <label class="flex items-start gap-3 rounded-lg border border-muted bg-elevated/40 p-3">
         <USwitch v-model="questionsOnPark" />
         <span class="text-sm">
-          <span class="block text-slate-200">
+          <span class="block text-default">
             {{ t('settings.issueTracker.writeback.questionsOnPark.label') }}
           </span>
-          <span class="block text-xs text-slate-500">
+          <span class="block text-xs text-dimmed">
             {{ t('settings.issueTracker.writeback.questionsOnPark.help') }}
           </span>
         </span>

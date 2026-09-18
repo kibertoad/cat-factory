@@ -153,7 +153,7 @@ const STATUS_CLASSES: Record<'done' | 'failed' | 'running' | 'other', string> = 
   done: 'bg-emerald-500',
   failed: 'bg-rose-500',
   running: 'bg-sky-500',
-  other: 'bg-slate-500',
+  other: 'bg-app-500',
 }
 /** `te`-guarded so a locale missing the key shows the raw status, never a raw message key. */
 function statusLabel(status: 'done' | 'failed' | 'running' | 'other'): string {
@@ -186,25 +186,27 @@ watch(
     <Transition name="reports-fade">
       <div
         v-if="open"
-        class="fixed inset-0 z-[60] flex flex-col bg-slate-950/96 backdrop-blur-sm"
+        class="fixed inset-0 z-[60] flex flex-col bg-app-950/96 backdrop-blur-sm"
         role="dialog"
         aria-modal="true"
         data-testid="reports-panel"
       >
-        <header class="flex flex-wrap items-center gap-3 border-b border-slate-800 px-6 py-4">
+        <header class="flex flex-wrap items-center gap-3 border-b border-default px-6 py-4">
           <div
             class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-500/15"
           >
             <UIcon name="i-lucide-chart-column" class="h-5 w-5 text-violet-400" />
           </div>
           <div class="min-w-0">
-            <h1 class="truncate text-base font-semibold text-white">{{ t('reports.title') }}</h1>
-            <p v-if="accountName" class="truncate text-xs text-slate-500">{{ accountName }}</p>
+            <h1 class="truncate text-base font-semibold text-highlighted">
+              {{ t('reports.title') }}
+            </h1>
+            <p v-if="accountName" class="truncate text-xs text-dimmed">{{ accountName }}</p>
           </div>
           <!-- Filters in ONE row above the charts: window, then board scope. -->
           <div class="ms-auto flex flex-wrap items-center gap-1.5">
             <select
-              class="rounded-lg border border-slate-800 bg-slate-900 px-2.5 py-1.5 text-[12px] text-slate-200"
+              class="rounded-lg border border-default bg-default px-2.5 py-1.5 text-[12px] text-default"
               :value="reports.workspaceFilter ?? ''"
               :aria-label="t('reports.filter.board')"
               data-testid="reports-board-filter"
@@ -217,15 +219,15 @@ watch(
                 {{ board.name }}
               </option>
             </select>
-            <div class="me-1 flex rounded-lg border border-slate-800 p-0.5 text-[12px]">
+            <div class="me-1 flex rounded-lg border border-default p-0.5 text-[12px]">
               <button
                 v-for="opt in WINDOWS"
                 :key="opt.value"
                 class="rounded-md px-2.5 py-1 transition"
                 :class="
                   reports.window === opt.value
-                    ? 'bg-slate-800 text-slate-100'
-                    : 'text-slate-400 hover:text-slate-200'
+                    ? 'bg-elevated text-app-100'
+                    : 'text-muted hover:text-default'
                 "
                 :data-testid="`reports-window-${opt.value}`"
                 @click="reports.setWindow(opt.value)"
@@ -234,7 +236,7 @@ watch(
               </button>
             </div>
             <button
-              class="rounded-lg border border-slate-800 p-1.5 text-slate-400 transition hover:text-slate-200"
+              class="rounded-lg border border-default p-1.5 text-muted transition hover:text-default"
               :aria-label="t('reports.refresh')"
               :title="t('reports.refresh')"
               @click="refresh"
@@ -246,7 +248,7 @@ watch(
               />
             </button>
             <button
-              class="rounded-lg border border-slate-800 p-1.5 text-slate-400 transition hover:text-slate-200"
+              class="rounded-lg border border-default p-1.5 text-muted transition hover:text-default"
               :aria-label="t('common.close')"
               @click="close"
             >
@@ -270,12 +272,12 @@ watch(
             </button>
           </div>
 
-          <div v-else-if="loading && !view" class="py-16 text-center text-sm text-slate-400">
+          <div v-else-if="loading && !view" class="py-16 text-center text-sm text-muted">
             {{ t('reports.loading') }}
           </div>
 
           <div v-else-if="view" class="mx-auto flex max-w-5xl flex-col gap-6">
-            <p class="text-[11px] text-slate-500">
+            <p class="text-[11px] text-dimmed">
               {{
                 t('reports.period', {
                   from: d(new Date(view.since), 'short'),
@@ -306,7 +308,7 @@ watch(
             </p>
             <p
               v-else-if="rollupState === 'current'"
-              class="text-[11px] text-slate-500"
+              class="text-[11px] text-dimmed"
               data-testid="reports-rollup-current"
             >
               {{
@@ -318,47 +320,47 @@ watch(
 
             <!-- Headline totals. A stat tile, not a chart: these are single numbers. -->
             <section>
-              <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-dimmed">
                 {{ t('reports.totals.title') }}
               </h2>
               <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <div class="rounded-lg border border-slate-800 bg-slate-900/40 p-3">
+                <div class="rounded-lg border border-default bg-default/40 p-3">
                   <p class="text-2xl font-semibold text-violet-300" data-testid="reports-metered">
                     {{ money(view.totals.meteredCost) }}
                   </p>
-                  <p class="text-xs text-slate-500">{{ t('reports.totals.metered') }}</p>
+                  <p class="text-xs text-dimmed">{{ t('reports.totals.metered') }}</p>
                 </div>
-                <div class="rounded-lg border border-slate-800 bg-slate-900/40 p-3">
+                <div class="rounded-lg border border-default bg-default/40 p-3">
                   <p class="text-2xl font-semibold text-amber-300">
                     {{ money(view.totals.subscriptionCost) }}
                   </p>
-                  <p class="text-xs text-slate-500">{{ t('reports.totals.subscription') }}</p>
+                  <p class="text-xs text-dimmed">{{ t('reports.totals.subscription') }}</p>
                 </div>
-                <div class="rounded-lg border border-slate-800 bg-slate-900/40 p-3">
-                  <p class="text-2xl font-semibold text-white">
+                <div class="rounded-lg border border-default bg-default/40 p-3">
+                  <p class="text-2xl font-semibold text-highlighted">
                     {{ n(view.totals.calls, 'decimal') }}
                   </p>
-                  <p class="text-xs text-slate-500">{{ t('reports.totals.calls') }}</p>
+                  <p class="text-xs text-dimmed">{{ t('reports.totals.calls') }}</p>
                 </div>
-                <div class="rounded-lg border border-slate-800 bg-slate-900/40 p-3">
-                  <p class="text-2xl font-semibold text-white">
+                <div class="rounded-lg border border-default bg-default/40 p-3">
+                  <p class="text-2xl font-semibold text-highlighted">
                     {{ formatTokens(view.totals.inputTokens + view.totals.outputTokens) }}
                   </p>
-                  <p class="text-xs text-slate-500">{{ t('reports.totals.tokens') }}</p>
+                  <p class="text-xs text-dimmed">{{ t('reports.totals.tokens') }}</p>
                 </div>
               </div>
-              <p class="mt-1.5 text-[10px] text-slate-500">
+              <p class="mt-1.5 text-[10px] text-dimmed">
                 {{ t('reports.totals.illustrative') }}
               </p>
             </section>
 
             <!-- Spend over time. One axis, two stacked series, legend always present. -->
             <section>
-              <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-dimmed">
                 {{ t('reports.trend.title') }}
               </h2>
-              <div class="rounded-lg border border-slate-800 bg-slate-900/40 p-4">
-                <div v-if="!hasSpend" class="py-6 text-center text-xs text-slate-500">
+              <div class="rounded-lg border border-default bg-default/40 p-4">
+                <div v-if="!hasSpend" class="py-6 text-center text-xs text-dimmed">
                   {{ t('reports.trend.empty') }}
                 </div>
                 <div v-else class="flex h-28 items-end gap-0.5" data-testid="reports-trend">
@@ -378,7 +380,7 @@ watch(
                     />
                   </div>
                 </div>
-                <div class="mt-2 flex items-center gap-4 text-[11px] text-slate-500">
+                <div class="mt-2 flex items-center gap-4 text-[11px] text-dimmed">
                   <span class="flex items-center gap-1" :title="t('reports.legend.meteredHint')">
                     <span class="h-2 w-2 rounded-sm bg-violet-500" />{{
                       t('reports.legend.metered')
@@ -399,7 +401,7 @@ watch(
             <!-- Spend by model + by agent kind: the two axes a run has no single value for. -->
             <div class="grid gap-6 md:grid-cols-2">
               <section>
-                <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-dimmed">
                   {{ t('reports.spend.byModel') }}
                 </h2>
                 <ReportsSpendBreakdown
@@ -410,7 +412,7 @@ watch(
                 />
               </section>
               <section>
-                <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-dimmed">
                   {{ t('reports.spend.byAgentKind') }}
                 </h2>
                 <ReportsSpendBreakdown
@@ -429,7 +431,7 @@ watch(
                  breakdowns the projection caps, and each says so under its own card. -->
             <div class="grid gap-6 md:grid-cols-2">
               <section>
-                <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-dimmed">
                   {{ t('reports.spend.byTicket') }}
                 </h2>
                 <ReportsSpendBreakdown
@@ -441,7 +443,7 @@ watch(
                 />
               </section>
               <section>
-                <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-dimmed">
                   {{ t('reports.spend.byRun') }}
                 </h2>
                 <ReportsSpendBreakdown
@@ -457,18 +459,18 @@ watch(
             <!-- The shared axis: spend AND activity for the same grouping, side by side. -->
             <section class="flex flex-col gap-3">
               <div class="flex flex-wrap items-center gap-2">
-                <h2 class="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <h2 class="text-xs font-semibold uppercase tracking-wide text-dimmed">
                   {{ t('reports.breakdown.title') }}
                 </h2>
-                <div class="flex rounded-lg border border-slate-800 p-0.5 text-[12px]">
+                <div class="flex rounded-lg border border-default p-0.5 text-[12px]">
                   <button
                     v-for="opt in DIMENSIONS"
                     :key="opt.value"
                     class="rounded-md px-2.5 py-1 transition"
                     :class="
                       dimension === opt.value
-                        ? 'bg-slate-800 text-slate-100'
-                        : 'text-slate-400 hover:text-slate-200'
+                        ? 'bg-elevated text-app-100'
+                        : 'text-muted hover:text-default'
                     "
                     :data-testid="`reports-dimension-${opt.value}`"
                     @click="dimension = opt.value"
@@ -479,7 +481,9 @@ watch(
               </div>
               <div class="grid gap-6 md:grid-cols-2">
                 <div>
-                  <h3 class="mb-2 text-[11px] text-slate-500">{{ t('reports.spend.heading') }}</h3>
+                  <h3 class="mb-2 text-[11px] text-dimmed">
+                    {{ t('reports.spend.heading') }}
+                  </h3>
                   <ReportsSpendBreakdown
                     :rows="spendByDimension"
                     :currency="currency"
@@ -488,13 +492,13 @@ watch(
                   />
                 </div>
                 <div>
-                  <h3 class="mb-2 text-[11px] text-slate-500">
+                  <h3 class="mb-2 text-[11px] text-dimmed">
                     {{ t('reports.activity.heading') }}
                   </h3>
-                  <div class="rounded-lg border border-slate-800 bg-slate-900/40 p-4">
+                  <div class="rounded-lg border border-default bg-default/40 p-4">
                     <div
                       v-if="!activityByDimension.length"
-                      class="py-4 text-center text-xs text-slate-500"
+                      class="py-4 text-center text-xs text-dimmed"
                     >
                       {{ t('reports.activity.empty') }}
                     </div>
@@ -507,10 +511,8 @@ watch(
                           data-testid="reports-activity-row"
                         >
                           <div class="mb-1 flex items-baseline justify-between gap-2">
-                            <span class="min-w-0 truncate text-slate-300">{{
-                              sliceLabel(row)
-                            }}</span>
-                            <span class="shrink-0 tabular-nums text-slate-400">
+                            <span class="min-w-0 truncate text-toned">{{ sliceLabel(row) }}</span>
+                            <span class="shrink-0 tabular-nums text-muted">
                               {{ t('reports.activity.runs', { count: row.runs }, row.runs) }}
                             </span>
                           </div>
@@ -527,7 +529,7 @@ watch(
                           </div>
                           <!-- The status counts in text: the reserved status hues are
                                red-green adjacent, so identity is never colour alone. -->
-                          <p class="mt-1 flex flex-wrap gap-x-2 text-[10px] text-slate-500">
+                          <p class="mt-1 flex flex-wrap gap-x-2 text-[10px] text-dimmed">
                             <span v-for="segment in activitySegments(row)" :key="segment.status">
                               {{ n(segment.count, 'decimal') }} {{ statusLabel(segment.status) }}
                             </span>
@@ -540,9 +542,7 @@ watch(
                           </p>
                         </li>
                       </ul>
-                      <div
-                        class="mt-3 flex flex-wrap items-center gap-3 text-[11px] text-slate-500"
-                      >
+                      <div class="mt-3 flex flex-wrap items-center gap-3 text-[11px] text-dimmed">
                         <span
                           v-for="status in ['done', 'failed', 'running', 'other'] as const"
                           :key="status"

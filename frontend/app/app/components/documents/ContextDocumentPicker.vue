@@ -415,14 +415,14 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="space-y-2 rounded-lg border border-slate-800 bg-slate-900/40 p-2">
+  <div class="space-y-2 rounded-lg border border-default bg-default/40 p-2">
     <!-- Which source is being searched, always visible, plus the sources the user could add from
          here (each opens the connect modal over the caller's form). Rendered as plain text when
          there is nothing to decide, which for a member is the usual case. -->
     <div class="flex items-center gap-1.5">
       <span
         :id="sourceLabelId"
-        class="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-slate-500"
+        class="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-dimmed"
       >
         {{ t('documents.picker.sourceLabel') }}
       </span>
@@ -444,7 +444,7 @@ onMounted(() => {
           <span class="truncate">{{ descriptor?.label ?? t('documents.picker.noSource') }}</span>
         </UButton>
       </UDropdownMenu>
-      <span v-else class="flex min-w-0 items-center gap-1 text-xs text-slate-300">
+      <span v-else class="flex min-w-0 items-center gap-1 text-xs text-toned">
         <UIcon :name="icon" class="h-3.5 w-3.5 shrink-0" />
         <span class="truncate">{{ descriptor?.label ?? t('documents.picker.noSource') }}</span>
       </span>
@@ -498,7 +498,7 @@ onMounted(() => {
            the user can still edit, rather than as a toast after the task is created. -->
       <p
         v-if="refState.status === 'checking'"
-        class="px-1 text-[11px] text-slate-500"
+        class="px-1 text-[11px] text-dimmed"
         data-testid="doc-ref-checking"
       >
         {{ t('documents.picker.refChecking') }}
@@ -532,7 +532,7 @@ onMounted(() => {
            at all reads as a picker that dropped it. -->
       <p
         v-else-if="refAlreadyAttached"
-        class="px-1 text-[11px] text-slate-500"
+        class="px-1 text-[11px] text-dimmed"
         data-testid="doc-ref-already-attached"
       >
         {{ t('documents.picker.refAlreadyAttached') }}
@@ -544,10 +544,10 @@ onMounted(() => {
           v-for="d in importedRows"
           :key="`imp:${d.externalId}`"
           type="button"
-          class="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-start text-xs text-slate-300 hover:bg-slate-800/70"
+          class="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-start text-xs text-toned hover:bg-elevated/70"
           @click="pickImported(d.externalId, d.title, d.excerpt)"
         >
-          <UIcon :name="icon" class="h-3.5 w-3.5 shrink-0 text-indigo-400" />
+          <UIcon :name="icon" class="h-3.5 w-3.5 shrink-0 text-primary-400" />
           <span class="truncate">{{ d.title }}</span>
           <UBadge color="neutral" variant="soft" size="xs" class="ms-auto shrink-0">{{
             t('documents.picker.importedBadge')
@@ -559,10 +559,10 @@ onMounted(() => {
           v-for="r in searchRows"
           :key="`hit:${r.externalId}`"
           type="button"
-          class="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-start text-xs text-slate-300 hover:bg-slate-800/70"
+          class="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-start text-xs text-toned hover:bg-elevated/70"
           @click="pickSearch(r)"
         >
-          <UIcon :name="icon" class="h-3.5 w-3.5 shrink-0 text-slate-400" />
+          <UIcon :name="icon" class="h-3.5 w-3.5 shrink-0 text-muted" />
           <span class="truncate">{{ r.title }}</span>
         </button>
 
@@ -572,20 +572,20 @@ onMounted(() => {
         <button
           v-if="refRow"
           type="button"
-          class="flex w-full items-start gap-1.5 rounded-md px-2 py-1.5 text-start text-xs text-slate-300 hover:bg-slate-800/70"
+          class="flex w-full items-start gap-1.5 rounded-md px-2 py-1.5 text-start text-xs text-toned hover:bg-elevated/70"
           data-testid="doc-ref-attach"
           @click="pickRef(refRow)"
         >
-          <UIcon name="i-lucide-link" class="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
+          <UIcon name="i-lucide-link" class="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted" />
           <span class="min-w-0">
             <span class="block truncate">
               <i18n-t keypath="documents.picker.attachByReference" scope="global">
                 <template #ref>
-                  <span class="text-slate-200">{{ refRow.label }}</span>
+                  <span class="text-default">{{ refRow.label }}</span>
                 </template>
               </i18n-t>
             </span>
-            <span v-if="refRow.trimmed" class="block truncate text-[11px] text-slate-500">
+            <span v-if="refRow.trimmed" class="block truncate text-[11px] text-dimmed">
               {{ t('documents.picker.refTrimmed') }}
             </span>
             <!-- A WIDENED reference, which the trim note above must never be left to imply: the

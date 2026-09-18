@@ -11,8 +11,8 @@ const props = defineProps<{
 const archetype = computed(() => agentKindMeta(props.step.agentKind))
 
 const stateRing: Record<AgentState, string> = {
-  pending: 'ring-slate-600/60 opacity-60',
-  working: 'ring-indigo-400',
+  pending: 'ring-app-600/60 opacity-60',
+  working: 'ring-primary-400',
   waiting_decision: 'ring-amber-400 board-pulse',
   done: 'ring-emerald-400',
 }
@@ -37,13 +37,13 @@ const dim = computed(() => (props.size === 'sm' ? 'h-7 w-7' : 'h-9 w-9'))
       <UIcon :name="archetype.icon" class="text-base" :style="{ color: archetype.color }" />
       <span
         v-if="step.state === 'working'"
-        class="absolute -bottom-1 -end-1 rounded-full bg-slate-900 p-0.5"
+        class="absolute -bottom-1 -end-1 rounded-full bg-default p-0.5"
       >
-        <UIcon :name="stateIcon.working!" class="h-3 w-3 animate-spin text-indigo-300" />
+        <UIcon :name="stateIcon.working!" class="h-3 w-3 animate-spin text-primary-300" />
       </span>
       <span
         v-else-if="stateIcon[step.state]"
-        class="absolute -bottom-1 -end-1 rounded-full bg-slate-900 p-0.5"
+        class="absolute -bottom-1 -end-1 rounded-full bg-default p-0.5"
       >
         <UIcon
           :name="stateIcon[step.state]!"
@@ -52,7 +52,7 @@ const dim = computed(() => (props.size === 'sm' ? 'h-7 w-7' : 'h-9 w-9'))
         />
       </span>
     </div>
-    <span v-if="size !== 'sm'" class="text-[10px] leading-none text-slate-300">
+    <span v-if="size !== 'sm'" class="text-[10px] leading-none text-toned">
       {{ archetype.label }}
     </span>
   </div>

@@ -92,17 +92,17 @@ function choose(id: string) {
         @mouseleave="hoverId = undefined"
       >
         <!-- left: selectable options -->
-        <ul class="w-1/2 shrink-0 overflow-y-auto border-e border-slate-800 p-1">
+        <ul class="w-1/2 shrink-0 overflow-y-auto border-e border-default p-1">
           <li v-if="noneLabel !== undefined">
             <button
               type="button"
-              class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-start text-sm hover:bg-slate-800/60"
-              :class="modelValue ? 'text-slate-300' : 'text-slate-100'"
+              class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-start text-sm hover:bg-elevated/60"
+              :class="modelValue ? 'text-toned' : 'text-app-100'"
               data-testid="pipeline-option-none"
               @mouseenter="hoverId = ''"
               @click="choose('')"
             >
-              <UIcon name="i-lucide-rotate-ccw" class="h-4 w-4 shrink-0 text-slate-400" />
+              <UIcon name="i-lucide-rotate-ccw" class="h-4 w-4 shrink-0 text-muted" />
               <span class="flex-1 truncate">{{ noneLabel }}</span>
               <UIcon
                 v-if="!modelValue"
@@ -114,13 +114,13 @@ function choose(id: string) {
           <li v-for="p in options" :key="p.id">
             <button
               type="button"
-              class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-start text-sm hover:bg-slate-800/60"
-              :class="modelValue === p.id ? 'text-slate-100' : 'text-slate-300'"
+              class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-start text-sm hover:bg-elevated/60"
+              :class="modelValue === p.id ? 'text-app-100' : 'text-toned'"
               :data-testid="`pipeline-option-${p.id}`"
               @mouseenter="hoverId = p.id"
               @click="choose(p.id)"
             >
-              <UIcon name="i-lucide-workflow" class="h-4 w-4 shrink-0 text-slate-400" />
+              <UIcon name="i-lucide-workflow" class="h-4 w-4 shrink-0 text-muted" />
               <span class="flex-1 truncate">{{ p.name }}</span>
               <UIcon
                 v-if="modelValue === p.id"
@@ -134,7 +134,7 @@ function choose(id: string) {
         <!-- right: preview of the hovered (or selected) pipeline -->
         <div class="w-1/2 overflow-y-auto p-3">
           <PipelinePreview v-if="previewPipeline" :pipeline="previewPipeline" />
-          <div v-else class="text-[12px] leading-snug text-slate-500">{{ emptyHint }}</div>
+          <div v-else class="text-[12px] leading-snug text-dimmed">{{ emptyHint }}</div>
         </div>
       </div>
     </template>

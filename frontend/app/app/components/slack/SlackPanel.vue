@@ -208,12 +208,12 @@ async function saveMapping() {
     </template>
     <template #body>
       <div class="space-y-5">
-        <p class="text-xs text-slate-400">
+        <p class="text-xs text-muted">
           {{ t('slack.panel.intro') }}
         </p>
 
         <!-- not connected: connect UI -->
-        <div v-if="!slack.connected" class="space-y-3 rounded-lg border border-slate-700 p-3">
+        <div v-if="!slack.connected" class="space-y-3 rounded-lg border border-muted p-3">
           <UButton
             v-if="slack.oauthEnabled"
             color="primary"
@@ -224,7 +224,7 @@ async function saveMapping() {
             {{ t('slack.connect.addToSlack') }}
           </UButton>
           <div class="space-y-1">
-            <span class="block text-[10px] uppercase tracking-wide text-slate-500">
+            <span class="block text-[10px] uppercase tracking-wide text-dimmed">
               {{ t('slack.connect.orPasteToken') }}
             </span>
             <div class="flex gap-2">
@@ -245,11 +245,9 @@ async function saveMapping() {
 
         <!-- connected -->
         <template v-else>
-          <div
-            class="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800/40 p-3"
-          >
+          <div class="flex items-center gap-2 rounded-lg border border-muted bg-elevated/40 p-3">
             <UIcon name="i-lucide-slack" class="text-emerald-400" />
-            <span class="flex-1 text-sm text-slate-200">
+            <span class="flex-1 text-sm text-default">
               <i18n-t keypath="slack.connected.label" tag="span">
                 <template #team>
                   <span class="font-semibold">{{ slack.connection?.teamName }}</span>
@@ -269,16 +267,16 @@ async function saveMapping() {
 
           <!-- routing -->
           <div class="space-y-3">
-            <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            <p class="text-[11px] font-semibold uppercase tracking-wide text-muted">
               {{ t('slack.routing.heading') }}
             </p>
             <div
               v-for="row in ROUTABLE"
               :key="row.type"
-              class="flex items-center gap-3 rounded-lg border border-slate-700 bg-slate-800/40 p-2"
+              class="flex items-center gap-3 rounded-lg border border-muted bg-elevated/40 p-2"
             >
               <USwitch v-model="routes[row.type]!.enabled" size="sm" />
-              <span class="w-32 text-sm text-slate-300">{{ row.label }}</span>
+              <span class="w-32 text-sm text-toned">{{ row.label }}</span>
               <UInput
                 v-model="routes[row.type]!.channel"
                 size="sm"
@@ -294,7 +292,7 @@ async function saveMapping() {
 
             <label class="flex items-center gap-2">
               <USwitch v-model="mentionsEnabled" size="sm" />
-              <span class="text-sm text-slate-300">{{ t('slack.routing.mentionMembers') }}</span>
+              <span class="text-sm text-toned">{{ t('slack.routing.mentionMembers') }}</span>
             </label>
 
             <div class="flex justify-end">
@@ -313,15 +311,13 @@ async function saveMapping() {
 
           <!-- member mapping -->
           <div v-if="mentionsEnabled" class="space-y-2">
-            <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            <p class="text-[11px] font-semibold uppercase tracking-wide text-muted">
               {{ t('slack.members.heading') }}
             </p>
-            <p class="text-[11px] leading-snug text-slate-500">
+            <p class="text-[11px] leading-snug text-dimmed">
               <i18n-t keypath="slack.members.hint" tag="span">
                 <template #product>
-                  <span class="font-medium text-slate-400">{{
-                    t('slack.members.productLabel')
-                  }}</span>
+                  <span class="font-medium text-muted">{{ t('slack.members.productLabel') }}</span>
                 </template>
               </i18n-t>
             </p>

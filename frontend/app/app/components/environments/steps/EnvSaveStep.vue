@@ -31,7 +31,7 @@ useEnvironmentWizardTarget(() => props.input.frameId)
       <UInput v-model="store.handlerLabel" class="w-full" data-testid="env-setup-handler-label" />
     </UFormField>
 
-    <div class="rounded-md border border-slate-800 bg-slate-900/40 p-3 text-[12px] text-slate-300">
+    <div class="rounded-md border border-default bg-default/40 p-3 text-[12px] text-toned">
       <p>
         {{
           t('environmentWizard.save.summary', {
@@ -74,7 +74,7 @@ useEnvironmentWizardTarget(() => props.input.frameId)
       </div>
 
       <div class="flex items-center justify-between gap-2">
-        <p class="text-[11px] text-slate-500">{{ t('environmentWizard.trial.hint') }}</p>
+        <p class="text-[11px] text-dimmed">{{ t('environmentWizard.trial.hint') }}</p>
         <UButton
           size="xs"
           variant="soft"

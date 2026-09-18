@@ -54,7 +54,7 @@ async function connect() {
 
 <template>
   <section class="space-y-3">
-    <p class="text-sm text-slate-400">{{ t('vcs.connect.gitlab.intro') }}</p>
+    <p class="text-sm text-muted">{{ t('vcs.connect.gitlab.intro') }}</p>
 
     <UFormField :label="t('vcs.connect.gitlab.tokenLabel')" :hint="t('vcs.connect.gitlab.scope')">
       <SecretInput
@@ -67,8 +67,8 @@ async function connect() {
       />
     </UFormField>
 
-    <p class="text-[11px] text-slate-500">
-      <ULink :to="tokenUrl" target="_blank" class="text-indigo-400 hover:underline">
+    <p class="text-[11px] text-dimmed">
+      <ULink :to="tokenUrl" target="_blank" class="text-primary-400 hover:underline">
         {{ t('vcs.connect.gitlab.createToken') }}
       </ULink>
     </p>

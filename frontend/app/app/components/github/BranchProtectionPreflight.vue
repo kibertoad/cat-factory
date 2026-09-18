@@ -115,8 +115,8 @@ async function check() {
 
 <template>
   <section class="space-y-2" data-testid="branch-protection-preflight">
-    <h3 class="text-sm font-semibold text-slate-200">{{ t('vcs.branchProtection.heading') }}</h3>
-    <p class="text-[11px] text-slate-400">{{ t('vcs.branchProtection.body') }}</p>
+    <h3 class="text-sm font-semibold text-default">{{ t('vcs.branchProtection.heading') }}</h3>
+    <p class="text-[11px] text-muted">{{ t('vcs.branchProtection.body') }}</p>
 
     <UButton
       color="neutral"
@@ -146,7 +146,7 @@ async function check() {
       >
         {{ t('errors.generic.showDetail') }}
       </UButton>
-      <p v-if="showFailureDetail" class="font-mono text-[10px] break-all text-slate-500">
+      <p v-if="showFailureDetail" class="font-mono text-[10px] break-all text-dimmed">
         {{ failure.detail }}
       </p>
     </div>
@@ -178,15 +178,15 @@ async function check() {
         <li
           v-for="row in rows"
           :key="row.repoGithubId"
-          class="rounded-md border border-slate-800 bg-slate-900/40 px-2 py-1.5"
+          class="rounded-md border border-default bg-default/40 px-2 py-1.5"
         >
           <div class="flex items-baseline justify-between gap-2">
-            <span class="font-mono text-xs text-slate-300">{{ row.owner }}/{{ row.name }}</span>
+            <span class="font-mono text-xs text-toned">{{ row.owner }}/{{ row.name }}</span>
             <span class="text-[11px]" :class="STATE_STYLE[row.protection.state]">
               {{ STATE_LABEL[row.protection.state]() }}
             </span>
           </div>
-          <p class="text-[10px] text-slate-500">
+          <p class="text-[10px] text-dimmed">
             {{ row.defaultBranch }}<span v-if="detailLine(row)"> — {{ detailLine(row) }}</span>
           </p>
         </li>

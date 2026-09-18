@@ -196,7 +196,7 @@ async function onDiscard() {
   <ResultWindowShell
     :open="open"
     icon="i-lucide-messages-square"
-    icon-class="bg-indigo-500/15 text-indigo-300"
+    icon-class="bg-primary-500/15 text-primary-300"
     :title="initiative?.title ?? block?.title ?? t('initiative.planning.title')"
     :subtitle="t('initiative.planning.subtitle')"
     width="4xl"
@@ -214,14 +214,14 @@ async function onDiscard() {
         <!-- No entity yet -->
         <div
           v-if="!initiative"
-          class="flex h-full flex-col items-center justify-center gap-2 text-center text-slate-400"
+          class="flex h-full flex-col items-center justify-center gap-2 text-center text-muted"
         >
           <UIcon name="i-lucide-messages-square" class="h-8 w-8 opacity-40" />
           <p class="text-sm">{{ t('initiative.planning.empty') }}</p>
         </div>
 
         <template v-else>
-          <p class="mb-4 text-[13px] leading-relaxed text-slate-300">
+          <p class="mb-4 text-[13px] leading-relaxed text-toned">
             {{ t('initiative.planning.intro') }}
           </p>
 
@@ -259,7 +259,7 @@ async function onDiscard() {
                converged, which means the planner already has what it needs). -->
           <div
             v-else-if="phase === 'idle' && questions.length === 0"
-            class="rounded-lg border border-slate-800 bg-slate-950/40 p-4 text-center text-[13px] text-slate-400"
+            class="rounded-lg border border-default bg-app-950/40 p-4 text-center text-[13px] text-muted"
             data-testid="initiative-planning-idle"
           >
             {{ t('initiative.planning.idle') }}
@@ -268,7 +268,7 @@ async function onDiscard() {
           <!-- Converged / no pending questions -->
           <div
             v-else-if="phase === 'converged' || questions.length === 0"
-            class="rounded-lg border border-slate-800 bg-slate-950/40 p-4 text-center text-[13px] text-slate-400"
+            class="rounded-lg border border-default bg-app-950/40 p-4 text-center text-[13px] text-muted"
             data-testid="initiative-planning-converged"
           >
             {{ t('initiative.planning.converged') }}
@@ -318,7 +318,7 @@ async function onDiscard() {
       <aside
         v-if="metaStep"
         data-testid="initiative-planning-run-meta"
-        class="hidden w-60 shrink-0 flex-col gap-4 overflow-y-auto border-s border-slate-800 bg-slate-900/50 px-4 py-4 lg:flex"
+        class="hidden w-60 shrink-0 flex-col gap-4 overflow-y-auto border-s border-default bg-default/50 px-4 py-4 lg:flex"
       >
         <StepRunMeta
           :step="metaStep"
@@ -338,7 +338,7 @@ async function onDiscard() {
          exactly the ones a wedged run sits in. -->
     <footer
       v-if="initiative && (canDiscard || (phase === 'awaiting' && questions.length > 0))"
-      class="flex items-center justify-between gap-3 border-t border-slate-800 px-5 py-3"
+      class="flex items-center justify-between gap-3 border-t border-default px-5 py-3"
     >
       <UButton
         v-if="canDiscard"
@@ -360,7 +360,7 @@ async function onDiscard() {
         v-if="phase === 'awaiting' && questions.length > 0"
         class="ms-auto flex items-center gap-2"
       >
-        <p class="text-[11px] text-slate-500">
+        <p class="text-[11px] text-dimmed">
           <span
             v-if="unanswered > 0"
             class="text-amber-400/90"

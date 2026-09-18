@@ -154,13 +154,13 @@ function reveal(blockId: string): void {
   <UModal v-model:open="open" :title="t('assistant.title')" :ui="{ content: 'max-w-2xl' }">
     <template #body>
       <div class="space-y-4">
-        <p class="text-sm text-slate-400">{{ t('assistant.intro') }}</p>
+        <p class="text-sm text-muted">{{ t('assistant.intro') }}</p>
 
         <!-- The read FAILED: this deployment may well have a model, and nobody can tell from here.
              So it offers the read again instead of explaining a configuration that may be fine. -->
         <div
           v-if="surface === 'unreadable'"
-          class="flex items-start gap-2 rounded-md bg-slate-800/60 p-3 text-sm text-slate-300"
+          class="flex items-start gap-2 rounded-md bg-elevated/60 p-3 text-sm text-toned"
           data-testid="assistant-unreadable"
         >
           <UIcon name="i-lucide-unplug" class="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
@@ -181,10 +181,10 @@ function reveal(blockId: string): void {
         <!-- No model wired: say so, rather than offering a box whose every submit would 503. -->
         <div
           v-else-if="surface === 'unwired'"
-          class="flex items-start gap-2 rounded-md bg-slate-800/60 p-3 text-sm text-slate-300"
+          class="flex items-start gap-2 rounded-md bg-elevated/60 p-3 text-sm text-toned"
           data-testid="assistant-unwired"
         >
-          <UIcon name="i-lucide-plug" class="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
+          <UIcon name="i-lucide-plug" class="mt-0.5 h-4 w-4 shrink-0 text-dimmed" />
           <span>{{ t('assistant.unavailable') }}</span>
         </div>
 
@@ -192,10 +192,10 @@ function reveal(blockId: string): void {
              and every submit against it would be refused with `assistant_no_actions`. -->
         <div
           v-else-if="surface === 'no_actions'"
-          class="flex items-start gap-2 rounded-md bg-slate-800/60 p-3 text-sm text-slate-300"
+          class="flex items-start gap-2 rounded-md bg-elevated/60 p-3 text-sm text-toned"
           data-testid="assistant-no-actions"
         >
-          <UIcon name="i-lucide-list-x" class="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
+          <UIcon name="i-lucide-list-x" class="mt-0.5 h-4 w-4 shrink-0 text-dimmed" />
           <span>{{ t('assistant.noActions') }}</span>
         </div>
 
@@ -240,7 +240,7 @@ function reveal(blockId: string): void {
               role="status"
               :aria-live="submitReason ? 'polite' : 'off'"
               class="flex items-center gap-1 text-xs"
-              :class="submitReason ? 'text-amber-400' : 'text-slate-500'"
+              :class="submitReason ? 'text-amber-400' : 'text-dimmed'"
               data-testid="assistant-submit-status"
             >
               <UIcon
@@ -254,7 +254,7 @@ function reveal(blockId: string): void {
 
           <!-- What it can do, always visible: the catalog is the affordance. -->
           <div v-if="examples.length" class="space-y-2">
-            <p class="text-xs font-medium uppercase tracking-wide text-slate-500">
+            <p class="text-xs font-medium uppercase tracking-wide text-dimmed">
               {{ t('assistant.examplesTitle') }}
             </p>
             <div class="flex flex-col gap-1">
@@ -262,11 +262,11 @@ function reveal(blockId: string): void {
                 v-for="entry in examples"
                 :key="entry.actionId"
                 type="button"
-                class="rounded-md px-2 py-1 text-left text-sm text-slate-300 hover:bg-slate-800"
+                class="rounded-md px-2 py-1 text-left text-sm text-toned hover:bg-elevated"
                 @click="useExample(entry.example)"
               >
-                <span class="text-slate-400">{{ entry.label }}</span>
-                <span class="block text-xs text-slate-500">“{{ entry.example }}”</span>
+                <span class="text-muted">{{ entry.label }}</span>
+                <span class="block text-xs text-dimmed">“{{ entry.example }}”</span>
               </button>
             </div>
           </div>
@@ -274,11 +274,11 @@ function reveal(blockId: string): void {
           <!-- The outcome. Rendered from the turn's data; no model prose reaches this. -->
           <div
             v-if="outcome"
-            class="rounded-md border border-slate-700 p-3 text-sm"
+            class="rounded-md border border-muted p-3 text-sm"
             data-testid="assistant-outcome"
           >
             <template v-if="outcome.status === 'performed'">
-              <div class="flex items-start gap-2 text-slate-200">
+              <div class="flex items-start gap-2 text-default">
                 <UIcon name="i-lucide-check" class="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
                 <div class="space-y-2">
                   <p v-if="outcome.result.actionId === 'declare-service-dependency'">
@@ -329,7 +329,7 @@ function reveal(blockId: string): void {
             </template>
 
             <template v-else-if="outcome.status === 'needs_input'">
-              <div class="flex items-start gap-2 text-slate-200">
+              <div class="flex items-start gap-2 text-default">
                 <UIcon name="i-lucide-help-circle" class="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
                 <div class="space-y-2">
                   <p>{{ t(`assistant.needsInput.${outcome.reason}`) }}</p>
@@ -351,11 +351,8 @@ function reveal(blockId: string): void {
             </template>
 
             <template v-else>
-              <div class="flex items-start gap-2 text-slate-200">
-                <UIcon
-                  name="i-lucide-circle-slash"
-                  class="mt-0.5 h-4 w-4 shrink-0 text-slate-500"
-                />
+              <div class="flex items-start gap-2 text-default">
+                <UIcon name="i-lucide-circle-slash" class="mt-0.5 h-4 w-4 shrink-0 text-dimmed" />
                 <p>{{ t('assistant.declined') }}</p>
               </div>
             </template>

@@ -391,7 +391,7 @@ async function copyOutput() {
     v-if="open && step && agent"
     data-testid="step-detail"
     :data-agent-kind="step?.agentKind"
-    class="fixed inset-0 z-50 flex max-h-[100dvh] bg-slate-950/96 backdrop-blur-sm"
+    class="fixed inset-0 z-50 flex max-h-[100dvh] bg-app-950/96 backdrop-blur-sm"
     role="dialog"
     aria-modal="true"
   >
@@ -399,10 +399,10 @@ async function copyOutput() {
     <aside
       v-if="outline.hasToc"
       data-testid="step-detail-toc"
-      class="hidden w-72 shrink-0 flex-col border-e border-slate-800 bg-slate-900/60 md:flex"
+      class="hidden w-72 shrink-0 flex-col border-e border-default bg-default/60 md:flex"
     >
-      <div class="border-b border-slate-800 px-4 py-3">
-        <div class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+      <div class="border-b border-default px-4 py-3">
+        <div class="text-[11px] font-semibold uppercase tracking-wide text-dimmed">
           {{ t('panels.stepDetail.contents') }}
         </div>
       </div>
@@ -411,8 +411,8 @@ async function copyOutput() {
           class="block w-full truncate rounded-md px-2 py-1 text-start text-[13px] transition"
           :class="
             activeId === 'step-details'
-              ? 'bg-indigo-500/15 font-medium text-indigo-200'
-              : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
+              ? 'bg-primary-500/15 font-medium text-primary-200'
+              : 'text-muted hover:bg-elevated/60 hover:text-default'
           "
           @click="goTo('step-details')"
         >
@@ -424,8 +424,8 @@ async function copyOutput() {
           class="block w-full truncate rounded-md px-2 py-1 text-start text-[13px] transition"
           :class="
             activeId === s.id
-              ? 'bg-indigo-500/15 font-medium text-indigo-200'
-              : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
+              ? 'bg-primary-500/15 font-medium text-primary-200'
+              : 'text-muted hover:bg-elevated/60 hover:text-default'
           "
           :style="{ paddingLeft: `${(s.depth - outline.minDepth) * 0.85 + 0.5}rem` }"
           :title="s.title"
@@ -438,7 +438,7 @@ async function copyOutput() {
 
     <!-- main column -->
     <div class="flex min-w-0 flex-1 flex-col">
-      <header class="flex items-center gap-3 border-b border-slate-800 px-6 py-4">
+      <header class="flex items-center gap-3 border-b border-default px-6 py-4">
         <div
           class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
           :style="{ backgroundColor: agent.color + '22' }"
@@ -446,8 +446,8 @@ async function copyOutput() {
           <UIcon :name="agent.icon" class="h-5 w-5" :style="{ color: agent.color }" />
         </div>
         <div class="min-w-0">
-          <h1 class="truncate text-base font-semibold text-white">{{ agent.label }}</h1>
-          <p v-if="block" class="truncate text-xs text-slate-500">{{ block.title }}</p>
+          <h1 class="truncate text-base font-semibold text-highlighted">{{ agent.label }}</h1>
+          <p v-if="block" class="truncate text-xs text-dimmed">{{ block.title }}</p>
         </div>
         <div class="ms-auto flex items-center gap-1.5">
           <UBadge
@@ -519,7 +519,7 @@ async function copyOutput() {
           <section
             id="step-details"
             :ref="(el) => (sectionEls['step-details'] = el as HTMLElement | null)"
-            class="scroll-mt-4 rounded-xl border border-slate-800 bg-slate-900/50 p-4"
+            class="scroll-mt-4 rounded-xl border border-default bg-default/50 p-4"
           >
             <StepMetadataCard
               :step="step"
@@ -783,16 +783,16 @@ async function copyOutput() {
             >
               <button
                 v-if="s.depth > 0"
-                class="group flex w-full items-center gap-2 rounded-md py-1 text-start transition hover:text-white"
+                class="group flex w-full items-center gap-2 rounded-md py-1 text-start transition hover:text-highlighted"
                 @click="toggle(s.id)"
               >
                 <UIcon
                   name="i-lucide-chevron-right"
-                  class="h-4 w-4 shrink-0 text-slate-500 transition-transform group-hover:text-slate-300"
+                  class="h-4 w-4 shrink-0 text-dimmed transition-transform group-hover:text-toned"
                   :class="collapsed[s.id] ? '' : 'rotate-90'"
                 />
                 <span
-                  class="font-semibold text-slate-100"
+                  class="font-semibold text-app-100"
                   :class="s.depth <= 1 ? 'text-lg' : s.depth === 2 ? 'text-base' : 'text-sm'"
                   v-html="s.titleHtml"
                 />
@@ -800,7 +800,7 @@ async function copyOutput() {
               <!-- eslint-disable-next-line vue/no-v-html -->
               <div
                 v-show="!collapsed[s.id]"
-                class="reader-prose mt-1 text-[13px] leading-relaxed text-slate-300"
+                class="reader-prose mt-1 text-[13px] leading-relaxed text-toned"
                 :class="[
                   s.depth > 0 ? 'ps-6' : '',
                   genericApprovalPending && !editing ? 'review-mode' : '',
@@ -813,7 +813,7 @@ async function copyOutput() {
 
           <p
             v-else
-            class="rounded-lg border border-dashed border-slate-800 py-6 text-center text-sm text-slate-500"
+            class="rounded-lg border border-dashed border-default py-6 text-center text-sm text-dimmed"
           >
             {{ t('panels.stepDetail.noProseOutput') }}
           </p>
@@ -826,9 +826,9 @@ async function copyOutput() {
          bottom sheet (still reachable) below lg, so the gate is always actionable. -->
     <aside
       v-if="genericApprovalPending"
-      class="absolute inset-x-0 bottom-0 z-10 flex max-h-[70dvh] flex-col rounded-t-2xl border-t border-slate-700 bg-slate-900/95 shadow-2xl backdrop-blur lg:static lg:inset-auto lg:z-auto lg:max-h-none lg:w-96 lg:shrink-0 lg:rounded-none lg:border-s lg:border-t-0 lg:border-slate-800 lg:bg-slate-900/60 lg:shadow-none lg:backdrop-blur-none"
+      class="absolute inset-x-0 bottom-0 z-10 flex max-h-[70dvh] flex-col rounded-t-2xl border-t border-muted bg-default/95 shadow-2xl backdrop-blur lg:static lg:inset-auto lg:z-auto lg:max-h-none lg:w-96 lg:shrink-0 lg:rounded-none lg:border-s lg:border-t-0 lg:border-default lg:bg-default/60 lg:shadow-none lg:backdrop-blur-none"
     >
-      <div class="border-b border-slate-800 px-4 py-3">
+      <div class="border-b border-default px-4 py-3">
         <div class="text-[11px] font-semibold uppercase tracking-wide text-amber-400">
           {{
             editing
@@ -836,7 +836,7 @@ async function copyOutput() {
               : t('panels.stepDetail.reviewAndApprove')
           }}
         </div>
-        <p class="mt-1 text-[12px] text-slate-400">
+        <p class="mt-1 text-[12px] text-muted">
           {{ editing ? t('panels.stepDetail.editHint') : t('panels.stepDetail.reviewHint') }}
         </p>
         <!-- The gate's configured POLICY, when it has one. Both lines exist because an
@@ -852,11 +852,7 @@ async function copyOutput() {
           }}
           <span v-if="viewerHasApproved">{{ t('panels.stepDetail.quorumYours') }}</span>
         </p>
-        <p
-          v-if="gateRefusal"
-          class="mt-1 text-[12px] text-slate-400"
-          data-testid="gate-not-approver"
-        >
+        <p v-if="gateRefusal" class="mt-1 text-[12px] text-muted" data-testid="gate-not-approver">
           {{ t(GATE_REFUSAL_KEYS[gateRefusal]) }}
         </p>
       </div>
@@ -873,13 +869,13 @@ async function copyOutput() {
           <div
             v-if="draftTarget"
             data-testid="step-review-composer"
-            class="rounded-lg border border-indigo-500/40 bg-indigo-500/5 p-3"
+            class="rounded-lg border border-primary-500/40 bg-primary-500/5 p-3"
           >
-            <div class="mb-1 text-[10px] uppercase tracking-wide text-indigo-300">
+            <div class="mb-1 text-[10px] uppercase tracking-wide text-primary-300">
               {{ t('panels.stepDetail.commentingOn') }}
             </div>
             <pre
-              class="mb-2 max-h-24 overflow-auto whitespace-pre-wrap rounded bg-slate-950/60 p-2 text-[11px] text-slate-300"
+              class="mb-2 max-h-24 overflow-auto whitespace-pre-wrap rounded bg-app-950/60 p-2 text-[11px] text-toned"
               >{{ draftTarget.quotedSource }}</pre>
             <UTextarea
               v-model="draftBody"
@@ -911,14 +907,14 @@ async function copyOutput() {
             v-for="(c, idx) in reviewComments"
             :key="idx"
             data-testid="step-review-comment"
-            class="rounded-lg border border-slate-800 bg-slate-900/50 p-3"
+            class="rounded-lg border border-default bg-default/50 p-3"
           >
             <div class="mb-1 flex items-start justify-between gap-2">
-              <div class="text-[10px] uppercase tracking-wide text-slate-500">
+              <div class="text-[10px] uppercase tracking-wide text-dimmed">
                 {{ t('panels.stepDetail.commentN', { number: idx + 1 }) }}
               </div>
               <button
-                class="text-slate-500 transition hover:text-rose-400"
+                class="text-dimmed transition hover:text-rose-400"
                 :title="t('panels.stepDetail.removeComment')"
                 @click="removeComment(idx)"
               >
@@ -926,15 +922,13 @@ async function copyOutput() {
               </button>
             </div>
             <pre
-              class="mb-1 max-h-20 overflow-auto whitespace-pre-wrap rounded bg-slate-950/50 p-1.5 text-[10px] text-slate-400"
+              class="mb-1 max-h-20 overflow-auto whitespace-pre-wrap rounded bg-app-950/50 p-1.5 text-[10px] text-muted"
               >{{ c.quotedSource }}</pre>
-            <p class="text-[12px] text-slate-200">{{ c.body }}</p>
+            <p class="text-[12px] text-default">{{ c.body }}</p>
           </div>
 
           <div>
-            <label
-              class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-400"
-            >
+            <label class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted">
               {{ t('panels.stepDetail.overallFeedback') }}
             </label>
             <UTextarea
@@ -953,7 +947,7 @@ async function copyOutput() {
       <!-- edit-then-approve actions -->
       <div
         v-if="editing"
-        class="space-y-2 border-t border-slate-800 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]"
+        class="space-y-2 border-t border-default px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]"
       >
         <UButton
           color="primary"
@@ -979,7 +973,7 @@ async function copyOutput() {
 
       <div
         v-else
-        class="space-y-2 border-t border-slate-800 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]"
+        class="space-y-2 border-t border-default px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]"
       >
         <UButton
           color="primary"
@@ -1007,14 +1001,14 @@ async function copyOutput() {
         </UButton>
         <p
           v-else-if="!proposalEditable"
-          class="text-[10px] text-slate-500"
+          class="text-[10px] text-dimmed"
           data-testid="step-rendered-output-note"
         >
           {{ t('panels.stepDetail.renderedOutputNote') }}
         </p>
         <!-- Withheld only until the quorum is one approval away, so it says so rather than
            leaving a reviewer to wonder where the affordance went. -->
-        <p v-else class="text-[10px] text-slate-500" data-testid="step-quorum-edit-locked">
+        <p v-else class="text-[10px] text-dimmed" data-testid="step-quorum-edit-locked">
           {{ t('panels.stepDetail.quorumEditLocked') }}
         </p>
 
@@ -1072,7 +1066,7 @@ async function copyOutput() {
             {{ t('panels.stepDetail.reject') }}
           </UButton>
         </div>
-        <p class="text-[10px] text-slate-500">
+        <p class="text-[10px] text-dimmed">
           {{ t('panels.stepDetail.requestChangesHint') }}
         </p>
       </div>

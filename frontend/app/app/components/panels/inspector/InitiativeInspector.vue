@@ -52,12 +52,12 @@ function control(action: 'pause' | 'resume' | 'cancel') {
       <UBadge color="primary" variant="subtle" size="sm">
         {{ t(INITIATIVE_STATUS_LABEL_KEYS[status]) }}
       </UBadge>
-      <span v-if="progress" class="text-[11px] text-slate-400">
+      <span v-if="progress" class="text-[11px] text-muted">
         {{ t('initiative.card.progress', { done: progress.settled, total: progress.total }) }}
       </span>
     </div>
 
-    <p v-if="initiative?.goal" class="whitespace-pre-wrap text-[12px] text-slate-300">
+    <p v-if="initiative?.goal" class="whitespace-pre-wrap text-[12px] text-toned">
       {{ initiative.goal }}
     </p>
 
@@ -165,7 +165,7 @@ function control(action: 'pause' | 'resume' | 'cancel') {
       </UButton>
     </div>
 
-    <p class="text-[11px] text-slate-500">
+    <p class="text-[11px] text-dimmed">
       {{ t('initiative.inspector.hint') }}
     </p>
   </div>

@@ -153,7 +153,7 @@ function stage() {
   <UModal v-model:open="open" :title="t('documents.startFromDesign.title')">
     <template #body>
       <div class="space-y-4">
-        <p class="text-sm text-slate-400">{{ t('documents.startFromDesign.intro') }}</p>
+        <p class="text-sm text-muted">{{ t('documents.startFromDesign.intro') }}</p>
 
         <!-- No connected design source: the flow cannot run, and saying which step is missing
              beats an input that refuses every paste. The connect route is withheld from a member
@@ -176,7 +176,7 @@ function stage() {
 
           <div
             v-if="state.status === 'checking'"
-            class="flex items-center gap-2 text-sm text-slate-400"
+            class="flex items-center gap-2 text-sm text-muted"
           >
             <UIcon name="i-lucide-loader" class="h-4 w-4 animate-spin" />
             {{ t('documents.startFromDesign.checking') }}
@@ -184,14 +184,14 @@ function stage() {
 
           <div
             v-else-if="row"
-            class="space-y-1 rounded-lg border border-slate-800 bg-slate-900/60 p-3"
+            class="space-y-1 rounded-lg border border-default bg-default/60 p-3"
             data-testid="start-from-design-resolved"
           >
-            <div class="flex items-center gap-2 text-sm text-white">
-              <UIcon name="i-lucide-frame" class="h-4 w-4 text-indigo-400" />
+            <div class="flex items-center gap-2 text-sm text-highlighted">
+              <UIcon name="i-lucide-frame" class="h-4 w-4 text-primary-400" />
               <span class="truncate">{{ row.label }}</span>
             </div>
-            <p v-if="row.trimmed" class="text-[11px] text-slate-400">
+            <p v-if="row.trimmed" class="text-[11px] text-muted">
               {{ t('documents.startFromDesign.trimmed') }}
             </p>
             <!-- Its own line, in amber: a trim resolves the same page, a drop widens ONE frame to
@@ -199,7 +199,7 @@ function stage() {
             <p v-if="row.droppedScope" class="text-[11px] text-amber-300">
               {{ t('documents.startFromDesign.widened', { scope: row.droppedScope }) }}
             </p>
-            <p v-if="row.unchecked && target" class="text-[11px] text-slate-400">
+            <p v-if="row.unchecked && target" class="text-[11px] text-muted">
               {{ t('documents.startFromDesign.unchecked') }}
             </p>
             <p v-else-if="row.unchecked" class="text-[11px] text-amber-300">

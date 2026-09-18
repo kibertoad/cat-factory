@@ -57,26 +57,26 @@ async function copyRunId() {
 <template>
   <div class="flex flex-col gap-4">
     <div v-if="stepNumber && totalSteps">
-      <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+      <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-dimmed">
         {{ t('panels.stepMeta.step') }}
       </h4>
-      <p class="text-[12px] text-slate-300">
+      <p class="text-[12px] text-toned">
         {{ t('panels.stepMeta.stepOf', { number: stepNumber, total: totalSteps }) }}
       </p>
     </div>
 
     <div v-if="durationLabel">
-      <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+      <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-dimmed">
         {{ t('panels.stepMeta.duration') }}
       </h4>
-      <p class="flex items-center gap-1.5 text-[12px] tabular-nums text-slate-300">
+      <p class="flex items-center gap-1.5 text-[12px] tabular-nums text-toned">
         <UIcon
           v-if="isRunning"
           name="i-lucide-loader-circle"
-          class="h-3 w-3 animate-spin text-indigo-400"
+          class="h-3 w-3 animate-spin text-primary-400"
         />
         {{ durationLabel }}
-        <span v-if="isRunning" class="text-[11px] text-slate-500">{{
+        <span v-if="isRunning" class="text-[11px] text-dimmed">{{
           t('panels.stepMeta.elapsed')
         }}</span>
       </p>
@@ -86,54 +86,54 @@ async function copyRunId() {
          the elapsed clock above — a long, quiet phase keeps this small while elapsed climbs, so a
          genuinely-active-but-quiet run reads apart from a wedged one. Only while actively running. -->
     <div v-if="isRunning && activityAgoLabel" data-testid="step-activity">
-      <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+      <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-dimmed">
         {{ t('panels.stepMeta.activity') }}
       </h4>
-      <p class="flex items-center gap-1.5 text-[12px] tabular-nums text-slate-300">
+      <p class="flex items-center gap-1.5 text-[12px] tabular-nums text-toned">
         <span class="h-1.5 w-1.5 rounded-full bg-emerald-400" />
         {{ t('panels.stepMeta.activityAgo', { duration: activityAgoLabel }) }}
       </p>
     </div>
 
     <div v-if="formatClock(step.startedAt)">
-      <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+      <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-dimmed">
         {{ t('panels.stepMeta.started') }}
       </h4>
-      <p class="text-[12px] text-slate-300">{{ formatClock(step.startedAt) }}</p>
+      <p class="text-[12px] text-toned">{{ formatClock(step.startedAt) }}</p>
     </div>
 
     <div v-if="formatClock(step.finishedAt)">
-      <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+      <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-dimmed">
         {{ t('panels.stepMeta.finished') }}
       </h4>
-      <p class="text-[12px] text-slate-300">{{ formatClock(step.finishedAt) }}</p>
+      <p class="text-[12px] text-toned">{{ formatClock(step.finishedAt) }}</p>
     </div>
 
     <div v-if="step.model">
-      <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+      <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-dimmed">
         {{ t('panels.stepMeta.model') }}
       </h4>
-      <p class="break-all text-[12px] text-slate-300" :title="step.model">
+      <p class="break-all text-[12px] text-toned" :title="step.model">
         {{ modelLabel ?? step.model }}
       </p>
     </div>
 
     <div v-if="promptVariant">
-      <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+      <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-dimmed">
         {{ t('panels.stepMeta.promptVariant') }}
       </h4>
-      <p class="break-all text-[12px] text-slate-300">{{ promptVariant.label }}</p>
+      <p class="break-all text-[12px] text-toned">{{ promptVariant.label }}</p>
       <p v-if="promptVariant.note" class="mt-0.5 text-[11px] text-amber-400/80">
         {{ promptVariant.note }}
       </p>
     </div>
 
     <div v-if="runId">
-      <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+      <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-dimmed">
         {{ t('panels.stepMeta.run') }}
       </h4>
       <p
-        class="cursor-pointer break-all font-mono text-[12px] text-slate-400 hover:text-slate-200"
+        class="cursor-pointer break-all font-mono text-[12px] text-muted hover:text-default"
         :title="t('panels.stepMeta.clickToCopy', { id: runId })"
         @click="copyRunId"
       >

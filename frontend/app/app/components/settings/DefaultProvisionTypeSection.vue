@@ -102,10 +102,10 @@ async function save() {
 <template>
   <section class="space-y-3" data-testid="default-provision-section">
     <div>
-      <h3 class="text-sm font-semibold text-slate-200">
+      <h3 class="text-sm font-semibold text-default">
         {{ t('settings.defaultProvision.title') }}
       </h3>
-      <p class="mt-1 text-[11px] leading-snug text-slate-500">
+      <p class="mt-1 text-[11px] leading-snug text-dimmed">
         {{ t('settings.defaultProvision.hint') }}
       </p>
     </div>
@@ -125,7 +125,7 @@ async function save() {
     </div>
 
     <div v-if="selection.type === 'custom'" class="space-y-1">
-      <label class="text-[11px] text-slate-400">
+      <label class="text-[11px] text-muted">
         {{ t('inspector.testConfig.customManifestId') }}
       </label>
       <USelect
@@ -165,7 +165,7 @@ async function save() {
       >
         {{ t('settings.defaultProvision.save') }}
       </UButton>
-      <span v-if="!unset && !dirty" class="text-[11px] text-slate-500">
+      <span v-if="!unset && !dirty" class="text-[11px] text-dimmed">
         {{ t('settings.defaultProvision.savedState') }}
       </span>
     </div>

@@ -171,7 +171,7 @@ async function clearAll() {
       <span>{{ t('inspector.testSecrets.warning') }}</span>
     </div>
 
-    <p class="text-[11px] leading-snug text-slate-500">
+    <p class="text-[11px] leading-snug text-dimmed">
       {{ t('inspector.testSecrets.replaceNote') }}
     </p>
 
@@ -180,7 +180,7 @@ async function clearAll() {
       <div
         v-for="(row, index) in draft.rows"
         :key="row.uid"
-        class="space-y-2 rounded-md border border-slate-800 p-2.5"
+        class="space-y-2 rounded-md border border-default p-2.5"
         :data-testid="`test-secret-row-${index}`"
       >
         <div class="flex items-start gap-2">

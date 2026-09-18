@@ -306,7 +306,7 @@ async function mergePr() {
     <div v-if="instance">
       <div class="mb-1 flex items-center justify-between">
         <span class="flex min-w-0 items-center gap-1.5">
-          <span class="truncate text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          <span class="truncate text-[11px] font-semibold uppercase tracking-wide text-muted">
             {{ instance.pipelineName }}
           </span>
           <!-- A sandboxed run looks exactly like one that simply has not reached the merge yet,
@@ -377,7 +377,7 @@ async function mergePr() {
           v-for="(s, i) in instance.steps"
           :key="i"
           class="rounded-md px-2 py-1"
-          :class="i === instance.currentStep ? 'bg-slate-800/70' : ''"
+          :class="i === instance.currentStep ? 'bg-elevated/70' : ''"
           data-testid="run-step"
           :data-step-kind="s.agentKind"
           :data-step-state="s.state"
@@ -387,7 +387,7 @@ async function mergePr() {
                  model, subtasks + the prose output when there is one). -->
             <button
               type="button"
-              class="flex min-w-0 cursor-pointer items-center gap-2 text-start transition hover:text-white"
+              class="flex min-w-0 cursor-pointer items-center gap-2 text-start transition hover:text-highlighted"
               data-testid="run-step-open"
               :title="
                 stepHasOutput(s)
@@ -401,24 +401,24 @@ async function mergePr() {
                 class="h-4 w-4 shrink-0"
                 :style="{ color: agentKindMeta(s.agentKind).color }"
               />
-              <span class="truncate text-xs text-slate-200">
+              <span class="truncate text-xs text-default">
                 {{ agentKindMeta(s.agentKind).label }}
               </span>
               <span
                 v-if="isCompanionKind(s.agentKind)"
-                class="shrink-0 rounded bg-slate-700/60 px-1 text-[9px] font-medium uppercase tracking-wide text-slate-300"
+                class="shrink-0 rounded bg-accented/60 px-1 text-[9px] font-medium uppercase tracking-wide text-toned"
                 :title="t('inspector.execution.companionTooltip')"
               >
                 {{ t('inspector.execution.companion') }}
               </span>
               <UIcon
                 :name="stepHasOutput(s) ? 'i-lucide-book-open-text' : 'i-lucide-info'"
-                class="h-3.5 w-3.5 shrink-0 text-slate-500"
+                class="h-3.5 w-3.5 shrink-0 text-dimmed"
               />
             </button>
             <span
               v-if="s.subtasks && s.subtasks.total > 0"
-              class="ms-auto font-mono text-[10px] tabular-nums text-slate-300"
+              class="ms-auto font-mono text-[10px] tabular-nums text-toned"
               data-testid="run-subtasks"
               :title="
                 s.subtasks.inProgress > 0
@@ -437,17 +437,14 @@ async function mergePr() {
             </span>
             <span
               class="inline-flex items-center gap-1 text-[10px]"
-              :class="[
-                stepFailed(s) ? 'text-rose-400' : 'text-slate-400',
-                { 'ms-auto': !s.subtasks },
-              ]"
+              :class="[stepFailed(s) ? 'text-rose-400' : 'text-muted', { 'ms-auto': !s.subtasks }]"
             >
               <UIcon v-if="stepFailed(s)" name="i-lucide-circle-x" class="h-3 w-3 shrink-0" />
               {{ labelForStep(s) }}
               <!-- live elapsed clock: a running step counts up, a finished one shows total -->
               <span
                 v-if="stepElapsed(s)"
-                class="inline-flex items-center gap-0.5 font-mono tabular-nums text-slate-500"
+                class="inline-flex items-center gap-0.5 font-mono tabular-nums text-dimmed"
                 :title="t('inspector.execution.elapsedTooltip')"
               >
                 · {{ stepElapsed(s) }}
@@ -467,7 +464,7 @@ async function mergePr() {
                  indicator, NOT a "Review" gate (the human is summoned only if needed) -->
             <span
               v-else-if="reviews.isBackground(s.agentKind, block.id) && reviewStage"
-              class="inline-flex shrink-0 items-center gap-1 text-[10px] text-indigo-300"
+              class="inline-flex shrink-0 items-center gap-1 text-[10px] text-primary-300"
             >
               <UIcon name="i-lucide-loader-circle" class="h-3 w-3 animate-spin" />
               {{ reviewStageLabel }}
@@ -551,16 +548,16 @@ async function mergePr() {
           </div>
           <div
             v-if="s.subtasks && s.subtasks.total > 0"
-            class="mt-1 ms-6 h-1 overflow-hidden rounded-full bg-slate-700/60"
+            class="mt-1 ms-6 h-1 overflow-hidden rounded-full bg-accented/60"
           >
             <div
-              class="h-full rounded-full bg-indigo-400 transition-all duration-500"
+              class="h-full rounded-full bg-primary-400 transition-all duration-500"
               :style="{ width: `${(s.subtasks.completed / s.subtasks.total) * 100}%` }"
             />
           </div>
           <div
             v-if="s.model"
-            class="mt-0.5 flex items-center gap-1 ps-6 text-[10px] text-slate-500"
+            class="mt-0.5 flex items-center gap-1 ps-6 text-[10px] text-dimmed"
             :title="s.model"
           >
             <UIcon name="i-lucide-cpu" class="h-3 w-3" />
@@ -569,7 +566,7 @@ async function mergePr() {
           <!-- Prompt-fragment standards the library selected for this step. -->
           <div
             v-if="s.selectedFragmentIds && s.selectedFragmentIds.length"
-            class="mt-0.5 flex flex-wrap items-center gap-1 ps-6 text-[10px] text-slate-500"
+            class="mt-0.5 flex flex-wrap items-center gap-1 ps-6 text-[10px] text-dimmed"
             :title="
               t('inspector.execution.fragmentsTooltip', {
                 fragments: s.selectedFragmentIds.join(', '),
@@ -599,7 +596,7 @@ async function mergePr() {
                 gateCompanionFor(s, runFailed)!.state === 'running' ? 'animate-spin' : '',
               ]"
             />
-            <span class="text-slate-400">
+            <span class="text-muted">
               {{
                 t('inspector.execution.companionOf', {
                   label: agentKindMeta(gateCompanionFor(s, runFailed)!.kind).label,
@@ -641,7 +638,7 @@ async function mergePr() {
 
     <!-- Open PR: link straight to it on GitHub -->
     <div v-if="pr" class="space-y-2">
-      <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+      <span class="text-[11px] font-semibold uppercase tracking-wide text-muted">
         {{ t('inspector.execution.pullRequest') }}
       </span>
       <UButton
@@ -663,7 +660,7 @@ async function mergePr() {
           </UBadge>
         </span>
       </UButton>
-      <p v-if="pr.branch" class="flex items-center gap-1 truncate text-[10px] text-slate-500">
+      <p v-if="pr.branch" class="flex items-center gap-1 truncate text-[10px] text-dimmed">
         <UIcon name="i-lucide-git-branch" class="h-3 w-3 shrink-0" />
         <span class="truncate" :title="pr.branch">{{ pr.branch }}</span>
       </p>

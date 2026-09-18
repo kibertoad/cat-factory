@@ -229,13 +229,11 @@ onUnmounted(() => preview.stopPolling(props.block.id))
          persisted until Apply. Only shown when the frame is linked to a repo. -->
     <div
       v-if="repoLink"
-      class="space-y-2 rounded border border-slate-800 bg-slate-900/40 p-2"
+      class="space-y-2 rounded border border-default bg-default/40 p-2"
       data-testid="frontend-detect"
     >
       <div class="flex items-center justify-between gap-2">
-        <span class="text-[11px] text-slate-400">{{
-          t('inspector.frontendConfig.detect.title')
-        }}</span>
+        <span class="text-[11px] text-muted">{{ t('inspector.frontendConfig.detect.title') }}</span>
         <UButton
           size="xs"
           variant="soft"
@@ -248,7 +246,7 @@ onUnmounted(() => preview.stopPolling(props.block.id))
           {{ t('inspector.frontendConfig.detect.button') }}
         </UButton>
       </div>
-      <p class="text-[11px] leading-snug text-slate-500">
+      <p class="text-[11px] leading-snug text-dimmed">
         {{ t('inspector.frontendConfig.detect.hint') }}
       </p>
 
@@ -265,7 +263,7 @@ onUnmounted(() => preview.stopPolling(props.block.id))
           <li
             v-for="(n, i) in detectResult.notes"
             :key="i"
-            class="flex items-start gap-1.5 text-[11px] leading-snug text-slate-500"
+            class="flex items-start gap-1.5 text-[11px] leading-snug text-dimmed"
           >
             <span :class="n.confidence === 'high' ? 'text-emerald-400/70' : 'text-amber-400/70'">
               {{
@@ -308,7 +306,7 @@ onUnmounted(() => preview.stopPolling(props.block.id))
     <!-- Build: package manager + frontend directory + install command + build script + output dir -->
     <InspectorSection v-model:open="showBuild" :title="t('inspector.frontendConfig.groups.build')">
       <div class="space-y-1">
-        <span class="text-[11px] text-slate-400">{{
+        <span class="text-[11px] text-muted">{{
           t('inspector.frontendConfig.packageManager')
         }}</span>
         <div class="flex flex-wrap gap-1">
@@ -326,9 +324,7 @@ onUnmounted(() => preview.stopPolling(props.block.id))
       </div>
 
       <div class="space-y-1">
-        <label class="text-[11px] text-slate-400">{{
-          t('inspector.frontendConfig.directory')
-        }}</label>
+        <label class="text-[11px] text-muted">{{ t('inspector.frontendConfig.directory') }}</label>
         <UInput
           :model-value="config.directory ?? ''"
           size="xs"
@@ -340,13 +336,13 @@ onUnmounted(() => preview.stopPolling(props.block.id))
             (e: KeyboardEvent) => saveText('directory', (e.target as HTMLInputElement).value)
           "
         />
-        <p class="text-[11px] leading-snug text-slate-500">
+        <p class="text-[11px] leading-snug text-dimmed">
           {{ t('inspector.frontendConfig.directoryHint') }}
         </p>
       </div>
 
       <div class="space-y-1">
-        <label class="text-[11px] text-slate-400">{{
+        <label class="text-[11px] text-muted">{{
           t('inspector.frontendConfig.installCommand')
         }}</label>
         <UInput
@@ -366,7 +362,7 @@ onUnmounted(() => preview.stopPolling(props.block.id))
 
       <div class="grid grid-cols-2 gap-2">
         <div class="space-y-1">
-          <label class="text-[11px] text-slate-400">{{
+          <label class="text-[11px] text-muted">{{
             t('inspector.frontendConfig.buildScript')
           }}</label>
           <UInput
@@ -382,7 +378,7 @@ onUnmounted(() => preview.stopPolling(props.block.id))
           />
         </div>
         <div class="space-y-1">
-          <label class="text-[11px] text-slate-400">{{
+          <label class="text-[11px] text-muted">{{
             t('inspector.frontendConfig.outputDir')
           }}</label>
           <UInput
@@ -403,9 +399,7 @@ onUnmounted(() => preview.stopPolling(props.block.id))
     <!-- Serve: mode (static vs command) + serve script (command mode) + port -->
     <InspectorSection v-model:open="showServe" :title="t('inspector.frontendConfig.groups.serve')">
       <div class="space-y-1">
-        <span class="text-[11px] text-slate-400">{{
-          t('inspector.frontendConfig.serveMode')
-        }}</span>
+        <span class="text-[11px] text-muted">{{ t('inspector.frontendConfig.serveMode') }}</span>
         <div class="flex flex-wrap gap-1">
           <UButton
             :color="serveMode === 'static' ? 'primary' : 'neutral'"
@@ -425,21 +419,21 @@ onUnmounted(() => preview.stopPolling(props.block.id))
           </UButton>
         </div>
         <!-- Explain each mode, and disambiguate from the separate envInjection axis. -->
-        <p class="text-[11px] leading-snug text-slate-500">
-          <span class="text-slate-400">{{ t('inspector.frontendConfig.serveStatic') }}:</span>
+        <p class="text-[11px] leading-snug text-dimmed">
+          <span class="text-muted">{{ t('inspector.frontendConfig.serveStatic') }}:</span>
           {{ t('inspector.frontendConfig.serveStaticDesc') }}
         </p>
-        <p class="text-[11px] leading-snug text-slate-500">
-          <span class="text-slate-400">{{ t('inspector.frontendConfig.serveCommand') }}:</span>
+        <p class="text-[11px] leading-snug text-dimmed">
+          <span class="text-muted">{{ t('inspector.frontendConfig.serveCommand') }}:</span>
           {{ t('inspector.frontendConfig.serveCommandDesc') }}
         </p>
-        <p class="text-[11px] leading-snug text-slate-500/80">
+        <p class="text-[11px] leading-snug text-dimmed/80">
           {{ t('inspector.frontendConfig.serveEnvAxisNote') }}
         </p>
       </div>
 
       <div v-if="serveMode === 'command'" class="space-y-1">
-        <label class="text-[11px] text-slate-400">{{
+        <label class="text-[11px] text-muted">{{
           t('inspector.frontendConfig.serveScript')
         }}</label>
         <UInput
@@ -456,9 +450,7 @@ onUnmounted(() => preview.stopPolling(props.block.id))
       </div>
 
       <div class="space-y-1">
-        <label class="text-[11px] text-slate-400">{{
-          t('inspector.frontendConfig.servePort')
-        }}</label>
+        <label class="text-[11px] text-muted">{{ t('inspector.frontendConfig.servePort') }}</label>
         <UInput
           :model-value="config.servePort != null ? String(config.servePort) : ''"
           type="number"
@@ -479,7 +471,7 @@ onUnmounted(() => preview.stopPolling(props.block.id))
       :title="t('inspector.frontendConfig.groups.mocking')"
     >
       <div class="space-y-1">
-        <label class="text-[11px] text-slate-400">{{
+        <label class="text-[11px] text-muted">{{
           t('inspector.frontendConfig.mockMappingsPath')
         }}</label>
         <UInput
@@ -495,7 +487,7 @@ onUnmounted(() => preview.stopPolling(props.block.id))
             (e: KeyboardEvent) => saveText('mockMappingsPath', (e.target as HTMLInputElement).value)
           "
         />
-        <p class="text-[11px] leading-snug text-slate-500">
+        <p class="text-[11px] leading-snug text-dimmed">
           {{ t('inspector.frontendConfig.mockMappingsHint') }}
         </p>
       </div>
@@ -525,7 +517,7 @@ onUnmounted(() => preview.stopPolling(props.block.id))
             {{ t('inspector.frontendConfig.envRuntime') }}
           </UButton>
         </div>
-        <p class="text-[11px] leading-snug text-slate-500">
+        <p class="text-[11px] leading-snug text-dimmed">
           {{ t('inspector.frontendConfig.envInjectionHint') }}
         </p>
       </div>
@@ -578,14 +570,14 @@ onUnmounted(() => preview.stopPolling(props.block.id))
             />
           </div>
         </div>
-        <div v-else class="text-[11px] text-slate-500">
+        <div v-else class="text-[11px] text-dimmed">
           {{ t('inspector.frontendConfig.bindings.empty') }}
         </div>
 
         <!-- How the bindings resolve RIGHT NOW: each env var → a bound service's live ephemeral
              URL, or WireMock — plus the duplicate-env-var warning. The same view a UI-test run
              would resolve against (shared helpers), so what you see is what a run will drive. -->
-        <div class="border-t border-slate-800/60 pt-2">
+        <div class="border-t border-default/60 pt-2">
           <FrontendBindingsResolved :config="config" />
         </div>
       </div>
@@ -607,7 +599,7 @@ onUnmounted(() => preview.stopPolling(props.block.id))
               save({ previewEnabled: v === true ? true : undefined })
           "
         />
-        <p class="mt-1 text-[11px] leading-snug text-slate-500">
+        <p class="mt-1 text-[11px] leading-snug text-dimmed">
           {{
             previewSupported
               ? t('inspector.frontendConfig.previewHint')
@@ -624,7 +616,7 @@ onUnmounted(() => preview.stopPolling(props.block.id))
                 'text-emerald-400': previewStatus === 'ready',
                 'text-amber-400': previewStatus === 'starting',
                 'text-rose-400': previewStatus === 'failed',
-                'text-slate-400': previewStatus === 'stopped',
+                'text-muted': previewStatus === 'stopped',
               }"
               data-testid="preview-status"
             >

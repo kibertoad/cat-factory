@@ -66,26 +66,24 @@ const withheldNote = computed(() => {
     <!-- The Done strip. Rendered only once the service HAS finished something: an empty archive
          is the one lane whose emptiness says nothing a reader needs (a new service has merged
          nothing, which its three live lanes already show). -->
-    <div v-if="doneLane && doneLane.total > 0" class="rounded-lg bg-slate-900/40">
+    <div v-if="doneLane && doneLane.total > 0" class="rounded-lg bg-default/40">
       <button
         type="button"
-        class="nodrag flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-left hover:bg-slate-800/40"
+        class="nodrag flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-left hover:bg-elevated/40"
         data-testid="done-lane-toggle"
         :aria-expanded="!laneView.doneLaneCollapsed"
         @click.stop="laneView.toggleDoneLane()"
       >
         <UIcon
           :name="laneView.doneLaneCollapsed ? 'i-lucide-chevron-right' : 'i-lucide-chevron-down'"
-          class="h-3.5 w-3.5 shrink-0 text-slate-500"
+          class="h-3.5 w-3.5 shrink-0 text-dimmed"
         />
         <UIcon
           :name="LANE_META.done.icon"
           class="h-3.5 w-3.5 shrink-0"
           :style="{ color: LANE_META.done.color }"
         />
-        <span class="text-[11px] font-semibold text-slate-200">{{
-          t(LANE_META.done.labelKey)
-        }}</span>
+        <span class="text-[11px] font-semibold text-default">{{ t(LANE_META.done.labelKey) }}</span>
         <!-- The TOTAL, not what the caps admitted: "this service has finished 312 tasks" is the
              fact the lane carries, and counting only the visible cards would understate it by
              two orders of magnitude. -->
@@ -98,7 +96,7 @@ const withheldNote = computed(() => {
           data-testid="lane-count-done"
           >{{ doneLane.total }}</span
         >
-        <span v-if="withheldNote" class="ms-auto truncate text-[10px] text-slate-500">{{
+        <span v-if="withheldNote" class="ms-auto truncate text-[10px] text-dimmed">{{
           withheldNote
         }}</span>
       </button>
@@ -120,7 +118,7 @@ const withheldNote = computed(() => {
              has nothing in it rather than looking broken. -->
         <p
           v-if="doneSelection.shown.length === 0"
-          class="px-1 text-[10px] leading-snug text-slate-600"
+          class="px-1 text-[10px] leading-snug text-app-600"
         >
           {{ t('board.lanes.done.allWithheld') }}
         </p>

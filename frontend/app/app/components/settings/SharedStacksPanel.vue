@@ -270,14 +270,14 @@ async function remove(stack: SharedStack) {
 
 <template>
   <div class="space-y-4" data-testid="shared-stacks-panel">
-    <p class="text-sm text-slate-400">{{ t('settings.sharedStacks.intro') }}</p>
+    <p class="text-sm text-muted">{{ t('settings.sharedStacks.intro') }}</p>
 
-    <section v-if="stacks.length" class="space-y-2 rounded-lg border border-slate-700 p-3">
+    <section v-if="stacks.length" class="space-y-2 rounded-lg border border-muted p-3">
       <h3 class="text-sm font-semibold">{{ t('settings.sharedStacks.list.heading') }}</h3>
       <div
         v-for="stack in stacks"
         :key="stack.id"
-        class="space-y-2 rounded-md border border-slate-800 px-3 py-2"
+        class="space-y-2 rounded-md border border-default px-3 py-2"
         :data-testid="`shared-stack-${stack.id}`"
       >
         <div class="flex items-center justify-between gap-2">
@@ -288,7 +288,7 @@ async function remove(stack: SharedStack) {
                 {{ statusLabel(stack.status) }}
               </UBadge>
             </div>
-            <p class="truncate text-[11px] text-slate-500">{{ stack.cloneUrl }}</p>
+            <p class="truncate text-[11px] text-dimmed">{{ stack.cloneUrl }}</p>
             <div v-if="stack.managedNetworks.length" class="flex flex-wrap gap-1">
               <UBadge
                 v-for="net in stack.managedNetworks"
@@ -351,10 +351,7 @@ async function remove(stack: SharedStack) {
       </div>
     </section>
 
-    <section
-      class="space-y-3 rounded-lg border border-slate-700 p-3"
-      data-testid="shared-stack-form"
-    >
+    <section class="space-y-3 rounded-lg border border-muted p-3" data-testid="shared-stack-form">
       <h3 class="text-sm font-semibold">
         {{
           t(editingId ? 'settings.sharedStacks.edit.heading' : 'settings.sharedStacks.add.heading')
@@ -410,12 +407,12 @@ async function remove(stack: SharedStack) {
         >
           {{ t('settings.sharedStacks.detect.button') }}
         </UButton>
-        <span class="text-[11px] text-slate-500">{{ t('settings.sharedStacks.detect.hint') }}</span>
+        <span class="text-[11px] text-dimmed">{{ t('settings.sharedStacks.detect.hint') }}</span>
       </div>
 
       <p
         v-if="detectedEnvFiles.length"
-        class="text-[11px] text-slate-500"
+        class="text-[11px] text-dimmed"
         data-testid="shared-stack-env-files"
       >
         {{ t('settings.sharedStacks.detect.envFiles') }}
@@ -431,7 +428,7 @@ async function remove(stack: SharedStack) {
           <li
             v-for="(label, index) in layerLabels"
             :key="index"
-            class="font-mono text-[11px] text-slate-500"
+            class="font-mono text-[11px] text-dimmed"
           >
             {{ label }}
           </li>
