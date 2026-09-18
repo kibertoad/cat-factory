@@ -47,7 +47,7 @@ export interface OneShotStepControllerDeps {
 }
 
 /**
- * The ONE-SHOT engine steps (CLAUDE.md's step taxonomy): the kinds the engine performs itself in
+ * The ONE-SHOT engine steps (`backend/docs/step-taxonomy.md`): the kinds the engine performs itself in
  * a single deterministic pass with no LLM, no container and no poll-or-escalate loop — `tracker`
  * files a ticket, `bug-intake` claims one and seeds the block from it, `initiative-committer`
  * persists an approved plan and mirrors it into the repo. (`deployer`, the fourth, already has

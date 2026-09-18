@@ -226,4 +226,4 @@ its seams, and the exports a superset of its registry constructors. That derivat
 here, because `startLocal` withholds `buildContainer`, so a seam this facade cannot construct is one
 a local deployment cannot register AT ALL.
 
-**See also:** `deploy/local/README.md`, `CLAUDE.md` → "Multi-runtime facades".
+**See also:** `deploy/local/README.md`, `CLAUDE.md` → "Keep the runtimes symmetric".

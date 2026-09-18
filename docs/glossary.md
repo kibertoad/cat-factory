@@ -138,7 +138,7 @@ home.
 
 ### Gates
 
-The step taxonomy is `CLAUDE.md` → "Gates vs agents". Code:
+The step taxonomy is [`backend/docs/step-taxonomy.md`](../backend/docs/step-taxonomy.md). Code:
 
 - Pure gate logic + the gate/helper **agent-kind constants**:
   `backend/packages/kernel/src/domain/gate-logic.ts`.
@@ -150,7 +150,7 @@ execution/` (`GateStepController.evaluate` / `GateHelperDispatcher.dispatch` / `
 
 ### Judges
 
-The FOURTH step-taxonomy bucket (`CLAUDE.md` → "Gates vs agents"): an inline LLM verdict against
+The FOURTH bucket of the [step taxonomy](../backend/docs/step-taxonomy.md): an inline LLM verdict against
 a **rubric**, compared to a per-task threshold, disposed as advance / park / **bounce** / fail.
 Distinct from a gate (whose `probe()` is a cheap programmatic precheck) and from a step resolver
 (which cannot park or loop a run). Code:

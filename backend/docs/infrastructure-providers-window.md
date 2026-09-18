@@ -149,7 +149,7 @@ secrets }`. (Types may gain a small `starterManifest` helper; see O1.)
 - **Backend**: `register`/`test`/`describeProvider` already accept/return everything the
   editor needs (`savedManifest`, `kind`, `secretKeys`). The editor is a pure consumer.
 
-## i18n (drift guards apply; see CLAUDE.md "Internationalization")
+## i18n (drift guards apply; see CLAUDE.md → Frontend → "Internationalization (i18n)")
 
 - **Remove:** `settings.providerConnection.manifestEditorUnavailable` (the disclaimer) and
   `settings.providerConnection.runnerPoolLocalHint` / `…ephemeralEnvironments` cross-link

@@ -356,4 +356,4 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
     ports, and memoizes the whole decision per scope (one probe boundary re-mints per request).
     See `backend/docs/security-model.md`.
 
-**See also:** `CLAUDE.md` → "Workspace RBAC enforcement", "Multi-runtime facades", "Conventions".
+**See also:** `CLAUDE.md` → "Workspace RBAC enforcement", "Keep the runtimes symmetric", "Conventions".
