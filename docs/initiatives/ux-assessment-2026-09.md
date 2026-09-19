@@ -376,33 +376,35 @@ violations (em-dashes, "…") are widespread in `en.json` placeholders and are o
 
 ## Checklist
 
-| Id                                                       | Severity | Status   | PR  |
-| -------------------------------------------------------- | -------- | -------- | --- |
-| UXA-01 lost first click on card actions                  | Major    | todo     |     |
-| UXA-02 toast region covers inspector footer              | Major    | todo     |     |
-| UXA-03 startup advisories for every role                 | Major    | todo     |     |
-| UXA-04 agent-config descriptors in basic tier and intake | Major    | todo     |     |
-| UXA-04b task type chips without descriptions             | Minor    | todo     |     |
-| UXA-05 designer entry points absent without explanation  | Major    | todo     |     |
-| UXA-06 silent run completion and auto-merge              | Major    | todo     |     |
-| UXA-07 card "Approve" label                              | Minor    | todo     |     |
-| UXA-08 tier-dependent default pipeline                   | Minor    | question |     |
-| UXA-09 inspector Run menu bypasses PipelinePicker        | Minor    | todo     |     |
-| UXA-10 initial fit at 42%                                | Minor    | todo     |     |
-| UXA-11 edge through an unrelated card                    | Minor    | todo     |     |
-| UXA-12 Stop/Reset on finished runs, lock note tense      | Minor    | todo     |     |
-| UXA-13 failure block length and repetition               | Minor    | todo     |     |
-| UXA-14 review effort without hint, preselected           | Minor    | todo     |     |
-| UXA-15 tour offer exits and Start names                  | Minor    | todo     |     |
-| UXA-16 five signals for one parked run                   | Minor    | todo     |     |
-| UXA-17 duplicate "Connect Linear"                        | Minor    | todo     |     |
-| UXA-18 merge confirm does not name the PR                | Minor    | todo     |     |
-| UXA-19 decision modal has no route to output             | Minor    | todo     |     |
-| UXA-20 approval rail leads with metadata                 | Minor    | todo     |     |
-| UXA-21 icon-only frame header buttons (advanced)         | Minor    | todo     |     |
-| UXA-22 rail label truncation                             | Cosmetic | todo     |     |
-| UXA-23 em-dashes and ellipses in placeholders            | Cosmetic | todo     |     |
-| UXA-24 intake role offered execution controls            | Question | open     |     |
+Confidence: **high** means the screenshot shows it and the mechanism was traced in code; **medium** means seen once on the e2e stack and not traced, so reproduce it on a real `deploy/local` board at your own viewport before fixing; **low** means a structural judgement, partly on fake agent output, to confirm with the maintainer before filing. Three e2e-stack differences to keep in mind when validating: fake agents make every transition instant, the capability advisories reflect the e2e configuration, and the consumer-extension spec module adds nav and palette entries (a candidate cause of UXA-17).
+
+| Id                                                       | Severity | Confidence                | Status   | PR  |
+| -------------------------------------------------------- | -------- | ------------------------- | -------- | --- |
+| UXA-01 lost first click on card actions                  | Major    | high: seen, code-traced   | todo     |     |
+| UXA-02 toast region covers inspector footer              | Major    | high: seen, code-traced   | todo     |     |
+| UXA-03 startup advisories for every role                 | Major    | medium: seen once         | todo     |     |
+| UXA-04 agent-config descriptors in basic tier and intake | Major    | high: seen, code-traced   | todo     |     |
+| UXA-04b task type chips without descriptions             | Minor    | high: seen, code-traced   | todo     |     |
+| UXA-05 designer entry points absent without explanation  | Major    | high: seen, code-traced   | todo     |     |
+| UXA-06 silent run completion and auto-merge              | Major    | high: seen, code-traced   | todo     |     |
+| UXA-07 card "Approve" label                              | Minor    | low: structural judgement | todo     |     |
+| UXA-08 tier-dependent default pipeline                   | Minor    | high: seen, code-traced   | question |     |
+| UXA-09 inspector Run menu bypasses PipelinePicker        | Minor    | low: structural judgement | todo     |     |
+| UXA-10 initial fit at 42%                                | Minor    | medium: seen once         | todo     |     |
+| UXA-11 edge through an unrelated card                    | Minor    | medium: seen once         | todo     |     |
+| UXA-12 Stop/Reset on finished runs, lock note tense      | Minor    | medium: seen once         | todo     |     |
+| UXA-13 failure block length and repetition               | Minor    | medium: seen once         | todo     |     |
+| UXA-14 review effort without hint, preselected           | Minor    | medium: seen once         | todo     |     |
+| UXA-15 tour offer exits and Start names                  | Minor    | high: seen, code-traced   | todo     |     |
+| UXA-16 five signals for one parked run                   | Minor    | low: structural judgement | todo     |     |
+| UXA-17 duplicate "Connect Linear"                        | Minor    | medium: seen once         | todo     |     |
+| UXA-18 merge confirm does not name the PR                | Minor    | low: structural judgement | todo     |     |
+| UXA-19 decision modal has no route to output             | Minor    | low: structural judgement | todo     |     |
+| UXA-20 approval rail leads with metadata                 | Minor    | low: structural judgement | todo     |     |
+| UXA-21 icon-only frame header buttons (advanced)         | Minor    | low: structural judgement | todo     |     |
+| UXA-22 rail label truncation                             | Cosmetic | medium: seen once         | todo     |     |
+| UXA-23 em-dashes and ellipses in placeholders            | Cosmetic | medium: seen once         | todo     |     |
+| UXA-24 intake role offered execution controls            | Question | low: structural judgement | open     |     |
 
 ## How to reproduce the captures
 
