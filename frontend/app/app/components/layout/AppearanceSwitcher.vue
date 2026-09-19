@@ -1,18 +1,21 @@
 <script setup lang="ts">
 import type { DropdownMenuItem } from '@nuxt/ui'
 import { computed } from 'vue'
+import { useThemeStore } from '~/stores/theme'
 
-// Appearance picker, shown at the sidebar bottom beside the language switcher: the colour MODE
-// (system / light / dark). It is a dropdown rather than a toggle because three states do not fit a
-// switch, and it is named "Appearance" rather than "Colour mode" because the theme pick joins it
-// next. Mode is `@nuxtjs/color-mode`'s preference (its own persisted storage); it is neither a
-// deployment setting nor an RBAC matter, so the row shows for every tier and role.
+// Appearance picker, shown at the sidebar bottom beside the language switcher: colour MODE
+// (system / light / dark) and THEME (the built-ins) in one dropdown, because they are two halves of one question ("what does the
+// app look like") and each on its own would cost a footer row for a control used once.
+//
+// Mode is `@nuxtjs/color-mode`'s preference (its own persisted storage); theme is the theme store.
+// Neither is a deployment setting or an RBAC matter, so the row shows for every tier and role.
 //
 // `collapsed` renders the icon-only rail variant; the dropdown itself is unchanged.
 withDefaults(defineProps<{ collapsed?: boolean }>(), { collapsed: false })
 
 const { t } = useI18n()
 const colorMode = useColorMode()
+const theme = useThemeStore()
 
 type ModePreference = 'system' | 'light' | 'dark'
 const MODES: readonly ModePreference[] = ['system', 'light', 'dark']
@@ -35,7 +38,7 @@ const preference = computed<ModePreference>(() =>
   isMode(colorMode.preference) ? colorMode.preference : 'system',
 )
 
-const summary = computed(() => t(MODE_LABELS[preference.value]))
+const summary = computed(() => `${theme.active.name} · ${t(MODE_LABELS[preference.value])}`)
 
 const items = computed<DropdownMenuItem[][]>(() => [
   MODES.map((mode) => ({
@@ -47,6 +50,15 @@ const items = computed<DropdownMenuItem[][]>(() => [
       colorMode.preference = mode
     },
   })),
+  [
+    { label: t('appearance.theme.section'), type: 'label' as const },
+    ...theme.themes.map((candidate) => ({
+      label: candidate.name,
+      type: 'checkbox' as const,
+      checked: theme.current === candidate.id,
+      onSelect: () => theme.select(candidate.id),
+    })),
+  ],
 ])
 </script>
 
