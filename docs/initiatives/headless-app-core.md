@@ -1,4 +1,4 @@
-# Headless app core: a framework-neutral client, reducer and contribution vocabulary
+# Framework-neutral app core: shared client, reducer and contribution vocabulary
 
 **Status:** proposal, no code landed · **Owner:** frontend · **Started:** 2026-09-19
 
@@ -8,20 +8,20 @@
 ## Goal & rationale
 
 A deployment that wants its own UI over the complete cat-factory stack has one option today: fork
-the Nuxt layer. `@cat-factory/app` is a thin client with no business logic, and everything it
-drives is reachable over HTTP, so the block is not the backend. The block is that the pieces a
-second UI needs sit inside the layer as Vue composables, and the extension seams
+the Nuxt layer. Everything the app drives is reachable over HTTP, so the block is not the backend.
+The block is that the client orchestration a second UI needs sits inside Vue composables and Pinia
+stores, and the extension seams
 ([ADR 0049](../../backend/docs/adr/0049-modular-vue-adoption.md)) contribute Vue components.
 
-The goal is that a consumer can ship a UI in the framework it already has (React first, because
-every embedding host that matters for a developer tool is React: VS Code and JetBrains webviews,
-Backstage plugins, GitHub-app UIs) while the platform keeps ONE backend and ONE contract. The
-maintainer owns the neutral core and the vocabulary; a binding other than the Vue layer is owned by
-whoever ships it.
+The goal is that a consumer can ship a browser UI in the framework it already uses while the
+platform keeps ONE backend and ONE contract. React is the first proof because it exercises the seam
+from outside the existing Vue layer; it is not a product constraint or a commitment to a particular
+host. The maintainer owns the neutral core and the vocabulary; a binding other than the Vue layer
+is owned by whoever ships it.
 
-The audience is internal: our own alternate frontends and deployments we control. That choice sets
-the stability model (a promise on one new package, stated in changesets, not an `/api/v2`-style
-freeze) and keeps the maintainer's ongoing cost to a changeset line on a binding-facing change.
+The audience is internal: our own alternate frontends and deployments we control. App core stays
+under the repository's existing pre-1.0 compatibility rule and records binding-facing changes in
+changesets.
 
 ### What is already in place
 
@@ -54,9 +54,8 @@ The proposal is smaller than it looks because the hard half exists:
   Vue and Angular bindings sit on top. Cat-factory consumes the Vue binding.
 
 So the work is: settle who owns the app-local types the api modules import, retire the last raw
-`$fetch` routes, lift the auth flow out of the store, package what exists, state a stability
-promise on the new package, own the i18n key map as data, and split the Vue-coupled slot entries
-into a framework-neutral spec plus a per-framework pairing.
+`$fetch` routes, lift the auth flow out of the store, package what exists, and split the
+Vue-coupled slot entries into a framework-neutral spec plus a per-framework pairing.
 
 ## Why not the two surfaces that already exist
 
@@ -75,12 +74,12 @@ into a framework-neutral spec plus a per-framework pairing.
 ## Vocabulary
 
 - **App core**: `@cat-factory/app-core`, the new framework-free package: the contract sender, the
-  auth flow, the version handshake, the stream (ticket, socket, reconcile), the reducer, and the
+  auth flow, the stream (ticket, socket, reconcile), the reducer, and the
   framework-neutral half of every contribution slot.
 - **Binding**: a package that renders app core's state with one framework and pairs its id
   vocabulary with components. `@cat-factory/app` (Vue/Nuxt) is the first binding.
 - **Targets seam**: `WorkspaceEventTargets`, the callback interface a binding implements to
-  receive routed events. The frozen contract for live updates.
+  receive routed events without switching on the wire event union.
 - **Contribution spec**: the framework-neutral half of a slot entry (id, order, labels, action
   ids, and its predicates and resolvers as plain functions). It ships as code in app core and never
   crosses a wire. **Pairing**: the framework half, an id mapped to a component inside a binding.
@@ -105,46 +104,23 @@ Components are never the contract.
 
 ## Decisions
 
-### D1. The promise sits on `app-core` only; `contracts` keeps its pre-1.0 freedom
+### D1. App core keeps the existing internal lockstep contract
 
-This adds a THIRD stability tier, and it is stated as one. Today there are two: `/api/v1`, the
-SDKs and webhook delivery are stable ([ADR 0034](../../backend/docs/adr/0034-public-api-stability.md)),
-and everything internal is pre-1.0 and breaks freely (`CLAUDE.md`). `@cat-factory/contracts` is in
-the second tier: it is at 0.355.1 and is reshaped in ordinary PRs. This proposal does not move it.
-The new tier is `@cat-factory/app-core`: promised to bindings, internal audience, no deprecation
-windows, no dual shapes.
+This proposal does not add a third stability tier. `/api/v1`, the SDKs and webhook delivery keep
+their stable public contract
+([ADR 0034](../../backend/docs/adr/0034-public-api-stability.md)); `@cat-factory/contracts` and the
+new `@cat-factory/app-core` remain internal, pre-1.0 packages under `CLAUDE.md`'s existing rule.
 
-What is promised, exactly: that a change to app core's exported surface is ANNOUNCED. What is not
-promised: that a binding built against one app core runs against a backend built against another.
-App core re-exports the contract types and validates every response against them, so the
-deployment contract is LOCKSTEP: a binding and the backend it talks to ship from the same contracts
-version, the way the Vue layer and the backend already do inside one deployment. Cross-version
-pairs are unsupported, and the alternative (app core owning stable DTOs and adapting the unstable
-contracts behind them) is a second copy of about 620 shapes, the exact thing "Deliberately NOT
-pursued" rejects for a generated client.
+App core re-exports contract types and validates responses against them. A binding and the backend
+it talks to therefore ship from compatible repository revisions, as the Vue layer and backend do
+today. Cross-version compatibility is not promised. A consumer that owns a separate binding also
+owns coordinating its frontend and backend upgrade.
 
-Unsupported must fail as a statement, not as a decode error somewhere in a store. Today nothing
-carries a version: neither `/health` nor the workspace snapshot reports one, so a mismatch surfaces
-as an `UnexpectedResponseError` with no cause named. The handshake: the backend reports the
-`@cat-factory/contracts` version it was built with on the bootstrap snapshot (the first thing app
-core reads), app core carries the version it was built against, and a mismatch puts the client
-into a typed `incompatible` state with both versions, before any store is touched. A binding
-renders that state; it never sees a half-hydrated board.
-
-What that means in daily work:
-
-- A PR that reshapes a route contract or an event member changes none of its habits, as long as
-  the backend and the Vue binding still agree. Where the reshape changes an `app-core` export (an
-  api module's signature, a re-exported type a binding reads, a targets callback), the PR adds one
-  changeset line under `@cat-factory/app-core` naming what a binding must change. That line is the
-  gate; a version number is not. A "major" on a 0.x package carries no signal, so app core
-  publishes `1.0.0` when the last slice lands, and until then every binding-facing break is the
-  changeset entry itself.
-- A binding pins an `app-core` range and reads the changelog on bump. Nothing else is promised.
-
-Rejected alternative: promising stability on `contracts` itself. It would put a consumer contract
-on the package the backend reshapes most, and reverse the internals rule with no migration story
-behind it.
+Every binding-facing change still gets an `@cat-factory/app-core` changeset that names what the
+binding must update. That is release communication, not a compatibility protocol. This initiative
+does not add a backend version endpoint, duplicate the route shapes behind stable DTOs, or publish
+app core as `1.0.0`. If independently deployed bindings later become a product requirement, their
+compatibility window and failure handshake need their own design before a stable release.
 
 ### D2. `@cat-factory/app-core` holds exactly what every binding needs and nothing a binding owns
 
@@ -156,7 +132,7 @@ refusal handling, the mothership session exchange, invite redemption, local PAT 
 re-gate, and the bootstrap ordering between them, with the store as a target rather than the
 owner), the ticket mint plus socket lifecycle with reconnect and reconcile (today's
 `useWorkspaceStream.ts` minus `ref` and `onScopeDispose`), `applyWorkspaceEvent`,
-`createCoarseRefresh`, `WorkspaceEventTargets`, the version handshake from D1, and the
+`createCoarseRefresh`, `WorkspaceEventTargets`, and the
 contribution specs from D4. The auth flow is in scope because it is the most failure-prone client
 logic there is; a "token holder" alone would make every binding rewrite it.
 
@@ -181,29 +157,27 @@ Location: `frontend/app-core`, a new workspace member beside `frontend/app`. It 
 dependency, so it cannot live inside the layer, and it is UI-side code, so it does not belong
 under `backend/packages/` beside contracts.
 
-### D3. Live updates freeze the targets seam, not the payloads
+### D3. Live updates route through required targets, not binding-owned event switches
 
 Three options were weighed:
 
-| Option                                              | Cost                                                                                                              | Verdict    |
-| --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ---------- |
-| Freeze the full `WorkspaceEvent` union              | Every member carries whole entities (`Block`, `ExecutionInstance`, the session types), so their shapes freeze too | Too heavy  |
-| Coarse public SSE only                              | Cannot drive a live board                                                                                         | Too little |
-| Freeze `WorkspaceEventTargets` and ship the reducer | A binding implements 16 upserts on its own store and never switches on `type`                                     | Chosen     |
+| Option                                       | Cost                                                                                                              | Verdict    |
+| -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ---------- |
+| Freeze the full `WorkspaceEvent` union       | Every member carries whole entities (`Block`, `ExecutionInstance`, the session types), so their shapes freeze too | Too heavy  |
+| Coarse public SSE only                       | Cannot drive a live board                                                                                         | Too little |
+| Ship `WorkspaceEventTargets` and the reducer | A binding implements 16 upserts on its own store and never switches on `type`                                     | Chosen     |
 
-A new event member arrives as a new OPTIONAL callback, so the seam is additive by construction.
-Optional cannot mean ignorable: a socket that stays open never runs the reconnect reconcile, so a
-binding that lacks a target would keep stale state for the rest of the session. The correctness
-rule is therefore: `refreshBoard` (the debounced coarse reconcile, already a target today) is the
-ONE REQUIRED callback, and an event with no target, whether unknown to this app core or not
-implemented by this binding, routes to it and logs one stated warning. The binding then re-reads
-the snapshot and is current again, at the cost of one refresh.
+Every target callback stays required. A new event member lands with its reducer branch and target
+callback, so a binding upgrading app core fails to compile until it decides how to store that
+event. This is a binding-facing change and its changeset names the new callback. The internal,
+lockstep audience makes that honest break cheaper than an optional callback that silently loses
+state.
 
-That fallback is sound because the workspace snapshot hydrates the state behind every current
-member except `llmCall`, which is append-only activity: a missed one is a gap in a feed, not a
-stale entity. A future member whose state lives outside the snapshot ships with a typed
-invalidation target of its own, never as optional-only; the version handshake in D1 covers the
-case where a binding is too old to know the member exists at all.
+There is no correct generic refresh fallback. The workspace snapshot covers the board and several
+eager stores, but requirements, clarity, brainstorm, consensus sessions, Kaizen activity and
+document interviews are lazy caches outside it. A board refresh would clear or miss those rather
+than apply the event. An event unknown at runtime therefore logs one warning and is dropped, as it
+is today; that case means the unsupported cross-version pairing from D1 is already running.
 
 Entity shapes still come from contracts, which keeps its pre-1.0 freedom (D1); a reshape reaches a
 binding as an app-core changeset line.
@@ -247,8 +221,9 @@ once and a pairing per binding it ships.
 The maintainer owns `contracts`, `app-core` and the vocabulary. `@cat-factory/app` stays the
 reference binding and the first consumer of app core. Any other binding lives OUT of this
 repository, pins an `app-core` range, and is that owner's to keep current. This repo's runtime
-symmetry rule does not extend to bindings: a React binding one version behind is not a
-showstopper here, and no CI in this repo tests it.
+symmetry rule does not extend to bindings: a change here does not block on parity in an external
+binding, and that binding's owner updates it before deploying it against a changed backend. No CI
+in this repo tests an external binding.
 
 The reason is cost. An in-tree second binding would inherit the parity rule by analogy and double
 frontend work per feature. The proposal asks the maintainer to own the seam, not a second UI.
@@ -261,18 +236,8 @@ by `pickPostLoginRedirect` in
 [`loginFlow.ts`](../../backend/packages/server/src/modules/auth/loginFlow.ts): the requested
 `redirect` is honoured when it is same-origin, listed in `AUTH_ALLOWED_REDIRECT_ORIGINS`, or a
 loopback host (`localhost`, `127.0.0.0/8`, `::1`); otherwise the request origin wins. So a second
-UI origin works when the operator lists it, and a local development server on the developer's own
-machine works with no configuration.
-
-That does NOT cover an IDE webview directly. A VS Code or JetBrains webview is not an `http(s)`
-origin, and `pickPostLoginRedirect` refuses any other protocol before it looks at the host, so the
-backend can never redirect into one. The design for that case needs no backend change: the
-extension host opens a short-lived loopback listener and names it as the `redirect`, which IS a
-loopback `http` origin and so is honoured; the listener receives the fragment, and the host hands
-the token to the webview over the IDE's own message channel, never through a URL. The security
-boundary is the same one the loopback rule already accepts: the token lands in a process on the
-developer's machine that the developer runs. The React proof (D7) is a browser app and does not
-exercise this path; an IDE binding is its own slice with this design as its starting point.
+UI origin works when the operator lists it. A local development server needs no redirect
+allow-list entry; the separate CORS policy below still applies.
 
 Two traps a binding author has to know:
 
@@ -283,49 +248,28 @@ Two traps a binding author has to know:
 
 ### D7. A read-only React board is the acceptance test for the seam
 
-The extraction slice is a move and proves nothing about the seam on its own beyond the headless
+The extraction slice is a move and proves nothing about the seam on its own beyond the framework-free
 suite in D2. The proof is a small React app, out of tree, that signs in, hydrates a board through
 app core, subscribes to the stream, and implements the targets on a Zustand store. It is done when
 a run started in the Vue SPA advances live in the React view with no code in the React app that
 names an event `type`. What it surfaces goes into the gotchas section here; what it needs from app
 core lands as slices.
 
-### D8. App core owns the reason-to-key map and the `en` reference catalog; catalogs stay per binding
-
-The backend does not localize prose. A failure carries a machine-readable `error.details.reason`
-and the SPA maps it to a frontend key through `usePipelineErrorToast` (with `UNAVAILABLE_REASONS`
-as an exhaustive `Record`). The catalog behind those keys is about 6400 keys in `en.json`, in 10
-locales. A binding that starts without this starts with no copy at all and re-derives the
-reason-to-key mapping by hand, which is the drift the i18n rule exists to prevent.
-
-The split: the reason-to-key map is framework-free data and moves to app core, beside the
-contracts vocabulary it maps from, with the exhaustiveness check that fails the build when a
-reason gains no key. App core also ships the `en` catalog as the reference the keys are written
-against. Rendering, the i18n library, locale loading and the nine other catalogs stay in each
-binding; the Vue layer keeps its deep-merge and its locale-parity guard unchanged. A binding may
-copy or translate `en` as it sees fit; the platform promises the keys, not the prose.
-
 ## Why now: what this unlocks
 
 Ranked by how much each depends on this split rather than on modularity in general.
 
-1. **Cat-factory inside the tools developers already use.** A Backstage plugin or a VS Code panel
-   becomes a thin React binding over the same live stream and contracts, instead of polling
-   `/api/v1`.
-2. **One surface per audience instead of one SPA with hidden fields.** The `basic`/`advanced` tier
+1. **One surface per audience instead of one SPA with hidden fields.** The `basic`/`advanced` tier
    and the `intake` role are implemented as hiding today. A form-first intake app or a read-only
    wallboard (the viewer-tier ticket exists for exactly this and nothing uses it outside the SPA)
    becomes a small binding over a subset of the store.
-3. **Store coherence becomes a unit test.** The repo's flake rule says a flaky e2e is almost always
+2. **Store coherence becomes a unit test.** The repo's flake rule says a flaky e2e is almost always
    a store reconcile or a readiness gate. With connect, reconcile, debounce and routing in app core,
-   those races run headless under vitest against a real backend instead of only through Playwright.
-4. **A headless operator with the human's capability.** `sdk/mcp` exposes `/api/v1` only, so an
-   agent can run pipelines but not author them. A session-authed headless client gives an internal
-   assistant, a CLI or the mothership local node the full board with the live stream. The
-   `assistant` api module and mothership mode would each otherwise build their own.
-5. **Consumers on a React design system can adopt at all.** `deploy/frontend` extends the Nuxt
+   those races run framework-free under vitest against a controlled transport instead of only
+   through Playwright.
+3. **Consumers on another design system can adopt at all.** `deploy/frontend` extends the Nuxt
    layer, so an organisation with a React component library rebrands and stops.
-6. **Slices E and F of the extension initiative close.** F is D3; E's `notificationKinds` spec is a
+4. **Slices E and F of the extension initiative close.** F is D3; E's `notificationKinds` spec is a
    D4 row.
 
 ## What stays unchanged
@@ -341,19 +285,17 @@ Ranked by how much each depends on this split rather than on modularity in gener
 
 ## Per-slice status
 
-| #   | Slice                                 | Deliverable                                                                                                                                                                                                                                                                                                                                                  | Status | PR  |
-| --- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------ | --- |
-| 0   | Tracker                               | This document                                                                                                                                                                                                                                                                                                                                                | done   | —   |
-| 1   | Type ownership                        | 37 api modules import 28 `~/types/*` modules today (`domain`, `execution`, `merge`, `tracker`, `notifications`, ...). Each type is placed: a wire shape moves to contracts, a client shape moves with the api modules, a frontend-only type (`AgentArchetype`, `TaskTypeMeta`, `LodLevel`, palette, level of detail) stays in the layer; no behaviour change | todo   | —   |
-| 2   | Retire the raw `$fetch` routes        | The three api modules still on Nuxt's `$fetch` (`auth.ts` ticket mint, `provisioningLogs.ts`, `visualConfirm.ts` blob upload) move to contract routes, or to a plain `fetch` where a body is binary; `ApiHttp` leaves `api/context.ts`                                                                                                                       | todo   | —   |
-| 3   | Auth flow as a state machine          | `stores/auth.ts`, `stores/auth/session.ts` and `stores/auth/mothership.ts` reduced to a Pinia target over a framework-neutral flow (login by provider, redirect-fragment consumption, SSO refusal, mothership exchange, invite redemption, PAT login, 401 re-gate, bootstrap order); headless tests                                                          | todo   | —   |
-| 4   | Extract `@cat-factory/app-core`       | `frontend/app-core` with client, api modules, auth flow, stream lifecycle, reducer, coarse refresh; SPA consumes it; dependency guard; headless suite in the no-DB lane; engine as peer; the [new published package checklist](../internal/releases.md#adding-a-new-published-package)                                                                       | todo   | —   |
-| 5   | Version handshake                     | Backend reports its contracts version on the bootstrap snapshot; app core compares against the version it was built with and enters a typed `incompatible` state on mismatch; conformance assertion on both runtimes                                                                                                                                         | todo   | —   |
-| 6   | Targets seam as the promised contract | `WorkspaceEventTargets` documented as the stability surface with `refreshBoard` required; unhandled event routes to it with one warning; slice F (`custom` member + handler registration) on the reducer                                                                                                                                                     | todo   | —   |
-| 7   | Slot spec / pairing split             | Each `AppSlots` row from D4 split; `registerAppModule` accepts spec + Vue pairing; consumer example updated                                                                                                                                                                                                                                                  | todo   | —   |
-| 8   | i18n key map and `en` reference       | Reason-to-key map as data in app core with its exhaustiveness check; `en` catalog shipped from app core; Vue layer loads it unchanged                                                                                                                                                                                                                        | todo   | —   |
-| 9   | Read-only React proof (out of tree)   | Sign-in, board hydrate, live stream on a Zustand store; findings recorded here; app-core gaps filed as slices                                                                                                                                                                                                                                                | todo   | —   |
-| 10  | Promise written down; `1.0.0`; ADR    | Changeset rule and the lockstep contract in the `app-core` README; `frontend/app/README.md` points at app core; app core publishes `1.0.0`; tracker converts to an ADR                                                                                                                                                                                       | todo   | —   |
+| #   | Slice                               | Deliverable                                                                                                                                                                                                                                                                                                                                                  | Status | PR  |
+| --- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------ | --- |
+| 0   | Tracker                             | This document                                                                                                                                                                                                                                                                                                                                                | done   | —   |
+| 1   | Type ownership                      | 31 api modules import 25 `~/types/*` modules today (`domain`, `execution`, `merge`, `tracker`, `notifications`, ...). Each type is placed: a wire shape moves to contracts, a client shape moves with the api modules, a frontend-only type (`AgentArchetype`, `TaskTypeMeta`, `LodLevel`, palette, level of detail) stays in the layer; no behaviour change | todo   | —   |
+| 2   | Retire the raw `$fetch` routes      | The three api modules still on Nuxt's `$fetch` (`auth.ts` ticket mint, `provisioningLogs.ts`, `visualConfirm.ts` blob upload) move to contract routes, or to a plain `fetch` where a body is binary; `ApiHttp` leaves `api/context.ts`                                                                                                                       | todo   | —   |
+| 3   | Auth flow as a state machine        | `stores/auth.ts`, `stores/auth/session.ts` and `stores/auth/mothership.ts` reduced to a Pinia target over a framework-neutral flow (login by provider, redirect-fragment consumption, SSO refusal, mothership exchange, invite redemption, PAT login, 401 re-gate, bootstrap order); framework-free tests                                                    | todo   | —   |
+| 4   | Extract `@cat-factory/app-core`     | `frontend/app-core` with client, api modules, auth flow, stream lifecycle, reducer, coarse refresh; SPA consumes it; dependency guard; framework-free suite in the no-DB lane; engine as peer; the [new published package checklist](../internal/releases.md#adding-a-new-published-package)                                                                 | todo   | —   |
+| 5   | Targets seam                        | `WorkspaceEventTargets` documented as the required routing surface; unknown runtime event warning; slice F (`custom` member + handler registration) on the reducer                                                                                                                                                                                           | todo   | —   |
+| 6   | Slot spec / pairing split           | Each `AppSlots` row from D4 split; `registerAppModule` accepts spec + Vue pairing; consumer example updated                                                                                                                                                                                                                                                  | todo   | —   |
+| 7   | Read-only React proof (out of tree) | Sign-in, board hydrate, live stream on a Zustand store; findings recorded here; app-core gaps filed as slices                                                                                                                                                                                                                                                | todo   | —   |
+| 8   | Package contract and ADR            | Changeset and lockstep rules in the `app-core` README; `frontend/app/README.md` points at app core; tracker converts to an ADR                                                                                                                                                                                                                               | todo   | —   |
 
 Slices 1 to 3 are prerequisites the extraction cannot skip: without them the move drags Nuxt's
 `$fetch`, a Pinia-shaped auth flow and two dozen layer-local type modules into the package, and
@@ -366,13 +308,11 @@ the dependency guard fails on day one.
   `applyWorkspaceEvent` and `coarseRefresh` already do it.
 - **A component reference in app core is a bug**, whatever the framework. If a spec needs to
   select a component, it carries a string id and the binding pairs it.
-- **Additive means optional, and optional means "falls back to `refreshBoard`".** A new targets
-  callback is optional; an event with no target reconciles coarsely and warns once. A member whose
-  state is outside the snapshot ships with its own invalidation target (D3). Making an existing
-  callback required is a binding-facing break and gets the changeset line (D1).
-- **Lockstep is the deployment contract.** A binding ships from the same contracts version as the
-  backend it talks to; the handshake makes a violation a stated `incompatible`, never a decode
-  error (D1).
+- **Every event target is required.** A new event member changes the target interface and gets a
+  binding-facing changeset. There is no generic refresh fallback for state outside the workspace
+  snapshot (D3).
+- **Lockstep is the deployment contract.** A binding and its backend ship from compatible
+  repository revisions. Supporting independent upgrades is outside this initiative (D1).
 - **A spec is code, not JSON.** Predicates and resolvers stay functions in app core; only
   `agentKinds` crosses a wire, and it does so under upstream's JSON-safe manifest subset (D4).
 - **One engine copy.** App core never lists `@modular-frontend/core` as a direct dependency and
@@ -390,6 +330,11 @@ the dependency guard fails on day one.
 - **Freezing the full `WorkspaceEvent` union.** Every entity change would be a break (D3).
 - **Growing `/api/v1` to UI parity.** Wrong audience, wrong cost (see "Why not").
 - **An in-tree second binding.** Doubles frontend work for the maintainer (D5).
+- **Non-browser hosts and non-frontend consumers.** This initiative supports browser frontends on
+  ordinary `http(s)` origins. Other hosts and consumers need their own requirements and acceptance
+  criteria.
+- **A shared localization catalog.** App core carries machine-readable error vocabulary; each
+  binding owns its copy, actions, i18n library and catalogs.
 - **A UI-scoped key tier.** The bearer plus ticket flow already serves any client (D6).
 - **A generated client for the session surface.** The contracts ARE the client's input; the
   `@toad-contracts` sender is already type-derived. A generator would be a second copy.
@@ -398,12 +343,7 @@ the dependency guard fails on day one.
 
 1. `frontend/app-core` as the location (D2), or a different home for a UI-side package with no
    Nuxt dependency?
-2. D1 states a third stability tier, keeps `contracts` free, and makes lockstep the deployment
-   contract with a version handshake on the bootstrap snapshot. Is the snapshot the right carrier,
-   or should the version ride an unauthenticated meta route so a binding can check before login?
-3. Slice F: agree to land it as the reducer-side registration in app core rather than a branch in
+2. Slice F: agree to land it as the reducer-side registration in app core rather than a branch in
    the Vue `onMessage` switch (D3)?
-4. Contribution vocabulary ownership: agent-kind presentation in contracts, everything else in
+3. Contribution vocabulary ownership: agent-kind presentation in contracts, everything else in
    app core (D4). Any row that should move?
-5. D8 ships the `en` catalog from app core. Is that wanted, or only the key list, with every
-   catalog including `en` staying in the Vue layer?
