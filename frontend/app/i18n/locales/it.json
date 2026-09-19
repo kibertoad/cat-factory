@@ -8575,7 +8575,27 @@
       "dark": "Scuro"
     },
     "theme": {
-      "section": "Tema"
+      "section": "Tema",
+      "import": "Importa un tema Nuxt UI…",
+      "remove": "Rimuovi questo tema"
+    },
+    "import": {
+      "title": "Importa un tema",
+      "description": "Crea un tema nell'editor dei temi di Nuxt UI, copia il suo link di condivisione e incollalo qui. Il tema viene salvato solo in questo browser.",
+      "linkLabel": "Link di condivisione",
+      "linkPlaceholder": "https://ui.nuxt.com/theme?doc=…",
+      "nameLabel": "Nome",
+      "namePlaceholder": "Il mio tema",
+      "nameTaken": "Esiste già un tema chiamato “{typed}”. Questo verrà salvato come “{name}”.",
+      "fontNote": "Il carattere indicato dal tema è usato solo se questo dispositivo o questa installazione lo fornisce; altrimenti il browser usa il carattere predefinito.",
+      "submit": "Importa",
+      "cancel": "Annulla",
+      "error": {
+        "notALink": "Incolla il link di condivisione di ui.nuxt.com/theme (o il JSON del tema).",
+        "malformed": "Questo link non contiene un tema leggibile. Copialo di nuovo dall'editor.",
+        "presetShorthand": "Questo link indica una preimpostazione dell'editor Nuxt UI che questa app non conosce. Modifica un'impostazione qualsiasi nell'editor così che il link contenga l'intero tema, poi copialo di nuovo.",
+        "unsupportedVersion": "Questo tema è stato creato con un formato dell'editor più recente di quello che questa app comprende."
+      }
     }
   }
 }
