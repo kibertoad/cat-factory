@@ -196,8 +196,8 @@ function onSave() {
 </script>
 
 <template>
-  <div class="space-y-3 rounded-lg border border-dashed border-slate-700 p-3">
-    <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+  <div class="space-y-3 rounded-lg border border-dashed border-muted p-3">
+    <p class="text-[11px] font-semibold uppercase tracking-wide text-muted">
       {{ t('settings.providerConnection.manifestEditor.title') }}
     </p>
 
@@ -214,7 +214,7 @@ function onSave() {
       />
     </UFormField>
 
-    <p v-if="!savedManifest && !jsonError && !schemaError" class="text-[11px] text-slate-500">
+    <p v-if="!savedManifest && !jsonError && !schemaError" class="text-[11px] text-dimmed">
       {{ t('settings.providerConnection.manifestEditor.starterHint') }}
     </p>
 
@@ -236,16 +236,16 @@ function onSave() {
 
     <!-- Secret sub-form: one write-only input per secret key the manifest references. -->
     <div class="space-y-2">
-      <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+      <p class="text-[11px] font-semibold uppercase tracking-wide text-muted">
         {{ t('settings.providerConnection.manifestEditor.secretsLabel') }}
       </p>
-      <p v-if="!secretKeys.length" class="text-[11px] text-slate-500">
+      <p v-if="!secretKeys.length" class="text-[11px] text-dimmed">
         {{ t('settings.providerConnection.manifestEditor.noSecrets') }}
       </p>
       <template v-else-if="connected">
         <p
           v-if="storedSecretKeys && storedSecretKeys.length"
-          class="text-[11px] text-slate-400"
+          class="text-[11px] text-muted"
           data-testid="manifest-editor-stored"
         >
           {{

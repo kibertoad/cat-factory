@@ -36,12 +36,12 @@ function addTask() {
       <li
         v-for="m in modules"
         :key="m.id"
-        class="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 hover:bg-slate-800/60"
+        class="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 hover:bg-elevated/60"
         @click="ui.select(m.id)"
       >
         <UIcon name="i-lucide-package" class="h-3.5 w-3.5 text-violet-400" />
-        <span class="truncate text-xs text-slate-200">{{ m.title }}</span>
-        <span class="ms-auto text-[10px] text-slate-500">{{
+        <span class="truncate text-xs text-default">{{ m.title }}</span>
+        <span class="ms-auto text-[10px] text-dimmed">{{
           t(
             'inspector.container.taskCount',
             { count: board.tasksOf(m.id).length },
@@ -68,19 +68,19 @@ function addTask() {
       <li
         v-for="task in tasks"
         :key="task.id"
-        class="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 hover:bg-slate-800/60"
+        class="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 hover:bg-elevated/60"
         @click="ui.select(task.id)"
       >
         <span
           class="h-2 w-2 shrink-0 rounded-full"
           :style="{ backgroundColor: STATUS_META[task.status].color }"
         />
-        <span class="truncate text-xs text-slate-200">{{ task.title }}</span>
-        <span class="ms-auto text-[10px] text-slate-500">{{ STATUS_META[task.status].label }}</span>
+        <span class="truncate text-xs text-default">{{ task.title }}</span>
+        <span class="ms-auto text-[10px] text-dimmed">{{ STATUS_META[task.status].label }}</span>
       </li>
     </ul>
-    <div v-else class="text-[11px] text-slate-500">{{ t('inspector.container.noTasks') }}</div>
-    <p v-if="isFrame" class="text-[11px] text-slate-500">
+    <div v-else class="text-[11px] text-dimmed">{{ t('inspector.container.noTasks') }}</div>
+    <p v-if="isFrame" class="text-[11px] text-dimmed">
       {{ t('inspector.container.servicesHint') }}
     </p>
   </InspectorSection>

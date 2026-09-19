@@ -36,7 +36,7 @@ const isEmpty = computed(() => props.rendered.groups.every((g) => g.entries.leng
 
 <template>
   <div
-    class="flex min-w-0 flex-col rounded-lg bg-slate-900/40"
+    class="flex min-w-0 flex-col rounded-lg bg-default/40"
     :style="{ width: LANE_GEOMETRY.laneWidth + 'px' }"
     :data-lane="rendered.lane"
   >
@@ -46,7 +46,7 @@ const isEmpty = computed(() => props.rendered.groups.every((g) => g.entries.leng
       :style="{ borderColor: meta.color + '33' }"
     >
       <UIcon :name="meta.icon" class="h-3.5 w-3.5 shrink-0" :style="{ color: meta.color }" />
-      <span class="truncate text-[11px] font-semibold text-slate-200">{{ t(meta.labelKey) }}</span>
+      <span class="truncate text-[11px] font-semibold text-default">{{ t(meta.labelKey) }}</span>
       <span
         class="ms-auto shrink-0 rounded px-1 text-[10px] font-semibold tabular-nums"
         :style="{ backgroundColor: meta.color + '22', color: meta.color }"
@@ -65,7 +65,7 @@ const isEmpty = computed(() => props.rendered.groups.every((g) => g.entries.leng
       <!-- An empty lane SAYS it is empty. Left blank, "nothing needs you" and "the lane failed
            to render" look identical, and the first is worth stating: it is the answer a reader
            scanning the needs-you column is hoping for. -->
-      <p v-if="isEmpty" class="px-1 pt-2 text-[10px] leading-snug text-slate-600">
+      <p v-if="isEmpty" class="px-1 pt-2 text-[10px] leading-snug text-app-600">
         {{ t(meta.emptyKey) }}
       </p>
       <LaneGroup

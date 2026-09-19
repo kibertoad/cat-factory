@@ -80,21 +80,21 @@ async function suppress(serviceId: string) {
 
 <template>
   <div class="flex flex-col gap-3" data-testid="foundational-catalog">
-    <p class="text-xs text-slate-500">{{ t('foundational.catalog.intro') }}</p>
+    <p class="text-xs text-dimmed">{{ t('foundational.catalog.intro') }}</p>
 
     <div
       v-for="s in catalog.resolved"
       :key="s.id"
-      class="rounded-md border border-slate-800 bg-slate-900/60 p-3"
+      class="rounded-md border border-default bg-default/60 p-3"
     >
       <div class="flex items-start gap-2">
         <UIcon name="i-lucide-boxes" class="mt-0.5 h-4 w-4 shrink-0 text-sky-400" />
         <div class="min-w-0 flex-1">
-          <p class="truncate text-sm font-medium text-slate-100">
+          <p class="truncate text-sm font-medium text-app-100">
             {{ s.name }}
-            <code class="ms-1 text-[11px] text-slate-500">{{ s.id }}</code>
+            <code class="ms-1 text-[11px] text-dimmed">{{ s.id }}</code>
           </p>
-          <p class="text-xs text-slate-400">{{ s.summary }}</p>
+          <p class="text-xs text-muted">{{ s.summary }}</p>
           <div v-if="s.capabilities.length" class="mt-1 flex flex-wrap gap-1">
             <UBadge v-for="c in s.capabilities" :key="c" size="xs" variant="subtle" color="neutral">
               {{ c }}
@@ -122,13 +122,13 @@ async function suppress(serviceId: string) {
             <div
               v-for="doc in catalog.contractBodies[s.id] ?? []"
               :key="doc.contractId"
-              class="rounded-md border border-slate-800 bg-slate-950/60 p-2"
+              class="rounded-md border border-default bg-app-950/60 p-2"
             >
-              <p class="mb-1 text-[11px] text-slate-400">
+              <p class="mb-1 text-[11px] text-muted">
                 {{ doc.title }}
-                <span v-if="doc.path" class="ms-1 font-mono text-slate-600">{{ doc.path }}</span>
+                <span v-if="doc.path" class="ms-1 font-mono text-app-600">{{ doc.path }}</span>
               </p>
-              <pre class="max-h-64 overflow-auto text-[11px] text-slate-300">{{ doc.body }}</pre>
+              <pre class="max-h-64 overflow-auto text-[11px] text-toned">{{ doc.body }}</pre>
             </div>
           </div>
         </div>
@@ -153,7 +153,7 @@ async function suppress(serviceId: string) {
       </div>
     </div>
 
-    <p v-if="!catalog.resolved.length" class="text-sm text-slate-500">
+    <p v-if="!catalog.resolved.length" class="text-sm text-dimmed">
       {{ t('foundational.catalog.empty') }}
     </p>
   </div>

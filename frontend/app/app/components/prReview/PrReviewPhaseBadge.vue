@@ -23,12 +23,12 @@ const phase = computed(() => prReviewPhase(props.step.prReview, props.step.subta
 // working (suppressed on a failed run). `awaiting` is the parked "findings ready" state — a
 // steady amber prompt, not a spinner.
 const PHASE_META: Record<PrReviewPhaseKind, { icon: string; spin: boolean; class: string }> = {
-  planning: { icon: 'i-lucide-loader-circle', spin: true, class: 'text-indigo-300' },
-  reviewing: { icon: 'i-lucide-loader-circle', spin: true, class: 'text-indigo-300' },
+  planning: { icon: 'i-lucide-loader-circle', spin: true, class: 'text-primary-300' },
+  reviewing: { icon: 'i-lucide-loader-circle', spin: true, class: 'text-primary-300' },
   awaiting: { icon: 'i-lucide-clipboard-check', spin: false, class: 'text-amber-300' },
-  challenging: { icon: 'i-lucide-gavel', spin: true, class: 'text-indigo-300' },
-  fixing: { icon: 'i-lucide-wrench', spin: true, class: 'text-indigo-300' },
-  posting: { icon: 'i-lucide-send', spin: true, class: 'text-indigo-300' },
+  challenging: { icon: 'i-lucide-gavel', spin: true, class: 'text-primary-300' },
+  fixing: { icon: 'i-lucide-wrench', spin: true, class: 'text-primary-300' },
+  posting: { icon: 'i-lucide-send', spin: true, class: 'text-primary-300' },
 }
 
 // Phase → i18n key. Exhaustive Record over the phase-kind union, so adding a kind without a

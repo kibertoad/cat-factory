@@ -75,8 +75,8 @@ export const COMPANION_STATE_META: Record<
 > = {
   possible: {
     label: 'May run',
-    dot: 'border-slate-600 bg-slate-800/40',
-    text: 'text-slate-400',
+    dot: 'border-app-600 bg-elevated/40',
+    text: 'text-muted',
     icon: 'i-lucide-circle-dashed',
   },
   running: {
@@ -93,8 +93,8 @@ export const COMPANION_STATE_META: Record<
   },
   skipped: {
     label: 'Skipped',
-    dot: 'border-slate-700 bg-slate-800/40',
-    text: 'text-slate-500',
+    dot: 'border-muted bg-elevated/40',
+    text: 'text-dimmed',
     icon: 'i-lucide-circle-slash',
   },
   failed: {
@@ -350,9 +350,9 @@ export function subtaskIconClass(status: string, runFailed: boolean): string[] {
   return [
     status === 'in_progress'
       ? runFailed
-        ? 'text-indigo-400'
-        : 'animate-spin text-indigo-400'
+        ? 'text-primary-400'
+        : 'animate-spin text-primary-400'
       : '',
-    status === 'completed' ? 'text-emerald-400' : 'text-slate-500',
+    status === 'completed' ? 'text-emerald-400' : 'text-dimmed',
   ]
 }

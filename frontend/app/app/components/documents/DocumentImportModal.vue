@@ -80,8 +80,8 @@ function preview(externalId: string) {
     </template>
     <template #body>
       <div v-if="!documents.anyConnected" class="space-y-3 text-center">
-        <UIcon name="i-lucide-plug" class="mx-auto h-8 w-8 text-slate-500" />
-        <p class="text-sm text-slate-400">{{ t('documents.import.connectFirst') }}</p>
+        <UIcon name="i-lucide-plug" class="mx-auto h-8 w-8 text-dimmed" />
+        <p class="text-sm text-muted">{{ t('documents.import.connectFirst') }}</p>
         <div class="flex justify-center gap-2">
           <UButton
             v-for="s in documents.sources"
@@ -125,13 +125,13 @@ function preview(externalId: string) {
         </div>
 
         <div v-if="sourceDocs.length" class="space-y-2">
-          <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          <h3 class="text-[11px] font-semibold uppercase tracking-wide text-muted">
             {{ t('documents.import.importedHeading') }}
           </h3>
           <div
             v-for="doc in sourceDocs"
             :key="`${doc.source}:${doc.externalId}`"
-            class="rounded-lg border border-slate-800 bg-slate-900/60 p-3"
+            class="rounded-lg border border-default bg-default/60 p-3"
           >
             <div class="flex items-start justify-between gap-2">
               <div class="min-w-0">
@@ -139,11 +139,11 @@ function preview(externalId: string) {
                   :href="doc.url"
                   target="_blank"
                   rel="noopener"
-                  class="truncate text-sm font-medium text-white hover:underline"
+                  class="truncate text-sm font-medium text-highlighted hover:underline"
                 >
                   {{ doc.title }}
                 </a>
-                <p class="mt-0.5 line-clamp-2 text-xs text-slate-500">{{ doc.excerpt }}</p>
+                <p class="mt-0.5 line-clamp-2 text-xs text-dimmed">{{ doc.excerpt }}</p>
                 <DocumentSyncState :doc="doc" class="mt-1" />
               </div>
               <UButton
@@ -158,7 +158,7 @@ function preview(externalId: string) {
             </div>
           </div>
         </div>
-        <p v-else class="text-center text-xs text-slate-500">
+        <p v-else class="text-center text-xs text-dimmed">
           {{ t('documents.import.noneImported') }}
         </p>
       </div>

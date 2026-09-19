@@ -112,7 +112,7 @@ function selectItems(field: DescriptorField) {
            testid that would have to be slugified to be selectable. -->
       <p
         v-if="caption"
-        class="-mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400"
+        class="-mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted"
         :class="{ 'pt-2': startsGroup }"
         :data-testid="`${testidPrefix}-section`"
       >

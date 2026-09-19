@@ -267,11 +267,11 @@ const labelKey = computed(() =>
 </script>
 
 <template>
-  <section v-if="cap" class="space-y-2 rounded-lg border border-slate-700 bg-slate-900/40 p-3">
-    <h3 class="text-sm font-semibold text-slate-200">{{ t(labelKey) }}</h3>
+  <section v-if="cap" class="space-y-2 rounded-lg border border-muted bg-default/40 p-3">
+    <h3 class="text-sm font-semibold text-default">{{ t(labelKey) }}</h3>
 
     <!-- Off-local: the active backend is deployment/registration-driven; state it plainly. -->
-    <p v-if="!writable" class="text-sm text-slate-300" :data-testid="`${axis}-backend-active`">
+    <p v-if="!writable" class="text-sm text-toned" :data-testid="`${axis}-backend-active`">
       {{ t('settings.infrastructure.active', { backend: activeLabel }) }}
     </p>
 
@@ -287,8 +287,8 @@ const labelKey = computed(() =>
           @change="select(item.id)"
         />
         <span class="min-w-0">
-          <span class="text-sm text-slate-200">{{ item.label }}</span>
-          <span v-if="item.desc" class="block text-[11px] text-slate-400">{{ item.desc }}</span>
+          <span class="text-sm text-default">{{ item.label }}</span>
+          <span v-if="item.desc" class="block text-[11px] text-muted">{{ item.desc }}</span>
         </span>
       </label>
     </div>

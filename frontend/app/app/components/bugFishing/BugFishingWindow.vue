@@ -232,7 +232,7 @@ const SEVERITY_CLASS: Record<BugFishingSeverity, string> = {
   critical: 'bg-red-500/15 text-red-300 border-red-500/30',
   high: 'bg-orange-500/15 text-orange-300 border-orange-500/30',
   medium: 'bg-amber-500/15 text-amber-200 border-amber-500/30',
-  low: 'bg-slate-500/15 text-slate-300 border-slate-600/40',
+  low: 'bg-app-500/15 text-toned border-app-600/40',
 }
 
 const PHASE_ICON: Record<string, string> = {
@@ -261,9 +261,9 @@ const PHASE_ICON: Record<string, string> = {
            phase that found nothing from one that has not run yet. -->
       <aside
         data-testid="bug-fishing-phases"
-        class="w-60 shrink-0 overflow-y-auto border-r border-slate-800 px-3 py-4"
+        class="w-60 shrink-0 overflow-y-auto border-r border-default px-3 py-4"
       >
-        <p class="mb-2 px-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+        <p class="mb-2 px-1 text-[10px] font-semibold uppercase tracking-wide text-dimmed">
           {{ t('bugFishing.phases.heading') }}
         </p>
         <button
@@ -271,8 +271,8 @@ const PHASE_ICON: Record<string, string> = {
           class="mb-1 w-full rounded-md px-2 py-1.5 text-left text-[12px]"
           :class="
             selectedPassKey === null
-              ? 'bg-slate-800 text-slate-100'
-              : 'text-slate-400 hover:bg-slate-800/60'
+              ? 'bg-elevated text-app-100'
+              : 'text-muted hover:bg-elevated/60'
           "
           @click="selectedPassKey = null"
         >
@@ -295,8 +295,8 @@ const PHASE_ICON: Record<string, string> = {
                 class="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left"
                 :class="
                   selectedPassKey === passKey(phase)
-                    ? 'bg-slate-800 text-slate-100'
-                    : 'text-slate-400 hover:bg-slate-800/60'
+                    ? 'bg-elevated text-app-100'
+                    : 'text-muted hover:bg-elevated/60'
                 "
                 :data-testid="`bug-fishing-phase-${phase.id}`"
                 @click="selectedPassKey = passKey(phase)"
@@ -308,12 +308,12 @@ const PHASE_ICON: Record<string, string> = {
                     'animate-spin text-sky-300': phase.status === 'fishing',
                     'text-emerald-400': phase.status === 'completed',
                     'text-amber-400': phase.status === 'failed',
-                    'text-slate-600': phase.status === 'pending',
+                    'text-app-600': phase.status === 'pending',
                   }"
                 />
                 <span class="min-w-0 flex-1">
                   <span class="block truncate text-[12px]">{{ phase.title }}</span>
-                  <span class="block text-[10px] text-slate-500">
+                  <span class="block text-[10px] text-dimmed">
                     {{
                       phase.status === 'completed' || phase.status === 'failed'
                         ? t('bugFishing.phases.found', { count: phaseFindingCount(phase) })
@@ -329,13 +329,13 @@ const PHASE_ICON: Record<string, string> = {
                     :data-testid="`bug-fishing-coverage-${phase.id}`"
                     :title="t('bugFishing.coverage.tooltip', { percent: coverageShare(phase) })"
                   >
-                    <span class="block h-0.5 w-full rounded-full bg-slate-700">
+                    <span class="block h-0.5 w-full rounded-full bg-accented">
                       <span
                         class="block h-0.5 rounded-full bg-sky-500/70"
                         :style="{ width: `${coverageShare(phase)}%` }"
                       />
                     </span>
-                    <span class="mt-0.5 block text-[10px] text-slate-600">
+                    <span class="mt-0.5 block text-[10px] text-app-600">
                       {{ t('bugFishing.coverage.share', { percent: coverageShare(phase) }) }}
                     </span>
                   </span>
@@ -352,9 +352,9 @@ const PHASE_ICON: Record<string, string> = {
              that reported nothing because it found nothing are different facts. -->
         <div
           v-if="selectedPhase"
-          class="mb-4 rounded-lg border border-slate-800 bg-slate-900/40 px-3 py-2.5"
+          class="mb-4 rounded-lg border border-default bg-default/40 px-3 py-2.5"
         >
-          <p class="text-[11px] text-slate-400">{{ selectedPhase.goal }}</p>
+          <p class="text-[11px] text-muted">{{ selectedPhase.goal }}</p>
           <p
             v-if="selectedPhase.status === 'failed'"
             data-testid="bug-fishing-phase-failed"
@@ -430,9 +430,9 @@ const PHASE_ICON: Record<string, string> = {
         <div
           v-if="canAct"
           data-testid="bug-fishing-pipeline"
-          class="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-slate-800 bg-slate-900/40 px-3 py-2"
+          class="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-default bg-default/40 px-3 py-2"
         >
-          <span class="text-[11px] text-slate-400">{{ t('bugFishing.fixPipeline.label') }}</span>
+          <span class="text-[11px] text-muted">{{ t('bugFishing.fixPipeline.label') }}</span>
           <USelectMenu
             v-model="pipelineOverride"
             :items="pipelineOptions"
@@ -440,16 +440,16 @@ const PHASE_ICON: Record<string, string> = {
             size="xs"
             class="min-w-52"
           />
-          <span class="text-[11px] text-slate-500">
+          <span class="text-[11px] text-dimmed">
             {{ t('bugFishing.fixPipeline.hint', { pipeline: effectivePipelineName ?? '—' }) }}
           </span>
         </div>
 
         <div class="mb-2 flex items-center justify-between">
-          <p class="text-[11px] text-slate-400">
+          <p class="text-[11px] text-muted">
             {{ t('bugFishing.counts', { untriaged: untriagedCount, spawned: spawnedCount }) }}
           </p>
-          <label class="flex items-center gap-1.5 text-[11px] text-slate-400">
+          <label class="flex items-center gap-1.5 text-[11px] text-muted">
             <input v-model="showTriaged" type="checkbox" class="accent-sky-500" />
             {{ t('bugFishing.showTriaged') }}
           </label>
@@ -465,7 +465,7 @@ const PHASE_ICON: Record<string, string> = {
         <div
           v-if="visibleFindings.length === 0"
           data-testid="bug-fishing-empty"
-          class="rounded-lg border border-slate-800 bg-slate-900/40 px-4 py-8 text-center text-[12px] text-slate-400"
+          class="rounded-lg border border-default bg-default/40 px-4 py-8 text-center text-[12px] text-muted"
         >
           {{
             findings.length === 0
@@ -479,7 +479,7 @@ const PHASE_ICON: Record<string, string> = {
             v-for="finding in visibleFindings"
             :key="finding.id"
             :data-testid="`bug-fishing-finding-${finding.id}`"
-            class="rounded-lg border border-slate-800 bg-slate-900/40 px-3 py-2.5"
+            class="rounded-lg border border-default bg-default/40 px-3 py-2.5"
             :class="{ 'opacity-60': finding.dismissed }"
           >
             <div class="flex flex-wrap items-center gap-2">
@@ -489,28 +489,28 @@ const PHASE_ICON: Record<string, string> = {
               >
                 {{ t(`bugFishing.severity.${finding.severity}`) }}
               </span>
-              <span class="rounded bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-300">
+              <span class="rounded bg-elevated px-1.5 py-0.5 text-[10px] text-toned">
                 {{ t(`bugFishing.kind.${finding.kind}`) }}
               </span>
-              <span class="text-[10px] text-slate-500">
+              <span class="text-[10px] text-dimmed">
                 {{ t(`bugFishing.confidence.${finding.confidence}`) }}
               </span>
               <span
-                class="min-w-0 flex-1 text-[13px] text-slate-100"
+                class="min-w-0 flex-1 text-[13px] text-app-100"
                 :class="{ 'line-through': finding.dismissed }"
               >
                 {{ finding.title }}
               </span>
             </div>
 
-            <p v-if="finding.path" class="mt-1 font-mono text-[11px] text-slate-500">
+            <p v-if="finding.path" class="mt-1 font-mono text-[11px] text-dimmed">
               {{ finding.path }}<span v-if="finding.line">:{{ finding.line }}</span>
             </p>
 
             <MarkdownProse :text="finding.detail" class="mt-2 max-w-3xl text-[12px]" />
 
-            <div v-if="finding.failureScenario" class="mt-2 text-[12px] text-slate-300">
-              <span class="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+            <div v-if="finding.failureScenario" class="mt-2 text-[12px] text-toned">
+              <span class="text-[10px] font-semibold uppercase tracking-wide text-dimmed">
                 {{ t('bugFishing.finding.failureScenario') }}
               </span>
               <MarkdownProse :text="finding.failureScenario" class="mt-0.5 max-w-3xl" />
@@ -520,14 +520,14 @@ const PHASE_ICON: Record<string, string> = {
                  apart: a finding that cannot point at the code it describes is speculating, and
                  that should be visible without reading the prose for it. -->
             <details v-if="finding.evidence" class="mt-2">
-              <summary class="cursor-pointer text-[11px] text-slate-400 hover:text-slate-200">
+              <summary class="cursor-pointer text-[11px] text-muted hover:text-default">
                 {{ t('bugFishing.finding.evidence') }}
               </summary>
               <MarkdownProse :text="finding.evidence" class="mt-1 max-w-3xl text-[12px]" />
             </details>
 
             <details v-if="finding.suggestedFix" class="mt-1">
-              <summary class="cursor-pointer text-[11px] text-slate-400 hover:text-slate-200">
+              <summary class="cursor-pointer text-[11px] text-muted hover:text-default">
                 {{ t('bugFishing.finding.suggestedFix') }}
               </summary>
               <MarkdownProse :text="finding.suggestedFix" class="mt-1 max-w-3xl text-[12px]" />
@@ -566,7 +566,7 @@ const PHASE_ICON: Record<string, string> = {
             <div
               v-else-if="finding.spawn?.status === 'pending'"
               data-testid="bug-fishing-finding-spawning"
-              class="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-400"
+              class="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-muted"
             >
               <UIcon name="i-lucide-loader-circle" class="h-3.5 w-3.5 animate-spin" />
               <span>{{ t('bugFishing.finding.spawning') }}</span>
@@ -621,9 +621,9 @@ const PHASE_ICON: Record<string, string> = {
          (it is not — the run advances past the step and the remaining angles never run). -->
     <footer
       v-if="awaiting"
-      class="flex items-center justify-between gap-3 border-t border-slate-800 px-5 py-3"
+      class="flex items-center justify-between gap-3 border-t border-default px-5 py-3"
     >
-      <p class="text-[11px] text-slate-500">
+      <p class="text-[11px] text-dimmed">
         {{
           untriagedCount > 0
             ? t('bugFishing.footer.parkedWithUntriaged', { count: untriagedCount })

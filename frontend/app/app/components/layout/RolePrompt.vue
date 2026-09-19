@@ -29,7 +29,7 @@ function pick(role: UiRole) {
   <UModal v-model:open="open" :title="t('uiRole.prompt.title')" :ui="{ content: 'max-w-lg' }">
     <template #body>
       <div class="space-y-4" data-testid="role-prompt">
-        <p class="text-sm text-slate-300">{{ t('uiRole.prompt.intro') }}</p>
+        <p class="text-sm text-toned">{{ t('uiRole.prompt.intro') }}</p>
         <div class="space-y-2">
           <button
             v-for="role in UI_ROLES"
@@ -40,23 +40,23 @@ function pick(role: UiRole) {
             class="flex w-full items-center gap-3 rounded-lg border p-3 text-start transition"
             :class="
               role === uiRole.role && uiRole.chosen
-                ? 'border-indigo-500/60 bg-indigo-500/10'
-                : 'border-slate-800 bg-slate-900/60 hover:border-slate-600 hover:bg-slate-800/60'
+                ? 'border-primary-500/60 bg-primary-500/10'
+                : 'border-default bg-default/60 hover:border-app-600 hover:bg-elevated/60'
             "
             @click="pick(role)"
           >
             <UIcon :name="ROLE_PRESENTATION[role].icon" class="h-5 w-5 shrink-0 text-primary-400" />
             <div class="min-w-0 flex-1">
-              <div class="text-sm font-medium text-slate-100">
+              <div class="text-sm font-medium text-app-100">
                 {{ t(ROLE_PRESENTATION[role].labelKey) }}
               </div>
-              <p class="text-xs text-slate-400">{{ t(ROLE_PRESENTATION[role].hintKey) }}</p>
+              <p class="text-xs text-muted">{{ t(ROLE_PRESENTATION[role].hintKey) }}</p>
             </div>
           </button>
         </div>
         <!-- The choice is not a commitment, and saying so is what makes the narrowed role
              pickable: it is one dropdown at the top of the sidebar to leave again. -->
-        <p class="text-[11px] leading-snug text-slate-500">{{ t('uiRole.prompt.change') }}</p>
+        <p class="text-[11px] leading-snug text-dimmed">{{ t('uiRole.prompt.change') }}</p>
       </div>
     </template>
     <template #footer>

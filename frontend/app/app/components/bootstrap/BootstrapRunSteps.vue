@@ -44,7 +44,7 @@ function stateLabel(state: BootstrapStepState): string {
         :class="BOOTSTRAP_STEP_STYLE[step.state].iconClass"
       />
       <span :class="BOOTSTRAP_STEP_STYLE[step.state].labelClass">{{ stepLabel(step.id) }}</span>
-      <span class="ms-auto shrink-0 text-slate-500">{{ stateLabel(step.state) }}</span>
+      <span class="ms-auto shrink-0 text-dimmed">{{ stateLabel(step.state) }}</span>
     </li>
   </ol>
 </template>

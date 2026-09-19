@@ -49,21 +49,18 @@ const draft = computed({
 </script>
 
 <template>
-  <div
-    class="rounded-lg border border-slate-800 bg-slate-950/40 p-3"
-    data-testid="clarification-item"
-  >
+  <div class="rounded-lg border border-default bg-app-950/40 p-3" data-testid="clarification-item">
     <div class="flex items-start justify-between gap-2">
-      <p class="text-[13px] font-medium text-slate-200">{{ prompt }}</p>
+      <p class="text-[13px] font-medium text-default">{{ prompt }}</p>
       <slot name="badges" />
     </div>
-    <p v-if="detail" class="mt-1 whitespace-pre-wrap text-[12px] leading-relaxed text-slate-400">
+    <p v-if="detail" class="mt-1 whitespace-pre-wrap text-[12px] leading-relaxed text-muted">
       {{ detail }}
     </p>
 
     <!-- dismissed: a "not relevant" chip + reopen -->
     <div v-if="dismissed" class="mt-2 flex items-center justify-between gap-2">
-      <span class="inline-flex items-center gap-1 text-[11px] text-slate-500">
+      <span class="inline-flex items-center gap-1 text-[11px] text-dimmed">
         <UIcon name="i-lucide-x" class="h-3.5 w-3.5" />{{ t('clarification.dismissed') }}
       </span>
       <UButton
@@ -82,7 +79,7 @@ const draft = computed({
     <!-- a recommendation is being requested/generated: a working chip, no answer box -->
     <div
       v-else-if="requested"
-      class="mt-2 inline-flex items-center gap-1 text-[11px] text-indigo-300"
+      class="mt-2 inline-flex items-center gap-1 text-[11px] text-primary-300"
       data-testid="clarification-requested"
     >
       <UIcon name="i-lucide-loader-circle" class="h-3.5 w-3.5 animate-spin" />
@@ -131,15 +128,15 @@ const draft = computed({
       <!-- inline AI suggestion + "use this answer" -->
       <div
         v-if="recommendation"
-        class="mt-2 rounded-md border border-indigo-800/50 bg-indigo-950/30 p-2"
+        class="mt-2 rounded-md border border-primary-800/50 bg-primary-950/30 p-2"
         data-testid="clarification-recommendation"
       >
         <div
-          class="mb-1 flex items-center gap-1 text-[10px] uppercase tracking-wide text-indigo-300"
+          class="mb-1 flex items-center gap-1 text-[10px] uppercase tracking-wide text-primary-300"
         >
           <UIcon name="i-lucide-wand-2" class="h-3 w-3" />{{ t('clarification.suggestion') }}
         </div>
-        <p class="whitespace-pre-wrap text-[12px] text-slate-200">{{ recommendation }}</p>
+        <p class="whitespace-pre-wrap text-[12px] text-default">{{ recommendation }}</p>
         <UButton
           class="mt-1.5"
           size="xs"

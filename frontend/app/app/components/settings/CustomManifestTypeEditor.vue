@@ -90,12 +90,12 @@ async function remove(type: CustomManifestType) {
 </script>
 
 <template>
-  <section class="space-y-3 rounded-lg border border-slate-700 bg-slate-900/40 p-3">
+  <section class="space-y-3 rounded-lg border border-muted bg-default/40 p-3">
     <div>
-      <h3 class="text-sm font-semibold text-slate-200">
+      <h3 class="text-sm font-semibold text-default">
         {{ t('settings.infrastructure.customType.title') }}
       </h3>
-      <p class="text-[11px] text-slate-500">{{ t('settings.infrastructure.customType.hint') }}</p>
+      <p class="text-[11px] text-dimmed">{{ t('settings.infrastructure.customType.hint') }}</p>
     </div>
 
     <!-- The catalog: registered (read-only) + workspace (editable). -->
@@ -103,11 +103,11 @@ async function remove(type: CustomManifestType) {
       <li
         v-for="type in infra.customTypes"
         :key="type.manifestId"
-        class="flex items-start justify-between gap-2 rounded-md border border-slate-800 bg-slate-900/50 px-2.5 py-1.5"
+        class="flex items-start justify-between gap-2 rounded-md border border-default bg-default/50 px-2.5 py-1.5"
       >
         <div class="min-w-0">
           <div class="flex items-center gap-1.5">
-            <span class="truncate text-[13px] text-slate-200">{{ type.label }}</span>
+            <span class="truncate text-[13px] text-default">{{ type.label }}</span>
             <UBadge
               :color="type.source === 'workspace' ? 'primary' : 'neutral'"
               variant="subtle"
@@ -116,8 +116,8 @@ async function remove(type: CustomManifestType) {
               {{ t(`settings.infrastructure.customType.source.${type.source}`) }}
             </UBadge>
           </div>
-          <code class="text-[11px] text-slate-500">{{ type.manifestId }}</code>
-          <p v-if="type.description" class="text-[11px] text-slate-400">{{ type.description }}</p>
+          <code class="text-[11px] text-dimmed">{{ type.manifestId }}</code>
+          <p v-if="type.description" class="text-[11px] text-muted">{{ type.description }}</p>
         </div>
         <div v-if="type.source === 'workspace'" class="flex shrink-0 items-center gap-0.5">
           <UButton
@@ -139,13 +139,13 @@ async function remove(type: CustomManifestType) {
         </div>
       </li>
     </ul>
-    <p v-else class="text-[11px] text-slate-500">
+    <p v-else class="text-[11px] text-dimmed">
       {{ t('settings.infrastructure.customType.empty') }}
     </p>
 
     <!-- Add / edit a workspace-defined type. -->
-    <div class="space-y-2 border-t border-slate-800 pt-3">
-      <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+    <div class="space-y-2 border-t border-default pt-3">
+      <p class="text-[11px] font-semibold uppercase tracking-wide text-muted">
         {{
           editing
             ? t('settings.infrastructure.customType.editTitle', { id: draft.manifestId })

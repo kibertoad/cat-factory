@@ -142,10 +142,10 @@ function prettyArgs(raw: string): string {
   <div class="space-y-4">
     <div class="flex flex-wrap items-center justify-between gap-2">
       <div>
-        <h2 class="text-[11px] uppercase tracking-wide text-slate-500">
+        <h2 class="text-[11px] uppercase tracking-wide text-dimmed">
           {{ t('observability.toolCalls.title') }}
         </h2>
-        <p class="text-[11px] text-slate-600">{{ t('observability.toolCalls.subtitle') }}</p>
+        <p class="text-[11px] text-app-600">{{ t('observability.toolCalls.subtitle') }}</p>
       </div>
       <OutcomeFilterChips v-model="filter" :options="filterOptions" />
     </div>
@@ -154,7 +154,7 @@ function prettyArgs(raw: string): string {
          read still in flight behind them, and outrank one that failed. -->
     <p
       v-if="source.loading && !visible.length"
-      class="flex items-center justify-center gap-2 py-8 text-center text-sm text-slate-500"
+      class="flex items-center justify-center gap-2 py-8 text-center text-sm text-dimmed"
     >
       <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
       {{ t('observability.toolCalls.loading') }}
@@ -179,7 +179,7 @@ function prettyArgs(raw: string): string {
          never off an empty prefix that may simply not have loaded. -->
     <p
       v-else-if="!counts.all"
-      class="rounded-lg border border-dashed border-slate-800 py-8 text-center text-sm text-slate-500"
+      class="rounded-lg border border-dashed border-default py-8 text-center text-sm text-dimmed"
     >
       {{ t('observability.toolCalls.none') }}
     </p>
@@ -187,7 +187,7 @@ function prettyArgs(raw: string): string {
          reassuring of the two: the operator asked for the failures and there are none. -->
     <p
       v-else-if="!visible.length"
-      class="rounded-lg border border-dashed border-slate-800 py-8 text-center text-sm text-slate-500"
+      class="rounded-lg border border-dashed border-default py-8 text-center text-sm text-dimmed"
     >
       {{ t('observability.toolCalls.noneMatching') }}
     </p>
@@ -207,16 +207,16 @@ function prettyArgs(raw: string): string {
         <li
           v-for="call in visible"
           :key="call.id"
-          class="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/40"
+          class="overflow-hidden rounded-xl border border-default bg-default/40"
           :class="!call.ok ? 'border-rose-900/60' : ''"
         >
           <button
-            class="flex w-full items-center gap-3 px-4 py-2.5 text-start transition hover:bg-slate-900/70"
+            class="flex w-full items-center gap-3 px-4 py-2.5 text-start transition hover:bg-default/70"
             @click="toggle(call)"
           >
             <UIcon
               name="i-lucide-chevron-right"
-              class="h-4 w-4 shrink-0 text-slate-500 transition-transform"
+              class="h-4 w-4 shrink-0 text-dimmed transition-transform"
               :class="expanded[call.id] ? 'rotate-90' : ''"
             />
             <UIcon
@@ -225,60 +225,60 @@ function prettyArgs(raw: string): string {
               :style="{ color: agentMeta(call.agentKind).color }"
               :title="agentMeta(call.agentKind).label"
             />
-            <span class="font-mono text-[13px] text-slate-200">{{ call.tool }}</span>
-            <div class="ms-auto flex items-center gap-2.5 text-[11px] tabular-nums text-slate-400">
+            <span class="font-mono text-[13px] text-default">{{ call.tool }}</span>
+            <div class="ms-auto flex items-center gap-2.5 text-[11px] tabular-nums text-muted">
               <span :title="t('observability.toolCalls.durationHint')">
                 {{ formatMs(Math.max(0, call.endedAt - call.startedAt)) }}
               </span>
               <UBadge v-if="!call.ok" color="error" variant="subtle" size="sm">
                 {{ t('observability.toolCalls.failed') }}
               </UBadge>
-              <span class="hidden text-slate-600 md:inline">{{ clock(call.startedAt) }}</span>
+              <span class="hidden text-app-600 md:inline">{{ clock(call.startedAt) }}</span>
             </div>
           </button>
 
-          <div v-if="expanded[call.id]" class="border-t border-slate-800 px-4 py-3 space-y-3">
-            <div class="flex flex-wrap gap-x-5 gap-y-1 text-[11px] text-slate-500">
+          <div v-if="expanded[call.id]" class="border-t border-default px-4 py-3 space-y-3">
+            <div class="flex flex-wrap gap-x-5 gap-y-1 text-[11px] text-dimmed">
               <span>{{ t('observability.toolCalls.dispatch', { jobId: call.jobId }) }}</span>
               <span>{{ t('observability.toolCalls.seq', { seq: call.seq }) }}</span>
             </div>
             <!-- `withheld` is not an empty body: nothing was captured, so an empty `args` here
                must not read as a tool that took none. -->
-            <p v-if="call.bodies !== 'stored'" class="text-[12px] italic text-slate-500">
+            <p v-if="call.bodies !== 'stored'" class="text-[12px] italic text-dimmed">
               {{ t('observability.toolCalls.bodiesWithheld') }}
             </p>
             <template v-else>
               <div>
                 <div
-                  class="mb-1 flex items-center gap-2 text-[11px] uppercase tracking-wide text-slate-500"
+                  class="mb-1 flex items-center gap-2 text-[11px] uppercase tracking-wide text-dimmed"
                 >
                   <span>{{ t('observability.toolCalls.arguments') }}</span>
                   <span
                     v-if="call.argsDropped > 0"
-                    class="normal-case tracking-normal text-slate-600"
+                    class="normal-case tracking-normal text-app-600"
                   >
                     {{ t('observability.toolCalls.dropped', { chars: call.argsDropped }) }}
                   </span>
                 </div>
                 <pre
-                  class="max-h-60 overflow-auto rounded-lg bg-slate-950/70 p-3 text-[11px] leading-relaxed text-slate-300"
+                  class="max-h-60 overflow-auto rounded-lg bg-app-950/70 p-3 text-[11px] leading-relaxed text-toned"
                   >{{ call.args ? prettyArgs(call.args) : '—' }}</pre>
               </div>
               <div>
                 <div
-                  class="mb-1 flex items-center gap-2 text-[11px] uppercase tracking-wide text-slate-500"
+                  class="mb-1 flex items-center gap-2 text-[11px] uppercase tracking-wide text-dimmed"
                 >
                   <span>{{ t('observability.toolCalls.result') }}</span>
                   <span
                     v-if="call.resultDropped > 0"
-                    class="normal-case tracking-normal text-slate-600"
+                    class="normal-case tracking-normal text-app-600"
                   >
                     {{ t('observability.toolCalls.dropped', { chars: call.resultDropped }) }}
                   </span>
                 </div>
                 <pre
-                  class="max-h-60 overflow-auto rounded-lg bg-slate-950/70 p-3 text-[11px] leading-relaxed"
-                  :class="call.ok ? 'text-slate-300' : 'text-rose-300'"
+                  class="max-h-60 overflow-auto rounded-lg bg-app-950/70 p-3 text-[11px] leading-relaxed"
+                  :class="call.ok ? 'text-toned' : 'text-rose-300'"
                   >{{ call.result || '—' }}</pre>
               </div>
             </template>

@@ -90,15 +90,15 @@ function selectItems(field: WorkspaceMetadataFieldDefinition) {
 <template>
   <div class="space-y-6" data-testid="workspace-metadata-settings">
     <section class="space-y-2">
-      <h3 class="text-sm font-semibold text-slate-200">
+      <h3 class="text-sm font-semibold text-default">
         {{ t('settings.workspaceSettings.metadata.heading') }}
       </h3>
-      <p class="text-[11px] text-slate-400">
+      <p class="text-[11px] text-muted">
         {{ t('settings.workspaceSettings.metadata.body') }}
       </p>
     </section>
 
-    <p v-if="fields.length === 0" class="text-[11px] text-slate-500">
+    <p v-if="fields.length === 0" class="text-[11px] text-dimmed">
       {{ t('settings.workspaceSettings.metadata.empty') }}
     </p>
 
@@ -106,7 +106,7 @@ function selectItems(field: WorkspaceMetadataFieldDefinition) {
       <div class="space-y-4">
         <label v-for="field in fields" :key="field.key" class="block">
           <!-- Field labels are deployment DATA, rendered verbatim (see the module docs). -->
-          <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+          <span class="mb-1 block text-[10px] uppercase tracking-wide text-dimmed">
             {{ field.label }}
           </span>
           <USelect
@@ -124,7 +124,7 @@ function selectItems(field: WorkspaceMetadataFieldDefinition) {
             size="sm"
             :data-testid="`workspace-metadata-${field.key}`"
           />
-          <span v-if="field.description" class="mt-1 block text-[11px] text-slate-500">
+          <span v-if="field.description" class="mt-1 block text-[11px] text-dimmed">
             {{ field.description }}
           </span>
         </label>

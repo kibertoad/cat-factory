@@ -353,7 +353,7 @@ function fieldHelp(key: string): string | undefined {
 <template>
   <div v-if="descriptor" class="space-y-4">
     <div class="flex items-start justify-between gap-3">
-      <p class="text-xs text-slate-400">{{ blurb }}</p>
+      <p class="text-xs text-muted">{{ blurb }}</p>
       <UButton
         :icon="showLogs ? 'i-lucide-chevron-up' : 'i-lucide-scroll-text'"
         variant="ghost"
@@ -379,10 +379,10 @@ function fieldHelp(key: string): string | undefined {
     <!-- Saved connection summary -->
     <div
       v-if="connection"
-      class="flex items-center justify-between rounded-md border border-slate-700 bg-slate-900/50 px-3 py-2 text-sm"
+      class="flex items-center justify-between rounded-md border border-muted bg-default/50 px-3 py-2 text-sm"
     >
       <div>
-        <span class="font-medium text-slate-200">{{ connection.label }}</span>
+        <span class="font-medium text-default">{{ connection.label }}</span>
         <div class="text-[11px] text-emerald-400">
           {{ t('settings.providerConnection.connectedAt', { baseUrl: connection.baseUrl }) }}
         </div>
@@ -425,11 +425,8 @@ function fieldHelp(key: string): string | undefined {
     />
 
     <!-- NATIVE provider: the friendly, descriptor-driven flat field form. -->
-    <div
-      v-else-if="isNative"
-      class="rounded-lg border border-dashed border-slate-700 p-3 space-y-3"
-    >
-      <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+    <div v-else-if="isNative" class="rounded-lg border border-dashed border-muted p-3 space-y-3">
+      <p class="text-[11px] font-semibold uppercase tracking-wide text-muted">
         {{
           connection
             ? t('settings.providerConnection.form.updateConfiguration')

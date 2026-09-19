@@ -24,8 +24,8 @@ export interface BootstrapStepStyle {
 export const BOOTSTRAP_STEP_STYLE: Record<BootstrapStepState, BootstrapStepStyle> = {
   pending: {
     icon: 'i-lucide-circle',
-    iconClass: 'text-slate-500',
-    labelClass: 'text-slate-500',
+    iconClass: 'text-dimmed',
+    labelClass: 'text-dimmed',
   },
   running: {
     icon: 'i-lucide-loader-circle',
@@ -40,7 +40,7 @@ export const BOOTSTRAP_STEP_STYLE: Record<BootstrapStepState, BootstrapStepStyle
   done: {
     icon: 'i-lucide-check-circle-2',
     iconClass: 'text-emerald-400',
-    labelClass: 'text-slate-400',
+    labelClass: 'text-muted',
   },
   failed: {
     icon: 'i-lucide-alert-triangle',
@@ -49,12 +49,12 @@ export const BOOTSTRAP_STEP_STYLE: Record<BootstrapStepState, BootstrapStepStyle
   },
   stopped: {
     icon: 'i-lucide-circle-stop',
-    iconClass: 'text-slate-400',
-    labelClass: 'text-slate-300',
+    iconClass: 'text-muted',
+    labelClass: 'text-toned',
   },
   unknown: {
     icon: 'i-lucide-help-circle',
-    iconClass: 'text-slate-400',
-    labelClass: 'text-slate-400',
+    iconClass: 'text-muted',
+    labelClass: 'text-muted',
   },
 }

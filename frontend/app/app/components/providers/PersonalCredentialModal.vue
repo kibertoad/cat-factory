@@ -93,7 +93,7 @@ function goConnect() {
     <template #body>
       <div class="space-y-4">
         <template v-if="needsConnect">
-          <p class="text-sm text-slate-400">
+          <p class="text-sm text-muted">
             {{ t('providers.personalCredential.connectBody', { vendor: vendorLabel }) }}
           </p>
           <div class="flex justify-end gap-2">
@@ -115,7 +115,7 @@ function goConnect() {
         </template>
 
         <template v-else>
-          <p class="text-sm text-slate-400">
+          <p class="text-sm text-muted">
             {{ t('providers.personalCredential.passwordBody', { vendor: vendorLabel }) }}
           </p>
           <UFormField :label="t('providers.personalCredential.passwordField')">

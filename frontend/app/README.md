@@ -288,6 +288,10 @@ it has nothing to do at mount, and running it there would announce a close that 
 
 A status → chip map feeding a `<UBadge :color="…">` types its values as `BadgeColor` (`utils/badge.ts`), which is derived from `UBadge`'s own prop type rather than restated as a literal union. Typed `string`, the binding does not compile and the reflex is `as any` at each call site: seven of them had accumulated. That cast also accepts a colour Nuxt UI does not define, which renders as an unstyled badge with nothing failing.
 
+### Color through the theme aliases, never the raw palette
+
+Greys go through Nuxt UI **role tokens** (`bg-default`, `bg-elevated`, `bg-accented`, `text-default`, `text-toned`, `text-muted`, `text-dimmed`, `text-highlighted`, `border-default`, `border-muted`), never the raw Tailwind palette (`bg-slate-900`, `text-slate-400`) and not the numbered neutral scale either. Role tokens flip with the theme, so the same markup renders correctly in dark and light; the numbered scale is fixed and does not. The five grey shades with no role token (the deep `950` surface, `100`, `600`, `500`, `400`) use the hand-defined `app-*` tokens (`bg-app-950`, `text-app-100`, ...) from `main.css`, which flip the same way. Brand accents use the `primary` alias numbered scale (`text-primary-400`, `bg-primary-500`); `text-white` is `text-highlighted`. `scripts/check-frontend-palette.mjs` (CI) bans a reintroduced raw `slate-`/`indigo-` utility. Status colours that are their own scale (`red`/`rose`, `amber`/`green`) are out of scope. colorMode is pinned dark. The theme layer is light-CAPABLE (every migrated token flips), but light is NOT enabled and NOT ready: the board canvas (`--board-bg`), the markdown reader surfaces in `prose.css`, the per-category hex accents in `utils/catalog.ts`, the status scales, and a few `bg-white` / `bg-black` / `border-white` literals still render for dark only, and no surface beyond login, add-task and workspace-settings has been checked in light. Enabling light is a separate change that closes those first.
+
 ## Task swimlanes
 
 A service frame lays its tasks out in **status lanes**, not at coordinates. Three lanes a reader

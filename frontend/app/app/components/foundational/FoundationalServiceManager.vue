@@ -88,7 +88,7 @@ const activeTab = computed({
          forms that would fail with a raw 503. -->
     <div
       v-if="catalog.available === false"
-      class="rounded-md border border-slate-800 bg-slate-900/40 p-3 text-sm text-slate-400"
+      class="rounded-md border border-default bg-default/40 p-3 text-sm text-muted"
     >
       {{ t('foundational.unavailable') }}
     </div>

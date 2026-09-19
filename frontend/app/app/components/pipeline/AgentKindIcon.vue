@@ -25,6 +25,6 @@ const tooltip = computed(() =>
 <template>
   <span class="inline-flex items-center gap-2" :title="tooltip">
     <UIcon :name="meta.icon" :class="iconClass" class="shrink-0" :style="{ color: meta.color }" />
-    <span v-if="showLabel" class="text-xs text-slate-100">{{ meta.label }}</span>
+    <span v-if="showLabel" class="text-xs text-app-100">{{ meta.label }}</span>
   </span>
 </template>

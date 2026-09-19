@@ -62,25 +62,31 @@ function backToApp() {
 
 <template>
   <div
-    class="flex h-screen w-screen items-center justify-center bg-slate-950 text-slate-100"
+    class="flex h-screen w-screen items-center justify-center bg-app-950 text-app-100"
     data-testid="mcp-oauth-callback"
   >
     <div
-      class="w-full max-w-sm rounded-xl border border-slate-800 bg-slate-900/80 p-8 text-center backdrop-blur"
+      class="w-full max-w-sm rounded-xl border border-default bg-default/80 p-8 text-center backdrop-blur"
     >
       <template v-if="state === 'working'">
-        <UIcon name="i-lucide-loader" class="mx-auto mb-3 h-10 w-10 animate-spin text-indigo-400" />
-        <h1 class="mb-1 text-lg font-semibold text-white">
+        <UIcon
+          name="i-lucide-loader"
+          class="mx-auto mb-3 h-10 w-10 animate-spin text-primary-400"
+        />
+        <h1 class="mb-1 text-lg font-semibold text-highlighted">
           {{ t('settings.toolServers.oauth.callback.working') }}
         </h1>
       </template>
 
       <template v-else-if="state === 'done'">
         <UIcon name="i-lucide-check-circle" class="mx-auto mb-3 h-10 w-10 text-emerald-400" />
-        <h1 class="mb-1 text-lg font-semibold text-white" data-testid="mcp-oauth-callback-done">
+        <h1
+          class="mb-1 text-lg font-semibold text-highlighted"
+          data-testid="mcp-oauth-callback-done"
+        >
           {{ t('settings.toolServers.oauth.callback.done', { server: serverId }) }}
         </h1>
-        <p class="mb-6 text-sm text-slate-400">
+        <p class="mb-6 text-sm text-muted">
           {{ t('settings.toolServers.oauth.callback.doneHint') }}
         </p>
         <UButton block color="primary" @click="backToApp">
@@ -90,10 +96,13 @@ function backToApp() {
 
       <template v-else>
         <UIcon name="i-lucide-alert-triangle" class="mx-auto mb-3 h-10 w-10 text-red-400" />
-        <h1 class="mb-1 text-lg font-semibold text-white" data-testid="mcp-oauth-callback-failed">
+        <h1
+          class="mb-1 text-lg font-semibold text-highlighted"
+          data-testid="mcp-oauth-callback-failed"
+        >
           {{ t('settings.toolServers.oauth.callback.failedTitle') }}
         </h1>
-        <p class="mb-6 text-sm break-words text-slate-400">{{ detail }}</p>
+        <p class="mb-6 text-sm break-words text-muted">{{ detail }}</p>
         <UButton block color="neutral" variant="subtle" @click="backToApp">
           {{ t('settings.toolServers.oauth.callback.back') }}
         </UButton>

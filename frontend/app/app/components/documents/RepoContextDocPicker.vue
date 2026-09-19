@@ -246,13 +246,13 @@ onMounted(() => {
             v-for="f in fileMatches"
             :key="f.path"
             type="button"
-            class="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-start text-xs text-slate-300 hover:bg-slate-800/70"
+            class="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-start text-xs text-toned hover:bg-elevated/70"
             @click="pickFile(f.path)"
           >
-            <UIcon :name="icon" class="h-3.5 w-3.5 shrink-0 text-indigo-400" />
+            <UIcon :name="icon" class="h-3.5 w-3.5 shrink-0 text-primary-400" />
             <span class="truncate">{{ f.path }}</span>
           </button>
-          <p v-if="fileMatchesTruncated" class="px-2 py-1 text-[11px] text-slate-500">
+          <p v-if="fileMatchesTruncated" class="px-2 py-1 text-[11px] text-dimmed">
             {{ t('documents.repoPicker.moreFiles', { count: FILE_RESULTS_CAP }) }}
           </p>
           <EmptyState
@@ -263,7 +263,7 @@ onMounted(() => {
           />
           <p
             v-else-if="!loadingFiles && !fileQuery.trim()"
-            class="px-2 py-1 text-[11px] text-slate-500"
+            class="px-2 py-1 text-[11px] text-dimmed"
           >
             {{ t('documents.repoPicker.searchFilesHint') }}
           </p>

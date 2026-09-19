@@ -147,11 +147,11 @@ function resetToDefaults() {
     </template>
     <template #body>
       <div class="space-y-4">
-        <p class="text-xs text-slate-400">{{ t('notificationSettings.panel.intro') }}</p>
+        <p class="text-xs text-muted">{{ t('notificationSettings.panel.intro') }}</p>
 
         <div
           v-if="notifications.settingsStatus === 'unavailable'"
-          class="rounded-lg border border-slate-700 bg-slate-800/40 p-3 text-xs text-slate-400"
+          class="rounded-lg border border-muted bg-elevated/40 p-3 text-xs text-muted"
         >
           {{ t('notificationSettings.unavailable') }}
         </div>
@@ -168,15 +168,13 @@ function resetToDefaults() {
 
         <div
           v-else-if="!editable"
-          class="rounded-lg border border-slate-700 bg-slate-800/40 p-3 text-xs text-slate-400"
+          class="rounded-lg border border-muted bg-elevated/40 p-3 text-xs text-muted"
         >
           {{ t('common.loading') }}
         </div>
 
         <template v-else>
-          <div
-            class="flex items-center gap-3 px-2 text-[10px] uppercase tracking-wide text-slate-500"
-          >
+          <div class="flex items-center gap-3 px-2 text-[10px] uppercase tracking-wide text-dimmed">
             <span class="flex-1">{{ t('notificationSettings.column.event') }}</span>
             <span class="w-16 text-center">{{ t('notificationSettings.column.inApp') }}</span>
             <span class="w-16 text-center">{{ t('notificationSettings.column.email') }}</span>
@@ -186,9 +184,9 @@ function resetToDefaults() {
             <div
               v-for="type in TYPES"
               :key="type"
-              class="flex items-center gap-3 rounded-lg border border-slate-700 bg-slate-800/40 p-2"
+              class="flex items-center gap-3 rounded-lg border border-muted bg-elevated/40 p-2"
             >
-              <span class="flex-1 text-sm text-slate-300">
+              <span class="flex-1 text-sm text-toned">
                 {{ t(`notificationSettings.type.${type}`) }}
               </span>
               <div class="flex w-16 justify-center">
@@ -200,9 +198,13 @@ function resetToDefaults() {
             </div>
           </div>
 
-          <p class="text-[11px] text-slate-500">{{ t('notificationSettings.panel.inAppNote') }}</p>
-          <p class="text-[11px] text-slate-500">{{ t('notificationSettings.panel.emailNote') }}</p>
-          <p class="text-[11px] text-slate-500">
+          <p class="text-[11px] text-dimmed">
+            {{ t('notificationSettings.panel.inAppNote') }}
+          </p>
+          <p class="text-[11px] text-dimmed">
+            {{ t('notificationSettings.panel.emailNote') }}
+          </p>
+          <p class="text-[11px] text-dimmed">
             {{ t('notificationSettings.panel.otherChannelsNote') }}
             <UButton
               v-if="slack.available"

@@ -93,8 +93,8 @@ const earlierFailedToolCalls = computed(() =>
         <!-- The run's own structured record. Absent on a run that is still going, or that
              failed without one; the evidence below stands on its own either way. -->
         <template v-if="evidence.failure">
-          <p class="mt-1 text-[13px] text-slate-200">{{ evidence.failure.message }}</p>
-          <div class="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-slate-500">
+          <p class="mt-1 text-[13px] text-default">{{ evidence.failure.message }}</p>
+          <div class="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-dimmed">
             <span>{{ t('observability.failure.kind', { kind: failureKindLabel }) }}</span>
             <span v-if="evidence.failure.stepIndex != null">
               {{ t('observability.failure.atStep', { index: evidence.failure.stepIndex + 1 }) }}
@@ -108,10 +108,10 @@ const earlierFailedToolCalls = computed(() =>
           <FailureDetail
             :detail="evidence.failure.detail"
             :message="evidence.failure.message"
-            summary-class="text-[11px] text-slate-500 hover:text-slate-300"
-            pre-class="bg-slate-950/60 text-[11px] text-slate-400"
+            summary-class="text-[11px] text-dimmed hover:text-toned"
+            pre-class="bg-app-950/60 text-[11px] text-muted"
           />
-          <p v-if="evidence.failure.hint" class="mt-1.5 text-[12px] text-slate-300">
+          <p v-if="evidence.failure.hint" class="mt-1.5 text-[12px] text-toned">
             {{ evidence.failure.hint }}
           </p>
         </template>
@@ -124,7 +124,7 @@ const earlierFailedToolCalls = computed(() =>
       <button
         v-if="evidence.lastErroredCall"
         type="button"
-        class="flex w-full items-start gap-3 rounded-lg border border-rose-900/50 bg-slate-950/50 px-3 py-2 text-start transition hover:bg-slate-900/70"
+        class="flex w-full items-start gap-3 rounded-lg border border-rose-900/50 bg-app-950/50 px-3 py-2 text-start transition hover:bg-default/70"
         @click="emit('showCall', evidence.lastErroredCall.id)"
       >
         <UIcon
@@ -134,10 +134,10 @@ const earlierFailedToolCalls = computed(() =>
         />
         <div class="min-w-0 flex-1">
           <div class="flex flex-wrap items-baseline gap-x-2 text-[12px]">
-            <span class="font-medium text-slate-200">
+            <span class="font-medium text-default">
               {{ t('observability.failure.lastErroredCall') }}
             </span>
-            <span class="text-slate-500">
+            <span class="text-dimmed">
               {{ agentMeta(evidence.lastErroredCall.agentKind).label }} ·
               {{ evidence.lastErroredCall.provider }}:{{ evidence.lastErroredCall.model }}
             </span>
@@ -148,7 +148,7 @@ const earlierFailedToolCalls = computed(() =>
           <p v-if="evidence.lastErroredCall.errorMessage" class="mt-0.5 text-[12px] text-rose-300">
             {{ evidence.lastErroredCall.errorMessage }}
           </p>
-          <p v-if="evidence.erroredCallCount > 1" class="mt-0.5 text-[11px] text-slate-500">
+          <p v-if="evidence.erroredCallCount > 1" class="mt-0.5 text-[11px] text-dimmed">
             {{
               t(
                 'observability.failure.moreErroredCalls',
@@ -158,20 +158,20 @@ const earlierFailedToolCalls = computed(() =>
             }}
           </p>
         </div>
-        <UIcon name="i-lucide-chevron-right" class="mt-0.5 h-4 w-4 shrink-0 text-slate-600" />
+        <UIcon name="i-lucide-chevron-right" class="mt-0.5 h-4 w-4 shrink-0 text-app-600" />
       </button>
 
       <!-- Last TOOL call that failed: the row no rollup counts. -->
       <button
         v-if="evidence.lastFailedToolCall"
         type="button"
-        class="flex w-full items-start gap-3 rounded-lg border border-rose-900/50 bg-slate-950/50 px-3 py-2 text-start transition hover:bg-slate-900/70"
+        class="flex w-full items-start gap-3 rounded-lg border border-rose-900/50 bg-app-950/50 px-3 py-2 text-start transition hover:bg-default/70"
         @click="emit('showFailingTools')"
       >
         <UIcon name="i-lucide-wrench" class="mt-0.5 h-4 w-4 shrink-0 text-rose-400" />
         <div class="min-w-0 flex-1">
           <div class="flex flex-wrap items-baseline gap-x-2 text-[12px]">
-            <span class="font-medium text-slate-200">
+            <span class="font-medium text-default">
               <!-- "One of the failing calls" when even the failures were bounded: the row is
                    real either way, but calling it the LAST would be a claim about rows this
                    read never saw. -->
@@ -181,8 +181,8 @@ const earlierFailedToolCalls = computed(() =>
                   : t('observability.failure.lastFailedToolCall')
               }}
             </span>
-            <span class="font-mono text-slate-300">{{ evidence.lastFailedToolCall.tool }}</span>
-            <span class="text-slate-500">
+            <span class="font-mono text-toned">{{ evidence.lastFailedToolCall.tool }}</span>
+            <span class="text-dimmed">
               {{ agentMeta(evidence.lastFailedToolCall.agentKind).label }}
             </span>
           </div>
@@ -190,14 +190,14 @@ const earlierFailedToolCalls = computed(() =>
             v-if="failedToolResult"
             class="mt-1 max-h-32 overflow-auto whitespace-pre-wrap text-[11px] leading-relaxed text-rose-300"
             >{{ failedToolResult }}</pre>
-          <p v-else class="mt-0.5 text-[11px] italic text-slate-500">
+          <p v-else class="mt-0.5 text-[11px] italic text-dimmed">
             {{
               evidence.lastFailedToolCall.bodies === 'stored'
                 ? t('observability.failure.toolReturnedNothing')
                 : t('observability.failure.toolBodiesWithheld')
             }}
           </p>
-          <p v-if="earlierFailedToolCalls" class="mt-0.5 text-[11px] text-slate-500">
+          <p v-if="earlierFailedToolCalls" class="mt-0.5 text-[11px] text-dimmed">
             {{
               t(
                 'observability.failure.moreFailedToolCalls',
@@ -207,7 +207,7 @@ const earlierFailedToolCalls = computed(() =>
             }}
           </p>
         </div>
-        <UIcon name="i-lucide-chevron-right" class="mt-0.5 h-4 w-4 shrink-0 text-slate-600" />
+        <UIcon name="i-lucide-chevron-right" class="mt-0.5 h-4 w-4 shrink-0 text-app-600" />
       </button>
 
       <!-- Nothing failing to point at. Which of the reasons it is decides what an operator should
@@ -221,7 +221,7 @@ const earlierFailedToolCalls = computed(() =>
         :class="
           emptyReason === 'sink-unreachable'
             ? 'border-amber-900/60 text-amber-300'
-            : 'border-slate-800 text-slate-400'
+            : 'border-default text-muted'
         "
       >
         <span>{{ t(`observability.failure.noFailingCall.${emptyReason}`) }}</span>

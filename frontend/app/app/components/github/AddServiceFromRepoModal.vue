@@ -442,7 +442,7 @@ function done() {
   <UModal v-model:open="open" :title="t('github.addService.title')" :ui="{ content: 'max-w-xl' }">
     <template #body>
       <div class="space-y-6">
-        <p class="text-sm text-slate-400">
+        <p class="text-sm text-muted">
           {{
             introProvider
               ? t('vcs.addService.intro', { provider: VCS_PROVIDER_LABELS[introProvider] })
@@ -531,9 +531,9 @@ function done() {
 
             <div
               v-if="isMonorepo"
-              class="space-y-3 rounded-md border border-slate-700/60 bg-slate-900/40 p-3"
+              class="space-y-3 rounded-md border border-muted/60 bg-default/40 p-3"
             >
-              <p class="text-xs text-slate-400">
+              <p class="text-xs text-muted">
                 {{ t('github.addService.monorepoBrowseHint') }}
               </p>
               <RepoTreeBrowser
@@ -547,20 +547,20 @@ function done() {
 
               <!-- the selection cart + the add action sit right beside the tree, so the
                    picked services and the button that adds them are never scrolled apart -->
-              <div class="space-y-2 rounded-md border border-slate-800 bg-slate-950/40 p-2.5">
-                <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+              <div class="space-y-2 rounded-md border border-default bg-app-950/40 p-2.5">
+                <p class="text-[11px] font-semibold uppercase tracking-wide text-muted">
                   {{ t('github.addService.selectedServices') }}
                 </p>
                 <div v-if="selectedDirectories.length" class="flex flex-wrap gap-1.5">
                   <span
                     v-for="dir in selectedDirectories"
                     :key="dir"
-                    class="inline-flex items-center gap-1 rounded bg-slate-800 px-2 py-0.5 text-xs text-slate-200"
+                    class="inline-flex items-center gap-1 rounded bg-elevated px-2 py-0.5 text-xs text-default"
                   >
-                    <code class="text-slate-200">{{ dir }}</code>
+                    <code class="text-default">{{ dir }}</code>
                     <button
                       type="button"
-                      class="text-slate-400 hover:text-slate-100"
+                      class="text-muted hover:text-app-100"
                       :aria-label="t('github.addService.removeService', { directory: dir })"
                       @click="removeSelected(dir)"
                     >
@@ -568,7 +568,7 @@ function done() {
                     </button>
                   </span>
                 </div>
-                <p v-else class="text-xs text-slate-500">
+                <p v-else class="text-xs text-dimmed">
                   {{ t('github.addService.noServicesSelected') }}
                 </p>
 

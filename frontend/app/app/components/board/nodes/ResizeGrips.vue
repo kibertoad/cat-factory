@@ -90,7 +90,7 @@ const GRIPS: Record<ResizeEdge, GripStyle> = {
 // A bar is filled, an L-shaped corner mark is drawn in border colour — so the lit/idle classes
 // differ per shape as well as per tone.
 const TONES = {
-  frame: { barLit: 'bg-sky-400', markLit: 'border-sky-400', markIdle: 'border-slate-500' },
+  frame: { barLit: 'bg-sky-400', markLit: 'border-sky-400', markIdle: 'border-app-500' },
   module: {
     barLit: 'bg-violet-300',
     markLit: 'border-violet-300',

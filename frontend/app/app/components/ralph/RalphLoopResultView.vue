@@ -137,7 +137,7 @@ const STATUS_META = computed<
       <div class="min-w-0 flex-1 overflow-y-auto px-5 py-4">
         <div
           v-if="!ralph"
-          class="flex h-full flex-col items-center justify-center gap-2 text-center text-slate-400"
+          class="flex h-full flex-col items-center justify-center gap-2 text-center text-muted"
         >
           <UIcon :name="meta.icon" class="h-8 w-8 opacity-40" />
           <p class="text-sm">{{ t('ralph.noActivity') }}</p>
@@ -145,27 +145,25 @@ const STATUS_META = computed<
 
         <template v-else>
           <!-- The completion criterion. -->
-          <h3 class="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+          <h3 class="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-dimmed">
             {{ t('ralph.validationCommand') }}
           </h3>
-          <div class="relative rounded-md border border-slate-800 bg-slate-950/60 px-3 py-2">
+          <div class="relative rounded-md border border-default bg-app-950/60 px-3 py-2">
             <CopyButton :text="ralph.validationCommand" class="absolute end-1 top-1" />
-            <code class="block whitespace-pre-wrap pe-8 font-mono text-[12px] text-slate-200">{{
+            <code class="block whitespace-pre-wrap pe-8 font-mono text-[12px] text-default">{{
               ralph.validationCommand
             }}</code>
           </div>
 
           <!-- The most recent validation output. -->
           <template v-if="ralph.lastValidationTail">
-            <h3
-              class="mb-1.5 mt-4 text-[11px] font-semibold uppercase tracking-wide text-slate-500"
-            >
+            <h3 class="mb-1.5 mt-4 text-[11px] font-semibold uppercase tracking-wide text-dimmed">
               {{ t('ralph.lastOutput', { exit: ralph.lastExitCode ?? '?' }) }}
             </h3>
-            <div class="relative rounded-md border border-slate-800 bg-slate-950/60 px-3 py-2">
+            <div class="relative rounded-md border border-default bg-app-950/60 px-3 py-2">
               <CopyButton :text="ralph.lastValidationTail" class="absolute end-1 top-1" />
               <pre
-                class="whitespace-pre-wrap pe-8 font-mono text-[11px] leading-relaxed text-slate-400"
+                class="whitespace-pre-wrap pe-8 font-mono text-[11px] leading-relaxed text-muted"
                 >{{ ralph.lastValidationTail }}</pre>
             </div>
           </template>
@@ -193,14 +191,14 @@ const STATUS_META = computed<
 
           <!-- Iteration history: what each pass produced and whether its validation passed. -->
           <section v-if="attempts.length" class="mt-5">
-            <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-dimmed">
               {{ t('ralph.iterationsHeading') }}
             </h3>
             <!-- The log is capped (it rides the run's detail blob); say so rather than letting a
                  long loop's partial history read as if those iterations never ran. -->
             <p
               v-if="droppedAttempts"
-              class="mb-2 text-[11px] text-slate-500"
+              class="mb-2 text-[11px] text-dimmed"
               data-testid="ralph-iterations-truncated"
             >
               {{ t('ralph.iterationsTruncated', { count: droppedAttempts }, droppedAttempts) }}
@@ -209,7 +207,7 @@ const STATUS_META = computed<
               <li
                 v-for="a in attempts"
                 :key="a.attempt"
-                class="rounded-md border border-slate-800 bg-slate-950/40 px-3 py-2"
+                class="rounded-md border border-default bg-app-950/40 px-3 py-2"
                 data-testid="ralph-iteration"
               >
                 <div class="flex items-center gap-2">
@@ -218,23 +216,23 @@ const STATUS_META = computed<
                     class="h-3.5 w-3.5"
                     :class="a.validationPassed ? 'text-emerald-400' : 'text-rose-400'"
                   />
-                  <span class="text-[12px] font-medium text-slate-200">
+                  <span class="text-[12px] font-medium text-default">
                     {{ t('ralph.iteration', { number: a.attempt }) }}
                   </span>
-                  <span class="text-[11px] text-slate-500">
+                  <span class="text-[11px] text-dimmed">
                     {{
                       a.validationPassed
                         ? t('ralph.iterationPassed')
                         : t('ralph.iterationFailed', { exit: a.exitCode ?? '?' })
                     }}
                   </span>
-                  <span class="ms-auto text-[10px] text-slate-600">{{
+                  <span class="ms-auto text-[10px] text-app-600">{{
                     d(new Date(a.at), 'long')
                   }}</span>
                 </div>
                 <p
                   v-if="a.summary"
-                  class="mt-1 whitespace-pre-wrap text-[12px] leading-relaxed text-slate-400"
+                  class="mt-1 whitespace-pre-wrap text-[12px] leading-relaxed text-muted"
                 >
                   {{ a.summary }}
                 </p>
@@ -245,10 +243,10 @@ const STATUS_META = computed<
       </div>
 
       <aside
-        class="hidden w-60 shrink-0 flex-col gap-4 border-s border-slate-800 bg-slate-900/50 px-4 py-4 lg:flex"
+        class="hidden w-60 shrink-0 flex-col gap-4 border-s border-default bg-default/50 px-4 py-4 lg:flex"
       >
         <div v-if="ralph">
-          <h4 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+          <h4 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-dimmed">
             {{ t('ralph.sidebar.state') }}
           </h4>
           <div class="flex items-center gap-2 text-[13px]">
@@ -261,10 +259,10 @@ const STATUS_META = computed<
           </div>
         </div>
         <div v-if="ralph">
-          <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+          <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-dimmed">
             {{ t('ralph.sidebar.iterations') }}
           </h4>
-          <p class="text-[12px] text-slate-300" data-testid="ralph-iteration-count">
+          <p class="text-[12px] text-toned" data-testid="ralph-iteration-count">
             {{ t('ralph.sidebar.count', { attempts: ralph.attempts, max: ralph.maxIterations }) }}
           </p>
         </div>
@@ -277,7 +275,7 @@ const STATUS_META = computed<
           :run-failed="instance?.status === 'failed'"
           :failure-at="instance?.failure?.occurredAt"
         />
-        <p class="mt-auto text-[10px] leading-relaxed text-slate-600">
+        <p class="mt-auto text-[10px] leading-relaxed text-app-600">
           {{ t('ralph.sidebar.footer') }}
         </p>
       </aside>

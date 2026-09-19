@@ -35,8 +35,8 @@ function when(ms: number): string {
   return d(new Date(ms), 'long')
 }
 function gradeTone(g: KaizenGrading): string {
-  if (g.status === 'failed') return 'text-slate-500'
-  if (g.grade == null) return 'text-slate-400'
+  if (g.status === 'failed') return 'text-dimmed'
+  if (g.grade == null) return 'text-muted'
   if (g.grade >= 5) return 'text-emerald-400'
   if (g.grade >= 4) return 'text-lime-400'
   if (g.grade === 3) return 'text-amber-400'
@@ -55,17 +55,19 @@ function statusLabel(g: KaizenGrading): string {
     <Transition name="kz-fade">
       <div
         v-if="open"
-        class="fixed inset-0 z-[60] flex flex-col bg-slate-950/96 backdrop-blur-sm"
+        class="fixed inset-0 z-[60] flex flex-col bg-app-950/96 backdrop-blur-sm"
         role="dialog"
         aria-modal="true"
       >
-        <header class="flex items-center gap-3 border-b border-slate-800 px-6 py-4">
+        <header class="flex items-center gap-3 border-b border-default px-6 py-4">
           <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-teal-500/15">
             <UIcon name="i-lucide-sparkles" class="h-5 w-5 text-teal-400" />
           </div>
           <div class="min-w-0">
-            <h1 class="truncate text-base font-semibold text-white">{{ t('kaizen.title') }}</h1>
-            <p class="truncate text-xs text-slate-500">
+            <h1 class="truncate text-base font-semibold text-highlighted">
+              {{ t('kaizen.title') }}
+            </h1>
+            <p class="truncate text-xs text-dimmed">
               {{ t('kaizen.subtitle') }}
             </p>
           </div>
@@ -88,7 +90,7 @@ function statusLabel(g: KaizenGrading): string {
 
         <div
           v-if="kaizen.available === false"
-          class="flex flex-1 items-center justify-center text-sm text-slate-500"
+          class="flex flex-1 items-center justify-center text-sm text-dimmed"
         >
           {{ t('kaizen.notConfigured') }}
         </div>
@@ -96,21 +98,21 @@ function statusLabel(g: KaizenGrading): string {
         <div v-else class="grid flex-1 grid-cols-1 gap-6 overflow-auto p-6 lg:grid-cols-3">
           <!-- Verified combos -->
           <section class="lg:col-span-1">
-            <h2 class="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-200">
+            <h2 class="mb-2 flex items-center gap-2 text-sm font-semibold text-default">
               <UIcon name="i-lucide-badge-check" class="h-4 w-4 text-emerald-400" />
               {{ t('kaizen.verifiedCombos.title') }}
-              <span class="text-xs font-normal text-slate-500">{{
+              <span class="text-xs font-normal text-dimmed">{{
                 t('kaizen.verifiedCombos.count', { count: kaizen.verifiedCount })
               }}</span>
             </h2>
-            <p class="mb-3 text-[11px] text-slate-500">
+            <p class="mb-3 text-[11px] text-dimmed">
               {{ t('kaizen.verifiedCombos.hint') }}
             </p>
             <ul class="space-y-2">
               <li
                 v-for="c in kaizen.verified"
                 :key="c.comboKey"
-                class="rounded-lg border border-slate-800 bg-slate-900/40 p-2.5"
+                class="rounded-lg border border-default bg-default/40 p-2.5"
               >
                 <div class="flex items-center gap-2">
                   <UIcon
@@ -118,7 +120,7 @@ function statusLabel(g: KaizenGrading): string {
                     class="h-3.5 w-3.5 shrink-0"
                     :style="{ color: meta(c.agentKind).color }"
                   />
-                  <span class="text-xs font-medium text-slate-200">{{
+                  <span class="text-xs font-medium text-default">{{
                     meta(c.agentKind).label
                   }}</span>
                   <UIcon
@@ -126,11 +128,11 @@ function statusLabel(g: KaizenGrading): string {
                     name="i-lucide-badge-check"
                     class="ms-auto h-3.5 w-3.5 text-emerald-400"
                   />
-                  <span v-else class="ms-auto text-[11px] text-slate-500">
+                  <span v-else class="ms-auto text-[11px] text-dimmed">
                     {{ t('kaizen.verifiedCombos.progress', { count: c.consecutiveHighGrades }) }}
                   </span>
                 </div>
-                <div class="mt-1 truncate text-[11px] text-slate-500" :title="c.model">
+                <div class="mt-1 truncate text-[11px] text-dimmed" :title="c.model">
                   {{
                     t('kaizen.verifiedCombos.modelPrompt', {
                       model: c.model,
@@ -139,7 +141,7 @@ function statusLabel(g: KaizenGrading): string {
                   }}
                 </div>
               </li>
-              <li v-if="kaizen.verified.length === 0" class="text-xs text-slate-600">
+              <li v-if="kaizen.verified.length === 0" class="text-xs text-app-600">
                 {{ t('kaizen.verifiedCombos.empty') }}
               </li>
             </ul>
@@ -147,13 +149,13 @@ function statusLabel(g: KaizenGrading): string {
 
           <!-- Grading history -->
           <section class="lg:col-span-2">
-            <h2 class="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-200">
+            <h2 class="mb-2 flex items-center gap-2 text-sm font-semibold text-default">
               <UIcon name="i-lucide-history" class="h-4 w-4 text-teal-400" />
               {{ t('kaizen.history.title') }}
             </h2>
-            <div class="overflow-hidden rounded-lg border border-slate-800">
+            <div class="overflow-hidden rounded-lg border border-default">
               <table class="w-full text-start text-xs">
-                <thead class="bg-slate-900/60 text-[11px] uppercase tracking-wide text-slate-500">
+                <thead class="bg-default/60 text-[11px] uppercase tracking-wide text-dimmed">
                   <tr>
                     <th class="px-3 py-2 font-medium">{{ t('kaizen.history.col.when') }}</th>
                     <th class="px-3 py-2 font-medium">{{ t('kaizen.history.col.agent') }}</th>
@@ -164,9 +166,9 @@ function statusLabel(g: KaizenGrading): string {
                     </th>
                   </tr>
                 </thead>
-                <tbody class="divide-y divide-slate-800/70">
+                <tbody class="divide-y divide-default/70">
                   <tr v-for="g in kaizen.history" :key="g.id" class="align-top">
-                    <td class="whitespace-nowrap px-3 py-2 text-slate-500">
+                    <td class="whitespace-nowrap px-3 py-2 text-dimmed">
                       {{ when(g.createdAt) }}
                     </td>
                     <td class="px-3 py-2">
@@ -176,28 +178,28 @@ function statusLabel(g: KaizenGrading): string {
                           class="h-3.5 w-3.5"
                           :style="{ color: meta(g.agentKind).color }"
                         />
-                        <span class="text-slate-200">{{ meta(g.agentKind).label }}</span>
-                        <span class="text-slate-600">{{
+                        <span class="text-default">{{ meta(g.agentKind).label }}</span>
+                        <span class="text-app-600">{{
                           t('kaizen.promptVersion', { version: g.promptVersion })
                         }}</span>
                       </span>
                     </td>
-                    <td class="max-w-[12rem] truncate px-3 py-2 text-slate-400" :title="g.model">
+                    <td class="max-w-[12rem] truncate px-3 py-2 text-muted" :title="g.model">
                       {{ g.model }}
                     </td>
                     <td class="whitespace-nowrap px-3 py-2 font-semibold" :class="gradeTone(g)">
                       {{ statusLabel(g) }}
                     </td>
-                    <td class="px-3 py-2 text-slate-400">
+                    <td class="px-3 py-2 text-muted">
                       <ul v-if="g.recommendations.length" class="list-disc space-y-0.5 ps-4">
                         <li v-for="(r, i) in g.recommendations" :key="i">{{ r }}</li>
                       </ul>
-                      <span v-else-if="g.status === 'complete'" class="text-slate-600">—</span>
+                      <span v-else-if="g.status === 'complete'" class="text-app-600">—</span>
                       <span v-else-if="g.error" class="text-rose-400/80">{{ g.error }}</span>
                     </td>
                   </tr>
                   <tr v-if="kaizen.history.length === 0">
-                    <td colspan="5" class="px-3 py-6 text-center text-slate-600">
+                    <td colspan="5" class="px-3 py-6 text-center text-app-600">
                       {{ t('kaizen.history.empty') }}
                     </td>
                   </tr>

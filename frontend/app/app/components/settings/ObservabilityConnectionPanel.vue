@@ -160,7 +160,7 @@ const connectedLabel = computed(() => {
         <i18n-t
           keypath="settings.observabilityConnection.intro"
           tag="p"
-          class="text-sm text-slate-400"
+          class="text-sm text-muted"
           scope="global"
         >
           <template #gate>
@@ -168,7 +168,7 @@ const connectedLabel = computed(() => {
           </template>
         </i18n-t>
 
-        <section class="space-y-3 rounded-lg border border-slate-700 p-3">
+        <section class="space-y-3 rounded-lg border border-muted p-3">
           <div class="flex items-center justify-between">
             <h3 class="text-sm font-semibold">
               {{ t('settings.observabilityConnection.connection.heading') }}
@@ -222,7 +222,7 @@ const connectedLabel = computed(() => {
              already opened from the same monitors/SLOs. -->
         <section
           v-if="store.incidentAvailable !== false"
-          class="space-y-3 rounded-lg border border-slate-700 p-3"
+          class="space-y-3 rounded-lg border border-muted p-3"
         >
           <div class="flex items-center justify-between">
             <h3 class="text-sm font-semibold">
@@ -236,7 +236,7 @@ const connectedLabel = computed(() => {
               }}
             </UBadge>
           </div>
-          <p class="text-[11px] text-slate-400">
+          <p class="text-[11px] text-muted">
             {{ t('settings.observabilityConnection.incident.description') }}
           </p>
 

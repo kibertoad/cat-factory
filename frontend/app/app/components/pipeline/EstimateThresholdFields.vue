@@ -53,12 +53,12 @@ function commit(axis: EstimateAxis, raw: string) {
 </script>
 
 <template>
-  <div class="flex flex-wrap items-center gap-2 border-t border-slate-800 pt-2">
-    <span class="text-[10px] text-slate-500" :title="t(OUTCOME_HINT_KEYS[outcome])">
+  <div class="flex flex-wrap items-center gap-2 border-t border-default pt-2">
+    <span class="text-[10px] text-dimmed" :title="t(OUTCOME_HINT_KEYS[outcome])">
       {{ t('pipeline.builder.runWhenAny') }}
     </span>
     <template v-for="f in fields" :key="f.axis">
-      <label class="text-slate-400" :title="f.hint">{{ f.label }}</label>
+      <label class="text-muted" :title="f.hint">{{ f.label }}</label>
       <input
         :value="f.value"
         :title="f.hint"
@@ -66,7 +66,7 @@ function commit(axis: EstimateAxis, raw: string) {
         min="0"
         max="1"
         step="0.1"
-        class="w-14 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-100"
+        class="w-14 rounded border border-muted bg-default px-1.5 py-0.5 text-app-100"
         @change="commit(f.axis, ($event.target as HTMLInputElement).value)"
       />
     </template>

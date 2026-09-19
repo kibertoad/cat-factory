@@ -150,7 +150,7 @@ function removeDisabled(entry: AprioriBranch): boolean {
 <template>
   <div v-if="repo" data-testid="apriori-branches">
     <div class="mb-1 flex items-center justify-between">
-      <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+      <span class="text-[11px] font-semibold uppercase tracking-wide text-muted">
         {{ t('inspector.aprioriBranches.title') }}
       </span>
     </div>
@@ -220,7 +220,7 @@ function removeDisabled(entry: AprioriBranch): boolean {
       class="w-full"
       data-testid="apriori-branch-search"
     />
-    <div v-else class="text-[11px] text-slate-500">
+    <div v-else class="text-[11px] text-dimmed">
       {{ t('inspector.aprioriBranches.connectFirst') }}
     </div>
 
@@ -234,7 +234,7 @@ function removeDisabled(entry: AprioriBranch): boolean {
       <span>{{ t('inspector.aprioriBranches.protectedWarning', { branch: workingName }) }}</span>
     </div>
 
-    <div class="mt-1 text-[11px] text-slate-500">
+    <div class="mt-1 text-[11px] text-dimmed">
       {{ t('inspector.aprioriBranches.hint') }}
       <template v-if="isMultiRepo">
         {{ t('inspector.aprioriBranches.multiRepoHint') }}

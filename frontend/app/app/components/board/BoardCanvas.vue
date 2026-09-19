@@ -163,10 +163,10 @@ function onPaneClick() {
       v-if="board.frames.length === 0"
       class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-4 text-center"
     >
-      <UIcon name="i-lucide-layout-dashboard" class="h-10 w-10 text-slate-600" />
+      <UIcon name="i-lucide-layout-dashboard" class="h-10 w-10 text-app-600" />
       <div>
-        <h2 class="text-base font-semibold text-slate-300">{{ t('board.canvas.emptyTitle') }}</h2>
-        <p class="mt-1 max-w-sm text-sm text-slate-500">
+        <h2 class="text-base font-semibold text-toned">{{ t('board.canvas.emptyTitle') }}</h2>
+        <p class="mt-1 max-w-sm text-sm text-dimmed">
           {{ t('board.canvas.emptyBody') }}
         </p>
       </div>
@@ -195,7 +195,7 @@ function onPaneClick() {
         </UButton>
       </div>
       <!-- A read-only viewer sees the empty state but no create affordances. -->
-      <p v-else class="max-w-sm text-xs text-slate-600">{{ t('access.noBoardWrite') }}</p>
+      <p v-else class="max-w-sm text-xs text-app-600">{{ t('access.noBoardWrite') }}</p>
     </div>
 
     <!-- task dependency arrows, overlaid in screen space -->

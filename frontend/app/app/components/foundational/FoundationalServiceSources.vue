@@ -245,14 +245,14 @@ async function unlink(id: string) {
     <div
       v-for="s in catalog.sources"
       :key="s.id"
-      class="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-900/60 p-3"
+      class="flex items-center gap-2 rounded-md border border-default bg-default/60 p-3"
     >
-      <UIcon name="i-lucide-git-branch" class="h-4 w-4 shrink-0 text-slate-400" />
+      <UIcon name="i-lucide-git-branch" class="h-4 w-4 shrink-0 text-muted" />
       <div class="min-w-0">
-        <span class="font-mono text-sm text-slate-100">
-          {{ s.repoOwner }}/{{ s.repoName }}<span class="text-slate-500">/{{ s.dirPath }}</span>
+        <span class="font-mono text-sm text-app-100">
+          {{ s.repoOwner }}/{{ s.repoName }}<span class="text-dimmed">/{{ s.dirPath }}</span>
         </span>
-        <p class="text-xs text-slate-500">
+        <p class="text-xs text-dimmed">
           <template v-if="s.mode === 'files'">
             {{
               t('foundational.sources.metaFiles', {
@@ -274,7 +274,7 @@ async function unlink(id: string) {
           </template>
           <template v-else>{{ t('foundational.sources.metaDirectory') }}</template>
         </p>
-        <p class="text-xs text-slate-500">
+        <p class="text-xs text-dimmed">
           {{
             s.lastSyncedAt
               ? t('foundational.sources.metaSynced', {
@@ -322,29 +322,29 @@ async function unlink(id: string) {
         />
       </div>
     </div>
-    <p v-if="!catalog.sources.length" class="text-sm text-slate-500">
+    <p v-if="!catalog.sources.length" class="text-sm text-dimmed">
       {{ t('foundational.sources.empty') }}
     </p>
 
     <!-- Linking needs the GitHub integration; say so rather than offering a form that 503s. -->
     <div
       v-if="!catalog.sourcesAvailable"
-      class="rounded-md border border-slate-800 bg-slate-900/40 p-3 text-sm text-slate-500"
+      class="rounded-md border border-default bg-default/40 p-3 text-sm text-dimmed"
     >
       {{ t('foundational.sources.githubRequired') }}
     </div>
-    <div v-else class="rounded-md border border-slate-800 p-3">
+    <div v-else class="rounded-md border border-default p-3">
       <p class="mb-2 text-sm font-medium">{{ t('foundational.sources.linkTitle') }}</p>
       <div class="flex flex-col gap-2">
         <URadioGroup v-model="mode" :items="modeItems" orientation="horizontal" size="sm" />
-        <p class="text-xs text-slate-500">{{ modeHints[mode] }}</p>
+        <p class="text-xs text-dimmed">{{ modeHints[mode] }}</p>
 
         <!-- Connected: search a repo, then browse to the folder / pick the contract files -->
         <template v-if="githubReady">
           <GitHubRepoSearchSelect v-model="repoId" @update:repo="repo = $event" />
           <div
             v-if="repoId !== undefined"
-            class="rounded-md border border-slate-800 bg-slate-900/40 p-2"
+            class="rounded-md border border-default bg-default/40 p-2"
           >
             <RepoTreeBrowser
               v-if="mode === 'files'"
@@ -355,13 +355,13 @@ async function unlink(id: string) {
               @toggle="toggleFile"
             />
             <RepoTreeBrowser v-else v-model="dirPath" :repo-github-id="repoId" mode="dir" />
-            <p class="mt-2 truncate text-xs text-slate-400">
+            <p class="mt-2 truncate text-xs text-muted">
               <template v-if="mode === 'files'">
                 {{ t('foundational.sources.selectedFiles', { count: filePaths.length }) }}
               </template>
               <template v-else-if="dirPath">
                 {{ t('foundational.sources.selectedDir') }}
-                <code class="text-slate-200">{{ dirPath }}</code>
+                <code class="text-default">{{ dirPath }}</code>
               </template>
               <template v-else>{{ t('foundational.sources.wholeRepo') }}</template>
             </p>

@@ -135,12 +135,12 @@ const usedBy = computed(() =>
         />
       </div>
     </div>
-    <div v-else class="text-[11px] text-slate-500">
+    <div v-else class="text-[11px] text-dimmed">
       {{ t('inspector.serviceConnections.empty') }}
     </div>
 
     <div v-if="usedBy.length" class="space-y-1" data-testid="service-connections-used-by">
-      <span class="text-[11px] text-slate-400">{{ t('inspector.serviceConnections.usedBy') }}</span>
+      <span class="text-[11px] text-muted">{{ t('inspector.serviceConnections.usedBy') }}</span>
       <div class="flex flex-wrap gap-1">
         <UBadge v-for="f in usedBy" :key="f.id" size="sm" variant="soft" color="neutral">
           {{ f.title || f.id }}

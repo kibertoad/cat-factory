@@ -162,10 +162,10 @@ function setSubmissionClass(
 <template>
   <div data-testid="merge-role-policy" class="space-y-2">
     <div>
-      <span class="block text-[10px] uppercase tracking-wide text-slate-500">
+      <span class="block text-[10px] uppercase tracking-wide text-dimmed">
         {{ t('settings.riskPolicy.roleRules.heading') }}
       </span>
-      <p class="mt-0.5 text-[11px] leading-snug text-slate-500">
+      <p class="mt-0.5 text-[11px] leading-snug text-dimmed">
         {{ t('settings.riskPolicy.roleRules.help') }}
       </p>
       <!-- Auto-merge off already sends every pull request to a human, so the per-class narrowing
@@ -183,11 +183,11 @@ function setSubmissionClass(
     <div
       v-for="group in roles"
       :key="group.role"
-      class="rounded-md border border-slate-700/50 bg-slate-900/30 px-2 py-1.5"
+      class="rounded-md border border-muted/50 bg-default/30 px-2 py-1.5"
       :data-testid="`merge-role-group-${group.role}`"
     >
       <div class="flex flex-wrap items-center gap-2">
-        <span class="min-w-[5rem] text-xs text-slate-300">{{ group.label }}</span>
+        <span class="min-w-[5rem] text-xs text-toned">{{ group.label }}</span>
         <USwitch
           :model-value="group.sandboxed"
           size="sm"
@@ -236,7 +236,7 @@ function setSubmissionClass(
         {{ t('settings.riskPolicy.roleRules.sandboxNote') }}
       </p>
 
-      <div v-if="group.open" class="mt-2 space-y-2 border-t border-slate-800 pt-2">
+      <div v-if="group.open" class="mt-2 space-y-2 border-t border-default pt-2">
         <!-- What this role may LAND at all. Above the class rules because it outranks them: a
              class can be auto-mergeable under the rules and still outside this list, and then
              nothing merges, through the review card's own button included. -->
@@ -249,7 +249,7 @@ function setSubmissionClass(
             :data-testid="`merge-role-submission-${group.role}`"
             @update:model-value="setSubmissionScoped(group.role, $event)"
           />
-          <p class="text-[11px] leading-snug text-slate-500">
+          <p class="text-[11px] leading-snug text-dimmed">
             {{ t('settings.riskPolicy.roleRules.submissionHelp') }}
           </p>
           <div v-if="group.submissionScoped" class="flex flex-wrap gap-x-4 gap-y-1">
@@ -275,11 +275,11 @@ function setSubmissionClass(
           </p>
         </div>
 
-        <div class="space-y-1.5 border-t border-slate-800/70 pt-2">
-          <p class="text-[11px] leading-snug text-slate-500">
+        <div class="space-y-1.5 border-t border-default/70 pt-2">
+          <p class="text-[11px] leading-snug text-dimmed">
             {{ t('settings.riskPolicy.roleRules.classHeading') }}
           </p>
-          <p v-if="!anyBaseRule" class="text-[11px] leading-snug text-slate-500">
+          <p v-if="!anyBaseRule" class="text-[11px] leading-snug text-dimmed">
             {{ t('settings.riskPolicy.roleRules.baseHint') }}
           </p>
           <div
@@ -288,7 +288,7 @@ function setSubmissionClass(
             class="flex flex-wrap items-center gap-2"
             :data-testid="`merge-role-row-${group.role}-${row.changeClass}`"
           >
-            <span class="min-w-[7rem] text-xs text-slate-400">{{ row.label }}</span>
+            <span class="min-w-[7rem] text-xs text-muted">{{ row.label }}</span>
             <USelect
               :model-value="row.selected"
               :items="row.items"
@@ -302,7 +302,7 @@ function setSubmissionClass(
               "
             />
             <!-- Nothing left to narrow: the base rule already routes this class to a human. -->
-            <span v-if="row.items.length === 1" class="text-[11px] text-slate-500">
+            <span v-if="row.items.length === 1" class="text-[11px] text-dimmed">
               {{ t('settings.riskPolicy.roleRules.alreadyStrictest') }}
             </span>
             <span

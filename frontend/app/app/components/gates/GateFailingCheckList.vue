@@ -23,7 +23,7 @@ const { t } = useI18n()
       :key="`${c.name}-${i}`"
       class="flex items-center"
       :class="
-        dense ? 'gap-1.5' : 'gap-2 rounded-md border border-slate-800 bg-slate-950/40 px-3 py-1.5'
+        dense ? 'gap-1.5' : 'gap-2 rounded-md border border-default bg-app-950/40 px-3 py-1.5'
       "
     >
       <UIcon
@@ -49,7 +49,7 @@ const { t } = useI18n()
       <span
         v-else
         class="min-w-0 flex-1 truncate"
-        :class="dense ? 'text-[12px] text-slate-300' : 'text-[13px] text-slate-200'"
+        :class="dense ? 'text-[12px] text-toned' : 'text-[13px] text-default'"
         >{{ c.name }}</span
       >
       <span

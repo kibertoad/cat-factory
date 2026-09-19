@@ -45,16 +45,16 @@ function go(action: () => void) {
         <i18n-t
           keypath="providers.presetMismatch.intro"
           tag="p"
-          class="text-sm text-slate-300"
+          class="text-sm text-toned"
           scope="global"
         >
           <template #name>
-            <span class="font-medium text-slate-100">{{ presetName }}</span>
+            <span class="font-medium text-app-100">{{ presetName }}</span>
           </template>
         </i18n-t>
 
-        <div class="rounded-lg border border-slate-700 bg-slate-900/50 p-3">
-          <p class="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+        <div class="rounded-lg border border-muted bg-default/50 p-3">
+          <p class="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-dimmed">
             {{ t('providers.presetMismatch.unavailable') }}
           </p>
           <div class="flex flex-wrap gap-1.5">
@@ -70,7 +70,7 @@ function go(action: () => void) {
           </div>
         </div>
 
-        <p class="text-[13px] text-slate-400">
+        <p class="text-[13px] text-muted">
           {{ t('providers.presetMismatch.advice') }}
         </p>
 

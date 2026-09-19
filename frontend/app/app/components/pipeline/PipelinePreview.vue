@@ -34,17 +34,17 @@ function stepDescription(kind: string): string {
 
 <template>
   <div class="space-y-2" data-testid="pipeline-preview">
-    <div class="text-sm font-semibold text-slate-100">{{ pipeline.name }}</div>
+    <div class="text-sm font-semibold text-app-100">{{ pipeline.name }}</div>
     <p
       v-if="pipeline.description"
-      class="text-[12px] leading-snug text-slate-400"
+      class="text-[12px] leading-snug text-muted"
       data-testid="pipeline-preview-description"
     >
       {{ pipeline.description }}
     </p>
 
     <div
-      class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] uppercase tracking-wide text-slate-500"
+      class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] uppercase tracking-wide text-dimmed"
     >
       <span class="inline-flex items-center gap-1">
         <UIcon name="i-lucide-workflow" class="h-3 w-3" />
@@ -76,11 +76,11 @@ function stepDescription(kind: string): string {
       >
         <div class="flex flex-col items-center">
           <span
-            class="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-slate-800 font-mono text-[9px] tabular-nums text-slate-400"
+            class="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-elevated font-mono text-[9px] tabular-nums text-muted"
           >
             {{ i + 1 }}
           </span>
-          <span v-if="i < steps.length - 1" class="w-px flex-1 bg-slate-800" />
+          <span v-if="i < steps.length - 1" class="w-px flex-1 bg-elevated" />
         </div>
         <div class="min-w-0 flex-1 pb-2">
           <div class="flex items-center gap-1">
@@ -101,7 +101,7 @@ function stepDescription(kind: string): string {
           </div>
           <!-- Clamped: the catalog prose runs long for some kinds, and <AgentKindIcon> already
                carries the full text in its hover tooltip. -->
-          <p class="line-clamp-2 text-[11px] leading-snug text-slate-500">
+          <p class="line-clamp-2 text-[11px] leading-snug text-dimmed">
             {{ stepDescription(s.kind) }}
           </p>
         </div>

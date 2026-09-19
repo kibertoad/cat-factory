@@ -78,18 +78,18 @@ function barClass(n: number): string {
     icon="i-lucide-gauge"
     default-open
   >
-    <div class="space-y-1.5 rounded-lg border border-slate-800 bg-slate-900/40 p-2.5">
-      <p class="text-[11px] text-slate-500" data-testid="task-estimate-basis">{{ basisLabel }}</p>
+    <div class="space-y-1.5 rounded-lg border border-default bg-default/40 p-2.5">
+      <p class="text-[11px] text-dimmed" data-testid="task-estimate-basis">{{ basisLabel }}</p>
       <p
         v-if="supersededLabel"
-        class="text-[11px] text-slate-500"
+        class="text-[11px] text-dimmed"
         data-testid="task-estimate-superseded"
       >
         {{ supersededLabel }}
       </p>
       <div v-for="axis in AXES" :key="axis.key" class="flex items-center gap-2">
-        <span class="w-20 shrink-0 text-xs text-slate-400">{{ axis.label }}</span>
-        <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-800">
+        <span class="w-20 shrink-0 text-xs text-muted">{{ axis.label }}</span>
+        <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-elevated">
           <div
             class="h-full rounded-full"
             :class="barClass(estimate[axis.key])"
@@ -98,15 +98,15 @@ function barClass(n: number): string {
         </div>
         <span
           v-if="axis.was"
-          class="shrink-0 text-[11px] tabular-nums text-slate-500"
+          class="shrink-0 text-[11px] tabular-nums text-dimmed"
           :data-testid="`task-estimate-was-${axis.key}`"
           >{{ t('inspector.estimate.was', { value: axis.was }) }}</span
         >
-        <span class="w-9 shrink-0 text-end text-xs tabular-nums text-slate-300">{{
+        <span class="w-9 shrink-0 text-end text-xs tabular-nums text-toned">{{
           n(estimate[axis.key], { key: 'percent' })
         }}</span>
       </div>
-      <p v-if="estimate.rationale" class="pt-1 text-xs leading-relaxed text-slate-500">
+      <p v-if="estimate.rationale" class="pt-1 text-xs leading-relaxed text-dimmed">
         {{ estimate.rationale }}
       </p>
     </div>

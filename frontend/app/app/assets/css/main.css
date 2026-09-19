@@ -3,6 +3,37 @@
 /* The shared rendered-markdown reader presentation (see prose.css). */
 @import './prose.css';
 
+/* Leftover neutral shades that have no Nuxt UI role token (#2239 light-mode enablement).
+ * The bulk of the SPA now uses role tokens (`bg-default`, `text-muted`, ...) that flip with the
+ * theme. These five shades (the deep `950` surface below `bg-default`, the brightest `100` text
+ * above `text-highlighted`, and `600`/`500`/`400`) have no exact role token, so we give them the
+ * same treatment by hand: the DARK value is the exact shade they replaced, so dark mode is
+ * unchanged, and the LIGHT value is the mirrored shade (`950↔50`, `100↔900`, `600↔400`, `400↔600`,
+ * `500` is the midpoint), so they adapt like the role tokens do. `@theme inline` binds each to a
+ * Tailwind color so `bg-app-950` / `text-app-100` / ... utilities exist. */
+:root,
+.dark {
+  --app-950: var(--ui-color-neutral-950);
+  --app-100: var(--ui-color-neutral-100);
+  --app-600: var(--ui-color-neutral-600);
+  --app-500: var(--ui-color-neutral-500);
+  --app-400: var(--ui-color-neutral-400);
+}
+.light {
+  --app-950: var(--ui-color-neutral-50);
+  --app-100: var(--ui-color-neutral-900);
+  --app-600: var(--ui-color-neutral-400);
+  --app-500: var(--ui-color-neutral-500);
+  --app-400: var(--ui-color-neutral-600);
+}
+@theme inline {
+  --color-app-950: var(--app-950);
+  --color-app-100: var(--app-100);
+  --color-app-600: var(--app-600);
+  --color-app-500: var(--app-500);
+  --color-app-400: var(--app-400);
+}
+
 /* The two toaster rules below are scoped by the `app-toaster` marker class that
  * `app.config.ts` puts on the toaster's viewport slot, NOT by `[data-slot='viewport']`.
  * That attribute is Nuxt UI's name for the scroll region of ELEVEN components

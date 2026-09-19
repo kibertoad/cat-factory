@@ -124,8 +124,8 @@ const STATUS_META: Record<
   filed: { badge: 'success', text: 'text-emerald-300' },
   queued: { badge: 'info', text: 'text-sky-300' },
   answered: { badge: 'info', text: 'text-sky-300' },
-  closed: { badge: 'neutral', text: 'text-slate-300' },
-  dismissed: { badge: 'neutral', text: 'text-slate-400' },
+  closed: { badge: 'neutral', text: 'text-toned' },
+  dismissed: { badge: 'neutral', text: 'text-muted' },
 }
 
 /** Whether a decided item carries a recorded reply to show ('answered' or 'closed'). */
@@ -158,11 +158,11 @@ function hasRecordedAnswer(item: FollowUpItem): boolean {
       <!-- Empty -->
       <div
         v-if="items.length === 0"
-        class="flex h-full flex-col items-center justify-center gap-2 py-10 text-center text-slate-400"
+        class="flex h-full flex-col items-center justify-center gap-2 py-10 text-center text-muted"
       >
         <UIcon :name="FOLLOW_UP_COMPANION_META.icon" class="h-8 w-8 opacity-40" />
         <p class="text-sm">{{ t('followUp.empty.title') }}</p>
-        <p class="max-w-sm text-[11px] text-slate-500">
+        <p class="max-w-sm text-[11px] text-dimmed">
           {{ t('followUp.empty.hint') }}
         </p>
       </div>
@@ -178,7 +178,7 @@ function hasRecordedAnswer(item: FollowUpItem): boolean {
         <article
           v-for="item in items"
           :key="item.id"
-          class="rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3"
+          class="rounded-xl border border-default bg-default/60 px-4 py-3"
           :class="item.status === 'pending' ? 'border-amber-500/40' : ''"
         >
           <div class="flex items-start gap-2">
@@ -189,18 +189,18 @@ function hasRecordedAnswer(item: FollowUpItem): boolean {
             />
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-2">
-                <h3 class="min-w-0 flex-1 truncate text-[13px] font-medium text-slate-100">
+                <h3 class="min-w-0 flex-1 truncate text-[13px] font-medium text-app-100">
                   {{ item.title }}
                 </h3>
                 <UBadge :color="STATUS_META[item.status].badge" variant="subtle" size="sm">
                   {{ t(STATUS_LABEL_KEYS[item.status]) }}
                 </UBadge>
               </div>
-              <p v-if="item.detail" class="mt-1 whitespace-pre-wrap text-[12px] text-slate-300">
+              <p v-if="item.detail" class="mt-1 whitespace-pre-wrap text-[12px] text-toned">
                 {{ item.detail }}
               </p>
-              <p v-if="item.suggestedAction" class="mt-1 text-[11px] text-slate-400">
-                <span class="text-slate-500">{{ t('followUp.suggested') }}</span>
+              <p v-if="item.suggestedAction" class="mt-1 text-[11px] text-muted">
+                <span class="text-dimmed">{{ t('followUp.suggested') }}</span>
                 {{ item.suggestedAction }}
               </p>
               <p v-if="item.status === 'filed' && item.ticketUrl" class="mt-1 text-[11px]">
@@ -213,8 +213,8 @@ function hasRecordedAnswer(item: FollowUpItem): boolean {
                   {{ item.ticketExternalId ?? t('followUp.viewIssue') }}
                 </a>
               </p>
-              <p v-if="hasRecordedAnswer(item)" class="mt-1 text-[11px] text-slate-300">
-                <span class="text-slate-500">
+              <p v-if="hasRecordedAnswer(item)" class="mt-1 text-[11px] text-toned">
+                <span class="text-dimmed">
                   {{
                     item.status === 'closed' ? t('followUp.yourRuling') : t('followUp.yourAnswer')
                   }}
@@ -235,7 +235,7 @@ function hasRecordedAnswer(item: FollowUpItem): boolean {
                     v-model="drafts[item.id]"
                     rows="2"
                     :placeholder="t('followUp.answerPlaceholder')"
-                    class="w-full resize-y rounded-md border border-slate-700 bg-slate-950/60 px-2.5 py-1.5 text-[12px] text-slate-100 placeholder:text-slate-600 focus:border-sky-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60"
+                    class="w-full resize-y rounded-md border border-muted bg-app-950/60 px-2.5 py-1.5 text-[12px] text-app-100 placeholder:text-app-600 focus:border-sky-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60"
                   />
                   <!-- Wraps, like the follow-up row below: three buttons whose labels are two
                        words each in English are one long line in most of the other locales, and
@@ -323,7 +323,7 @@ function hasRecordedAnswer(item: FollowUpItem): boolean {
     </div>
 
     <footer
-      class="flex items-center justify-between border-t border-slate-800 px-5 py-2.5 text-[11px] text-slate-400"
+      class="flex items-center justify-between border-t border-default px-5 py-2.5 text-[11px] text-muted"
     >
       <span>
         {{
