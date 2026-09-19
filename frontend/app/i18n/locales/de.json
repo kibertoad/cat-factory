@@ -8600,7 +8600,26 @@
       "dark": "Dunkel"
     },
     "theme": {
-      "section": "Design"
+      "section": "Design",
+      "import": "Nuxt-UI-Design importieren…",
+      "remove": "Dieses Design entfernen"
+    },
+    "import": {
+      "title": "Design importieren",
+      "description": "Erstelle ein Design im Nuxt UI Theme-Editor, kopiere den Freigabelink und füge ihn hier ein. Das Design wird nur in diesem Browser gespeichert.",
+      "linkLabel": "Freigabelink",
+      "linkPlaceholder": "https://ui.nuxt.com/theme?doc=…",
+      "nameLabel": "Name",
+      "namePlaceholder": "Mein Design",
+      "fontNote": "Eine im Design genannte Schrift wird nur verwendet, wenn dieses Gerät oder diese Installation sie bereitstellt; sonst nutzt der Browser seine Standardschrift.",
+      "submit": "Importieren",
+      "cancel": "Abbrechen",
+      "error": {
+        "notALink": "Füge den Freigabelink von ui.nuxt.com/theme ein (oder das JSON des Designs).",
+        "malformed": "Dieser Link enthält kein lesbares Design. Kopiere ihn erneut aus dem Editor.",
+        "presetShorthand": "Dieser Link nennt eine Vorlage des Nuxt UI Editors, die diese App nicht kennt. Ändere eine beliebige Einstellung im Editor, damit der Link das ganze Design enthält, und kopiere ihn erneut.",
+        "unsupportedVersion": "Dieses Design stammt aus einem neueren Editor-Format, als diese App versteht."
+      }
     }
   }
 }

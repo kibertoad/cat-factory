@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import type { DropdownMenuItem } from '@nuxt/ui'
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
+import ThemeImportModal from '~/components/theme/ThemeImportModal.vue'
 import { useThemeStore } from '~/stores/theme'
 
 // Appearance picker, shown at the sidebar bottom beside the language switcher: colour MODE
-// (system / light / dark) and THEME (the built-ins) in one dropdown, because they are two halves of one question ("what does the
+// (system / light / dark) and THEME (the built-ins plus anything the user imported from the Nuxt
+// UI theme editor) in one dropdown, because they are two halves of one question ("what does the
 // app look like") and each on its own would cost a footer row for a control used once.
 //
 // Mode is `@nuxtjs/color-mode`'s preference (its own persisted storage); theme is the theme store.
@@ -16,6 +18,7 @@ withDefaults(defineProps<{ collapsed?: boolean }>(), { collapsed: false })
 const { t } = useI18n()
 const colorMode = useColorMode()
 const theme = useThemeStore()
+const importOpen = ref(false)
 
 type ModePreference = 'system' | 'light' | 'dark'
 const MODES: readonly ModePreference[] = ['system', 'light', 'dark']
@@ -59,6 +62,25 @@ const items = computed<DropdownMenuItem[][]>(() => [
       onSelect: () => theme.select(candidate.id),
     })),
   ],
+  [
+    {
+      label: t('appearance.theme.import'),
+      icon: 'i-lucide-palette',
+      onSelect: () => {
+        importOpen.value = true
+      },
+    },
+    ...(theme.isCustom
+      ? [
+          {
+            label: t('appearance.theme.remove'),
+            icon: 'i-lucide-trash-2',
+            color: 'error' as const,
+            onSelect: () => theme.removeCustom(theme.current),
+          },
+        ]
+      : []),
+  ],
 ])
 </script>
 
@@ -82,4 +104,5 @@ const items = computed<DropdownMenuItem[][]>(() => [
       <UIcon v-if="!collapsed" name="i-lucide-chevron-up" class="h-4 w-4 shrink-0 text-dimmed" />
     </button>
   </UDropdownMenu>
+  <ThemeImportModal v-model:open="importOpen" />
 </template>

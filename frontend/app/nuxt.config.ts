@@ -49,7 +49,10 @@ export default defineNuxtConfig({
   // self-hosted under `/_fonts` so no visitor's browser calls a font CDN. `global: true` emits the
   // `@font-face` rules whether or not a stylesheet at build time names the family, because the
   // theme plugin sets `--font-sans` / `--font-mono` at RUNTIME from the active document, which the
-  // module's CSS scan cannot see. `theme.builtins.spec.ts` pins that every built-in font is here.
+  // module's CSS scan cannot see. An IMPORTED theme's font is not listed here, so it renders only if
+  // the device or the deployment provides it (the import dialog says so); a deployment that wants
+  // one adds it to this list in its own config. `theme.builtins.spec.ts` pins that every built-in
+  // font is here.
   fonts: {
     families: [
       { name: 'Geist', provider: 'google', global: true },

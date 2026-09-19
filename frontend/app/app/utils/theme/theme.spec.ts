@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { deflateRawSync } from 'node:zlib'
 import { docModeTokens, isSafePaletteName, themeDocToCss } from '~/utils/theme/css'
 import {
   DEFAULT_COLORS,
@@ -9,7 +10,21 @@ import {
   styleTokens,
   type ThemeDoc,
 } from '~/utils/theme/doc'
+import { decodeThemeLink, extractThemePayload } from '~/utils/theme/link'
 import { MONO_THEME } from '~/utils/theme/builtins'
+import { presets } from '~/utils/theme/presets'
+
+/** A editor link: the Mono preset with Inter / JetBrains Mono in place of Geist (issue #2239). */
+const MONO_LINK =
+  'https://ui.nuxt.com/theme?doc=jc3BaoQwEAbgVyn_ORYtCDW39tZCodAnGHVWgzEpyUS6LHn3omXX9dbbz8z3z1ywcIjGO-hKofPWhwh9geMkgSz0LWWF1lI3vcTPYGYKZ2gJiRUC9SZF6PKxVjh5J2s_kovQeHPCAQqzdx4a7yyvgYyLDx_rICtEOVteCz2fKFnZni8UDLm_bNx3WhNiasUyclYQP7H7GqnnjRRFMkU7bFcoTNBNXWZ1HRdzEu7XpTXDKNBVWaorLO8hW17on5a6jt3RPu32ebfCP3KHmh1VR1SMZhg3dbja1LdCXeac8y8'
+
+function encode(doc: object): string {
+  return deflateRawSync(Buffer.from(JSON.stringify(doc)))
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '')
+}
 
 describe('theme document expansion', () => {
   it('fills the alias map with the library defaults', () => {
@@ -145,5 +160,65 @@ describe('themeDocToCss', () => {
     expect(isSafePaletteName('red; } body { display: none')).toBe(false)
     expect(isSafePaletteName('__proto__')).toBe(false)
     expect(isSafePaletteName(undefined)).toBe(false)
+  })
+})
+
+describe('decodeThemeLink', () => {
+  it('extracts the payload from a editor URL, a bare payload, or raw JSON', () => {
+    expect(extractThemePayload(MONO_LINK)).toMatch(/^jc3B/)
+    expect(extractThemePayload('  abc_DEF-123 ')).toBe('abc_DEF-123')
+    expect(extractThemePayload('{"version":1}')).toBe('{"version":1}')
+    expect(extractThemePayload('hello world')).toBeNull()
+    expect(extractThemePayload('https://ui.nuxt.com/theme')).toBeNull()
+  })
+
+  it('decodes a real editor link to its document', async () => {
+    const result = await decodeThemeLink(MONO_LINK)
+    expect(result).toEqual({
+      ok: true,
+      doc: { ...MONO_THEME.doc, font: { sans: 'Inter', mono: 'JetBrains Mono' } },
+    })
+  })
+
+  it('reads an uncompressed payload and raw JSON too', async () => {
+    const doc = { version: 1, radius: 0.5 }
+    const plain = Buffer.from(JSON.stringify(doc)).toString('base64url')
+    expect(await decodeThemeLink(plain)).toEqual({ ok: true, doc })
+    expect(await decodeThemeLink(JSON.stringify(doc))).toEqual({ ok: true, doc })
+  })
+
+  it('names each failure so the dialog can show the right remedy', async () => {
+    expect(await decodeThemeLink('')).toEqual({ ok: false, reason: 'not_a_link' })
+    expect(await decodeThemeLink('https://ui.nuxt.com/theme')).toEqual({
+      ok: false,
+      reason: 'not_a_link',
+    })
+    expect(await decodeThemeLink('https://example.com/?doc=%%%')).toEqual({
+      ok: false,
+      reason: 'malformed',
+    })
+    expect(await decodeThemeLink('AAAA')).toEqual({ ok: false, reason: 'malformed' })
+    expect(await decodeThemeLink(encode({ version: 2 }))).toEqual({
+      ok: false,
+      reason: 'unsupported_version',
+    })
+    expect(await decodeThemeLink(encode({ version: 1, preset: 'not-a-preset' }))).toEqual({
+      ok: false,
+      reason: 'preset_shorthand',
+    })
+  })
+
+  it('rebuilds a editor preset shorthand link from the copied preset table', async () => {
+    const cobalt = presets.find((preset) => preset.id === 'cobalt')!
+    expect(await decodeThemeLink(encode({ version: 1, preset: 'cobalt' }))).toEqual({
+      ok: true,
+      doc: cobalt.doc,
+    })
+    expect(await decodeThemeLink(encode({ version: 1, preset: 'default' }))).toEqual({
+      ok: true,
+      doc: { version: 1 },
+    })
+    // The built-in Mono IS the editor preset, not a copy.
+    expect(presets.find((preset) => preset.id === 'mono')!.doc).toBe(MONO_THEME.doc)
   })
 })
