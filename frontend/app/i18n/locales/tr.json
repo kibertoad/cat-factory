@@ -8611,6 +8611,7 @@
       "linkPlaceholder": "https://ui.nuxt.com/theme?doc=…",
       "nameLabel": "Ad",
       "namePlaceholder": "Temam",
+      "nameTaken": "“{typed}” adlı bir tema zaten var. Bu tema “{name}” olarak kaydedilecek.",
       "fontNote": "Temanın belirttiği yazı tipi yalnızca bu cihaz veya bu kurulum sağlıyorsa kullanılır; aksi halde tarayıcı varsayılan yazı tipine döner.",
       "submit": "İçe aktar",
       "cancel": "İptal",

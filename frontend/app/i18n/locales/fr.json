@@ -8611,6 +8611,7 @@
       "linkPlaceholder": "https://ui.nuxt.com/theme?doc=…",
       "nameLabel": "Nom",
       "namePlaceholder": "Mon thème",
+      "nameTaken": "Un thème nommé « {typed} » existe déjà. Celui-ci sera enregistré sous « {name} ».",
       "fontNote": "La police nommée par le thème n'est utilisée que si cet appareil ou ce déploiement la fournit ; sinon le navigateur utilise sa police par défaut.",
       "submit": "Importer",
       "cancel": "Annuler",

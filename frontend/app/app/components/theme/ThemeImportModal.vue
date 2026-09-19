@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useThemeStore } from '~/stores/theme'
 import { decodeThemeLink, type ThemeLinkDecodeResult } from '~/utils/theme/link'
 
@@ -16,6 +16,16 @@ const link = ref('')
 const name = ref('')
 const error = ref<Extract<ThemeLinkDecodeResult, { ok: false }>['reason'] | null>(null)
 const busy = ref(false)
+
+// The name the theme will actually be saved under. Shown as help text only when it differs from
+// what was typed, so a taken name is explained before the import rather than discovered after.
+const resolvedName = computed(() => {
+  const requested = name.value.trim()
+  return requested ? theme.uniqueName(requested) : ''
+})
+const nameTaken = computed(
+  () => resolvedName.value !== '' && resolvedName.value !== name.value.trim(),
+)
 
 // Static literal keys per decode outcome, so the typed-message-keys check sees them.
 const ERROR_KEYS: Record<NonNullable<typeof error.value>, string> = {
@@ -70,7 +80,14 @@ async function submit() {
             data-testid="theme-import-link"
           />
         </UFormField>
-        <UFormField :label="t('appearance.import.nameLabel')">
+        <UFormField
+          :label="t('appearance.import.nameLabel')"
+          :help="
+            nameTaken
+              ? t('appearance.import.nameTaken', { typed: name.trim(), name: resolvedName })
+              : undefined
+          "
+        >
           <UInput
             v-model="name"
             class="w-full"

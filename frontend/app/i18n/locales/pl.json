@@ -8611,6 +8611,7 @@
       "linkPlaceholder": "https://ui.nuxt.com/theme?doc=…",
       "nameLabel": "Nazwa",
       "namePlaceholder": "Mój motyw",
+      "nameTaken": "Motyw o nazwie „{typed}” już istnieje. Ten zostanie zapisany jako „{name}”.",
       "fontNote": "Czcionka wskazana w motywie jest używana tylko wtedy, gdy udostępnia ją to urządzenie lub ta instalacja; w przeciwnym razie przeglądarka użyje domyślnej.",
       "submit": "Importuj",
       "cancel": "Anuluj",

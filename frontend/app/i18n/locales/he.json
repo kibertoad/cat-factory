@@ -8611,6 +8611,7 @@
       "linkPlaceholder": "https://ui.nuxt.com/theme?doc=…",
       "nameLabel": "שם",
       "namePlaceholder": "ערכת הנושא שלי",
+      "nameTaken": "ערכת נושא בשם „{typed}” כבר קיימת. זו תישמר בשם „{name}”.",
       "fontNote": "גופן שערכת הנושא מציינת ישמש רק אם המכשיר או ההתקנה הזו מספקים אותו; אחרת הדפדפן ישתמש בגופן ברירת המחדל.",
       "submit": "ייבוא",
       "cancel": "ביטול",
