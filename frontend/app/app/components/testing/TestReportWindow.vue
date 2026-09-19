@@ -145,10 +145,14 @@ const STATUS_META = computed<
 >(() => ({
   passed: {
     icon: 'i-lucide-circle-check',
-    text: 'text-emerald-400',
+    text: 'text-app-success-400',
     label: t('testing.status.passed'),
   },
-  failed: { icon: 'i-lucide-circle-x', text: 'text-rose-400', label: t('testing.status.failed') },
+  failed: {
+    icon: 'i-lucide-circle-x',
+    text: 'text-app-error-400',
+    label: t('testing.status.failed'),
+  },
   skipped: {
     icon: 'i-lucide-circle-minus',
     text: 'text-dimmed',
@@ -167,9 +171,17 @@ const SEVERITY_LABELS = computed<Record<TestConcern['severity'], string>>(() => 
 
 const SEVERITY_META: Record<TestConcern['severity'], { text: string; chip: string; rank: number }> =
   {
-    critical: { text: 'text-rose-300', chip: 'bg-rose-500/15 text-rose-300', rank: 0 },
-    high: { text: 'text-rose-300', chip: 'bg-rose-500/15 text-rose-300', rank: 1 },
-    medium: { text: 'text-amber-300', chip: 'bg-amber-500/15 text-amber-300', rank: 2 },
+    critical: {
+      text: 'text-app-error-300',
+      chip: 'bg-app-error-500/15 text-app-error-300',
+      rank: 0,
+    },
+    high: { text: 'text-app-error-300', chip: 'bg-app-error-500/15 text-app-error-300', rank: 1 },
+    medium: {
+      text: 'text-app-warning-300',
+      chip: 'bg-app-warning-500/15 text-app-warning-300',
+      rank: 2,
+    },
     low: { text: 'text-toned', chip: 'bg-app-500/15 text-toned', rank: 3 },
   }
 
@@ -318,10 +330,10 @@ function toggle(key: string) {
 }
 
 const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: string }> = {
-  passed: { icon: 'i-lucide-circle-check', text: 'text-emerald-400' },
-  failed: { icon: 'i-lucide-circle-x', text: 'text-rose-400' },
+  passed: { icon: 'i-lucide-circle-check', text: 'text-app-success-400' },
+  failed: { icon: 'i-lucide-circle-x', text: 'text-app-error-400' },
   skipped: { icon: 'i-lucide-circle-minus', text: 'text-dimmed' },
-  mixed: { icon: 'i-lucide-circle-dot', text: 'text-amber-400' },
+  mixed: { icon: 'i-lucide-circle-dot', text: 'text-app-warning-400' },
   empty: { icon: 'i-lucide-circle-dashed', text: 'text-dimmed' },
 }
 </script>
@@ -330,7 +342,7 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
   <ResultWindowShell
     :open="open"
     icon="i-lucide-flask-conical"
-    icon-class="bg-amber-500/15 text-amber-300"
+    icon-class="bg-app-warning-500/15 text-app-warning-300"
     :title="headerTitle"
     :subtitle="t('testing.subtitle')"
     :step-ref="{ instanceId, stepIndex }"
@@ -393,14 +405,14 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
             :class="
               infraSetup.started
                 ? 'border-default bg-default/60'
-                : 'border-rose-500/40 bg-rose-500/10'
+                : 'border-app-error-500/40 bg-app-error-500/10'
             "
           >
             <div class="flex items-center gap-2">
               <UIcon
                 :name="infraSetup.started ? 'i-lucide-container' : 'i-lucide-circle-x'"
                 class="h-3.5 w-3.5 shrink-0"
-                :class="infraSetup.started ? 'text-emerald-400' : 'text-rose-400'"
+                :class="infraSetup.started ? 'text-app-success-400' : 'text-app-error-400'"
               />
               <span class="text-[13px] font-medium text-default">
                 {{ standupHeadline }}
@@ -418,7 +430,7 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
             </p>
             <p
               v-if="infraSetup.error"
-              class="mt-1 text-[12px] leading-snug text-rose-300"
+              class="mt-1 text-[12px] leading-snug text-app-error-300"
               data-testid="tester-infra-setup-error"
             >
               {{ infraSetup.error }}
@@ -455,9 +467,9 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
           <div
             v-if="infraReady"
             data-testid="tester-env-ready"
-            class="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-[13px] text-emerald-200"
+            class="flex items-center gap-2 rounded-lg border border-app-success-500/30 bg-app-success-500/10 px-3 py-2 text-[13px] text-app-success-200"
           >
-            <UIcon name="i-lucide-rocket" class="h-4 w-4 shrink-0 text-emerald-400" />
+            <UIcon name="i-lucide-rocket" class="h-4 w-4 shrink-0 text-app-success-400" />
             <span>{{ t('testing.readyBanner') }}</span>
           </div>
 
@@ -512,7 +524,9 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                 "
                 :at="a.at"
                 :icon="a.outcome === 'completed' ? 'i-lucide-wrench' : 'i-lucide-circle-x'"
-                :icon-class="a.outcome === 'completed' ? 'text-amber-300' : 'text-rose-400'"
+                :icon-class="
+                  a.outcome === 'completed' ? 'text-app-warning-300' : 'text-app-error-400'
+                "
               />
               <MarkdownProse
                 v-if="a.summary"
@@ -588,7 +602,7 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                 <UIcon
                   :name="vd.adequate ? 'i-lucide-shield-check' : 'i-lucide-shield-alert'"
                   class="h-3.5 w-3.5 shrink-0"
-                  :class="vd.adequate ? 'text-emerald-400' : 'text-amber-300'"
+                  :class="vd.adequate ? 'text-app-success-400' : 'text-app-warning-300'"
                 />
                 <span class="text-[13px] font-medium text-default">
                   {{
@@ -615,7 +629,10 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                     :key="`qc${vi}-g${gi}`"
                     class="flex items-start gap-1.5 text-[12px] text-toned"
                   >
-                    <UIcon name="i-lucide-dot" class="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400" />
+                    <UIcon
+                      name="i-lucide-dot"
+                      class="mt-0.5 h-3.5 w-3.5 shrink-0 text-app-warning-400"
+                    />
                     <span>{{ gap }}</span>
                   </li>
                 </ul>
@@ -835,9 +852,9 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
             <UIcon
               :name="report.greenlight ? 'i-lucide-circle-check' : 'i-lucide-circle-x'"
               class="h-4 w-4"
-              :class="report.greenlight ? 'text-emerald-400' : 'text-rose-400'"
+              :class="report.greenlight ? 'text-app-success-400' : 'text-app-error-400'"
             />
-            <span :class="report.greenlight ? 'text-emerald-300' : 'text-rose-300'">
+            <span :class="report.greenlight ? 'text-app-success-300' : 'text-app-error-300'">
               {{ report.greenlight ? t('testing.verdict.safe') : t('testing.verdict.withheld') }}
             </span>
           </div>
@@ -850,11 +867,11 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
           <dl class="space-y-1 text-[12px]">
             <div class="flex items-center justify-between">
               <dt class="text-muted">{{ t('testing.outcomes.passed') }}</dt>
-              <dd class="text-emerald-300">{{ counts.passed }}</dd>
+              <dd class="text-app-success-300">{{ counts.passed }}</dd>
             </div>
             <div class="flex items-center justify-between">
               <dt class="text-muted">{{ t('testing.outcomes.failed') }}</dt>
-              <dd class="text-rose-300">{{ counts.failed }}</dd>
+              <dd class="text-app-error-300">{{ counts.failed }}</dd>
             </div>
             <div class="flex items-center justify-between">
               <dt class="text-muted">{{ t('testing.outcomes.skipped') }}</dt>
@@ -862,7 +879,7 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
             </div>
             <div class="flex items-center justify-between border-t border-default pt-1">
               <dt class="text-muted">{{ t('testing.outcomes.concerns') }}</dt>
-              <dd class="text-amber-300">
+              <dd class="text-app-warning-300">
                 {{ counts.concerns
                 }}<template v-if="counts.blocking">
                   {{

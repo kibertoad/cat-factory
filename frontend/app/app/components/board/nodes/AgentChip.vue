@@ -12,9 +12,9 @@ const archetype = computed(() => agentKindMeta(props.step.agentKind))
 
 const stateRing: Record<AgentState, string> = {
   pending: 'ring-app-600/60 opacity-60',
-  working: 'ring-primary-400',
-  waiting_decision: 'ring-amber-400 board-pulse',
-  done: 'ring-emerald-400',
+  working: 'ring-primary',
+  waiting_decision: 'ring-app-warning-400 board-pulse',
+  done: 'ring-app-success-400',
 }
 
 const stateIcon: Record<AgentState, string | null> = {
@@ -32,14 +32,14 @@ const dim = computed(() => (props.size === 'sm' ? 'h-7 w-7' : 'h-9 w-9'))
     <div
       class="relative flex items-center justify-center rounded-full ring-2 transition"
       :class="[dim, stateRing[step.state], active ? 'scale-110' : '']"
-      :style="{ backgroundColor: archetype.color + '22' }"
+      :style="{ backgroundColor: tint(archetype.color) }"
     >
       <UIcon :name="archetype.icon" class="text-base" :style="{ color: archetype.color }" />
       <span
         v-if="step.state === 'working'"
         class="absolute -bottom-1 -end-1 rounded-full bg-default p-0.5"
       >
-        <UIcon :name="stateIcon.working!" class="h-3 w-3 animate-spin text-primary-300" />
+        <UIcon :name="stateIcon.working!" class="h-3 w-3 animate-spin text-primary" />
       </span>
       <span
         v-else-if="stateIcon[step.state]"
@@ -48,7 +48,7 @@ const dim = computed(() => (props.size === 'sm' ? 'h-7 w-7' : 'h-9 w-9'))
         <UIcon
           :name="stateIcon[step.state]!"
           class="h-3 w-3"
-          :class="step.state === 'done' ? 'text-emerald-300' : 'text-amber-300'"
+          :class="step.state === 'done' ? 'text-app-success-300' : 'text-app-warning-300'"
         />
       </span>
     </div>

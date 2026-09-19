@@ -52,13 +52,13 @@ function stepDescription(kind: string): string {
       </span>
       <!-- Gates are the reason a run stops for a human, so they earn a headline of their own
            rather than only the per-step marker below. -->
-      <span v-if="gateCount" class="inline-flex items-center gap-1 text-amber-500">
+      <span v-if="gateCount" class="inline-flex items-center gap-1 text-app-warning-500">
         <UIcon name="i-lucide-shield-check" class="h-3 w-3" />
         {{ t('pipeline.preview.gateCount', { count: gateCount }, gateCount) }}
       </span>
       <!-- Conditional steps change what a run of this pipeline actually does from task to task,
            which is exactly what a preview read BEFORE picking has to say out loud. -->
-      <span v-if="conditionalCount" class="inline-flex items-center gap-1 text-sky-500">
+      <span v-if="conditionalCount" class="inline-flex items-center gap-1 text-app-info-500">
         <UIcon name="i-lucide-git-branch" class="h-3 w-3" />
         {{ t('pipeline.preview.conditionalCount', { count: conditionalCount }, conditionalCount) }}
       </span>
@@ -88,14 +88,14 @@ function stepDescription(kind: string): string {
             <UIcon
               v-if="s.gated"
               name="i-lucide-shield-check"
-              class="h-3 w-3 shrink-0 text-amber-400"
+              class="h-3 w-3 shrink-0 text-app-warning-400"
               :title="t('pipeline.preview.gated')"
             />
             <UIcon
               v-for="c in s.conditions"
               :key="c"
               :name="CONDITION_MARKERS[c].icon"
-              class="h-3 w-3 shrink-0 text-sky-400"
+              class="h-3 w-3 shrink-0 text-app-info-400"
               :title="t(CONDITION_MARKERS[c].key)"
             />
           </div>

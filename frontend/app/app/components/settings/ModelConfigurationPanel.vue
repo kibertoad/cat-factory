@@ -303,10 +303,8 @@ async function save() {
         aria-modal="true"
       >
         <header class="flex items-center gap-3 border-b border-default px-6 py-4">
-          <div
-            class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-500/15"
-          >
-            <UIcon name="i-lucide-cpu" class="h-5 w-5 text-primary-300" />
+          <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15">
+            <UIcon name="i-lucide-cpu" class="h-5 w-5 text-primary" />
           </div>
           <div class="min-w-0">
             <h1 class="truncate text-base font-semibold text-highlighted">

@@ -224,7 +224,7 @@ async function onFilePicked(e: Event) {
   <ResultWindowShell
     :open="open"
     icon="i-lucide-image-play"
-    icon-class="bg-amber-500/15 text-amber-300"
+    icon-class="bg-app-warning-500/15 text-app-warning-300"
     :title="headerTitle"
     :subtitle="phase ? PHASE_LABEL[phase] : t('visualConfirm.subtitle')"
     width="5xl"
@@ -242,7 +242,7 @@ async function onFilePicked(e: Event) {
       <template v-else>
         <p
           v-if="vc.degradedReason"
-          class="rounded-lg border border-amber-700/40 bg-amber-500/5 px-3 py-2 text-[12px] text-amber-300/90"
+          class="rounded-lg border border-app-warning-700/40 bg-app-warning-500/5 px-3 py-2 text-[12px] text-app-warning-300/90"
         >
           {{ vc.degradedReason }}
         </p>
@@ -254,7 +254,7 @@ async function onFilePicked(e: Event) {
           class="rounded-lg border border-default bg-default/60 px-3 py-2 text-[12px] text-toned"
         >
           <p class="flex items-center gap-1.5">
-            <UIcon name="i-lucide-figma" class="h-3.5 w-3.5 shrink-0 text-amber-300" />
+            <UIcon name="i-lucide-figma" class="h-3.5 w-3.5 shrink-0 text-app-warning-300" />
             <span>{{
               t('visualConfirm.design.summary', { count: design.images }, design.images)
             }}</span>
@@ -265,7 +265,10 @@ async function onFilePicked(e: Event) {
           <!-- One line per short design, carrying both ways it can fall short: what its source
                kept, and what this gallery's shared ceiling cut from it. A design the ceiling shut
                out entirely reads as one with no frames unless it is named here. -->
-          <ul v-if="design.gaps?.length" class="mt-1.5 space-y-1 text-[11px] text-amber-300/90">
+          <ul
+            v-if="design.gaps?.length"
+            class="mt-1.5 space-y-1 text-[11px] text-app-warning-300/90"
+          >
             <li v-for="gap in design.gaps" :key="`${gap.title}-${gap.reason ?? 'capped'}`">
               {{ t('visualConfirm.design.gapLine', { title: gap.title }) }}
               <template v-if="gap.reason">{{ DESIGN_GAP_LABELS[gap.reason] }}</template>
@@ -280,7 +283,7 @@ async function onFilePicked(e: Event) {
           v-if="working"
           class="flex items-center gap-2 rounded-lg border border-default bg-app-950/40 px-3 py-2 text-[12px] text-toned"
         >
-          <UIcon name="i-lucide-loader" class="h-3.5 w-3.5 animate-spin text-amber-300" />
+          <UIcon name="i-lucide-loader" class="h-3.5 w-3.5 animate-spin text-app-warning-300" />
           {{ phase ? PHASE_LABEL[phase] : '' }}
         </p>
 
@@ -311,7 +314,7 @@ async function onFilePicked(e: Event) {
                 {{ t('visualConfirm.noteIssue', { view: p.view }) }}
                 <span
                   v-if="perViewNotes[p.view]?.trim()"
-                  class="rounded-full bg-amber-500/15 px-1.5 text-[9px] text-amber-300"
+                  class="rounded-full bg-app-warning-500/15 px-1.5 text-[9px] text-app-warning-300"
                   >{{ t('visualConfirm.noted') }}</span
                 >
               </button>
@@ -320,7 +323,7 @@ async function onFilePicked(e: Event) {
                 v-model="perViewNotes[p.view]"
                 rows="2"
                 :placeholder="t('visualConfirm.notePlaceholder', { view: p.view })"
-                class="mt-1 w-full rounded-md border border-muted bg-app-950 px-2 py-1.5 text-[12px] text-default placeholder:text-app-600 focus:border-amber-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/60"
+                class="mt-1 w-full rounded-md border border-muted bg-app-950 px-2 py-1.5 text-[12px] text-default placeholder:text-app-600 focus:border-app-warning-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-app-warning-500/60"
               />
             </div>
           </div>
@@ -371,7 +374,7 @@ async function onFilePicked(e: Event) {
             v-model="globalFindings"
             rows="3"
             :placeholder="t('visualConfirm.requestFix.placeholder')"
-            class="w-full rounded-md border border-muted bg-app-950 px-3 py-2 text-[13px] text-default placeholder:text-app-600 focus:border-amber-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/60"
+            class="w-full rounded-md border border-muted bg-app-950 px-3 py-2 text-[13px] text-default placeholder:text-app-600 focus:border-app-warning-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-app-warning-500/60"
           />
           <div class="mt-2 flex items-center justify-between">
             <span class="text-[11px] text-dimmed">
@@ -408,9 +411,9 @@ async function onFilePicked(e: Event) {
                   class="ms-1.5 rounded px-1 text-[10px] uppercase"
                   :class="
                     r.outcome === 'completed'
-                      ? 'bg-emerald-500/15 text-emerald-300'
+                      ? 'bg-app-success-500/15 text-app-success-300'
                       : r.outcome === 'failed'
-                        ? 'bg-rose-500/15 text-rose-300'
+                        ? 'bg-app-error-500/15 text-app-error-300'
                         : 'bg-app-500/15 text-toned'
                   "
                 >
@@ -444,9 +447,9 @@ async function onFilePicked(e: Event) {
       <div class="flex items-center gap-2">
         <label
           v-if="awaitingHuman && needsAck"
-          class="flex items-center gap-1.5 text-[11px] text-amber-300/90"
+          class="flex items-center gap-1.5 text-[11px] text-app-warning-300/90"
         >
-          <input v-model="ackDegraded" type="checkbox" class="accent-amber-500" />
+          <input v-model="ackDegraded" type="checkbox" class="accent-app-warning-500" />
           {{ t('visualConfirm.reviewedManually') }}
         </label>
         <UButton

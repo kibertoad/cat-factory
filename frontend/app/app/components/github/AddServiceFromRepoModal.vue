@@ -454,11 +454,11 @@ function done() {
              offer whichever connect methods the deployment serves (never just the App) -->
         <div
           v-if="needsConnection"
-          class="space-y-3 rounded-md border border-amber-500/30 bg-amber-500/5 p-3"
+          class="space-y-3 rounded-md border border-app-warning-500/30 bg-app-warning-500/5 p-3"
         >
           <div class="flex items-start gap-2">
-            <UIcon name="i-lucide-plug-zap" class="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
-            <p class="text-sm text-amber-200/90">
+            <UIcon name="i-lucide-plug-zap" class="mt-0.5 h-4 w-4 shrink-0 text-app-warning-400" />
+            <p class="text-sm text-app-warning-200/90">
               {{ t('vcs.addService.connectFirst') }}
             </p>
           </div>
@@ -617,10 +617,10 @@ function done() {
           <!-- just-added service: configure it with the same controls as the inspector -->
           <div
             v-if="configuredBlock"
-            class="space-y-4 rounded-md border border-emerald-900/50 bg-emerald-950/20 p-3"
+            class="space-y-4 rounded-md border border-app-success-900/50 bg-app-success-950/20 p-3"
           >
             <div
-              class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-emerald-400"
+              class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-app-success-400"
             >
               <UIcon name="i-lucide-check" class="h-3.5 w-3.5" />
               {{ t('github.addService.addedConfigure', { title: configuredBlock.title }) }}

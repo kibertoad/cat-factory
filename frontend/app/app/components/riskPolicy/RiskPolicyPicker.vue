@@ -162,7 +162,7 @@ function choose(id: string) {
               <UIcon
                 v-if="!modelValue"
                 name="i-lucide-check"
-                class="h-4 w-4 shrink-0 text-primary-400"
+                class="h-4 w-4 shrink-0 text-primary"
               />
             </button>
           </li>
@@ -189,7 +189,7 @@ function choose(id: string) {
               <UIcon
                 v-if="modelValue === p.id"
                 name="i-lucide-check"
-                class="h-4 w-4 shrink-0 text-primary-400"
+                class="h-4 w-4 shrink-0 text-primary"
               />
             </button>
           </li>
@@ -200,7 +200,7 @@ function choose(id: string) {
           <template v-if="preview.policy">
             <p
               v-if="previewRefusal"
-              class="mb-2 text-[11px] leading-snug text-amber-400"
+              class="mb-2 text-[11px] leading-snug text-app-warning-400"
               data-testid="risk-policy-refusal"
             >
               {{ t(`riskPolicy.picker.refused.${previewRefusal}`) }}

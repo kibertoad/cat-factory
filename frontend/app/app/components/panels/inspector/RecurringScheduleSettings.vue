@@ -103,9 +103,9 @@ async function runNow() {
 }
 
 const RUN_COLOR: Record<string, string> = {
-  running: 'text-amber-400',
-  done: 'text-emerald-400',
-  failed: 'text-rose-400',
+  running: 'text-app-warning-400',
+  done: 'text-app-success-400',
+  failed: 'text-app-error-400',
   skipped: 'text-dimmed',
 }
 const RUN_STATUS_KEYS: Record<string, string> = {
@@ -123,13 +123,10 @@ function fmtTime(ms: number) {
 </script>
 
 <template>
-  <div
-    v-if="schedule"
-    class="space-y-2 rounded-lg border border-primary-900/50 bg-primary-950/20 p-3"
-  >
+  <div v-if="schedule" class="space-y-2 rounded-lg border border-primary/50 bg-primary/10 p-3">
     <div class="flex items-center justify-between">
       <span
-        class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-primary-300"
+        class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-primary"
       >
         <UIcon name="i-lucide-repeat" class="h-3.5 w-3.5" />
         {{ t('inspector.recurring.title') }}

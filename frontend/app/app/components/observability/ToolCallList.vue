@@ -161,7 +161,7 @@ function prettyArgs(raw: string): string {
     </p>
     <div
       v-else-if="source.error && !visible.length"
-      class="flex flex-col items-center gap-3 rounded-lg border border-dashed border-rose-900/60 py-6 text-center text-sm text-rose-400"
+      class="flex flex-col items-center gap-3 rounded-lg border border-dashed border-app-error-900/60 py-6 text-center text-sm text-app-error-400"
     >
       {{ t('observability.toolCalls.error') }}
       <UButton
@@ -198,7 +198,7 @@ function prettyArgs(raw: string): string {
            implies has to explain itself here. -->
       <p
         v-if="boundedNotice"
-        class="rounded-lg border border-dashed border-amber-900/50 px-3 py-2 text-[11px] text-amber-300/90"
+        class="rounded-lg border border-dashed border-app-warning-900/50 px-3 py-2 text-[11px] text-app-warning-300/90"
       >
         {{ boundedNotice }}
       </p>
@@ -208,7 +208,7 @@ function prettyArgs(raw: string): string {
           v-for="call in visible"
           :key="call.id"
           class="overflow-hidden rounded-xl border border-default bg-default/40"
-          :class="!call.ok ? 'border-rose-900/60' : ''"
+          :class="!call.ok ? 'border-app-error-900/60' : ''"
         >
           <button
             class="flex w-full items-center gap-3 px-4 py-2.5 text-start transition hover:bg-default/70"
@@ -278,7 +278,7 @@ function prettyArgs(raw: string): string {
                 </div>
                 <pre
                   class="max-h-60 overflow-auto rounded-lg bg-app-950/70 p-3 text-[11px] leading-relaxed"
-                  :class="call.ok ? 'text-toned' : 'text-rose-300'"
+                  :class="call.ok ? 'text-toned' : 'text-app-error-300'"
                   >{{ call.result || '—' }}</pre>
               </div>
             </template>

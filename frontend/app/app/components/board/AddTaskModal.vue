@@ -1112,7 +1112,7 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
                     v-model="fishingPhaseIds"
                     type="checkbox"
                     :value="phase.id"
-                    class="mt-0.5 accent-sky-500"
+                    class="mt-0.5 accent-app-info-500"
                     :data-testid="`add-task-fishing-angle-${phase.id}`"
                   />
                   <span class="min-w-0">

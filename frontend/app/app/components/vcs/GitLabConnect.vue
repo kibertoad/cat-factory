@@ -68,12 +68,12 @@ async function connect() {
     </UFormField>
 
     <p class="text-[11px] text-dimmed">
-      <ULink :to="tokenUrl" target="_blank" class="text-primary-400 hover:underline">
+      <ULink :to="tokenUrl" target="_blank" class="text-primary hover:underline">
         {{ t('vcs.connect.gitlab.createToken') }}
       </ULink>
     </p>
 
-    <p v-if="error" class="text-sm text-rose-400" data-testid="gitlab-connect-error">
+    <p v-if="error" class="text-sm text-app-error-400" data-testid="gitlab-connect-error">
       {{ error }}
     </p>
 

@@ -182,7 +182,7 @@ function kindLabel(item: RequirementItem): string {
   <ResultWindowShell
     :open="open"
     icon="i-lucide-scroll-text"
-    icon-class="bg-primary-500/15 text-primary-300"
+    icon-class="bg-primary/15 text-primary"
     :title="t('spec.title')"
     :subtitle="block ? spec?.service || block.title : undefined"
     variant="centered"
@@ -237,7 +237,7 @@ function kindLabel(item: RequirementItem): string {
       v-else-if="errored"
       class="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center text-sm text-muted"
     >
-      <UIcon name="i-lucide-triangle-alert" class="h-6 w-6 text-amber-400" />
+      <UIcon name="i-lucide-triangle-alert" class="h-6 w-6 text-app-warning-400" />
       {{ t('spec.error') }}
       <UButton
         icon="i-lucide-rotate-cw"
@@ -295,7 +295,7 @@ function kindLabel(item: RequirementItem): string {
                 class="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-start text-[13px] transition"
                 :class="
                   selected?.m === mi && selected?.g === gi
-                    ? 'bg-primary-500/15 text-primary-200'
+                    ? 'bg-primary/15 text-primary'
                     : 'text-toned hover:bg-elevated'
                 "
                 @click="selectGroup(mi, gi)"
@@ -386,7 +386,10 @@ function kindLabel(item: RequirementItem): string {
               data-testid="spec-state-filter"
             >
               <div class="flex items-center gap-1.5 text-[11px] text-dimmed">
-                <UIcon :name="STATE_META.established.icon" class="h-3.5 w-3.5 text-emerald-400" />
+                <UIcon
+                  :name="STATE_META.established.icon"
+                  class="h-3.5 w-3.5 text-app-success-400"
+                />
                 {{
                   t('spec.state.groupRollup', {
                     established: groupStates.established,
@@ -474,19 +477,19 @@ function kindLabel(item: RequirementItem): string {
                     class="rounded-md border border-default bg-app-950/50 px-3 py-2 text-[12.5px] leading-relaxed"
                   >
                     <p class="text-toned">
-                      <span class="font-semibold text-emerald-400">{{
+                      <span class="font-semibold text-app-success-400">{{
                         t('spec.acceptance.given')
                       }}</span>
                       {{ ac.given }}
                     </p>
                     <p class="text-toned">
-                      <span class="font-semibold text-sky-400">{{
+                      <span class="font-semibold text-app-info-400">{{
                         t('spec.acceptance.when')
                       }}</span>
                       {{ ac.when }}
                     </p>
                     <p class="text-toned">
-                      <span class="font-semibold text-violet-400">{{
+                      <span class="font-semibold text-app-secondary-400">{{
                         t('spec.acceptance.then')
                       }}</span>
                       {{ ac.outcome }}

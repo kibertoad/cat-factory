@@ -20,13 +20,13 @@ export interface VerdictMeta {
  * exists to prevent. Amber is the same "attention, but not a failure" tone the panel's severity
  * scale already uses for `medium`.
  */
-export const UNKNOWN_VERDICT_COLOR = '#f59e0b'
+export const UNKNOWN_VERDICT_COLOR = 'var(--ui-warning)'
 
 /** Dot colour per known verdict. Exhaustive over the closed union (drift guard tier 2). */
 export const VERDICT_COLORS: Record<RequirementVerdictStatus, string> = {
-  met: '#22c55e',
-  not_met: '#ef4444',
-  not_covered: '#64748b',
+  met: 'var(--ui-success)',
+  not_met: 'var(--ui-error)',
+  not_covered: 'var(--ui-text-muted)',
 }
 
 /**

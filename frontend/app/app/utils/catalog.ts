@@ -39,7 +39,7 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     tier: 'basic',
     label: 'Requirements Reviewer',
     icon: 'i-lucide-clipboard-check',
-    color: '#f59e0b',
+    color: 'var(--app-hue-amber)',
     category: 'review',
     // Settles the PRODUCT layer before anyone builds, which is every use-case except reviewing
     // someone else's open pull request: there the requirements are already someone's shipped
@@ -56,7 +56,7 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     tier: 'basic',
     label: 'Clarity Reviewer',
     icon: 'i-lucide-bug',
-    color: '#f59e0b',
+    color: 'var(--app-hue-amber)',
     category: 'review',
     // Triages a BUG REPORT for fixability, so it only makes sense where something gets fixed.
     purposes: ['build'],
@@ -75,7 +75,7 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     tier: 'intermediate',
     label: 'Bug Investigator',
     icon: 'i-lucide-search-code',
-    color: '#38bdf8',
+    color: 'var(--app-hue-sky)',
     category: 'review',
     // Traces a bug to its root cause in the code: a fixing pipeline's opening move, and nothing
     // a document, review, spike or plan has any use for.
@@ -94,7 +94,7 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     tier: 'intermediate',
     label: 'Bug Fisher',
     icon: 'i-lucide-fish',
-    color: '#0ea5e9',
+    color: 'var(--app-hue-sky)',
     category: 'review',
     // Hunts for defects nobody reported: it belongs with the bug work rather than the build
     // ladder, and with review because its product is findings.
@@ -113,7 +113,7 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     tier: 'basic',
     label: 'PR Reviewer',
     icon: 'i-lucide-clipboard-check',
-    color: '#6366f1',
+    color: 'var(--app-hue-indigo)',
     category: 'review',
     // Reviews an EXISTING open pull request, which is the whole of the review use-case, and is
     // available to a build pipeline that wants a deep pass over the pull request it just opened.
@@ -133,7 +133,7 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     tier: 'intermediate',
     label: 'Spike',
     icon: 'i-lucide-flask-conical',
-    color: '#22d3ee',
+    color: 'var(--app-hue-cyan)',
     category: 'design',
     description:
       'Timeboxed read-only investigation that answers a research question against the context and codebase, and delivers a findings document (as a pull request by default; no code).',
@@ -144,7 +144,7 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     tier: 'intermediate',
     label: 'Task Estimator',
     icon: 'i-lucide-gauge',
-    color: '#eab308',
+    color: 'var(--app-hue-yellow)',
     category: 'review',
     description:
       'Triages the task after requirements are clarified — rates Complexity, Risk and Impact (0..1). Used to gate consensus and conditional companion steps, and shown as ratings on the task.',
@@ -158,7 +158,7 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     tier: 'advanced',
     label: 'Task Reassessor',
     icon: 'i-lucide-gauge-circle',
-    color: '#f59e0b',
+    color: 'var(--app-hue-amber)',
     category: 'review',
     // Reads the pull request the run opened, so it only belongs where a pipeline ships code. A
     // document, research, planning or review pipeline opens none, and the step would be offered
@@ -172,7 +172,7 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     tier: 'intermediate',
     label: 'Requirements Brainstorm',
     icon: 'i-lucide-lightbulb',
-    color: '#f59e0b',
+    color: 'var(--app-hue-amber)',
     category: 'design',
     description:
       'A structured dialogue that turns a rough idea into crisp requirements — proposing options with explicit trade-offs and letting you choose, before the requirements review.',
@@ -185,7 +185,7 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     tier: 'advanced',
     label: 'Architecture Brainstorm',
     icon: 'i-lucide-compass',
-    color: '#a78bfa',
+    color: 'var(--app-hue-violet)',
     category: 'design',
     description:
       'A structured dialogue that explores and finalizes a technical approach from the refined requirements — proposing options with explicit trade-offs and letting you converge, before the architect.',
@@ -201,7 +201,7 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     tier: 'intermediate',
     label: 'Spec Writer',
     icon: 'i-lucide-clipboard-list',
-    color: '#c084fc',
+    color: 'var(--app-hue-purple)',
     category: 'design',
     // Writes the in-repo spec the implementation is then built against.
     purposes: ['build', 'planning'],
@@ -213,7 +213,7 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     tier: 'basic',
     label: 'Architect',
     icon: 'i-lucide-drafting-compass',
-    color: '#a78bfa',
+    color: 'var(--app-hue-violet)',
     category: 'design',
     // Designs the shape of a CODE change, so it belongs wherever code is planned or written and
     // nowhere a document is being authored.
@@ -228,7 +228,7 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     tier: 'intermediate',
     label: 'Blueprinter',
     icon: 'i-lucide-map',
-    color: '#22d3ee',
+    color: 'var(--app-hue-cyan)',
     category: 'design',
     // Decomposes a repository into services and modules on the board.
     purposes: ['build', 'planning'],
@@ -239,7 +239,7 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     tier: 'intermediate',
     label: 'Researcher',
     icon: 'i-lucide-telescope',
-    color: '#38bdf8',
+    color: 'var(--app-hue-sky)',
     category: 'design',
     description: 'Investigates prior art, libraries and constraints.',
   },
@@ -248,7 +248,7 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     tier: 'basic',
     label: 'Coder',
     icon: 'i-lucide-code-xml',
-    color: '#34d399',
+    color: 'var(--app-hue-emerald)',
     category: 'build',
     description: 'Implements the block according to the design.',
   },
@@ -257,7 +257,7 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     tier: 'advanced',
     label: 'Integrator',
     icon: 'i-lucide-plug-zap',
-    color: '#fb923c',
+    color: 'var(--app-hue-orange)',
     category: 'build',
     description: 'Wires the block into the surrounding system.',
   },
@@ -266,7 +266,7 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     tier: 'advanced',
     label: 'Mock Builder',
     icon: 'i-lucide-server-cog',
-    color: '#fb7185',
+    color: 'var(--app-hue-rose)',
     category: 'build',
     description: 'Builds WireMock mocks for external services and wires them into local/CI runs.',
   },
@@ -282,7 +282,7 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     tier: 'basic',
     label: 'Deployer',
     icon: 'i-lucide-cloud-upload',
-    color: '#34d399',
+    color: 'var(--app-hue-emerald)',
     category: 'test',
     description:
       'Provisions the ephemeral environment the tester and human-test gate run against (kubernetes / custom services); a no-op for docker-compose / infraless. Place it before the first step that needs the environment.',
@@ -292,7 +292,7 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     tier: 'basic',
     label: 'API Tester',
     icon: 'i-lucide-flask-conical',
-    color: '#fbbf24',
+    color: 'var(--app-hue-amber)',
     category: 'test',
     description: 'Exercises the change against the mocks + spec scenarios and reports outcomes.',
     // Opens the dedicated structured test-report window (scenarios → outcomes →
@@ -304,7 +304,7 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     tier: 'intermediate',
     label: 'UI Tester',
     icon: 'i-lucide-camera',
-    color: '#fbbf24',
+    color: 'var(--app-hue-amber)',
     category: 'test',
     description:
       'Drives a real browser through the new UI, captures a screenshot of each view, and reports outcomes.',
@@ -316,7 +316,7 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     tier: 'intermediate',
     label: 'Acceptance Test Author',
     icon: 'i-lucide-theater',
-    color: '#e879f9',
+    color: 'var(--app-hue-fuchsia)',
     category: 'test',
     description:
       "Turns scenarios into runnable tests — Playwright for frontend, the project's own framework for backend; adds only new ones.",
@@ -326,7 +326,7 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     tier: 'intermediate',
     label: 'Human Testing',
     icon: 'i-lucide-user-check',
-    color: '#f59e0b',
+    color: 'var(--app-hue-amber)',
     category: 'test',
     description:
       'Spins up an ephemeral environment and pauses for a person to validate the change in a live URL — request a fix from findings, pull main + redeploy, or recreate/destroy the env — before the pipeline continues.',
@@ -347,7 +347,7 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     tier: 'basic',
     label: 'Disposer',
     icon: 'i-lucide-cloud-off',
-    color: '#34d399',
+    color: 'var(--app-hue-emerald)',
     category: 'test',
     description:
       'Reclaims the ephemeral environments this run provisioned, and confirms they are actually gone. Place it after the last step that needs the environment.',
@@ -357,7 +357,7 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     tier: 'advanced',
     label: 'Visual Confirmation',
     icon: 'i-lucide-image-play',
-    color: '#f59e0b',
+    color: 'var(--app-hue-amber)',
     category: 'test',
     description:
       'Pauses for a person to review the UI tester’s screenshots against the uploaded reference designs — approve, or request a fix from findings — before the pipeline continues.',
@@ -370,7 +370,7 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     tier: 'basic',
     label: 'Documenter',
     icon: 'i-lucide-book-open-text',
-    color: '#818cf8',
+    color: 'var(--app-hue-indigo)',
     category: 'docs',
     // WRITES documentation into the repository, which a pipeline that reviews someone else's
     // pull request never does.
@@ -382,7 +382,7 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     tier: 'intermediate',
     label: 'Domain Rules Documenter',
     icon: 'i-lucide-scroll-text',
-    color: '#84cc16',
+    color: 'var(--app-hue-lime)',
     category: 'docs',
     // Writes domain-rule docs into the repository (see `documenter`).
     purposes: ['build', 'document'],
@@ -394,7 +394,7 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     tier: 'advanced',
     label: 'Domain Rules Reviewer',
     icon: 'i-lucide-shield-alert',
-    color: '#ef4444',
+    color: 'var(--app-hue-red)',
     category: 'docs',
     // The review activity that groups under Documentation: it reads a change against the
     // documented rules and reports violations, writing nothing.
@@ -420,7 +420,7 @@ export const COMPANION_ARCHETYPES: AgentArchetype[] = [
     tier: 'basic',
     label: 'Reviewer (companion)',
     icon: 'i-lucide-scan-eye',
-    color: '#f472b6',
+    color: 'var(--app-hue-pink)',
     description:
       "Coder's companion: rates the change for quality/correctness and loops it back for automatic rework below the threshold.",
   },
@@ -429,7 +429,7 @@ export const COMPANION_ARCHETYPES: AgentArchetype[] = [
     tier: 'intermediate',
     label: 'Architect Companion',
     icon: 'i-lucide-bug-play',
-    color: '#c084fc',
+    color: 'var(--app-hue-purple)',
     description:
       "Challenges the architect's design for quality and completeness, looping it back for rework below the threshold before a human reviews it.",
   },
@@ -438,7 +438,7 @@ export const COMPANION_ARCHETYPES: AgentArchetype[] = [
     tier: 'intermediate',
     label: 'Spec Reviewer',
     icon: 'i-lucide-list-checks',
-    color: '#2dd4bf',
+    color: 'var(--app-hue-teal)',
     description:
       'Reviews the spec — especially acceptance-scenario coverage — rating it and looping the Spec Writer back for automatic rework below the threshold, instead of requiring a human review.',
   },
@@ -447,7 +447,7 @@ export const COMPANION_ARCHETYPES: AgentArchetype[] = [
     tier: 'intermediate',
     label: 'Doc Reviewer',
     icon: 'i-lucide-file-search',
-    color: '#818cf8',
+    color: 'var(--app-hue-indigo)',
     description:
       'Reviews the drafted document for completeness, clarity, accuracy and structure, looping the Doc Writer back for automatic rework below the threshold.',
   },
@@ -635,7 +635,7 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
     tier: 'advanced',
     label: 'Challenge Investigator',
     icon: 'i-lucide-gavel',
-    color: '#6366f1',
+    color: 'var(--app-hue-indigo)',
     description:
       'Re-examines a single challenged PR-review finding against the full source, then upholds ' +
       '(strengthening it) or retracts it with a justification. Configurable separately from the reviewer.',
@@ -654,7 +654,7 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
     tier: 'advanced',
     label: 'Repo Bootstrapper',
     icon: 'i-lucide-package-plus',
-    color: '#f59e0b',
+    color: 'var(--app-hue-amber)',
     description:
       'Scaffolds a new repository from a reference architecture, or writes a new service into a monorepo and opens the pull request.',
   },
@@ -663,7 +663,7 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
     tier: 'advanced',
     label: 'Adoption Advisor',
     icon: 'i-lucide-scale',
-    color: '#f59e0b',
+    color: 'var(--app-hue-amber)',
     description:
       'Reads a monorepo and the reference template and proposes what a new service should adopt from each. Its suggestion is the one a human settles before anything is written.',
   },
@@ -676,7 +676,7 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
     tier: 'advanced',
     label: 'Initiative Interviewer',
     icon: 'i-lucide-messages-square',
-    color: '#818cf8',
+    color: 'var(--app-hue-indigo)',
     description:
       'Interviews you on the goals, scope and constraints the codebase cannot answer, then synthesizes the agreed brief the planner builds on.',
     // Opens the dedicated planning Q&A window (answer / continue / proceed) while parked.
@@ -687,7 +687,7 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
     tier: 'advanced',
     label: 'Initiative Analyst',
     icon: 'i-lucide-microscope',
-    color: '#818cf8',
+    color: 'var(--app-hue-indigo)',
     description:
       'Explores the codebase first and writes an analysis (architecture, touch points, risks) that grounds both the interview and the plan. Makes no changes.',
     resultView: 'initiative-tracker',
@@ -697,7 +697,7 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
     tier: 'advanced',
     label: 'Initiative Planner',
     icon: 'i-lucide-milestone',
-    color: '#818cf8',
+    color: 'var(--app-hue-indigo)',
     description:
       "Explores the codebase and drafts the initiative's multi-phase plan (items, estimates, concurrency + pipeline policy) for approval.",
     // Opens the dedicated tracker window (phases / items / policy) instead of the
@@ -709,7 +709,7 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
     tier: 'advanced',
     label: 'Initiative Committer',
     icon: 'i-lucide-git-commit-horizontal',
-    color: '#818cf8',
+    color: 'var(--app-hue-indigo)',
     description:
       'Persists the approved plan and commits the in-repo tracker (docs/initiatives/<slug>/), arming the execution loop. Runs no model.',
     resultView: 'initiative-tracker',
@@ -722,7 +722,7 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
     tier: 'intermediate',
     label: 'Analyst',
     icon: 'i-lucide-search-code',
-    color: '#818cf8',
+    color: 'var(--app-hue-indigo)',
     description:
       'Audits the repository read-only and emits a prioritized findings report (drives the tech-debt pipeline).',
   },
@@ -734,7 +734,7 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
     tier: 'advanced',
     label: 'Issue Tracker',
     icon: 'i-lucide-ticket',
-    color: '#fb923c',
+    color: 'var(--app-hue-orange)',
     description:
       'Files a tracker ticket (GitHub issue / Jira) from the analysis before work starts.',
   },
@@ -748,7 +748,7 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
     tier: 'advanced',
     label: 'Bug Intake',
     icon: 'i-lucide-inbox',
-    color: '#fb923c',
+    color: 'var(--app-hue-orange)',
     description:
       'Pulls one matching open issue from the configured tracker board, marks it in-progress, and seeds the run from it.',
   },
@@ -757,7 +757,7 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
     tier: 'intermediate',
     label: 'Conflicts Gate',
     icon: 'i-lucide-git-merge',
-    color: '#f97316',
+    color: 'var(--app-hue-orange)',
     description: 'Ensures the PR is mergeable with its base, looping the resolver on conflicts.',
     // Opens the dedicated gate window (verdict, attempts, conflict detail) instead of
     // the generic prose step-detail panel. Shared with the CI gate.
@@ -768,7 +768,7 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
     tier: 'intermediate',
     label: 'Conflict Resolver',
     icon: 'i-lucide-git-merge',
-    color: '#f97316',
+    color: 'var(--app-hue-orange)',
     description: 'Merges the base in and resolves conflicts on the PR branch.',
   },
   ci: {
@@ -776,7 +776,7 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
     tier: 'basic',
     label: 'CI Gate',
     icon: 'i-lucide-shield-check',
-    color: '#38bdf8',
+    color: 'var(--app-hue-sky)',
     description: 'Gates the PR on green CI, looping the CI fixer on failure.',
     // Opens the dedicated gate window (verdict, attempts, the failing checks) instead
     // of the generic prose step-detail panel. Shared with the conflicts gate.
@@ -791,7 +791,7 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
     tier: 'intermediate',
     label: 'Doc Quality Gate',
     icon: 'i-lucide-file-check-2',
-    color: '#818cf8',
+    color: 'var(--app-hue-indigo)',
     description:
       'Checks the drafted document for required sections, placeholders, links and heading structure, looping the doc fixer on problems.',
     // Opens the dedicated gate window (verdict, attempts, the document findings).
@@ -802,7 +802,7 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
     tier: 'basic',
     label: 'CI Fixer',
     icon: 'i-lucide-wrench',
-    color: '#38bdf8',
+    color: 'var(--app-hue-sky)',
     description: 'Fixes failing CI and pushes back to the PR branch.',
   },
   // The deployer's escalation, and the ci-fixer's shape one step earlier in the pipeline: never a
@@ -813,7 +813,7 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
     tier: 'basic',
     label: 'Deploy Fixer',
     icon: 'i-lucide-server-cog',
-    color: '#0ea5e9',
+    color: 'var(--app-hue-sky)',
     description:
       'Repairs the deployment files a failed provision was rejected for and pushes back to the PR branch, then the environment is stood up again.',
   },
@@ -822,7 +822,7 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
     tier: 'basic',
     label: 'Fixer',
     icon: 'i-lucide-wrench',
-    color: '#fbbf24',
+    color: 'var(--app-hue-amber)',
     description:
       "Tester's companion: fixes the bugs the tester found and pushes back, then the tester re-runs.",
   },
@@ -831,7 +831,7 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
     tier: 'basic',
     label: 'Merger',
     icon: 'i-lucide-git-pull-request',
-    color: '#a3e635',
+    color: 'var(--app-hue-lime)',
     description: 'Scores the PR and auto-merges within the task thresholds, or asks for review.',
     // The merger's verdict is structured (scores + the engine's auto-merge / review
     // decision), so it opens a dedicated result view instead of the raw-JSON prose panel.
@@ -842,7 +842,7 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
     tier: 'basic',
     label: 'Human Review Gate',
     icon: 'i-lucide-users',
-    color: '#c084fc',
+    color: 'var(--app-hue-purple)',
     category: 'gates',
     description:
       'Waits for a human code review on the PR, looping the fixer to address comments; advances once approved with no unresolved threads.',
@@ -858,7 +858,7 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
     tier: 'advanced',
     label: 'Kaizen',
     icon: 'i-lucide-sparkles',
-    color: '#2dd4bf',
+    color: 'var(--app-hue-teal)',
     description:
       'Grades each completed agent step (smooth vs chaotic) after a run and recommends prompt/model improvements.',
   },
@@ -876,7 +876,7 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
     tier: 'intermediate',
     label: 'Assistant',
     icon: 'i-lucide-sparkles',
-    color: '#38bdf8',
+    color: 'var(--app-hue-sky)',
     description:
       'Routes a typed request to one action the platform performs on the board (declare a dependency, add a service from a repository, file a task from a tracker issue).',
   },
@@ -894,7 +894,7 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
     tier: 'intermediate',
     label: 'Post-Release Health',
     icon: 'i-lucide-activity',
-    color: '#f43f5e',
+    color: 'var(--app-hue-rose)',
     category: 'gates',
     description:
       'Watches the released PR’s Datadog monitors/SLOs after merge and escalates to the on-call agent on a regression.',
@@ -944,7 +944,7 @@ export const MODEL_CONFIGURABLE_SYSTEM_KINDS: AgentArchetype[] = [
 const FALLBACK_AGENT_META: Omit<AgentArchetype, 'kind'> = {
   label: 'Agent',
   icon: 'i-lucide-bot',
-  color: '#94a3b8',
+  color: 'var(--app-hue-slate)',
   description: 'Agent step.',
 }
 
@@ -1015,55 +1015,55 @@ export const TASK_TYPE_META: Record<string, TaskTypeMeta> = {
   feature: {
     taskType: 'feature',
     icon: 'i-lucide-sparkles',
-    color: '#38bdf8',
+    color: 'var(--app-hue-sky)',
     labelKey: 'board.addTask.types.feature',
   },
   bug: {
     taskType: 'bug',
     icon: 'i-lucide-bug',
-    color: '#f87171',
+    color: 'var(--app-hue-red)',
     labelKey: 'board.addTask.types.bug',
   },
   'bug-fishing': {
     taskType: 'bug-fishing',
     icon: 'i-lucide-fish',
-    color: '#0ea5e9',
+    color: 'var(--app-hue-sky)',
     labelKey: 'board.addTask.types.bugFishing',
   },
   document: {
     taskType: 'document',
     icon: 'i-lucide-file-text',
-    color: '#c084fc',
+    color: 'var(--app-hue-purple)',
     labelKey: 'board.addTask.types.document',
   },
   spike: {
     taskType: 'spike',
     icon: 'i-lucide-flask-conical',
-    color: '#fbbf24',
+    color: 'var(--app-hue-amber)',
     labelKey: 'board.addTask.types.spike',
   },
   review: {
     taskType: 'review',
     icon: 'i-lucide-clipboard-check',
-    color: '#34d399',
+    color: 'var(--app-hue-emerald)',
     labelKey: 'board.addTask.types.review',
   },
   ralph: {
     taskType: 'ralph',
     icon: 'i-lucide-infinity',
-    color: '#a78bfa',
+    color: 'var(--app-hue-violet)',
     labelKey: 'board.addTask.types.ralph',
   },
   media: {
     taskType: 'media',
     icon: 'i-lucide-image-plus',
-    color: '#f472b6',
+    color: 'var(--app-hue-pink)',
     labelKey: 'board.addTask.types.media',
   },
   recurring: {
     taskType: 'recurring',
     icon: 'i-lucide-repeat',
-    color: '#94a3b8',
+    color: 'var(--app-hue-slate)',
     labelKey: 'board.addTask.types.recurring',
   },
 }
@@ -1119,28 +1119,32 @@ type BlockTypeMeta = { label: string; icon: string; accent: string }
 
 /** Visual metadata for each architecture block type. */
 export const BLOCK_TYPE_META: Record<BlockType, BlockTypeMeta> = {
-  frontend: { label: 'Frontend', icon: 'i-lucide-monitor', accent: '#60a5fa' },
-  service: { label: 'Service', icon: 'i-lucide-server', accent: '#a78bfa' },
-  library: { label: 'Library', icon: 'i-lucide-package', accent: '#f472b6' },
-  document: { label: 'Document repository', icon: 'i-lucide-book-text', accent: '#c084fc' },
-  api: { label: 'API', icon: 'i-lucide-route', accent: '#22d3ee' },
-  database: { label: 'Database', icon: 'i-lucide-database', accent: '#34d399' },
-  queue: { label: 'Queue', icon: 'i-lucide-list-ordered', accent: '#fbbf24' },
+  frontend: { label: 'Frontend', icon: 'i-lucide-monitor', accent: 'var(--app-hue-blue)' },
+  service: { label: 'Service', icon: 'i-lucide-server', accent: 'var(--app-hue-violet)' },
+  library: { label: 'Library', icon: 'i-lucide-package', accent: 'var(--app-hue-pink)' },
+  document: {
+    label: 'Document repository',
+    icon: 'i-lucide-book-text',
+    accent: 'var(--app-hue-purple)',
+  },
+  api: { label: 'API', icon: 'i-lucide-route', accent: 'var(--app-hue-cyan)' },
+  database: { label: 'Database', icon: 'i-lucide-database', accent: 'var(--app-hue-emerald)' },
+  queue: { label: 'Queue', icon: 'i-lucide-list-ordered', accent: 'var(--app-hue-amber)' },
   integration: {
     label: 'Integration',
     icon: 'i-lucide-workflow',
-    accent: '#fb923c',
+    accent: 'var(--app-hue-orange)',
   },
   // Not user-creatable, but still emitted by the backend (the seeded third-party
   // service and the environments integration), so they need display metadata.
-  external: { label: 'External', icon: 'i-lucide-globe', accent: '#94a3b8' },
-  environment: { label: 'Environment', icon: 'i-lucide-box', accent: '#2dd4bf' },
+  external: { label: 'External', icon: 'i-lucide-globe', accent: 'var(--app-hue-slate)' },
+  environment: { label: 'Environment', icon: 'i-lucide-box', accent: 'var(--app-hue-teal)' },
 }
 
 const FALLBACK_BLOCK_TYPE_META: BlockTypeMeta = {
   label: 'Block',
   icon: 'i-lucide-box',
-  accent: '#94a3b8',
+  accent: 'var(--app-hue-slate)',
 }
 
 /**
@@ -1158,19 +1162,19 @@ export const STATUS_META: Record<
 > = {
   planned: {
     label: 'Planned',
-    color: '#64748b',
+    color: 'var(--ui-text-muted)',
     chip: 'neutral',
     icon: 'i-lucide-circle-dashed',
   },
   ready: {
     label: 'Ready',
-    color: '#3b82f6',
+    color: 'var(--ui-info)',
     chip: 'info',
     icon: 'i-lucide-circle-play',
   },
   in_progress: {
     label: 'In progress',
-    color: '#6366f1',
+    color: 'var(--ui-primary)',
     chip: 'primary',
     icon: 'i-lucide-loader',
   },
@@ -1180,26 +1184,26 @@ export const STATUS_META: Record<
     // specific reason (TaskCard, the inspector) show the precise label/action;
     // this fallback must NOT imply a decision is the only thing it can be.
     label: 'Needs attention',
-    color: '#f59e0b',
+    color: 'var(--ui-warning)',
     chip: 'warning',
     icon: 'i-lucide-alert-triangle',
   },
   pr_ready: {
     label: 'PR ready',
-    color: '#22c55e',
+    color: 'var(--ui-success)',
     chip: 'success',
     icon: 'i-lucide-git-pull-request',
   },
   done: {
     label: 'Done',
-    color: '#16a34a',
+    color: 'var(--ui-text-muted)',
     chip: 'success',
     icon: 'i-lucide-circle-check',
   },
 }
 
 /** Visual metadata for module sub-frames. */
-export const MODULE_META = { icon: 'i-lucide-package', color: '#a78bfa' }
+export const MODULE_META = { icon: 'i-lucide-package', color: 'var(--app-hue-violet)' }
 
 /**
  * Display metadata for the future-looking Follow-up companion — a per-`coder`-step toggle
@@ -1211,7 +1215,7 @@ export const MODULE_META = { icon: 'i-lucide-package', color: '#a78bfa' }
 export const FOLLOW_UP_COMPANION_META = {
   label: 'Follow-up companion',
   icon: 'i-lucide-compass',
-  color: '#f472b6',
+  color: 'var(--app-hue-pink)',
 }
 
 /**
@@ -1222,5 +1226,5 @@ export const FOLLOW_UP_COMPANION_META = {
 export const FORK_DECISION_META = {
   label: 'Implementation-fork decision',
   icon: 'i-lucide-git-fork',
-  color: '#a78bfa',
+  color: 'var(--app-hue-violet)',
 }

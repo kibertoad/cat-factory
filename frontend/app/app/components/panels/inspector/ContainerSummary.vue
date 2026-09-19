@@ -39,7 +39,7 @@ function addTask() {
         class="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 hover:bg-elevated/60"
         @click="ui.select(m.id)"
       >
-        <UIcon name="i-lucide-package" class="h-3.5 w-3.5 text-violet-400" />
+        <UIcon name="i-lucide-package" class="h-3.5 w-3.5 text-app-secondary-400" />
         <span class="truncate text-xs text-default">{{ m.title }}</span>
         <span class="ms-auto text-[10px] text-dimmed">{{
           t(

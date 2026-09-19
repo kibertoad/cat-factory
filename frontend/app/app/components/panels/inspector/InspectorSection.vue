@@ -43,7 +43,7 @@ if (props.defaultOpen) open.value = true
         <UIcon
           v-if="warning"
           name="i-lucide-triangle-alert"
-          class="h-3.5 w-3.5 shrink-0 text-amber-400"
+          class="h-3.5 w-3.5 shrink-0 text-app-warning-400"
         />
       </button>
       <!-- An action ("+", attach, menu) mutates the body list, so expand (never collapse)

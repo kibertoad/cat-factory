@@ -129,7 +129,7 @@ function when(epochMs: number): string {
       </UButton>
     </div>
 
-    <p v-if="state.error" class="px-3 py-2 text-[12px] text-rose-300">{{ state.error }}</p>
+    <p v-if="state.error" class="px-3 py-2 text-[12px] text-app-error-300">{{ state.error }}</p>
     <p
       v-else-if="!state.loading && state.entries.length === 0"
       class="px-3 py-3 text-[12px] text-dimmed"
@@ -143,15 +143,15 @@ function when(epochMs: number): string {
           <UIcon
             :name="entry.outcome === 'success' ? 'i-lucide-check-circle' : 'i-lucide-x-circle'"
             class="h-3.5 w-3.5 shrink-0"
-            :class="entry.outcome === 'success' ? 'text-emerald-400' : 'text-rose-400'"
+            :class="entry.outcome === 'success' ? 'text-app-success-400' : 'text-app-error-400'"
           />
           <span class="font-medium text-default">{{ OPERATION_LABEL[entry.operation] }}</span>
           <span
             class="rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide"
             :class="
               entry.outcome === 'success'
-                ? 'bg-emerald-950/60 text-emerald-300'
-                : 'bg-rose-950/60 text-rose-300'
+                ? 'bg-app-success-950/60 text-app-success-300'
+                : 'bg-app-error-950/60 text-app-error-300'
             "
             >{{ OUTCOME_LABEL[entry.outcome] }}</span
           >
@@ -163,7 +163,7 @@ function when(epochMs: number): string {
         <!-- The verbatim provider/runtime error on a failed attempt. -->
         <pre
           v-if="entry.error"
-          class="mt-1 max-h-28 overflow-auto whitespace-pre-wrap rounded border border-rose-900/50 bg-rose-950/30 p-1.5 text-[11px] text-rose-200/90"
+          class="mt-1 max-h-28 overflow-auto whitespace-pre-wrap rounded border border-app-error-900/50 bg-app-error-950/30 p-1.5 text-[11px] text-app-error-200/90"
           >{{ entry.error }}</pre>
       </li>
     </ul>

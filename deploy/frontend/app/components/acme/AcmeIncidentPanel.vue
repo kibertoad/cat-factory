@@ -45,15 +45,17 @@ const compliant = computed(() => (block.value?.id.length ?? 0) % 2 === 0)
         <span
           class="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase"
           :class="
-            compliant ? 'bg-emerald-500/15 text-emerald-300' : 'bg-amber-500/15 text-amber-300'
+            compliant
+              ? 'bg-app-success-500/15 text-app-success-300'
+              : 'bg-app-warning-500/15 text-app-warning-300'
           "
           data-testid="acme-incident-status"
         >
           {{ compliant ? t('acme.incidentPanel.compliant') : t('acme.incidentPanel.actionNeeded') }}
         </span>
-        <span class="truncate text-[12px] text-slate-400">{{ block?.title }}</span>
+        <span class="truncate text-[12px] text-muted">{{ block?.title }}</span>
       </div>
-      <p class="text-[11px] leading-relaxed text-slate-500">
+      <p class="text-[11px] leading-relaxed text-dimmed">
         {{ t('acme.incidentPanel.body') }}
       </p>
     </div>

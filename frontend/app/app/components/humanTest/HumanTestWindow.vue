@@ -65,9 +65,9 @@ const ENV_STATUS_LABEL: Record<HumanTestEnvironmentStatus, string> = {
   torn_down: 'humanTest.envStatus.tornDown',
 }
 const ENV_STATUS_COLOR: Record<HumanTestEnvironmentStatus, string> = {
-  provisioning: 'text-amber-300',
-  ready: 'text-emerald-300',
-  failed: 'text-rose-300',
+  provisioning: 'text-app-warning-300',
+  ready: 'text-app-success-300',
+  failed: 'text-app-error-300',
   expired: 'text-muted',
   tearing_down: 'text-muted',
   torn_down: 'text-muted',
@@ -150,7 +150,7 @@ const canDestroy = computed(
   <ResultWindowShell
     :open="open"
     icon="i-lucide-user-check"
-    icon-class="bg-amber-500/15 text-amber-300"
+    icon-class="bg-app-warning-500/15 text-app-warning-300"
     :title="headerTitle"
     :subtitle="phase ? t(PHASE_LABEL[phase]) : t('humanTest.subtitle')"
     width="3xl"
@@ -187,7 +187,7 @@ const canDestroy = computed(
               :href="env.url"
               target="_blank"
               rel="noopener"
-              class="inline-flex items-center gap-1.5 break-all text-[13px] text-sky-300 hover:underline"
+              class="inline-flex items-center gap-1.5 break-all text-[13px] text-app-info-300 hover:underline"
             >
               <UIcon name="i-lucide-external-link" class="h-3.5 w-3.5 shrink-0" />
               {{ env.url }}
@@ -199,10 +199,10 @@ const canDestroy = computed(
               {{ t('humanTest.environment.expires', { date: d(new Date(env.expiresAt), 'long') }) }}
             </p>
           </div>
-          <p v-else class="text-[12px] text-amber-300/90">
+          <p v-else class="text-[12px] text-app-warning-300/90">
             {{ ht.degradedReason ?? t('humanTest.environment.none') }}
           </p>
-          <p v-if="env && ht.degradedReason" class="mt-2 text-[12px] text-amber-300/90">
+          <p v-if="env && ht.degradedReason" class="mt-2 text-[12px] text-app-warning-300/90">
             {{ ht.degradedReason }}
           </p>
 
@@ -251,7 +251,7 @@ const canDestroy = computed(
           v-if="working"
           class="flex items-center gap-2 rounded-lg border border-default bg-app-950/40 px-3 py-2 text-[12px] text-toned"
         >
-          <UIcon name="i-lucide-loader" class="h-3.5 w-3.5 animate-spin text-amber-300" />
+          <UIcon name="i-lucide-loader" class="h-3.5 w-3.5 animate-spin text-app-warning-300" />
           {{ phase ? t(PHASE_LABEL[phase]) : '' }}
         </p>
 
@@ -273,7 +273,7 @@ const canDestroy = computed(
               v-model="findings"
               rows="4"
               :placeholder="t('humanTest.fix.placeholder')"
-              class="w-full rounded-md border border-muted bg-app-950 px-3 py-2 text-[13px] text-default placeholder:text-app-600 focus:border-amber-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/60"
+              class="w-full rounded-md border border-muted bg-app-950 px-3 py-2 text-[13px] text-default placeholder:text-app-600 focus:border-app-warning-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-app-warning-500/60"
             />
             <UButton
               size="sm"
@@ -313,9 +313,9 @@ const canDestroy = computed(
                   class="ms-1.5 rounded px-1 text-[10px] uppercase"
                   :class="
                     r.outcome === 'completed'
-                      ? 'bg-emerald-500/15 text-emerald-300'
+                      ? 'bg-app-success-500/15 text-app-success-300'
                       : r.outcome === 'failed'
-                        ? 'bg-rose-500/15 text-rose-300'
+                        ? 'bg-app-error-500/15 text-app-error-300'
                         : 'bg-app-500/15 text-toned'
                   "
                 >

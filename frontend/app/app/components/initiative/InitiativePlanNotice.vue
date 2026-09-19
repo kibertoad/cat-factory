@@ -39,19 +39,19 @@ const { t } = useI18n()
 
 <template>
   <section
-    class="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3.5"
+    class="mb-4 rounded-lg border border-app-warning-500/40 bg-app-warning-500/10 p-3.5"
     data-testid="initiative-plan-notice"
   >
     <header class="flex items-start gap-2.5">
-      <UIcon name="i-lucide-clipboard-check" class="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
+      <UIcon name="i-lucide-clipboard-check" class="mt-0.5 h-4 w-4 shrink-0 text-app-warning-300" />
       <div class="min-w-0 flex-1">
-        <h3 class="text-[13px] font-semibold text-amber-200">
+        <h3 class="text-[13px] font-semibold text-app-warning-200">
           {{ t('initiative.planReview.title') }}
         </h3>
-        <p class="mt-0.5 text-[12px] leading-relaxed text-amber-100/80">
+        <p class="mt-0.5 text-[12px] leading-relaxed text-app-warning-100/80">
           {{ t('initiative.planReview.body') }}
         </p>
-        <p class="mt-2 text-[12px] leading-relaxed text-amber-100/70">
+        <p class="mt-2 text-[12px] leading-relaxed text-app-warning-100/70">
           {{ t('initiative.planReview.noDocument') }}
           <template v-if="hasSections">
             {{ t('initiative.planReview.noDocumentSections') }}

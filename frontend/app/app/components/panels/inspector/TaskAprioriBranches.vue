@@ -227,10 +227,13 @@ function removeDisabled(entry: AprioriBranch): boolean {
     <!-- A protected branch pushed to by the run is likely to be rejected — warn, don't block. -->
     <div
       v-if="workingName && isProtected(workingName)"
-      class="mt-1.5 flex items-start gap-1.5 rounded-md border border-amber-500/40 bg-amber-950/40 p-2 text-[11px] text-amber-200/90"
+      class="mt-1.5 flex items-start gap-1.5 rounded-md border border-app-warning-500/40 bg-app-warning-950/40 p-2 text-[11px] text-app-warning-200/90"
       data-testid="apriori-branch-protected-warning"
     >
-      <UIcon name="i-lucide-triangle-alert" class="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400" />
+      <UIcon
+        name="i-lucide-triangle-alert"
+        class="mt-0.5 h-3.5 w-3.5 shrink-0 text-app-warning-400"
+      />
       <span>{{ t('inspector.aprioriBranches.protectedWarning', { branch: workingName }) }}</span>
     </div>
 

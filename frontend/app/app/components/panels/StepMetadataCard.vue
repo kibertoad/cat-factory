@@ -41,10 +41,10 @@ const STATE_LABEL_KEYS: Record<AgentState, string> = {
   done: 'panels.stepMeta.state.done',
 }
 const STATE_COLOR: Record<AgentState, string> = {
-  pending: '#64748b',
-  working: '#6366f1',
-  waiting_decision: '#f59e0b',
-  done: '#22c55e',
+  pending: 'var(--ui-text-muted)',
+  working: 'var(--ui-primary)',
+  waiting_decision: 'var(--ui-warning)',
+  done: 'var(--ui-success)',
 }
 
 // The state badge: a step left mid-flight on a failed run keeps `state: 'working'`,
@@ -52,7 +52,7 @@ const STATE_COLOR: Record<AgentState, string> = {
 const stateMeta = computed(() => {
   const s = props.step
   if (props.runFailed && s.state === 'working')
-    return { label: t('panels.stepMeta.state.failed'), color: '#ef4444' }
+    return { label: t('panels.stepMeta.state.failed'), color: 'var(--ui-error)' }
   return { label: t(STATE_LABEL_KEYS[s.state]), color: STATE_COLOR[s.state] }
 })
 
@@ -185,7 +185,7 @@ async function copyRunId() {
           <UIcon
             v-if="isRunning"
             name="i-lucide-loader-circle"
-            class="h-3 w-3 animate-spin text-primary-400"
+            class="h-3 w-3 animate-spin text-primary"
           />
           <span v-if="durationLabel">{{ durationLabel }}</span>
           <span v-else class="text-dimmed">—</span>
@@ -227,7 +227,7 @@ async function copyRunId() {
           {{ t('panels.stepMeta.promptVariant') }}
         </dt>
         <dd class="mt-0.5 truncate text-toned">{{ promptVariant.label }}</dd>
-        <dd v-if="promptVariant.note" class="mt-0.5 text-[11px] text-amber-400/80">
+        <dd v-if="promptVariant.note" class="mt-0.5 text-[11px] text-app-warning-400/80">
           {{ promptVariant.note }}
         </dd>
       </div>
@@ -267,7 +267,7 @@ async function copyRunId() {
       </div>
       <div class="mt-1 h-1 overflow-hidden rounded-full bg-accented/60">
         <div
-          class="h-full rounded-full bg-primary-400 transition-all duration-500"
+          class="h-full rounded-full bg-primary transition-all duration-500"
           :style="{
             width: `${(step.subtasks.completed / step.subtasks.total) * 100}%`,
           }"
@@ -335,12 +335,12 @@ async function copyRunId() {
       <p class="mt-0.5 text-[13px] text-default">{{ step.decision.question }}</p>
       <p
         v-if="step.decision.chosen"
-        class="mt-0.5 flex items-center gap-1 text-[12px] text-emerald-400"
+        class="mt-0.5 flex items-center gap-1 text-[12px] text-app-success-400"
       >
         <UIcon name="i-lucide-check" class="h-3 w-3 shrink-0" />
         {{ step.decision.chosen }}
       </p>
-      <p v-else class="mt-0.5 text-[12px] text-amber-400">
+      <p v-else class="mt-0.5 text-[12px] text-app-warning-400">
         {{ t('panels.stepMeta.awaitingChoice') }}
       </p>
     </div>
@@ -387,12 +387,14 @@ async function copyRunId() {
             <span
               class="inline-flex h-4 shrink-0 items-center rounded px-1 font-mono text-[11px] tabular-nums"
               :class="
-                v.passed ? 'bg-emerald-500/15 text-emerald-300' : 'bg-amber-500/15 text-amber-300'
+                v.passed
+                  ? 'bg-app-success-500/15 text-app-success-300'
+                  : 'bg-app-warning-500/15 text-app-warning-300'
               "
             >
               {{ i + 1 }}
             </span>
-            <span :class="v.passed ? 'text-emerald-300' : 'text-amber-300'">
+            <span :class="v.passed ? 'text-app-success-300' : 'text-app-warning-300'">
               {{ pctOf(v.rating) }} {{ ratingMeetsBar(v) ? '≥' : '<' }} {{ pctOf(v.threshold) }}
             </span>
           </div>

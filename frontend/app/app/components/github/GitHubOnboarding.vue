@@ -30,7 +30,7 @@ const title = computed(() =>
       class="my-8 w-full max-w-md rounded-xl border border-default bg-default/80 p-8 backdrop-blur"
     >
       <div class="mb-5 text-center">
-        <UIcon :name="icon" class="mx-auto mb-3 h-10 w-10 text-primary-400" />
+        <UIcon :name="icon" class="mx-auto mb-3 h-10 w-10 text-primary" />
         <h1 class="mb-1 text-lg font-semibold text-highlighted">{{ title }}</h1>
         <p class="text-sm text-muted">
           {{ t('vcs.onboarding.intro') }}

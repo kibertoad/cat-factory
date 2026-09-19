@@ -3,36 +3,8 @@
 /* The shared rendered-markdown reader presentation (see prose.css). */
 @import './prose.css';
 
-/* Leftover neutral shades that have no Nuxt UI role token (#2239 light-mode enablement).
- * The bulk of the SPA now uses role tokens (`bg-default`, `text-muted`, ...) that flip with the
- * theme. These five shades (the deep `950` surface below `bg-default`, the brightest `100` text
- * above `text-highlighted`, and `600`/`500`/`400`) have no exact role token, so we give them the
- * same treatment by hand: the DARK value is the exact shade they replaced, so dark mode is
- * unchanged, and the LIGHT value is the mirrored shade (`950↔50`, `100↔900`, `600↔400`, `400↔600`,
- * `500` is the midpoint), so they adapt like the role tokens do. `@theme inline` binds each to a
- * Tailwind color so `bg-app-950` / `text-app-100` / ... utilities exist. */
-:root,
-.dark {
-  --app-950: var(--ui-color-neutral-950);
-  --app-100: var(--ui-color-neutral-100);
-  --app-600: var(--ui-color-neutral-600);
-  --app-500: var(--ui-color-neutral-500);
-  --app-400: var(--ui-color-neutral-400);
-}
-.light {
-  --app-950: var(--ui-color-neutral-50);
-  --app-100: var(--ui-color-neutral-900);
-  --app-600: var(--ui-color-neutral-400);
-  --app-500: var(--ui-color-neutral-500);
-  --app-400: var(--ui-color-neutral-600);
-}
-@theme inline {
-  --color-app-950: var(--app-950);
-  --color-app-100: var(--app-100);
-  --color-app-600: var(--app-600);
-  --color-app-500: var(--app-500);
-  --color-app-400: var(--app-400);
-}
+/* The app's own mode-adaptive colour tokens (`app-*`), layered on Nuxt UI's. */
+@import './tokens.css';
 
 /* The two toaster rules below are scoped by the `app-toaster` marker class that
  * `app.config.ts` puts on the toaster's viewport slot, NOT by `[data-slot='viewport']`.
@@ -84,10 +56,6 @@
 
 /* ---- Agent Architecture Board: shared visual language ---------------------- */
 
-:root {
-  --board-bg: #0b1020;
-}
-
 html,
 body,
 #__nuxt {
@@ -99,9 +67,9 @@ body {
   overflow: hidden;
 }
 
-/* Vue Flow surface tuned to a dark "design board" look */
+/* The Vue Flow surface is the board canvas: one step below the page background in both modes. */
 .vue-flow__background {
-  background-color: var(--board-bg);
+  background-color: var(--app-bg-canvas);
 }
 
 /* Touch: let the pane own one-finger pan + pinch-zoom rather than the browser
@@ -114,14 +82,15 @@ body {
   touch-action: none;
 }
 
-/* Status-pulse used by blocked / decision-needed blocks */
+/* Status-pulse used by blocked / decision-needed blocks: the warning alias, so a theme that
+ * recolours `warning` recolours the halo. `color-mix` is how a custom property gets an alpha. */
 @keyframes board-pulse {
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.55);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--ui-warning) 55%, transparent);
   }
   50% {
-    box-shadow: 0 0 0 10px rgba(245, 158, 11, 0);
+    box-shadow: 0 0 0 10px transparent;
   }
 }
 
@@ -129,14 +98,14 @@ body {
   animation: board-pulse 1.4s ease-in-out infinite;
 }
 
-/* Green pulse used when a block reaches the "PR ready" state */
+/* Success pulse used when a block reaches the "PR ready" state */
 @keyframes board-pulse-green {
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.6);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--ui-success) 60%, transparent);
   }
   50% {
-    box-shadow: 0 0 0 12px rgba(34, 197, 94, 0);
+    box-shadow: 0 0 0 12px transparent;
   }
 }
 
@@ -152,7 +121,7 @@ body {
 
 /* A selected edge: highlight it so the user knows what Delete/Backspace removes */
 .vue-flow__edge.selected .vue-flow__edge-path {
-  stroke: #f43f5e !important;
+  stroke: var(--ui-error) !important;
   stroke-width: 2.5 !important;
 }
 

@@ -197,10 +197,10 @@ async function revokeToken(key: PublicApiKey) {
              key is never recoverable, so it must be copied now. -->
         <section
           v-if="newSecret"
-          class="space-y-2 rounded-lg border border-primary-500/40 bg-primary-500/10 p-3"
+          class="space-y-2 rounded-lg border border-primary/40 bg-primary/10 p-3"
           data-testid="api-token-secret"
         >
-          <div class="flex items-center gap-2 text-sm font-medium text-primary-200">
+          <div class="flex items-center gap-2 text-sm font-medium text-primary">
             <UIcon name="i-lucide-key-round" class="h-4 w-4 shrink-0" />
             <span>{{ t('settings.apiTokens.secret.heading') }}</span>
           </div>

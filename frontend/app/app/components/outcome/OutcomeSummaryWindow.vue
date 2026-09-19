@@ -194,9 +194,9 @@ const SPEC_JOIN_KEYS: Record<Exclude<OutcomeSpecJoin, 'joined'>, string> = {
 }
 
 const VERDICT_META: Record<RequirementVerdictStatus, { color: string; key: string }> = {
-  met: { color: '#22c55e', key: 'outcome.requirements.verdict.met' },
-  not_met: { color: '#ef4444', key: 'outcome.requirements.verdict.not_met' },
-  not_covered: { color: '#64748b', key: 'outcome.requirements.verdict.not_covered' },
+  met: { color: 'var(--ui-success)', key: 'outcome.requirements.verdict.met' },
+  not_met: { color: 'var(--ui-error)', key: 'outcome.requirements.verdict.not_met' },
+  not_covered: { color: 'var(--ui-text-muted)', key: 'outcome.requirements.verdict.not_covered' },
 }
 const SEVERITY_KEYS: Record<TestConcernSeverity, string> = {
   low: 'outcome.tests.severity.low',
@@ -412,7 +412,7 @@ function openTestReport() {
   <ResultWindowShell
     :open="open"
     icon="i-lucide-clipboard-check"
-    icon-class="bg-sky-500/15 text-sky-300"
+    icon-class="bg-app-info-500/15 text-app-info-300"
     :title="headerTitle"
     :subtitle="t('outcome.subtitle')"
     width="3xl"
@@ -492,7 +492,7 @@ function openTestReport() {
               class="flex items-center gap-1.5 text-xs text-toned"
               hover-class="hover:text-highlighted"
             >
-              <UIcon :name="source.icon" class="h-3.5 w-3.5 shrink-0 text-primary-400" />
+              <UIcon :name="source.icon" class="h-3.5 w-3.5 shrink-0 text-primary" />
               <span class="truncate">{{ source.title }}</span>
             </DocumentOriginLink>
             <p class="mt-0.5 text-[11px] text-dimmed" data-testid="outcome-source-revision">
@@ -503,7 +503,7 @@ function openTestReport() {
                  changed under it. -->
             <p
               v-if="source.movedDuringRun"
-              class="mt-0.5 text-[11px] text-amber-300"
+              class="mt-0.5 text-[11px] text-app-warning-300"
               data-testid="outcome-source-moved"
             >
               {{ t('outcome.sources.moved') }}
@@ -550,7 +550,7 @@ function openTestReport() {
                and do not cover rather than letting them read as the whole picture. -->
           <p
             v-if="specNote"
-            class="mb-2 text-[11px] leading-relaxed text-amber-300/90"
+            class="mb-2 text-[11px] leading-relaxed text-app-warning-300/90"
             data-testid="outcome-spec-note"
           >
             {{ specNote }}
@@ -560,7 +560,7 @@ function openTestReport() {
                deciding which of the two numbers to distrust. -->
           <p
             v-if="unmatchedVerdicts > 0"
-            class="mb-2 text-[11px] leading-relaxed text-amber-300/90"
+            class="mb-2 text-[11px] leading-relaxed text-app-warning-300/90"
             data-testid="outcome-unmatched-verdicts"
           >
             {{ t('outcome.requirements.unmatchedVerdicts', { count: unmatchedVerdicts }) }}
@@ -642,7 +642,7 @@ function openTestReport() {
         <template v-if="outcome.tests.status === 'reported'">
           <p
             v-if="outcome.tests.abortReason"
-            class="mb-2 rounded-md border border-rose-900/70 bg-rose-500/10 p-2 text-[13px] leading-relaxed text-rose-200"
+            class="mb-2 rounded-md border border-app-error-900/70 bg-app-error-500/10 p-2 text-[13px] leading-relaxed text-app-error-200"
             data-testid="outcome-tests-abort"
           >
             {{ t('outcome.tests.abort', { reason: outcome.tests.abortReason }) }}
@@ -724,7 +724,7 @@ function openTestReport() {
                 <UIcon
                   v-if="view.referenceArtifactId"
                   name="i-lucide-images"
-                  class="h-3 w-3 shrink-0 text-sky-300"
+                  class="h-3 w-3 shrink-0 text-app-info-300"
                   :title="t('outcome.visuals.hasReference')"
                 />
                 {{ view.view }}

@@ -72,7 +72,7 @@ function take(tourId: string) {
       <div class="flex items-start gap-2">
         <UIcon
           :name="offered.icon ?? 'i-lucide-graduation-cap'"
-          class="text-primary-300 mt-0.5 h-4 w-4 shrink-0"
+          class="text-primary mt-0.5 h-4 w-4 shrink-0"
         />
         <div class="min-w-0 flex-1">
           <p class="text-[11px] tracking-wide text-muted uppercase">

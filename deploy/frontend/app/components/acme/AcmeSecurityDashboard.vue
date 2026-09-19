@@ -29,7 +29,7 @@ const { t } = useI18n()
   <ResultWindowShell
     :open="true"
     icon="i-lucide-shield-check"
-    icon-class="bg-rose-500/15 text-rose-300"
+    icon-class="bg-app-error-500/15 text-app-error-300"
     :title="t('acme.securityDashboard.title')"
     :subtitle="t('acme.securityDashboard.subtitle')"
     variant="centered"
@@ -37,16 +37,16 @@ const { t } = useI18n()
     @close="emit('close')"
   >
     <div class="px-5 py-6" data-testid="acme-security-dashboard-body">
-      <p class="text-[13px] leading-relaxed text-slate-300">
+      <p class="text-[13px] leading-relaxed text-toned">
         {{ t('acme.securityDashboard.body') }}
       </p>
       <ul class="mt-4 flex flex-col gap-2">
         <li
           v-for="item in [1, 2, 3]"
           :key="item"
-          class="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2 text-[12px] text-slate-400"
+          class="flex items-center gap-2 rounded-lg border border-default bg-app-950/40 px-3 py-2 text-[12px] text-muted"
         >
-          <UIcon name="i-lucide-shield-check" class="h-4 w-4 shrink-0 text-rose-300/70" />
+          <UIcon name="i-lucide-shield-check" class="h-4 w-4 shrink-0 text-app-error-300/70" />
           {{ t('acme.securityDashboard.placeholderRow', { n: item }) }}
         </li>
       </ul>

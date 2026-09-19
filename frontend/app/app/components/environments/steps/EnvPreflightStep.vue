@@ -58,14 +58,14 @@ const PREFLIGHT_COLOR: Record<'pass' | 'warn' | 'fail', 'success' | 'warning' | 
     </p>
     <p
       v-else-if="preflightsUnavailable"
-      class="text-[12px] text-amber-300/80"
+      class="text-[12px] text-app-warning-300/80"
       data-testid="env-setup-preflight-unavailable"
     >
       {{ t('environmentWizard.preflight.unavailable') }}
     </p>
     <p
       v-if="store.preflightError"
-      class="text-[12px] text-rose-300/80"
+      class="text-[12px] text-app-error-300/80"
       data-testid="env-setup-preflight-error"
     >
       {{ store.preflightError }}
@@ -93,7 +93,7 @@ const PREFLIGHT_COLOR: Record<'pass' | 'warn' | 'fail', 'success' | 'warning' | 
         <p v-if="r.detail" class="mt-1 text-[11px] text-muted">{{ r.detail }}</p>
         <pre
           v-if="r.status !== 'pass' && r.remediation"
-          class="mt-1 max-h-40 overflow-auto whitespace-pre-wrap rounded border border-amber-900/40 bg-amber-950/20 p-1.5 text-[11px] text-amber-200/90"
+          class="mt-1 max-h-40 overflow-auto whitespace-pre-wrap rounded border border-app-warning-900/40 bg-app-warning-950/20 p-1.5 text-[11px] text-app-warning-200/90"
           >{{ r.remediation }}</pre>
       </li>
     </ul>

@@ -22,7 +22,11 @@ const difficultyPct = computed(() =>
   Math.min(100, Math.max(0, (props.report.difficulty / 10) * 100)),
 )
 // Colour the difficulty by band: easy (emerald) → moderate (amber) → hard (rose).
-const BAR_CLASS = { easy: 'bg-emerald-400', moderate: 'bg-amber-400', hard: 'bg-rose-400' } as const
+const BAR_CLASS = {
+  easy: 'bg-app-success-400',
+  moderate: 'bg-app-warning-400',
+  hard: 'bg-app-error-400',
+} as const
 const difficultyClass = computed(() => BAR_CLASS[effortBand(props.report.difficulty)])
 </script>
 
@@ -89,7 +93,7 @@ const difficultyClass = computed(() => BAR_CLASS[effortBand(props.report.difficu
         >
           <UIcon
             name="i-lucide-alert-triangle"
-            class="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400/80"
+            class="mt-0.5 h-3.5 w-3.5 shrink-0 text-app-warning-400/80"
           />
           <span>{{ obstacle }}</span>
         </li>

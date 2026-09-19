@@ -148,8 +148,8 @@ const renders = computed(() => {
 })
 
 const TONE_CLASS: Record<Stated['tone'], string> = {
-  ok: 'text-emerald-400',
-  warn: 'text-amber-400',
+  ok: 'text-app-success-400',
+  warn: 'text-app-warning-400',
   muted: 'text-dimmed',
 }
 

@@ -49,7 +49,7 @@ const max = computed(() => maxOf(props.rows, spendMagnitude))
             {{ money(row.meteredCost) }}
             <span
               v-if="row.subscriptionCost > 0"
-              class="text-amber-400"
+              class="text-app-warning-400"
               :title="t('reports.legend.subscriptionHint')"
             >
               {{ t('reports.spend.subscriptionAside', { value: money(row.subscriptionCost) }) }}
@@ -58,11 +58,11 @@ const max = computed(() => maxOf(props.rows, spendMagnitude))
         </div>
         <div class="flex h-1.5 gap-[2px]">
           <div
-            class="h-1.5 rounded-full bg-violet-500"
+            class="h-1.5 rounded-full bg-app-secondary-500"
             :style="{ width: `${segmentPct(row.meteredCost, max)}%` }"
           />
           <div
-            class="h-1.5 rounded-full bg-amber-600"
+            class="h-1.5 rounded-full bg-app-warning-600"
             :style="{ width: `${segmentPct(row.subscriptionCost, max)}%` }"
           />
         </div>

@@ -131,7 +131,7 @@ async function toggleEnabled(enabled: boolean) {
           <p class="text-[11px] text-dimmed">
             {{ t('tasks.connect.credentialless') }}
           </p>
-          <p v-if="!available" class="text-[11px] text-amber-400">
+          <p v-if="!available" class="text-[11px] text-app-warning-400">
             {{ t('tasks.connect.installAppHint', { label: descriptor.label }) }}
           </p>
         </template>

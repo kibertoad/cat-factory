@@ -182,11 +182,14 @@ watch(open, (isOpen) => {
              presenting an empty list, which would read as "there was nothing to decide". -->
         <div
           v-if="unavailable"
-          class="space-y-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-3"
+          class="space-y-2 rounded-md border border-app-warning-500/30 bg-app-warning-500/5 p-3"
         >
           <div class="flex items-start gap-2">
-            <UIcon name="i-lucide-triangle-alert" class="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
-            <p class="text-sm text-amber-200/90">
+            <UIcon
+              name="i-lucide-triangle-alert"
+              class="mt-0.5 h-4 w-4 shrink-0 text-app-warning-400"
+            />
+            <p class="text-sm text-app-warning-200/90">
               {{
                 t(
                   `bootstrap.adoption.unavailable.${plan?.unavailableReason ?? 'analysis_unusable'}`,
@@ -215,10 +218,10 @@ watch(open, (isOpen) => {
           <p v-if="readSummary.missed > 0" class="text-dimmed">
             {{ t('bootstrap.adoption.survey.missed', { count: readSummary.missed }) }}
           </p>
-          <p v-if="exhausted" class="text-amber-300/90">
+          <p v-if="exhausted" class="text-app-warning-300/90">
             {{ t(`bootstrap.adoption.survey.exhausted.${exhausted}`) }}
           </p>
-          <p v-if="recordsDropped > 0" class="text-amber-300/90">
+          <p v-if="recordsDropped > 0" class="text-app-warning-300/90">
             {{ t('bootstrap.adoption.survey.truncated', { count: recordsDropped }) }}
           </p>
           <details>
@@ -237,7 +240,7 @@ watch(open, (isOpen) => {
               >
                 <span
                   class="shrink-0 font-mono text-[10px] uppercase"
-                  :class="entry.outcome === 'read' ? 'text-dimmed' : 'text-amber-400/80'"
+                  :class="entry.outcome === 'read' ? 'text-dimmed' : 'text-app-warning-400/80'"
                 >
                   {{ t(`bootstrap.adoption.survey.outcome.${entry.outcome}`) }}
                 </span>
@@ -280,7 +283,7 @@ watch(open, (isOpen) => {
               :class="
                 touched.has(decision.id)
                   ? 'border-muted bg-default/40'
-                  : 'border-amber-500/40 bg-amber-500/5'
+                  : 'border-app-warning-500/40 bg-app-warning-500/5'
               "
             >
               <div class="flex items-start justify-between gap-3">
@@ -365,7 +368,7 @@ watch(open, (isOpen) => {
 
     <template #footer>
       <div class="flex w-full items-center justify-between gap-3">
-        <p v-if="!unavailable && remaining > 0" class="text-xs text-amber-300/90">
+        <p v-if="!unavailable && remaining > 0" class="text-xs text-app-warning-300/90">
           {{ t('bootstrap.adoption.remaining', { count: remaining }) }}
         </p>
         <span v-else />

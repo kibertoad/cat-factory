@@ -141,7 +141,8 @@ function onPaneClick() {
       @pane-click="onPaneClick"
       @contextmenu.prevent
     >
-      <Background pattern-color="#1e293b" :gap="22" :size="1.4" />
+      <!-- The dot grid rides the border token: `neutral-800` in dark (the shade it always was), `200` in light. -->
+      <Background pattern-color="var(--ui-border)" :gap="22" :size="1.4" />
       <!-- No minimap: it's a precise-pointer affordance (too small to hit on touch,
            eats scarce width on narrow windows) that earned its keep on neither
            desktop nor mobile. The toolbar's zoom-in/out + fit-view controls are the

@@ -417,30 +417,30 @@ const technicalLabel = computed(() => {
       </div>
       <div
         v-if="unavailablePresetModels.length"
-        class="mt-2 rounded-md border border-amber-500/40 bg-amber-950/40 p-2 text-[11px] text-amber-200/90"
+        class="mt-2 rounded-md border border-app-warning-500/40 bg-app-warning-950/40 p-2 text-[11px] text-app-warning-200/90"
       >
         <div class="flex items-start gap-1.5">
           <UIcon
             name="i-lucide-triangle-alert"
-            class="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400"
+            class="mt-0.5 h-3.5 w-3.5 shrink-0 text-app-warning-400"
           />
           <div class="min-w-0">
             <p>
               <i18n-t keypath="inspector.runSettings.unavailableModels" tag="span" scope="global">
                 <template #models>
-                  <span class="text-amber-100">{{ unavailablePresetModels.join(', ') }}</span>
+                  <span class="text-app-warning-100">{{ unavailablePresetModels.join(', ') }}</span>
                 </template>
               </i18n-t>
             </p>
             <div class="mt-1.5 flex flex-wrap gap-2">
               <button
-                class="font-medium text-amber-100 underline-offset-2 hover:underline"
+                class="font-medium text-app-warning-100 underline-offset-2 hover:underline"
                 @click="ui.openModelConfig()"
               >
                 {{ t('inspector.runSettings.editPresets') }}
               </button>
               <button
-                class="font-medium text-amber-100 underline-offset-2 hover:underline"
+                class="font-medium text-app-warning-100 underline-offset-2 hover:underline"
                 @click="ui.openVendorCredentials()"
               >
                 {{ t('inspector.runSettings.configureVendors') }}

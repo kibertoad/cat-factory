@@ -133,8 +133,8 @@ const drops = computed(() =>
         class="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[12px]"
         :class="
           server.isFault
-            ? 'border-amber-500/30 bg-amber-500/10 text-amber-200'
-            : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
+            ? 'border-app-warning-500/30 bg-app-warning-500/10 text-app-warning-200'
+            : 'border-app-success-500/30 bg-app-success-500/10 text-app-success-200'
         "
         :title="
           server.tools?.length
@@ -187,7 +187,10 @@ const drops = computed(() =>
         data-testid="step-tool-server-unavailable"
         class="flex items-start gap-1.5 text-[12px] text-toned"
       >
-        <UIcon name="i-lucide-plug-zap" class="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400/80" />
+        <UIcon
+          name="i-lucide-plug-zap"
+          class="mt-0.5 h-3.5 w-3.5 shrink-0 text-app-warning-400/80"
+        />
         <span>
           <span class="font-medium text-default">{{ server.label || server.id }}</span>
           <span class="text-muted"> {{ server.reasonText }}</span>

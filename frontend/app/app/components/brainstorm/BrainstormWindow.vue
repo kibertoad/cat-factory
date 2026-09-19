@@ -258,7 +258,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
   <ResultWindowShell
     :open="open"
     :icon="isArchitecture ? 'i-lucide-drafting-compass' : 'i-lucide-lightbulb'"
-    icon-class="bg-amber-500/15 text-amber-300"
+    icon-class="bg-app-warning-500/15 text-app-warning-300"
     :title="
       isArchitecture ? t('brainstorm.title.architecture') : t('brainstorm.title.requirements')
     "
@@ -310,7 +310,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
           <!-- converged -->
           <div
             v-if="incorporated"
-            class="mb-4 flex items-center gap-2 rounded-lg border border-emerald-900/60 bg-emerald-950/30 p-4 text-sm text-emerald-300"
+            class="mb-4 flex items-center gap-2 rounded-lg border border-app-success-900/60 bg-app-success-950/30 p-4 text-sm text-app-success-300"
           >
             <UIcon name="i-lucide-circle-check" class="h-5 w-5 shrink-0" />
             {{ t('brainstorm.settledBanner', { doc: docNoun }) }}
@@ -329,7 +329,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
           <!-- working: the async cycle is running in the driver -->
           <div
             v-else-if="working"
-            class="mb-4 flex items-center gap-2 rounded-lg border border-amber-900/60 bg-amber-950/30 p-4 text-sm text-amber-200"
+            class="mb-4 flex items-center gap-2 rounded-lg border border-app-warning-900/60 bg-app-warning-950/30 p-4 text-sm text-app-warning-200"
           >
             <UIcon name="i-lucide-loader-circle" class="h-5 w-5 shrink-0 animate-spin" />
             <span v-if="incorporating">
@@ -454,7 +454,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
 
           <!-- converged document: the standard-format direction -->
           <section v-if="outline" class="mt-6 border-t border-default pt-5">
-            <div class="mb-3 flex items-center gap-1.5 text-[11px] text-emerald-400">
+            <div class="mb-3 flex items-center gap-1.5 text-[11px] text-app-success-400">
               <UIcon name="i-lucide-file-check-2" class="h-3.5 w-3.5" />
               <span class="font-semibold uppercase tracking-wide">
                 {{ incorporated ? docNoun : t('brainstorm.docDraft', { doc: docNoun }) }}

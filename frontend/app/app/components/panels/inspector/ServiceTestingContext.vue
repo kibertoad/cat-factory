@@ -104,7 +104,7 @@ function revert() {
     />
 
     <div class="flex items-center justify-between gap-2">
-      <p class="text-[11px] text-dimmed" :class="{ 'text-error-400': tooLong }">
+      <p class="text-[11px] text-dimmed" :class="{ 'text-app-error-400': tooLong }">
         {{
           t('inspector.testingContext.length', {
             count: outgoing.length,

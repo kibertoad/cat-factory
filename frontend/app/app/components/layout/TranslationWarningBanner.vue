@@ -31,19 +31,19 @@ function dismiss() {
       v-if="show"
       data-testid="translation-warning"
       role="alert"
-      class="flex shrink-0 items-center gap-3 border-b border-amber-500/40 bg-amber-950/95 px-4 py-2 text-[13px] text-amber-100 shadow-lg backdrop-blur"
+      class="flex shrink-0 items-center gap-3 border-b border-app-warning-500/40 bg-app-warning-950/95 px-4 py-2 text-[13px] text-app-warning-100 shadow-lg backdrop-blur"
     >
-      <UIcon name="i-lucide-languages" class="h-4 w-4 shrink-0 text-amber-400" />
+      <UIcon name="i-lucide-languages" class="h-4 w-4 shrink-0 text-app-warning-400" />
       <p class="min-w-0 flex-1">
         <span class="font-semibold">{{ t('language.warning.title') }}</span>
-        <span class="mx-1.5 text-amber-400/60">·</span>
+        <span class="mx-1.5 text-app-warning-400/60">·</span>
         <i18n-t keypath="language.warning.body" tag="span" scope="global">
           <template #repoLink>
             <a
               :href="REPO_URL"
               target="_blank"
               rel="noopener noreferrer"
-              class="inline-flex items-center gap-1 font-medium text-sky-300 hover:underline"
+              class="inline-flex items-center gap-1 font-medium text-app-info-300 hover:underline"
             >
               {{ t('language.warning.repoLinkLabel') }}
               <UIcon name="i-lucide-external-link" class="h-3 w-3" />

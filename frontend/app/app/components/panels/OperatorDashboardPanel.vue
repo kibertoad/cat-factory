@@ -112,8 +112,10 @@ watch(
         data-testid="operator-dashboard"
       >
         <header class="flex items-center gap-3 border-b border-default px-6 py-4">
-          <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sky-500/15">
-            <UIcon name="i-lucide-gauge" class="h-5 w-5 text-sky-400" />
+          <div
+            class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-app-info-500/15"
+          >
+            <UIcon name="i-lucide-gauge" class="h-5 w-5 text-app-info-400" />
           </div>
           <div class="min-w-0">
             <h1 class="truncate text-base font-semibold text-highlighted">
@@ -166,11 +168,11 @@ watch(
         <div class="flex-1 overflow-y-auto px-6 py-5">
           <div
             v-if="error"
-            class="mx-auto max-w-2xl rounded-lg border border-rose-800/60 bg-rose-950/40 p-4 text-sm text-rose-200"
+            class="mx-auto max-w-2xl rounded-lg border border-app-error-800/60 bg-app-error-950/40 p-4 text-sm text-app-error-200"
           >
             <p>{{ error }}</p>
             <button
-              class="mt-2 rounded-md border border-rose-700 px-3 py-1 text-xs hover:bg-rose-900/40"
+              class="mt-2 rounded-md border border-app-error-700 px-3 py-1 text-xs hover:bg-app-error-900/40"
               @click="refresh"
             >
               {{ t('platformObservability.retry') }}
@@ -189,14 +191,14 @@ watch(
             -->
             <p
               v-if="rollupState === 'none'"
-              class="rounded-lg border border-amber-800/60 bg-amber-950/30 px-3 py-2 text-xs text-amber-200"
+              class="rounded-lg border border-app-warning-800/60 bg-app-warning-950/30 px-3 py-2 text-xs text-app-warning-200"
               data-testid="operator-rollup-missing"
             >
               {{ t('platformObservability.rollup.none') }}
             </p>
             <p
               v-else-if="rollupState === 'stale'"
-              class="rounded-lg border border-amber-800/60 bg-amber-950/30 px-3 py-2 text-xs text-amber-200"
+              class="rounded-lg border border-app-warning-800/60 bg-app-warning-950/30 px-3 py-2 text-xs text-app-warning-200"
               data-testid="operator-rollup-stale"
             >
               {{
@@ -232,7 +234,7 @@ watch(
                   </p>
                 </div>
                 <div class="rounded-lg border border-default bg-default/40 p-3">
-                  <p class="text-2xl font-semibold text-emerald-400">
+                  <p class="text-2xl font-semibold text-app-success-400">
                     {{ n(view.outcomes.done, 'decimal') }}
                   </p>
                   <p class="text-xs text-dimmed">
@@ -240,7 +242,7 @@ watch(
                   </p>
                 </div>
                 <div class="rounded-lg border border-default bg-default/40 p-3">
-                  <p class="text-2xl font-semibold text-rose-400">
+                  <p class="text-2xl font-semibold text-app-error-400">
                     {{ n(view.outcomes.failed, 'decimal') }}
                   </p>
                   <p class="text-xs text-dimmed">
@@ -249,7 +251,7 @@ watch(
                 </div>
                 <div class="rounded-lg border border-default bg-default/40 p-3">
                   <p
-                    class="text-2xl font-semibold text-sky-400"
+                    class="text-2xl font-semibold text-app-info-400"
                     data-testid="operator-success-rate"
                   >
                     {{
@@ -282,7 +284,7 @@ watch(
                     :title="trendTooltip(p)"
                   >
                     <div
-                      class="w-full rounded-t-sm bg-rose-500/80"
+                      class="w-full rounded-t-sm bg-app-error-500/80"
                       :style="{ height: `${heightPct(p.failed, maxTrend)}%` }"
                     />
                     <div
@@ -290,19 +292,19 @@ watch(
                       :style="{ height: `${heightPct(p.other, maxTrend)}%` }"
                     />
                     <div
-                      class="w-full rounded-b-sm bg-emerald-500/80"
+                      class="w-full rounded-b-sm bg-app-success-500/80"
                       :style="{ height: `${heightPct(p.done, maxTrend)}%` }"
                     />
                   </div>
                 </div>
                 <div class="mt-2 flex items-center gap-4 text-[11px] text-dimmed">
                   <span class="flex items-center gap-1"
-                    ><span class="h-2 w-2 rounded-sm bg-emerald-500/80" />{{
+                    ><span class="h-2 w-2 rounded-sm bg-app-success-500/80" />{{
                       t('platformObservability.trend.done')
                     }}</span
                   >
                   <span class="flex items-center gap-1"
-                    ><span class="h-2 w-2 rounded-sm bg-rose-500/80" />{{
+                    ><span class="h-2 w-2 rounded-sm bg-app-error-500/80" />{{
                       t('platformObservability.trend.failed')
                     }}</span
                   >
@@ -361,19 +363,19 @@ watch(
                       </td>
                       <td class="py-2 pe-3 text-end tabular-nums">{{ g.gates }}</td>
                       <td class="py-2 pe-3 text-end tabular-nums">
-                        <span class="text-emerald-400">{{ g.cleanPasses }}</span>
+                        <span class="text-app-success-400">{{ g.cleanPasses }}</span>
                         <span v-if="cleanRate(g) !== null" class="ms-1 text-dimmed"
                           >({{ n(cleanRate(g) ?? 0, 'percent') }})</span
                         >
                       </td>
                       <td class="py-2 pe-3 text-end tabular-nums">{{ g.attempts }}</td>
                       <td class="py-2 pe-3 text-end tabular-nums">
-                        <span :class="g.helperFailures > 0 ? 'text-amber-400' : ''">{{
+                        <span :class="g.helperFailures > 0 ? 'text-app-warning-400' : ''">{{
                           g.helperFailures
                         }}</span>
                       </td>
                       <td class="py-2 text-end tabular-nums">
-                        <span :class="g.exhausted > 0 ? 'text-rose-400' : ''">{{
+                        <span :class="g.exhausted > 0 ? 'text-app-error-400' : ''">{{
                           g.exhausted
                         }}</span>
                       </td>
@@ -404,7 +406,7 @@ watch(
                       </div>
                       <div class="h-1.5 rounded-full bg-elevated">
                         <div
-                          class="h-1.5 rounded-full bg-rose-500/70"
+                          class="h-1.5 rounded-full bg-app-error-500/70"
                           :style="{ width: `${barPct(f.count, maxFailure)}%` }"
                         />
                       </div>
@@ -424,13 +426,15 @@ watch(
                     data-testid="operator-live"
                   >
                     <div>
-                      <p class="text-lg font-semibold text-sky-400">{{ view.live.running }}</p>
+                      <p class="text-lg font-semibold text-app-info-400">{{ view.live.running }}</p>
                       <p class="text-[11px] text-dimmed">
                         {{ t('platformObservability.outcomes.running') }}
                       </p>
                     </div>
                     <div>
-                      <p class="text-lg font-semibold text-amber-400">{{ view.live.blocked }}</p>
+                      <p class="text-lg font-semibold text-app-warning-400">
+                        {{ view.live.blocked }}
+                      </p>
                       <p class="text-[11px] text-dimmed">
                         {{ t('platformObservability.outcomes.blocked') }}
                       </p>

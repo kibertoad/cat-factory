@@ -850,7 +850,7 @@ async function unlinkSource(id: string) {
           :key="f.id"
           class="flex items-start gap-2 rounded-md border border-default bg-default/60 p-3"
         >
-          <UIcon name="i-lucide-radio" class="mt-0.5 h-4 w-4 text-emerald-400" />
+          <UIcon name="i-lucide-radio" class="mt-0.5 h-4 w-4 text-app-success-400" />
           <div class="min-w-0">
             <div class="flex items-center gap-2">
               <span class="font-medium text-app-100">{{ f.title }}</span>
@@ -944,10 +944,7 @@ async function unlinkSource(id: string) {
                     :key="staged.path"
                     class="flex items-center gap-1.5 rounded bg-elevated/60 px-2 py-1 text-xs text-toned"
                   >
-                    <UIcon
-                      name="i-lucide-file-code-2"
-                      class="h-3.5 w-3.5 shrink-0 text-primary-400"
-                    />
+                    <UIcon name="i-lucide-file-code-2" class="h-3.5 w-3.5 shrink-0 text-primary" />
                     <span class="truncate">{{ staged.path }}</span>
                     <UButton
                       class="ms-auto"

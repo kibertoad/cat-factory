@@ -588,7 +588,7 @@ const declaredFormats = computed(() => {
       </div>
       <p
         v-if="unusableReferences.length"
-        class="ms-1 text-[10px] text-amber-400"
+        class="ms-1 text-[10px] text-app-warning-400"
         data-testid="binary-output-reference-unusable"
       >
         {{
@@ -696,7 +696,7 @@ const declaredFormats = computed(() => {
              that does not carry the requirement. -->
         <p
           v-if="outputSizeIncomplete"
-          class="text-[10px] text-amber-400"
+          class="text-[10px] text-app-warning-400"
           data-testid="binary-output-size-incomplete"
         >
           {{ t('pipeline.builder.binaryOutputSizeIncomplete') }}
@@ -782,7 +782,7 @@ const declaredFormats = computed(() => {
       </div>
       <p
         v-if="comparisonUnreachable"
-        class="text-[10px] text-amber-400"
+        class="text-[10px] text-app-warning-400"
         data-testid="binary-output-comparison-unreachable"
       >
         {{ t('pipeline.builder.binaryComparisonUnreachable') }}
@@ -794,25 +794,25 @@ const declaredFormats = computed(() => {
          an untagged one, and a lost CONTEXT service is not a lost storage target. -->
     <p
       v-if="has('catalog_unavailable')"
-      class="text-[10px] text-amber-400"
+      class="text-[10px] text-app-warning-400"
       data-testid="binary-output-unavailable"
     >
       {{ t('pipeline.builder.binaryOutputUnavailable') }}
     </p>
     <p
       v-else-if="has('no_storage_service')"
-      class="text-[10px] text-amber-400"
+      class="text-[10px] text-app-warning-400"
       data-testid="binary-output-no-storage"
     >
       {{ t('pipeline.builder.binaryOutputNoStorage', { capability: ASSET_STORAGE_CAPABILITY }) }}
     </p>
-    <p v-if="has('unknown_service')" class="text-[10px] text-amber-400">
+    <p v-if="has('unknown_service')" class="text-[10px] text-app-warning-400">
       {{ t('pipeline.builder.binaryOutputMissing') }}
     </p>
-    <p v-if="has('not_storage_capable')" class="text-[10px] text-amber-400">
+    <p v-if="has('not_storage_capable')" class="text-[10px] text-app-warning-400">
       {{ t('pipeline.builder.binaryOutputNotStorage', { capability: ASSET_STORAGE_CAPABILITY }) }}
     </p>
-    <p v-if="has('unknown_context_service')" class="text-[10px] text-amber-400">
+    <p v-if="has('unknown_context_service')" class="text-[10px] text-app-warning-400">
       {{
         t('pipeline.builder.binaryOutputContextMissing', {
           ids: pick.unknownContextIds.join(', '),
@@ -826,14 +826,14 @@ const declaredFormats = computed(() => {
          it says so and stops, exactly as run admission does. -->
     <p
       v-if="has('generators_unavailable')"
-      class="text-[10px] text-amber-400"
+      class="text-[10px] text-app-warning-400"
       data-testid="binary-output-generators-unavailable"
     >
       {{ t('pipeline.builder.binaryOutputGeneratorsUnavailable') }}
     </p>
     <p
       v-if="has('unknown_generator')"
-      class="text-[10px] text-amber-400"
+      class="text-[10px] text-app-warning-400"
       data-testid="binary-output-unknown-generator"
     >
       {{
@@ -844,7 +844,7 @@ const declaredFormats = computed(() => {
     </p>
     <p
       v-if="has('modality_uncovered')"
-      class="text-[10px] text-amber-400"
+      class="text-[10px] text-app-warning-400"
       data-testid="binary-output-modality-uncovered"
     >
       {{
@@ -855,7 +855,7 @@ const declaredFormats = computed(() => {
     </p>
     <p
       v-if="has('media_type_uncovered')"
-      class="text-[10px] text-amber-400"
+      class="text-[10px] text-app-warning-400"
       data-testid="binary-output-media-type-uncovered"
     >
       {{
@@ -904,7 +904,7 @@ const declaredFormats = computed(() => {
     </p>
     <p
       v-if="has('capability_unsupported')"
-      class="text-[10px] text-amber-400"
+      class="text-[10px] text-app-warning-400"
       data-testid="binary-output-capability-unsupported"
     >
       {{
@@ -919,7 +919,7 @@ const declaredFormats = computed(() => {
     <p
       v-for="value in pick.unacceptedValues"
       :key="value.option"
-      class="text-[10px] text-amber-400"
+      class="text-[10px] text-app-warning-400"
       data-testid="binary-output-value-unaccepted"
     >
       {{
@@ -935,7 +935,7 @@ const declaredFormats = computed(() => {
          two values on this form. -->
     <p
       v-if="has('output_size_ambiguous')"
-      class="text-[10px] text-amber-400"
+      class="text-[10px] text-app-warning-400"
       data-testid="binary-output-size-ambiguous"
     >
       {{
@@ -991,7 +991,7 @@ const declaredFormats = computed(() => {
     </p>
     <p
       v-if="unusableMediaTypes.length"
-      class="text-[10px] text-amber-400"
+      class="text-[10px] text-app-warning-400"
       data-testid="binary-output-media-type-unusable"
     >
       {{

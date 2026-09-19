@@ -97,7 +97,7 @@ const filename = computed(() => {
     </p>
     <p
       v-else-if="status === 'error'"
-      class="flex items-center gap-1.5 text-[11px] text-amber-300"
+      class="flex items-center gap-1.5 text-[11px] text-app-warning-300"
       data-testid="stored-asset-error"
     >
       <span>{{ t('binaryOutput.asset.loadFailed') }}</span>
@@ -116,7 +116,7 @@ const filename = computed(() => {
         :href="url"
         target="_blank"
         rel="noopener"
-        class="text-sky-300 hover:underline"
+        class="text-app-info-300 hover:underline"
         data-testid="stored-asset-open"
         @click.stop
         >{{ t('binaryOutput.asset.open') }}</a
@@ -124,7 +124,7 @@ const filename = computed(() => {
       <a
         :href="url"
         :download="filename"
-        class="text-sky-300 hover:underline"
+        class="text-app-info-300 hover:underline"
         data-testid="stored-asset-download"
         @click.stop
         >{{ t('binaryOutput.asset.download') }}</a

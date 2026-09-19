@@ -58,7 +58,7 @@ async function choose(option: string) {
         <div class="flex items-center gap-2 text-sm text-muted">
           <div
             class="flex h-8 w-8 items-center justify-center rounded-lg"
-            :style="{ backgroundColor: agent.color + '22' }"
+            :style="{ backgroundColor: tint(agent.color) }"
           >
             <UIcon :name="agent.icon" class="h-4 w-4" :style="{ color: agent.color }" />
           </div>

@@ -553,7 +553,7 @@ watch(
 
       <!-- Backend unreachable / bootstrap failed -->
       <div v-else-if="workspace.error" class="m-auto max-w-md p-8 text-center">
-        <UIcon name="i-lucide-plug-zap" class="mx-auto mb-3 h-10 w-10 text-amber-400" />
+        <UIcon name="i-lucide-plug-zap" class="mx-auto mb-3 h-10 w-10 text-app-warning-400" />
         <h1 class="mb-1 text-lg font-semibold">{{ $t('app.backendUnreachable') }}</h1>
         <p class="mb-4 text-sm text-muted">{{ workspace.error }}</p>
         <UButton color="primary" icon="i-lucide-rotate-ccw" @click="workspace.init()">

@@ -163,7 +163,7 @@ function reveal(blockId: string): void {
           class="flex items-start gap-2 rounded-md bg-elevated/60 p-3 text-sm text-toned"
           data-testid="assistant-unreadable"
         >
-          <UIcon name="i-lucide-unplug" class="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+          <UIcon name="i-lucide-unplug" class="mt-0.5 h-4 w-4 shrink-0 text-app-warning-400" />
           <div class="space-y-2">
             <p>{{ t('assistant.unreadable') }}</p>
             <UButton
@@ -240,7 +240,7 @@ function reveal(blockId: string): void {
               role="status"
               :aria-live="submitReason ? 'polite' : 'off'"
               class="flex items-center gap-1 text-xs"
-              :class="submitReason ? 'text-amber-400' : 'text-dimmed'"
+              :class="submitReason ? 'text-app-warning-400' : 'text-dimmed'"
               data-testid="assistant-submit-status"
             >
               <UIcon
@@ -279,7 +279,7 @@ function reveal(blockId: string): void {
           >
             <template v-if="outcome.status === 'performed'">
               <div class="flex items-start gap-2 text-default">
-                <UIcon name="i-lucide-check" class="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
+                <UIcon name="i-lucide-check" class="mt-0.5 h-4 w-4 shrink-0 text-app-success-400" />
                 <div class="space-y-2">
                   <p v-if="outcome.result.actionId === 'declare-service-dependency'">
                     {{
@@ -330,7 +330,10 @@ function reveal(blockId: string): void {
 
             <template v-else-if="outcome.status === 'needs_input'">
               <div class="flex items-start gap-2 text-default">
-                <UIcon name="i-lucide-help-circle" class="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+                <UIcon
+                  name="i-lucide-help-circle"
+                  class="mt-0.5 h-4 w-4 shrink-0 text-app-warning-400"
+                />
                 <div class="space-y-2">
                   <p>{{ t(`assistant.needsInput.${outcome.reason}`) }}</p>
                   <div v-if="outcome.candidates.length" class="flex flex-wrap gap-1">

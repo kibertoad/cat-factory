@@ -140,22 +140,22 @@ const STATE_META = computed<Record<AgentState, { label: string; color: string; i
   () => ({
     pending: {
       label: t('pipeline.progress.state.pending'),
-      color: '#64748b',
+      color: 'var(--ui-text-muted)',
       icon: 'i-lucide-circle-dashed',
     },
     working: {
       label: t('pipeline.progress.state.working'),
-      color: '#6366f1',
+      color: 'var(--ui-primary)',
       icon: 'i-lucide-loader',
     },
     waiting_decision: {
       label: t('pipeline.progress.state.waiting_decision'),
-      color: '#f59e0b',
+      color: 'var(--ui-warning)',
       icon: 'i-lucide-circle-help',
     },
     done: {
       label: t('pipeline.progress.state.done'),
-      color: '#22c55e',
+      color: 'var(--ui-success)',
       icon: 'i-lucide-circle-check',
     },
   }),
@@ -310,7 +310,7 @@ const ITEM_ICON: Record<string, string> = {
         <span
           v-if="i < steps.length - 1"
           class="absolute top-9 bottom-0 start-[17px] w-0.5 -translate-x-1/2"
-          :class="connectorDone(i) ? 'bg-emerald-500/60' : 'bg-accented'"
+          :class="connectorDone(i) ? 'bg-app-success-500/60' : 'bg-accented'"
         />
 
         <!-- rail node -->
@@ -332,7 +332,7 @@ const ITEM_ICON: Record<string, string> = {
           class="flex-1 rounded-xl border p-4 transition"
           :class="[
             i === instance.currentStep && instance.status !== 'done'
-              ? 'border-primary-500/70 bg-default shadow-lg shadow-primary-500/10'
+              ? 'border-primary/70 bg-default shadow-lg shadow-primary/10'
               : 'border-default bg-default/50',
             s.state === 'pending' ? 'opacity-60' : '',
           ]"
@@ -350,7 +350,7 @@ const ITEM_ICON: Record<string, string> = {
           >
             <div
               class="flex h-8 w-8 items-center justify-center rounded-lg"
-              :style="{ backgroundColor: agentKindMeta(s.agentKind).color + '22' }"
+              :style="{ backgroundColor: tint(agentKindMeta(s.agentKind).color) }"
             >
               <UIcon
                 :name="agentKindMeta(s.agentKind).icon"
@@ -443,7 +443,7 @@ const ITEM_ICON: Record<string, string> = {
 
             <UIcon
               :name="stepHasOutput(s) ? 'i-lucide-book-open-text' : 'i-lucide-info'"
-              class="h-4 w-4 shrink-0 text-dimmed transition-colors group-hover:text-primary-300"
+              class="h-4 w-4 shrink-0 text-dimmed transition-colors group-hover:text-primary"
             />
           </div>
 
@@ -458,7 +458,7 @@ const ITEM_ICON: Record<string, string> = {
           <!-- container cold-boot phase: shown while the container is spinning up. -->
           <div
             v-if="s.container?.status === 'starting' && !runFailed"
-            class="mt-2 flex items-center gap-1.5 text-[11px] text-sky-300"
+            class="mt-2 flex items-center gap-1.5 text-[11px] text-app-info-300"
           >
             <UIcon name="i-lucide-loader-circle" class="h-3.5 w-3.5 shrink-0 animate-spin" />
             <span>{{ t('pipeline.progress.spinningUpContainer') }}</span>
@@ -468,7 +468,7 @@ const ITEM_ICON: Record<string, string> = {
                making calls) so the step isn't a blank "working" before subtasks appear. -->
           <div
             v-else-if="stepPhaseLabel(s) && !runFailed"
-            class="mt-2 flex items-center gap-1.5 text-[11px] text-emerald-300"
+            class="mt-2 flex items-center gap-1.5 text-[11px] text-app-success-300"
           >
             <UIcon name="i-lucide-box" class="h-3.5 w-3.5 shrink-0" />
             <span>{{ stepPhaseLabel(s) }}</span>
@@ -497,14 +497,14 @@ const ITEM_ICON: Record<string, string> = {
                     total: s.subtasks.total,
                   })
                 }}
-                <span v-if="s.subtasks.inProgress > 0" class="text-primary-300">
+                <span v-if="s.subtasks.inProgress > 0" class="text-primary">
                   {{ t('pipeline.progress.subtasksInProgress', { count: s.subtasks.inProgress }) }}
                 </span>
               </span>
             </div>
             <div class="mt-1 h-1 overflow-hidden rounded-full bg-accented/60">
               <div
-                class="h-full rounded-full bg-primary-400 transition-all duration-500"
+                class="h-full rounded-full bg-primary transition-all duration-500"
                 :style="{ width: `${(s.subtasks.completed / s.subtasks.total) * 100}%` }"
               />
             </div>
@@ -611,18 +611,18 @@ const ITEM_ICON: Record<string, string> = {
           <button
             v-if="s.followUps?.enabled"
             type="button"
-            class="mt-3 flex w-full items-center gap-2 rounded-lg border border-dashed px-2.5 py-1.5 text-start transition hover:border-pink-400/60"
+            class="mt-3 flex w-full items-center gap-2 rounded-lg border border-dashed px-2.5 py-1.5 text-start transition hover:border-app-hue-pink/60"
             :class="
               followUpPending(s) > 0
-                ? 'border-pink-500/50 bg-pink-500/10 followup-blink'
+                ? 'border-app-hue-pink/50 bg-app-hue-pink/10 followup-blink'
                 : 'border-muted/70 bg-default/40'
             "
             @click="ui.openFollowUps(instance.id, i)"
           >
             <span
-              class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-pink-500/40 bg-pink-500/15"
+              class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-app-hue-pink/40 bg-app-hue-pink/15"
             >
-              <UIcon :name="FOLLOW_UP_COMPANION_META.icon" class="h-3 w-3 text-pink-300" />
+              <UIcon :name="FOLLOW_UP_COMPANION_META.icon" class="h-3 w-3 text-app-hue-pink" />
             </span>
             <span class="min-w-0 flex-1 truncate text-[12px] text-toned">
               {{ FOLLOW_UP_COMPANION_META.label }}
@@ -630,7 +630,7 @@ const ITEM_ICON: Record<string, string> = {
             </span>
             <span
               class="shrink-0 text-[11px] font-medium"
-              :class="followUpPending(s) > 0 ? 'text-pink-300' : 'text-muted'"
+              :class="followUpPending(s) > 0 ? 'text-app-hue-pink' : 'text-muted'"
             >
               {{ followUpLabel(s) }}
             </span>
@@ -643,23 +643,23 @@ const ITEM_ICON: Record<string, string> = {
             type="button"
             data-testid="fork-decision-open"
             :data-fork-phase="forkPhase(s)"
-            class="mt-3 flex w-full items-center gap-2 rounded-lg border border-dashed px-2.5 py-1.5 text-start transition hover:border-violet-400/60"
+            class="mt-3 flex w-full items-center gap-2 rounded-lg border border-dashed px-2.5 py-1.5 text-start transition hover:border-app-secondary-400/60"
             :class="
               forkPhase(s) === 'awaiting_choice'
-                ? 'border-violet-500/50 bg-violet-500/10 followup-blink'
+                ? 'border-app-secondary-500/50 bg-app-secondary-500/10 followup-blink'
                 : 'border-muted/70 bg-default/40'
             "
             :disabled="forkPhase(s) === 'proposing'"
             @click="ui.openForkDecision(instance.id, i)"
           >
             <span
-              class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-violet-500/40 bg-violet-500/15"
+              class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-app-secondary-500/40 bg-app-secondary-500/15"
             >
               <UIcon
                 :name="
                   forkPhase(s) === 'proposing' ? 'i-lucide-loader-circle' : FORK_DECISION_META.icon
                 "
-                class="h-3 w-3 text-violet-300"
+                class="h-3 w-3 text-app-secondary-300"
                 :class="forkPhase(s) === 'proposing' ? 'animate-spin' : ''"
               />
             </span>
@@ -679,13 +679,13 @@ const ITEM_ICON: Record<string, string> = {
             v-if="prReviewAwaiting(s)"
             type="button"
             data-testid="pr-review-open"
-            class="mt-3 flex w-full items-center gap-2 rounded-lg border border-dashed border-primary-500/50 bg-primary-500/10 px-2.5 py-1.5 text-start transition followup-blink hover:border-primary-400/60"
+            class="mt-3 flex w-full items-center gap-2 rounded-lg border border-dashed border-primary/50 bg-primary/10 px-2.5 py-1.5 text-start transition followup-blink hover:border-primary/60"
             @click="ui.openPrReview(instance.id, i)"
           >
             <span
-              class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-primary-500/40 bg-primary-500/15"
+              class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-primary/40 bg-primary/15"
             >
-              <UIcon name="i-lucide-clipboard-check" class="h-3 w-3 text-primary-300" />
+              <UIcon name="i-lucide-clipboard-check" class="h-3 w-3 text-primary" />
             </span>
             <span class="min-w-0 flex-1 truncate text-[12px] text-toned">
               {{ t('pipeline.progress.prReview.review') }}
@@ -701,15 +701,15 @@ const ITEM_ICON: Record<string, string> = {
             v-if="candidatesAwaiting(s)"
             type="button"
             data-testid="binary-candidates-open"
-            class="mt-3 flex w-full items-center gap-2 rounded-lg border border-dashed border-cyan-500/50 bg-cyan-500/10 px-2.5 py-1.5 text-start transition followup-blink hover:border-cyan-400/60"
+            class="mt-3 flex w-full items-center gap-2 rounded-lg border border-dashed border-app-hue-cyan/50 bg-app-hue-cyan/10 px-2.5 py-1.5 text-start transition followup-blink hover:border-app-hue-cyan/60"
             @click="ui.openBinaryCandidates(instance.id, i)"
           >
             <span
-              class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-cyan-500/40 bg-cyan-500/15"
+              class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-app-hue-cyan/40 bg-app-hue-cyan/15"
             >
               <UIcon
                 :name="REDIRECT_PARK_PRESENTATION['binary-candidates'].icon"
-                class="h-3 w-3 text-cyan-300"
+                class="h-3 w-3 text-app-hue-cyan"
               />
             </span>
             <span class="min-w-0 flex-1 truncate text-[12px] text-toned">
@@ -721,7 +721,7 @@ const ITEM_ICON: Record<string, string> = {
                NOT a "Review & approve" gate (the human is summoned only if needed) -->
           <div
             v-if="reviewStageLabel(s.agentKind)"
-            class="mt-3 inline-flex items-center gap-1 text-[11px] text-primary-300"
+            class="mt-3 inline-flex items-center gap-1 text-[11px] text-primary"
           >
             <UIcon name="i-lucide-loader-circle" class="h-3 w-3 animate-spin" />
             {{ reviewStageLabel(s.agentKind) }}
@@ -766,7 +766,7 @@ const ITEM_ICON: Record<string, string> = {
           </div>
           <p
             v-else-if="s.decision?.chosen"
-            class="mt-2 flex items-center gap-1 truncate text-[11px] text-emerald-400"
+            class="mt-2 flex items-center gap-1 truncate text-[11px] text-app-success-400"
             :title="s.decision.chosen"
           >
             <UIcon name="i-lucide-check" class="h-3 w-3 shrink-0" />
@@ -779,14 +779,14 @@ const ITEM_ICON: Record<string, string> = {
 </template>
 
 <style scoped>
-/* Soft indigo halo around the rail node of the actively-working step. */
+/* Soft primary halo around the rail node of the actively-working step. */
 @keyframes step-pulse {
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.5);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--ui-primary) 50%, transparent);
   }
   50% {
-    box-shadow: 0 0 0 6px rgba(99, 102, 241, 0);
+    box-shadow: 0 0 0 6px transparent;
   }
 }
 .step-active {
@@ -797,10 +797,10 @@ const ITEM_ICON: Record<string, string> = {
 @keyframes followup-blink {
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgba(244, 114, 182, 0.5);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--app-hue-pink) 50%, transparent);
   }
   50% {
-    box-shadow: 0 0 0 5px rgba(244, 114, 182, 0);
+    box-shadow: 0 0 0 5px transparent;
   }
 }
 .followup-blink {

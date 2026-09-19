@@ -177,11 +177,8 @@ const filteredGroups = computed<ProviderGroup[]>(() => {
 
         <!-- Nothing connected at all is a hard stop, not a nudge: no provider means no agent
              step can run. Say so plainly rather than showing an empty list of options. -->
-        <div
-          v-if="!anyConnected"
-          class="rounded-lg border border-primary-500/40 bg-primary-500/10 p-3"
-        >
-          <div class="mb-1.5 flex items-center gap-2 text-sm font-medium text-primary-200">
+        <div v-if="!anyConnected" class="rounded-lg border border-primary/40 bg-primary/10 p-3">
+          <div class="mb-1.5 flex items-center gap-2 text-sm font-medium text-primary">
             <UIcon name="i-lucide-rocket" class="h-4 w-4 shrink-0" />
             <span>{{ t('layout.modelProvidersHub.getStarted.title') }}</span>
           </div>

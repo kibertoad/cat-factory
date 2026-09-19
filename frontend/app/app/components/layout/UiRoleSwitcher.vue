@@ -44,9 +44,9 @@ const items = computed(() =>
       data-testid="ui-role-toggle"
       :aria-label="`${t('uiRole.switcher')}: ${currentLabel}`"
       :title="`${t('uiRole.switcher')}: ${currentLabel}`"
-      class="flex w-full flex-col items-center gap-0.5 rounded-lg border border-muted bg-default/60 px-1 py-1.5 transition hover:border-primary-500/60 hover:bg-elevated/60"
+      class="flex w-full flex-col items-center gap-0.5 rounded-lg border border-muted bg-default/60 px-1 py-1.5 transition hover:border-primary/60 hover:bg-elevated/60"
     >
-      <UIcon :name="current.icon" class="h-4 w-4 shrink-0 text-primary-400" />
+      <UIcon :name="current.icon" class="h-4 w-4 shrink-0 text-primary" />
       <span class="w-full truncate text-center text-[9px] font-medium uppercase text-toned">
         {{ currentLabel }}
       </span>
@@ -58,9 +58,9 @@ const items = computed(() =>
       data-testid="ui-role-switcher"
       :aria-label="t('uiRole.switcher')"
       :title="t(current.hintKey)"
-      class="flex w-full items-center gap-2 rounded-lg border border-muted bg-default/60 p-2 text-start transition hover:border-primary-500/60 hover:bg-elevated/60"
+      class="flex w-full items-center gap-2 rounded-lg border border-muted bg-default/60 p-2 text-start transition hover:border-primary/60 hover:bg-elevated/60"
     >
-      <UIcon :name="current.icon" class="h-4 w-4 shrink-0 text-primary-400" />
+      <UIcon :name="current.icon" class="h-4 w-4 shrink-0 text-primary" />
       <div class="min-w-0 flex-1">
         <div class="truncate text-[10px] uppercase tracking-wide text-dimmed">
           {{ t('uiRole.switcher') }}

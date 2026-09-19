@@ -8566,5 +8566,13 @@
     "territories": {
       "heading": "Gebiete"
     }
+  },
+  "appearance": {
+    "switcher": "Darstellung",
+    "mode": {
+      "system": "System",
+      "light": "Hell",
+      "dark": "Dunkel"
+    }
   }
 }

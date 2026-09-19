@@ -31,12 +31,14 @@ const emit = defineEmits<{ resolve: [choice: IterationCapChoice] }>()
 </script>
 
 <template>
-  <div class="rounded-lg border border-amber-500/40 bg-amber-500/5 p-4 text-sm text-amber-200">
+  <div
+    class="rounded-lg border border-app-warning-500/40 bg-app-warning-500/5 p-4 text-sm text-app-warning-200"
+  >
     <div class="flex items-center gap-2 font-medium">
       <UIcon name="i-lucide-alert-triangle" class="h-5 w-5 shrink-0" />
       {{ heading }}
     </div>
-    <p class="mt-1 text-[12px] text-amber-200/80">{{ detail }}</p>
+    <p class="mt-1 text-[12px] text-app-warning-200/80">{{ detail }}</p>
     <div class="mt-3 flex flex-wrap gap-2">
       <UButton
         color="primary"

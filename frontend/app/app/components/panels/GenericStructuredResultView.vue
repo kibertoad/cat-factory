@@ -58,7 +58,7 @@ const customJson = computed<string | null>(() => {
   <ResultWindowShell
     :open="open"
     :icon="meta?.icon ?? 'i-lucide-braces'"
-    icon-class="bg-cyan-500/15 text-cyan-300"
+    icon-class="bg-app-hue-cyan/15 text-app-hue-cyan"
     :title="headerTitle"
     :subtitle="meta?.description ?? t('panels.structuredResult.fallbackDescription')"
     :step-ref="{ instanceId, stepIndex }"

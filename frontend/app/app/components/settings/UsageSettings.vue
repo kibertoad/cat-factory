@@ -47,7 +47,7 @@ const hasAny = computed(() => usage.rows.length > 0)
     </p>
 
     <p v-if="usage.loading" class="text-[11px] text-dimmed">{{ t('common.loading') }}</p>
-    <p v-else-if="usage.error" class="text-[11px] text-rose-400">{{ usage.error }}</p>
+    <p v-else-if="usage.error" class="text-[11px] text-app-error-400">{{ usage.error }}</p>
     <p v-else-if="!hasAny" class="text-[11px] text-dimmed">{{ t('settings.usage.empty') }}</p>
 
     <template v-else>

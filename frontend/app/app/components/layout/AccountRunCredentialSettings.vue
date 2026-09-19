@@ -71,7 +71,7 @@ async function save() {
 
     <!-- What the choice actually costs, stated at the point of choosing rather than discovered
          later: attribution is a real feature, and turning this on is what trades it away. -->
-    <p v-if="forbid" class="text-[11px] text-amber-300">
+    <p v-if="forbid" class="text-[11px] text-app-warning-300">
       {{ t('settings.runCredentialPolicy.onHint') }}
     </p>
     <p v-else class="text-[11px] text-dimmed">

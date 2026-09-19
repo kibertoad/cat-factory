@@ -37,10 +37,10 @@ function when(ms: number): string {
 function gradeTone(g: KaizenGrading): string {
   if (g.status === 'failed') return 'text-dimmed'
   if (g.grade == null) return 'text-muted'
-  if (g.grade >= 5) return 'text-emerald-400'
-  if (g.grade >= 4) return 'text-lime-400'
-  if (g.grade === 3) return 'text-amber-400'
-  return 'text-rose-400'
+  if (g.grade >= 5) return 'text-app-success-400'
+  if (g.grade >= 4) return 'text-app-hue-lime'
+  if (g.grade === 3) return 'text-app-warning-400'
+  return 'text-app-error-400'
 }
 function statusLabel(g: KaizenGrading): string {
   if (g.status === 'scheduled') return t('kaizen.status.scheduled')
@@ -60,8 +60,10 @@ function statusLabel(g: KaizenGrading): string {
         aria-modal="true"
       >
         <header class="flex items-center gap-3 border-b border-default px-6 py-4">
-          <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-teal-500/15">
-            <UIcon name="i-lucide-sparkles" class="h-5 w-5 text-teal-400" />
+          <div
+            class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-app-hue-teal/15"
+          >
+            <UIcon name="i-lucide-sparkles" class="h-5 w-5 text-app-hue-teal" />
           </div>
           <div class="min-w-0">
             <h1 class="truncate text-base font-semibold text-highlighted">
@@ -99,7 +101,7 @@ function statusLabel(g: KaizenGrading): string {
           <!-- Verified combos -->
           <section class="lg:col-span-1">
             <h2 class="mb-2 flex items-center gap-2 text-sm font-semibold text-default">
-              <UIcon name="i-lucide-badge-check" class="h-4 w-4 text-emerald-400" />
+              <UIcon name="i-lucide-badge-check" class="h-4 w-4 text-app-success-400" />
               {{ t('kaizen.verifiedCombos.title') }}
               <span class="text-xs font-normal text-dimmed">{{
                 t('kaizen.verifiedCombos.count', { count: kaizen.verifiedCount })
@@ -126,7 +128,7 @@ function statusLabel(g: KaizenGrading): string {
                   <UIcon
                     v-if="c.verified"
                     name="i-lucide-badge-check"
-                    class="ms-auto h-3.5 w-3.5 text-emerald-400"
+                    class="ms-auto h-3.5 w-3.5 text-app-success-400"
                   />
                   <span v-else class="ms-auto text-[11px] text-dimmed">
                     {{ t('kaizen.verifiedCombos.progress', { count: c.consecutiveHighGrades }) }}
@@ -150,7 +152,7 @@ function statusLabel(g: KaizenGrading): string {
           <!-- Grading history -->
           <section class="lg:col-span-2">
             <h2 class="mb-2 flex items-center gap-2 text-sm font-semibold text-default">
-              <UIcon name="i-lucide-history" class="h-4 w-4 text-teal-400" />
+              <UIcon name="i-lucide-history" class="h-4 w-4 text-app-hue-teal" />
               {{ t('kaizen.history.title') }}
             </h2>
             <div class="overflow-hidden rounded-lg border border-default">
@@ -195,7 +197,7 @@ function statusLabel(g: KaizenGrading): string {
                         <li v-for="(r, i) in g.recommendations" :key="i">{{ r }}</li>
                       </ul>
                       <span v-else-if="g.status === 'complete'" class="text-app-600">—</span>
-                      <span v-else-if="g.error" class="text-rose-400/80">{{ g.error }}</span>
+                      <span v-else-if="g.error" class="text-app-error-400/80">{{ g.error }}</span>
                     </td>
                   </tr>
                   <tr v-if="kaizen.history.length === 0">

@@ -250,12 +250,12 @@ onUnmounted(() => preview.stopPolling(props.block.id))
         {{ t('inspector.frontendConfig.detect.hint') }}
       </p>
 
-      <p v-if="detectError" class="text-[11px] text-rose-300/80">
+      <p v-if="detectError" class="text-[11px] text-app-error-300/80">
         {{ detectError }}
       </p>
 
       <template v-if="detectResult && !detecting">
-        <p v-if="!detectResult.detected" class="text-[11px] text-amber-300/80">
+        <p v-if="!detectResult.detected" class="text-[11px] text-app-warning-300/80">
           {{ t('inspector.frontendConfig.detect.none') }}
         </p>
 
@@ -265,7 +265,11 @@ onUnmounted(() => preview.stopPolling(props.block.id))
             :key="i"
             class="flex items-start gap-1.5 text-[11px] leading-snug text-dimmed"
           >
-            <span :class="n.confidence === 'high' ? 'text-emerald-400/70' : 'text-amber-400/70'">
+            <span
+              :class="
+                n.confidence === 'high' ? 'text-app-success-400/70' : 'text-app-warning-400/70'
+              "
+            >
               {{
                 n.confidence === 'high'
                   ? t('inspector.frontendConfig.detect.confidenceHigh')
@@ -613,9 +617,9 @@ onUnmounted(() => preview.stopPolling(props.block.id))
             <span
               class="text-[11px] font-medium"
               :class="{
-                'text-emerald-400': previewStatus === 'ready',
-                'text-amber-400': previewStatus === 'starting',
-                'text-rose-400': previewStatus === 'failed',
+                'text-app-success-400': previewStatus === 'ready',
+                'text-app-warning-400': previewStatus === 'starting',
+                'text-app-error-400': previewStatus === 'failed',
                 'text-muted': previewStatus === 'stopped',
               }"
               data-testid="preview-status"
@@ -667,7 +671,7 @@ onUnmounted(() => preview.stopPolling(props.block.id))
 
           <p
             v-if="previewStatus === 'failed' && previewState?.error"
-            class="text-[11px] leading-snug text-rose-400"
+            class="text-[11px] leading-snug text-app-error-400"
             data-testid="preview-error"
           >
             {{ previewState.error }}
@@ -675,7 +679,7 @@ onUnmounted(() => preview.stopPolling(props.block.id))
 
           <p
             v-if="previewRequestError"
-            class="text-[11px] leading-snug text-rose-400"
+            class="text-[11px] leading-snug text-app-error-400"
             data-testid="preview-request-error"
           >
             {{ previewRequestError }}

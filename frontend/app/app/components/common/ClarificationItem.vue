@@ -79,7 +79,7 @@ const draft = computed({
     <!-- a recommendation is being requested/generated: a working chip, no answer box -->
     <div
       v-else-if="requested"
-      class="mt-2 inline-flex items-center gap-1 text-[11px] text-primary-300"
+      class="mt-2 inline-flex items-center gap-1 text-[11px] text-primary"
       data-testid="clarification-requested"
     >
       <UIcon name="i-lucide-loader-circle" class="h-3.5 w-3.5 animate-spin" />
@@ -128,12 +128,10 @@ const draft = computed({
       <!-- inline AI suggestion + "use this answer" -->
       <div
         v-if="recommendation"
-        class="mt-2 rounded-md border border-primary-800/50 bg-primary-950/30 p-2"
+        class="mt-2 rounded-md border border-primary/50 bg-primary/10 p-2"
         data-testid="clarification-recommendation"
       >
-        <div
-          class="mb-1 flex items-center gap-1 text-[10px] uppercase tracking-wide text-primary-300"
-        >
+        <div class="mb-1 flex items-center gap-1 text-[10px] uppercase tracking-wide text-primary">
           <UIcon name="i-lucide-wand-2" class="h-3 w-3" />{{ t('clarification.suggestion') }}
         </div>
         <p class="whitespace-pre-wrap text-[12px] text-default">{{ recommendation }}</p>

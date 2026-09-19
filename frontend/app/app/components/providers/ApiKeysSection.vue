@@ -332,7 +332,7 @@ async function remove(k: ApiKey) {
           :href="selected.url"
           target="_blank"
           rel="noopener noreferrer"
-          class="text-primary-400 underline"
+          class="text-primary underline"
         >
           {{ t('providers.apiKeys.openKeys', { provider: selected.label }) }}
         </a>
@@ -343,7 +343,7 @@ async function remove(k: ApiKey) {
          the caching flavour, so long agentic runs stop re-billing the whole prompt. -->
     <p
       v-if="cachesPrompts(selected.value)"
-      class="flex items-center gap-1.5 text-[12px] text-emerald-400/90"
+      class="flex items-center gap-1.5 text-[12px] text-app-success-400/90"
     >
       <UIcon name="i-lucide-zap" class="h-3.5 w-3.5 shrink-0" />
       {{ t('providers.apiKeys.cachingNote', { provider: selected.label }) }}

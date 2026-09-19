@@ -76,7 +76,7 @@ async function importUrl() {
         {{ t('fragments.documents.urlImport.action') }}
       </UButton>
     </div>
-    <p v-if="error" class="text-xs text-red-400" data-testid="fragment-url-import-error">
+    <p v-if="error" class="text-xs text-app-error-400" data-testid="fragment-url-import-error">
       {{ error }}
     </p>
   </div>

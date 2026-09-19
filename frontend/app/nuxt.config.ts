@@ -15,12 +15,12 @@ export default defineNuxtConfig({
   // Render as a pure client-side SPA that talks to the cat-factory backend.
   ssr: false,
 
-  // The board is a single dark-themed surface (neutral is mapped to `slate` and
-  // every component is hand-styled in slate). Pin Nuxt UI's color mode to dark so
-  // its own chrome (modals, inputs, selects, dropdowns) matches instead of
-  // following the visitor's system preference and rendering light/white overlays.
+  // Colour mode follows the visitor's system preference and the in-app appearance switcher
+  // (`AppearanceSwitcher`); `@nuxtjs/color-mode` (registered by Nuxt UI) persists the pick. Dark
+  // is the fallback for a browser that reports no preference, since the board was designed dark
+  // first. Every colour in the SPA is a theme token, so both modes render from the same markup.
   colorMode: {
-    preference: 'dark',
+    preference: 'system',
     fallback: 'dark',
   },
 
@@ -129,11 +129,16 @@ export default defineNuxtConfig({
           name: 'viewport',
           content: 'width=device-width, initial-scale=1, viewport-fit=cover',
         },
-        // Tint the mobile browser chrome / iOS Safari address bar to the board
-        // surface so the app doesn't sit under a mismatched white bar. Matches
-        // `--board-bg`. (Home-screen installability — manifest, standalone status
-        // bar, touch icons — is deferred to the initiative's E2/A5-icons follow-up.)
-        { name: 'theme-color', content: '#0b1020' },
+        // Tint the mobile browser chrome / iOS Safari address bar to the board canvas for the FIRST
+        // paint, one value per OS colour scheme (the default theme's `--app-bg-canvas`). The app's
+        // own mode can differ from the OS, so `plugins/appearance.client.ts` overrides both entries
+        // with the live canvas colour once it runs: unhead dedupes a `theme-color` meta by name AND
+        // media, so the plugin's pair (same media, no key) lands on these two tags. The loading
+        // shell leaves them alone: a hand-edited tag stops matching unhead's hydration and is left
+        // behind as a duplicate. (Home-screen installability is deferred to the initiative's
+        // E2/A5-icons follow-up.)
+        { name: 'theme-color', content: '#020618', media: '(prefers-color-scheme: dark)' },
+        { name: 'theme-color', content: '#e2e8f0', media: '(prefers-color-scheme: light)' },
       ],
     },
   },

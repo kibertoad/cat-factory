@@ -86,7 +86,7 @@ async function removeDep(dep: Block) {
       icon="i-lucide-git-branch"
       :title="t('inspector.dependencies.empty')"
     />
-    <div v-if="!runnable" class="text-[10px] text-amber-400">
+    <div v-if="!runnable" class="text-[10px] text-app-warning-400">
       {{ t('inspector.dependencies.blocked') }}
     </div>
   </InspectorSection>

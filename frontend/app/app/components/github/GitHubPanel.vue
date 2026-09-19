@@ -429,7 +429,7 @@ async function merge(pr: GitHubPullRequest) {
                   <UIcon
                     :name="selected.has(r.githubId) ? 'i-lucide-check-square' : 'i-lucide-square'"
                     class="h-4 w-4 shrink-0"
-                    :class="selected.has(r.githubId) ? 'text-primary-400' : 'text-dimmed'"
+                    :class="selected.has(r.githubId) ? 'text-primary' : 'text-dimmed'"
                   />
                   <span class="truncate text-sm text-default">{{ r.owner }}/{{ r.name }}</span>
                   <UBadge v-if="r.private" color="neutral" variant="subtle" size="sm">
@@ -509,7 +509,7 @@ async function merge(pr: GitHubPullRequest) {
                   <ULink
                     :to="github.repoUrl(repo.githubId) ?? '#'"
                     target="_blank"
-                    class="text-[11px] text-primary-400 hover:underline"
+                    class="text-[11px] text-primary hover:underline"
                   >
                     {{ t('github.panel.open') }}
                   </ULink>
@@ -669,7 +669,7 @@ async function merge(pr: GitHubPullRequest) {
                 <ULink
                   :to="github.pullUrl(pr) ?? '#'"
                   target="_blank"
-                  class="text-[11px] text-primary-400 hover:underline"
+                  class="text-[11px] text-primary hover:underline"
                 >
                   {{ t('github.panel.open') }}
                 </ULink>
@@ -707,7 +707,7 @@ async function merge(pr: GitHubPullRequest) {
                 <ULink
                   :to="github.issueUrl(issue) ?? '#'"
                   target="_blank"
-                  class="text-[11px] text-primary-400 hover:underline"
+                  class="text-[11px] text-primary hover:underline"
                 >
                   {{ t('github.panel.open') }}
                 </ULink>
