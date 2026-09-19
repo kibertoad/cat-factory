@@ -109,6 +109,7 @@ a tracker document](../../CLAUDE.md).
 - [Frontend extension mechanism](./frontend-extension-mechanism.md)
 - [GitLab product-surface parity](./gitlab-ui-parity.md)
 - [Global search and deep-linkable routing](./global-search-and-deep-links.md)
+- [Headless app core (framework-neutral client, reducer and contribution vocabulary)](./headless-app-core.md)
 - [Mobile-friendly frontend](./mobile-friendly-frontend.md)
 - [UX papercuts](./ux-papercuts.md) ·
   [quality-of-life pass](./ux-qol-pass.md)

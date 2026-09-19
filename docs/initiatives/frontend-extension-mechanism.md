@@ -297,6 +297,10 @@ existing branch changes; the fan-out refactor stays a separate future initiative
 Consumer handlers typically patch the consumer's own Pinia store, which its windows and
 panels read: the layer's stores are not writable from consumer code.
 
+The [headless app core](./headless-app-core.md) proposal places this branch on the shared
+reducer instead of the Vue `onMessage` switch, so every binding gets it; if that lands first, this
+slice is delivered there.
+
 ### 7. Already-landed seams (documented, not re-built)
 
 For completeness: these are DONE (modular-vue slices 1–5) and slice A's authoring guide
