@@ -77,6 +77,29 @@ async function resolvePair(
   )
 }
 
+/**
+ * Reload with the given colour-mode preference and wait for the theme to be READY, not merely for
+ * `load`. Nuxt UI's `--ui-color-<alias>-<n>` ramps are not in a stylesheet: its runtime colours
+ * plugin injects them from `app.config` after Vue mounts, and every role token (`--ui-bg` is
+ * `var(--ui-color-neutral-900)`) chains into them. `page.reload()` resolves on the load event,
+ * which on a client-only SPA fires BEFORE that plugin runs, so a read in that window sees an
+ * unresolvable `var()` and computes to `rgb(0, 0, 0)`: the flake CI caught on shard 2. Wait on the
+ * exact precondition (the ramp variable resolves on `<html>`) rather than on an element id.
+ */
+async function reloadInColorMode(
+  page: import('@playwright/test').Page,
+  mode: 'light' | 'dark',
+): Promise<void> {
+  await page.evaluate((value) => localStorage.setItem('nuxt-color-mode', value), mode)
+  await page.reload()
+  await page.waitForFunction(
+    () =>
+      getComputedStyle(document.documentElement)
+        .getPropertyValue('--ui-color-neutral-900')
+        .trim() !== '',
+  )
+}
+
 test.describe('palette token parity', () => {
   // `seededBoard` opens a real, error-free board (the `pageErrors` auto fixture would
   // fail us on an incidental exception from a bare unseeded load). The parity check only
@@ -143,8 +166,7 @@ test.describe('palette token parity', () => {
     seededBoard,
   }) => {
     void seededBoard
-    await page.evaluate(() => localStorage.setItem('nuxt-color-mode', 'dark'))
-    await page.reload()
+    await reloadInColorMode(page, 'dark')
     // `text-highlighted` is #fff in dark; assert it too, separately from the neutral-shade set.
     const [hi, white] = await resolvePair(page, 'var(--ui-text-highlighted)', 'rgb(255,255,255)')
     expect(hi, '--ui-text-highlighted must be white in dark (== text-white)').toBe(white)
