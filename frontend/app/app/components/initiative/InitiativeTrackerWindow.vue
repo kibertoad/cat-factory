@@ -393,7 +393,7 @@ const { requestClose } = useUnsavedGuard({
                 </p>
                 <div class="mt-2.5 flex flex-wrap gap-2">
                   <button
-                    class="rounded bg-primary px-2.5 py-1 text-[11px] font-medium text-white hover:bg-primary/90 disabled:opacity-50"
+                    class="rounded bg-primary/90 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-primary disabled:opacity-50"
                     :disabled="initiatives.controlling"
                     data-testid="initiative-checkpoint-resume"
                     @click="checkpointControl('resume')"
@@ -625,7 +625,7 @@ const { requestClose } = useUnsavedGuard({
               </label>
               <div class="flex gap-2">
                 <button
-                  class="rounded bg-primary px-2 py-1 text-[11px] text-white hover:bg-primary/90 disabled:opacity-50"
+                  class="rounded bg-primary/90 px-2 py-1 text-[11px] text-white hover:bg-primary disabled:opacity-50"
                   :disabled="initiatives.curating"
                   data-testid="initiative-policy-save"
                   @click="savePolicy"
@@ -714,7 +714,7 @@ const { requestClose } = useUnsavedGuard({
                     />
                     <div class="flex gap-2">
                       <button
-                        class="rounded bg-primary px-2 py-1 text-[11px] text-white hover:bg-primary/90 disabled:opacity-50"
+                        class="rounded bg-primary/90 px-2 py-1 text-[11px] text-white hover:bg-primary disabled:opacity-50"
                         :disabled="initiatives.curating || !promoteForm.phaseId"
                         data-testid="initiative-promote-submit"
                         @click="submitPromote(f)"

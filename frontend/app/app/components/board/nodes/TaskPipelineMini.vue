@@ -162,7 +162,7 @@ const ITEM_ICON: Record<string, string> = {
           !reviews.isBackground(s.agentKind, props.taskId)
         "
         type="button"
-        class="mt-1 flex w-full items-center justify-center gap-1 rounded bg-app-warning-500 px-1.5 py-0.5 text-[9px] font-semibold text-app-warning-950 transition hover:bg-app-warning-400"
+        class="mt-1 flex w-full items-center justify-center gap-1 rounded bg-app-warning-500 px-1.5 py-0.5 text-[9px] font-semibold text-app-warning-50 dark:text-app-warning-950 transition hover:bg-app-warning-400"
         @click.stop="ui.openApprovalDetail(instance.id, s.approval.id)"
       >
         <UIcon name="i-lucide-shield-check" class="h-2.5 w-2.5" />

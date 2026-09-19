@@ -81,10 +81,7 @@ function outcomeClass(outcome: EnvironmentProbeReport['operations'][number]['out
 </script>
 
 <template>
-  <div
-    class="space-y-2 rounded border border-white/5 bg-white/[0.02] p-2"
-    data-testid="env-probe-report"
-  >
+  <div class="space-y-2 rounded border border-default bg-muted p-2" data-testid="env-probe-report">
     <p class="text-[11px] font-medium" :class="verdictClass" data-testid="env-probe-verdict">
       {{ verdictLabel }}
     </p>

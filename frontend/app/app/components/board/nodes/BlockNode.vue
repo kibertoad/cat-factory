@@ -292,7 +292,7 @@ const ITEM_ICON: Record<string, string> = {
          held the only render of the "Shared" badge, which now lives in the header below. -->
     <div
       class="relative overflow-visible rounded-2xl border bg-default/95 shadow-2xl backdrop-blur"
-      :class="[selected ? 'border-white' : 'border-muted', pulseClass]"
+      :class="[selected ? 'border-inverted' : 'border-muted', pulseClass]"
     >
       <div class="h-1.5 w-full rounded-t-2xl" :style="{ backgroundColor: accent }" />
       <!-- bootstrap-in-progress banner -->

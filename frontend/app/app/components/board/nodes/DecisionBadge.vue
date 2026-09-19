@@ -18,7 +18,7 @@ const displayLabel = computed(() => props.label ?? t('board.decisionBadge.decisi
 <template>
   <button
     type="button"
-    class="board-pulse flex items-center gap-1 rounded-full bg-app-warning-500 px-2 py-0.5 text-xs font-semibold text-app-warning-950 shadow-lg transition hover:bg-app-warning-400"
+    class="board-pulse flex items-center gap-1 rounded-full bg-app-warning-500 px-2 py-0.5 text-xs font-semibold text-app-warning-50 dark:text-app-warning-950 shadow-lg transition hover:bg-app-warning-400"
     @click.stop="$emit('open')"
   >
     <UIcon :name="icon" class="h-3.5 w-3.5" />

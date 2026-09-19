@@ -313,7 +313,7 @@ function selectTask() {
     data-testid="task-card"
     class="nodrag w-full cursor-pointer rounded-lg border bg-app-950/70 p-2 text-start transition"
     :class="[
-      selected ? 'border-white' : 'border-muted hover:border-app-500',
+      selected ? 'border-inverted' : 'border-muted hover:border-app-500',
       task.status === 'pr_ready' ? 'board-pulse-green' : attention ? 'board-pulse' : '',
     ]"
     @click.stop="selectTask"

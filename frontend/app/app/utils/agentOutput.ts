@@ -79,7 +79,7 @@ const md = new MarkdownIt({
 }).use(sourceLinePlugin)
 
 const HEADINGS = new Set(['H1', 'H2', 'H3', 'H4', 'H5', 'H6'])
-const LINK_CLASS = 'text-primary underline decoration-primary/40 hover:text-primary'
+const LINK_CLASS = 'text-primary underline decoration-primary/40 hover:decoration-primary'
 
 // A second markdown-it instance for INLINE prose rendering (a rationale, a synthesis,
 // a summary) — the same secure config as `md` (html: false, so raw HTML is escaped and
