@@ -8573,6 +8573,9 @@
       "system": "Systemowy",
       "light": "Jasny",
       "dark": "Ciemny"
+    },
+    "theme": {
+      "section": "Motyw"
     }
   }
 }

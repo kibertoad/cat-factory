@@ -1336,6 +1336,9 @@ importers:
       '@modular-vue/vue':
         specifier: ^1.4.1
         version: 1.4.1(@modular-frontend/core@0.6.0)(vue@3.5.43(typescript@6.0.3))
+      '@nuxt/fonts':
+        specifier: ^0.14.0
+        version: 0.14.0(aws4fetch@1.0.20)(db0@0.3.4)(esbuild@0.28.1)(ioredis@5.11.1(supports-color@10.2.2))(magic-string@1.4.1)(magicast@0.5.5)(oxc-parser@0.141.0)(rolldown@1.2.9)(rollup@4.63.3)(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
       '@nuxt/ui':
         specifier: ^4.11.1
         version: 4.11.1(767a751a14a234bf25bed666975e64d1)
