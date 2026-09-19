@@ -86,21 +86,24 @@ const FIXED_ALIAS = new RegExp(`(?<![\\w-])${PREFIX}-(?:${ALIASES.join('|')})-${
 // utility would silently apply nothing.
 const RETIRED_PRIMARY = new RegExp(`(?<![\\w-])${PREFIX}-app-primary-${SHADE}`, 'g')
 
-// A colour LITERAL outside the token system: a hex colour (6 or 8 digits, or 3 when it is clearly a
-// value and not a template slot like `#add`), or an `rgb()` / `hsl()` function. These hide in SVG
+// A colour LITERAL outside the token system: a hex colour (6 or 8 digits, or 3 or 4 when a value
+// terminator follows, so a template slot like `#add` or an ID selector like `#app {` stays clear
+// while `#fff;` and `#fff8;` do not), or an `rgb()` / `hsl()` function. These hide in SVG
 // `fill`/`stroke` attributes, scoped `<style>` blocks and keyframes, where no utility class exists
 // for the utility rules above to catch. The pre-JS loading shell is HTML and is not scanned; a line
 // that must carry a literal (the first-paint `theme-color` fallbacks) says why with
 // `colour-literal-ok:`.
 const COLOUR_LITERAL =
-  /#[0-9a-f]{6}(?:[0-9a-f]{2})?\b|#[0-9a-f]{3}(?=["');,\s])|\b(?:rgba?|hsla?)\(/gi
+  /#[0-9a-f]{6}(?:[0-9a-f]{2})?\b|#[0-9a-f]{3,4}(?=["');,\s])|\b(?:rgba?|hsla?)\(/gi
 // Appending a hex alpha to a colour value: valid on a hex, garbage on a `var(--app-hue-*)`, and
 // nothing in the type system tells the two apart. `tint()` (`utils/colorTint.ts`) is the seam.
 const ALPHA_CONCAT =
   /\b(?:color|accent)\s*\+\s*['"][0-9a-f]{2}['"]|\$\{[^}]*(?:color|accent)[^}]*\}[0-9a-f]{2}/gi
 const LITERAL_OK = 'colour-literal-ok:'
-// Comment lines may name a colour when explaining one; the guard reads code, not prose.
-const COMMENT_LINE = /^\s*(?:\/\/|\/?\*|<!--|#)/
+// Comment lines may name a colour when explaining one; the guard reads code, not prose. `#` is NOT
+// a comment marker here: in the scanned `.css` and `.vue` files a line starting with `#` is an ID
+// selector, and `#app { color: #ff0000 }` must not slip past.
+const COMMENT_LINE = /^\s*(?:\/\/|\/?\*|<!--)/
 
 /** Every offending utility on a line (deduplicated), or [] for a clean line. Pure, so the
  * companion test can drive it with fixture strings. */

@@ -97,7 +97,11 @@ describe('findColourLiterals', () => {
     ])
     assert.deepEqual(findColourLiterals("  frontend: { accent: '#60a5fa' },"), ['#60a5fa'])
     assert.deepEqual(findColourLiterals('  background: #fff;'), ['#fff'])
+    assert.deepEqual(findColourLiterals('  color: #fff8;'), ['#fff8'])
     assert.deepEqual(findColourLiterals('  --x: #0b1020ff;'), ['#0b1020ff'])
+    // An ID selector is code, not a comment: the literal inside it must still be caught.
+    assert.deepEqual(findColourLiterals('#app { color: #ff0000; }'), ['#ff0000'])
+    assert.deepEqual(findColourLiterals('#board .edge { stroke: rgb(1 2 3); }'), ['rgb('])
   })
 
   it('flags a hex alpha appended to a colour value', () => {
@@ -115,6 +119,8 @@ describe('findColourLiterals', () => {
     assert.deepEqual(findColourLiterals("  fill: 'var(--app-hue-blue)',"), [])
     assert.deepEqual(findColourLiterals('<template #body>'), [])
     assert.deepEqual(findColourLiterals('<template #add>'), [])
+    assert.deepEqual(findColourLiterals('#app {'), [])
+    assert.deepEqual(findColourLiterals('#__nuxt { height: 100%; }'), [])
     assert.deepEqual(findColourLiterals('marker-end="url(#task-arrow-done)"'), [])
     assert.deepEqual(findColourLiterals('// the canvas was the literal #0b1020 navy'), [])
     assert.deepEqual(
