@@ -53,9 +53,10 @@ The proposal is smaller than it looks because the hard half exists:
   `resolvePanels` and `defineOverlayHost` / `resolveOverlay` as framework-free primitives; React,
   Vue and Angular bindings sit on top. Cat-factory consumes the Vue binding.
 
-So the work is: split the frontend-only types out of `~/types/domain`, package what exists, state
-a stability promise on the new package, own the i18n key map as data, and split the Vue-coupled
-slot entries into data plus per-framework pairing.
+So the work is: settle who owns the app-local types the api modules import, retire the last raw
+`$fetch` routes, lift the auth flow out of the store, package what exists, state a stability
+promise on the new package, own the i18n key map as data, and split the Vue-coupled slot entries
+into a framework-neutral spec plus a per-framework pairing.
 
 ## Why not the two surfaces that already exist
 
@@ -74,14 +75,15 @@ slot entries into data plus per-framework pairing.
 ## Vocabulary
 
 - **App core**: `@cat-factory/app-core`, the new framework-free package: the contract sender, the
-  token holder, the stream (ticket, socket, reconcile), the reducer, and the data half of every
-  contribution slot.
+  auth flow, the version handshake, the stream (ticket, socket, reconcile), the reducer, and the
+  framework-neutral half of every contribution slot.
 - **Binding**: a package that renders app core's state with one framework and pairs its id
   vocabulary with components. `@cat-factory/app` (Vue/Nuxt) is the first binding.
 - **Targets seam**: `WorkspaceEventTargets`, the callback interface a binding implements to
   receive routed events. The frozen contract for live updates.
-- **Contribution spec**: the JSON-safe half of a slot entry (id, order, `when`, labels, action
-  ids). **Pairing**: the framework half, an id mapped to a component inside a binding.
+- **Contribution spec**: the framework-neutral half of a slot entry (id, order, labels, action
+  ids, and its predicates and resolvers as plain functions). It ships as code in app core and never
+  crosses a wire. **Pairing**: the framework half, an id mapped to a component inside a binding.
 
 ## Target pattern
 
@@ -112,6 +114,23 @@ the second tier: it is at 0.355.1 and is reshaped in ordinary PRs. This proposal
 The new tier is `@cat-factory/app-core`: promised to bindings, internal audience, no deprecation
 windows, no dual shapes.
 
+What is promised, exactly: that a change to app core's exported surface is ANNOUNCED. What is not
+promised: that a binding built against one app core runs against a backend built against another.
+App core re-exports the contract types and validates every response against them, so the
+deployment contract is LOCKSTEP: a binding and the backend it talks to ship from the same contracts
+version, the way the Vue layer and the backend already do inside one deployment. Cross-version
+pairs are unsupported, and the alternative (app core owning stable DTOs and adapting the unstable
+contracts behind them) is a second copy of about 620 shapes, the exact thing "Deliberately NOT
+pursued" rejects for a generated client.
+
+Unsupported must fail as a statement, not as a decode error somewhere in a store. Today nothing
+carries a version: neither `/health` nor the workspace snapshot reports one, so a mismatch surfaces
+as an `UnexpectedResponseError` with no cause named. The handshake: the backend reports the
+`@cat-factory/contracts` version it was built with on the bootstrap snapshot (the first thing app
+core reads), app core carries the version it was built against, and a mismatch puts the client
+into a typed `incompatible` state with both versions, before any store is touched. A binding
+renders that state; it never sees a half-hydrated board.
+
 What that means in daily work:
 
 - A PR that reshapes a route contract or an event member changes none of its habits, as long as
@@ -130,10 +149,16 @@ behind it.
 ### D2. `@cat-factory/app-core` holds exactly what every binding needs and nothing a binding owns
 
 Contents: `createApiClient` / `createSend` (the `wretch` + `@toad-contracts/frontend-http-client`
-composition from `composables/api/client.ts`), the 62 per-resource api modules, a token holder
-with the 401 re-gate hook, the ticket mint plus socket lifecycle with reconnect and reconcile
-(today's `useWorkspaceStream.ts` minus `ref` and `onScopeDispose`), `applyWorkspaceEvent`,
-`createCoarseRefresh`, `WorkspaceEventTargets`, and the contribution specs from D4.
+composition from `composables/api/client.ts`), the 62 per-resource api modules, the auth flow as
+a framework-neutral state machine (everything `stores/auth.ts`, `stores/auth/session.ts` and
+`stores/auth/mothership.ts` do today: login by provider, redirect-fragment token consumption, SSO
+refusal handling, the mothership session exchange, invite redemption, local PAT login, the 401
+re-gate, and the bootstrap ordering between them, with the store as a target rather than the
+owner), the ticket mint plus socket lifecycle with reconnect and reconcile (today's
+`useWorkspaceStream.ts` minus `ref` and `onScopeDispose`), `applyWorkspaceEvent`,
+`createCoarseRefresh`, `WorkspaceEventTargets`, the version handshake from D1, and the
+contribution specs from D4. The auth flow is in scope because it is the most failure-prone client
+logic there is; a "token holder" alone would make every binding rewrite it.
 
 Not in it: stores, components, i18n rendering, routing, anything that names a framework. Two guards
 enforce that, because an import check alone cannot see the seam growing Vue-shaped assumptions:
@@ -166,8 +191,20 @@ Three options were weighed:
 | Coarse public SSE only                              | Cannot drive a live board                                                                                         | Too little |
 | Freeze `WorkspaceEventTargets` and ship the reducer | A binding implements 16 upserts on its own store and never switches on `type`                                     | Chosen     |
 
-A new event member arrives as a new OPTIONAL callback, so the seam is additive by construction. An
-event with no target logs one stated warning through the injected logger, never a silent drop.
+A new event member arrives as a new OPTIONAL callback, so the seam is additive by construction.
+Optional cannot mean ignorable: a socket that stays open never runs the reconnect reconcile, so a
+binding that lacks a target would keep stale state for the rest of the session. The correctness
+rule is therefore: `refreshBoard` (the debounced coarse reconcile, already a target today) is the
+ONE REQUIRED callback, and an event with no target, whether unknown to this app core or not
+implemented by this binding, routes to it and logs one stated warning. The binding then re-reads
+the snapshot and is current again, at the cost of one refresh.
+
+That fallback is sound because the workspace snapshot hydrates the state behind every current
+member except `llmCall`, which is append-only activity: a missed one is a gap in a feed, not a
+stale entity. A future member whose state lives outside the snapshot ships with a typed
+invalidation target of its own, never as optional-only; the version handshake in D1 covers the
+case where a binding is too old to know the member exists at all.
+
 Entity shapes still come from contracts, which keeps its pre-1.0 freedom (D1); a reshape reaches a
 binding as an app-core changeset line.
 
@@ -177,21 +214,28 @@ stream events for free and the Vue `onMessage` switch never grows a branch. ADR 
 fan-out a choke point to leave alone "until a dedicated event-fan-out initiative"; this is that
 initiative.
 
-### D4. Every slot entry splits into a JSON-safe spec and a per-binding pairing
+### D4. Every slot entry splits into a framework-neutral spec and a per-binding pairing
 
-`AppSlots` ([`modular/slots.ts`](../../frontend/app/app/modular/slots.ts)) today mixes data and
-`Component` references in one object per entry. Following the upstream rule that a component
-cannot cross the wire, each slot splits:
+`AppSlots` ([`modular/slots.ts`](../../frontend/app/app/modular/slots.ts)) today mixes
+framework-neutral logic and `Component` references in one object per entry. The specs are NOT
+JSON: inspector panels carry `when(block)`, nav and external tools carry `gate` predicates,
+external tools carry a URL resolver (`ExternalToolUrlResolver` in `modular/external-tools.ts`),
+tutorial steps carry `when(gates)`. They are executable, and this proposal keeps them so: a spec is
+code that ships in app core, imports only contracts and the engine, and is called by any binding.
+Nothing here crosses a wire, so no condition vocabulary is invented. The ONE spec that does cross a
+wire is `agentKinds`, which the backend already declares as a per-workspace `RemoteModuleManifest`
+under upstream's own JSON-safe subset, and it stays there.
 
-| Slot                                                    | Spec (app core)                                                                       | Pairing (binding)                          |
-| ------------------------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------ |
-| `nav`                                                   | id, label key, group, `NavActionId`, gate predicate inputs                            | icon component, action handler map         |
-| `resultViews`, `taskTypeFormPanels`                     | id                                                                                    | `ComponentEntry` id → component            |
-| `inspectorPanels`                                       | id, order, `when(block)` (already pure in `panels/inspector.logic.ts`)                | `PanelEntry` id → component                |
-| `appOverlays`                                           | id, title key                                                                         | `OverlayEntry` id → component              |
-| `taskTypes`, `externalTools`, `workspaceMetadataFields` | already data                                                                          | none                                       |
-| `agentKinds`                                            | stays in contracts: the backend declares it as a per-workspace `RemoteModuleManifest` | `ComponentEntry` for the result view       |
-| `tutorialTours`                                         | step ids and anchors                                                                  | none needed; a binding may ignore the slot |
+| Slot                                   | Spec (app core, code)                                                                 | Pairing (binding)                          |
+| -------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------ |
+| `nav`                                  | id, label key, group, `NavActionId`, `gate(gates)`                                    | icon component, action handler map         |
+| `resultViews`, `taskTypeFormPanels`    | id                                                                                    | `ComponentEntry` id → component            |
+| `inspectorPanels`                      | id, order, `when(block)` (already separate in `panels/inspector.logic.ts`)            | `PanelEntry` id → component                |
+| `appOverlays`                          | id, title key                                                                         | `OverlayEntry` id → component              |
+| `externalTools`                        | id, label key, `gate(gates)`, URL resolver                                            | none                                       |
+| `taskTypes`, `workspaceMetadataFields` | already framework-neutral                                                             | none                                       |
+| `agentKinds`                           | stays in contracts: the backend declares it as a per-workspace `RemoteModuleManifest` | `ComponentEntry` for the result view       |
+| `tutorialTours`                        | step ids, anchors, `when(gates)`                                                      | none needed; a binding may ignore the slot |
 
 The spec resolvers (`resolvePanels`, `resolveComponentRegistry`, `resolveOverlay`) are already
 `@modular-frontend/core` exports; app core re-exports them from its peer (D2) rather than
@@ -217,8 +261,18 @@ by `pickPostLoginRedirect` in
 [`loginFlow.ts`](../../backend/packages/server/src/modules/auth/loginFlow.ts): the requested
 `redirect` is honoured when it is same-origin, listed in `AUTH_ALLOWED_REDIRECT_ORIGINS`, or a
 loopback host (`localhost`, `127.0.0.0/8`, `::1`); otherwise the request origin wins. So a second
-UI origin works when the operator lists it, and a UI on the developer's own machine (a VS Code or
-JetBrains webview, a local dev server) works with no configuration.
+UI origin works when the operator lists it, and a local development server on the developer's own
+machine works with no configuration.
+
+That does NOT cover an IDE webview directly. A VS Code or JetBrains webview is not an `http(s)`
+origin, and `pickPostLoginRedirect` refuses any other protocol before it looks at the host, so the
+backend can never redirect into one. The design for that case needs no backend change: the
+extension host opens a short-lived loopback listener and names it as the `redirect`, which IS a
+loopback `http` origin and so is honoured; the listener receives the fragment, and the host hands
+the token to the webview over the IDE's own message channel, never through a URL. The security
+boundary is the same one the loopback rule already accepts: the token lands in a process on the
+developer's machine that the developer runs. The React proof (D7) is a browser app and does not
+exercise this path; an IDE binding is its own slice with this design as its starting point.
 
 Two traps a binding author has to know:
 
@@ -287,16 +341,23 @@ Ranked by how much each depends on this split rather than on modularity in gener
 
 ## Per-slice status
 
-| #   | Slice                                 | Deliverable                                                                                                                                                                                                                                                                               | Status | PR  |
-| --- | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | --- |
-| 0   | Tracker                               | This document                                                                                                                                                                                                                                                                             | done   | —   |
-| 1   | Split `~/types/domain`                | Contracts re-exports separated from the frontend-only types (`AgentArchetype`, `TaskTypeMeta`, `LodLevel`, `AuthUser`, the palette and level-of-detail types) that 16 api modules import today; no behaviour change                                                                       | todo   | —   |
-| 2   | Extract `@cat-factory/app-core`       | `frontend/app-core` with client, api modules, token holder, stream lifecycle, reducer, coarse refresh; SPA consumes it; dependency guard; headless suite in the no-DB lane; engine as peer; the [new published package checklist](../internal/releases.md#adding-a-new-published-package) | todo   | —   |
-| 3   | Targets seam as the promised contract | `WorkspaceEventTargets` documented as the stability surface; unknown-event warning; slice F (`custom` member + handler registration) on the reducer                                                                                                                                       | todo   | —   |
-| 4   | Slot spec / pairing split             | Each `AppSlots` row from D4 split; `registerAppModule` accepts spec + Vue pairing; consumer example updated                                                                                                                                                                               | todo   | —   |
-| 5   | i18n key map and `en` reference       | Reason-to-key map as data in app core with its exhaustiveness check; `en` catalog shipped from app core; Vue layer loads it unchanged                                                                                                                                                     | todo   | —   |
-| 6   | Read-only React proof (out of tree)   | Sign-in, board hydrate, live stream on a Zustand store; findings recorded here; app-core gaps filed as slices                                                                                                                                                                             | todo   | —   |
-| 7   | Promise written down; `1.0.0`; ADR    | Changeset rule in the `app-core` README; `frontend/app/README.md` points at app core; app core publishes `1.0.0`; tracker converts to an ADR                                                                                                                                              | todo   | —   |
+| #   | Slice                                 | Deliverable                                                                                                                                                                                                                                                                                                                                                  | Status | PR  |
+| --- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------ | --- |
+| 0   | Tracker                               | This document                                                                                                                                                                                                                                                                                                                                                | done   | —   |
+| 1   | Type ownership                        | 37 api modules import 28 `~/types/*` modules today (`domain`, `execution`, `merge`, `tracker`, `notifications`, ...). Each type is placed: a wire shape moves to contracts, a client shape moves with the api modules, a frontend-only type (`AgentArchetype`, `TaskTypeMeta`, `LodLevel`, palette, level of detail) stays in the layer; no behaviour change | todo   | —   |
+| 2   | Retire the raw `$fetch` routes        | The three api modules still on Nuxt's `$fetch` (`auth.ts` ticket mint, `provisioningLogs.ts`, `visualConfirm.ts` blob upload) move to contract routes, or to a plain `fetch` where a body is binary; `ApiHttp` leaves `api/context.ts`                                                                                                                       | todo   | —   |
+| 3   | Auth flow as a state machine          | `stores/auth.ts`, `stores/auth/session.ts` and `stores/auth/mothership.ts` reduced to a Pinia target over a framework-neutral flow (login by provider, redirect-fragment consumption, SSO refusal, mothership exchange, invite redemption, PAT login, 401 re-gate, bootstrap order); headless tests                                                          | todo   | —   |
+| 4   | Extract `@cat-factory/app-core`       | `frontend/app-core` with client, api modules, auth flow, stream lifecycle, reducer, coarse refresh; SPA consumes it; dependency guard; headless suite in the no-DB lane; engine as peer; the [new published package checklist](../internal/releases.md#adding-a-new-published-package)                                                                       | todo   | —   |
+| 5   | Version handshake                     | Backend reports its contracts version on the bootstrap snapshot; app core compares against the version it was built with and enters a typed `incompatible` state on mismatch; conformance assertion on both runtimes                                                                                                                                         | todo   | —   |
+| 6   | Targets seam as the promised contract | `WorkspaceEventTargets` documented as the stability surface with `refreshBoard` required; unhandled event routes to it with one warning; slice F (`custom` member + handler registration) on the reducer                                                                                                                                                     | todo   | —   |
+| 7   | Slot spec / pairing split             | Each `AppSlots` row from D4 split; `registerAppModule` accepts spec + Vue pairing; consumer example updated                                                                                                                                                                                                                                                  | todo   | —   |
+| 8   | i18n key map and `en` reference       | Reason-to-key map as data in app core with its exhaustiveness check; `en` catalog shipped from app core; Vue layer loads it unchanged                                                                                                                                                                                                                        | todo   | —   |
+| 9   | Read-only React proof (out of tree)   | Sign-in, board hydrate, live stream on a Zustand store; findings recorded here; app-core gaps filed as slices                                                                                                                                                                                                                                                | todo   | —   |
+| 10  | Promise written down; `1.0.0`; ADR    | Changeset rule and the lockstep contract in the `app-core` README; `frontend/app/README.md` points at app core; app core publishes `1.0.0`; tracker converts to an ADR                                                                                                                                                                                       | todo   | —   |
+
+Slices 1 to 3 are prerequisites the extraction cannot skip: without them the move drags Nuxt's
+`$fetch`, a Pinia-shaped auth flow and two dozen layer-local type modules into the package, and
+the dependency guard fails on day one.
 
 ## Conventions & gotchas (carry between iterations)
 
@@ -305,8 +366,15 @@ Ranked by how much each depends on this split rather than on modularity in gener
   `applyWorkspaceEvent` and `coarseRefresh` already do it.
 - **A component reference in app core is a bug**, whatever the framework. If a spec needs to
   select a component, it carries a string id and the binding pairs it.
-- **Additive means optional.** A new targets callback is optional with a stated warning when
-  absent; a required callback is a binding-facing break and gets the changeset line (D1).
+- **Additive means optional, and optional means "falls back to `refreshBoard`".** A new targets
+  callback is optional; an event with no target reconciles coarsely and warns once. A member whose
+  state is outside the snapshot ships with its own invalidation target (D3). Making an existing
+  callback required is a binding-facing break and gets the changeset line (D1).
+- **Lockstep is the deployment contract.** A binding ships from the same contracts version as the
+  backend it talks to; the handshake makes a violation a stated `incompatible`, never a decode
+  error (D1).
+- **A spec is code, not JSON.** Predicates and resolvers stay functions in app core; only
+  `agentKinds` crosses a wire, and it does so under upstream's JSON-safe manifest subset (D4).
 - **One engine copy.** App core never lists `@modular-frontend/core` as a direct dependency and
   never re-implements a resolver it exports; a binding never imports the engine itself (D2).
 - **Keep the co-evolution loop.** A primitive app core needs that `@modular-frontend/core` lacks
@@ -330,8 +398,9 @@ Ranked by how much each depends on this split rather than on modularity in gener
 
 1. `frontend/app-core` as the location (D2), or a different home for a UI-side package with no
    Nuxt dependency?
-2. D1 states a third stability tier and keeps `contracts` free. Is that the right line, or should
-   the promise also name the subset of contracts that app core re-exports?
+2. D1 states a third stability tier, keeps `contracts` free, and makes lockstep the deployment
+   contract with a version handshake on the bootstrap snapshot. Is the snapshot the right carrier,
+   or should the version ride an unauthenticated meta route so a binding can check before login?
 3. Slice F: agree to land it as the reducer-side registration in app core rather than a branch in
    the Vue `onMessage` switch (D3)?
 4. Contribution vocabulary ownership: agent-kind presentation in contracts, everything else in
