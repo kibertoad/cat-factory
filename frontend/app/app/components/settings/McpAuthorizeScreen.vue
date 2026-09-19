@@ -146,11 +146,11 @@ function backToApp() {
   >
     <div class="w-full max-w-md rounded-xl border border-default bg-default/80 p-8 backdrop-blur">
       <template v-if="screen === 'loading'">
-        <UIcon name="i-lucide-loader" class="mx-auto h-10 w-10 animate-spin text-primary-400" />
+        <UIcon name="i-lucide-loader" class="mx-auto h-10 w-10 animate-spin text-primary" />
       </template>
 
       <template v-else-if="screen === 'failed'">
-        <UIcon name="i-lucide-alert-triangle" class="mx-auto mb-3 h-10 w-10 text-red-400" />
+        <UIcon name="i-lucide-alert-triangle" class="mx-auto mb-3 h-10 w-10 text-app-error-400" />
         <h1
           class="mb-1 text-center text-lg font-semibold text-highlighted"
           data-testid="mcp-authorize-failed"
@@ -164,7 +164,7 @@ function backToApp() {
       </template>
 
       <template v-else>
-        <UIcon name="i-lucide-plug-zap" class="mx-auto mb-3 h-10 w-10 text-primary-400" />
+        <UIcon name="i-lucide-plug-zap" class="mx-auto mb-3 h-10 w-10 text-primary" />
         <h1 class="mb-1 text-center text-lg font-semibold text-highlighted">
           {{ t('mcpAuthorize.title', { client: clientName }) }}
         </h1>
@@ -178,7 +178,7 @@ function backToApp() {
           {{ t('mcpAuthorize.subtitle', { client: clientName, origin: redirectOrigin }) }}
         </p>
 
-        <div v-if="!workspaces.length" class="mb-6 text-center text-sm text-amber-300">
+        <div v-if="!workspaces.length" class="mb-6 text-center text-sm text-app-warning-300">
           {{ t('mcpAuthorize.noWorkspaces') }}
         </div>
 
@@ -211,7 +211,7 @@ function backToApp() {
                host rather than acted on: raising the grant stays a thing a person does. -->
           <p
             v-if="requestedScope"
-            class="mb-6 text-xs text-amber-300"
+            class="mb-6 text-xs text-app-warning-300"
             data-testid="mcp-authorize-requested-scope"
           >
             {{
@@ -225,7 +225,7 @@ function backToApp() {
 
         <p
           v-if="decisionError"
-          class="mb-4 text-center text-sm break-words text-red-400"
+          class="mb-4 text-center text-sm break-words text-app-error-400"
           data-testid="mcp-authorize-decision-error"
         >
           {{ decisionError }}

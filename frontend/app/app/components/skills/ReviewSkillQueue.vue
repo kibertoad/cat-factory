@@ -97,7 +97,7 @@ function toggle(id: string) {
                   <UIcon
                     :name="selectedSet.has(s.id) ? 'i-lucide-check' : 'i-lucide-plus'"
                     class="mt-0.5 h-4 w-4 shrink-0"
-                    :class="selectedSet.has(s.id) ? 'text-primary-400' : 'text-dimmed'"
+                    :class="selectedSet.has(s.id) ? 'text-primary' : 'text-dimmed'"
                   />
                   <span class="min-w-0 flex-1">
                     <span class="block truncate">{{ s.name }}</span>
@@ -112,7 +112,10 @@ function toggle(id: string) {
               </p>
             </div>
 
-            <p v-if="atCap" class="border-t border-default px-2 py-1.5 text-[11px] text-amber-400">
+            <p
+              v-if="atCap"
+              class="border-t border-default px-2 py-1.5 text-[11px] text-app-warning-400"
+            >
               {{ t('skills.reviewQueue.capped', { max: MAX_REVIEW_SKILLS }) }}
             </p>
             <div class="flex justify-end border-t border-default p-1.5">

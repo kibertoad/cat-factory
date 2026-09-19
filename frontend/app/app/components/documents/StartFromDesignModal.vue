@@ -158,7 +158,7 @@ function stage() {
         <!-- No connected design source: the flow cannot run, and saying which step is missing
              beats an input that refuses every paste. The connect route is withheld from a member
              for the same reason the picker's add tier is: connecting stores a credential. -->
-        <p v-if="sources.length === 0" class="text-sm text-amber-300">
+        <p v-if="sources.length === 0" class="text-sm text-app-warning-300">
           {{ t('documents.startFromDesign.noSource') }}
         </p>
 
@@ -188,7 +188,7 @@ function stage() {
             data-testid="start-from-design-resolved"
           >
             <div class="flex items-center gap-2 text-sm text-highlighted">
-              <UIcon name="i-lucide-frame" class="h-4 w-4 text-primary-400" />
+              <UIcon name="i-lucide-frame" class="h-4 w-4 text-primary" />
               <span class="truncate">{{ row.label }}</span>
             </div>
             <p v-if="row.trimmed" class="text-[11px] text-muted">
@@ -196,20 +196,20 @@ function stage() {
             </p>
             <!-- Its own line, in amber: a trim resolves the same page, a drop widens ONE frame to
                  the whole design file, and the second is what a designer needs to see. -->
-            <p v-if="row.droppedScope" class="text-[11px] text-amber-300">
+            <p v-if="row.droppedScope" class="text-[11px] text-app-warning-300">
               {{ t('documents.startFromDesign.widened', { scope: row.droppedScope }) }}
             </p>
             <p v-if="row.unchecked && target" class="text-[11px] text-muted">
               {{ t('documents.startFromDesign.unchecked') }}
             </p>
-            <p v-else-if="row.unchecked" class="text-[11px] text-amber-300">
+            <p v-else-if="row.unchecked" class="text-[11px] text-app-warning-300">
               {{ t('documents.startFromDesign.uncheckedAmbiguous') }}
             </p>
           </div>
 
           <p
             v-else-if="state.status === 'rejected'"
-            class="text-sm text-amber-300"
+            class="text-sm text-app-warning-300"
             data-testid="start-from-design-rejected"
           >
             {{ t('documents.startFromDesign.rejected') }}

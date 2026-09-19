@@ -218,7 +218,7 @@ const noSignInMethod = computed(
   >
     <div class="w-full max-w-sm rounded-xl border border-default bg-default/80 p-8 backdrop-blur">
       <div class="mb-6 text-center">
-        <UIcon name="i-lucide-layout-dashboard" class="mx-auto mb-3 h-10 w-10 text-primary-400" />
+        <UIcon name="i-lucide-layout-dashboard" class="mx-auto mb-3 h-10 w-10 text-primary" />
         <h1 class="mb-1 text-lg font-semibold text-highlighted">{{ t('auth.login.appTitle') }}</h1>
         <p class="text-sm text-muted">
           <template v-if="mode === 'forgot'">{{ t('auth.login.forgotSubtitle') }}</template>
@@ -244,7 +244,7 @@ const noSignInMethod = computed(
         <p class="px-1 text-xs text-muted">{{ t('auth.mothership.hint') }}</p>
         <p
           v-if="auth.mothershipError"
-          class="px-1 text-xs text-rose-400"
+          class="px-1 text-xs text-app-error-400"
           data-testid="mothership-error"
         >
           {{ t('auth.mothership.error') }}
@@ -292,14 +292,14 @@ const noSignInMethod = computed(
               :href="tokenCreateUrl(p)"
               target="_blank"
               rel="noopener noreferrer"
-              class="text-xs text-primary-400 hover:underline"
+              class="text-xs text-primary hover:underline"
             >
               {{ t('auth.localMode.createToken', { provider: PROVIDER_LABELS[p] }) }}
             </a>
           </div>
         </template>
 
-        <p v-if="patError" class="text-sm text-rose-400">{{ patError }}</p>
+        <p v-if="patError" class="text-sm text-app-error-400">{{ patError }}</p>
       </div>
 
       <div
@@ -411,7 +411,7 @@ const noSignInMethod = computed(
           class="w-full"
           data-testid="login-password"
         />
-        <p v-if="error" class="text-sm text-rose-400" data-testid="login-error">{{ error }}</p>
+        <p v-if="error" class="text-sm text-app-error-400" data-testid="login-error">{{ error }}</p>
         <UButton
           block
           size="lg"
@@ -428,7 +428,7 @@ const noSignInMethod = computed(
               <template #signUp>
                 <button
                   type="button"
-                  class="text-primary-400 hover:underline"
+                  class="text-primary hover:underline"
                   @click="setMode('signup')"
                 >
                   {{ t('auth.login.signUp') }}
@@ -441,7 +441,7 @@ const noSignInMethod = computed(
               <template #signIn>
                 <button
                   type="button"
-                  class="text-primary-400 hover:underline"
+                  class="text-primary hover:underline"
                   @click="setMode('login')"
                 >
                   {{ t('auth.login.signIn') }}
@@ -451,7 +451,7 @@ const noSignInMethod = computed(
           </template>
         </p>
         <p v-if="mode === 'login'" class="text-center text-xs text-muted">
-          <button type="button" class="text-primary-400 hover:underline" @click="setMode('forgot')">
+          <button type="button" class="text-primary hover:underline" @click="setMode('forgot')">
             {{ t('auth.login.forgotPassword') }}
           </button>
         </p>
@@ -500,7 +500,7 @@ const noSignInMethod = computed(
             size="lg"
             class="w-full"
           />
-          <p v-if="remotePatError" class="text-sm text-rose-400">{{ remotePatError }}</p>
+          <p v-if="remotePatError" class="text-sm text-app-error-400">{{ remotePatError }}</p>
           <UButton
             block
             size="lg"
@@ -521,7 +521,7 @@ const noSignInMethod = computed(
               :href="tokenCreateUrl(remotePatProvider)"
               target="_blank"
               rel="noopener noreferrer"
-              class="text-xs text-primary-400 hover:underline"
+              class="text-xs text-primary hover:underline"
             >
               {{
                 t('auth.localMode.createToken', { provider: PROVIDER_LABELS[remotePatProvider] })
@@ -562,13 +562,13 @@ const noSignInMethod = computed(
             size="lg"
             class="w-full"
           />
-          <p v-if="error" class="text-sm text-rose-400">{{ error }}</p>
+          <p v-if="error" class="text-sm text-app-error-400">{{ error }}</p>
           <UButton block size="lg" color="primary" type="submit" :loading="busy">
             {{ t('auth.login.sendResetLink') }}
           </UButton>
         </template>
         <p class="text-center text-xs text-muted">
-          <button type="button" class="text-primary-400 hover:underline" @click="setMode('login')">
+          <button type="button" class="text-primary hover:underline" @click="setMode('login')">
             {{ t('auth.login.backToSignIn') }}
           </button>
         </p>

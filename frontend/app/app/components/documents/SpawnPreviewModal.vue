@@ -179,7 +179,7 @@ async function spawn() {
             class="rounded-lg border border-default bg-default/60 p-3"
           >
             <div class="flex items-center gap-2">
-              <UIcon name="i-lucide-box" class="h-4 w-4 text-primary-400" />
+              <UIcon name="i-lucide-box" class="h-4 w-4 text-primary" />
               <span class="text-sm font-semibold text-highlighted">{{ frame.title }}</span>
               <UBadge variant="subtle" size="sm" color="neutral">{{ frame.type }}</UBadge>
             </div>
@@ -197,7 +197,7 @@ async function spawn() {
 
             <div v-for="(mod, mi) in frame.modules" :key="`m-${mi}`" class="mt-2 ps-4">
               <div class="flex items-center gap-1.5 text-xs font-medium text-default">
-                <UIcon name="i-lucide-folder" class="h-3.5 w-3.5 text-amber-400" />
+                <UIcon name="i-lucide-folder" class="h-3.5 w-3.5 text-app-warning-400" />
                 {{ mod.name }}
               </div>
               <ul class="mt-1 space-y-1 ps-5">

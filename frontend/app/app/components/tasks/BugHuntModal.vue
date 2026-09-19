@@ -419,12 +419,12 @@ const STATUS_KEYS: Record<BugHuntAnalysisStatus, string> = {
             />
             <!-- The service holds no repository, so there are no issues to read. Said here
                  rather than in a toast: it invalidates the scope named right above it. -->
-            <p v-if="huntNeedsRepo" class="mt-1 text-xs text-amber-400">
+            <p v-if="huntNeedsRepo" class="mt-1 text-xs text-app-warning-400">
               {{ t('bugHunt.boardNeedsRepo') }}
             </p>
             <!-- A board read that failed for a fixable reason (unreachable site, expired
                  token): named, so the user isn't left with an empty picker and no cause. -->
-            <p v-else-if="boardsFailure" class="mt-1 text-xs text-amber-400">
+            <p v-else-if="boardsFailure" class="mt-1 text-xs text-app-warning-400">
               {{ t('bugHunt.boardsFailed', { reason: boardsFailure }) }}
             </p>
           </UFormField>
@@ -437,7 +437,7 @@ const STATUS_KEYS: Record<BugHuntAnalysisStatus, string> = {
             <!-- Not a disabled input: this tracker's provider never sends the predicate, so a box
                  still holding a value would read as a filter that is on. What it CAN narrow by is
                  named instead, since the alternative is a hunt over every open issue. -->
-            <p v-else class="text-xs text-amber-400">
+            <p v-else class="text-xs text-app-warning-400">
               {{ t('bugHunt.issueTypeUnsupported', { tracker: descriptor?.label ?? '' }) }}
             </p>
           </UFormField>
@@ -506,7 +506,7 @@ const STATUS_KEYS: Record<BugHuntAnalysisStatus, string> = {
               {{ t('bugHunt.viaModel', { model: hunt.result!.model }) }}
             </span>
           </p>
-          <p v-if="hunt.result!.truncated" class="text-xs text-amber-400">
+          <p v-if="hunt.result!.truncated" class="text-xs text-app-warning-400">
             {{ t('bugHunt.truncated', { count: hunt.result!.scanned }) }}
           </p>
 

@@ -1,7 +1,14 @@
 export default defineAppConfig({
   ui: {
+    // The alias map every token in `tokens.css` resolves through: `primary` for the brand, the
+    // four status aliases for the mirrored status tokens, `neutral` for the role tokens.
     colors: {
       primary: 'indigo',
+      secondary: 'violet',
+      success: 'emerald',
+      info: 'sky',
+      warning: 'amber',
+      error: 'rose',
       neutral: 'slate',
     },
     // Give every overlay the same layered surface the agent-run-details reader uses: the deep

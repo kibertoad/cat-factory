@@ -506,8 +506,10 @@ function exportJson() {
         aria-modal="true"
       >
         <header class="flex items-center gap-3 border-b border-default px-6 py-4">
-          <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sky-500/15">
-            <UIcon name="i-lucide-activity" class="h-5 w-5 text-sky-400" />
+          <div
+            class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-app-info-500/15"
+          >
+            <UIcon name="i-lucide-activity" class="h-5 w-5 text-app-info-400" />
           </div>
           <div class="min-w-0">
             <h1 class="truncate text-base font-semibold text-highlighted">
@@ -636,7 +638,7 @@ function exportJson() {
                       <template v-if="totals.cacheReadTokens > 0">
                         <span class="text-app-600"> · </span>
                         <span
-                          class="text-emerald-400/80"
+                          class="text-app-success-400/80"
                           :title="t('observability.summary.cacheReadHint')"
                         >
                           {{
@@ -649,7 +651,7 @@ function exportJson() {
                       <template v-if="totals.cacheWriteTokens > 0">
                         <span class="text-app-600"> · </span>
                         <span
-                          class="text-amber-400/80"
+                          class="text-app-warning-400/80"
                           :title="t('observability.summary.cacheWriteHint')"
                         >
                           {{
@@ -812,7 +814,7 @@ function exportJson() {
             </p>
             <div
               v-else-if="error"
-              class="flex flex-col items-center gap-3 rounded-lg border border-dashed border-rose-900/60 py-6 text-center text-sm text-rose-400"
+              class="flex flex-col items-center gap-3 rounded-lg border border-dashed border-app-error-900/60 py-6 text-center text-sm text-app-error-400"
             >
               {{ error }}
               <UButton
@@ -858,7 +860,7 @@ function exportJson() {
                   :id="callRowId(c.id)"
                   :key="c.id"
                   class="overflow-hidden rounded-xl border border-default bg-default/40"
-                  :class="!c.ok ? 'border-rose-900/60' : ''"
+                  :class="!c.ok ? 'border-app-error-900/60' : ''"
                 >
                   <button
                     class="flex w-full items-center gap-3 px-4 py-2.5 text-start transition hover:bg-default/70"
@@ -940,7 +942,7 @@ function exportJson() {
                   </button>
 
                   <div v-if="expanded[c.id]" class="border-t border-default px-4 py-3 space-y-3">
-                    <p v-if="c.errorMessage" class="text-[12px] text-rose-400">
+                    <p v-if="c.errorMessage" class="text-[12px] text-app-error-400">
                       {{ c.errorMessage }}
                     </p>
                     <div class="flex flex-wrap gap-x-5 gap-y-1 text-[11px] text-dimmed">
@@ -957,10 +959,10 @@ function exportJson() {
                       <span v-if="c.cacheReadTokens > 0 || c.cacheWriteTokens > 0">{{
                         t('observability.call.fresh', { tokens: c.promptTokens })
                       }}</span>
-                      <span v-if="c.cacheReadTokens > 0" class="text-emerald-400">{{
+                      <span v-if="c.cacheReadTokens > 0" class="text-app-success-400">{{
                         t('observability.call.cacheRead', { tokens: c.cacheReadTokens })
                       }}</span>
-                      <span v-if="c.cacheWriteTokens > 0" class="text-amber-400">{{
+                      <span v-if="c.cacheWriteTokens > 0" class="text-app-warning-400">{{
                         t('observability.call.cacheWrite', { tokens: c.cacheWriteTokens })
                       }}</span>
                       <span>{{
@@ -1065,7 +1067,7 @@ function exportJson() {
             </p>
             <div
               v-else-if="contextError && !contextSnapshots.length"
-              class="flex flex-col items-center gap-3 rounded-lg border border-dashed border-rose-900/60 py-8 text-center text-sm text-rose-400"
+              class="flex flex-col items-center gap-3 rounded-lg border border-dashed border-app-error-900/60 py-8 text-center text-sm text-app-error-400"
             >
               {{ t('observability.contextError') }}
               <UButton
@@ -1197,7 +1199,7 @@ function exportJson() {
               </span>
               <span
                 class="inline-flex items-center gap-1.5"
-                :class="searchAvailability.available ? 'text-emerald-300' : 'text-muted'"
+                :class="searchAvailability.available ? 'text-app-success-300' : 'text-muted'"
               >
                 <UIcon
                   :name="searchAvailability.available ? 'i-lucide-globe' : 'i-lucide-globe-lock'"

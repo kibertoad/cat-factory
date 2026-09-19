@@ -35,17 +35,17 @@ watch(
 const tone = computed(() => {
   const g = grading.value
   if (!g || g.grade == null) return 'text-muted'
-  if (g.grade >= 5) return 'text-emerald-400'
-  if (g.grade >= 4) return 'text-lime-400'
-  if (g.grade === 3) return 'text-amber-400'
-  return 'text-rose-400'
+  if (g.grade >= 5) return 'text-app-success-400'
+  if (g.grade >= 4) return 'text-app-hue-lime'
+  if (g.grade === 3) return 'text-app-warning-400'
+  return 'text-app-error-400'
 })
 </script>
 
 <template>
   <section v-if="grading" class="rounded-xl border border-default bg-default/50 p-4">
     <div class="flex items-center gap-2">
-      <UIcon name="i-lucide-sparkles" class="h-4 w-4 text-teal-400" />
+      <UIcon name="i-lucide-sparkles" class="h-4 w-4 text-app-hue-teal" />
       <h3 class="text-sm font-semibold text-default">{{ t('kaizen.grading.title') }}</h3>
       <span class="ms-auto flex items-center gap-1.5 text-xs">
         <template v-if="grading.status === 'scheduled'">
@@ -53,12 +53,12 @@ const tone = computed(() => {
           <span class="text-muted">{{ t('kaizen.status.scheduled') }}</span>
         </template>
         <template v-else-if="grading.status === 'running'">
-          <UIcon name="i-lucide-loader-circle" class="h-3.5 w-3.5 animate-spin text-teal-400" />
-          <span class="text-teal-300">{{ t('kaizen.status.grading') }}</span>
+          <UIcon name="i-lucide-loader-circle" class="h-3.5 w-3.5 animate-spin text-app-hue-teal" />
+          <span class="text-app-hue-teal">{{ t('kaizen.status.grading') }}</span>
         </template>
         <template v-else-if="grading.status === 'failed'">
-          <UIcon name="i-lucide-circle-alert" class="h-3.5 w-3.5 text-rose-400" />
-          <span class="text-rose-400">{{ t('kaizen.status.failed') }}</span>
+          <UIcon name="i-lucide-circle-alert" class="h-3.5 w-3.5 text-app-error-400" />
+          <span class="text-app-error-400">{{ t('kaizen.status.failed') }}</span>
         </template>
         <template v-else>
           <span class="font-semibold" :class="tone">{{
@@ -82,7 +82,7 @@ const tone = computed(() => {
           <li v-for="(r, i) in grading.recommendations" :key="i">{{ r }}</li>
         </ul>
       </div>
-      <p v-else class="mt-2 text-[11px] text-emerald-400/80">
+      <p v-else class="mt-2 text-[11px] text-app-success-400/80">
         {{ t('kaizen.noImprovements') }}
       </p>
       <p v-if="grading.graderModel" class="mt-2 text-[10px] text-app-600">
@@ -90,7 +90,7 @@ const tone = computed(() => {
       </p>
     </template>
 
-    <p v-else-if="grading.status === 'failed'" class="mt-2 text-[11px] text-rose-400/80">
+    <p v-else-if="grading.status === 'failed'" class="mt-2 text-[11px] text-app-error-400/80">
       {{ grading.error ?? t('kaizen.failedFallback') }}
     </p>
   </section>

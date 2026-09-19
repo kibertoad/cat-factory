@@ -69,17 +69,14 @@ function backToApp() {
       class="w-full max-w-sm rounded-xl border border-default bg-default/80 p-8 text-center backdrop-blur"
     >
       <template v-if="state === 'working'">
-        <UIcon
-          name="i-lucide-loader"
-          class="mx-auto mb-3 h-10 w-10 animate-spin text-primary-400"
-        />
+        <UIcon name="i-lucide-loader" class="mx-auto mb-3 h-10 w-10 animate-spin text-primary" />
         <h1 class="mb-1 text-lg font-semibold text-highlighted">
           {{ t('settings.toolServers.oauth.callback.working') }}
         </h1>
       </template>
 
       <template v-else-if="state === 'done'">
-        <UIcon name="i-lucide-check-circle" class="mx-auto mb-3 h-10 w-10 text-emerald-400" />
+        <UIcon name="i-lucide-check-circle" class="mx-auto mb-3 h-10 w-10 text-app-success-400" />
         <h1
           class="mb-1 text-lg font-semibold text-highlighted"
           data-testid="mcp-oauth-callback-done"
@@ -95,7 +92,7 @@ function backToApp() {
       </template>
 
       <template v-else>
-        <UIcon name="i-lucide-alert-triangle" class="mx-auto mb-3 h-10 w-10 text-red-400" />
+        <UIcon name="i-lucide-alert-triangle" class="mx-auto mb-3 h-10 w-10 text-app-error-400" />
         <h1
           class="mb-1 text-lg font-semibold text-highlighted"
           data-testid="mcp-oauth-callback-failed"

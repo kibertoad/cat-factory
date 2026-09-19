@@ -52,16 +52,16 @@ function openConfig(event: MouseEvent) {
   <Transition name="fade">
     <div
       v-if="show"
-      class="pointer-events-auto w-full max-w-3xl rounded-2xl border border-sky-500/50 bg-sky-950/90 p-4 shadow-xl backdrop-blur"
+      class="pointer-events-auto w-full max-w-3xl rounded-2xl border border-app-info-500/50 bg-app-info-950/90 p-4 shadow-xl backdrop-blur"
       role="status"
       aria-live="polite"
       data-testid="default-test-env-banner"
     >
       <div class="flex items-start gap-3">
-        <UIcon name="i-lucide-flask-conical" class="mt-0.5 h-7 w-7 shrink-0 text-sky-400" />
+        <UIcon name="i-lucide-flask-conical" class="mt-0.5 h-7 w-7 shrink-0 text-app-info-400" />
         <div class="min-w-0 flex-1">
           <div class="flex items-start justify-between gap-3">
-            <h2 class="text-sm font-semibold text-sky-100">
+            <h2 class="text-sm font-semibold text-app-info-100">
               {{ t('layout.defaultTestEnvBanner.title') }}
             </h2>
             <UButton
@@ -74,7 +74,7 @@ function openConfig(event: MouseEvent) {
               @click="ui.dismissDefaultProvision()"
             />
           </div>
-          <p class="mt-1 text-[13px] text-sky-200/90">
+          <p class="mt-1 text-[13px] text-app-info-200/90">
             {{ t('layout.defaultTestEnvBanner.body') }}
           </p>
           <div class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
@@ -92,7 +92,7 @@ function openConfig(event: MouseEvent) {
             <!-- The URL itself, shown so it can be read and copied, not just clicked. -->
             <a
               :href="configUrl"
-              class="min-w-0 truncate font-mono text-[11px] text-sky-300/80 underline decoration-dotted underline-offset-2 hover:text-sky-200"
+              class="min-w-0 truncate font-mono text-[11px] text-app-info-300/80 underline decoration-dotted underline-offset-2 hover:text-app-info-200"
               data-testid="default-test-env-url"
               @click="openConfig"
             >

@@ -244,7 +244,7 @@ async function disconnect(v: SubscriptionVendor) {
       />
     </div>
 
-    <p v-for="(line, i) in renewals" :key="i" class="text-sm text-amber-400/90">{{ line }}</p>
+    <p v-for="(line, i) in renewals" :key="i" class="text-sm text-app-warning-400/90">{{ line }}</p>
 
     <!-- vendor picker -->
     <UFormField :label="t('personalSubscriptions.vendorField')">
@@ -292,11 +292,11 @@ async function disconnect(v: SubscriptionVendor) {
         </UFormField>
       </div>
       <div class="flex items-center justify-end gap-3">
-        <p v-if="savedNotice" class="flex items-center gap-1.5 text-sm text-emerald-400">
+        <p v-if="savedNotice" class="flex items-center gap-1.5 text-sm text-app-success-400">
           <UIcon name="i-lucide-check" class="size-4" />
           {{ savedNotice }}
         </p>
-        <p v-else-if="disabledReason" class="text-sm text-rose-400">{{ disabledReason }}</p>
+        <p v-else-if="disabledReason" class="text-sm text-app-error-400">{{ disabledReason }}</p>
         <UButton
           :loading="busy"
           :disabled="disabledReason !== null"

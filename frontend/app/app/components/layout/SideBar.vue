@@ -13,6 +13,7 @@
 // independently from the role / tier switchers at the top and the rail toggle.
 import { useEventListener, useScrollLock } from '@vueuse/core'
 import BoardSwitcher from '~/components/layout/BoardSwitcher.vue'
+import AppearanceSwitcher from '~/components/layout/AppearanceSwitcher.vue'
 import LanguageSwitcher from '~/components/layout/LanguageSwitcher.vue'
 import UiModeSwitcher from '~/components/layout/UiModeSwitcher.vue'
 import UiRoleSwitcher from '~/components/layout/UiRoleSwitcher.vue'
@@ -278,6 +279,7 @@ watch(
     </div>
 
     <div class="mt-auto space-y-2">
+      <AppearanceSwitcher :collapsed="railed" />
       <LanguageSwitcher :collapsed="railed" />
       <UserMenu :collapsed="railed" />
     </div>

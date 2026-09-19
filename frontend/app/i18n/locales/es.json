@@ -8566,5 +8566,13 @@
     "territories": {
       "heading": "Territorios"
     }
+  },
+  "appearance": {
+    "switcher": "Apariencia",
+    "mode": {
+      "system": "Sistema",
+      "light": "Claro",
+      "dark": "Oscuro"
+    }
   }
 }

@@ -64,9 +64,9 @@ const supersededLabel = computed(() => {
 
 /** Cool→hot bar colour by severity (low = sky, mid = amber, high = rose). */
 function barClass(n: number): string {
-  if (n >= 0.66) return 'bg-rose-500'
-  if (n >= 0.33) return 'bg-amber-500'
-  return 'bg-sky-500'
+  if (n >= 0.66) return 'bg-app-error-500'
+  if (n >= 0.33) return 'bg-app-warning-500'
+  return 'bg-app-info-500'
 }
 </script>
 

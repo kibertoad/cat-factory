@@ -220,7 +220,7 @@ function unhide(presetId: string) {
       <p class="text-[11px] font-semibold uppercase tracking-wide text-muted">
         {{ t('settings.riskPolicy.hidden.heading') }}
       </p>
-      <p v-if="suppressionsFailed" class="text-[11px] text-amber-400">
+      <p v-if="suppressionsFailed" class="text-[11px] text-app-warning-400">
         {{ t('settings.riskPolicy.hidden.loadFailed') }}
       </p>
       <div

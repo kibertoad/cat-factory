@@ -153,7 +153,7 @@ async function remove() {
 
     <div
       v-if="handler && !editing"
-      class="space-y-2 rounded-md border border-emerald-500/30 bg-emerald-500/5 p-2.5"
+      class="space-y-2 rounded-md border border-app-success-500/30 bg-app-success-500/5 p-2.5"
       data-testid="cloudflare-handler-connected"
     >
       <div class="flex items-start justify-between gap-2">
@@ -162,7 +162,7 @@ async function remove() {
           disabled
           size="lg"
           :label="t('settings.infrastructure.handler.connectionEstablished')"
-          :ui="{ label: 'text-[13px] font-semibold text-emerald-300' }"
+          :ui="{ label: 'text-[13px] font-semibold text-app-success-300' }"
         />
         <div class="flex items-center gap-1">
           <UButton
@@ -301,7 +301,7 @@ async function remove() {
       <p
         v-if="testResult"
         class="text-[11px]"
-        :class="testResult.ok ? 'text-emerald-300' : 'text-rose-300'"
+        :class="testResult.ok ? 'text-app-success-300' : 'text-app-error-300'"
       >
         {{ testResult.message }}
       </p>

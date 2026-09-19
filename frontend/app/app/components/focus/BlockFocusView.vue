@@ -116,7 +116,7 @@ function openApprovalFor(approvalId: string) {
       <UIcon name="i-lucide-chevron-right" class="h-4 w-4 text-app-600 rtl:-scale-x-100" />
       <div
         class="flex h-9 w-9 items-center justify-center rounded-lg"
-        :style="{ backgroundColor: typeMeta.accent + '22' }"
+        :style="{ backgroundColor: tint(typeMeta.accent) }"
       >
         <UIcon :name="typeMeta.icon" class="h-5 w-5" :style="{ color: typeMeta.accent }" />
       </div>

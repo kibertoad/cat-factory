@@ -88,10 +88,10 @@ const riskLabel = computed(() => {
 })
 
 const SEVERITY_CLASS: Record<NonNullable<SecurityFinding['severity']>, string> = {
-  low: 'bg-slate-500/15 text-slate-300',
-  medium: 'bg-amber-500/15 text-amber-300',
-  high: 'bg-orange-500/15 text-orange-300',
-  critical: 'bg-rose-500/15 text-rose-300',
+  low: 'bg-elevated text-toned',
+  medium: 'bg-app-warning-500/15 text-app-warning-300',
+  high: 'bg-app-hue-orange/15 text-app-hue-orange',
+  critical: 'bg-app-error-500/15 text-app-error-300',
 }
 
 const headerTitle = computed(() =>
@@ -105,7 +105,7 @@ const headerTitle = computed(() =>
   <ResultWindowShell
     :open="open"
     icon="i-lucide-shield-check"
-    icon-class="bg-rose-500/15 text-rose-300"
+    icon-class="bg-app-error-500/15 text-app-error-300"
     :title="headerTitle"
     :subtitle="meta?.description ?? t('acme.securityReport.subtitle')"
     :step-ref="{ instanceId, stepIndex }"
@@ -116,7 +116,7 @@ const headerTitle = computed(() =>
     <template #header-extras>
       <span
         v-if="riskLabel"
-        class="rounded-md bg-rose-500/15 px-2 py-0.5 text-[11px] font-semibold text-rose-300"
+        class="rounded-md bg-app-error-500/15 px-2 py-0.5 text-[11px] font-semibold text-app-error-300"
         data-testid="acme-security-risk"
       >
         {{ t('acme.securityReport.riskBadge', { risk: riskLabel }) }}
@@ -129,27 +129,27 @@ const headerTitle = computed(() =>
         <MarkdownProse
           v-if="assessment?.summary"
           :text="assessment.summary"
-          class="mb-4 text-[13px] leading-relaxed text-slate-300"
+          class="mb-4 text-[13px] leading-relaxed text-toned"
         />
         <MarkdownProse
           v-else-if="step?.output"
           :text="step.output"
-          class="mb-4 text-[13px] leading-relaxed text-slate-300"
+          class="mb-4 text-[13px] leading-relaxed text-toned"
         />
 
         <template v-if="findings.length">
-          <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+          <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-dimmed">
             {{ t('acme.securityReport.findingsHeading') }}
           </h3>
           <ul class="flex flex-col gap-2">
             <li
               v-for="(finding, i) in findings"
               :key="i"
-              class="rounded-lg border border-slate-800 bg-slate-950/40 p-3"
+              class="rounded-lg border border-default bg-app-950/40 p-3"
               data-testid="acme-security-finding"
             >
               <div class="flex items-center gap-2">
-                <span class="text-[13px] font-medium text-slate-200">
+                <span class="text-[13px] font-medium text-default">
                   {{ finding.title ?? t('acme.securityReport.untitledFinding') }}
                 </span>
                 <span
@@ -160,7 +160,7 @@ const headerTitle = computed(() =>
                   {{ t(`acme.securityReport.severity.${finding.severity}`) }}
                 </span>
               </div>
-              <p v-if="finding.detail" class="mt-1 text-[12px] leading-relaxed text-slate-400">
+              <p v-if="finding.detail" class="mt-1 text-[12px] leading-relaxed text-muted">
                 {{ finding.detail }}
               </p>
             </li>
@@ -169,7 +169,7 @@ const headerTitle = computed(() =>
 
         <div
           v-else-if="!assessment?.summary && !step?.output"
-          class="flex h-full flex-col items-center justify-center gap-2 text-center text-slate-400"
+          class="flex h-full flex-col items-center justify-center gap-2 text-center text-muted"
         >
           <UIcon name="i-lucide-shield-check" class="h-8 w-8 opacity-40" />
           <p class="text-sm">{{ t('acme.securityReport.empty') }}</p>
@@ -178,7 +178,7 @@ const headerTitle = computed(() =>
 
       <!-- Sidebar: the SHARED run-metadata block — reused verbatim, never reinvented. -->
       <aside
-        class="hidden w-60 shrink-0 flex-col gap-4 border-s border-slate-800 bg-slate-900/50 px-4 py-4 lg:flex"
+        class="hidden w-60 shrink-0 flex-col gap-4 border-s border-default bg-default/50 px-4 py-4 lg:flex"
       >
         <StepRunMeta
           v-if="step"

@@ -259,7 +259,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
           </p>
           <button
             v-if="state === 'error' && current"
-            class="text-[12px] text-amber-300 hover:underline"
+            class="text-[12px] text-app-warning-300 hover:underline"
             @click="props.blobs.retry(current.artifactId)"
           >
             {{ t('common.retry') }}

@@ -452,11 +452,11 @@ function setSize(value: InstanceSize) {
          provisions the compose stack, rather than editing the raw path inline. -->
     <div
       v-if="provisionType === 'docker-compose'"
-      class="flex items-center justify-between gap-2 rounded border border-primary-800/40 bg-primary-950/20 p-2"
+      class="flex items-center justify-between gap-2 rounded border border-primary/40 bg-primary/10 p-2"
       data-testid="env-setup-nudge"
     >
       <div class="min-w-0">
-        <p class="text-[11px] font-medium text-primary-200/90">
+        <p class="text-[11px] font-medium text-primary/90">
           {{ t('inspector.testConfig.envWizard.title') }}
         </p>
         <p class="text-[11px] leading-snug text-dimmed">
@@ -495,19 +495,19 @@ function setSize(value: InstanceSize) {
         {{ t('inspector.testConfig.detect.hint') }}
       </p>
 
-      <p v-if="detectError" class="text-[11px] text-rose-300/80">
+      <p v-if="detectError" class="text-[11px] text-app-error-300/80">
         {{ detectError }}
       </p>
 
       <template v-if="detectResult && !detecting">
         <p
           v-if="!detectResult.detected && detectResult.provisioning.type !== 'custom'"
-          class="text-[11px] text-amber-300/80"
+          class="text-[11px] text-app-warning-300/80"
         >
           {{ t('inspector.testConfig.detect.none') }}
         </p>
         <template v-else>
-          <p class="text-[11px] text-emerald-300/80">
+          <p class="text-[11px] text-app-success-300/80">
             {{
               t('inspector.testConfig.detect.applied', {
                 type: provisionTypeLabel(detectResult.provisioning.type),
@@ -602,7 +602,11 @@ function setSize(value: InstanceSize) {
               :key="i"
               class="flex items-start gap-1.5 text-[11px] leading-snug text-dimmed"
             >
-              <span :class="n.confidence === 'high' ? 'text-emerald-400/70' : 'text-amber-400/70'">
+              <span
+                :class="
+                  n.confidence === 'high' ? 'text-app-success-400/70' : 'text-app-warning-400/70'
+                "
+              >
                 {{
                   n.confidence === 'high'
                     ? t('inspector.testConfig.detect.confidenceHigh')
@@ -772,7 +776,7 @@ function setSize(value: InstanceSize) {
           :placeholder="t('inspector.testConfig.customManifestIdPlaceholder')"
           @update:model-value="(v: string) => setCustomManifestId(v)"
         />
-        <p v-else class="text-[11px] leading-snug text-amber-300/80">
+        <p v-else class="text-[11px] leading-snug text-app-warning-300/80">
           {{ t('inspector.testConfig.customNoTypes') }}
         </p>
         <p class="text-[11px] leading-snug text-dimmed">
@@ -822,21 +826,21 @@ function setSize(value: InstanceSize) {
         <p class="text-[11px] leading-snug text-dimmed">
           {{ t('inspector.testConfig.generateManifest.hint') }}
         </p>
-        <p v-if="manifestRepairError" class="text-[11px] text-rose-300/80">
+        <p v-if="manifestRepairError" class="text-[11px] text-app-error-300/80">
           {{ t('inspector.testConfig.generateManifest.error') }}
         </p>
         <p
           v-else-if="manifestRepairJob"
           class="text-[11px]"
           :class="{
-            'text-sky-300/80': manifestRepairJob.status === 'running',
-            'text-emerald-300/80': manifestRepairJob.status === 'succeeded',
-            'text-rose-300/80': manifestRepairJob.status === 'failed',
+            'text-app-info-300/80': manifestRepairJob.status === 'running',
+            'text-app-success-300/80': manifestRepairJob.status === 'succeeded',
+            'text-app-error-300/80': manifestRepairJob.status === 'failed',
           }"
         >
           {{ t(`inspector.testConfig.generateManifest.status.${manifestRepairJob.status}`) }}
         </p>
-        <p v-else-if="manifestRepairJobId" class="text-[11px] text-sky-300/80">
+        <p v-else-if="manifestRepairJobId" class="text-[11px] text-app-info-300/80">
           {{ t('inspector.testConfig.generateManifest.dispatched') }}
         </p>
       </div>

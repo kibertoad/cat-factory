@@ -107,7 +107,7 @@ function choose(id: string) {
               <UIcon
                 v-if="!modelValue"
                 name="i-lucide-check"
-                class="h-4 w-4 shrink-0 text-primary-400"
+                class="h-4 w-4 shrink-0 text-primary"
               />
             </button>
           </li>
@@ -125,7 +125,7 @@ function choose(id: string) {
               <UIcon
                 v-if="modelValue === p.id"
                 name="i-lucide-check"
-                class="h-4 w-4 shrink-0 text-primary-400"
+                class="h-4 w-4 shrink-0 text-primary"
               />
             </button>
           </li>

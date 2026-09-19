@@ -383,7 +383,7 @@ function fieldHelp(key: string): string | undefined {
     >
       <div>
         <span class="font-medium text-default">{{ connection.label }}</span>
-        <div class="text-[11px] text-emerald-400">
+        <div class="text-[11px] text-app-success-400">
           {{ t('settings.providerConnection.connectedAt', { baseUrl: connection.baseUrl }) }}
         </div>
       </div>
@@ -400,7 +400,7 @@ function fieldHelp(key: string): string | undefined {
     <!-- Mandatory-fields warning (mirrors the banner) -->
     <div
       v-if="descriptor.missingRequired.length"
-      class="rounded-md border border-amber-500/40 bg-amber-950/40 px-3 py-2 text-xs text-amber-200"
+      class="rounded-md border border-app-warning-500/40 bg-app-warning-950/40 px-3 py-2 text-xs text-app-warning-200"
     >
       {{
         t('settings.providerConnection.missingConfig', {
@@ -433,7 +433,7 @@ function fieldHelp(key: string): string | undefined {
             : t('settings.providerConnection.form.connect')
         }}
       </p>
-      <p v-if="connection && hasSecretFields" class="text-[11px] text-amber-300/80">
+      <p v-if="connection && hasSecretFields" class="text-[11px] text-app-warning-300/80">
         {{
           t(
             'settings.providerConnection.form.reenterSecrets',

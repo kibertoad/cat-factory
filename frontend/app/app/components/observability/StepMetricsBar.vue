@@ -119,7 +119,7 @@ const headroomTone = computed(() => headroomColor(headroom.value, m.value.trunca
       <span v-if="cacheRead > 0" class="text-app-600">·</span>
       <span
         v-if="cacheRead > 0"
-        class="text-emerald-400/80"
+        class="text-app-success-400/80"
         :title="t('observability.metricsBar.cacheReadHint')"
       >
         {{ t('observability.metricsBar.cacheRead', { tokens: formatTokens(cacheRead) }) }}
@@ -127,7 +127,7 @@ const headroomTone = computed(() => headroomColor(headroom.value, m.value.trunca
       <span v-if="cacheWrite > 0" class="text-app-600">·</span>
       <span
         v-if="cacheWrite > 0"
-        class="text-amber-400/80"
+        class="text-app-warning-400/80"
         :title="t('observability.metricsBar.cacheWriteHint')"
       >
         {{ t('observability.metricsBar.cacheWrite', { tokens: formatTokens(cacheWrite) }) }}
@@ -148,15 +148,15 @@ const headroomTone = computed(() => headroomColor(headroom.value, m.value.trunca
           class="h-full rounded-full transition-all duration-500"
           :class="
             m.truncatedCalls > 0 || headroom >= 0.98
-              ? 'bg-rose-400'
+              ? 'bg-app-error-400'
               : headroom >= 0.8
-                ? 'bg-amber-400'
-                : 'bg-emerald-400'
+                ? 'bg-app-warning-400'
+                : 'bg-app-success-400'
           "
           :style="{ width: `${Math.max(2, pct(headroom))}%` }"
         />
       </div>
-      <p v-if="m.truncatedCalls > 0" class="mt-1 text-[11px] text-rose-400">
+      <p v-if="m.truncatedCalls > 0" class="mt-1 text-[11px] text-app-error-400">
         {{
           t(
             'observability.metricsBar.truncatedCalls',
@@ -177,12 +177,12 @@ const headroomTone = computed(() => headroomColor(headroom.value, m.value.trunca
       </div>
       <div class="mt-1 flex h-1 overflow-hidden rounded-full bg-accented/60">
         <div
-          class="h-full bg-sky-400/80"
+          class="h-full bg-app-info-400/80"
           :style="{ width: `${pct(transport)}%` }"
           :title="t('observability.metricsBar.transportOverhead')"
         />
         <div
-          class="h-full bg-primary-400/80 flex-1"
+          class="h-full bg-primary/80 flex-1"
           :title="t('observability.metricsBar.modelExecution')"
         />
       </div>

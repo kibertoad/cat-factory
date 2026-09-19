@@ -82,31 +82,31 @@ const STATUS_META = computed<
     label: t('ralph.status.passed'),
     badge: 'success',
     icon: 'i-lucide-circle-check',
-    text: 'text-emerald-300',
+    text: 'text-app-success-300',
   },
   stalled: {
     label: t('ralph.status.stalled'),
     badge: 'error',
     icon: 'i-lucide-circle-slash',
-    text: 'text-rose-300',
+    text: 'text-app-error-300',
   },
   'gave-up': {
     label: t('ralph.status.gaveUp'),
     badge: 'error',
     icon: 'i-lucide-circle-x',
-    text: 'text-rose-300',
+    text: 'text-app-error-300',
   },
   running: {
     label: t('ralph.status.running'),
     badge: 'warning',
     icon: 'i-lucide-loader',
-    text: 'text-amber-300',
+    text: 'text-app-warning-300',
   },
   failing: {
     label: t('ralph.status.failing'),
     badge: 'error',
     icon: 'i-lucide-circle-x',
-    text: 'text-rose-300',
+    text: 'text-app-error-300',
   },
 }))
 </script>
@@ -115,7 +115,7 @@ const STATUS_META = computed<
   <ResultWindowShell
     :open="open"
     :icon="meta.icon"
-    icon-class="bg-violet-500/15 text-violet-300"
+    icon-class="bg-app-secondary-500/15 text-app-secondary-300"
     :title="headerTitle"
     :subtitle="t('ralph.subtitle')"
     :step-ref="{ instanceId, stepIndex }"
@@ -173,7 +173,7 @@ const STATUS_META = computed<
             :href="prUrl"
             target="_blank"
             rel="noopener"
-            class="mt-3 inline-flex items-center gap-1 text-[12px] text-sky-300 hover:text-sky-200 hover:underline"
+            class="mt-3 inline-flex items-center gap-1 text-[12px] text-app-info-300 hover:text-app-info-200 hover:underline"
           >
             {{ t('ralph.viewPr') }}
             <UIcon name="i-lucide-external-link" class="h-3 w-3" />
@@ -183,7 +183,7 @@ const STATUS_META = computed<
                the sidebar (e.g. "3 of 20") reads as an unexplained abandonment. -->
           <p
             v-if="status === 'stalled'"
-            class="mt-3 rounded-md border border-rose-900/60 bg-rose-950/30 px-3 py-2 text-[12px] leading-relaxed text-rose-200"
+            class="mt-3 rounded-md border border-app-error-900/60 bg-app-error-950/30 px-3 py-2 text-[12px] leading-relaxed text-app-error-200"
             data-testid="ralph-stalled-note"
           >
             {{ t('ralph.stalledNote') }}
@@ -214,7 +214,7 @@ const STATUS_META = computed<
                   <UIcon
                     :name="a.validationPassed ? 'i-lucide-circle-check' : 'i-lucide-circle-x'"
                     class="h-3.5 w-3.5"
-                    :class="a.validationPassed ? 'text-emerald-400' : 'text-rose-400'"
+                    :class="a.validationPassed ? 'text-app-success-400' : 'text-app-error-400'"
                   />
                   <span class="text-[12px] font-medium text-default">
                     {{ t('ralph.iteration', { number: a.attempt }) }}

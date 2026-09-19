@@ -400,7 +400,7 @@ async function remove(group: ConsensusGroup) {
       <!-- the estimate bar -->
       <div class="space-y-2 rounded-lg border border-default bg-app-950/40 p-3">
         <label class="flex items-center gap-2 text-xs text-toned">
-          <input v-model="editor.gated" type="checkbox" class="accent-emerald-500" />
+          <input v-model="editor.gated" type="checkbox" class="accent-app-success-500" />
           {{ t('settings.consensusGroups.editor.gatedLabel') }}
         </label>
         <p class="text-[11px] text-dimmed">
@@ -453,7 +453,7 @@ async function remove(group: ConsensusGroup) {
             />
           </label>
         </div>
-        <p v-if="gatingIncomplete" class="text-[11px] text-amber-400">
+        <p v-if="gatingIncomplete" class="text-[11px] text-app-warning-400">
           {{ t('settings.consensusGroups.editor.gatingIncomplete') }}
         </p>
       </div>

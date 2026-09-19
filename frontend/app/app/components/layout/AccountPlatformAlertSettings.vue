@@ -334,7 +334,7 @@ const hasOverrides = computed(
     -->
     <p
       v-if="!loaded"
-      class="rounded-lg border border-amber-800/60 bg-amber-950/30 px-3 py-2 text-xs text-amber-200"
+      class="rounded-lg border border-app-warning-800/60 bg-app-warning-950/30 px-3 py-2 text-xs text-app-warning-200"
       data-testid="account-platform-alerts-unloaded"
     >
       {{ t('settings.platformAlerts.notLoaded') }}

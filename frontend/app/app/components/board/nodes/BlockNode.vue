@@ -298,16 +298,16 @@ const ITEM_ICON: Record<string, string> = {
       <!-- bootstrap-in-progress banner -->
       <div
         v-if="bootstrapping"
-        class="border-b border-amber-900/50 bg-amber-950/30 px-4 py-2"
+        class="border-b border-app-warning-900/50 bg-app-warning-950/30 px-4 py-2"
         data-testid="bootstrap-progress"
       >
         <div class="flex items-center gap-1.5 text-xs">
           <UIcon
             name="i-lucide-loader-circle"
-            class="h-4 w-4 shrink-0 animate-spin text-amber-400"
+            class="h-4 w-4 shrink-0 animate-spin text-app-warning-400"
           />
-          <span class="text-amber-300">{{ t('board.frame.bootstrappingRepository') }}</span>
-          <span v-if="bootstrapSubtasks" class="ms-auto text-amber-200/80">
+          <span class="text-app-warning-300">{{ t('board.frame.bootstrappingRepository') }}</span>
+          <span v-if="bootstrapSubtasks" class="ms-auto text-app-warning-200/80">
             {{
               t('board.frame.bootstrapStepsCount', {
                 completed: bootstrapSubtasks.completed,
@@ -316,9 +316,9 @@ const ITEM_ICON: Record<string, string> = {
             }}
           </span>
         </div>
-        <div class="mt-1.5 h-1 w-full overflow-hidden rounded bg-amber-900/40">
+        <div class="mt-1.5 h-1 w-full overflow-hidden rounded bg-app-warning-900/40">
           <div
-            class="h-full rounded bg-amber-400 transition-all"
+            class="h-full rounded bg-app-warning-400 transition-all"
             :style="{ width: bootstrapPct + '%' }"
           />
         </div>
@@ -330,18 +330,18 @@ const ITEM_ICON: Record<string, string> = {
             class="flex items-start gap-1.5 text-[11px]"
             :class="
               item.status === 'completed'
-                ? 'text-amber-200/60 line-through'
+                ? 'text-app-warning-200/60 line-through'
                 : item.status === 'in_progress'
-                  ? 'text-amber-100'
-                  : 'text-amber-200/80'
+                  ? 'text-app-warning-100'
+                  : 'text-app-warning-200/80'
             "
           >
             <UIcon
               :name="ITEM_ICON[item.status]"
               class="mt-px h-3 w-3 shrink-0"
               :class="[
-                item.status === 'in_progress' ? 'animate-spin text-amber-400' : '',
-                item.status === 'completed' ? 'text-emerald-400' : 'text-amber-400/70',
+                item.status === 'in_progress' ? 'animate-spin text-app-warning-400' : '',
+                item.status === 'completed' ? 'text-app-success-400' : 'text-app-warning-400/70',
               ]"
             />
             <span>{{ item.label }}</span>
@@ -368,11 +368,11 @@ const ITEM_ICON: Record<string, string> = {
       <!-- parked on a human adoption review: the run is waiting on the viewer, not working -->
       <div
         v-else-if="awaitingReview"
-        class="m-3 space-y-2 rounded-md border border-amber-500/40 bg-amber-500/5 p-3"
+        class="m-3 space-y-2 rounded-md border border-app-warning-500/40 bg-app-warning-500/5 p-3"
       >
         <div class="flex items-start gap-2">
-          <UIcon name="i-lucide-user-check" class="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
-          <p class="text-xs text-amber-200/90">{{ t('bootstrap.adoption.cardPrompt') }}</p>
+          <UIcon name="i-lucide-user-check" class="mt-0.5 h-4 w-4 shrink-0 text-app-warning-400" />
+          <p class="text-xs text-app-warning-200/90">{{ t('bootstrap.adoption.cardPrompt') }}</p>
         </div>
         <BootstrapRunSteps :run-id="awaitingReview.id" />
         <div class="flex justify-end">
@@ -404,7 +404,7 @@ const ITEM_ICON: Record<string, string> = {
             <div class="flex items-center gap-2">
               <div
                 class="flex h-8 w-8 items-center justify-center rounded-lg"
-                :style="{ backgroundColor: typeMeta!.accent + '22' }"
+                :style="{ backgroundColor: tint(typeMeta!.accent) }"
               >
                 <UIcon
                   :name="typeMeta!.icon"
@@ -536,7 +536,7 @@ const ITEM_ICON: Record<string, string> = {
               t('board.frame.moduleCount', { count: modules.length }, modules.length)
             }}</span>
             <span v-if="modules.length && prTasks" aria-hidden="true">·</span>
-            <span v-if="prTasks" class="text-emerald-400">{{
+            <span v-if="prTasks" class="text-app-success-400">{{
               t('board.frame.prReadyCount', { count: prTasks })
             }}</span>
           </div>

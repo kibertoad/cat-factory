@@ -165,9 +165,9 @@ async function clearAll() {
 
     <!-- These are REAL secrets: an unmistakable sensitivity + replace-all warning. -->
     <div
-      class="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-2 text-[11px] leading-snug text-amber-200"
+      class="flex items-start gap-2 rounded-md border border-app-warning-500/40 bg-app-warning-500/10 px-2.5 py-2 text-[11px] leading-snug text-app-warning-200"
     >
-      <UIcon name="i-lucide-shield-alert" class="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+      <UIcon name="i-lucide-shield-alert" class="mt-0.5 h-4 w-4 shrink-0 text-app-warning-400" />
       <span>{{ t('inspector.testSecrets.warning') }}</span>
     </div>
 
@@ -234,7 +234,7 @@ async function clearAll() {
         </UFormField>
       </div>
 
-      <p v-if="duplicateKeys.size" class="text-[11px] text-error-400">
+      <p v-if="duplicateKeys.size" class="text-[11px] text-app-error-400">
         {{ t('inspector.testSecrets.duplicateKey') }}
       </p>
 

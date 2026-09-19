@@ -120,10 +120,10 @@ const STATUS_META: Record<
   FollowUpItem['status'],
   { badge: 'neutral' | 'info' | 'success' | 'warning'; text: string }
 > = {
-  pending: { badge: 'warning', text: 'text-amber-300' },
-  filed: { badge: 'success', text: 'text-emerald-300' },
-  queued: { badge: 'info', text: 'text-sky-300' },
-  answered: { badge: 'info', text: 'text-sky-300' },
+  pending: { badge: 'warning', text: 'text-app-warning-300' },
+  filed: { badge: 'success', text: 'text-app-success-300' },
+  queued: { badge: 'info', text: 'text-app-info-300' },
+  answered: { badge: 'info', text: 'text-app-info-300' },
   closed: { badge: 'neutral', text: 'text-toned' },
   dismissed: { badge: 'neutral', text: 'text-muted' },
 }
@@ -138,7 +138,7 @@ function hasRecordedAnswer(item: FollowUpItem): boolean {
   <ResultWindowShell
     :open="open"
     :icon="FOLLOW_UP_COMPANION_META.icon"
-    icon-class="bg-pink-500/15 text-pink-300"
+    icon-class="bg-app-hue-pink/15 text-app-hue-pink"
     :title="headerTitle"
     :subtitle="t('followUp.subtitle')"
     width="3xl"
@@ -170,7 +170,7 @@ function hasRecordedAnswer(item: FollowUpItem): boolean {
       <div v-else class="space-y-3">
         <p
           v-if="followUps.error"
-          class="rounded-md bg-rose-500/10 px-3 py-2 text-[12px] text-rose-300"
+          class="rounded-md bg-app-error-500/10 px-3 py-2 text-[12px] text-app-error-300"
         >
           {{ followUps.error }}
         </p>
@@ -179,13 +179,13 @@ function hasRecordedAnswer(item: FollowUpItem): boolean {
           v-for="item in items"
           :key="item.id"
           class="rounded-xl border border-default bg-default/60 px-4 py-3"
-          :class="item.status === 'pending' ? 'border-amber-500/40' : ''"
+          :class="item.status === 'pending' ? 'border-app-warning-500/40' : ''"
         >
           <div class="flex items-start gap-2">
             <UIcon
               :name="item.kind === 'question' ? 'i-lucide-circle-help' : 'i-lucide-compass'"
               class="mt-0.5 h-4 w-4 shrink-0"
-              :class="item.kind === 'question' ? 'text-sky-300' : 'text-pink-300'"
+              :class="item.kind === 'question' ? 'text-app-info-300' : 'text-app-hue-pink'"
             />
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-2">
@@ -208,7 +208,7 @@ function hasRecordedAnswer(item: FollowUpItem): boolean {
                   :href="item.ticketUrl"
                   target="_blank"
                   rel="noopener"
-                  class="text-emerald-300 hover:underline"
+                  class="text-app-success-300 hover:underline"
                 >
                   {{ item.ticketExternalId ?? t('followUp.viewIssue') }}
                 </a>
@@ -223,7 +223,7 @@ function hasRecordedAnswer(item: FollowUpItem): boolean {
               </p>
               <!-- A decision that was made and then thrown away when the budget ran out. It must
                    not read like one the Coder acted on. -->
-              <p v-if="item.sendBackDropped" class="mt-1 text-[11px] text-amber-300">
+              <p v-if="item.sendBackDropped" class="mt-1 text-[11px] text-app-warning-300">
                 {{ t('followUp.sendBackDropped') }}
               </p>
 
@@ -235,7 +235,7 @@ function hasRecordedAnswer(item: FollowUpItem): boolean {
                     v-model="drafts[item.id]"
                     rows="2"
                     :placeholder="t('followUp.answerPlaceholder')"
-                    class="w-full resize-y rounded-md border border-muted bg-app-950/60 px-2.5 py-1.5 text-[12px] text-app-100 placeholder:text-app-600 focus:border-sky-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60"
+                    class="w-full resize-y rounded-md border border-muted bg-app-950/60 px-2.5 py-1.5 text-[12px] text-app-100 placeholder:text-app-600 focus:border-app-info-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-app-info-500/60"
                   />
                   <!-- Wraps, like the follow-up row below: three buttons whose labels are two
                        words each in English are one long line in most of the other locales, and

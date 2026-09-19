@@ -73,7 +73,7 @@ async function copyRunId() {
         <UIcon
           v-if="isRunning"
           name="i-lucide-loader-circle"
-          class="h-3 w-3 animate-spin text-primary-400"
+          class="h-3 w-3 animate-spin text-primary"
         />
         {{ durationLabel }}
         <span v-if="isRunning" class="text-[11px] text-dimmed">{{
@@ -90,7 +90,7 @@ async function copyRunId() {
         {{ t('panels.stepMeta.activity') }}
       </h4>
       <p class="flex items-center gap-1.5 text-[12px] tabular-nums text-toned">
-        <span class="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+        <span class="h-1.5 w-1.5 rounded-full bg-app-success-400" />
         {{ t('panels.stepMeta.activityAgo', { duration: activityAgoLabel }) }}
       </p>
     </div>
@@ -123,7 +123,7 @@ async function copyRunId() {
         {{ t('panels.stepMeta.promptVariant') }}
       </h4>
       <p class="break-all text-[12px] text-toned">{{ promptVariant.label }}</p>
-      <p v-if="promptVariant.note" class="mt-0.5 text-[11px] text-amber-400/80">
+      <p v-if="promptVariant.note" class="mt-0.5 text-[11px] text-app-warning-400/80">
         {{ promptVariant.note }}
       </p>
     </div>

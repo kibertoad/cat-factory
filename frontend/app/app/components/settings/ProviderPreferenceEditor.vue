@@ -118,7 +118,7 @@ function reset() {
          route a connected plan quietly overrules is the one thing this control must not do. -->
     <p
       v-if="subscriptionWins"
-      class="mb-2 text-[11px] leading-relaxed text-amber-400/90"
+      class="mb-2 text-[11px] leading-relaxed text-app-warning-400/90"
       data-testid="preset-route-order-subscription-warning"
     >
       {{ t('settings.modelConfiguration.routeOrder.subscriptionOverrideHint') }}

@@ -246,10 +246,10 @@ function removePending(item: PendingContext) {
            that into an attachment would attach pages nobody meant to attach. -->
       <div
         v-if="offer && docsConnected"
-        class="flex items-center gap-2 rounded-md border border-primary-900/60 bg-primary-950/30 px-2 py-1.5"
+        class="flex items-center gap-2 rounded-md border border-primary/60 bg-primary/10 px-2 py-1.5"
         data-testid="pasted-link-offer"
       >
-        <UIcon name="i-lucide-link" class="h-3.5 w-3.5 shrink-0 text-primary-400" />
+        <UIcon name="i-lucide-link" class="h-3.5 w-3.5 shrink-0 text-primary" />
         <span class="min-w-0 flex-1 truncate text-xs text-toned">
           {{
             t('contextAttachments.pastedLink.offer', {
@@ -276,7 +276,7 @@ function removePending(item: PendingContext) {
           <div class="flex items-center gap-1.5 px-2 py-1.5 text-xs text-toned">
             <UIcon
               :name="item.icon ?? 'i-lucide-file-text'"
-              class="h-3.5 w-3.5 shrink-0 text-primary-400"
+              class="h-3.5 w-3.5 shrink-0 text-primary"
             />
             <span class="truncate">{{ item.title }}</span>
             <UBadge
@@ -298,7 +298,7 @@ function removePending(item: PendingContext) {
           </div>
           <p
             v-if="item.unreadable"
-            class="px-2 pb-1.5 text-[11px] text-amber-400"
+            class="px-2 pb-1.5 text-[11px] text-app-warning-400"
             data-testid="context-item-unreadable"
           >
             {{ t('contextAttachments.unreadable', { error: item.unreadable }) }}
@@ -384,7 +384,7 @@ function removePending(item: PendingContext) {
           <div class="flex items-center gap-1.5 px-2 py-1.5 text-xs text-toned">
             <UIcon
               :name="item.icon ?? 'i-lucide-square-check'"
-              class="h-3.5 w-3.5 shrink-0 text-primary-400"
+              class="h-3.5 w-3.5 shrink-0 text-primary"
             />
             <span class="truncate">{{ item.title }}</span>
             <UBadge
@@ -409,7 +409,7 @@ function removePending(item: PendingContext) {
                again on submit, and a failure now blocks the create. -->
           <p
             v-if="item.unreadable"
-            class="px-2 pb-1.5 text-[11px] text-amber-400"
+            class="px-2 pb-1.5 text-[11px] text-app-warning-400"
             data-testid="context-item-unreadable"
           >
             {{ t('contextAttachments.unreadable', { error: item.unreadable }) }}

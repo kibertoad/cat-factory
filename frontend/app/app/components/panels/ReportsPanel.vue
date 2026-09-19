@@ -150,9 +150,9 @@ const STATUS_KEYS: Record<'done' | 'failed' | 'running' | 'other', string> = {
   other: 'reports.status.other',
 }
 const STATUS_CLASSES: Record<'done' | 'failed' | 'running' | 'other', string> = {
-  done: 'bg-emerald-500',
-  failed: 'bg-rose-500',
-  running: 'bg-sky-500',
+  done: 'bg-app-success-500',
+  failed: 'bg-app-error-500',
+  running: 'bg-app-info-500',
   other: 'bg-app-500',
 }
 /** `te`-guarded so a locale missing the key shows the raw status, never a raw message key. */
@@ -193,9 +193,9 @@ watch(
       >
         <header class="flex flex-wrap items-center gap-3 border-b border-default px-6 py-4">
           <div
-            class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-500/15"
+            class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-app-secondary-500/15"
           >
-            <UIcon name="i-lucide-chart-column" class="h-5 w-5 text-violet-400" />
+            <UIcon name="i-lucide-chart-column" class="h-5 w-5 text-app-secondary-400" />
           </div>
           <div class="min-w-0">
             <h1 class="truncate text-base font-semibold text-highlighted">
@@ -260,12 +260,12 @@ watch(
         <div class="flex-1 overflow-y-auto px-6 py-5">
           <div
             v-if="failed"
-            class="mx-auto max-w-2xl rounded-lg border border-rose-800/60 bg-rose-950/40 p-4 text-sm text-rose-200"
+            class="mx-auto max-w-2xl rounded-lg border border-app-error-800/60 bg-app-error-950/40 p-4 text-sm text-app-error-200"
           >
             <p>{{ t('reports.error') }}</p>
-            <p v-if="error" class="mt-1 text-xs text-rose-300/80">{{ error }}</p>
+            <p v-if="error" class="mt-1 text-xs text-app-error-300/80">{{ error }}</p>
             <button
-              class="mt-2 rounded-md border border-rose-700 px-3 py-1 text-xs hover:bg-rose-900/40"
+              class="mt-2 rounded-md border border-app-error-700 px-3 py-1 text-xs hover:bg-app-error-900/40"
               @click="refresh"
             >
               {{ t('reports.retry') }}
@@ -290,14 +290,14 @@ watch(
                  account that spent nothing produce the same empty breakdown. -->
             <p
               v-if="rollupState === 'none'"
-              class="rounded-lg border border-amber-800/60 bg-amber-950/30 px-3 py-2 text-xs text-amber-200"
+              class="rounded-lg border border-app-warning-800/60 bg-app-warning-950/30 px-3 py-2 text-xs text-app-warning-200"
               data-testid="reports-rollup-none"
             >
               {{ t('reports.rollup.none') }}
             </p>
             <p
               v-else-if="rollupState === 'stale'"
-              class="rounded-lg border border-amber-800/60 bg-amber-950/30 px-3 py-2 text-xs text-amber-200"
+              class="rounded-lg border border-app-warning-800/60 bg-app-warning-950/30 px-3 py-2 text-xs text-app-warning-200"
               data-testid="reports-rollup-stale"
             >
               {{
@@ -325,13 +325,16 @@ watch(
               </h2>
               <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <div class="rounded-lg border border-default bg-default/40 p-3">
-                  <p class="text-2xl font-semibold text-violet-300" data-testid="reports-metered">
+                  <p
+                    class="text-2xl font-semibold text-app-secondary-300"
+                    data-testid="reports-metered"
+                  >
                     {{ money(view.totals.meteredCost) }}
                   </p>
                   <p class="text-xs text-dimmed">{{ t('reports.totals.metered') }}</p>
                 </div>
                 <div class="rounded-lg border border-default bg-default/40 p-3">
-                  <p class="text-2xl font-semibold text-amber-300">
+                  <p class="text-2xl font-semibold text-app-warning-300">
                     {{ money(view.totals.subscriptionCost) }}
                   </p>
                   <p class="text-xs text-dimmed">{{ t('reports.totals.subscription') }}</p>
@@ -371,18 +374,18 @@ watch(
                     :title="trendTooltip(point)"
                   >
                     <div
-                      class="w-full rounded-t-sm bg-amber-600"
+                      class="w-full rounded-t-sm bg-app-warning-600"
                       :style="{ height: `${columnPct(point.subscriptionCost, maxTrend)}%` }"
                     />
                     <div
-                      class="w-full rounded-sm bg-violet-500"
+                      class="w-full rounded-sm bg-app-secondary-500"
                       :style="{ height: `${columnPct(point.meteredCost, maxTrend)}%` }"
                     />
                   </div>
                 </div>
                 <div class="mt-2 flex items-center gap-4 text-[11px] text-dimmed">
                   <span class="flex items-center gap-1" :title="t('reports.legend.meteredHint')">
-                    <span class="h-2 w-2 rounded-sm bg-violet-500" />{{
+                    <span class="h-2 w-2 rounded-sm bg-app-secondary-500" />{{
                       t('reports.legend.metered')
                     }}
                   </span>
@@ -390,7 +393,7 @@ watch(
                     class="flex items-center gap-1"
                     :title="t('reports.legend.subscriptionHint')"
                   >
-                    <span class="h-2 w-2 rounded-sm bg-amber-600" />{{
+                    <span class="h-2 w-2 rounded-sm bg-app-warning-600" />{{
                       t('reports.legend.subscription')
                     }}
                   </span>

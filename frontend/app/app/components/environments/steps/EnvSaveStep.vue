@@ -44,7 +44,7 @@ useEnvironmentWizardTarget(() => props.input.frameId)
 
     <p
       v-if="store.saveError"
-      class="text-[12px] text-rose-300/80"
+      class="text-[12px] text-app-error-300/80"
       data-testid="env-setup-save-error"
     >
       {{ store.saveError }}
@@ -66,7 +66,7 @@ useEnvironmentWizardTarget(() => props.input.frameId)
     <!-- saved: confirmation + optional trial provision -->
     <template v-else>
       <div
-        class="flex items-center gap-2 rounded-md border border-emerald-800/50 bg-emerald-950/30 p-2 text-[12px] text-emerald-200"
+        class="flex items-center gap-2 rounded-md border border-app-success-800/50 bg-app-success-950/30 p-2 text-[12px] text-app-success-200"
         data-testid="env-setup-saved"
       >
         <UIcon name="i-lucide-check-circle" class="h-4 w-4" />
@@ -88,7 +88,9 @@ useEnvironmentWizardTarget(() => props.input.frameId)
           {{ t('environmentWizard.trial.run') }}
         </UButton>
       </div>
-      <p v-if="store.trialError" class="text-[11px] text-rose-300/80">{{ store.trialError }}</p>
+      <p v-if="store.trialError" class="text-[11px] text-app-error-300/80">
+        {{ store.trialError }}
+      </p>
       <ProvisioningLogsDrawer v-if="store.trialStarted" subsystem="environment" />
     </template>
 

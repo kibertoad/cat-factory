@@ -385,9 +385,9 @@ const filteredGroups = computed<IntegrationGroup[]>(() => {
              run isn't blocked on hunting for them. Hidden once anything is connected. -->
         <div
           v-if="!anyConnected && recommendedActions.length"
-          class="rounded-lg border border-primary-500/40 bg-primary-500/10 p-3"
+          class="rounded-lg border border-primary/40 bg-primary/10 p-3"
         >
-          <div class="mb-2 flex items-center gap-2 text-sm font-medium text-primary-200">
+          <div class="mb-2 flex items-center gap-2 text-sm font-medium text-primary">
             <UIcon name="i-lucide-rocket" class="h-4 w-4 shrink-0" />
             <span>{{ t('layout.integrationsHub.getStarted.title') }}</span>
           </div>

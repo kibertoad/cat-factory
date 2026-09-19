@@ -166,7 +166,10 @@ async function unlinkSource(id: string) {
           :key="s.id"
           class="flex items-start gap-2 rounded-md border border-default bg-default/60 p-3"
         >
-          <UIcon name="i-lucide-book-open-check" class="mt-0.5 h-4 w-4 shrink-0 text-sky-400" />
+          <UIcon
+            name="i-lucide-book-open-check"
+            class="mt-0.5 h-4 w-4 shrink-0 text-app-info-400"
+          />
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-2">
               <p class="truncate text-sm font-medium text-app-100">{{ s.name }}</p>
@@ -178,7 +181,7 @@ async function unlinkSource(id: string) {
             <!-- The manifest declared a group this build does not know (a typo, or a member
                  retired since the sync). It is filed under Other, and saying which value was
                  declared is what lets the author fix their frontmatter. -->
-            <p v-if="s.declaredGroup" class="mt-1 text-[11px] text-amber-400">
+            <p v-if="s.declaredGroup" class="mt-1 text-[11px] text-app-warning-400">
               {{ t('skills.catalog.groupUnknown', { group: s.declaredGroup }) }}
             </p>
             <p class="mt-1 flex flex-wrap gap-x-3 text-[11px] text-dimmed">

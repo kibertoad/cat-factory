@@ -142,7 +142,7 @@ async function attach(item: PendingContext) {
       >
         <UIcon
           :name="tasks.descriptorFor(issue.source)?.icon ?? 'i-lucide-square-check'"
-          class="h-3.5 w-3.5 shrink-0 text-primary-400"
+          class="h-3.5 w-3.5 shrink-0 text-primary"
         />
         <span class="truncate">{{ issue.externalId }} · {{ issue.title }}</span>
         <UBadge color="neutral" variant="soft" size="xs" class="ms-auto shrink-0">

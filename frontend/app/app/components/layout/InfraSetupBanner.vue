@@ -208,8 +208,8 @@ function dismissMenu(card: AreaCard): DropdownMenuItem[][] {
         class="pointer-events-auto w-full max-w-3xl rounded-2xl border-2 p-5 shadow-2xl backdrop-blur"
         :class="
           card.kind === 'outage'
-            ? 'border-red-500/70 bg-red-950/95'
-            : 'border-amber-500/70 bg-amber-950/95'
+            ? 'border-app-error-500/70 bg-app-error-950/95'
+            : 'border-app-warning-500/70 bg-app-warning-950/95'
         "
         :data-testid="`infra-setup-banner-${card.area}`"
         :data-infra-status="card.kind === 'outage' ? 'unreachable' : 'not_defined'"
@@ -218,13 +218,13 @@ function dismissMenu(card: AreaCard): DropdownMenuItem[][] {
           <UIcon
             :name="card.kind === 'outage' ? 'i-lucide-plug-zap' : AREA_META[card.area].icon"
             class="mt-0.5 h-9 w-9 shrink-0"
-            :class="card.kind === 'outage' ? 'text-red-400' : 'text-amber-400'"
+            :class="card.kind === 'outage' ? 'text-app-error-400' : 'text-app-warning-400'"
           />
           <div class="min-w-0 flex-1">
             <div class="flex items-start justify-between gap-3">
               <h2
                 class="text-lg font-semibold"
-                :class="card.kind === 'outage' ? 'text-red-100' : 'text-amber-100'"
+                :class="card.kind === 'outage' ? 'text-app-error-100' : 'text-app-warning-100'"
               >
                 {{ t(titleKey(card)) }}
               </h2>
@@ -241,7 +241,7 @@ function dismissMenu(card: AreaCard): DropdownMenuItem[][] {
             </div>
             <p
               class="mt-1 text-sm"
-              :class="card.kind === 'outage' ? 'text-red-200/90' : 'text-amber-200/90'"
+              :class="card.kind === 'outage' ? 'text-app-error-200/90' : 'text-app-warning-200/90'"
             >
               {{
                 card.kind === 'outage'
@@ -256,7 +256,7 @@ function dismissMenu(card: AreaCard): DropdownMenuItem[][] {
                  never the only thing that explains the card. -->
             <p
               v-if="card.detail"
-              class="mt-2 truncate font-mono text-xs text-red-300/80"
+              class="mt-2 truncate font-mono text-xs text-app-error-300/80"
               :title="card.detail"
               :data-testid="`infra-setup-detail-${card.area}`"
             >

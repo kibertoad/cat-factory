@@ -97,7 +97,7 @@ function toggle(id: string) {
           >
             <div
               class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
-              :style="{ backgroundColor: a.color + '22' }"
+              :style="{ backgroundColor: tint(a.color) }"
             >
               <UIcon :name="a.icon" class="h-4 w-4" :style="{ color: a.color }" />
             </div>

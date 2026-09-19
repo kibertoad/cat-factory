@@ -24,16 +24,16 @@ defineProps<{
     class="flex flex-col items-center gap-2 rounded-lg border border-default bg-app-950/40 p-6 text-center"
     :data-testid="testid"
   >
-    <UIcon name="i-lucide-loader-circle" class="h-5 w-5 animate-spin text-primary-300" />
+    <UIcon name="i-lucide-loader-circle" class="h-5 w-5 animate-spin text-primary" />
     <p class="text-[13px] text-default">{{ title }}</p>
     <p class="text-[12px] text-muted">{{ hint }}</p>
   </div>
   <div
     v-else
-    class="rounded-lg border border-red-900/60 bg-red-950/20 p-4 text-center"
+    class="rounded-lg border border-app-error-900/60 bg-app-error-950/20 p-4 text-center"
     :data-testid="testid"
   >
-    <p class="text-[13px] text-red-200">{{ title }}</p>
+    <p class="text-[13px] text-app-error-200">{{ title }}</p>
     <p class="mt-1 text-[12px] text-muted">{{ hint }}</p>
   </div>
 </template>

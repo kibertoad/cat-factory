@@ -316,14 +316,16 @@ async function remove(p: LocalRunner) {
             </div>
             <!-- A row whose URL the deployment no longer permits: its models are withheld
                  from the picker, so this is the only place that can say why. -->
-            <div v-if="e.urlBlockedReason" class="mt-1 text-[11px] text-amber-400">
+            <div v-if="e.urlBlockedReason" class="mt-1 text-[11px] text-app-warning-400">
               {{ t('settings.localModelEndpoints.blocked') }}
-              <span class="block text-amber-300/70">{{ urlReasonText(e.urlBlockedReason) }}</span>
+              <span class="block text-app-warning-300/70">{{
+                urlReasonText(e.urlBlockedReason)
+              }}</span>
             </div>
             <!-- Part of the stored model list could not be read and was discarded. Without this
                  the shortened list reads exactly like a runner nothing was ever enabled on, and
                  only one of those is fixed by re-ticking. -->
-            <div v-if="e.unreadableModels" class="mt-1 text-[11px] text-amber-400">
+            <div v-if="e.unreadableModels" class="mt-1 text-[11px] text-app-warning-400">
               {{ t('settings.localModelEndpoints.modelsDiscarded') }}
             </div>
           </div>
@@ -411,13 +413,13 @@ async function remove(p: LocalRunner) {
             >
               {{ t('settings.localModelEndpoints.testConnection') }}
             </UButton>
-            <span v-if="testError" class="text-xs text-rose-400">
+            <span v-if="testError" class="text-xs text-app-error-400">
               {{ testError }}
-              <span v-if="testErrorDetail" class="block text-[11px] text-rose-300/70">{{
+              <span v-if="testErrorDetail" class="block text-[11px] text-app-error-300/70">{{
                 testErrorDetail
               }}</span>
             </span>
-            <span v-else-if="tested && discovered.length" class="text-xs text-emerald-400">
+            <span v-else-if="tested && discovered.length" class="text-xs text-app-success-400">
               {{
                 t(
                   'settings.localModelEndpoints.reachable',

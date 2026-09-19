@@ -194,7 +194,7 @@ async function removeKey(key: string) {
       <p v-else-if="view?.environmentFallback === true" class="text-[11px] text-dimmed">
         {{ t('settings.capabilityCredentials.notStoredWithFallback') }}
       </p>
-      <p v-else-if="view?.environmentFallback === false" class="text-[11px] text-amber-400">
+      <p v-else-if="view?.environmentFallback === false" class="text-[11px] text-app-warning-400">
         {{ t('settings.capabilityCredentials.notStored') }}
       </p>
       <p v-else class="text-[11px] text-dimmed">
@@ -252,7 +252,7 @@ async function removeKey(key: string) {
          regressed". Withheld entirely while the declaration read is incomplete. -->
     <section
       v-if="view?.orphaned.length"
-      class="space-y-2 rounded-lg border border-amber-900/60 p-3"
+      class="space-y-2 rounded-lg border border-app-warning-900/60 p-3"
       data-testid="capability-credentials-orphaned"
     >
       <h3 class="text-sm font-semibold">

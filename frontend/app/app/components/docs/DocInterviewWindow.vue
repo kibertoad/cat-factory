@@ -107,7 +107,7 @@ const onProceed = () =>
   <ResultWindowShell
     :open="open"
     icon="i-lucide-messages-square"
-    icon-class="bg-primary-500/15 text-primary-300"
+    icon-class="bg-primary/15 text-primary"
     :title="block?.title ?? t('docInterview.title')"
     :subtitle="t('docInterview.subtitle')"
     width="3xl"
@@ -212,7 +212,7 @@ const onProceed = () =>
                  for an answer to go. Saying so beats taking text the flush could only drop. -->
             <p
               v-if="!addressable(q)"
-              class="mt-1 text-[11px] text-amber-300"
+              class="mt-1 text-[11px] text-app-warning-300"
               data-testid="doc-interview-unanswerable"
             >
               {{ t('docInterview.unanswerable') }}
@@ -231,7 +231,7 @@ const onProceed = () =>
       <p class="text-[11px] text-dimmed">
         <span
           v-if="unanswered > 0"
-          class="text-amber-400/90"
+          class="text-app-warning-400/90"
           data-testid="doc-interview-unanswered"
         >
           {{ t('docInterview.unanswered', { count: unanswered }) }}

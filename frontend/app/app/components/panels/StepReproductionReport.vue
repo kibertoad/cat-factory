@@ -70,7 +70,11 @@ function phaseLabel(outcome: ReproductionPhaseOutcome): string {
          trees can tell a test that misses the defect from a resumed run whose pre-fix tree already
          carried this step's own interrupted work, so re-deriving a cause from the exit codes here
          is exactly the inference that gets it wrong. -->
-    <p v-if="report.note" class="text-[11px] text-amber-300" data-testid="reproduction-observation">
+    <p
+      v-if="report.note"
+      class="text-[11px] text-app-warning-300"
+      data-testid="reproduction-observation"
+    >
       {{ report.note }}
     </p>
 
@@ -108,7 +112,7 @@ function phaseLabel(outcome: ReproductionPhaseOutcome): string {
            reads as "the test does not capture the defect". Stated, never implied. -->
       <p
         v-if="report.omittedTestPaths"
-        class="text-[11px] text-amber-300"
+        class="text-[11px] text-app-warning-300"
         data-testid="reproduction-omitted-paths"
       >
         {{
@@ -133,8 +137,8 @@ function phaseLabel(outcome: ReproductionPhaseOutcome): string {
             :class="
               phase.outcome
                 ? phase.outcome.passed
-                  ? 'text-emerald-400'
-                  : 'text-rose-400'
+                  ? 'text-app-success-400'
+                  : 'text-app-error-400'
                 : 'text-app-600'
             "
           />

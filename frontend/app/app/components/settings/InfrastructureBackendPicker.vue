@@ -293,7 +293,7 @@ const labelKey = computed(() =>
       </label>
     </div>
 
-    <p v-if="showRegisterHint" class="text-[11px] text-amber-300/80">
+    <p v-if="showRegisterHint" class="text-[11px] text-app-warning-300/80">
       {{ t('settings.infrastructure.registerHint') }}
     </p>
 

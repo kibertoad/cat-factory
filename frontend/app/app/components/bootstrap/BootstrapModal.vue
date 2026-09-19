@@ -635,11 +635,11 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
              whichever methods the deployment serves, never just the GitHub App. -->
         <div
           v-if="needsConnection"
-          class="space-y-3 rounded-md border border-amber-500/30 bg-amber-500/5 p-3"
+          class="space-y-3 rounded-md border border-app-warning-500/30 bg-app-warning-500/5 p-3"
         >
           <div class="flex items-start gap-2">
-            <UIcon name="i-lucide-plug-zap" class="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
-            <p class="text-sm text-amber-200/90">
+            <UIcon name="i-lucide-plug-zap" class="mt-0.5 h-4 w-4 shrink-0 text-app-warning-400" />
+            <p class="text-sm text-app-warning-200/90">
               {{ t('vcs.bootstrap.connectPrompt') }}
             </p>
           </div>
@@ -935,7 +935,7 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
                 v-if="job.repoUrl"
                 :to="job.repoUrl"
                 target="_blank"
-                class="text-[11px] text-primary-400 hover:underline"
+                class="text-[11px] text-primary hover:underline"
               >
                 {{ t('bootstrap.recent.open') }}
               </ULink>
@@ -947,7 +947,7 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
                 v-if="job.prUrl"
                 :to="job.prUrl"
                 target="_blank"
-                class="text-[11px] text-primary-400 hover:underline"
+                class="text-[11px] text-primary hover:underline"
               >
                 {{ t('bootstrap.recent.openPr') }}
               </ULink>

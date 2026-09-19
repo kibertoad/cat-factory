@@ -235,7 +235,7 @@ const faults = computed(() => failureKindRuleFaults(rules.value))
 
       <p
         v-if="faults.tooMany"
-        class="text-[11px] text-amber-300"
+        class="text-[11px] text-app-warning-300"
         data-testid="platform-alert-failure-kinds-too-many"
       >
         {{
@@ -244,14 +244,14 @@ const faults = computed(() => failureKindRuleFaults(rules.value))
       </p>
       <p
         v-else-if="duplicateKinds.size > 0"
-        class="text-[11px] text-amber-300"
+        class="text-[11px] text-app-warning-300"
         data-testid="platform-alert-failure-kinds-duplicate"
       >
         {{ t('settings.platformAlerts.failureKinds.duplicateKind') }}
       </p>
       <p
         v-else-if="faults.rows.length > 0"
-        class="text-[11px] text-amber-300"
+        class="text-[11px] text-app-warning-300"
         data-testid="platform-alert-failure-kinds-invalid"
       >
         {{

@@ -43,13 +43,13 @@ const isEmpty = computed(() => props.rendered.groups.every((g) => g.entries.leng
     <!-- Lane header -->
     <div
       class="flex items-center gap-1.5 rounded-t-lg border-b px-2 py-1.5"
-      :style="{ borderColor: meta.color + '33' }"
+      :style="{ borderColor: tint(meta.color, 20) }"
     >
       <UIcon :name="meta.icon" class="h-3.5 w-3.5 shrink-0" :style="{ color: meta.color }" />
       <span class="truncate text-[11px] font-semibold text-default">{{ t(meta.labelKey) }}</span>
       <span
         class="ms-auto shrink-0 rounded px-1 text-[10px] font-semibold tabular-nums"
-        :style="{ backgroundColor: meta.color + '22', color: meta.color }"
+        :style="{ backgroundColor: tint(meta.color), color: meta.color }"
         :data-testid="`lane-count-${rendered.lane}`"
         >{{ rendered.total }}</span
       >

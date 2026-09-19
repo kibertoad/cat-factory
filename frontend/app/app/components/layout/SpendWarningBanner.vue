@@ -36,41 +36,44 @@ async function resume() {
          re-enables pointer events on it. -->
     <div v-if="exceeded && spend" class="pointer-events-auto w-full max-w-3xl">
       <div
-        class="w-full max-w-3xl rounded-2xl border-2 border-red-500/70 bg-red-950/95 p-5 shadow-2xl backdrop-blur"
+        class="w-full max-w-3xl rounded-2xl border-2 border-app-error-500/70 bg-app-error-950/95 p-5 shadow-2xl backdrop-blur"
         role="alert"
       >
         <div class="flex items-start gap-4">
-          <UIcon name="i-lucide-octagon-alert" class="mt-0.5 h-10 w-10 shrink-0 text-red-400" />
+          <UIcon
+            name="i-lucide-octagon-alert"
+            class="mt-0.5 h-10 w-10 shrink-0 text-app-error-400"
+          />
           <div class="min-w-0 flex-1">
-            <h2 class="text-lg font-semibold text-red-100">
+            <h2 class="text-lg font-semibold text-app-error-100">
               {{ t('layout.spendWarningBanner.title') }}
             </h2>
-            <p class="mt-1 text-sm text-red-200/90">
+            <p class="mt-1 text-sm text-app-error-200/90">
               {{ t('layout.spendWarningBanner.body') }}
             </p>
 
             <dl class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-              <div class="rounded-lg bg-red-900/50 px-3 py-2">
-                <dt class="text-[11px] uppercase tracking-wide text-red-300/80">
+              <div class="rounded-lg bg-app-error-900/50 px-3 py-2">
+                <dt class="text-[11px] uppercase tracking-wide text-app-error-300/80">
                   {{ t('layout.spendWarningBanner.spent') }}
                 </dt>
-                <dd class="text-base font-semibold tabular-nums text-red-50">
+                <dd class="text-base font-semibold tabular-nums text-app-error-50">
                   {{ money(spend.costSpent, spend.currency) }}
                 </dd>
               </div>
-              <div class="rounded-lg bg-red-900/50 px-3 py-2">
-                <dt class="text-[11px] uppercase tracking-wide text-red-300/80">
+              <div class="rounded-lg bg-app-error-900/50 px-3 py-2">
+                <dt class="text-[11px] uppercase tracking-wide text-app-error-300/80">
                   {{ t('layout.spendWarningBanner.budget') }}
                 </dt>
-                <dd class="text-base font-semibold tabular-nums text-red-50">
+                <dd class="text-base font-semibold tabular-nums text-app-error-50">
                   {{ money(spend.costLimit, spend.currency) }}
                 </dd>
               </div>
-              <div class="rounded-lg bg-red-900/50 px-3 py-2">
-                <dt class="text-[11px] uppercase tracking-wide text-red-300/80">
+              <div class="rounded-lg bg-app-error-900/50 px-3 py-2">
+                <dt class="text-[11px] uppercase tracking-wide text-app-error-300/80">
                   {{ t('layout.spendWarningBanner.tokens') }}
                 </dt>
-                <dd class="text-base font-semibold tabular-nums text-red-50">{{ tokens }}</dd>
+                <dd class="text-base font-semibold tabular-nums text-app-error-50">{{ tokens }}</dd>
               </div>
             </dl>
 
@@ -86,7 +89,7 @@ async function resume() {
               >
                 {{ t('layout.spendWarningBanner.resume') }}
               </UButton>
-              <span class="text-xs text-red-300/70">
+              <span class="text-xs text-app-error-300/70">
                 {{ t('layout.spendWarningBanner.resumeHint') }}
               </span>
             </div>

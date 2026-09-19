@@ -244,9 +244,9 @@ const binaryOutputSummary = computed(() => {
 const effortOpen = ref(false)
 const hint = computed(() => (effortReport.value ? effortHint(effortReport.value) : null))
 const CHIP_CLASS = {
-  easy: 'bg-emerald-500/15 text-emerald-300',
-  moderate: 'bg-amber-500/15 text-amber-300',
-  hard: 'bg-rose-500/15 text-rose-300',
+  easy: 'bg-app-success-500/15 text-app-success-300',
+  moderate: 'bg-app-warning-500/15 text-app-warning-300',
+  hard: 'bg-app-error-500/15 text-app-error-300',
 } as const
 const chipClass = computed(() =>
   effortReport.value ? CHIP_CLASS[effortBand(effortReport.value.difficulty)] : '',
@@ -369,7 +369,7 @@ const panelClass = computed(() => [
             <UIcon
               :name="validationReport.passed ? 'i-lucide-shield-check' : 'i-lucide-shield-alert'"
               class="h-3.5 w-3.5 shrink-0"
-              :class="validationReport.passed ? 'text-emerald-400' : 'text-rose-400'"
+              :class="validationReport.passed ? 'text-app-success-400' : 'text-app-error-400'"
             />
             <span class="text-[11px] font-semibold uppercase tracking-wide text-muted">
               {{ t('panels.stepDetail.validation.heading') }}
@@ -378,8 +378,8 @@ const panelClass = computed(() => [
               class="shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium tabular-nums"
               :class="
                 validationReport.passed
-                  ? 'bg-emerald-500/15 text-emerald-300'
-                  : 'bg-rose-500/15 text-rose-300'
+                  ? 'bg-app-success-500/15 text-app-success-300'
+                  : 'bg-app-error-500/15 text-app-error-300'
               "
             >
               {{
@@ -425,7 +425,7 @@ const panelClass = computed(() => [
             <UIcon
               :name="reproductionKeys!.icon"
               class="h-3.5 w-3.5 shrink-0"
-              :class="reproductionKeys!.proven ? 'text-emerald-400' : 'text-amber-400'"
+              :class="reproductionKeys!.proven ? 'text-app-success-400' : 'text-app-warning-400'"
             />
             <span class="text-[11px] font-semibold uppercase tracking-wide text-muted">
               {{ t('panels.stepDetail.reproduction.heading') }}
@@ -434,8 +434,8 @@ const panelClass = computed(() => [
               class="shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium"
               :class="
                 reproductionKeys!.proven
-                  ? 'bg-emerald-500/15 text-emerald-300'
-                  : 'bg-amber-500/15 text-amber-300'
+                  ? 'bg-app-success-500/15 text-app-success-300'
+                  : 'bg-app-warning-500/15 text-app-warning-300'
               "
             >
               {{ t(reproductionKeys!.chip) }}

@@ -115,7 +115,10 @@ const gateFieldValues = computed<DescriptorFieldValues>({
 
 <template>
   <div v-if="gated || gateFields?.length" class="ms-6 space-y-2" data-testid="gate-config">
-    <div v-if="gated" class="space-y-2 rounded-md border border-amber-800/40 bg-amber-950/10 p-2">
+    <div
+      v-if="gated"
+      class="space-y-2 rounded-md border border-app-warning-800/40 bg-app-warning-950/10 p-2"
+    >
       <div class="flex flex-wrap items-center gap-2 text-[10px]">
         <span class="text-dimmed">{{ t('pipeline.gateConfig.approversLabel') }}</span>
         <label

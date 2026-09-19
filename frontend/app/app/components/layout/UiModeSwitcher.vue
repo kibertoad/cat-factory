@@ -72,10 +72,10 @@ const pinnedTitle = computed(
     data-testid="ui-mode-toggle"
     :aria-label="t('uiMode.switchTo', { mode: t(MODE_LABELS[otherMode]) })"
     :title="t('uiMode.switchTo', { mode: t(MODE_LABELS[otherMode]) })"
-    class="flex w-full flex-col items-center gap-0.5 rounded-lg border border-muted bg-default/60 px-1 py-1.5 transition hover:border-primary-500/60 hover:bg-elevated/60"
+    class="flex w-full flex-col items-center gap-0.5 rounded-lg border border-muted bg-default/60 px-1 py-1.5 transition hover:border-primary/60 hover:bg-elevated/60"
     @click="uiMode.toggleMode()"
   >
-    <UIcon :name="icon" class="h-4 w-4 shrink-0 text-primary-400" />
+    <UIcon :name="icon" class="h-4 w-4 shrink-0 text-primary" />
     <span class="w-full truncate text-center text-[9px] font-medium uppercase text-toned">
       {{ currentLabel }}
     </span>
@@ -99,7 +99,7 @@ const pinnedTitle = computed(
         class="flex-1 truncate rounded-md px-2 py-1 text-xs font-medium transition"
         :class="
           mode === uiMode.mode
-            ? 'bg-primary-500/20 text-primary-200 ring-1 ring-primary-500/50'
+            ? 'bg-primary/20 text-primary ring-1 ring-primary/50'
             : 'text-muted hover:bg-elevated/70 hover:text-default'
         "
         @click="uiMode.setMode(mode)"

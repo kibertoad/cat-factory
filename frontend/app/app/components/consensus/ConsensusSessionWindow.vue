@@ -68,10 +68,10 @@ const STATUS_LABEL_KEYS: Record<string, string> = {
   failed: 'consensus.status.failed',
 }
 const STATUS_CLASS: Record<string, string> = {
-  running: 'bg-sky-500/15 text-sky-300',
-  synthesizing: 'bg-primary-500/15 text-primary-300',
-  done: 'bg-emerald-500/15 text-emerald-300',
-  failed: 'bg-rose-500/15 text-rose-300',
+  running: 'bg-app-info-500/15 text-app-info-300',
+  synthesizing: 'bg-primary/15 text-primary',
+  done: 'bg-app-success-500/15 text-app-success-300',
+  failed: 'bg-app-error-500/15 text-app-error-300',
 }
 
 function strategyLabel(strategy: string): string {
@@ -116,7 +116,7 @@ function topScore(c: ConsensusContribution): { label: string; value: number } | 
   <ResultWindowShell
     :open="open"
     icon="i-lucide-users-round"
-    icon-class="bg-amber-500/15 text-amber-300"
+    icon-class="bg-app-warning-500/15 text-app-warning-300"
     :title="headerTitle"
     :subtitle="headerSubtitle"
     variant="centered"
@@ -130,7 +130,7 @@ function topScore(c: ConsensusContribution): { label: string; value: number } | 
            this task" has the transcript but not the reason. -->
       <span
         v-if="session.groupName"
-        class="rounded-full bg-emerald-900/50 px-2.5 py-1 text-xs font-medium text-emerald-200"
+        class="rounded-full bg-app-success-900/50 px-2.5 py-1 text-xs font-medium text-app-success-200"
         :title="t('consensus.groupTitle')"
       >
         {{ session.groupName }}
@@ -154,7 +154,7 @@ function topScore(c: ConsensusContribution): { label: string; value: number } | 
         <!-- failure -->
         <div
           v-if="session.status === 'failed'"
-          class="mb-5 flex items-start gap-2 rounded-lg border border-rose-800/60 bg-rose-950/40 px-4 py-3 text-sm text-rose-200"
+          class="mb-5 flex items-start gap-2 rounded-lg border border-app-error-800/60 bg-app-error-950/40 px-4 py-3 text-sm text-app-error-200"
         >
           <span class="min-w-0 flex-1">{{
             t('consensus.failed', { error: session.error ?? t('consensus.unknownError') })
@@ -170,7 +170,7 @@ function topScore(c: ConsensusContribution): { label: string; value: number } | 
             </h3>
             <span
               v-if="session.confidence != null"
-              class="rounded bg-emerald-500/15 px-1.5 py-0.5 text-xs text-emerald-300"
+              class="rounded bg-app-success-500/15 px-1.5 py-0.5 text-xs text-app-success-300"
               >{{ t('consensus.confidence', { pct: pct(session.confidence) }) }}</span
             >
             <CopyButton :text="session.synthesis" class="ms-auto -my-1" />
@@ -183,7 +183,7 @@ function topScore(c: ConsensusContribution): { label: string; value: number } | 
             <li
               v-for="(d, i) in session.dissent"
               :key="i"
-              class="flex items-start gap-2 text-xs text-amber-300/90"
+              class="flex items-start gap-2 text-xs text-app-warning-300/90"
             >
               <UIcon name="i-lucide-triangle-alert" class="mt-0.5 h-3.5 w-3.5 shrink-0" />
               <span>{{ d }}</span>

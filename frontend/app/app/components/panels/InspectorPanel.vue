@@ -358,7 +358,7 @@ const showOriginalDescription = ref(false)
         <div class="flex items-center gap-2">
           <div
             class="flex h-9 w-9 items-center justify-center rounded-lg"
-            :style="{ backgroundColor: typeMeta.accent + '22' }"
+            :style="{ backgroundColor: tint(typeMeta.accent) }"
           >
             <UIcon :name="typeMeta.icon" class="h-5 w-5" :style="{ color: typeMeta.accent }" />
           </div>
@@ -401,9 +401,9 @@ const showOriginalDescription = ref(false)
         <!-- reworked: the standardized requirements document takes focus; the raw
              description is frozen and tucked behind an expander. -->
         <template v-if="frozenByRework">
-          <div class="rounded-lg border border-emerald-900/60 bg-emerald-950/20 p-3">
+          <div class="rounded-lg border border-app-success-900/60 bg-app-success-950/20 p-3">
             <div
-              class="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-emerald-400"
+              class="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-app-success-400"
             >
               <UIcon name="i-lucide-file-check-2" class="h-3.5 w-3.5" />
               {{ t('panels.inspector.reworkedRequirements') }}
@@ -493,10 +493,10 @@ const showOriginalDescription = ref(false)
       <!-- running bootstrap: show the steps, let the user inspect it, let them stop it -->
       <div
         v-else-if="runningRun"
-        class="space-y-2 rounded-lg border border-amber-900/60 bg-amber-950/30 px-3 py-2"
+        class="space-y-2 rounded-lg border border-app-warning-900/60 bg-app-warning-950/30 px-3 py-2"
       >
         <div class="flex items-center justify-between gap-2">
-          <span class="flex items-center gap-1.5 text-xs text-amber-300">
+          <span class="flex items-center gap-1.5 text-xs text-app-warning-300">
             <UIcon name="i-lucide-loader-circle" class="h-3.5 w-3.5 animate-spin" />
             {{ t('panels.inspector.bootstrapping') }}
           </span>
@@ -613,7 +613,7 @@ const showOriginalDescription = ref(false)
            on a disabled button doesn't fire hover events. -->
       <p
         v-if="isTask && runBlockedReason"
-        class="flex items-start gap-1.5 text-[11px] text-amber-300/90"
+        class="flex items-start gap-1.5 text-[11px] text-app-warning-300/90"
         data-testid="run-blocked-reason"
       >
         <UIcon name="i-lucide-lock" class="mt-px h-3 w-3 shrink-0" />

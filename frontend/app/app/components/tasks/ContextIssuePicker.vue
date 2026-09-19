@@ -335,7 +335,7 @@ onMounted(() => {
       @keydown.enter="refRow && pickRef(refRow)"
     />
 
-    <p v-if="searchError" class="px-1 text-[11px] text-amber-400">
+    <p v-if="searchError" class="px-1 text-[11px] text-app-warning-400">
       {{ searchError }}
     </p>
 
@@ -348,7 +348,7 @@ onMounted(() => {
         class="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-start text-xs text-toned hover:bg-elevated/70"
         @click="pickImported(row)"
       >
-        <UIcon :name="icon" class="h-3.5 w-3.5 shrink-0 text-primary-400" />
+        <UIcon :name="icon" class="h-3.5 w-3.5 shrink-0 text-primary" />
         <span class="truncate">{{ row.externalId }} · {{ row.title }}</span>
         <UBadge color="neutral" variant="soft" size="xs" class="ms-auto shrink-0">{{
           t('tasks.picker.imported')

@@ -715,7 +715,7 @@ async function clearWeb() {
       <p v-if="selectedCustomStore?.summary" class="text-[11px] text-muted">
         {{ selectedCustomStore.summary }}
       </p>
-      <p v-if="unregisteredStoreId" class="text-[11px] text-amber-400">
+      <p v-if="unregisteredStoreId" class="text-[11px] text-app-warning-400">
         {{
           t('layout.accountDeployment.contentStorage.unregisteredStoreWarning', {
             store: unregisteredStoreId,

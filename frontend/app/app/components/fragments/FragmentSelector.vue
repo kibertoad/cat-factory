@@ -117,7 +117,7 @@ function manageAccount() {
                     <UIcon
                       :name="selectedSet.has(f.id) ? 'i-lucide-check' : 'i-lucide-plus'"
                       class="h-4 w-4 shrink-0"
-                      :class="selectedSet.has(f.id) ? 'text-primary-400' : 'text-dimmed'"
+                      :class="selectedSet.has(f.id) ? 'text-primary' : 'text-dimmed'"
                     />
                     <span class="flex-1 truncate">{{ f.title }}</span>
                   </button>

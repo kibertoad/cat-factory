@@ -173,7 +173,7 @@ const reasonText = computed(() => {
   <ResultWindowShell
     :open="open"
     :icon="meta?.icon ?? 'i-lucide-git-pull-request'"
-    icon-class="bg-lime-500/15 text-lime-300"
+    icon-class="bg-app-hue-lime/15 text-app-hue-lime"
     :title="headerTitle"
     :subtitle="t('panels.mergerResult.description')"
     :step-ref="{ instanceId, stepIndex }"
@@ -188,8 +188,8 @@ const reasonText = computed(() => {
             class="mb-4 flex items-start gap-3 rounded-lg border p-3"
             :class="
               merged
-                ? 'border-emerald-800/70 bg-emerald-500/10'
-                : 'border-amber-800/70 bg-amber-500/10'
+                ? 'border-app-success-800/70 bg-app-success-500/10'
+                : 'border-app-warning-800/70 bg-app-warning-500/10'
             "
             data-testid="merger-decision"
             :data-outcome="decision.outcome"
@@ -197,13 +197,13 @@ const reasonText = computed(() => {
             <UIcon
               :name="merged ? 'i-lucide-git-merge' : 'i-lucide-user-round-check'"
               class="mt-0.5 h-5 w-5 shrink-0"
-              :class="merged ? 'text-emerald-300' : 'text-amber-300'"
+              :class="merged ? 'text-app-success-300' : 'text-app-warning-300'"
             />
             <div class="min-w-0">
               <div class="flex flex-wrap items-center gap-2">
                 <p
                   class="text-sm font-semibold"
-                  :class="merged ? 'text-emerald-200' : 'text-amber-200'"
+                  :class="merged ? 'text-app-success-200' : 'text-app-warning-200'"
                 >
                   {{ outcomeText }}
                 </p>
@@ -232,13 +232,13 @@ const reasonText = computed(() => {
                 <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-elevated">
                   <div
                     class="h-full rounded-full"
-                    :class="exceeded.has(axis.key) ? 'bg-rose-500' : 'bg-emerald-500'"
+                    :class="exceeded.has(axis.key) ? 'bg-app-error-500' : 'bg-app-success-500'"
                     :style="{ width: `${Math.round(axis.score * 100)}%` }"
                   />
                 </div>
                 <span
                   class="w-11 shrink-0 text-end text-xs tabular-nums"
-                  :class="exceeded.has(axis.key) ? 'text-rose-300' : 'text-toned'"
+                  :class="exceeded.has(axis.key) ? 'text-app-error-300' : 'text-toned'"
                 >
                   {{ n(axis.score, { key: 'percent' }) }}
                 </span>

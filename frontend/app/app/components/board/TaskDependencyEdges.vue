@@ -193,7 +193,7 @@ watch([taskDeps, epicLinks, frontendLinks, connectionLinks], poke)
         markerHeight="6"
         orient="auto-start-reverse"
       >
-        <path d="M0,0 L10,5 L0,10 z" fill="#f59e0b" />
+        <path d="M0,0 L10,5 L0,10 z" fill="var(--ui-warning)" />
       </marker>
       <marker
         id="task-arrow-done"
@@ -204,7 +204,7 @@ watch([taskDeps, epicLinks, frontendLinks, connectionLinks], poke)
         markerHeight="6"
         orient="auto-start-reverse"
       >
-        <path d="M0,0 L10,5 L0,10 z" fill="#64748b" />
+        <path d="M0,0 L10,5 L0,10 z" fill="var(--ui-text-muted)" />
       </marker>
       <marker
         id="frontend-arrow"
@@ -215,7 +215,7 @@ watch([taskDeps, epicLinks, frontendLinks, connectionLinks], poke)
         markerHeight="6"
         orient="auto-start-reverse"
       >
-        <path d="M0,0 L10,5 L0,10 z" fill="#22d3ee" />
+        <path d="M0,0 L10,5 L0,10 z" fill="var(--app-hue-cyan)" />
       </marker>
       <marker
         id="service-connection-arrow"
@@ -226,7 +226,7 @@ watch([taskDeps, epicLinks, frontendLinks, connectionLinks], poke)
         markerHeight="6"
         orient="auto-start-reverse"
       >
-        <path d="M0,0 L10,5 L0,10 z" fill="#34d399" />
+        <path d="M0,0 L10,5 L0,10 z" fill="var(--app-hue-emerald)" />
       </marker>
     </defs>
 
@@ -238,7 +238,7 @@ watch([taskDeps, epicLinks, frontendLinks, connectionLinks], poke)
       :y1="s.y1"
       :x2="s.x2"
       :y2="s.y2"
-      stroke="#34d399"
+      stroke="var(--app-hue-emerald)"
       :stroke-width="1.5"
       stroke-dasharray="3 4"
       :stroke-opacity="0.55"
@@ -253,7 +253,7 @@ watch([taskDeps, epicLinks, frontendLinks, connectionLinks], poke)
       :y1="s.y1"
       :x2="s.x2"
       :y2="s.y2"
-      stroke="#22d3ee"
+      stroke="var(--app-hue-cyan)"
       :stroke-width="1.5"
       stroke-dasharray="1 4"
       :stroke-opacity="0.6"
@@ -268,7 +268,7 @@ watch([taskDeps, epicLinks, frontendLinks, connectionLinks], poke)
       :y1="s.y1"
       :x2="s.x2"
       :y2="s.y2"
-      stroke="#8b5cf6"
+      stroke="var(--app-hue-violet)"
       :stroke-width="1.5"
       stroke-dasharray="2 5"
       :stroke-opacity="0.5"
@@ -281,7 +281,7 @@ watch([taskDeps, epicLinks, frontendLinks, connectionLinks], poke)
       :y1="s.y1"
       :x2="s.x2"
       :y2="s.y2"
-      :stroke="s.done ? '#64748b' : '#f59e0b'"
+      :stroke="s.done ? 'var(--ui-text-muted)' : 'var(--ui-warning)'"
       :stroke-width="2"
       :stroke-dasharray="s.done ? '0' : '5 4'"
       :stroke-opacity="0.85"

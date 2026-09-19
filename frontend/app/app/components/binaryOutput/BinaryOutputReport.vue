@@ -234,7 +234,7 @@ const state = computed(() => {
     <!-- Every qualification the report counted, each naming its own number. Never folded into
          one "some entries were dropped": the fix for an unknown service id is not the fix for
          a malformed entry, and neither is the fix for a list that stops short of the tail. -->
-    <ul class="space-y-1 text-[11px] text-amber-400">
+    <ul class="space-y-1 text-[11px] text-app-warning-400">
       <!-- The step's OWN target went missing from the catalog, and an id the AGENT invented,
            are two different failures with two different fixes (re-register it, versus correct
            the declaration). `binaryOutputView` returns them as DISJOINT fields precisely so

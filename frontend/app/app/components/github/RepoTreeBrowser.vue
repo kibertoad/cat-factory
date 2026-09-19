@@ -208,15 +208,15 @@ watch(
         >
           <button
             type="button"
-            class="flex items-center gap-2 truncate text-sm text-default hover:text-primary-400"
+            class="flex items-center gap-2 truncate text-sm text-default hover:text-primary"
             @click="browseTo(entry.path)"
           >
-            <UIcon name="i-lucide-folder" class="h-4 w-4 shrink-0 text-amber-400" />
+            <UIcon name="i-lucide-folder" class="h-4 w-4 shrink-0 text-app-warning-400" />
             <span class="truncate">{{ entry.name }}</span>
           </button>
           <span
             v-if="clashes(entry)"
-            class="flex shrink-0 items-center gap-1 text-xs text-amber-400"
+            class="flex shrink-0 items-center gap-1 text-xs text-app-warning-400"
           >
             <UIcon name="i-lucide-circle-alert" class="h-3.5 w-3.5" />
             {{ t('github.repoTree.exists') }}
@@ -258,7 +258,7 @@ watch(
             />
             <button
               type="button"
-              class="text-xs text-muted hover:text-primary-400"
+              class="text-xs text-muted hover:text-primary"
               @click="toggleAllFiles"
             >
               {{
@@ -284,8 +284,8 @@ watch(
               />
               <button
                 type="button"
-                class="flex items-center gap-2 truncate text-sm hover:text-primary-400"
-                :class="isPicked(entry.path) ? 'text-primary-400' : 'text-toned'"
+                class="flex items-center gap-2 truncate text-sm hover:text-primary"
+                :class="isPicked(entry.path) ? 'text-primary' : 'text-toned'"
                 :disabled="isAdded(entry.path)"
                 @click="pick(entry.path)"
               >
@@ -303,7 +303,7 @@ watch(
             <UIcon
               v-else-if="!multiple && isPicked(entry.path)"
               name="i-lucide-check"
-              class="h-4 w-4 shrink-0 text-primary-400"
+              class="h-4 w-4 shrink-0 text-primary"
             />
           </li>
         </template>
@@ -314,7 +314,10 @@ watch(
          (unlike a plain dir pick, where the root means "the whole repo") and the target path
          is spelled out beside the button rather than left to be inferred from the crumbs -->
     <div v-if="placingNewDir" class="mt-2 flex items-center justify-between gap-2">
-      <p class="min-w-0 truncate text-xs" :class="nameTakenHere ? 'text-amber-400' : 'text-muted'">
+      <p
+        class="min-w-0 truncate text-xs"
+        :class="nameTakenHere ? 'text-app-warning-400' : 'text-muted'"
+      >
         <template v-if="nameTakenHere">
           {{ t('github.repoTree.nameTaken', { name: newDirName }) }}
         </template>

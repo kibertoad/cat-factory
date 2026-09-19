@@ -47,10 +47,7 @@ const undecided = computed(() => tutorial.decision === null)
             :key="tour.id"
             class="flex items-center gap-3 rounded-lg border border-default bg-default/60 p-3"
           >
-            <UIcon
-              :name="tour.icon ?? 'i-lucide-compass'"
-              class="h-5 w-5 shrink-0 text-primary-400"
-            />
+            <UIcon :name="tour.icon ?? 'i-lucide-compass'" class="h-5 w-5 shrink-0 text-primary" />
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-2">
                 <span class="text-sm font-medium text-app-100">{{ t(tour.titleKey) }}</span>

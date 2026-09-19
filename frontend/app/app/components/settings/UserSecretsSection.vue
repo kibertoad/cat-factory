@@ -170,7 +170,7 @@ async function remove() {
         >
           <div>
             <span class="font-medium text-default">{{ status.label }}</span>
-            <div class="text-[11px] text-emerald-400">
+            <div class="text-[11px] text-app-success-400">
               {{ t('settings.userSecrets.connectedStored') }}
             </div>
           </div>
@@ -225,10 +225,10 @@ async function remove() {
             >
               {{ t('settings.userSecrets.testConnection') }}
             </UButton>
-            <span v-if="testResult && testResult.ok" class="text-xs text-emerald-400">
+            <span v-if="testResult && testResult.ok" class="text-xs text-app-success-400">
               {{ testResult.message ?? t('settings.userSecrets.tokenValid') }}
             </span>
-            <span v-else-if="testResult" class="text-xs text-rose-400">
+            <span v-else-if="testResult" class="text-xs text-app-error-400">
               {{ testResult.message ?? t('settings.userSecrets.tokenRejected') }}
             </span>
           </div>

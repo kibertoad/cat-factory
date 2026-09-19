@@ -363,7 +363,7 @@ async function save() {
               <p class="text-[11px] text-muted">
                 <i18n-t keypath="settings.workspaceSettings.waiting.body" tag="span" scope="global">
                   <template #overdue>
-                    <span class="text-error-400">{{
+                    <span class="text-app-error-400">{{
                       t('settings.workspaceSettings.waiting.overdue')
                     }}</span>
                   </template>
@@ -643,7 +643,7 @@ async function save() {
                   t('settings.workspaceSettings.runCredential.toggle')
                 }}</span>
               </label>
-              <p v-if="!draft.allowInitiatorPat" class="text-[11px] text-amber-300">
+              <p v-if="!draft.allowInitiatorPat" class="text-[11px] text-app-warning-300">
                 {{ t('settings.workspaceSettings.runCredential.offHint') }}
               </p>
               <!-- Stated rather than read: the account floor lives behind an ACCOUNT-admin

@@ -60,7 +60,7 @@ const reseedableCount = computed(
   <UModal v-model:open="open" :title="t('modelPreset.health.title')" :ui="{ content: 'max-w-2xl' }">
     <template #body>
       <div v-if="!hasIssues" class="py-6 text-center text-sm text-muted">
-        <UIcon name="i-lucide-check-circle-2" class="mx-auto mb-2 h-8 w-8 text-emerald-400" />
+        <UIcon name="i-lucide-check-circle-2" class="mx-auto mb-2 h-8 w-8 text-app-success-400" />
         {{ t('modelPreset.health.allValid') }}
       </div>
 
@@ -68,7 +68,7 @@ const reseedableCount = computed(
         <!-- New built-in presets the workspace can add. -->
         <section v-if="newPresets.length" class="space-y-2">
           <div class="flex items-center gap-2">
-            <UIcon name="i-lucide-sparkles" class="h-4 w-4 text-emerald-400" />
+            <UIcon name="i-lucide-sparkles" class="h-4 w-4 text-app-success-400" />
             <h3 class="text-sm font-semibold text-default">
               {{ t('modelPreset.health.newHeading') }}
             </h3>
@@ -103,7 +103,7 @@ const reseedableCount = computed(
         <!-- Outdated built-ins: a newer catalog version is available. -->
         <section v-if="outdated.length" class="space-y-2">
           <div class="flex items-center gap-2">
-            <UIcon name="i-lucide-arrow-up-circle" class="h-4 w-4 text-amber-400" />
+            <UIcon name="i-lucide-arrow-up-circle" class="h-4 w-4 text-app-warning-400" />
             <h3 class="text-sm font-semibold text-default">
               {{ t('modelPreset.health.updatesHeading') }}
             </h3>
@@ -119,7 +119,7 @@ const reseedableCount = computed(
             >
               <div class="min-w-0">
                 <span class="truncate text-sm font-medium text-app-100">{{ i.name }}</span>
-                <p class="text-[11px] text-amber-400/80">
+                <p class="text-[11px] text-app-warning-400/80">
                   {{
                     t('modelPreset.health.versionAvailable', {
                       from: i.fromVersion ?? 0,

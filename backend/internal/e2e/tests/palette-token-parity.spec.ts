@@ -159,6 +159,22 @@ test.describe('palette token parity', () => {
     ['--app-600', s(600)], // text-app-600
     ['--app-500', s(500)], // bg-app-500
     ['--app-400', s(400)], // ring-app-400
+    ['--app-bg-canvas', s(950)], // the board canvas (was the literal #0b1020 navy; now the ramp)
+  ]
+
+  // The five status ramps ride the same mirror scheme (`tokens.css`): in dark, `--app-<alias>-<n>`
+  // IS `<alias>`'s ramp shade `n`, and the default theme maps the aliases to the hues the raw
+  // classes used (amber, rose, emerald, sky, violet). One pin per alias, at a shade the app paints
+  // with, so an alias remap in `app.config.ts` or a broken mirror fails here. Primary has no
+  // numbered token (brand accents use the bare alias, Nuxt UI's own responsibility).
+  const ACCENT_DARK_EXPECT: Array<[string, string]> = [
+    ['--app-warning-300', 'oklch(87.9% 0.169 91.605)'], // text-app-warning-300 == amber-300
+    ['--app-error-800', 'oklch(45.5% 0.188 13.697)'], // border-app-error-800 == rose-800
+    ['--app-success-950', 'oklch(26.2% 0.051 172.552)'], // bg-app-success-950 == emerald-950
+    ['--app-info-400', 'oklch(74.6% 0.16 232.661)'], // text-app-info-400 == sky-400
+    ['--app-secondary-500', 'oklch(60.6% 0.25 292.717)'], // bg-app-secondary-500 == violet-500
+    // A category hue is not an alias: dark is the Tailwind ramp's own 400.
+    ['--app-hue-pink', 'oklch(71.8% 0.202 349.761)'], // text-app-hue-pink == pink-400
   ]
 
   test('role + app tokens keep their dark values (dark stays identical)', async ({
@@ -170,9 +186,41 @@ test.describe('palette token parity', () => {
     // `text-highlighted` is #fff in dark; assert it too, separately from the neutral-shade set.
     const [hi, white] = await resolvePair(page, 'var(--ui-text-highlighted)', 'rgb(255,255,255)')
     expect(hi, '--ui-text-highlighted must be white in dark (== text-white)').toBe(white)
-    for (const [cssVar, expected] of DARK_EXPECT) {
+    for (const [cssVar, expected] of [...DARK_EXPECT, ...ACCENT_DARK_EXPECT]) {
       const [token, literal] = await resolvePair(page, `var(${cssVar})`, expected)
       expect(token, `${cssVar} must resolve to ${expected} in dark`).toBe(literal)
     }
+  })
+
+  // The light half of the mirror: `--app-<alias>-<n>` in light is shade `1000 - n` of the same
+  // ramp (and `500` is its own midpoint), so the class list that reads on a dark surface lands on
+  // the matching light shade. Asserted by RELATION against the dark ramp read from the same page,
+  // never against a second literal table, so the assertion is about the mirror and nothing else.
+  test('app accent tokens mirror the ramp in light', async ({ page, seededBoard }) => {
+    void seededBoard
+    await reloadInColorMode(page, 'light')
+    for (const alias of ['secondary', 'success', 'info', 'warning', 'error']) {
+      for (const [dark, light] of [
+        [300, 700],
+        [800, 200],
+        [950, 50],
+        [500, 500],
+      ]) {
+        const [token, mirrored] = await resolvePair(
+          page,
+          `var(--app-${alias}-${dark})`,
+          `var(--ui-color-${alias}-${light})`,
+        )
+        expect(token, `--app-${alias}-${dark} must be ${alias}-${light} in light`).toBe(mirrored)
+      }
+    }
+    const [canvas, expected] = await resolvePair(page, 'var(--app-bg-canvas)', s(200))
+    expect(canvas, 'the light canvas is neutral-200').toBe(expected)
+    // The page surface sits one step below white so `bg-default/60` panels keep an edge (tokens.css).
+    const [page950, n100] = await resolvePair(page, 'var(--app-950)', s(100))
+    expect(page950, 'the light page surface is neutral-100').toBe(n100)
+    // A category hue steps to the ramp's 600 in light, Nuxt UI's own alias convention.
+    const [hue, hue600] = await resolvePair(page, 'var(--app-hue-pink)', 'oklch(59.2% 0.249 0.584)')
+    expect(hue, '--app-hue-pink is pink-600 in light').toBe(hue600)
   })
 })

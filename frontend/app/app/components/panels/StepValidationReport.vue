@@ -41,13 +41,13 @@ const failed = computed(() => props.report.outcomes.filter((o) => !o.passed))
         <UIcon
           :name="outcome.passed ? 'i-lucide-check' : 'i-lucide-x'"
           class="h-3.5 w-3.5 shrink-0"
-          :class="outcome.passed ? 'text-emerald-400' : 'text-rose-400'"
+          :class="outcome.passed ? 'text-app-success-400' : 'text-app-error-400'"
         />
         <span class="text-[12px] font-medium text-default">{{ outcome.label }}</span>
         <span class="truncate font-mono text-[11px] text-dimmed">{{ outcome.command }}</span>
         <span
           v-if="!outcome.passed"
-          class="ms-auto shrink-0 rounded bg-rose-500/15 px-1.5 py-0.5 text-[11px] tabular-nums text-rose-300"
+          class="ms-auto shrink-0 rounded bg-app-error-500/15 px-1.5 py-0.5 text-[11px] tabular-nums text-app-error-300"
         >
           {{
             outcome.timedOut
