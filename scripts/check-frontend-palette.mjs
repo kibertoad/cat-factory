@@ -1,16 +1,19 @@
 #!/usr/bin/env node
 // Bans raw Tailwind palette utilities (`bg-slate-900`, `text-indigo-400`, `border-slate-800`)
-// in the SPA layer. The theme migration (issue #2239) moved every one of these onto the
-// `app.config.ts` aliases (`bg-neutral-*`, `text-primary-*`), so that changing `neutral` /
-// `primary` there actually recolors the app. `neutral` maps to slate and `primary` to indigo,
-// so the alias utilities resolve to the SAME shade the raw class did (the e2e
-// `palette-token-parity` spec pins that equality); a reintroduced `slate-`/`indigo-` class
-// looks identical today but is welded to a fixed palette and silently opts out of the theme.
+// in the SPA layer. The theme migration (issue #2239) moved every grey onto Nuxt UI's role tokens
+// (`bg-default`, `text-muted`, ...) and the `app-*` tokens, and brand accents onto the `primary`
+// alias, so that `app.config.ts` actually recolours the app and the mode can flip. Each token's
+// dark value is the exact shade the raw class used (the e2e `palette-token-parity` spec pins that
+// equality), so a reintroduced `slate-`/`indigo-` class looks identical today but is welded to a
+// fixed palette and silently opts out of the theme.
 //
 // Policy: ZERO raw palette utilities. The migration left none, so there is no ratchet of
-// legacy allowances to carry: the moment a diff adds one, this fails. Use `neutral-{n}` for a
-// grey and `primary-{n}` for the brand color instead. A shade with no exact role token
-// (slate-950/100/600) still goes through `neutral-{n}`, not the raw class.
+// legacy allowances to carry: the moment a diff adds one, this fails. What replaces them is in
+// `frontend/app/README.md` ("Color through the theme aliases"): greys go through Nuxt UI's ROLE
+// tokens (`bg-default`, `bg-elevated`, `text-muted`, `border-default`, ...), never the numbered
+// neutral scale (`bg-neutral-900` is a fixed shade and does not flip with the mode); the five grey
+// shades with no role token use the `app-*` tokens (`bg-app-950`, `text-app-100`); brand accents
+// use `primary-{n}`.
 //
 // Scope: the two other Tailwind palette colours the app already uses semantically (`red`/
 // `rose` for danger, `amber`/`green` for status) are NOT covered; only slate/indigo, which
@@ -21,7 +24,7 @@
 
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const SCAN_ROOT = join(repoRoot, 'frontend', 'app', 'app')
@@ -72,7 +75,11 @@ function main() {
 
   if (offenders.length) {
     console.error('Raw Tailwind palette utilities are banned in the SPA (issue #2239).')
-    console.error('Use the theme aliases: slate-{n} -> neutral-{n}, indigo-{n} -> primary-{n}.\n')
+    console.error(
+      'Greys: a role token (bg-default, bg-elevated, text-muted, border-default) or, for a shade\n' +
+        'with no role token, an app-* token (bg-app-950, text-app-100). Brand: primary-{n}.\n' +
+        'Never the numbered neutral scale. See frontend/app/README.md, "Color through the theme aliases".\n',
+    )
     for (const o of offenders) {
       console.error(`  ${o.file}:${o.line}  ${o.matches.join(' ')}`)
     }
@@ -84,4 +91,4 @@ function main() {
 }
 
 // Run the filesystem scan only as a CLI; importing for tests must have no side effects.
-if (import.meta.url === `file://${process.argv[1]}`) main()
+if (import.meta.url === pathToFileURL(process.argv[1]).href) main()

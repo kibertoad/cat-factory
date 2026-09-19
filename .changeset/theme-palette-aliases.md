@@ -10,6 +10,7 @@ tokens; `text-white` becomes `text-highlighted`; brand accents use the `primary`
 
 Dark mode is unchanged (every role/`app-*` token resolves to the exact shade it replaced; verified
 by pixel-diff against the prior build, with one sub-perceptual `backdrop-blur` toolbar artifact
-noted). Light mode now renders coherently from the same markup, but `colorMode` stays pinned dark:
-light is one config line away, not enabled here. A new e2e `palette-token-parity` dark-identity test
+noted). `colorMode` stays pinned dark: the theme layer is light-capable, but light is NOT enabled
+and NOT ready (the board canvas, the markdown reader, the category accents and a few literals
+still render for dark only); enabling it is a separate change. A new e2e `palette-token-parity` dark-identity test
 and `scripts/check-frontend-palette.mjs` guard against regressions.

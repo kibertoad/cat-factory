@@ -1,17 +1,16 @@
 import { test, expect } from './fixtures'
 
-// Guards the Nuxt UI theming migration (issue #2239): the SPA is moving off raw
-// Tailwind palette classes (`bg-slate-900`, `text-indigo-400`) onto the theme
-// aliases (`bg-neutral-900`, `text-primary-400`). That swap is only pixel-identical
-// because `app.config.ts` maps `neutral: 'slate'` / `primary: 'indigo'`, so the alias
-// utility inlines the Nuxt UI layer variable, which resolves to the source scale:
-//   bg-neutral-{n}  ->  (inlined) var(--ui-color-neutral-{n})
-//                   ->  var(--color-slate-{n}, slate-{n} literal)
-//                   ->  the slate-{n} value
-// This asserts `--ui-color-neutral-{n}` / `--ui-color-primary-{n}` resolve, in the REAL
-// built stylesheet, to the exact Tailwind slate/indigo values for every shade the app
-// uses. A Nuxt UI upgrade or an `app.config.ts` edit that broke the aliasing reshades
-// the whole app; it would fail here instead of shipping.
+// Guards the Nuxt UI theming migration (issue #2239): the SPA moved off raw Tailwind palette
+// classes (`bg-slate-900`, `text-indigo-400`) onto Nuxt UI's ROLE tokens (`bg-default`,
+// `text-muted`, ...), the `app-*` tokens for the five grey shades with no role token, and the
+// `primary` alias for brand accents. Dark stayed pixel-identical only because every one of those
+// resolves, in dark, to the exact slate/indigo shade it replaced. The chain each token rides:
+//   bg-default  ->  var(--ui-bg)  ->  var(--ui-color-neutral-900)
+//               ->  var(--color-slate-900, slate-900 literal)  ->  the slate-900 value
+// This asserts, in the REAL built stylesheet, that `--ui-color-neutral-{n}` / `--ui-color-primary-{n}`
+// resolve to the exact Tailwind slate/indigo values for every shade the app uses, and that each
+// role / `app-*` token's DARK value is the shade it replaced. A Nuxt UI upgrade or an
+// `app.config.ts` edit that broke the aliasing would reshade the whole app; it fails here instead.
 //
 // Two deliberate choices, both learned from getting it wrong first:
 //   1. Read `--ui-color-*`, NOT `--color-*`. Nuxt UI declares `--color-neutral-*` with
