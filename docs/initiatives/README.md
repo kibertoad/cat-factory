@@ -111,7 +111,8 @@ a tracker document](../../CLAUDE.md).
 - [Global search and deep-linkable routing](./global-search-and-deep-links.md)
 - [Mobile-friendly frontend](./mobile-friendly-frontend.md)
 - [UX papercuts](./ux-papercuts.md) ·
-  [quality-of-life pass](./ux-qol-pass.md)
+  [quality-of-life pass](./ux-qol-pass.md) ·
+  [UX assessment 2026-09 (core loop by persona)](./ux-assessment-2026-09.md)
 
 The modular-vue adoption closed with slice 5, and its four upstream request specs all shipped
 and were re-adopted, so the whole family converted to
