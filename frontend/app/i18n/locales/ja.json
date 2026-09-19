@@ -8586,6 +8586,7 @@
       "linkPlaceholder": "https://ui.nuxt.com/theme?doc=…",
       "nameLabel": "名前",
       "namePlaceholder": "マイテーマ",
+      "nameTaken": "「{typed}」という名前のテーマはすでにあります。こちらは「{name}」として保存されます。",
       "fontNote": "テーマで指定されたフォントは、この端末またはこの環境が提供している場合にのみ使われます。それ以外の場合はブラウザーの既定のフォントになります。",
       "submit": "読み込む",
       "cancel": "キャンセル",

@@ -40,7 +40,9 @@ export const useThemeStore = defineStore(
      * A display name no other theme (built-in or imported) already uses. Ids never collide (an
      * import gets a generated one), so the name is the only thing two entries could share, and
      * two menu rows both reading "Mono" tell the user nothing. The first duplicate becomes
-     * "Mono (2)", the next "Mono (3)", the file-manager convention.
+     * "Mono (2)", the next "Mono (3)", the file-manager convention. Exposed so the import dialog
+     * can show the name that WILL be used while the user is still typing, rather than surprising
+     * them after the save.
      */
     function uniqueName(requested: string): string {
       const taken = new Set(themes.value.map((theme) => theme.name.toLowerCase()))
@@ -69,7 +71,17 @@ export const useThemeStore = defineStore(
       if (current.value === id) current.value = DEFAULT_THEME_ID
     }
 
-    return { current, custom, themes, active, isCustom, select, addCustom, removeCustom }
+    return {
+      current,
+      custom,
+      themes,
+      active,
+      isCustom,
+      uniqueName,
+      select,
+      addCustom,
+      removeCustom,
+    }
   },
   { persist: { pick: ['current', 'custom'] } },
 )

@@ -8914,6 +8914,10 @@
       "linkPlaceholder": "https://ui.nuxt.com/theme?doc=…",
       "nameLabel": "Name",
       "namePlaceholder": "My theme",
+      "nameTaken": "A theme called “{typed}” already exists. This one will be saved as “{name}”.",
+      "@nameTaken": {
+        "description": "Help text under the Name field of the theme import dialog when the typed name is already used. {typed} is what the user typed, {name} is the name that will be saved instead (e.g. 'Mono (2)')."
+      },
       "fontNote": "A font the theme names is used only if this device or deployment provides it; otherwise the browser falls back to its default.",
       "submit": "Import",
       "cancel": "Cancel",

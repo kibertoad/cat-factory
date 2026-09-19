@@ -8586,6 +8586,7 @@
       "linkPlaceholder": "https://ui.nuxt.com/theme?doc=…",
       "nameLabel": "Nombre",
       "namePlaceholder": "Mi tema",
+      "nameTaken": "Ya existe un tema llamado «{typed}». Este se guardará como «{name}».",
       "fontNote": "La fuente que nombra el tema solo se usa si este dispositivo o esta instalación la proporciona; si no, el navegador usa su fuente predeterminada.",
       "submit": "Importar",
       "cancel": "Cancelar",
