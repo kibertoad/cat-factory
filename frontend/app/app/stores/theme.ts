@@ -36,11 +36,26 @@ export const useThemeStore = defineStore(
       if (themes.value.some((theme) => theme.id === id)) current.value = id
     }
 
+    /**
+     * A display name no other theme (built-in or imported) already uses. Ids never collide (an
+     * import gets a generated one), so the name is the only thing two entries could share, and
+     * two menu rows both reading "Mono" tell the user nothing. The first duplicate becomes
+     * "Mono (2)", the next "Mono (3)", the file-manager convention.
+     */
+    function uniqueName(requested: string): string {
+      const taken = new Set(themes.value.map((theme) => theme.name.toLowerCase()))
+      if (!taken.has(requested.toLowerCase())) return requested
+      for (let n = 2; ; n++) {
+        const candidate = `${requested} (${n})`
+        if (!taken.has(candidate.toLowerCase())) return candidate
+      }
+    }
+
     /** Store an imported document under a name and switch to it. Returns the new theme. */
     function addCustom(name: string, doc: ThemeDoc): NamedTheme {
       const theme: NamedTheme = {
         id: `custom-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
-        name: name.trim() || `Theme ${custom.value.length + 1}`,
+        name: uniqueName(name.trim() || `Theme ${custom.value.length + 1}`),
         doc,
       }
       custom.value = [...custom.value, theme]

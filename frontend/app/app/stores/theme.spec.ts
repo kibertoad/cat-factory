@@ -34,6 +34,14 @@ describe('theme store', () => {
     expect(store.addCustom('   ', { version: 1 }).name).toBe('Theme 2')
   })
 
+  it('disambiguates a name a built-in or an earlier import already uses', () => {
+    const store = useThemeStore()
+    expect(store.addCustom('Mono', { version: 1 }).name).toBe('Mono (2)')
+    expect(store.addCustom('mono', { version: 1 }).name).toBe('mono (3)')
+    expect(store.addCustom('Ocean', { version: 1 }).name).toBe('Ocean')
+    expect(store.addCustom('Ocean', { version: 1 }).name).toBe('Ocean (2)')
+  })
+
   it('falls back to the default when the active custom theme is removed or was never restored', () => {
     const store = useThemeStore()
     const theme = store.addCustom('Gone', { version: 1 })
