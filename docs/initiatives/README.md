@@ -110,6 +110,8 @@ a tracker document](../../CLAUDE.md).
 - [GitLab product-surface parity](./gitlab-ui-parity.md)
 - [Global search and deep-linkable routing](./global-search-and-deep-links.md)
 - [Mobile-friendly frontend](./mobile-friendly-frontend.md)
+- [UX assessment against the delivery jobs](./ux-jtbd-assessment.md) (assessment, not a
+  tracker; the home-surface decision it raises has its own issue)
 - [UX papercuts](./ux-papercuts.md) ·
   [quality-of-life pass](./ux-qol-pass.md)
 
