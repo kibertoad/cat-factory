@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract, withObjectKeys } from '@toad-contracts/valibot'
+import { defineApiContract, noBodyResponse, withObjectKeys } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import {
   branchProtectionReportSchema,
@@ -129,7 +129,7 @@ export const listGitHubRepoFilesContract = defineApiContract({
 export const disconnectGitHubContract = defineApiContract({
   method: 'delete',
   pathResolver: () => '/github/connection',
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 // ---- resync ---------------------------------------------------------------
@@ -215,7 +215,7 @@ export const mergeGitHubPullRequestContract = defineApiContract({
   requestPathParamsSchema: repoPullNumberParams,
   pathResolver: ({ repoGithubId, number }) => `/github/repos/${repoGithubId}/pulls/${number}/merge`,
   requestBodySchema: mergePullRequestSchema,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 export const commentGitHubIssueContract = defineApiContract({
@@ -224,7 +224,7 @@ export const commentGitHubIssueContract = defineApiContract({
   pathResolver: ({ repoGithubId, number }) =>
     `/github/repos/${repoGithubId}/issues/${number}/comments`,
   requestBodySchema: commentSchema,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 /**

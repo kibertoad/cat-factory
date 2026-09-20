@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
+import { ContractNoBody, defineApiContract, noBodyResponse } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import {
   createModelPresetSchema,
@@ -41,7 +41,7 @@ export const deleteModelPresetContract = defineApiContract({
   method: 'delete',
   requestPathParamsSchema: presetIdParams,
   pathResolver: ({ presetId }) => `/model-presets/${presetId}`,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 /**

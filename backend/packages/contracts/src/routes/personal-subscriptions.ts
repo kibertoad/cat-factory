@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
+import { defineApiContract, noBodyResponse } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import {
   personalSubscriptionStatusSchema,
@@ -36,5 +36,5 @@ export const removePersonalSubscriptionContract = defineApiContract({
   method: 'delete',
   requestPathParamsSchema: vendorParams,
   pathResolver: ({ vendor }) => `/personal-subscriptions/${vendor}`,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })

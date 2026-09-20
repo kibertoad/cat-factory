@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
+import { ContractNoBody, defineApiContract, noBodyResponse } from '@toad-contracts/valibot'
 import {
   createHeadlessPublicApiKeySchema,
   createPublicApiKeySchema,
@@ -70,7 +70,7 @@ export const revokePublicApiKeyContract = defineApiContract({
   method: 'delete',
   requestPathParamsSchema: idParams,
   pathResolver: ({ id }) => `/public-api-keys/${id}`,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 // ---- the external `/api/v1` surface (absolute paths, key-authenticated) ----
@@ -258,7 +258,7 @@ export const deletePublicTaskContract = withMinScope(
     method: 'delete',
     requestPathParamsSchema: taskIdParams,
     pathResolver: ({ taskId }) => `/api/v1/tasks/${taskId}`,
-    responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+    responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
   }),
 )
 
@@ -488,6 +488,6 @@ export const revokePublicKeyContract = withMinScope(
     method: 'delete',
     requestPathParamsSchema: keyIdParams,
     pathResolver: ({ keyId }) => `/api/v1/keys/${keyId}`,
-    responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+    responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
   }),
 )

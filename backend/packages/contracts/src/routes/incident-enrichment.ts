@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
+import { defineApiContract, noBodyResponse } from '@toad-contracts/valibot'
 import {
   incidentEnrichmentViewSchema,
   upsertIncidentEnrichmentSchema,
@@ -28,5 +28,5 @@ export const setIncidentEnrichmentContract = defineApiContract({
 export const deleteIncidentEnrichmentContract = defineApiContract({
   method: 'delete',
   pathResolver: () => '/incident-enrichment',
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })

@@ -41,7 +41,7 @@
     "oxlint": "^1.83.0",
     "publint": "^0.3.24",
     "sherif": "^1.13.0",
-    "turbo": "^2.10.13",
+    "turbo": "^2.11.2",
     "typescript": "7.0.2"
   },
   "engines": {

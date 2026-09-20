@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
+import { defineApiContract, noBodyResponse } from '@toad-contracts/valibot'
 import {
   attachPublicTaskDocumentSchema,
   createPublicServiceSchema,
@@ -102,7 +102,7 @@ export const deletePublicServiceContract = withMinScope(
     method: 'delete',
     requestPathParamsSchema: singleStringParam('serviceId'),
     pathResolver: ({ serviceId }) => `/api/v1/services/${serviceId}`,
-    responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+    responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
   }),
 )
 
@@ -179,6 +179,6 @@ export const detachPublicTaskDocumentContract = withMinScope(
     requestPathParamsSchema: taskIdParams,
     pathResolver: ({ taskId }) => `/api/v1/tasks/${taskId}/documents/detach`,
     requestBodySchema: detachPublicTaskDocumentSchema,
-    responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+    responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
   }),
 )
