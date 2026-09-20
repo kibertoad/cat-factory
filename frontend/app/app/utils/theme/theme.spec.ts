@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { docModeTokens, themeDocToCss } from '~/utils/theme/css'
+import { docModeTokens, isSafePaletteName, themeDocToCss } from '~/utils/theme/css'
 import {
   DEFAULT_COLORS,
   docColors,
@@ -112,5 +112,38 @@ describe('themeDocToCss', () => {
     expect(css).not.toContain('url(')
     expect(css).toContain('--ui-text: black;')
     expect(css).toContain('--color-ok-600: #abc;')
+  })
+
+  it('applies blackAsPrimary at the same precedence in both modes', () => {
+    const tokens = docModeTokens({
+      version: 1,
+      blackAsPrimary: true,
+      style: { tokenShades: { '--ui-primary': { light: 600, dark: 600 } } },
+    })
+    // The style sets a --ui-primary shade in both modes; blackAsPrimary is the coarser control and
+    // wins in BOTH (the old code let the light style shade suppress it, so light disagreed).
+    expect(tokens.light['--ui-primary']).toBe('black')
+    expect(tokens.dark['--ui-primary']).toBe('white')
+  })
+
+  it('lets an explicit token beat blackAsPrimary in both modes', () => {
+    const tokens = docModeTokens({
+      version: 1,
+      blackAsPrimary: true,
+      tokens: {
+        light: { '--ui-primary': 'var(--custom-l)' },
+        dark: { '--ui-primary': 'var(--custom-d)' },
+      },
+    })
+    expect(tokens.light['--ui-primary']).toBe('var(--custom-l)')
+    expect(tokens.dark['--ui-primary']).toBe('var(--custom-d)')
+  })
+
+  it('accepts a plain palette name and rejects one that could break out of CSS', () => {
+    expect(isSafePaletteName('green')).toBe(true)
+    expect(isSafePaletteName('brand-1')).toBe(true)
+    expect(isSafePaletteName('red; } body { display: none')).toBe(false)
+    expect(isSafePaletteName('__proto__')).toBe(false)
+    expect(isSafePaletteName(undefined)).toBe(false)
   })
 })

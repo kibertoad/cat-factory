@@ -30,9 +30,15 @@ export const BOOT_PALETTE_TOKENS = {
 export type BootPaletteEntry = Record<keyof typeof BOOT_PALETTE_TOKENS, string>
 export type BootPalette = { theme?: string } & Partial<Record<ColorModeName, BootPaletteEntry>>
 
-// A computed colour as the browser reports it: a colour function or a hex literal. Anything else
-// (an unresolved `var()` reads back as an empty string) is dropped rather than cached.
+// A computed colour as the browser reports it: a colour function or a hex literal.
 const COMPUTED_COLOR = /^(?:[a-z]+\([\d.%,\s/a-z-]+\)|#[0-9a-f]{3,8}|[a-z]+)$/i
+
+// A sentinel the probe's fallback lands on when a token is undefined. `color` is an INHERITED
+// property, so a bare `color: var(--missing)` is invalid at computed-value time and resolves to the
+// inherited colour (always a real `rgb(...)`), not to nothing: the guard below could never tell an
+// unresolved token from a resolved one. Giving the `var()` this fallback makes the difference
+// observable, since no theme paints a slot in it. `getComputedStyle` normalises it to this string.
+const UNRESOLVED_SENTINEL = 'rgb(1, 2, 3)' // colour-literal-ok: a probe sentinel, never a painted colour
 
 function isEntry(value: unknown): value is BootPaletteEntry {
   if (typeof value !== 'object' || value === null) return false
@@ -51,9 +57,9 @@ export function captureBootPalette(
   try {
     const entry: Partial<BootPaletteEntry> = {}
     for (const [slot, token] of Object.entries(BOOT_PALETTE_TOKENS)) {
-      probe.style.color = `var(${token})`
+      probe.style.color = `var(${token}, ${UNRESOLVED_SENTINEL})`
       const computed = getComputedStyle(probe).color
-      if (!COMPUTED_COLOR.test(computed)) return null
+      if (computed === UNRESOLVED_SENTINEL || !COMPUTED_COLOR.test(computed)) return null
       entry[slot as keyof BootPaletteEntry] = computed
     }
     return entry as BootPaletteEntry

@@ -1,9 +1,10 @@
 import { computed, nextTick, ref, toRaw, watch } from 'vue'
 import { useThemeStore } from '~/stores/theme'
 import { captureBootPalette, writeBootPalette } from '~/utils/theme/bootPalette'
-import { themeDocToCss } from '~/utils/theme/css'
+import { isSafePaletteName, themeDocToCss } from '~/utils/theme/css'
 import {
   COLOR_ALIASES,
+  DEFAULT_COLORS,
   docColors,
   docComponentOverrides,
   mergeUi,
@@ -45,8 +46,14 @@ export default defineNuxtPlugin(() => {
   let themedKeys = new Set<string>()
 
   function apply(doc: ThemeDoc) {
-    const colors: Record<string, string> = docColors(doc)
-    for (const alias of COLOR_ALIASES) ui.colors[alias] = colors[alias]!
+    // `docColors` fills defaults but passes a document's own alias values through untouched, and
+    // Nuxt UI interpolates each into `--ui-color-<alias>-<shade>: var(--color-<value>-<shade>)`, so
+    // an imported document's value has to clear the same grammar as any token that reaches CSS.
+    const colors = docColors(doc)
+    for (const alias of COLOR_ALIASES) {
+      const value = colors[alias]
+      ui.colors[alias] = isSafePaletteName(value) ? value : DEFAULT_COLORS[alias]
+    }
 
     const overrides = docComponentOverrides(doc)
     const next = new Set(Object.keys(overrides))

@@ -55,6 +55,15 @@ export function isSafeFontName(value: unknown): value is string {
   return typeof value === 'string' && SAFE_FONT_NAME.test(value)
 }
 
+/**
+ * A palette NAME safe to interpolate into `--color-<name>-<shade>` and into the alias map Nuxt UI
+ * re-emits as `--ui-color-<alias>-<shade>: var(--color-<value>-<shade>)`. Both a custom palette key
+ * and a document's alias VALUE reach generated CSS this way, so both must pass this one rule.
+ */
+export function isSafePaletteName(value: unknown): value is string {
+  return typeof value === 'string' && SAFE_PALETTE_NAME.test(value) && !UNSAFE_KEYS.has(value)
+}
+
 function cleanVars(vars: Record<string, unknown> | undefined): Record<string, string> {
   const result: Record<string, string> = {}
   for (const [key, value] of Object.entries(vars ?? {})) {
@@ -63,21 +72,29 @@ function cleanVars(vars: Record<string, unknown> | undefined): Record<string, st
   return result
 }
 
-/** The per-mode variable set a document resolves to: style shades first, explicit tokens win. */
+/**
+ * The per-mode variable set a document resolves to. One precedence in BOTH modes: style shades
+ * first, then `blackAsPrimary` (the coarser instruction), then explicit tokens win. Light mirrors
+ * dark so a document carrying both `blackAsPrimary` and a `--ui-primary` style shade cannot render
+ * monochrome in one mode and a ramp colour in the other.
+ */
 export function docModeTokens(doc: ThemeDoc): ModeTokens {
   const style = styleTokens(doc.style)
-  const light = { ...style.light, ...cleanVars(doc.tokens?.light) }
+  const light = {
+    ...style.light,
+    ...(doc.blackAsPrimary ? { '--ui-primary': 'black' } : {}),
+    ...cleanVars(doc.tokens?.light),
+  }
   const dark = {
     ...style.dark,
     ...(doc.blackAsPrimary ? { '--ui-primary': 'white' } : {}),
     ...cleanVars(doc.tokens?.dark),
   }
-  if (doc.blackAsPrimary && !('--ui-primary' in light)) light['--ui-primary'] = 'black'
   return { light, dark }
 }
 
 function paletteLines(name: string, palette: ThemePalette): string[] {
-  if (!SAFE_PALETTE_NAME.test(name) || UNSAFE_KEYS.has(name)) return []
+  if (!isSafePaletteName(name)) return []
   return Object.entries(palette.shades ?? {})
     .filter(([shade, value]) => /^\d{2,3}$/.test(shade) && isSafeShadeValue(value))
     .map(([shade, value]) => `  --color-${name}-${shade}: ${value};`)
