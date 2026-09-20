@@ -797,7 +797,7 @@ const { requestClose } = useUnsavedGuard({
                         </button>
                         <button
                           data-testid="pr-review-challenge-submit"
-                          class="rounded bg-primary/80 px-2 py-1 text-[11px] font-medium text-white hover:bg-primary/90 disabled:opacity-50"
+                          class="rounded bg-primary/80 px-2 py-1 text-[11px] font-medium text-inverted hover:bg-primary/90 disabled:opacity-50"
                           :disabled="!canResolve"
                           @click="submitChallenge(f.id)"
                         >

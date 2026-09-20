@@ -50,7 +50,7 @@ function stepLabel(key: string | undefined): string {
         <span
           class="flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold"
           :class="{
-            'bg-primary text-white': i === index,
+            'bg-primary text-inverted': i === index,
             'bg-app-success-600/70 text-highlighted': i < index,
             'bg-accented text-toned': i > index,
           }"
