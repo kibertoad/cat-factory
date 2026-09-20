@@ -3,7 +3,8 @@
 Status: assessment only, no implementation. Written 2026-09-20 against `main` at `585bcdaba`,
 the running local deployment on port 3010 (demo board "Checkout platform"), the website
 (catfactory.ai), and the frontend README. Annotated screenshots and wireframes are under
-`assets/ux-jtbd/` beside this file (section 8).
+`assets/ux-jtbd/` beside this file (section 8). The decision this report raises is filed as
+[#2258](https://github.com/kibertoad/cat-factory/issues/2258).
 
 Out of scope on purpose: visual consistency (typography, primitives, button variants, radius,
 feedback states). Issue #2246 and its slices #2247 to #2252 own that. This report is about
