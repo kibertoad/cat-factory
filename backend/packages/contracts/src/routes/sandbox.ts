@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
+import { ContractNoBody, defineApiContract, noBodyResponse } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import {
   cloneSandboxPromptSchema,
@@ -110,7 +110,7 @@ export const archiveSandboxPromptContract = defineApiContract({
   method: 'delete',
   requestPathParamsSchema: promptIdParams,
   pathResolver: ({ promptId }) => `/sandbox/prompts/${promptId}`,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 // ---- fixtures -------------------------------------------------------------
@@ -132,7 +132,7 @@ export const removeSandboxFixtureContract = defineApiContract({
   method: 'delete',
   requestPathParamsSchema: fixtureIdParams,
   pathResolver: ({ fixtureId }) => `/sandbox/fixtures/${fixtureId}`,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 // ---- experiments ----------------------------------------------------------

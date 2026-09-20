@@ -118,7 +118,12 @@ export async function sendContract<T extends ApiContract>(
     const { statusCode, body } = error as { statusCode: number; body: unknown }
     throw new ApiError(statusCode, body)
   }
-  return outcome.result!.body as SuccessBodyOf<T>
+  // The success arm is read through the same widening as the error arm above. Since
+  // `@toad-contracts/core@1`, a success entry expands to one union member per declared media
+  // type, so on an unresolved `T` the member type stays a deferred conditional and even reading
+  // `.body` off it is unprovable, not just assigning it to `SuccessBodyOf<T>`.
+  const { body } = outcome.result! as { body: unknown }
+  return body as SuccessBodyOf<T>
 }
 
 /** Curry {@link sendContract} over a client into the throw-on-error {@link ApiSend}. */

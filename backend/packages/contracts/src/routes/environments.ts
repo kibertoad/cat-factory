@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
+import { ContractNoBody, defineApiContract, noBodyResponse } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import {
   bootstrapEnvironmentRepoSchema,
@@ -68,7 +68,7 @@ export const updateEnvironmentSecretsContract = defineApiContract({
 export const unregisterEnvironmentProviderContract = defineApiContract({
   method: 'delete',
   pathResolver: () => '/environments/connection',
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 export const describeEnvironmentProviderContract = defineApiContract({
@@ -180,7 +180,7 @@ export const unregisterEnvironmentHandlerContract = defineApiContract({
   requestPathParamsSchema: provisionTypeParams,
   requestQuerySchema: handlerManifestIdQuery,
   pathResolver: ({ provisionType }) => `/environments/handlers/${provisionType}`,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 export const upsertCustomManifestTypeContract = defineApiContract({
@@ -195,7 +195,7 @@ export const removeCustomManifestTypeContract = defineApiContract({
   method: 'delete',
   requestPathParamsSchema: manifestIdParams,
   pathResolver: ({ manifestId }) => `/environments/custom-types/${manifestId}`,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 export const listEnvironmentsContract = defineApiContract({

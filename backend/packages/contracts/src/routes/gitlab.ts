@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
+import { defineApiContract, noBodyResponse } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import { githubConnectionSchema } from '../github.js'
 import { errorResponses } from './_shared.js'
@@ -35,5 +35,5 @@ export const connectGitLabContract = defineApiContract({
 export const disconnectGitLabContract = defineApiContract({
   method: 'delete',
   pathResolver: () => '/gitlab/connection',
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })

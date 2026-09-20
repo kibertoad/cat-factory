@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
+import { ContractNoBody, defineApiContract, noBodyResponse } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import { connectionTestResultSchema } from '../provider-config.js'
 import {
@@ -60,7 +60,7 @@ export const connectServiceCatalogContract = defineApiContract({
 export const disconnectServiceCatalogContract = defineApiContract({
   method: 'delete',
   pathResolver: () => '/service-catalog',
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 /**

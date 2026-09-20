@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
+import { defineApiContract, noBodyResponse } from '@toad-contracts/valibot'
 import {
   addApiKeySchema,
   apiKeyListResultSchema,
@@ -44,7 +44,7 @@ export const removeWorkspaceApiKeyContract = defineApiContract({
   method: 'delete',
   requestPathParamsSchema: idParams,
   pathResolver: ({ id }) => `/api-keys/${id}`,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 // ---- user-scoped (the caller's own pool, mounted at the root) -------------
@@ -74,5 +74,5 @@ export const removeUserApiKeyContract = defineApiContract({
   method: 'delete',
   requestPathParamsSchema: idParams,
   pathResolver: ({ id }) => `/me/api-keys/${id}`,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })

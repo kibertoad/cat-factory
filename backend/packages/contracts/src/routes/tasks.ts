@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
+import { ContractNoBody, defineApiContract, noBodyResponse } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import { blockSchema } from '../entities.js'
 import {
@@ -69,7 +69,7 @@ export const setTaskSourceEnabledContract = defineApiContract({
   requestPathParamsSchema: sourceParams,
   pathResolver: ({ source }) => `/task-sources/${source}/enabled`,
   requestBodySchema: setTaskSourceEnabledSchema,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 export const listTaskConnectionsContract = defineApiContract({
@@ -90,7 +90,7 @@ export const disconnectTaskSourceContract = defineApiContract({
   method: 'delete',
   requestPathParamsSchema: sourceParams,
   pathResolver: ({ source }) => `/task-sources/${source}/connection`,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 export const diagnoseTaskSourceContract = defineApiContract({
@@ -133,7 +133,7 @@ export const clearTaskSourceWebhookContract = defineApiContract({
   method: 'delete',
   requestPathParamsSchema: sourceParams,
   pathResolver: ({ source }) => `/task-sources/${source}/webhook`,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 // Linear-specific: list the connection's teams (for the ticket-filing team picker)

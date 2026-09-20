@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
+import { ContractNoBody, defineApiContract, noBodyResponse } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import {
   accountSkillSchema,
@@ -51,7 +51,7 @@ export const unlinkSkillSourceContract = defineApiContract({
   method: 'delete',
   requestPathParamsSchema: sourceIdParams,
   pathResolver: ({ id }) => `/skill-sources/${id}`,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 export const skillSourceStatusContract = defineApiContract({

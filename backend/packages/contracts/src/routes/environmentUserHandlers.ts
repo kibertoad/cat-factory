@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
+import { defineApiContract, noBodyResponse } from '@toad-contracts/valibot'
 import { withObjectKeys } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import {
@@ -49,5 +49,5 @@ export const removeEnvironmentUserHandlerContract = defineApiContract({
   requestQuerySchema: v.object({ manifestId: v.optional(v.string()) }),
   pathResolver: ({ workspaceId, provisionType }) =>
     `/me/environment-handlers/${workspaceId}/${provisionType}`,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
