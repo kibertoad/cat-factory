@@ -207,8 +207,8 @@ const CLASS_HINTS = computed<Record<FindingClass, string>>(() => ({
   practice: t('requirements.findingClass.practiceHint'),
 }))
 const CLASS_LABEL_COLOR = {
-  judgement: 'text-amber-300',
-  practice: 'text-sky-300',
+  judgement: 'text-app-warning-300',
+  practice: 'text-app-info-300',
 } as const satisfies Record<FindingClass, string>
 
 // How sure the Writer says it is. Shown on every suggestion, because the confidence is what an
@@ -449,8 +449,8 @@ const ATTENTION_LABELS = computed<Record<FindingAttention, string>>(() => ({
   settled: t('requirements.group.settled'),
 }))
 const ATTENTION_LABEL_COLOR = {
-  action: 'text-amber-300',
-  waiting: 'text-primary-300',
+  action: 'text-app-warning-300',
+  waiting: 'text-primary',
   settled: 'text-dimmed',
 } as const satisfies Record<FindingAttention, string>
 // Whether a finding's recorded reply is the human's OWN answer (vs an untouched auto-generated
@@ -699,7 +699,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
   <ResultWindowShell
     :open="open"
     icon="i-lucide-clipboard-check"
-    icon-class="bg-primary-500/15 text-primary-300"
+    icon-class="bg-primary/15 text-primary"
     :title="t('requirements.title')"
     :subtitle="block?.title"
     :step-ref="{ instanceId, stepIndex }"
@@ -753,7 +753,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
           <!-- converged: reviewer satisfied -->
           <div
             v-if="incorporated"
-            class="mb-4 flex items-center gap-2 rounded-lg border border-emerald-900/60 bg-emerald-950/30 p-4 text-sm text-emerald-300"
+            class="mb-4 flex items-center gap-2 rounded-lg border border-app-success-900/60 bg-app-success-950/30 p-4 text-sm text-app-success-300"
             data-testid="requirements-settled"
           >
             <UIcon name="i-lucide-circle-check" class="h-5 w-5 shrink-0" />
@@ -774,7 +774,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                    the human can see which of the two LLM calls is currently in progress. -->
           <div
             v-else-if="working"
-            class="mb-4 flex items-center gap-2 rounded-lg border border-primary-900/60 bg-primary-950/30 p-4 text-sm text-primary-200"
+            class="mb-4 flex items-center gap-2 rounded-lg border border-primary/60 bg-primary/10 p-4 text-sm text-primary"
           >
             <UIcon name="i-lucide-loader-circle" class="h-5 w-5 shrink-0 animate-spin" />
             <span v-if="incorporating">
@@ -901,7 +901,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                           <UIcon
                             v-if="opt.mode === 'answer' && isUserAnswered(item)"
                             name="i-lucide-check"
-                            class="h-3.5 w-3.5 text-emerald-400"
+                            class="h-3.5 w-3.5 text-app-success-400"
                           />
                         </UButton>
                       </div>
@@ -912,7 +912,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                                answer; the human can keep it, edit it, or switch modes. -->
                         <div
                           v-if="autoDefaults.get(item.id)"
-                          class="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-primary-300"
+                          class="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-primary"
                         >
                           <UIcon name="i-lucide-sparkles" class="h-3.5 w-3.5 shrink-0" />
                           <span>{{ t('requirements.recommendedDefault') }}</span>
@@ -964,7 +964,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                         />
                         <p
                           v-if="isUserAnswered(item)"
-                          class="mt-1 flex items-center gap-1 text-[11px] text-emerald-400"
+                          class="mt-1 flex items-center gap-1 text-[11px] text-app-success-400"
                         >
                           <UIcon name="i-lucide-check" class="h-3 w-3 shrink-0" />
                           {{ t('requirements.userAnswered') }}
@@ -976,7 +976,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                       <template v-else-if="modeFor(item) === 'recommend'">
                         <div
                           v-if="pendingRecFor(item)"
-                          class="mt-2 flex items-center gap-1.5 text-xs text-primary-300"
+                          class="mt-2 flex items-center gap-1.5 text-xs text-primary"
                         >
                           <UIcon name="i-lucide-loader-circle" class="h-3.5 w-3.5 animate-spin" />
                           {{ t('requirements.generatingSuggestion') }}
@@ -985,7 +985,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                           <div
                             v-for="rec in [readyRecFor(item)!]"
                             :key="rec.id"
-                            class="mt-2 rounded-lg border border-primary-900/50 bg-primary-950/20 p-3"
+                            class="mt-2 rounded-lg border border-primary/50 bg-primary/10 p-3"
                           >
                             <UBadge
                               v-if="rec.groundedInFragment"
@@ -1093,7 +1093,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                             :placeholder="t('requirements.guidancePlaceholder')"
                             :disabled="frozen"
                           />
-                          <p class="mt-1 flex items-center gap-1 text-[11px] text-primary-300/80">
+                          <p class="mt-1 flex items-center gap-1 text-[11px] text-primary/80">
                             <UIcon name="i-lucide-wand-2" class="h-3 w-3 shrink-0" />
                             {{ t('requirements.guidanceHint') }}
                           </p>
@@ -1116,7 +1116,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                    off-screen); the per-heading toggles below still work when it's expanded. -->
           <section v-if="outline" class="mt-6 border-t border-default pt-5">
             <button
-              class="mb-3 flex w-full items-center gap-1.5 text-[11px] text-emerald-400"
+              class="mb-3 flex w-full items-center gap-1.5 text-[11px] text-app-success-400"
               @click="toggleDoc"
             >
               <UIcon
@@ -1191,9 +1191,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                      the Writer is still producing / what's waiting on them even while reading the
                      incorporated document or acting elsewhere in the window. -->
             <template v-if="generatingRecommendations.length || readyRecommendations.length">
-              <div
-                class="flex items-center gap-1.5 border-t border-default/60 pt-2 text-primary-300"
-              >
+              <div class="flex items-center gap-1.5 border-t border-default/60 pt-2 text-primary">
                 <UIcon name="i-lucide-wand-2" class="h-3 w-3" />
                 <span class="font-medium">{{ t('requirements.stats.recommendations') }}</span>
               </div>
@@ -1202,11 +1200,11 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                 class="flex items-center justify-between"
               >
                 <span>{{ t('requirements.stats.recsGenerating') }}</span>
-                <span class="text-primary-300">{{ generatingRecommendations.length }}</span>
+                <span class="text-primary">{{ generatingRecommendations.length }}</span>
               </div>
               <div v-if="readyRecommendations.length" class="flex items-center justify-between">
                 <span>{{ t('requirements.stats.recsToReview') }}</span>
-                <span class="text-primary-300">{{ readyRecommendations.length }}</span>
+                <span class="text-primary">{{ readyRecommendations.length }}</span>
               </div>
             </template>
             <div v-if="review.model" class="flex items-center justify-between">

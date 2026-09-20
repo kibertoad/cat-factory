@@ -100,14 +100,14 @@ function remove(id: string) {
       </span>
       <button
         type="button"
-        class="font-medium text-primary-400 hover:underline"
+        class="font-medium text-primary hover:underline"
         @click="ui.openFragmentLibrary()"
       >
         {{ t('settings.serviceFragmentDefaults.footer.manageBoard') }}
       </button>
       <button
         type="button"
-        class="font-medium text-primary-400 hover:underline"
+        class="font-medium text-primary hover:underline"
         @click="ui.openAccountSettings('fragments')"
       >
         {{ t('settings.serviceFragmentDefaults.footer.manageAccount') }}

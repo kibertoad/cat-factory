@@ -185,7 +185,7 @@ async function remove(service: FoundationalService) {
       class="rounded-md border border-default bg-default/60 p-3"
     >
       <div class="flex items-start gap-2">
-        <UIcon name="i-lucide-boxes" class="mt-0.5 h-4 w-4 shrink-0 text-sky-400" />
+        <UIcon name="i-lucide-boxes" class="mt-0.5 h-4 w-4 shrink-0 text-app-info-400" />
         <div class="min-w-0 flex-1">
           <p class="truncate text-sm font-medium text-app-100">
             {{ s.name }}

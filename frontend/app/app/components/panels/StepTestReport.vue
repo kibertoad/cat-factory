@@ -14,15 +14,15 @@ defineProps<{
 const { t } = useI18n()
 
 const SEVERITY_COLOR: Record<string, string> = {
-  low: '#64748b',
-  medium: '#f59e0b',
-  high: '#f97316',
-  critical: '#ef4444',
+  low: 'var(--ui-text-muted)',
+  medium: 'var(--ui-warning)',
+  high: 'var(--app-hue-orange)',
+  critical: 'var(--ui-error)',
 }
 const OUTCOME_COLOR: Record<string, string> = {
-  passed: '#22c55e',
-  failed: '#ef4444',
-  skipped: '#64748b',
+  passed: 'var(--ui-success)',
+  failed: 'var(--ui-error)',
+  skipped: 'var(--ui-text-muted)',
 }
 
 // Per-spec-requirement verdict labels, keyed by the requirement id the service's in-repo `spec/`
@@ -76,7 +76,7 @@ function verdictMeta(status: RequirementVerdictStatus): VerdictMeta {
       <div v-for="(o, i) in report.outcomes" :key="i" class="flex items-start gap-2 text-[12px]">
         <span
           class="mt-1 h-2 w-2 shrink-0 rounded-full"
-          :style="{ backgroundColor: OUTCOME_COLOR[o.status] ?? '#64748b' }"
+          :style="{ backgroundColor: OUTCOME_COLOR[o.status] ?? 'var(--ui-text-muted)' }"
         />
         <span class="text-toned"
           >{{ o.name }}<span v-if="o.detail" class="text-dimmed"> — {{ o.detail }}</span></span
@@ -121,7 +121,7 @@ function verdictMeta(status: RequirementVerdictStatus): VerdictMeta {
         <div class="flex items-center gap-1.5">
           <span
             class="rounded px-1 text-[10px] font-semibold uppercase text-highlighted"
-            :style="{ backgroundColor: SEVERITY_COLOR[c.severity] ?? '#64748b' }"
+            :style="{ backgroundColor: SEVERITY_COLOR[c.severity] ?? 'var(--ui-text-muted)' }"
             >{{ c.severity }}</span
           >
           <span class="font-medium text-default">{{ c.title }}</span>

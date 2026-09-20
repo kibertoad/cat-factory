@@ -347,7 +347,7 @@ async function remove(stack: SharedStack) {
             />
           </div>
         </div>
-        <p v-if="stack.lastError" class="text-[11px] text-rose-400">{{ stack.lastError }}</p>
+        <p v-if="stack.lastError" class="text-[11px] text-app-error-400">{{ stack.lastError }}</p>
       </div>
     </section>
 

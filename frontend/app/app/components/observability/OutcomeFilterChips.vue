@@ -17,8 +17,8 @@ const emit = defineEmits<{ 'update:modelValue': [value: T] }>()
 function toneClass(option: (typeof props.options)[number], active: boolean): string {
   if (active) return 'bg-elevated text-app-100'
   if (option.count === 0) return 'text-app-600 hover:text-muted'
-  if (option.tone === 'error') return 'text-rose-400 hover:text-rose-300'
-  if (option.tone === 'warning') return 'text-amber-400 hover:text-amber-300'
+  if (option.tone === 'error') return 'text-app-error-400 hover:text-app-error-300'
+  if (option.tone === 'warning') return 'text-app-warning-400 hover:text-app-warning-300'
   return 'text-muted hover:text-default'
 }
 </script>

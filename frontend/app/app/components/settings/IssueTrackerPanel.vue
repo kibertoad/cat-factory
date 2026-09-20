@@ -269,7 +269,10 @@ async function checkSetup(source: TaskSourceKind) {
       </div>
 
       <!-- Inline readiness hints for the picked tracker. -->
-      <p v-if="trackerKind === 'github' && !githubAvailable" class="text-[11px] text-amber-400">
+      <p
+        v-if="trackerKind === 'github' && !githubAvailable"
+        class="text-[11px] text-app-warning-400"
+      >
         <i18n-t keypath="settings.issueTracker.filing.githubHint" tag="span" scope="global">
           <template #link>
             <button class="underline" @click="ui.openGitHub()">
@@ -278,7 +281,10 @@ async function checkSetup(source: TaskSourceKind) {
           </template>
         </i18n-t>
       </p>
-      <p v-else-if="trackerKind === 'jira' && !jiraConnected" class="text-[11px] text-amber-400">
+      <p
+        v-else-if="trackerKind === 'jira' && !jiraConnected"
+        class="text-[11px] text-app-warning-400"
+      >
         <i18n-t keypath="settings.issueTracker.filing.jiraHint" tag="span" scope="global">
           <template #link>
             <button class="underline" @click="ui.openTaskConnect('jira')">
@@ -289,7 +295,7 @@ async function checkSetup(source: TaskSourceKind) {
       </p>
       <p
         v-else-if="trackerKind === 'linear' && !linearConnected"
-        class="text-[11px] text-amber-400"
+        class="text-[11px] text-app-warning-400"
       >
         <i18n-t keypath="settings.issueTracker.filing.linearHint" tag="span" scope="global">
           <template #link>

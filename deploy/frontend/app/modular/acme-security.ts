@@ -162,7 +162,7 @@ export const acmeSecurityModule = defineModule({
         presentation: {
           label: 'Security Auditor',
           icon: 'i-lucide-shield-check',
-          color: '#ef4444',
+          color: 'var(--app-hue-red)',
           description: 'Read-only security audit of the change, with a compliance report.',
           category: 'review',
           // A specialist kind: offered only at the palette's widest agent tier. Omitting
@@ -278,7 +278,7 @@ export const acmeSecurityModule = defineModule({
         presentation: {
           label: 'Incident',
           icon: 'i-lucide-siren',
-          color: '#ef4444',
+          color: 'var(--app-hue-red)',
           description: 'A production incident to triage and resolve.',
           // The picker's grouping axis: the type gets its own captioned row instead of trailing the
           // built-in `feature` / `bug` choices, which is what keeps a growing catalog of the

@@ -158,7 +158,7 @@ async function attach(item: PendingContext) {
         >
           <UIcon
             :name="documents.descriptorForOrigin(doc.source)?.icon ?? 'i-lucide-file-text'"
-            class="h-3.5 w-3.5 shrink-0 text-primary-400"
+            class="h-3.5 w-3.5 shrink-0 text-primary"
           />
           <span class="truncate">{{ doc.title }}</span>
         </DocumentOriginLink>

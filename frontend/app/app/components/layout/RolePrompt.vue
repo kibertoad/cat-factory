@@ -40,12 +40,12 @@ function pick(role: UiRole) {
             class="flex w-full items-center gap-3 rounded-lg border p-3 text-start transition"
             :class="
               role === uiRole.role && uiRole.chosen
-                ? 'border-primary-500/60 bg-primary-500/10'
+                ? 'border-primary/60 bg-primary/10'
                 : 'border-default bg-default/60 hover:border-app-600 hover:bg-elevated/60'
             "
             @click="pick(role)"
           >
-            <UIcon :name="ROLE_PRESENTATION[role].icon" class="h-5 w-5 shrink-0 text-primary-400" />
+            <UIcon :name="ROLE_PRESENTATION[role].icon" class="h-5 w-5 shrink-0 text-primary" />
             <div class="min-w-0 flex-1">
               <div class="text-sm font-medium text-app-100">
                 {{ t(ROLE_PRESENTATION[role].labelKey) }}

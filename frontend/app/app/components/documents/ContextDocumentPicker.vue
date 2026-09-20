@@ -490,7 +490,7 @@ onMounted(() => {
         @keydown.enter="refRow && pickRef(refRow)"
       />
 
-      <p v-if="searchError" class="px-1 text-[11px] text-amber-400">
+      <p v-if="searchError" class="px-1 text-[11px] text-app-warning-400">
         {{ t('documents.picker.searchFailed', { error: searchError }) }}
       </p>
 
@@ -505,7 +505,7 @@ onMounted(() => {
       </p>
       <div
         v-else-if="refRejection"
-        class="flex flex-wrap items-center gap-x-2 gap-y-1 px-1 text-[11px] text-amber-400"
+        class="flex flex-wrap items-center gap-x-2 gap-y-1 px-1 text-[11px] text-app-warning-400"
         data-testid="doc-ref-rejected"
       >
         <span>{{ refRejection }}</span>
@@ -523,7 +523,7 @@ onMounted(() => {
       </div>
       <p
         v-else-if="refState.status === 'unchecked'"
-        class="px-1 text-[11px] text-amber-400"
+        class="px-1 text-[11px] text-app-warning-400"
         data-testid="doc-ref-unchecked"
       >
         {{ t('documents.picker.refCheckFailed', { error: refState.message }) }}
@@ -547,7 +547,7 @@ onMounted(() => {
           class="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-start text-xs text-toned hover:bg-elevated/70"
           @click="pickImported(d.externalId, d.title, d.excerpt)"
         >
-          <UIcon :name="icon" class="h-3.5 w-3.5 shrink-0 text-primary-400" />
+          <UIcon :name="icon" class="h-3.5 w-3.5 shrink-0 text-primary" />
           <span class="truncate">{{ d.title }}</span>
           <UBadge color="neutral" variant="soft" size="xs" class="ms-auto shrink-0">{{
             t('documents.picker.importedBadge')
@@ -593,7 +593,7 @@ onMounted(() => {
                  around it. Amber and separate, because it is a loss rather than tidying. -->
             <span
               v-if="refRow.droppedScope"
-              class="block text-[11px] text-amber-400"
+              class="block text-[11px] text-app-warning-400"
               data-testid="doc-ref-widened"
             >
               {{ t('documents.picker.refWidened', { scope: refRow.droppedScope }) }}

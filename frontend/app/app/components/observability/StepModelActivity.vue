@@ -36,7 +36,7 @@ function openObservability() {
       </span>
       <button
         v-if="instanceId"
-        class="text-[11px] text-sky-400 hover:text-sky-300"
+        class="text-[11px] text-app-info-400 hover:text-app-info-300"
         @click="openObservability"
       >
         {{ t('observability.viewAllCalls') }}

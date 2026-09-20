@@ -298,7 +298,7 @@ const { requestClose } = useUnsavedGuard({
   <ResultWindowShell
     :open="open"
     icon="i-lucide-milestone"
-    icon-class="bg-primary-500/15 text-primary-300"
+    icon-class="bg-primary/15 text-primary"
     :title="initiative?.title ?? block?.title ?? t('initiative.tracker.title')"
     :subtitle="t('initiative.tracker.subtitle')"
     width="full"
@@ -309,7 +309,7 @@ const { requestClose } = useUnsavedGuard({
       <div v-if="progress" class="flex items-center gap-2" data-testid="initiative-progress">
         <div class="h-1.5 w-24 overflow-hidden rounded-full bg-elevated">
           <div
-            class="h-full rounded-full bg-emerald-500 transition-[width] duration-500"
+            class="h-full rounded-full bg-app-success-500 transition-[width] duration-500"
             :style="{ width: `${progressPct}%` }"
           />
         </div>
@@ -376,21 +376,24 @@ const { requestClose } = useUnsavedGuard({
                    then resume (continue) or cancel (stop) the initiative right here. -->
           <section
             v-if="pausedAtCheckpoint"
-            class="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3.5"
+            class="mb-4 rounded-lg border border-app-warning-500/40 bg-app-warning-500/10 p-3.5"
             data-testid="initiative-checkpoint-pause"
           >
             <div class="flex items-start gap-2.5">
-              <UIcon name="i-lucide-pause-circle" class="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
+              <UIcon
+                name="i-lucide-pause-circle"
+                class="mt-0.5 h-4 w-4 shrink-0 text-app-warning-300"
+              />
               <div class="min-w-0 flex-1">
-                <h3 class="text-[13px] font-semibold text-amber-200">
+                <h3 class="text-[13px] font-semibold text-app-warning-200">
                   {{ t('initiative.checkpoint.pausedTitle') }}
                 </h3>
-                <p class="mt-0.5 text-[12px] leading-relaxed text-amber-100/80">
+                <p class="mt-0.5 text-[12px] leading-relaxed text-app-warning-100/80">
                   {{ t('initiative.checkpoint.pausedBody', { phase: checkpointPhase!.title }) }}
                 </p>
                 <div class="mt-2.5 flex flex-wrap gap-2">
                   <button
-                    class="rounded bg-primary-600 px-2.5 py-1 text-[11px] font-medium text-highlighted hover:bg-primary-500 disabled:opacity-50"
+                    class="rounded bg-primary/90 px-2.5 py-1 text-[11px] font-medium text-inverted hover:bg-primary disabled:opacity-50"
                     :disabled="initiatives.controlling"
                     data-testid="initiative-checkpoint-resume"
                     @click="checkpointControl('resume')"
@@ -398,7 +401,7 @@ const { requestClose } = useUnsavedGuard({
                     {{ t('initiative.inspector.resume') }}
                   </button>
                   <button
-                    class="rounded border border-rose-500/50 px-2.5 py-1 text-[11px] font-medium text-rose-300 hover:bg-rose-500/10 disabled:opacity-50"
+                    class="rounded border border-app-error-500/50 px-2.5 py-1 text-[11px] font-medium text-app-error-300 hover:bg-app-error-500/10 disabled:opacity-50"
                     :disabled="initiatives.controlling"
                     data-testid="initiative-checkpoint-cancel"
                     @click="checkpointControl('cancel')"
@@ -510,7 +513,10 @@ const { requestClose } = useUnsavedGuard({
                           })
                         }}
                       </div>
-                      <div v-if="item.note" class="mt-0.5 max-w-3xl text-[10px] text-amber-300/80">
+                      <div
+                        v-if="item.note"
+                        class="mt-0.5 max-w-3xl text-[10px] text-app-warning-300/80"
+                      >
                         {{ item.note }}
                       </div>
                       <div
@@ -551,7 +557,7 @@ const { requestClose } = useUnsavedGuard({
                         :href="item.pr.url"
                         target="_blank"
                         rel="noopener"
-                        class="text-sky-400 hover:underline"
+                        class="text-app-info-400 hover:underline"
                       >
                         {{ item.pr.number ? `#${item.pr.number}` : t('initiative.tracker.prLink') }}
                       </a>
@@ -587,12 +593,12 @@ const { requestClose } = useUnsavedGuard({
                 }}
               </li>
               <li v-for="(rule, i) in policyRules" :key="i">
-                <code class="text-sky-300">{{ rule.pipelineId }}</code>
+                <code class="text-app-info-300">{{ rule.pipelineId }}</code>
                 · {{ ruleAxes(rule) }}
               </li>
               <li>
                 {{ t('initiative.tracker.defaultPipeline') }}
-                <code class="text-sky-300">{{ initiative.policy.defaultPipelineId }}</code>
+                <code class="text-app-info-300">{{ initiative.policy.defaultPipelineId }}</code>
               </li>
             </ul>
             <!-- Edit form: the two scalar knobs; planner-authored rules are preserved. -->
@@ -619,7 +625,7 @@ const { requestClose } = useUnsavedGuard({
               </label>
               <div class="flex gap-2">
                 <button
-                  class="rounded bg-primary-600 px-2 py-1 text-[11px] text-highlighted hover:bg-primary-500 disabled:opacity-50"
+                  class="rounded bg-primary/90 px-2 py-1 text-[11px] text-inverted hover:bg-primary disabled:opacity-50"
                   :disabled="initiatives.curating"
                   data-testid="initiative-policy-save"
                   @click="savePolicy"
@@ -708,7 +714,7 @@ const { requestClose } = useUnsavedGuard({
                     />
                     <div class="flex gap-2">
                       <button
-                        class="rounded bg-primary-600 px-2 py-1 text-[11px] text-highlighted hover:bg-primary-500 disabled:opacity-50"
+                        class="rounded bg-primary/90 px-2 py-1 text-[11px] text-inverted hover:bg-primary disabled:opacity-50"
                         :disabled="initiatives.curating || !promoteForm.phaseId"
                         data-testid="initiative-promote-submit"
                         @click="submitPromote(f)"

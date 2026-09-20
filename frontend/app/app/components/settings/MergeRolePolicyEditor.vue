@@ -173,7 +173,7 @@ function setSubmissionClass(
            MANUAL merge as well, which is the one thing the master switch leaves open. -->
       <p
         v-if="!autoMergeEnabled"
-        class="mt-1 text-[11px] leading-snug text-amber-400/90"
+        class="mt-1 text-[11px] leading-snug text-app-warning-400/90"
         data-testid="merge-role-auto-merge-off"
       >
         {{ t('settings.riskPolicy.roleRules.autoMergeOffWarning') }}
@@ -218,7 +218,7 @@ function setSubmissionClass(
              only, and a role can land nothing at all while showing "No class limits". -->
         <span
           v-if="group.submissionScoped"
-          class="text-[11px] text-amber-400/90"
+          class="text-[11px] text-app-warning-400/90"
           :data-testid="`merge-role-submission-badge-${group.role}`"
         >
           {{ t('settings.riskPolicy.roleRules.submissionBadge') }}
@@ -230,7 +230,7 @@ function setSubmissionClass(
            row says which of the three is actually governing. -->
       <p
         v-if="group.sandboxed"
-        class="mt-1 text-[11px] leading-snug text-amber-400/90"
+        class="mt-1 text-[11px] leading-snug text-app-warning-400/90"
         :data-testid="`merge-role-sandbox-note-${group.role}`"
       >
         {{ t('settings.riskPolicy.roleRules.sandboxNote') }}
@@ -268,7 +268,7 @@ function setSubmissionClass(
                does rather than reading as a switch somebody forgot to fill in. -->
           <p
             v-if="group.submissionScoped && !group.submissionRows.some((r) => r.allowed)"
-            class="text-[11px] leading-snug text-amber-400/90"
+            class="text-[11px] leading-snug text-app-warning-400/90"
             :data-testid="`merge-role-submission-none-${group.role}`"
           >
             {{ t('settings.riskPolicy.roleRules.submissionNone') }}
@@ -307,7 +307,7 @@ function setSubmissionClass(
             </span>
             <span
               v-else-if="row.redundant"
-              class="text-[11px] text-amber-400/90"
+              class="text-[11px] text-app-warning-400/90"
               :data-testid="`merge-role-redundant-${group.role}-${row.changeClass}`"
             >
               {{ t('settings.riskPolicy.roleRules.redundant') }}

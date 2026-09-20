@@ -416,7 +416,9 @@ function revealDecision(n: Notification) {
           :data-notification-type="n.type"
           class="rounded-lg border p-2.5 mt-1.5"
           :class="
-            isUrgent(n) ? 'border-error-500/60 bg-error-500/10' : 'border-muted/60 bg-elevated/40'
+            isUrgent(n)
+              ? 'border-app-error-500/60 bg-app-error-500/10'
+              : 'border-muted/60 bg-elevated/40'
           "
         >
           <div class="flex items-start gap-2">
@@ -435,7 +437,7 @@ function revealDecision(n: Notification) {
                 </button>
                 <span
                   v-if="isUrgent(n)"
-                  class="shrink-0 rounded bg-error-500/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-error-400"
+                  class="shrink-0 rounded bg-app-error-500/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-app-error-400"
                 >
                   {{ t('layout.notifications.overdue') }}
                 </span>
@@ -446,7 +448,7 @@ function revealDecision(n: Notification) {
                 :href="n.payload.prUrl"
                 target="_blank"
                 rel="noopener"
-                class="mt-1 inline-flex items-center gap-1 text-[11px] text-sky-400 hover:underline"
+                class="mt-1 inline-flex items-center gap-1 text-[11px] text-app-info-400 hover:underline"
               >
                 <UIcon name="i-lucide-external-link" class="h-3 w-3" />
                 {{ t('layout.notifications.openPr') }}
@@ -468,7 +470,7 @@ function revealDecision(n: Notification) {
                   class="flex items-center gap-1 text-start text-[11px]"
                   :class="
                     canOpenFailingRun(run)
-                      ? 'text-sky-400 hover:underline'
+                      ? 'text-app-info-400 hover:underline'
                       : 'cursor-default text-dimmed'
                   "
                   :title="

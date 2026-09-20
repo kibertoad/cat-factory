@@ -76,7 +76,7 @@ const statusColor = (row: TutorialCatalogueRow) =>
           >
             <UIcon
               :name="row.tour.icon ?? 'i-lucide-compass'"
-              class="mt-0.5 h-5 w-5 shrink-0 text-primary-400"
+              class="mt-0.5 h-5 w-5 shrink-0 text-primary"
             />
             <div class="min-w-0 flex-1 space-y-1">
               <div class="flex flex-wrap items-center gap-2">

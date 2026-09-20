@@ -143,25 +143,25 @@ const STATUS_META = computed<
     label: t('gates.status.passed'),
     badge: 'success',
     icon: 'i-lucide-circle-check',
-    text: 'text-emerald-300',
+    text: 'text-app-success-300',
   },
   'gave-up': {
     label: t('gates.status.gaveUp'),
     badge: 'error',
     icon: 'i-lucide-circle-x',
-    text: 'text-rose-300',
+    text: 'text-app-error-300',
   },
   fixing: {
     label: t('gates.status.fixing'),
     badge: 'warning',
     icon: 'i-lucide-loader',
-    text: 'text-amber-300',
+    text: 'text-app-warning-300',
   },
   failing: {
     label: t('gates.status.failing'),
     badge: 'error',
     icon: 'i-lucide-circle-x',
-    text: 'text-rose-300',
+    text: 'text-app-error-300',
   },
   pending: {
     label: t('gates.status.pending'),
@@ -191,7 +191,7 @@ const conflictVerdict = computed(() => {
   <ResultWindowShell
     :open="open"
     :icon="meta.icon"
-    icon-class="bg-sky-500/15 text-sky-300"
+    icon-class="bg-app-info-500/15 text-app-info-300"
     :title="headerTitle"
     :subtitle="subtitle"
     :step-ref="{ instanceId, stepIndex }"
@@ -227,10 +227,13 @@ const conflictVerdict = computed(() => {
           <!-- Passed -->
           <div
             v-if="status === 'passed'"
-            class="flex items-start gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2.5"
+            class="flex items-start gap-2 rounded-lg border border-app-success-500/30 bg-app-success-500/10 px-3 py-2.5"
           >
-            <UIcon name="i-lucide-circle-check" class="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
-            <p class="text-[13px] leading-relaxed text-emerald-200">
+            <UIcon
+              name="i-lucide-circle-check"
+              class="mt-0.5 h-4 w-4 shrink-0 text-app-success-400"
+            />
+            <p class="text-[13px] leading-relaxed text-app-success-200">
               {{ step?.output || (isCi ? t('gates.passedCi') : t('gates.passedConflicts')) }}
             </p>
           </div>
@@ -240,7 +243,7 @@ const conflictVerdict = computed(() => {
             <div
               class="flex items-center gap-2 rounded-md border border-default bg-app-950/40 px-3 py-2"
             >
-              <UIcon name="i-lucide-users" class="h-4 w-4 shrink-0 text-violet-300" />
+              <UIcon name="i-lucide-users" class="h-4 w-4 shrink-0 text-app-secondary-300" />
               <span class="text-[13px] text-default">
                 {{
                   t(
@@ -272,7 +275,7 @@ const conflictVerdict = computed(() => {
               :href="prUrl"
               target="_blank"
               rel="noopener"
-              class="mt-2 inline-flex items-center gap-1 text-[12px] text-sky-300 hover:text-sky-200 hover:underline"
+              class="mt-2 inline-flex items-center gap-1 text-[12px] text-app-info-300 hover:text-app-info-200 hover:underline"
             >
               {{ t('gates.humanReview.reviewPr') }}
               <UIcon name="i-lucide-external-link" class="h-3 w-3" />
@@ -291,7 +294,7 @@ const conflictVerdict = computed(() => {
                 rows="3"
                 :disabled="fixBusy"
                 :placeholder="t('gates.humanReview.requestFixPlaceholder')"
-                class="w-full resize-y rounded-md border border-default bg-app-950/60 px-3 py-2 text-[13px] text-default placeholder:text-app-600 focus:border-violet-500/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/60"
+                class="w-full resize-y rounded-md border border-default bg-app-950/60 px-3 py-2 text-[13px] text-default placeholder:text-app-600 focus:border-app-secondary-500/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-app-secondary-500/60"
               />
               <div class="mt-2 flex justify-end">
                 <UButton
@@ -344,7 +347,7 @@ const conflictVerdict = computed(() => {
               :href="prUrl"
               target="_blank"
               rel="noopener"
-              class="mt-2 inline-flex items-center gap-1 text-[12px] text-sky-300 hover:text-sky-200 hover:underline"
+              class="mt-2 inline-flex items-center gap-1 text-[12px] text-app-info-300 hover:text-app-info-200 hover:underline"
             >
               {{ t('gates.docQuality.viewPr') }}
               <UIcon name="i-lucide-external-link" class="h-3 w-3" />
@@ -383,7 +386,7 @@ const conflictVerdict = computed(() => {
               :href="prUrl"
               target="_blank"
               rel="noopener"
-              class="mt-2 inline-flex items-center gap-1 text-[12px] text-sky-300 hover:text-sky-200 hover:underline"
+              class="mt-2 inline-flex items-center gap-1 text-[12px] text-app-info-300 hover:text-app-info-200 hover:underline"
             >
               {{ t('gates.conflicts.viewPr') }}
               <UIcon name="i-lucide-external-link" class="h-3 w-3" />

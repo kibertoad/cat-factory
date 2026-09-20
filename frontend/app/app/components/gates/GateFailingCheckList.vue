@@ -28,7 +28,7 @@ const { t } = useI18n()
     >
       <UIcon
         name="i-lucide-circle-x"
-        class="shrink-0 text-rose-400"
+        class="shrink-0 text-app-error-400"
         :class="dense ? 'h-3 w-3' : 'h-3.5 w-3.5'"
       />
       <a
@@ -36,7 +36,7 @@ const { t } = useI18n()
         :href="c.url"
         target="_blank"
         rel="noopener"
-        class="group min-w-0 flex-1 truncate text-sky-300 hover:text-sky-200 hover:underline"
+        class="group min-w-0 flex-1 truncate text-app-info-300 hover:text-app-info-200 hover:underline"
         :class="dense ? 'text-[12px]' : 'text-[13px]'"
         :title="t('gates.ci.openOnGithub', { name: c.name })"
       >
@@ -53,7 +53,7 @@ const { t } = useI18n()
         >{{ c.name }}</span
       >
       <span
-        class="shrink-0 uppercase text-rose-300"
+        class="shrink-0 uppercase text-app-error-300"
         :class="dense ? 'text-[10px]' : 'text-[11px]'"
         >{{ c.conclusion ?? t('gates.ci.conclusionFallback') }}</span
       >

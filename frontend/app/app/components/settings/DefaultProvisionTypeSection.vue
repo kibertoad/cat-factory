@@ -138,7 +138,7 @@ async function save() {
         :placeholder="t('inspector.testConfig.customManifestIdPlaceholder')"
         @update:model-value="(v: string) => setManifestId(v)"
       />
-      <p v-else class="text-[11px] leading-snug text-amber-300/80">
+      <p v-else class="text-[11px] leading-snug text-app-warning-300/80">
         {{ t('inspector.testConfig.customNoTypes') }}
       </p>
     </div>
@@ -147,7 +147,7 @@ async function save() {
          the workspace still has nothing stored. -->
     <p
       v-if="unset && selection.type"
-      class="text-[11px] leading-snug text-amber-300/80"
+      class="text-[11px] leading-snug text-app-warning-300/80"
       data-testid="default-provision-suggestion-hint"
     >
       {{ t('settings.defaultProvision.suggestionHint') }}

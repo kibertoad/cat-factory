@@ -16,7 +16,7 @@ function reload() {
   >
     <div class="max-w-sm rounded-2xl border border-muted bg-default p-5 shadow-2xl">
       <div class="flex items-center gap-2 text-sm font-semibold text-app-100">
-        <UIcon name="i-lucide-unplug" class="h-4 w-4 shrink-0 text-amber-400" />
+        <UIcon name="i-lucide-unplug" class="h-4 w-4 shrink-0 text-app-warning-400" />
         {{ t('errors.asyncView.title') }}
       </div>
       <p class="mt-2 text-[12px] leading-relaxed text-muted">

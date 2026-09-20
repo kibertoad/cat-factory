@@ -60,17 +60,17 @@ const ENV_STATUS_META = computed<
 >(() => ({
   provisioning: {
     label: t('environments.status.provisioning'),
-    color: 'text-amber-300',
+    color: 'text-app-warning-300',
     icon: 'i-lucide-loader-circle',
   },
   ready: {
     label: t('environments.status.ready'),
-    color: 'text-emerald-300',
+    color: 'text-app-success-300',
     icon: 'i-lucide-circle-dot',
   },
   failed: {
     label: t('environments.status.failed'),
-    color: 'text-rose-300',
+    color: 'text-app-error-300',
     icon: 'i-lucide-circle-alert',
   },
   expired: {
@@ -128,7 +128,7 @@ const envInTransition = computed(
         :href="environment.url"
         target="_blank"
         rel="noopener"
-        class="inline-flex items-center gap-1.5 break-all text-[13px] text-sky-300 hover:underline"
+        class="inline-flex items-center gap-1.5 break-all text-[13px] text-app-info-300 hover:underline"
       >
         <UIcon name="i-lucide-external-link" class="h-3.5 w-3.5 shrink-0" />
         {{ environment.url }}
@@ -151,7 +151,7 @@ const envInTransition = computed(
       <!-- The verbatim provider error when the environment failed/expired. -->
       <pre
         v-if="failureShown"
-        class="mt-1 max-h-32 overflow-auto whitespace-pre-wrap rounded border border-rose-900/60 bg-rose-950/40 p-1.5 text-[11px] text-rose-200/90"
+        class="mt-1 max-h-32 overflow-auto whitespace-pre-wrap rounded border border-app-error-900/60 bg-app-error-950/40 p-1.5 text-[11px] text-app-error-200/90"
         >{{ environment.lastError }}</pre>
       <!-- What the provider says it is still waiting on. Muted rather than alarming: an
            environment mid-rollout is healthy, and styling this like the error above would report

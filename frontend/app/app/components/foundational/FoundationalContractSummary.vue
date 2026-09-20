@@ -37,12 +37,12 @@ const { t, n } = useI18n()
       <span v-else-if="!c.omittedOperations" class="ms-1 text-app-600">
         {{ t('foundational.contracts.noOperations') }}
       </span>
-      <span v-if="c.omittedOperations > 0" class="ms-1 text-amber-500/80">
+      <span v-if="c.omittedOperations > 0" class="ms-1 text-app-warning-500/80">
         {{ t('foundational.contracts.omitted', { count: c.omittedOperations }) }}
       </span>
     </div>
   </div>
-  <p v-else class="mt-1 text-[11px] text-amber-500/80">
+  <p v-else class="mt-1 text-[11px] text-app-warning-500/80">
     {{ t('foundational.contracts.none') }}
   </p>
 </template>

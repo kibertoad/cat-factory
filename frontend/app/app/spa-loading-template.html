@@ -12,11 +12,11 @@
         d="M4 4l3 3.2A7.5 7.5 0 0 1 12 6c1.9 0 3.6.5 5 1.2L20 4v8a8 8 0 0 1-16 0V4z"
         fill="currentColor"
       />
-      <circle cx="9" cy="11.5" r="1.1" fill="#0b1020" />
-      <circle cx="15" cy="11.5" r="1.1" fill="#0b1020" />
+      <circle cx="9" cy="11.5" r="1.1" />
+      <circle cx="15" cy="11.5" r="1.1" />
       <path
         d="M10.6 14.4c.4.5 2.4.5 2.8 0"
-        stroke="#0b1020"
+        stroke="currentColor"
         stroke-width="1"
         stroke-linecap="round"
       />
@@ -38,8 +38,14 @@
     align-items: center;
     justify-content: center;
     gap: 1.5rem;
-    /* --board-bg / slate-950, matching the board surface AuthGate renders on. */
-    background-color: #0b1020;
+    /* The token values the shell paints with (slate-950 / slate-200 canvas, indigo primary),
+       hardcoded because main.css is not loaded yet; the colour-mode script in <head> has already
+       put `light` or `dark` on <html>, so the light block below applies. */
+    --cf-bg: #020618;
+    --cf-track: #1e293b;
+    --cf-accent: #818cf8;
+    --cf-status: #94a3b8;
+    background-color: var(--cf-bg);
     font-family:
       ui-sans-serif,
       system-ui,
@@ -60,15 +66,15 @@
     position: absolute;
     inset: 0;
     border-radius: 9999px;
-    /* Track in slate-700, the active arc in indigo-500 (the app's primary). */
-    border: 3px solid #1e293b;
-    border-top-color: #6366f1;
+    /* Track in the border token, the active arc in the primary. */
+    border: 3px solid var(--cf-track);
+    border-top-color: var(--cf-accent);
     animation: cf-spa-spin 1s linear infinite;
   }
   .cf-spa-loader__cat {
     width: 2.5rem;
     height: 2.5rem;
-    color: #818cf8;
+    color: var(--cf-accent);
     animation: cf-spa-bob 1.6s ease-in-out infinite;
   }
   .cf-spa-loader__text {
@@ -81,14 +87,23 @@
     font-size: 1.35rem;
     font-weight: 700;
     letter-spacing: 0.01em;
-    background: linear-gradient(90deg, #818cf8, #6366f1);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
+    color: var(--cf-accent);
   }
   .cf-spa-loader__status {
     font-size: 0.875rem;
-    color: #94a3b8;
+    color: var(--cf-status);
+  }
+  /* Light colour mode: the canvas and the two neutral shades flip; the indigo accents stay. */
+  html.light .cf-spa-loader {
+    --cf-bg: #e2e8f0;
+    --cf-track: #cbd5e1;
+    --cf-accent: #6366f1;
+    --cf-status: #64748b;
+  }
+  .cf-spa-loader__cat circle,
+  .cf-spa-loader__cat path[stroke] {
+    fill: var(--cf-bg);
+    stroke: var(--cf-bg);
   }
   .cf-spa-loader__dots i {
     font-style: normal;

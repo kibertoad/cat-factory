@@ -85,9 +85,9 @@ const SEVERITY_LABELS = computed<Record<JudgeFinding['severity'], string>>(() =>
 
 const SEVERITY_CLASSES: Record<JudgeFinding['severity'], string> = {
   low: 'border-muted text-toned',
-  medium: 'border-amber-500/40 text-amber-300',
-  high: 'border-orange-500/40 text-orange-300',
-  critical: 'border-rose-500/40 text-rose-300',
+  medium: 'border-app-warning-500/40 text-app-warning-300',
+  high: 'border-app-hue-orange/40 text-app-hue-orange',
+  critical: 'border-app-error-500/40 text-app-error-300',
 }
 
 const DISPOSITION_LABELS = computed<
@@ -128,7 +128,7 @@ async function act(choice: 'proceed' | 'bounce' | 'stop') {
   <ResultWindowShell
     :open="open"
     :icon="meta.icon"
-    icon-class="bg-amber-500/15 text-amber-300"
+    icon-class="bg-app-warning-500/15 text-app-warning-300"
     :title="headerTitle"
     :subtitle="t('judge.subtitle')"
     :step-ref="{ instanceId, stepIndex }"
@@ -175,7 +175,7 @@ async function act(choice: 'proceed' | 'bounce' | 'stop') {
           <span v-if="judge.disposition" class="text-[12px] text-muted">
             · {{ DISPOSITION_LABELS[judge.disposition] }}
           </span>
-          <span v-if="judge.rubricOverridden" class="text-[11px] text-violet-300">
+          <span v-if="judge.rubricOverridden" class="text-[11px] text-app-secondary-300">
             · {{ t('judge.rubricOverridden') }}
           </span>
           <span v-if="(judge.maxBounces ?? 0) > 0" class="text-[11px] text-dimmed">
@@ -189,7 +189,7 @@ async function act(choice: 'proceed' | 'bounce' | 'stop') {
              name doesn't, and being overridden by the task's own choice is the normal outcome. -->
         <p
           v-if="judge.modelPin?.status === 'unavailable'"
-          class="mt-2 rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-[12px] leading-relaxed text-amber-200"
+          class="mt-2 rounded-md border border-app-warning-500/30 bg-app-warning-500/5 px-3 py-2 text-[12px] leading-relaxed text-app-warning-200"
           data-testid="judge-model-pin"
         >
           {{ t('judge.modelPinUnavailable', { model: judge.modelPin.requested }) }}
@@ -259,9 +259,9 @@ async function act(choice: 'proceed' | 'bounce' | 'stop') {
             rows="3"
             :disabled="busy"
             :placeholder="t('judge.feedbackPlaceholder')"
-            class="w-full resize-y rounded-md border border-default bg-app-950/60 px-3 py-2 text-[13px] text-default placeholder:text-app-600 focus:border-amber-500/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/60"
+            class="w-full resize-y rounded-md border border-default bg-app-950/60 px-3 py-2 text-[13px] text-default placeholder:text-app-600 focus:border-app-warning-500/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-app-warning-500/60"
           />
-          <p v-if="judgeStore.error" class="mt-2 text-[12px] text-rose-300">
+          <p v-if="judgeStore.error" class="mt-2 text-[12px] text-app-error-300">
             {{ judgeStore.error }}
           </p>
           <div class="mt-2 flex flex-wrap justify-end gap-2">

@@ -13,7 +13,11 @@ const { t } = useI18n()
 
 /** Rating band → bar colour: poor adherence (rose) → partial (amber) → strong (emerald). */
 function ratingClass(rating: number): string {
-  return rating >= 8 ? 'bg-emerald-400' : rating >= 5 ? 'bg-amber-400' : 'bg-rose-400'
+  return rating >= 8
+    ? 'bg-app-success-400'
+    : rating >= 5
+      ? 'bg-app-warning-400'
+      : 'bg-app-error-400'
 }
 function ratingPct(rating: number): number {
   return Math.min(100, Math.max(0, (rating / 10) * 100))

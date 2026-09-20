@@ -90,7 +90,7 @@ const withheldNote = computed(() => {
         <span
           class="shrink-0 rounded px-1 text-[10px] font-semibold tabular-nums"
           :style="{
-            backgroundColor: LANE_META.done.color + '22',
+            backgroundColor: tint(LANE_META.done.color),
             color: LANE_META.done.color,
           }"
           data-testid="lane-count-done"

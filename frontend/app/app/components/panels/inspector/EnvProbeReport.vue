@@ -29,11 +29,11 @@ const VERDICT_KEYS: Record<EnvironmentProbeVerdict, string> = {
 }
 
 const VERDICT_CLASS: Record<EnvironmentProbeVerdict, string> = {
-  operable: 'text-emerald-300/90',
+  operable: 'text-app-success-300/90',
   // Amber, not rose: the LIFECYCLE succeeded and the finding is partial. Colouring it as a
   // failure would make it read as the run breaking rather than as the diagnostic working.
-  partially_operable: 'text-amber-300/90',
-  inoperable: 'text-rose-300/90',
+  partially_operable: 'text-app-warning-300/90',
+  inoperable: 'text-app-error-300/90',
 }
 
 /**
@@ -74,17 +74,14 @@ function outcomeIcon(outcome: EnvironmentProbeReport['operations'][number]['outc
 }
 
 function outcomeClass(outcome: EnvironmentProbeReport['operations'][number]['outcome']): string {
-  if (outcome === 'succeeded') return 'text-emerald-400'
-  if (outcome === 'failed') return 'text-rose-400'
+  if (outcome === 'succeeded') return 'text-app-success-400'
+  if (outcome === 'failed') return 'text-app-error-400'
   return 'text-dimmed'
 }
 </script>
 
 <template>
-  <div
-    class="space-y-2 rounded border border-white/5 bg-white/[0.02] p-2"
-    data-testid="env-probe-report"
-  >
+  <div class="space-y-2 rounded border border-default bg-muted p-2" data-testid="env-probe-report">
     <p class="text-[11px] font-medium" :class="verdictClass" data-testid="env-probe-verdict">
       {{ verdictLabel }}
     </p>
@@ -104,7 +101,7 @@ function outcomeClass(outcome: EnvironmentProbeReport['operations'][number]['out
     <!-- What the platform did not tell the agent: the actionable half of the report, so it comes
          before the evidence. -->
     <div v-if="report.missingContext.length" data-testid="env-probe-missing">
-      <p class="text-[11px] font-medium text-amber-300/90">
+      <p class="text-[11px] font-medium text-app-warning-300/90">
         {{ t('inspector.testConfig.envProbe.missingContext') }}
       </p>
       <ul class="mt-0.5 list-disc space-y-0.5 pl-4 text-[11px] text-toned">
@@ -113,7 +110,7 @@ function outcomeClass(outcome: EnvironmentProbeReport['operations'][number]['out
     </div>
 
     <div v-if="report.blockers.length" data-testid="env-probe-blockers">
-      <p class="text-[11px] font-medium text-rose-300/90">
+      <p class="text-[11px] font-medium text-app-error-300/90">
         {{ t('inspector.testConfig.envProbe.blockers') }}
       </p>
       <ul class="mt-0.5 space-y-0.5 text-[11px] text-toned">
@@ -143,7 +140,7 @@ function outcomeClass(outcome: EnvironmentProbeReport['operations'][number]['out
               {{ t('inspector.testConfig.envProbe.authenticated') }}
             </span>
             <span v-if="op.target" class="ml-1 font-mono text-dimmed">{{ op.target }}</span>
-            <span v-if="op.failure" class="block text-rose-300/70">
+            <span v-if="op.failure" class="block text-app-error-300/70">
               {{ failureLabel(op.failure) }}<template v-if="op.detail">: {{ op.detail }}</template>
             </span>
             <span v-else-if="op.detail" class="block text-muted">{{ op.detail }}</span>

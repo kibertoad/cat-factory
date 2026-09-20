@@ -203,7 +203,7 @@ function saveUser() {
       <p
         v-if="accountCap != null"
         class="text-[11px]"
-        :class="accountOverCap ? 'text-rose-400' : 'text-amber-400'"
+        :class="accountOverCap ? 'text-app-error-400' : 'text-app-warning-400'"
       >
         {{ t('settings.workspaceSettings.budget.hardCap', { amount: money(accountCap) }) }}
         <span class="text-dimmed">({{ t('settings.workspaceSettings.budget.hardCapHint') }})</span>
@@ -257,7 +257,7 @@ function saveUser() {
       <p
         v-if="userCap != null"
         class="text-[11px]"
-        :class="userOverCap ? 'text-rose-400' : 'text-amber-400'"
+        :class="userOverCap ? 'text-app-error-400' : 'text-app-warning-400'"
       >
         {{ t('settings.workspaceSettings.budget.hardCap', { amount: money(userCap) }) }}
         <span class="text-dimmed">({{ t('settings.workspaceSettings.budget.hardCapHint') }})</span>

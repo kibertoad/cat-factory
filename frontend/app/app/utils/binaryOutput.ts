@@ -413,13 +413,13 @@ export const BINARY_OUTPUT_STATE_KEYS: Record<
   },
   undeclared: {
     icon: 'i-lucide-circle-help',
-    tone: 'text-amber-300',
+    tone: 'text-app-warning-300',
     summary: 'binaryOutput.state.undeclared.summary',
     detail: 'binaryOutput.state.undeclared.detail',
   },
   'parse-failed': {
     icon: 'i-lucide-file-warning',
-    tone: 'text-amber-300',
+    tone: 'text-app-warning-300',
     summary: 'binaryOutput.state.parseFailed.summary',
     detail: 'binaryOutput.state.parseFailed.detail',
   },
@@ -431,7 +431,7 @@ export const BINARY_OUTPUT_STATE_KEYS: Record<
   },
   stored: {
     icon: 'i-lucide-package-check',
-    tone: 'text-emerald-300',
+    tone: 'text-app-success-300',
     summary: 'binaryOutput.state.stored.summary',
     detail: '',
   },

@@ -51,17 +51,17 @@ const CONTAINER_STATUS_META: Record<
   starting: {
     icon: 'i-lucide-loader-circle',
     spin: true,
-    cls: 'border-sky-900/50 bg-sky-950/30 text-sky-300',
+    cls: 'border-app-info-900/50 bg-app-info-950/30 text-app-info-300',
   },
   up: {
     icon: 'i-lucide-box',
     spin: false,
-    cls: 'border-emerald-900/50 bg-emerald-950/30 text-emerald-300',
+    cls: 'border-app-success-900/50 bg-app-success-950/30 text-app-success-300',
   },
   errored: {
     icon: 'i-lucide-circle-x',
     spin: false,
-    cls: 'border-rose-900/50 bg-rose-950/30 text-rose-300',
+    cls: 'border-app-error-900/50 bg-app-error-950/30 text-app-error-300',
   },
   destroyed: {
     icon: 'i-lucide-power-off',

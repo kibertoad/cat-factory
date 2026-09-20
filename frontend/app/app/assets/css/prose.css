@@ -21,8 +21,8 @@
   transition: background 0.12s ease;
 }
 .reader-prose.review-mode [data-src-start]:hover {
-  background: rgb(99 102 241 / 0.08);
-  box-shadow: inset 2px 0 0 rgb(99 102 241 / 0.5);
+  background: color-mix(in srgb, var(--ui-primary) 8%, transparent);
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--ui-primary) 50%, transparent);
 }
 .reader-prose.review-mode [data-src-start]::before {
   content: '+';
@@ -35,23 +35,23 @@
   align-items: center;
   justify-content: center;
   border-radius: 0.25rem;
-  background: rgb(99 102 241);
-  color: white;
+  background: var(--ui-primary);
+  color: var(--ui-text-inverted);
   font-size: 0.8rem;
   line-height: 1;
 }
 .reader-prose.review-mode [data-src-start]:hover::before {
   display: flex;
 }
-/* Persistent markers: amber for a block that already has a comment, indigo for
-   the block whose composer is currently open. */
+/* Persistent markers: the warning alias for a block that already has a comment, the primary
+   alias for the block whose composer is currently open. */
 .reader-prose .cf-commented {
-  background: rgb(234 179 8 / 0.1);
-  box-shadow: inset 2px 0 0 rgb(234 179 8 / 0.6);
+  background: color-mix(in srgb, var(--ui-warning) 10%, transparent);
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--ui-warning) 60%, transparent);
 }
 .reader-prose .cf-selected {
-  background: rgb(99 102 241 / 0.12);
-  box-shadow: inset 2px 0 0 rgb(99 102 241 / 0.8);
+  background: color-mix(in srgb, var(--ui-primary) 12%, transparent);
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--ui-primary) 80%, transparent);
 }
 
 /* Styling for the markdown HTML injected via v-html (out of scoped reach without
@@ -75,36 +75,36 @@
 }
 .reader-prose strong {
   font-weight: 600;
-  color: rgb(226 232 240);
+  color: var(--ui-text-highlighted);
 }
 .reader-prose em {
   font-style: italic;
 }
 .reader-prose code {
   border-radius: 0.25rem;
-  background: rgb(30 41 59 / 0.8);
+  background: var(--ui-bg-elevated);
   padding: 0.1rem 0.3rem;
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 0.85em;
-  color: rgb(199 210 254);
+  color: var(--ui-primary);
 }
 .reader-prose pre {
   margin: 0.6rem 0;
   overflow: auto;
   border-radius: 0.5rem;
-  background: rgb(2 6 23 / 0.6);
+  background: var(--app-bg-canvas);
   padding: 0.75rem 0.9rem;
 }
 .reader-prose pre code {
   background: transparent;
   padding: 0;
-  color: rgb(203 213 225);
+  color: var(--ui-text-toned);
 }
 .reader-prose blockquote {
   margin: 0.6rem 0;
-  border-left: 3px solid rgb(99 102 241 / 0.5);
+  border-left: 3px solid color-mix(in srgb, var(--ui-primary) 50%, transparent);
   padding-left: 0.75rem;
-  color: rgb(148 163 184);
+  color: var(--ui-text-muted);
 }
 .reader-prose table {
   margin: 0.6rem 0;
@@ -113,17 +113,17 @@
 }
 .reader-prose th,
 .reader-prose td {
-  border: 1px solid rgb(51 65 85);
+  border: 1px solid var(--ui-border-muted);
   padding: 0.3rem 0.6rem;
 }
 .reader-prose th {
-  background: rgb(30 41 59 / 0.6);
+  background: var(--ui-bg-elevated);
   font-weight: 600;
 }
 .reader-prose hr {
   margin: 1rem 0;
   border: none;
-  border-top: 1px solid rgb(51 65 85);
+  border-top: 1px solid var(--ui-border-muted);
 }
 .reader-prose h1,
 .reader-prose h2,
@@ -131,5 +131,5 @@
 .reader-prose h4 {
   margin: 0.6rem 0 0.3rem;
   font-weight: 600;
-  color: rgb(226 232 240);
+  color: var(--ui-text-highlighted);
 }

@@ -104,7 +104,7 @@ function timestamp(at: number): string {
     </div>
 
     <!-- A failed load is NOT an empty log; it says so and offers the retry. -->
-    <p v-if="loadError" class="text-red-400" data-testid="audit-log-error">
+    <p v-if="loadError" class="text-app-error-400" data-testid="audit-log-error">
       {{ t('layout.auditLog.errors.load') }}
       <span class="text-muted">{{ loadError }}</span>
     </p>

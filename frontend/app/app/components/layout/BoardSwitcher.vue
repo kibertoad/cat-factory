@@ -287,7 +287,7 @@ async function submitPrompt() {
         data-testid="board-switcher"
         :data-board-id="workspace.workspaceId ?? ''"
       >
-        <UIcon name="i-lucide-layout-dashboard" class="h-4 w-4 shrink-0 text-primary-400" />
+        <UIcon name="i-lucide-layout-dashboard" class="h-4 w-4 shrink-0 text-primary" />
         <span v-if="!collapsed" class="truncate text-sm font-medium text-highlighted">
           {{ workspace.activeWorkspace?.name ?? t('layout.boardSwitcher.boardFallback') }}
         </span>

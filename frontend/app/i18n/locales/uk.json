@@ -8566,5 +8566,13 @@
     "territories": {
       "heading": "Території"
     }
+  },
+  "appearance": {
+    "switcher": "Вигляд",
+    "mode": {
+      "system": "Системний",
+      "light": "Світлий",
+      "dark": "Темний"
+    }
   }
 }

@@ -151,7 +151,7 @@ const { requestClose } = useUnsavedGuard({
   <ResultWindowShell
     :open="open"
     :icon="FORK_DECISION_META.icon"
-    icon-class="bg-violet-500/15 text-violet-300"
+    icon-class="bg-app-secondary-500/15 text-app-secondary-300"
     :title="headerTitle"
     :subtitle="t('forkDecision.subtitle')"
     width="3xl"
@@ -187,9 +187,9 @@ const { requestClose } = useUnsavedGuard({
       <!-- Chosen: a read-only record of what was decided. -->
       <div
         v-else-if="status === 'chosen'"
-        class="rounded-xl border border-violet-500/40 bg-default/60 px-4 py-3 text-toned"
+        class="rounded-xl border border-app-secondary-500/40 bg-default/60 px-4 py-3 text-toned"
       >
-        <p class="text-[13px] font-medium text-violet-200">
+        <p class="text-[13px] font-medium text-app-secondary-200">
           {{ t('forkDecision.chosen.title') }}
         </p>
         <p v-if="state?.chosen?.custom" class="mt-1 whitespace-pre-wrap text-[12px]">
@@ -207,7 +207,7 @@ const { requestClose } = useUnsavedGuard({
       <div v-else-if="interactive" class="space-y-3">
         <p
           v-if="forkDecision.error"
-          class="rounded-md bg-rose-500/10 px-3 py-2 text-[12px] text-rose-300"
+          class="rounded-md bg-app-error-500/10 px-3 py-2 text-[12px] text-app-error-300"
         >
           {{ forkDecision.error }}
         </p>
@@ -228,7 +228,7 @@ const { requestClose } = useUnsavedGuard({
           class="cursor-pointer rounded-xl border px-4 py-3 transition"
           :class="
             selected === fork.id
-              ? 'border-violet-500/70 bg-violet-500/5'
+              ? 'border-app-secondary-500/70 bg-app-secondary-500/5'
               : 'border-default bg-default/60 hover:border-muted'
           "
           @click="selected = fork.id"
@@ -236,7 +236,7 @@ const { requestClose } = useUnsavedGuard({
           <div class="flex items-start gap-2">
             <input
               type="radio"
-              class="mt-1 accent-violet-500"
+              class="mt-1 accent-app-secondary-500"
               :checked="selected === fork.id"
               @change="selected = fork.id"
             />
@@ -264,8 +264,8 @@ const { requestClose } = useUnsavedGuard({
                   <span class="text-app-600">•</span>{{ tr }}
                 </li>
               </ul>
-              <p v-if="fork.riskNotes" class="mt-1.5 text-[11px] text-amber-300/90">
-                <span class="text-amber-500/70">{{ t('forkDecision.riskNotes') }}</span>
+              <p v-if="fork.riskNotes" class="mt-1.5 text-[11px] text-app-warning-300/90">
+                <span class="text-app-warning-500/70">{{ t('forkDecision.riskNotes') }}</span>
                 {{ fork.riskNotes }}
               </p>
             </div>
@@ -277,12 +277,12 @@ const { requestClose } = useUnsavedGuard({
           class="rounded-xl border px-4 py-3 transition"
           :class="
             selected === 'custom'
-              ? 'border-violet-500/70 bg-violet-500/5'
+              ? 'border-app-secondary-500/70 bg-app-secondary-500/5'
               : 'border-default bg-default/60'
           "
         >
           <label class="flex cursor-pointer items-center gap-2" @click="selected = 'custom'">
-            <input type="radio" class="accent-violet-500" :checked="selected === 'custom'" />
+            <input type="radio" class="accent-app-secondary-500" :checked="selected === 'custom'" />
             <span class="text-[13px] font-medium text-app-100">{{
               t('forkDecision.custom.title')
             }}</span>
@@ -292,7 +292,7 @@ const { requestClose } = useUnsavedGuard({
             data-testid="fork-custom-input"
             rows="3"
             :placeholder="t('forkDecision.custom.placeholder')"
-            class="mt-2 w-full resize-y rounded-md border border-muted bg-app-950/60 px-2.5 py-1.5 text-[12px] text-app-100 placeholder:text-app-600 focus:border-violet-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/60"
+            class="mt-2 w-full resize-y rounded-md border border-muted bg-app-950/60 px-2.5 py-1.5 text-[12px] text-app-100 placeholder:text-app-600 focus:border-app-secondary-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-app-secondary-500/60"
             @focus="selected = 'custom'"
           />
         </article>
@@ -304,7 +304,7 @@ const { requestClose } = useUnsavedGuard({
             v-model="note"
             type="text"
             :placeholder="t('forkDecision.notePlaceholder')"
-            class="w-full rounded-md border border-muted bg-app-950/60 px-2.5 py-1.5 text-[12px] text-app-100 placeholder:text-app-600 focus:border-violet-500 focus:outline-none"
+            class="w-full rounded-md border border-muted bg-app-950/60 px-2.5 py-1.5 text-[12px] text-app-100 placeholder:text-app-600 focus:border-app-secondary-500 focus:outline-none"
           />
         </div>
 
@@ -325,7 +325,7 @@ const { requestClose } = useUnsavedGuard({
                 class="max-w-[85%] whitespace-pre-wrap rounded-lg px-3 py-1.5 text-[12px]"
                 :class="
                   msg.role === 'human'
-                    ? 'bg-violet-500/15 text-violet-100'
+                    ? 'bg-app-secondary-500/15 text-app-secondary-100'
                     : 'bg-elevated/70 text-default'
                 "
               >
@@ -355,7 +355,7 @@ const { requestClose } = useUnsavedGuard({
                   ? t('forkDecision.chat.budgetSpent')
                   : t('forkDecision.chat.placeholder')
               "
-              class="min-h-0 flex-1 resize-y rounded-md border border-muted bg-app-950/60 px-2.5 py-1.5 text-[12px] text-app-100 placeholder:text-app-600 focus:border-violet-500 focus:outline-none disabled:opacity-50"
+              class="min-h-0 flex-1 resize-y rounded-md border border-muted bg-app-950/60 px-2.5 py-1.5 text-[12px] text-app-100 placeholder:text-app-600 focus:border-app-secondary-500 focus:outline-none disabled:opacity-50"
               @keydown.enter.exact.prevent="onSend"
             />
             <UButton

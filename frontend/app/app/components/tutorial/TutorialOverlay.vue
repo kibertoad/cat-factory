@@ -541,7 +541,7 @@ onUnmounted(() => {
            which is exactly the involuntary movement `prefers-reduced-motion` is about. -->
       <div
         v-if="targetRect"
-        class="ring-primary-400 outline-primary-400/25 pointer-events-none fixed z-[70] rounded-lg outline-4 ring-2 motion-safe:transition-all motion-safe:duration-150"
+        class="ring-primary outline-primary/25 pointer-events-none fixed z-[70] rounded-lg outline-4 ring-2 motion-safe:transition-all motion-safe:duration-150"
         :style="{
           top: `${targetRect.top - 4}px`,
           left: `${targetRect.left - 4}px`,
@@ -569,7 +569,7 @@ onUnmounted(() => {
         role="dialog"
         :tabindex="cardFocusable ? -1 : undefined"
         :aria-label="t('tutorial.overlay.ariaLabel')"
-        class="pointer-events-auto fixed z-[70] w-80 max-w-[calc(100vw-16px)] rounded-xl border border-muted bg-default p-4 shadow-2xl outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
+        class="pointer-events-auto fixed z-[70] w-80 max-w-[calc(100vw-16px)] rounded-xl border border-muted bg-default p-4 shadow-2xl outline-none focus-visible:ring-2 focus-visible:ring-primary"
         :style="{ top: `${layout.top}px`, left: `${layout.left}px` }"
         data-testid="tutorial-tooltip"
         @pointerdown.stop
@@ -597,7 +597,7 @@ onUnmounted(() => {
         </p>
         <p
           v-else-if="step.advanceOn === 'target-click'"
-          class="text-primary-300 mt-2 text-xs"
+          class="text-primary mt-2 text-xs"
           data-testid="tutorial-click-hint"
         >
           {{ t('tutorial.overlay.clickHint') }}
@@ -606,7 +606,7 @@ onUnmounted(() => {
              whole tour: say so rather than congratulating the user either way. -->
         <p
           v-if="isLast && abridged"
-          class="mt-2 text-xs text-amber-300/90"
+          class="mt-2 text-xs text-app-warning-300/90"
           data-testid="tutorial-abridged"
         >
           {{

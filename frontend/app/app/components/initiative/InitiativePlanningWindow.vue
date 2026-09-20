@@ -196,7 +196,7 @@ async function onDiscard() {
   <ResultWindowShell
     :open="open"
     icon="i-lucide-messages-square"
-    icon-class="bg-primary-500/15 text-primary-300"
+    icon-class="bg-primary/15 text-primary"
     :title="initiative?.title ?? block?.title ?? t('initiative.planning.title')"
     :subtitle="t('initiative.planning.subtitle')"
     width="4xl"
@@ -301,7 +301,7 @@ async function onDiscard() {
                    flush could only drop. -->
               <p
                 v-if="!addressable(q)"
-                class="mt-1 text-[11px] text-amber-300"
+                class="mt-1 text-[11px] text-app-warning-300"
                 data-testid="initiative-planning-unanswerable"
               >
                 {{ t('initiative.planning.unanswerable') }}
@@ -363,7 +363,7 @@ async function onDiscard() {
         <p class="text-[11px] text-dimmed">
           <span
             v-if="unanswered > 0"
-            class="text-amber-400/90"
+            class="text-app-warning-400/90"
             data-testid="initiative-planning-unanswered"
           >
             {{ t('initiative.planning.unanswered', { count: unanswered }) }}

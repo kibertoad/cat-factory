@@ -158,7 +158,7 @@ function resetToDefaults() {
 
         <div
           v-else-if="notifications.settingsStatus === 'failed'"
-          class="space-y-3 rounded-lg border border-amber-700/60 bg-amber-950/30 p-3 text-xs text-amber-200"
+          class="space-y-3 rounded-lg border border-app-warning-700/60 bg-app-warning-950/30 p-3 text-xs text-app-warning-200"
         >
           <p>{{ t('notificationSettings.loadFailed') }}</p>
           <UButton color="neutral" variant="soft" size="xs" icon="i-lucide-rotate-cw" @click="load">

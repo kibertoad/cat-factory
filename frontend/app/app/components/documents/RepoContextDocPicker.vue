@@ -238,7 +238,7 @@ onMounted(() => {
           class="w-full"
           :placeholder="t('documents.repoPicker.searchFilesPlaceholder')"
         />
-        <p v-if="filesError" class="px-1 text-[11px] text-amber-400">
+        <p v-if="filesError" class="px-1 text-[11px] text-app-warning-400">
           {{ t('documents.repoPicker.filesFailed', { error: filesError }) }}
         </p>
         <div class="max-h-56 space-y-0.5 overflow-y-auto">
@@ -249,7 +249,7 @@ onMounted(() => {
             class="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-start text-xs text-toned hover:bg-elevated/70"
             @click="pickFile(f.path)"
           >
-            <UIcon :name="icon" class="h-3.5 w-3.5 shrink-0 text-primary-400" />
+            <UIcon :name="icon" class="h-3.5 w-3.5 shrink-0 text-primary" />
             <span class="truncate">{{ f.path }}</span>
           </button>
           <p v-if="fileMatchesTruncated" class="px-2 py-1 text-[11px] text-dimmed">

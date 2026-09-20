@@ -65,8 +65,8 @@ function start() {
     </div>
 
     <div class="grid gap-2 sm:grid-cols-2">
-      <div class="rounded border border-emerald-900/50 bg-emerald-950/20 p-3">
-        <p class="flex items-center gap-1.5 text-[11px] font-medium text-emerald-200/90">
+      <div class="rounded border border-app-success-900/50 bg-app-success-950/20 p-3">
+        <p class="flex items-center gap-1.5 text-[11px] font-medium text-app-success-200/90">
           <UIcon name="i-lucide-check" class="h-3.5 w-3.5 shrink-0" />
           {{ t('settings.composeEnvSetup.needed.title') }}
         </p>

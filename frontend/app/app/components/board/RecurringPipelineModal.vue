@@ -556,7 +556,7 @@ async function add() {
           </p>
           <!-- Two different remedies: connect something, versus connect something ELSE. A source
                that is connected but cannot run a scheduled search is not an absent connection. -->
-          <p v-if="intakeSources.length === 0" class="text-[11px] text-amber-500">
+          <p v-if="intakeSources.length === 0" class="text-[11px] text-app-warning-500">
             {{
               tasks.anyOffered
                 ? t('board.recurring.intakeNoIntakeSources')
@@ -659,7 +659,7 @@ async function add() {
                    still holding a value would read as a filter that is on. Stated here because a
                    schedule fires unattended — the only other evidence of the gap is a bugfix run
                    started on a docs chore. -->
-              <p v-else class="text-xs text-amber-400">
+              <p v-else class="text-xs text-app-warning-400">
                 {{
                   t('board.recurring.intakeIssueTypeUnsupported', {
                     tracker: intakeSourceLabel,

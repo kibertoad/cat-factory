@@ -193,7 +193,7 @@ async function copyPlan() {
           class="block w-full truncate rounded-md px-2 py-1 text-start text-[12px] transition"
           :class="
             activeId === s.id
-              ? 'bg-amber-500/15 font-medium text-amber-100'
+              ? 'bg-app-warning-500/15 font-medium text-app-warning-100'
               : 'text-muted hover:bg-elevated/60 hover:text-default'
           "
           :style="{ paddingLeft: `${(s.depth - outline.minDepth) * 0.7 + 0.5}rem` }"
@@ -305,7 +305,7 @@ async function copyPlan() {
         <!-- A HEADING, not a styled div: this rail is what the window is now for, so the surface
              that asks the human for a decision has to be reachable as one. -->
         <h3
-          class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-amber-400"
+          class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-app-warning-400"
         >
           <UIcon name="i-lucide-clipboard-check" class="h-3.5 w-3.5 shrink-0" />
           {{ t('initiative.planReview.title') }}
@@ -320,9 +320,9 @@ async function copyPlan() {
         <div
           v-if="draftTarget"
           data-testid="initiative-plan-composer"
-          class="rounded-lg border border-primary-500/40 bg-primary-500/5 p-2.5"
+          class="rounded-lg border border-primary/40 bg-primary/5 p-2.5"
         >
-          <div class="mb-1 text-[10px] uppercase tracking-wide text-primary-300">
+          <div class="mb-1 text-[10px] uppercase tracking-wide text-primary">
             {{ t('panels.stepDetail.commentingOn') }}
           </div>
           <pre
@@ -365,7 +365,7 @@ async function copyPlan() {
               {{ t('panels.stepDetail.commentN', { number: idx + 1 }) }}
             </div>
             <button
-              class="text-dimmed transition hover:text-rose-400"
+              class="text-dimmed transition hover:text-app-error-400"
               :title="t('panels.stepDetail.removeComment')"
               @click="removeComment(idx)"
             >

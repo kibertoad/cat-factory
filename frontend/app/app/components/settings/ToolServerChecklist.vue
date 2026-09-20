@@ -142,7 +142,11 @@ async function runProbe(id: string) {
       <p v-if="server.declaredBy.length" class="text-[11px] text-muted">
         {{ t('settings.toolServers.declaredBy', { kinds: server.declaredBy.join(', ') }) }}
       </p>
-      <p v-else class="text-[11px] text-amber-400" :data-testid="`tool-server-orphan-${server.id}`">
+      <p
+        v-else
+        class="text-[11px] text-app-warning-400"
+        :data-testid="`tool-server-orphan-${server.id}`"
+      >
         {{ t('settings.toolServers.declaredByNone') }}
       </p>
 
@@ -156,7 +160,7 @@ async function runProbe(id: string) {
           })
         }}
       </p>
-      <p v-else class="text-[11px] text-amber-400">
+      <p v-else class="text-[11px] text-app-warning-400">
         {{ t('settings.toolServers.servableHarnessesNone') }}
       </p>
 
@@ -207,13 +211,13 @@ async function runProbe(id: string) {
              granting again by hand. Said BEFORE it happens, which is the only time it is useful. -->
         <p
           v-if="server.oauth.connected && server.oauth.refreshable === false"
-          class="text-[11px] text-amber-400"
+          class="text-[11px] text-app-warning-400"
         >
           {{ t('settings.toolServers.oauth.notRefreshable') }}
         </p>
         <p
           v-if="server.oauth.lastError"
-          class="text-[11px] text-red-400"
+          class="text-[11px] text-app-error-400"
           :data-testid="`tool-server-oauth-error-${server.id}`"
         >
           {{ t('settings.toolServers.oauth.lastError', { detail: server.oauth.lastError }) }}
@@ -315,7 +319,7 @@ async function runProbe(id: string) {
              advertising the tool. Withheld entirely when the tool list was a prefix. -->
         <p
           v-if="resultFor(server.id)!.allowedTools?.unmatched?.length"
-          class="text-[11px] text-amber-400"
+          class="text-[11px] text-app-warning-400"
           :data-testid="`tool-server-unmatched-${server.id}`"
         >
           {{
@@ -333,7 +337,7 @@ async function runProbe(id: string) {
 
         <p
           v-if="resultFor(server.id)!.unresolvedCredentials?.length"
-          class="text-[11px] text-amber-400"
+          class="text-[11px] text-app-warning-400"
         >
           {{
             t('settings.toolServers.unresolvedCredentials', {
@@ -341,7 +345,10 @@ async function runProbe(id: string) {
             })
           }}
         </p>
-        <p v-if="resultFor(server.id)!.refusedCredentials?.length" class="text-[11px] text-red-400">
+        <p
+          v-if="resultFor(server.id)!.refusedCredentials?.length"
+          class="text-[11px] text-app-error-400"
+        >
           {{
             t('settings.toolServers.refusedCredentials', {
               keys: resultFor(server.id)!.refusedCredentials!.join(', '),
@@ -350,7 +357,7 @@ async function runProbe(id: string) {
         </p>
         <p
           v-if="resultFor(server.id)!.unusableCredentials?.length"
-          class="text-[11px] text-red-400"
+          class="text-[11px] text-app-error-400"
         >
           {{
             t('settings.toolServers.unusableCredentials', {

@@ -89,7 +89,7 @@ function setRule(changeClass: (typeof RULEABLE_CHANGE_CLASSES)[number], rule: Me
       <p class="mt-0.5 text-[11px] leading-snug text-dimmed">
         {{ t('settings.riskPolicy.classRules.help') }}
       </p>
-      <p v-if="!autoMergeEnabled" class="mt-1 text-[11px] leading-snug text-amber-400/90">
+      <p v-if="!autoMergeEnabled" class="mt-1 text-[11px] leading-snug text-app-warning-400/90">
         {{ t('settings.riskPolicy.classRules.autoMergeOffWarning') }}
       </p>
     </div>

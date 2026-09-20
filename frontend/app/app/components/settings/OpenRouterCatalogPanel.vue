@@ -245,7 +245,7 @@ function manageKeys() {
                     href="https://openrouter.ai/keys"
                     target="_blank"
                     rel="noopener noreferrer"
-                    class="text-primary-400 underline"
+                    class="text-primary underline"
                     >{{ t('settings.openRouterCatalog.step1Link') }}</a
                   >
                 </template>
@@ -302,7 +302,7 @@ function manageKeys() {
           class="flex items-center justify-between rounded-lg border border-muted bg-default/60 px-3 py-2 text-sm"
         >
           <span class="flex items-center gap-2 text-toned">
-            <UIcon name="i-lucide-check-circle" class="h-4 w-4 text-emerald-400" />
+            <UIcon name="i-lucide-check-circle" class="h-4 w-4 text-app-success-400" />
             {{ t('settings.openRouterCatalog.keyConnected') }}
           </span>
           <UButton color="neutral" variant="ghost" size="xs" @click="manageKeys()">
@@ -342,7 +342,9 @@ function manageKeys() {
             />
           </div>
 
-          <p v-if="store.refreshError" class="text-xs text-rose-400">{{ store.refreshError }}</p>
+          <p v-if="store.refreshError" class="text-xs text-app-error-400">
+            {{ store.refreshError }}
+          </p>
 
           <div v-if="visible.length" class="max-h-96 space-y-1 overflow-y-auto pe-1">
             <label
@@ -362,9 +364,11 @@ function manageKeys() {
                   route simply stops answering and the run falls through to whatever the picker
                   offers next, so the moment to see it is while choosing.
                 -->
-                <span v-if="m.expirationDate" class="block truncate text-[11px] text-amber-400">{{
-                  t('settings.openRouterCatalog.retiresOn', { date: m.expirationDate })
-                }}</span>
+                <span
+                  v-if="m.expirationDate"
+                  class="block truncate text-[11px] text-app-warning-400"
+                  >{{ t('settings.openRouterCatalog.retiresOn', { date: m.expirationDate }) }}</span
+                >
               </span>
               <span class="shrink-0 text-end text-[11px] text-dimmed">
                 <span v-if="m.contextLength" class="block">{{

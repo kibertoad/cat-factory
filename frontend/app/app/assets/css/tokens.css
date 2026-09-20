@@ -1,0 +1,295 @@
+/* The app's own colour tokens, layered on Nuxt UI's (issue #2239).
+ *
+ * Nuxt UI gives every alias ONE mode-adaptive token (`--ui-primary`, `--ui-warning`: shade 500 in
+ * light, 400 in dark) plus the fixed numbered ramp (`--ui-color-warning-300`), and gives the
+ * neutral ramp the role tokens (`--ui-bg`, `--ui-text-muted`, ...). The SPA's status and accent
+ * surfaces are painted in SPECIFIC ramp shades (a `300` text on a `950/40` fill inside an `800`
+ * border), and a fixed shade cannot serve both modes: what reads on a dark surface vanishes on a
+ * light one. These tokens give each numbered shade a light twin by MIRRORING the ramp (`50↔950`,
+ * `100↔900`, `200↔800`, `300↔700`, `400↔600`, `500` is its own midpoint): the dark value is the
+ * exact shade the raw class used, so dark mode is unchanged, and the light value is the shade the
+ * same intent lands on against a light surface.
+ *
+ * Every value is a reference into Nuxt UI's `--ui-color-<alias>-<n>` ramps, never a literal, so a
+ * theme that maps `warning` to another palette in `app.config.ts` recolours every warning surface.
+ *
+ * `@theme inline` binds each to a Tailwind colour so the `bg-app-warning-950/40` /
+ * `text-app-error-300` utilities exist (with opacity modifiers). Five NEUTRAL shades ride the same
+ * scheme under the shorter `app-<n>` name because the role tokens cover the rest of that ramp.
+ * PRIMARY has no numbered tokens: brand accents use Nuxt UI's bare alias (`text-primary`,
+ * `bg-primary/10`), the idiom the editor's primary slider and `blackAsPrimary` address directly.
+ *
+ * CATEGORY hues (`--app-hue-<h>`) are identity colours for agent kinds, task types and pipeline
+ * step kinds: one per Tailwind hue, mode-adaptive on Nuxt UI's own convention (`400` in dark,
+ * `600` in light), consumed as `text-app-hue-pink` or as `var(--app-hue-pink)` in an inline style.
+ * They reference Tailwind's ramps, not an alias, because a category is not a status.
+ *
+ * `scripts/check-frontend-palette.mjs` bans the raw and the fixed-alias forms these replace, and
+ * `palette-token-parity.spec.ts` pins the dark values. */
+
+/* ---- Neutral: the five shades with no role token ------------------------------------------- */
+:root,
+.dark {
+  --app-950: var(--ui-color-neutral-950);
+  --app-100: var(--ui-color-neutral-100);
+  --app-600: var(--ui-color-neutral-600);
+  --app-500: var(--ui-color-neutral-500);
+  --app-400: var(--ui-color-neutral-400);
+  /* The board canvas: one step BELOW `bg-default` (900), so panels and cards lift off it. The
+   * only surface in the app below the page background, hence its own token. */
+  --app-bg-canvas: var(--ui-color-neutral-950);
+}
+.light {
+  /* The one deliberate break in the mirror: 950 lands on 100, not 50. Some 350 panels are painted
+   * `bg-default/60` / `bg-elevated/40` over this surface; in dark that is two distinct dark greys, in
+   * light white-at-60% over neutral-50 composites to within 1% of it and every panel edge vanishes.
+   * One step deeper keeps the translucent-panel idiom legible without re-tuning 350 alphas. */
+  --app-950: var(--ui-color-neutral-100);
+  --app-100: var(--ui-color-neutral-900);
+  --app-600: var(--ui-color-neutral-400);
+  --app-500: var(--ui-color-neutral-500);
+  --app-400: var(--ui-color-neutral-600);
+  --app-bg-canvas: var(--ui-color-neutral-200);
+}
+
+/* ---- The five status ramps, every shade mirrored -------------------------------------------- */
+:root,
+.dark {
+  --app-secondary-50: var(--ui-color-secondary-50);
+  --app-secondary-100: var(--ui-color-secondary-100);
+  --app-secondary-200: var(--ui-color-secondary-200);
+  --app-secondary-300: var(--ui-color-secondary-300);
+  --app-secondary-400: var(--ui-color-secondary-400);
+  --app-secondary-500: var(--ui-color-secondary-500);
+  --app-secondary-600: var(--ui-color-secondary-600);
+  --app-secondary-700: var(--ui-color-secondary-700);
+  --app-secondary-800: var(--ui-color-secondary-800);
+  --app-secondary-900: var(--ui-color-secondary-900);
+  --app-secondary-950: var(--ui-color-secondary-950);
+  --app-success-50: var(--ui-color-success-50);
+  --app-success-100: var(--ui-color-success-100);
+  --app-success-200: var(--ui-color-success-200);
+  --app-success-300: var(--ui-color-success-300);
+  --app-success-400: var(--ui-color-success-400);
+  --app-success-500: var(--ui-color-success-500);
+  --app-success-600: var(--ui-color-success-600);
+  --app-success-700: var(--ui-color-success-700);
+  --app-success-800: var(--ui-color-success-800);
+  --app-success-900: var(--ui-color-success-900);
+  --app-success-950: var(--ui-color-success-950);
+  --app-info-50: var(--ui-color-info-50);
+  --app-info-100: var(--ui-color-info-100);
+  --app-info-200: var(--ui-color-info-200);
+  --app-info-300: var(--ui-color-info-300);
+  --app-info-400: var(--ui-color-info-400);
+  --app-info-500: var(--ui-color-info-500);
+  --app-info-600: var(--ui-color-info-600);
+  --app-info-700: var(--ui-color-info-700);
+  --app-info-800: var(--ui-color-info-800);
+  --app-info-900: var(--ui-color-info-900);
+  --app-info-950: var(--ui-color-info-950);
+  --app-warning-50: var(--ui-color-warning-50);
+  --app-warning-100: var(--ui-color-warning-100);
+  --app-warning-200: var(--ui-color-warning-200);
+  --app-warning-300: var(--ui-color-warning-300);
+  --app-warning-400: var(--ui-color-warning-400);
+  --app-warning-500: var(--ui-color-warning-500);
+  --app-warning-600: var(--ui-color-warning-600);
+  --app-warning-700: var(--ui-color-warning-700);
+  --app-warning-800: var(--ui-color-warning-800);
+  --app-warning-900: var(--ui-color-warning-900);
+  --app-warning-950: var(--ui-color-warning-950);
+  --app-error-50: var(--ui-color-error-50);
+  --app-error-100: var(--ui-color-error-100);
+  --app-error-200: var(--ui-color-error-200);
+  --app-error-300: var(--ui-color-error-300);
+  --app-error-400: var(--ui-color-error-400);
+  --app-error-500: var(--ui-color-error-500);
+  --app-error-600: var(--ui-color-error-600);
+  --app-error-700: var(--ui-color-error-700);
+  --app-error-800: var(--ui-color-error-800);
+  --app-error-900: var(--ui-color-error-900);
+  --app-error-950: var(--ui-color-error-950);
+}
+.light {
+  --app-secondary-50: var(--ui-color-secondary-950);
+  --app-secondary-100: var(--ui-color-secondary-900);
+  --app-secondary-200: var(--ui-color-secondary-800);
+  --app-secondary-300: var(--ui-color-secondary-700);
+  --app-secondary-400: var(--ui-color-secondary-600);
+  --app-secondary-500: var(--ui-color-secondary-500);
+  --app-secondary-600: var(--ui-color-secondary-400);
+  --app-secondary-700: var(--ui-color-secondary-300);
+  --app-secondary-800: var(--ui-color-secondary-200);
+  --app-secondary-900: var(--ui-color-secondary-100);
+  --app-secondary-950: var(--ui-color-secondary-50);
+  --app-success-50: var(--ui-color-success-950);
+  --app-success-100: var(--ui-color-success-900);
+  --app-success-200: var(--ui-color-success-800);
+  --app-success-300: var(--ui-color-success-700);
+  --app-success-400: var(--ui-color-success-600);
+  --app-success-500: var(--ui-color-success-500);
+  --app-success-600: var(--ui-color-success-400);
+  --app-success-700: var(--ui-color-success-300);
+  --app-success-800: var(--ui-color-success-200);
+  --app-success-900: var(--ui-color-success-100);
+  --app-success-950: var(--ui-color-success-50);
+  --app-info-50: var(--ui-color-info-950);
+  --app-info-100: var(--ui-color-info-900);
+  --app-info-200: var(--ui-color-info-800);
+  --app-info-300: var(--ui-color-info-700);
+  --app-info-400: var(--ui-color-info-600);
+  --app-info-500: var(--ui-color-info-500);
+  --app-info-600: var(--ui-color-info-400);
+  --app-info-700: var(--ui-color-info-300);
+  --app-info-800: var(--ui-color-info-200);
+  --app-info-900: var(--ui-color-info-100);
+  --app-info-950: var(--ui-color-info-50);
+  --app-warning-50: var(--ui-color-warning-950);
+  --app-warning-100: var(--ui-color-warning-900);
+  --app-warning-200: var(--ui-color-warning-800);
+  --app-warning-300: var(--ui-color-warning-700);
+  --app-warning-400: var(--ui-color-warning-600);
+  --app-warning-500: var(--ui-color-warning-500);
+  --app-warning-600: var(--ui-color-warning-400);
+  --app-warning-700: var(--ui-color-warning-300);
+  --app-warning-800: var(--ui-color-warning-200);
+  --app-warning-900: var(--ui-color-warning-100);
+  --app-warning-950: var(--ui-color-warning-50);
+  --app-error-50: var(--ui-color-error-950);
+  --app-error-100: var(--ui-color-error-900);
+  --app-error-200: var(--ui-color-error-800);
+  --app-error-300: var(--ui-color-error-700);
+  --app-error-400: var(--ui-color-error-600);
+  --app-error-500: var(--ui-color-error-500);
+  --app-error-600: var(--ui-color-error-400);
+  --app-error-700: var(--ui-color-error-300);
+  --app-error-800: var(--ui-color-error-200);
+  --app-error-900: var(--ui-color-error-100);
+  --app-error-950: var(--ui-color-error-50);
+}
+
+/* ---- Category hues: one mode-adaptive value per Tailwind hue ---------------------------------- */
+:root,
+.dark {
+  --app-hue-slate: var(--color-slate-400);
+  --app-hue-red: var(--color-red-400);
+  --app-hue-orange: var(--color-orange-400);
+  --app-hue-amber: var(--color-amber-400);
+  --app-hue-yellow: var(--color-yellow-400);
+  --app-hue-lime: var(--color-lime-400);
+  --app-hue-green: var(--color-green-400);
+  --app-hue-emerald: var(--color-emerald-400);
+  --app-hue-teal: var(--color-teal-400);
+  --app-hue-cyan: var(--color-cyan-400);
+  --app-hue-sky: var(--color-sky-400);
+  --app-hue-blue: var(--color-blue-400);
+  --app-hue-indigo: var(--color-indigo-400);
+  --app-hue-violet: var(--color-violet-400);
+  --app-hue-purple: var(--color-purple-400);
+  --app-hue-fuchsia: var(--color-fuchsia-400);
+  --app-hue-pink: var(--color-pink-400);
+  --app-hue-rose: var(--color-rose-400);
+}
+.light {
+  --app-hue-slate: var(--color-slate-600);
+  --app-hue-red: var(--color-red-600);
+  --app-hue-orange: var(--color-orange-600);
+  --app-hue-amber: var(--color-amber-600);
+  --app-hue-yellow: var(--color-yellow-600);
+  --app-hue-lime: var(--color-lime-600);
+  --app-hue-green: var(--color-green-600);
+  --app-hue-emerald: var(--color-emerald-600);
+  --app-hue-teal: var(--color-teal-600);
+  --app-hue-cyan: var(--color-cyan-600);
+  --app-hue-sky: var(--color-sky-600);
+  --app-hue-blue: var(--color-blue-600);
+  --app-hue-indigo: var(--color-indigo-600);
+  --app-hue-violet: var(--color-violet-600);
+  --app-hue-purple: var(--color-purple-600);
+  --app-hue-fuchsia: var(--color-fuchsia-600);
+  --app-hue-pink: var(--color-pink-600);
+  --app-hue-rose: var(--color-rose-600);
+}
+
+@theme inline {
+  --color-app-hue-slate: var(--app-hue-slate);
+  --color-app-hue-red: var(--app-hue-red);
+  --color-app-hue-orange: var(--app-hue-orange);
+  --color-app-hue-amber: var(--app-hue-amber);
+  --color-app-hue-yellow: var(--app-hue-yellow);
+  --color-app-hue-lime: var(--app-hue-lime);
+  --color-app-hue-green: var(--app-hue-green);
+  --color-app-hue-emerald: var(--app-hue-emerald);
+  --color-app-hue-teal: var(--app-hue-teal);
+  --color-app-hue-cyan: var(--app-hue-cyan);
+  --color-app-hue-sky: var(--app-hue-sky);
+  --color-app-hue-blue: var(--app-hue-blue);
+  --color-app-hue-indigo: var(--app-hue-indigo);
+  --color-app-hue-violet: var(--app-hue-violet);
+  --color-app-hue-purple: var(--app-hue-purple);
+  --color-app-hue-fuchsia: var(--app-hue-fuchsia);
+  --color-app-hue-pink: var(--app-hue-pink);
+  --color-app-hue-rose: var(--app-hue-rose);
+  --color-app-950: var(--app-950);
+  --color-app-100: var(--app-100);
+  --color-app-600: var(--app-600);
+  --color-app-500: var(--app-500);
+  --color-app-400: var(--app-400);
+  --color-app-canvas: var(--app-bg-canvas);
+  --color-app-secondary-50: var(--app-secondary-50);
+  --color-app-secondary-100: var(--app-secondary-100);
+  --color-app-secondary-200: var(--app-secondary-200);
+  --color-app-secondary-300: var(--app-secondary-300);
+  --color-app-secondary-400: var(--app-secondary-400);
+  --color-app-secondary-500: var(--app-secondary-500);
+  --color-app-secondary-600: var(--app-secondary-600);
+  --color-app-secondary-700: var(--app-secondary-700);
+  --color-app-secondary-800: var(--app-secondary-800);
+  --color-app-secondary-900: var(--app-secondary-900);
+  --color-app-secondary-950: var(--app-secondary-950);
+  --color-app-success-50: var(--app-success-50);
+  --color-app-success-100: var(--app-success-100);
+  --color-app-success-200: var(--app-success-200);
+  --color-app-success-300: var(--app-success-300);
+  --color-app-success-400: var(--app-success-400);
+  --color-app-success-500: var(--app-success-500);
+  --color-app-success-600: var(--app-success-600);
+  --color-app-success-700: var(--app-success-700);
+  --color-app-success-800: var(--app-success-800);
+  --color-app-success-900: var(--app-success-900);
+  --color-app-success-950: var(--app-success-950);
+  --color-app-info-50: var(--app-info-50);
+  --color-app-info-100: var(--app-info-100);
+  --color-app-info-200: var(--app-info-200);
+  --color-app-info-300: var(--app-info-300);
+  --color-app-info-400: var(--app-info-400);
+  --color-app-info-500: var(--app-info-500);
+  --color-app-info-600: var(--app-info-600);
+  --color-app-info-700: var(--app-info-700);
+  --color-app-info-800: var(--app-info-800);
+  --color-app-info-900: var(--app-info-900);
+  --color-app-info-950: var(--app-info-950);
+  --color-app-warning-50: var(--app-warning-50);
+  --color-app-warning-100: var(--app-warning-100);
+  --color-app-warning-200: var(--app-warning-200);
+  --color-app-warning-300: var(--app-warning-300);
+  --color-app-warning-400: var(--app-warning-400);
+  --color-app-warning-500: var(--app-warning-500);
+  --color-app-warning-600: var(--app-warning-600);
+  --color-app-warning-700: var(--app-warning-700);
+  --color-app-warning-800: var(--app-warning-800);
+  --color-app-warning-900: var(--app-warning-900);
+  --color-app-warning-950: var(--app-warning-950);
+  --color-app-error-50: var(--app-error-50);
+  --color-app-error-100: var(--app-error-100);
+  --color-app-error-200: var(--app-error-200);
+  --color-app-error-300: var(--app-error-300);
+  --color-app-error-400: var(--app-error-400);
+  --color-app-error-500: var(--app-error-500);
+  --color-app-error-600: var(--app-error-600);
+  --color-app-error-700: var(--app-error-700);
+  --color-app-error-800: var(--app-error-800);
+  --color-app-error-900: var(--app-error-900);
+  --color-app-error-950: var(--app-error-950);
+}

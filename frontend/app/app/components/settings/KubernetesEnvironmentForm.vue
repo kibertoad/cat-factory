@@ -296,7 +296,7 @@ function optional(label: string): string {
       <p
         v-if="tokenProblem"
         class="mt-1 text-[11px]"
-        :class="tokenBlocking ? 'text-rose-400' : 'text-amber-400'"
+        :class="tokenBlocking ? 'text-app-error-400' : 'text-app-warning-400'"
         data-testid="service-account-token-problem"
       >
         {{ tokenProblem }}
@@ -454,7 +454,7 @@ function optional(label: string): string {
     <ConnectionWarnings :warnings="testResult?.warnings" />
 
     <div class="flex items-center justify-end gap-3">
-      <p v-if="connectBlockedReason" class="flex-1 text-left text-xs text-rose-400">
+      <p v-if="connectBlockedReason" class="flex-1 text-left text-xs text-app-error-400">
         {{ connectBlockedReason }}
       </p>
       <UButton

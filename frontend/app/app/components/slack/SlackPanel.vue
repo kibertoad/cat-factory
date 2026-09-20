@@ -246,7 +246,7 @@ async function saveMapping() {
         <!-- connected -->
         <template v-else>
           <div class="flex items-center gap-2 rounded-lg border border-muted bg-elevated/40 p-3">
-            <UIcon name="i-lucide-slack" class="text-emerald-400" />
+            <UIcon name="i-lucide-slack" class="text-app-success-400" />
             <span class="flex-1 text-sm text-default">
               <i18n-t keypath="slack.connected.label" tag="span">
                 <template #team>

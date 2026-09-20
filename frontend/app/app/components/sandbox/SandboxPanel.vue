@@ -222,9 +222,9 @@ const detailRows = computed(() =>
 const selectedRun = ref<SandboxRun | null>(null)
 
 function scoreColor(score: number): string {
-  if (score >= 4) return 'text-emerald-400'
-  if (score >= 3) return 'text-amber-400'
-  return 'text-rose-400'
+  if (score >= 4) return 'text-app-success-400'
+  if (score >= 3) return 'text-app-warning-400'
+  return 'text-app-error-400'
 }
 
 // ---- prompt editor ---------------------------------------------------------
@@ -286,10 +286,10 @@ async function archive(prompt: SandboxPromptVersion) {
 
       <div
         v-else-if="store.error"
-        class="rounded-lg border border-rose-800 bg-rose-950/40 p-6 text-sm text-rose-200"
+        class="rounded-lg border border-app-error-800 bg-app-error-950/40 p-6 text-sm text-app-error-200"
       >
-        <p class="font-medium text-rose-100">{{ t('sandbox.error.title') }}</p>
-        <p class="mt-1 text-rose-300">{{ store.error }}</p>
+        <p class="font-medium text-app-error-100">{{ t('sandbox.error.title') }}</p>
+        <p class="mt-1 text-app-error-300">{{ store.error }}</p>
         <UButton class="mt-3" size="xs" color="neutral" variant="subtle" @click="store.load()">
           {{ t('common.retry') }}
         </UButton>
@@ -439,7 +439,7 @@ async function archive(prompt: SandboxPromptVersion) {
             <div class="flex items-center justify-between">
               <span class="text-xs text-dimmed">
                 {{ t('sandbox.builder.cellCount', { count: cellCount }, cellCount) }}
-                <span v-if="cellCount > store.maxCells" class="text-rose-400">
+                <span v-if="cellCount > store.maxCells" class="text-app-error-400">
                   {{ t('sandbox.builder.maxCells', { max: store.maxCells }) }}
                 </span>
               </span>
@@ -498,7 +498,7 @@ async function archive(prompt: SandboxPromptVersion) {
                         >
                           {{ grade.weightedTotal.toFixed(2) }}
                         </span>
-                        <span v-else-if="run.status === 'failed'" class="text-rose-400">{{
+                        <span v-else-if="run.status === 'failed'" class="text-app-error-400">{{
                           t('sandbox.results.failed')
                         }}</span>
                         <span v-else class="text-app-600">—</span>
@@ -506,7 +506,9 @@ async function archive(prompt: SandboxPromptVersion) {
                       <td class="py-1">
                         <span
                           v-if="grade?.objective"
-                          :class="grade.objective.pass ? 'text-emerald-400' : 'text-amber-400'"
+                          :class="
+                            grade.objective.pass ? 'text-app-success-400' : 'text-app-warning-400'
+                          "
                         >
                           {{ grade.objective.caught }}/{{ grade.objective.total }}
                         </span>
@@ -522,7 +524,7 @@ async function archive(prompt: SandboxPromptVersion) {
                 <p class="mb-1 text-[11px] uppercase tracking-wide text-dimmed">
                   {{ selectedRun.promptLabel }} · {{ selectedRun.model }}
                 </p>
-                <p v-if="selectedRun.error" class="text-xs text-rose-400">
+                <p v-if="selectedRun.error" class="text-xs text-app-error-400">
                   {{ selectedRun.error }}
                 </p>
                 <pre

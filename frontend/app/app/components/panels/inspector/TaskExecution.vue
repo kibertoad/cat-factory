@@ -437,7 +437,10 @@ async function mergePr() {
             </span>
             <span
               class="inline-flex items-center gap-1 text-[10px]"
-              :class="[stepFailed(s) ? 'text-rose-400' : 'text-muted', { 'ms-auto': !s.subtasks }]"
+              :class="[
+                stepFailed(s) ? 'text-app-error-400' : 'text-muted',
+                { 'ms-auto': !s.subtasks },
+              ]"
             >
               <UIcon v-if="stepFailed(s)" name="i-lucide-circle-x" class="h-3 w-3 shrink-0" />
               {{ labelForStep(s) }}
@@ -464,7 +467,7 @@ async function mergePr() {
                  indicator, NOT a "Review" gate (the human is summoned only if needed) -->
             <span
               v-else-if="reviews.isBackground(s.agentKind, block.id) && reviewStage"
-              class="inline-flex shrink-0 items-center gap-1 text-[10px] text-primary-300"
+              class="inline-flex shrink-0 items-center gap-1 text-[10px] text-primary"
             >
               <UIcon name="i-lucide-loader-circle" class="h-3 w-3 animate-spin" />
               {{ reviewStageLabel }}
@@ -551,7 +554,7 @@ async function mergePr() {
             class="mt-1 ms-6 h-1 overflow-hidden rounded-full bg-accented/60"
           >
             <div
-              class="h-full rounded-full bg-primary-400 transition-all duration-500"
+              class="h-full rounded-full bg-primary transition-all duration-500"
               :style="{ width: `${(s.subtasks.completed / s.subtasks.total) * 100}%` }"
             />
           </div>

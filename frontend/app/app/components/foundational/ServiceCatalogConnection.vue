@@ -250,7 +250,7 @@ async function disconnect() {
             })
           }}
         </p>
-        <p v-if="connection.lastSyncMessage" class="text-xs text-amber-400">
+        <p v-if="connection.lastSyncMessage" class="text-xs text-app-warning-400">
           {{ connection.lastSyncMessage }}
         </p>
         <div class="flex gap-2">

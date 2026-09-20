@@ -379,7 +379,7 @@ async function copyAutoSetupCommand() {
 
     <p
       v-if="engine === 'local-k3s'"
-      class="rounded-md border border-sky-500/30 bg-sky-500/10 p-2 text-[11px] text-sky-200"
+      class="rounded-md border border-app-info-500/30 bg-app-info-500/10 p-2 text-[11px] text-app-info-200"
     >
       {{ t('settings.infrastructure.kubernetesEngine.localK3sHint') }}
     </p>
@@ -438,7 +438,7 @@ async function copyAutoSetupCommand() {
       "
     >
       <template v-if="tokenStored" #hint>
-        <span class="inline-flex items-center gap-1 text-[11px] text-emerald-400">
+        <span class="inline-flex items-center gap-1 text-[11px] text-app-success-400">
           <UIcon name="i-lucide-check-circle-2" class="h-3.5 w-3.5" />
           {{ t('settings.infrastructure.kubernetesEngine.tokenSaved') }}
         </span>
@@ -458,7 +458,7 @@ async function copyAutoSetupCommand() {
       <p
         v-if="tokenProblem"
         class="mt-1 text-[11px]"
-        :class="tokenBlocking ? 'text-rose-400' : 'text-amber-400'"
+        :class="tokenBlocking ? 'text-app-error-400' : 'text-app-warning-400'"
         data-testid="service-account-token-problem"
       >
         {{ tokenProblem }}
@@ -600,7 +600,7 @@ async function copyAutoSetupCommand() {
     </div>
 
     <div class="flex items-center justify-end gap-3">
-      <p v-if="connectBlockedReason" class="flex-1 text-left text-xs text-rose-400">
+      <p v-if="connectBlockedReason" class="flex-1 text-left text-xs text-app-error-400">
         {{ connectBlockedReason }}
       </p>
       <UButton

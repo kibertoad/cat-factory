@@ -434,7 +434,7 @@ function toastRemoved() {
            re-opening the form. Absent ⇒ the "not connected yet" hint. -->
       <div
         v-if="kubeHandler"
-        class="space-y-2 rounded-md border border-emerald-500/30 bg-emerald-500/5 p-2.5"
+        class="space-y-2 rounded-md border border-app-success-500/30 bg-app-success-500/5 p-2.5"
       >
         <div class="flex items-start justify-between gap-2">
           <UCheckbox
@@ -442,7 +442,7 @@ function toastRemoved() {
             disabled
             size="lg"
             :label="t('settings.infrastructure.handler.connectionEstablished')"
-            :ui="{ label: 'text-[13px] font-semibold text-emerald-300' }"
+            :ui="{ label: 'text-[13px] font-semibold text-app-success-300' }"
           />
           <UButton
             icon="i-lucide-trash-2"
@@ -599,7 +599,7 @@ function toastRemoved() {
           v-if="customHandler"
           class="flex items-center justify-between gap-2 text-[12px] text-toned"
         >
-          <span class="text-emerald-400">{{
+          <span class="text-app-success-400">{{
             t('settings.infrastructure.handler.customConnected')
           }}</span>
           <UButton

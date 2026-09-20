@@ -203,7 +203,7 @@ function onRefInput(e: Event) {
       <figure class="space-y-1">
         <figcaption class="text-[10px] uppercase tracking-wide text-dimmed">
           {{ t('media.compare.reference') }}
-          <span v-if="referenceOrigin === 'design'" class="text-amber-300/80">
+          <span v-if="referenceOrigin === 'design'" class="text-app-warning-300/80">
             {{ t('media.compare.fromLinkedDesign') }}
           </span>
         </figcaption>
@@ -230,7 +230,7 @@ function onRefInput(e: Event) {
           class="flex h-32 cursor-pointer flex-col items-center justify-center gap-1 rounded border border-dashed text-[11px] transition"
           :class="
             dragOver
-              ? 'border-amber-500 bg-amber-500/5 text-amber-300'
+              ? 'border-app-warning-500 bg-app-warning-500/5 text-app-warning-300'
               : 'border-muted text-app-600 hover:border-app-500 hover:text-muted'
           "
           @click="refInput?.click()"
@@ -263,7 +263,7 @@ function onRefInput(e: Event) {
           type="range"
           min="0"
           max="100"
-          class="flex-1 accent-amber-500"
+          class="flex-1 accent-app-warning-500"
         />
         <span>{{ t('media.compare.actual') }}</span>
       </div>
@@ -297,9 +297,9 @@ function onRefInput(e: Event) {
            `clientX - rect.left`), so the handle and the corner labels stay PHYSICAL too.
            Logical (`start-`/`end-`) here would flip the labels under RTL while the image
            regions stayed put, mislabeling actual vs reference. -->
-      <div class="absolute inset-y-0 w-0.5 bg-amber-400" :style="{ left: `${splitPct}%` }">
+      <div class="absolute inset-y-0 w-0.5 bg-app-warning-400" :style="{ left: `${splitPct}%` }">
         <span
-          class="absolute top-1/2 left-1/2 flex h-6 w-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-amber-400 text-app-950 shadow"
+          class="absolute top-1/2 left-1/2 flex h-6 w-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-app-warning-400 text-app-950 shadow"
         >
           <UIcon name="i-lucide-move-horizontal" class="h-3.5 w-3.5" />
         </span>

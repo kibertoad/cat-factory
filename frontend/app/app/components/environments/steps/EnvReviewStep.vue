@@ -130,12 +130,12 @@ const canLeaveReview = computed(
       </UButton>
     </div>
 
-    <p v-if="!store.hasRepo" class="text-[12px] text-amber-300/80">
+    <p v-if="!store.hasRepo" class="text-[12px] text-app-warning-300/80">
       {{ t('environmentWizard.review.noRepo') }}
     </p>
     <p
       v-else-if="store.detectError"
-      class="text-[12px] text-rose-300/80"
+      class="text-[12px] text-app-error-300/80"
       data-testid="env-setup-detect-error"
     >
       {{ t('environmentWizard.review.detectError') }}
@@ -145,13 +145,11 @@ const canLeaveReview = computed(
       <!-- deep analysis (opt-in; elevated to a prominent nudge when the repo ships its own CLI) -->
       <div
         class="rounded-md border p-3"
-        :class="
-          repoCliHint ? 'border-primary-700/60 bg-primary-950/30' : 'border-default bg-default/40'
-        "
+        :class="repoCliHint ? 'border-primary/60 bg-primary/10' : 'border-default bg-default/40'"
       >
         <p
           v-if="repoCliHint"
-          class="mb-2 flex items-start gap-1.5 text-[11px] text-primary-300"
+          class="mb-2 flex items-start gap-1.5 text-[11px] text-primary"
           data-testid="env-setup-cli-nudge"
         >
           <UIcon name="i-lucide-lightbulb" class="mt-0.5 h-3.5 w-3.5 shrink-0" />
@@ -184,7 +182,10 @@ const canLeaveReview = computed(
         >
           {{ t('environmentWizard.analysis.unavailable') }}
         </p>
-        <p v-else-if="store.analysisStatus === 'failed'" class="mt-2 text-[11px] text-rose-300/80">
+        <p
+          v-else-if="store.analysisStatus === 'failed'"
+          class="mt-2 text-[11px] text-app-error-300/80"
+        >
           {{ t('environmentWizard.analysis.failed') }}
         </p>
         <div
@@ -350,7 +351,11 @@ const canLeaveReview = computed(
             class="w-full font-mono text-[11px]"
             data-testid="env-setup-raw-text"
           />
-          <p v-if="rawError" class="text-[11px] text-rose-300/80" data-testid="env-setup-raw-error">
+          <p
+            v-if="rawError"
+            class="text-[11px] text-app-error-300/80"
+            data-testid="env-setup-raw-error"
+          >
             {{ rawError }}
           </p>
           <div class="flex justify-end">

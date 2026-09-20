@@ -24,7 +24,7 @@ const ordered = computed(() => [...props.failures].reverse())
       data-testid="agent-failure-history-entry"
     >
       <div class="flex items-center gap-1.5 text-[10px] text-dimmed">
-        <UIcon name="i-lucide-alert-triangle" class="h-3 w-3 shrink-0 text-rose-400/70" />
+        <UIcon name="i-lucide-alert-triangle" class="h-3 w-3 shrink-0 text-app-error-400/70" />
         <time>{{ d(new Date(failure.occurredAt), 'long') }}</time>
       </div>
 

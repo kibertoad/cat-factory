@@ -57,10 +57,10 @@ function openStep(i: number) {
 
 /** Per-state accent, matching the inspector/focus pipeline views. */
 const STATE_META: Record<AgentState, { color: string; icon: string }> = {
-  pending: { color: '#64748b', icon: 'i-lucide-circle-dashed' },
-  working: { color: '#6366f1', icon: 'i-lucide-loader' },
-  waiting_decision: { color: '#f59e0b', icon: 'i-lucide-circle-help' },
-  done: { color: '#22c55e', icon: 'i-lucide-circle-check' },
+  pending: { color: 'var(--ui-text-muted)', icon: 'i-lucide-circle-dashed' },
+  working: { color: 'var(--ui-primary)', icon: 'i-lucide-loader' },
+  waiting_decision: { color: 'var(--ui-warning)', icon: 'i-lucide-circle-help' },
+  done: { color: 'var(--ui-success)', icon: 'i-lucide-circle-check' },
 }
 
 // A reviewer gate (requirements-review / clarity-review) folding answers or re-reviewing in
@@ -108,7 +108,7 @@ const ITEM_ICON: Record<string, string> = {
     <div v-for="(s, i) in steps" :key="i" class="rounded bg-default/60 px-1.5 py-1">
       <button
         type="button"
-        class="flex w-full cursor-pointer items-center gap-1 rounded text-start focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60"
+        class="flex w-full cursor-pointer items-center gap-1 rounded text-start focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
         :title="`${agentKindMeta(s.agentKind).label} — ${agentKindMeta(s.agentKind).description}\n${t('board.task.clickToViewStep')}`"
         @click.stop="openStep(i)"
       >
@@ -162,7 +162,7 @@ const ITEM_ICON: Record<string, string> = {
           !reviews.isBackground(s.agentKind, props.taskId)
         "
         type="button"
-        class="mt-1 flex w-full items-center justify-center gap-1 rounded bg-amber-500 px-1.5 py-0.5 text-[9px] font-semibold text-amber-950 transition hover:bg-amber-400"
+        class="mt-1 flex w-full items-center justify-center gap-1 rounded bg-app-warning-500 px-1.5 py-0.5 text-[9px] font-semibold text-app-warning-50 dark:text-app-warning-950 transition hover:bg-app-warning-400"
         @click.stop="ui.openApprovalDetail(instance.id, s.approval.id)"
       >
         <UIcon name="i-lucide-shield-check" class="h-2.5 w-2.5" />
@@ -175,7 +175,7 @@ const ITEM_ICON: Record<string, string> = {
         class="mt-1 h-0.5 w-full overflow-hidden rounded bg-accented/60"
       >
         <div
-          class="h-full rounded bg-primary-400 transition-all"
+          class="h-full rounded bg-primary transition-all"
           :style="{ width: `${(s.subtasks.completed / s.subtasks.total) * 100}%` }"
         />
       </div>

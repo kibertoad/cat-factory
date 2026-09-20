@@ -490,7 +490,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
               class="gap-1"
             >
               {{ l }}
-              <button type="button" class="hover:text-rose-400" @click="removeLabel(l)">
+              <button type="button" class="hover:text-app-error-400" @click="removeLabel(l)">
                 <UIcon name="i-lucide-x" class="h-3 w-3" />
               </button>
             </UBadge>
@@ -508,7 +508,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
           <p
             v-for="warning in draftWarnings"
             :key="warning.key"
-            class="mb-2 flex items-center gap-1.5 rounded-md border border-amber-800/50 bg-amber-950/30 px-2 py-1 text-[11px] text-amber-300"
+            class="mb-2 flex items-center gap-1.5 rounded-md border border-app-warning-800/50 bg-app-warning-950/30 px-2 py-1 text-[11px] text-app-warning-300"
             :data-testid="warning.testId"
           >
             <UIcon name="i-lucide-alert-triangle" class="h-3.5 w-3.5 shrink-0" />
@@ -788,7 +788,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                 <p v-if="!skillSelectItems.length" class="text-[10px] text-dimmed">
                   {{ t('pipeline.builder.skillNoneAvailable') }}
                 </p>
-                <p v-else-if="skillMissing(unit.index)" class="text-[10px] text-amber-400">
+                <p v-else-if="skillMissing(unit.index)" class="text-[10px] text-app-warning-400">
                   {{ t('pipeline.builder.skillMissing') }}
                 </p>
               </div>
@@ -859,7 +859,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                  gated on the task estimate. -->
               <div
                 v-if="unit.companionIndex !== null"
-                class="ms-6 space-y-2 rounded-md border border-fuchsia-800/40 bg-fuchsia-950/20 p-2 text-xs"
+                class="ms-6 space-y-2 rounded-md border border-app-hue-fuchsia/40 bg-app-hue-fuchsia/10 p-2 text-xs"
               >
                 <div class="flex items-center gap-1.5">
                   <UIcon name="i-lucide-corner-down-right" class="h-3.5 w-3.5 text-dimmed" />
@@ -919,7 +919,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
               <!-- Consensus config (shown when the step is consensus-enabled). -->
               <div
                 v-if="pipelines.draftConsensus[unit.index]?.enabled"
-                class="ms-6 space-y-2 rounded-md border border-emerald-800/40 bg-emerald-950/20 p-2 text-xs"
+                class="ms-6 space-y-2 rounded-md border border-app-success-800/40 bg-app-success-950/20 p-2 text-xs"
               >
                 <!-- The workspace consensus-GROUP tier set: pick which reusable panels this
                      step may escalate to. Each group carries its own estimate bar; the engine
@@ -931,7 +931,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                   class="space-y-1 border-b border-default pb-2"
                 >
                   <div class="flex items-center gap-1.5">
-                    <UIcon name="i-lucide-layers" class="h-3.5 w-3.5 text-emerald-400" />
+                    <UIcon name="i-lucide-layers" class="h-3.5 w-3.5 text-app-success-400" />
                     <span class="text-toned">{{ t('pipeline.builder.consensusGroups') }}</span>
                   </div>
                   <p class="text-[11px] text-dimmed">
@@ -945,7 +945,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                       class="rounded border px-1.5 py-0.5 text-[11px]"
                       :class="
                         isGroupSelected(unit.index, group.id)
-                          ? 'border-emerald-600 bg-emerald-900/40 text-emerald-200'
+                          ? 'border-app-success-600 bg-app-success-900/40 text-app-success-200'
                           : 'border-muted bg-default text-muted hover:text-default'
                       "
                       :title="group.description"
@@ -1062,10 +1062,10 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                   isTesterKind(unit.kind) &&
                   pipelines.draftTesterQuality[unit.index]?.enabled !== false
                 "
-                class="ms-6 space-y-2 rounded-md border border-sky-800/40 bg-sky-950/20 p-2 text-xs"
+                class="ms-6 space-y-2 rounded-md border border-app-info-800/40 bg-app-info-950/20 p-2 text-xs"
               >
                 <div class="flex items-center gap-1.5">
-                  <UIcon name="i-lucide-shield-check" class="h-3.5 w-3.5 text-sky-400" />
+                  <UIcon name="i-lucide-shield-check" class="h-3.5 w-3.5 text-app-info-400" />
                   <span class="min-w-0 flex-1 truncate text-default">
                     {{ t('pipeline.builder.testerQualityLabel') }}
                   </span>
@@ -1365,7 +1365,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                     v-for="c in stepConditionsAt(p, i)"
                     :key="c"
                     :name="CONDITION_MARKERS[c].icon"
-                    class="h-3 w-3 shrink-0 text-sky-400"
+                    class="h-3 w-3 shrink-0 text-app-info-400"
                     :title="t(CONDITION_MARKERS[c].key)"
                   />
                 </li>

@@ -133,7 +133,7 @@ async function retry() {
 
 <template>
   <div
-    class="nodrag rounded-lg border border-rose-900/60 bg-rose-950/40"
+    class="nodrag rounded-lg border border-app-error-900/60 bg-app-error-950/40"
     :class="compact ? 'px-3 py-2' : 'px-3 py-2.5'"
     data-testid="agent-failure-banner"
     :data-run-kind="run.kind"
@@ -141,15 +141,15 @@ async function retry() {
     <div class="flex items-center gap-1.5" :class="compact ? 'text-[11px]' : 'text-xs'">
       <UIcon
         name="i-lucide-alert-triangle"
-        class="shrink-0 text-rose-400"
+        class="shrink-0 text-app-error-400"
         :class="compact ? 'h-3.5 w-3.5' : 'h-4 w-4'"
       />
-      <span class="text-rose-300">{{ title }}</span>
+      <span class="text-app-error-300">{{ title }}</span>
     </div>
 
     <p
       v-if="failure?.message"
-      class="mt-1 leading-snug text-rose-300/90"
+      class="mt-1 leading-snug text-app-error-300/90"
       :class="compact ? 'line-clamp-2 text-[10px]' : 'text-[11px]'"
       :title="failure.message"
     >
@@ -158,7 +158,7 @@ async function retry() {
 
     <p
       v-if="failure?.hint"
-      class="mt-1 leading-snug text-rose-400/70"
+      class="mt-1 leading-snug text-app-error-400/70"
       :class="compact ? 'text-[10px]' : 'text-[11px]'"
     >
       {{ failure.hint }}
@@ -168,7 +168,7 @@ async function retry() {
          name the concrete .env fix rather than only pointing at the (unhelpful-here) tab. -->
     <p
       v-if="showEnvironmentLocalHint && !compact"
-      class="mt-1 text-[11px] leading-snug text-rose-400/70"
+      class="mt-1 text-[11px] leading-snug text-app-error-400/70"
       data-testid="agent-failure-environment-local-hint"
     >
       {{
@@ -192,14 +192,14 @@ async function retry() {
       v-if="!compact && failure"
       :detail="failure.detail"
       :message="failure.message"
-      summary-class="text-[10px] text-rose-400/60 hover:text-rose-300"
-      pre-class="bg-rose-950/60 text-[10px] text-rose-200/80"
+      summary-class="text-[10px] text-app-error-400/60 hover:text-app-error-300"
+      pre-class="bg-app-error-950/60 text-[10px] text-app-error-200/80"
     />
 
     <div class="mt-2 flex flex-wrap items-center gap-2">
       <button
         type="button"
-        class="nodrag flex items-center gap-1 rounded-md bg-rose-900/40 text-rose-200 hover:bg-rose-900/70 disabled:opacity-60"
+        class="nodrag flex items-center gap-1 rounded-md bg-app-error-900/40 text-app-error-200 hover:bg-app-error-900/70 disabled:opacity-60"
         :class="compact ? 'px-2 py-0.5 text-[10px]' : 'px-2 py-1 text-[11px]'"
         :disabled="retrying || !access.canExecuteRuns.value"
         :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
@@ -216,7 +216,7 @@ async function retry() {
       <button
         v-if="run.kind === 'bootstrap'"
         type="button"
-        class="nodrag flex items-center gap-1 rounded-md bg-rose-900/20 text-rose-300 hover:bg-rose-900/50"
+        class="nodrag flex items-center gap-1 rounded-md bg-app-error-900/20 text-app-error-300 hover:bg-app-error-900/50"
         :class="compact ? 'px-2 py-0.5 text-[10px]' : 'px-2 py-1 text-[11px]'"
         data-testid="agent-failure-inspect"
         @click.stop="inspectRun"
@@ -233,7 +233,7 @@ async function retry() {
       <button
         v-if="isEnvironmentFailure"
         type="button"
-        class="nodrag flex items-center gap-1 rounded-md bg-rose-900/20 text-rose-300 hover:bg-rose-900/50"
+        class="nodrag flex items-center gap-1 rounded-md bg-app-error-900/20 text-app-error-300 hover:bg-app-error-900/50"
         :class="compact ? 'px-2 py-0.5 text-[10px]' : 'px-2 py-1 text-[11px]'"
         data-testid="agent-failure-configure-environment"
         @click.stop="openFailureSetup"

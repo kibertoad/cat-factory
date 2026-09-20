@@ -298,7 +298,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
   <ResultWindowShell
     :open="open"
     icon="i-lucide-bug"
-    icon-class="bg-primary-500/15 text-primary-300"
+    icon-class="bg-primary/15 text-primary"
     :title="t('clarity.title')"
     :subtitle="block?.title"
     variant="centered"
@@ -348,7 +348,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
           <!-- converged: reviewer satisfied -->
           <div
             v-if="incorporated"
-            class="mb-4 flex items-center gap-2 rounded-lg border border-emerald-900/60 bg-emerald-950/30 p-4 text-sm text-emerald-300"
+            class="mb-4 flex items-center gap-2 rounded-lg border border-app-success-900/60 bg-app-success-950/30 p-4 text-sm text-app-success-300"
           >
             <UIcon name="i-lucide-circle-check" class="h-5 w-5 shrink-0" />
             {{ t('clarity.converged') }}
@@ -368,7 +368,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                    the human can see which of the two LLM calls is currently in progress. -->
           <div
             v-else-if="working"
-            class="mb-4 flex items-center gap-2 rounded-lg border border-primary-900/60 bg-primary-950/30 p-4 text-sm text-primary-200"
+            class="mb-4 flex items-center gap-2 rounded-lg border border-primary/60 bg-primary/10 p-4 text-sm text-primary"
           >
             <UIcon name="i-lucide-loader-circle" class="h-5 w-5 shrink-0 animate-spin" />
             <span v-if="incorporating">
@@ -480,7 +480,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
 
           <!-- clarified document: the standard-format bug report -->
           <section v-if="outline" class="mt-6 border-t border-default pt-5">
-            <div class="mb-3 flex items-center gap-1.5 text-[11px] text-emerald-400">
+            <div class="mb-3 flex items-center gap-1.5 text-[11px] text-app-success-400">
               <UIcon name="i-lucide-file-check-2" class="h-3.5 w-3.5" />
               <span class="font-semibold uppercase tracking-wide">
                 {{ incorporated ? t('clarity.docHeading') : t('clarity.docHeadingDraft') }}
