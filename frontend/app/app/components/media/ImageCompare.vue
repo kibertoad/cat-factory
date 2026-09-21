@@ -82,11 +82,13 @@ function onSwipeUp() {
 
 // --- diff canvas ---
 const diffCanvas = ref<HTMLCanvasElement | null>(null)
-// A fixed black backing, opting out of the theme on purpose: the canvas holds a `difference`
-// composite, and black is the neutral blend base in either colour mode (a diff of two similar
-// frames is near-black), so no mode-following token fits. Bound as a const so the guard's marker
+// A fixed black backing, opting out of the theme on purpose. The CSS background does not take part
+// in the canvas `difference` composite (that runs on the bitmap); it shows through wherever the
+// bitmap is transparent, before the first draw and in any transparent region of the diff. Black
+// there reads as "no difference", the same zero the difference composite produces, in either colour
+// mode, so no mode-following token fits. Bound as a const so the guard's `fixed-colour-ok:` marker
 // stays on the class string; the inline-template form gets reflowed off its own line by oxfmt.
-const DIFF_CANVAS_CLASS = 'w-full rounded border border-default bg-black' // fixed-colour-ok: difference composite
+const DIFF_CANVAS_CLASS = 'w-full rounded border border-default bg-black' // fixed-colour-ok: diff canvas backdrop
 const CAP = 2000
 // Bumped on every renderDiff entry so a render whose async work (image decode) is overtaken
 // by a newer mode/image change bails out instead of drawing stale pixels onto the canvas.

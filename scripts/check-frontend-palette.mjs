@@ -20,34 +20,22 @@
 // Brand accents use the BARE alias (`text-primary`, `bg-primary/10`); a category hue (an agent
 // kind's identity colour) uses `text-app-hue-pink` or `var(--app-hue-pink)` in an inline style.
 //
-// Three more shapes come from the #2242 review, each a class of comment the reviewer left more
-// than once, turned into a deterministic check:
+// One more shape comes from the #2242 review, a class of comment the reviewer left more than once,
+// turned into a deterministic check:
 //   4. A FIXED white or black utility (`bg-white`, `text-black`, `border-white/5`,
 //      `bg-white/[0.02]`, `ring-white/10`): welded to one end of the mode, so it is invisible or
 //      wrong in light mode. The theme-aware replacements are role tokens: `border-inverted` for a
 //      selection ring, `border-default` / `bg-muted` for faint chrome, `text-inverted` for text
 //      over a filled surface, `text-highlighted` for the page's strongest text. A line that
-//      genuinely needs a fixed white or black (a difference-composite canvas backing, where black
-//      is the mathematically neutral backdrop in either mode) says why with `fixed-colour-ok:`.
-//   5. TEXT over a PRIMARY or alias FILL must be `text-inverted`. `text-white` on `bg-primary` is
-//      white-on-white under the shipped Mono theme (its `--ui-primary` is white in dark mode), and
-//      `text-highlighted` follows the PAGE, not the fill. Only `text-inverted` is defined against
-//      the inverted surface. Flagged when one class attribute pairs `bg-primary` (or an alias fill:
-//      `bg-secondary`, `bg-success`, `bg-info`, `bg-warning`, `bg-error`, `bg-neutral`) with
-//      `text-white` or `text-highlighted`. `text-white` pairs with any such fill; `text-highlighted`
-//      only with an OPAQUE one, because over a TRANSLUCENT fill (`bg-primary/10`) the surface is the
-//      page recoloured, where page-following text is the correct, readable choice.
-//   6. A DEGENERATE hover: a `hover:<utility>` whose colour utility equals a resting one in the
-//      same class list (`text-primary … hover:text-primary`). A mechanical-migration artefact (two
-//      numbered shades collapsed onto one alias) that leaves no hover feedback. Colour utilities
-//      only (a size / layout class like `text-sm` or `bg-cover` is not one); an alpha difference
-//      (`bg-primary/90 … hover:bg-primary`) is a real change and is left alone. The resting twin is
-//      a bare utility or one under a MODE / RESPONSIVE variant (`sm:`, `dark:`), which sets a resting
-//      colour in a context; a twin under an interaction-STATE variant (`focus:`, `active:`) is a
-//      DIFFERENT state, not resting, so it never makes a plain `hover:` degenerate.
-// Rules 5-6 read one applied class list at a time (a bound `:class` ternary splits into its
-// branches), so a `bg-primary` in one branch and a `text-white` in another never pair. Neither has
-// a fixed value to opt out the way rule 4 does, so a genuine need says why with `theme-colour-ok:`.
+//      genuinely needs a fixed white or black says why with `fixed-colour-ok:`, on that line or the
+//      one before it (a trailing HTML comment naming a utility is prose, not an offender).
+//
+// Readable-text-on-fill and degenerate-hover checks were prototyped here as rules 5 and 6 and
+// WITHDRAWN: they assert a COMPUTED-STYLE property (contrast of text against its fill under every
+// theme and mode; a hover producing a colour change) that a line-scoped regex cannot decide from
+// class names, because it would have to model the Tailwind grammar (variants, opacity modifiers,
+// array and ternary bindings, cross-line class lists, `@apply`). They re-land as a real-browser
+// contrast check. See the PR and the `ui-render-snapshot-safety` initiative.
 //
 // Policy: ZERO offenders. The migration left none, so there is no ratchet of legacy allowances to
 // carry: the moment a diff adds one, this fails. A hex a deployment-registered kind sends over the
@@ -136,51 +124,6 @@ const OPACITY = '(?:\\/(?:\\d{1,3}|\\[[^\\]]+\\]))?'
 // `-white` / `-black`, then an optional opacity. `bg-white/[0.02]` and `ring-white/10` included.
 const FIXED_BW = new RegExp(`(?<![\\w-])${PREFIX}-(?:white|black)(?![\\w-])${OPACITY}`, 'g')
 const FIXED_BW_OK = 'fixed-colour-ok:'
-// One shared escape for the pairing (rule 5) and degenerate-hover (rule 6) rules, whose refusals a
-// site otherwise cannot waive (they have no fixed value to opt out, the way rule 4's white/black
-// does). A line that genuinely wants the flagged combination says why.
-const THEME_COLOUR_OK = 'theme-colour-ok:'
-// The colour names a utility may carry: the Nuxt UI aliases and role tokens, plus the app's own
-// `app-*` tokens (numbered ramps, hues, canvas). Deliberately NOT `[\\w-]+`: a bare suffix match
-// swept up size / layout / position utilities (`text-sm`, `bg-cover`, `ring-2`, `text-center`) that
-// share a prefix but are not colours, and rule 6 flagged their same-value hovers as colour bugs.
-const COLOUR_NAME =
-  '(?:primary|secondary|success|info|warning|error|neutral|default|muted|elevated|accented|toned|dimmed|highlighted|inverted|app-[\\w-]+)'
-// A colour utility, opacity included so `bg-primary/90` and `bg-primary` stay DISTINCT.
-const COLOUR_UTIL = `(?:text|bg|border|border-[xytrbles]|ring|decoration)-${COLOUR_NAME}${OPACITY}`
-// A PRIMARY / alias fill (rule 5). `text-white` is a fixed colour, wrong over any alias fill in
-// light mode; `text-highlighted` follows the PAGE, so it is RIGHT over a translucent tint (the fill
-// carries a `/opacity`, so the surface is the page recoloured, not an inverted one) and wrong only
-// over an OPAQUE fill.
-const FILL_FOR_TEXT = new RegExp(`(?<![\\w-])bg-(?:${ALIASES.join('|')})${OPACITY}(?![\\w-])`)
-const TEXT_WHITE = /(?<![\w-])text-white(?![\w-])/
-const TEXT_HIGHLIGHTED = /(?<![\w-])text-highlighted(?![\w-])/
-// One class TOKEN split into its variant chain (`hover:`, `dark:`, `sm:`, `group-hover:`, `[&]:`)
-// and the colour utility it decorates. A token is a hover state when `hover:` sits ANYWHERE in the
-// chain, so a resting twin under a MODE or RESPONSIVE variant (`sm:text-primary`, `dark:text-error`)
-// still counts (rule 6): that variant sets the element's resting colour in a context.
-const CLASS_TOKEN = new RegExp(`^((?:[\\w[\\]&.-]+:)*)(${COLOUR_UTIL})$`)
-// An INTERACTION-STATE variant (`focus:`, `active:`, `visited:`, `target:`, their `group-`/`peer-`
-// forms). A twin under one of these is not a resting value but a value for a DIFFERENT state, so it
-// cannot make a plain `hover:` degenerate: `focus:text-primary hover:text-primary` gives real
-// feedback when you hover an unfocused element. Excluded from the resting set (rule 6).
-const STATE_VARIANT =
-  /(?:^|:)(?:group-|peer-)?(?:focus|focus-visible|focus-within|active|visited|target)(?=:)/
-
-/** The class strings on a line, scoped so rules 5 and 6 pair utilities only WITHIN one applied
- * class list. Each quoted run (double, single, backtick); a run that itself nests quoted strings (a
- * bound `:class="cond ? 'a' : 'b'"`) yields those inner strings, so two mutually-exclusive ternary
- * branches never pair. The whole line when it carries no quotes (a CSS `@apply`). */
-function classSegments(line) {
-  const runs = [...line.matchAll(/"([^"]*)"|'([^']*)'|`([^`]*)`/g)].map((m) => m[1] ?? m[2] ?? m[3])
-  if (!runs.length) return [line]
-  return runs.flatMap((run) => {
-    const inner = [...run.matchAll(/"([^"]*)"|'([^']*)'|`([^`]*)`/g)].map(
-      (m) => m[1] ?? m[2] ?? m[3],
-    )
-    return inner.length ? inner : [run]
-  })
-}
 // Comment lines may name a colour when explaining one; the guard reads code, not prose. `#` is NOT
 // a comment marker here: in the scanned `.css` and `.vue` files a line starting with `#` is an ID
 // selector, and `#app { color: #ff0000 }` must not slip past.
@@ -204,52 +147,15 @@ export function findColourLiterals(line) {
   return [...new Set([...(line.match(COLOUR_LITERAL) ?? []), ...(line.match(ALPHA_CONCAT) ?? [])])]
 }
 
-/** Every fixed white/black utility on a CODE line (rule 4), or [] for a clean or exempted line. */
-export function findFixedBlackWhite(line) {
-  if (COMMENT_LINE.test(line) || line.includes(FIXED_BW_OK)) return []
-  return [...new Set(line.match(FIXED_BW) ?? [])]
-}
-
-/** Each `bg-<alias>` + `text-white`/`text-highlighted` pairing on a CODE line (rule 5), reported as
- * `<fill>+<text>`, scoped to one applied class list. `text-white` pairs with any alias fill;
- * `text-highlighted` pairs only with an OPAQUE fill, being the correct readable choice over a
- * translucent tint. [] for a clean, comment or waived line. */
-export function findTextOnFill(line) {
-  if (COMMENT_LINE.test(line) || line.includes(THEME_COLOUR_OK)) return []
-  const hits = []
-  for (const seg of classSegments(line)) {
-    const fill = FILL_FOR_TEXT.exec(seg)
-    if (!fill) continue
-    const white = TEXT_WHITE.exec(seg)
-    if (white) hits.push(`${fill[0]}+${white[0]}`)
-    // `text-highlighted` inverts wrongly only on an OPAQUE fill; over a `/opacity` tint it is right.
-    const highlighted = fill[0].includes('/') ? null : TEXT_HIGHLIGHTED.exec(seg)
-    if (highlighted) hits.push(`${fill[0]}+${highlighted[0]}`)
-  }
-  return [...new Set(hits)]
-}
-
-/** Each degenerate hover on a CODE line (rule 6): a `hover:<util>` whose colour utility (opacity
- * included) also appears as a resting utility in the same class list, compared by the utility below
- * its variant chain so a `sm:`-prefixed resting twin still counts. A twin under an interaction-STATE
- * variant (`focus:`, `active:`) is NOT resting and is skipped. Reported as `hover:<util>=<util>`.
- * [] for a clean, comment or waived line. */
-export function findDegenerateHover(line) {
-  if (COMMENT_LINE.test(line) || line.includes(THEME_COLOUR_OK)) return []
-  const hits = []
-  for (const seg of classSegments(line)) {
-    const resting = new Set()
-    const hovers = []
-    for (const token of seg.split(/\s+/)) {
-      const m = CLASS_TOKEN.exec(token)
-      if (!m) continue // not a colour utility (a size / layout / position class, or plain word)
-      if (m[1].includes('hover:')) hovers.push(m[2])
-      else if (STATE_VARIANT.test(m[1])) continue // a focus/active/etc. state value, never resting
-      else resting.add(m[2])
-    }
-    for (const util of hovers) if (resting.has(util)) hits.push(`hover:${util}=${util}`)
-  }
-  return [...new Set(hits)]
+/** Every fixed white/black utility on a CODE line (rule 4), or [] for a clean or exempted line. The
+ * `fixed-colour-ok:` waiver is honoured on the line itself OR on the line before it (`prevLine`, the
+ * `eslint-disable-next-line` shape), so a waiver never forces the class off its own line. A trailing
+ * HTML comment is stripped first, so `<!-- was bg-white -->` beside real markup is prose, not an
+ * offender. */
+export function findFixedBlackWhite(line, prevLine = '') {
+  if (COMMENT_LINE.test(line)) return []
+  if (line.includes(FIXED_BW_OK) || prevLine.includes(FIXED_BW_OK)) return []
+  return [...new Set(line.replace(/<!--.*?-->/g, ' ').match(FIXED_BW) ?? [])]
 }
 
 function* sourceFiles(dirAbs) {
@@ -269,19 +175,15 @@ function main() {
   const offenders = []
   for (const file of SCAN_ROOTS.flatMap((root) => [...sourceFiles(root)])) {
     const lines = readFileSync(file, 'utf8').split('\n')
-    // A spec may hold a hex as a FIXTURE (the value a deployment-registered kind sends, a colour
-    // the sanitiser must accept); the literal rule reads production code only.
-    // The literal rule (rule 3) reads production code only; the utility rules (raw palette, and
-    // rules 4-6) apply everywhere, a fixed class being wrong even in a fixture. #2245 widens this
-    // gate to also exempt `presets.ts` (a verbatim Nuxt UI decode table of `oklch()` strings); the
-    // utility spreads below are untouched by that.
+    // The literal rule (rule 3) reads production code only; the utility rules (raw palette, fixed
+    // numbered alias, fixed white/black) apply everywhere, a fixed class being wrong even in a
+    // fixture. #2245 widens this gate to also exempt `presets.ts` (a verbatim Nuxt UI decode table
+    // of `oklch()` strings); the utility spreads below are untouched by that.
     const literalExempt = file.endsWith('.spec.ts')
     lines.forEach((line, i) => {
       const matches = [
         ...findRawPalette(line),
-        ...findFixedBlackWhite(line),
-        ...findTextOnFill(line),
-        ...findDegenerateHover(line),
+        ...findFixedBlackWhite(line, lines[i - 1] ?? ''),
         ...(literalExempt ? [] : findColourLiterals(line)),
       ]
       if (matches.length) offenders.push({ file: relative(repoRoot, file), line: i + 1, matches })
@@ -295,8 +197,8 @@ function main() {
         "app's mirrored numbered token (text-app-warning-300, bg-app-950) or category hue\n" +
         '(text-app-hue-pink); in CSS or SVG, var(--ui-*) / var(--app-*); a translucent fill goes\n' +
         'through tint(). For a fixed white/black, use border-inverted / border-default / bg-muted /\n' +
-        'text-inverted; text on a bg-primary/alias fill is text-inverted; a hover: utility must\n' +
-        'differ from its resting value. See frontend/app/README.md, "Colour through theme tokens".\n',
+        'text-inverted, or waive one deliberate line with a `fixed-colour-ok:` comment (on the line\n' +
+        'or the one above). See frontend/app/README.md, "Colour through theme tokens".\n',
     )
     for (const o of offenders) {
       console.error(`  ${o.file}:${o.line}  ${o.matches.join(' ')}`)
