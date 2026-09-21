@@ -114,6 +114,17 @@ describe('findColourLiterals', () => {
     assert.deepEqual(findColourLiterals(':style="{ backgroundColor: tint(a.color) }"'), [])
   })
 
+  it('ignores an issue or URL reference glued to a word char or slash (issue #2261)', () => {
+    // `#NNN` after a word char or `/` is a reference, not a 3/4-digit hex colour.
+    assert.deepEqual(findColourLiterals("      refPlaceholder: 'acme/web#123',"), [])
+    assert.deepEqual(findColourLiterals("  const ref = 'owner/repo#456'"), [])
+    assert.deepEqual(findColourLiterals("  url: 'https://x.test/page#abcdef',"), [])
+    // A real short/long hex keeps being flagged: it is preceded by a value opener, not a word char.
+    assert.deepEqual(findColourLiterals("  accent: '#123',"), ['#123'])
+    assert.deepEqual(findColourLiterals('  color: #abc;'), ['#abc'])
+    assert.deepEqual(findColourLiterals("  accent: '#abcdef',"), ['#abcdef'])
+  })
+
   it('accepts tokens, template slots, url(#id) references and comments', () => {
     assert.deepEqual(findColourLiterals('  color: var(--ui-text-highlighted);'), [])
     assert.deepEqual(findColourLiterals("  fill: 'var(--app-hue-blue)',"), [])

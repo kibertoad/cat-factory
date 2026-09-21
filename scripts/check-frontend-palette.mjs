@@ -93,8 +93,13 @@ const RETIRED_PRIMARY = new RegExp(`(?<![\\w-])${PREFIX}-app-primary-${SHADE}`, 
 // for the utility rules above to catch. The pre-JS loading shell is HTML and is not scanned; a line
 // that must carry a literal (the first-paint `theme-color` fallbacks) says why with
 // `colour-literal-ok:`.
+//
+// `(?<![\w/])` is a LEFT boundary on the hex branches: a `#` glued to a word char or a `/` is an
+// issue/URL reference (`acme/web#123`, `page#abcdef`), never a colour, because a real hex is
+// preceded by a value opener (`:`, whitespace, quote, `(`) or the line start (issue #2261). A
+// colour function needs no such guard: `myrgb(` is not a thing.
 const COLOUR_LITERAL =
-  /#[0-9a-f]{6}(?:[0-9a-f]{2})?\b|#[0-9a-f]{3,4}(?=["');,\s])|\b(?:rgba?|hsla?|oklch|oklab|lab|lch|color)\(/gi
+  /(?<![\w/])#[0-9a-f]{6}(?:[0-9a-f]{2})?\b|(?<![\w/])#[0-9a-f]{3,4}(?=["');,\s])|\b(?:rgba?|hsla?|oklch|oklab|lab|lch|color)\(/gi
 // Appending a hex alpha to a colour value: valid on a hex, garbage on a `var(--app-hue-*)`, and
 // nothing in the type system tells the two apart. `tint()` (`utils/colorTint.ts`) is the seam.
 const ALPHA_CONCAT =
