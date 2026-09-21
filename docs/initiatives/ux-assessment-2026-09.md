@@ -159,7 +159,7 @@ the outcome, get feedback, complete. "Issue" names the failing question.
 | Step                      | User is trying to          | Issue                                                                                                                                                                                             | Severity                 |
 | ------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
 | Open the app              | Get a simpler board        | Same three operator advisories as the engineer, before the role question. The role hint says "a simpler board"; the first screen is not.                                                          | Major (UXA-03)           |
-| Read the board            | See work in flight         | Frames, lanes and cards read well. Cards offer Start, Retry, Review, Merge as primary buttons: execution controls on the intake surface.                                                          | Question (UXA-24)        |
+| Read the board            | See work in flight         | Frames, lanes and cards read well. Cards offer Start, Retry, Review, Merge as primary buttons. Decided: they stay; pipeline ownership is a team policy.                                           | Closed (UXA-24)          |
 | File a task from a design | Use what the role promised | No "Start from a design" or "Create task from issue" anywhere: both render only when a source is connected, and the role hides the surface that connects one. Nothing says so. Q2 fails silently. | Major (UXA-05)           |
 | Add a task                | Describe the work          | Identical modal to the engineer's: ten types, agent configuration, engine helper text.                                                                                                            | Major (UXA-04, same fix) |
 | Find anything             | Search                     | Palette has three entries: assistant, shortcuts, role, tutorials. No task or service search (known: [`global-search-and-deep-links.md`](./global-search-and-deep-links.md)).                      | Known                    |
@@ -261,9 +261,10 @@ seen on screen; line numbers were not pinned because #2246 will move most of the
   changes what a run does. Code-traced: the card's chain is task pin → workspace-declared
   interactive default → tier rung → first pipeline (`TaskCard.vue` `defaultPipeline`), computed
   live over `uiMode.isAdvanced` with nothing persisted. Tasks created through the modal are pinned,
-  so this bites REST-created and seeded tasks and any task whose pin was cleared. Fix: resolve the
-  default once from the workspace (a declared interactive default already outranks the rung), and
-  let the tier decide only whether the picker is shown.
+  so this bites REST-created and seeded tasks and any task whose pin was cleared.
+  **Decided in PR #2254: intended, no change.** The tier rung is the deliberate default, and which
+  pipeline a given role runs is a team policy (pipelines distributed across people or owned by
+  one), not a UI axis. The card already names the pipeline it will run.
 - **UXA-09. The inspector's Run menu is a flat list of 18 names.** No step preview, no grouping by
   purpose, custom pipelines last. `frontend/app/README.md` states `PipelinePicker` (with its
   preview pane) is "the single way a pipeline is chosen anywhere"; this menu is the exception. The
@@ -324,9 +325,10 @@ seen on screen; line numbers were not pinned because #2246 will move most of the
 - **UXA-23. Em-dashes and ellipsis characters in placeholders.** "Describe the work — context…",
   "It won't run until you start a pipeline on it — you can keep editing". The repo's writing rule
   bans them in every human-readable string. [Copy]
-- **UXA-24. (Question, not graded.)** The designer surface shows Start, Retry, Review and Merge as
-  primary card actions. RBAC decides whether they work; the role decides what is offered. Should an
-  intake persona be offered Merge? See unresolved questions.
+- **UXA-24. (Question, closed.)** The designer surface shows Start, Retry, Review and Merge as
+  primary card actions. **Decided in PR #2254: no change.** Retry is a recovery mechanism and stays
+  for every role; whether a designer starts or merges is for the team to decide through pipeline
+  ownership, not for the role axis to narrow.
 
 ## Hierarchy and delight read
 
@@ -356,55 +358,58 @@ violations (em-dashes, "…") are widespread in `en.json` placeholders and are o
 4. UXA-03 first-launch advisories shown to every role.
 5. UXA-04 and UXA-05 together: what the intake role is offered and what it is told is missing.
 
-## Unresolved questions
+## Decisions
 
-1. **UXA-24.** Should the intake role be offered Merge and Retry on cards? The README says the role
-   decides what the SPA offers and RBAC decides what works. Suggested answer: keep Review and
-   Outcome, drop Start / Retry / Merge from the intake surface; a designer who needs them switches
-   role, which is one click.
-2. **UXA-08.** Is a tier-dependent default pipeline intended? `defaultBuildPipelineId(isAdvanced)`
-   reads as deliberate. Suggested answer: it should be a workspace default; the tier should only
-   decide whether the choice is shown.
-3. **UXA-03.** Are the three startup advisories meant for every user, or for the person who can
-   act on them? Suggested answer: gate on `fullSurface` plus `canManageIntegrations`, and show
-   them after the role and tour questions.
-4. **UXA-01.** Fix the expansion (do not move the action row) or the timing (hover delay)?
-   Suggested answer: do not move the row; a delay trades one race for another.
-5. Should the full-audit passes (axe on every captured state, keyboard-only, RTL and pseudo-locale
-   re-shoots) run as a second slice of this tracker, or as their own? Suggested answer: own
-   tracker after UXA-01..06 land, since they change the DOM the audit would measure.
+Answered by the maintainer in the review of PR #2254 (2026-09-20):
+
+1. **UXA-24, execution controls on the intake surface: no change.** Retry is a recovery mechanism
+   and is useful for everyone. Whether a designer runs, say, an architecture review is for the team
+   to decide (pipelines distributed across members, or owned by one person); the role axis does not
+   narrow it.
+2. **UXA-08, tier-dependent default pipeline: intended.** Closed as won't fix.
+3. **UXA-03, startup advisories: agreed.** Gate on `fullSurface` plus `canManageIntegrations`, and
+   show them after the role and tour questions.
+4. **UXA-01, geometry or timing: open.** The maintainer asked what changes in practical terms.
+   Geometry: the expanded step list renders below the action row (or as an overlay), so Resolve,
+   Approve and Outcome never move; an expanded card shows its buttons first and its steps under
+   them. Timing: today's layout stays and a hover delay (about 250 ms) precedes the expansion; a
+   quick click lands, but a person who pauses on the card still sees the row jump before they click,
+   and the zoom-band expansion gets the same lag. Geometry removes the race; timing narrows it.
+   Recommendation stands: geometry.
+5. **Full-audit passes (axe, keyboard-only, RTL and pseudo-locale): own tracker**, after
+   UXA-01..06 land.
 
 ## Checklist
 
 Confidence: **high** means the screenshot shows it and the mechanism was traced in code; **medium** means seen once on the e2e stack and not traced, so reproduce it on a real `deploy/local` board at your own viewport before fixing; **low** means a structural judgement, partly on fake agent output, to confirm with the maintainer before filing. Three e2e-stack differences to keep in mind when validating: fake agents make every transition instant, the capability advisories reflect the e2e configuration, and the consumer-extension spec module adds nav and palette entries (a candidate cause of UXA-17).
 
-| Id                                                       | Severity | Confidence                | Status   | PR  |
-| -------------------------------------------------------- | -------- | ------------------------- | -------- | --- |
-| UXA-01 lost first click on card actions                  | Major    | high: seen, code-traced   | todo     |     |
-| UXA-02 toast region covers inspector footer              | Major    | high: seen, code-traced   | todo     |     |
-| UXA-03 startup advisories for every role                 | Major    | medium: seen once         | todo     |     |
-| UXA-04 agent-config descriptors in basic tier and intake | Major    | high: seen, code-traced   | todo     |     |
-| UXA-04b task type chips without descriptions             | Minor    | high: seen, code-traced   | todo     |     |
-| UXA-05 designer entry points absent without explanation  | Major    | high: seen, code-traced   | todo     |     |
-| UXA-06 silent run completion and auto-merge              | Major    | high: seen, code-traced   | todo     |     |
-| UXA-07 card "Approve" label                              | Minor    | low: structural judgement | todo     |     |
-| UXA-08 tier-dependent default pipeline                   | Minor    | high: seen, code-traced   | question |     |
-| UXA-09 inspector Run menu bypasses PipelinePicker        | Minor    | low: structural judgement | todo     |     |
-| UXA-10 initial fit at 42%                                | Minor    | medium: seen once         | todo     |     |
-| UXA-11 edge through an unrelated card                    | Minor    | medium: seen once         | todo     |     |
-| UXA-12 Stop/Reset on finished runs, lock note tense      | Minor    | medium: seen once         | todo     |     |
-| UXA-13 failure block length and repetition               | Minor    | medium: seen once         | todo     |     |
-| UXA-14 review effort without hint, preselected           | Minor    | medium: seen once         | todo     |     |
-| UXA-15 tour offer exits and Start names                  | Minor    | high: seen, code-traced   | todo     |     |
-| UXA-16 five signals for one parked run                   | Minor    | low: structural judgement | todo     |     |
-| UXA-17 duplicate "Connect Linear"                        | Minor    | medium: seen once         | todo     |     |
-| UXA-18 merge confirm does not name the PR                | Minor    | low: structural judgement | todo     |     |
-| UXA-19 decision modal has no route to output             | Minor    | low: structural judgement | todo     |     |
-| UXA-20 approval rail leads with metadata                 | Minor    | low: structural judgement | todo     |     |
-| UXA-21 icon-only frame header buttons (advanced)         | Minor    | low: structural judgement | todo     |     |
-| UXA-22 rail label truncation                             | Cosmetic | medium: seen once         | todo     |     |
-| UXA-23 em-dashes and ellipses in placeholders            | Cosmetic | medium: seen once         | todo     |     |
-| UXA-24 intake role offered execution controls            | Question | low: structural judgement | open     |     |
+| Id                                                       | Severity | Confidence                | Status                      | PR  |
+| -------------------------------------------------------- | -------- | ------------------------- | --------------------------- | --- |
+| UXA-01 lost first click on card actions                  | Major    | high: seen, code-traced   | todo                        |     |
+| UXA-02 toast region covers inspector footer              | Major    | high: seen, code-traced   | todo                        |     |
+| UXA-03 startup advisories for every role                 | Major    | medium: seen once         | todo (fix agreed, #2254)    |     |
+| UXA-04 agent-config descriptors in basic tier and intake | Major    | high: seen, code-traced   | todo                        |     |
+| UXA-04b task type chips without descriptions             | Minor    | high: seen, code-traced   | todo                        |     |
+| UXA-05 designer entry points absent without explanation  | Major    | high: seen, code-traced   | todo                        |     |
+| UXA-06 silent run completion and auto-merge              | Major    | high: seen, code-traced   | todo                        |     |
+| UXA-07 card "Approve" label                              | Minor    | low: structural judgement | todo                        |     |
+| UXA-08 tier-dependent default pipeline                   | Minor    | high: seen, code-traced   | won't fix (intended, #2254) |     |
+| UXA-09 inspector Run menu bypasses PipelinePicker        | Minor    | low: structural judgement | todo                        |     |
+| UXA-10 initial fit at 42%                                | Minor    | medium: seen once         | todo                        |     |
+| UXA-11 edge through an unrelated card                    | Minor    | medium: seen once         | todo                        |     |
+| UXA-12 Stop/Reset on finished runs, lock note tense      | Minor    | medium: seen once         | todo                        |     |
+| UXA-13 failure block length and repetition               | Minor    | medium: seen once         | todo                        |     |
+| UXA-14 review effort without hint, preselected           | Minor    | medium: seen once         | todo                        |     |
+| UXA-15 tour offer exits and Start names                  | Minor    | high: seen, code-traced   | todo                        |     |
+| UXA-16 five signals for one parked run                   | Minor    | low: structural judgement | todo                        |     |
+| UXA-17 duplicate "Connect Linear"                        | Minor    | medium: seen once         | todo                        |     |
+| UXA-18 merge confirm does not name the PR                | Minor    | low: structural judgement | todo                        |     |
+| UXA-19 decision modal has no route to output             | Minor    | low: structural judgement | todo                        |     |
+| UXA-20 approval rail leads with metadata                 | Minor    | low: structural judgement | todo                        |     |
+| UXA-21 icon-only frame header buttons (advanced)         | Minor    | low: structural judgement | todo                        |     |
+| UXA-22 rail label truncation                             | Cosmetic | medium: seen once         | todo                        |     |
+| UXA-23 em-dashes and ellipses in placeholders            | Cosmetic | medium: seen once         | todo                        |     |
+| UXA-24 intake role offered execution controls            | Question | low: structural judgement | closed (no change, #2254)   |     |
 
 ## How to reproduce the captures
 
