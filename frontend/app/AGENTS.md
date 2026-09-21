@@ -35,7 +35,9 @@ Code loads as instructions (via the sibling [`CLAUDE.md`](./CLAUDE.md)).
 **Nuxt UI guidance:** the vendored [`nuxt-ui` skill](../../.claude/skills/nuxt-ui/SKILL.md) teaches
 WHEN to use which component and HOW to build well; the [`nuxt-ui` MCP server](../../.mcp.json)
 (`https://ui.nuxt.com/mcp`) answers WHAT a component accepts (props, slots, theme files, examples).
-Where the SPA's own rules override the skill: [`README.md` → Nuxt UI](./README.md#nuxt-ui-agent-tooling-and-where-the-spa-overrides-the-skill).
+The platform's own coder agents get the same skill + server through `registerNuxtUiCapability`
+(`backend/packages/agents/src/agents/kinds/nuxt-ui/`), which inlines THIS vendored skill, so the two
+never drift. Where the SPA's own rules override the skill: [`README.md` → Nuxt UI](./README.md#nuxt-ui-agent-tooling-and-where-the-spa-overrides-the-skill).
 
 ## Verify
 

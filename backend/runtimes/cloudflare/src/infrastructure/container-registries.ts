@@ -4,7 +4,11 @@ import {
   defaultStepResolverRegistry,
   defaultVcsRegistry,
 } from '@cat-factory/kernel'
-import { defaultAgentKindRegistry, defaultInitiativePresetRegistry } from '@cat-factory/agents'
+import {
+  defaultAgentKindRegistry,
+  defaultInitiativePresetRegistry,
+  registerNuxtUiCapability,
+} from '@cat-factory/agents'
 import { createBackendRegistries } from '@cat-factory/integrations'
 import { gateRegistryWithBuiltins } from '@cat-factory/gates'
 import { promptFragmentRegistryWithBuiltins } from '@cat-factory/prompt-fragments'
@@ -52,8 +56,12 @@ export function resolveWorkerRegistries(overrides: Partial<CoreDependencies>): W
     overrides.customManifestTypeRegistry ?? defaultRegistries.customManifestTypeRegistry
   const userSecretKindRegistry =
     overrides.userSecretKindRegistry ?? defaultRegistries.userSecretKindRegistry
-  // The app-owned agent-kind registry (built-ins + any a deployment registered by reference).
+  // The app-owned agent-kind registry (built-ins + any a deployment registered by reference). On
+  // our OWN default (no injected registry) we opt in to the Nuxt UI capability — the vendored
+  // `nuxt-ui` skill + MCP server on the coder kinds — so this deployment's SPA-touching coders get
+  // it. A deployment injecting its own registry owns its capability wiring. Mirrors the Node facade.
   const agentKindRegistry = overrides.agentKindRegistry ?? defaultAgentKindRegistry()
+  if (!overrides.agentKindRegistry) registerNuxtUiCapability(agentKindRegistry)
   // The app-owned gate registry: the injected instance, else a fresh one with the built-in
   // `@cat-factory/gates` suite installed — so a container built directly for a scheduled/cron sweep
   // (no overrides) still has the gates its re-driven runs need.

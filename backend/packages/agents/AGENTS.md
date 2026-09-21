@@ -75,6 +75,12 @@
   tool-server (MCP) refs a kind declares, plus the pure normalisers `AgentKindRegistry` resolves
   them with (`skillsFor` / `toolServersFor`). `prompts/capabilities.ts` renders the tool-server
   prompt section (available servers + the ones this run could NOT wire). See ADR 0029.
+  `kinds/nuxt-ui/` is the one bundled capability shipped here: `registerNuxtUiCapability` attaches
+  the vendored `nuxt-ui` skill + MCP server to the coder kinds, OPT-IN per deployment (the facades
+  call it; `defaultAgentKindRegistry()` does not, so the default stays stack-agnostic). Its
+  `skill.generated.ts` is inlined from `.claude/skills/nuxt-ui/` by
+  `scripts/generate-nuxt-ui-skill.mjs` (`--check` guards drift), so there is no second copy of the
+  skill text.
   `catalog.ts` exports `baseSystemPromptFor` (the SHIPPED track prompt) beside `systemPromptFor`
   (that prompt plus the engine-enforced surface directives and trait guidance). The split is what
   a per-workspace **prompt override** replaces: an override supplies the base and the directives

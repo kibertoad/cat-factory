@@ -49,6 +49,17 @@ export {
   normalizeSkillRefs,
   normalizeToolRefs,
 } from './agents/kinds/capabilities.js'
+// The Nuxt UI capability: an OPT-IN bundled skill + MCP tool server a facade attaches to the coder
+// kinds. Not in `defaultAgentKindRegistry()` — the framework default stays stack-agnostic. See
+// `backend/packages/agents/src/agents/kinds/nuxt-ui/index.ts`.
+export {
+  NUXT_UI_CAPABILITY_KINDS,
+  NUXT_UI_SKILL_ID,
+  NUXT_UI_TOOL_SERVER_ID,
+  nuxtUiSkill,
+  nuxtUiToolServer,
+  registerNuxtUiCapability,
+} from './agents/kinds/nuxt-ui/index.js'
 // Where the deployment's capability LAYER is read from when it is not this process's own registry
 // (a mothership-mode node reads the mothership's, over `GET /internal/agent-kinds`). The kind
 // catalog itself stays node-local: only the data half can cross a wire.

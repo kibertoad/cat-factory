@@ -1,4 +1,8 @@
-import { defaultAgentKindRegistry } from '@cat-factory/agents'
+import {
+  defaultAgentKindRegistry,
+  NUXT_UI_TOOL_SERVER_ID,
+  registerNuxtUiCapability,
+} from '@cat-factory/agents'
 import type { Pipeline } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import type { ConformanceHarness } from '../harness.js'
@@ -122,6 +126,43 @@ export function defineToolServerConformance(harness: ConformanceHarness): void {
         'harness_unsupported',
         'harness_unsupported',
       ])
+    })
+
+    it('wires the opt-in Nuxt UI MCP server onto the built-in coder on claude-code', async () => {
+      // The deployment capability (issue #2262): `registerNuxtUiCapability` attaches the `nuxt-ui`
+      // HTTP server to the built-in `coder` by assignment, which is the path boot validation and
+      // this dispatch both reach through `kindsWithCapabilities()`. Asserted cross-runtime because
+      // what a facade's resolved harness serves is the thing under test: on claude-code the server
+      // is wired with no credential, and on Codex it drops with a stated reason (the definition
+      // pins `harnesses: ['claude-code']`, so Codex fails the harness test before the transport one)
+      // rather than being advertised in the prompt and skipped by the harness's TOML writer.
+      const registry = defaultAgentKindRegistry()
+      registerNuxtUiCapability(registry)
+      const app = harness.makeApp({}, { agentKindRegistry: registry })
+      const probe = app.toolServerDispatch?.()
+      if (!probe) return
+      const { workspace } = await app.createWorkspace()
+
+      const onClaude = await probe.resolveForDispatch({
+        workspaceId: workspace.id,
+        agentKind: 'coder',
+        harness: 'claude-code',
+      })
+      expect(onClaude.record.wired.map((s) => s.id)).toContain(NUXT_UI_TOOL_SERVER_ID)
+      const wired = onClaude.mcpServers.find((s) => s.id === NUXT_UI_TOOL_SERVER_ID)
+      expect(wired).toBeDefined()
+      // A public endpoint: nothing was resolved into the job body, so no credential rides it.
+      expect(wired?.secretKeys ?? []).toEqual([])
+
+      const onCodex = await probe.resolveForDispatch({
+        workspaceId: workspace.id,
+        agentKind: 'coder',
+        harness: 'codex',
+      })
+      expect(onCodex.record.wired.map((s) => s.id)).not.toContain(NUXT_UI_TOOL_SERVER_ID)
+      expect(onCodex.record.unavailable.find((s) => s.id === NUXT_UI_TOOL_SERVER_ID)?.reason).toBe(
+        'harness_unsupported',
+      )
     })
 
     it('persists a dispatch’s tool-server record onto the run’s step', async () => {
