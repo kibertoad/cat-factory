@@ -33,13 +33,18 @@
 //      white-on-white under the shipped Mono theme (its `--ui-primary` is white in dark mode), and
 //      `text-highlighted` follows the PAGE, not the fill. Only `text-inverted` is defined against
 //      the inverted surface. Flagged when one class attribute pairs `bg-primary` (or an alias fill:
-//      `bg-secondary`, `bg-success`, `bg-info`, `bg-warning`, `bg-error`, `bg-neutral`, with or
-//      without `/N`) with `text-white` or `text-highlighted`.
+//      `bg-secondary`, `bg-success`, `bg-info`, `bg-warning`, `bg-error`, `bg-neutral`) with
+//      `text-white` or `text-highlighted`. `text-white` pairs with any such fill; `text-highlighted`
+//      only with an OPAQUE one, because over a TRANSLUCENT fill (`bg-primary/10`) the surface is the
+//      page recoloured, where page-following text is the correct, readable choice.
 //   6. A DEGENERATE hover: a `hover:<utility>` whose colour utility equals a resting one in the
 //      same class list (`text-primary … hover:text-primary`). A mechanical-migration artefact (two
 //      numbered shades collapsed onto one alias) that leaves no hover feedback. Colour utilities
 //      only (a size / layout class like `text-sm` or `bg-cover` is not one); an alpha difference
-//      (`bg-primary/90 … hover:bg-primary`) is a real change and is left alone.
+//      (`bg-primary/90 … hover:bg-primary`) is a real change and is left alone. The resting twin is
+//      a bare utility or one under a MODE / RESPONSIVE variant (`sm:`, `dark:`), which sets a resting
+//      colour in a context; a twin under an interaction-STATE variant (`focus:`, `active:`) is a
+//      DIFFERENT state, not resting, so it never makes a plain `hover:` degenerate.
 // Rules 5-6 read one applied class list at a time (a bound `:class` ternary splits into its
 // branches), so a `bg-primary` in one branch and a `text-white` in another never pair. Neither has
 // a fixed value to opt out the way rule 4 does, so a genuine need says why with `theme-colour-ok:`.
@@ -143,13 +148,24 @@ const COLOUR_NAME =
   '(?:primary|secondary|success|info|warning|error|neutral|default|muted|elevated|accented|toned|dimmed|highlighted|inverted|app-[\\w-]+)'
 // A colour utility, opacity included so `bg-primary/90` and `bg-primary` stay DISTINCT.
 const COLOUR_UTIL = `(?:text|bg|border|border-[xytrbles]|ring|decoration)-${COLOUR_NAME}${OPACITY}`
-// A PRIMARY / alias fill and the two page-relative text tokens that must not sit on it (rule 5).
+// A PRIMARY / alias fill (rule 5). `text-white` is a fixed colour, wrong over any alias fill in
+// light mode; `text-highlighted` follows the PAGE, so it is RIGHT over a translucent tint (the fill
+// carries a `/opacity`, so the surface is the page recoloured, not an inverted one) and wrong only
+// over an OPAQUE fill.
 const FILL_FOR_TEXT = new RegExp(`(?<![\\w-])bg-(?:${ALIASES.join('|')})${OPACITY}(?![\\w-])`)
-const PAGE_TEXT = /(?<![\w-])text-(?:white|highlighted)(?![\w-])/
+const TEXT_WHITE = /(?<![\w-])text-white(?![\w-])/
+const TEXT_HIGHLIGHTED = /(?<![\w-])text-highlighted(?![\w-])/
 // One class TOKEN split into its variant chain (`hover:`, `dark:`, `sm:`, `group-hover:`, `[&]:`)
 // and the colour utility it decorates. A token is a hover state when `hover:` sits ANYWHERE in the
-// chain, so a resting twin under a different variant (`sm:text-primary`) still counts (rule 6).
+// chain, so a resting twin under a MODE or RESPONSIVE variant (`sm:text-primary`, `dark:text-error`)
+// still counts (rule 6): that variant sets the element's resting colour in a context.
 const CLASS_TOKEN = new RegExp(`^((?:[\\w[\\]&.-]+:)*)(${COLOUR_UTIL})$`)
+// An INTERACTION-STATE variant (`focus:`, `active:`, `visited:`, `target:`, their `group-`/`peer-`
+// forms). A twin under one of these is not a resting value but a value for a DIFFERENT state, so it
+// cannot make a plain `hover:` degenerate: `focus:text-primary hover:text-primary` gives real
+// feedback when you hover an unfocused element. Excluded from the resting set (rule 6).
+const STATE_VARIANT =
+  /(?:^|:)(?:group-|peer-)?(?:focus|focus-visible|focus-within|active|visited|target)(?=:)/
 
 /** The class strings on a line, scoped so rules 5 and 6 pair utilities only WITHIN one applied
  * class list. Each quoted run (double, single, backtick); a run that itself nests quoted strings (a
@@ -195,21 +211,28 @@ export function findFixedBlackWhite(line) {
 }
 
 /** Each `bg-<alias>` + `text-white`/`text-highlighted` pairing on a CODE line (rule 5), reported as
- * `<fill>+<text>`, scoped to one applied class list. [] for a clean, comment or waived line. */
+ * `<fill>+<text>`, scoped to one applied class list. `text-white` pairs with any alias fill;
+ * `text-highlighted` pairs only with an OPAQUE fill, being the correct readable choice over a
+ * translucent tint. [] for a clean, comment or waived line. */
 export function findTextOnFill(line) {
   if (COMMENT_LINE.test(line) || line.includes(THEME_COLOUR_OK)) return []
   const hits = []
   for (const seg of classSegments(line)) {
     const fill = FILL_FOR_TEXT.exec(seg)
-    const text = PAGE_TEXT.exec(seg)
-    if (fill && text) hits.push(`${fill[0]}+${text[0]}`)
+    if (!fill) continue
+    const white = TEXT_WHITE.exec(seg)
+    if (white) hits.push(`${fill[0]}+${white[0]}`)
+    // `text-highlighted` inverts wrongly only on an OPAQUE fill; over a `/opacity` tint it is right.
+    const highlighted = fill[0].includes('/') ? null : TEXT_HIGHLIGHTED.exec(seg)
+    if (highlighted) hits.push(`${fill[0]}+${highlighted[0]}`)
   }
   return [...new Set(hits)]
 }
 
 /** Each degenerate hover on a CODE line (rule 6): a `hover:<util>` whose colour utility (opacity
  * included) also appears as a resting utility in the same class list, compared by the utility below
- * its variant chain so a `sm:`-prefixed resting twin still counts. Reported as `hover:<util>=<util>`.
+ * its variant chain so a `sm:`-prefixed resting twin still counts. A twin under an interaction-STATE
+ * variant (`focus:`, `active:`) is NOT resting and is skipped. Reported as `hover:<util>=<util>`.
  * [] for a clean, comment or waived line. */
 export function findDegenerateHover(line) {
   if (COMMENT_LINE.test(line) || line.includes(THEME_COLOUR_OK)) return []
@@ -221,6 +244,7 @@ export function findDegenerateHover(line) {
       const m = CLASS_TOKEN.exec(token)
       if (!m) continue // not a colour utility (a size / layout / position class, or plain word)
       if (m[1].includes('hover:')) hovers.push(m[2])
+      else if (STATE_VARIANT.test(m[1])) continue // a focus/active/etc. state value, never resting
       else resting.add(m[2])
     }
     for (const util of hovers) if (resting.has(util)) hits.push(`hover:${util}=${util}`)

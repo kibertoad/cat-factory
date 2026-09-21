@@ -205,9 +205,6 @@ describe('findTextOnFill', () => {
     assert.deepEqual(findTextOnFill('class="bg-error px-2 text-highlighted"'), [
       'bg-error+text-highlighted',
     ])
-    assert.deepEqual(findTextOnFill('class="bg-warning/10 text-highlighted"'), [
-      'bg-warning/10+text-highlighted',
-    ])
   })
 
   it('accepts text-inverted on a fill, and a bare fill or bare text on its own', () => {
@@ -217,6 +214,20 @@ describe('findTextOnFill', () => {
     assert.deepEqual(findTextOnFill('class="text-highlighted"'), [])
     // A numbered alias fill is the raw-palette rule's job, not this one.
     assert.deepEqual(findTextOnFill('class="bg-primary-500 text-white"'), [])
+  })
+
+  it('accepts text-highlighted over a translucent tint, but still flags text-white there', () => {
+    // A `/opacity` fill is the page recoloured, so page-following text is the readable choice;
+    // text-inverted would be near-invisible on it. text-highlighted is fine, text-white is not.
+    assert.deepEqual(findTextOnFill('class="rounded bg-primary/10 p-2 text-highlighted"'), [])
+    assert.deepEqual(findTextOnFill('class="bg-error/5 text-highlighted"'), [])
+    assert.deepEqual(findTextOnFill('class="bg-primary/80 text-white"'), [
+      'bg-primary/80+text-white',
+    ])
+    // An OPAQUE alias fill still inverts the surface: text-highlighted stays flagged.
+    assert.deepEqual(findTextOnFill('class="bg-error px-2 text-highlighted"'), [
+      'bg-error+text-highlighted',
+    ])
   })
 
   it('does not pair a fill and text across two separate class attributes', () => {
@@ -278,6 +289,21 @@ describe('findDegenerateHover', () => {
       [],
     )
     assert.deepEqual(findDegenerateHover('class="text-muted hover:text-default"'), [])
+  })
+
+  it('does not treat an interaction-state twin as resting', () => {
+    // focus:/active: apply in a DIFFERENT state, so the hover still gives feedback when you hover an
+    // unfocused, inactive element. Not degenerate.
+    assert.deepEqual(findDegenerateHover('class="focus:text-primary hover:text-primary"'), [])
+    assert.deepEqual(findDegenerateHover('class="active:text-primary hover:text-primary"'), [])
+    assert.deepEqual(findDegenerateHover('class="group-focus:bg-error hover:bg-error"'), [])
+    // A mode / responsive twin DOES set a resting colour in its context, so it still counts.
+    assert.deepEqual(findDegenerateHover('class="sm:text-primary hover:text-primary"'), [
+      'hover:text-primary=text-primary',
+    ])
+    assert.deepEqual(findDegenerateHover('class="dark:text-error hover:text-error"'), [
+      'hover:text-error=text-error',
+    ])
   })
 
   it('compares COLOUR utilities only, never a size / layout class on the same prefix', () => {
