@@ -542,6 +542,15 @@ jobs:
       - name: Guard layer component imports
         run: node scripts/check-component-imports.mjs
 
+      # Requires every nested AGENTS.md to have a sibling CLAUDE.md whose first line is
+      # `@AGENTS.md`. With a root CLAUDE.md present, Claude Code does not load a nested AGENTS.md as
+      # instructions, so the per-package guidance is invisible to the platform's own coder agents
+      # (and to any consumer repo with the same shape) until the sibling imports it. A new package
+      # added without the pairing is the silent regrowth this guards. Its fixtures run in the
+      # `node --test` step above. Pure node, no install.
+      - name: Guard AGENTS.md pairing
+        run: node scripts/check-agents-md-pairing.mjs
+
       # Requires every environment variable the platform documents to be RESERVED — unusable as a
       # tool-server / generative-integration credential key. Without it, a variable added outside
       # the reserved prefix families becomes resolvable into an agent process the day it is added,

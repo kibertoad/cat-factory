@@ -13,7 +13,9 @@ requirements review, the merge/gate lifecycle, telemetry). **Read `CLAUDE.md` fi
   [`backend/README.md`](./backend/README.md).
 - **Local orientation**: each `backend/packages/*`, `backend/runtimes/*` and `frontend/app` has
   its own `AGENTS.md` with that package's public entry point and a "where things live" map. Open
-  the one next to the code you're editing.
+  the one next to the code you're editing. Each has a sibling `CLAUDE.md` that imports it
+  (`@AGENTS.md`), so Claude Code loads it too; `scripts/check-agents-md-pairing.mjs` keeps the
+  pairing from drifting.
 - **Vocabulary & naming**: [`docs/glossary.md`](./docs/glossary.md) resolves the traps: `block`
   vs `task` vs `card`; the dir↔package name map (`runtimes/cloudflare` = `@cat-factory/worker`);
   `runner`/`executor`/`transport`/`provider`; and where the cross-cutting concepts (gates,
