@@ -223,8 +223,26 @@ describe('findTextOnFill', () => {
     assert.deepEqual(findTextOnFill('<div class="bg-primary"><span class="text-white">'), [])
   })
 
-  it('ignores a comment line that names the pairing', () => {
+  it('does not pair across the branches of one bound :class ternary', () => {
+    // The outer `"..."` holds two mutually-exclusive branches; each inner class string is its own
+    // class list, so a fill in one and a text in the other never apply together.
+    assert.deepEqual(findTextOnFill(`:class="active ? 'bg-primary' : 'text-white'"`), [])
+    assert.deepEqual(
+      findTextOnFill(`:class="active ? 'bg-primary text-inverted' : 'bg-default text-white'"`),
+      [],
+    )
+    // A fill and text in the SAME branch still pair.
+    assert.deepEqual(findTextOnFill(`:class="on ? 'bg-primary text-white' : ''"`), [
+      'bg-primary+text-white',
+    ])
+  })
+
+  it('ignores a comment line, and honours the theme-colour-ok escape', () => {
     assert.deepEqual(findTextOnFill('// bg-primary with text-white was the old mistake'), [])
+    assert.deepEqual(
+      findTextOnFill('class="bg-primary text-white" <!-- theme-colour-ok: brand banner -->'),
+      [],
+    )
   })
 })
 
@@ -243,6 +261,14 @@ describe('findDegenerateHover', () => {
     assert.deepEqual(findDegenerateHover('class="group-hover:text-error text-error"'), [
       'hover:text-error=text-error',
     ])
+    // An app token is a colour utility too.
+    assert.deepEqual(findDegenerateHover('class="bg-app-950 hover:bg-app-950"'), [
+      'hover:bg-app-950=bg-app-950',
+    ])
+    // A resting twin under a different variant still counts: the utility below the chain matches.
+    assert.deepEqual(findDegenerateHover('class="sm:text-primary hover:text-primary"'), [
+      'hover:text-primary=text-primary',
+    ])
   })
 
   it('leaves a real hover alone: an alpha change or a different value', () => {
@@ -254,15 +280,32 @@ describe('findDegenerateHover', () => {
     assert.deepEqual(findDegenerateHover('class="text-muted hover:text-default"'), [])
   })
 
-  it('compares colour utilities only and stays within one class attribute', () => {
-    assert.deepEqual(findDegenerateHover('class="flex hover:flex"'), []) // not a colour utility
+  it('compares COLOUR utilities only, never a size / layout class on the same prefix', () => {
+    assert.deepEqual(findDegenerateHover('class="flex hover:flex"'), []) // not a colour prefix
+    // Same prefix, non-colour value: a size, position, alignment or width no-op is not this rule's.
+    assert.deepEqual(findDegenerateHover('class="text-sm hover:text-sm"'), [])
+    assert.deepEqual(findDegenerateHover('class="bg-cover hover:bg-cover"'), [])
+    assert.deepEqual(findDegenerateHover('class="ring-2 hover:ring-2"'), [])
+    assert.deepEqual(findDegenerateHover('class="border-2 hover:border-2"'), [])
+    assert.deepEqual(findDegenerateHover('class="text-center hover:text-center"'), [])
+  })
+
+  it('stays within one class list, ternary branches included', () => {
     assert.deepEqual(
       findDegenerateHover('<a class="text-primary"><b class="hover:text-primary">'),
       [],
     )
+    // hover: in one branch, the resting twin in the other: never applied together.
+    assert.deepEqual(findDegenerateHover(`:class="a ? 'hover:text-primary' : 'text-primary'"`), [])
   })
 
-  it('ignores a comment line', () => {
+  it('ignores a comment line, and honours the theme-colour-ok escape', () => {
     assert.deepEqual(findDegenerateHover('// text-primary hover:text-primary looked wrong'), [])
+    assert.deepEqual(
+      findDegenerateHover(
+        'class="text-primary hover:text-primary" // theme-colour-ok: intentional',
+      ),
+      [],
+    )
   })
 })

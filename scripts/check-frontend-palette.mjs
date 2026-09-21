@@ -35,13 +35,14 @@
 //      the inverted surface. Flagged when one class attribute pairs `bg-primary` (or an alias fill:
 //      `bg-secondary`, `bg-success`, `bg-info`, `bg-warning`, `bg-error`, `bg-neutral`, with or
 //      without `/N`) with `text-white` or `text-highlighted`.
-//   6. A DEGENERATE hover: a `hover:<utility>` whose value equals its resting utility in the same
-//      class attribute (`text-primary … hover:text-primary`). A mechanical-migration artefact (two
+//   6. A DEGENERATE hover: a `hover:<utility>` whose colour utility equals a resting one in the
+//      same class list (`text-primary … hover:text-primary`). A mechanical-migration artefact (two
 //      numbered shades collapsed onto one alias) that leaves no hover feedback. Colour utilities
-//      only (`text-`, `bg-`, `border-`, `ring-`, `decoration-`); an alpha difference
+//      only (a size / layout class like `text-sm` or `bg-cover` is not one); an alpha difference
 //      (`bg-primary/90 … hover:bg-primary`) is a real change and is left alone.
-// Rules 4-6 read one class attribute / string literal at a time, so a `bg-primary` on one element
-// and a `text-white` on another never pair across the line.
+// Rules 5-6 read one applied class list at a time (a bound `:class` ternary splits into its
+// branches), so a `bg-primary` in one branch and a `text-white` in another never pair. Neither has
+// a fixed value to opt out the way rule 4 does, so a genuine need says why with `theme-colour-ok:`.
 //
 // Policy: ZERO offenders. The migration left none, so there is no ratchet of legacy allowances to
 // carry: the moment a diff adds one, this fails. A hex a deployment-registered kind sends over the
@@ -130,25 +131,39 @@ const OPACITY = '(?:\\/(?:\\d{1,3}|\\[[^\\]]+\\]))?'
 // `-white` / `-black`, then an optional opacity. `bg-white/[0.02]` and `ring-white/10` included.
 const FIXED_BW = new RegExp(`(?<![\\w-])${PREFIX}-(?:white|black)(?![\\w-])${OPACITY}`, 'g')
 const FIXED_BW_OK = 'fixed-colour-ok:'
-// A colour utility for the pairing (rule 5) and the degenerate-hover (rule 6) rules. The full
-// token, opacity included, so `bg-primary/90` and `bg-primary` compare as the DIFFERENT utilities
-// they are.
-const COLOUR_UTIL = `(?:text|bg|border|border-[xytrbles]|ring|decoration)-[\\w-]+${OPACITY}`
+// One shared escape for the pairing (rule 5) and degenerate-hover (rule 6) rules, whose refusals a
+// site otherwise cannot waive (they have no fixed value to opt out, the way rule 4's white/black
+// does). A line that genuinely wants the flagged combination says why.
+const THEME_COLOUR_OK = 'theme-colour-ok:'
+// The colour names a utility may carry: the Nuxt UI aliases and role tokens, plus the app's own
+// `app-*` tokens (numbered ramps, hues, canvas). Deliberately NOT `[\\w-]+`: a bare suffix match
+// swept up size / layout / position utilities (`text-sm`, `bg-cover`, `ring-2`, `text-center`) that
+// share a prefix but are not colours, and rule 6 flagged their same-value hovers as colour bugs.
+const COLOUR_NAME =
+  '(?:primary|secondary|success|info|warning|error|neutral|default|muted|elevated|accented|toned|dimmed|highlighted|inverted|app-[\\w-]+)'
+// A colour utility, opacity included so `bg-primary/90` and `bg-primary` stay DISTINCT.
+const COLOUR_UTIL = `(?:text|bg|border|border-[xytrbles]|ring|decoration)-${COLOUR_NAME}${OPACITY}`
 // A PRIMARY / alias fill and the two page-relative text tokens that must not sit on it (rule 5).
 const FILL_FOR_TEXT = new RegExp(`(?<![\\w-])bg-(?:${ALIASES.join('|')})${OPACITY}(?![\\w-])`)
 const PAGE_TEXT = /(?<![\w-])text-(?:white|highlighted)(?![\w-])/
-// A resting colour utility (rule 6): one NOT introduced by a variant (`hover:`, `dark:`, `[&]:`).
-// The negative lookbehind for `:` keeps a variant-prefixed copy from counting as its own resting
-// twin, so only a bare resting utility pairs with a `hover:` of the same value.
-const RESTING_UTIL = new RegExp(`(?<![\\w:-])(${COLOUR_UTIL})(?![\\w/-])`, 'g')
-const HOVER_UTIL = new RegExp(`(?<![\\w-])(?:group-)?hover:(${COLOUR_UTIL})(?![\\w/-])`, 'g')
+// One class TOKEN split into its variant chain (`hover:`, `dark:`, `sm:`, `group-hover:`, `[&]:`)
+// and the colour utility it decorates. A token is a hover state when `hover:` sits ANYWHERE in the
+// chain, so a resting twin under a different variant (`sm:text-primary`) still counts (rule 6).
+const CLASS_TOKEN = new RegExp(`^((?:[\\w[\\]&.-]+:)*)(${COLOUR_UTIL})$`)
 
-/** The class attributes / string literals on a line, scoped so rules 5 and 6 pair utilities only
- * WITHIN one attribute. Every quoted run (double, single, backtick), or the whole line when the
- * line carries no quotes (a CSS `@apply`, an unquoted value). */
+/** The class strings on a line, scoped so rules 5 and 6 pair utilities only WITHIN one applied
+ * class list. Each quoted run (double, single, backtick); a run that itself nests quoted strings (a
+ * bound `:class="cond ? 'a' : 'b'"`) yields those inner strings, so two mutually-exclusive ternary
+ * branches never pair. The whole line when it carries no quotes (a CSS `@apply`). */
 function classSegments(line) {
-  const segs = [...line.matchAll(/"([^"]*)"|'([^']*)'|`([^`]*)`/g)].map((m) => m[1] ?? m[2] ?? m[3])
-  return segs.length ? segs : [line]
+  const runs = [...line.matchAll(/"([^"]*)"|'([^']*)'|`([^`]*)`/g)].map((m) => m[1] ?? m[2] ?? m[3])
+  if (!runs.length) return [line]
+  return runs.flatMap((run) => {
+    const inner = [...run.matchAll(/"([^"]*)"|'([^']*)'|`([^`]*)`/g)].map(
+      (m) => m[1] ?? m[2] ?? m[3],
+    )
+    return inner.length ? inner : [run]
+  })
 }
 // Comment lines may name a colour when explaining one; the guard reads code, not prose. `#` is NOT
 // a comment marker here: in the scanned `.css` and `.vue` files a line starting with `#` is an ID
@@ -180,9 +195,9 @@ export function findFixedBlackWhite(line) {
 }
 
 /** Each `bg-<alias>` + `text-white`/`text-highlighted` pairing on a CODE line (rule 5), reported as
- * `<fill>+<text>`, scoped to one class attribute. [] for a clean or comment line. */
+ * `<fill>+<text>`, scoped to one applied class list. [] for a clean, comment or waived line. */
 export function findTextOnFill(line) {
-  if (COMMENT_LINE.test(line)) return []
+  if (COMMENT_LINE.test(line) || line.includes(THEME_COLOUR_OK)) return []
   const hits = []
   for (const seg of classSegments(line)) {
     const fill = FILL_FOR_TEXT.exec(seg)
@@ -192,17 +207,23 @@ export function findTextOnFill(line) {
   return [...new Set(hits)]
 }
 
-/** Each degenerate hover on a CODE line (rule 6): a `hover:<util>` whose exact value (opacity
- * included) also appears as a resting utility in the same class attribute. Reported as
- * `hover:<util>=<util>`. [] for a clean or comment line. */
+/** Each degenerate hover on a CODE line (rule 6): a `hover:<util>` whose colour utility (opacity
+ * included) also appears as a resting utility in the same class list, compared by the utility below
+ * its variant chain so a `sm:`-prefixed resting twin still counts. Reported as `hover:<util>=<util>`.
+ * [] for a clean, comment or waived line. */
 export function findDegenerateHover(line) {
-  if (COMMENT_LINE.test(line)) return []
+  if (COMMENT_LINE.test(line) || line.includes(THEME_COLOUR_OK)) return []
   const hits = []
   for (const seg of classSegments(line)) {
-    const resting = new Set([...seg.matchAll(RESTING_UTIL)].map((m) => m[1]))
-    for (const m of seg.matchAll(HOVER_UTIL)) {
-      if (resting.has(m[1])) hits.push(`hover:${m[1]}=${m[1]}`)
+    const resting = new Set()
+    const hovers = []
+    for (const token of seg.split(/\s+/)) {
+      const m = CLASS_TOKEN.exec(token)
+      if (!m) continue // not a colour utility (a size / layout / position class, or plain word)
+      if (m[1].includes('hover:')) hovers.push(m[2])
+      else resting.add(m[2])
     }
+    for (const util of hovers) if (resting.has(util)) hits.push(`hover:${util}=${util}`)
   }
   return [...new Set(hits)]
 }
