@@ -119,6 +119,10 @@ describe('findColourLiterals', () => {
     assert.deepEqual(findColourLiterals("      refPlaceholder: 'acme/web#123',"), [])
     assert.deepEqual(findColourLiterals("  const ref = 'owner/repo#456'"), [])
     assert.deepEqual(findColourLiterals("  url: 'https://x.test/page#abcdef',"), [])
+    // A `#` glued directly to a `/` is a root-relative fragment, so the `/` boundary earns its
+    // place: a 3/6-hex route hash is a reference, not a colour.
+    assert.deepEqual(findColourLiterals("  to: '/#fff',"), [])
+    assert.deepEqual(findColourLiterals("  href: '/#abcdef',"), [])
     // A real short/long hex keeps being flagged: it is preceded by a value opener, not a word char.
     assert.deepEqual(findColourLiterals("  accent: '#123',"), ['#123'])
     assert.deepEqual(findColourLiterals('  color: #abc;'), ['#abc'])
