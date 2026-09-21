@@ -8,7 +8,13 @@
 
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { findColourLiterals, findRawPalette } from './check-frontend-palette.mjs'
+import {
+  findColourLiterals,
+  findDegenerateHover,
+  findFixedBlackWhite,
+  findRawPalette,
+  findTextOnFill,
+} from './check-frontend-palette.mjs'
 
 describe('findRawPalette', () => {
   it('flags raw utilities for every aliased hue, including variants and opacity', () => {
@@ -104,6 +110,31 @@ describe('findColourLiterals', () => {
     assert.deepEqual(findColourLiterals('#board .edge { stroke: rgb(1 2 3); }'), ['rgb('])
   })
 
+  // The literal regex widened (commit 45ba4ec43) to the modern colour functions. A guard with a
+  // zero-offender policy must enumerate the syntax space it claims, or a hole is a rule that
+  // silently does not apply. hex 3/4/6/8 and rgb()/rgba() are covered above; these are the rest.
+  it('flags every colour-function form the header enumerates', () => {
+    assert.deepEqual(findColourLiterals('  color: hsl(210 40% 96%);'), ['hsl('])
+    assert.deepEqual(findColourLiterals('  color: hsla(210, 40%, 96%, 0.5);'), ['hsla('])
+    assert.deepEqual(findColourLiterals('  --x: oklch(62.8% 0.15 264);'), ['oklch('])
+    assert.deepEqual(findColourLiterals('  --x: oklab(0.6 0.1 -0.1);'), ['oklab('])
+    assert.deepEqual(findColourLiterals('  --x: lab(52% 40 59);'), ['lab('])
+    assert.deepEqual(findColourLiterals('  --x: lch(52% 72 49);'), ['lch('])
+    assert.deepEqual(findColourLiterals('  --x: color(display-p3 1 0 0);'), ['color('])
+  })
+
+  it('covers the four hex widths and the 3/4-digit terminator boundary', () => {
+    assert.deepEqual(findColourLiterals('  a: #abc;'), ['#abc'])
+    assert.deepEqual(findColourLiterals('  a: #abcd;'), ['#abcd'])
+    assert.deepEqual(findColourLiterals('  a: #a1b2c3;'), ['#a1b2c3'])
+    assert.deepEqual(findColourLiterals('  a: #a1b2c3d4;'), ['#a1b2c3d4'])
+    // A 3/4-digit hex needs a value terminator (`"');,` or space) after it: a slot closed by `>`
+    // and a 5-hex-char word both stay clear. (A real 4-hex word before a space, `#cafe `, does
+    // match; that is the accepted cost of catching `#fff8;`.)
+    assert.deepEqual(findColourLiterals('<template #abc>'), [])
+    assert.deepEqual(findColourLiterals('const slug = "#faced"'), [])
+  })
+
   it('flags a hex alpha appended to a colour value', () => {
     assert.deepEqual(findColourLiterals(':style="{ backgroundColor: typeMeta.accent + \'22\' }"'), [
       "accent + '22'",
@@ -131,5 +162,107 @@ describe('findColourLiterals', () => {
       findColourLiterals("content: '#020618', // colour-literal-ok: first-paint fallback"),
       [],
     )
+  })
+})
+
+describe('findFixedBlackWhite', () => {
+  it('flags fixed white/black utilities, alpha and arbitrary-opacity forms included', () => {
+    assert.deepEqual(findFixedBlackWhite('class="bg-white"'), ['bg-white'])
+    assert.deepEqual(findFixedBlackWhite('class="text-black"'), ['text-black'])
+    assert.deepEqual(findFixedBlackWhite('class="border-white/5"'), ['border-white/5'])
+    assert.deepEqual(findFixedBlackWhite('class="bg-white/[0.02]"'), ['bg-white/[0.02]'])
+    assert.deepEqual(findFixedBlackWhite('class="ring-white/10"'), ['ring-white/10'])
+    assert.deepEqual(findFixedBlackWhite('class="border-white/5 bg-white/[0.02]"'), [
+      'border-white/5',
+      'bg-white/[0.02]',
+    ])
+    // A variant prefix precedes the utility and does not affect the match; a side border does.
+    assert.deepEqual(findFixedBlackWhite('class="hover:bg-black/20"'), ['bg-black/20'])
+    assert.deepEqual(findFixedBlackWhite('class="border-x-black"'), ['border-x-black'])
+  })
+
+  it('needs a whole-word colour and a left boundary', () => {
+    assert.deepEqual(findFixedBlackWhite('class="fill-whitesmoke"'), []) // not `white`
+    assert.deepEqual(findFixedBlackWhite('class="text-blackout"'), []) // not `black`
+    assert.deepEqual(findFixedBlackWhite('data-bg-white'), []) // no left boundary
+  })
+
+  it('reads code only: skips a comment line and honours the escape marker', () => {
+    assert.deepEqual(findFixedBlackWhite('// a bg-white panel used to sit here'), [])
+    assert.deepEqual(
+      findFixedBlackWhite("const C = 'border-default bg-black' // fixed-colour-ok: diff composite"),
+      [],
+    )
+  })
+})
+
+describe('findTextOnFill', () => {
+  it('flags page-relative text on a primary or alias fill, within one class attribute', () => {
+    assert.deepEqual(findTextOnFill('class="bg-primary text-white"'), ['bg-primary+text-white'])
+    assert.deepEqual(findTextOnFill('class="rounded bg-primary/80 px-2 text-white"'), [
+      'bg-primary/80+text-white',
+    ])
+    assert.deepEqual(findTextOnFill('class="bg-error px-2 text-highlighted"'), [
+      'bg-error+text-highlighted',
+    ])
+    assert.deepEqual(findTextOnFill('class="bg-warning/10 text-highlighted"'), [
+      'bg-warning/10+text-highlighted',
+    ])
+  })
+
+  it('accepts text-inverted on a fill, and a bare fill or bare text on its own', () => {
+    assert.deepEqual(findTextOnFill('class="bg-primary text-inverted"'), [])
+    assert.deepEqual(findTextOnFill('class="bg-primary"'), [])
+    assert.deepEqual(findTextOnFill('class="text-white"'), [])
+    assert.deepEqual(findTextOnFill('class="text-highlighted"'), [])
+    // A numbered alias fill is the raw-palette rule's job, not this one.
+    assert.deepEqual(findTextOnFill('class="bg-primary-500 text-white"'), [])
+  })
+
+  it('does not pair a fill and text across two separate class attributes', () => {
+    assert.deepEqual(findTextOnFill('<div class="bg-primary"><span class="text-white">'), [])
+  })
+
+  it('ignores a comment line that names the pairing', () => {
+    assert.deepEqual(findTextOnFill('// bg-primary with text-white was the old mistake'), [])
+  })
+})
+
+describe('findDegenerateHover', () => {
+  it('flags a hover whose value equals its resting utility', () => {
+    assert.deepEqual(findDegenerateHover('class="text-primary hover:text-primary"'), [
+      'hover:text-primary=text-primary',
+    ])
+    assert.deepEqual(
+      findDegenerateHover("'text-primary underline decoration-primary/40 hover:text-primary'"),
+      ['hover:text-primary=text-primary'],
+    )
+    assert.deepEqual(findDegenerateHover('class="bg-primary hover:bg-primary"'), [
+      'hover:bg-primary=bg-primary',
+    ])
+    assert.deepEqual(findDegenerateHover('class="group-hover:text-error text-error"'), [
+      'hover:text-error=text-error',
+    ])
+  })
+
+  it('leaves a real hover alone: an alpha change or a different value', () => {
+    assert.deepEqual(findDegenerateHover('class="bg-primary/90 hover:bg-primary"'), [])
+    assert.deepEqual(
+      findDegenerateHover('class="decoration-primary/40 hover:decoration-primary"'),
+      [],
+    )
+    assert.deepEqual(findDegenerateHover('class="text-muted hover:text-default"'), [])
+  })
+
+  it('compares colour utilities only and stays within one class attribute', () => {
+    assert.deepEqual(findDegenerateHover('class="flex hover:flex"'), []) // not a colour utility
+    assert.deepEqual(
+      findDegenerateHover('<a class="text-primary"><b class="hover:text-primary">'),
+      [],
+    )
+  })
+
+  it('ignores a comment line', () => {
+    assert.deepEqual(findDegenerateHover('// text-primary hover:text-primary looked wrong'), [])
   })
 })

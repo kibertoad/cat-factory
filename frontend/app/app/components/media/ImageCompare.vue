@@ -82,6 +82,11 @@ function onSwipeUp() {
 
 // --- diff canvas ---
 const diffCanvas = ref<HTMLCanvasElement | null>(null)
+// A fixed black backing, opting out of the theme on purpose: the canvas holds a `difference`
+// composite, and black is the neutral blend base in either colour mode (a diff of two similar
+// frames is near-black), so no mode-following token fits. Bound as a const so the guard's marker
+// stays on the class string; the inline-template form gets reflowed off its own line by oxfmt.
+const DIFF_CANVAS_CLASS = 'w-full rounded border border-default bg-black' // fixed-colour-ok: difference composite
 const CAP = 2000
 // Bumped on every renderDiff entry so a render whose async work (image decode) is overtaken
 // by a newer mode/image change bails out instead of drawing stale pixels onto the canvas.
@@ -316,7 +321,7 @@ function onRefInput(e: Event) {
 
     <!-- DIFF (canvas) -->
     <div v-else-if="mode === 'diff'" class="space-y-1">
-      <canvas ref="diffCanvas" class="w-full rounded border border-default bg-black" />
+      <canvas ref="diffCanvas" :class="DIFF_CANVAS_CLASS" />
       <p class="text-[10px] text-dimmed">{{ t('media.compare.diffHint') }}</p>
     </div>
 
