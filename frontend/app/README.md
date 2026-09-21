@@ -306,7 +306,7 @@ Every colour in the SPA is a token that follows the THEME and the colour MODE. T
 
 The SPA runs on Nuxt UI 4. Two first-party sources carry the rules this repo does not restate:
 
-- **The vendored [`nuxt-ui` skill](../../.claude/skills/nuxt-ui/)** teaches WHEN to reach for which
+- **The vendored [`nuxt-ui` skill](https://github.com/kibertoad/cat-factory/tree/main/.claude/skills/nuxt-ui)** teaches WHEN to reach for which
   component (Modal vs Slideover vs Drawer, Tabs vs NavigationMenu, Toast vs Alert) and HOW to build
   well (the variant-weight table, one solid primary per view, semantic utility roles). It is
   vendored under `.claude/skills/nuxt-ui/`, beside the project's own skills, so the rules version
@@ -316,14 +316,14 @@ The SPA runs on Nuxt UI 4. Two first-party sources carry the rules this repo doe
   skill or an auto-wired server. Making the platform's OWN coder agents (Claude Code, Codex, Pi in
   the runner image) apply the skill is a separate, backend change: they stage skills and tool
   servers per run through the agent-capabilities system (ADR 0024 /
-  [`custom-agents.md`](../../backend/docs/custom-agents.md)), not from these repo files. The `@nuxt/ui` npm
+  [`custom-agents.md`](https://github.com/kibertoad/cat-factory/blob/main/backend/docs/custom-agents.md)), not from these repo files. The `@nuxt/ui` npm
   package does not ship the skill, so it cannot move with `pnpm update`: it is vendored from the
   `v4` branch of `nuxt/ui` (which tracks the 4.x line) and pinned by convention to the Nuxt UI
   major in [`package.json`](./package.json) (`@nuxt/ui@^4.11`). Refresh it by re-vendoring
   `skills/nuxt-ui/` from that branch (or `npx skills add nuxt/ui`) when the major moves. The
   vendored files are kept byte-for-byte as upstream (oxfmt ignores them) so a refresh is a clean
   diff.
-- **The [`nuxt-ui` MCP server](../../.mcp.json)** (`https://ui.nuxt.com/mcp`, declared repo-level)
+- **The [`nuxt-ui` MCP server](https://github.com/kibertoad/cat-factory/blob/main/.mcp.json)** (`https://ui.nuxt.com/mcp`, declared repo-level)
   answers WHAT a component accepts: props, slots, events, theme files and examples per component.
   The skill defers to it for every API question.
 
@@ -341,7 +341,7 @@ protects, so the two never contradict silently:
   `aria-label`, rather than a bare `<UButton icon>`.
 - **Colour goes through theme tokens, never a fixed palette shade.** The skill bans raw Tailwind
   hues; this repo also bans fixed numbered aliases, enforced by
-  [`scripts/check-frontend-palette.mjs`](../../scripts/check-frontend-palette.mjs).
+  [`scripts/check-frontend-palette.mjs`](https://github.com/kibertoad/cat-factory/blob/main/scripts/check-frontend-palette.mjs).
   [Rule](#colour-through-theme-tokens-never-a-fixed-palette-shade).
 - **Confirmation dialogs use the shared `useConfirm`.** The skill shows `useOverlay()` per call
   site; here callers `await useConfirm().confirm({...})`
