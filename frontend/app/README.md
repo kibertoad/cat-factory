@@ -330,6 +330,9 @@ The SPA runs on Nuxt UI 4. Two first-party sources carry the rules this repo doe
 The SPA's own rules win where they and the skill disagree. Each entry below links the rule it
 protects, so the two never contradict silently:
 
+- **Visible copy is an i18n key, never a literal string.** The skill's examples hard-code labels and
+  placeholders (`label="Email"`, `placeholder="you@example.com"`); here every user-facing string
+  goes through `@nuxtjs/i18n` and lands in the catalog. [Rule](#internationalization-i18n-authoring).
 - **Failure toasts go through the funnel, not a bare `toast.add`.** The skill uses `useToast()`
   freely; here a failed backend call is reported with `usePipelineErrorToast().present(error, key)`.
   [Rule](#every-failure-toast-goes-through-one-funnel).
