@@ -74,7 +74,7 @@ export function pickRepoSource<T>(
  * built-ins-only default, and the opt-in AWS EKS backends are registered by reference. Extracted
  * from {@link buildNodeContainer} to keep it under the complexity ceiling.
  */
-function resolveNodeAppRegistries(options: NodeContainerOptions) {
+export function resolveNodeAppRegistries(options: NodeContainerOptions) {
   const {
     environmentBackendRegistry,
     runnerBackendRegistry,

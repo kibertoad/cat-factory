@@ -1,3 +1,8 @@
+import {
+  NUXT_UI_SKILL_ID,
+  NUXT_UI_TOOL_SERVER_ID,
+  defaultAgentKindRegistry,
+} from '@cat-factory/agents'
 import { describe, expect, it } from 'vitest'
 import { resolveWorkerRegistries } from '../src/infrastructure/container-registries'
 
@@ -38,5 +43,30 @@ describe('resolveWorkerRegistries with no overrides', () => {
     const injected = resolveWorkerRegistries({ promptFragmentRegistry })
 
     expect(injected.promptFragmentRegistry).toBe(promptFragmentRegistry)
+  })
+
+  it('opts the override-less default into the Nuxt UI capability on the coder kinds', () => {
+    // The behaviour the facade actually ships (issue #2262): `resolveWorkerRegistries` opts its OWN
+    // default into `registerNuxtUiCapability`. Conformance builds its own registry and calls the
+    // helper directly, so it never exercises THIS line — delete it and every conformance test still
+    // passes while every deployment ships a coder with no Nuxt UI skill or MCP server.
+    const { agentKindRegistry } = resolveWorkerRegistries({})
+    expect(agentKindRegistry.skillsFor('coder').bundled.map((s) => s.id)).toContain(
+      NUXT_UI_SKILL_ID,
+    )
+    expect(agentKindRegistry.toolServersFor('coder').servers.map((s) => s.id)).toContain(
+      NUXT_UI_TOOL_SERVER_ID,
+    )
+  })
+
+  it('leaves an injected agent-kind registry untouched, so a deployment owns its wiring', () => {
+    // The opt-in boundary: a deployment that injects its own registry gets exactly what it
+    // registered, not our Nuxt UI capability layered on silently.
+    const injected = defaultAgentKindRegistry()
+    const { agentKindRegistry } = resolveWorkerRegistries({ agentKindRegistry: injected })
+    expect(agentKindRegistry).toBe(injected)
+    expect(agentKindRegistry.skillsFor('coder').bundled.map((s) => s.id)).not.toContain(
+      NUXT_UI_SKILL_ID,
+    )
   })
 })
