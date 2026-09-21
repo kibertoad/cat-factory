@@ -15,6 +15,7 @@ The SPA source lives under `app/` (the Nuxt srcDir).
 - [What it is](#what-it-is)
 - [Tech stack](#tech-stack)
 - [Layout](#layout)
+- [Nuxt UI: agent tooling and overrides](#nuxt-ui-agent-tooling-and-where-the-spa-overrides-the-skill)
 - [Task swimlanes](#task-swimlanes)
 - [Roles (engineer / product manager / designer)](#roles-engineer--product-manager--designer)
 - [Interface modes (basic / advanced)](#interface-modes-basic--advanced)
@@ -300,6 +301,48 @@ Every colour in the SPA is a token that follows the THEME and the colour MODE. T
 ### Colour mode
 
 **Colour mode** (system / light / dark) is `@nuxtjs/color-mode`'s, registered by Nuxt UI, with its own persistence; `nuxt.config.ts` follows the system preference and falls back to dark. `AppearanceSwitcher` at the sidebar bottom is the control. `plugins/appearance.client.ts` keeps the two `theme-color` metas on the live canvas colour (the static pair in `nuxt.config.ts` follows the OS, which the app's mode can disagree with). The pre-JS loading shell (`spa-loading-template.html`) hardcodes the token values for both modes because no stylesheet is loaded yet; the colour-mode script in `<head>` has already classed `<html>` by then.
+
+## Nuxt UI: agent tooling and where the SPA overrides the skill
+
+The SPA runs on Nuxt UI 4. Two first-party sources carry the rules this repo does not restate:
+
+- **The vendored [`nuxt-ui` skill](../../.claude/skills/nuxt-ui/)** teaches WHEN to reach for which
+  component (Modal vs Slideover vs Drawer, Tabs vs NavigationMenu, Toast vs Alert) and HOW to build
+  well (the variant-weight table, one solid primary per view, semantic utility roles). It is
+  vendored under `.claude/skills/nuxt-ui/`, beside the project's own skills, so the rules version
+  with the code and every contributor on Claude Code reads the same text. This is the Claude Code
+  surface: `.claude/skills/` and the repo `.mcp.json` auto-load for a local Claude Code session, and
+  another tool that reads `AGENTS.md` (Codex, for one) gets the pointers below but not an auto-loaded
+  skill or an auto-wired server. Making the platform's OWN coder agents (Claude Code, Codex, Pi in
+  the runner image) apply the skill is a separate, backend change: they stage skills and tool
+  servers per run through the agent-capabilities system (ADR 0024 /
+  [`custom-agents.md`](../../backend/docs/custom-agents.md)), not from these repo files. The `@nuxt/ui` npm
+  package does not ship the skill, so it cannot move with `pnpm update`: it is vendored from the
+  `v4` branch of `nuxt/ui` (which tracks the 4.x line) and pinned by convention to the Nuxt UI
+  major in [`package.json`](./package.json) (`@nuxt/ui@^4.11`). Refresh it by re-vendoring
+  `skills/nuxt-ui/` from that branch (or `npx skills add nuxt/ui`) when the major moves. The
+  vendored files are kept byte-for-byte as upstream (oxfmt ignores them) so a refresh is a clean
+  diff.
+- **The [`nuxt-ui` MCP server](../../.mcp.json)** (`https://ui.nuxt.com/mcp`, declared repo-level)
+  answers WHAT a component accepts: props, slots, events, theme files and examples per component.
+  The skill defers to it for every API question.
+
+The SPA's own rules win where they and the skill disagree. Each entry below links the rule it
+protects, so the two never contradict silently:
+
+- **Failure toasts go through the funnel, not a bare `toast.add`.** The skill uses `useToast()`
+  freely; here a failed backend call is reported with `usePipelineErrorToast().present(error, key)`.
+  [Rule](#every-failure-toast-goes-through-one-funnel).
+- **Icon-only buttons carry an accessible name.** Use `common/IconButton.vue`
+  ([source](./app/components/common/IconButton.vue)), which applies `label` as both `title` and
+  `aria-label`, rather than a bare `<UButton icon>`.
+- **Colour goes through theme tokens, never a fixed palette shade.** The skill bans raw Tailwind
+  hues; this repo also bans fixed numbered aliases, enforced by
+  [`scripts/check-frontend-palette.mjs`](../../scripts/check-frontend-palette.mjs).
+  [Rule](#colour-through-theme-tokens-never-a-fixed-palette-shade).
+- **Confirmation dialogs use the shared `useConfirm`.** The skill shows `useOverlay()` per call
+  site; here callers `await useConfirm().confirm({...})`
+  ([source](./app/composables/useConfirm.ts)) against one app-mounted `<ConfirmDialog />`.
 
 ## Task swimlanes
 
@@ -1354,12 +1397,21 @@ wrong place is invisible until a user cannot find it:
 
 ## Develop & test
 
+This package has no `dev` or `lint` script of its own: it is a layer, consumed through `extends`,
+and linting is whole-tree from the repo root (CLAUDE.md). The `AGENTS.md` verify checklist carries
+the same list, plus the install-free frontend guards.
+
 ```bash
+# From the repo root:
 pnpm install
-pnpm dev          # Nuxt dev server (expects the Worker running; set NUXT_PUBLIC_API_BASE)
-pnpm test         # vitest
-pnpm typecheck    # nuxt typecheck
-pnpm lint         # oxlint + oxfmt --check
+pnpm dev:frontend                                    # Nuxt dev server via deploy/frontend; set NUXT_PUBLIC_API_BASE to a running Worker
+pnpm exec turbo run typecheck --filter=@cat-factory/app   # typecheck goes through Turbo
+pnpm lint                                            # oxlint + oxfmt over the whole tree
+
+# From frontend/app:
+pnpm exec vitest run <file>                          # run the spec your change touched
+pnpm i18n:check                                      # catalog is well-formed
+pnpm i18n:parity                                     # locales are in parity
 ```
 
 > Building/deploying the static site is covered in the deployment docs: see the
