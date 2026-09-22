@@ -153,6 +153,20 @@ describe('DelegatedExecutorRegistry.register', () => {
     ).toThrow(DelegatedExecutorRegistrationError)
   })
 
+  it('refuses a work-branch policy this build does not know', () => {
+    // Every `=== 'platform-creates'` test in the engine skips an unrecognised value, so a
+    // misspelling silently means "the executor makes its own branch": the deployment believes it
+    // opted in, nothing is written, and the failure surfaces hours later as a checkout against a
+    // branch that is not there. The type catches nothing where a registration comes from
+    // JavaScript or from a JSON-driven composition module, which is where this reaches.
+    expect(() =>
+      defaultDelegatedExecutorRegistry().register({
+        ...EXECUTOR,
+        workBranch: 'platform_creates' as DelegatedExecutorDefinition['workBranch'],
+      }),
+    ).toThrow(/work-branch policy/)
+  })
+
   it('refuses a window shorter than one poll interval', () => {
     // The step would be failed as un-settled before the platform ever asked how it was going.
     expect(() =>

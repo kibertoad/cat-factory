@@ -32,7 +32,12 @@ export interface GitHubActionsWorkflowLocation {
  * Narrowed deliberately. A resolver reading a brief-only fact would address one repository at
  * dispatch and a different one at every call after it, so the run would be dispatched, then polled
  * where it does not exist, and reported as a workflow that never appeared. Offering only the
- * intersection makes that unrepresentable rather than merely documented.
+ * intersection is what keeps that off a resolver author's shoulders.
+ *
+ * Every field is GUARANTEED, not best-effort: the engine refuses a poll whose handle is short of
+ * the workspace, the block, the run or the agent kind (`requireHandleScope`) rather than filling
+ * one in, precisely so a resolver keyed on `agentKind` cannot dispatch `implement.yml` and then
+ * poll `''`. The narrowing is only half the property; the refusal is the other half.
  */
 export interface GitHubActionsWorkflowScope {
   /**

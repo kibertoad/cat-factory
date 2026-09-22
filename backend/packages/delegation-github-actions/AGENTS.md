@@ -15,9 +15,12 @@ wherever the work does, so one registration dispatches against every repo the de
 The resolver is handed a `GitHubActionsWorkflowScope`, deliberately narrowed to the INTERSECTION of
 what a brief and a handle carry: `start` holds a brief and `poll`/`cancel` hold a handle written
 hours earlier in another process, so a resolver reading a brief-only fact would dispatch into one
-repository and poll another, reporting a live run as one that never appeared. A handle that names
-no work repository (a record written before it was persisted) is REFUSED rather than defaulted, for
-the reason the result reader refuses a handle with no branches.
+repository and poll another, reporting a live run as one that never appeared. Every field of the
+scope is guaranteed, not best-effort: the engine refuses a poll whose handle is short of one rather
+than filling it in, which is the other half of the property. A handle that names no work repository
+(a record written before it was persisted) is REFUSED rather than defaulted, for the reason the
+result reader refuses a handle with no branches. It is asked ONCE per call and threaded down, so a
+resolver that reads a config map or counts a metric sees one addressing decision per call.
 
 **The three problems, and where each is solved:**
 

@@ -59,8 +59,10 @@ export interface DelegationBrief {
    * staging a context layer is too late to matter, and an executor that wanted it had to reach the
    * repository over a second credential of its own.
    *
-   * Not `task.id`, which falls back to the run when a context carries no block: an executor keying
-   * a repository read off that would resolve nothing on exactly the dispatches that have no block.
+   * It holds the same value as {@link DelegationBrief.task}`.id` and is stated separately because
+   * the two are different contracts: this one is a LOOKUP KEY the platform promises the resolver
+   * accepts, and `task` is the work's identity as an executor records it. An executor keying its
+   * read off the identity is one rename away from a resolver that answers nothing.
    */
   blockId: string
   runId: string
@@ -371,15 +373,32 @@ export type DelegatedExecutorTelemetry = 'not-reported' | 'self-reported'
  *   can check out. What a CI runner needs: `actions/checkout` on a missing branch fails the job
  *   before any of the work begins, and a runner that silently substitutes a branch of its own is
  *   worse, publishing to a ref the platform never recorded while the run reads as having produced
- *   nothing. Requires a facade with a VCS client wired, asserted where the arm is built.
+ *   nothing. It needs a deployment whose VCS provider is configured; a dispatch that finds none is
+ *   refused under `delegated_work_branch_unprepared` rather than started.
  * - `executor-creates`: the external system makes the branch itself when it pushes. The platform
  *   writes nothing, so a run whose work never landed leaves no empty ref behind.
+ *
+ * The one case `platform-creates` does NOT write is a task carrying an apriori WORKING branch: the
+ * run builds inside a branch the user named, and the platform never creates one of those (a
+ * silently created empty ref would look exactly like the run ignoring the branch they picked). It
+ * is probed instead, and a dispatch onto a missing one is refused.
  *
  * REQUIRED, like {@link DelegatedExecutorDefinition.telemetry} and for the same reason: the
  * executor that never answered the question is the one that fails at checkout, hours into a run,
  * with a message about a missing branch and nothing naming who was supposed to make it.
  */
-export type DelegatedWorkBranchPolicy = 'platform-creates' | 'executor-creates'
+export type DelegatedWorkBranchPolicy = (typeof DELEGATED_WORK_BRANCH_POLICIES)[number]
+
+/**
+ * Every {@link DelegatedWorkBranchPolicy} value, so a registration can be REFUSED for naming one
+ * this build does not know.
+ *
+ * A value rather than a bare union because the type alone catches nothing where a registration
+ * comes from JavaScript or from a JSON-driven composition module: `'platform_creates'` would then
+ * fall through every `=== 'platform-creates'` test and degrade to `executor-creates` in silence,
+ * which is the exact failure the declaration was added to prevent.
+ */
+export const DELEGATED_WORK_BRANCH_POLICIES = ['platform-creates', 'executor-creates'] as const
 
 /** How a delegated step is polled: per executor, never the harness's job defaults. */
 export interface DelegatedPollPolicy {

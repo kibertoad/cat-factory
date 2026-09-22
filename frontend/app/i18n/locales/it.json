@@ -6226,7 +6226,7 @@
         "assistant_generation_failed": "Il fornitore di modelli dell'assistente non ha risposto. È configurato correttamente e qui non c'è nulla da impostare: riprova la richiesta tra un momento.",
         "assistant_reply_unreadable": "Il modello dell'assistente ha risposto con qualcosa che questa piattaforma non può eseguire come decisione. Riformulare aiuta di rado: scegli un altro modello per l'assistente nelle impostazioni dei modelli.",
         "delegated_executor_failed": "L’esecutore esterno non è riuscito ad avviare questo passaggio. Il problema è nel sistema che svolge il lavoro, non in questa installazione: controlla i suoi log e riprova.",
-        "delegated_work_branch_unprepared": "La piattaforma non è riuscita a creare il branch di lavoro su cui viene inviato l'executor di questo passo, quindi non è stato avviato nulla. Verifica che la connessione al repository possa scrivere su di esso e riprova."
+        "delegated_work_branch_unprepared": "La piattaforma non è riuscita a preparare il branch di lavoro su cui viene inviato l'executor di questo passo, quindi non è stato avviato nulla. O la connessione al repository non può scriverci, oppure l'attività indica un branch che non esiste ancora: i dettagli dicono quale dei due."
       }
     },
     "reason": {

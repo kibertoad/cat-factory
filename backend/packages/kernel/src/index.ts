@@ -521,7 +521,10 @@ export type {
   DelegationStart,
   DelegationUpdate,
 } from './ports/delegated-executor.js'
-export { DelegatedExecutorRegistrationError } from './ports/delegated-executor.js'
+export {
+  DELEGATED_WORK_BRANCH_POLICIES,
+  DelegatedExecutorRegistrationError,
+} from './ports/delegated-executor.js'
 export {
   type DelegatedExecutorView,
   DelegatedExecutorRegistry,

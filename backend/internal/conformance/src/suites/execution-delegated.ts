@@ -9,7 +9,9 @@ import {
   delegatedKindRegistry,
   fakeDelegatedExecutor,
   fakeDelegatedRegistry,
+  fakeDelegationRepoFiles,
   type FakeDelegatedExecutorOptions,
+  type FakeDelegationRepo,
 } from '../FakeDelegatedExecutor.js'
 
 // Cross-runtime conformance for DELEGATED EXECUTION: a step whose work runs in a system the
@@ -22,7 +24,11 @@ import {
 // has to survive a round trip through D1 and through Postgres identically. A driver that dropped
 // the nested attempt array, or a store that lost the record on a settle, would fail nothing else.
 
-function makeApp(harness: ConformanceHarness, options: FakeDelegatedExecutorOptions = {}) {
+function makeApp(
+  harness: ConformanceHarness,
+  options: FakeDelegatedExecutorOptions = {},
+  repo?: FakeDelegationRepo,
+) {
   const { definition, calls } = fakeDelegatedExecutor(options)
   const agentKindRegistry = delegatedKindRegistry()
   const app = harness.makeApp(
@@ -30,6 +36,7 @@ function makeApp(harness: ConformanceHarness, options: FakeDelegatedExecutorOpti
     {
       agentKindRegistry,
       delegatedExecutorRegistry: fakeDelegatedRegistry(definition),
+      ...(repo ? { delegatedRepoFiles: repo.repoFiles } : {}),
     },
   )
   return { app, calls }
@@ -123,6 +130,34 @@ export function defineDelegatedConformance(harness: ConformanceHarness): void {
       // The correlation key is what the executor is asked to make its own run recoverable by, and
       // it is the step's job id on both runtimes.
       expect(brief.correlationKey).toBe(brief.runId + '-' + CONFORMANCE_DELEGATED_KIND)
+    })
+
+    it('creates the work branch before `start` when the executor declared the platform does', async () => {
+      // The one VCS write the delegated path makes, and the only assertion that covers a facade
+      // FORGETTING to hand the arm a repo binding: the Worker threads it out of one assembly and
+      // Node out of another, and the symptom of omitting it is an external run checking out a
+      // branch nobody created, hours later and somewhere else.
+      const repo = fakeDelegationRepoFiles({ main: 'sha-main' })
+      const { app, calls } = makeApp(harness, { workBranch: 'platform-creates' }, repo)
+      const { workspaceId } = await runDelegated(app)
+      const exec = (await app.drive(workspaceId)).find((e) => e.blockId === 'task_login')!
+      expect(exec.status).toBe('done')
+      expect(repo.created).toEqual([{ branch: 'cat-factory/task_login', fromSha: 'sha-main' }])
+      // The executor saw a branch that was already there. `heads` is the repository's state at the
+      // end, so this pins the ORDER the assertion above cannot: created, then dispatched.
+      expect(calls.starts).toHaveLength(1)
+      expect(repo.heads['cat-factory/task_login']).toBe('sha-main')
+    })
+
+    it('refuses a `platform-creates` dispatch when the deployment has no repo binding', async () => {
+      // No `delegatedRepoFiles`, which is a deployment that configured no VCS provider. Refused
+      // rather than started: the executor SAID its system cannot make the branch, so dispatching
+      // anyway buys a checkout failure in somebody else's CI instead of a failure here.
+      const { app, calls } = makeApp(harness, { workBranch: 'platform-creates' })
+      const { workspaceId } = await runDelegated(app)
+      const exec = (await app.drive(workspaceId)).find((e) => e.blockId === 'task_login')!
+      expect(exec.status).toBe('failed')
+      expect(calls.starts).toEqual([])
     })
 
     it('fails the run with the executor’s own reason when the external work fails', async () => {

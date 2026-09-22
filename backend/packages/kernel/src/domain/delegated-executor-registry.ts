@@ -3,6 +3,7 @@ import {
   uniqueCredentialInjectionNames,
 } from '@cat-factory/contracts'
 import {
+  DELEGATED_WORK_BRANCH_POLICIES,
   DelegatedExecutorRegistrationError,
   type DelegatedExecutorDefinition,
 } from '../ports/delegated-executor.js'
@@ -60,6 +61,22 @@ export class DelegatedExecutorRegistry {
           `<namespace>:<name> of lowercase letters, digits and dashes (for example ` +
           `"acme:executor"). The id is persisted on every delegated step, so it is constrained ` +
           `rather than normalised.`,
+      )
+    }
+    if (!DELEGATED_WORK_BRANCH_POLICIES.includes(definition.workBranch)) {
+      // Refused rather than treated as the safer of the two, because there is no safer one and a
+      // misspelling reads as the opposite of what was meant: every `=== 'platform-creates'` test
+      // in the engine skips an unrecognised value, so the deployment believes it opted in, the
+      // platform writes no ref, and the failure surfaces hours later as a checkout against a
+      // branch that is not there with nothing naming who was supposed to make it. A registration
+      // from JavaScript, or from a composition module driven by JSON, reaches here with the type
+      // having checked nothing.
+      throw new DelegatedExecutorRegistrationError(
+        `delegated executor ${JSON.stringify(id)} declares the work-branch policy ` +
+          `${JSON.stringify(definition.workBranch)}, which this build does not know (expected ` +
+          `${DELEGATED_WORK_BRANCH_POLICIES.map((p) => JSON.stringify(p)).join(' or ')}). The ` +
+          `engine reads it to decide whether to create the branch each dispatch names, and an ` +
+          `unrecognised value would silently mean "the executor makes its own".`,
       )
     }
     if (definition.poll.intervalMs <= 0 || definition.poll.maxDurationMs <= 0) {

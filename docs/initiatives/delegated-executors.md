@@ -298,8 +298,23 @@ which is the `telemetry` pattern: the deployment knows something the platform ca
 question is put in front of whoever writes the registration rather than discovered at checkout
 hours into a run. `platform-creates` writes through the same checkout-free binding a pre/post-op
 uses, so the engine owns the one VCS write rather than every deployment re-implementing it over a
-second credential, and a facade with no VCS client refuses the BUILD (at the entry point, where the
-two facts are both known) rather than every dispatch.
+second credential.
+
+The refusal lives at the DISPATCH, not where the arm is built. The Worker builds its container per
+request, so a throw at the build turns a delegated-only misconfiguration into a 500 on the board,
+the API and the settings the operator would go and fix it on: a blast radius far wider than the
+fault. The dispatch is also the altitude at which the two distinguishable causes separate (this
+deployment has no VCS provider configured, versus this workspace has connected no repository), and
+both carry the translated `delegated_work_branch_unprepared`.
+
+Which branch is NOT the engine's own answer either: the task's apriori WORKING branch wins when it
+declared one, through the same `resolveAprioriWorkingBranch` the container dispatch and the
+repo-ops controller use. Delegating a step changes nothing about where the run builds, and the
+first cut of this slice hard-coded `cat-factory/<blockId>` on the brief: on a task that named a
+branch, the platform would have created a competing empty ref while the pull request, the `ci` gate
+and the merger all rode the branch the user picked. An apriori branch is probed, never created
+([ADR 0021](../../backend/docs/adr/0021-apriori-branches.md)), so a dispatch onto a missing
+one is refused rather than forked off base.
 
 The alternative considered and rejected was an `ensureWorkBranch()` callback on
 `DelegatedExecutorDeps`. Same write in the same place, but an executor author still has to know to
@@ -457,6 +472,14 @@ like `/v1/artifacts/ingest`, not public API.
       engine's idempotent create and the entry-point assertion; the helper's `workflow` resolver.
       Landed BEFORE the first publish, so all three are the shape the seam ships with rather than a
       second one beside the first.
+- [ ] **Converge the container path's work-branch ensure onto `RepoFiles`.** The delegated path
+      creates the branch through the provider-neutral binding a pre/post-op writes with; the
+      container path still uses `server/src/github/ensureWorkBranch.ts`, which is GitHub REST over
+      a minted installation token (so GitLab needs a second implementation) and answers a
+      best-effort boolean where a dispatch has to be refused. Two implementations of one operation
+      is one too many, and a change to the create semantics has to be made in both or the paths
+      quietly disagree about what the work branch means. Not folded into PR 6: it changes a wired
+      port on both facades and belongs with its own conformance assertion.
 - [ ] **PR 5: push-wake and per-call telemetry ingest** (D7 second half, D8's second and third hooks).
       See "What is still open" below: the first is blocked on the drivers' park machinery, and the
       second has no consumer until an executor reports.
@@ -557,6 +580,11 @@ counts delegated steps whose step metrics hold no calls, so an executor that dec
   `cancel`, where staging a context layer is too late to matter. The first consumer reached the
   repository over a second credential of its own instead. `task.id` is not a substitute: it falls
   back to the run for a context carrying no block.
+- **A branch-naming rule with three call sites gains a fourth silently.** `branches.work` on the
+  delegated brief was written as a literal `cat-factory/<blockId>` beside three sites that resolve
+  the task's apriori working branch first, and nothing failed: the derived name is right for every
+  task that declares no branch, which is most of them. Anything naming a ref, a checkout or a base
+  goes through the shared rule in `@cat-factory/contracts`, never a template literal.
 - **A JOIN neither side owns is a gap even when both sides are correct.** The work branch was the
   worked example: the engine had a defensible reason not to create it (no empty refs for runs that
   never landed) and the executor had no way to know that was the contract, so the prose on one side

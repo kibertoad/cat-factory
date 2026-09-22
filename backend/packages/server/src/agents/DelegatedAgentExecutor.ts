@@ -27,6 +27,7 @@ import {
 } from '@cat-factory/kernel'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import { delegatedExecutorFor } from '@cat-factory/agents'
+import { resolveAprioriWorkingBranch } from '@cat-factory/contracts'
 import { composeDelegationBrief, briefRepoProvider } from './brief.js'
 import { ensureDelegatedWorkBranch } from './delegationWorkBranch.js'
 import { recordAgentContextSnapshot } from './agentContextRecord.js'
@@ -89,8 +90,8 @@ export interface DelegatedAgentExecutorDependencies {
    *
    * The SAME resolver `executorDeps.repoFiles` carries, named here as its own dependency because
    * the engine's use of it is not the executor's: reaching into another collaborator's bundle is
-   * how the two come to disagree about which binding is live. Absent ⇒ the facade wired no VCS
-   * client, which is refused where the arm is built for any executor that declared it needs one.
+   * how the two come to disagree about which binding is live. Absent ⇒ this deployment configured
+   * no VCS provider, which refuses a `platform-creates` DISPATCH and nothing else.
    */
   resolveRepoFiles?: DelegatedRepoFilesResolver
   logger: Logger
@@ -157,7 +158,7 @@ export class DelegatedAgentExecutor implements AsyncAgentExecutor {
     const definition = this.requireDefinition(context.agentKind)
     const executor = this.executorFor(definition)
     const correlationKey = stepJobId(executionId, context.agentKind, context.dispatchEpoch)
-    const brief = await this.composeBrief(context, {
+    const { brief, aprioriWork } = await this.composeBrief(context, {
       workspaceId,
       executionId,
       blockId,
@@ -177,10 +178,13 @@ export class DelegatedAgentExecutor implements AsyncAgentExecutor {
       resolveToolSecrets: this.deps.resolveToolSecrets,
       logger: jobLog,
     })
-    // Last, so a dispatch refused for any other reason leaves no ref behind, and before `start`,
-    // because a CI system handed a branch that is not there fails at checkout rather than
-    // reporting anything this platform can act on.
-    await this.prepareWorkBranch(definition, brief, jobLog)
+    // After everything the platform can refuse on its own (the repo, the brief, the credentials),
+    // so a step that was never going to dispatch leaves no ref behind. It cannot move later: a CI
+    // system handed a branch that is not there fails at checkout rather than reporting anything
+    // this platform can act on, so `start` must find it already made. What that ordering does NOT
+    // buy is a ref-free failure INSIDE the dispatch; a create followed by an executor that refuses
+    // leaves the branch, and the next attempt re-uses it.
+    await this.prepareWorkBranch(definition, brief, aprioriWork, jobLog)
     let started
     try {
       started = await executor.start(brief, credentials)
@@ -274,14 +278,14 @@ export class DelegatedAgentExecutor implements AsyncAgentExecutor {
         'delegated_claim_missing',
       )
     }
-    const blockId = requireHandleBlock(handle)
-    const definition = this.requireDefinition(handle.agentKind ?? '', delegated.executor)
+    const scope = requireHandleScope(handle)
+    const definition = this.requireDefinition(scope.agentKind, delegated.executor)
     const executor = this.executorFor(definition)
     const jobLog = this.log.child({
-      workspaceId: handle.workspaceId,
-      executionId: handle.runId,
+      workspaceId: scope.workspaceId,
+      executionId: scope.runId,
       jobId: handle.jobId,
-      agentKind: handle.agentKind,
+      agentKind: scope.agentKind,
       executor: definition.id,
     })
     const target: DelegationHandle = {
@@ -291,18 +295,15 @@ export class DelegatedAgentExecutor implements AsyncAgentExecutor {
       ...(delegated.url ? { url: delegated.url } : {}),
       ...(delegated.branches ? { branches: delegated.branches } : {}),
       ...(delegated.repo ? { repo: delegated.repo } : {}),
-      workspaceId: handle.workspaceId ?? '',
-      blockId,
-      runId: handle.runId ?? handle.jobId,
-      agentKind: handle.agentKind ?? '',
+      ...scope,
     }
     const credentials = await resolveDelegationCredentials({
       definition,
-      workspaceId: handle.workspaceId ?? '',
+      workspaceId: scope.workspaceId,
       // The SAME scope the dispatch resolved in. Dropped here, a deployment whose credential
       // store is per service resolves an empty bag on every poll of a run it started perfectly
       // well, and the step dies on an unreadable status while the external work carries on.
-      blockId,
+      blockId: scope.blockId,
       resolveToolSecrets: this.deps.resolveToolSecrets,
       logger: jobLog,
     })
@@ -432,34 +433,33 @@ export class DelegatedAgentExecutor implements AsyncAgentExecutor {
   /**
    * Honour the executor's {@link DelegatedExecutorDefinition.workBranch} declaration.
    *
-   * `executor-creates` writes nothing, which is what keeps a run whose external work never landed
-   * from leaving an empty ref behind. The unwired case throws rather than passing through: the
-   * executor said its system cannot make the branch, so dispatching anyway buys a checkout failure
-   * an hour later instead of a refusal now.
+   * `executor-creates` writes nothing and probes nothing, which is what keeps a run whose external
+   * work never landed from leaving an empty ref behind.
    */
   private async prepareWorkBranch(
     definition: DelegatedExecutorDefinition,
     brief: DelegationBrief,
+    aprioriWork: boolean,
     jobLog: Logger,
   ): Promise<void> {
     if (definition.workBranch !== 'platform-creates') return
-    const resolveRepoFiles = this.deps.resolveRepoFiles
-    if (!resolveRepoFiles) {
-      throw new UnavailableError(
-        `The "${definition.id}" executor is dispatched onto a work branch this platform creates, ` +
-          'and this deployment wired no repository client to create it with.',
-        'delegated_work_branch_unprepared',
-        { executor: definition.id, branch: brief.branches.work },
-      )
-    }
-    await ensureDelegatedWorkBranch({ resolveRepoFiles, logger: jobLog }, brief, definition.id)
+    await ensureDelegatedWorkBranch(
+      { resolveRepoFiles: this.deps.resolveRepoFiles, logger: jobLog },
+      brief,
+      { executorId: definition.id, apriori: aprioriWork },
+    )
   }
 
-  /** Resolve the repo + branches this dispatch targets, then compose the brief over them. */
+  /**
+   * Resolve the repo + branches this dispatch targets, then compose the brief over them.
+   *
+   * `aprioriWork` rides back out because the brief carries the branch NAME and not who is allowed
+   * to create it, and only this method knows which of the two answers produced the name.
+   */
   private async composeBrief(
     context: AgentRunContext,
     ids: { workspaceId: string; executionId: string; blockId: string; correlationKey: string },
-  ) {
+  ): Promise<{ brief: DelegationBrief; aprioriWork: boolean }> {
     const repo = await this.deps.resolveRepoTarget(ids.workspaceId, ids.blockId)
     if (!repo) {
       throw new ConflictError(
@@ -470,7 +470,14 @@ export class DelegatedAgentExecutor implements AsyncAgentExecutor {
     }
     const origin = this.deps.resolveRepoOrigin(repo)
     const trackerRef = await this.resolveTrackerRef(ids.workspaceId, ids.blockId)
-    return composeDelegationBrief(context, this.deps.agentKindRegistry, {
+    // The task's own WORKING branch when it declared one, through the shared rule the container
+    // dispatch and the repo-ops controller resolve it with, so the three cannot drift on which
+    // branch a run builds inside (it also refuses a working branch equal to the base). Delegating
+    // the step changes nothing about that choice: the pull request, the `ci` gate and the merger
+    // all ride the branch the task named, so a dispatch onto `cat-factory/<blockId>` instead would
+    // land the external work on a ref nothing downstream looks at.
+    const aprioriWork = resolveAprioriWorkingBranch(context.aprioriBranches, repo.baseBranch)
+    const brief = composeDelegationBrief(context, this.deps.agentKindRegistry, {
       correlationKey: ids.correlationKey,
       workspaceId: ids.workspaceId,
       blockId: ids.blockId,
@@ -486,15 +493,17 @@ export class DelegatedAgentExecutor implements AsyncAgentExecutor {
         },
         branches: {
           base: repo.baseBranch,
-          // The deterministic per-task branch every step of this run's pipeline shares: the same
-          // name the container path resolves, so a delegated producer and a later container fixer
-          // work on ONE branch. Whether the REF exists when the executor is called is its own
-          // `workBranch` declaration, honoured just before `start`.
-          work: `cat-factory/${ids.blockId}`,
+          // The task's declared working branch, else the deterministic per-task branch every step
+          // of this run's pipeline shares: the same name the container path resolves, so a
+          // delegated producer and a later container fixer work on ONE branch. Whether the REF
+          // exists when the executor is called is its own `workBranch` declaration, honoured just
+          // before `start`.
+          work: aprioriWork ?? `cat-factory/${ids.blockId}`,
         },
         ...(trackerRef ? { trackerRef } : {}),
       },
     })
+    return { brief, aprioriWork: aprioriWork !== undefined }
   }
 
   /**
@@ -522,26 +531,49 @@ export class DelegatedAgentExecutor implements AsyncAgentExecutor {
   }
 }
 
-/** The delegated dispatch's ids, refused together so a caller cannot proceed on half of them. */
 /**
- * The block a poll addresses, refused rather than defaulted when the handle carries none.
+ * The four run facts a poll addresses by, refused rather than defaulted when the handle carries
+ * none.
  *
- * Refused because the alternative is silent and permanent: credentials resolved without the
- * block come back empty on a per-service store, so every poll of a perfectly healthy external run
- * fails to read its status and the step dies hours later reporting a timeout. The engine supplies
- * it from the run at the one place a handle is rebuilt (`pollHandleFor`), so an absent one is a
- * new call site rather than a state a deployment can reach.
+ * They are optional on {@link AgentJobHandle} because the container executor does not need them
+ * all, and REQUIRED on {@link DelegationHandle} because a delegated call does. Filling the gap
+ * with `''` is what makes that requirement a lie, and every consequence of it is silent:
+ * credentials resolved without the block come back empty on a per-service store, so a poll of a
+ * perfectly healthy external run cannot read its status and the step dies hours later reporting a
+ * timeout; and a deployment whose executor picks which workflow to address from the scope it is
+ * handed (its repository, its agent kind) would dispatch against one and then poll another,
+ * reporting a live run as one that never appeared. The engine supplies all four at the one place
+ * a handle is rebuilt (`pollHandleFor`), so an absent one is a new call site rather than a state a
+ * deployment can reach.
  */
-function requireHandleBlock(handle: AgentJobHandle): string {
-  if (handle.blockId) return handle.blockId
-  throw new ConflictError(
-    'A delegated poll arrived with no block on its handle, so the credentials this executor ' +
-      'declares cannot be resolved in the scope its dispatch used. The engine supplies it from ' +
-      'the run; a handle without it was built somewhere that does not.',
-    'delegated_claim_missing',
+function requireHandleScope(handle: AgentJobHandle): {
+  workspaceId: string
+  blockId: string
+  runId: string
+  agentKind: string
+} {
+  const { workspaceId, blockId, runId, agentKind } = handle
+  if (!workspaceId || !blockId || !runId || !agentKind) {
+    throw new ConflictError(
+      'A delegated poll arrived with an incomplete handle (it needs the workspace, the block, ' +
+        'the run and the agent kind), so neither the credentials this executor declares nor the ' +
+        'external work it addresses can be resolved in the scope its dispatch used. The engine ' +
+        'supplies all four from the run; a handle without them was built somewhere that does not.',
+      'delegated_claim_missing',
+      { missing: missingScopeFields(handle) },
+    )
+  }
+  return { workspaceId, blockId, runId, agentKind }
+}
+
+/** Which of the four a handle was short, so the refusal names the call site's actual gap. */
+function missingScopeFields(handle: AgentJobHandle): string[] {
+  return (['workspaceId', 'blockId', 'runId', 'agentKind'] as const).filter(
+    (field) => !handle[field],
   )
 }
 
+/** The delegated dispatch's ids, refused together so a caller cannot proceed on half of them. */
 function requireIds(context: AgentRunContext): {
   workspaceId: string
   executionId: string

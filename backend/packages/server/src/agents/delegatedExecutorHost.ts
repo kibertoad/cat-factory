@@ -12,7 +12,7 @@ import type {
   UrlSafetyPolicy,
 } from '@cat-factory/kernel'
 import type { AgentKindRegistry } from '@cat-factory/agents'
-import { DelegatedExecutorRegistrationError, UnavailableError } from '@cat-factory/kernel'
+import { UnavailableError } from '@cat-factory/kernel'
 import {
   assertSafePublicUrl,
   readCappedText,
@@ -47,9 +47,17 @@ export interface DelegatedExecutorHostOptions {
   resolveRepoOrigin: ResolveRepoOrigin
   /**
    * The engine's checkout-free repo binding, re-used as the `repoFiles` an executor may stage its
-   * own context layer through. The SAME seam a registered kind's pre/post-ops run over, rather
-   * than a second binding: an executor writing `.cat-context/` onto the work branch and a preOp
-   * writing it are the same operation, and two bindings would be two caches and two head memos.
+   * own context layer through, and as what the engine creates a `platform-creates` work branch
+   * with. The SAME seam a registered kind's pre/post-ops run over, rather than a second binding:
+   * an executor writing `.cat-context/` onto the work branch and a preOp writing it are the same
+   * operation, and two bindings would be two caches and two head memos.
+   *
+   * Absent ⇒ this deployment configured no VCS provider. NOT asserted here even though a
+   * `platform-creates` registration needs it: this function runs inside the Worker's per-request
+   * container build, so a throw turns a delegated-only misconfiguration into a 500 on every
+   * unrelated endpoint, including the settings the operator would go and look at. The dispatch
+   * that actually needs the branch refuses instead, by name and with translated copy
+   * (`delegated_work_branch_unprepared`).
    */
   resolveRunRepoContext?: ResolveRunRepoContext
   taskRepository?: TaskRepository
@@ -93,7 +101,6 @@ export function buildDelegatedAgentExecutor(
   const resolveRepoFiles = options.resolveRunRepoContext
     ? repoFilesResolver(options.resolveRunRepoContext)
     : undefined
-  assertWorkBranchWritable(options.delegatedExecutorRegistry, resolveRepoFiles)
   const executorDeps: DelegatedExecutorDeps = {
     logger: options.logger.child({ component: 'delegatedExecutor' }),
     clock: options.clock,
@@ -118,33 +125,6 @@ export function buildDelegatedAgentExecutor(
     logger: options.logger,
     clock: options.clock,
   })
-}
-
-/**
- * Refuse a build where an executor declared `workBranch: 'platform-creates'` and the facade wired
- * nothing to create a branch with.
- *
- * At the ENTRY POINT rather than at the dispatch, because the two facts are both known here and
- * neither changes afterwards: the alternative is a registration that boots clean and refuses every
- * run of that executor hours later, naming a branch instead of the wiring. The registry is
- * populated by the time the arm is built (a deployment's registrations arrive as the `start()` /
- * `startLocal()` option this is composed from), so the scan sees every definition a dispatch could
- * reach.
- */
-function assertWorkBranchWritable(
-  registry: DelegatedExecutorRegistry,
-  resolveRepoFiles: DelegatedExecutorDeps['repoFiles'],
-): void {
-  if (resolveRepoFiles) return
-  const needy = registry.ids().filter((id) => registry.get(id)?.workBranch === 'platform-creates')
-  if (needy.length === 0) return
-  throw new DelegatedExecutorRegistrationError(
-    `Delegated executor(s) ${needy.map((id) => `"${id}"`).join(', ')} declare ` +
-      "`workBranch: 'platform-creates'`, so the platform creates the work branch each dispatch " +
-      'names, and this facade wired no repository client to create it with. Wire ' +
-      "`resolveRunRepoContext`, or declare `workBranch: 'executor-creates'` if the external " +
-      'system makes its own branch when it pushes.',
-  )
 }
 
 /** Project the engine's run-repo binding down to the narrower shape an executor is handed. */

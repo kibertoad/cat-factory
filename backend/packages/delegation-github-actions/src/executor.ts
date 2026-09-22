@@ -125,8 +125,19 @@ export function githubActionsDelegatedExecutor(
 ): DelegatedExecutor {
   const apiBase = description.apiBase ?? DEFAULT_API_BASE
   const tokenKey = description.tokenKey ?? 'GITHUB_TOKEN'
-  const log = deps.logger.child({ executor: 'github-actions' })
+  const baseLog = deps.logger.child({ executor: 'github-actions' })
   const workflows = workflowAddressing(description.workflow)
+
+  /**
+   * The logger every line of one call goes through, naming the workflow it addressed.
+   *
+   * Bound per call rather than once at build, because the location is per call as soon as a
+   * deployment resolves it: on a deployment onboarding fifty repositories, "the workflow
+   * succeeded and its result could not be read" with only a run id on it cannot tell one
+   * misconfigured repository from a token that is wrong everywhere.
+   */
+  const logFor = (workflow: GitHubActionsWorkflowLocation) =>
+    baseLog.child({ repo: `${workflow.owner}/${workflow.repo}`, workflow: workflow.workflowFile })
 
   const tokenOf = (credentials: Record<string, string>): string => {
     const token = credentials[tokenKey]
@@ -165,7 +176,7 @@ export function githubActionsDelegatedExecutor(
       // at all means the previous attempt may have got as far as the dispatch.
       const existing = await locate(workflow, brief.correlationKey, token)
       if (existing) {
-        log.info('re-attached to an existing workflow run', { runId: existing.id })
+        logFor(workflow).info('re-attached to an existing workflow run', { runId: existing.id })
         return {
           externalId: String(existing.id),
           url: existing.html_url,
@@ -197,7 +208,11 @@ export function githubActionsDelegatedExecutor(
 
     async poll(handle, credentials): Promise<DelegationUpdate> {
       const token = tokenOf(credentials)
-      const run = await resolveRun(handle, token)
+      // ONCE per call, then threaded down. A deployment's resolver is its own code with no purity
+      // requirement: one that reads a per-repo config map, logs, or counts a metric must see one
+      // addressing decision per call, not the two or three that asking again at each use makes.
+      const workflow = workflows.forHandle(handle)
+      const run = await resolveRun(workflow, handle, token)
       if (!run) {
         // The run has still not appeared. `running` rather than a failure: the poll budget is what
         // bounds this, and a workflow queued behind a busy runner pool is the ordinary case.
@@ -232,16 +247,16 @@ export function githubActionsDelegatedExecutor(
             : {}),
         }
       }
-      return { state: 'done', result: await readResult(handle, run, token) }
+      return { state: 'done', result: await readResult(workflow, handle, run, token) }
     },
 
     async cancel(handle, credentials): Promise<void> {
       const token = tokenOf(credentials)
-      const run = await resolveRun(handle, token)
+      const workflow = workflows.forHandle(handle)
+      const run = await resolveRun(workflow, handle, token)
       // Nothing to cancel is a clean outcome, not a failure: the run may have finished between the
       // teardown deciding to stop it and this call.
       if (!run || run.status === 'completed') return
-      const workflow = workflows.forHandle(handle)
       await apiPost(deps.fetchImpl, {
         apiBase,
         token,
@@ -258,10 +273,10 @@ export function githubActionsDelegatedExecutor(
    * whenever the dispatch's run had not appeared yet, so this is ordinary rather than exceptional.
    */
   async function resolveRun(
+    workflow: GitHubActionsWorkflowLocation,
     handle: DelegationHandle,
     token: string,
   ): Promise<GitHubActionsRunView | null> {
-    const workflow = workflows.forHandle(handle)
     const id = handle.externalId
     if (id && /^\d+$/.test(id)) {
       return apiGet<GitHubActionsRunView>(deps.fetchImpl, {
@@ -281,6 +296,7 @@ export function githubActionsDelegatedExecutor(
    * not be read, which is the "degrade loudly" disposition rather than a silent empty result.
    */
   async function readResult(
+    workflow: GitHubActionsWorkflowLocation,
     handle: DelegationHandle,
     run: GitHubActionsRunView,
     token: string,
@@ -289,9 +305,9 @@ export function githubActionsDelegatedExecutor(
       if (description.resultFrom) {
         return await description.resultFrom({ handle, run, token, fetchImpl: deps.fetchImpl })
       }
-      return await defaultResult(handle, token)
+      return await defaultResult(workflow, handle, token)
     } catch (error) {
-      log.warn('the workflow succeeded and its result could not be read', {
+      logFor(workflow).warn('the workflow succeeded and its result could not be read', {
         runId: run.id,
         err: getErrorMessage(error),
       })
@@ -319,9 +335,14 @@ export function githubActionsDelegatedExecutor(
    * every such rule can pick somebody else's, which then becomes the block's pull request, the
    * `ci` gate's checks and the merger's diff. A missing REPO falls back to the workflow's own,
    * which is not a guess of the same kind: it is the right answer for the single-repo deployment,
-   * and the branch match still has to hold.
+   * and the branch match still has to hold. That fallback is reachable only for a LITERAL
+   * `workflow`, because a resolver is refused a handle that names no work repository.
    */
-  async function defaultResult(handle: DelegationHandle, token: string): Promise<DelegationResult> {
+  async function defaultResult(
+    workflow: GitHubActionsWorkflowLocation,
+    handle: DelegationHandle,
+    token: string,
+  ): Promise<DelegationResult> {
     const work = handle.branches?.work
     if (!work) {
       return {
@@ -330,7 +351,6 @@ export function githubActionsDelegatedExecutor(
           'may have opened could not be identified: open the run to see.',
       }
     }
-    const workflow = workflows.forHandle(handle)
     const target = handle.repo ?? { owner: workflow.owner, name: workflow.repo }
     const pullRequest = await pullRequestForBranch(deps.fetchImpl, {
       apiBase,

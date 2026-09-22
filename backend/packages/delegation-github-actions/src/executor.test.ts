@@ -6,7 +6,7 @@ import type {
   DelegationResult,
   DelegationUpdate,
 } from '@cat-factory/kernel'
-import { noopLogger } from '@cat-factory/kernel'
+import { createRecordingLogger, noopLogger } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import { correlationRunName } from './correlation.js'
 import { githubActionsDelegatedExecutor } from './executor.js'
@@ -482,6 +482,55 @@ describe('a workflow resolved per dispatch', () => {
         CREDS,
       ),
     ).rejects.toThrow(/no work repository/)
+  })
+
+  it('names the repository it addressed on every line it logs', async () => {
+    // With a resolver, the repository is a per-call fact. Bound once at build, a deployment
+    // onboarding fifty of them reads fifty identical "result could not be read" warnings and
+    // cannot tell one misconfigured repository from a token that is wrong everywhere.
+    const recording = createRecordingLogger()
+    const { fetchImpl } = fakeFetch({
+      '/actions/runs/4242': () => ({ body: RUN }),
+      '/pulls?': () => ({ status: 500, body: { message: 'boom' } }),
+    })
+    await githubActionsDelegatedExecutor(perRepo, {
+      ...deps(fetchImpl),
+      logger: recording,
+    }).poll(handle({ repo: { owner: 'acme', name: 'payments' } }), CREDS)
+    expect(recording.lines).toContainEqual(
+      expect.objectContaining({
+        level: 'warn',
+        fields: expect.objectContaining({ repo: 'acme/payments' }),
+      }),
+    )
+  })
+
+  it('asks the resolver ONCE per call, not once per use of what it answered', async () => {
+    // A deployment's resolver is its own code with no purity requirement: one that reads a
+    // per-repo config map, logs, or counts a metric must see one addressing decision per call.
+    // A settling poll is the worst case, because the result read needs the location too.
+    let resolved = 0
+    const counted = {
+      ...perRepo,
+      workflow: (scope: GitHubActionsWorkflowScope) => {
+        resolved += 1
+        return {
+          owner: scope.repo.owner,
+          repo: scope.repo.name,
+          workflowFile: 'w.yml',
+          ref: 'main',
+        }
+      },
+    }
+    const { fetchImpl } = fakeFetch({
+      '/actions/runs/4242': () => ({ body: RUN }),
+      '/pulls?': () => ({ body: [] }),
+    })
+    const executor = githubActionsDelegatedExecutor(counted, deps(fetchImpl))
+    await executor.poll(handle({ repo: { owner: 'acme', name: 'payments' } }), CREDS)
+    expect(resolved).toBe(1)
+    await executor.cancel?.(handle({ repo: { owner: 'acme', name: 'payments' } }), CREDS)
+    expect(resolved).toBe(2)
   })
 
   it('leaves a LITERAL description addressable from a handle that predates the work repo', async () => {

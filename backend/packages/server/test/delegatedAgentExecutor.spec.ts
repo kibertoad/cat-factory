@@ -407,6 +407,19 @@ describe('DelegatedAgentExecutor: credentials', () => {
     expect((error as DomainError).details?.reason).toBe('delegated_claim_missing')
   })
 
+  it('REFUSES a poll whose handle names no agent kind, rather than passing an empty one', async () => {
+    // An executor may address its external system by the scope it is handed (the GitHub Actions
+    // helper offers exactly this for picking `implement.yml` over `review.yml`). Filled with '',
+    // the poll addresses a different workflow from the dispatch and reports a live run as one
+    // that never appeared, so the handle is refused and the gap is named.
+    const { agentKind: _dropped, ...withoutKind } = handle()
+    const error = await build(fakeExecutor())
+      .pollJob(withoutKind as AgentJobHandle)
+      .catch((e: unknown) => e)
+    expect((error as DomainError).details?.reason).toBe('delegated_claim_missing')
+    expect((error as DomainError).details?.missing).toEqual(['agentKind'])
+  })
+
   it('withholds a reserved platform key rather than handing it over', async () => {
     // The lookup key is a boundary: a resolver reads it off the deployment's own environment, so
     // an executor declaring `ENCRYPTION_KEY` would hand the master sealing key to whatever it posts to.

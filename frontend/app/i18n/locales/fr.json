@@ -638,7 +638,7 @@
         "assistant_generation_failed": "Le fournisseur de modèles de l'assistant n'a pas répondu. Il est correctement configuré et il n'y a rien à paramétrer ici : réessayez la demande dans un instant.",
         "assistant_reply_unreadable": "Le modèle de l'assistant a répondu quelque chose que cette plateforme ne peut pas exécuter comme décision. Reformuler aide rarement : choisissez un autre modèle pour l'assistant dans les paramètres de modèles.",
         "delegated_executor_failed": "L’exécuteur externe n’a pas pu démarrer cette étape. Le problème vient du système qui effectue le travail, pas de ce déploiement : consultez ses propres journaux, puis réessayez.",
-        "delegated_work_branch_unprepared": "La plateforme n'a pas pu créer la branche de travail vers laquelle l'exécuteur de cette étape est envoyé, donc rien n'a démarré. Vérifiez que la connexion au dépôt peut y écrire, puis réessayez."
+        "delegated_work_branch_unprepared": "La plateforme n'a pas pu préparer la branche de travail vers laquelle l'exécuteur de cette étape est envoyé, donc rien n'a démarré. Soit la connexion au dépôt ne peut pas y écrire, soit la tâche nomme une branche qui n'existe pas encore : les détails indiquent laquelle des deux."
       }
     },
     "reason": {

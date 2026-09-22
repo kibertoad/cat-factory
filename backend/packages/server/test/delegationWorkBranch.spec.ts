@@ -5,10 +5,11 @@ import type {
   RepoFiles,
   ResolveRunRepoContext,
 } from '@cat-factory/kernel'
+import type { AprioriBranch } from '@cat-factory/contracts'
 import {
-  DelegatedExecutorRegistrationError,
   DomainError,
   defaultDelegatedExecutorRegistry,
+  getErrorMessage,
   noopLogger,
 } from '@cat-factory/kernel'
 import { defaultAgentKindRegistry } from '@cat-factory/agents'
@@ -21,8 +22,9 @@ import { githubRepoOrigin } from '../src/agents/containerAgentBody.js'
 // A container step's work branch comes into existence as part of the harness's own clone. Nothing
 // did that for a delegated step, so an external CI system told to check out `branches.work` failed
 // at checkout, and a runner that substitutes a branch of its own on a missing ref succeeded on a
-// branch the platform never recorded. Both halves are asserted here: the declaration is honoured,
-// and the executor that declared it cannot be registered on a facade with nothing to write with.
+// branch the platform never recorded. What is asserted here: the declaration is honoured, every
+// way the write can fail is refused under its own reason rather than the executor's, and a branch
+// the TASK named is probed rather than created.
 
 const REPO = {
   installationId: 7,
@@ -70,6 +72,7 @@ function build(
   workBranch: DelegatedExecutorDefinition['workBranch'],
   resolveRunRepoContext?: ResolveRunRepoContext,
   onStart?: () => void,
+  aprioriBranches?: AprioriBranch[],
 ): { start: () => Promise<void>; starts: DelegationBrief[] } {
   const agentKindRegistry = defaultAgentKindRegistry()
   agentKindRegistry.register({
@@ -108,13 +111,13 @@ function build(
   })
   return {
     start: async () => {
-      await executor.startJob(context())
+      await executor.startJob(context(aprioriBranches))
     },
     starts,
   }
 }
 
-function context(): AgentRunContext {
+function context(aprioriBranches?: AprioriBranch[]): AgentRunContext {
   return {
     agentKind: 'acme:impl',
     pipelineName: 'Standard build',
@@ -126,6 +129,7 @@ function context(): AgentRunContext {
     resolvedDecision: null,
     priorOutputs: [],
     decisions: [],
+    ...(aprioriBranches ? { aprioriBranches } : {}),
   }
 }
 
@@ -207,10 +211,75 @@ describe("workBranch: 'platform-creates'", () => {
     expect(repo.created).toEqual([])
   })
 
-  it('refuses the BUILD on a facade that wired no repository client', async () => {
-    // At the entry point, not at the dispatch: the alternative is a registration that boots clean
-    // and refuses every run of that executor hours later, naming a branch instead of the wiring.
-    expect(() => build('platform-creates')).toThrow(DelegatedExecutorRegistrationError)
+  it('refuses the DISPATCH on a deployment that configured no VCS provider', async () => {
+    // At the dispatch, not at the build: the arm is built inside the Worker's per-request
+    // container assembly, so refusing there would 500 the board, the API and the settings page an
+    // operator would go and fix this on. Here it costs exactly the step that needed the branch.
+    const { start, starts } = build('platform-creates')
+    await expect(start().catch((error: unknown) => reasonOf(error))).resolves.toBe(
+      'delegated_work_branch_unprepared',
+    )
+    expect(starts).toEqual([])
+  })
+
+  it('wraps a failing PROBE in the same reason as a failing write', async () => {
+    // Unwrapped, the SPA has nothing to map and the operator reads the generic 500 copy, which
+    // reads as an engine bug rather than as the provider blip it was.
+    const repo = fakeRepoFiles({ main: 'sha-main' })
+    repo.repoFiles.headSha = () => Promise.reject(new Error('502 Bad Gateway'))
+    const { start } = build('platform-creates', runRepoContext(repo.repoFiles))
+    await expect(start().catch((error: unknown) => reasonOf(error))).resolves.toBe(
+      'delegated_work_branch_unprepared',
+    )
+  })
+
+  it('keeps the CREATE failure when the race re-read fails too', async () => {
+    // The re-read exists only to tell a lost race from a failed write. Letting it throw would
+    // replace the actionable cause (the app lacks write access) with a probe error naming nothing.
+    const repo = fakeRepoFiles({ main: 'sha-main' })
+    const head = repo.repoFiles.headSha.bind(repo.repoFiles)
+    let probes = 0
+    repo.repoFiles.headSha = (branch: string) =>
+      ++probes > 2 ? Promise.reject(new Error('502 Bad Gateway')) : head(branch)
+    repo.repoFiles.createBranch = () =>
+      Promise.reject(new Error('403 Resource not accessible by integration'))
+    const { start } = build('platform-creates', runRepoContext(repo.repoFiles))
+    const error = await start().catch((e: unknown) => e)
+    expect(reasonOf(error)).toBe('delegated_work_branch_unprepared')
+    expect(getErrorMessage(error)).toContain('403 Resource not accessible by integration')
+  })
+})
+
+describe('a task that names its own working branch', () => {
+  const APRIORI: AprioriBranch[] = [{ name: 'feature/spike', mode: 'working' }]
+
+  it('dispatches onto the branch the task named, not `cat-factory/<blockId>`', async () => {
+    // The pull request, the `ci` gate and the merger all ride the task's branch, so a dispatch
+    // onto the derived one lands the external work on a ref nothing downstream looks at.
+    const repo = fakeRepoFiles({ main: 'sha-main', 'feature/spike': 'sha-spike' })
+    const built = build('platform-creates', runRepoContext(repo.repoFiles), undefined, APRIORI)
+    await built.start()
+    expect(built.starts[0]?.branches.work).toBe('feature/spike')
+    // And NOTHING was created: the platform never creates a branch a task named, because an empty
+    // ref where the user's branch should be looks exactly like the run ignoring their choice.
+    expect(repo.created).toEqual([])
+  })
+
+  it('refuses the dispatch when that branch is not in the repository', async () => {
+    const repo = fakeRepoFiles({ main: 'sha-main' })
+    const built = build('platform-creates', runRepoContext(repo.repoFiles), undefined, APRIORI)
+    await expect(built.start().catch((error: unknown) => reasonOf(error))).resolves.toBe(
+      'delegated_work_branch_unprepared',
+    )
+    expect(repo.created).toEqual([])
+    expect(built.starts).toEqual([])
+  })
+
+  it('names it on the brief for an executor that makes its own branch too', async () => {
+    const repo = fakeRepoFiles({ main: 'sha-main' })
+    const built = build('executor-creates', runRepoContext(repo.repoFiles), undefined, APRIORI)
+    await built.start()
+    expect(built.starts[0]?.branches.work).toBe('feature/spike')
   })
 })
 
@@ -223,8 +292,10 @@ describe("workBranch: 'executor-creates'", () => {
     expect(starts).toHaveLength(1)
   })
 
-  it('builds on a facade with no repository client at all', () => {
-    expect(() => build('executor-creates')).not.toThrow()
+  it('dispatches on a deployment that configured no VCS provider at all', async () => {
+    const { start, starts } = build('executor-creates')
+    await start()
+    expect(starts).toHaveLength(1)
   })
 })
 
