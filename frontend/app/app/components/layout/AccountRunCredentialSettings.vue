@@ -59,22 +59,22 @@ async function save() {
 
 <template>
   <div v-if="store.available !== false" class="space-y-2" data-testid="account-run-credential">
-    <h3 class="text-sm font-semibold text-slate-200">
+    <h3 class="text-sm font-semibold text-default">
       {{ t('settings.runCredentialPolicy.heading') }}
     </h3>
-    <p class="text-[11px] text-slate-400">{{ t('settings.runCredentialPolicy.body') }}</p>
+    <p class="text-[11px] text-muted">{{ t('settings.runCredentialPolicy.body') }}</p>
 
     <label class="flex items-center gap-2">
       <USwitch v-model="forbid" size="sm" data-testid="account-forbid-initiator-pat" />
-      <span class="text-sm text-slate-200">{{ t('settings.runCredentialPolicy.toggle') }}</span>
+      <span class="text-sm text-default">{{ t('settings.runCredentialPolicy.toggle') }}</span>
     </label>
 
     <!-- What the choice actually costs, stated at the point of choosing rather than discovered
          later: attribution is a real feature, and turning this on is what trades it away. -->
-    <p v-if="forbid" class="text-[11px] text-amber-300">
+    <p v-if="forbid" class="text-[11px] text-app-warning-300">
       {{ t('settings.runCredentialPolicy.onHint') }}
     </p>
-    <p v-else class="text-[11px] text-slate-500">
+    <p v-else class="text-[11px] text-dimmed">
       {{ t('settings.runCredentialPolicy.offHint') }}
     </p>
 

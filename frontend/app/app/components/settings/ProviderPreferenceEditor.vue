@@ -90,7 +90,7 @@ function reset() {
 <template>
   <div>
     <div class="mb-1 flex items-start justify-between gap-3">
-      <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+      <span class="text-[11px] font-semibold uppercase tracking-wide text-muted">
         {{ t('settings.modelConfiguration.routeOrder.label') }}
       </span>
       <UButton
@@ -105,7 +105,7 @@ function reset() {
         {{ t('settings.modelConfiguration.routeOrder.reset') }}
       </UButton>
     </div>
-    <p class="mb-2 text-[11px] leading-relaxed text-slate-500">
+    <p class="mb-2 text-[11px] leading-relaxed text-dimmed">
       {{
         isCustom
           ? t('settings.modelConfiguration.routeOrder.customHint')
@@ -118,7 +118,7 @@ function reset() {
          route a connected plan quietly overrules is the one thing this control must not do. -->
     <p
       v-if="subscriptionWins"
-      class="mb-2 text-[11px] leading-relaxed text-amber-400/90"
+      class="mb-2 text-[11px] leading-relaxed text-app-warning-400/90"
       data-testid="preset-route-order-subscription-warning"
     >
       {{ t('settings.modelConfiguration.routeOrder.subscriptionOverrideHint') }}
@@ -128,13 +128,13 @@ function reset() {
          answering a different question than this order asks. -->
     <p
       v-if="badgesShowAnotherOrder"
-      class="mb-2 text-[11px] leading-relaxed text-slate-500"
+      class="mb-2 text-[11px] leading-relaxed text-dimmed"
       data-testid="preset-route-order-badge-hint"
     >
       {{ t('settings.modelConfiguration.routeOrder.badgesUseDefaultPresetHint') }}
     </p>
     <ol
-      class="divide-y divide-slate-800 rounded-xl border border-slate-800 bg-slate-900/50"
+      class="divide-y divide-default rounded-xl border border-default bg-default/50"
       data-testid="preset-route-order"
     >
       <li
@@ -144,13 +144,13 @@ function reset() {
         :data-testid="`preset-route-${flavor}`"
       >
         <span
-          class="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-slate-800 text-[10px] font-semibold text-slate-400"
+          class="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-elevated text-[10px] font-semibold text-muted"
         >
           {{ index + 1 }}
         </span>
         <div class="min-w-0 flex-1">
-          <p class="truncate text-sm text-slate-200">{{ t(ROUTE_LABELS[flavor]) }}</p>
-          <p class="truncate text-[11px] text-slate-500">{{ t(ROUTE_HINTS[flavor]) }}</p>
+          <p class="truncate text-sm text-default">{{ t(ROUTE_LABELS[flavor]) }}</p>
+          <p class="truncate text-[11px] text-dimmed">{{ t(ROUTE_HINTS[flavor]) }}</p>
         </div>
         <div class="flex shrink-0 items-center gap-1">
           <UButton

@@ -619,7 +619,7 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
              the user creates it in one click on a host we can name; or the user creates it
              themselves somewhere we cannot name, where promising a click below would be a lie
              (the button is absent for exactly the same reason). -->
-        <p class="text-sm text-slate-400">
+        <p class="text-sm text-muted">
           {{
             intoMonorepo
               ? t('bootstrap.monorepo.intro')
@@ -635,11 +635,11 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
              whichever methods the deployment serves, never just the GitHub App. -->
         <div
           v-if="needsConnection"
-          class="space-y-3 rounded-md border border-amber-500/30 bg-amber-500/5 p-3"
+          class="space-y-3 rounded-md border border-app-warning-500/30 bg-app-warning-500/5 p-3"
         >
           <div class="flex items-start gap-2">
-            <UIcon name="i-lucide-plug-zap" class="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
-            <p class="text-sm text-amber-200/90">
+            <UIcon name="i-lucide-plug-zap" class="mt-0.5 h-4 w-4 shrink-0 text-app-warning-400" />
+            <p class="text-sm text-app-warning-200/90">
               {{ t('vcs.bootstrap.connectPrompt') }}
             </p>
           </div>
@@ -648,7 +648,7 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
 
         <!-- launch -->
         <section class="space-y-4">
-          <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          <h3 class="text-[11px] font-semibold uppercase tracking-wide text-muted">
             {{ t('bootstrap.section.newRepo') }}
           </h3>
 
@@ -676,7 +676,7 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
               :description="t('bootstrap.monorepo.repo.description')"
               required
             >
-              <div v-if="!monorepoRepoItems.length" class="text-sm text-slate-400">
+              <div v-if="!monorepoRepoItems.length" class="text-sm text-muted">
                 {{ t('bootstrap.monorepo.repo.empty') }}
               </div>
               <USelect
@@ -716,9 +716,9 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
                      decide nothing, so say that instead of listing a repo for nothing. -->
                 <div
                   v-if="browsingDirectory && monorepoRepoId !== undefined"
-                  class="rounded-md border border-slate-800 bg-slate-900/40 p-2"
+                  class="rounded-md border border-default bg-default/40 p-2"
                 >
-                  <p class="mb-2 text-xs text-slate-400">
+                  <p class="mb-2 text-xs text-muted">
                     {{
                       directoryLeaf
                         ? t('bootstrap.monorepo.directory.browseHint')
@@ -749,7 +749,7 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
               :description="t('bootstrap.reference.description')"
               required
             >
-              <div v-if="!bootstrap.hasArchitectures" class="text-sm text-slate-400">
+              <div v-if="!bootstrap.hasArchitectures" class="text-sm text-muted">
                 {{ t('bootstrap.reference.empty') }}
               </div>
               <USelect
@@ -893,7 +893,7 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
           <UFormField :label="t('bootstrap.visibility.label')">
             <div class="flex items-center gap-2">
               <USwitch v-model="isPrivate" />
-              <span class="text-sm text-slate-300">{{ t('bootstrap.visibility.private') }}</span>
+              <span class="text-sm text-toned">{{ t('bootstrap.visibility.private') }}</span>
             </div>
           </UFormField>
 
@@ -912,17 +912,17 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
 
         <!-- recent jobs -->
         <section v-if="agentRuns.bootstrapJobs.length" class="space-y-2">
-          <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          <h3 class="text-[11px] font-semibold uppercase tracking-wide text-muted">
             {{ t('bootstrap.recent.title') }}
           </h3>
           <div
             v-for="job in agentRuns.bootstrapJobs.slice(0, 5)"
             :key="job.id"
-            class="flex items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm"
+            class="flex items-center justify-between gap-2 rounded-md border border-default bg-default/60 px-3 py-2 text-sm"
           >
             <div class="min-w-0">
-              <div class="truncate text-slate-200">{{ job.repoName }}</div>
-              <div class="truncate text-[11px] text-slate-500">
+              <div class="truncate text-default">{{ job.repoName }}</div>
+              <div class="truncate text-[11px] text-dimmed">
                 {{
                   job.referenceArchitectureName
                     ? t('bootstrap.recent.fromArch', { name: job.referenceArchitectureName })
@@ -935,7 +935,7 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
                 v-if="job.repoUrl"
                 :to="job.repoUrl"
                 target="_blank"
-                class="text-[11px] text-indigo-400 hover:underline"
+                class="text-[11px] text-primary hover:underline"
               >
                 {{ t('bootstrap.recent.open') }}
               </ULink>
@@ -947,7 +947,7 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
                 v-if="job.prUrl"
                 :to="job.prUrl"
                 target="_blank"
-                class="text-[11px] text-indigo-400 hover:underline"
+                class="text-[11px] text-primary hover:underline"
               >
                 {{ t('bootstrap.recent.openPr') }}
               </ULink>
@@ -963,7 +963,7 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
         <!-- reference architecture management -->
         <section class="space-y-3">
           <div class="flex items-center justify-between">
-            <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            <h3 class="text-[11px] font-semibold uppercase tracking-wide text-muted">
               {{ t('bootstrap.arch.title') }}
             </h3>
             <UButton
@@ -980,13 +980,11 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
           <div
             v-for="a in bootstrap.architectures"
             :key="a.id"
-            class="flex items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-900/60 px-3 py-2"
+            class="flex items-center justify-between gap-2 rounded-md border border-default bg-default/60 px-3 py-2"
           >
             <div class="min-w-0">
-              <div class="truncate text-sm text-slate-200">{{ a.name }}</div>
-              <div class="truncate text-[11px] text-slate-500">
-                {{ a.repoOwner }}/{{ a.repoName }}
-              </div>
+              <div class="truncate text-sm text-default">{{ a.name }}</div>
+              <div class="truncate text-[11px] text-dimmed">{{ a.repoOwner }}/{{ a.repoName }}</div>
             </div>
             <div class="flex items-center gap-1">
               <UButton
@@ -1009,7 +1007,7 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
           <!-- add / edit form -->
           <div
             v-if="showArchForm"
-            class="space-y-3 rounded-md border border-slate-700 bg-slate-900/80 p-3"
+            class="space-y-3 rounded-md border border-muted bg-default/80 p-3"
           >
             <!-- The options come from the connected projection, so a repo to pick means a
                  connection exists and `providerLabel` names it rather than guessing. -->

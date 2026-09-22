@@ -153,24 +153,24 @@ async function remove() {
     </template>
     <template #body>
       <div class="space-y-4">
-        <p class="text-xs text-slate-400">
+        <p class="text-xs text-muted">
           <i18n-t keypath="settings.userSecrets.intro" tag="span" scope="global">
             <template #you>
               <strong>{{ t('settings.userSecrets.introYou') }}</strong>
             </template>
             <template #scope>
-              <span class="text-slate-300">{{ t('settings.userSecrets.introScope') }}</span>
+              <span class="text-toned">{{ t('settings.userSecrets.introScope') }}</span>
             </template>
           </i18n-t>
         </p>
 
         <div
           v-if="status"
-          class="flex items-center justify-between rounded-md border border-slate-700 bg-slate-900/50 px-3 py-2 text-sm"
+          class="flex items-center justify-between rounded-md border border-muted bg-default/50 px-3 py-2 text-sm"
         >
           <div>
-            <span class="font-medium text-slate-200">{{ status.label }}</span>
-            <div class="text-[11px] text-emerald-400">
+            <span class="font-medium text-default">{{ status.label }}</span>
+            <div class="text-[11px] text-app-success-400">
               {{ t('settings.userSecrets.connectedStored') }}
             </div>
           </div>
@@ -184,11 +184,8 @@ async function remove() {
           />
         </div>
 
-        <div
-          v-if="descriptor"
-          class="rounded-lg border border-dashed border-slate-700 p-3 space-y-3"
-        >
-          <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        <div v-if="descriptor" class="rounded-lg border border-dashed border-muted p-3 space-y-3">
+          <p class="text-[11px] font-semibold uppercase tracking-wide text-muted">
             {{
               status ? t('settings.userSecrets.replaceToken') : t('settings.userSecrets.addToken')
             }}
@@ -228,10 +225,10 @@ async function remove() {
             >
               {{ t('settings.userSecrets.testConnection') }}
             </UButton>
-            <span v-if="testResult && testResult.ok" class="text-xs text-emerald-400">
+            <span v-if="testResult && testResult.ok" class="text-xs text-app-success-400">
               {{ testResult.message ?? t('settings.userSecrets.tokenValid') }}
             </span>
-            <span v-else-if="testResult" class="text-xs text-rose-400">
+            <span v-else-if="testResult" class="text-xs text-app-error-400">
               {{ testResult.message ?? t('settings.userSecrets.tokenRejected') }}
             </span>
           </div>

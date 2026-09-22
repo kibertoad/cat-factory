@@ -429,7 +429,7 @@ function setSize(value: InstanceSize) {
     :default-open="props.defaultOpen"
   >
     <div class="space-y-1">
-      <span class="text-[11px] text-slate-400">{{ t('inspector.testConfig.provisionType') }}</span>
+      <span class="text-[11px] text-muted">{{ t('inspector.testConfig.provisionType') }}</span>
       <div class="flex flex-wrap gap-1">
         <UButton
           v-for="p in PROVISION_TYPES"
@@ -442,7 +442,7 @@ function setSize(value: InstanceSize) {
           {{ p.label }}
         </UButton>
       </div>
-      <p class="text-[11px] leading-snug text-slate-500">
+      <p class="text-[11px] leading-snug text-dimmed">
         {{ t('inspector.testConfig.provisionTypeHint') }}
       </p>
     </div>
@@ -452,14 +452,14 @@ function setSize(value: InstanceSize) {
          provisions the compose stack, rather than editing the raw path inline. -->
     <div
       v-if="provisionType === 'docker-compose'"
-      class="flex items-center justify-between gap-2 rounded border border-primary-800/40 bg-primary-950/20 p-2"
+      class="flex items-center justify-between gap-2 rounded border border-primary/40 bg-primary/10 p-2"
       data-testid="env-setup-nudge"
     >
       <div class="min-w-0">
-        <p class="text-[11px] font-medium text-primary-200/90">
+        <p class="text-[11px] font-medium text-primary/90">
           {{ t('inspector.testConfig.envWizard.title') }}
         </p>
-        <p class="text-[11px] leading-snug text-slate-500">
+        <p class="text-[11px] leading-snug text-dimmed">
           {{ t('inspector.testConfig.envWizard.hint') }}
         </p>
       </div>
@@ -477,9 +477,9 @@ function setSize(value: InstanceSize) {
 
     <!-- Auto-detect a recommended provisioning config from the repo (slice 11). Non-binding:
          it prefills the form below + the kube edit refs; the user confirms/edits everything. -->
-    <div v-if="repoContext" class="space-y-2 rounded border border-slate-800 bg-slate-900/40 p-2">
+    <div v-if="repoContext" class="space-y-2 rounded border border-default bg-default/40 p-2">
       <div class="flex items-center justify-between gap-2">
-        <span class="text-[11px] text-slate-400">{{ t('inspector.testConfig.detect.title') }}</span>
+        <span class="text-[11px] text-muted">{{ t('inspector.testConfig.detect.title') }}</span>
         <UButton
           size="xs"
           variant="soft"
@@ -491,23 +491,23 @@ function setSize(value: InstanceSize) {
           {{ t('inspector.testConfig.detect.button') }}
         </UButton>
       </div>
-      <p class="text-[11px] leading-snug text-slate-500">
+      <p class="text-[11px] leading-snug text-dimmed">
         {{ t('inspector.testConfig.detect.hint') }}
       </p>
 
-      <p v-if="detectError" class="text-[11px] text-rose-300/80">
+      <p v-if="detectError" class="text-[11px] text-app-error-300/80">
         {{ detectError }}
       </p>
 
       <template v-if="detectResult && !detecting">
         <p
           v-if="!detectResult.detected && detectResult.provisioning.type !== 'custom'"
-          class="text-[11px] text-amber-300/80"
+          class="text-[11px] text-app-warning-300/80"
         >
           {{ t('inspector.testConfig.detect.none') }}
         </p>
         <template v-else>
-          <p class="text-[11px] text-emerald-300/80">
+          <p class="text-[11px] text-app-success-300/80">
             {{
               t('inspector.testConfig.detect.applied', {
                 type: provisionTypeLabel(detectResult.provisioning.type),
@@ -516,7 +516,7 @@ function setSize(value: InstanceSize) {
           </p>
 
           <div v-if="detectResult.serviceDirCandidates?.length" class="space-y-1">
-            <span class="text-[11px] text-slate-400">{{
+            <span class="text-[11px] text-muted">{{
               t('inspector.testConfig.detect.serviceDirTitle')
             }}</span>
             <div class="flex flex-wrap gap-1">
@@ -534,7 +534,7 @@ function setSize(value: InstanceSize) {
           </div>
 
           <div v-if="detectResult.manifestRootCandidates?.length" class="space-y-1">
-            <span class="text-[11px] text-slate-400">{{
+            <span class="text-[11px] text-muted">{{
               t('inspector.testConfig.detect.manifestRootTitle')
             }}</span>
             <div class="flex flex-wrap gap-1">
@@ -552,7 +552,7 @@ function setSize(value: InstanceSize) {
           </div>
 
           <div v-if="detectResult.overlayCandidates?.length" class="space-y-1">
-            <span class="text-[11px] text-slate-400">{{
+            <span class="text-[11px] text-muted">{{
               t('inspector.testConfig.detect.overlayTitle')
             }}</span>
             <div class="flex flex-wrap gap-1">
@@ -570,7 +570,7 @@ function setSize(value: InstanceSize) {
           </div>
 
           <div v-if="detectResult.composeServiceCandidates?.length" class="space-y-1">
-            <span class="text-[11px] text-slate-400">{{
+            <span class="text-[11px] text-muted">{{
               t('inspector.testConfig.detect.composeServiceTitle')
             }}</span>
             <div class="flex flex-wrap gap-1">
@@ -587,12 +587,12 @@ function setSize(value: InstanceSize) {
             </div>
           </div>
 
-          <p v-if="detectResult.urlSource" class="text-[11px] text-slate-500">
+          <p v-if="detectResult.urlSource" class="text-[11px] text-dimmed">
             {{
               t('inspector.testConfig.detect.urlSource', { source: detectResult.urlSource.source })
             }}
           </p>
-          <p v-if="detectResult.namespace" class="text-[11px] text-slate-500">
+          <p v-if="detectResult.namespace" class="text-[11px] text-dimmed">
             {{ t('inspector.testConfig.detect.namespace', { namespace: detectResult.namespace }) }}
           </p>
 
@@ -600,9 +600,13 @@ function setSize(value: InstanceSize) {
             <li
               v-for="(n, i) in detectResult.notes"
               :key="i"
-              class="flex items-start gap-1.5 text-[11px] leading-snug text-slate-500"
+              class="flex items-start gap-1.5 text-[11px] leading-snug text-dimmed"
             >
-              <span :class="n.confidence === 'high' ? 'text-emerald-400/70' : 'text-amber-400/70'">
+              <span
+                :class="
+                  n.confidence === 'high' ? 'text-app-success-400/70' : 'text-app-warning-400/70'
+                "
+              >
                 {{
                   n.confidence === 'high'
                     ? t('inspector.testConfig.detect.confidenceHigh')
@@ -618,9 +622,7 @@ function setSize(value: InstanceSize) {
 
     <div v-if="provisionType === 'docker-compose'" class="space-y-2">
       <div class="space-y-1">
-        <label class="text-[11px] text-slate-400">{{
-          t('inspector.testConfig.composePath')
-        }}</label>
+        <label class="text-[11px] text-muted">{{ t('inspector.testConfig.composePath') }}</label>
         <div class="flex items-center gap-1">
           <UInput
             :model-value="composePath"
@@ -642,7 +644,7 @@ function setSize(value: InstanceSize) {
             @click="openBrowse('compose')"
           />
         </div>
-        <p class="text-[11px] leading-snug text-slate-500">
+        <p class="text-[11px] leading-snug text-dimmed">
           {{ t('inspector.testConfig.composeHint') }}
         </p>
       </div>
@@ -658,7 +660,7 @@ function setSize(value: InstanceSize) {
          connection (the "how") is configured per-type in the Infrastructure window. -->
     <div v-if="provisionType === 'kubernetes'" class="space-y-2">
       <div class="space-y-1">
-        <span class="text-[11px] text-slate-400">{{
+        <span class="text-[11px] text-muted">{{
           t('inspector.testConfig.manifestSourceLabel')
         }}</span>
         <div class="flex flex-wrap gap-1">
@@ -682,9 +684,7 @@ function setSize(value: InstanceSize) {
       </div>
 
       <div v-if="kubeSourceType === 'separate'" class="space-y-1">
-        <label class="text-[11px] text-slate-400">{{
-          t('inspector.testConfig.manifestRepo')
-        }}</label>
+        <label class="text-[11px] text-muted">{{ t('inspector.testConfig.manifestRepo') }}</label>
         <UInput
           :model-value="kubeRepo"
           size="xs"
@@ -695,9 +695,7 @@ function setSize(value: InstanceSize) {
         />
       </div>
       <div v-if="kubeSourceType === 'separate'" class="space-y-1">
-        <label class="text-[11px] text-slate-400">{{
-          t('inspector.testConfig.manifestRef')
-        }}</label>
+        <label class="text-[11px] text-muted">{{ t('inspector.testConfig.manifestRef') }}</label>
         <UInput
           :model-value="kubeRef"
           size="xs"
@@ -709,9 +707,7 @@ function setSize(value: InstanceSize) {
       </div>
 
       <div class="space-y-1">
-        <label class="text-[11px] text-slate-400">{{
-          t('inspector.testConfig.manifestPath')
-        }}</label>
+        <label class="text-[11px] text-muted">{{ t('inspector.testConfig.manifestPath') }}</label>
         <div class="flex items-center gap-1">
           <UInput
             :model-value="kubePath"
@@ -731,15 +727,13 @@ function setSize(value: InstanceSize) {
             @click="openBrowse('k8s')"
           />
         </div>
-        <p class="text-[11px] leading-snug text-slate-500">
+        <p class="text-[11px] leading-snug text-dimmed">
           {{ t('inspector.testConfig.manifestPathHint') }}
         </p>
       </div>
 
       <div class="space-y-1">
-        <span class="text-[11px] text-slate-400">{{
-          t('inspector.testConfig.rendererLabel')
-        }}</span>
+        <span class="text-[11px] text-muted">{{ t('inspector.testConfig.rendererLabel') }}</span>
         <div class="flex flex-wrap gap-1">
           <UButton
             v-for="r in RENDERERS"
@@ -752,7 +746,7 @@ function setSize(value: InstanceSize) {
             {{ r.label }}
           </UButton>
         </div>
-        <p class="text-[11px] leading-snug text-slate-500">
+        <p class="text-[11px] leading-snug text-dimmed">
           {{ t('inspector.testConfig.rendererHint') }}
         </p>
       </div>
@@ -762,7 +756,7 @@ function setSize(value: InstanceSize) {
          source), the per-PR recipe lives in the target repository's own preview workflow, so
          declaring the type IS the whole service-side configuration. Say so explicitly rather
          than rendering an empty panel that reads like something failed to load. -->
-    <p v-if="provisionType === 'cloudflare'" class="text-[11px] text-slate-500">
+    <p v-if="provisionType === 'cloudflare'" class="text-[11px] text-dimmed">
       {{ t('inspector.testConfig.cloudflareHint') }}
     </p>
 
@@ -770,7 +764,7 @@ function setSize(value: InstanceSize) {
          handler the workspace configures). -->
     <div v-if="provisionType === 'custom'" class="space-y-2">
       <div class="space-y-1">
-        <label class="text-[11px] text-slate-400">{{
+        <label class="text-[11px] text-muted">{{
           t('inspector.testConfig.customManifestId')
         }}</label>
         <USelect
@@ -782,15 +776,15 @@ function setSize(value: InstanceSize) {
           :placeholder="t('inspector.testConfig.customManifestIdPlaceholder')"
           @update:model-value="(v: string) => setCustomManifestId(v)"
         />
-        <p v-else class="text-[11px] leading-snug text-amber-300/80">
+        <p v-else class="text-[11px] leading-snug text-app-warning-300/80">
           {{ t('inspector.testConfig.customNoTypes') }}
         </p>
-        <p class="text-[11px] leading-snug text-slate-500">
+        <p class="text-[11px] leading-snug text-dimmed">
           {{ t('inspector.testConfig.customManifestIdHint') }}
         </p>
       </div>
       <div class="space-y-1">
-        <label class="text-[11px] text-slate-400">{{
+        <label class="text-[11px] text-muted">{{
           t('inspector.testConfig.customManifestPath')
         }}</label>
         <UInput
@@ -802,7 +796,7 @@ function setSize(value: InstanceSize) {
             (e: KeyboardEvent) => setCustomManifestPath((e.target as HTMLInputElement).value)
           "
         />
-        <p class="text-[11px] leading-snug text-slate-500">
+        <p class="text-[11px] leading-snug text-dimmed">
           {{ t('inspector.testConfig.customManifestPathHint') }}
         </p>
       </div>
@@ -811,10 +805,10 @@ function setSize(value: InstanceSize) {
            shown when the selected type declares a fixer prompt. -->
       <div
         v-if="manifestFixerAvailable && repoContext"
-        class="space-y-1.5 rounded border border-slate-800 bg-slate-900/40 p-2"
+        class="space-y-1.5 rounded border border-default bg-default/40 p-2"
       >
         <div class="flex items-center justify-between gap-2">
-          <span class="text-[11px] text-slate-400">{{
+          <span class="text-[11px] text-muted">{{
             t('inspector.testConfig.generateManifest.title')
           }}</span>
           <UButton
@@ -829,24 +823,24 @@ function setSize(value: InstanceSize) {
             {{ t('inspector.testConfig.generateManifest.button') }}
           </UButton>
         </div>
-        <p class="text-[11px] leading-snug text-slate-500">
+        <p class="text-[11px] leading-snug text-dimmed">
           {{ t('inspector.testConfig.generateManifest.hint') }}
         </p>
-        <p v-if="manifestRepairError" class="text-[11px] text-rose-300/80">
+        <p v-if="manifestRepairError" class="text-[11px] text-app-error-300/80">
           {{ t('inspector.testConfig.generateManifest.error') }}
         </p>
         <p
           v-else-if="manifestRepairJob"
           class="text-[11px]"
           :class="{
-            'text-sky-300/80': manifestRepairJob.status === 'running',
-            'text-emerald-300/80': manifestRepairJob.status === 'succeeded',
-            'text-rose-300/80': manifestRepairJob.status === 'failed',
+            'text-app-info-300/80': manifestRepairJob.status === 'running',
+            'text-app-success-300/80': manifestRepairJob.status === 'succeeded',
+            'text-app-error-300/80': manifestRepairJob.status === 'failed',
           }"
         >
           {{ t(`inspector.testConfig.generateManifest.status.${manifestRepairJob.status}`) }}
         </p>
-        <p v-else-if="manifestRepairJobId" class="text-[11px] text-sky-300/80">
+        <p v-else-if="manifestRepairJobId" class="text-[11px] text-app-info-300/80">
           {{ t('inspector.testConfig.generateManifest.dispatched') }}
         </p>
       </div>
@@ -862,7 +856,7 @@ function setSize(value: InstanceSize) {
     >
       <template #body>
         <div v-if="repoContext" class="space-y-3">
-          <p class="text-xs text-slate-400">
+          <p class="text-xs text-muted">
             {{
               browseTarget === 'compose'
                 ? t('inspector.testConfig.selectComposeHint')
@@ -876,11 +870,11 @@ function setSize(value: InstanceSize) {
             :start-path="repoContext.directory ?? ''"
           />
           <div class="flex items-center justify-between gap-2">
-            <p class="truncate text-xs text-slate-400">
+            <p class="truncate text-xs text-muted">
               <template v-if="pickedPath">
                 <i18n-t keypath="inspector.testConfig.selected" tag="span" scope="global">
                   <template #path>
-                    <code class="text-slate-200">{{ pickedPath }}</code>
+                    <code class="text-default">{{ pickedPath }}</code>
                   </template>
                 </i18n-t>
               </template>
@@ -902,9 +896,7 @@ function setSize(value: InstanceSize) {
       :hint="t('inspector.testConfig.provisioningHint')"
     >
       <div class="space-y-1">
-        <span class="text-[11px] text-slate-400">{{
-          t('inspector.testConfig.cloudProvider')
-        }}</span>
+        <span class="text-[11px] text-muted">{{ t('inspector.testConfig.cloudProvider') }}</span>
         <div class="flex flex-wrap gap-1">
           <UButton
             v-for="p in PROVIDERS"
@@ -920,7 +912,7 @@ function setSize(value: InstanceSize) {
       </div>
 
       <div class="space-y-1">
-        <span class="text-[11px] text-slate-400">{{ t('inspector.testConfig.instanceSize') }}</span>
+        <span class="text-[11px] text-muted">{{ t('inspector.testConfig.instanceSize') }}</span>
         <div class="flex flex-wrap gap-1">
           <UButton
             v-for="s in SIZES"

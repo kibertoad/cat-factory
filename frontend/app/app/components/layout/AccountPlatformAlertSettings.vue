@@ -261,13 +261,13 @@ const hasOverrides = computed(
   <section
     v-if="store.available !== false"
     data-testid="account-platform-alerts"
-    class="space-y-3 border-t border-slate-800 pt-6"
+    class="space-y-3 border-t border-default pt-6"
   >
     <div>
-      <h4 class="text-sm font-semibold text-slate-200">
+      <h4 class="text-sm font-semibold text-default">
         {{ t('settings.platformAlerts.title') }}
       </h4>
-      <p class="text-[11px] text-slate-400">{{ t('settings.platformAlerts.description') }}</p>
+      <p class="text-[11px] text-muted">{{ t('settings.platformAlerts.description') }}</p>
     </div>
 
     <!--
@@ -282,11 +282,11 @@ const hasOverrides = computed(
         :label="t('settings.platformAlerts.muteLabel')"
         data-testid="platform-alerts-mute"
       />
-      <p class="ps-6 text-[11px] text-slate-400">{{ t('settings.platformAlerts.muteHint') }}</p>
+      <p class="ps-6 text-[11px] text-muted">{{ t('settings.platformAlerts.muteHint') }}</p>
     </div>
 
     <div class="space-y-1">
-      <label class="text-[11px] font-medium text-slate-300">
+      <label class="text-[11px] font-medium text-toned">
         {{ t('settings.platformAlerts.windowLabel') }}
       </label>
       <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -298,17 +298,17 @@ const hasOverrides = computed(
           data-testid="platform-alerts-window"
         />
       </div>
-      <p class="text-[11px] text-slate-400">{{ t('settings.platformAlerts.windowHint') }}</p>
+      <p class="text-[11px] text-muted">{{ t('settings.platformAlerts.windowHint') }}</p>
     </div>
 
     <div class="space-y-2">
-      <label class="text-[11px] font-medium text-slate-300">
+      <label class="text-[11px] font-medium text-toned">
         {{ t('settings.platformAlerts.thresholdsLabel') }}
       </label>
-      <p class="text-[11px] text-slate-400">{{ t('settings.platformAlerts.inheritHint') }}</p>
+      <p class="text-[11px] text-muted">{{ t('settings.platformAlerts.inheritHint') }}</p>
       <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div v-for="th in THRESHOLDS" :key="th.field" class="space-y-1">
-          <label class="block text-[11px] text-slate-300" :for="`platform-alert-${th.field}`">
+          <label class="block text-[11px] text-toned" :for="`platform-alert-${th.field}`">
             {{ thresholdLabels[th.field] }}
           </label>
           <UInput
@@ -320,7 +320,7 @@ const hasOverrides = computed(
             :placeholder="t('settings.platformAlerts.inheritPlaceholder')"
             :data-testid="`platform-alert-${th.field}`"
           />
-          <p class="text-[11px] leading-snug text-slate-500">{{ thresholdHints[th.field] }}</p>
+          <p class="text-[11px] leading-snug text-dimmed">{{ thresholdHints[th.field] }}</p>
         </div>
       </div>
     </div>
@@ -334,7 +334,7 @@ const hasOverrides = computed(
     -->
     <p
       v-if="!loaded"
-      class="rounded-lg border border-amber-800/60 bg-amber-950/30 px-3 py-2 text-xs text-amber-200"
+      class="rounded-lg border border-app-warning-800/60 bg-app-warning-950/30 px-3 py-2 text-xs text-app-warning-200"
       data-testid="account-platform-alerts-unloaded"
     >
       {{ t('settings.platformAlerts.notLoaded') }}

@@ -147,12 +147,12 @@ async function copyPlan() {
          reason, in a main-column header this surface does not have. -->
     <aside
       v-if="outline.hasToc || $slots['run-details']"
-      class="hidden w-52 shrink-0 flex-col border-e border-slate-800 bg-slate-900/60 lg:flex"
+      class="hidden w-52 shrink-0 flex-col border-e border-default bg-default/60 lg:flex"
     >
-      <div class="flex items-center gap-0.5 border-b border-slate-800 px-3 py-2">
+      <div class="flex items-center gap-0.5 border-b border-default px-3 py-2">
         <span
           v-if="outline.hasToc"
-          class="min-w-0 flex-1 truncate text-[11px] font-semibold uppercase tracking-wide text-slate-500"
+          class="min-w-0 flex-1 truncate text-[11px] font-semibold uppercase tracking-wide text-dimmed"
         >
           {{ t('panels.stepDetail.contents') }}
         </span>
@@ -193,8 +193,8 @@ async function copyPlan() {
           class="block w-full truncate rounded-md px-2 py-1 text-start text-[12px] transition"
           :class="
             activeId === s.id
-              ? 'bg-amber-500/15 font-medium text-amber-100'
-              : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
+              ? 'bg-app-warning-500/15 font-medium text-app-warning-100'
+              : 'text-muted hover:bg-elevated/60 hover:text-default'
           "
           :style="{ paddingLeft: `${(s.depth - outline.minDepth) * 0.7 + 0.5}rem` }"
           :title="s.title"
@@ -212,23 +212,21 @@ async function copyPlan() {
       <div
         v-if="$slots['run-details']"
         class="flex flex-col"
-        :class="
-          outline.hasToc ? 'max-h-[45%] shrink-0 border-t border-slate-800' : 'min-h-0 flex-1'
-        "
+        :class="outline.hasToc ? 'max-h-[45%] shrink-0 border-t border-default' : 'min-h-0 flex-1'"
       >
         <button
           type="button"
           data-testid="initiative-plan-run-meta-toggle"
-          class="flex shrink-0 items-center gap-1.5 px-3 py-2 text-start transition hover:bg-slate-800/40"
+          class="flex shrink-0 items-center gap-1.5 px-3 py-2 text-start transition hover:bg-elevated/40"
           :aria-expanded="runDetailsOpen"
           @click="runDetailsOpen = !runDetailsOpen"
         >
-          <span class="flex-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+          <span class="flex-1 text-[11px] font-semibold uppercase tracking-wide text-dimmed">
             {{ t('panels.stepDetail.details') }}
           </span>
           <UIcon
             :name="runDetailsOpen ? 'i-lucide-chevron-down' : 'i-lucide-chevron-up'"
-            class="h-3.5 w-3.5 shrink-0 text-slate-500"
+            class="h-3.5 w-3.5 shrink-0 text-dimmed"
           />
         </button>
         <div
@@ -266,17 +264,17 @@ async function copyPlan() {
         >
           <button
             v-if="s.depth > 0"
-            class="group flex w-full items-center gap-1.5 rounded py-0.5 text-start transition hover:text-white"
+            class="group flex w-full items-center gap-1.5 rounded py-0.5 text-start transition hover:text-highlighted"
             :aria-expanded="!collapsed[s.id]"
             @click="toggle(s.id)"
           >
             <UIcon
               name="i-lucide-chevron-right"
-              class="h-3.5 w-3.5 shrink-0 text-slate-500 transition-transform group-hover:text-slate-300"
+              class="h-3.5 w-3.5 shrink-0 text-dimmed transition-transform group-hover:text-toned"
               :class="collapsed[s.id] ? '' : 'rotate-90'"
             />
             <span
-              class="font-semibold text-slate-100"
+              class="font-semibold text-app-100"
               :class="s.depth <= 1 ? 'text-base' : s.depth === 2 ? 'text-sm' : 'text-[13px]'"
               v-html="s.titleHtml"
             />
@@ -287,7 +285,7 @@ async function copyPlan() {
           <!-- eslint-disable-next-line vue/no-v-html -->
           <div
             v-show="!collapsed[s.id]"
-            class="reader-prose mt-0.5 text-[13px] leading-relaxed text-slate-300"
+            class="reader-prose mt-0.5 text-[13px] leading-relaxed text-toned"
             :class="[s.depth > 0 ? 'ps-5' : '', canExecute ? 'review-mode' : '']"
             @click="onProseClick"
             v-html="s.bodyHtml"
@@ -301,18 +299,18 @@ async function copyPlan() {
          so a long comment list can't crowd the plan off the screen. -->
     <aside
       :aria-label="t('initiative.planReview.title')"
-      class="flex max-h-[55%] w-full shrink-0 flex-col border-t border-slate-800 bg-slate-900/60 lg:max-h-none lg:w-72 lg:border-s lg:border-t-0"
+      class="flex max-h-[55%] w-full shrink-0 flex-col border-t border-default bg-default/60 lg:max-h-none lg:w-72 lg:border-s lg:border-t-0"
     >
-      <div class="border-b border-slate-800 px-4 py-3">
+      <div class="border-b border-default px-4 py-3">
         <!-- A HEADING, not a styled div: this rail is what the window is now for, so the surface
              that asks the human for a decision has to be reachable as one. -->
         <h3
-          class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-amber-400"
+          class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-app-warning-400"
         >
           <UIcon name="i-lucide-clipboard-check" class="h-3.5 w-3.5 shrink-0" />
           {{ t('initiative.planReview.title') }}
         </h3>
-        <p class="mt-1 text-[12px] leading-relaxed text-slate-400">
+        <p class="mt-1 text-[12px] leading-relaxed text-muted">
           {{ t('initiative.planReview.body') }}
         </p>
       </div>
@@ -322,13 +320,13 @@ async function copyPlan() {
         <div
           v-if="draftTarget"
           data-testid="initiative-plan-composer"
-          class="rounded-lg border border-indigo-500/40 bg-indigo-500/5 p-2.5"
+          class="rounded-lg border border-primary/40 bg-primary/5 p-2.5"
         >
-          <div class="mb-1 text-[10px] uppercase tracking-wide text-indigo-300">
+          <div class="mb-1 text-[10px] uppercase tracking-wide text-primary">
             {{ t('panels.stepDetail.commentingOn') }}
           </div>
           <pre
-            class="mb-2 max-h-20 overflow-auto whitespace-pre-wrap rounded bg-slate-950/60 p-1.5 text-[11px] text-slate-300"
+            class="mb-2 max-h-20 overflow-auto whitespace-pre-wrap rounded bg-app-950/60 p-1.5 text-[11px] text-toned"
             >{{ draftTarget.quotedSource }}</pre>
           <UTextarea
             v-model="draftBody"
@@ -360,14 +358,14 @@ async function copyPlan() {
           v-for="(c, idx) in planComments"
           :key="idx"
           data-testid="initiative-plan-comment"
-          class="rounded-lg border border-slate-800 bg-slate-900/50 p-2.5"
+          class="rounded-lg border border-default bg-default/50 p-2.5"
         >
           <div class="mb-1 flex items-start justify-between gap-2">
-            <div class="text-[10px] uppercase tracking-wide text-slate-500">
+            <div class="text-[10px] uppercase tracking-wide text-dimmed">
               {{ t('panels.stepDetail.commentN', { number: idx + 1 }) }}
             </div>
             <button
-              class="text-slate-500 transition hover:text-rose-400"
+              class="text-dimmed transition hover:text-app-error-400"
               :title="t('panels.stepDetail.removeComment')"
               @click="removeComment(idx)"
             >
@@ -375,16 +373,16 @@ async function copyPlan() {
             </button>
           </div>
           <pre
-            class="mb-1 max-h-16 overflow-auto whitespace-pre-wrap rounded bg-slate-950/50 p-1.5 text-[10px] text-slate-400"
+            class="mb-1 max-h-16 overflow-auto whitespace-pre-wrap rounded bg-app-950/50 p-1.5 text-[10px] text-muted"
             >{{ c.quotedSource }}</pre>
-          <p class="text-[12px] text-slate-200">{{ c.body }}</p>
+          <p class="text-[12px] text-default">{{ c.body }}</p>
         </div>
 
         <!-- Only worth saying where clicking a block does something (the RBAC to act on it) and
              where nothing has been said yet. -->
         <p
           v-if="canExecute && !draftTarget && !planComments.length"
-          class="text-[11px] leading-relaxed text-slate-400"
+          class="text-[11px] leading-relaxed text-muted"
         >
           {{ t('initiative.planReview.commentHint') }}
         </p>
@@ -394,7 +392,7 @@ async function copyPlan() {
            "request changes" step: with per-block comments in play the human is already composing a
            review, and a hidden field reads as "there is nothing more to say". -->
       <InitiativePlanDecision
-        class="border-t border-slate-800 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]"
+        class="border-t border-default px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]"
         :approval-id="approval.id"
         :instance-id="instanceId"
         :can-execute="canExecute"

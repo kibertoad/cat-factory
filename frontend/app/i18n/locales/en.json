@@ -8913,5 +8913,16 @@
     "territories": {
       "heading": "Territories"
     }
+  },
+  "appearance": {
+    "switcher": "Appearance",
+    "@switcher": {
+      "description": "Label above the sidebar picker that chooses the colour mode (system, light, dark)."
+    },
+    "mode": {
+      "system": "System",
+      "light": "Light",
+      "dark": "Dark"
+    }
   }
 }

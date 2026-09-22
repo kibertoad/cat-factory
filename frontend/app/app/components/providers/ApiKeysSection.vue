@@ -264,7 +264,7 @@ async function remove(k: ApiKey) {
 <template>
   <div class="space-y-4">
     <div>
-      <h4 class="text-xs font-semibold uppercase tracking-wide text-slate-500">
+      <h4 class="text-xs font-semibold uppercase tracking-wide text-dimmed">
         {{
           category === 'proxy'
             ? t('providers.apiKeys.proxyHeading')
@@ -272,18 +272,18 @@ async function remove(k: ApiKey) {
         }}
       </h4>
       <template v-if="category === 'proxy'">
-        <p v-if="isAccount" class="mt-1 text-sm text-slate-400">
+        <p v-if="isAccount" class="mt-1 text-sm text-muted">
           {{ t('providers.apiKeys.proxyAccountIntro') }}
         </p>
-        <p v-else class="mt-1 text-sm text-slate-400">
+        <p v-else class="mt-1 text-sm text-muted">
           {{ t('providers.apiKeys.proxyIntro') }}
         </p>
       </template>
       <template v-else>
-        <p v-if="isAccount" class="mt-1 text-sm text-slate-400">
+        <p v-if="isAccount" class="mt-1 text-sm text-muted">
           {{ t('providers.apiKeys.directAccountIntro') }}
         </p>
-        <p v-else class="mt-1 text-sm text-slate-400">
+        <p v-else class="mt-1 text-sm text-muted">
           {{ t('providers.apiKeys.directIntro') }}
         </p>
       </template>
@@ -324,7 +324,7 @@ async function remove(k: ApiKey) {
 
     <!-- where to get the key -->
     <ol
-      class="list-decimal space-y-1.5 rounded-lg border border-slate-700 bg-slate-900/60 p-4 ps-8 text-sm text-slate-300"
+      class="list-decimal space-y-1.5 rounded-lg border border-muted bg-default/60 p-4 ps-8 text-sm text-toned"
     >
       <li v-for="(step, i) in selected.steps" :key="i">{{ step }}</li>
       <li>
@@ -332,7 +332,7 @@ async function remove(k: ApiKey) {
           :href="selected.url"
           target="_blank"
           rel="noopener noreferrer"
-          class="text-primary-400 underline"
+          class="text-primary underline"
         >
           {{ t('providers.apiKeys.openKeys', { provider: selected.label }) }}
         </a>
@@ -343,7 +343,7 @@ async function remove(k: ApiKey) {
          the caching flavour, so long agentic runs stop re-billing the whole prompt. -->
     <p
       v-if="cachesPrompts(selected.value)"
-      class="flex items-center gap-1.5 text-[12px] text-emerald-400/90"
+      class="flex items-center gap-1.5 text-[12px] text-app-success-400/90"
     >
       <UIcon name="i-lucide-zap" class="h-3.5 w-3.5 shrink-0" />
       {{ t('providers.apiKeys.cachingNote', { provider: selected.label }) }}
@@ -380,22 +380,22 @@ async function remove(k: ApiKey) {
 
     <!-- connected keys for the selected scope -->
     <div v-if="connected.length" class="space-y-2">
-      <h5 class="text-xs font-semibold uppercase tracking-wide text-slate-500">
+      <h5 class="text-xs font-semibold uppercase tracking-wide text-dimmed">
         {{ t('providers.apiKeys.connected', { count: connected.length }) }}
       </h5>
       <div
         v-for="k in connected"
         :key="k.id"
-        class="flex items-center justify-between rounded-md border border-slate-700 bg-slate-900/50 px-3 py-2 text-sm"
+        class="flex items-center justify-between rounded-md border border-muted bg-default/50 px-3 py-2 text-sm"
         :class="{ 'opacity-55': !k.enabled }"
       >
         <div>
-          <span class="font-medium text-slate-200">{{ k.label }}</span>
-          <span class="ms-2 text-xs text-slate-500">{{ providerLabel(k.provider) }}</span>
+          <span class="font-medium text-default">{{ k.label }}</span>
+          <span class="ms-2 text-xs text-dimmed">{{ providerLabel(k.provider) }}</span>
           <UBadge v-if="!k.enabled" color="neutral" variant="subtle" size="sm" class="ms-2">
             {{ t('providers.apiKeys.disabledBadge') }}
           </UBadge>
-          <div class="text-[11px] tabular-nums text-slate-500">
+          <div class="text-[11px] tabular-nums text-dimmed">
             {{
               t(
                 'providers.apiKeys.usage',

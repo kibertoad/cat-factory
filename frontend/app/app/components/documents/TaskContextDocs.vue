@@ -149,23 +149,23 @@ async function attach(item: PendingContext) {
       <div
         v-for="doc in linked"
         :key="`${doc.source}:${doc.externalId}`"
-        class="rounded-md border border-slate-800 bg-slate-900/60 px-2 py-1.5"
+        class="rounded-md border border-default bg-default/60 px-2 py-1.5"
       >
         <DocumentOriginLink
           :url="doc.url"
-          class="flex items-center gap-1.5 text-xs text-slate-300"
-          hover-class="hover:text-white"
+          class="flex items-center gap-1.5 text-xs text-toned"
+          hover-class="hover:text-highlighted"
         >
           <UIcon
             :name="documents.descriptorForOrigin(doc.source)?.icon ?? 'i-lucide-file-text'"
-            class="h-3.5 w-3.5 shrink-0 text-indigo-400"
+            class="h-3.5 w-3.5 shrink-0 text-primary"
           />
           <span class="truncate">{{ doc.title }}</span>
         </DocumentOriginLink>
         <DocumentSyncState :doc="doc" class="mt-1" />
       </div>
     </div>
-    <p v-else class="text-[11px] text-slate-500">
+    <p v-else class="text-[11px] text-dimmed">
       {{ emptyHint }}
     </p>
   </InspectorSection>

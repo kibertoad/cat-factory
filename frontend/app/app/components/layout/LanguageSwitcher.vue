@@ -45,17 +45,17 @@ const items = computed<DropdownMenuItem[][]>(() => [
       data-testid="language-switcher"
       :aria-label="t('language.switcher')"
       :title="collapsed ? `${t('language.switcher')}: ${current}` : undefined"
-      class="flex w-full items-center gap-2 rounded-lg border border-slate-800 bg-slate-900/60 p-2 text-start transition hover:bg-slate-800/60"
+      class="flex w-full items-center gap-2 rounded-lg border border-default bg-default/60 p-2 text-start transition hover:bg-elevated/60"
       :class="collapsed ? 'justify-center' : ''"
     >
-      <UIcon name="i-lucide-languages" class="h-4 w-4 shrink-0 text-slate-400" />
+      <UIcon name="i-lucide-languages" class="h-4 w-4 shrink-0 text-muted" />
       <div v-if="!collapsed" class="min-w-0 flex-1">
-        <div class="truncate text-[10px] uppercase tracking-wide text-slate-500">
+        <div class="truncate text-[10px] uppercase tracking-wide text-dimmed">
           {{ t('language.switcher') }}
         </div>
-        <div class="truncate text-xs font-medium text-white">{{ current }}</div>
+        <div class="truncate text-xs font-medium text-highlighted">{{ current }}</div>
       </div>
-      <UIcon v-if="!collapsed" name="i-lucide-chevron-up" class="h-4 w-4 shrink-0 text-slate-500" />
+      <UIcon v-if="!collapsed" name="i-lucide-chevron-up" class="h-4 w-4 shrink-0 text-dimmed" />
     </button>
   </UDropdownMenu>
 </template>

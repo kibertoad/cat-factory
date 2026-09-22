@@ -33,23 +33,23 @@ const max = computed(() => maxOf(props.rows, spendMagnitude))
 </script>
 
 <template>
-  <div class="rounded-lg border border-slate-800 bg-slate-900/40 p-4">
-    <div v-if="!rows.length" class="py-4 text-center text-xs text-slate-500">
+  <div class="rounded-lg border border-default bg-default/40 p-4">
+    <div v-if="!rows.length" class="py-4 text-center text-xs text-dimmed">
       {{ t('reports.spend.empty') }}
     </div>
     <ul v-else class="flex flex-col gap-2.5" :data-testid="testId">
       <li v-for="row in rows" :key="row.key" class="text-xs" data-testid="reports-spend-row">
         <div class="mb-1 flex items-baseline justify-between gap-2">
-          <span class="min-w-0 truncate text-slate-300">{{ labelOf(row) }}</span>
+          <span class="min-w-0 truncate text-toned">{{ labelOf(row) }}</span>
           <!-- The metered figure alone is the slice's SPEND. The subscription cost rides
                beside it, in its own series colour and explicitly named, because it is the
                illustrative cost of flat-rate quota usage — adding the two into one currency
                figure would report money that was never billed. -->
-          <span class="shrink-0 tabular-nums text-slate-400">
+          <span class="shrink-0 tabular-nums text-muted">
             {{ money(row.meteredCost) }}
             <span
               v-if="row.subscriptionCost > 0"
-              class="text-amber-400"
+              class="text-app-warning-400"
               :title="t('reports.legend.subscriptionHint')"
             >
               {{ t('reports.spend.subscriptionAside', { value: money(row.subscriptionCost) }) }}
@@ -58,15 +58,15 @@ const max = computed(() => maxOf(props.rows, spendMagnitude))
         </div>
         <div class="flex h-1.5 gap-[2px]">
           <div
-            class="h-1.5 rounded-full bg-violet-500"
+            class="h-1.5 rounded-full bg-app-secondary-500"
             :style="{ width: `${segmentPct(row.meteredCost, max)}%` }"
           />
           <div
-            class="h-1.5 rounded-full bg-amber-600"
+            class="h-1.5 rounded-full bg-app-warning-600"
             :style="{ width: `${segmentPct(row.subscriptionCost, max)}%` }"
           />
         </div>
-        <p class="mt-1 text-[10px] text-slate-500">
+        <p class="mt-1 text-[10px] text-dimmed">
           {{ t('reports.spend.calls', { count: row.calls }, row.calls) }} ·
           {{
             t('reports.spend.tokens', {
@@ -77,7 +77,7 @@ const max = computed(() => maxOf(props.rows, spendMagnitude))
         </p>
       </li>
     </ul>
-    <p v-if="cap" class="mt-3 text-[10px] text-slate-500" :data-testid="`${testId}-capped`">
+    <p v-if="cap" class="mt-3 text-[10px] text-dimmed" :data-testid="`${testId}-capped`">
       {{
         t('reports.spend.capped', { shown: n(cap.returned), omitted: n(cap.omitted) }, cap.omitted)
       }}

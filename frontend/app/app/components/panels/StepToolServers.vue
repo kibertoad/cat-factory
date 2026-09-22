@@ -107,10 +107,10 @@ const drops = computed(() =>
   <section
     v-if="hasAny"
     data-testid="step-tool-servers"
-    class="scroll-mt-4 rounded-xl border border-slate-800 bg-slate-900/50 p-4"
+    class="scroll-mt-4 rounded-xl border border-default bg-default/50 p-4"
   >
     <div
-      class="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400"
+      class="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted"
     >
       <UIcon name="i-lucide-plug" class="h-3.5 w-3.5" />
       <span>{{ t('panels.stepDetail.toolServers.heading') }}</span>
@@ -119,7 +119,7 @@ const drops = computed(() =>
     <p
       v-if="dispatchedAs"
       data-testid="step-tool-servers-dispatched-as"
-      class="mb-2 text-[12px] text-slate-400"
+      class="mb-2 text-[12px] text-muted"
     >
       {{ t('panels.stepDetail.toolServers.dispatchedAs', { agent: dispatchedAs }) }}
     </p>
@@ -133,8 +133,8 @@ const drops = computed(() =>
         class="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[12px]"
         :class="
           server.isFault
-            ? 'border-amber-500/30 bg-amber-500/10 text-amber-200'
-            : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
+            ? 'border-app-warning-500/30 bg-app-warning-500/10 text-app-warning-200'
+            : 'border-app-success-500/30 bg-app-success-500/10 text-app-success-200'
         "
         :title="
           server.tools?.length
@@ -171,7 +171,7 @@ const drops = computed(() =>
         v-for="server in unattributed"
         :key="server.id"
         data-testid="step-tool-server-unattributed"
-        class="flex items-start gap-1.5 text-[12px] text-slate-400"
+        class="flex items-start gap-1.5 text-[12px] text-muted"
       >
         <UIcon name="i-lucide-circle-help" class="mt-0.5 h-3.5 w-3.5 shrink-0" />
         <span>{{
@@ -185,12 +185,15 @@ const drops = computed(() =>
         v-for="server in drops"
         :key="server.id"
         data-testid="step-tool-server-unavailable"
-        class="flex items-start gap-1.5 text-[12px] text-slate-300"
+        class="flex items-start gap-1.5 text-[12px] text-toned"
       >
-        <UIcon name="i-lucide-plug-zap" class="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400/80" />
+        <UIcon
+          name="i-lucide-plug-zap"
+          class="mt-0.5 h-3.5 w-3.5 shrink-0 text-app-warning-400/80"
+        />
         <span>
-          <span class="font-medium text-slate-200">{{ server.label || server.id }}</span>
-          <span class="text-slate-400"> {{ server.reasonText }}</span>
+          <span class="font-medium text-default">{{ server.label || server.id }}</span>
+          <span class="text-muted"> {{ server.reasonText }}</span>
           <!--
             Absent for a reason this build no longer recognises: it knows the code was recorded and
             not what it meant, so there is no surface it can honestly send an operator to.
@@ -198,7 +201,7 @@ const drops = computed(() =>
           <span
             v-if="server.remedy"
             data-testid="step-tool-server-remedy"
-            class="mt-0.5 block text-slate-500"
+            class="mt-0.5 block text-dimmed"
             >{{ server.remedy }}</span
           >
         </span>

@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
+import { defineApiContract, noBodyResponse } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import {
   mountServiceInputSchema,
@@ -51,5 +51,5 @@ export const unmountServiceContract = defineApiContract({
   method: 'delete',
   requestPathParamsSchema: serviceIdParams,
   pathResolver: ({ serviceId }) => `/services/${serviceId}`,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })

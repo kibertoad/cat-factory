@@ -160,7 +160,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
       v-if="open"
       ref="dialogRef"
       tabindex="-1"
-      class="fixed inset-0 z-[60] flex flex-col bg-slate-950/95 backdrop-blur-sm focus:outline-none"
+      class="fixed inset-0 z-[60] flex flex-col bg-app-950/95 backdrop-blur-sm focus:outline-none"
       role="dialog"
       aria-modal="true"
       data-testid="artifact-lightbox"
@@ -172,27 +172,27 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
       @click.self="close"
     >
       <!-- Toolbar -->
-      <div class="flex items-center gap-3 border-b border-slate-800/60 px-4 py-2.5">
-        <span class="min-w-0 flex-1 truncate text-[13px] font-medium text-slate-200">
+      <div class="flex items-center gap-3 border-b border-default/60 px-4 py-2.5">
+        <span class="min-w-0 flex-1 truncate text-[13px] font-medium text-default">
           {{ current?.label ?? t('media.lightbox.fallbackTitle') }}
         </span>
-        <span v-if="total > 1" class="shrink-0 text-[12px] tabular-nums text-slate-400">
+        <span v-if="total > 1" class="shrink-0 text-[12px] tabular-nums text-muted">
           {{ t('media.lightbox.counter', { current: index + 1, total }) }}
         </span>
         <div class="flex shrink-0 items-center gap-1">
           <button
-            class="rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 disabled:opacity-40"
+            class="rounded-md p-1.5 text-muted hover:bg-elevated hover:text-default disabled:opacity-40"
             :title="t('media.lightbox.zoomOut')"
             :disabled="scale <= MIN_SCALE"
             @click="zoomBy(1 / 1.25)"
           >
             <UIcon name="i-lucide-zoom-out" class="h-4 w-4" />
           </button>
-          <span class="w-10 text-center text-[11px] tabular-nums text-slate-500">{{
+          <span class="w-10 text-center text-[11px] tabular-nums text-dimmed">{{
             n(scale, 'percent')
           }}</span>
           <button
-            class="rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 disabled:opacity-40"
+            class="rounded-md p-1.5 text-muted hover:bg-elevated hover:text-default disabled:opacity-40"
             :title="t('media.lightbox.zoomIn')"
             :disabled="scale >= MAX_SCALE"
             @click="zoomBy(1.25)"
@@ -200,14 +200,14 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
             <UIcon name="i-lucide-zoom-in" class="h-4 w-4" />
           </button>
           <button
-            class="rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+            class="rounded-md p-1.5 text-muted hover:bg-elevated hover:text-default"
             :title="t('media.lightbox.reset')"
             @click="resetView"
           >
             <UIcon name="i-lucide-maximize" class="h-4 w-4" />
           </button>
           <button
-            class="ms-1 rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+            class="ms-1 rounded-md p-1.5 text-muted hover:bg-elevated hover:text-default"
             :title="t('media.lightbox.close')"
             @click="close"
           >
@@ -224,7 +224,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
       >
         <button
           v-if="total > 1"
-          class="absolute start-3 top-1/2 z-10 -translate-y-1/2 rounded-full bg-slate-900/80 p-2 text-slate-300 hover:bg-slate-800 hover:text-white"
+          class="absolute start-3 top-1/2 z-10 -translate-y-1/2 rounded-full bg-default/80 p-2 text-toned hover:bg-elevated hover:text-highlighted"
           :title="t('media.lightbox.prev')"
           @click="go(-1)"
         >
@@ -248,7 +248,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
           @pointerup="onPointerUp"
           @pointercancel="onPointerUp"
         />
-        <div v-else class="flex flex-col items-center gap-2 text-slate-500">
+        <div v-else class="flex flex-col items-center gap-2 text-dimmed">
           <UIcon
             :name="state === 'error' ? 'i-lucide-image-off' : 'i-lucide-loader'"
             class="h-8 w-8"
@@ -259,7 +259,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
           </p>
           <button
             v-if="state === 'error' && current"
-            class="text-[12px] text-amber-300 hover:underline"
+            class="text-[12px] text-app-warning-300 hover:underline"
             @click="props.blobs.retry(current.artifactId)"
           >
             {{ t('common.retry') }}
@@ -268,7 +268,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
 
         <button
           v-if="total > 1"
-          class="absolute end-3 top-1/2 z-10 -translate-y-1/2 rounded-full bg-slate-900/80 p-2 text-slate-300 hover:bg-slate-800 hover:text-white"
+          class="absolute end-3 top-1/2 z-10 -translate-y-1/2 rounded-full bg-default/80 p-2 text-toned hover:bg-elevated hover:text-highlighted"
           :title="t('media.lightbox.next')"
           @click="go(1)"
         >

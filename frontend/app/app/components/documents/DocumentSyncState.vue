@@ -148,9 +148,9 @@ const renders = computed(() => {
 })
 
 const TONE_CLASS: Record<Stated['tone'], string> = {
-  ok: 'text-emerald-400',
-  warn: 'text-amber-400',
-  muted: 'text-slate-500',
+  ok: 'text-app-success-400',
+  warn: 'text-app-warning-400',
+  muted: 'text-dimmed',
 }
 
 async function refresh() {
@@ -165,7 +165,7 @@ async function refresh() {
 </script>
 
 <template>
-  <div class="flex items-center gap-1.5 text-[11px] text-slate-500">
+  <div class="flex items-center gap-1.5 text-[11px] text-dimmed">
     <span class="truncate">
       {{ t('documents.freshness.updated', { when: d(new Date(props.doc.syncedAt), 'long') }) }}
     </span>
@@ -178,7 +178,7 @@ async function refresh() {
       <UIcon :name="stated.icon" class="h-3 w-3 shrink-0" />
       <span class="truncate">{{ stated.text }}</span>
     </span>
-    <span v-if="renders" class="flex min-w-0 items-center gap-1 text-slate-500" :title="renders">
+    <span v-if="renders" class="flex min-w-0 items-center gap-1 text-dimmed" :title="renders">
       <UIcon name="i-lucide-image-off" class="h-3 w-3 shrink-0" />
       <span class="truncate">{{ renders }}</span>
     </span>

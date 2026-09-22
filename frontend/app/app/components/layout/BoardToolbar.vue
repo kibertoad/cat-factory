@@ -132,7 +132,7 @@ const decisionItems = computed(() =>
        the board's top overlay region; this renders only the pill and re-enables pointer events
        on it. Self-anchoring here is what let a banner cover the toolbar outright. -->
   <div
-    class="pointer-events-auto flex max-w-full items-center gap-1 overflow-x-auto rounded-full border border-slate-700 bg-slate-900/90 px-2 py-1.5 shadow-xl backdrop-blur"
+    class="pointer-events-auto flex max-w-full items-center gap-1 overflow-x-auto rounded-full border border-muted bg-default/90 px-2 py-1.5 shadow-xl backdrop-blur"
   >
     <!-- zoom controls -->
     <IconButton
@@ -153,14 +153,14 @@ const decisionItems = computed(() =>
          drops on narrow viewports) so the zoom level is never a mystery. -->
     <button
       type="button"
-      class="w-16 rounded text-center text-xs tabular-nums text-slate-300 hover:bg-slate-800 focus-visible:ring-2 focus-visible:ring-slate-400/60 sm:w-20"
+      class="w-16 rounded text-center text-xs tabular-nums text-toned hover:bg-elevated focus-visible:ring-2 focus-visible:ring-app-400/60 sm:w-20"
       :title="t('board.toolbar.resetZoom')"
       :aria-label="t('board.toolbar.resetZoom')"
       data-testid="board-zoom-reset"
       @click="resetZoom()"
     >
       {{ zoomPct }}%
-      <span class="hidden text-[9px] uppercase tracking-wide text-slate-500 sm:block">{{
+      <span class="hidden text-[9px] uppercase tracking-wide text-dimmed sm:block">{{
         lodLabel
       }}</span>
     </button>

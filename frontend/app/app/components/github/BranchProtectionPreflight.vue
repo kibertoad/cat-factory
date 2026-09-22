@@ -48,9 +48,9 @@ const exposedCount = computed(
 )
 
 const STATE_STYLE: Record<BranchProtectionStateValue, string> = {
-  unprotected: 'text-rose-300',
-  unknown: 'text-amber-300',
-  protected: 'text-emerald-400',
+  unprotected: 'text-app-error-300',
+  unknown: 'text-app-warning-300',
+  protected: 'text-app-success-400',
 }
 
 // Exhaustive Records of LITERAL keys, not an assembled `\`…\${state}\`` lookup: the typed-key
@@ -115,8 +115,8 @@ async function check() {
 
 <template>
   <section class="space-y-2" data-testid="branch-protection-preflight">
-    <h3 class="text-sm font-semibold text-slate-200">{{ t('vcs.branchProtection.heading') }}</h3>
-    <p class="text-[11px] text-slate-400">{{ t('vcs.branchProtection.body') }}</p>
+    <h3 class="text-sm font-semibold text-default">{{ t('vcs.branchProtection.heading') }}</h3>
+    <p class="text-[11px] text-muted">{{ t('vcs.branchProtection.body') }}</p>
 
     <UButton
       color="neutral"
@@ -131,7 +131,7 @@ async function check() {
     </UButton>
 
     <div v-if="failure" class="space-y-1" data-testid="branch-protection-failure">
-      <p class="text-xs text-rose-400">{{ t(failure.descriptionKey) }}</p>
+      <p class="text-xs text-app-error-400">{{ t(failure.descriptionKey) }}</p>
       <!-- The raw prose stays reachable, never dropped: the backend's messages here name the
            operator remedy, and the request id is the join to the one server log line that
            explains it. One click away, so it is never what a user is shown FIRST. -->
@@ -146,7 +146,7 @@ async function check() {
       >
         {{ t('errors.generic.showDetail') }}
       </UButton>
-      <p v-if="showFailureDetail" class="font-mono text-[10px] break-all text-slate-500">
+      <p v-if="showFailureDetail" class="font-mono text-[10px] break-all text-dimmed">
         {{ failure.detail }}
       </p>
     </div>
@@ -155,7 +155,7 @@ async function check() {
          would otherwise read exactly like a clean bill of health. -->
     <p
       v-else-if="report && report.capability === 'unavailable'"
-      class="text-xs text-amber-300"
+      class="text-xs text-app-warning-300"
       data-testid="branch-protection-unavailable"
     >
       {{ t('vcs.branchProtection.unavailable') }}
@@ -164,7 +164,7 @@ async function check() {
     <template v-else-if="report">
       <p
         class="text-xs"
-        :class="exposedCount ? 'text-rose-300' : 'text-emerald-400'"
+        :class="exposedCount ? 'text-app-error-300' : 'text-app-success-400'"
         data-testid="branch-protection-summary"
       >
         {{
@@ -178,15 +178,15 @@ async function check() {
         <li
           v-for="row in rows"
           :key="row.repoGithubId"
-          class="rounded-md border border-slate-800 bg-slate-900/40 px-2 py-1.5"
+          class="rounded-md border border-default bg-default/40 px-2 py-1.5"
         >
           <div class="flex items-baseline justify-between gap-2">
-            <span class="font-mono text-xs text-slate-300">{{ row.owner }}/{{ row.name }}</span>
+            <span class="font-mono text-xs text-toned">{{ row.owner }}/{{ row.name }}</span>
             <span class="text-[11px]" :class="STATE_STYLE[row.protection.state]">
               {{ STATE_LABEL[row.protection.state]() }}
             </span>
           </div>
-          <p class="text-[10px] text-slate-500">
+          <p class="text-[10px] text-dimmed">
             {{ row.defaultBranch }}<span v-if="detailLine(row)"> — {{ detailLine(row) }}</span>
           </p>
         </li>
@@ -194,7 +194,7 @@ async function check() {
 
       <!-- A cap that truncated silently would read as "these are all your repositories", which
            on a security report is the same failure as calling an unprobed repo protected. -->
-      <p v-if="report.omittedRepos > 0" class="text-[11px] text-amber-300">
+      <p v-if="report.omittedRepos > 0" class="text-[11px] text-app-warning-300">
         {{ t('vcs.branchProtection.omitted', { count: report.omittedRepos }, report.omittedRepos) }}
       </p>
     </template>

@@ -64,7 +64,7 @@ function take(tourId: string) {
          this far, which is acceptable in a way the standing overlap was not: it clears itself. -->
     <div
       v-if="offered && !suppressed"
-      class="fixed end-4 bottom-20 z-50 w-80 max-w-[calc(100vw-32px)] rounded-xl border border-slate-700 bg-slate-900/95 p-3 shadow-2xl backdrop-blur"
+      class="fixed end-4 bottom-20 z-50 w-80 max-w-[calc(100vw-32px)] rounded-xl border border-muted bg-default/95 p-3 shadow-2xl backdrop-blur"
       role="status"
       aria-live="polite"
       data-testid="tutorial-nudge"
@@ -72,14 +72,14 @@ function take(tourId: string) {
       <div class="flex items-start gap-2">
         <UIcon
           :name="offered.icon ?? 'i-lucide-graduation-cap'"
-          class="text-primary-300 mt-0.5 h-4 w-4 shrink-0"
+          class="text-primary mt-0.5 h-4 w-4 shrink-0"
         />
         <div class="min-w-0 flex-1">
-          <p class="text-[11px] tracking-wide text-slate-400 uppercase">
+          <p class="text-[11px] tracking-wide text-muted uppercase">
             {{ t('tutorial.nudge.label') }}
           </p>
-          <p class="mt-0.5 text-sm font-medium text-slate-100">{{ t(offered.titleKey) }}</p>
-          <p class="mt-0.5 text-xs text-slate-400">{{ t(offered.descriptionKey) }}</p>
+          <p class="mt-0.5 text-sm font-medium text-app-100">{{ t(offered.titleKey) }}</p>
+          <p class="mt-0.5 text-xs text-muted">{{ t(offered.descriptionKey) }}</p>
         </div>
         <UButton
           size="xs"

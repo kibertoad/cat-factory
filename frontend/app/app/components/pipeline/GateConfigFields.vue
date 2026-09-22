@@ -115,13 +115,16 @@ const gateFieldValues = computed<DescriptorFieldValues>({
 
 <template>
   <div v-if="gated || gateFields?.length" class="ms-6 space-y-2" data-testid="gate-config">
-    <div v-if="gated" class="space-y-2 rounded-md border border-amber-800/40 bg-amber-950/10 p-2">
+    <div
+      v-if="gated"
+      class="space-y-2 rounded-md border border-app-warning-800/40 bg-app-warning-950/10 p-2"
+    >
       <div class="flex flex-wrap items-center gap-2 text-[10px]">
-        <span class="text-slate-500">{{ t('pipeline.gateConfig.approversLabel') }}</span>
+        <span class="text-dimmed">{{ t('pipeline.gateConfig.approversLabel') }}</span>
         <label
           v-for="role in APPROVER_ROLES"
           :key="role"
-          class="flex items-center gap-1 text-slate-400"
+          class="flex items-center gap-1 text-muted"
         >
           <input
             type="checkbox"
@@ -134,7 +137,7 @@ const gateFieldValues = computed<DescriptorFieldValues>({
       </div>
 
       <div class="flex flex-wrap items-center gap-2 text-[10px]">
-        <span class="text-slate-500">{{ t('pipeline.gateConfig.namedApproversLabel') }}</span>
+        <span class="text-dimmed">{{ t('pipeline.gateConfig.namedApproversLabel') }}</span>
         <USelectMenu
           class="w-64"
           multiple
@@ -149,7 +152,7 @@ const gateFieldValues = computed<DescriptorFieldValues>({
       </div>
 
       <div class="flex flex-wrap items-center gap-2 text-[10px]">
-        <label class="text-slate-500" :title="t('pipeline.gateConfig.requiredApprovalsHint')">
+        <label class="text-dimmed" :title="t('pipeline.gateConfig.requiredApprovalsHint')">
           {{ t('pipeline.gateConfig.requiredApprovalsLabel') }}
         </label>
         <input
@@ -158,14 +161,14 @@ const gateFieldValues = computed<DescriptorFieldValues>({
           min="1"
           :max="MAX_GATE_APPROVALS"
           step="1"
-          class="w-14 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-100"
+          class="w-14 rounded border border-muted bg-default px-1.5 py-0.5 text-app-100"
           data-testid="gate-required-approvals"
           @change="setRequiredApprovals(($event.target as HTMLInputElement).value)"
         />
-        <span class="text-slate-500">{{ t('pipeline.gateConfig.requiredApprovalsHint') }}</span>
+        <span class="text-dimmed">{{ t('pipeline.gateConfig.requiredApprovalsHint') }}</span>
       </div>
 
-      <p v-if="!config.approvers" class="text-[10px] text-slate-500">
+      <p v-if="!config.approvers" class="text-[10px] text-dimmed">
         {{ t('pipeline.gateConfig.anyoneHint') }}
       </p>
     </div>
@@ -174,9 +177,9 @@ const gateFieldValues = computed<DescriptorFieldValues>({
        the gate's own English (the descriptor-form convention); only the heading is i18n. -->
     <div
       v-if="gateFields?.length"
-      class="space-y-2 rounded-md border border-slate-800 bg-slate-900/40 p-2"
+      class="space-y-2 rounded-md border border-default bg-default/40 p-2"
     >
-      <p class="text-[10px] text-slate-500">{{ t('pipeline.gateConfig.gateParametersLabel') }}</p>
+      <p class="text-[10px] text-dimmed">{{ t('pipeline.gateConfig.gateParametersLabel') }}</p>
       <DescriptorFields
         v-model="gateFieldValues"
         :fields="gateFields"

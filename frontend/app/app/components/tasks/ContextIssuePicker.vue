@@ -284,7 +284,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="space-y-2 rounded-lg border border-slate-800 bg-slate-900/40 p-2">
+  <div class="space-y-2 rounded-lg border border-default bg-default/40 p-2">
     <!-- Which tracker is being searched, always visible, plus the trackers the user could add from
          here (each opens the connect modal over the caller's form). With a single entry there is
          nothing to decide, so the tracker is named as plain text: a chevron opening a one-item menu
@@ -293,7 +293,7 @@ onMounted(() => {
     <div class="flex items-center gap-1.5">
       <span
         :id="sourceLabelId"
-        class="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-slate-500"
+        class="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-dimmed"
       >
         {{ t('tasks.picker.sourceLabel') }}
       </span>
@@ -315,7 +315,7 @@ onMounted(() => {
           <span class="truncate">{{ descriptor?.label ?? t('tasks.picker.noSource') }}</span>
         </UButton>
       </UDropdownMenu>
-      <span v-else class="flex min-w-0 items-center gap-1 text-xs text-slate-300">
+      <span v-else class="flex min-w-0 items-center gap-1 text-xs text-toned">
         <UIcon :name="icon" class="h-3.5 w-3.5 shrink-0" />
         <span class="truncate">{{ descriptor?.label ?? t('tasks.picker.noSource') }}</span>
       </span>
@@ -335,7 +335,7 @@ onMounted(() => {
       @keydown.enter="refRow && pickRef(refRow)"
     />
 
-    <p v-if="searchError" class="px-1 text-[11px] text-amber-400">
+    <p v-if="searchError" class="px-1 text-[11px] text-app-warning-400">
       {{ searchError }}
     </p>
 
@@ -345,10 +345,10 @@ onMounted(() => {
         v-for="row in importedRows"
         :key="`imp:${row.externalId}`"
         type="button"
-        class="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-start text-xs text-slate-300 hover:bg-slate-800/70"
+        class="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-start text-xs text-toned hover:bg-elevated/70"
         @click="pickImported(row)"
       >
-        <UIcon :name="icon" class="h-3.5 w-3.5 shrink-0 text-indigo-400" />
+        <UIcon :name="icon" class="h-3.5 w-3.5 shrink-0 text-primary" />
         <span class="truncate">{{ row.externalId }} · {{ row.title }}</span>
         <UBadge color="neutral" variant="soft" size="xs" class="ms-auto shrink-0">{{
           t('tasks.picker.imported')
@@ -360,10 +360,10 @@ onMounted(() => {
         v-for="r in searchRows"
         :key="`hit:${r.externalId}`"
         type="button"
-        class="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-start text-xs text-slate-300 hover:bg-slate-800/70"
+        class="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-start text-xs text-toned hover:bg-elevated/70"
         @click="pickSearch(r)"
       >
-        <UIcon :name="icon" class="h-3.5 w-3.5 shrink-0 text-slate-400" />
+        <UIcon :name="icon" class="h-3.5 w-3.5 shrink-0 text-muted" />
         <span class="truncate">{{ r.externalId }} · {{ r.title }}</span>
         <UBadge v-if="r.status" color="neutral" variant="soft" size="xs" class="ms-auto shrink-0">
           {{ r.status }}
@@ -374,14 +374,14 @@ onMounted(() => {
       <button
         v-if="refRow"
         type="button"
-        class="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-start text-xs text-slate-300 hover:bg-slate-800/70"
+        class="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-start text-xs text-toned hover:bg-elevated/70"
         @click="pickRef(refRow)"
       >
-        <UIcon name="i-lucide-link" class="h-3.5 w-3.5 shrink-0 text-slate-400" />
+        <UIcon name="i-lucide-link" class="h-3.5 w-3.5 shrink-0 text-muted" />
         <span class="truncate">
           <i18n-t keypath="tasks.picker.attachByReference" tag="span" scope="global">
             <template #ref>
-              <span class="text-slate-200">{{ refRow }}</span>
+              <span class="text-default">{{ refRow }}</span>
             </template>
           </i18n-t>
         </span>

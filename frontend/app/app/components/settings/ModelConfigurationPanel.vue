@@ -298,21 +298,19 @@ async function save() {
     <Transition name="reader-fade">
       <div
         v-if="open"
-        class="fixed inset-0 z-50 flex max-h-[100dvh] flex-col bg-slate-950/96 backdrop-blur-sm"
+        class="fixed inset-0 z-50 flex max-h-[100dvh] flex-col bg-app-950/96 backdrop-blur-sm"
         role="dialog"
         aria-modal="true"
       >
-        <header class="flex items-center gap-3 border-b border-slate-800 px-6 py-4">
-          <div
-            class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-500/15"
-          >
-            <UIcon name="i-lucide-cpu" class="h-5 w-5 text-indigo-300" />
+        <header class="flex items-center gap-3 border-b border-default px-6 py-4">
+          <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15">
+            <UIcon name="i-lucide-cpu" class="h-5 w-5 text-primary" />
           </div>
           <div class="min-w-0">
-            <h1 class="truncate text-base font-semibold text-white">
+            <h1 class="truncate text-base font-semibold text-highlighted">
               {{ t('settings.modelConfiguration.title') }}
             </h1>
-            <p class="truncate text-xs text-slate-500">
+            <p class="truncate text-xs text-dimmed">
               {{ t('settings.modelConfiguration.subtitle') }}
             </p>
           </div>
@@ -352,14 +350,14 @@ async function save() {
             <!-- ===== list view ===== -->
             <template v-if="!editor">
               <div class="flex items-center justify-between">
-                <p class="text-sm leading-relaxed text-slate-400">
+                <p class="text-sm leading-relaxed text-muted">
                   <i18n-t
                     keypath="settings.modelConfiguration.list.intro"
                     scope="global"
                     tag="span"
                   >
                     <template #baseModel>
-                      <span class="text-slate-300">{{
+                      <span class="text-toned">{{
                         t('settings.modelConfiguration.list.introBaseModel')
                       }}</span>
                     </template>
@@ -376,7 +374,7 @@ async function save() {
                 </UButton>
               </div>
 
-              <p v-if="models.models.length === 0" class="py-4 text-center text-sm text-slate-500">
+              <p v-if="models.models.length === 0" class="py-4 text-center text-sm text-dimmed">
                 {{ t('settings.modelConfiguration.list.loadingCatalog') }}
               </p>
 
@@ -384,10 +382,10 @@ async function save() {
                 <div
                   v-for="p in sortedPresets"
                   :key="p.id"
-                  class="rounded-xl border border-slate-800 bg-slate-900/50 p-4"
+                  class="rounded-xl border border-default bg-default/50 p-4"
                 >
                   <div class="flex items-center gap-2">
-                    <span class="truncate text-sm font-semibold text-slate-100">{{ p.name }}</span>
+                    <span class="truncate text-sm font-semibold text-app-100">{{ p.name }}</span>
                     <UBadge v-if="p.isDefault" color="primary" variant="subtle" size="xs">
                       {{ t('settings.modelConfiguration.list.default') }}
                     </UBadge>
@@ -426,9 +424,9 @@ async function save() {
                       />
                     </div>
                   </div>
-                  <div class="mt-1.5 text-[11px] text-slate-400">
+                  <div class="mt-1.5 text-[11px] text-muted">
                     {{ t('settings.modelConfiguration.list.basePrefix') }}
-                    <span class="text-slate-300">{{ modelLabel(p.baseModelId) }}</span>
+                    <span class="text-toned">{{ modelLabel(p.baseModelId) }}</span>
                     <span v-if="Object.keys(p.overrides).length">
                       ·
                       {{
@@ -442,15 +440,12 @@ async function save() {
                     <!-- A custom route order changes which provider the same model runs on, so the
                          list says so rather than leaving it visible only inside the editor (which
                          basic mode hides). -->
-                    <span v-if="p.providerPreference?.length" class="text-slate-300">
+                    <span v-if="p.providerPreference?.length" class="text-toned">
                       · {{ t('settings.modelConfiguration.list.customRouteOrder') }}
                     </span>
                   </div>
                 </div>
-                <p
-                  v-if="sortedPresets.length === 0"
-                  class="py-6 text-center text-sm text-slate-500"
-                >
+                <p v-if="sortedPresets.length === 0" class="py-6 text-center text-sm text-dimmed">
                   {{ t('settings.modelConfiguration.list.empty') }}
                 </p>
               </div>
@@ -463,10 +458,10 @@ async function save() {
 
             <!-- ===== editor view ===== -->
             <template v-else>
-              <div class="space-y-4 rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+              <div class="space-y-4 rounded-xl border border-default bg-default/50 p-4">
                 <div>
                   <label
-                    class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-400"
+                    class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted"
                   >
                     {{ t('settings.modelConfiguration.editor.nameLabel') }}
                   </label>
@@ -480,7 +475,7 @@ async function save() {
 
                 <div>
                   <label
-                    class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-400"
+                    class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted"
                   >
                     {{ t('settings.modelConfiguration.editor.baseModelLabel') }}
                   </label>
@@ -500,7 +495,7 @@ async function save() {
                   </UDropdownMenu>
                 </div>
 
-                <label class="flex items-center gap-2 text-sm text-slate-300">
+                <label class="flex items-center gap-2 text-sm text-toned">
                   <UCheckbox v-model="editor.isDefault" />
                   {{ t('settings.modelConfiguration.editor.makeDefault') }}
                 </label>
@@ -519,7 +514,7 @@ async function save() {
 
               <div>
                 <div class="mb-1 flex items-start justify-between gap-3">
-                  <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                  <span class="text-[11px] font-semibold uppercase tracking-wide text-muted">
                     {{ t('settings.modelConfiguration.editor.perAgentOverrides') }}
                   </span>
                   <AgentTierSelect class="w-56 shrink-0" :hidden-count="hiddenByTier" />
@@ -531,9 +526,7 @@ async function save() {
                   :placeholder="t('settings.modelConfiguration.editor.filterPlaceholder')"
                   class="mb-3 w-full"
                 />
-                <div
-                  class="divide-y divide-slate-800 rounded-xl border border-slate-800 bg-slate-900/50"
-                >
+                <div class="divide-y divide-default rounded-xl border border-default bg-default/50">
                   <div
                     v-for="a in filteredKinds"
                     :key="a.kind"
@@ -546,7 +539,7 @@ async function save() {
                       :title="a.description"
                     />
                     <div class="min-w-0 flex-1" :title="a.description">
-                      <p class="truncate text-sm text-slate-200">{{ a.label }}</p>
+                      <p class="truncate text-sm text-default">{{ a.label }}</p>
                     </div>
                     <UDropdownMenu
                       :items="overrideMenu(a.kind)"
@@ -565,7 +558,7 @@ async function save() {
                   </div>
                   <p
                     v-if="filteredKinds.length === 0"
-                    class="px-4 py-6 text-center text-sm text-slate-500"
+                    class="px-4 py-6 text-center text-sm text-dimmed"
                   >
                     {{ t('settings.modelConfiguration.editor.noAgentsMatch', { filter }) }}
                   </p>

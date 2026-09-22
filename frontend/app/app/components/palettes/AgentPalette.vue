@@ -57,7 +57,7 @@ function toggle(id: string) {
 
 <template>
   <div class="space-y-2">
-    <p class="px-1 text-[11px] text-slate-500">{{ t('palette.hint') }}</p>
+    <p class="px-1 text-[11px] text-dimmed">{{ t('palette.hint') }}</p>
     <!-- The two catalog dials, one above the other: what this pipeline is for, and how deep into
          the agent catalog to look. Both narrow the sections below, and each states its own count.
          Stacked rather than side by side because the palette column is a third of the slideover:
@@ -75,7 +75,7 @@ function toggle(id: string) {
       <section v-for="g in groups" :key="g.id">
         <button
           type="button"
-          class="flex w-full items-center gap-1.5 rounded px-1 py-1 text-start text-[11px] font-semibold uppercase tracking-wide text-slate-400 transition hover:text-slate-200"
+          class="flex w-full items-center gap-1.5 rounded px-1 py-1 text-start text-[11px] font-semibold uppercase tracking-wide text-muted transition hover:text-default"
           @click="toggle(g.id)"
         >
           <UIcon
@@ -83,29 +83,29 @@ function toggle(id: string) {
             class="h-3.5 w-3.5 shrink-0"
           />
           <span>{{ g.label }}</span>
-          <span class="ms-auto text-slate-600">{{ g.agents.length }}</span>
+          <span class="ms-auto text-app-600">{{ g.agents.length }}</span>
         </button>
         <div v-if="!isCollapsed(g.id)" class="mt-1 space-y-1.5">
           <button
             v-for="a in g.agents"
             :key="a.kind"
             type="button"
-            class="flex w-full items-center gap-2.5 rounded-lg border border-slate-700 bg-slate-800/60 p-2 text-start transition hover:border-slate-500 hover:bg-slate-800"
+            class="flex w-full items-center gap-2.5 rounded-lg border border-muted bg-elevated/60 p-2 text-start transition hover:border-app-500 hover:bg-elevated"
             :title="a.description"
             :data-testid="`palette-agent-${a.kind}`"
             @click="$emit('add', a.kind)"
           >
             <div
               class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
-              :style="{ backgroundColor: a.color + '22' }"
+              :style="{ backgroundColor: tint(a.color) }"
             >
               <UIcon :name="a.icon" class="h-4 w-4" :style="{ color: a.color }" />
             </div>
             <div class="min-w-0">
-              <div class="text-xs font-semibold text-slate-100">{{ a.label }}</div>
-              <div class="truncate text-[10px] text-slate-400">{{ a.description }}</div>
+              <div class="text-xs font-semibold text-app-100">{{ a.label }}</div>
+              <div class="truncate text-[10px] text-muted">{{ a.description }}</div>
             </div>
-            <UIcon name="i-lucide-plus" class="ms-auto h-4 w-4 shrink-0 text-slate-500" />
+            <UIcon name="i-lucide-plus" class="ms-auto h-4 w-4 shrink-0 text-dimmed" />
           </button>
         </div>
       </section>

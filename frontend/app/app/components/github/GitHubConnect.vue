@@ -73,7 +73,7 @@ async function connectManually() {
     <!-- discovered installations: pick one the App is already on -->
     <section class="space-y-2">
       <div class="flex items-center justify-between">
-        <span class="text-xs font-medium uppercase tracking-wide text-slate-500">
+        <span class="text-xs font-medium uppercase tracking-wide text-dimmed">
           {{ t('github.connect.yourInstallations') }}
         </span>
         <UButton
@@ -90,7 +90,7 @@ async function connectManually() {
 
       <div
         v-if="github.loadingInstallations && !github.installations.length"
-        class="flex items-center gap-2 py-3 text-sm text-slate-400"
+        class="flex items-center gap-2 py-3 text-sm text-muted"
       >
         <UIcon name="i-lucide-loader" class="h-4 w-4 animate-spin" />
         {{ t('github.connect.lookingForInstallations') }}
@@ -98,7 +98,7 @@ async function connectManually() {
 
       <p
         v-else-if="!github.installations.length"
-        class="rounded-md border border-dashed border-slate-800 px-3 py-3 text-sm text-slate-400"
+        class="rounded-md border border-dashed border-default px-3 py-3 text-sm text-muted"
       >
         {{ t('github.connect.noInstallations') }}
       </p>
@@ -106,7 +106,7 @@ async function connectManually() {
       <div
         v-for="inst in github.installations"
         :key="inst.installationId"
-        class="flex items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-900/60 px-3 py-2"
+        class="flex items-center justify-between gap-2 rounded-md border border-default bg-default/60 px-3 py-2"
       >
         <div class="flex min-w-0 items-center gap-2">
           <UAvatar
@@ -115,10 +115,10 @@ async function connectManually() {
             size="2xs"
             :alt="inst.accountLogin"
           />
-          <UIcon v-else name="i-lucide-github" class="h-4 w-4 text-slate-400" />
+          <UIcon v-else name="i-lucide-github" class="h-4 w-4 text-muted" />
           <div class="min-w-0">
-            <div class="truncate text-sm text-slate-200">{{ inst.accountLogin }}</div>
-            <div class="text-[11px] text-slate-500">
+            <div class="truncate text-sm text-default">{{ inst.accountLogin }}</div>
+            <div class="text-[11px] text-dimmed">
               {{
                 t('github.connect.installationMeta', {
                   targetType: inst.targetType,

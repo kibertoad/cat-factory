@@ -23,12 +23,12 @@ const phase = computed(() => prReviewPhase(props.step.prReview, props.step.subta
 // working (suppressed on a failed run). `awaiting` is the parked "findings ready" state — a
 // steady amber prompt, not a spinner.
 const PHASE_META: Record<PrReviewPhaseKind, { icon: string; spin: boolean; class: string }> = {
-  planning: { icon: 'i-lucide-loader-circle', spin: true, class: 'text-indigo-300' },
-  reviewing: { icon: 'i-lucide-loader-circle', spin: true, class: 'text-indigo-300' },
-  awaiting: { icon: 'i-lucide-clipboard-check', spin: false, class: 'text-amber-300' },
-  challenging: { icon: 'i-lucide-gavel', spin: true, class: 'text-indigo-300' },
-  fixing: { icon: 'i-lucide-wrench', spin: true, class: 'text-indigo-300' },
-  posting: { icon: 'i-lucide-send', spin: true, class: 'text-indigo-300' },
+  planning: { icon: 'i-lucide-loader-circle', spin: true, class: 'text-primary' },
+  reviewing: { icon: 'i-lucide-loader-circle', spin: true, class: 'text-primary' },
+  awaiting: { icon: 'i-lucide-clipboard-check', spin: false, class: 'text-app-warning-300' },
+  challenging: { icon: 'i-lucide-gavel', spin: true, class: 'text-primary' },
+  fixing: { icon: 'i-lucide-wrench', spin: true, class: 'text-primary' },
+  posting: { icon: 'i-lucide-send', spin: true, class: 'text-primary' },
 }
 
 // Phase → i18n key. Exhaustive Record over the phase-kind union, so adding a kind without a
@@ -62,7 +62,7 @@ const spinning = computed(
     v-if="phase && label"
     data-testid="pr-review-phase"
     class="inline-flex items-center gap-1"
-    :class="runFailed ? 'text-rose-400' : PHASE_META[phase.kind].class"
+    :class="runFailed ? 'text-app-error-400' : PHASE_META[phase.kind].class"
   >
     <UIcon
       :name="runFailed ? 'i-lucide-circle-x' : PHASE_META[phase.kind].icon"

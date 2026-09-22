@@ -106,31 +106,33 @@ watch(
     <Transition name="obs-fade">
       <div
         v-if="open"
-        class="fixed inset-0 z-[60] flex flex-col bg-slate-950/96 backdrop-blur-sm"
+        class="fixed inset-0 z-[60] flex flex-col bg-app-950/96 backdrop-blur-sm"
         role="dialog"
         aria-modal="true"
         data-testid="operator-dashboard"
       >
-        <header class="flex items-center gap-3 border-b border-slate-800 px-6 py-4">
-          <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sky-500/15">
-            <UIcon name="i-lucide-gauge" class="h-5 w-5 text-sky-400" />
+        <header class="flex items-center gap-3 border-b border-default px-6 py-4">
+          <div
+            class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-app-info-500/15"
+          >
+            <UIcon name="i-lucide-gauge" class="h-5 w-5 text-app-info-400" />
           </div>
           <div class="min-w-0">
-            <h1 class="truncate text-base font-semibold text-white">
+            <h1 class="truncate text-base font-semibold text-highlighted">
               {{ t('platformObservability.title') }}
             </h1>
-            <p v-if="accountName" class="truncate text-xs text-slate-500">{{ accountName }}</p>
+            <p v-if="accountName" class="truncate text-xs text-dimmed">{{ accountName }}</p>
           </div>
           <div class="ms-auto flex items-center gap-1.5">
-            <div class="me-1 flex rounded-lg border border-slate-800 p-0.5 text-[12px]">
+            <div class="me-1 flex rounded-lg border border-default p-0.5 text-[12px]">
               <button
                 v-for="opt in WINDOWS"
                 :key="opt.value"
                 class="rounded-md px-2.5 py-1 transition"
                 :class="
                   platform.window === opt.value
-                    ? 'bg-slate-800 text-slate-100'
-                    : 'text-slate-400 hover:text-slate-200'
+                    ? 'bg-elevated text-app-100'
+                    : 'text-muted hover:text-default'
                 "
                 :data-testid="`operator-window-${opt.value}`"
                 @click="setWindow(opt.value)"
@@ -139,7 +141,7 @@ watch(
               </button>
             </div>
             <button
-              class="rounded-lg border border-slate-800 p-1.5 text-slate-400 transition hover:text-slate-200"
+              class="rounded-lg border border-default p-1.5 text-muted transition hover:text-default"
               :title="t('platformObservability.refresh')"
               :aria-label="t('platformObservability.refresh')"
               data-testid="operator-refresh"
@@ -152,7 +154,7 @@ watch(
               />
             </button>
             <button
-              class="rounded-lg border border-slate-800 p-1.5 text-slate-400 transition hover:text-slate-200"
+              class="rounded-lg border border-default p-1.5 text-muted transition hover:text-default"
               :title="t('platformObservability.close')"
               :aria-label="t('platformObservability.close')"
               data-testid="operator-close"
@@ -166,18 +168,18 @@ watch(
         <div class="flex-1 overflow-y-auto px-6 py-5">
           <div
             v-if="error"
-            class="mx-auto max-w-2xl rounded-lg border border-rose-800/60 bg-rose-950/40 p-4 text-sm text-rose-200"
+            class="mx-auto max-w-2xl rounded-lg border border-app-error-800/60 bg-app-error-950/40 p-4 text-sm text-app-error-200"
           >
             <p>{{ error }}</p>
             <button
-              class="mt-2 rounded-md border border-rose-700 px-3 py-1 text-xs hover:bg-rose-900/40"
+              class="mt-2 rounded-md border border-app-error-700 px-3 py-1 text-xs hover:bg-app-error-900/40"
               @click="refresh"
             >
               {{ t('platformObservability.retry') }}
             </button>
           </div>
 
-          <div v-else-if="loading && !view" class="py-16 text-center text-sm text-slate-400">
+          <div v-else-if="loading && !view" class="py-16 text-center text-sm text-muted">
             {{ t('platformObservability.loading') }}
           </div>
 
@@ -189,14 +191,14 @@ watch(
             -->
             <p
               v-if="rollupState === 'none'"
-              class="rounded-lg border border-amber-800/60 bg-amber-950/30 px-3 py-2 text-xs text-amber-200"
+              class="rounded-lg border border-app-warning-800/60 bg-app-warning-950/30 px-3 py-2 text-xs text-app-warning-200"
               data-testid="operator-rollup-missing"
             >
               {{ t('platformObservability.rollup.none') }}
             </p>
             <p
               v-else-if="rollupState === 'stale'"
-              class="rounded-lg border border-amber-800/60 bg-amber-950/30 px-3 py-2 text-xs text-amber-200"
+              class="rounded-lg border border-app-warning-800/60 bg-app-warning-950/30 px-3 py-2 text-xs text-app-warning-200"
               data-testid="operator-rollup-stale"
             >
               {{
@@ -207,7 +209,7 @@ watch(
             </p>
             <p
               v-else-if="rollupState === 'current'"
-              class="text-xs text-slate-500"
+              class="text-xs text-dimmed"
               data-testid="operator-rollup-current"
             >
               {{
@@ -219,37 +221,37 @@ watch(
 
             <!-- Outcome summary tiles -->
             <section>
-              <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-dimmed">
                 {{ t('platformObservability.outcomes.title') }}
               </h2>
               <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <div class="rounded-lg border border-slate-800 bg-slate-900/40 p-3">
-                  <p class="text-2xl font-semibold text-white">
+                <div class="rounded-lg border border-default bg-default/40 p-3">
+                  <p class="text-2xl font-semibold text-highlighted">
                     {{ n(view.outcomes.total, 'decimal') }}
                   </p>
-                  <p class="text-xs text-slate-500">
+                  <p class="text-xs text-dimmed">
                     {{ t('platformObservability.outcomes.total') }}
                   </p>
                 </div>
-                <div class="rounded-lg border border-slate-800 bg-slate-900/40 p-3">
-                  <p class="text-2xl font-semibold text-emerald-400">
+                <div class="rounded-lg border border-default bg-default/40 p-3">
+                  <p class="text-2xl font-semibold text-app-success-400">
                     {{ n(view.outcomes.done, 'decimal') }}
                   </p>
-                  <p class="text-xs text-slate-500">
+                  <p class="text-xs text-dimmed">
                     {{ t('platformObservability.outcomes.done') }}
                   </p>
                 </div>
-                <div class="rounded-lg border border-slate-800 bg-slate-900/40 p-3">
-                  <p class="text-2xl font-semibold text-rose-400">
+                <div class="rounded-lg border border-default bg-default/40 p-3">
+                  <p class="text-2xl font-semibold text-app-error-400">
                     {{ n(view.outcomes.failed, 'decimal') }}
                   </p>
-                  <p class="text-xs text-slate-500">
+                  <p class="text-xs text-dimmed">
                     {{ t('platformObservability.outcomes.failed') }}
                   </p>
                 </div>
-                <div class="rounded-lg border border-slate-800 bg-slate-900/40 p-3">
+                <div class="rounded-lg border border-default bg-default/40 p-3">
                   <p
-                    class="text-2xl font-semibold text-sky-400"
+                    class="text-2xl font-semibold text-app-info-400"
                     data-testid="operator-success-rate"
                   >
                     {{
@@ -258,7 +260,7 @@ watch(
                         : n(view.outcomes.successRate, 'percent')
                     }}
                   </p>
-                  <p class="text-xs text-slate-500">
+                  <p class="text-xs text-dimmed">
                     {{ t('platformObservability.outcomes.successRate') }}
                   </p>
                 </div>
@@ -267,14 +269,11 @@ watch(
 
             <!-- Outcome trend sparkline -->
             <section>
-              <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-dimmed">
                 {{ t('platformObservability.trend.title') }}
               </h2>
-              <div class="rounded-lg border border-slate-800 bg-slate-900/40 p-4">
-                <div
-                  v-if="view.outcomes.total === 0"
-                  class="py-6 text-center text-xs text-slate-500"
-                >
+              <div class="rounded-lg border border-default bg-default/40 p-4">
+                <div v-if="view.outcomes.total === 0" class="py-6 text-center text-xs text-dimmed">
                   {{ t('platformObservability.trend.empty') }}
                 </div>
                 <div v-else class="flex h-28 items-end gap-0.5" data-testid="operator-trend">
@@ -285,32 +284,32 @@ watch(
                     :title="trendTooltip(p)"
                   >
                     <div
-                      class="w-full rounded-t-sm bg-rose-500/80"
+                      class="w-full rounded-t-sm bg-app-error-500/80"
                       :style="{ height: `${heightPct(p.failed, maxTrend)}%` }"
                     />
                     <div
-                      class="w-full bg-slate-500/60"
+                      class="w-full bg-app-500/60"
                       :style="{ height: `${heightPct(p.other, maxTrend)}%` }"
                     />
                     <div
-                      class="w-full rounded-b-sm bg-emerald-500/80"
+                      class="w-full rounded-b-sm bg-app-success-500/80"
                       :style="{ height: `${heightPct(p.done, maxTrend)}%` }"
                     />
                   </div>
                 </div>
-                <div class="mt-2 flex items-center gap-4 text-[11px] text-slate-500">
+                <div class="mt-2 flex items-center gap-4 text-[11px] text-dimmed">
                   <span class="flex items-center gap-1"
-                    ><span class="h-2 w-2 rounded-sm bg-emerald-500/80" />{{
+                    ><span class="h-2 w-2 rounded-sm bg-app-success-500/80" />{{
                       t('platformObservability.trend.done')
                     }}</span
                   >
                   <span class="flex items-center gap-1"
-                    ><span class="h-2 w-2 rounded-sm bg-rose-500/80" />{{
+                    ><span class="h-2 w-2 rounded-sm bg-app-error-500/80" />{{
                       t('platformObservability.trend.failed')
                     }}</span
                   >
                   <span class="flex items-center gap-1"
-                    ><span class="h-2 w-2 rounded-sm bg-slate-500/60" />{{
+                    ><span class="h-2 w-2 rounded-sm bg-app-500/60" />{{
                       t('platformObservability.trend.other')
                     }}</span
                   >
@@ -320,15 +319,15 @@ watch(
 
             <!-- Gate / CI-fixer attempt statistics -->
             <section>
-              <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-dimmed">
                 {{ t('platformObservability.gates.title') }}
               </h2>
-              <div class="overflow-x-auto rounded-lg border border-slate-800 bg-slate-900/40 p-4">
-                <p v-if="!view.gates.length" class="py-4 text-center text-xs text-slate-500">
+              <div class="overflow-x-auto rounded-lg border border-default bg-default/40 p-4">
+                <p v-if="!view.gates.length" class="py-4 text-center text-xs text-dimmed">
                   {{ t('platformObservability.gates.empty') }}
                 </p>
                 <table v-else class="w-full text-left text-xs" data-testid="operator-gates">
-                  <thead class="text-[11px] uppercase tracking-wide text-slate-500">
+                  <thead class="text-[11px] uppercase tracking-wide text-dimmed">
                     <tr>
                       <th class="pb-2 pe-3 font-medium">
                         {{ t('platformObservability.gates.gate') }}
@@ -350,40 +349,40 @@ watch(
                       </th>
                     </tr>
                   </thead>
-                  <tbody class="text-slate-300">
+                  <tbody class="text-toned">
                     <tr
                       v-for="g in view.gates"
                       :key="g.gateKind"
-                      class="border-t border-slate-800/70"
+                      class="border-t border-default/70"
                     >
                       <td class="py-2 pe-3">
-                        <span class="font-medium text-slate-200">{{ g.gateKind }}</span>
-                        <span v-if="g.helperKind" class="ms-1.5 text-slate-500"
+                        <span class="font-medium text-default">{{ g.gateKind }}</span>
+                        <span v-if="g.helperKind" class="ms-1.5 text-dimmed"
                           >&rarr; {{ g.helperKind }}</span
                         >
                       </td>
                       <td class="py-2 pe-3 text-end tabular-nums">{{ g.gates }}</td>
                       <td class="py-2 pe-3 text-end tabular-nums">
-                        <span class="text-emerald-400">{{ g.cleanPasses }}</span>
-                        <span v-if="cleanRate(g) !== null" class="ms-1 text-slate-500"
+                        <span class="text-app-success-400">{{ g.cleanPasses }}</span>
+                        <span v-if="cleanRate(g) !== null" class="ms-1 text-dimmed"
                           >({{ n(cleanRate(g) ?? 0, 'percent') }})</span
                         >
                       </td>
                       <td class="py-2 pe-3 text-end tabular-nums">{{ g.attempts }}</td>
                       <td class="py-2 pe-3 text-end tabular-nums">
-                        <span :class="g.helperFailures > 0 ? 'text-amber-400' : ''">{{
+                        <span :class="g.helperFailures > 0 ? 'text-app-warning-400' : ''">{{
                           g.helperFailures
                         }}</span>
                       </td>
                       <td class="py-2 text-end tabular-nums">
-                        <span :class="g.exhausted > 0 ? 'text-rose-400' : ''">{{
+                        <span :class="g.exhausted > 0 ? 'text-app-error-400' : ''">{{
                           g.exhausted
                         }}</span>
                       </td>
                     </tr>
                   </tbody>
                 </table>
-                <p class="mt-3 text-[11px] leading-relaxed text-slate-500">
+                <p class="mt-3 text-[11px] leading-relaxed text-dimmed">
                   {{ t('platformObservability.gates.hint') }}
                 </p>
               </div>
@@ -392,22 +391,22 @@ watch(
             <div class="grid gap-6 md:grid-cols-2">
               <!-- Failure taxonomy -->
               <section>
-                <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-dimmed">
                   {{ t('platformObservability.failures.title') }}
                 </h2>
-                <div class="rounded-lg border border-slate-800 bg-slate-900/40 p-4">
-                  <div v-if="!view.failures.length" class="py-4 text-center text-xs text-slate-500">
+                <div class="rounded-lg border border-default bg-default/40 p-4">
+                  <div v-if="!view.failures.length" class="py-4 text-center text-xs text-dimmed">
                     {{ t('platformObservability.failures.empty') }}
                   </div>
                   <ul v-else class="flex flex-col gap-2" data-testid="operator-failures">
                     <li v-for="f in view.failures" :key="f.kind" class="text-xs">
                       <div class="mb-0.5 flex items-center justify-between">
-                        <span class="text-slate-300">{{ failureLabel(f.kind) }}</span>
-                        <span class="tabular-nums text-slate-400">{{ f.count }}</span>
+                        <span class="text-toned">{{ failureLabel(f.kind) }}</span>
+                        <span class="tabular-nums text-muted">{{ f.count }}</span>
                       </div>
-                      <div class="h-1.5 rounded-full bg-slate-800">
+                      <div class="h-1.5 rounded-full bg-elevated">
                         <div
-                          class="h-1.5 rounded-full bg-rose-500/70"
+                          class="h-1.5 rounded-full bg-app-error-500/70"
                           :style="{ width: `${barPct(f.count, maxFailure)}%` }"
                         />
                       </div>
@@ -419,47 +418,49 @@ watch(
               <!-- Live depth + durations -->
               <section class="flex flex-col gap-4">
                 <div>
-                  <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-dimmed">
                     {{ t('platformObservability.live.title') }}
                   </h2>
                   <div
-                    class="grid grid-cols-4 gap-2 rounded-lg border border-slate-800 bg-slate-900/40 p-3 text-center"
+                    class="grid grid-cols-4 gap-2 rounded-lg border border-default bg-default/40 p-3 text-center"
                     data-testid="operator-live"
                   >
                     <div>
-                      <p class="text-lg font-semibold text-sky-400">{{ view.live.running }}</p>
-                      <p class="text-[11px] text-slate-500">
+                      <p class="text-lg font-semibold text-app-info-400">{{ view.live.running }}</p>
+                      <p class="text-[11px] text-dimmed">
                         {{ t('platformObservability.outcomes.running') }}
                       </p>
                     </div>
                     <div>
-                      <p class="text-lg font-semibold text-amber-400">{{ view.live.blocked }}</p>
-                      <p class="text-[11px] text-slate-500">
+                      <p class="text-lg font-semibold text-app-warning-400">
+                        {{ view.live.blocked }}
+                      </p>
+                      <p class="text-[11px] text-dimmed">
                         {{ t('platformObservability.outcomes.blocked') }}
                       </p>
                     </div>
                     <div>
-                      <p class="text-lg font-semibold text-slate-300">{{ view.live.paused }}</p>
-                      <p class="text-[11px] text-slate-500">
+                      <p class="text-lg font-semibold text-toned">{{ view.live.paused }}</p>
+                      <p class="text-[11px] text-dimmed">
                         {{ t('platformObservability.outcomes.paused') }}
                       </p>
                     </div>
                     <div>
-                      <p class="text-lg font-semibold text-slate-300">{{ view.live.pending }}</p>
-                      <p class="text-[11px] text-slate-500">
+                      <p class="text-lg font-semibold text-toned">{{ view.live.pending }}</p>
+                      <p class="text-[11px] text-dimmed">
                         {{ t('platformObservability.outcomes.pending') }}
                       </p>
                     </div>
                   </div>
                 </div>
                 <div>
-                  <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-dimmed">
                     {{ t('platformObservability.durations.title') }}
                   </h2>
-                  <div class="rounded-lg border border-slate-800 bg-slate-900/40 p-3 text-sm">
+                  <div class="rounded-lg border border-default bg-default/40 p-3 text-sm">
                     <div
                       v-if="view.durations.count === 0"
-                      class="py-2 text-center text-xs text-slate-500"
+                      class="py-2 text-center text-xs text-dimmed"
                     >
                       {{ t('platformObservability.durations.empty') }}
                     </div>
@@ -469,59 +470,50 @@ watch(
                       data-testid="operator-durations"
                     >
                       <div>
-                        <dt class="text-[11px] text-slate-500">
+                        <dt class="text-[11px] text-dimmed">
                           {{ t('platformObservability.durations.avg') }}
                         </dt>
-                        <dd class="font-semibold text-white">
+                        <dd class="font-semibold text-highlighted">
                           {{ view.durations.avgMs == null ? '—' : formatMs(view.durations.avgMs) }}
                         </dd>
                       </div>
                       <div>
-                        <dt class="text-[11px] text-slate-500">
+                        <dt class="text-[11px] text-dimmed">
                           {{ t('platformObservability.durations.min') }}
                         </dt>
-                        <dd class="font-semibold text-slate-300">
+                        <dd class="font-semibold text-toned">
                           {{ view.durations.minMs == null ? '—' : formatMs(view.durations.minMs) }}
                         </dd>
                       </div>
                       <div>
-                        <dt class="text-[11px] text-slate-500">
+                        <dt class="text-[11px] text-dimmed">
                           {{ t('platformObservability.durations.max') }}
                         </dt>
-                        <dd class="font-semibold text-slate-300">
+                        <dd class="font-semibold text-toned">
                           {{ view.durations.maxMs == null ? '—' : formatMs(view.durations.maxMs) }}
                         </dd>
                       </div>
                       <div>
-                        <dt class="text-[11px] text-slate-500">
+                        <dt class="text-[11px] text-dimmed">
                           {{ t('platformObservability.durations.p50') }}
                         </dt>
-                        <dd
-                          class="font-semibold text-slate-300"
-                          data-testid="operator-duration-p50"
-                        >
+                        <dd class="font-semibold text-toned" data-testid="operator-duration-p50">
                           {{ view.durations.p50Ms == null ? '—' : formatMs(view.durations.p50Ms) }}
                         </dd>
                       </div>
                       <div>
-                        <dt class="text-[11px] text-slate-500">
+                        <dt class="text-[11px] text-dimmed">
                           {{ t('platformObservability.durations.p90') }}
                         </dt>
-                        <dd
-                          class="font-semibold text-slate-300"
-                          data-testid="operator-duration-p90"
-                        >
+                        <dd class="font-semibold text-toned" data-testid="operator-duration-p90">
                           {{ view.durations.p90Ms == null ? '—' : formatMs(view.durations.p90Ms) }}
                         </dd>
                       </div>
                       <div>
-                        <dt class="text-[11px] text-slate-500">
+                        <dt class="text-[11px] text-dimmed">
                           {{ t('platformObservability.durations.p99') }}
                         </dt>
-                        <dd
-                          class="font-semibold text-slate-300"
-                          data-testid="operator-duration-p99"
-                        >
+                        <dd class="font-semibold text-toned" data-testid="operator-duration-p99">
                           {{ view.durations.p99Ms == null ? '—' : formatMs(view.durations.p99Ms) }}
                         </dd>
                       </div>

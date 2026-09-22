@@ -102,12 +102,12 @@ function revert() {
     </UButton>
     <p
       v-else-if="label"
-      class="rounded-lg border border-slate-800 bg-slate-900/40 p-2.5 text-xs text-slate-300"
+      class="rounded-lg border border-default bg-default/40 p-2.5 text-xs text-toned"
       data-testid="inspector-review-target-link"
     >
       {{ label }}
     </p>
-    <p v-if="focus" class="text-xs leading-relaxed text-slate-500">
+    <p v-if="focus" class="text-xs leading-relaxed text-dimmed">
       {{ t('inspector.reviewTarget.focus', { focus }) }}
     </p>
     <div data-testid="inspector-review-skills">

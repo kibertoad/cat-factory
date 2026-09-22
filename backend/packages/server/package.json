@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/server",
-  "version": "0.325.1",
+  "version": "0.325.2",
   "description": "Runtime-neutral HTTP layer for the Agent Architecture Board: the Hono controllers, middleware (auth/authz/CORS/error), request helpers and the gateway seams shared by every deployment facade (Cloudflare Worker, Node service).",
   "repository": {
     "type": "git",
@@ -39,17 +39,17 @@
     "@cat-factory/mcp-server": "workspace:*",
     "@cat-factory/orchestration": "workspace:*",
     "@cat-factory/spend": "workspace:*",
-    "@toad-contracts/core": "0.4.0",
-    "@toad-contracts/hono": "0.3.2",
-    "@toad-contracts/valibot": "0.5.0",
-    "hono": "^4.13.7",
+    "@toad-contracts/core": "1.0.0",
+    "@toad-contracts/hono": "1.0.0",
+    "@toad-contracts/valibot": "1.0.0",
+    "hono": "^4.13.8",
     "jose": "^6.2.12",
     "pino": "^10.3.1",
     "valibot": "^1.5.0"
   },
   "devDependencies": {
-    "@types/node": "^26.5.1",
-    "ai": "^7.0.98",
+    "@types/node": "^26.6.2",
+    "ai": "^7.0.107",
     "typescript": "7.0.2",
     "undici": "^8.10.2",
     "vitest": "^4.1.11"

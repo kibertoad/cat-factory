@@ -40,20 +40,17 @@ const undecided = computed(() => tutorial.decision === null)
            decline/close buttons are in a SIBLING slot — address them from the page by
            their own test ids rather than scoping a locator under this one. -->
       <div class="space-y-4" data-testid="tutorial-prompt">
-        <p class="text-sm text-slate-300">{{ t('tutorial.prompt.intro') }}</p>
+        <p class="text-sm text-toned">{{ t('tutorial.prompt.intro') }}</p>
         <ul class="space-y-2">
           <li
             v-for="tour in offered"
             :key="tour.id"
-            class="flex items-center gap-3 rounded-lg border border-slate-800 bg-slate-900/60 p-3"
+            class="flex items-center gap-3 rounded-lg border border-default bg-default/60 p-3"
           >
-            <UIcon
-              :name="tour.icon ?? 'i-lucide-compass'"
-              class="h-5 w-5 shrink-0 text-primary-400"
-            />
+            <UIcon :name="tour.icon ?? 'i-lucide-compass'" class="h-5 w-5 shrink-0 text-primary" />
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-2">
-                <span class="text-sm font-medium text-slate-100">{{ t(tour.titleKey) }}</span>
+                <span class="text-sm font-medium text-app-100">{{ t(tour.titleKey) }}</span>
                 <UBadge
                   v-if="tutorial.isCompleted(tour.id)"
                   color="success"
@@ -64,7 +61,7 @@ const undecided = computed(() => tutorial.decision === null)
                   {{ t('tutorial.status.completed') }}
                 </UBadge>
               </div>
-              <p class="text-xs text-slate-400">{{ t(tour.descriptionKey) }}</p>
+              <p class="text-xs text-muted">{{ t(tour.descriptionKey) }}</p>
             </div>
             <UButton
               size="sm"
@@ -85,7 +82,7 @@ const undecided = computed(() => tutorial.decision === null)
              alone, where `board-basics` requires nothing at all — but a consumer's own slot
              filter can produce it, and "no tours exist" would be the wrong thing to say then.)
              The footer's browse button is the way on, so it stays. -->
-        <p v-if="offered.length === 0" class="text-sm text-slate-400">
+        <p v-if="offered.length === 0" class="text-sm text-muted">
           {{ t('tutorial.prompt.empty') }}
         </p>
       </div>

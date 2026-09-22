@@ -25,24 +25,24 @@ const { t, n } = useI18n()
 
 <template>
   <div v-if="contracts.length" class="mt-1 flex flex-col gap-1">
-    <div v-for="c in contracts" :key="c.contractId" class="text-[11px] text-slate-500">
-      <span class="text-slate-400">{{ c.title }}</span>
+    <div v-for="c in contracts" :key="c.contractId" class="text-[11px] text-dimmed">
+      <span class="text-muted">{{ c.title }}</span>
       <span class="ms-1">({{ formatLabel[c.format] }}, {{ n(c.size) }})</span>
-      <span v-if="c.operations.length" class="ms-1 font-mono text-slate-500">
+      <span v-if="c.operations.length" class="ms-1 font-mono text-dimmed">
         {{ c.operations.join(' · ') }}
       </span>
-      <span v-else-if="!operationsAreIndexable(c.format)" class="ms-1 text-slate-600">
+      <span v-else-if="!operationsAreIndexable(c.format)" class="ms-1 text-app-600">
         {{ t('foundational.contracts.notIndexed') }}
       </span>
-      <span v-else-if="!c.omittedOperations" class="ms-1 text-slate-600">
+      <span v-else-if="!c.omittedOperations" class="ms-1 text-app-600">
         {{ t('foundational.contracts.noOperations') }}
       </span>
-      <span v-if="c.omittedOperations > 0" class="ms-1 text-amber-500/80">
+      <span v-if="c.omittedOperations > 0" class="ms-1 text-app-warning-500/80">
         {{ t('foundational.contracts.omitted', { count: c.omittedOperations }) }}
       </span>
     </div>
   </div>
-  <p v-else class="mt-1 text-[11px] text-amber-500/80">
+  <p v-else class="mt-1 text-[11px] text-app-warning-500/80">
     {{ t('foundational.contracts.none') }}
   </p>
 </template>

@@ -24,15 +24,15 @@ const title = computed(() =>
 
 <template>
   <div
-    class="flex h-full w-full items-center justify-center overflow-y-auto bg-slate-950 text-slate-100"
+    class="flex h-full w-full items-center justify-center overflow-y-auto bg-app-950 text-app-100"
   >
     <div
-      class="my-8 w-full max-w-md rounded-xl border border-slate-800 bg-slate-900/80 p-8 backdrop-blur"
+      class="my-8 w-full max-w-md rounded-xl border border-default bg-default/80 p-8 backdrop-blur"
     >
       <div class="mb-5 text-center">
-        <UIcon :name="icon" class="mx-auto mb-3 h-10 w-10 text-indigo-400" />
-        <h1 class="mb-1 text-lg font-semibold text-white">{{ title }}</h1>
-        <p class="text-sm text-slate-400">
+        <UIcon :name="icon" class="mx-auto mb-3 h-10 w-10 text-primary" />
+        <h1 class="mb-1 text-lg font-semibold text-highlighted">{{ title }}</h1>
+        <p class="text-sm text-muted">
           {{ t('vcs.onboarding.intro') }}
         </p>
       </div>
@@ -41,10 +41,10 @@ const title = computed(() =>
 
       <p
         v-if="auth.required && auth.user"
-        class="mt-6 border-t border-slate-800 pt-4 text-center text-xs text-slate-500"
+        class="mt-6 border-t border-default pt-4 text-center text-xs text-dimmed"
       >
         {{ t('github.onboarding.signedInAs', { login: auth.user.login }) }} ·
-        <button class="text-slate-300 underline-offset-2 hover:underline" @click="auth.logout()">
+        <button class="text-toned underline-offset-2 hover:underline" @click="auth.logout()">
           {{ t('github.onboarding.signOut') }}
         </button>
       </p>

@@ -58,7 +58,7 @@ const statusColor = (row: TutorialCatalogueRow) =>
   >
     <template #body>
       <div class="space-y-4" data-testid="tutorial-catalogue">
-        <p v-if="rows.length > 0" class="text-xs text-slate-400" data-testid="tutorial-progress">
+        <p v-if="rows.length > 0" class="text-xs text-muted" data-testid="tutorial-progress">
           {{
             t('tutorial.catalogue.progress', {
               completed: progress.completed,
@@ -70,17 +70,17 @@ const statusColor = (row: TutorialCatalogueRow) =>
           <li
             v-for="row in rows"
             :key="row.tour.id"
-            class="flex items-start gap-3 rounded-lg border border-slate-800 bg-slate-900/60 p-3"
+            class="flex items-start gap-3 rounded-lg border border-default bg-default/60 p-3"
             :class="row.startable ? '' : 'opacity-75'"
             :data-testid="`tutorial-catalogue-entry-${row.tour.id}`"
           >
             <UIcon
               :name="row.tour.icon ?? 'i-lucide-compass'"
-              class="mt-0.5 h-5 w-5 shrink-0 text-primary-400"
+              class="mt-0.5 h-5 w-5 shrink-0 text-primary"
             />
             <div class="min-w-0 flex-1 space-y-1">
               <div class="flex flex-wrap items-center gap-2">
-                <span class="text-sm font-medium text-slate-100">{{ t(row.tour.titleKey) }}</span>
+                <span class="text-sm font-medium text-app-100">{{ t(row.tour.titleKey) }}</span>
                 <UBadge
                   v-if="showsStatus(row)"
                   :color="statusColor(row)"
@@ -91,15 +91,15 @@ const statusColor = (row: TutorialCatalogueRow) =>
                   {{ t(TUTORIAL_STATUS_KEYS[row.state]) }}
                 </UBadge>
               </div>
-              <p class="text-xs text-slate-400">{{ t(row.tour.descriptionKey) }}</p>
-              <p v-if="row.stepCount !== null" class="text-xs text-slate-500">
+              <p class="text-xs text-muted">{{ t(row.tour.descriptionKey) }}</p>
+              <p v-if="row.stepCount !== null" class="text-xs text-dimmed">
                 {{ t('tutorial.catalogue.steps', { count: row.stepCount }, row.stepCount) }}
               </p>
               <!-- A held-back tour says what would unlock it, rather than vanishing from the
                    list: these are things the reader can go and do. -->
               <div
                 v-else-if="row.availability === 'blocked'"
-                class="text-xs text-slate-500"
+                class="text-xs text-dimmed"
                 :data-testid="`tutorial-catalogue-requirements-${row.tour.id}`"
               >
                 <span>{{ t('tutorial.catalogue.blocked') }}</span>
@@ -112,7 +112,7 @@ const statusColor = (row: TutorialCatalogueRow) =>
               </div>
               <!-- Requirements met, but every step is about a branch this board isn't on:
                    nothing to go and fix, so it must not read like the case above. -->
-              <p v-else class="text-xs text-slate-500">
+              <p v-else class="text-xs text-dimmed">
                 {{ t('tutorial.catalogue.notApplicable') }}
               </p>
             </div>
@@ -130,7 +130,7 @@ const statusColor = (row: TutorialCatalogueRow) =>
         </ul>
         <!-- No tours at all is a real state (a deployment may register none of its own and
              strip the built-ins), and it is not the same as one whose tours are all blocked. -->
-        <p v-if="rows.length === 0" class="text-sm text-slate-400">
+        <p v-if="rows.length === 0" class="text-sm text-muted">
           {{ t('tutorial.catalogue.empty') }}
         </p>
       </div>

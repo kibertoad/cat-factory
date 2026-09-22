@@ -23,7 +23,7 @@ const { t } = useI18n()
 
 <template>
   <div
-    class="rounded-lg border border-slate-700/70 bg-slate-900/30 p-3"
+    class="rounded-lg border border-muted/70 bg-default/30 p-3"
     data-testid="risk-policy-inherited-row"
     :data-policy-id="policy.id"
     :data-policy-tier="policy.tier"

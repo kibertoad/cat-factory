@@ -8591,5 +8591,13 @@
     "territories": {
       "heading": "טריטוריות"
     }
+  },
+  "appearance": {
+    "switcher": "מראה",
+    "mode": {
+      "system": "מערכת",
+      "light": "בהיר",
+      "dark": "כהה"
+    }
   }
 }

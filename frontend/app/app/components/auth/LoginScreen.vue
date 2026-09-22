@@ -213,16 +213,14 @@ const noSignInMethod = computed(
 
 <template>
   <div
-    class="flex h-screen w-screen items-center justify-center bg-slate-950 text-slate-100"
+    class="flex h-screen w-screen items-center justify-center bg-app-950 text-app-100"
     data-testid="login-screen"
   >
-    <div
-      class="w-full max-w-sm rounded-xl border border-slate-800 bg-slate-900/80 p-8 backdrop-blur"
-    >
+    <div class="w-full max-w-sm rounded-xl border border-default bg-default/80 p-8 backdrop-blur">
       <div class="mb-6 text-center">
-        <UIcon name="i-lucide-layout-dashboard" class="mx-auto mb-3 h-10 w-10 text-indigo-400" />
-        <h1 class="mb-1 text-lg font-semibold text-white">{{ t('auth.login.appTitle') }}</h1>
-        <p class="text-sm text-slate-400">
+        <UIcon name="i-lucide-layout-dashboard" class="mx-auto mb-3 h-10 w-10 text-primary" />
+        <h1 class="mb-1 text-lg font-semibold text-highlighted">{{ t('auth.login.appTitle') }}</h1>
+        <p class="text-sm text-muted">
           <template v-if="mode === 'forgot'">{{ t('auth.login.forgotSubtitle') }}</template>
           <template v-else>{{
             invite ? t('auth.login.inviteSubtitle') : t('auth.login.subtitle')
@@ -243,10 +241,10 @@ const noSignInMethod = computed(
         >
           {{ t('auth.mothership.signIn') }}
         </UButton>
-        <p class="px-1 text-xs text-slate-400">{{ t('auth.mothership.hint') }}</p>
+        <p class="px-1 text-xs text-muted">{{ t('auth.mothership.hint') }}</p>
         <p
           v-if="auth.mothershipError"
-          class="px-1 text-xs text-rose-400"
+          class="px-1 text-xs text-app-error-400"
           data-testid="mothership-error"
         >
           {{ t('auth.mothership.error') }}
@@ -294,22 +292,22 @@ const noSignInMethod = computed(
               :href="tokenCreateUrl(p)"
               target="_blank"
               rel="noopener noreferrer"
-              class="text-xs text-indigo-400 hover:underline"
+              class="text-xs text-primary hover:underline"
             >
               {{ t('auth.localMode.createToken', { provider: PROVIDER_LABELS[p] }) }}
             </a>
           </div>
         </template>
 
-        <p v-if="patError" class="text-sm text-rose-400">{{ patError }}</p>
+        <p v-if="patError" class="text-sm text-app-error-400">{{ patError }}</p>
       </div>
 
       <div
         v-if="isLocalMode && auth.providers.password && mode !== 'forgot'"
-        class="my-4 flex items-center gap-3 text-xs text-slate-500"
+        class="my-4 flex items-center gap-3 text-xs text-dimmed"
       >
-        <span class="h-px flex-1 bg-slate-800" /> {{ t('auth.localMode.orDivider') }}
-        <span class="h-px flex-1 bg-slate-800" />
+        <span class="h-px flex-1 bg-elevated" /> {{ t('auth.localMode.orDivider') }}
+        <span class="h-px flex-1 bg-elevated" />
       </div>
 
       <!-- A refused SSO round-trip: name the rule that refused, don't return the user to an
@@ -341,10 +339,10 @@ const noSignInMethod = computed(
 
       <div
         v-if="showSsoDivider && mode !== 'forgot'"
-        class="my-4 flex items-center gap-3 text-xs text-slate-500"
+        class="my-4 flex items-center gap-3 text-xs text-dimmed"
       >
-        <span class="h-px flex-1 bg-slate-800" /> {{ t('auth.login.or') }}
-        <span class="h-px flex-1 bg-slate-800" />
+        <span class="h-px flex-1 bg-elevated" /> {{ t('auth.login.or') }}
+        <span class="h-px flex-1 bg-elevated" />
       </div>
 
       <!-- OAuth providers -->
@@ -374,10 +372,10 @@ const noSignInMethod = computed(
 
       <div
         v-if="showOAuthDivider && mode !== 'forgot'"
-        class="my-4 flex items-center gap-3 text-xs text-slate-500"
+        class="my-4 flex items-center gap-3 text-xs text-dimmed"
       >
-        <span class="h-px flex-1 bg-slate-800" /> {{ t('auth.login.or') }}
-        <span class="h-px flex-1 bg-slate-800" />
+        <span class="h-px flex-1 bg-elevated" /> {{ t('auth.login.or') }}
+        <span class="h-px flex-1 bg-elevated" />
       </div>
 
       <!-- Email / password -->
@@ -413,7 +411,7 @@ const noSignInMethod = computed(
           class="w-full"
           data-testid="login-password"
         />
-        <p v-if="error" class="text-sm text-rose-400" data-testid="login-error">{{ error }}</p>
+        <p v-if="error" class="text-sm text-app-error-400" data-testid="login-error">{{ error }}</p>
         <UButton
           block
           size="lg"
@@ -424,13 +422,13 @@ const noSignInMethod = computed(
         >
           {{ mode === 'signup' ? t('auth.login.createAccount') : t('auth.login.signIn') }}
         </UButton>
-        <p class="text-center text-xs text-slate-400">
+        <p class="text-center text-xs text-muted">
           <template v-if="mode === 'login'">
             <i18n-t keypath="auth.login.needAccount" tag="span" scope="global">
               <template #signUp>
                 <button
                   type="button"
-                  class="text-indigo-400 hover:underline"
+                  class="text-primary hover:underline"
                   @click="setMode('signup')"
                 >
                   {{ t('auth.login.signUp') }}
@@ -443,7 +441,7 @@ const noSignInMethod = computed(
               <template #signIn>
                 <button
                   type="button"
-                  class="text-indigo-400 hover:underline"
+                  class="text-primary hover:underline"
                   @click="setMode('login')"
                 >
                   {{ t('auth.login.signIn') }}
@@ -452,8 +450,8 @@ const noSignInMethod = computed(
             </i18n-t>
           </template>
         </p>
-        <p v-if="mode === 'login'" class="text-center text-xs text-slate-400">
-          <button type="button" class="text-indigo-400 hover:underline" @click="setMode('forgot')">
+        <p v-if="mode === 'login'" class="text-center text-xs text-muted">
+          <button type="button" class="text-primary hover:underline" @click="setMode('forgot')">
             {{ t('auth.login.forgotPassword') }}
           </button>
         </p>
@@ -469,10 +467,10 @@ const noSignInMethod = computed(
             auth.providers.password ||
             hasConfiguredPat
           "
-          class="my-4 flex items-center gap-3 text-xs text-slate-500"
+          class="my-4 flex items-center gap-3 text-xs text-dimmed"
         >
-          <span class="h-px flex-1 bg-slate-800" /> {{ t('auth.login.or') }}
-          <span class="h-px flex-1 bg-slate-800" />
+          <span class="h-px flex-1 bg-elevated" /> {{ t('auth.login.or') }}
+          <span class="h-px flex-1 bg-elevated" />
         </div>
         <form class="space-y-3" @submit.prevent="submitRemotePat">
           <div v-if="remotePatProviders.length > 1" class="flex gap-2">
@@ -502,7 +500,7 @@ const noSignInMethod = computed(
             size="lg"
             class="w-full"
           />
-          <p v-if="remotePatError" class="text-sm text-rose-400">{{ remotePatError }}</p>
+          <p v-if="remotePatError" class="text-sm text-app-error-400">{{ remotePatError }}</p>
           <UButton
             block
             size="lg"
@@ -515,7 +513,7 @@ const noSignInMethod = computed(
           </UButton>
           <!-- Local mode only: say what else the token is for BEFORE it is handed over, since it
                becomes the credential every agent step on this machine clones and pushes with. -->
-          <p v-if="isLocalMode" class="px-1 text-xs text-slate-400">
+          <p v-if="isLocalMode" class="px-1 text-xs text-muted">
             {{ t('auth.localMode.tokenBecomesCredential') }}
           </p>
           <p class="px-1 text-center">
@@ -523,7 +521,7 @@ const noSignInMethod = computed(
               :href="tokenCreateUrl(remotePatProvider)"
               target="_blank"
               rel="noopener noreferrer"
-              class="text-xs text-indigo-400 hover:underline"
+              class="text-xs text-primary hover:underline"
             >
               {{
                 t('auth.localMode.createToken', { provider: PROVIDER_LABELS[remotePatProvider] })
@@ -550,7 +548,7 @@ const noSignInMethod = computed(
         @submit.prevent="submitForgot"
       >
         <template v-if="forgotSent">
-          <p class="text-sm text-slate-300">
+          <p class="text-sm text-toned">
             {{ t('auth.login.forgotSent') }}
           </p>
         </template>
@@ -564,13 +562,13 @@ const noSignInMethod = computed(
             size="lg"
             class="w-full"
           />
-          <p v-if="error" class="text-sm text-rose-400">{{ error }}</p>
+          <p v-if="error" class="text-sm text-app-error-400">{{ error }}</p>
           <UButton block size="lg" color="primary" type="submit" :loading="busy">
             {{ t('auth.login.sendResetLink') }}
           </UButton>
         </template>
-        <p class="text-center text-xs text-slate-400">
-          <button type="button" class="text-indigo-400 hover:underline" @click="setMode('login')">
+        <p class="text-center text-xs text-muted">
+          <button type="button" class="text-primary hover:underline" @click="setMode('login')">
             {{ t('auth.login.backToSignIn') }}
           </button>
         </p>

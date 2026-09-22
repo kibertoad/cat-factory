@@ -1,7 +1,7 @@
 # `@cat-factory/delegation-github-actions`: a DelegatedExecutor over GitHub Actions
 
 A deployment plugs its own implement/review/test loop in as the executor of a pipeline step
-(`CLAUDE.md` → "Delegated executors"). When that loop is a GitHub Actions workflow, three problems
+(`docs/flow-index.md` → "Delegated executors"). When that loop is a GitHub Actions workflow, three problems
 stand between it and the seam, and none of them is about that company's workflow, so they are
 solved once, here, rather than in every deployment repo.
 
@@ -37,5 +37,5 @@ registration becomes a description of its own workflow (`owner`, `repo`, `workfl
 **Key files:** `executor.ts` (the `DelegatedExecutor`), `correlation.ts` (finding the run),
 `result.ts` (finding the pull request), `http.ts` (the two REST calls).
 
-**See also:** `CLAUDE.md` → "Delegated executors"; kernel `ports/delegated-executor.ts`;
+**See also:** `docs/flow-index.md` → "Delegated executors"; kernel `ports/delegated-executor.ts`;
 `backend/internal/example-delegated-executor` (a runnable registration, with no GitHub in it).

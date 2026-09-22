@@ -423,7 +423,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
           data-testid="pipeline-builder-palette"
         >
           <div class="mb-2 flex shrink-0 items-center justify-between gap-2">
-            <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <h3 class="text-xs font-semibold uppercase tracking-wide text-muted">
               {{ t('pipeline.builder.agentPalette') }}
             </h3>
             <UButton
@@ -447,7 +447,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
           data-testid="pipeline-builder-draft"
         >
           <div class="mb-2 flex items-center justify-between gap-2">
-            <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <h3 class="text-xs font-semibold uppercase tracking-wide text-muted">
               {{ t('pipeline.builder.pipeline') }}
             </h3>
             <UButton
@@ -490,14 +490,14 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
               class="gap-1"
             >
               {{ l }}
-              <button type="button" class="hover:text-rose-400" @click="removeLabel(l)">
+              <button type="button" class="hover:text-app-error-400" @click="removeLabel(l)">
                 <UIcon name="i-lucide-x" class="h-3 w-3" />
               </button>
             </UBadge>
             <input
               v-model="newLabel"
               :placeholder="t('pipeline.builder.labelPlaceholder')"
-              class="w-20 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-[11px] text-slate-200 focus:w-28"
+              class="w-20 rounded border border-muted bg-default px-1.5 py-0.5 text-[11px] text-default focus:w-28"
               @keydown.enter.prevent="addLabel"
               @blur="addLabel"
             />
@@ -508,7 +508,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
           <p
             v-for="warning in draftWarnings"
             :key="warning.key"
-            class="mb-2 flex items-center gap-1.5 rounded-md border border-amber-800/50 bg-amber-950/30 px-2 py-1 text-[11px] text-amber-300"
+            class="mb-2 flex items-center gap-1.5 rounded-md border border-app-warning-800/50 bg-app-warning-950/30 px-2 py-1 text-[11px] text-app-warning-300"
             :data-testid="warning.testId"
           >
             <UIcon name="i-lucide-alert-triangle" class="h-3.5 w-3.5 shrink-0" />
@@ -517,7 +517,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
 
           <div
             v-if="pipelines.draft.length === 0"
-            class="flex flex-1 items-center justify-center rounded-lg border border-dashed border-slate-700 p-4 text-center text-xs text-slate-500"
+            class="flex flex-1 items-center justify-center rounded-lg border border-dashed border-muted p-4 text-center text-xs text-dimmed"
           >
             {{ t('pipeline.builder.emptyDraft') }}
           </div>
@@ -526,19 +526,17 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
             <li
               v-for="(unit, vi) in pipelines.units"
               :key="unit.index"
-              class="flex flex-col gap-2 rounded-lg border border-slate-700 bg-slate-800/60 p-2"
+              class="flex flex-col gap-2 rounded-lg border border-muted bg-elevated/60 p-2"
               :class="{ 'opacity-50': pipelines.draftEnabled[unit.index] === false }"
               data-testid="pipeline-draft-step"
               :data-agent-kind="unit.kind"
               :data-gated="pipelines.draftGates[unit.index] === true"
             >
               <div class="flex items-center gap-1.5">
-                <span class="w-4 shrink-0 text-center text-[10px] text-slate-500">{{
-                  vi + 1
-                }}</span>
+                <span class="w-4 shrink-0 text-center text-[10px] text-dimmed">{{ vi + 1 }}</span>
                 <AgentKindIcon :kind="unit.kind" icon-class="h-4 w-4" />
                 <span
-                  class="min-w-0 flex-1 truncate text-xs text-slate-100"
+                  class="min-w-0 flex-1 truncate text-xs text-app-100"
                   :class="{ 'line-through': pipelines.draftEnabled[unit.index] === false }"
                   :title="agentKindMeta(unit.kind).description"
                 >
@@ -787,10 +785,10 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                   :disabled="!skillSelectItems.length"
                   @update:model-value="pipelines.setDraftSkillId(unit.index, $event)"
                 />
-                <p v-if="!skillSelectItems.length" class="text-[10px] text-slate-500">
+                <p v-if="!skillSelectItems.length" class="text-[10px] text-dimmed">
                   {{ t('pipeline.builder.skillNoneAvailable') }}
                 </p>
-                <p v-else-if="skillMissing(unit.index)" class="text-[10px] text-amber-400">
+                <p v-else-if="skillMissing(unit.index)" class="text-[10px] text-app-warning-400">
                   {{ t('pipeline.builder.skillMissing') }}
                 </p>
               </div>
@@ -803,7 +801,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                 v-if="showVariantPicker(unit.index, unit.kind)"
                 class="ms-6 flex items-center gap-2"
               >
-                <span class="text-[10px] text-slate-500">
+                <span class="text-[10px] text-dimmed">
                   {{ t('pipeline.builder.variantLabel') }}
                 </span>
                 <USelect
@@ -844,7 +842,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                  setting (itself an override of the deployment routing default), so it is
                  advanced-only until a value is pinned; empty inherits. -->
               <div v-if="showOutputBudget(unit.index)" class="ms-6 flex items-center gap-2">
-                <span class="text-[10px] text-slate-500">
+                <span class="text-[10px] text-dimmed">
                   {{ t('pipeline.outputBudget.stepLabel') }}
                 </span>
                 <OutputBudgetInput
@@ -861,15 +859,15 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                  gated on the task estimate. -->
               <div
                 v-if="unit.companionIndex !== null"
-                class="ms-6 space-y-2 rounded-md border border-fuchsia-800/40 bg-fuchsia-950/20 p-2 text-xs"
+                class="ms-6 space-y-2 rounded-md border border-app-hue-fuchsia/40 bg-app-hue-fuchsia/10 p-2 text-xs"
               >
                 <div class="flex items-center gap-1.5">
-                  <UIcon name="i-lucide-corner-down-right" class="h-3.5 w-3.5 text-slate-500" />
+                  <UIcon name="i-lucide-corner-down-right" class="h-3.5 w-3.5 text-dimmed" />
                   <AgentKindIcon
                     :kind="pipelines.draft[unit.companionIndex]!"
                     icon-class="h-4 w-4"
                   />
-                  <span class="min-w-0 flex-1 truncate text-slate-200">
+                  <span class="min-w-0 flex-1 truncate text-default">
                     {{ agentKindMeta(pipelines.draft[unit.companionIndex]!).label }}
                   </span>
                   <!-- A companion is an agent kind with a prompt of its own, and this row is its
@@ -921,7 +919,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
               <!-- Consensus config (shown when the step is consensus-enabled). -->
               <div
                 v-if="pipelines.draftConsensus[unit.index]?.enabled"
-                class="ms-6 space-y-2 rounded-md border border-emerald-800/40 bg-emerald-950/20 p-2 text-xs"
+                class="ms-6 space-y-2 rounded-md border border-app-success-800/40 bg-app-success-950/20 p-2 text-xs"
               >
                 <!-- The workspace consensus-GROUP tier set: pick which reusable panels this
                      step may escalate to. Each group carries its own estimate bar; the engine
@@ -930,13 +928,13 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                      editor below, so the step has exactly one source of truth for its panel. -->
                 <div
                   v-if="consensusGroups.hasGroups"
-                  class="space-y-1 border-b border-slate-800 pb-2"
+                  class="space-y-1 border-b border-default pb-2"
                 >
                   <div class="flex items-center gap-1.5">
-                    <UIcon name="i-lucide-layers" class="h-3.5 w-3.5 text-emerald-400" />
-                    <span class="text-slate-300">{{ t('pipeline.builder.consensusGroups') }}</span>
+                    <UIcon name="i-lucide-layers" class="h-3.5 w-3.5 text-app-success-400" />
+                    <span class="text-toned">{{ t('pipeline.builder.consensusGroups') }}</span>
                   </div>
-                  <p class="text-[11px] text-slate-500">
+                  <p class="text-[11px] text-dimmed">
                     {{ t('pipeline.builder.consensusGroupsHint') }}
                   </p>
                   <div class="flex flex-wrap gap-1">
@@ -947,28 +945,28 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                       class="rounded border px-1.5 py-0.5 text-[11px]"
                       :class="
                         isGroupSelected(unit.index, group.id)
-                          ? 'border-emerald-600 bg-emerald-900/40 text-emerald-200'
-                          : 'border-slate-700 bg-slate-900 text-slate-400 hover:text-slate-200'
+                          ? 'border-app-success-600 bg-app-success-900/40 text-app-success-200'
+                          : 'border-muted bg-default text-muted hover:text-default'
                       "
                       :title="group.description"
                       @click="pipelines.toggleDraftConsensusGroup(unit.index, group.id)"
                     >
                       {{ group.name }}
-                      <span class="ms-1 text-slate-500">{{ groupBarLabel(group.id) }}</span>
+                      <span class="ms-1 text-dimmed">{{ groupBarLabel(group.id) }}</span>
                     </button>
                   </div>
                 </div>
 
-                <div v-if="usesGroups(unit.index)" class="text-[11px] text-slate-500">
+                <div v-if="usesGroups(unit.index)" class="text-[11px] text-dimmed">
                   {{ t('pipeline.builder.consensusGroupsActive') }}
                 </div>
 
                 <template v-else>
                   <div class="flex items-center gap-2">
-                    <label class="text-slate-400">{{ t('pipeline.builder.strategy') }}</label>
+                    <label class="text-muted">{{ t('pipeline.builder.strategy') }}</label>
                     <select
                       v-model="pipelines.draftConsensus[unit.index]!.strategy"
-                      class="rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-100"
+                      class="rounded border border-muted bg-default px-1.5 py-0.5 text-app-100"
                     >
                       <option v-for="s in CONSENSUS_STRATEGIES" :key="s.value" :value="s.value">
                         {{ s.label }}
@@ -976,7 +974,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                     </select>
                     <label
                       v-if="pipelines.draftConsensus[unit.index]!.strategy === 'debate'"
-                      class="ms-2 text-slate-400"
+                      class="ms-2 text-muted"
                       >{{ t('pipeline.builder.rounds') }}</label
                     >
                     <input
@@ -986,7 +984,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                       min="1"
                       max="5"
                       placeholder="2"
-                      class="w-12 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-100"
+                      class="w-12 rounded border border-muted bg-default px-1.5 py-0.5 text-app-100"
                     />
                   </div>
 
@@ -1000,12 +998,12 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                       <input
                         v-model="p.role"
                         :placeholder="t('pipeline.builder.rolePlaceholder')"
-                        class="w-28 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-100"
+                        class="w-28 rounded border border-muted bg-default px-1.5 py-0.5 text-app-100"
                       />
                       <input
                         v-model="p.modelId"
                         :placeholder="t('pipeline.builder.modelIdPlaceholder')"
-                        class="flex-1 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-300"
+                        class="flex-1 rounded border border-muted bg-default px-1.5 py-0.5 text-toned"
                       />
                       <UButton
                         icon="i-lucide-x"
@@ -1028,7 +1026,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                   </div>
 
                   <!-- gating -->
-                  <div class="flex flex-wrap items-center gap-2 border-t border-slate-800 pt-2">
+                  <div class="flex flex-wrap items-center gap-2 border-t border-default pt-2">
                     <UButton
                       :icon="
                         pipelines.draftConsensus[unit.index]!.gating?.enabled
@@ -1064,11 +1062,11 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                   isTesterKind(unit.kind) &&
                   pipelines.draftTesterQuality[unit.index]?.enabled !== false
                 "
-                class="ms-6 space-y-2 rounded-md border border-sky-800/40 bg-sky-950/20 p-2 text-xs"
+                class="ms-6 space-y-2 rounded-md border border-app-info-800/40 bg-app-info-950/20 p-2 text-xs"
               >
                 <div class="flex items-center gap-1.5">
-                  <UIcon name="i-lucide-shield-check" class="h-3.5 w-3.5 text-sky-400" />
-                  <span class="min-w-0 flex-1 truncate text-slate-200">
+                  <UIcon name="i-lucide-shield-check" class="h-3.5 w-3.5 text-app-info-400" />
+                  <span class="min-w-0 flex-1 truncate text-default">
                     {{ t('pipeline.builder.testerQualityLabel') }}
                   </span>
                   <UButton
@@ -1105,7 +1103,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
              moved to the task card / inspector when the palettes were removed). -->
         <div v-if="pipelines.pipelines.length" class="flex flex-col lg:min-h-0 lg:overflow-hidden">
           <div class="mb-2 flex shrink-0 items-center justify-between gap-2">
-            <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <h3 class="text-xs font-semibold uppercase tracking-wide text-muted">
               {{ t('pipeline.builder.savedPipelines') }}
             </h3>
             <UButton
@@ -1159,7 +1157,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                narrows and whose every change is saved. -->
           <div
             v-if="browseEveryPurpose || library.hiddenByPurpose"
-            class="mb-2 flex shrink-0 flex-wrap items-center gap-x-2 px-1 text-[10px] text-slate-500"
+            class="mb-2 flex shrink-0 flex-wrap items-center gap-x-2 px-1 text-[10px] text-dimmed"
           >
             <span>
               {{
@@ -1174,7 +1172,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
             </span>
             <button
               type="button"
-              class="underline underline-offset-2 hover:text-slate-300"
+              class="underline underline-offset-2 hover:text-toned"
               data-testid="pipeline-library-purpose-toggle"
               @click="browseEveryPurpose = !browseEveryPurpose"
             >
@@ -1190,7 +1188,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
             <li
               v-for="p in visiblePipelines"
               :key="p.id"
-              class="group rounded-lg border border-slate-700 bg-slate-800/40"
+              class="group rounded-lg border border-muted bg-elevated/40"
               :class="{ 'opacity-60': p.archived }"
             >
               <div class="flex items-center gap-2 px-2 py-1.5">
@@ -1203,9 +1201,9 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                     :name="
                       expandedSaved.has(p.id) ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'
                     "
-                    class="h-3.5 w-3.5 shrink-0 text-slate-500"
+                    class="h-3.5 w-3.5 shrink-0 text-dimmed"
                   />
-                  <span class="min-w-0 flex-1 truncate text-xs text-slate-200">{{ p.name }}</span>
+                  <span class="min-w-0 flex-1 truncate text-xs text-default">{{ p.name }}</span>
                   <UBadge
                     v-for="l in p.labels ?? []"
                     :key="l"
@@ -1251,7 +1249,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                   >
                     {{ t('pipeline.builder.scopeDefault.unattended') }}
                   </UBadge>
-                  <span class="shrink-0 text-[10px] text-slate-500">
+                  <span class="shrink-0 text-[10px] text-dimmed">
                     {{
                       t(
                         'pipeline.builder.stepCount',
@@ -1347,7 +1345,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
               <!-- Full ordered step list, revealed on click. -->
               <ol
                 v-if="expandedSaved.has(p.id)"
-                class="space-y-1 border-t border-slate-800 px-2 py-2 ps-7"
+                class="space-y-1 border-t border-default px-2 py-2 ps-7"
               >
                 <li
                   v-for="(k, i) in p.agentKinds"
@@ -1358,9 +1356,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                     p.enabled?.[i] === false ? t('pipeline.builder.disabledStepTooltip') : undefined
                   "
                 >
-                  <span class="w-4 shrink-0 text-center text-[10px] text-slate-500">{{
-                    i + 1
-                  }}</span>
+                  <span class="w-4 shrink-0 text-center text-[10px] text-dimmed">{{ i + 1 }}</span>
                   <AgentKindIcon :kind="k" show-label />
                   <!-- A step that does not run on every task says so HERE, in the library, because
                        this list is what a reader compares two pipelines by: a preset whose testers
@@ -1369,7 +1365,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                     v-for="c in stepConditionsAt(p, i)"
                     :key="c"
                     :name="CONDITION_MARKERS[c].icon"
-                    class="h-3 w-3 shrink-0 text-sky-400"
+                    class="h-3 w-3 shrink-0 text-app-info-400"
                     :title="t(CONDITION_MARKERS[c].key)"
                   />
                 </li>
@@ -1404,9 +1400,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
     <template #body>
       <div class="space-y-3">
         <div>
-          <label
-            class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-400"
-          >
+          <label class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted">
             {{ t('pipeline.builder.addAgentModal.name') }}
           </label>
           <UInput
@@ -1417,9 +1411,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
           />
         </div>
         <div>
-          <label
-            class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-400"
-          >
+          <label class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted">
             {{ t('pipeline.builder.addAgentModal.description') }}
           </label>
           <UTextarea

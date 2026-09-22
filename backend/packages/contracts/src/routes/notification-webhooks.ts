@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
+import { defineApiContract, noBodyResponse } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import {
   notificationWebhookSchema,
@@ -54,7 +54,7 @@ export const putNotificationWebhookContract = defineApiContract({
 export const deleteNotificationWebhookContract = defineApiContract({
   method: 'delete',
   pathResolver: () => '/notification-webhook',
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 // ---- the session surface's COLLECTION (every named endpoint) ----
@@ -91,7 +91,7 @@ export const deleteNamedNotificationWebhookContract = defineApiContract({
   method: 'delete',
   pathResolver: (p: { webhookId: string }) => `/notification-webhooks/${p.webhookId}`,
   requestPathParamsSchema: singleStringParam('webhookId'),
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 // ---- the external `/api/v1` surface (absolute paths, key-authenticated) ----
@@ -135,7 +135,7 @@ export const deletePublicNotificationWebhookContract = withMinScope(
   defineApiContract({
     method: 'delete',
     pathResolver: () => '/api/v1/notification-webhook',
-    responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+    responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
   }),
 )
 
@@ -203,6 +203,6 @@ export const deletePublicNamedNotificationWebhookContract = withMinScope(
     method: 'delete',
     requestPathParamsSchema: singleStringParam('webhookId'),
     pathResolver: ({ webhookId }) => `/api/v1/notification-webhooks/${webhookId}`,
-    responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+    responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
   }),
 )

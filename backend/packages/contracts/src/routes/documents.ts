@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
+import { defineApiContract, noBodyResponse } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import {
   connectDocumentSourceSchema,
@@ -105,7 +105,7 @@ export const disconnectDocumentSourceContract = defineApiContract({
   method: 'delete',
   requestPathParamsSchema: sourceParams,
   pathResolver: ({ source }) => `/document-sources/${source}/connection`,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 export const listDocumentsContract = defineApiContract({
@@ -203,5 +203,5 @@ export const unlinkDocumentForKindContract = defineApiContract({
   method: 'post',
   pathResolver: () => '/document-role-links/remove',
   requestBodySchema: unlinkDocumentForKindSchema,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })

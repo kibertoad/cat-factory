@@ -81,24 +81,24 @@ function createAnyway() {
   >
     <template #body>
       <div v-if="ctx" class="space-y-5">
-        <p class="text-sm text-slate-300">{{ body }}</p>
+        <p class="text-sm text-toned">{{ body }}</p>
 
-        <div class="rounded-lg border border-slate-700 bg-slate-900/50 p-2">
-          <p class="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+        <div class="rounded-lg border border-muted bg-default/50 p-2">
+          <p class="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-wide text-dimmed">
             {{ t('errors.reviewFriction.waitingHeading') }}
           </p>
           <ul class="space-y-1">
             <li v-for="item in ctx.debt" :key="item.blockId">
               <button
                 type="button"
-                class="flex w-full items-center justify-between gap-3 rounded-md px-2 py-1.5 text-left text-sm hover:bg-slate-800/60 disabled:opacity-50"
+                class="flex w-full items-center justify-between gap-3 rounded-md px-2 py-1.5 text-left text-sm hover:bg-elevated/60 disabled:opacity-50"
                 :disabled="pending"
                 @click="goToBlock(item.blockId)"
               >
-                <span class="truncate text-slate-200">
+                <span class="truncate text-default">
                   {{ item.title || t('errors.reviewFriction.untitled') }}
                 </span>
-                <span class="shrink-0 text-[12px] text-slate-500">
+                <span class="shrink-0 text-[12px] text-dimmed">
                   {{ t('errors.reviewFriction.waiting', { minutes: item.waitingMinutes }) }}
                 </span>
               </button>

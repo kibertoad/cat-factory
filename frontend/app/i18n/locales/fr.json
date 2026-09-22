@@ -8591,5 +8591,13 @@
     "territories": {
       "heading": "Territoires"
     }
+  },
+  "appearance": {
+    "switcher": "Apparence",
+    "mode": {
+      "system": "Système",
+      "light": "Clair",
+      "dark": "Sombre"
+    }
   }
 }

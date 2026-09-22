@@ -37,7 +37,7 @@ const nothingConfigured = computed(() => !github.canConnectGitHubApp && !github.
 <template>
   <div class="space-y-3">
     <template v-if="github.canConnectGitHubApp">
-      <p v-if="props.appIntro" class="text-sm text-slate-400">{{ props.appIntro }}</p>
+      <p v-if="props.appIntro" class="text-sm text-muted">{{ props.appIntro }}</p>
       <GitHubConnect />
     </template>
 
@@ -50,7 +50,7 @@ const nothingConfigured = computed(() => !github.canConnectGitHubApp && !github.
 
     <p
       v-if="nothingConfigured"
-      class="rounded-md border border-dashed border-slate-800 px-3 py-3 text-sm text-slate-400"
+      class="rounded-md border border-dashed border-default px-3 py-3 text-sm text-muted"
     >
       {{ t('vcs.connect.noneConfigured') }}
     </p>

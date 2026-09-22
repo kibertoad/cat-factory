@@ -76,7 +76,7 @@ function manageAccount() {
 <template>
   <div>
     <div class="mb-1 flex items-center justify-between gap-2">
-      <span v-if="label" class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+      <span v-if="label" class="text-[11px] font-semibold uppercase tracking-wide text-muted">
         {{ label }}
       </span>
       <span v-else />
@@ -99,7 +99,7 @@ function manageAccount() {
               <template v-if="categoryGroups.length">
                 <div v-for="group in categoryGroups" :key="group.category">
                   <p
-                    class="px-2 pb-0.5 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500"
+                    class="px-2 pb-0.5 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-dimmed"
                   >
                     {{ group.category }}
                   </p>
@@ -107,8 +107,8 @@ function manageAccount() {
                     v-for="f in group.fragments"
                     :key="f.id"
                     type="button"
-                    class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-start text-sm hover:bg-slate-800/60"
-                    :class="selectedSet.has(f.id) ? 'text-slate-100' : 'text-slate-300'"
+                    class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-start text-sm hover:bg-elevated/60"
+                    :class="selectedSet.has(f.id) ? 'text-app-100' : 'text-toned'"
                     :title="f.summary"
                     :data-testid="`fragment-option-${f.id}`"
                     :aria-pressed="selectedSet.has(f.id)"
@@ -117,38 +117,38 @@ function manageAccount() {
                     <UIcon
                       :name="selectedSet.has(f.id) ? 'i-lucide-check' : 'i-lucide-plus'"
                       class="h-4 w-4 shrink-0"
-                      :class="selectedSet.has(f.id) ? 'text-primary-400' : 'text-slate-500'"
+                      :class="selectedSet.has(f.id) ? 'text-primary' : 'text-dimmed'"
                     />
                     <span class="flex-1 truncate">{{ f.title }}</span>
                   </button>
                 </div>
               </template>
-              <p v-else class="px-2 py-3 text-[12px] text-slate-500">
+              <p v-else class="px-2 py-3 text-[12px] text-dimmed">
                 {{ t('inspector.fragments.pickerEmpty') }}
               </p>
 
-              <div class="mt-1 border-t border-slate-800 pt-1">
+              <div class="mt-1 border-t border-default pt-1">
                 <button
                   type="button"
-                  class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-start text-sm text-slate-300 hover:bg-slate-800/60"
+                  class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-start text-sm text-toned hover:bg-elevated/60"
                   @click="manageBoard"
                 >
-                  <UIcon name="i-lucide-book-marked" class="h-4 w-4 shrink-0 text-slate-400" />
+                  <UIcon name="i-lucide-book-marked" class="h-4 w-4 shrink-0 text-muted" />
                   <span class="flex-1 truncate">{{ t('inspector.fragments.manageBoard') }}</span>
                 </button>
                 <button
                   v-if="accounts.enabled"
                   type="button"
-                  class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-start text-sm text-slate-300 hover:bg-slate-800/60"
+                  class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-start text-sm text-toned hover:bg-elevated/60"
                   @click="manageAccount"
                 >
-                  <UIcon name="i-lucide-users" class="h-4 w-4 shrink-0 text-slate-400" />
+                  <UIcon name="i-lucide-users" class="h-4 w-4 shrink-0 text-muted" />
                   <span class="flex-1 truncate">{{ t('inspector.fragments.manageAccount') }}</span>
                 </button>
               </div>
             </div>
 
-            <div class="flex justify-end border-t border-slate-800 p-1.5">
+            <div class="flex justify-end border-t border-default p-1.5">
               <UButton
                 size="xs"
                 color="neutral"
@@ -178,7 +178,7 @@ function manageAccount() {
         {{ f.title }}<UIcon name="i-lucide-x" class="ms-0.5 h-3 w-3" />
       </UBadge>
     </div>
-    <div v-else-if="emptyText" class="text-[11px] text-slate-500">
+    <div v-else-if="emptyText" class="text-[11px] text-dimmed">
       {{ emptyText }}
     </div>
   </div>

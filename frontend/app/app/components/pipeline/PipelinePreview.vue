@@ -34,17 +34,17 @@ function stepDescription(kind: string): string {
 
 <template>
   <div class="space-y-2" data-testid="pipeline-preview">
-    <div class="text-sm font-semibold text-slate-100">{{ pipeline.name }}</div>
+    <div class="text-sm font-semibold text-app-100">{{ pipeline.name }}</div>
     <p
       v-if="pipeline.description"
-      class="text-[12px] leading-snug text-slate-400"
+      class="text-[12px] leading-snug text-muted"
       data-testid="pipeline-preview-description"
     >
       {{ pipeline.description }}
     </p>
 
     <div
-      class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] uppercase tracking-wide text-slate-500"
+      class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] uppercase tracking-wide text-dimmed"
     >
       <span class="inline-flex items-center gap-1">
         <UIcon name="i-lucide-workflow" class="h-3 w-3" />
@@ -52,13 +52,13 @@ function stepDescription(kind: string): string {
       </span>
       <!-- Gates are the reason a run stops for a human, so they earn a headline of their own
            rather than only the per-step marker below. -->
-      <span v-if="gateCount" class="inline-flex items-center gap-1 text-amber-500">
+      <span v-if="gateCount" class="inline-flex items-center gap-1 text-app-warning-500">
         <UIcon name="i-lucide-shield-check" class="h-3 w-3" />
         {{ t('pipeline.preview.gateCount', { count: gateCount }, gateCount) }}
       </span>
       <!-- Conditional steps change what a run of this pipeline actually does from task to task,
            which is exactly what a preview read BEFORE picking has to say out loud. -->
-      <span v-if="conditionalCount" class="inline-flex items-center gap-1 text-sky-500">
+      <span v-if="conditionalCount" class="inline-flex items-center gap-1 text-app-info-500">
         <UIcon name="i-lucide-git-branch" class="h-3 w-3" />
         {{ t('pipeline.preview.conditionalCount', { count: conditionalCount }, conditionalCount) }}
       </span>
@@ -76,11 +76,11 @@ function stepDescription(kind: string): string {
       >
         <div class="flex flex-col items-center">
           <span
-            class="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-slate-800 font-mono text-[9px] tabular-nums text-slate-400"
+            class="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-elevated font-mono text-[9px] tabular-nums text-muted"
           >
             {{ i + 1 }}
           </span>
-          <span v-if="i < steps.length - 1" class="w-px flex-1 bg-slate-800" />
+          <span v-if="i < steps.length - 1" class="w-px flex-1 bg-elevated" />
         </div>
         <div class="min-w-0 flex-1 pb-2">
           <div class="flex items-center gap-1">
@@ -88,20 +88,20 @@ function stepDescription(kind: string): string {
             <UIcon
               v-if="s.gated"
               name="i-lucide-shield-check"
-              class="h-3 w-3 shrink-0 text-amber-400"
+              class="h-3 w-3 shrink-0 text-app-warning-400"
               :title="t('pipeline.preview.gated')"
             />
             <UIcon
               v-for="c in s.conditions"
               :key="c"
               :name="CONDITION_MARKERS[c].icon"
-              class="h-3 w-3 shrink-0 text-sky-400"
+              class="h-3 w-3 shrink-0 text-app-info-400"
               :title="t(CONDITION_MARKERS[c].key)"
             />
           </div>
           <!-- Clamped: the catalog prose runs long for some kinds, and <AgentKindIcon> already
                carries the full text in its hover tooltip. -->
-          <p class="line-clamp-2 text-[11px] leading-snug text-slate-500">
+          <p class="line-clamp-2 text-[11px] leading-snug text-dimmed">
             {{ stepDescription(s.kind) }}
           </p>
         </div>

@@ -20,14 +20,14 @@ const show = computed(() => !!setupUrl.value && !dismissed.value)
          re-enables pointer events on it. -->
     <div v-if="show" class="pointer-events-auto w-full max-w-3xl">
       <div
-        class="w-full max-w-3xl rounded-2xl border-2 border-amber-500/70 bg-amber-950/95 p-5 shadow-2xl backdrop-blur"
+        class="w-full max-w-3xl rounded-2xl border-2 border-app-warning-500/70 bg-app-warning-950/95 p-5 shadow-2xl backdrop-blur"
         role="alert"
       >
         <div class="flex items-start gap-4">
-          <UIcon name="i-lucide-key-round" class="mt-0.5 h-9 w-9 shrink-0 text-amber-400" />
+          <UIcon name="i-lucide-key-round" class="mt-0.5 h-9 w-9 shrink-0 text-app-warning-400" />
           <div class="min-w-0 flex-1">
             <div class="flex items-start justify-between gap-3">
-              <h2 class="text-lg font-semibold text-amber-100">
+              <h2 class="text-lg font-semibold text-app-warning-100">
                 {{ t('layout.githubPatBanner.title') }}
               </h2>
               <UButton
@@ -43,7 +43,7 @@ const show = computed(() => !!setupUrl.value && !dismissed.value)
                 "
               />
             </div>
-            <p class="mt-1 text-sm text-amber-200/90">
+            <p class="mt-1 text-sm text-app-warning-200/90">
               {{ t('layout.githubPatBanner.body') }}
             </p>
 
@@ -59,7 +59,7 @@ const show = computed(() => !!setupUrl.value && !dismissed.value)
               >
                 {{ t('layout.githubPatBanner.createToken') }}
               </UButton>
-              <p class="mt-2 text-xs text-amber-300/70">
+              <p class="mt-2 text-xs text-app-warning-300/70">
                 <i18n-t keypath="layout.githubPatBanner.thenSet" tag="span" scope="global">
                   <template #envVar>
                     <code class="font-mono">GITHUB_PAT</code>

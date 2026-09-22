@@ -44,10 +44,10 @@ const items = computed(() =>
       data-testid="ui-role-toggle"
       :aria-label="`${t('uiRole.switcher')}: ${currentLabel}`"
       :title="`${t('uiRole.switcher')}: ${currentLabel}`"
-      class="flex w-full flex-col items-center gap-0.5 rounded-lg border border-slate-700 bg-slate-900/60 px-1 py-1.5 transition hover:border-indigo-500/60 hover:bg-slate-800/60"
+      class="flex w-full flex-col items-center gap-0.5 rounded-lg border border-muted bg-default/60 px-1 py-1.5 transition hover:border-primary/60 hover:bg-elevated/60"
     >
-      <UIcon :name="current.icon" class="h-4 w-4 shrink-0 text-indigo-400" />
-      <span class="w-full truncate text-center text-[9px] font-medium uppercase text-slate-300">
+      <UIcon :name="current.icon" class="h-4 w-4 shrink-0 text-primary" />
+      <span class="w-full truncate text-center text-[9px] font-medium uppercase text-toned">
         {{ currentLabel }}
       </span>
     </button>
@@ -58,16 +58,16 @@ const items = computed(() =>
       data-testid="ui-role-switcher"
       :aria-label="t('uiRole.switcher')"
       :title="t(current.hintKey)"
-      class="flex w-full items-center gap-2 rounded-lg border border-slate-700 bg-slate-900/60 p-2 text-start transition hover:border-indigo-500/60 hover:bg-slate-800/60"
+      class="flex w-full items-center gap-2 rounded-lg border border-muted bg-default/60 p-2 text-start transition hover:border-primary/60 hover:bg-elevated/60"
     >
-      <UIcon :name="current.icon" class="h-4 w-4 shrink-0 text-indigo-400" />
+      <UIcon :name="current.icon" class="h-4 w-4 shrink-0 text-primary" />
       <div class="min-w-0 flex-1">
-        <div class="truncate text-[10px] uppercase tracking-wide text-slate-500">
+        <div class="truncate text-[10px] uppercase tracking-wide text-dimmed">
           {{ t('uiRole.switcher') }}
         </div>
-        <div class="truncate text-xs font-medium text-slate-200">{{ currentLabel }}</div>
+        <div class="truncate text-xs font-medium text-default">{{ currentLabel }}</div>
       </div>
-      <UIcon name="i-lucide-chevron-down" class="h-3.5 w-3.5 shrink-0 text-slate-500" />
+      <UIcon name="i-lucide-chevron-down" class="h-3.5 w-3.5 shrink-0 text-dimmed" />
     </button>
   </UDropdownMenu>
 </template>

@@ -66,33 +66,33 @@ function select() {
     <div
       data-testid="initiative-card"
       :data-status="status"
-      class="cursor-pointer rounded-lg border border-indigo-800/60 bg-indigo-950/40 p-3 transition hover:border-indigo-600"
+      class="cursor-pointer rounded-lg border border-primary/60 bg-primary/10 p-3 transition hover:border-primary"
       :class="[
-        selected ? 'ring-2 ring-indigo-400/60' : '',
+        selected ? 'ring-2 ring-primary/60' : '',
         awaitingAnswers || attention ? 'board-pulse' : '',
       ]"
       @click.stop="select"
     >
       <div class="flex items-start justify-between gap-2">
         <div class="flex items-center gap-2">
-          <UIcon name="i-lucide-milestone" class="h-4 w-4 shrink-0 text-indigo-400" />
-          <div class="text-xs font-semibold text-white">{{ block.title }}</div>
+          <UIcon name="i-lucide-milestone" class="h-4 w-4 shrink-0 text-primary" />
+          <div class="text-xs font-semibold text-highlighted">{{ block.title }}</div>
         </div>
         <UBadge :color="INITIATIVE_STATUS_CHIPS[status]" variant="subtle" size="sm">
           {{ statusLabel }}
         </UBadge>
       </div>
-      <div class="mt-1 text-[10px] uppercase tracking-wide text-indigo-300/70">
+      <div class="mt-1 text-[10px] uppercase tracking-wide text-primary/70">
         {{ t('initiative.card.kind') }}
       </div>
       <div v-if="progress" class="mt-2 space-y-1">
-        <div class="h-1.5 overflow-hidden rounded bg-slate-800">
+        <div class="h-1.5 overflow-hidden rounded bg-elevated">
           <div
-            class="h-full rounded bg-indigo-400"
+            class="h-full rounded bg-primary"
             :style="{ width: `${Math.round((progress.settled / progress.total) * 100)}%` }"
           />
         </div>
-        <div class="text-[10px] text-slate-400">
+        <div class="text-[10px] text-muted">
           {{ t('initiative.card.progress', { done: progress.settled, total: progress.total }) }}
         </div>
       </div>

@@ -38,26 +38,26 @@ const hasAny = computed(() => usage.rows.length > 0)
 
 <template>
   <div class="space-y-6">
-    <p class="text-[11px] text-slate-400">
+    <p class="text-[11px] text-muted">
       {{ t('settings.usage.body') }}
     </p>
 
-    <p v-if="usage.report" class="text-[11px] text-slate-500">
+    <p v-if="usage.report" class="text-[11px] text-dimmed">
       {{ t('settings.usage.period', { date: d(new Date(usage.report.periodStart), 'short') }) }}
     </p>
 
-    <p v-if="usage.loading" class="text-[11px] text-slate-500">{{ t('common.loading') }}</p>
-    <p v-else-if="usage.error" class="text-[11px] text-rose-400">{{ usage.error }}</p>
-    <p v-else-if="!hasAny" class="text-[11px] text-slate-500">{{ t('settings.usage.empty') }}</p>
+    <p v-if="usage.loading" class="text-[11px] text-dimmed">{{ t('common.loading') }}</p>
+    <p v-else-if="usage.error" class="text-[11px] text-app-error-400">{{ usage.error }}</p>
+    <p v-else-if="!hasAny" class="text-[11px] text-dimmed">{{ t('settings.usage.empty') }}</p>
 
     <template v-else>
       <!-- Subscriptions (flat-rate quota harnesses) -->
       <section v-if="usage.subscription.length" class="space-y-3">
         <div class="flex items-baseline justify-between">
-          <h3 class="text-sm font-semibold text-slate-200">
+          <h3 class="text-sm font-semibold text-default">
             {{ t('settings.usage.subscription') }}
           </h3>
-          <span class="text-[11px] text-slate-400">
+          <span class="text-[11px] text-muted">
             {{
               t('settings.usage.tokens', {
                 input: formatTokens(usage.subscriptionTotal.inputTokens),
@@ -66,7 +66,7 @@ const hasAny = computed(() => usage.rows.length > 0)
             }}
           </span>
         </div>
-        <p class="text-[10px] text-slate-500">{{ t('settings.usage.illustrative') }}</p>
+        <p class="text-[10px] text-dimmed">{{ t('settings.usage.illustrative') }}</p>
         <div
           v-for="row in usage.subscription"
           :key="`sub-${row.vendor}-${row.provider}-${row.model}`"
@@ -74,13 +74,13 @@ const hasAny = computed(() => usage.rows.length > 0)
           :data-testid="'usage-row-subscription'"
         >
           <div class="flex items-center justify-between gap-2 text-[11px]">
-            <span class="min-w-0 truncate font-medium text-slate-300">{{ row.model }}</span>
-            <span class="shrink-0 rounded bg-slate-700/60 px-1.5 py-0.5 text-[10px] text-slate-300">
+            <span class="min-w-0 truncate font-medium text-toned">{{ row.model }}</span>
+            <span class="shrink-0 rounded bg-accented/60 px-1.5 py-0.5 text-[10px] text-toned">
               {{ row.vendor ?? row.provider }}
             </span>
           </div>
           <UProgress :model-value="pctOf(row, usage.subscription)" size="xs" color="primary" />
-          <div class="flex justify-between text-[10px] text-slate-500">
+          <div class="flex justify-between text-[10px] text-dimmed">
             <span>
               {{
                 t('settings.usage.tokens', {
@@ -98,10 +98,10 @@ const hasAny = computed(() => usage.rows.length > 0)
       <!-- Metered API / proxy calls (real spend) -->
       <section v-if="usage.metered.length" class="space-y-3">
         <div class="flex items-baseline justify-between">
-          <h3 class="text-sm font-semibold text-slate-200">
+          <h3 class="text-sm font-semibold text-default">
             {{ t('settings.usage.metered') }}
           </h3>
-          <span class="text-[11px] text-slate-400">
+          <span class="text-[11px] text-muted">
             {{
               t('settings.usage.tokens', {
                 input: formatTokens(usage.meteredTotal.inputTokens),
@@ -118,12 +118,12 @@ const hasAny = computed(() => usage.rows.length > 0)
           :data-testid="'usage-row-metered'"
         >
           <div class="flex items-center justify-between gap-2 text-[11px]">
-            <span class="min-w-0 truncate font-medium text-slate-300">
+            <span class="min-w-0 truncate font-medium text-toned">
               {{ row.provider }}:{{ row.model }}
             </span>
           </div>
           <UProgress :model-value="pctOf(row, usage.metered)" size="xs" color="neutral" />
-          <div class="flex justify-between text-[10px] text-slate-500">
+          <div class="flex justify-between text-[10px] text-dimmed">
             <span>
               {{
                 t('settings.usage.tokens', {

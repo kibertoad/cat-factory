@@ -442,7 +442,7 @@ function done() {
   <UModal v-model:open="open" :title="t('github.addService.title')" :ui="{ content: 'max-w-xl' }">
     <template #body>
       <div class="space-y-6">
-        <p class="text-sm text-slate-400">
+        <p class="text-sm text-muted">
           {{
             introProvider
               ? t('vcs.addService.intro', { provider: VCS_PROVIDER_LABELS[introProvider] })
@@ -454,11 +454,11 @@ function done() {
              offer whichever connect methods the deployment serves (never just the App) -->
         <div
           v-if="needsConnection"
-          class="space-y-3 rounded-md border border-amber-500/30 bg-amber-500/5 p-3"
+          class="space-y-3 rounded-md border border-app-warning-500/30 bg-app-warning-500/5 p-3"
         >
           <div class="flex items-start gap-2">
-            <UIcon name="i-lucide-plug-zap" class="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
-            <p class="text-sm text-amber-200/90">
+            <UIcon name="i-lucide-plug-zap" class="mt-0.5 h-4 w-4 shrink-0 text-app-warning-400" />
+            <p class="text-sm text-app-warning-200/90">
               {{ t('vcs.addService.connectFirst') }}
             </p>
           </div>
@@ -531,9 +531,9 @@ function done() {
 
             <div
               v-if="isMonorepo"
-              class="space-y-3 rounded-md border border-slate-700/60 bg-slate-900/40 p-3"
+              class="space-y-3 rounded-md border border-muted/60 bg-default/40 p-3"
             >
-              <p class="text-xs text-slate-400">
+              <p class="text-xs text-muted">
                 {{ t('github.addService.monorepoBrowseHint') }}
               </p>
               <RepoTreeBrowser
@@ -547,20 +547,20 @@ function done() {
 
               <!-- the selection cart + the add action sit right beside the tree, so the
                    picked services and the button that adds them are never scrolled apart -->
-              <div class="space-y-2 rounded-md border border-slate-800 bg-slate-950/40 p-2.5">
-                <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+              <div class="space-y-2 rounded-md border border-default bg-app-950/40 p-2.5">
+                <p class="text-[11px] font-semibold uppercase tracking-wide text-muted">
                   {{ t('github.addService.selectedServices') }}
                 </p>
                 <div v-if="selectedDirectories.length" class="flex flex-wrap gap-1.5">
                   <span
                     v-for="dir in selectedDirectories"
                     :key="dir"
-                    class="inline-flex items-center gap-1 rounded bg-slate-800 px-2 py-0.5 text-xs text-slate-200"
+                    class="inline-flex items-center gap-1 rounded bg-elevated px-2 py-0.5 text-xs text-default"
                   >
-                    <code class="text-slate-200">{{ dir }}</code>
+                    <code class="text-default">{{ dir }}</code>
                     <button
                       type="button"
-                      class="text-slate-400 hover:text-slate-100"
+                      class="text-muted hover:text-app-100"
                       :aria-label="t('github.addService.removeService', { directory: dir })"
                       @click="removeSelected(dir)"
                     >
@@ -568,7 +568,7 @@ function done() {
                     </button>
                   </span>
                 </div>
-                <p v-else class="text-xs text-slate-500">
+                <p v-else class="text-xs text-dimmed">
                   {{ t('github.addService.noServicesSelected') }}
                 </p>
 
@@ -617,10 +617,10 @@ function done() {
           <!-- just-added service: configure it with the same controls as the inspector -->
           <div
             v-if="configuredBlock"
-            class="space-y-4 rounded-md border border-emerald-900/50 bg-emerald-950/20 p-3"
+            class="space-y-4 rounded-md border border-app-success-900/50 bg-app-success-950/20 p-3"
           >
             <div
-              class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-emerald-400"
+              class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-app-success-400"
             >
               <UIcon name="i-lucide-check" class="h-3.5 w-3.5" />
               {{ t('github.addService.addedConfigure', { title: configuredBlock.title }) }}

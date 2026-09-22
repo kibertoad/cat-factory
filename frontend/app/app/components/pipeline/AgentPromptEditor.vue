@@ -174,13 +174,13 @@ function revisionLabel(revision: AgentPromptRevision): string {
     :ui="{ content: 'max-w-[92vw] sm:max-w-3xl lg:max-w-5xl' }"
   >
     <template #body>
-      <div v-if="prompts.loadingDetail" class="py-8 text-center text-sm text-slate-400">
+      <div v-if="prompts.loadingDetail" class="py-8 text-center text-sm text-muted">
         {{ t('common.loading') }}
       </div>
       <div v-else-if="detail" class="flex flex-col gap-3">
         <div class="flex flex-wrap items-center gap-2 text-xs">
           <AgentKindIcon v-if="agentKind" :kind="agentKind" icon-class="h-4 w-4" />
-          <span class="font-medium text-slate-200">{{ label }}</span>
+          <span class="font-medium text-default">{{ label }}</span>
           <UBadge v-if="detail.builtinVersionLabel" color="neutral" variant="subtle" size="sm">
             {{ detail.builtinVersionLabel }}
           </UBadge>
@@ -192,14 +192,14 @@ function revisionLabel(revision: AgentPromptRevision): string {
         <!-- The workspace-wide output ceiling for this kind. Same per-agent-kind scope as the
              prompt below it; saves on change, since there is no revision log to commit to. -->
         <div class="flex flex-wrap items-center gap-2">
-          <span class="text-[11px] text-slate-400">{{ t('pipeline.outputBudget.kindLabel') }}</span>
+          <span class="text-[11px] text-muted">{{ t('pipeline.outputBudget.kindLabel') }}</span>
           <OutputBudgetInput
             class="w-32"
             :model-value="budget"
             :disabled="agentSettings.saving"
             @update:model-value="saveBudget"
           />
-          <span class="text-[10px] text-slate-500">
+          <span class="text-[10px] text-dimmed">
             {{ t('pipeline.outputBudget.kindHint') }}
           </span>
         </div>
@@ -207,7 +207,7 @@ function revisionLabel(revision: AgentPromptRevision): string {
         <!-- What the platform appends is SHOWN, not described. A prose summary of it is copy
              that silently goes stale the moment a directive is added, and a user who does not
              know what is already there writes a prompt that fights it. -->
-        <p v-if="directives" class="text-[11px] leading-relaxed text-slate-500">
+        <p v-if="directives" class="text-[11px] leading-relaxed text-dimmed">
           {{ t('agentPrompt.managedNotice') }}
           <UButton
             variant="link"
@@ -220,13 +220,13 @@ function revisionLabel(revision: AgentPromptRevision): string {
         </p>
         <div
           v-if="directives && showDirectives"
-          class="rounded-md border border-slate-800 bg-slate-950/60 p-2"
+          class="rounded-md border border-default bg-app-950/60 p-2"
         >
-          <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted">
             {{ t('agentPrompt.appendedHeading') }}
           </h4>
           <pre
-            class="max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] text-slate-300"
+            class="max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] text-toned"
             >{{ directives.trim() }}</pre>
         </div>
 
@@ -278,28 +278,28 @@ function revisionLabel(revision: AgentPromptRevision): string {
           >
             {{ showBuiltin ? t('agentPrompt.hideBuiltin') : t('agentPrompt.showBuiltin') }}
           </UButton>
-          <span v-if="restoredFrom !== undefined" class="text-[11px] text-slate-400">
+          <span v-if="restoredFrom !== undefined" class="text-[11px] text-muted">
             {{ t('agentPrompt.restoringFrom', { n: restoredFrom }) }}
           </span>
         </div>
 
-        <div v-if="showBuiltin" class="rounded-md border border-slate-800 bg-slate-950/60 p-2">
-          <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        <div v-if="showBuiltin" class="rounded-md border border-default bg-app-950/60 p-2">
+          <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted">
             {{ t('agentPrompt.builtinHeading') }}
           </h4>
           <pre
-            class="max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] text-slate-300"
+            class="max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] text-toned"
             >{{ detail.builtinText }}</pre>
         </div>
 
         <div>
-          <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted">
             {{ t('agentPrompt.historyHeading') }}
           </h4>
-          <p v-if="!detail.revisions.length" class="text-[11px] text-slate-500">
+          <p v-if="!detail.revisions.length" class="text-[11px] text-dimmed">
             {{ t('agentPrompt.historyEmpty') }}
           </p>
-          <ul v-else class="max-h-52 divide-y divide-slate-800 overflow-y-auto text-xs">
+          <ul v-else class="max-h-52 divide-y divide-default overflow-y-auto text-xs">
             <li
               v-for="revision in detail.revisions"
               :key="revision.revision"
@@ -313,10 +313,10 @@ function revisionLabel(revision: AgentPromptRevision): string {
               >
                 {{ t('agentPrompt.live') }}
               </UBadge>
-              <span class="min-w-0 flex-1 truncate text-slate-300">
+              <span class="min-w-0 flex-1 truncate text-toned">
                 {{ revisionLabel(revision) }}
               </span>
-              <span class="shrink-0 text-[11px] text-slate-500">
+              <span class="shrink-0 text-[11px] text-dimmed">
                 {{ d(new Date(revision.createdAt), 'short') }}
               </span>
               <UButton

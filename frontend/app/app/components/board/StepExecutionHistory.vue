@@ -46,8 +46,8 @@ const entries = computed<Entry[]>(() =>
       class="rounded-md border px-2.5 py-2"
       :class="
         entry.kind === 'success'
-          ? 'border-emerald-900/60 bg-emerald-950/20'
-          : 'border-slate-800/80 bg-slate-950/50'
+          ? 'border-app-success-900/60 bg-app-success-950/20'
+          : 'border-default/80 bg-app-950/50'
       "
       :data-testid="
         entry.kind === 'success' ? 'step-history-success-entry' : 'step-history-failure-entry'
@@ -55,39 +55,39 @@ const entries = computed<Entry[]>(() =>
     >
       <!-- a superseded SUCCESSFUL attempt: its output, collapsible + copyable -->
       <template v-if="entry.kind === 'success'">
-        <div class="flex items-center gap-1.5 text-[10px] text-slate-500">
-          <UIcon name="i-lucide-check-circle-2" class="h-3 w-3 shrink-0 text-emerald-400/70" />
+        <div class="flex items-center gap-1.5 text-[10px] text-dimmed">
+          <UIcon name="i-lucide-check-circle-2" class="h-3 w-3 shrink-0 text-app-success-400/70" />
           <time>{{ d(new Date(entry.occurredAt), 'long') }}</time>
-          <span class="text-emerald-400/80">{{ t('panels.stepDetail.attemptSucceeded') }}</span>
+          <span class="text-app-success-400/80">{{ t('panels.stepDetail.attemptSucceeded') }}</span>
         </div>
         <div class="relative mt-1">
           <CopyButton :text="entry.output.output" class="absolute end-1 top-1 z-10" />
           <pre
-            class="max-h-40 overflow-auto whitespace-pre-wrap rounded bg-slate-950/80 p-1.5 pe-9 text-[10px] leading-snug text-slate-300"
+            class="max-h-40 overflow-auto whitespace-pre-wrap rounded bg-app-950/80 p-1.5 pe-9 text-[10px] leading-snug text-toned"
             >{{ entry.output.output }}</pre>
         </div>
-        <p v-if="entry.output.truncated" class="mt-1 text-[10px] text-slate-500">
+        <p v-if="entry.output.truncated" class="mt-1 text-[10px] text-dimmed">
           {{ t('panels.stepDetail.outputTruncated') }}
         </p>
       </template>
 
       <!-- a FAILED attempt: mirrors FailureHistoryList's entry markup -->
       <template v-else>
-        <div class="flex items-center gap-1.5 text-[10px] text-slate-500">
-          <UIcon name="i-lucide-alert-triangle" class="h-3 w-3 shrink-0 text-rose-400/70" />
+        <div class="flex items-center gap-1.5 text-[10px] text-dimmed">
+          <UIcon name="i-lucide-alert-triangle" class="h-3 w-3 shrink-0 text-app-error-400/70" />
           <time>{{ d(new Date(entry.occurredAt), 'long') }}</time>
         </div>
-        <p class="mt-1 text-[11px] leading-snug text-slate-300" :title="entry.failure.message">
+        <p class="mt-1 text-[11px] leading-snug text-toned" :title="entry.failure.message">
           {{ entry.failure.message }}
         </p>
-        <p v-if="entry.failure.hint" class="mt-1 text-[10px] leading-snug text-slate-500">
+        <p v-if="entry.failure.hint" class="mt-1 text-[10px] leading-snug text-dimmed">
           {{ entry.failure.hint }}
         </p>
         <FailureDetail
           :detail="entry.failure.detail"
           :message="entry.failure.message"
-          summary-class="text-[10px] text-slate-500 hover:text-slate-300"
-          pre-class="bg-slate-950/80 text-[10px] text-slate-400"
+          summary-class="text-[10px] text-dimmed hover:text-toned"
+          pre-class="bg-app-950/80 text-[10px] text-muted"
         />
       </template>
     </li>

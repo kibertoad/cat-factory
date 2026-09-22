@@ -35,7 +35,7 @@ const copy = (warning: ConnectionWarning): string => {
 <template>
   <div
     v-if="warnings?.length"
-    class="rounded-md border border-amber-500/40 bg-amber-950/40 px-3 py-2 text-xs text-amber-200"
+    class="rounded-md border border-app-warning-500/40 bg-app-warning-950/40 px-3 py-2 text-xs text-app-warning-200"
     data-testid="connection-warnings"
   >
     <p class="font-semibold">

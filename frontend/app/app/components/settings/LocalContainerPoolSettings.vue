@@ -75,12 +75,7 @@ async function save() {
 
 <template>
   <div class="space-y-6" data-testid="local-container-pool-settings">
-    <i18n-t
-      keypath="settings.localMode.intro"
-      tag="p"
-      class="text-xs text-slate-400"
-      scope="global"
-    >
+    <i18n-t keypath="settings.localMode.intro" tag="p" class="text-xs text-muted" scope="global">
       <template #poolVars>
         <code>LOCAL_POOL_*</code>
       </template>
@@ -92,13 +87,13 @@ async function save() {
     <!-- Warm container pool -->
     <section class="space-y-3">
       <div>
-        <h4 class="text-sm font-semibold text-slate-200">
+        <h4 class="text-sm font-semibold text-default">
           {{ t('settings.localMode.pool.heading') }}
         </h4>
         <i18n-t
           keypath="settings.localMode.pool.description"
           tag="p"
-          class="text-[11px] text-slate-400"
+          class="text-[11px] text-muted"
           scope="global"
         >
           <template #appleContainer>
@@ -141,12 +136,12 @@ async function save() {
     </section>
 
     <!-- Checkout reuse -->
-    <section class="space-y-3 border-t border-slate-800 pt-6">
+    <section class="space-y-3 border-t border-default pt-6">
       <div>
-        <h4 class="text-sm font-semibold text-slate-200">
+        <h4 class="text-sm font-semibold text-default">
           {{ t('settings.localMode.checkout.heading') }}
         </h4>
-        <p class="text-[11px] text-slate-400">
+        <p class="text-[11px] text-muted">
           {{ t('settings.localMode.checkout.description') }}
         </p>
       </div>

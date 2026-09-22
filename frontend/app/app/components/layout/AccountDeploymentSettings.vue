@@ -434,8 +434,8 @@ async function clearWeb() {
 <template>
   <div v-if="store.available !== false" class="space-y-6">
     <div>
-      <h3 class="mb-1 font-semibold text-white">{{ t('layout.accountDeployment.title') }}</h3>
-      <p class="text-[11px] text-slate-400">
+      <h3 class="mb-1 font-semibold text-highlighted">{{ t('layout.accountDeployment.title') }}</h3>
+      <p class="text-[11px] text-muted">
         {{ t('layout.accountDeployment.intro') }}
       </p>
     </div>
@@ -443,7 +443,7 @@ async function clearWeb() {
     <!-- Slack app OAuth -->
     <section class="space-y-2">
       <div class="flex items-center gap-2">
-        <h4 class="text-sm font-semibold text-slate-200">
+        <h4 class="text-sm font-semibold text-default">
           {{ t('layout.accountDeployment.slack.title') }}
         </h4>
         <UBadge
@@ -458,7 +458,7 @@ async function clearWeb() {
           }}
         </UBadge>
       </div>
-      <p class="text-[11px] text-slate-400">
+      <p class="text-[11px] text-muted">
         {{ t('layout.accountDeployment.slack.description') }}
       </p>
       <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -502,9 +502,9 @@ async function clearWeb() {
     </section>
 
     <!-- Linear app OAuth -->
-    <section class="space-y-2 border-t border-slate-800 pt-6">
+    <section class="space-y-2 border-t border-default pt-6">
       <div class="flex items-center gap-2">
-        <h4 class="text-sm font-semibold text-slate-200">
+        <h4 class="text-sm font-semibold text-default">
           {{ t('layout.accountDeployment.linear.title') }}
         </h4>
         <UBadge
@@ -519,7 +519,7 @@ async function clearWeb() {
           }}
         </UBadge>
       </div>
-      <p class="text-[11px] text-slate-400">
+      <p class="text-[11px] text-muted">
         {{ t('layout.accountDeployment.linear.description') }}
       </p>
       <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -563,9 +563,9 @@ async function clearWeb() {
     </section>
 
     <!-- Figma app OAuth (the document source's designer-doable connect) -->
-    <section class="space-y-2 border-t border-slate-800 pt-6">
+    <section class="space-y-2 border-t border-default pt-6">
       <div class="flex items-center gap-2">
-        <h4 class="text-sm font-semibold text-slate-200">
+        <h4 class="text-sm font-semibold text-default">
           {{ t('layout.accountDeployment.figma.title') }}
         </h4>
         <UBadge
@@ -580,7 +580,7 @@ async function clearWeb() {
           }}
         </UBadge>
       </div>
-      <p class="text-[11px] text-slate-400">
+      <p class="text-[11px] text-muted">
         {{ t('layout.accountDeployment.figma.description') }}
       </p>
       <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -624,9 +624,9 @@ async function clearWeb() {
     </section>
 
     <!-- Web search keys -->
-    <section class="space-y-2 border-t border-slate-800 pt-6">
+    <section class="space-y-2 border-t border-default pt-6">
       <div class="flex items-center gap-2">
-        <h4 class="text-sm font-semibold text-slate-200">
+        <h4 class="text-sm font-semibold text-default">
           {{ t('layout.accountDeployment.web.title') }}
         </h4>
         <UBadge :color="summary?.webSearch ? 'success' : 'neutral'" variant="subtle" size="xs">
@@ -637,7 +637,7 @@ async function clearWeb() {
           }}
         </UBadge>
       </div>
-      <p class="text-[11px] text-slate-400">
+      <p class="text-[11px] text-muted">
         {{ t('layout.accountDeployment.web.description') }}
       </p>
       <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -685,10 +685,10 @@ async function clearWeb() {
       v-if="storageCapability"
       id="content-storage"
       ref="storageSection"
-      class="space-y-2 border-t border-slate-800 pt-6"
+      class="space-y-2 border-t border-default pt-6"
     >
       <div class="flex items-center gap-2">
-        <h4 class="text-sm font-semibold text-slate-200">
+        <h4 class="text-sm font-semibold text-default">
           {{ t('layout.accountDeployment.contentStorage.title') }}
         </h4>
         <UBadge
@@ -706,16 +706,16 @@ async function clearWeb() {
           }}
         </UBadge>
       </div>
-      <p class="text-[11px] text-slate-400">
+      <p class="text-[11px] text-muted">
         {{ t('layout.accountDeployment.contentStorage.description') }}
       </p>
       <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <USelect v-model="csBackend" :items="backendItems" value-key="value" size="sm" />
       </div>
-      <p v-if="selectedCustomStore?.summary" class="text-[11px] text-slate-400">
+      <p v-if="selectedCustomStore?.summary" class="text-[11px] text-muted">
         {{ selectedCustomStore.summary }}
       </p>
-      <p v-if="unregisteredStoreId" class="text-[11px] text-amber-400">
+      <p v-if="unregisteredStoreId" class="text-[11px] text-app-warning-400">
         {{
           t('layout.accountDeployment.contentStorage.unregisteredStoreWarning', {
             store: unregisteredStoreId,
@@ -762,7 +762,7 @@ async function clearWeb() {
           size="sm"
         />
         <div class="flex items-center gap-2">
-          <span class="text-[11px] text-slate-400">
+          <span class="text-[11px] text-muted">
             {{ t('layout.accountDeployment.contentStorage.accessKeys') }}
           </span>
           <UBadge
@@ -789,7 +789,7 @@ async function clearWeb() {
             size="sm"
           />
         </div>
-        <p class="text-[11px] text-slate-400">
+        <p class="text-[11px] text-muted">
           {{ t('layout.accountDeployment.contentStorage.keysHint') }}
         </p>
       </template>

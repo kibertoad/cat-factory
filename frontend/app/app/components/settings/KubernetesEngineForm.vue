@@ -368,8 +368,8 @@ async function copyAutoSetupCommand() {
 </script>
 
 <template>
-  <div class="rounded-lg border border-dashed border-slate-700 p-3 space-y-3">
-    <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+  <div class="rounded-lg border border-dashed border-muted p-3 space-y-3">
+    <p class="text-[11px] font-semibold uppercase tracking-wide text-muted">
       {{
         connected
           ? t('settings.providerConnection.form.updateConfiguration')
@@ -379,7 +379,7 @@ async function copyAutoSetupCommand() {
 
     <p
       v-if="engine === 'local-k3s'"
-      class="rounded-md border border-sky-500/30 bg-sky-500/10 p-2 text-[11px] text-sky-200"
+      class="rounded-md border border-app-info-500/30 bg-app-info-500/10 p-2 text-[11px] text-app-info-200"
     >
       {{ t('settings.infrastructure.kubernetesEngine.localK3sHint') }}
     </p>
@@ -389,18 +389,18 @@ async function copyAutoSetupCommand() {
          (the token is pasted, never in the link). -->
     <div
       v-if="engine === 'local-k3s'"
-      class="rounded-md border border-slate-700 bg-slate-900/40 p-2 space-y-1.5"
+      class="rounded-md border border-muted bg-default/40 p-2 space-y-1.5"
     >
-      <p class="flex items-center gap-1.5 text-[11px] font-semibold text-slate-300">
-        <UIcon name="i-lucide-wand-2" class="h-3.5 w-3.5 text-slate-400" />
+      <p class="flex items-center gap-1.5 text-[11px] font-semibold text-toned">
+        <UIcon name="i-lucide-wand-2" class="h-3.5 w-3.5 text-muted" />
         {{ t('settings.infrastructure.kubernetesEngine.autoSetup.title') }}
       </p>
-      <p class="text-[11px] text-slate-400">
+      <p class="text-[11px] text-muted">
         {{ t('settings.infrastructure.kubernetesEngine.autoSetup.description') }}
       </p>
       <div class="flex items-center gap-1.5">
         <code
-          class="flex-1 rounded bg-slate-950 px-2 py-1 font-mono text-[11px] text-slate-200 select-all"
+          class="flex-1 rounded bg-app-950 px-2 py-1 font-mono text-[11px] text-default select-all"
         >
           {{ AUTO_SETUP_COMMAND }}
         </code>
@@ -438,7 +438,7 @@ async function copyAutoSetupCommand() {
       "
     >
       <template v-if="tokenStored" #hint>
-        <span class="inline-flex items-center gap-1 text-[11px] text-emerald-400">
+        <span class="inline-flex items-center gap-1 text-[11px] text-app-success-400">
           <UIcon name="i-lucide-check-circle-2" class="h-3.5 w-3.5" />
           {{ t('settings.infrastructure.kubernetesEngine.tokenSaved') }}
         </span>
@@ -458,7 +458,7 @@ async function copyAutoSetupCommand() {
       <p
         v-if="tokenProblem"
         class="mt-1 text-[11px]"
-        :class="tokenBlocking ? 'text-rose-400' : 'text-amber-400'"
+        :class="tokenBlocking ? 'text-app-error-400' : 'text-app-warning-400'"
         data-testid="service-account-token-problem"
       >
         {{ tokenProblem }}
@@ -600,7 +600,7 @@ async function copyAutoSetupCommand() {
     </div>
 
     <div class="flex items-center justify-end gap-3">
-      <p v-if="connectBlockedReason" class="flex-1 text-left text-xs text-rose-400">
+      <p v-if="connectBlockedReason" class="flex-1 text-left text-xs text-app-error-400">
         {{ connectBlockedReason }}
       </p>
       <UButton

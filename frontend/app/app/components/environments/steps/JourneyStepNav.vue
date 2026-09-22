@@ -14,7 +14,7 @@ const { t } = useI18n()
 </script>
 
 <template>
-  <div class="flex items-center justify-between border-t border-slate-800 pt-3">
+  <div class="flex items-center justify-between border-t border-default pt-3">
     <UButton
       color="neutral"
       variant="ghost"

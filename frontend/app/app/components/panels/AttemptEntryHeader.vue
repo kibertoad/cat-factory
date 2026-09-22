@@ -23,14 +23,12 @@ function formatClock(ms: number | null | undefined, fmt: 'short' | 'long'): stri
 <template>
   <div class="flex items-center gap-2">
     <UIcon v-if="icon" :name="icon" class="h-3.5 w-3.5 shrink-0" :class="iconClass" />
-    <span class="text-[13px] font-medium text-slate-200">{{ label }}</span>
+    <span class="text-[13px] font-medium text-default">{{ label }}</span>
     <UBadge :color="outcome === 'failed' ? 'error' : 'neutral'" variant="subtle" size="sm">{{
       outcomeLabel
     }}</UBadge>
-    <span
-      v-if="formatClock(at, dateFormat ?? 'short')"
-      class="ms-auto text-[11px] text-slate-500"
-      >{{ formatClock(at, dateFormat ?? 'short') }}</span
-    >
+    <span v-if="formatClock(at, dateFormat ?? 'short')" class="ms-auto text-[11px] text-dimmed">{{
+      formatClock(at, dateFormat ?? 'short')
+    }}</span>
   </div>
 </template>

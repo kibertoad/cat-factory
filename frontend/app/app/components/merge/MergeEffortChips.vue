@@ -88,7 +88,7 @@ function pick(effort: ReviewEffort) {
   <div data-testid="merge-effort-chips" class="mt-2">
     <div class="flex items-center gap-1.5">
       <span
-        class="text-[10px] uppercase tracking-wide text-slate-500"
+        class="text-[10px] uppercase tracking-wide text-dimmed"
         :title="t('merge.effort.promptHint')"
       >
         {{ t('merge.effort.prompt') }}
@@ -119,7 +119,7 @@ function pick(effort: ReviewEffort) {
         {{ chip.label }}
       </UButton>
     </div>
-    <p v-if="history" data-testid="merge-effort-history" class="mt-1 text-[10px] text-slate-500">
+    <p v-if="history" data-testid="merge-effort-history" class="mt-1 text-[10px] text-dimmed">
       {{ history }}
     </p>
   </div>

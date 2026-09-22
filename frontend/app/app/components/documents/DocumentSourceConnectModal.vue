@@ -118,7 +118,7 @@ async function disconnect() {
     </template>
     <template #body>
       <div v-if="descriptor" class="space-y-4">
-        <p class="text-sm text-slate-400">
+        <p class="text-sm text-muted">
           {{ t('documents.connect.intro', { source: descriptor.label }) }}
         </p>
 
@@ -132,10 +132,10 @@ async function disconnect() {
           >
             {{ t('documents.connect.oauth.action', { source: descriptor.label }) }}
           </UButton>
-          <p class="text-[11px] text-slate-500">
+          <p class="text-[11px] text-dimmed">
             {{ t('documents.connect.oauth.scopes', { scopes: oauth.scopes.join(', ') }) }}
           </p>
-          <p class="text-[11px] text-slate-500">{{ t('documents.connect.oauth.fallback') }}</p>
+          <p class="text-[11px] text-dimmed">{{ t('documents.connect.oauth.fallback') }}</p>
         </div>
 
         <div class="space-y-3">

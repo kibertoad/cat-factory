@@ -22,7 +22,11 @@ const difficultyPct = computed(() =>
   Math.min(100, Math.max(0, (props.report.difficulty / 10) * 100)),
 )
 // Colour the difficulty by band: easy (emerald) → moderate (amber) → hard (rose).
-const BAR_CLASS = { easy: 'bg-emerald-400', moderate: 'bg-amber-400', hard: 'bg-rose-400' } as const
+const BAR_CLASS = {
+  easy: 'bg-app-success-400',
+  moderate: 'bg-app-warning-400',
+  hard: 'bg-app-error-400',
+} as const
 const difficultyClass = computed(() => BAR_CLASS[effortBand(props.report.difficulty)])
 </script>
 
@@ -30,25 +34,22 @@ const difficultyClass = computed(() => BAR_CLASS[effortBand(props.report.difficu
   <section
     data-testid="step-effort-report"
     :class="
-      variant === 'card' ? 'scroll-mt-4 rounded-xl border border-slate-800 bg-slate-900/50 p-4' : ''
+      variant === 'card' ? 'scroll-mt-4 rounded-xl border border-default bg-default/50 p-4' : ''
     "
   >
     <div
       v-if="variant === 'card'"
-      class="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400"
+      class="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted"
     >
       <UIcon name="i-lucide-gauge" class="h-3.5 w-3.5" />
       <span>{{ t('panels.stepDetail.effort.heading') }}</span>
     </div>
 
     <div class="flex items-center gap-2">
-      <span
-        class="text-[12px] text-slate-300"
-        :title="t('panels.stepDetail.effort.difficultyHint')"
-      >
+      <span class="text-[12px] text-toned" :title="t('panels.stepDetail.effort.difficultyHint')">
         {{ t('panels.stepDetail.effort.difficulty') }}
       </span>
-      <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-700/60">
+      <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-accented/60">
         <div
           class="h-full rounded-full"
           :class="difficultyClass"
@@ -57,7 +58,7 @@ const difficultyClass = computed(() => BAR_CLASS[effortBand(props.report.difficu
       </div>
       <span
         data-testid="step-effort-difficulty"
-        class="text-[12px] font-medium text-slate-200"
+        class="text-[12px] font-medium text-default"
         :title="t('panels.stepDetail.effort.difficultyHint')"
       >
         {{ t('panels.stepDetail.effort.outOfTen', { value: report.difficulty }) }}
@@ -66,33 +67,33 @@ const difficultyClass = computed(() => BAR_CLASS[effortBand(props.report.difficu
 
     <p
       v-if="report.summary"
-      class="mt-2 whitespace-pre-wrap text-[13px] leading-relaxed text-slate-300"
+      class="mt-2 whitespace-pre-wrap text-[13px] leading-relaxed text-toned"
     >
       {{ report.summary }}
     </p>
 
     <div v-if="report.reducedEffectiveness" class="mt-3">
-      <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+      <p class="text-[11px] font-semibold uppercase tracking-wide text-dimmed">
         {{ t('panels.stepDetail.effort.reduced') }}
       </p>
-      <p class="mt-0.5 whitespace-pre-wrap text-[12px] text-slate-300">
+      <p class="mt-0.5 whitespace-pre-wrap text-[12px] text-toned">
         {{ report.reducedEffectiveness }}
       </p>
     </div>
 
     <div v-if="report.obstacles?.length" class="mt-3">
-      <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+      <p class="text-[11px] font-semibold uppercase tracking-wide text-dimmed">
         {{ t('panels.stepDetail.effort.obstacles') }}
       </p>
       <ul class="mt-0.5 space-y-1">
         <li
           v-for="(obstacle, i) in report.obstacles"
           :key="i"
-          class="flex items-start gap-1.5 text-[12px] text-slate-300"
+          class="flex items-start gap-1.5 text-[12px] text-toned"
         >
           <UIcon
             name="i-lucide-alert-triangle"
-            class="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400/80"
+            class="mt-0.5 h-3.5 w-3.5 shrink-0 text-app-warning-400/80"
           />
           <span>{{ obstacle }}</span>
         </li>

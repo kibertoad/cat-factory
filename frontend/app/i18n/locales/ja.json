@@ -8591,5 +8591,13 @@
     "territories": {
       "heading": "領域"
     }
+  },
+  "appearance": {
+    "switcher": "外観",
+    "mode": {
+      "system": "システム",
+      "light": "ライト",
+      "dark": "ダーク"
+    }
   }
 }

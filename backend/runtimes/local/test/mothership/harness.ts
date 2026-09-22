@@ -248,6 +248,7 @@ interface MothershipAppOptions {
    * delegated assertion passed judgement on nothing.
    */
   agentKindRegistry?: AgentKindRegistry
+  gateRegistry?: CoreDependencies['gateRegistry']
   delegatedExecutorRegistry?: CoreDependencies['delegatedExecutorRegistry']
 }
 
@@ -436,6 +437,7 @@ export function makeMothershipConformanceApp(
     // a kind's work leaves the platform, so the pair travels together: one without the other
     // composes a container that can never route to the executor.
     ...(opts?.agentKindRegistry ? { agentKindRegistry: opts.agentKindRegistry } : {}),
+    ...(opts?.gateRegistry ? { gateRegistry: opts.gateRegistry } : {}),
     ...(opts?.delegatedExecutorRegistry
       ? { delegatedExecutorRegistry: opts.delegatedExecutorRegistry }
       : {}),

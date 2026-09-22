@@ -357,20 +357,20 @@ async function save() {
           <div class="space-y-6">
             <!-- Run-timing escalation -->
             <section class="space-y-2">
-              <h3 class="text-sm font-semibold text-slate-200">
+              <h3 class="text-sm font-semibold text-default">
                 {{ t('settings.workspaceSettings.waiting.heading') }}
               </h3>
-              <p class="text-[11px] text-slate-400">
+              <p class="text-[11px] text-muted">
                 <i18n-t keypath="settings.workspaceSettings.waiting.body" tag="span" scope="global">
                   <template #overdue>
-                    <span class="text-error-400">{{
+                    <span class="text-app-error-400">{{
                       t('settings.workspaceSettings.waiting.overdue')
                     }}</span>
                   </template>
                 </i18n-t>
               </p>
               <label class="block w-48">
-                <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+                <span class="mb-1 block text-[10px] uppercase tracking-wide text-dimmed">
                   {{ t('settings.workspaceSettings.waiting.escalateAfter') }}
                 </span>
                 <UInput
@@ -384,14 +384,14 @@ async function save() {
 
             <!-- Per-service running-task limit -->
             <section class="space-y-2">
-              <h3 class="text-sm font-semibold text-slate-200">
+              <h3 class="text-sm font-semibold text-default">
                 {{ t('settings.workspaceSettings.taskLimit.heading') }}
               </h3>
-              <p class="text-[11px] text-slate-400">
+              <p class="text-[11px] text-muted">
                 {{ t('settings.workspaceSettings.taskLimit.body') }}
               </p>
               <label class="block w-64">
-                <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">{{
+                <span class="mb-1 block text-[10px] uppercase tracking-wide text-dimmed">{{
                   t('settings.workspaceSettings.taskLimit.mode')
                 }}</span>
                 <USelect
@@ -404,7 +404,7 @@ async function save() {
               </label>
 
               <label v-if="draft.taskLimitMode === 'shared'" class="block w-48">
-                <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+                <span class="mb-1 block text-[10px] uppercase tracking-wide text-dimmed">
                   {{ t('settings.workspaceSettings.taskLimit.maxRunning') }}
                 </span>
                 <UInput v-model.number="draft.taskLimitShared" type="number" :min="1" size="sm" />
@@ -412,7 +412,7 @@ async function save() {
 
               <div v-else-if="draft.taskLimitMode === 'per_type'" class="grid grid-cols-2 gap-3">
                 <label v-for="taskType in TASK_TYPES" :key="taskType" class="block">
-                  <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+                  <span class="mb-1 block text-[10px] uppercase tracking-wide text-dimmed">
                     {{ maxTaskTypeLabel(taskType) }}
                   </span>
                   <UInput
@@ -428,14 +428,14 @@ async function save() {
             <!-- The pre-dispatch input gate: the structural check of a task's own wording, run
                  before a run's first agent step is dispatched. -->
             <section class="space-y-2">
-              <h3 class="text-sm font-semibold text-slate-200">
+              <h3 class="text-sm font-semibold text-default">
                 {{ t('settings.workspaceSettings.inputGate.heading') }}
               </h3>
-              <p class="text-[11px] text-slate-400">
+              <p class="text-[11px] text-muted">
                 {{ t('settings.workspaceSettings.inputGate.body') }}
               </p>
               <label class="block w-64">
-                <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">{{
+                <span class="mb-1 block text-[10px] uppercase tracking-wide text-dimmed">{{
                   t('settings.workspaceSettings.inputGate.mode')
                 }}</span>
                 <USelect
@@ -451,14 +451,14 @@ async function save() {
 
             <!-- Review-debt friction on task creation -->
             <section class="space-y-2">
-              <h3 class="text-sm font-semibold text-slate-200">
+              <h3 class="text-sm font-semibold text-default">
                 {{ t('settings.workspaceSettings.reviewFriction.heading') }}
               </h3>
-              <p class="text-[11px] text-slate-400">
+              <p class="text-[11px] text-muted">
                 {{ t('settings.workspaceSettings.reviewFriction.body') }}
               </p>
               <label class="block w-64">
-                <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">{{
+                <span class="mb-1 block text-[10px] uppercase tracking-wide text-dimmed">{{
                   t('settings.workspaceSettings.reviewFriction.mode')
                 }}</span>
                 <USelect
@@ -471,7 +471,7 @@ async function save() {
               </label>
 
               <label v-if="draft.reviewFrictionMode !== 'off'" class="block w-48">
-                <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+                <span class="mb-1 block text-[10px] uppercase tracking-wide text-dimmed">
                   {{ t('settings.workspaceSettings.reviewFriction.warnCount') }}
                 </span>
                 <UInput
@@ -483,17 +483,17 @@ async function save() {
               </label>
 
               <div v-if="draft.reviewFrictionMode === 'enforce'" class="space-y-2">
-                <p class="text-[11px] text-slate-400">
+                <p class="text-[11px] text-muted">
                   {{ t('settings.workspaceSettings.reviewFriction.enforceHint') }}
                 </p>
                 <label class="flex items-center gap-2">
                   <USwitch v-model="draft.reviewFrictionBlockCountEnabled" size="sm" />
-                  <span class="text-[13px] text-slate-300">{{
+                  <span class="text-[13px] text-toned">{{
                     t('settings.workspaceSettings.reviewFriction.blockCountToggle')
                   }}</span>
                 </label>
                 <label v-if="draft.reviewFrictionBlockCountEnabled" class="block w-48">
-                  <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+                  <span class="mb-1 block text-[10px] uppercase tracking-wide text-dimmed">
                     {{ t('settings.workspaceSettings.reviewFriction.blockCount') }}
                   </span>
                   <UInput
@@ -505,12 +505,12 @@ async function save() {
                 </label>
                 <label class="flex items-center gap-2">
                   <USwitch v-model="draft.reviewFrictionBlockStuckEnabled" size="sm" />
-                  <span class="text-[13px] text-slate-300">{{
+                  <span class="text-[13px] text-toned">{{
                     t('settings.workspaceSettings.reviewFriction.blockStuckToggle')
                   }}</span>
                 </label>
                 <label v-if="draft.reviewFrictionBlockStuckEnabled" class="block w-48">
-                  <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+                  <span class="mb-1 block text-[10px] uppercase tracking-wide text-dimmed">
                     {{ t('settings.workspaceSettings.reviewFriction.blockStuckMinutes') }}
                   </span>
                   <UInput
@@ -525,15 +525,15 @@ async function save() {
 
             <!-- Agent observability -->
             <section class="space-y-2">
-              <h3 class="text-sm font-semibold text-slate-200">
+              <h3 class="text-sm font-semibold text-default">
                 {{ t('settings.workspaceSettings.observability.heading') }}
               </h3>
-              <p class="text-[11px] text-slate-400">
+              <p class="text-[11px] text-muted">
                 {{ t('settings.workspaceSettings.observability.body') }}
               </p>
               <label class="flex items-center gap-2">
                 <USwitch v-model="draft.storeAgentContext" size="sm" />
-                <span class="text-sm text-slate-200">{{
+                <span class="text-sm text-default">{{
                   t('settings.workspaceSettings.observability.toggle')
                 }}</span>
               </label>
@@ -541,15 +541,15 @@ async function save() {
 
             <!-- Engine-maintained PR verification report -->
             <section class="space-y-2">
-              <h3 class="text-sm font-semibold text-slate-200">
+              <h3 class="text-sm font-semibold text-default">
                 {{ t('settings.workspaceSettings.prReport.heading') }}
               </h3>
-              <p class="text-[11px] text-slate-400">
+              <p class="text-[11px] text-muted">
                 {{ t('settings.workspaceSettings.prReport.body') }}
               </p>
               <label class="flex items-center gap-2">
                 <USwitch v-model="draft.publishPrVerificationReport" size="sm" />
-                <span class="text-sm text-slate-200">{{
+                <span class="text-sm text-default">{{
                   t('settings.workspaceSettings.prReport.toggle')
                 }}</span>
               </label>
@@ -557,14 +557,14 @@ async function save() {
 
             <!-- Visual-confirmation artifact retention -->
             <section class="space-y-2">
-              <h3 class="text-sm font-semibold text-slate-200">
+              <h3 class="text-sm font-semibold text-default">
                 {{ t('settings.workspaceSettings.retention.heading') }}
               </h3>
-              <p class="text-[11px] text-slate-400">
+              <p class="text-[11px] text-muted">
                 {{ t('settings.workspaceSettings.retention.body') }}
               </p>
               <label class="block w-48">
-                <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+                <span class="mb-1 block text-[10px] uppercase tracking-wide text-dimmed">
                   {{ t('settings.workspaceSettings.retention.days') }}
                 </span>
                 <UInput
@@ -579,14 +579,14 @@ async function save() {
 
             <!-- What the board's Done swimlane keeps in view -->
             <section class="space-y-2">
-              <h3 class="text-sm font-semibold text-slate-200">
+              <h3 class="text-sm font-semibold text-default">
                 {{ t('settings.workspaceSettings.doneLane.heading') }}
               </h3>
-              <p class="text-[11px] text-slate-400">
+              <p class="text-[11px] text-muted">
                 {{ t('settings.workspaceSettings.doneLane.body') }}
               </p>
               <label class="block w-48">
-                <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+                <span class="mb-1 block text-[10px] uppercase tracking-wide text-dimmed">
                   {{ t('settings.workspaceSettings.doneLane.maxItems') }}
                 </span>
                 <UInput
@@ -598,17 +598,17 @@ async function save() {
                   data-testid="done-lane-max-items"
                 />
               </label>
-              <p v-if="draft.doneLaneMaxItems === 0" class="text-[11px] text-slate-500">
+              <p v-if="draft.doneLaneMaxItems === 0" class="text-[11px] text-dimmed">
                 {{ t('settings.workspaceSettings.doneLane.zeroHint') }}
               </p>
               <label class="flex items-center gap-2">
                 <UCheckbox v-model="draft.doneLaneRetentionEnabled" size="sm" />
-                <span class="text-[11px] text-slate-300">{{
+                <span class="text-[11px] text-toned">{{
                   t('settings.workspaceSettings.doneLane.ageToggle')
                 }}</span>
               </label>
               <label v-if="draft.doneLaneRetentionEnabled" class="block w-48">
-                <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+                <span class="mb-1 block text-[10px] uppercase tracking-wide text-dimmed">
                   {{ t('settings.workspaceSettings.doneLane.days') }}
                 </span>
                 <UInput
@@ -620,17 +620,17 @@ async function save() {
                   data-testid="done-lane-retention-days"
                 />
               </label>
-              <p class="text-[11px] text-slate-500">
+              <p class="text-[11px] text-dimmed">
                 {{ t('settings.workspaceSettings.doneLane.hidesOnlyHint') }}
               </p>
             </section>
 
             <!-- Run credential: the App installation vs. the initiator's own token -->
             <section class="space-y-2">
-              <h3 class="text-sm font-semibold text-slate-200">
+              <h3 class="text-sm font-semibold text-default">
                 {{ t('settings.workspaceSettings.runCredential.heading') }}
               </h3>
-              <p class="text-[11px] text-slate-400">
+              <p class="text-[11px] text-muted">
                 {{ t('settings.workspaceSettings.runCredential.body') }}
               </p>
               <label class="flex items-center gap-2">
@@ -639,18 +639,18 @@ async function save() {
                   size="sm"
                   data-testid="allow-initiator-pat"
                 />
-                <span class="text-sm text-slate-200">{{
+                <span class="text-sm text-default">{{
                   t('settings.workspaceSettings.runCredential.toggle')
                 }}</span>
               </label>
-              <p v-if="!draft.allowInitiatorPat" class="text-[11px] text-amber-300">
+              <p v-if="!draft.allowInitiatorPat" class="text-[11px] text-app-warning-300">
                 {{ t('settings.workspaceSettings.runCredential.offHint') }}
               </p>
               <!-- Stated rather than read: the account floor lives behind an ACCOUNT-admin
                    endpoint, which a workspace admin may not hold, so probing it here would 403
                    for exactly the people this note is for. A static line sets the expectation
                    without pretending to report a value we cannot see. -->
-              <p v-if="draft.allowInitiatorPat" class="text-[11px] text-slate-500">
+              <p v-if="draft.allowInitiatorPat" class="text-[11px] text-dimmed">
                 {{ t('settings.workspaceSettings.runCredential.accountFloorNote') }}
               </p>
             </section>
@@ -659,10 +659,10 @@ async function save() {
                  It is a property of how this team fixes bugs rather than of any one hunt, which
                  is why it is a board setting and not a field on the expedition. -->
             <section class="space-y-2">
-              <h3 class="text-sm font-semibold text-slate-200">
+              <h3 class="text-sm font-semibold text-default">
                 {{ t('settings.workspaceSettings.bugFishing.heading') }}
               </h3>
-              <p class="text-[11px] text-slate-400">
+              <p class="text-[11px] text-muted">
                 {{ t('settings.workspaceSettings.bugFishing.body') }}
               </p>
               <USelectMenu
@@ -677,15 +677,15 @@ async function save() {
 
             <!-- Kaizen agent -->
             <section class="space-y-2">
-              <h3 class="text-sm font-semibold text-slate-200">
+              <h3 class="text-sm font-semibold text-default">
                 {{ t('settings.workspaceSettings.kaizen.heading') }}
               </h3>
-              <p class="text-[11px] text-slate-400">
+              <p class="text-[11px] text-muted">
                 {{ t('settings.workspaceSettings.kaizen.body') }}
               </p>
               <label class="flex items-center gap-2">
                 <USwitch v-model="draft.kaizenEnabled" size="sm" />
-                <span class="text-sm text-slate-200">{{
+                <span class="text-sm text-default">{{
                   t('settings.workspaceSettings.kaizen.toggle')
                 }}</span>
               </label>

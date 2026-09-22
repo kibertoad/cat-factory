@@ -89,13 +89,13 @@ const STATUS_UI: Record<
 </script>
 
 <template>
-  <div class="rounded-lg border border-slate-800 bg-slate-800/40 px-3 py-2.5">
+  <div class="rounded-lg border border-default bg-elevated/40 px-3 py-2.5">
     <div class="flex items-center justify-between gap-2">
       <div class="flex min-w-0 items-center gap-2.5">
-        <UIcon :name="state.icon" class="h-5 w-5 shrink-0 text-slate-300" />
+        <UIcon :name="state.icon" class="h-5 w-5 shrink-0 text-toned" />
         <div class="min-w-0">
-          <div class="text-sm font-medium text-slate-200">{{ state.label }}</div>
-          <div class="text-[11px] text-slate-500">{{ subtitle }}</div>
+          <div class="text-sm font-medium text-default">{{ state.label }}</div>
+          <div class="text-[11px] text-dimmed">{{ subtitle }}</div>
         </div>
       </div>
       <div class="flex shrink-0 items-center gap-2">

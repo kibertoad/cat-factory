@@ -592,13 +592,13 @@ async function unlinkSource(id: string) {
          would fail with a raw 503 — say so instead (any entry point lands here). -->
     <div
       v-if="library.available === false"
-      class="rounded-md border border-slate-800 bg-slate-900/40 p-3 text-sm text-slate-400"
+      class="rounded-md border border-default bg-default/40 p-3 text-sm text-muted"
     >
       {{ t('fragments.unavailable') }}
     </div>
 
     <template v-else>
-      <p class="text-sm text-slate-400">
+      <p class="text-sm text-muted">
         <template v-if="isWorkspace">
           {{ t('fragments.intro.workspace') }}
         </template>
@@ -626,7 +626,7 @@ async function unlinkSource(id: string) {
 
       <!-- Resolved (merged) catalog — workspace scope only -->
       <div v-if="tab === 'catalog'" class="flex flex-col gap-2">
-        <p class="text-xs text-slate-500">
+        <p class="text-xs text-dimmed">
           {{
             t(
               'fragments.catalog.summary',
@@ -638,10 +638,10 @@ async function unlinkSource(id: string) {
         <div
           v-for="f in library.resolved"
           :key="f.id"
-          class="rounded-md border border-slate-800 bg-slate-900/60 p-3"
+          class="rounded-md border border-default bg-default/60 p-3"
         >
           <div class="flex items-center gap-2">
-            <span class="font-medium text-slate-100">{{ f.title }}</span>
+            <span class="font-medium text-app-100">{{ f.title }}</span>
             <UBadge size="xs" :color="tierColor[f.tier]" variant="subtle">
               {{ tierLabel[f.tier] }}
             </UBadge>
@@ -654,9 +654,9 @@ async function unlinkSource(id: string) {
             >
               {{ t('fragments.catalog.live', { source: f.documentRef.source }) }}
             </UBadge>
-            <span class="ms-auto font-mono text-[11px] text-slate-500">{{ f.id }}</span>
+            <span class="ms-auto font-mono text-[11px] text-dimmed">{{ f.id }}</span>
           </div>
-          <p class="mt-1 text-sm text-slate-400">{{ f.summary }}</p>
+          <p class="mt-1 text-sm text-muted">{{ f.summary }}</p>
           <div v-if="f.tags?.length" class="mt-1 flex flex-wrap gap-1">
             <UBadge v-for="tag in f.tags" :key="tag" size="xs" variant="outline" color="neutral">
               {{ tag }}
@@ -670,7 +670,7 @@ async function unlinkSource(id: string) {
         <div
           v-for="f in library.fragments"
           :key="f.id"
-          class="rounded-md border border-slate-800 bg-slate-900/60 p-3"
+          class="rounded-md border border-default bg-default/60 p-3"
         >
           <!-- Inline editor (hand-authored fragments): title / summary / body / tags, with the
                same auto-generate-title button as the create form. -->
@@ -716,7 +716,7 @@ async function unlinkSource(id: string) {
                 :placeholder="t('fragments.authored.briefPlaceholder')"
                 :rows="2"
               />
-              <p class="text-xs text-slate-500">{{ t('fragments.authored.briefHint') }}</p>
+              <p class="text-xs text-dimmed">{{ t('fragments.authored.briefHint') }}</p>
             </div>
             <UInput
               v-model="editDraft.tags"
@@ -740,12 +740,12 @@ async function unlinkSource(id: string) {
           <div v-else class="flex items-start gap-2">
             <div class="min-w-0">
               <div class="flex items-center gap-2">
-                <span class="font-medium text-slate-100">{{ f.title }}</span>
+                <span class="font-medium text-app-100">{{ f.title }}</span>
                 <UBadge v-if="f.source" size="xs" color="info" variant="subtle">{{
                   t('fragments.authored.fromRepo')
                 }}</UBadge>
               </div>
-              <p class="text-sm text-slate-400">{{ f.summary }}</p>
+              <p class="text-sm text-muted">{{ f.summary }}</p>
             </div>
             <div class="ms-auto flex gap-1">
               <!-- Editing a repo-SOURCED fragment locally would be overwritten on the next sync,
@@ -769,7 +769,7 @@ async function unlinkSource(id: string) {
             </div>
           </div>
         </div>
-        <p v-if="!library.fragments.length" class="text-sm text-slate-500">
+        <p v-if="!library.fragments.length" class="text-sm text-dimmed">
           {{
             isWorkspace
               ? t('fragments.authored.empty.workspace')
@@ -777,7 +777,7 @@ async function unlinkSource(id: string) {
           }}
         </p>
 
-        <div class="rounded-md border border-slate-800 p-3">
+        <div class="rounded-md border border-default p-3">
           <p class="mb-2 text-sm font-medium">{{ t('fragments.authored.addTitle') }}</p>
           <div class="flex flex-col gap-2">
             <div class="flex gap-2">
@@ -822,7 +822,7 @@ async function unlinkSource(id: string) {
                 :placeholder="t('fragments.authored.briefPlaceholder')"
                 :rows="2"
               />
-              <p class="text-xs text-slate-500">{{ t('fragments.authored.briefHint') }}</p>
+              <p class="text-xs text-dimmed">{{ t('fragments.authored.briefHint') }}</p>
             </div>
             <UInput v-model="draft.tags" :placeholder="t('fragments.authored.tagsPlaceholder')" />
             <UButton
@@ -841,25 +841,25 @@ async function unlinkSource(id: string) {
 
       <!-- Document-backed (living) fragments -->
       <div v-else-if="tab === 'documents'" class="flex flex-col gap-3">
-        <p class="text-xs text-slate-500">
+        <p class="text-xs text-dimmed">
           {{ t('fragments.documents.intro') }}
         </p>
 
         <div
           v-for="f in documentFragments"
           :key="f.id"
-          class="flex items-start gap-2 rounded-md border border-slate-800 bg-slate-900/60 p-3"
+          class="flex items-start gap-2 rounded-md border border-default bg-default/60 p-3"
         >
-          <UIcon name="i-lucide-radio" class="mt-0.5 h-4 w-4 text-emerald-400" />
+          <UIcon name="i-lucide-radio" class="mt-0.5 h-4 w-4 text-app-success-400" />
           <div class="min-w-0">
             <div class="flex items-center gap-2">
-              <span class="font-medium text-slate-100">{{ f.title }}</span>
+              <span class="font-medium text-app-100">{{ f.title }}</span>
               <UBadge size="xs" color="success" variant="subtle">
                 {{ f.documentRef?.source }}
               </UBadge>
             </div>
-            <p class="text-sm text-slate-400">{{ f.summary }}</p>
-            <p v-if="f.resolvedAt" class="text-[11px] text-slate-500">
+            <p class="text-sm text-muted">{{ f.summary }}</p>
+            <p v-if="f.resolvedAt" class="text-[11px] text-dimmed">
               {{
                 t('fragments.documents.lastResolved', { date: d(new Date(f.resolvedAt), 'long') })
               }}
@@ -884,16 +884,16 @@ async function unlinkSource(id: string) {
             />
           </div>
         </div>
-        <p v-if="!documentFragments.length" class="text-sm text-slate-500">
+        <p v-if="!documentFragments.length" class="text-sm text-dimmed">
           {{ t('fragments.documents.empty') }}
         </p>
 
-        <div class="rounded-md border border-slate-800 p-3">
+        <div class="rounded-md border border-default p-3">
           <p class="mb-2 text-sm font-medium">{{ t('fragments.documents.linkTitle') }}</p>
-          <div v-if="docLinkDisabled" class="text-sm text-slate-500">
+          <div v-if="docLinkDisabled" class="text-sm text-dimmed">
             {{ t('fragments.documents.disabledHint') }}
           </div>
-          <div v-else-if="!documents.connectedSources.length" class="text-sm text-slate-500">
+          <div v-else-if="!documents.connectedSources.length" class="text-sm text-dimmed">
             {{ t('fragments.documents.connectFirst') }}
           </div>
           <div v-else class="flex flex-col gap-2">
@@ -921,9 +921,9 @@ async function unlinkSource(id: string) {
               <GitHubRepoSearchSelect v-model="docRepoId" @update:repo="docRepo = $event" />
               <div
                 v-if="docRepoId !== undefined"
-                class="rounded-md border border-slate-800 bg-slate-900/40 p-2"
+                class="rounded-md border border-default bg-default/40 p-2"
               >
-                <p class="mb-2 text-xs text-slate-400">
+                <p class="mb-2 text-xs text-muted">
                   {{ t('fragments.documents.githubBrowseHint') }}
                 </p>
                 <RepoTreeBrowser
@@ -936,18 +936,15 @@ async function unlinkSource(id: string) {
                   @toggle="toggleDocFile"
                 />
                 <div v-if="stagedDocRefs.length" class="mt-2 space-y-1">
-                  <p class="text-xs font-medium text-slate-400">
+                  <p class="text-xs font-medium text-muted">
                     {{ t('fragments.documents.selectedFiles', { count: stagedDocRefs.length }) }}
                   </p>
                   <div
                     v-for="staged in stagedDocRefs"
                     :key="staged.path"
-                    class="flex items-center gap-1.5 rounded bg-slate-800/60 px-2 py-1 text-xs text-slate-300"
+                    class="flex items-center gap-1.5 rounded bg-elevated/60 px-2 py-1 text-xs text-toned"
                   >
-                    <UIcon
-                      name="i-lucide-file-code-2"
-                      class="h-3.5 w-3.5 shrink-0 text-indigo-400"
-                    />
+                    <UIcon name="i-lucide-file-code-2" class="h-3.5 w-3.5 shrink-0 text-primary" />
                     <span class="truncate">{{ staged.path }}</span>
                     <UButton
                       class="ms-auto"
@@ -985,7 +982,7 @@ async function unlinkSource(id: string) {
               </UButton>
               <p
                 v-if="docLinkBlockedReason"
-                class="flex items-center gap-1 text-xs text-slate-500"
+                class="flex items-center gap-1 text-xs text-dimmed"
                 data-testid="fragment-link-blocked-reason"
               >
                 <UIcon name="i-lucide-info" class="h-3.5 w-3.5 shrink-0" />
@@ -1001,15 +998,15 @@ async function unlinkSource(id: string) {
         <div
           v-for="s in library.sources"
           :key="s.id"
-          class="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-900/60 p-3"
+          class="flex items-center gap-2 rounded-md border border-default bg-default/60 p-3"
         >
-          <UIcon name="i-lucide-git-branch" class="h-4 w-4 text-slate-400" />
+          <UIcon name="i-lucide-git-branch" class="h-4 w-4 text-muted" />
           <div class="min-w-0">
-            <span class="font-mono text-sm text-slate-100">
+            <span class="font-mono text-sm text-app-100">
               {{ s.repoOwner }}/{{ s.repoName
-              }}<span class="text-slate-500">/{{ s.dirPath || '' }}</span>
+              }}<span class="text-dimmed">/{{ s.dirPath || '' }}</span>
             </span>
-            <p class="text-xs text-slate-500">
+            <p class="text-xs text-dimmed">
               {{
                 s.lastSyncedAt
                   ? t('fragments.sources.metaSynced', { ref: s.gitRef })
@@ -1051,11 +1048,11 @@ async function unlinkSource(id: string) {
             />
           </div>
         </div>
-        <p v-if="!library.sources.length" class="text-sm text-slate-500">
+        <p v-if="!library.sources.length" class="text-sm text-dimmed">
           {{ t('fragments.sources.empty') }}
         </p>
 
-        <div class="rounded-md border border-slate-800 p-3">
+        <div class="rounded-md border border-default p-3">
           <p class="mb-2 text-sm font-medium">{{ t('fragments.sources.linkTitle') }}</p>
           <div class="flex flex-col gap-2">
             <!-- Connected: search a repo + browse to the guideline directory -->
@@ -1063,16 +1060,16 @@ async function unlinkSource(id: string) {
               <GitHubRepoSearchSelect v-model="sourceRepoId" @update:repo="sourceRepo = $event" />
               <div
                 v-if="sourceRepoId !== undefined"
-                class="rounded-md border border-slate-800 bg-slate-900/40 p-2"
+                class="rounded-md border border-default bg-default/40 p-2"
               >
-                <p class="mb-2 text-xs text-slate-400">
+                <p class="mb-2 text-xs text-muted">
                   {{ t('fragments.sources.browseHint') }}
                 </p>
                 <RepoTreeBrowser v-model="sourceDir" :repo-github-id="sourceRepoId" mode="dir" />
-                <p class="mt-2 truncate text-xs text-slate-400">
+                <p class="mt-2 truncate text-xs text-muted">
                   <template v-if="sourceDir">
                     {{ t('fragments.sources.selectedDir') }}
-                    <code class="text-slate-200">{{ sourceDir }}</code>
+                    <code class="text-default">{{ sourceDir }}</code>
                   </template>
                   <template v-else>{{ t('fragments.sources.wholeRepo') }}</template>
                 </p>

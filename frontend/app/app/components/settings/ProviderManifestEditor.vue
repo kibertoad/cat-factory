@@ -196,8 +196,8 @@ function onSave() {
 </script>
 
 <template>
-  <div class="space-y-3 rounded-lg border border-dashed border-slate-700 p-3">
-    <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+  <div class="space-y-3 rounded-lg border border-dashed border-muted p-3">
+    <p class="text-[11px] font-semibold uppercase tracking-wide text-muted">
       {{ t('settings.providerConnection.manifestEditor.title') }}
     </p>
 
@@ -214,21 +214,21 @@ function onSave() {
       />
     </UFormField>
 
-    <p v-if="!savedManifest && !jsonError && !schemaError" class="text-[11px] text-slate-500">
+    <p v-if="!savedManifest && !jsonError && !schemaError" class="text-[11px] text-dimmed">
       {{ t('settings.providerConnection.manifestEditor.starterHint') }}
     </p>
 
     <!-- Parse + shape errors, validated against the same contract the backend enforces. -->
     <p
       v-if="jsonError"
-      class="rounded-md border border-rose-500/40 bg-rose-950/40 px-3 py-2 text-xs text-rose-200"
+      class="rounded-md border border-app-error-500/40 bg-app-error-950/40 px-3 py-2 text-xs text-app-error-200"
       data-testid="manifest-editor-error"
     >
       {{ t('settings.providerConnection.manifestEditor.invalidJson') }}
     </p>
     <p
       v-else-if="schemaError"
-      class="rounded-md border border-amber-500/40 bg-amber-950/40 px-3 py-2 text-xs text-amber-200"
+      class="rounded-md border border-app-warning-500/40 bg-app-warning-950/40 px-3 py-2 text-xs text-app-warning-200"
       data-testid="manifest-editor-error"
     >
       {{ t('settings.providerConnection.manifestEditor.schemaError', { message: schemaError }) }}
@@ -236,16 +236,16 @@ function onSave() {
 
     <!-- Secret sub-form: one write-only input per secret key the manifest references. -->
     <div class="space-y-2">
-      <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+      <p class="text-[11px] font-semibold uppercase tracking-wide text-muted">
         {{ t('settings.providerConnection.manifestEditor.secretsLabel') }}
       </p>
-      <p v-if="!secretKeys.length" class="text-[11px] text-slate-500">
+      <p v-if="!secretKeys.length" class="text-[11px] text-dimmed">
         {{ t('settings.providerConnection.manifestEditor.noSecrets') }}
       </p>
       <template v-else-if="connected">
         <p
           v-if="storedSecretKeys && storedSecretKeys.length"
-          class="text-[11px] text-slate-400"
+          class="text-[11px] text-muted"
           data-testid="manifest-editor-stored"
         >
           {{
@@ -254,7 +254,7 @@ function onSave() {
             })
           }}
         </p>
-        <p class="text-[11px] text-amber-300/80">
+        <p class="text-[11px] text-app-warning-300/80">
           {{ t('settings.providerConnection.manifestEditor.reenterSecrets') }}
         </p>
       </template>

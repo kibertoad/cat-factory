@@ -122,8 +122,8 @@ RUN echo 'harness:100000:65536' > /etc/subuid \
 # The Codex pin also carries a FLOOR the catalog depends on: `gpt-6-astra` resolves only from
 # Codex 0.153.0 onward, and an older CLI answers `Unknown model` rather than falling back, so
 # moving this pin below that version silently breaks that catalog entry at dispatch.
-ARG PI_VERSION=0.85.1
-ARG CLAUDE_CODE_VERSION=2.1.270
+ARG PI_VERSION=0.86.0
+ARG CLAUDE_CODE_VERSION=2.1.278
 ARG CODEX_VERSION=0.154.0
 RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
     sh -eu -c 'apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl procps psmisc python3 jq ripgrep && rm -rf /var/lib/apt/lists/*; \
@@ -233,8 +233,8 @@ USER harness
 # auto-detects it, writes the config and nudges the agent to use the tools
 # (WEB_SEARCH_PROVIDER pins the active provider). No key is baked into the image.
 # Both pinned for the same reproducibility reason as Pi itself.
-ARG PI_TODO_EXTENSION_VERSION=2.9.0
-ARG PI_WEB_TOOLS_EXTENSION_VERSION=2.9.0
+ARG PI_TODO_EXTENSION_VERSION=2.10.1
+ARG PI_WEB_TOOLS_EXTENSION_VERSION=2.10.1
 RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
     sh -eu -c 'if [ -s /tmp/extra_ca.crt ]; then export NODE_EXTRA_CA_CERTS=/tmp/extra_ca.crt; fi; \
     pi install "npm:@juicesharp/rpiv-todo@${PI_TODO_EXTENSION_VERSION}"; \

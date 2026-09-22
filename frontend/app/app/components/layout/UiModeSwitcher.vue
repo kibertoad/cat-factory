@@ -50,17 +50,17 @@ const pinnedTitle = computed(
     v-if="uiMode.envPinned"
     data-testid="ui-mode-pinned"
     :title="pinnedTitle"
-    class="flex w-full items-center gap-2 rounded-lg border border-slate-800 bg-slate-900/40 p-2 text-start"
+    class="flex w-full items-center gap-2 rounded-lg border border-default bg-default/40 p-2 text-start"
     :class="collapsed ? 'justify-center' : ''"
   >
-    <UIcon :name="icon" class="h-4 w-4 shrink-0 text-slate-500" />
+    <UIcon :name="icon" class="h-4 w-4 shrink-0 text-dimmed" />
     <div v-if="!collapsed" class="min-w-0 flex-1">
-      <div class="truncate text-[10px] uppercase tracking-wide text-slate-500">
+      <div class="truncate text-[10px] uppercase tracking-wide text-dimmed">
         {{ t('uiMode.switcher') }}
       </div>
-      <div class="truncate text-xs font-medium text-slate-300">{{ currentLabel }}</div>
+      <div class="truncate text-xs font-medium text-toned">{{ currentLabel }}</div>
     </div>
-    <UIcon v-if="!collapsed" name="i-lucide-lock" class="h-3.5 w-3.5 shrink-0 text-slate-600" />
+    <UIcon v-if="!collapsed" name="i-lucide-lock" class="h-3.5 w-3.5 shrink-0 text-app-600" />
   </div>
 
   <!-- Rail: one button, flips the tier. The label rides under the glyph so the rail still says
@@ -72,23 +72,23 @@ const pinnedTitle = computed(
     data-testid="ui-mode-toggle"
     :aria-label="t('uiMode.switchTo', { mode: t(MODE_LABELS[otherMode]) })"
     :title="t('uiMode.switchTo', { mode: t(MODE_LABELS[otherMode]) })"
-    class="flex w-full flex-col items-center gap-0.5 rounded-lg border border-slate-700 bg-slate-900/60 px-1 py-1.5 transition hover:border-indigo-500/60 hover:bg-slate-800/60"
+    class="flex w-full flex-col items-center gap-0.5 rounded-lg border border-muted bg-default/60 px-1 py-1.5 transition hover:border-primary/60 hover:bg-elevated/60"
     @click="uiMode.toggleMode()"
   >
-    <UIcon :name="icon" class="h-4 w-4 shrink-0 text-indigo-400" />
-    <span class="w-full truncate text-center text-[9px] font-medium uppercase text-slate-300">
+    <UIcon :name="icon" class="h-4 w-4 shrink-0 text-primary" />
+    <span class="w-full truncate text-center text-[9px] font-medium uppercase text-toned">
       {{ currentLabel }}
     </span>
   </button>
 
   <div v-else data-testid="ui-mode-switcher" class="w-full">
-    <div class="mb-1 px-1 text-[10px] uppercase tracking-wide text-slate-500">
+    <div class="mb-1 px-1 text-[10px] uppercase tracking-wide text-dimmed">
       {{ t('uiMode.switcher') }}
     </div>
     <div
       role="group"
       :aria-label="t('uiMode.switcher')"
-      class="flex w-full gap-1 rounded-lg border border-slate-700 bg-slate-900/60 p-1"
+      class="flex w-full gap-1 rounded-lg border border-muted bg-default/60 p-1"
     >
       <button
         v-for="mode in UI_MODES"
@@ -99,8 +99,8 @@ const pinnedTitle = computed(
         class="flex-1 truncate rounded-md px-2 py-1 text-xs font-medium transition"
         :class="
           mode === uiMode.mode
-            ? 'bg-indigo-500/20 text-indigo-200 ring-1 ring-indigo-500/50'
-            : 'text-slate-400 hover:bg-slate-800/70 hover:text-slate-200'
+            ? 'bg-primary/20 text-primary ring-1 ring-primary/50'
+            : 'text-muted hover:bg-elevated/70 hover:text-default'
         "
         @click="uiMode.setMode(mode)"
       >
@@ -111,7 +111,7 @@ const pinnedTitle = computed(
 
   <!-- The one-line "what this tier gives you", so the choice is self-explanatory. Dropped in
        the collapsed rail, where the tooltip above carries the mode instead. -->
-  <p v-if="!collapsed" class="px-1 text-[10px] leading-snug text-slate-500">
+  <p v-if="!collapsed" class="px-1 text-[10px] leading-snug text-dimmed">
     {{ t(MODE_HINTS[uiMode.mode]) }}
   </p>
 </template>

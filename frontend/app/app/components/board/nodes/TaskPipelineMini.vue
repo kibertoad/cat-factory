@@ -57,10 +57,10 @@ function openStep(i: number) {
 
 /** Per-state accent, matching the inspector/focus pipeline views. */
 const STATE_META: Record<AgentState, { color: string; icon: string }> = {
-  pending: { color: '#64748b', icon: 'i-lucide-circle-dashed' },
-  working: { color: '#6366f1', icon: 'i-lucide-loader' },
-  waiting_decision: { color: '#f59e0b', icon: 'i-lucide-circle-help' },
-  done: { color: '#22c55e', icon: 'i-lucide-circle-check' },
+  pending: { color: 'var(--ui-text-muted)', icon: 'i-lucide-circle-dashed' },
+  working: { color: 'var(--ui-primary)', icon: 'i-lucide-loader' },
+  waiting_decision: { color: 'var(--ui-warning)', icon: 'i-lucide-circle-help' },
+  done: { color: 'var(--ui-success)', icon: 'i-lucide-circle-check' },
 }
 
 // A reviewer gate (requirements-review / clarity-review) folding answers or re-reviewing in
@@ -100,15 +100,15 @@ const ITEM_ICON: Record<string, string> = {
 </script>
 
 <template>
-  <div v-if="showSteps" class="mt-2 space-y-1 border-t border-slate-800 pt-2">
-    <div class="flex items-center gap-1 text-[9px] uppercase tracking-wide text-slate-500">
+  <div v-if="showSteps" class="mt-2 space-y-1 border-t border-default pt-2">
+    <div class="flex items-center gap-1 text-[9px] uppercase tracking-wide text-dimmed">
       <UIcon name="i-lucide-workflow" class="h-2.5 w-2.5" />
       {{ t('board.task.buildSteps') }}
     </div>
-    <div v-for="(s, i) in steps" :key="i" class="rounded bg-slate-900/60 px-1.5 py-1">
+    <div v-for="(s, i) in steps" :key="i" class="rounded bg-default/60 px-1.5 py-1">
       <button
         type="button"
-        class="flex w-full cursor-pointer items-center gap-1 rounded text-start focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60"
+        class="flex w-full cursor-pointer items-center gap-1 rounded text-start focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
         :title="`${agentKindMeta(s.agentKind).label} — ${agentKindMeta(s.agentKind).description}\n${t('board.task.clickToViewStep')}`"
         @click.stop="openStep(i)"
       >
@@ -117,19 +117,19 @@ const ITEM_ICON: Record<string, string> = {
           class="h-3 w-3 shrink-0"
           :style="{ color: agentKindMeta(s.agentKind).color }"
         />
-        <span class="truncate text-[10px] text-slate-200">
+        <span class="truncate text-[10px] text-default">
           {{ agentKindMeta(s.agentKind).label }}
         </span>
         <UIcon
           v-if="stepHasOutput(s)"
           name="i-lucide-file-text"
-          class="h-2.5 w-2.5 shrink-0 text-slate-500"
+          class="h-2.5 w-2.5 shrink-0 text-dimmed"
         />
         <!-- The plain N/M count, replaced by the phase line below while a `pr-reviewer` step is
              live — its slice progress reads better as Slicing… / Reviewing X/Y slices. -->
         <span
           v-if="s.subtasks && s.subtasks.total > 0 && !prPhaseActive(s)"
-          class="ms-auto shrink-0 font-mono text-[9px] tabular-nums text-slate-400"
+          class="ms-auto shrink-0 font-mono text-[9px] tabular-nums text-muted"
         >
           {{ s.subtasks.completed }}/{{ s.subtasks.total }}
         </span>
@@ -162,7 +162,7 @@ const ITEM_ICON: Record<string, string> = {
           !reviews.isBackground(s.agentKind, props.taskId)
         "
         type="button"
-        class="mt-1 flex w-full items-center justify-center gap-1 rounded bg-amber-500 px-1.5 py-0.5 text-[9px] font-semibold text-amber-950 transition hover:bg-amber-400"
+        class="mt-1 flex w-full items-center justify-center gap-1 rounded bg-app-warning-500 px-1.5 py-0.5 text-[9px] font-semibold text-app-warning-50 dark:text-app-warning-950 transition hover:bg-app-warning-400"
         @click.stop="ui.openApprovalDetail(instance.id, s.approval.id)"
       >
         <UIcon name="i-lucide-shield-check" class="h-2.5 w-2.5" />
@@ -172,10 +172,10 @@ const ITEM_ICON: Record<string, string> = {
       <!-- per-step subtask progress bar -->
       <div
         v-if="s.subtasks && s.subtasks.total > 0"
-        class="mt-1 h-0.5 w-full overflow-hidden rounded bg-slate-700/60"
+        class="mt-1 h-0.5 w-full overflow-hidden rounded bg-accented/60"
       >
         <div
-          class="h-full rounded bg-indigo-400 transition-all"
+          class="h-full rounded bg-primary transition-all"
           :style="{ width: `${(s.subtasks.completed / s.subtasks.total) * 100}%` }"
         />
       </div>
@@ -192,7 +192,7 @@ const ITEM_ICON: Record<string, string> = {
             companionByStep[i]!.state === 'running' ? 'animate-spin' : '',
           ]"
         />
-        <span class="truncate text-slate-400">
+        <span class="truncate text-muted">
           {{ agentKindMeta(companionByStep[i]!.kind).label }}
         </span>
         <span
@@ -211,10 +211,10 @@ const ITEM_ICON: Record<string, string> = {
           class="flex items-start gap-1 text-[9px]"
           :class="
             item.status === 'completed'
-              ? 'text-slate-500 line-through'
+              ? 'text-dimmed line-through'
               : item.status === 'in_progress'
-                ? 'text-slate-100'
-                : 'text-slate-400'
+                ? 'text-app-100'
+                : 'text-muted'
           "
         >
           <UIcon

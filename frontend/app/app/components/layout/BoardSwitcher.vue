@@ -258,20 +258,17 @@ async function submitPrompt() {
     >
       <button
         type="button"
-        class="flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-start transition hover:bg-slate-800/60"
+        class="flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-start transition hover:bg-elevated/60"
         :disabled="busy"
       >
         <UIcon
           :name="accounts.activeAccount?.type === 'org' ? 'i-lucide-users' : 'i-lucide-user'"
-          class="h-3.5 w-3.5 shrink-0 text-slate-400"
+          class="h-3.5 w-3.5 shrink-0 text-muted"
         />
-        <span class="truncate text-[11px] font-medium uppercase tracking-wide text-slate-400">
+        <span class="truncate text-[11px] font-medium uppercase tracking-wide text-muted">
           {{ accounts.activeAccount?.name ?? t('layout.boardSwitcher.accountFallback') }}
         </span>
-        <UIcon
-          name="i-lucide-chevrons-up-down"
-          class="ms-auto h-3.5 w-3.5 shrink-0 text-slate-600"
-        />
+        <UIcon name="i-lucide-chevrons-up-down" class="ms-auto h-3.5 w-3.5 shrink-0 text-app-600" />
       </button>
     </UDropdownMenu>
 
@@ -284,20 +281,20 @@ async function submitPrompt() {
             ? (workspace.activeWorkspace?.name ?? t('layout.boardSwitcher.boardFallback'))
             : undefined
         "
-        class="flex w-full items-center gap-2 rounded-lg border border-slate-800 bg-slate-900/60 px-2.5 py-1.5 text-start transition hover:bg-slate-800/60"
+        class="flex w-full items-center gap-2 rounded-lg border border-default bg-default/60 px-2.5 py-1.5 text-start transition hover:bg-elevated/60"
         :class="collapsed ? 'justify-center' : ''"
         :disabled="busy"
         data-testid="board-switcher"
         :data-board-id="workspace.workspaceId ?? ''"
       >
-        <UIcon name="i-lucide-layout-dashboard" class="h-4 w-4 shrink-0 text-indigo-400" />
-        <span v-if="!collapsed" class="truncate text-sm font-medium text-white">
+        <UIcon name="i-lucide-layout-dashboard" class="h-4 w-4 shrink-0 text-primary" />
+        <span v-if="!collapsed" class="truncate text-sm font-medium text-highlighted">
           {{ workspace.activeWorkspace?.name ?? t('layout.boardSwitcher.boardFallback') }}
         </span>
         <UIcon
           v-if="!collapsed"
           name="i-lucide-chevron-down"
-          class="ms-auto h-4 w-4 shrink-0 text-slate-500"
+          class="ms-auto h-4 w-4 shrink-0 text-dimmed"
         />
       </button>
     </UDropdownMenu>

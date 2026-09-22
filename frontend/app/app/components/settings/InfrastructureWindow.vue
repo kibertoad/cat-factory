@@ -174,8 +174,8 @@ watch([tabs, () => store.loaded], () => {
               <InfrastructureBackendPicker axis="execution" />
               <!-- Local mode: the warm-pool + checkout reuse ARE the host agent-container
                    runtime, so they live here rather than in a separate menu. -->
-              <section v-if="isLocal" class="border-t border-slate-800 pt-4">
-                <h3 class="mb-3 text-sm font-semibold text-slate-200">
+              <section v-if="isLocal" class="border-t border-default pt-4">
+                <h3 class="mb-3 text-sm font-semibold text-default">
                   {{ t('settings.localMode.title') }}
                 </h3>
                 <LocalContainerPoolSettings />
@@ -191,13 +191,13 @@ watch([tabs, () => store.loaded], () => {
               <!-- The Tester's environment is driven by each SERVICE's declared provision type
                    (the "what/where"); the workspace configures HOW each type is handled here —
                    the engine + connection per provision type, plus the custom-type catalog. -->
-              <div class="border-t border-slate-800 pt-4">
+              <div class="border-t border-default pt-4">
                 <InfraHandlersConfigurator />
               </div>
               <!-- The guided per-SERVICE Compose flow (formerly the standalone "Environment
                    setup" sidebar entry). Last, because it fills in one service's recipe on
                    top of the workspace-wide choices above. -->
-              <div class="border-t border-slate-800 pt-4">
+              <div class="border-t border-default pt-4">
                 <ComposeEnvironmentSetupSection />
               </div>
             </div>
@@ -213,7 +213,7 @@ watch([tabs, () => store.loaded], () => {
           </template>
         </UTabs>
 
-        <p v-else class="px-1 py-6 text-center text-sm text-slate-500">
+        <p v-else class="px-1 py-6 text-center text-sm text-dimmed">
           {{ t('settings.providerConnection.noneAvailable') }}
         </p>
       </div>

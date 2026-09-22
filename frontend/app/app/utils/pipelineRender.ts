@@ -49,7 +49,7 @@ export type CompanionState = 'possible' | 'running' | 'completed' | 'skipped' | 
  */
 export const FAILED_STEP_META = {
   label: 'Failed',
-  color: '#ef4444',
+  color: 'var(--ui-error)',
   icon: 'i-lucide-circle-x',
 } as const
 
@@ -75,32 +75,32 @@ export const COMPANION_STATE_META: Record<
 > = {
   possible: {
     label: 'May run',
-    dot: 'border-slate-600 bg-slate-800/40',
-    text: 'text-slate-400',
+    dot: 'border-app-600 bg-elevated/40',
+    text: 'text-muted',
     icon: 'i-lucide-circle-dashed',
   },
   running: {
     label: 'Running',
-    dot: 'border-amber-400 bg-amber-500/20',
-    text: 'text-amber-300',
+    dot: 'border-app-warning-400 bg-app-warning-500/20',
+    text: 'text-app-warning-300',
     icon: 'i-lucide-loader',
   },
   completed: {
     label: 'Ran',
-    dot: 'border-emerald-500 bg-emerald-500/20',
-    text: 'text-emerald-300',
+    dot: 'border-app-success-500 bg-app-success-500/20',
+    text: 'text-app-success-300',
     icon: 'i-lucide-circle-check',
   },
   skipped: {
     label: 'Skipped',
-    dot: 'border-slate-700 bg-slate-800/40',
-    text: 'text-slate-500',
+    dot: 'border-muted bg-elevated/40',
+    text: 'text-dimmed',
     icon: 'i-lucide-circle-slash',
   },
   failed: {
     label: 'Gave up',
-    dot: 'border-rose-500 bg-rose-500/20',
-    text: 'text-rose-400',
+    dot: 'border-app-error-500 bg-app-error-500/20',
+    text: 'text-app-error-400',
     icon: 'i-lucide-circle-x',
   },
 }
@@ -348,11 +348,7 @@ function describeUnhandledSkipReason(reason: never): string {
  */
 export function subtaskIconClass(status: string, runFailed: boolean): string[] {
   return [
-    status === 'in_progress'
-      ? runFailed
-        ? 'text-indigo-400'
-        : 'animate-spin text-indigo-400'
-      : '',
-    status === 'completed' ? 'text-emerald-400' : 'text-slate-500',
+    status === 'in_progress' ? (runFailed ? 'text-primary' : 'animate-spin text-primary') : '',
+    status === 'completed' ? 'text-app-success-400' : 'text-dimmed',
   ]
 }

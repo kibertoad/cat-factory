@@ -406,7 +406,7 @@ function revealDecision(n: Notification) {
 
     <template #content>
       <div class="max-h-[28rem] w-[min(24rem,92vw)] overflow-y-auto p-2">
-        <div class="px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        <div class="px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted">
           {{ t('layout.notifications.heading') }}
         </div>
         <div
@@ -417,8 +417,8 @@ function revealDecision(n: Notification) {
           class="rounded-lg border p-2.5 mt-1.5"
           :class="
             isUrgent(n)
-              ? 'border-error-500/60 bg-error-500/10'
-              : 'border-slate-700/60 bg-slate-800/40'
+              ? 'border-app-error-500/60 bg-app-error-500/10'
+              : 'border-muted/60 bg-elevated/40'
           "
         >
           <div class="flex items-start gap-2">
@@ -429,7 +429,7 @@ function revealDecision(n: Notification) {
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-1.5">
                 <button
-                  class="block min-w-0 flex-1 truncate text-start text-sm font-medium text-slate-200 hover:underline"
+                  class="block min-w-0 flex-1 truncate text-start text-sm font-medium text-default hover:underline"
                   :title="n.title"
                   @click="reveal(n)"
                 >
@@ -437,18 +437,18 @@ function revealDecision(n: Notification) {
                 </button>
                 <span
                   v-if="isUrgent(n)"
-                  class="shrink-0 rounded bg-error-500/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-error-400"
+                  class="shrink-0 rounded bg-app-error-500/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-app-error-400"
                 >
                   {{ t('layout.notifications.overdue') }}
                 </span>
               </div>
-              <p class="mt-0.5 text-[11px] leading-snug text-slate-400">{{ n.body }}</p>
+              <p class="mt-0.5 text-[11px] leading-snug text-muted">{{ n.body }}</p>
               <a
                 v-if="n.payload?.prUrl"
                 :href="n.payload.prUrl"
                 target="_blank"
                 rel="noopener"
-                class="mt-1 inline-flex items-center gap-1 text-[11px] text-sky-400 hover:underline"
+                class="mt-1 inline-flex items-center gap-1 text-[11px] text-app-info-400 hover:underline"
               >
                 <UIcon name="i-lucide-external-link" class="h-3 w-3" />
                 {{ t('layout.notifications.openPr') }}
@@ -470,8 +470,8 @@ function revealDecision(n: Notification) {
                   class="flex items-center gap-1 text-start text-[11px]"
                   :class="
                     canOpenFailingRun(run)
-                      ? 'text-sky-400 hover:underline'
-                      : 'cursor-default text-slate-500'
+                      ? 'text-app-info-400 hover:underline'
+                      : 'cursor-default text-dimmed'
                   "
                   :title="
                     canOpenFailingRun(run) ? undefined : t('layout.notifications.failingRunGone')
@@ -486,7 +486,7 @@ function revealDecision(n: Notification) {
                     })
                   }}</span>
                 </component>
-                <span v-if="failingRunsOmitted(n) > 0" class="text-[11px] text-slate-500">
+                <span v-if="failingRunsOmitted(n) > 0" class="text-[11px] text-dimmed">
                   {{ t('layout.notifications.failingRunsMore', { count: failingRunsOmitted(n) }) }}
                 </span>
               </div>

@@ -65,7 +65,7 @@ onBeforeUnmount(clearTimer)
     <div v-if="reconnecting || offline" class="pointer-events-none flex w-full justify-center">
       <div
         v-if="reconnecting"
-        class="pointer-events-auto flex items-center gap-2 rounded-full border border-amber-500/60 bg-amber-950/90 px-3 py-1.5 text-xs text-amber-100 shadow-lg backdrop-blur"
+        class="pointer-events-auto flex items-center gap-2 rounded-full border border-app-warning-500/60 bg-app-warning-950/90 px-3 py-1.5 text-xs text-app-warning-100 shadow-lg backdrop-blur"
         role="status"
         aria-live="polite"
         data-testid="stream-reconnecting"
@@ -75,7 +75,7 @@ onBeforeUnmount(clearTimer)
       </div>
       <div
         v-else
-        class="pointer-events-auto flex items-center gap-2 rounded-full border border-rose-500/60 bg-rose-950/90 px-3 py-1.5 text-xs text-rose-100 shadow-lg backdrop-blur"
+        class="pointer-events-auto flex items-center gap-2 rounded-full border border-app-error-500/60 bg-app-error-950/90 px-3 py-1.5 text-xs text-app-error-100 shadow-lg backdrop-blur"
         role="status"
         aria-live="polite"
         data-testid="stream-offline"

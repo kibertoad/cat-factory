@@ -66,13 +66,13 @@ const rows = computed(() => {
 
 <template>
   <div v-if="rows.length || duplicates.length" class="space-y-1.5" data-testid="frontend-resolved">
-    <div class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+    <div class="text-[11px] font-semibold uppercase tracking-wide text-dimmed">
       {{ t('inspector.frontendConfig.resolved.title') }}
     </div>
 
     <p
       v-if="duplicates.length"
-      class="text-[11px] leading-snug text-amber-300/80"
+      class="text-[11px] leading-snug text-app-warning-300/80"
       data-testid="frontend-resolved-duplicates"
     >
       {{ t('inspector.frontendConfig.resolved.duplicateWarning', { vars: duplicates.join(', ') }) }}
@@ -88,21 +88,21 @@ const rows = computed(() => {
         <span
           class="mt-1 h-1.5 w-1.5 shrink-0 rounded-full"
           :class="{
-            'bg-emerald-400': row.kind === 'live',
-            'bg-amber-400': row.kind === 'service-offline',
-            'bg-slate-500': row.kind === 'mock',
+            'bg-app-success-400': row.kind === 'live',
+            'bg-app-warning-400': row.kind === 'service-offline',
+            'bg-app-500': row.kind === 'mock',
           }"
         />
-        <span class="font-mono text-slate-300">{{ row.envVar }}</span>
-        <span class="text-slate-600">→</span>
+        <span class="font-mono text-toned">{{ row.envVar }}</span>
+        <span class="text-app-600">→</span>
         <template v-if="row.kind === 'live'">
-          <span class="truncate font-mono text-emerald-300/90">{{ row.serviceUrl }}</span>
-          <span v-if="row.serviceTitle" class="text-slate-500">({{ row.serviceTitle }})</span>
+          <span class="truncate font-mono text-app-success-300/90">{{ row.serviceUrl }}</span>
+          <span v-if="row.serviceTitle" class="text-dimmed">({{ row.serviceTitle }})</span>
         </template>
-        <span v-else-if="row.kind === 'service-offline'" class="text-amber-300/80">
+        <span v-else-if="row.kind === 'service-offline'" class="text-app-warning-300/80">
           {{ t('inspector.frontendConfig.resolved.serviceOffline', { service: row.serviceTitle }) }}
         </span>
-        <span v-else class="text-slate-500">
+        <span v-else class="text-dimmed">
           {{ t('inspector.frontendConfig.resolved.mock') }}
         </span>
       </li>

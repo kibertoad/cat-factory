@@ -62,10 +62,10 @@ const STATE_LABEL_KEYS: Record<AgentState, string> = {
   done: 'panels.stepMeta.state.done',
 }
 const STATE_COLOR: Record<AgentState, string> = {
-  pending: '#64748b',
-  working: '#6366f1',
-  waiting_decision: '#f59e0b',
-  done: '#22c55e',
+  pending: 'var(--ui-text-muted)',
+  working: 'var(--ui-primary)',
+  waiting_decision: 'var(--ui-warning)',
+  done: 'var(--ui-success)',
 }
 
 // The state badge: a step left mid-flight on a failed run keeps `state: 'working'`,
@@ -73,7 +73,7 @@ const STATE_COLOR: Record<AgentState, string> = {
 const stateMeta = computed(() => {
   const s = props.step
   if (props.runFailed && s.state === 'working')
-    return { label: t('panels.stepMeta.state.failed'), color: '#ef4444' }
+    return { label: t('panels.stepMeta.state.failed'), color: 'var(--ui-error)' }
   return { label: t(STATE_LABEL_KEYS[s.state]), color: STATE_COLOR[s.state] }
 })
 
@@ -184,10 +184,10 @@ async function copyRunId() {
   <div>
     <dl class="grid grid-cols-2 gap-x-6 gap-y-3 text-[13px] sm:grid-cols-3">
       <div>
-        <dt class="text-[11px] uppercase tracking-wide text-slate-500">
+        <dt class="text-[11px] uppercase tracking-wide text-dimmed">
           {{ t('panels.stepMeta.stateLabel') }}
         </dt>
-        <dd class="mt-0.5 flex items-center gap-1.5 text-slate-200">
+        <dd class="mt-0.5 flex items-center gap-1.5 text-default">
           <UIcon
             v-if="runFailed && step.state === 'working'"
             name="i-lucide-circle-x"
@@ -199,66 +199,66 @@ async function copyRunId() {
         </dd>
       </div>
       <div>
-        <dt class="text-[11px] uppercase tracking-wide text-slate-500">
+        <dt class="text-[11px] uppercase tracking-wide text-dimmed">
           {{ t('panels.stepMeta.duration') }}
         </dt>
-        <dd class="mt-0.5 flex items-center gap-1.5 tabular-nums text-slate-200">
+        <dd class="mt-0.5 flex items-center gap-1.5 tabular-nums text-default">
           <UIcon
             v-if="isRunning"
             name="i-lucide-loader-circle"
-            class="h-3 w-3 animate-spin text-indigo-400"
+            class="h-3 w-3 animate-spin text-primary"
           />
           <span v-if="durationLabel">{{ durationLabel }}</span>
-          <span v-else class="text-slate-500">—</span>
-          <span v-if="isRunning" class="text-[11px] text-slate-500">{{
+          <span v-else class="text-dimmed">—</span>
+          <span v-if="isRunning" class="text-[11px] text-dimmed">{{
             t('panels.stepMeta.elapsed')
           }}</span>
         </dd>
       </div>
       <div>
-        <dt class="text-[11px] uppercase tracking-wide text-slate-500">
+        <dt class="text-[11px] uppercase tracking-wide text-dimmed">
           {{ t('panels.stepMeta.step') }}
         </dt>
-        <dd class="mt-0.5 text-slate-200">
+        <dd class="mt-0.5 text-default">
           {{ t('panels.stepMeta.stepOf', { number: stepNumber, total: totalSteps }) }}
         </dd>
       </div>
       <div>
-        <dt class="text-[11px] uppercase tracking-wide text-slate-500">
+        <dt class="text-[11px] uppercase tracking-wide text-dimmed">
           {{ t('panels.stepMeta.started') }}
         </dt>
-        <dd class="mt-0.5 text-slate-300">{{ formatClock(step.startedAt) ?? '—' }}</dd>
+        <dd class="mt-0.5 text-toned">{{ formatClock(step.startedAt) ?? '—' }}</dd>
       </div>
       <div>
-        <dt class="text-[11px] uppercase tracking-wide text-slate-500">
+        <dt class="text-[11px] uppercase tracking-wide text-dimmed">
           {{ t('panels.stepMeta.finished') }}
         </dt>
-        <dd class="mt-0.5 text-slate-300">{{ formatClock(step.finishedAt) ?? '—' }}</dd>
+        <dd class="mt-0.5 text-toned">{{ formatClock(step.finishedAt) ?? '—' }}</dd>
       </div>
       <div>
-        <dt class="text-[11px] uppercase tracking-wide text-slate-500">
+        <dt class="text-[11px] uppercase tracking-wide text-dimmed">
           {{ t('panels.stepMeta.model') }}
         </dt>
-        <dd class="mt-0.5 truncate text-slate-300" :title="step.model">
+        <dd class="mt-0.5 truncate text-toned" :title="step.model">
           {{ modelLabel ?? t('panels.stepMeta.notRecorded') }}
         </dd>
       </div>
       <div v-if="promptVariant">
-        <dt class="text-[11px] uppercase tracking-wide text-slate-500">
+        <dt class="text-[11px] uppercase tracking-wide text-dimmed">
           {{ t('panels.stepMeta.promptVariant') }}
         </dt>
-        <dd class="mt-0.5 truncate text-slate-300">{{ promptVariant.label }}</dd>
-        <dd v-if="promptVariant.note" class="mt-0.5 text-[11px] text-amber-400/80">
+        <dd class="mt-0.5 truncate text-toned">{{ promptVariant.label }}</dd>
+        <dd v-if="promptVariant.note" class="mt-0.5 text-[11px] text-app-warning-400/80">
           {{ promptVariant.note }}
         </dd>
       </div>
       <!-- The run id this step belongs to, surfaced for debugging (copyable). -->
       <div class="col-span-2 sm:col-span-3">
-        <dt class="text-[11px] uppercase tracking-wide text-slate-500">
+        <dt class="text-[11px] uppercase tracking-wide text-dimmed">
           {{ t('panels.stepMeta.run') }}
         </dt>
         <dd
-          class="mt-0.5 cursor-pointer truncate font-mono text-[12px] text-slate-400 hover:text-slate-200"
+          class="mt-0.5 cursor-pointer truncate font-mono text-[12px] text-muted hover:text-default"
           :title="t('panels.stepMeta.clickToCopy', { id: step.runId ?? instanceId ?? '' })"
           @click="copyRunId"
         >
@@ -284,7 +284,7 @@ async function copyRunId() {
 
     <!-- live subtask breakdown -->
     <div v-if="step.subtasks && step.subtasks.total > 0" class="mt-4">
-      <div class="text-[11px] uppercase tracking-wide text-slate-500">
+      <div class="text-[11px] uppercase tracking-wide text-dimmed">
         {{
           t('panels.stepMeta.subtasks', {
             completed: step.subtasks.completed,
@@ -292,9 +292,9 @@ async function copyRunId() {
           })
         }}
       </div>
-      <div class="mt-1 h-1 overflow-hidden rounded-full bg-slate-700/60">
+      <div class="mt-1 h-1 overflow-hidden rounded-full bg-accented/60">
         <div
-          class="h-full rounded-full bg-indigo-400 transition-all duration-500"
+          class="h-full rounded-full bg-primary transition-all duration-500"
           :style="{
             width: `${(step.subtasks.completed / step.subtasks.total) * 100}%`,
           }"
@@ -307,10 +307,10 @@ async function copyRunId() {
           class="flex items-start gap-1.5 text-[12px]"
           :class="
             item.status === 'completed'
-              ? 'text-slate-500 line-through'
+              ? 'text-dimmed line-through'
               : item.status === 'in_progress'
-                ? 'text-slate-100'
-                : 'text-slate-400'
+                ? 'text-app-100'
+                : 'text-muted'
           "
         >
           <UIcon
@@ -336,7 +336,7 @@ async function copyRunId() {
     <!-- standards (prompt fragments) folded into this step -->
     <div v-if="step.selectedFragmentIds && step.selectedFragmentIds.length" class="mt-4">
       <div
-        class="text-[11px] uppercase tracking-wide text-slate-500"
+        class="text-[11px] uppercase tracking-wide text-dimmed"
         :title="t('panels.stepMeta.standardsAppliedHint')"
       >
         {{ t('panels.stepMeta.standardsApplied') }}
@@ -356,28 +356,28 @@ async function copyRunId() {
 
     <!-- decision raised on this step -->
     <div v-if="step.decision" class="mt-4">
-      <div class="text-[11px] uppercase tracking-wide text-slate-500">
+      <div class="text-[11px] uppercase tracking-wide text-dimmed">
         {{ t('panels.stepMeta.decision') }}
       </div>
-      <p class="mt-0.5 text-[13px] text-slate-200">{{ step.decision.question }}</p>
+      <p class="mt-0.5 text-[13px] text-default">{{ step.decision.question }}</p>
       <p
         v-if="step.decision.chosen"
-        class="mt-0.5 flex items-center gap-1 text-[12px] text-emerald-400"
+        class="mt-0.5 flex items-center gap-1 text-[12px] text-app-success-400"
       >
         <UIcon name="i-lucide-check" class="h-3 w-3 shrink-0" />
         {{ step.decision.chosen }}
       </p>
-      <p v-else class="mt-0.5 text-[12px] text-amber-400">
+      <p v-else class="mt-0.5 text-[12px] text-app-warning-400">
         {{ t('panels.stepMeta.awaitingChoice') }}
       </p>
     </div>
 
     <!-- approval gate state -->
     <div v-if="step.approval" class="mt-4">
-      <div class="text-[11px] uppercase tracking-wide text-slate-500">
+      <div class="text-[11px] uppercase tracking-wide text-dimmed">
         {{ t('panels.stepMeta.approvalGate') }}
       </div>
-      <p class="mt-0.5 text-[13px] text-slate-200">
+      <p class="mt-0.5 text-[13px] text-default">
         {{ approvalStatusLabel }}
       </p>
     </div>
@@ -385,7 +385,7 @@ async function copyRunId() {
     <!-- companion verdict + full correction sequence -->
     <div v-if="companionVerdicts.length" class="mt-4">
       <div class="flex items-center justify-between">
-        <span class="text-[11px] uppercase tracking-wide text-slate-500">
+        <span class="text-[11px] uppercase tracking-wide text-dimmed">
           {{ t('panels.stepMeta.companionReview') }}
         </span>
         <!-- The COLOUR is the verdict (`passed`) and the GLYPH is the arithmetic, which are no
@@ -407,19 +407,21 @@ async function copyRunId() {
           v-for="({ verdict: v, findings }, i) in verdictRounds"
           :key="i"
           data-testid="companion-verdict"
-          class="relative rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2"
+          class="relative rounded-lg border border-default bg-default/60 px-3 py-2"
         >
           <CopyButton v-if="v.feedback" :text="v.feedback" class="absolute end-1 top-1" />
           <div class="flex items-center gap-2 text-[12px]">
             <span
               class="inline-flex h-4 shrink-0 items-center rounded px-1 font-mono text-[11px] tabular-nums"
               :class="
-                v.passed ? 'bg-emerald-500/15 text-emerald-300' : 'bg-amber-500/15 text-amber-300'
+                v.passed
+                  ? 'bg-app-success-500/15 text-app-success-300'
+                  : 'bg-app-warning-500/15 text-app-warning-300'
               "
             >
               {{ i + 1 }}
             </span>
-            <span :class="v.passed ? 'text-emerald-300' : 'text-amber-300'">
+            <span :class="v.passed ? 'text-app-success-300' : 'text-app-warning-300'">
               {{ pctOf(v.rating) }} {{ ratingMeetsBar(v) ? '≥' : '<' }} {{ pctOf(v.threshold) }}
             </span>
           </div>
@@ -427,7 +429,7 @@ async function copyRunId() {
             v-if="v.feedback"
             :text="v.feedback"
             data-testid="companion-verdict-summary"
-            class="mt-1.5 pe-6 text-[12px] leading-relaxed text-slate-300"
+            class="mt-1.5 pe-6 text-[12px] leading-relaxed text-toned"
           />
           <ul v-if="findings.length" class="mt-2 space-y-1.5">
             <li
@@ -446,13 +448,13 @@ async function copyRunId() {
               </UBadge>
               <MarkdownProse
                 :text="finding.body"
-                class="min-w-0 text-[12px] leading-relaxed text-slate-300"
+                class="min-w-0 text-[12px] leading-relaxed text-toned"
               />
             </li>
           </ul>
         </li>
       </ol>
-      <p v-if="companionVerdicts.length > 1" class="mt-1 text-[11px] text-slate-500">
+      <p v-if="companionVerdicts.length > 1" class="mt-1 text-[11px] text-dimmed">
         {{
           t(
             'panels.stepMeta.correctionIterations',

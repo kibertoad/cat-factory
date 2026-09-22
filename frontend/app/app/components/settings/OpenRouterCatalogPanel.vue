@@ -221,7 +221,7 @@ function manageKeys() {
     </template>
     <template #body>
       <div class="space-y-4">
-        <p class="text-xs text-slate-400">
+        <p class="text-xs text-muted">
           <i18n-t keypath="settings.openRouterCatalog.intro" tag="span" scope="global">
             <template #models>
               <strong>{{ t('settings.openRouterCatalog.introModels') }}</strong>
@@ -232,12 +232,12 @@ function manageKeys() {
         <!-- Step 1: connect a key (inline) — hidden once a key is connected -->
         <div
           v-if="!keyConnected"
-          class="space-y-3 rounded-lg border border-slate-700 bg-slate-900/60 p-4"
+          class="space-y-3 rounded-lg border border-muted bg-default/60 p-4"
         >
-          <h4 class="text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <h4 class="text-xs font-semibold uppercase tracking-wide text-dimmed">
             {{ t('settings.openRouterCatalog.connectHeading') }}
           </h4>
-          <ol class="list-decimal space-y-1 ps-5 text-sm text-slate-300">
+          <ol class="list-decimal space-y-1 ps-5 text-sm text-toned">
             <li>
               <i18n-t keypath="settings.openRouterCatalog.step1" tag="span" scope="global">
                 <template #link>
@@ -245,7 +245,7 @@ function manageKeys() {
                     href="https://openrouter.ai/keys"
                     target="_blank"
                     rel="noopener noreferrer"
-                    class="text-primary-400 underline"
+                    class="text-primary underline"
                     >{{ t('settings.openRouterCatalog.step1Link') }}</a
                   >
                 </template>
@@ -299,10 +299,10 @@ function manageKeys() {
         <!-- Key connected status -->
         <div
           v-else
-          class="flex items-center justify-between rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm"
+          class="flex items-center justify-between rounded-lg border border-muted bg-default/60 px-3 py-2 text-sm"
         >
-          <span class="flex items-center gap-2 text-slate-300">
-            <UIcon name="i-lucide-check-circle" class="h-4 w-4 text-emerald-400" />
+          <span class="flex items-center gap-2 text-toned">
+            <UIcon name="i-lucide-check-circle" class="h-4 w-4 text-app-success-400" />
             {{ t('settings.openRouterCatalog.keyConnected') }}
           </span>
           <UButton color="neutral" variant="ghost" size="xs" @click="manageKeys()">
@@ -342,31 +342,35 @@ function manageKeys() {
             />
           </div>
 
-          <p v-if="store.refreshError" class="text-xs text-rose-400">{{ store.refreshError }}</p>
+          <p v-if="store.refreshError" class="text-xs text-app-error-400">
+            {{ store.refreshError }}
+          </p>
 
           <div v-if="visible.length" class="max-h-96 space-y-1 overflow-y-auto pe-1">
             <label
               v-for="m in visible"
               :key="m.id"
-              class="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-900/40 px-2.5 py-1.5 text-sm"
+              class="flex items-center gap-2 rounded-md border border-default bg-default/40 px-2.5 py-1.5 text-sm"
             >
               <UCheckbox
                 :model-value="selected.has(m.id)"
                 @update:model-value="(v: boolean | 'indeterminate') => toggle(m.id, v === true)"
               />
               <span class="min-w-0 flex-1">
-                <span class="block truncate text-slate-200">{{ m.name }}</span>
-                <span class="block truncate font-mono text-[11px] text-slate-500">{{ m.id }}</span>
+                <span class="block truncate text-default">{{ m.name }}</span>
+                <span class="block truncate font-mono text-[11px] text-dimmed">{{ m.id }}</span>
                 <!--
                   A withdrawal date is the one fact about a model that fails SILENTLY: past it the
                   route simply stops answering and the run falls through to whatever the picker
                   offers next, so the moment to see it is while choosing.
                 -->
-                <span v-if="m.expirationDate" class="block truncate text-[11px] text-amber-400">{{
-                  t('settings.openRouterCatalog.retiresOn', { date: m.expirationDate })
-                }}</span>
+                <span
+                  v-if="m.expirationDate"
+                  class="block truncate text-[11px] text-app-warning-400"
+                  >{{ t('settings.openRouterCatalog.retiresOn', { date: m.expirationDate }) }}</span
+                >
               </span>
-              <span class="shrink-0 text-end text-[11px] text-slate-500">
+              <span class="shrink-0 text-end text-[11px] text-dimmed">
                 <span v-if="m.contextLength" class="block">{{
                   contextLabel(m.contextLength)
                 }}</span>
@@ -374,16 +378,16 @@ function manageKeys() {
               </span>
             </label>
           </div>
-          <p v-else class="text-xs text-slate-500">
+          <p v-else class="text-xs text-dimmed">
             <i18n-t keypath="settings.openRouterCatalog.empty" tag="span" scope="global">
               <template #action>
-                <span class="text-slate-300">{{ t('settings.openRouterCatalog.refresh') }}</span>
+                <span class="text-toned">{{ t('settings.openRouterCatalog.refresh') }}</span>
               </template>
             </i18n-t>
           </p>
 
           <div class="flex items-center justify-between">
-            <span class="text-xs text-slate-500">{{
+            <span class="text-xs text-dimmed">{{
               t('settings.openRouterCatalog.enabledCount', { count: selectedCount }, selectedCount)
             }}</span>
             <UButton

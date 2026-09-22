@@ -15,11 +15,16 @@ const LABELS: Record<RequirementVerdictStatus, string> = {
 
 describe('resolveVerdictMeta', () => {
   it('resolves each known status to its own label and colour', () => {
-    expect(resolveVerdictMeta('met', LABELS)).toEqual({ label: 'Met', color: '#22c55e' })
-    expect(resolveVerdictMeta('not_met', LABELS)).toEqual({ label: 'Not met', color: '#ef4444' })
+    // A verdict is a status, so its dot takes the semantic alias: it recolours with the theme
+    // and stays distinct from the category hues an agent kind wears.
+    expect(resolveVerdictMeta('met', LABELS)).toEqual({ label: 'Met', color: 'var(--ui-success)' })
+    expect(resolveVerdictMeta('not_met', LABELS)).toEqual({
+      label: 'Not met',
+      color: 'var(--ui-error)',
+    })
     expect(resolveVerdictMeta('not_covered', LABELS)).toEqual({
       label: 'Not checked',
-      color: '#64748b',
+      color: 'var(--ui-text-muted)',
     })
   })
 

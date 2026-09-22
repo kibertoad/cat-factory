@@ -311,7 +311,7 @@ mainly on high-RTT managed databases.
 **Fix (only if item 1's numbers say it matters):** collapse the consistency probe into
 one round trip (a single SQL statement returning ledger-exists + count + anchor regclass
 columns). Do NOT weaken the guard semantics or the advisory lock; the drift-guard
-behaviour is load-bearing (see CLAUDE.md "Migration safety"). Skipping `migrate()`
+behaviour is load-bearing (see CLAUDE.md → "Migrations"). Skipping `migrate()`
 entirely on a "current" fast-path is explicitly rejected: the ledger read IS the
 fast-path, and any shortcut re-opens the ledger↔schema-split window the guard exists
 to close.

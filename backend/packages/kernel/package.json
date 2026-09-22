@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/kernel",
-  "version": "0.348.0",
+  "version": "0.348.1",
   "description": "Shared vocabulary, pure logic, and port interfaces for the Agent Architecture Board.",
   "repository": {
     "type": "git",
@@ -33,8 +33,8 @@
   },
   "dependencies": {
     "@cat-factory/contracts": "workspace:*",
-    "ai": "^7.0.98",
-    "yaml": "^2.9.0"
+    "ai": "^7.0.107",
+    "yaml": "^2.9.1"
   },
   "devDependencies": {
     "@stryker-mutator/core": "10.0.0",

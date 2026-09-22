@@ -18,7 +18,7 @@ empty by design, so a site that forgets the second step silently drops the platf
 **Key files:** `gates.ts` (the `GateDefinition`s), `providers.ts` (the provider-wiring handles),
 `review.logic.ts`.
 
-**See also:** `CLAUDE.md` → "Gates vs agents (the step taxonomy)"; kernel `domain/gate-logic.ts`
+**See also:** [`docs/step-taxonomy.md`](../../docs/step-taxonomy.md); kernel `domain/gate-logic.ts`
 (the pure gate logic the engine drives); `backend/docs/custom-agent-gate-ergonomics.md`.
 
 **Mutation-tested** (`stryker.config.mjs`): nightly, non-blocking, never run locally. Scope and

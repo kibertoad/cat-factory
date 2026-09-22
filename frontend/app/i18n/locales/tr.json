@@ -8591,5 +8591,13 @@
     "territories": {
       "heading": "Bölgeler"
     }
+  },
+  "appearance": {
+    "switcher": "Görünüm",
+    "mode": {
+      "system": "Sistem",
+      "light": "Açık",
+      "dark": "Koyu"
+    }
   }
 }

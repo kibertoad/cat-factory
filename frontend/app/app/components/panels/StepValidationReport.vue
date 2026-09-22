@@ -15,7 +15,7 @@ const failed = computed(() => props.report.outcomes.filter((o) => !o.passed))
 
 <template>
   <div class="space-y-2" data-testid="step-validation-report">
-    <p class="text-[11px] text-slate-400">
+    <p class="text-[11px] text-muted">
       {{
         report.passed
           ? t('panels.stepDetail.validation.passedSummary', {
@@ -34,20 +34,20 @@ const failed = computed(() => props.report.outcomes.filter((o) => !o.passed))
     <div
       v-for="outcome in report.outcomes"
       :key="outcome.label"
-      class="rounded-md border border-slate-800 bg-slate-950/40 p-2"
+      class="rounded-md border border-default bg-app-950/40 p-2"
       data-testid="validation-outcome"
     >
       <div class="flex items-center gap-2">
         <UIcon
           :name="outcome.passed ? 'i-lucide-check' : 'i-lucide-x'"
           class="h-3.5 w-3.5 shrink-0"
-          :class="outcome.passed ? 'text-emerald-400' : 'text-rose-400'"
+          :class="outcome.passed ? 'text-app-success-400' : 'text-app-error-400'"
         />
-        <span class="text-[12px] font-medium text-slate-200">{{ outcome.label }}</span>
-        <span class="truncate font-mono text-[11px] text-slate-500">{{ outcome.command }}</span>
+        <span class="text-[12px] font-medium text-default">{{ outcome.label }}</span>
+        <span class="truncate font-mono text-[11px] text-dimmed">{{ outcome.command }}</span>
         <span
           v-if="!outcome.passed"
-          class="ms-auto shrink-0 rounded bg-rose-500/15 px-1.5 py-0.5 text-[11px] tabular-nums text-rose-300"
+          class="ms-auto shrink-0 rounded bg-app-error-500/15 px-1.5 py-0.5 text-[11px] tabular-nums text-app-error-300"
         >
           {{
             outcome.timedOut
@@ -58,7 +58,7 @@ const failed = computed(() => props.report.outcomes.filter((o) => !o.passed))
       </div>
       <pre
         v-if="outcome.outputTail"
-        class="mt-1.5 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded bg-slate-950 p-2 font-mono text-[11px] text-slate-400"
+        class="mt-1.5 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded bg-app-950 p-2 font-mono text-[11px] text-muted"
         data-testid="validation-output"
         >{{ outcome.outputTail }}</pre>
     </div>

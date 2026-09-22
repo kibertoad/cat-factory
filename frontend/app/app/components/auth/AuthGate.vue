@@ -22,7 +22,7 @@ onMounted(() => void auth.bootstrap().finally(() => markBoot('auth-ready')))
 <template>
   <div
     v-if="!auth.ready"
-    class="flex h-screen w-screen flex-col items-center justify-center gap-3 bg-slate-950 text-slate-400"
+    class="flex h-screen w-screen flex-col items-center justify-center gap-3 bg-app-950 text-muted"
   >
     <UIcon name="i-lucide-loader" class="h-8 w-8 animate-spin" />
     <span class="text-sm">{{ t('auth.gate.loading') }}</span>

@@ -306,7 +306,7 @@ else imports its **ports** and domain types from here.
   `firstPresent`/`allPresent`, `readYamlDoc`, `listFiles`, + the `CustomManifestDetection` /
   `CustomManifestDetectionContext` authoring types).
 
-**See also:** `CLAUDE.md` → "Gates vs agents (the step taxonomy)", "Custom agents",
+**See also:** [`docs/step-taxonomy.md`](../../docs/step-taxonomy.md), `CLAUDE.md` → "Custom agents",
 "Merge track record", "Logging goes through the kernel `Logger` port".
 
 **Mutation-tested** (`stryker.config.mjs`): nightly, non-blocking, never run locally. Scope and

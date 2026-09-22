@@ -55,27 +55,27 @@ async function choose(option: string) {
   <UModal v-model:open="open" :title="t('panels.decision.title')">
     <template #body>
       <div v-if="decision && agent" class="space-y-4" data-testid="decision-modal">
-        <div class="flex items-center gap-2 text-sm text-slate-400">
+        <div class="flex items-center gap-2 text-sm text-muted">
           <div
             class="flex h-8 w-8 items-center justify-center rounded-lg"
-            :style="{ backgroundColor: agent.color + '22' }"
+            :style="{ backgroundColor: tint(agent.color) }"
           >
             <UIcon :name="agent.icon" class="h-4 w-4" :style="{ color: agent.color }" />
           </div>
           <div>
             <i18n-t v-if="block" keypath="panels.decision.agentOnBlock" tag="span" scope="global">
               <template #agent>
-                <span class="font-medium text-slate-200">{{ agent.label }}</span>
+                <span class="font-medium text-default">{{ agent.label }}</span>
               </template>
               <template #block>
-                <span class="font-medium text-slate-200">{{ block.title }}</span>
+                <span class="font-medium text-default">{{ block.title }}</span>
               </template>
             </i18n-t>
-            <span v-else class="font-medium text-slate-200">{{ agent.label }}</span>
+            <span v-else class="font-medium text-default">{{ agent.label }}</span>
           </div>
         </div>
 
-        <p class="text-base font-medium text-white">{{ decision.question }}</p>
+        <p class="text-base font-medium text-highlighted">{{ decision.question }}</p>
 
         <div class="grid gap-2">
           <UButton
@@ -93,7 +93,7 @@ async function choose(option: string) {
             {{ opt }}
           </UButton>
         </div>
-        <p class="text-[11px] text-slate-500">
+        <p class="text-[11px] text-dimmed">
           {{ t('panels.decision.visualizationHint') }}
         </p>
       </div>

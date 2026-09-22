@@ -103,10 +103,10 @@ async function runNow() {
 }
 
 const RUN_COLOR: Record<string, string> = {
-  running: 'text-amber-400',
-  done: 'text-emerald-400',
-  failed: 'text-rose-400',
-  skipped: 'text-slate-500',
+  running: 'text-app-warning-400',
+  done: 'text-app-success-400',
+  failed: 'text-app-error-400',
+  skipped: 'text-dimmed',
 }
 const RUN_STATUS_KEYS: Record<string, string> = {
   running: 'inspector.recurring.runStatus.running',
@@ -123,13 +123,10 @@ function fmtTime(ms: number) {
 </script>
 
 <template>
-  <div
-    v-if="schedule"
-    class="space-y-2 rounded-lg border border-indigo-900/50 bg-indigo-950/20 p-3"
-  >
+  <div v-if="schedule" class="space-y-2 rounded-lg border border-primary/50 bg-primary/10 p-3">
     <div class="flex items-center justify-between">
       <span
-        class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-indigo-300"
+        class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-primary"
       >
         <UIcon name="i-lucide-repeat" class="h-3.5 w-3.5" />
         {{ t('inspector.recurring.title') }}
@@ -149,13 +146,13 @@ function fmtTime(ms: number) {
       </UBadge>
     </div>
 
-    <p class="text-[11px] text-slate-400">
-      <span class="text-slate-300">{{ pipelineName }}</span>
+    <p class="text-[11px] text-muted">
+      <span class="text-toned">{{ pipelineName }}</span>
     </p>
 
     <!-- On-demand: no cadence, no pause/resume — it fires only when a person triggers it. -->
     <template v-if="schedule.onDemand">
-      <p class="text-[11px] text-slate-500">{{ t('inspector.recurring.onDemandHint') }}</p>
+      <p class="text-[11px] text-dimmed">{{ t('inspector.recurring.onDemandHint') }}</p>
       <div class="flex flex-wrap gap-1.5 pt-1">
         <UButton size="xs" variant="soft" icon="i-lucide-play" :loading="busy" @click="runNow">
           {{ t('inspector.recurring.runNow') }}
@@ -164,8 +161,8 @@ function fmtTime(ms: number) {
     </template>
 
     <template v-else-if="!editing">
-      <p class="text-[11px] text-slate-400">{{ describeCadence(schedule.recurrence) }}</p>
-      <p class="text-[11px] text-slate-500">
+      <p class="text-[11px] text-muted">{{ describeCadence(schedule.recurrence) }}</p>
+      <p class="text-[11px] text-dimmed">
         {{ t('inspector.recurring.nextRun', { time: fmtTime(schedule.nextRunAt) }) }}
       </p>
       <div class="flex flex-wrap gap-1.5 pt-1">
@@ -215,16 +212,16 @@ function fmtTime(ms: number) {
     </template>
 
     <!-- run history -->
-    <div v-if="runs.length" class="space-y-1 border-t border-slate-800 pt-2">
-      <span class="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+    <div v-if="runs.length" class="space-y-1 border-t border-default pt-2">
+      <span class="text-[10px] font-semibold uppercase tracking-wide text-dimmed">
         {{ t('inspector.recurring.recentRuns') }}
       </span>
       <div v-for="run in runs" :key="run.id" class="flex items-center gap-2 text-[11px]">
-        <span :class="RUN_COLOR[run.status] ?? 'text-slate-400'" class="w-14 shrink-0">
+        <span :class="RUN_COLOR[run.status] ?? 'text-muted'" class="w-14 shrink-0">
           {{ runStatusLabel(run.status) }}
         </span>
-        <span class="truncate text-slate-500">{{ fmtTime(run.startedAt) }}</span>
-        <span v-if="run.outcome" class="ms-auto truncate text-slate-500">{{ run.outcome }}</span>
+        <span class="truncate text-dimmed">{{ fmtTime(run.startedAt) }}</span>
+        <span v-if="run.outcome" class="ms-auto truncate text-dimmed">{{ run.outcome }}</span>
       </div>
     </div>
   </div>

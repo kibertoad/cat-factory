@@ -190,7 +190,7 @@ const { requestClose } = useUnsavedGuard({
   <ResultWindowShell
     :open="open"
     icon="i-lucide-images"
-    icon-class="bg-sky-500/15 text-sky-300"
+    icon-class="bg-app-info-500/15 text-app-info-300"
     :title="headerTitle"
     :subtitle="t('binaryCandidates.subtitle')"
     width="5xl"
@@ -202,7 +202,7 @@ const { requestClose } = useUnsavedGuard({
            declared its candidates and one whose block was unreadable need different fixes. -->
       <p
         v-if="noChoiceKey"
-        class="mb-3 rounded border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-200"
+        class="mb-3 rounded border border-app-warning-500/30 bg-app-warning-500/5 px-3 py-2 text-xs text-app-warning-200"
         data-testid="binary-candidates-no-choice"
       >
         {{ t(noChoiceKey) }}
@@ -211,7 +211,7 @@ const { requestClose } = useUnsavedGuard({
       <!-- An automatic keep is NOT a review, and must never render as one. -->
       <p
         v-if="view.automatic"
-        class="mb-3 rounded border border-slate-600/40 bg-slate-800/40 px-3 py-2 text-xs text-slate-300"
+        class="mb-3 rounded border border-app-600/40 bg-elevated/40 px-3 py-2 text-xs text-toned"
         data-testid="binary-candidates-automatic"
       >
         {{ t('binaryCandidates.automatic') }}
@@ -221,7 +221,7 @@ const { requestClose } = useUnsavedGuard({
            over all five. -->
       <p
         v-if="warnings"
-        class="mb-3 text-xs text-amber-300"
+        class="mb-3 text-xs text-app-warning-300"
         data-testid="binary-candidates-warnings"
       >
         <span v-if="view.state.omitted">{{
@@ -236,7 +236,7 @@ const { requestClose } = useUnsavedGuard({
       </p>
 
       <div v-for="group in view.groups" :key="group.subject ?? '·'" class="mb-6">
-        <h3 class="mb-2 text-xs font-medium text-slate-400">
+        <h3 class="mb-2 text-xs font-medium text-muted">
           {{ group.subject ?? t('binaryCandidates.unlabelledSubject') }}
         </h3>
         <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -246,8 +246,8 @@ const { requestClose } = useUnsavedGuard({
             class="rounded border p-2 transition"
             :class="[
               selected.includes(row.id) || row.kept
-                ? 'border-sky-400/60 bg-sky-500/5'
-                : 'border-slate-700/60',
+                ? 'border-app-info-400/60 bg-app-info-500/5'
+                : 'border-muted/60',
               view.awaiting ? 'cursor-pointer' : '',
             ]"
             data-testid="binary-candidate-card"
@@ -268,13 +268,13 @@ const { requestClose } = useUnsavedGuard({
                  that is no longer selected. -->
             <label
               v-if="view.awaiting"
-              class="mb-1.5 flex cursor-pointer items-center gap-2 text-[11px] text-slate-400"
+              class="mb-1.5 flex cursor-pointer items-center gap-2 text-[11px] text-muted"
               @click.stop
             >
               <input
                 :type="view.multiSelect ? 'checkbox' : 'radio'"
                 name="binary-candidate"
-                class="accent-sky-500"
+                class="accent-app-info-500"
                 :checked="selected.includes(row.id)"
                 :aria-label="candidateLabel(row)"
                 data-testid="binary-candidate-select"
@@ -304,22 +304,22 @@ const { requestClose } = useUnsavedGuard({
                  rather than left as an empty frame the reader reads as a failed generation. -->
             <p
               v-else
-              class="mb-2 flex h-24 items-center justify-center rounded bg-slate-800/60 px-2 text-center text-[10px] text-slate-400"
+              class="mb-2 flex h-24 items-center justify-center rounded bg-elevated/60 px-2 text-center text-[10px] text-muted"
               data-testid="binary-candidate-no-preview"
             >
               {{ t('binaryCandidates.noPreview') }}
             </p>
-            <p class="text-xs text-slate-200">
+            <p class="text-xs text-default">
               {{
                 row.generator
                   ? t('binaryCandidates.fromGenerator', { generator: row.generator })
                   : t('binaryCandidates.unattributed')
               }}
             </p>
-            <p v-if="row.note" class="mt-1 text-[11px] text-slate-400">{{ row.note }}</p>
-            <p class="mt-1 break-all text-[10px] text-slate-500">{{ row.location }}</p>
-            <p v-if="row.contentType" class="text-[10px] text-slate-500">{{ row.contentType }}</p>
-            <p v-if="row.kept" class="mt-1 text-[11px] text-emerald-300">
+            <p v-if="row.note" class="mt-1 text-[11px] text-muted">{{ row.note }}</p>
+            <p class="mt-1 break-all text-[10px] text-dimmed">{{ row.location }}</p>
+            <p v-if="row.contentType" class="text-[10px] text-dimmed">{{ row.contentType }}</p>
+            <p v-if="row.kept" class="mt-1 text-[11px] text-app-success-300">
               {{
                 row.storeAs
                   ? t('binaryCandidates.keptAs', { id: row.storeAs })
@@ -352,19 +352,21 @@ const { requestClose } = useUnsavedGuard({
         />
         <p
           v-if="missingAliases.length"
-          class="mt-1 text-[11px] text-amber-300"
+          class="mt-1 text-[11px] text-app-warning-300"
           data-testid="binary-candidates-missing-alias"
         >
           {{ t('binaryCandidates.missingAlias') }}
         </p>
         <p
           v-else-if="duplicateAliases"
-          class="mt-1 text-[11px] text-amber-300"
+          class="mt-1 text-[11px] text-app-warning-300"
           data-testid="binary-candidates-duplicate-alias"
         >
           {{ t('binaryCandidates.duplicateAlias') }}
         </p>
-        <p v-if="candidates.error" class="mt-1 text-[11px] text-red-300">{{ candidates.error }}</p>
+        <p v-if="candidates.error" class="mt-1 text-[11px] text-app-error-300">
+          {{ candidates.error }}
+        </p>
         <div class="mt-2 flex justify-end">
           <UButton
             size="xs"
@@ -388,28 +390,28 @@ const { requestClose } = useUnsavedGuard({
          simply not fetched. -->
     <div
       v-else-if="absence === 'no_run'"
-      class="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-5 py-10 text-center text-slate-400"
+      class="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-5 py-10 text-center text-muted"
       data-testid="binary-candidates-no-run"
     >
       <UIcon name="i-lucide-unlink" class="h-8 w-8 opacity-40" />
       <p class="text-sm">{{ t('binaryCandidates.noRun.title') }}</p>
-      <p class="max-w-md text-[11px] text-slate-500">{{ t('binaryCandidates.noRun.hint') }}</p>
+      <p class="max-w-md text-[11px] text-dimmed">{{ t('binaryCandidates.noRun.hint') }}</p>
     </div>
     <div
       v-else-if="absence === 'loading'"
-      class="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-5 py-10 text-center text-slate-400"
+      class="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-5 py-10 text-center text-muted"
       data-testid="binary-candidates-loading"
     >
       <UIcon name="i-lucide-loader-circle" class="h-8 w-8 animate-spin opacity-60" />
     </div>
     <div
       v-else-if="absence === 'load_failed'"
-      class="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-5 py-10 text-center text-slate-400"
+      class="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-5 py-10 text-center text-muted"
       data-testid="binary-candidates-load-error"
     >
-      <UIcon name="i-lucide-triangle-alert" class="h-8 w-8 text-amber-400/70" />
+      <UIcon name="i-lucide-triangle-alert" class="h-8 w-8 text-app-warning-400/70" />
       <p class="text-sm">{{ t('binaryCandidates.loadFailed') }}</p>
-      <p class="max-w-md break-words text-[11px] text-slate-500">{{ candidates.error }}</p>
+      <p class="max-w-md break-words text-[11px] text-dimmed">{{ candidates.error }}</p>
       <UButton
         size="xs"
         color="neutral"
@@ -423,7 +425,7 @@ const { requestClose } = useUnsavedGuard({
     </div>
     <div
       v-else
-      class="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-5 py-10 text-center text-slate-400"
+      class="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-5 py-10 text-center text-muted"
       data-testid="binary-candidates-empty"
     >
       <UIcon name="i-lucide-images" class="h-8 w-8 opacity-40" />

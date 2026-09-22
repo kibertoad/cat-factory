@@ -54,12 +54,12 @@ function remove(id: string) {
 
 <template>
   <div class="space-y-4">
-    <p class="text-xs text-slate-400">
+    <p class="text-xs text-muted">
       {{ t('settings.serviceFragmentDefaults.intro') }}
     </p>
 
     <div class="flex items-center justify-between">
-      <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+      <span class="text-[11px] font-semibold uppercase tracking-wide text-muted">
         {{ t('settings.serviceFragmentDefaults.defaultFragments') }}
       </span>
       <UDropdownMenu v-if="menu.length" :items="menu" :ui="{ content: 'max-h-72 overflow-y-auto' }">
@@ -90,24 +90,24 @@ function remove(id: string) {
         {{ f.title }}<UIcon name="i-lucide-x" class="ms-0.5 h-3 w-3" />
       </UBadge>
     </div>
-    <p v-else class="text-[11px] text-slate-500">
+    <p v-else class="text-[11px] text-dimmed">
       {{ t('settings.serviceFragmentDefaults.empty') }}
     </p>
 
-    <div class="flex flex-wrap gap-x-4 gap-y-1 border-t border-slate-800 pt-3 text-[11px]">
-      <span class="text-slate-500">
+    <div class="flex flex-wrap gap-x-4 gap-y-1 border-t border-default pt-3 text-[11px]">
+      <span class="text-dimmed">
         {{ t('settings.serviceFragmentDefaults.footer.question') }}
       </span>
       <button
         type="button"
-        class="font-medium text-primary-400 hover:underline"
+        class="font-medium text-primary hover:underline"
         @click="ui.openFragmentLibrary()"
       >
         {{ t('settings.serviceFragmentDefaults.footer.manageBoard') }}
       </button>
       <button
         type="button"
-        class="font-medium text-primary-400 hover:underline"
+        class="font-medium text-primary hover:underline"
         @click="ui.openAccountSettings('fragments')"
       >
         {{ t('settings.serviceFragmentDefaults.footer.manageAccount') }}

@@ -24,27 +24,27 @@ export const DELEGATION_STATUS_META: Record<
   starting: {
     icon: 'i-lucide-loader-circle',
     spin: true,
-    cls: 'border-sky-900/50 bg-sky-950/30 text-sky-300',
+    cls: 'border-app-info-900/50 bg-app-info-950/30 text-app-info-300',
   },
   running: {
     icon: 'i-lucide-radio',
     spin: false,
-    cls: 'border-indigo-900/50 bg-indigo-950/30 text-indigo-300',
+    cls: 'border-primary/50 bg-primary/10 text-primary',
   },
   done: {
     icon: 'i-lucide-circle-check',
     spin: false,
-    cls: 'border-emerald-900/50 bg-emerald-950/30 text-emerald-300',
+    cls: 'border-app-success-900/50 bg-app-success-950/30 text-app-success-300',
   },
   failed: {
     icon: 'i-lucide-circle-x',
     spin: false,
-    cls: 'border-rose-900/50 bg-rose-950/30 text-rose-300',
+    cls: 'border-app-error-900/50 bg-app-error-950/30 text-app-error-300',
   },
   cancelled: {
     icon: 'i-lucide-circle-slash',
     spin: false,
-    cls: 'border-amber-900/50 bg-amber-950/30 text-amber-300',
+    cls: 'border-app-warning-900/50 bg-app-warning-950/30 text-app-warning-300',
   },
 }
 
@@ -62,14 +62,14 @@ export const DELEGATION_STATUS_KEY: Record<RunDelegationStatus, string> = {
 }
 
 /**
- * How a status this build does not recognise renders: amber, like `cancelled`, because both mean
- * "something here wants a person to look". Its own row rather than a borrowed one, so nothing reads
- * it as one of the known outcomes.
+ * How a status this build does not recognise renders: the WARNING tone, like `cancelled`, because
+ * both mean "something here wants a person to look". Its own row rather than a borrowed one, so
+ * nothing reads it as one of the known outcomes.
  */
 export const UNKNOWN_DELEGATION_STATUS_META = {
   icon: 'i-lucide-circle-help',
   spin: false,
-  cls: 'border-amber-900/50 bg-amber-950/30 text-amber-300',
+  cls: 'border-app-warning-900/50 bg-app-warning-950/30 text-app-warning-300',
 }
 
 /** The vocabulary as the SCHEMA states it: what a parity assertion grades the two maps against. */

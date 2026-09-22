@@ -311,9 +311,9 @@ function selectTask() {
     :data-status="task.status"
     :data-task-type="task.taskType"
     data-testid="task-card"
-    class="nodrag w-full cursor-pointer rounded-lg border bg-slate-950/70 p-2 text-start transition"
+    class="nodrag w-full cursor-pointer rounded-lg border bg-app-950/70 p-2 text-start transition"
     :class="[
-      selected ? 'border-white' : 'border-slate-700 hover:border-slate-500',
+      selected ? 'border-inverted' : 'border-muted hover:border-app-500',
       task.status === 'pr_ready' ? 'board-pulse-green' : attention ? 'board-pulse' : '',
     ]"
     @click.stop="selectTask"
@@ -328,7 +328,7 @@ function selectTask() {
       <span
         v-if="typeBadge"
         class="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded"
-        :style="{ color: typeBadge.color, backgroundColor: `${typeBadge.color}22` }"
+        :style="{ color: typeBadge.color, backgroundColor: tint(typeBadge.color) }"
         :title="typeBadge.label"
         :data-task-type-badge="task.taskType"
         data-testid="task-type-badge"
@@ -338,7 +338,7 @@ function selectTask() {
       <UIcon
         v-if="schedule"
         name="i-lucide-repeat"
-        class="h-3 w-3 shrink-0 text-indigo-400"
+        class="h-3 w-3 shrink-0 text-primary"
         :title="
           schedule.enabled
             ? t('board.task.recurringPipeline')
@@ -349,12 +349,12 @@ function selectTask() {
         class="ms-auto truncate text-[9px] uppercase tracking-wide"
         :class="
           runFailed
-            ? 'text-rose-400'
+            ? 'text-app-error-400'
             : reviewStage
-              ? 'text-indigo-300'
+              ? 'text-primary'
               : attention
-                ? 'text-amber-400'
-                : 'text-slate-500'
+                ? 'text-app-warning-400'
+                : 'text-dimmed'
         "
       >
         {{ statusText }}
@@ -362,7 +362,7 @@ function selectTask() {
       <!-- drag-to-connect handle: drag onto another task to make it depend on this one -->
       <button
         type="button"
-        class="nodrag shrink-0 cursor-crosshair touch-none rounded-full p-0.5 text-slate-500 hover:bg-slate-800 hover:text-amber-400 pointer-coarse:p-2.5"
+        class="nodrag shrink-0 cursor-crosshair touch-none rounded-full p-0.5 text-dimmed hover:bg-elevated hover:text-app-warning-400 pointer-coarse:p-2.5"
         :title="t('board.task.dragToConnect')"
         @pointerdown.stop="startConnect(task.id, $event)"
         @click.stop
@@ -379,7 +379,7 @@ function selectTask() {
          title is the one always-rendered part of the body that no control can occupy. -->
     <div
       data-testid="task-title"
-      class="mt-1 line-clamp-2 break-words text-[11px] font-semibold leading-snug text-slate-100"
+      class="mt-1 line-clamp-2 break-words text-[11px] font-semibold leading-snug text-app-100"
       :title="task.title"
     >
       {{ task.title }}
@@ -410,13 +410,13 @@ function selectTask() {
       <UIcon
         :name="runnable ? 'i-lucide-link' : 'i-lucide-lock'"
         class="h-3 w-3"
-        :class="runnable ? 'text-slate-500' : 'text-amber-400'"
+        :class="runnable ? 'text-dimmed' : 'text-app-warning-400'"
       />
       <span
         v-for="d in deps"
         :key="d.id"
-        class="inline-flex items-center gap-0.5 rounded bg-slate-800/80 px-1 py-0.5 text-[9px]"
-        :class="d.status === 'done' ? 'text-slate-400' : 'text-amber-300'"
+        class="inline-flex items-center gap-0.5 rounded bg-elevated/80 px-1 py-0.5 text-[9px]"
+        :class="d.status === 'done' ? 'text-muted' : 'text-app-warning-300'"
         :title="depLabel(d)"
       >
         <UIcon
@@ -431,7 +431,7 @@ function selectTask() {
     <div class="nodrag mt-2 flex flex-wrap items-center gap-1">
       <!-- a reviewer gate folding/re-reviewing in the background: a working indicator,
            NOT a gate — the human is back on the board and summoned only if input is needed -->
-      <span v-if="reviewStage" class="inline-flex items-center gap-1 text-[9px] text-indigo-300">
+      <span v-if="reviewStage" class="inline-flex items-center gap-1 text-[9px] text-primary">
         <UIcon name="i-lucide-loader-circle" class="h-3 w-3 animate-spin" />
         {{ reviewStageLabel }}
       </span>
@@ -481,7 +481,7 @@ function selectTask() {
         </UButton>
         <span
           v-if="runnable && defaultPipeline"
-          class="inline-flex items-center gap-0.5 text-[9px] text-slate-500"
+          class="inline-flex items-center gap-0.5 text-[9px] text-dimmed"
         >
           <UIcon name="i-lucide-workflow" class="h-2.5 w-2.5" />{{ defaultPipeline.name }}
         </span>
@@ -539,7 +539,7 @@ function selectTask() {
       <!-- A merged task is the one people come back to READ, so its result stays openable
            rather than collapsing to a tick the moment it lands. -->
       <template v-else-if="task.status === 'done'">
-        <span class="inline-flex items-center gap-1 text-[9px] text-emerald-400">
+        <span class="inline-flex items-center gap-1 text-[9px] text-app-success-400">
           <UIcon name="i-lucide-check-check" class="h-3 w-3" /> {{ t('board.task.implemented') }}
         </span>
         <UButton
@@ -562,10 +562,10 @@ function selectTask() {
          cost a row of card height each and add nothing. -->
     <div
       v-if="showModuleChip"
-      class="mt-2 flex flex-wrap items-center gap-1 border-t border-slate-800 pt-2"
+      class="mt-2 flex flex-wrap items-center gap-1 border-t border-default pt-2"
     >
       <span
-        class="inline-flex items-center gap-1 rounded bg-violet-500/15 px-1.5 py-0.5 text-[9px] text-violet-200"
+        class="inline-flex items-center gap-1 rounded bg-app-secondary-500/15 px-1.5 py-0.5 text-[9px] text-app-secondary-200"
         :title="t('board.task.module', { name: task.moduleName })"
       >
         <UIcon :name="MODULE_META.icon" class="h-3 w-3" :style="{ color: MODULE_META.color }" />

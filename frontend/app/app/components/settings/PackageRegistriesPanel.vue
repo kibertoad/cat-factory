@@ -99,23 +99,23 @@ async function removeEntry(entryId: string) {
 
 <template>
   <div class="space-y-4" data-testid="package-registries-panel">
-    <p class="text-sm text-slate-400">
+    <p class="text-sm text-muted">
       {{ t('settings.packageRegistries.intro') }}
     </p>
 
-    <section v-if="store.entries.length" class="space-y-2 rounded-lg border border-slate-700 p-3">
+    <section v-if="store.entries.length" class="space-y-2 rounded-lg border border-muted p-3">
       <h3 class="text-sm font-semibold">
         {{ t('settings.packageRegistries.list.heading') }}
       </h3>
       <div
         v-for="entry in store.entries"
         :key="entry.id"
-        class="flex items-center justify-between gap-2 rounded-md border border-slate-800 px-3 py-2"
+        class="flex items-center justify-between gap-2 rounded-md border border-default px-3 py-2"
       >
         <div class="min-w-0 space-y-1">
           <div class="flex items-center gap-2">
             <span class="text-sm font-medium">{{ vendorLabel(entry.vendor) }}</span>
-            <span class="text-[11px] text-slate-500">
+            <span class="text-[11px] text-dimmed">
               {{ t('settings.packageRegistries.list.tokenTail', { tail: entry.tokenTail }) }}
             </span>
           </div>
@@ -132,7 +132,7 @@ async function removeEntry(entryId: string) {
             <!-- An entry with no scopes authenticates its host without routing any scope to
                  it (the deliberate mixed public/private setup) — say so, or the row reads as
                  half-configured. -->
-            <span v-if="!entry.scopes.length" class="text-[11px] text-slate-500">
+            <span v-if="!entry.scopes.length" class="text-[11px] text-dimmed">
               {{ t('settings.packageRegistries.list.noScopes') }}
             </span>
           </div>
@@ -150,7 +150,7 @@ async function removeEntry(entryId: string) {
       </div>
     </section>
 
-    <section class="space-y-3 rounded-lg border border-slate-700 p-3">
+    <section class="space-y-3 rounded-lg border border-muted p-3">
       <h3 class="text-sm font-semibold">
         {{ t('settings.packageRegistries.add.heading') }}
       </h3>
@@ -164,7 +164,7 @@ async function removeEntry(entryId: string) {
           data-testid="package-registry-vendor"
         />
       </UFormField>
-      <p class="text-[11px] text-slate-500">
+      <p class="text-[11px] text-dimmed">
         {{ t('settings.packageRegistries.add.host', { host: vendorHost }) }}
       </p>
 
@@ -197,7 +197,7 @@ async function removeEntry(entryId: string) {
       </div>
       <!-- Why leaving this empty is often the RIGHT answer — a scope mapping is all-or-nothing,
            so an org publishing some of its `@org` packages publicly breaks under one. -->
-      <p class="text-[11px] text-slate-500">
+      <p class="text-[11px] text-dimmed">
         {{ t('settings.packageRegistries.add.scopesNote') }}
       </p>
 

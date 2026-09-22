@@ -87,10 +87,10 @@ const { copy: copyText } = useCopyToClipboard()
         <!-- A status this build does not know is NAMED as unrecognised, carrying the stored value,
              rather than guessed onto a current one or silently dropped. -->
         <span class="font-medium">{{ t(statusView.labelKey, statusView.labelParams) }}</span>
-        <span class="text-slate-500">·</span>
+        <span class="text-dimmed">·</span>
         <span class="truncate" :title="executor?.description">{{ executorName }}</span>
         <template v-if="record.phase && statusView.status === 'running'">
-          <span class="text-slate-500">·</span>
+          <span class="text-dimmed">·</span>
           <span>{{ record.phase }}</span>
         </template>
       </div>
@@ -98,13 +98,13 @@ const { copy: copyText } = useCopyToClipboard()
       <!-- The PRIMARY affordance: the executor's own logs. It is the only place the detail of
            what happened exists, which is why a failed delegated step without it is a dead end. -->
       <div v-if="record.url" class="mt-2 flex items-center gap-2">
-        <dt class="shrink-0 text-[11px] uppercase tracking-wide text-slate-500">
+        <dt class="shrink-0 text-[11px] uppercase tracking-wide text-dimmed">
           {{ t('panels.stepMeta.delegated.run') }}
         </dt>
         <!-- Linked only when the executor's URL is `http(s)`. Anything else is shown as the text
              it is: refusing to follow it is right, and hiding it would report a run that named
              no link at all. -->
-        <dd class="truncate font-mono text-[11px] text-slate-300">
+        <dd class="truncate font-mono text-[11px] text-toned">
           <a
             v-if="runHref"
             :href="runHref"
@@ -132,35 +132,35 @@ const { copy: copyText } = useCopyToClipboard()
            request. Rendered here because the platform holds nothing else about that run's
            product. -->
       <div v-if="landedBranch" class="mt-2 flex items-center gap-2">
-        <dt class="shrink-0 text-[11px] uppercase tracking-wide text-slate-500">
+        <dt class="shrink-0 text-[11px] uppercase tracking-wide text-dimmed">
           {{ t('panels.stepMeta.delegated.branch') }}
         </dt>
-        <dd class="truncate font-mono text-[11px] text-slate-300">{{ landedBranch }}</dd>
+        <dd class="truncate font-mono text-[11px] text-toned">{{ landedBranch }}</dd>
       </div>
 
       <!-- What the platform could not do, stated rather than left to read as a clean outcome:
            a cancelled run whose executor declares no cancel is still going. -->
-      <p v-if="record.note" class="mt-2 text-[11px] text-slate-300">{{ record.note }}</p>
+      <p v-if="record.note" class="mt-2 text-[11px] text-toned">{{ record.note }}</p>
     </div>
 
     <!-- "Absent" and "zero" must never render the same. Without this line a delegated step shows
          no tokens beside a container step that shows some, and the only available reading is that
          it was free. -->
-    <p v-if="usageUnreported" class="mt-2 text-[11px] text-slate-500">
+    <p v-if="usageUnreported" class="mt-2 text-[11px] text-dimmed">
       {{ t('panels.stepMeta.delegated.usageNotReported', { executor: executorName }) }}
     </p>
 
     <!-- Earlier attempts. Kept across a re-run on purpose: the previous run's logs are the
          evidence for why this step is being run again, and the platform holds nothing else. -->
     <div v-if="priorAttempts.length" class="mt-3">
-      <div class="text-[11px] uppercase tracking-wide text-slate-500">
+      <div class="text-[11px] uppercase tracking-wide text-dimmed">
         {{ t('panels.stepMeta.delegated.earlierAttempts') }}
       </div>
       <ul class="mt-1 space-y-1">
         <li
           v-for="(attempt, index) in priorAttempts"
           :key="`${attempt.startedAt}-${index}`"
-          class="flex items-center gap-2 text-[11px] text-slate-400"
+          class="flex items-center gap-2 text-[11px] text-muted"
         >
           <span class="truncate">{{
             attempt.outcome || t('panels.stepMeta.delegated.noOutcome')

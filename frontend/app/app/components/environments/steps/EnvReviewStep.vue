@@ -113,8 +113,8 @@ const canLeaveReview = computed(
     <!-- detection status -->
     <div class="flex items-center justify-between gap-2">
       <div class="min-w-0">
-        <p class="text-sm font-medium text-slate-200">{{ store.targetFrame?.title }}</p>
-        <p class="text-[11px] text-slate-500">{{ t('environmentWizard.review.detectHint') }}</p>
+        <p class="text-sm font-medium text-default">{{ store.targetFrame?.title }}</p>
+        <p class="text-[11px] text-dimmed">{{ t('environmentWizard.review.detectHint') }}</p>
       </div>
       <UButton
         size="xs"
@@ -130,12 +130,12 @@ const canLeaveReview = computed(
       </UButton>
     </div>
 
-    <p v-if="!store.hasRepo" class="text-[12px] text-amber-300/80">
+    <p v-if="!store.hasRepo" class="text-[12px] text-app-warning-300/80">
       {{ t('environmentWizard.review.noRepo') }}
     </p>
     <p
       v-else-if="store.detectError"
-      class="text-[12px] text-rose-300/80"
+      class="text-[12px] text-app-error-300/80"
       data-testid="env-setup-detect-error"
     >
       {{ t('environmentWizard.review.detectError') }}
@@ -145,15 +145,11 @@ const canLeaveReview = computed(
       <!-- deep analysis (opt-in; elevated to a prominent nudge when the repo ships its own CLI) -->
       <div
         class="rounded-md border p-3"
-        :class="
-          repoCliHint
-            ? 'border-primary-700/60 bg-primary-950/30'
-            : 'border-slate-800 bg-slate-900/40'
-        "
+        :class="repoCliHint ? 'border-primary/60 bg-primary/10' : 'border-default bg-default/40'"
       >
         <p
           v-if="repoCliHint"
-          class="mb-2 flex items-start gap-1.5 text-[11px] text-primary-300"
+          class="mb-2 flex items-start gap-1.5 text-[11px] text-primary"
           data-testid="env-setup-cli-nudge"
         >
           <UIcon name="i-lucide-lightbulb" class="mt-0.5 h-3.5 w-3.5 shrink-0" />
@@ -161,10 +157,10 @@ const canLeaveReview = computed(
         </p>
         <div class="flex items-center justify-between gap-2">
           <div class="min-w-0">
-            <p class="text-[12px] font-medium text-slate-300">
+            <p class="text-[12px] font-medium text-toned">
               {{ t('environmentWizard.analysis.title') }}
             </p>
-            <p class="text-[11px] text-slate-500">{{ t('environmentWizard.analysis.hint') }}</p>
+            <p class="text-[11px] text-dimmed">{{ t('environmentWizard.analysis.hint') }}</p>
           </div>
           <UButton
             size="xs"
@@ -181,12 +177,15 @@ const canLeaveReview = computed(
         </div>
         <p
           v-if="!store.canAnalyze"
-          class="mt-2 text-[11px] text-slate-500"
+          class="mt-2 text-[11px] text-dimmed"
           data-testid="env-setup-analysis-unavailable"
         >
           {{ t('environmentWizard.analysis.unavailable') }}
         </p>
-        <p v-else-if="store.analysisStatus === 'failed'" class="mt-2 text-[11px] text-rose-300/80">
+        <p
+          v-else-if="store.analysisStatus === 'failed'"
+          class="mt-2 text-[11px] text-app-error-300/80"
+        >
           {{ t('environmentWizard.analysis.failed') }}
         </p>
         <div
@@ -194,7 +193,7 @@ const canLeaveReview = computed(
           class="mt-2 space-y-2"
           data-testid="env-setup-analysis-ready"
         >
-          <p v-if="store.merged?.summary" class="text-[11px] leading-snug text-slate-400">
+          <p v-if="store.merged?.summary" class="text-[11px] leading-snug text-muted">
             {{ store.merged.summary }}
           </p>
           <UButton
@@ -212,7 +211,7 @@ const canLeaveReview = computed(
 
       <!-- per-field provenance -->
       <div v-if="store.merged?.fields.length" class="space-y-1.5">
-        <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        <p class="text-[11px] font-semibold uppercase tracking-wide text-muted">
           {{ t('environmentWizard.review.provenanceTitle') }}
         </p>
         <div class="flex flex-wrap gap-1.5">
@@ -262,7 +261,7 @@ const canLeaveReview = computed(
 
       <!-- compose file layering -->
       <div v-if="composeFileCandidates.length" class="space-y-1.5">
-        <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        <p class="text-[11px] font-semibold uppercase tracking-wide text-muted">
           {{ t('environmentWizard.review.composeFiles') }}
         </p>
         <div class="flex flex-wrap gap-1.5">
@@ -283,7 +282,7 @@ const canLeaveReview = computed(
 
       <!-- compose profiles -->
       <div v-if="profileCandidates.length" class="space-y-1.5">
-        <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        <p class="text-[11px] font-semibold uppercase tracking-wide text-muted">
           {{ t('environmentWizard.review.profiles') }}
         </p>
         <div class="flex flex-wrap gap-1.5">
@@ -304,16 +303,16 @@ const canLeaveReview = computed(
 
       <!-- seed dumps -->
       <div v-if="seedDumpCandidates.length" class="space-y-1.5">
-        <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        <p class="text-[11px] font-semibold uppercase tracking-wide text-muted">
           {{ t('environmentWizard.review.seedDumps') }}
         </p>
         <div class="space-y-1">
           <div
             v-for="c in seedDumpCandidates"
             :key="c.path"
-            class="flex items-center justify-between gap-2 rounded border border-slate-800 bg-slate-900/40 px-2 py-1"
+            class="flex items-center justify-between gap-2 rounded border border-default bg-default/40 px-2 py-1"
           >
-            <span class="truncate text-[11px] text-slate-300">{{ c.path }}</span>
+            <span class="truncate text-[11px] text-toned">{{ c.path }}</span>
             <UButton
               size="xs"
               :color="seedAdded(c.path) ? 'success' : 'neutral'"
@@ -352,7 +351,11 @@ const canLeaveReview = computed(
             class="w-full font-mono text-[11px]"
             data-testid="env-setup-raw-text"
           />
-          <p v-if="rawError" class="text-[11px] text-rose-300/80" data-testid="env-setup-raw-error">
+          <p
+            v-if="rawError"
+            class="text-[11px] text-app-error-300/80"
+            data-testid="env-setup-raw-error"
+          >
             {{ rawError }}
           </p>
           <div class="flex justify-end">

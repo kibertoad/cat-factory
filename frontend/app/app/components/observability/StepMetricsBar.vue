@@ -57,31 +57,29 @@ const headroomTone = computed(() => headroomColor(headroom.value, m.value.trunca
 <template>
   <div
     v-if="m.calls > 0"
-    class="rounded-lg border border-slate-800 bg-slate-900/40 p-2.5 text-[12px]"
-    :class="
-      clickable ? 'cursor-pointer transition hover:border-slate-700 hover:bg-slate-900/70' : ''
-    "
+    class="rounded-lg border border-default bg-default/40 p-2.5 text-[12px]"
+    :class="clickable ? 'cursor-pointer transition hover:border-muted hover:bg-default/70' : ''"
     :role="clickable ? 'button' : undefined"
     @click="clickable ? $emit('inspect') : undefined"
   >
     <!-- header line: call count + tokens + warning/error badges -->
     <div class="flex items-center gap-2">
-      <UIcon name="i-lucide-activity" class="h-3.5 w-3.5 shrink-0 text-slate-500" />
-      <span class="text-slate-300">
+      <UIcon name="i-lucide-activity" class="h-3.5 w-3.5 shrink-0 text-dimmed" />
+      <span class="text-toned">
         {{ t('observability.metricsBar.calls', { count: m.calls }, m.calls) }}
       </span>
-      <span class="text-slate-500">·</span>
+      <span class="text-dimmed">·</span>
       <span
-        class="tabular-nums text-slate-400"
+        class="tabular-nums text-muted"
         :title="t('observability.metricsBar.inputCompletionTokens')"
       >
         {{ formatTokens(totalInput) }}↑ {{ formatTokens(m.completionTokens) }}↓
       </span>
       <template v-if="cost">
-        <span class="text-slate-500">·</span>
+        <span class="text-dimmed">·</span>
         <span
           class="tabular-nums"
-          :class="onSubscription ? 'text-slate-500' : 'text-slate-300'"
+          :class="onSubscription ? 'text-dimmed' : 'text-toned'"
           :title="
             onSubscription
               ? t('observability.metricsBar.subscriptionCostHint')
@@ -92,7 +90,7 @@ const headroomTone = computed(() => headroomColor(headroom.value, m.value.trunca
         </span>
         <span
           v-if="onSubscription"
-          class="text-[10px] uppercase tracking-wide text-slate-500"
+          class="text-[10px] uppercase tracking-wide text-dimmed"
           :title="t('observability.metricsBar.subscriptionCostHint')"
         >
           {{ t('observability.metricsBar.subscription') }}
@@ -108,28 +106,28 @@ const headroomTone = computed(() => headroomColor(headroom.value, m.value.trunca
         <UIcon
           v-if="clickable"
           name="i-lucide-chevron-right"
-          class="h-3.5 w-3.5 text-slate-600 rtl:-scale-x-100"
+          class="h-3.5 w-3.5 text-app-600 rtl:-scale-x-100"
         />
       </div>
     </div>
 
     <!-- input breakdown: the headline's three classes, priced an order of magnitude apart -->
     <div v-if="hasCache" class="mt-1.5 flex items-center gap-1.5 text-[11px] tabular-nums">
-      <span class="text-slate-400" :title="t('observability.metricsBar.freshHint')">
+      <span class="text-muted" :title="t('observability.metricsBar.freshHint')">
         {{ t('observability.metricsBar.fresh', { tokens: formatTokens(m.promptTokens) }) }}
       </span>
-      <span v-if="cacheRead > 0" class="text-slate-600">·</span>
+      <span v-if="cacheRead > 0" class="text-app-600">·</span>
       <span
         v-if="cacheRead > 0"
-        class="text-emerald-400/80"
+        class="text-app-success-400/80"
         :title="t('observability.metricsBar.cacheReadHint')"
       >
         {{ t('observability.metricsBar.cacheRead', { tokens: formatTokens(cacheRead) }) }}
       </span>
-      <span v-if="cacheWrite > 0" class="text-slate-600">·</span>
+      <span v-if="cacheWrite > 0" class="text-app-600">·</span>
       <span
         v-if="cacheWrite > 0"
-        class="text-amber-400/80"
+        class="text-app-warning-400/80"
         :title="t('observability.metricsBar.cacheWriteHint')"
       >
         {{ t('observability.metricsBar.cacheWrite', { tokens: formatTokens(cacheWrite) }) }}
@@ -139,26 +137,26 @@ const headroomTone = computed(() => headroomColor(headroom.value, m.value.trunca
     <!-- output-limit headroom -->
     <div v-if="headroom !== null" class="mt-2">
       <div class="flex items-center justify-between text-[11px]">
-        <span class="text-slate-500">{{ t('observability.metricsBar.outputLimit') }}</span>
+        <span class="text-dimmed">{{ t('observability.metricsBar.outputLimit') }}</span>
         <span class="tabular-nums" :class="headroomTone">
           {{ formatTokens(m.peakCompletionTokens) }} /
           {{ formatTokens(m.maxOutputTokens ?? 0) }} ({{ pct(headroom) }}%)
         </span>
       </div>
-      <div class="mt-1 h-1 overflow-hidden rounded-full bg-slate-700/60">
+      <div class="mt-1 h-1 overflow-hidden rounded-full bg-accented/60">
         <div
           class="h-full rounded-full transition-all duration-500"
           :class="
             m.truncatedCalls > 0 || headroom >= 0.98
-              ? 'bg-rose-400'
+              ? 'bg-app-error-400'
               : headroom >= 0.8
-                ? 'bg-amber-400'
-                : 'bg-emerald-400'
+                ? 'bg-app-warning-400'
+                : 'bg-app-success-400'
           "
           :style="{ width: `${Math.max(2, pct(headroom))}%` }"
         />
       </div>
-      <p v-if="m.truncatedCalls > 0" class="mt-1 text-[11px] text-rose-400">
+      <p v-if="m.truncatedCalls > 0" class="mt-1 text-[11px] text-app-error-400">
         {{
           t(
             'observability.metricsBar.truncatedCalls',
@@ -172,19 +170,19 @@ const headroomTone = computed(() => headroomColor(headroom.value, m.value.trunca
     <!-- transport overhead vs model execution -->
     <div v-if="transport !== null" class="mt-2">
       <div class="flex items-center justify-between text-[11px]">
-        <span class="text-slate-500">{{ t('observability.metricsBar.transportVsExecution') }}</span>
-        <span class="tabular-nums text-slate-400">
+        <span class="text-dimmed">{{ t('observability.metricsBar.transportVsExecution') }}</span>
+        <span class="tabular-nums text-muted">
           {{ formatMs(m.overheadMs) }} / {{ formatMs(m.upstreamMs) }}
         </span>
       </div>
-      <div class="mt-1 flex h-1 overflow-hidden rounded-full bg-slate-700/60">
+      <div class="mt-1 flex h-1 overflow-hidden rounded-full bg-accented/60">
         <div
-          class="h-full bg-sky-400/80"
+          class="h-full bg-app-info-400/80"
           :style="{ width: `${pct(transport)}%` }"
           :title="t('observability.metricsBar.transportOverhead')"
         />
         <div
-          class="h-full bg-indigo-400/80 flex-1"
+          class="h-full bg-primary/80 flex-1"
           :title="t('observability.metricsBar.modelExecution')"
         />
       </div>

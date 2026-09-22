@@ -17,11 +17,11 @@ const { t } = useI18n()
 
 <template>
   <section class="space-y-3" data-testid="env-setup-step-pick">
-    <p class="text-sm text-slate-400">{{ t('environmentWizard.pick.intro') }}</p>
+    <p class="text-sm text-muted">{{ t('environmentWizard.pick.intro') }}</p>
     <!-- The one-service scope caveat, stated on the step that asks for the service: nothing
          here changes any other service, and running it twice just re-edits this one's recipe. -->
-    <p class="text-xs leading-relaxed text-slate-500">{{ t('environmentWizard.pick.scope') }}</p>
-    <p v-if="!store.serviceFrames.length" class="text-sm text-slate-500">
+    <p class="text-xs leading-relaxed text-dimmed">{{ t('environmentWizard.pick.scope') }}</p>
+    <p v-if="!store.serviceFrames.length" class="text-sm text-dimmed">
       {{ t('environmentWizard.pick.empty') }}
     </p>
     <div v-else class="space-y-1.5">

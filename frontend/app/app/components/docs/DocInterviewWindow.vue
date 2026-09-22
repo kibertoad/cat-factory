@@ -107,7 +107,7 @@ const onProceed = () =>
   <ResultWindowShell
     :open="open"
     icon="i-lucide-messages-square"
-    icon-class="bg-indigo-500/15 text-indigo-300"
+    icon-class="bg-primary/15 text-primary"
     :title="block?.title ?? t('docInterview.title')"
     :subtitle="t('docInterview.subtitle')"
     width="3xl"
@@ -124,14 +124,14 @@ const onProceed = () =>
       <!-- No session yet -->
       <div
         v-if="!session"
-        class="flex h-full flex-col items-center justify-center gap-2 text-center text-slate-400"
+        class="flex h-full flex-col items-center justify-center gap-2 text-center text-muted"
       >
         <UIcon name="i-lucide-messages-square" class="h-8 w-8 opacity-40" />
         <p class="text-sm">{{ t('docInterview.empty') }}</p>
       </div>
 
       <template v-else>
-        <p class="mb-4 text-[13px] leading-relaxed text-slate-300">
+        <p class="mb-4 text-[13px] leading-relaxed text-toned">
           {{ t('docInterview.intro') }}
         </p>
 
@@ -168,23 +168,23 @@ const onProceed = () =>
         <!-- Converged: show the synthesized authoring brief -->
         <div
           v-else-if="converged"
-          class="rounded-lg border border-slate-800 bg-slate-950/40 p-4"
+          class="rounded-lg border border-default bg-app-950/40 p-4"
           data-testid="doc-interview-converged"
         >
-          <p class="mb-2 text-[11px] font-medium uppercase tracking-wide text-slate-500">
+          <p class="mb-2 text-[11px] font-medium uppercase tracking-wide text-dimmed">
             {{ t('docInterview.brief') }}
           </p>
           <pre
             v-if="session.brief"
-            class="whitespace-pre-wrap break-words text-[13px] leading-relaxed text-slate-300"
+            class="whitespace-pre-wrap break-words text-[13px] leading-relaxed text-toned"
             >{{ session.brief }}</pre>
-          <p v-else class="text-[13px] text-slate-400">{{ t('docInterview.converged') }}</p>
+          <p v-else class="text-[13px] text-muted">{{ t('docInterview.converged') }}</p>
         </div>
 
         <!-- No pending questions but not yet converged -->
         <div
           v-else-if="questions.length === 0"
-          class="rounded-lg border border-slate-800 bg-slate-950/40 p-4 text-center text-[13px] text-slate-400"
+          class="rounded-lg border border-default bg-app-950/40 p-4 text-center text-[13px] text-muted"
         >
           {{ t('docInterview.converged') }}
         </div>
@@ -194,10 +194,10 @@ const onProceed = () =>
           <li
             v-for="q in questions"
             :key="q.key"
-            class="rounded-lg border border-slate-800 bg-slate-950/40 p-3"
+            class="rounded-lg border border-default bg-app-950/40 p-3"
             data-testid="doc-interview-question"
           >
-            <p class="mb-2 text-[13px] font-medium text-slate-200">{{ q.question }}</p>
+            <p class="mb-2 text-[13px] font-medium text-default">{{ q.question }}</p>
             <UTextarea
               v-model="drafts[q.key]"
               :rows="2"
@@ -212,7 +212,7 @@ const onProceed = () =>
                  for an answer to go. Saying so beats taking text the flush could only drop. -->
             <p
               v-if="!addressable(q)"
-              class="mt-1 text-[11px] text-amber-300"
+              class="mt-1 text-[11px] text-app-warning-300"
               data-testid="doc-interview-unanswerable"
             >
               {{ t('docInterview.unanswerable') }}
@@ -226,12 +226,12 @@ const onProceed = () =>
          re-submit a question set already in flight, and the resume is a no-op once it isn't. -->
     <footer
       v-if="session && phase === 'awaiting' && questions.length > 0"
-      class="flex items-center justify-between gap-3 border-t border-slate-800 px-5 py-3"
+      class="flex items-center justify-between gap-3 border-t border-default px-5 py-3"
     >
-      <p class="text-[11px] text-slate-500">
+      <p class="text-[11px] text-dimmed">
         <span
           v-if="unanswered > 0"
-          class="text-amber-400/90"
+          class="text-app-warning-400/90"
           data-testid="doc-interview-unanswered"
         >
           {{ t('docInterview.unanswered', { count: unanswered }) }}

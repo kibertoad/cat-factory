@@ -180,10 +180,10 @@ async function create() {
   <UModal v-model:open="open" :title="t('initiative.create.title')">
     <template #body>
       <div class="space-y-4" data-testid="create-initiative-modal">
-        <p v-if="frame" class="text-xs text-slate-400">
+        <p v-if="frame" class="text-xs text-muted">
           <i18n-t keypath="initiative.create.inFrame" tag="span" scope="global">
             <template #frame>
-              <span class="font-medium text-slate-200">{{ frame.title }}</span>
+              <span class="font-medium text-default">{{ frame.title }}</span>
             </template>
           </i18n-t>
         </p>
@@ -191,9 +191,7 @@ async function create() {
         <!-- Preset picker: only when a deployment registered presets beyond the built-in generic
              one, so a single-preset install keeps today's plain form. -->
         <div v-if="presets.length > 1" class="space-y-1.5">
-          <span class="text-xs font-medium text-slate-300">{{
-            t('initiative.create.preset')
-          }}</span>
+          <span class="text-xs font-medium text-toned">{{ t('initiative.create.preset') }}</span>
           <div class="grid gap-2" data-testid="initiative-preset-picker">
             <button
               v-for="p in presets"
@@ -204,8 +202,8 @@ async function create() {
               class="flex items-start gap-3 rounded-md border px-3 py-2 text-left transition"
               :class="
                 p.id === selectedPresetId
-                  ? 'border-primary-500 bg-primary-950/30'
-                  : 'border-slate-700 hover:border-slate-600'
+                  ? 'border-primary bg-primary/10'
+                  : 'border-muted hover:border-app-600'
               "
               @click="selectPreset(p.id)"
             >
@@ -215,10 +213,10 @@ async function create() {
                 :style="{ color: p.presentation.color }"
               />
               <span class="min-w-0">
-                <span class="block text-sm font-medium text-slate-200">
+                <span class="block text-sm font-medium text-default">
                   {{ p.presentation.label }}
                 </span>
-                <span class="block text-[11px] text-slate-400">
+                <span class="block text-[11px] text-muted">
                   {{ p.presentation.description }}
                 </span>
               </span>
@@ -266,7 +264,7 @@ async function create() {
           :issues-hint="t('initiative.create.contextIssuesHint')"
         />
 
-        <p class="text-[11px] text-slate-500">
+        <p class="text-[11px] text-dimmed">
           {{ t('initiative.create.hint') }}
         </p>
       </div>

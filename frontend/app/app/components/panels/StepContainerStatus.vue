@@ -51,22 +51,22 @@ const CONTAINER_STATUS_META: Record<
   starting: {
     icon: 'i-lucide-loader-circle',
     spin: true,
-    cls: 'border-sky-900/50 bg-sky-950/30 text-sky-300',
+    cls: 'border-app-info-900/50 bg-app-info-950/30 text-app-info-300',
   },
   up: {
     icon: 'i-lucide-box',
     spin: false,
-    cls: 'border-emerald-900/50 bg-emerald-950/30 text-emerald-300',
+    cls: 'border-app-success-900/50 bg-app-success-950/30 text-app-success-300',
   },
   errored: {
     icon: 'i-lucide-circle-x',
     spin: false,
-    cls: 'border-rose-900/50 bg-rose-950/30 text-rose-300',
+    cls: 'border-app-error-900/50 bg-app-error-950/30 text-app-error-300',
   },
   destroyed: {
     icon: 'i-lucide-power-off',
     spin: false,
-    cls: 'border-slate-800 bg-slate-900/40 text-slate-400',
+    cls: 'border-default bg-default/40 text-muted',
   },
 }
 
@@ -105,16 +105,16 @@ const { copy: copyText } = useCopyToClipboard()
         />
         <span class="font-medium">{{ t(CONTAINER_STATUS_KEYS[containerStatus]) }}</span>
         <template v-if="phaseLabel && containerStatus === 'up'">
-          <span class="text-slate-500">·</span>
+          <span class="text-dimmed">·</span>
           <span>{{ phaseLabel }}</span>
         </template>
       </div>
       <dl v-if="step.container?.id || step.container?.url" class="mt-2 space-y-1">
         <div v-if="step.container?.id" class="flex items-center gap-2">
-          <dt class="shrink-0 text-[11px] uppercase tracking-wide text-slate-500">
+          <dt class="shrink-0 text-[11px] uppercase tracking-wide text-dimmed">
             {{ t('panels.stepMeta.container.id') }}
           </dt>
-          <dd class="truncate font-mono text-[11px] text-slate-300" :title="step.container.id">
+          <dd class="truncate font-mono text-[11px] text-toned" :title="step.container.id">
             {{ step.container.id }}
           </dd>
           <UButton
@@ -129,10 +129,10 @@ const { copy: copyText } = useCopyToClipboard()
           />
         </div>
         <div v-if="step.container?.url" class="flex items-center gap-2">
-          <dt class="shrink-0 text-[11px] uppercase tracking-wide text-slate-500">
+          <dt class="shrink-0 text-[11px] uppercase tracking-wide text-dimmed">
             {{ t('panels.stepMeta.container.url') }}
           </dt>
-          <dd class="truncate font-mono text-[11px] text-slate-300">
+          <dd class="truncate font-mono text-[11px] text-toned">
             <a
               :href="step.container.url"
               target="_blank"

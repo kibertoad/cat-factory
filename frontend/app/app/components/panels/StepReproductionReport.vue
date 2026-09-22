@@ -51,18 +51,18 @@ function phaseLabel(outcome: ReproductionPhaseOutcome): string {
     class="space-y-2"
     data-testid="step-reproduction-report"
     :class="
-      variant === 'card' ? 'scroll-mt-4 rounded-xl border border-slate-800 bg-slate-900/50 p-4' : ''
+      variant === 'card' ? 'scroll-mt-4 rounded-xl border border-default bg-default/50 p-4' : ''
     "
   >
     <div
       v-if="variant === 'card'"
-      class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400"
+      class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted"
     >
       <UIcon :name="presentation.icon" class="h-3.5 w-3.5" />
       <span>{{ t('panels.stepDetail.reproduction.heading') }}</span>
     </div>
 
-    <p class="text-[11px] text-slate-400" data-testid="reproduction-verdict">
+    <p class="text-[11px] text-muted" data-testid="reproduction-verdict">
       {{ t(presentation.verdict) }}
     </p>
 
@@ -70,27 +70,31 @@ function phaseLabel(outcome: ReproductionPhaseOutcome): string {
          trees can tell a test that misses the defect from a resumed run whose pre-fix tree already
          carried this step's own interrupted work, so re-deriving a cause from the exit codes here
          is exactly the inference that gets it wrong. -->
-    <p v-if="report.note" class="text-[11px] text-amber-300" data-testid="reproduction-observation">
+    <p
+      v-if="report.note"
+      class="text-[11px] text-app-warning-300"
+      data-testid="reproduction-observation"
+    >
       {{ report.note }}
     </p>
 
     <!-- A structural infeasibility declaration: the reason, and what the agent verified instead.
          This is what keeps "could not be reproduced" from looking like "nobody tried". -->
     <template v-if="report.status === 'declared_infeasible'">
-      <div v-if="report.reason" class="rounded-md border border-slate-800 bg-slate-950/40 p-2">
-        <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+      <div v-if="report.reason" class="rounded-md border border-default bg-app-950/40 p-2">
+        <p class="text-[11px] font-semibold uppercase tracking-wide text-muted">
           {{ t('panels.stepDetail.reproduction.reason') }}
         </p>
-        <p class="mt-1 whitespace-pre-wrap text-[12px] text-slate-300">{{ report.reason }}</p>
+        <p class="mt-1 whitespace-pre-wrap text-[12px] text-toned">{{ report.reason }}</p>
       </div>
       <div
         v-if="report.alternativeVerification"
-        class="rounded-md border border-slate-800 bg-slate-950/40 p-2"
+        class="rounded-md border border-default bg-app-950/40 p-2"
       >
-        <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        <p class="text-[11px] font-semibold uppercase tracking-wide text-muted">
           {{ t('panels.stepDetail.reproduction.alternative') }}
         </p>
-        <p class="mt-1 whitespace-pre-wrap text-[12px] text-slate-300">
+        <p class="mt-1 whitespace-pre-wrap text-[12px] text-toned">
           {{ report.alternativeVerification }}
         </p>
       </div>
@@ -98,17 +102,17 @@ function phaseLabel(outcome: ReproductionPhaseOutcome): string {
 
     <template v-else>
       <div v-if="report.command" class="flex items-baseline gap-2">
-        <span class="shrink-0 text-[11px] text-slate-500">{{
+        <span class="shrink-0 text-[11px] text-dimmed">{{
           t('panels.stepDetail.reproduction.command')
         }}</span>
-        <span class="truncate font-mono text-[11px] text-slate-300">{{ report.command }}</span>
+        <span class="truncate font-mono text-[11px] text-toned">{{ report.command }}</span>
       </div>
 
       <!-- A dropped path can leave the pre-fix tree without the reproduction, which greens it and
            reads as "the test does not capture the defect". Stated, never implied. -->
       <p
         v-if="report.omittedTestPaths"
-        class="text-[11px] text-amber-300"
+        class="text-[11px] text-app-warning-300"
         data-testid="reproduction-omitted-paths"
       >
         {{
@@ -123,7 +127,7 @@ function phaseLabel(outcome: ReproductionPhaseOutcome): string {
       <div
         v-for="phase in phases"
         :key="phase.key"
-        class="rounded-md border border-slate-800 bg-slate-950/40 p-2"
+        class="rounded-md border border-default bg-app-950/40 p-2"
         data-testid="reproduction-phase"
       >
         <div class="flex items-center gap-2">
@@ -133,15 +137,15 @@ function phaseLabel(outcome: ReproductionPhaseOutcome): string {
             :class="
               phase.outcome
                 ? phase.outcome.passed
-                  ? 'text-emerald-400'
-                  : 'text-rose-400'
-                : 'text-slate-600'
+                  ? 'text-app-success-400'
+                  : 'text-app-error-400'
+                : 'text-app-600'
             "
           />
-          <span class="text-[12px] font-medium text-slate-200">
+          <span class="text-[12px] font-medium text-default">
             {{ t(phase.label) }}
           </span>
-          <span class="ms-auto shrink-0 text-[11px] tabular-nums text-slate-400">
+          <span class="ms-auto shrink-0 text-[11px] tabular-nums text-muted">
             {{
               phase.outcome ? phaseLabel(phase.outcome) : t('panels.stepDetail.reproduction.notRun')
             }}
@@ -149,12 +153,12 @@ function phaseLabel(outcome: ReproductionPhaseOutcome): string {
         </div>
         <pre
           v-if="phase.outcome?.outputTail"
-          class="mt-1.5 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded bg-slate-950 p-2 font-mono text-[11px] text-slate-400"
+          class="mt-1.5 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded bg-app-950 p-2 font-mono text-[11px] text-muted"
           data-testid="reproduction-output"
           >{{ phase.outcome.outputTail }}</pre>
       </div>
 
-      <p class="text-[11px] text-slate-500">
+      <p class="text-[11px] text-dimmed">
         {{
           t('panels.stepDetail.reproduction.attempts', {
             attempts: report.attempts,

@@ -126,9 +126,7 @@ async function resolve(choice: 'recheck' | 'proceed') {
   <div
     class="rounded-lg border p-3"
     :class="
-      blocking
-        ? 'border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40'
-        : 'border-default bg-elevated/40'
+      blocking ? 'border-app-warning-800 bg-app-warning-950/40' : 'border-default bg-elevated/40'
     "
     :data-tone="tone"
     data-testid="input-gate-notice"
@@ -137,7 +135,7 @@ async function resolve(choice: 'recheck' | 'proceed') {
       <UIcon
         :name="blocking ? 'i-lucide-file-question' : 'i-lucide-info'"
         class="mt-0.5 size-4 shrink-0"
-        :class="blocking ? 'text-amber-600 dark:text-amber-400' : 'text-muted'"
+        :class="blocking ? 'text-app-warning-400' : 'text-muted'"
       />
       <div class="min-w-0 flex-1">
         <p class="text-sm font-medium">{{ t(copy.title) }}</p>

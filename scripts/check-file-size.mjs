@@ -244,22 +244,14 @@ const LEGACY_ALLOWANCES = new Map([
  * Shrink-only, like LEGACY_ALLOWANCES: move detail into the linked authority doc rather than
  * raising the number, and lower the allowance in the same PR when a cleanup lands a win.
  *
- * Ratcheted 1100 → 1098 by condensing the role-scoped merge-policy entry back to the charter's
- * shape (what the flow is, the deadliest trap, the link). It had grown to a five-trap paragraph
- * restating two ADRs that already own every one of them.
- *
- * Ratcheted 1098 → 1095 by the same move one level up, on the merge-lifecycle entry those bullets
- * sit in: three siblings re-narrated their linked ADR before linking it, and the threshold-preset
- * bullet was a field list whose per-flow half belongs to the flow doc that reads it. Every link
- * survived; only the restatement went. One field had NO other home and a deeper doc pointed up
- * here for it (`requirements-review.md` cited this entry for the review cap and tolerance), so
- * that pair of knobs was written down THERE in the same change. Dropping a field list is only a
- * shrink once something else states it: check for an inbound pointer before condensing one.
- *
- * Ratcheted 1095 → 1094 while ADDING the test-lane-parity guard to the guard-scripts list: two
- * neighbouring entries were a hair short of their own wrap width and gave up a line each. A list
- * that has to grow is the easiest place to find a line, and a hand-maintained count in it ("CI runs
- * all five") is the same rot as a pinned total in a test, so that became a relation.
+ * Ratcheted 1094 → 689 by the cleanup the charter above always implied but never got: the file had
+ * become an architecture reader with rules in it. Three architecture bodies moved WHOLE to docs of
+ * their own rather than being trimmed in place (the flow index to `docs/flow-index.md`, the step
+ * taxonomy to `backend/docs/step-taxonomy.md`, the canonical dispatch pattern into
+ * `docs/execution-state-machine.md`), the counter rules with no other home landed in
+ * `backend/docs/logging.md`, and every section whose authority doc already restated it was cut back
+ * to the rule plus the link. Nothing was dropped without a home: the earlier entries below are the
+ * record of how expensive it is to find one line at a time, which is why this moved bodies instead.
  *
  * `docs/internal/running-tests.md` is here for a second reason: CLAUDE.md points an agent at it
  * by name, so its whole length is a context cost paid on every read, and it sits in the tree
@@ -282,7 +274,7 @@ const LEGACY_ALLOWANCES = new Map([
  * and the next addition has to earn its own justification instead of spending this one's headroom.
  */
 const DOC_ALLOWANCES = new Map([
-  ['CLAUDE.md', 1094],
+  ['CLAUDE.md', 689],
   ['docs/internal/running-tests.md', 96],
 ])
 

@@ -541,7 +541,7 @@ onUnmounted(() => {
            which is exactly the involuntary movement `prefers-reduced-motion` is about. -->
       <div
         v-if="targetRect"
-        class="ring-primary-400 outline-primary-400/25 pointer-events-none fixed z-[70] rounded-lg outline-4 ring-2 motion-safe:transition-all motion-safe:duration-150"
+        class="ring-primary outline-primary/25 pointer-events-none fixed z-[70] rounded-lg outline-4 ring-2 motion-safe:transition-all motion-safe:duration-150"
         :style="{
           top: `${targetRect.top - 4}px`,
           left: `${targetRect.left - 4}px`,
@@ -569,27 +569,27 @@ onUnmounted(() => {
         role="dialog"
         :tabindex="cardFocusable ? -1 : undefined"
         :aria-label="t('tutorial.overlay.ariaLabel')"
-        class="pointer-events-auto fixed z-[70] w-80 max-w-[calc(100vw-16px)] rounded-xl border border-slate-700 bg-slate-900 p-4 shadow-2xl outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
+        class="pointer-events-auto fixed z-[70] w-80 max-w-[calc(100vw-16px)] rounded-xl border border-muted bg-default p-4 shadow-2xl outline-none focus-visible:ring-2 focus-visible:ring-primary"
         :style="{ top: `${layout.top}px`, left: `${layout.left}px` }"
         data-testid="tutorial-tooltip"
         @pointerdown.stop
         @focusout="onCardFocusOut"
       >
         <div class="mb-1 flex items-start justify-between gap-3">
-          <h3 class="text-sm font-semibold text-slate-100">{{ t(step.titleKey) }}</h3>
-          <span class="shrink-0 text-xs text-slate-500">
+          <h3 class="text-sm font-semibold text-app-100">{{ t(step.titleKey) }}</h3>
+          <span class="shrink-0 text-xs text-dimmed">
             {{ t('tutorial.overlay.progress', { current: tutorial.stepIndex + 1, total }) }}
           </span>
         </div>
         <!-- `bodyParams` carries the fixed proper nouns a step names (a repository slug),
              which live in the catalog's `{named}` placeholders rather than in nine
              translations of the same literal. Absent for most steps. -->
-        <p class="text-sm text-slate-300">
+        <p class="text-sm text-toned">
           {{ t(step.bodyKey, step.bodyParams ?? {}) }}
         </p>
         <p
           v-if="searching"
-          class="mt-2 flex items-center gap-1.5 text-xs text-slate-400"
+          class="mt-2 flex items-center gap-1.5 text-xs text-muted"
           data-testid="tutorial-searching"
         >
           <UIcon name="i-lucide-loader" class="h-3.5 w-3.5 motion-safe:animate-spin" />
@@ -597,7 +597,7 @@ onUnmounted(() => {
         </p>
         <p
           v-else-if="step.advanceOn === 'target-click'"
-          class="text-primary-300 mt-2 text-xs"
+          class="text-primary mt-2 text-xs"
           data-testid="tutorial-click-hint"
         >
           {{ t('tutorial.overlay.clickHint') }}
@@ -606,7 +606,7 @@ onUnmounted(() => {
              whole tour: say so rather than congratulating the user either way. -->
         <p
           v-if="isLast && abridged"
-          class="mt-2 text-xs text-amber-300/90"
+          class="mt-2 text-xs text-app-warning-300/90"
           data-testid="tutorial-abridged"
         >
           {{
@@ -625,14 +625,14 @@ onUnmounted(() => {
              nothing ready, where the plain Done below is the honest ending. -->
         <div
           v-if="isLast && nextTour"
-          class="mt-3 rounded-lg border border-slate-700/70 bg-slate-800/40 p-2.5"
+          class="mt-3 rounded-lg border border-muted/70 bg-elevated/40 p-2.5"
           data-testid="tutorial-next-tour"
         >
-          <p class="text-[11px] tracking-wide text-slate-400 uppercase">
+          <p class="text-[11px] tracking-wide text-muted uppercase">
             {{ t('tutorial.overlay.nextUp') }}
           </p>
-          <p class="mt-0.5 text-sm font-medium text-slate-100">{{ t(nextTour.titleKey) }}</p>
-          <p class="mt-0.5 text-xs text-slate-400">{{ t(nextTour.descriptionKey) }}</p>
+          <p class="mt-0.5 text-sm font-medium text-app-100">{{ t(nextTour.titleKey) }}</p>
+          <p class="mt-0.5 text-xs text-muted">{{ t(nextTour.descriptionKey) }}</p>
           <UButton
             size="xs"
             color="primary"

@@ -122,16 +122,16 @@ async function toggleEnabled(enabled: boolean) {
     </template>
     <template #body>
       <div v-if="descriptor" class="space-y-4">
-        <p class="text-sm text-slate-400">
+        <p class="text-sm text-muted">
           {{ t('tasks.connect.intro', { label: descriptor.label }) }}
         </p>
 
         <!-- Credentialless source (GitHub Issues): no form, just the on/off toggle. -->
         <template v-if="credentialless">
-          <p class="text-[11px] text-slate-500">
+          <p class="text-[11px] text-dimmed">
             {{ t('tasks.connect.credentialless') }}
           </p>
-          <p v-if="!available" class="text-[11px] text-amber-400">
+          <p v-if="!available" class="text-[11px] text-app-warning-400">
             {{ t('tasks.connect.installAppHint', { label: descriptor.label }) }}
           </p>
         </template>
@@ -149,7 +149,7 @@ async function toggleEnabled(enabled: boolean) {
             >
               {{ t('tasks.connect.oauthButton', { label: descriptor.label }) }}
             </UButton>
-            <p class="text-center text-[11px] text-slate-500">
+            <p class="text-center text-[11px] text-dimmed">
               {{ t('tasks.connect.oauthOr') }}
             </p>
           </template>
@@ -167,7 +167,7 @@ async function toggleEnabled(enabled: boolean) {
             />
           </UFormField>
         </div>
-        <p v-else class="text-[11px] text-slate-500">
+        <p v-else class="text-[11px] text-dimmed">
           {{
             connection?.label
               ? t('tasks.connect.connectedTo', { label: connection.label })
@@ -178,11 +178,13 @@ async function toggleEnabled(enabled: boolean) {
         <!-- The per-workspace on/off toggle, available once the source is usable. -->
         <div
           v-if="available"
-          class="flex items-center justify-between gap-2 rounded-md border border-slate-800 px-3 py-2"
+          class="flex items-center justify-between gap-2 rounded-md border border-default px-3 py-2"
         >
           <div class="text-sm">
-            <div class="font-medium text-slate-200">{{ t('tasks.connect.offerToWorkspace') }}</div>
-            <div class="text-[11px] text-slate-500">
+            <div class="font-medium text-default">
+              {{ t('tasks.connect.offerToWorkspace') }}
+            </div>
+            <div class="text-[11px] text-dimmed">
               {{ t('tasks.connect.offerHint', { label: descriptor.label }) }}
             </div>
           </div>

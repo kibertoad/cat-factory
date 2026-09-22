@@ -182,23 +182,23 @@ async function remove(service: FoundationalService) {
     <div
       v-for="s in catalog.services"
       :key="s.id"
-      class="rounded-md border border-slate-800 bg-slate-900/60 p-3"
+      class="rounded-md border border-default bg-default/60 p-3"
     >
       <div class="flex items-start gap-2">
-        <UIcon name="i-lucide-boxes" class="mt-0.5 h-4 w-4 shrink-0 text-sky-400" />
+        <UIcon name="i-lucide-boxes" class="mt-0.5 h-4 w-4 shrink-0 text-app-info-400" />
         <div class="min-w-0 flex-1">
-          <p class="truncate text-sm font-medium text-slate-100">
+          <p class="truncate text-sm font-medium text-app-100">
             {{ s.name }}
-            <code class="ms-1 text-[11px] text-slate-500">{{ s.id }}</code>
+            <code class="ms-1 text-[11px] text-dimmed">{{ s.id }}</code>
           </p>
-          <p class="text-xs text-slate-400">{{ s.summary }}</p>
+          <p class="text-xs text-muted">{{ s.summary }}</p>
           <div v-if="s.capabilities.length" class="mt-1 flex flex-wrap gap-1">
             <UBadge v-for="c in s.capabilities" :key="c" size="xs" variant="subtle" color="neutral">
               {{ c }}
             </UBadge>
           </div>
           <FoundationalContractSummary :contracts="s.contracts" :format-label="formatLabel" />
-          <p v-if="s.sourceId" class="mt-1 text-[11px] text-slate-500">
+          <p v-if="s.sourceId" class="mt-1 text-[11px] text-dimmed">
             {{ t('foundational.registry.fromSource', { path: s.sourcePath ?? '' }) }}
           </p>
         </div>
@@ -222,7 +222,7 @@ async function remove(service: FoundationalService) {
         </div>
       </div>
     </div>
-    <p v-if="!catalog.services.length" class="text-sm text-slate-500">
+    <p v-if="!catalog.services.length" class="text-sm text-dimmed">
       {{ t('foundational.registry.empty') }}
     </p>
 
@@ -238,7 +238,7 @@ async function remove(service: FoundationalService) {
       {{ t('foundational.registry.add') }}
     </UButton>
 
-    <div v-else class="rounded-md border border-slate-800 p-3">
+    <div v-else class="rounded-md border border-default p-3">
       <p class="mb-2 text-sm font-medium">
         {{
           isCreating ? t('foundational.registry.addTitle') : t('foundational.registry.editTitle')
@@ -251,8 +251,8 @@ async function remove(service: FoundationalService) {
           v-model="draft.id"
           :placeholder="t('foundational.registry.idPlaceholder')"
         />
-        <p v-else class="text-xs text-slate-500">
-          <code class="text-slate-300">{{ draft.id }}</code>
+        <p v-else class="text-xs text-dimmed">
+          <code class="text-toned">{{ draft.id }}</code>
           — {{ t('foundational.registry.idFixed') }}
         </p>
         <UInput v-model="draft.name" :placeholder="t('foundational.registry.namePlaceholder')" />
@@ -270,11 +270,11 @@ async function remove(service: FoundationalService) {
           :placeholder="t('foundational.registry.capabilitiesPlaceholder')"
         />
 
-        <div class="rounded-md border border-slate-800 p-2">
-          <p class="text-xs font-medium text-slate-300">
+        <div class="rounded-md border border-default p-2">
+          <p class="text-xs font-medium text-toned">
             {{ t('foundational.registry.contractsTitle') }}
           </p>
-          <p class="mb-2 text-[11px] text-slate-500">
+          <p class="mb-2 text-[11px] text-dimmed">
             {{
               draft.contractsTouched
                 ? t('foundational.registry.contractsReplace')

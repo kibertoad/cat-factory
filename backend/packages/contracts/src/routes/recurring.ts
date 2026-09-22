@@ -1,4 +1,4 @@
-import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
+import { ContractNoBody, defineApiContract, noBodyResponse } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import {
   createScheduleSchema,
@@ -43,7 +43,7 @@ export const deleteScheduleContract = defineApiContract({
   method: 'delete',
   requestPathParamsSchema: scheduleIdParams,
   pathResolver: ({ scheduleId }) => `/recurring-pipelines/${scheduleId}`,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })
 
 export const listScheduleRunsContract = defineApiContract({

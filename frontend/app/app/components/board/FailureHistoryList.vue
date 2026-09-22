@@ -20,27 +20,27 @@ const ordered = computed(() => [...props.failures].reverse())
     <li
       v-for="failure in ordered"
       :key="failure.occurredAt"
-      class="rounded-md border border-slate-800/80 bg-slate-950/50 px-2.5 py-2"
+      class="rounded-md border border-default/80 bg-app-950/50 px-2.5 py-2"
       data-testid="agent-failure-history-entry"
     >
-      <div class="flex items-center gap-1.5 text-[10px] text-slate-500">
-        <UIcon name="i-lucide-alert-triangle" class="h-3 w-3 shrink-0 text-rose-400/70" />
+      <div class="flex items-center gap-1.5 text-[10px] text-dimmed">
+        <UIcon name="i-lucide-alert-triangle" class="h-3 w-3 shrink-0 text-app-error-400/70" />
         <time>{{ d(new Date(failure.occurredAt), 'long') }}</time>
       </div>
 
-      <p class="mt-1 text-[11px] leading-snug text-slate-300" :title="failure.message">
+      <p class="mt-1 text-[11px] leading-snug text-toned" :title="failure.message">
         {{ failure.message }}
       </p>
 
-      <p v-if="failure.hint" class="mt-1 text-[10px] leading-snug text-slate-500">
+      <p v-if="failure.hint" class="mt-1 text-[10px] leading-snug text-dimmed">
         {{ failure.hint }}
       </p>
 
       <FailureDetail
         :detail="failure.detail"
         :message="failure.message"
-        summary-class="text-[10px] text-slate-500 hover:text-slate-300"
-        pre-class="bg-slate-950/80 text-[10px] text-slate-400"
+        summary-class="text-[10px] text-dimmed hover:text-toned"
+        pre-class="bg-app-950/80 text-[10px] text-muted"
       />
     </li>
   </ol>

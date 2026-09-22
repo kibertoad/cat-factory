@@ -418,15 +418,15 @@ function toastRemoved() {
        === true). While it's still being probed (null) show a loading line instead of flashing
        the full form, and render nothing when the integration is off (false). -->
   <div v-if="infra.available === true" class="space-y-5">
-    <p class="text-xs text-slate-400">{{ t('settings.infrastructure.handler.intro') }}</p>
+    <p class="text-xs text-muted">{{ t('settings.infrastructure.handler.intro') }}</p>
 
     <!-- kubernetes -->
     <section
       ref="kubeSection"
-      class="space-y-2 rounded-lg border border-slate-700 bg-slate-900/40 p-3"
+      class="space-y-2 rounded-lg border border-muted bg-default/40 p-3"
       data-testid="infra-kubernetes-section"
     >
-      <h3 class="text-sm font-semibold text-slate-200">
+      <h3 class="text-sm font-semibold text-default">
         {{ t('inspector.testConfig.provisionTypes.kubernetes') }}
       </h3>
       <!-- Established-connection card: a prominent checkbox signals a connection is stored, and
@@ -434,7 +434,7 @@ function toastRemoved() {
            re-opening the form. Absent ⇒ the "not connected yet" hint. -->
       <div
         v-if="kubeHandler"
-        class="space-y-2 rounded-md border border-emerald-500/30 bg-emerald-500/5 p-2.5"
+        class="space-y-2 rounded-md border border-app-success-500/30 bg-app-success-500/5 p-2.5"
       >
         <div class="flex items-start justify-between gap-2">
           <UCheckbox
@@ -442,7 +442,7 @@ function toastRemoved() {
             disabled
             size="lg"
             :label="t('settings.infrastructure.handler.connectionEstablished')"
-            :ui="{ label: 'text-[13px] font-semibold text-emerald-300' }"
+            :ui="{ label: 'text-[13px] font-semibold text-app-success-300' }"
           />
           <UButton
             icon="i-lucide-trash-2"
@@ -454,9 +454,9 @@ function toastRemoved() {
             @click="removeKube"
           />
         </div>
-        <p class="pl-7 text-[11px] text-slate-300">
+        <p class="pl-7 text-[11px] text-toned">
           {{ t('settings.infrastructure.handler.activeEngine') }}
-          <span class="text-slate-200">{{ kubeHandlerEngineLabel }}</span>
+          <span class="text-default">{{ kubeHandlerEngineLabel }}</span>
         </p>
         <div class="space-y-1.5 pl-7">
           <UButton
@@ -472,13 +472,13 @@ function toastRemoved() {
           <ConnectionTestVerdict :result="kubeSavedTestResult" />
         </div>
       </div>
-      <p v-else class="flex items-center gap-1.5 text-[12px] text-slate-500">
+      <p v-else class="flex items-center gap-1.5 text-[12px] text-dimmed">
         <UIcon name="i-lucide-circle-dashed" class="h-3.5 w-3.5" />
         {{ t('settings.infrastructure.handler.notConnected') }}
       </p>
 
       <div class="space-y-1">
-        <span class="text-[11px] text-slate-400">{{
+        <span class="text-[11px] text-muted">{{
           t('settings.infrastructure.handler.engineLabel')
         }}</span>
         <div class="flex flex-wrap gap-1">
@@ -512,10 +512,10 @@ function toastRemoved() {
       />
 
       <!-- Local mode: a personal override for THIS machine, layered over the workspace handler. -->
-      <div v-if="userOverridesOn" class="border-t border-slate-800 pt-2">
+      <div v-if="userOverridesOn" class="border-t border-default pt-2">
         <button
           type="button"
-          class="flex w-full items-center gap-1.5 text-start text-[11px] font-semibold uppercase tracking-wide text-slate-500 hover:text-slate-300"
+          class="flex w-full items-center gap-1.5 text-start text-[11px] font-semibold uppercase tracking-wide text-dimmed hover:text-toned"
           @click="showKubeOverride = !showKubeOverride"
         >
           <UIcon
@@ -528,7 +528,7 @@ function toastRemoved() {
           </UBadge>
         </button>
         <div v-if="showKubeOverride" class="mt-2 space-y-2">
-          <p class="text-[11px] text-slate-500">
+          <p class="text-[11px] text-dimmed">
             {{ t('settings.infrastructure.handler.personalOverrideHint') }}
           </p>
           <p v-if="kubeUserHandler" class="flex justify-end">
@@ -558,11 +558,13 @@ function toastRemoved() {
     </section>
 
     <!-- docker-compose: handled by the runtime's local Docker capability, no connection. -->
-    <section class="space-y-1 rounded-lg border border-slate-700 bg-slate-900/40 p-3">
-      <h3 class="text-sm font-semibold text-slate-200">
+    <section class="space-y-1 rounded-lg border border-muted bg-default/40 p-3">
+      <h3 class="text-sm font-semibold text-default">
         {{ t('inspector.testConfig.provisionTypes.docker-compose') }}
       </h3>
-      <p class="text-[12px] text-slate-400">{{ t('settings.infrastructure.dockerComposeInfo') }}</p>
+      <p class="text-[12px] text-muted">
+        {{ t('settings.infrastructure.dockerComposeInfo') }}
+      </p>
     </section>
 
     <!-- cloudflare: a self-contained section (see the component's own note on why it is not
@@ -570,15 +572,15 @@ function toastRemoved() {
     <CloudflareHandlerSection />
 
     <!-- custom: the catalog editor + a remote-custom HTTP handler per custom type. -->
-    <section class="space-y-3 rounded-lg border border-slate-700 bg-slate-900/40 p-3">
-      <h3 class="text-sm font-semibold text-slate-200">
+    <section class="space-y-3 rounded-lg border border-muted bg-default/40 p-3">
+      <h3 class="text-sm font-semibold text-default">
         {{ t('inspector.testConfig.provisionTypes.custom') }}
       </h3>
 
       <CustomManifestTypeEditor />
 
-      <div v-if="infra.customTypes.length" class="space-y-2 border-t border-slate-800 pt-3">
-        <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+      <div v-if="infra.customTypes.length" class="space-y-2 border-t border-default pt-3">
+        <p class="text-[11px] font-semibold uppercase tracking-wide text-muted">
           {{ t('settings.infrastructure.handler.customHandlerTitle') }}
         </p>
         <UFormField :label="t('settings.infrastructure.handler.customTypeLabel')">
@@ -595,9 +597,9 @@ function toastRemoved() {
         </UFormField>
         <p
           v-if="customHandler"
-          class="flex items-center justify-between gap-2 text-[12px] text-slate-300"
+          class="flex items-center justify-between gap-2 text-[12px] text-toned"
         >
-          <span class="text-emerald-400">{{
+          <span class="text-app-success-400">{{
             t('settings.infrastructure.handler.customConnected')
           }}</span>
           <UButton
@@ -625,7 +627,7 @@ function toastRemoved() {
       </div>
     </section>
   </div>
-  <p v-else-if="infra.available === null" class="text-xs text-slate-500">
+  <p v-else-if="infra.available === null" class="text-xs text-dimmed">
     {{ t('settings.infrastructure.handler.loading') }}
   </p>
 </template>
