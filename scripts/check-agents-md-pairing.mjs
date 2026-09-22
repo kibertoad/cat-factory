@@ -25,21 +25,12 @@
 // Usage:  node scripts/check-agents-md-pairing.mjs
 // Exit 0 = every nested AGENTS.md is paired; exit 1 = at least one is not.
 
-import { readdirSync, readFileSync } from 'node:fs'
-import { dirname, join, relative, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { execFileSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-
-const SKIP_DIRS = new Set([
-  'node_modules',
-  'dist',
-  '.turbo',
-  'coverage',
-  '.nuxt',
-  '.output',
-  '.git',
-])
 
 /** The one line a sibling CLAUDE.md must open with, so Claude Code loads the AGENTS.md as memory. */
 export const REQUIRED_IMPORT = '@AGENTS.md'
@@ -74,43 +65,42 @@ function readSibling(dirAbs) {
   }
 }
 
-/** Every directory holding an `AGENTS.md`, repo root excluded. */
-function* agentsDirs(dirAbs) {
-  let entries
-  try {
-    entries = readdirSync(dirAbs, { withFileTypes: true })
-  } catch {
-    return
-  }
-  if (entries.some((e) => e.isFile() && e.name === 'AGENTS.md') && dirAbs !== repoRoot) {
-    yield dirAbs
-  }
-  for (const entry of entries) {
-    if (entry.isDirectory() && !SKIP_DIRS.has(entry.name)) {
-      yield* agentsDirs(join(dirAbs, entry.name))
-    }
-  }
+/**
+ * Every tracked nested `AGENTS.md`, as a repo-relative path. Tracked files only, so an untracked
+ * checkout inside the tree (a `.claude/worktrees/*` worktree, a scratch clone) never reads as an
+ * unpaired package.
+ */
+function trackedNestedAgentsFiles() {
+  return execFileSync('git', ['ls-files', '-z', '--', ':(glob)**/AGENTS.md'], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
+  })
+    .split('\0')
+    .filter((path) => path.length > 0 && path !== 'AGENTS.md')
 }
 
-const failures = []
-for (const dirAbs of agentsDirs(repoRoot)) {
-  const problem = describeSiblingProblem(readSibling(dirAbs))
-  if (problem) {
-    failures.push(
-      `${relative(repoRoot, join(dirAbs, 'AGENTS.md')).replaceAll('\\', '/')}: ${problem}`,
+function main() {
+  const failures = []
+  for (const path of trackedNestedAgentsFiles()) {
+    const problem = describeSiblingProblem(readSibling(join(repoRoot, dirname(path))))
+    if (problem) failures.push(`${path}: ${problem}`)
+  }
+
+  if (failures.length > 0) {
+    console.error('Nested AGENTS.md files Claude Code will not load as instructions:\n')
+    for (const failure of failures) console.error(`  - ${failure}`)
+    console.error(
+      `\nAdd a sibling CLAUDE.md next to each, containing a single \`${REQUIRED_IMPORT}\` line, so`,
     )
+    console.error('Claude Code loads the guidance while other tools keep reading AGENTS.md.')
+    console.error('Background: the header of scripts/check-agents-md-pairing.mjs, and #2257.')
+    process.exit(1)
   }
+
+  console.log('Every nested AGENTS.md has its CLAUDE.md sibling.')
 }
 
-if (failures.length > 0) {
-  console.error('Nested AGENTS.md files Claude Code will not load as instructions:\n')
-  for (const failure of failures) console.error(`  - ${failure}`)
-  console.error(
-    `\nAdd a sibling CLAUDE.md next to each, containing a single \`${REQUIRED_IMPORT}\` line, so`,
-  )
-  console.error('Claude Code loads the guidance while other tools keep reading AGENTS.md.')
-  console.error('Background: the header of scripts/check-agents-md-pairing.mjs, and #2257.')
-  process.exit(1)
-}
-
-console.log('Every nested AGENTS.md has its CLAUDE.md sibling.')
+// Only when run as a script: the fixtures import `describeSiblingProblem`, and an import must not
+// scan the tree or exit the test process.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main()
