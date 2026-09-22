@@ -1,5 +1,33 @@
 # @cat-factory/worker
 
+## 0.218.1
+
+### Patch Changes
+
+- 7760397: Apply the Nuxt UI skill and MCP server to the platform's own coder agents.
+  
+  Slice 0 (#2247) vendored the `nuxt-ui` skill and declared the MCP server as Claude Code repo
+  conventions, which reach a local contributor session but not the coder agents this platform runs.
+  This adds `registerNuxtUiCapability`: an opt-in agent-kind capability that attaches the vendored
+  skill (a bundled playbook) and the `nuxt-ui` MCP server (`https://ui.nuxt.com/mcp`) to the coder
+  kinds that author or repair SPA source: `coder`, `fixer`, `ci-fixer`.
+  
+  It is opt-in per deployment, not a framework default: `defaultAgentKindRegistry()` stays
+  stack-agnostic, and the Node and Cloudflare facades opt in when they build their own default
+  registry. A deployment whose repos are not Nuxt gets neither the playbook nor a server pointing at
+  `ui.nuxt.com`, and a deployment injecting its own registry owns its capability wiring.
+  
+  The skill text stays single-sourced: `scripts/generate-nuxt-ui-skill.mjs` inlines the vendored
+  `.claude/skills/nuxt-ui/` tree into a committed generated module (the Worker cannot read the
+  filesystem at runtime), and `--check` guards it against drift in CI.
+- Updated dependencies [7760397]
+  - @cat-factory/agents@0.168.0
+  - @cat-factory/binary-generators@0.3.54
+  - @cat-factory/consensus@0.19.1
+  - @cat-factory/orchestration@0.314.1
+  - @cat-factory/provider-cloudflare@0.7.547
+  - @cat-factory/server@0.326.1
+
 ## 0.218.0
 
 ### Minor Changes
