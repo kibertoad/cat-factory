@@ -37,7 +37,28 @@ export default defineNuxtConfig({
     },
   },
 
-  modules: ['@nuxt/ui', '@pinia/nuxt', 'pinia-plugin-persistedstate/nuxt', '@nuxtjs/i18n'],
+  modules: [
+    '@nuxt/ui',
+    '@nuxt/fonts',
+    '@pinia/nuxt',
+    'pinia-plugin-persistedstate/nuxt',
+    '@nuxtjs/i18n',
+  ],
+
+  // The faces the BUILT-IN themes name (`utils/theme/builtins.ts`), downloaded at build time and
+  // self-hosted under `/_fonts` so no visitor's browser calls a font CDN. `global: true` emits the
+  // `@font-face` rules whether or not a stylesheet at build time names the family, because the
+  // theme plugin sets `--font-sans` / `--font-mono` at RUNTIME from the active document, which the
+  // module's CSS scan cannot see. An IMPORTED theme's font is not listed here, so it renders only if
+  // the device or the deployment provides it (the import dialog says so); a deployment that wants
+  // one adds it to this list in its own config. `theme.builtins.spec.ts` pins that every built-in
+  // font is here.
+  fonts: {
+    families: [
+      { name: 'Geist', provider: 'google', global: true },
+      { name: 'Geist Mono', provider: 'google', global: true },
+    ],
+  },
 
   // i18n lives in THIS layer's `i18n/` dir (the v9+ `restructureDir` convention).
   // @nuxtjs/i18n is layer-aware: it scans `i18n/locales/` in every layer of the
@@ -131,7 +152,7 @@ export default defineNuxtConfig({
         },
         // Tint the mobile browser chrome / iOS Safari address bar to the board canvas for the FIRST
         // paint, one value per OS colour scheme (the default theme's `--app-bg-canvas`). The app's
-        // own mode can differ from the OS, so `plugins/appearance.client.ts` overrides both entries
+        // own mode and theme can differ from the OS, so the theme plugin overrides both entries
         // with the live canvas colour once it runs: unhead dedupes a `theme-color` meta by name AND
         // media, so the plugin's pair (same media, no key) lands on these two tags. The loading
         // shell leaves them alone: a hand-edited tag stops matching unhead's hydration and is left

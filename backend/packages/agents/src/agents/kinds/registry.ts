@@ -19,6 +19,7 @@ import type { CompanionDefinition } from './companions.js'
 import { COMPANIONS } from './companions.js'
 import type { AgentTuning } from './tuning.js'
 import type { AgentKindVariantDefinition } from './variants.js'
+import { surfaceTraits } from './surface-traits.js'
 import type { StructuredOutput } from './structured-output.js'
 import { registerBugFisherAgent } from './bug-fisher.js'
 import { registerBugInvestigatorAgent } from './bug-investigator.js'
@@ -350,8 +351,7 @@ export class AgentKindRegistry {
     const definition = this.registry.get(kind)
     if (!definition) return false
     if (definition.requiresContainer === true) return true
-    const surface = definition.agent?.surface
-    return surface === 'container-explore' || surface === 'container-coding'
+    return surfaceTraits(definition.agent?.surface)?.container ?? false
   }
 
   /**

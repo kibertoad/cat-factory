@@ -265,11 +265,16 @@ export async function driveExecution(
     let gateHops = 0
     while (gateHops++ < MAX_PARK_HOPS) {
       if (result.kind === 'awaiting_job') {
+        // The park may carry its OWN cadence, and today exactly one kind of step does: a
+        // DELEGATED one, whose executor declares the interval and window its external system
+        // actually works on. A three-hour Actions run polled on the harness's 15s job cadence
+        // spends its whole budget saying "queued". Absent ⇒ the deployment's configured job
+        // cadence, which is every container job.
         const next = await pollUntil(
           'awaiting_job',
           () => exec.pollAgentJob(workspaceId, executionId),
-          cfg.jobPollIntervalMs,
-          cfg.jobMaxPolls,
+          result.poll?.intervalMs ?? cfg.jobPollIntervalMs,
+          result.poll?.maxPolls ?? cfg.jobMaxPolls,
           'Implementation job',
           { pollFirst: true },
         )

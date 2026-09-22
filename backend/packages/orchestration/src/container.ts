@@ -120,6 +120,7 @@ import type {
   BinaryGeneratorRegistry,
   BinaryGeneratorSource,
   BinaryStoreRegistry,
+  DelegatedExecutorRegistry,
   FoundationalBuiltinSource,
   FoundationalServiceRegistry,
   GateRegistry,
@@ -372,6 +373,13 @@ export interface CoreSpine {
    * `validateRegistrations` at boot.
    */
   judgeRegistry: JudgeRegistry
+  /**
+   * The app-owned DELEGATED-EXECUTOR registry the engine resolved (the facade's injected instance,
+   * else the empty default). Re-exposed so the dispatch path builds each executor from the SAME
+   * instance the boot validation graded, and so the HTTP layer's workspace-snapshot projection can
+   * tell the pipeline builder which steps leave the platform.
+   */
+  delegatedExecutorRegistry: DelegatedExecutorRegistry
   /**
    * The app-owned pipeline registry the engine resolved (the facade's injected instance, else the
    * empty default). Re-exposed so the facade passes the SAME instance to `validateRegistrations` at
@@ -728,6 +736,7 @@ export function createCore(injected: CoreDependencies): Core {
     agentKindRegistry,
     gateRegistry,
     judgeRegistry,
+    delegatedExecutorRegistry,
     pipelineRegistry,
     taskTypeRegistry,
     inlineUseCaseRegistry,
@@ -923,6 +932,7 @@ export function createCore(injected: CoreDependencies): Core {
     agentKindRegistry,
     gateRegistry,
     judgeRegistry,
+    delegatedExecutorRegistry,
     pipelineRegistry,
     taskTypeRegistry,
     inlineUseCaseRegistry,

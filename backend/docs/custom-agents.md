@@ -39,7 +39,14 @@ agent.
 
 `preOps` (backend TS, before the LLM step) → `agent` (the optional LLM step, on an `inline`,
 `container-explore` or `container-coding` surface) → `postOps` (backend TS, after it returns).
-The container runs only the middle stage. The website's
+The container runs only the middle stage.
+
+There is a FOURTH surface, `delegated`, and it is a different kind of thing: the middle stage runs
+in a system the deployment already operates rather than in a container of ours, and the platform
+observes it. Its pre/post-ops run here exactly as they do for a container kind, and everything
+downstream of the step (the `ci` gate, the merge policy, the notifications) is unchanged. It has its
+own document, because what a deployment writes is an EXECUTOR rather than a prompt:
+[`delegated-executors.md`](./delegated-executors.md). The website's
 [mental model](https://www.catfactory.ai/extend/custom-agents.html#the-mental-model-three-stages)
 is the account to read; what matters here is the port the hooks run over:
 [`RepoFiles`](../packages/kernel/src/ports/repo-files.ts), which talks only HTTP (the GitHub Git

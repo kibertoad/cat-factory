@@ -1,7 +1,8 @@
 export default defineAppConfig({
   ui: {
-    // The alias map every token in `tokens.css` resolves through: `primary` for the brand, the
-    // four status aliases for the mirrored status tokens, `neutral` for the role tokens.
+    // The default theme's alias map. It MUST equal `CAT_FACTORY_THEME.doc.colors`
+    // (`utils/theme/builtins.ts`): this is what the first paint renders from, before the theme
+    // plugin applies the active document over it (`theme.builtins.spec.ts` pins the equality).
     colors: {
       primary: 'indigo',
       secondary: 'violet',

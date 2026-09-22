@@ -59,7 +59,7 @@ function controller(over: Partial<PollCompletionControllerDeps> = {}) {
       step.evictionRecoveries = (step.evictionRecoveries ?? 0) + 1
       return { kind: 'continue' as const }
     },
-    markContainerErrored: async () => {
+    markDispatchErrored: async () => {
       calls.containerErrored += 1
     },
     ...over,

@@ -1,5 +1,6 @@
 import {
   AsyncFakeAgentExecutor,
+  withDelegatedArm,
   type ConformanceHarness,
   FakeAgentExecutor,
   FakeEnvConfigRepairer,
@@ -121,6 +122,11 @@ function buildWorkerConformanceDeps(recorder: RecordingEventPublisher, opts: Wor
       //   pass-through) is driven against real D1 with no model.
       judgeRegistry: o.judgeRegistry,
       judgeAssessor: o.judgeAssessor,
+      // - delegatedExecutorRegistry: a deployment-registered EXTERNAL executor, so the delegated
+      //   arm's dispatch / poll / settle / teardown is driven against real D1. The agent executor
+      //   above is wrapped in the production composite for the same suite (see `withDelegatedArm`),
+      //   because a wholesale override would have the fake answer for the delegated kind too.
+      delegatedExecutorRegistry: o.delegatedExecutorRegistry,
       bugHuntAssessor: o.bugHuntAssessor,
       monorepoAdoptionAdvisor: o.monorepoAdoptionAdvisor,
       inlineUseCaseGenerator: o.inlineUseCaseGenerator,
@@ -171,9 +177,16 @@ const harness: ConformanceHarness = {
       ...(opts?.agentKindRegistry ? { agentKindRegistry: opts.agentKindRegistry } : {}),
     }
     const app = makeApp(
-      agentOptions?.asyncKinds?.length
-        ? new AsyncFakeAgentExecutor(fakeOptions)
-        : new FakeAgentExecutor(fakeOptions),
+      // The deterministic agent, WRAPPED in the production composite when the suite registered an
+      // external executor, so a delegated kind reaches the real `DelegatedAgentExecutor` while
+      // everything else stays on the fake. Overriding `agentExecutor` wholesale is right for every
+      // other assertion and would make the delegated ones vacuous.
+      withDelegatedArm(
+        agentOptions?.asyncKinds?.length
+          ? new AsyncFakeAgentExecutor(fakeOptions)
+          : new FakeAgentExecutor(fakeOptions),
+        opts ?? {},
+      ),
       buildWorkerConformanceDeps(recorder, opts),
       // The Worker binds `AI` in tests; let the suite force the opt-in flag off so the
       // provider-key assertions behave identically to Node (which has no binding).

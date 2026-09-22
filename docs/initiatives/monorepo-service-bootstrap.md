@@ -7,8 +7,10 @@ from the monorepo versus what it keeps from the template.
 ## Goal & rationale
 
 Repo bootstrap creates a service in a repository of its own: clone a reference architecture,
-adapt it, force-push a single commit to a fresh, empty repo. That is the whole design, and it
-is exactly wrong for a monorepo. A monorepo already holds other people's services, so there is
+adapt it, force-push a single commit to a fresh, empty repo. Its brief rides Pi's GLOBAL
+`~/.pi/agent/AGENTS.md`, outside the checkout, precisely so the instructions never land in the
+commit the run force-pushes: an empty target means anything written into the tree IS the service.
+That is the whole design, and it is exactly wrong for a monorepo. A monorepo already holds other people's services, so there is
 no empty target, a force-push would destroy them, and the interesting question is not "what
 should this service contain" but **"what should it share with everything around it"**.
 

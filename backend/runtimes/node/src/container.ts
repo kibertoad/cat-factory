@@ -947,6 +947,7 @@ interface NodeContainerFinalizeBundle {
   customManifestTypeRegistry: NodeAppRegistriesResult['customManifestTypeRegistry']
   gateRegistry: NodeAppRegistriesResult['gateRegistry']
   judgeRegistry: NodeAppRegistriesResult['judgeRegistry']
+  delegatedExecutorRegistry: NodeAppRegistriesResult['delegatedExecutorRegistry']
   stepResolverRegistry: NodeAppRegistriesResult['stepResolverRegistry']
   initiativePresetRegistry: NodeAppRegistriesResult['initiativePresetRegistry']
   apiKeys: NodeModelDepsResult['apiKeys']
@@ -1058,6 +1059,7 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     customManifestTypeRegistry,
     gateRegistry,
     judgeRegistry,
+    delegatedExecutorRegistry,
     stepResolverRegistry,
     initiativePresetRegistry,
     apiKeys,
@@ -1181,6 +1183,7 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     agentKindRegistry,
     gateRegistry,
     judgeRegistry,
+    delegatedExecutorRegistry,
     stepResolverRegistry,
     initiativePresetRegistry,
     providerRegistry,
@@ -1295,6 +1298,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     agentKindRegistry,
     gateRegistry,
     judgeRegistry,
+    delegatedExecutorRegistry,
     stepResolverRegistry,
     initiativePresetRegistry,
     vcsRegistry,
@@ -1383,6 +1387,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     customManifestTypeRegistry,
     gateRegistry,
     judgeRegistry,
+    delegatedExecutorRegistry,
     stepResolverRegistry,
     initiativePresetRegistry,
     apiKeys,

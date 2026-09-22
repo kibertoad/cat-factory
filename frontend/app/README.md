@@ -42,7 +42,8 @@ over the WebSocket. How that sync works is written up in
 
 ## Tech stack
 
-- **Nuxt 4 / Vue 3** SPA: single route (`pages/index.vue`).
+- **Nuxt 4 / Vue 3** SPA: the board is `pages/index.vue`, beside three standalone routes
+  (`mcp-authorize.vue`, `mcp-oauth-callback.vue`, `reset-password.vue`).
 - **Pinia** (+ `pinia-plugin-persistedstate`): feature stores.
 - **Vue Flow** (`core`, `background`, `controls`, `node-resizer`): the canvas.
 - **Nuxt UI** + Tailwind: components and styling.
@@ -51,15 +52,15 @@ over the WebSocket. How that sync works is written up in
 
 ## Layout
 
-| Path              | Contents                                                                                                                                              |
-| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `app.vue`         | Root; wraps the page in `AuthGate`.                                                                                                                   |
-| `pages/index.vue` | The only route: mounts the sidebar, canvas, toolbar, inspector, focus view, and all modals.                                                           |
-| `components/`     | UI grouped by area (see [Key UI surfaces](#key-ui-surfaces)).                                                                                         |
-| `composables/`    | `useApi` (typed client), `useWorkspaceStream` (WebSocket sync), `useBlockDrag`, `useBlockQueries`, `useBoardFlow`, `useSemanticZoom`, `useDepLabels`. |
-| `stores/`         | Pinia stores, one per feature domain.                                                                                                                 |
-| `types/`          | TypeScript domain unions (`domain.ts`) and wire types mirroring the contracts.                                                                        |
-| `utils/`          | Small pure helpers.                                                                                                                                   |
+| Path           | Contents                                                                                                                                                                     |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app.vue`      | Root; wraps the page in `AuthGate`.                                                                                                                                          |
+| `pages/`       | The board (`index.vue`: sidebar, canvas, toolbar, inspector, focus view, all modals), plus the standalone `mcp-authorize`, `mcp-oauth-callback` and `reset-password` routes. |
+| `components/`  | UI grouped by area (see [Key UI surfaces](#key-ui-surfaces)).                                                                                                                |
+| `composables/` | `useApi` (typed client), `useWorkspaceStream` (WebSocket sync), `useBlockDrag`, `useBlockQueries`, `useBoardFlow`, `useSemanticZoom`, `useDepLabels`.                        |
+| `stores/`      | Pinia stores, one per feature domain.                                                                                                                                        |
+| `types/`       | TypeScript domain unions (`domain.ts`) and wire types mirroring the contracts.                                                                                               |
+| `utils/`       | Small pure helpers.                                                                                                                                                          |
 
 ### The board's top overlay region has ONE owner
 
@@ -297,39 +298,58 @@ Every colour in the SPA is a token that follows the THEME and the colour MODE. T
 - **The app's mirrored numbered tokens** (`app/assets/css/tokens.css`) for a STATUS surface painted in a specific ramp shade: `bg-app-950` / `text-app-100` / `text-app-600` / `bg-app-500` / `ring-app-400` for the five grey shades with no role token, `bg-app-canvas` for the board canvas (the one surface below the page background; in light the page surface `app-950` sits at neutral-100 rather than the mirror's 50 and the canvas at 200, so the ~350 translucent `bg-default/NN` panels keep an edge), and `text-app-warning-300` / `bg-app-error-950/40` / `border-app-success-800` for the five status ramps (`secondary`, `success`, `info`, `warning`, `error`). Each token's dark value is the exact ramp shade and its light value is the MIRRORED shade (`50↔950`, `100↔900`, `200↔800`, `300↔700`, `400↔600`, `500` its own midpoint), so a `300` text on a `950/40` fill reads on both surfaces from one class list. Every value is a reference into the `--ui-color-<alias>-<n>` ramps, so a theme that remaps `warning` recolours every warning surface. `primary` has NO numbered token: brand accents use the bare alias, which is what the editor's primary slider and `blackAsPrimary` address.
 - **Category hues** (`text-app-hue-pink`, `var(--app-hue-teal)` in an inline style) for an IDENTITY colour: an agent kind, a task type, a pipeline step kind (`utils/catalog.ts`). One token per Tailwind hue, `400` in dark and `600` in light (Nuxt UI's own alias convention), referencing Tailwind's ramps because a category is not a status. A STATUS (task status, step state, test verdict, finding severity) is not a category and takes the alias directly (`var(--ui-warning)`, `var(--ui-success)`, `var(--ui-text-muted)` for planned / done / skipped), so the halo, the badge and the dot recolour together. A translucent tile behind a category glyph goes through `tint()` (`utils/colorTint.ts`), which also accepts the hex a deployment-registered kind may send. A theme recolours a hue through its `tokens` block.
 - **Never** a raw Tailwind hue (`bg-slate-900`, `text-amber-300`, `text-pink-300`) nor a fixed numbered alias (`text-primary-400`, `bg-warning-950/40`): the first is welded to one palette and one mode, the second follows the palette but not the mode. `scripts/check-frontend-palette.mjs` (CI) bans both. `red` and `rose` both mean `error`.
+- **Never** a fixed `white` / `black` utility (`bg-white`, `text-black`, `border-white/5`, `bg-white/[0.02]`): invisible or wrong in light mode. Use `border-inverted` (a selection ring), `border-default` / `bg-muted` (faint chrome) or `text-inverted` (text over a filled surface). A line that genuinely needs a fixed value says why with a `fixed-colour-ok:` comment, on that line or the one above it.
 
-### Colour mode
+### Themes and colour mode
 
-**Colour mode** (system / light / dark) is `@nuxtjs/color-mode`'s, registered by Nuxt UI, with its own persistence; `nuxt.config.ts` follows the system preference and falls back to dark. `AppearanceSwitcher` at the sidebar bottom is the control. `plugins/appearance.client.ts` keeps the two `theme-color` metas on the live canvas colour (the static pair in `nuxt.config.ts` follows the OS, which the app's mode can disagree with). The pre-JS loading shell (`spa-loading-template.html`) hardcodes the token values for both modes because no stylesheet is loaded yet; the colour-mode script in `<head>` has already classed `<html>` by then.
+A **theme** is a Nuxt UI theme editor document (https://ui.nuxt.com/theme): the sparse `ThemeDoc` the editor edits and shares as a `?doc=` link, decoded by `utils/theme/link.ts` and typed in `utils/theme/doc.ts` (a port of the editor engine's tables). The app speaks THAT format rather than one of its own, so a theme built in the editor imports as-is and a built-in theme is a document a user could have exported. `utils/theme/builtins.ts` ships `Cat Factory` (the default; its `colors` MUST equal `app.config.ts`'s `ui.colors`, which paints the first frame) and the editor's own `Mono` preset, referenced from the preset table rather than copied. The `theme` store persists the pick and the user's imported documents in this browser; `plugins/theme.client.ts` applies the active document at runtime: aliases onto `appConfig.ui.colors` (Nuxt UI's own colours plugin re-emits the ramps), default variants and component overrides onto `appConfig.ui.<component>` merged INTO the layer's own overrides, and tokens / radius / fonts onto one `<style id="app-theme">` whose selectors anchor on the `data-theme` attribute on `<html>` (`utils/theme/css.ts`, which is also the write boundary for untrusted values). The faces the built-in themes name (Geist, Geist Mono) are self-hosted through `@nuxt/fonts` (`fonts.families` in `nuxt.config.ts`, pinned by `builtins.spec.ts`); a font an IMPORTED theme names is applied as a family name only, so it renders when the device or the deployment provides it. A editor link whose document equals one of the editor's presets collapses to `{ preset: 'mono' }`; `utils/theme/presets.ts` is a copy of the editor's preset table so such a link rebuilds (a decode table, not menu entries).
+
+**Colour mode** (system / light / dark) is `@nuxtjs/color-mode`'s, registered by Nuxt UI, with its own persistence; `nuxt.config.ts` follows the system preference and falls back to dark. `AppearanceSwitcher` at the sidebar bottom is the one control for both axes. The pre-JS loading shell (`spa-loading-template.html`) cannot resolve a token (no stylesheet is loaded yet), so the plugin caches the computed colours of the four tokens the shell paints with, per colour mode, in `localStorage` (`utils/theme/bootPalette.ts`), and a two-line inline script in the shell applies the entry for the mode the `<head>` colour-mode script has already put on `<html>`. The hardcoded defaults are the default theme's, used only until a theme has been seen in that mode.
 
 ## Nuxt UI: agent tooling and where the SPA overrides the skill
 
 The SPA runs on Nuxt UI 4. Two first-party sources carry the rules this repo does not restate:
 
-- **The vendored [`nuxt-ui` skill](../../.claude/skills/nuxt-ui/)** teaches WHEN to reach for which
+- **The vendored [`nuxt-ui` skill](https://github.com/kibertoad/cat-factory/tree/main/.claude/skills/nuxt-ui)** teaches WHEN to reach for which
   component (Modal vs Slideover vs Drawer, Tabs vs NavigationMenu, Toast vs Alert) and HOW to build
   well (the variant-weight table, one solid primary per view, semantic utility roles). It is
   vendored under `.claude/skills/nuxt-ui/`, beside the project's own skills, so the rules version
   with the code and every contributor on Claude Code reads the same text. This is the Claude Code
-  surface: `.claude/skills/` and the repo `.mcp.json` auto-load for a local Claude Code session, and
-  another tool that reads `AGENTS.md` (Codex, for one) gets the pointers below but not an auto-loaded
-  skill or an auto-wired server. Making the platform's OWN coder agents (Claude Code, Codex, Pi in
+  surface: `.claude/skills/` auto-loads for a local Claude Code session, and the repo `.mcp.json` is
+  offered once for approval on the first session in the repo (re-offered when the file changes); a
+  decline is remembered, and `claude mcp reset-project-choices` un-sticks it. Another tool that reads
+  `AGENTS.md` (Codex, for one) gets the pointers below but not an auto-loaded skill or an auto-wired
+  server. Making the platform's OWN coder agents (Claude Code, Codex, Pi in
   the runner image) apply the skill is a separate, backend change: they stage skills and tool
   servers per run through the agent-capabilities system (ADR 0024 /
-  [`custom-agents.md`](../../backend/docs/custom-agents.md)), not from these repo files. The `@nuxt/ui` npm
+  [`custom-agents.md`](https://github.com/kibertoad/cat-factory/blob/main/backend/docs/custom-agents.md)), not from these repo files. The `@nuxt/ui` npm
   package does not ship the skill, so it cannot move with `pnpm update`: it is vendored from the
   `v4` branch of `nuxt/ui` (which tracks the 4.x line) and pinned by convention to the Nuxt UI
   major in [`package.json`](./package.json) (`@nuxt/ui@^4.11`). Refresh it by re-vendoring
   `skills/nuxt-ui/` from that branch (or `npx skills add nuxt/ui`) when the major moves. The
-  vendored files are kept byte-for-byte as upstream (oxfmt ignores them) so a refresh is a clean
-  diff.
-- **The [`nuxt-ui` MCP server](../../.mcp.json)** (`https://ui.nuxt.com/mcp`, declared repo-level)
+  vendored files are kept byte-for-byte as upstream: `.oxfmtrc.json` exempts them from the
+  formatter and `scripts/check-doc-links.mjs` skips them, so a refresh stays a clean diff even when
+  upstream ships a link this repo's own doc rules would reject.
+- **The [`nuxt-ui` MCP server](https://github.com/kibertoad/cat-factory/blob/main/.mcp.json)** (`https://ui.nuxt.com/mcp`, declared repo-level)
   answers WHAT a component accepts: props, slots, events, theme files and examples per component.
   The skill defers to it for every API question.
 
 The SPA's own rules win where they and the skill disagree. Each entry below links the rule it
 protects, so the two never contradict silently:
 
+- **Visible copy is an i18n key, never a literal string.** The skill's examples hard-code labels and
+  placeholders (`label="Email"`, `placeholder="you@example.com"`); here every user-facing string
+  goes through `@nuxtjs/i18n` and lands in the catalog. [Rule](#internationalization-i18n-authoring).
+- **Schema validation goes through valibot, never zod.** The skill's `forms.md` recipe opens with
+  `import * as z from 'zod'` and validates through `z.object({...})`; this package depends on
+  `valibot` (and `@toad-contracts/valibot`) and has no `zod`, so a `zod` import fails typecheck and
+  "fixing" it pulls in a dependency the repo deliberately lacks (which then has to clear the 24h
+  `minimumReleaseAge` gate). Validate with valibot, mirroring the wire contracts
+  ([`@cat-factory/contracts`](https://github.com/kibertoad/cat-factory/tree/main/backend/packages/contracts)).
+- **A backend-declared form renders through `DescriptorFields.vue`, not a hand-built `UForm`.** The
+  skill teaches the hand-rolled `UForm` + `UFormField` shape for every form; when the backend
+  declares the fields and the SPA only collects them, that shape is forbidden here.
+  [Rule](#a-backend-declared-form-renders-through-descriptorfieldsvue).
 - **Failure toasts go through the funnel, not a bare `toast.add`.** The skill uses `useToast()`
   freely; here a failed backend call is reported with `usePipelineErrorToast().present(error, key)`.
   [Rule](#every-failure-toast-goes-through-one-funnel).
@@ -338,7 +358,7 @@ protects, so the two never contradict silently:
   `aria-label`, rather than a bare `<UButton icon>`.
 - **Colour goes through theme tokens, never a fixed palette shade.** The skill bans raw Tailwind
   hues; this repo also bans fixed numbered aliases, enforced by
-  [`scripts/check-frontend-palette.mjs`](../../scripts/check-frontend-palette.mjs).
+  [`scripts/check-frontend-palette.mjs`](https://github.com/kibertoad/cat-factory/blob/main/scripts/check-frontend-palette.mjs).
   [Rule](#colour-through-theme-tokens-never-a-fixed-palette-shade).
 - **Confirmation dialogs use the shared `useConfirm`.** The skill shows `useOverlay()` per call
   site; here callers `await useConfirm().confirm({...})`

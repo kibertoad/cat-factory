@@ -7,7 +7,8 @@ guide is [`README.md`](./README.md); this file is the short orientation and the 
 Code loads as instructions (via the sibling [`CLAUDE.md`](./CLAUDE.md)).
 
 **Entry:** `nuxt.config.ts` (the layer's `main`). Source lives under `app/` (the Nuxt srcDir):
-`app.vue` is the root, `app/pages/index.vue` the only route.
+`app.vue` is the root; `app/pages/index.vue` is the board, beside three standalone routes
+(`mcp-authorize.vue`, `mcp-oauth-callback.vue`, `reset-password.vue`).
 
 **Where things live:**
 
