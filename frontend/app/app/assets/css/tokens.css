@@ -11,7 +11,9 @@
  * same intent lands on against a light surface.
  *
  * Every value is a reference into Nuxt UI's `--ui-color-<alias>-<n>` ramps, never a literal, so a
- * theme that maps `warning` to another palette in `app.config.ts` recolours every warning surface.
+ * theme that maps `warning` to another palette recolours every warning surface, and a theme
+ * document can override any single token here through its `tokens` block (the theme stylesheet's
+ * selectors outrank these; see `utils/theme/css.ts`).
  *
  * `@theme inline` binds each to a Tailwind colour so the `bg-app-warning-950/40` /
  * `text-app-error-300` utilities exist (with opacity modifiers). Five NEUTRAL shades ride the same
@@ -22,7 +24,8 @@
  * CATEGORY hues (`--app-hue-<h>`) are identity colours for agent kinds, task types and pipeline
  * step kinds: one per Tailwind hue, mode-adaptive on Nuxt UI's own convention (`400` in dark,
  * `600` in light), consumed as `text-app-hue-pink` or as `var(--app-hue-pink)` in an inline style.
- * They reference Tailwind's ramps, not an alias, because a category is not a status.
+ * They reference Tailwind's ramps, not an alias, because a category is not a status; a theme
+ * document recolours one through its `tokens` block (`'--app-hue-pink': 'var(--color-rose-400)'`).
  *
  * `scripts/check-frontend-palette.mjs` bans the raw and the fixed-alias forms these replace, and
  * `palette-token-parity.spec.ts` pins the dark values. */

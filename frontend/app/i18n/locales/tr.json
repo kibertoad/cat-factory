@@ -8598,6 +8598,9 @@
       "system": "Sistem",
       "light": "Açık",
       "dark": "Koyu"
+    },
+    "theme": {
+      "section": "Tema"
     }
   }
 }

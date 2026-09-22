@@ -8598,6 +8598,9 @@
       "system": "Système",
       "light": "Clair",
       "dark": "Sombre"
+    },
+    "theme": {
+      "section": "Thème"
     }
   }
 }

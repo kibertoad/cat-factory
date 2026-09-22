@@ -177,8 +177,11 @@ function main() {
     const lines = readFileSync(file, 'utf8').split('\n')
     // The literal rule (rule 3) reads production code only; the utility rules (raw palette, fixed
     // numbered alias, fixed white/black) apply everywhere, a fixed class being wrong even in a
-    // fixture. #2245 widens this gate to also exempt `presets.ts` (a verbatim Nuxt UI decode table
-    // of `oklch()` strings); the utility spreads below are untouched by that.
+    // fixture. `presets.ts` is the exception: a verbatim Nuxt UI decode table (oklch strings and the
+    // editor's own component classes) stored only to rebuild an editor share link and NEVER rendered
+    // by the SPA, so no palette rule applies to it.
+    const rel = relative(repoRoot, file).replaceAll('\\', '/')
+    if (rel.endsWith('frontend/app/app/utils/theme/presets.ts')) continue
     const literalExempt = file.endsWith('.spec.ts')
     lines.forEach((line, i) => {
       const matches = [
