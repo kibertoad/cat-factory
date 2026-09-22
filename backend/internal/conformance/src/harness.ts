@@ -27,6 +27,7 @@ import type {
   MonorepoAdoptionAdvisor,
   RepoBootstrapper,
   FragmentBriefGenerator,
+  DelegatedExecutorRegistry,
   JudgeRegistry,
   InitiativePresetRegistry,
   StepResolverRegistry,
@@ -754,6 +755,16 @@ export interface ConformanceAppOptions {
    * container build. Absent → the facade's default (empty) judge registry.
    */
   judgeRegistry?: JudgeRegistry
+  /**
+   * Inject the app-owned DELEGATED-EXECUTOR registry, pre-loaded with a deterministic fake, so the
+   * suite can assert a deployment-registered EXTERNAL executor dispatches, polls, settles and is
+   * torn down identically on EVERY runtime. Each facade harness wraps its fake agent executor in
+   * the production `CompositeAgentExecutor` when this is present (see `withDelegatedArm`), because
+   * a harness that overrides `agentExecutor` wholesale would otherwise have the fake answer for the
+   * delegated kind too and assert nothing about the arm. Absent → the facade's default (empty)
+   * registry, and nothing changes.
+   */
+  delegatedExecutorRegistry?: DelegatedExecutorRegistry
   /**
    * Inject the judge's verdict producer (a deterministic fake in the suite) so the whole loop —
    * pass / park / bounce / fail — is driven on EVERY runtime without a real model, and so the

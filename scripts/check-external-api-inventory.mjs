@@ -202,6 +202,14 @@ const CLASSIFICATION = [
     vendors: ['github'],
   },
   {
+    // The DelegatedExecutor over GitHub Actions: `workflow_dispatch`, the run list it correlates
+    // through, the run read, the cancel, and the pull-request lookup that recovers what a finished
+    // workflow produced. Every one of those is an Actions/REST surface GitHub can change.
+    path: 'backend/packages/delegation-github-actions/src/',
+    kind: 'vendor',
+    vendors: ['github'],
+  },
+  {
     path: 'backend/packages/integrations/src/modules/incidentio/',
     kind: 'vendor',
     vendors: ['incident.io'],
@@ -377,6 +385,12 @@ const CLASSIFICATION = [
     path: 'backend/packages/integrations/src/modules/notificationWebhook/',
     kind: 'internal',
     reason: 'outbound delivery to a subscriber endpoint, on the webhook contract we publish',
+  },
+  {
+    path: 'backend/packages/server/src/agents/delegatedExecutorHost.ts',
+    kind: 'internal',
+    reason:
+      "the policy-checked fetch every registered delegated executor is built over; it names no host of its own, and each executor's vendor is swept where that executor lives",
   },
   {
     path: 'backend/packages/integrations/src/modules/observability/RegistryReleaseHealthProvider.ts',

@@ -1,4 +1,5 @@
 import {
+  defaultDelegatedExecutorRegistry,
   defaultJudgeRegistry,
   defaultProviderRegistry,
   defaultStepResolverRegistry,
@@ -24,6 +25,7 @@ export type WorkerRegistries = Required<
     | 'agentKindRegistry'
     | 'gateRegistry'
     | 'judgeRegistry'
+    | 'delegatedExecutorRegistry'
     | 'stepResolverRegistry'
     | 'initiativePresetRegistry'
     | 'vcsRegistry'
@@ -64,6 +66,11 @@ export function resolveWorkerRegistries(overrides: Partial<CoreDependencies>): W
   // The app-owned JUDGE registry (the fourth step-taxonomy bucket): the injected instance, else an
   // empty default — the platform ships no built-in judges, so every entry is a deployment's own.
   const judgeRegistry = overrides.judgeRegistry ?? defaultJudgeRegistry()
+  // The app-owned DELEGATED-EXECUTOR registry (the external systems a deployment plugs in as the
+  // executor of a step): the injected instance, else an empty default: the platform ships none,
+  // so every entry is a deployment's own, exactly like the judges above.
+  const delegatedExecutorRegistry =
+    overrides.delegatedExecutorRegistry ?? defaultDelegatedExecutorRegistry()
   // The app-owned initiative-preset registry (built-in generic / docs-refresh / tech-migration +
   // any a deployment registered by reference).
   const initiativePresetRegistry =
@@ -123,6 +130,7 @@ export function resolveWorkerRegistries(overrides: Partial<CoreDependencies>): W
     agentKindRegistry,
     gateRegistry,
     judgeRegistry,
+    delegatedExecutorRegistry,
     stepResolverRegistry,
     initiativePresetRegistry,
     vcsRegistry,

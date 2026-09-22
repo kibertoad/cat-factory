@@ -24,7 +24,9 @@ import type { AgentContextBuilder } from './AgentContextBuilder.js'
 import type { RunStateMachine } from './RunStateMachine.js'
 import type { RunPolicyScope } from './policy-types.js'
 import type { StepGraph } from './StepGraph.js'
-import { recordDispatchedJob } from './step-fold.logic.js'
+import { liveJobId } from './step-fold.logic.js'
+import type { StartStepDispatch } from './delegation.logic.js'
+import { awaitingJob } from './awaitingJob.logic.js'
 
 /** Render the human's findings as the resolved-context block handed to the fixer. */
 function renderFindingsForFixer(findings: string): string {
@@ -70,6 +72,12 @@ export interface HumanTestControllerDeps {
   ) => Promise<{ ciMaxAttempts: number }>
   /** The async instance/block spine (park/advance/finalize/persist/emit/progress/stop). */
   stateMachine: RunStateMachine
+  /**
+   * Opens and commits this dispatch's record, calls the executor and folds what came back: a
+   * delegation claim for a helper kind whose work leaves the platform, a container cold boot
+   * otherwise. See {@link StartStepDispatch}.
+   */
+  startStepDispatch: StartStepDispatch
   /** The pure step mutators (start/finish a step). */
   stepGraph: StepGraph
   clockNow: () => number
@@ -138,9 +146,12 @@ export class HumanTestController {
     // A helper (fixer / conflict-resolver) is in flight: the step is `working` with a live
     // job, NOT parked. Re-attach to its job instead of re-parking, so a re-drive through
     // `advance` (the stale-run sweeper, or a durable replay that lost the `awaiting_job`
-    // position) keeps polling the job rather than abandoning it.
-    if ((ht.phase === 'fixing' || ht.phase === 'resolving_conflicts') && step.jobId) {
-      return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
+    // position) keeps polling the job rather than abandoning it. LIVE is the question, not
+    // "has a job id": a delegated helper's claim is committed before its executor is called, so
+    // an unanswered one re-parks the human rather than polling work nobody started.
+    const attached = liveJobId(step)
+    if ((ht.phase === 'fixing' || ht.phase === 'resolving_conflicts') && attached) {
+      return awaitingJob(step, instance.currentStep, attached)
     }
     return this.deps.stateMachine.parkStepOnDecision(workspaceId, instance, step, this.proposal(ht))
   }
@@ -416,8 +427,16 @@ export class HumanTestController {
             ],
           }
         : { ...base, agentKind: helperKind }
-    const handle = await executor.startJob(context)
-    recordDispatchedJob(step, handle, context.agentKind)
+    // The helper's record, opened and committed before the executor is called, and settled by
+    // the same seam if the call throws: a deployment whose fixer runs on its own external loop
+    // reaches this site and needs the same claim-before-effect every other dispatch takes.
+    const { jobId } = await this.deps.startStepDispatch({
+      workspaceId,
+      instance,
+      context,
+      step,
+      executor,
+    })
     step.subtasks = undefined
     // Leave the parked decision state: while the helper runs the step is `working` with a
     // live job (like the Tester→Fixer loop), NOT `waiting_decision` on a stale approval. If
@@ -435,13 +454,13 @@ export class HumanTestController {
         findings:
           roundKind === 'fix' ? findings : 'Pulled latest main into the branch (conflicts).',
         helperKind,
-        jobId: handle.jobId,
+        jobId,
         outcome: null,
         at: this.deps.clockNow(),
       },
     ]
     await this.deps.stateMachine.persistAndEmit(workspaceId, instance)
-    return { kind: 'awaiting_job', jobId: handle.jobId, stepIndex: instance.currentStep }
+    return awaitingJob(step, instance.currentStep, jobId)
   }
 
   /**

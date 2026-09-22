@@ -173,6 +173,30 @@ export {
   type JudgeAssessor,
   type JudgeContext,
 } from '@cat-factory/kernel'
+// Installation-level extension point for DELEGATED EXECUTORS: an external system this deployment
+// already runs (a GitHub-Actions implement/review/test loop, an internal job runner, a vendor's
+// autonomous PR bot), taking ONE pipeline step while cat-factory keeps the intake, the context,
+// the policy, the merge and the notifications around it. Empty by default: the platform ships
+// none, because shipping one would make the seam about that one.
+export {
+  DelegatedExecutorRegistry,
+  defaultDelegatedExecutorRegistry,
+  DelegatedExecutorRegistrationError,
+  type DelegatedExecutor,
+  type DelegatedExecutorDefinition,
+  type DelegatedExecutorDeps,
+  type DelegatedExecutorPresentation,
+  type DelegatedExecutorTelemetry,
+  type DelegatedExecutorView,
+  type DelegatedFetch,
+  type DelegatedFetchResponse,
+  type DelegatedPollPolicy,
+  type DelegationBrief,
+  type DelegationHandle,
+  type DelegationResult,
+  type DelegationStart,
+  type DelegationUpdate,
+} from '@cat-factory/kernel'
 // Installation-level extension point for VCS PROVIDERS: the neutral seam a deployment adds a git
 // host through, rather than re-hardcoding GitHub in a shared path.
 export {

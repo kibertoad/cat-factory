@@ -79,6 +79,12 @@ export type {
   PromptFragment,
   PullRequestRef,
   PeerPullRequest,
+  // What a step's work is running ON: the per-run container, and the external delegation.
+  RunContainer,
+  RunContainerStatus,
+  RunDelegation,
+  RunDelegationAttempt,
+  RunDelegationStatus,
   ReferenceRepo,
   AprioriBranch,
   SpendStatus,

@@ -117,6 +117,28 @@ describe('StepGraph.resetStepForRerun', () => {
     expect(s.state).toBe('pending')
   })
 
+  it('clears the delegated retry budget while keeping the attempt log it is NOT counted from', () => {
+    // The two halves of the reason `delegatedRetries` is its own counter. The attempt log is the
+    // evidence for why the step is being re-run and survives; the budget is per run of the step,
+    // so a step re-run after one recovered external failure must not spend its next retryable
+    // verdict on a budget the previous run used up and hard-fail as `delegated_failed`.
+    const graph = new StepGraph(clock)
+    const s = step({
+      state: 'working',
+      delegatedRetries: 1,
+      delegated: {
+        executor: 'acme:executor',
+        status: 'failed',
+        correlationKey: 'run_1-acme:impl',
+        poll: null,
+        attempts: [{ startedAt: 1000, outcome: 'the workflow was cancelled' }],
+      },
+    } as Partial<PipelineStep>)
+    graph.resetStepForRerun(s)
+    expect(s.delegatedRetries).toBeUndefined()
+    expect(s.delegated?.attempts).toHaveLength(1)
+  })
+
   it('drops the tool-server record but keeps the attribution the settle path reads back', () => {
     // The two halves of one rule, asserted together because the rule is the DIFFERENCE between
     // them: both are pinned at dispatch by `recordDispatchAttribution` and only one is consumed

@@ -2129,7 +2129,24 @@
       "promptVariant": "Variante del prompt",
       "promptVariantAdditionOnly": "È stata applicata solo l'aggiunta di questa variante. Il prompt dello spazio di lavoro per questo agente ne ha sostituito il testo di base.",
       "promptVariantSuperseded": "Questa variante non è stata applicata. Il prompt dello spazio di lavoro per questo agente ha avuto la precedenza.",
-      "promptVariantWithdrawn": "Questa variante non è più registrata, quindi il passaggio ha usato il prompt predefinito."
+      "promptVariantWithdrawn": "Questa variante non è più registrata, quindi il passaggio ha usato il prompt predefinito.",
+      "delegated": {
+        "status": {
+          "cancelled": "Annullato",
+          "done": "Completato all’esterno",
+          "failed": "Non riuscito all’esterno",
+          "running": "In esecuzione all’esterno",
+          "starting": "Avvio all’esterno",
+          "unrecognised": "Stato non riconosciuto ({status})"
+        },
+        "run": "Esecuzione esterna",
+        "branch": "Ramo",
+        "copyUrl": "Copia il link dell’esecuzione esterna",
+        "openRun": "Apri l’esecuzione",
+        "noOutcome": "Nessun esito registrato",
+        "earlierAttempts": "Tentativi precedenti",
+        "usageNotReported": "Il consumo di token non viene riportato da {executor}, quindi questo passaggio manca dai totali qui sopra."
+      }
     },
     "stepDetail": {
       "contents": "Contenuti",
@@ -4035,6 +4052,7 @@
       "timeout": "Timeout",
       "agent": "Agente",
       "job_failed": "Job fallito",
+      "delegated_failed": "Esecutore esterno fallito",
       "rejected": "Rifiutata",
       "companion_rejected": "Companion rifiutato",
       "stalled": "In stallo",
@@ -6206,7 +6224,8 @@
         "service_catalog_filter_missing": "Non è stato possibile leggere il filtro delle entità di questa connessione, quindi non c’è nulla da importare. Salva di nuovo la connessione al catalogo dei servizi per ripristinarlo.",
         "service_catalog_response_too_large": "Il portale per sviluppatori ha risposto con più dati di quanti questa piattaforma ne accolga in una sola risposta. Apri le impostazioni del catalogo dei servizi e abbassa il limite dei servizi, oppure disattiva l'importazione delle definizioni di interfaccia, poi importa di nuovo.",
         "assistant_generation_failed": "Il fornitore di modelli dell'assistente non ha risposto. È configurato correttamente e qui non c'è nulla da impostare: riprova la richiesta tra un momento.",
-        "assistant_reply_unreadable": "Il modello dell'assistente ha risposto con qualcosa che questa piattaforma non può eseguire come decisione. Riformulare aiuta di rado: scegli un altro modello per l'assistente nelle impostazioni dei modelli."
+        "assistant_reply_unreadable": "Il modello dell'assistente ha risposto con qualcosa che questa piattaforma non può eseguire come decisione. Riformulare aiuta di rado: scegli un altro modello per l'assistente nelle impostazioni dei modelli.",
+        "delegated_executor_failed": "L’esecutore esterno non è riuscito ad avviare questo passaggio. Il problema è nel sistema che svolge il lavoro, non in questa installazione: controlla i suoi log e riprova."
       }
     },
     "reason": {
@@ -6290,7 +6309,10 @@
         "expedition_settled": "Questa spedizione è già terminata",
         "not_awaiting_triage": "Questa spedizione non è in attesa di triage",
         "already_addressed": "Alcuni rilievi hanno già un'attività di correzione",
-        "no_host_frame": "Questa spedizione non si trova sotto un servizio"
+        "no_host_frame": "Questa spedizione non si trova sotto un servizio",
+        "delegated_executor_unwired": "Esecutore esterno non registrato",
+        "delegated_step_async_only": "Questo passo viene interrogato, non atteso",
+        "delegated_claim_missing": "Questo passo non ha lavoro esterno da controllare"
       },
       "description": {
         "dependencies_unmet": "Questa attività dipende da altre non ancora completate. Completale o sbloccale, poi avviala di nuovo.",
@@ -6344,7 +6366,10 @@
         "expedition_settled": "L'esecuzione ha già superato il passo di pesca dei bug, quindi non c'è più nulla da contrassegnare o scartare. Ricarichi l'esecuzione per vedere che cosa ha trovato e su quali risultati si è intervenuti.",
         "not_awaiting_triage": "O sta ancora esplorando un'altra angolazione o è già stata conclusa. Ricarichi l'esecuzione per vedere a che punto è.",
         "already_addressed": "Un'attività di correzione era già stata creata per essi, quindi non è stato creato nulla di nuovo. Apra il rilievo per raggiungere l'attività esistente.",
-        "no_host_frame": "Un'attività di correzione ha bisogno di un servizio in cui vivere e di un repository da correggere. Sposti l'attività della spedizione sotto un frame di servizio e riprovi."
+        "no_host_frame": "Un'attività di correzione ha bisogno di un servizio in cui vivere e di un repository da correggere. Sposti l'attività della spedizione sotto un frame di servizio e riprovi.",
+        "delegated_executor_unwired": "Un passaggio di questa pipeline viene eseguito su un esecutore esterno che questa installazione non registra, quindi il lavoro non ha una destinazione. Registra l’esecutore nel codice oppure sostituisci il passaggio con uno eseguito qui.",
+        "delegated_step_async_only": "Questo passo gira su un esecutore esterno e può durare ore, quindi viene avviato e poi interrogato invece di essere eseguito dentro una sola richiesta. Avvia l’esecuzione dalla board; se sei arrivato qui dal tuo codice, guida il passo attraverso il percorso asincrono.",
+        "delegated_claim_missing": "Manca la registrazione di ciò che l’esecuzione ha inviato all’esecutore esterno, quindi non c’è nulla da interrogare. L’esecutore in sé non ha alcun problema. Ricarica l’esecuzione e rilancia il passo se resta bloccato."
       },
       "action": {
         "connectGitHub": "Collega GitHub",

@@ -13,7 +13,22 @@ export type AdvanceResult =
    * parked: the durable driver polls {@link ExecutionService.pollAgentJob} between
    * sleeps until the job finishes, then records its result and continues.
    */
-  | { kind: 'awaiting_job'; jobId: string; stepIndex: number }
+  | {
+      kind: 'awaiting_job'
+      jobId: string
+      stepIndex: number
+      /**
+       * The cadence THIS job is polled on, when it is not the deployment's ordinary one. Present
+       * only for a DELEGATED step, whose executor declares its own interval and window: an
+       * external run of an hour is ordinary where a harness job of an hour is a stall, so neither
+       * number can be a platform default. Both durable drivers honour it in place of
+       * `jobPollIntervalMs`/`jobMaxPolls`; absent ⇒ those stand, which is every container job.
+       *
+       * It rides the RESULT because the driver's park loop has no step, no registry and no
+       * workspace in scope: it has a bound `poll()` callback and whatever the last advance said.
+       */
+      poll?: { intervalMs: number; maxPolls: number }
+    }
   /**
    * A polling **gate** step (`ci` / `conflicts`) is gating the PR on its precheck.
    * The run is parked: the durable driver sleeps, then polls

@@ -1,5 +1,6 @@
 import {
   AsyncFakeAgentExecutor,
+  withDelegatedArm,
   type ConformanceApp,
   FakeAgentExecutor,
   type FakeAgentOptions,
@@ -174,6 +175,7 @@ type ConformanceAppOpts = {
   agentKindRegistry?: AgentKindRegistry
   gateRegistry?: CoreDependencies['gateRegistry']
   judgeRegistry?: CoreDependencies['judgeRegistry']
+  delegatedExecutorRegistry?: CoreDependencies['delegatedExecutorRegistry']
   judgeAssessor?: CoreDependencies['judgeAssessor']
   bugHuntAssessor?: CoreDependencies['bugHuntAssessor']
   monorepoAdoptionAdvisor?: CoreDependencies['monorepoAdoptionAdvisor']
@@ -220,9 +222,16 @@ function buildConformanceOverrides(
     ...(o.agentKindRegistry ? { agentKindRegistry: o.agentKindRegistry } : {}),
   }
   return {
-    agentExecutor: agentOptions?.asyncKinds?.length
-      ? new AsyncFakeAgentExecutor(agentExecutorOptions)
-      : new FakeAgentExecutor(agentExecutorOptions),
+    // The deterministic agent, WRAPPED in the production composite when the suite registered an
+    // external executor, so a delegated kind reaches the real `DelegatedAgentExecutor` while
+    // everything else stays on the fake. Overriding `agentExecutor` wholesale is right for every
+    // other assertion and would make the delegated ones vacuous.
+    agentExecutor: withDelegatedArm(
+      agentOptions?.asyncKinds?.length
+        ? new AsyncFakeAgentExecutor(agentExecutorOptions)
+        : new FakeAgentExecutor(agentExecutorOptions),
+      o,
+    ),
     workRunner: new NoopWorkRunner(),
     bootstrapRunner: new NoopBootstrapRunner(),
     // A deterministic bootstrapper so the suite can drive the dispatch→poll→finalise
@@ -300,6 +309,7 @@ function buildContainerRegistryOptions(opts: ConformanceAppOpts | undefined) {
     agentKindRegistry: o.agentKindRegistry,
     gateRegistry: o.gateRegistry,
     judgeRegistry: o.judgeRegistry,
+    delegatedExecutorRegistry: o.delegatedExecutorRegistry,
     stepResolverRegistry: o.stepResolverRegistry,
     initiativePresetRegistry: o.initiativePresetRegistry,
     taskTypeRegistry: o.taskTypeRegistry,
