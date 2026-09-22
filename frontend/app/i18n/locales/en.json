@@ -8925,7 +8925,33 @@
       "dark": "Dark"
     },
     "theme": {
-      "section": "Theme"
+      "section": "Theme",
+      "import": "Import a Nuxt UI theme…",
+      "@import": {
+        "description": "Menu entry that opens the dialog for importing a theme built in the Nuxt UI theme editor (ui.nuxt.com/theme). Keep 'Nuxt UI' as a product name."
+      },
+      "remove": "Remove this theme"
+    },
+    "import": {
+      "title": "Import a theme",
+      "description": "Build a theme in the Nuxt UI theme editor, copy its share link and paste it here. The theme is stored in this browser only.",
+      "linkLabel": "Share link",
+      "linkPlaceholder": "https://ui.nuxt.com/theme?doc=…",
+      "nameLabel": "Name",
+      "namePlaceholder": "My theme",
+      "nameTaken": "A theme called “{typed}” already exists. This one will be saved as “{name}”.",
+      "@nameTaken": {
+        "description": "Help text under the Name field of the theme import dialog when the typed name is already used. {typed} is what the user typed, {name} is the name that will be saved instead (e.g. 'Mono (2)')."
+      },
+      "fontNote": "A font the theme names is used only if this device or deployment provides it; otherwise the browser falls back to its default.",
+      "submit": "Import",
+      "cancel": "Cancel",
+      "error": {
+        "notALink": "Paste the share link from ui.nuxt.com/theme (or the theme's JSON).",
+        "malformed": "This link does not carry a readable theme. Copy it again from the editor.",
+        "presetShorthand": "This link names a Nuxt UI editor preset this app does not know. Change any setting in the editor so the link carries the whole theme, then copy it again.",
+        "unsupportedVersion": "This theme was made with a newer editor format than this app understands."
+      }
     }
   }
 }

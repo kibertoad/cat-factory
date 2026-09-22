@@ -8600,7 +8600,27 @@
       "dark": "Ciemny"
     },
     "theme": {
-      "section": "Motyw"
+      "section": "Motyw",
+      "import": "Importuj motyw Nuxt UI…",
+      "remove": "Usuń ten motyw"
+    },
+    "import": {
+      "title": "Importuj motyw",
+      "description": "Zbuduj motyw w edytorze motywów Nuxt UI, skopiuj jego link do udostępniania i wklej go tutaj. Motyw jest zapisywany tylko w tej przeglądarce.",
+      "linkLabel": "Link do udostępniania",
+      "linkPlaceholder": "https://ui.nuxt.com/theme?doc=…",
+      "nameLabel": "Nazwa",
+      "namePlaceholder": "Mój motyw",
+      "nameTaken": "Motyw o nazwie „{typed}” już istnieje. Ten zostanie zapisany jako „{name}”.",
+      "fontNote": "Czcionka wskazana w motywie jest używana tylko wtedy, gdy udostępnia ją to urządzenie lub ta instalacja; w przeciwnym razie przeglądarka użyje domyślnej.",
+      "submit": "Importuj",
+      "cancel": "Anuluj",
+      "error": {
+        "notALink": "Wklej link do udostępniania z ui.nuxt.com/theme (lub JSON motywu).",
+        "malformed": "Ten link nie zawiera czytelnego motywu. Skopiuj go ponownie z edytora.",
+        "presetShorthand": "Ten link wskazuje ustawienie wstępne edytora Nuxt UI, którego ta aplikacja nie zna. Zmień dowolny parametr w edytorze, aby link zawierał cały motyw, i skopiuj go ponownie.",
+        "unsupportedVersion": "Ten motyw powstał w nowszym formacie edytora, niż rozumie ta aplikacja."
+      }
     }
   }
 }

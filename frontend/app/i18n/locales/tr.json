@@ -8600,7 +8600,27 @@
       "dark": "Koyu"
     },
     "theme": {
-      "section": "Tema"
+      "section": "Tema",
+      "import": "Nuxt UI teması içe aktar…",
+      "remove": "Bu temayı kaldır"
+    },
+    "import": {
+      "title": "Tema içe aktar",
+      "description": "Nuxt UI tema düzenleyicisinde bir tema oluşturun, paylaşım bağlantısını kopyalayın ve buraya yapıştırın. Tema yalnızca bu tarayıcıda saklanır.",
+      "linkLabel": "Paylaşım bağlantısı",
+      "linkPlaceholder": "https://ui.nuxt.com/theme?doc=…",
+      "nameLabel": "Ad",
+      "namePlaceholder": "Temam",
+      "nameTaken": "“{typed}” adlı bir tema zaten var. Bu tema “{name}” olarak kaydedilecek.",
+      "fontNote": "Temanın belirttiği yazı tipi yalnızca bu cihaz veya bu kurulum sağlıyorsa kullanılır; aksi halde tarayıcı varsayılan yazı tipine döner.",
+      "submit": "İçe aktar",
+      "cancel": "İptal",
+      "error": {
+        "notALink": "ui.nuxt.com/theme adresindeki paylaşım bağlantısını (veya temanın JSON'unu) yapıştırın.",
+        "malformed": "Bu bağlantı okunabilir bir tema içermiyor. Düzenleyiciden yeniden kopyalayın.",
+        "presetShorthand": "Bu bağlantı, bu uygulamanın tanımadığı bir Nuxt UI düzenleyici ön ayarını adlandırıyor. Bağlantının tüm temayı taşıması için düzenleyicide herhangi bir ayarı değiştirin ve yeniden kopyalayın.",
+        "unsupportedVersion": "Bu tema, bu uygulamanın anladığından daha yeni bir düzenleyici biçimiyle oluşturulmuş."
+      }
     }
   }
 }
