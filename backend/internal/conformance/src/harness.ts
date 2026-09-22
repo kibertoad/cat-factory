@@ -38,6 +38,7 @@ import type {
   PipelineRegistry,
   PromptFragmentRegistry,
   PrVerificationReportPublisher,
+  RepoFiles,
   RequirementReviewRepository,
   ResolveBinaryArtifactStore,
   ResolveRunRepoContext,
@@ -765,6 +766,14 @@ export interface ConformanceAppOptions {
    * registry, and nothing changes.
    */
   delegatedExecutorRegistry?: DelegatedExecutorRegistry
+  /**
+   * Inject the checkout-free repo binding the DELEGATED arm creates a `platform-creates` work
+   * branch through (`fakeDelegationRepoFiles()`), so the engine's one VCS write on that path is
+   * driven on EVERY runtime. Read only by `withDelegatedArm`, beside the registry above. Absent →
+   * the arm is built with no binding, which is what a deployment with no VCS provider configured
+   * looks like, and such a dispatch is refused rather than started.
+   */
+  delegatedRepoFiles?: RepoFiles
   /**
    * Inject the judge's verdict producer (a deterministic fake in the suite) so the whole loop —
    * pass / park / bounce / fail — is driven on EVERY runtime without a real model, and so the

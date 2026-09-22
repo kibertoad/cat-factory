@@ -11,6 +11,11 @@ import { getErrorMessage } from '@cat-factory/kernel'
 import { findRunByCorrelation, type ActionsRunSummary } from './correlation.js'
 import { apiGet, apiPost } from './http.js'
 import { pullRequestForBranch } from './result.js'
+import {
+  workflowAddressing,
+  type GitHubActionsWorkflowLocation,
+  type GitHubActionsWorkflowTarget,
+} from './workflow.js'
 
 // ---------------------------------------------------------------------------
 // A {@link DelegatedExecutor} over GITHUB ACTIONS.
@@ -52,12 +57,20 @@ export type GitHubActionsResultReader = (input: {
 
 /** What a deployment states about its own workflow. */
 export interface GitHubActionsExecutorDescription {
-  owner: string
-  repo: string
-  /** The workflow file name (`implement.yml`) or its numeric id, as the REST path takes it. */
-  workflowFile: string
-  /** The git ref the workflow is dispatched on (a branch that HOLDS the workflow, not the work). */
-  ref: string
+  /**
+   * The workflow this executor dispatches: one location, or a function of the dispatch.
+   *
+   * A FUNCTION is what a multi-repo deployment needs, and it is the ordinary shape: a caller shim
+   * committed to each onboarded repository means the workflow lives wherever the work does, so the
+   * dispatch target varies per brief while the registration stays one. Everything else in this
+   * helper is already per-call (`inputs`, the correlation scan, the result read out of
+   * `handle.repo`); a fixed owner/repo made the dispatch the single part that could not follow.
+   *
+   * A LITERAL is right for the other shape, a central automation repo holding one workflow that
+   * works on many product repositories, and then `ref` really is "a branch that holds the
+   * workflow, not the work".
+   */
+  workflow: GitHubActionsWorkflowTarget
   /**
    * The `workflow_dispatch` inputs, built from the brief. The correlation input is added for you
    * under {@link CORRELATION_INPUT}. Supply it yourself only if your workflow names it something
@@ -112,10 +125,19 @@ export function githubActionsDelegatedExecutor(
 ): DelegatedExecutor {
   const apiBase = description.apiBase ?? DEFAULT_API_BASE
   const tokenKey = description.tokenKey ?? 'GITHUB_TOKEN'
-  const log = deps.logger.child({
-    executor: 'github-actions',
-    repo: `${description.owner}/${description.repo}`,
-  })
+  const baseLog = deps.logger.child({ executor: 'github-actions' })
+  const workflows = workflowAddressing(description.workflow)
+
+  /**
+   * The logger every line of one call goes through, naming the workflow it addressed.
+   *
+   * Bound per call rather than once at build, because the location is per call as soon as a
+   * deployment resolves it: on a deployment onboarding fifty repositories, "the workflow
+   * succeeded and its result could not be read" with only a run id on it cannot tell one
+   * misconfigured repository from a token that is wrong everywhere.
+   */
+  const logFor = (workflow: GitHubActionsWorkflowLocation) =>
+    baseLog.child({ repo: `${workflow.owner}/${workflow.repo}`, workflow: workflow.workflowFile })
 
   const tokenOf = (credentials: Record<string, string>): string => {
     const token = credentials[tokenKey]
@@ -130,13 +152,17 @@ export function githubActionsDelegatedExecutor(
     return token
   }
 
-  const locate = (correlationKey: string, token: string): Promise<GitHubActionsRunView | null> =>
+  const locate = (
+    workflow: GitHubActionsWorkflowLocation,
+    correlationKey: string,
+    token: string,
+  ): Promise<GitHubActionsRunView | null> =>
     findRunByCorrelation(deps.fetchImpl, {
       apiBase,
       token,
-      owner: description.owner,
-      repo: description.repo,
-      workflowFile: description.workflowFile,
+      owner: workflow.owner,
+      repo: workflow.repo,
+      workflowFile: workflow.workflowFile,
       correlationKey,
       ...(description.correlationScanSize ? { perPage: description.correlationScanSize } : {}),
     })
@@ -144,12 +170,13 @@ export function githubActionsDelegatedExecutor(
   return {
     async start(brief, credentials): Promise<DelegationStart> {
       const token = tokenOf(credentials)
+      const workflow = workflows.forBrief(brief)
       // IDEMPOTENCY, first. A replayed dispatch must find the run it already started rather than
       // queue another; the engine commits its claim before calling this, so a replay reaching here
       // at all means the previous attempt may have got as far as the dispatch.
-      const existing = await locate(brief.correlationKey, token)
+      const existing = await locate(workflow, brief.correlationKey, token)
       if (existing) {
-        log.info('re-attached to an existing workflow run', { runId: existing.id })
+        logFor(workflow).info('re-attached to an existing workflow run', { runId: existing.id })
         return {
           externalId: String(existing.id),
           url: existing.html_url,
@@ -160,10 +187,10 @@ export function githubActionsDelegatedExecutor(
         apiBase,
         token,
         path:
-          `/repos/${description.owner}/${description.repo}/actions/workflows/` +
-          `${encodeURIComponent(description.workflowFile)}/dispatches`,
+          `/repos/${workflow.owner}/${workflow.repo}/actions/workflows/` +
+          `${encodeURIComponent(workflow.workflowFile)}/dispatches`,
         body: {
-          ref: description.ref,
+          ref: workflow.ref,
           inputs: { [CORRELATION_INPUT]: brief.correlationKey, ...description.inputs(brief) },
         },
       })
@@ -171,7 +198,7 @@ export function githubActionsDelegatedExecutor(
       // now) and, failing that, answer with the correlation key as the external id so the step is
       // recorded and the FIRST POLL recovers the real one. Refusing here instead would fail a step
       // whose workflow is queued and about to run.
-      const started = await locate(brief.correlationKey, token)
+      const started = await locate(workflow, brief.correlationKey, token)
       if (started) return { externalId: String(started.id), url: started.html_url }
       return {
         externalId: brief.correlationKey,
@@ -181,7 +208,11 @@ export function githubActionsDelegatedExecutor(
 
     async poll(handle, credentials): Promise<DelegationUpdate> {
       const token = tokenOf(credentials)
-      const run = await resolveRun(handle, token)
+      // ONCE per call, then threaded down. A deployment's resolver is its own code with no purity
+      // requirement: one that reads a per-repo config map, logs, or counts a metric must see one
+      // addressing decision per call, not the two or three that asking again at each use makes.
+      const workflow = workflows.forHandle(handle)
+      const run = await resolveRun(workflow, handle, token)
       if (!run) {
         // The run has still not appeared. `running` rather than a failure: the poll budget is what
         // bounds this, and a workflow queued behind a busy runner pool is the ordinary case.
@@ -216,19 +247,20 @@ export function githubActionsDelegatedExecutor(
             : {}),
         }
       }
-      return { state: 'done', result: await readResult(handle, run, token) }
+      return { state: 'done', result: await readResult(workflow, handle, run, token) }
     },
 
     async cancel(handle, credentials): Promise<void> {
       const token = tokenOf(credentials)
-      const run = await resolveRun(handle, token)
+      const workflow = workflows.forHandle(handle)
+      const run = await resolveRun(workflow, handle, token)
       // Nothing to cancel is a clean outcome, not a failure: the run may have finished between the
       // teardown deciding to stop it and this call.
       if (!run || run.status === 'completed') return
       await apiPost(deps.fetchImpl, {
         apiBase,
         token,
-        path: `/repos/${description.owner}/${description.repo}/actions/runs/${run.id}/cancel`,
+        path: `/repos/${workflow.owner}/${workflow.repo}/actions/runs/${run.id}/cancel`,
         body: {},
       })
     },
@@ -241,6 +273,7 @@ export function githubActionsDelegatedExecutor(
    * whenever the dispatch's run had not appeared yet, so this is ordinary rather than exceptional.
    */
   async function resolveRun(
+    workflow: GitHubActionsWorkflowLocation,
     handle: DelegationHandle,
     token: string,
   ): Promise<GitHubActionsRunView | null> {
@@ -249,10 +282,10 @@ export function githubActionsDelegatedExecutor(
       return apiGet<GitHubActionsRunView>(deps.fetchImpl, {
         apiBase,
         token,
-        path: `/repos/${description.owner}/${description.repo}/actions/runs/${id}`,
+        path: `/repos/${workflow.owner}/${workflow.repo}/actions/runs/${id}`,
       })
     }
-    return locate(handle.correlationKey, token)
+    return locate(workflow, handle.correlationKey, token)
   }
 
   /**
@@ -263,6 +296,7 @@ export function githubActionsDelegatedExecutor(
    * not be read, which is the "degrade loudly" disposition rather than a silent empty result.
    */
   async function readResult(
+    workflow: GitHubActionsWorkflowLocation,
     handle: DelegationHandle,
     run: GitHubActionsRunView,
     token: string,
@@ -271,9 +305,9 @@ export function githubActionsDelegatedExecutor(
       if (description.resultFrom) {
         return await description.resultFrom({ handle, run, token, fetchImpl: deps.fetchImpl })
       }
-      return await defaultResult(handle, token)
+      return await defaultResult(workflow, handle, token)
     } catch (error) {
-      log.warn('the workflow succeeded and its result could not be read', {
+      logFor(workflow).warn('the workflow succeeded and its result could not be read', {
         runId: run.id,
         err: getErrorMessage(error),
       })
@@ -290,9 +324,9 @@ export function githubActionsDelegatedExecutor(
    * the WORK targeted.
    *
    * Two facts have to come off the handle, and neither is derivable here. The BRANCH, because a
-   * handle carries the run and the work branch is named from the block. And the REPO, because
-   * `description.owner/repo` is where the WORKFLOW lives, which is routinely not where the work
-   * goes: `description.ref` is documented as a branch that holds the workflow, so a central
+   * handle carries the run and the work branch is named from the block. And the REPO, because the
+   * resolved workflow's own `owner/repo` is where the WORKFLOW lives, which is routinely not where
+   * the work goes: its `ref` is documented as a branch that holds the workflow, so a central
    * automation repo dispatching against many product repos is the ordinary shape, and reading the
    * result out of the automation repo finds nothing on every run.
    *
@@ -301,9 +335,14 @@ export function githubActionsDelegatedExecutor(
    * every such rule can pick somebody else's, which then becomes the block's pull request, the
    * `ci` gate's checks and the merger's diff. A missing REPO falls back to the workflow's own,
    * which is not a guess of the same kind: it is the right answer for the single-repo deployment,
-   * and the branch match still has to hold.
+   * and the branch match still has to hold. That fallback is reachable only for a LITERAL
+   * `workflow`, because a resolver is refused a handle that names no work repository.
    */
-  async function defaultResult(handle: DelegationHandle, token: string): Promise<DelegationResult> {
+  async function defaultResult(
+    workflow: GitHubActionsWorkflowLocation,
+    handle: DelegationHandle,
+    token: string,
+  ): Promise<DelegationResult> {
     const work = handle.branches?.work
     if (!work) {
       return {
@@ -312,7 +351,7 @@ export function githubActionsDelegatedExecutor(
           'may have opened could not be identified: open the run to see.',
       }
     }
-    const target = handle.repo ?? { owner: description.owner, name: description.repo }
+    const target = handle.repo ?? { owner: workflow.owner, name: workflow.repo }
     const pullRequest = await pullRequestForBranch(deps.fetchImpl, {
       apiBase,
       token,

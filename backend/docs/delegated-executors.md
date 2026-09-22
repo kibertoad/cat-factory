@@ -26,6 +26,7 @@ executors.register({
   credentials: [{ key: 'ACME_TOKEN' }], // key NAMES; the values never touch a prompt
   poll: { intervalMs: 60_000, maxDurationMs: 3 * 60 * 60_000 },
   telemetry: 'not-reported',
+  workBranch: 'platform-creates', // or 'executor-creates'; see "who creates the work branch"
   create: (deps) => myExecutor(deps),
 })
 
@@ -66,8 +67,8 @@ system: a wrong run in the wrong company's CI, with nothing anywhere reporting a
 
 ## What the executor is handed
 
-The **brief**: `{ correlationKey, workspaceId, runId, stepIndex, agentKind, task, repo, branches,
-systemPrompt, userPrompt, contextFiles, ownService }`.
+The **brief**: `{ correlationKey, workspaceId, blockId, runId, stepIndex, agentKind, task, repo,
+branches, systemPrompt, userPrompt, contextFiles, ownService }`.
 
 It is the production prompt. `composeRoleSystemPrompt` composes the system half and the harness job
 body consumes the SAME function, so the workspace's prompt override, its agreed best-practice
@@ -75,11 +76,63 @@ standards and the service the work belongs to reach an external executor and a c
 identically. `delegationBrief.spec.ts` builds both from one context and compares them; a drift there
 would deliver a team's standards to one executor and not the other, silently.
 
+`blockId` is the pair `deps.repoFiles` is keyed by, so an executor that wants to commit its own
+context layer onto the work branch can do it from `start`, which is the only moment "before
+starting" exists. It carries the same value as `task.id` and is stated separately because the two
+are different contracts: one is a lookup key the platform promises the resolver accepts, the other
+is the work's identity as an executor records it.
+
 The brief carries **no credentials**. Those arrive as the second argument to `start` / `poll`,
 resolved through the `ToolSecretResolver` port under a `delegated-executor` subject: **once per
 dispatch and once per poll**, never cached on the handle. A delegated poll runs hours after the
 dispatch and a GitHub App token lives one, so a credential frozen at dispatch is dead exactly on the
 long runs this executor class exists for.
+
+## Who creates the work branch
+
+`branches.work` is the task's own working branch when it declared one, else
+`cat-factory/<blockId>`, the deterministic per-task branch every step of a run's pipeline shares.
+Both come from the shared rule the container dispatch resolves with (`resolveAprioriWorkingBranch`),
+so a step that leaves the platform still builds where the rest of the run does: the pull request,
+the `ci` gate and the merger all ride that branch.
+
+For a CONTAINER step the branch comes into existence as part of the harness's own clone. Nothing
+does that for a delegated step, so the definition declares who does:
+
+- **`platform-creates`**: the engine creates the ref at the base branch's head just before `start`,
+  idempotently, through the same checkout-free binding a pre/post-op writes with. What a CI runner
+  needs. `actions/checkout` on a branch that is not there fails the job before any of the work
+  begins, and a runner that quietly substitutes a branch of its own is worse: it SUCCEEDS, publishes
+  to a ref the platform never recorded, and the run then reads as having produced nothing over a
+  pull request nobody links to. It needs a deployment whose VCS provider is configured; a dispatch
+  that finds none is refused by name rather than started.
+- **`executor-creates`**: the external system makes the branch itself when it pushes. The platform
+  writes nothing, so a run whose work never landed leaves no empty ref behind.
+
+Required, like `telemetry`, and for the same reason: the executor that never answered is the one
+that fails at checkout, hours in, with a message about a missing branch and nothing naming who was
+supposed to make it. An unrecognised value is refused at `register()`, because every test of it in
+the engine is `=== 'platform-creates'`, so a typo would silently mean the other answer.
+
+The one branch `platform-creates` does NOT write is a task's own working branch: the platform never
+creates one of those (an empty ref where the user's branch should be looks exactly like the run
+ignoring their choice), so it is probed and a dispatch onto a missing one is refused. Otherwise, a
+create that loses a race is settled by re-reading the ref rather than by reading the provider's
+status, because GitHub answers 422 and GitLab 400 and neither distinguishes "somebody else made it"
+from "this write failed".
+
+Every way preparing the branch can fail refuses the dispatch under its own
+`delegated_work_branch_unprepared`, never the executor's `delegated_executor_failed`: nothing was
+asked of the external system. That includes the probes, so a provider blip carries the same
+machine-readable reason as a refused write rather than surfacing as a generic 500. The refusal is
+made at the DISPATCH rather than where the arm is built, because the Worker builds its container
+per request: a throw there would turn a delegated-only misconfiguration into a 500 on the board,
+the API and the settings page an operator would go and fix it on.
+
+`RepoFiles` rather than the container path's GitHub-REST `EnsureWorkBranch`: this binding is
+provider-neutral and already the one a registered kind's pre/post-ops write through, so no second
+credential and no second GitLab implementation. Converging the container path onto it is its own
+slice (`docs/initiatives/delegated-executors.md`).
 
 ## The traps
 
@@ -210,7 +263,8 @@ re-collects a run that is perfectly alive.
 **A delegated kind needs a CHECKOUT, just not one of ours.** `SURFACE_TRAITS.delegated.container` is
 false because the platform runs no container for it; `dispatchDeliversCheckout` is TRUE, because the
 executor is handed a repository and a work branch and checks them out itself, which is what
-`composeDelegationBrief` tells the agent. Reading the second off the first had a kind's preOps
+`composeDelegationBrief` tells the agent (and what `workBranch` decides is actually THERE). Reading
+the second off the first had a kind's preOps
 prepare checkout-less context for an agent whose own prompt named the branch it was working on. Its
 deliverable is a pushed branch rather than a reply (`deliverableIsReply` is false) and it takes no
 container directives; those answers live in one total `Record<AgentSurface, …>` (`SURFACE_TRAITS`),

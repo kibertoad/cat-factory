@@ -24,9 +24,11 @@ export {
   delegatedKindRegistry,
   fakeDelegatedExecutor,
   fakeDelegatedRegistry,
+  fakeDelegationRepoFiles,
   withDelegatedArm,
   type FakeDelegatedExecutorOptions,
   type FakeDelegationCalls,
+  type FakeDelegationRepo,
 } from './FakeDelegatedExecutor.js'
 export {
   makeFakeCi,

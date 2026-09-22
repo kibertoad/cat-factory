@@ -416,6 +416,13 @@ export const UNAVAILABLE_REASONS = [
   // the misattribution itself here: the executor IS wired, and what failed is the system it talks
   // to. `details.executor` names it, so the remedy points at that system rather than at this build.
   'delegated_executor_failed',
+  // The platform could not create the WORK BRANCH an executor declaring `workBranch:
+  // 'platform-creates'` is dispatched onto, so the dispatch was refused instead of handing a CI
+  // system a ref that is not there. Split from the reason above because the side that failed is
+  // the opposite one: nothing was asked of the executor, and what did not answer is this
+  // deployment's own VCS provider. `details.branch` names the ref and `details.executor` the
+  // dispatch it was for.
+  'delegated_work_branch_unprepared',
 ] as const
 
 export type UnavailableReason = (typeof UNAVAILABLE_REASONS)[number]

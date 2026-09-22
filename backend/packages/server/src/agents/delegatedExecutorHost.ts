@@ -47,9 +47,17 @@ export interface DelegatedExecutorHostOptions {
   resolveRepoOrigin: ResolveRepoOrigin
   /**
    * The engine's checkout-free repo binding, re-used as the `repoFiles` an executor may stage its
-   * own context layer through. The SAME seam a registered kind's pre/post-ops run over, rather
-   * than a second binding: an executor writing `.cat-context/` onto the work branch and a preOp
-   * writing it are the same operation, and two bindings would be two caches and two head memos.
+   * own context layer through, and as what the engine creates a `platform-creates` work branch
+   * with. The SAME seam a registered kind's pre/post-ops run over, rather than a second binding:
+   * an executor writing `.cat-context/` onto the work branch and a preOp writing it are the same
+   * operation, and two bindings would be two caches and two head memos.
+   *
+   * Absent ⇒ this deployment configured no VCS provider. NOT asserted here even though a
+   * `platform-creates` registration needs it: this function runs inside the Worker's per-request
+   * container build, so a throw turns a delegated-only misconfiguration into a 500 on every
+   * unrelated endpoint, including the settings the operator would go and look at. The dispatch
+   * that actually needs the branch refuses instead, by name and with translated copy
+   * (`delegated_work_branch_unprepared`).
    */
   resolveRunRepoContext?: ResolveRunRepoContext
   taskRepository?: TaskRepository
@@ -90,6 +98,9 @@ export interface DelegatedExecutorHostOptions {
 export function buildDelegatedAgentExecutor(
   options: DelegatedExecutorHostOptions,
 ): DelegatedAgentExecutor {
+  const resolveRepoFiles = options.resolveRunRepoContext
+    ? repoFilesResolver(options.resolveRunRepoContext)
+    : undefined
   const executorDeps: DelegatedExecutorDeps = {
     logger: options.logger.child({ component: 'delegatedExecutor' }),
     clock: options.clock,
@@ -97,11 +108,10 @@ export function buildDelegatedAgentExecutor(
       options.fetchImpl ?? (globalThis.fetch as unknown as DelegatedFetch),
       options.urlSafetyPolicy,
     ),
-    ...(options.resolveRunRepoContext
-      ? { repoFiles: repoFilesResolver(options.resolveRunRepoContext) }
-      : {}),
+    ...(resolveRepoFiles ? { repoFiles: resolveRepoFiles } : {}),
   }
   return new DelegatedAgentExecutor({
+    ...(resolveRepoFiles ? { resolveRepoFiles } : {}),
     delegatedExecutorRegistry: options.delegatedExecutorRegistry,
     agentKindRegistry: options.agentKindRegistry,
     resolveRepoTarget: options.resolveRepoTarget,

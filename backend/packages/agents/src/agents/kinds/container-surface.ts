@@ -49,7 +49,8 @@ export function runsInContainer(kind: AgentKind, registry: AgentKindRegistry): b
  * A DELEGATED kind answers TRUE, and that is the one place this parts company with
  * {@link runsInContainer}. The two ask different questions: whether the work needs one of OUR
  * containers, and whether the agent will be looking at a working tree. An external executor is
- * handed a repository and a work branch and checks them out itself, which is exactly why
+ * handed a repository and a work branch and checks them out itself (whether the branch is already
+ * THERE is the executor's own `workBranch` declaration), which is exactly why
  * `composeDelegationBrief` renders its prompt with `materialized: true` and a dispatch naming the
  * branch. Deriving this from the container answer told the two halves of one dispatch opposite
  * things: an inlined file list from the preOps, and a prompt about a checkout the agent does have.
