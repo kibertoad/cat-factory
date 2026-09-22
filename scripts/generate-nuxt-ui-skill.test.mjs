@@ -12,7 +12,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { describe, it } from 'node:test'
 import { fileURLToPath } from 'node:url'
-import { buildModule, parseSkillMd } from './generate-nuxt-ui-skill.mjs'
+import { buildModule, parseSkillMd, shipInstructions } from './generate-nuxt-ui-skill.mjs'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
 const OUT_PATH = join(
@@ -56,8 +56,57 @@ describe('parseSkillMd', () => {
   })
 })
 
+describe('shipInstructions', () => {
+  const withSetup = [
+    '## MCP Server',
+    '',
+    'Use the [Nuxt UI MCP server](https://ui.nuxt.com/x). If not already configured, add it:',
+    '',
+    '**Cursor** — `.cursor/mcp.json`:',
+    '',
+    '```json',
+    '{ "mcpServers": { "nuxt-ui": { "type": "http", "url": "https://ui.nuxt.com/mcp" } } }',
+    '```',
+    '',
+    '**Claude Code**:',
+    '',
+    '```bash',
+    'claude mcp add --transport http nuxt-ui https://ui.nuxt.com/mcp',
+    '```',
+    '',
+    'Key MCP tools:',
+    '- `search-components` — find components',
+  ].join('\n')
+
+  it('drops the human-editor setup steps and keeps the tool list', () => {
+    const out = shipInstructions(withSetup)
+    assert.ok(!out.includes('claude mcp add'))
+    assert.ok(!out.includes('.cursor/mcp.json'))
+    assert.ok(!out.includes('If not already configured'))
+    assert.ok(out.includes('Key MCP tools:'))
+    assert.ok(out.includes('use the [Nuxt UI MCP server]') || out.includes('[Nuxt UI MCP server]'))
+    // The heading and intro survive with clean spacing before the tool list.
+    assert.match(out, /## MCP Server[\s\S]*\/x\)\.\n\nKey MCP tools:/)
+  })
+
+  it('leaves a body with no setup section untouched', () => {
+    assert.equal(
+      shipInstructions('# Nuxt UI\n\nNo MCP section here.'),
+      '# Nuxt UI\n\nNo MCP section here.',
+    )
+  })
+})
+
 describe('buildModule', () => {
   it('matches the committed skill.generated.ts (the check the CI guard runs)', () => {
     assert.equal(buildModule(), readFileSync(OUT_PATH, 'utf8'))
+  })
+
+  it('ships no "configure the MCP yourself" instructions to a coder agent', () => {
+    // A re-vendor of upstream SKILL.md that reintroduces the setup steps (a config file the coder
+    // would commit, a `claude mcp add` that mutates harness config from inside a job) fails here.
+    const generated = buildModule()
+    assert.ok(!generated.includes('claude mcp add'))
+    assert.ok(!generated.includes('.cursor/mcp.json'))
   })
 })

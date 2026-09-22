@@ -133,9 +133,9 @@ export function defineToolServerConformance(harness: ConformanceHarness): void {
       // HTTP server to the built-in `coder` by assignment, which is the path boot validation and
       // this dispatch both reach through `kindsWithCapabilities()`. Asserted cross-runtime because
       // what a facade's resolved harness serves is the thing under test: on claude-code the server
-      // is wired with no credential, and on Codex it drops with a stated reason (the definition
-      // pins `harnesses: ['claude-code']`, so Codex fails the harness test before the transport one)
-      // rather than being advertised in the prompt and skipped by the harness's TOML writer.
+      // is wired with no credential, and on Codex it drops as `transport_unsupported` (the server is
+      // HTTP and kernel's `MCP_HARNESS_TRANSPORTS` gives Codex `stdio` only, so it fails the
+      // transport test) rather than being advertised in the prompt and skipped by the TOML writer.
       const registry = defaultAgentKindRegistry()
       registerNuxtUiCapability(registry)
       const app = harness.makeApp({}, { agentKindRegistry: registry })
@@ -161,7 +161,7 @@ export function defineToolServerConformance(harness: ConformanceHarness): void {
       })
       expect(onCodex.record.wired.map((s) => s.id)).not.toContain(NUXT_UI_TOOL_SERVER_ID)
       expect(onCodex.record.unavailable.find((s) => s.id === NUXT_UI_TOOL_SERVER_ID)?.reason).toBe(
-        'harness_unsupported',
+        'transport_unsupported',
       )
     })
 

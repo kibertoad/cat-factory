@@ -50,9 +50,11 @@ export const nuxtUiSkill: BundledSkillDefinition = {
 
 /**
  * The Nuxt UI MCP tool server: a public, credential-free HTTPS endpoint that serves component
- * props, slots, events and examples. `claude-code` only, because it is HTTP and Codex's MCP client
- * is stdio-only (Pi has none): a run on either drops the server with a stated reason rather than
- * being told about a tool its CLI cannot call.
+ * props, slots, events and examples. No `harnesses` allow-list: which transports a CLI can reach is
+ * a fact kernel holds centrally (`MCP_HARNESS_TRANSPORTS`), and it already reads `codex: ['stdio']`
+ * / `pi: []`, so this HTTP server drops on both as `transport_unsupported` with no declaration here.
+ * Pinning `harnesses` would restate that fact, mislabel the drop as `harness_unsupported`, and go
+ * stale the day a CLI's client gains HTTP.
  */
 export const nuxtUiToolServer: McpServerDefinition = {
   id: NUXT_UI_TOOL_SERVER_ID,
@@ -61,7 +63,6 @@ export const nuxtUiToolServer: McpServerDefinition = {
     'Look up a @nuxt/ui component’s real props, slots, events and examples with search-components / ' +
     'get-component before writing it, instead of guessing the API from the component name.',
   transport: { kind: 'http', url: 'https://ui.nuxt.com/mcp' },
-  harnesses: ['claude-code'],
 }
 
 /**

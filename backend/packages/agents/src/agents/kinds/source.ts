@@ -48,6 +48,12 @@ export interface AgentKindCapabilityView {
  * Deliberately ONE method returning the whole (small, bounded) set rather than a per-kind read:
  * the callers are a dispatch's skill resolution and its tool-server resolution, which want
  * different kinds at different moments, and a per-kind remote read would put a round trip on each.
+ *
+ * "Small" is bounded by the KIND COUNT, not the payload: a `bundled` skill inlines its whole body
+ * (instructions plus every resource blob) into each kind that declares it, so one large playbook
+ * assigned to several kinds serialises N times. The Nuxt UI capability is the first to do this at
+ * scale (~99 KB x 3 kinds). If more land, serve bundled skills by reference on this route the way
+ * `catalog` refs already are (id plus body fetched on demand). Tracked separately.
  */
 export interface AgentKindSource {
   capabilities(): Promise<AgentKindCapabilityView[]>

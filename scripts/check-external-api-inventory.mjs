@@ -123,6 +123,16 @@ const CLASSIFICATION = [
     vendors: ['github', 'gitlab'],
   },
   {
+    // The opt-in Nuxt UI capability declares the `nuxt-ui` MCP tool server. cat-factory does not
+    // send to it: the agent's CLI does, from inside the run. But we DECLARE the endpoint, and its
+    // `guidance` names tool ids (`search-components` / `get-component`), so a Nuxt-side rename to
+    // the endpoint or those tools breaks runs here. That is exactly the "declared for something ELSE
+    // to send" surface the sweep verifies.
+    path: 'backend/packages/agents/src/agents/kinds/nuxt-ui/index.ts',
+    kind: 'vendor',
+    vendors: ['nuxt-ui'],
+  },
+  {
     path: 'backend/packages/agents/src/providers/endpoints.ts',
     kind: 'vendor',
     vendors: [

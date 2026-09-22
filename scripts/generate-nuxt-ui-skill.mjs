@@ -72,6 +72,21 @@ export function parseSkillMd(text) {
   return { name: field('name'), description: field('description'), body: body.replace(/\s+$/, '') }
 }
 
+/**
+ * Strip the "configure the MCP server yourself" half of the vendored `## MCP Server` section. That
+ * text is written for a human wiring their own editor (`.cursor/mcp.json`, `claude mcp add …`);
+ * staged into a container coder it reads as an instruction to edit config in a checkout it will
+ * push, and it is most likely acted on precisely on the runs where the server is deliberately
+ * absent (Codex/Pi). The platform wires the server itself on claude-code and STATES its absence
+ * elsewhere, so only the setup steps go: the tool list from `Key MCP tools:` onward, which a wired
+ * agent uses, stays. If a re-vendor of upstream `SKILL.md` changes this wording the match misses,
+ * the setup text survives, and the fixture in `generate-nuxt-ui-skill.test.mjs` fails rather than
+ * letting it back in silently.
+ */
+export function shipInstructions(body) {
+  return body.replace(/ If not already configured, add it:[\s\S]*?(?=\n\nKey MCP tools:)/, '')
+}
+
 export function buildModule() {
   const files = skillFiles(SKILL_DIR)
   const skill = parseSkillMd(readSkillText(join(SKILL_DIR, 'SKILL.md')))
@@ -85,7 +100,7 @@ export function buildModule() {
     '',
     `export const NUXT_UI_SKILL_NAME = ${JSON.stringify(skill.name)}`,
     `export const NUXT_UI_SKILL_DESCRIPTION = ${JSON.stringify(skill.description)}`,
-    `export const NUXT_UI_SKILL_INSTRUCTIONS = ${JSON.stringify(skill.body)}`,
+    `export const NUXT_UI_SKILL_INSTRUCTIONS = ${JSON.stringify(shipInstructions(skill.body))}`,
     '',
     'export const NUXT_UI_SKILL_RESOURCES: { relPath: string; content: string }[] = [',
     ...resources.map(

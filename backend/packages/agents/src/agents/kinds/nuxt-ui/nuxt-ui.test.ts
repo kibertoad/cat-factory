@@ -53,9 +53,9 @@ describe('nuxt-ui capability', () => {
     }
     // Public endpoint: no credential to resolve, so nothing lands in the operator's checklist.
     expect(nuxtUiToolServer.secretKeys).toBeUndefined()
-    // HTTP, so Codex (stdio-only) and Pi (no MCP) drop it with a stated reason rather than being
-    // told about a tool their CLI cannot call.
-    expect(nuxtUiToolServer.harnesses).toEqual(['claude-code'])
+    // No `harnesses` allow-list: the drop on Codex/Pi comes from kernel's transport table
+    // (`MCP_HARNESS_TRANSPORTS`), which already refuses HTTP there, not from a restated pin here.
+    expect(nuxtUiToolServer.harnesses).toBeUndefined()
   })
 
   it('is idempotent across repeated registration', () => {
