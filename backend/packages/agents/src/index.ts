@@ -49,6 +49,17 @@ export {
   normalizeSkillRefs,
   normalizeToolRefs,
 } from './agents/kinds/capabilities.js'
+// The Nuxt UI capability: an OPT-IN bundled skill + MCP tool server a facade attaches to the coder
+// kinds. Not in `defaultAgentKindRegistry()` — the framework default stays stack-agnostic. See
+// `backend/packages/agents/src/agents/kinds/nuxt-ui/index.ts`.
+export {
+  NUXT_UI_CAPABILITY_KINDS,
+  NUXT_UI_SKILL_ID,
+  NUXT_UI_TOOL_SERVER_ID,
+  nuxtUiSkill,
+  nuxtUiToolServer,
+  registerNuxtUiCapability,
+} from './agents/kinds/nuxt-ui/index.js'
 // Where the deployment's capability LAYER is read from when it is not this process's own registry
 // (a mothership-mode node reads the mothership's, over `GET /internal/agent-kinds`). The kind
 // catalog itself stays node-local: only the data half can cross a wire.
@@ -254,10 +265,15 @@ export { BUILTIN_GATABLE_KINDS, isGatableKind } from './agents/kinds/gatable.js'
 // composite executor's ROUTING and the engine's preOp context preparation so the two can never
 // disagree about whether an agent can read files or run git.
 export {
+  delegatedExecutorFor,
   deliverableIsReply,
   dispatchDeliversCheckout,
+  runsDelegated,
   runsInContainer,
 } from './agents/kinds/container-surface.js'
+// What a declared surface IMPLIES, as a total table: adding a surface fails the build there rather
+// than falling through to whatever each call site's `else` happened to be.
+export { SURFACE_TRAITS, type SurfaceTraits, surfaceTraits } from './agents/kinds/surface-traits.js'
 export { companionSystemPrompt } from './agents/prompts/companion.js'
 // The document-authoring agent kinds (doc-researcher / doc-outliner / doc-writer /
 // doc-finalizer), registered as a SIDE EFFECT of importing this module so they are

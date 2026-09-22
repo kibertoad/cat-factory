@@ -10,29 +10,11 @@ import type { AgentKindRegistry } from '@cat-factory/agents'
 // same answer with nothing carried between them: the poll runs in another process after a
 // durable replay and rebuilds the handle from the persisted step alone.
 
-/**
- * The harness job id for one dispatch: the run (execution) id, the agent kind, and — past the
- * first job of that kind in the run — the `dispatchEpoch`. A run executes a sequence of steps that
- * all share the one per-run container, so each job needs an id that is UNIQUE WITHIN THE RUN: the
- * harness keys its per-kind job registries by it, and two jobs sharing an id alias there (the bug
- * where an `architect` /explore poll read back the `spec-writer`'s /spec result). The run itself is
- * addressed separately by the execution id (the {@link RunnerJobRef.runId}).
- *
- * The epoch is what makes that uniqueness total, because the engine dispatches one kind more than
- * once per run in two ways: a step RE-dispatched (a Tester re-test after a fixer round, a gate's
- * helper retry, a companion's rework round, an eviction recovery) and the same helper kind
- * escalated off DIFFERENT steps (`fixer` serves four gates). The harness re-attaches to an EXISTING
- * job id rather than re-running (replay idempotency), and a container-reusing transport — a warm
- * local pool, a self-hosted runner pool — keeps that registry alive across rounds, since reclaiming
- * a pooled member does NOT destroy it. So a reused id replays a completed job: the Tester that
- * appeared to "pass regardless" and never re-tested, an eviction recovery landing back on the job
- * whose runner just died. `dispatchEpochFor` counts the run's prior dispatches of the kind, so the
- * id names the n-th job of that kind and the run's first keeps the unsuffixed shape.
- */
-export function stepJobId(executionId: string, agentKind: string, dispatchEpoch = 0): string {
-  const base = `${executionId}-${agentKind}`
-  return dispatchEpoch > 0 ? `${base}-${dispatchEpoch}` : base
-}
+// The per-dispatch job id itself lives in KERNEL (`stepJobId`), because the engine now mints the
+// same string as a delegated step's correlation key and had to be able to commit it before any
+// executor is called. Re-exported here so every existing importer keeps resolving it from the
+// module that addresses container jobs.
+export { stepJobId } from '@cat-factory/kernel'
 
 /** The provider slug from a handle's `provider:model` string (fallback when the handle omits `provider`). */
 export function providerOf(model: string | undefined): string {

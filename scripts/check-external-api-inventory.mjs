@@ -45,7 +45,7 @@
 //         node scripts/check-external-api-inventory.mjs --list   (the derived inventory, as TSV)
 // Exit 0 = every external surface is classified; exit 1 = at least one is not, in both modes.
 
-import { readFileSync, readdirSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
@@ -123,6 +123,16 @@ const CLASSIFICATION = [
     vendors: ['github', 'gitlab'],
   },
   {
+    // The opt-in Nuxt UI capability declares the `nuxt-ui` MCP tool server. cat-factory does not
+    // send to it: the agent's CLI does, from inside the run. But we DECLARE the endpoint, and its
+    // `guidance` names tool ids (`search-components` / `get-component`), so a Nuxt-side rename to
+    // the endpoint or those tools breaks runs here. That is exactly the "declared for something ELSE
+    // to send" surface the sweep verifies.
+    path: 'backend/packages/agents/src/agents/kinds/nuxt-ui/index.ts',
+    kind: 'vendor',
+    vendors: ['nuxt-ui'],
+  },
+  {
     path: 'backend/packages/agents/src/providers/endpoints.ts',
     kind: 'vendor',
     vendors: [
@@ -198,6 +208,14 @@ const CLASSIFICATION = [
   },
   {
     path: 'backend/packages/integrations/src/modules/github/',
+    kind: 'vendor',
+    vendors: ['github'],
+  },
+  {
+    // The DelegatedExecutor over GitHub Actions: `workflow_dispatch`, the run list it correlates
+    // through, the run read, the cancel, and the pull-request lookup that recovers what a finished
+    // workflow produced. Every one of those is an Actions/REST surface GitHub can change.
+    path: 'backend/packages/delegation-github-actions/src/',
     kind: 'vendor',
     vendors: ['github'],
   },
@@ -316,6 +334,16 @@ const CLASSIFICATION = [
   { path: 'backend/runtimes/local/src/github.ts', kind: 'vendor', vendors: ['github'] },
   { path: 'backend/runtimes/local/src/linkRepo.ts', kind: 'vendor', vendors: ['github'] },
   { path: 'scripts/check-release-versions.mjs', kind: 'vendor', vendors: ['npm-registry'] },
+  {
+    // The repo-level MCP config: the `nuxt-ui` HTTP server an agent's MCP client sends to. A JSON
+    // file at the repo root, so the source walk (scoped to ROOTS and code extensions) never sees
+    // it; it is injected as an endpoint candidate below. `evidence` because the host is declared
+    // once here rather than reached from typed source the vendor check could read.
+    path: '.mcp.json',
+    kind: 'vendor',
+    vendors: ['nuxt-ui'],
+    evidence: 'the nuxt-ui MCP server URL, declared for an agent MCP client to send to',
+  },
 
   // ---- SDK-mediated, a dependency bump rather than a sweep ---------------------------------
   {
@@ -377,6 +405,12 @@ const CLASSIFICATION = [
     path: 'backend/packages/integrations/src/modules/notificationWebhook/',
     kind: 'internal',
     reason: 'outbound delivery to a subscriber endpoint, on the webhook contract we publish',
+  },
+  {
+    path: 'backend/packages/server/src/agents/delegatedExecutorHost.ts',
+    kind: 'internal',
+    reason:
+      "the policy-checked fetch every registered delegated executor is built over; it names no host of its own, and each executor's vendor is swept where that executor lives",
   },
   {
     path: 'backend/packages/integrations/src/modules/observability/RegistryReleaseHealthProvider.ts',
@@ -527,6 +561,18 @@ const candidates = sourceFiles()
   })
   .filter(Boolean)
   .sort((a, b) => a.file.localeCompare(b.file))
+
+// The repo-level MCP config declares a vendor endpoint an agent's MCP client sends to, but it is
+// JSON at the repo root: outside ROOTS and not a code extension, so the walk above never sees it.
+// Add it by hand as an endpoint surface so the sweep stays complete (classified in CLASSIFICATION).
+const MCP_CONFIG = '.mcp.json'
+if (
+  existsSync(join(root, MCP_CONFIG)) &&
+  !candidates.some((candidate) => candidate.file === MCP_CONFIG)
+) {
+  candidates.push({ file: MCP_CONFIG, signal: 'endpoint' })
+  candidates.sort((a, b) => a.file.localeCompare(b.file))
+}
 
 const files = candidates.map((candidate) => candidate.file)
 const malformed = malformedEntries(CLASSIFICATION)

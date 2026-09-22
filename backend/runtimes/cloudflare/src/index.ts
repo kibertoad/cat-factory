@@ -6,6 +6,7 @@ import type {
 } from '@cloudflare/workers-types'
 import { type CreateAppOptions, createApp } from './app'
 import { loadConfig } from './infrastructure/config'
+import { defaultWorkerAgentKindRegistry } from './infrastructure/container-registries'
 import type {
   Env,
   ExecutionStartMessage,
@@ -97,7 +98,7 @@ import {
 } from '@cat-factory/orchestration'
 import { binaryGeneratorRegistryWithBuiltins } from '@cat-factory/binary-generators'
 import { promptFragmentRegistryWithBuiltins } from '@cat-factory/prompt-fragments'
-import { defaultAgentKindRegistry, defaultInitiativePresetRegistry } from '@cat-factory/agents'
+import { defaultInitiativePresetRegistry } from '@cat-factory/agents'
 import { gateRegistryWithBuiltins } from '@cat-factory/gates'
 import {
   DEFAULT_WORKSPACE_SETTINGS,
@@ -301,6 +302,30 @@ export {
   type JudgeAssessor,
   type JudgeContext,
 } from '@cat-factory/kernel'
+// Installation-level extension point for DELEGATED EXECUTORS: an external system this deployment
+// already runs (a GitHub-Actions implement/review/test loop, an internal job runner, a vendor's
+// autonomous PR bot), taking ONE pipeline step while cat-factory keeps the intake, the context,
+// the policy, the merge and the notifications around it. Empty by default: the platform ships
+// none, because shipping one would make the seam about that one.
+export {
+  DelegatedExecutorRegistry,
+  defaultDelegatedExecutorRegistry,
+  DelegatedExecutorRegistrationError,
+  type DelegatedExecutor,
+  type DelegatedExecutorDefinition,
+  type DelegatedExecutorDeps,
+  type DelegatedExecutorPresentation,
+  type DelegatedExecutorTelemetry,
+  type DelegatedExecutorView,
+  type DelegatedFetch,
+  type DelegatedFetchResponse,
+  type DelegatedPollPolicy,
+  type DelegationBrief,
+  type DelegationHandle,
+  type DelegationResult,
+  type DelegationStart,
+  type DelegationUpdate,
+} from '@cat-factory/kernel'
 // Installation-level extension point for VCS PROVIDERS: the neutral seam a deployment adds a git
 // host through, rather than re-hardcoding GitHub in a shared path.
 export {
@@ -432,10 +457,13 @@ export { DEFAULT_MODEL_PRESET_ID, MODEL_PRESET_SEED_IDS } from '@cat-factory/ker
  * seam: a deployment registers its kinds/gates/pipelines/estate on its own instance and passes it
  * in, exactly as it would through `start({ … })` / `startLocal({ … })` on the other two facades.
  */
-function resolveEntryRegistries(overrides: Partial<CoreDependencies>) {
+export function resolveEntryRegistries(overrides: Partial<CoreDependencies>) {
   return {
-    // Custom agent kinds (the built-ins plus anything a deployment registered by reference).
-    agentKindRegistry: overrides.agentKindRegistry ?? defaultAgentKindRegistry(),
+    // Custom agent kinds (the built-ins plus anything a deployment registered by reference). Our
+    // OWN default carries the opt-in Nuxt UI capability, and this is the instance both boot
+    // validation and `GET /internal/agent-kinds` read, so the request path must default through the
+    // same helper the override-less `buildContainer(env)` builders use, or the two disagree.
+    agentKindRegistry: overrides.agentKindRegistry ?? defaultWorkerAgentKindRegistry(),
     // Custom initiative presets — the same DI seam as `agentKindRegistry`.
     initiativePresetRegistry:
       overrides.initiativePresetRegistry ?? defaultInitiativePresetRegistry(),

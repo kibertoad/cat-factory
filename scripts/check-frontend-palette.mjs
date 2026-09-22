@@ -20,6 +20,23 @@
 // Brand accents use the BARE alias (`text-primary`, `bg-primary/10`); a category hue (an agent
 // kind's identity colour) uses `text-app-hue-pink` or `var(--app-hue-pink)` in an inline style.
 //
+// One more shape comes from the #2242 review, a class of comment the reviewer left more than once,
+// turned into a deterministic check:
+//   4. A FIXED white or black utility (`bg-white`, `text-black`, `border-white/5`,
+//      `bg-white/[0.02]`, `ring-white/10`): welded to one end of the mode, so it is invisible or
+//      wrong in light mode. The theme-aware replacements are role tokens: `border-inverted` for a
+//      selection ring, `border-default` / `bg-muted` for faint chrome, `text-inverted` for text
+//      over a filled surface, `text-highlighted` for the page's strongest text. A line that
+//      genuinely needs a fixed white or black says why with `fixed-colour-ok:`, on that line or the
+//      one before it (a trailing HTML comment naming a utility is prose, not an offender).
+//
+// Readable-text-on-fill and degenerate-hover checks were prototyped here as rules 5 and 6 and
+// WITHDRAWN: they assert a COMPUTED-STYLE property (contrast of text against its fill under every
+// theme and mode; a hover producing a colour change) that a line-scoped regex cannot decide from
+// class names, because it would have to model the Tailwind grammar (variants, opacity modifiers,
+// array and ternary bindings, cross-line class lists, `@apply`). They re-land as a real-browser
+// contrast check. See the PR and the `ui-render-snapshot-safety` initiative.
+//
 // Policy: ZERO offenders. The migration left none, so there is no ratchet of legacy allowances to
 // carry: the moment a diff adds one, this fails. A hex a deployment-registered kind sends over the
 // wire is data, not source, and `tint()` accepts it.
@@ -105,6 +122,13 @@ const COLOUR_LITERAL =
 const ALPHA_CONCAT =
   /\b(?:color|accent)\s*\+\s*['"][0-9a-f]{2}['"]|\$\{[^}]*(?:color|accent)[^}]*\}[0-9a-f]{2}/gi
 const LITERAL_OK = 'colour-literal-ok:'
+
+// An optional Tailwind opacity suffix: `/40` or an arbitrary `/[0.02]`.
+const OPACITY = '(?:\\/(?:\\d{1,3}|\\[[^\\]]+\\]))?'
+// A FIXED white/black utility (rule 4). Same colour-bearing prefixes as the palette rules, then
+// `-white` / `-black`, then an optional opacity. `bg-white/[0.02]` and `ring-white/10` included.
+const FIXED_BW = new RegExp(`(?<![\\w-])${PREFIX}-(?:white|black)(?![\\w-])${OPACITY}`, 'g')
+const FIXED_BW_OK = 'fixed-colour-ok:'
 // Comment lines may name a colour when explaining one; the guard reads code, not prose. `#` is NOT
 // a comment marker here: in the scanned `.css` and `.vue` files a line starting with `#` is an ID
 // selector, and `#app { color: #ff0000 }` must not slip past.
@@ -128,6 +152,17 @@ export function findColourLiterals(line) {
   return [...new Set([...(line.match(COLOUR_LITERAL) ?? []), ...(line.match(ALPHA_CONCAT) ?? [])])]
 }
 
+/** Every fixed white/black utility on a CODE line (rule 4), or [] for a clean or exempted line. The
+ * `fixed-colour-ok:` waiver is honoured on the line itself OR on the line before it (`prevLine`, the
+ * `eslint-disable-next-line` shape), so a waiver never forces the class off its own line. A trailing
+ * HTML comment is stripped first, so `<!-- was bg-white -->` beside real markup is prose, not an
+ * offender. */
+export function findFixedBlackWhite(line, prevLine = '') {
+  if (COMMENT_LINE.test(line)) return []
+  if (line.includes(FIXED_BW_OK) || prevLine.includes(FIXED_BW_OK)) return []
+  return [...new Set(line.replace(/<!--.*?-->/g, ' ').match(FIXED_BW) ?? [])]
+}
+
 function* sourceFiles(dirAbs) {
   for (const entry of readdirSync(dirAbs)) {
     if (entry === 'node_modules' || entry === '.nuxt' || entry === 'dist') continue
@@ -145,11 +180,20 @@ function main() {
   const offenders = []
   for (const file of SCAN_ROOTS.flatMap((root) => [...sourceFiles(root)])) {
     const lines = readFileSync(file, 'utf8').split('\n')
-    // A spec may hold a hex as a FIXTURE (the value a deployment-registered kind sends, a colour
-    // the sanitiser must accept); the literal rule reads production code only.
-    const isSpec = file.endsWith('.spec.ts')
+    // The literal rule (rule 3) reads production code only; the utility rules (raw palette, fixed
+    // numbered alias, fixed white/black) apply everywhere, a fixed class being wrong even in a
+    // fixture. `presets.ts` is the exception: a verbatim Nuxt UI decode table (oklch strings and the
+    // editor's own component classes) stored only to rebuild an editor share link and NEVER rendered
+    // by the SPA, so no palette rule applies to it.
+    const rel = relative(repoRoot, file).replaceAll('\\', '/')
+    if (rel.endsWith('frontend/app/app/utils/theme/presets.ts')) continue
+    const literalExempt = file.endsWith('.spec.ts')
     lines.forEach((line, i) => {
-      const matches = [...findRawPalette(line), ...(isSpec ? [] : findColourLiterals(line))]
+      const matches = [
+        ...findRawPalette(line),
+        ...findFixedBlackWhite(line, lines[i - 1] ?? ''),
+        ...(literalExempt ? [] : findColourLiterals(line)),
+      ]
       if (matches.length) offenders.push({ file: relative(repoRoot, file), line: i + 1, matches })
     })
   }
@@ -160,7 +204,9 @@ function main() {
       'Use a role token (bg-default, text-muted), a bare alias (text-primary, bg-warning/10) or the\n' +
         "app's mirrored numbered token (text-app-warning-300, bg-app-950) or category hue\n" +
         '(text-app-hue-pink); in CSS or SVG, var(--ui-*) / var(--app-*); a translucent fill goes\n' +
-        'through tint(). See frontend/app/README.md, "Colour through theme tokens".\n',
+        'through tint(). For a fixed white/black, use border-inverted / border-default / bg-muted /\n' +
+        'text-inverted, or waive one deliberate line with a `fixed-colour-ok:` comment (on the line\n' +
+        'or the one above). See frontend/app/README.md, "Colour through theme tokens".\n',
     )
     for (const o of offenders) {
       console.error(`  ${o.file}:${o.line}  ${o.matches.join(' ')}`)

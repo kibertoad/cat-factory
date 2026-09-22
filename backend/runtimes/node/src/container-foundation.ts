@@ -1,4 +1,8 @@
-import { defaultAgentKindRegistry, defaultInitiativePresetRegistry } from '@cat-factory/agents'
+import {
+  defaultAgentKindRegistry,
+  defaultInitiativePresetRegistry,
+  registerNuxtUiCapability,
+} from '@cat-factory/agents'
 // Opt-in AWS EKS backends (runner + environment), registered by reference below (the Worker
 // facade registers the same pair, keeping the runtimes symmetric with the native `kubernetes`
 // backend these extend). They are pass-throughs until a workspace actually connects an `eks`
@@ -8,6 +12,7 @@ import { eksEnvironmentBackend, eksRunnerBackend } from '@cat-factory/eks'
 import { createBackendRegistries } from '@cat-factory/integrations'
 import { type GitHubClient, defaultProviderRegistry, defaultVcsRegistry } from '@cat-factory/kernel'
 import {
+  defaultDelegatedExecutorRegistry,
   defaultJudgeRegistry,
   defaultStepResolverRegistry,
   resolvePresetModelForKind,
@@ -70,7 +75,7 @@ export function pickRepoSource<T>(
  * built-ins-only default, and the opt-in AWS EKS backends are registered by reference. Extracted
  * from {@link buildNodeContainer} to keep it under the complexity ceiling.
  */
-function resolveNodeAppRegistries(options: NodeContainerOptions) {
+export function resolveNodeAppRegistries(options: NodeContainerOptions) {
   const {
     environmentBackendRegistry,
     runnerBackendRegistry,
@@ -88,14 +93,20 @@ function resolveNodeAppRegistries(options: NodeContainerOptions) {
   runnerBackendRegistry.register(eksRunnerBackend)
   environmentBackendRegistry.register(eksEnvironmentBackend)
 
+  // The app-owned agent-kind registry: the injected instance (so a deployment's custom kinds are
+  // visible) else the built-ins-only default. On our OWN default (no injected registry) we opt in
+  // to the Nuxt UI capability — the vendored `nuxt-ui` skill + MCP server on the coder kinds — so
+  // this deployment's SPA-touching coders get it. A deployment that injects its own registry owns
+  // its capability wiring, so it is left untouched. Mirrored in the Worker's `container-registries`.
+  const agentKindRegistry = options.agentKindRegistry ?? defaultAgentKindRegistry()
+  if (!options.agentKindRegistry) registerNuxtUiCapability(agentKindRegistry)
+
   return {
     environmentBackendRegistry,
     runnerBackendRegistry,
     customManifestTypeRegistry,
     userSecretKindRegistry,
-    // The app-owned agent-kind registry: the injected instance (so a deployment's custom kinds
-    // are visible) else the built-ins-only default.
-    agentKindRegistry: options.agentKindRegistry ?? defaultAgentKindRegistry(),
+    agentKindRegistry,
     // The app-owned gate registry: the injected instance (conformance / a deployment pre-loads it),
     // else a fresh one with the built-in `@cat-factory/gates` suite installed.
     gateRegistry: options.gateRegistry ?? gateRegistryWithBuiltins(),
@@ -106,6 +117,11 @@ function resolveNodeAppRegistries(options: NodeContainerOptions) {
     // (conformance / a deployment pre-loads it) else an empty default — the platform ships no
     // built-in judges. See `docs/initiatives/judge-registry.md`.
     judgeRegistry: options.judgeRegistry ?? defaultJudgeRegistry(),
+    // The app-owned DELEGATED-EXECUTOR registry (the external systems a deployment plugs in as the
+    // executor of a step): the injected instance else an empty default: the platform ships none,
+    // exactly like the judges above. See `docs/initiatives/delegated-executors.md`.
+    delegatedExecutorRegistry:
+      options.delegatedExecutorRegistry ?? defaultDelegatedExecutorRegistry(),
     // The app-owned initiative-preset registry: the injected instance else the built-ins-only
     // default (generic / docs-refresh / tech-migration).
     initiativePresetRegistry: options.initiativePresetRegistry ?? defaultInitiativePresetRegistry(),

@@ -9,7 +9,9 @@ import { failureKindFromHarnessCause } from '@cat-factory/kernel'
 import {
   type ContainerFailureView,
   containerShutdownFailure,
+  delegatedTerminalFailure,
   MAX_BRANCH_CONTENTION_RECOVERIES,
+  MAX_DELEGATED_RETRIES,
 } from './job.logic.js'
 import { PR_REVIEWER_KIND } from '@cat-factory/agents'
 import { HUMAN_TEST_AGENT_KIND, isTesterKind, VISUAL_CONFIRM_AGENT_KIND } from './ci.logic.js'
@@ -26,13 +28,14 @@ import {
   validationFailureDetail,
 } from './validation.logic.js'
 import { applyReproductionReport } from './reproductionProof.logic.js'
+import { inFlightDelegation, settleDelegation } from './step-fold.logic.js'
 
 /** A settled (non-`running`) agent poll — the only states {@link PollCompletionController} acts on. */
 type SettledUpdate = Extract<AgentJobUpdate, { state: 'done' } | { state: 'failed' }>
 
 /**
  * Collaborators + bound call-backs the {@link PollCompletionController} needs. The three
- * `recordBackendDiagnostics` / `recoverContainerEviction` / `markContainerErrored` hooks are bound
+ * `recordBackendDiagnostics` / `recoverContainerEviction` / `markDispatchErrored` hooks are bound
  * methods of the dispatcher so completion still runs against the SAME dispatcher state the inline
  * code did.
  */
@@ -52,10 +55,11 @@ export interface PollCompletionControllerDeps {
     step: PipelineStep,
     failure: ContainerFailureView,
   ) => Promise<AdvanceResult | null>
-  markContainerErrored: (
+  markDispatchErrored: (
     workspaceId: string,
     instance: ExecutionInstance,
     step: PipelineStep,
+    failure?: { error?: string; url?: string },
   ) => Promise<void>
 }
 
@@ -77,7 +81,7 @@ export class PollCompletionController {
   private readonly bugFishingController: BugFishingController
   private readonly recordBackendDiagnostics: PollCompletionControllerDeps['recordBackendDiagnostics']
   private readonly recoverContainerEviction: PollCompletionControllerDeps['recoverContainerEviction']
-  private readonly markContainerErrored: PollCompletionControllerDeps['markContainerErrored']
+  private readonly markDispatchErrored: PollCompletionControllerDeps['markDispatchErrored']
 
   constructor(deps: PollCompletionControllerDeps) {
     this.blockRepository = deps.blockRepository
@@ -90,7 +94,7 @@ export class PollCompletionController {
     this.bugFishingController = deps.bugFishingController
     this.recordBackendDiagnostics = deps.recordBackendDiagnostics
     this.recoverContainerEviction = deps.recoverContainerEviction
-    this.markContainerErrored = deps.markContainerErrored
+    this.markDispatchErrored = deps.markDispatchErrored
   }
 
   /**
@@ -173,7 +177,7 @@ export class PollCompletionController {
     // running branch that normally records it, and an evicted run is exactly the case a
     // post-mortem inspects ("which backend evicted this?"). Idempotent, so it's harmless when
     // the running branch already stamped it; whichever path upserts below persists it — the
-    // eviction re-dispatch/exhausted upsert in recoverContainerEviction, or markContainerErrored
+    // eviction re-dispatch/exhausted upsert in recoverContainerEviction, or markDispatchErrored
     // on a genuine failure (failRun then re-reads from storage).
     this.recordBackendDiagnostics(instance, update.backend)
     // Fold the job's EVIDENCE next, ahead of every recovery below, because a recovered failure
@@ -207,6 +211,14 @@ export class PollCompletionController {
       update,
     )
     if (resumedAfterContention) return resumedAfterContention
+    // The DELEGATED member of the same family: an external verdict its own executor called
+    // survivable (a run cancelled by a runner-pool restart, a rate limit), which re-dispatches on
+    // a bounded budget instead of failing the run. Sits with the two recoveries above rather than
+    // with the terminal branch below, because the axes are separate: `delegated_failed` is the
+    // classification for BOTH dispositions, and only the disposition decides whether a second
+    // external run is spent.
+    const redispatched = await this.recoverDelegatedFailure(workspaceId, instance, step, update)
+    if (redispatched) return redispatched
     // A read-only Challenge Investigator (dispatched off a parked `pr-reviewer` step when the
     // human challenged ONE finding) failed for real: settle the challenge as `failed` and RE-PARK
     // the review — a non-critical second opinion crashing must not fail the human's in-flight
@@ -238,6 +250,19 @@ export class PollCompletionController {
       )
       if (settled) return settled
     }
+    // A DELEGATED executor that called its verdict FINAL, asked immediately before the container's
+    // own terminal signal and for the same reason it sits below every branch above: both are
+    // "terminal, do not spend a recovery budget", and only the NAME differs. It gets its own
+    // because a delegated step never had a harness, and reporting one tells an operator their
+    // container was stopped and files the verdict under container eviction in every rollup.
+    const delegatedTerminal = delegatedTerminalFailure(update)
+    if (delegatedTerminal) {
+      await this.markDispatchErrored(workspaceId, instance, step, {
+        error: delegatedTerminal.error,
+        ...(update.delegated?.url ? { url: update.delegated.url } : {}),
+      })
+      return { kind: 'job_failed', ...delegatedTerminal }
+    }
     // A harness that exited cleanly mid-job was stopped by something a fresh container meets
     // again, so this fails the run outright rather than spending an eviction budget on it. It is
     // asked HERE, below every branch that settles a job WITHOUT failing the run, because those
@@ -248,7 +273,10 @@ export class PollCompletionController {
     // above it spends a retry on this failure.
     const shutdown = containerShutdownFailure(update)
     if (shutdown) {
-      await this.markContainerErrored(workspaceId, instance, step)
+      await this.markDispatchErrored(workspaceId, instance, step, {
+        error: shutdown.error,
+        ...(update.delegated?.url ? { url: update.delegated.url } : {}),
+      })
       return { kind: 'job_failed', ...shutdown }
     }
     // Not an eviction: a genuine agent/job failure. Prefer the harness's STRUCTURED cause
@@ -258,17 +286,25 @@ export class PollCompletionController {
     // rather than a generic `agent`. The extended diagnostic surfaces as the failure detail.
     // Mark the container errored and persist so the failed details show it (failRun
     // re-reads from storage, so an in-memory-only mutation would be lost; failRun emits
-    // the terminal frame, so markContainerErrored deliberately doesn't). The two harness reports
+    // the terminal frame, so markDispatchErrored deliberately doesn't). The two harness reports
     // were already folded onto the step above: a red PRE-PR VALIDATION lends its rendered detail
     // to this failure (so the board's card shows WHICH check failed and what it printed), and the
     // reproduction proof never contributes one, the detail belonging to whatever killed the job.
-    await this.markContainerErrored(workspaceId, instance, step)
+    await this.markDispatchErrored(workspaceId, instance, step, {
+      error: update.error,
+      ...(update.delegated?.url ? { url: update.delegated.url } : {}),
+    })
     return {
       kind: 'job_failed',
       error: update.error,
       // Prefer the harness's structured cause; default to the coarse `agent` when it reported
       // none (the watchdog-phrase string fallback is gone — current images always emit a cause).
-      failureKind: failureKindFromHarnessCause(update.failureCause) ?? 'agent',
+      // A RETRYABLE delegated failure lands here (the terminal branch above answered null for it),
+      // and it is still an external verdict rather than an agent of ours: naming the step's own
+      // executor class is what keeps the run card and the rollups honest about where it ran.
+      failureKind:
+        failureKindFromHarnessCause(update.failureCause) ??
+        (inFlightDelegation(step) ? 'delegated_failed' : 'agent'),
       detail: validationDetail ?? update.detail ?? update.error,
       // Preserve the harness's FINE-GRAINED cause (git / api / no-usable-output / no-changes)
       // that `failureKind` collapses to the coarse `agent` — recorded on the failure's
@@ -308,6 +344,46 @@ export class PollCompletionController {
     // The job's container is finished with; a fresh one boots for the re-dispatch, so the details
     // show it spinning up again rather than a stale "up" (the eviction recovery's reasoning).
     step.container = { status: 'starting' }
+    await this.runStateMachine.persistAndEmit(workspaceId, instance)
+    return { kind: 'continue' }
+  }
+
+  /**
+   * Re-dispatch a DELEGATED step whose executor called its failure RETRYABLE, or null when that is
+   * not what happened (so the caller reports the failure).
+   *
+   * The engine sets the budget, not the executor: an executor asking for a retry is stating a fact
+   * about its own system ("this verdict was not about the work"), and how many times a platform is
+   * willing to spend somebody else's runner on it is a different question, answered once here (see
+   * {@link MAX_DELEGATED_RETRIES}).
+   *
+   * The failed attempt is SETTLED onto the record before the handle is dropped, because the record
+   * is the platform's only account of work that happened elsewhere and the next claim appends to
+   * its log. Clearing `jobId` is what makes the next advance dispatch rather than re-attach, and
+   * the fresh dispatch takes a new correlation key (the dispatch epoch moved), so the executor
+   * starts a new run instead of recognising the failed one.
+   */
+  private async recoverDelegatedFailure(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    update: Extract<AgentJobUpdate, { state: 'failed' }>,
+  ): Promise<AdvanceResult | null> {
+    if (update.delegated?.disposition !== 'retryable') return null
+    // Gated on the in-flight job BEING the delegated one, like every other reader of the record:
+    // a container helper dispatched later on the same step must not be re-driven on this budget.
+    if (!inFlightDelegation(step)) return null
+    const retries = step.delegatedRetries ?? 0
+    if (retries >= MAX_DELEGATED_RETRIES) return null
+    step.delegatedRetries = retries + 1
+    settleDelegation(step, {
+      status: 'failed',
+      outcome: update.error,
+      ...(update.delegated.url ? { url: update.delegated.url } : {}),
+    })
+    step.jobId = undefined
+    step.subtasks = undefined
+    step.progress = 0
     await this.runStateMachine.persistAndEmit(workspaceId, instance)
     return { kind: 'continue' }
   }

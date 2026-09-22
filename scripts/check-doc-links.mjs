@@ -53,10 +53,16 @@ let documents = 0
 let checked = 0
 const failures = []
 
+// Vendored third-party skill, kept byte-for-byte as upstream (`.oxfmtrc.json` exempts it from the
+// formatter too). Holding someone else's markdown to this repo's link rules would redden CI on the
+// next clean re-vendor for a link that resolves upstream, so a refresh could not stay byte-for-byte.
+const VENDORED_DOCS = ['.claude/skills/nuxt-ui/']
+
 for (const file of walk(repoRoot)) {
   if (!file.endsWith('.md')) continue
   const docRelPath = toRepoRel(file)
   if (isFrozenHistory(docRelPath)) continue
+  if (VENDORED_DOCS.some((prefix) => docRelPath.startsWith(prefix))) continue
   documents++
   const links = repoLinks(readFileSync(file, 'utf8'), docRelPath)
   checked += links.length

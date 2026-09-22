@@ -636,7 +636,9 @@
         "service_catalog_filter_missing": "Nie udało się odczytać filtra encji tego połączenia, więc nie ma czego importować. Zapisz połączenie katalogu usług ponownie, aby go przywrócić.",
         "service_catalog_response_too_large": "Portal deweloperski zwrócił więcej danych, niż ta platforma przyjmuje w jednej odpowiedzi. Otwórz ustawienia katalogu usług i obniż limit usług albo wyłącz importowanie definicji interfejsów, a następnie zaimportuj ponownie.",
         "assistant_generation_failed": "Dostawca modelu asystenta nie odpowiedział. Jest poprawnie skonfigurowany i nie ma tu nic do ustawienia: spróbuj ponowić żądanie za chwilę.",
-        "assistant_reply_unreadable": "Model asystenta odpowiedział czymś, czego ta platforma nie może wykonać jako decyzji. Przeformułowanie rzadko pomaga: wybierz inny model dla asystenta w ustawieniach modeli."
+        "assistant_reply_unreadable": "Model asystenta odpowiedział czymś, czego ta platforma nie może wykonać jako decyzji. Przeformułowanie rzadko pomaga: wybierz inny model dla asystenta w ustawieniach modeli.",
+        "delegated_executor_failed": "Zewnętrzny executor nie zdołał uruchomić tego kroku. Problem leży w systemie wykonującym pracę, a nie w tej instalacji: sprawdź jego własne logi i spróbuj ponownie.",
+        "delegated_work_branch_unprepared": "Platforma nie mogła przygotować gałęzi roboczej, na którą wysyłany jest executor tego kroku, więc nic nie zostało uruchomione. Albo połączenie z repozytorium nie ma prawa zapisu, albo zadanie wskazuje gałąź, która jeszcze nie istnieje: szczegóły mówią, co z tego."
       }
     },
     "reason": {
@@ -720,7 +722,10 @@
         "expedition_settled": "Ta wyprawa już się zakończyła",
         "not_awaiting_triage": "Ta wyprawa nie czeka na segregację",
         "already_addressed": "Część znalezisk ma już zadanie naprawcze",
-        "no_host_frame": "Ta wyprawa nie znajduje się pod żadną usługą"
+        "no_host_frame": "Ta wyprawa nie znajduje się pod żadną usługą",
+        "delegated_executor_unwired": "Zewnętrzny executor nie jest zarejestrowany",
+        "delegated_step_async_only": "Ten krok jest odpytywany, a nie oczekiwany",
+        "delegated_claim_missing": "Ten krok nie ma zewnętrznej pracy do sprawdzenia"
       },
       "description": {
         "dependencies_unmet": "To zadanie zależy od innych, które nie zostały jeszcze ukończone. Ukończ je lub odblokuj, a następnie uruchom je ponownie.",
@@ -774,7 +779,10 @@
         "expedition_settled": "Uruchomienie minęło już krok polowania na błędy, więc nie ma czego oznaczać ani odrzucać. Odśwież uruchomienie, aby zobaczyć, co znalazło i którymi ustaleniami się zajęto.",
         "not_awaiting_triage": "Albo wciąż przeszukuje kolejną perspektywę, albo zostało już zakończone. Odśwież uruchomienie, aby zobaczyć jego stan.",
         "already_addressed": "Zadanie naprawcze powstało dla nich wcześniej, więc nic nie utworzono ponownie. Otwórz znalezisko, aby przejść do istniejącego zadania.",
-        "no_host_frame": "Zadanie naprawcze potrzebuje usługi, pod którą będzie żyć, i repozytorium do naprawy. Przenieś zadanie wyprawy pod ramkę usługi i spróbuj ponownie."
+        "no_host_frame": "Zadanie naprawcze potrzebuje usługi, pod którą będzie żyć, i repozytorium do naprawy. Przenieś zadanie wyprawy pod ramkę usługi i spróbuj ponownie.",
+        "delegated_executor_unwired": "Krok tego potoku działa na zewnętrznym executorze, którego ta instalacja nie rejestruje, więc pracy nie ma dokąd wysłać. Zarejestruj executor w kodzie albo zmień krok na taki, który działa tutaj.",
+        "delegated_step_async_only": "Ten krok działa na zewnętrznym wykonawcy i może trwać godzinami, więc jest wysyłany, a następnie odpytywany, zamiast wykonywany w obrębie jednego żądania. Uruchom przebieg z tablicy; jeśli trafiłeś tu z własnego kodu, steruj krokiem ścieżką asynchroniczną.",
+        "delegated_claim_missing": "Brakuje zapisu tego, co przebieg wysłał do zewnętrznego wykonawcy, więc nie ma czego odpytywać. Z samym wykonawcą wszystko jest w porządku. Odśwież przebieg i uruchom krok ponownie, jeśli nadal stoi."
       },
       "action": {
         "connectGitHub": "Połącz GitHub",
@@ -1586,7 +1594,24 @@
       "promptVariant": "Wariant promptu",
       "promptVariantAdditionOnly": "Zastosowano tylko dodatek tego wariantu. Prompt przestrzeni roboczej dla tego agenta zastąpił jego tekst bazowy.",
       "promptVariantSuperseded": "Ten wariant nie został zastosowany. Prompt przestrzeni roboczej dla tego agenta miał pierwszeństwo.",
-      "promptVariantWithdrawn": "Ten wariant nie jest już zarejestrowany, więc krok wykonał się na wbudowanym promptcie."
+      "promptVariantWithdrawn": "Ten wariant nie jest już zarejestrowany, więc krok wykonał się na wbudowanym promptcie.",
+      "delegated": {
+        "status": {
+          "cancelled": "Anulowane",
+          "done": "Zakończone na zewnątrz",
+          "failed": "Niepowodzenie na zewnątrz",
+          "running": "Działa na zewnątrz",
+          "starting": "Uruchamianie na zewnątrz",
+          "unrecognised": "Nierozpoznany status ({status})"
+        },
+        "run": "Uruchomienie zewnętrzne",
+        "branch": "Gałąź",
+        "copyUrl": "Skopiuj link do uruchomienia zewnętrznego",
+        "openRun": "Otwórz uruchomienie",
+        "noOutcome": "Nie zapisano wyniku",
+        "earlierAttempts": "Wcześniejsze próby",
+        "usageNotReported": "{executor} nie raportuje zużycia tokenów, więc tego kroku brakuje w sumach powyżej."
+      }
     },
     "stepDetail": {
       "contents": "Zawartość",
@@ -2006,6 +2031,7 @@
       "timeout": "Przekroczono czas",
       "agent": "Agent",
       "job_failed": "Zadanie nieudane",
+      "delegated_failed": "Błąd zewnętrznego wykonawcy",
       "rejected": "Odrzucone",
       "companion_rejected": "Towarzysz odrzucony",
       "stalled": "Zawieszone",
@@ -8573,6 +8599,29 @@
       "system": "Systemowy",
       "light": "Jasny",
       "dark": "Ciemny"
+    },
+    "theme": {
+      "section": "Motyw",
+      "import": "Importuj motyw Nuxt UI…",
+      "remove": "Usuń ten motyw"
+    },
+    "import": {
+      "title": "Importuj motyw",
+      "description": "Zbuduj motyw w edytorze motywów Nuxt UI, skopiuj jego link do udostępniania i wklej go tutaj. Motyw jest zapisywany tylko w tej przeglądarce.",
+      "linkLabel": "Link do udostępniania",
+      "linkPlaceholder": "https://ui.nuxt.com/theme?doc=…",
+      "nameLabel": "Nazwa",
+      "namePlaceholder": "Mój motyw",
+      "nameTaken": "Motyw o nazwie „{typed}” już istnieje. Ten zostanie zapisany jako „{name}”.",
+      "fontNote": "Czcionka wskazana w motywie jest używana tylko wtedy, gdy udostępnia ją to urządzenie lub ta instalacja; w przeciwnym razie przeglądarka użyje domyślnej.",
+      "submit": "Importuj",
+      "cancel": "Anuluj",
+      "error": {
+        "notALink": "Wklej link do udostępniania z ui.nuxt.com/theme (lub JSON motywu).",
+        "malformed": "Ten link nie zawiera czytelnego motywu. Skopiuj go ponownie z edytora.",
+        "presetShorthand": "Ten link wskazuje ustawienie wstępne edytora Nuxt UI, którego ta aplikacja nie zna. Zmień dowolny parametr w edytorze, aby link zawierał cały motyw, i skopiuj go ponownie.",
+        "unsupportedVersion": "Ten motyw powstał w nowszym formacie edytora, niż rozumie ta aplikacja."
+      }
     }
   }
 }

@@ -408,6 +408,34 @@ describe('ConsensusAgentExecutor', () => {
     expect(await exec.previewToolServers(makeContext())).toBeUndefined()
   })
 
+  // The reclaim REPORT is how the engine tells "the external work was stopped" from "we asked and
+  // it is still running". This wrapper is the executor the engine holds whenever
+  // `CONSENSUS_ENABLED` is set, so swallowing the answer here turned every successful delegated
+  // cancel into a step telling its operator to go and chase a run that was already dead.
+  it('answers with the wrapped executor’s reclaim report rather than swallowing it', async () => {
+    const report = { delegations: [{ correlationKey: 'ex-acme:impl', cancelled: true }] }
+    const exec = new ConsensusAgentExecutor({
+      ...baseDeps,
+      standard: {
+        ...standard,
+        runsAsync: () => true,
+        startJob: vi.fn(),
+        pollJob: vi.fn(),
+        reclaimRun: vi.fn(async () => report),
+      } as unknown as AgentExecutor,
+    })
+    expect(await exec.reclaimRun({ runId: 'ex', jobId: 'ex-acme:impl', agentKinds: [] })).toEqual(
+      report,
+    )
+  })
+
+  it('answers nothing when the wrapped executor reclaims nothing', () => {
+    const exec = new ConsensusAgentExecutor(baseDeps)
+    return expect(
+      exec.reclaimRun({ runId: 'ex', jobId: 'ex-coder', agentKinds: [] }),
+    ).resolves.toBeUndefined()
+  })
+
   it('runsAsync is false while consensus is active, delegated otherwise', () => {
     const exec = new ConsensusAgentExecutor(baseDeps)
     expect(

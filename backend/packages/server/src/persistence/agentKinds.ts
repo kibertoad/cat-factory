@@ -32,6 +32,12 @@ import { UnavailableError, describeError } from '@cat-factory/kernel'
  * the caching seam exists to keep out while buying a saving nothing can measure. If a caller ever
  * puts this on a path that runs per STEP rather than per dispatch, it earns a real entry on the
  * `AppCaches` seam, not a memo here.
+ *
+ * The "assignment table" bound is by KIND, not bytes: a `bundled` skill inlines its whole body into
+ * each kind that declares it (see `AgentKindSource`), so a large playbook on several kinds inflates
+ * this response well past a plain table (the Nuxt UI capability is ~99 KB x 3 kinds). If that grows,
+ * serve bundled skills by reference here the way `catalog` refs are, rather than caching a read
+ * whose whole point is to be current. Tracked in #2269.
  */
 export class HttpAgentKindSource implements AgentKindSource {
   constructor(

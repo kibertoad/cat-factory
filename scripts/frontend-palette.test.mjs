@@ -8,7 +8,11 @@
 
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { findColourLiterals, findRawPalette } from './check-frontend-palette.mjs'
+import {
+  findColourLiterals,
+  findFixedBlackWhite,
+  findRawPalette,
+} from './check-frontend-palette.mjs'
 
 describe('findRawPalette', () => {
   it('flags raw utilities for every aliased hue, including variants and opacity', () => {
@@ -104,6 +108,31 @@ describe('findColourLiterals', () => {
     assert.deepEqual(findColourLiterals('#board .edge { stroke: rgb(1 2 3); }'), ['rgb('])
   })
 
+  // The literal regex covers the modern colour functions too. A guard with a zero-offender policy
+  // must enumerate the syntax space it claims, or a hole is a rule that silently does not apply.
+  // hex 3/4/6/8 and rgb()/rgba() are covered above; these are the rest.
+  it('flags every colour-function form the header enumerates', () => {
+    assert.deepEqual(findColourLiterals('  color: hsl(210 40% 96%);'), ['hsl('])
+    assert.deepEqual(findColourLiterals('  color: hsla(210, 40%, 96%, 0.5);'), ['hsla('])
+    assert.deepEqual(findColourLiterals('  --x: oklch(62.8% 0.15 264);'), ['oklch('])
+    assert.deepEqual(findColourLiterals('  --x: oklab(0.6 0.1 -0.1);'), ['oklab('])
+    assert.deepEqual(findColourLiterals('  --x: lab(52% 40 59);'), ['lab('])
+    assert.deepEqual(findColourLiterals('  --x: lch(52% 72 49);'), ['lch('])
+    assert.deepEqual(findColourLiterals('  --x: color(display-p3 1 0 0);'), ['color('])
+  })
+
+  it('covers the four hex widths and the 3/4-digit terminator boundary', () => {
+    assert.deepEqual(findColourLiterals('  a: #abc;'), ['#abc'])
+    assert.deepEqual(findColourLiterals('  a: #abcd;'), ['#abcd'])
+    assert.deepEqual(findColourLiterals('  a: #a1b2c3;'), ['#a1b2c3'])
+    assert.deepEqual(findColourLiterals('  a: #a1b2c3d4;'), ['#a1b2c3d4'])
+    // A 3/4-digit hex needs a value terminator (`"');,` or space) after it: a slot closed by `>`
+    // and a 5-hex-char word both stay clear. (A real 4-hex word before a space, `#cafe `, does
+    // match; that is the accepted cost of catching `#fff8;`.)
+    assert.deepEqual(findColourLiterals('<template #abc>'), [])
+    assert.deepEqual(findColourLiterals('const slug = "#faced"'), [])
+  })
+
   it('flags a hex alpha appended to a colour value', () => {
     assert.deepEqual(findColourLiterals(':style="{ backgroundColor: typeMeta.accent + \'22\' }"'), [
       "accent + '22'",
@@ -146,5 +175,47 @@ describe('findColourLiterals', () => {
       findColourLiterals("content: '#020618', // colour-literal-ok: first-paint fallback"),
       [],
     )
+  })
+})
+
+describe('findFixedBlackWhite', () => {
+  it('flags fixed white/black utilities, alpha and arbitrary-opacity forms included', () => {
+    assert.deepEqual(findFixedBlackWhite('class="bg-white"'), ['bg-white'])
+    assert.deepEqual(findFixedBlackWhite('class="text-black"'), ['text-black'])
+    assert.deepEqual(findFixedBlackWhite('class="border-white/5"'), ['border-white/5'])
+    assert.deepEqual(findFixedBlackWhite('class="bg-white/[0.02]"'), ['bg-white/[0.02]'])
+    assert.deepEqual(findFixedBlackWhite('class="ring-white/10"'), ['ring-white/10'])
+    assert.deepEqual(findFixedBlackWhite('class="border-white/5 bg-white/[0.02]"'), [
+      'border-white/5',
+      'bg-white/[0.02]',
+    ])
+    // A variant prefix precedes the utility and does not affect the match; a side border does.
+    assert.deepEqual(findFixedBlackWhite('class="hover:bg-black/20"'), ['bg-black/20'])
+    assert.deepEqual(findFixedBlackWhite('class="border-x-black"'), ['border-x-black'])
+  })
+
+  it('needs a whole-word colour and a left boundary', () => {
+    assert.deepEqual(findFixedBlackWhite('class="fill-whitesmoke"'), []) // not `white`
+    assert.deepEqual(findFixedBlackWhite('class="text-blackout"'), []) // not `black`
+    assert.deepEqual(findFixedBlackWhite('data-bg-white'), []) // no left boundary
+  })
+
+  it('reads code only: skips a comment line and honours the escape marker', () => {
+    assert.deepEqual(findFixedBlackWhite('// a bg-white panel used to sit here'), [])
+    assert.deepEqual(
+      findFixedBlackWhite("const C = 'border-default bg-black' // fixed-colour-ok: diff composite"),
+      [],
+    )
+  })
+
+  it('honours the marker on the line before, the eslint-disable-next-line shape', () => {
+    const prev = '<!-- fixed-colour-ok: diff canvas backdrop -->'
+    assert.deepEqual(findFixedBlackWhite('  <canvas class="rounded bg-black" />', prev), [])
+    // Without the preceding marker the same line is an offender.
+    assert.deepEqual(findFixedBlackWhite('  <canvas class="rounded bg-black" />'), ['bg-black'])
+  })
+
+  it('strips a trailing HTML comment, so a comment naming a utility is prose', () => {
+    assert.deepEqual(findFixedBlackWhite('<div class="bg-muted" /> <!-- was bg-white -->'), [])
   })
 })

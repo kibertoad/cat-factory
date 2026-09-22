@@ -154,3 +154,173 @@ describe('CompositeAgentExecutor', () => {
     ).resolves.toBeUndefined()
   })
 })
+
+// The THIRD arm. Its failure mode is the quiet one: a delegated kind answers `false` to both
+// predicates the other two arms route on, so without an arm of its own it falls through to the
+// inline executor: a one-shot LLM call over an implementer's prompt, producing confident prose
+// and no branch, with the run then advancing into a `ci` gate that has nothing to check.
+describe('CompositeAgentExecutor: delegated kinds', () => {
+  function delegatedRegistry() {
+    const registry = defaultAgentKindRegistry()
+    registry.register({
+      kind: 'acme:impl',
+      systemPrompt: 'You implement the change.',
+      agent: { surface: 'delegated', executor: 'acme:executor' },
+    })
+    return registry
+  }
+
+  it('routes a delegated kind to the delegated arm, never to inline', async () => {
+    const c = new CompositeAgentExecutor(
+      new Tagged('inline'),
+      new Tagged('container'),
+      delegatedRegistry(),
+      new Tagged('delegated'),
+    )
+    expect((await c.run(ctx('acme:impl'))).output).toBe('delegated')
+    // …and nothing else moved.
+    expect((await c.run(ctx('coder'))).output).toBe('container')
+    expect((await c.run(ctx('acceptance'))).output).toBe('inline')
+  })
+
+  it('throws for a delegated kind when no delegated executor is wired', () => {
+    // The same disposition an unwired container kind gets, for the same reason.
+    const c = new CompositeAgentExecutor(
+      new Tagged('inline'),
+      new Tagged('container'),
+      delegatedRegistry(),
+    )
+    expect(() => c.run(ctx('acme:impl'))).toThrow(/external \(delegated\) executor/)
+  })
+
+  it('ROUTES the poll off the handle rather than assuming the container', async () => {
+    // A poll rebuilds its handle from the persisted step. Hard-routing to the container polls one
+    // that was never started and settles the step against nothing.
+    const polled: string[] = []
+    const delegated: AgentExecutor = {
+      run: () => Promise.resolve({ output: 'delegated' }),
+      runsAsync: () => true,
+      startJob: () => Promise.resolve({ jobId: 'j' }),
+      pollJob: (handle: AgentJobHandle) => {
+        polled.push(handle.delegated!.executor)
+        return Promise.resolve({ state: 'running' as const })
+      },
+    } as AgentExecutor
+    const c = new CompositeAgentExecutor(
+      new Tagged('inline'),
+      new ReclaimableContainer(),
+      delegatedRegistry(),
+      delegated,
+    )
+    await c.pollJob({
+      jobId: 'j',
+      delegated: { executor: 'acme:executor', externalId: 'run-99' },
+    })
+    expect(polled).toEqual(['acme:executor'])
+  })
+
+  it('reclaims BOTH arms, and the delegated one ANSWERS', async () => {
+    // A run can hold a container and external work at once (a delegated implementer followed by a
+    // container fixer), so reclaiming one is not reclaiming the run.
+    const container = new ReclaimableContainer()
+    const delegated: AgentExecutor = {
+      run: () => Promise.resolve({ output: 'delegated' }),
+      runsAsync: () => true,
+      startJob: () => Promise.resolve({ jobId: 'j' }),
+      pollJob: () => Promise.resolve({ state: 'running' as const }),
+      reclaimRun: () =>
+        Promise.resolve({ delegations: [{ correlationKey: 'k', cancelled: true }] }),
+    } as AgentExecutor
+    const c = new CompositeAgentExecutor(
+      new Tagged('inline'),
+      container,
+      delegatedRegistry(),
+      delegated,
+    )
+    const report = await c.reclaimRun({
+      runId: 'exec-1',
+      jobId: 'exec-1-acme:impl',
+      agentKinds: ['acme:impl'],
+      delegations: [
+        {
+          executor: 'acme:executor',
+          correlationKey: 'k',
+          workspaceId: 'ws',
+          blockId: 'blk_1',
+          runId: 'exec-1',
+          agentKind: 'acme:impl',
+        },
+      ],
+    })
+    expect(container.reclaimed).toEqual(['exec-1'])
+    expect(report).toEqual({ delegations: [{ correlationKey: 'k', cancelled: true }] })
+  })
+
+  it('still cancels the external work when the CONTAINER reclaim throws', async () => {
+    // The two arms are independent resources. An unguarded container reclaim propagated before the
+    // delegated one ran, so `applyDelegationCancellation` recorded every live delegation as
+    // "could not stop the external work" while the executor that could stop it was never asked,
+    // and the external run carried on, opened its pull request and billed its tokens.
+    const container: AgentExecutor = {
+      run: () => Promise.resolve({ output: 'container' }),
+      runsAsync: () => true,
+      startJob: () => Promise.resolve({ jobId: 'j' }),
+      pollJob: () => Promise.resolve({ state: 'running' as const }),
+      reclaimRun: () => Promise.reject(new Error('DO reclaim exploded')),
+    } as AgentExecutor
+    const cancelled: string[] = []
+    const delegated: AgentExecutor = {
+      run: () => Promise.resolve({ output: 'delegated' }),
+      runsAsync: () => true,
+      startJob: () => Promise.resolve({ jobId: 'j' }),
+      pollJob: () => Promise.resolve({ state: 'running' as const }),
+      reclaimRun: (target: RunReclaimTarget) => {
+        for (const handle of target.delegations ?? []) cancelled.push(handle.correlationKey)
+        return Promise.resolve({ delegations: [{ correlationKey: 'k', cancelled: true }] })
+      },
+    } as AgentExecutor
+    const c = new CompositeAgentExecutor(
+      new Tagged('inline'),
+      container,
+      delegatedRegistry(),
+      delegated,
+    )
+    const report = await c.reclaimRun({
+      runId: 'exec-1',
+      jobId: 'exec-1-acme:impl',
+      agentKinds: ['acme:impl'],
+      delegations: [
+        {
+          executor: 'acme:executor',
+          correlationKey: 'k',
+          workspaceId: 'ws',
+          blockId: 'blk_1',
+          runId: 'exec-1',
+          agentKind: 'acme:impl',
+        },
+      ],
+    })
+    expect(cancelled).toEqual(['k'])
+    expect(report).toEqual({ delegations: [{ correlationKey: 'k', cancelled: true }] })
+  })
+
+  it('NAMES external work it cannot stop, instead of reporting a clean teardown', async () => {
+    const c = new CompositeAgentExecutor(new Tagged('inline'), null, delegatedRegistry())
+    const report = await c.reclaimRun({
+      runId: 'exec-1',
+      jobId: 'exec-1-acme:impl',
+      agentKinds: ['acme:impl'],
+      delegations: [
+        {
+          executor: 'acme:executor',
+          correlationKey: 'k',
+          workspaceId: 'ws',
+          blockId: 'blk_1',
+          runId: 'exec-1',
+          agentKind: 'acme:impl',
+        },
+      ],
+    })
+    expect(report).toMatchObject({ delegations: [{ correlationKey: 'k', cancelled: false }] })
+  })
+})

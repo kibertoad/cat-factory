@@ -106,6 +106,25 @@ export {
 // composite that routes repo-operating kinds to a sandbox, the container executor
 // that builds + dispatches the harness job, and the backend-polymorphic job client.
 export { CompositeAgentExecutor } from './agents/CompositeAgentExecutor.js'
+// The DELEGATED arm: a step whose work runs in a system the deployment already operates. Built by
+// one factory so the facades cannot wire it differently.
+export {
+  DelegatedAgentExecutor,
+  type DelegatedAgentExecutorDependencies,
+} from './agents/DelegatedAgentExecutor.js'
+export {
+  buildDelegatedAgentExecutor,
+  type DelegatedExecutorHostOptions,
+} from './agents/delegatedExecutorHost.js'
+// The executor-INDEPENDENT half of a dispatch's instructions, shared by the harness job body and
+// the delegated brief so the two can never tell an agent different things about one task.
+export {
+  type AgentBriefCore,
+  composeAgentBriefCore,
+  composeDelegationBrief,
+  composeRoleSystemPrompt,
+  type DelegationBriefTarget,
+} from './agents/brief.js'
 export {
   ContainerAgentExecutor,
   type ContainerAgentExecutorDependencies,

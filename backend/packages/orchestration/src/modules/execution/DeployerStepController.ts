@@ -43,6 +43,7 @@ import { TESTER_AGENT_KIND, UI_TESTER_AGENT_KIND } from './ci.logic.js'
 import type { AgentContextBuilder } from './AgentContextBuilder.js'
 import type { RunStateMachine } from './RunStateMachine.js'
 import type { AdvanceResult } from './advance.js'
+import { awaitingJob } from './awaitingJob.logic.js'
 
 /**
  * Step kinds whose run details surface the ephemeral-environment lifecycle: the
@@ -326,7 +327,7 @@ export class DeployerStepController {
     // `handleAgentStep`). Short-circuit BEFORE resolving targets so a parked re-attach
     // skips the workspace block-list read.
     if (step.jobId) {
-      return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
+      return awaitingJob(step, instance.currentStep, step.jobId)
     }
     // The same re-attach rule for the OTHER park this step owns. A live `deployWait` means a
     // frame's environment is already provisioned and still coming up, so re-park on it rather than
@@ -458,7 +459,7 @@ export class DeployerStepController {
     step.deployProvisioning = next.provisioning
     await this.attachEnvironmentProjection(workspaceId, instance.blockId, step, next.frameId)
     await this.runStateMachine.persistAndEmit(workspaceId, instance)
-    return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
+    return awaitingJob(step, instance.currentStep, step.jobId)
   }
 
   /**
@@ -984,7 +985,7 @@ export class DeployerStepController {
         // agent running fold — a deploy job makes no LLM calls anyway).
         await this.runStateMachine.emitInstance(workspaceId, instance, { rollUpMetrics: false })
       }
-      return { kind: 'awaiting_job', jobId: step.jobId!, stepIndex: instance.currentStep }
+      return awaitingJob(step, instance.currentStep, step.jobId!)
     }
 
     // The deploy container vanished (evicted/crashed). The shared recovery re-dispatches a fresh

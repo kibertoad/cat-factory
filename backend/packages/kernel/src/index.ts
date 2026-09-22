@@ -30,6 +30,10 @@ export {
   type RecognisedDataIntegrityError,
 } from './domain/data-integrity.js'
 export { sameSubtasks, sameSubtaskItems, parseSubtasks } from './domain/subtasks.logic.js'
+// The per-dispatch job id, shared by the three layers that must produce the same string from the
+// same three facts: the container executor, the deployer's dispatch logic, and the engine minting
+// a delegated step's correlation key.
+export { stepJobId } from './domain/job-id.js'
 // The prompt-caching policy lives in `@cat-factory/contracts` (the SPA has to agree about it
 // too); re-exported here so kernel's own consumers keep one import.
 export {
@@ -494,6 +498,38 @@ export {
   BinaryStoreRegistry,
   defaultBinaryStoreRegistry,
 } from './domain/binary-store-registry.js'
+
+// The THIRD executor class, beside inline and container: an external system a deployment already
+// runs takes one pipeline step, while cat-factory keeps the intake, the context, the policy, the
+// merge and the notifications around it. The port declares what such a system must be able to do
+// (start, be observed, be linked to); the registry is the by-reference seam a deployment puts its
+// own on. See `docs/initiatives/delegated-executors.md`.
+export type {
+  DelegatedExecutor,
+  DelegatedExecutorDefinition,
+  DelegatedFetch,
+  DelegatedFetchResponse,
+  DelegatedExecutorDeps,
+  DelegatedExecutorPresentation,
+  DelegatedExecutorTelemetry,
+  DelegatedPollPolicy,
+  DelegatedRepoFilesResolver,
+  DelegatedWorkBranchPolicy,
+  DelegationBrief,
+  DelegationHandle,
+  DelegationResult,
+  DelegationStart,
+  DelegationUpdate,
+} from './ports/delegated-executor.js'
+export {
+  DELEGATED_WORK_BRANCH_POLICIES,
+  DelegatedExecutorRegistrationError,
+} from './ports/delegated-executor.js'
+export {
+  type DelegatedExecutorView,
+  DelegatedExecutorRegistry,
+  defaultDelegatedExecutorRegistry,
+} from './domain/delegated-executor-registry.js'
 
 // Where those integrations are READ from: the in-process registry by default, the MOTHERSHIP's
 // over `/internal/binary-generators` on a mothership-mode node (whose own build can only hold a

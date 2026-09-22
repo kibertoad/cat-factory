@@ -8,19 +8,16 @@ import {
   type AgentKindRegistry,
   appendContainerDispatchDirectives,
   bugFixGuidanceFor,
-  composeBlockSystemPrompt,
   toolServersSection,
   FOLLOW_UP_GUIDANCE,
   PR_DESCRIPTION_GUIDANCE,
   isContainerBackedCompanion,
   resolvePrHeadNumber,
-  standardsDeliveredAsFiles,
-  standardsVerbosityFor,
   userPromptFor,
 } from '@cat-factory/agents'
+import { composeRoleSystemPrompt } from './brief.js'
 import { siblingCheckoutDir } from './harnessContract.js'
 import { prBody, testerInfraSpec } from './prompts.js'
-import { dispatchSystemPromptFor } from './promptOverrides.js'
 import type { RepoTarget } from './ContainerAgentExecutor.js'
 import type { RepoCheckout } from './resolveRepoTarget.js'
 
@@ -131,17 +128,12 @@ export function buildKindBody(
 ): { body: Record<string, unknown>; kind: RunnerDispatchKind } {
   // `parts` (common/webTools/workBranch/workBranchReady) is consumed by
   // `buildRegisteredAgentBody`, not directly here.
-  const baseRoleSystemPrompt = composeBlockSystemPrompt(
-    // The workspace's own prompt for this kind when it has one, else the shipped base — see
-    // `dispatchSystemPromptFor`, which every container-dispatch prompt assembly rides.
-    dispatchSystemPromptFor(context, registry),
-    context.block,
-    registry.standardsDelivery(context.agentKind),
-    standardsDeliveredAsFiles(context.injectedContextFiles),
-    // Implementer kinds (coder/fixer/…) fold the condensed `brief` standards; reviewer/planner
-    // kinds get the full bodies. See `standardsVerbosityFor` / the `brief-standards` trait.
-    standardsVerbosityFor(context.agentKind, registry),
-  )
+  // The executor-INDEPENDENT half: the workspace's own prompt for this kind when it has one (else
+  // the shipped base), the block's resolved standards at this kind's verbosity, and its trait
+  // guidance. Composed by `composeRoleSystemPrompt`, which a DELEGATED dispatch's brief calls too,
+  // so an external executor and this harness are told the same thing about the work. Everything
+  // layered below it is about the CONTAINER.
+  const baseRoleSystemPrompt = composeRoleSystemPrompt(context, registry)
   // The directives EVERY container job carries, whatever the kind: what the execution environment
   // can and cannot do (platform facts no agent can derive from the repository, absent which a coder
   // and its reviewer each rediscovered that the Dockerfile they were asked for could not be built

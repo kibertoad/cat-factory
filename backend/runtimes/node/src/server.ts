@@ -358,6 +358,13 @@ export interface StartOptions {
    */
   judgeRegistry?: NodeContainerOptions['judgeRegistry']
   /**
+   * App-owned DI seam for DELEGATED EXECUTORS (an external system this deployment already runs,
+   * taking one pipeline step): a deployment news a `defaultDelegatedExecutorRegistry()`,
+   * registers its `DelegatedExecutorDefinition`s on it by reference, and passes it here.
+   * Absent → the empty default (the platform ships none).
+   */
+  delegatedExecutorRegistry?: NodeContainerOptions['delegatedExecutorRegistry']
+  /**
    * App-owned DI seam for custom STEP COMPLETION RESOLVERS: a deployment news a
    * `defaultStepResolverRegistry()`, registers its resolvers on it by reference, and passes it
    * here. Absent → the empty default (the built-in `merger` resolver is a privileged engine
@@ -866,6 +873,7 @@ async function bootServer(
     pipelineRegistry: options.pipelineRegistry,
     gateRegistry: options.gateRegistry,
     judgeRegistry: options.judgeRegistry,
+    delegatedExecutorRegistry: options.delegatedExecutorRegistry,
     stepResolverRegistry: options.stepResolverRegistry,
     vcsRegistry: options.vcsRegistry,
     promptFragmentRegistry: options.promptFragmentRegistry,
