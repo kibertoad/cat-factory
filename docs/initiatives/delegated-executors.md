@@ -5,6 +5,16 @@
 > This is the durable source of truth for a multi-PR initiative. Read it FIRST before picking up
 > the next slice; update the checklist at the end of each PR.
 
+> **Provenance of PR 6.** The first consumer to build against the seam (a `DelegatedExecutor`
+> running a [Ratchet](https://github.com/lokalise/ratchet) pipeline on GitHub Actions, measured
+> against `kernel@0.348.1` / `agents@0.166.3` / `local-server@0.151.5` / `node-server@0.231.5` and
+> cat-factory `main` at `bc073ab6`) reported three gaps in the seam and six in Ratchet. The three
+> here were re-verified against HEAD and against the published surface: all three confirmed, none
+> stale, and the seam's whole timing is that **nothing had been published yet**, so each landed as
+> the shape it should have had rather than beside a compatibility shim. Two of the three asks were
+> granted with a DIFFERENT remedy than the one requested; see §PR 6 below for what and why. The
+> report's other six findings are against `lokalise/ratchet` and are not ours.
+
 ## Goal & rationale
 
 cat-factory today owns the whole vertical: intake (tracker webhooks, bug hunt, the assistant),
@@ -269,6 +279,65 @@ so the palette can label the kind; the boolean is left in place (the snapshot is
 removing it buys nothing this slice). The pipeline builder shows the executor's presentation on the
 kind card, so a person composing a pipeline sees which steps leave the platform.
 
+### D11. Who creates the work branch is DECLARED, not assumed
+
+`branches.work` is the deterministic per-task branch every step of a run's pipeline shares. For a
+container step the harness's own clone brings it into existence; for a delegated step nothing did,
+and the seam said nothing about it. Both readings were live at once: `dispatchDeliversCheckout`
+answers TRUE for a delegated kind ("the executor is handed a repository and a work branch and
+checks them out itself") while `composeBrief` explicitly declined to create the ref, so the brief
+told the agent it was working on a branch that was not there.
+
+Neither default is safe. A CI runner fails at `actions/checkout`, or worse, substitutes a branch
+of its own and SUCCEEDS on a ref the platform never recorded, at which point the run reports having
+produced nothing over a pull request nobody links to. And an unconditional create leaves an empty
+ref behind for every run whose external work never landed.
+
+So `DelegatedExecutorDefinition.workBranch` is a REQUIRED `'platform-creates' | 'executor-creates'`,
+which is the `telemetry` pattern: the deployment knows something the platform cannot, and the
+question is put in front of whoever writes the registration rather than discovered at checkout
+hours into a run. `platform-creates` writes through the same checkout-free binding a pre/post-op
+uses, so the engine owns the one VCS write rather than every deployment re-implementing it over a
+second credential.
+
+The refusal lives at the DISPATCH, not where the arm is built. The Worker builds its container per
+request, so a throw at the build turns a delegated-only misconfiguration into a 500 on the board,
+the API and the settings the operator would go and fix it on: a blast radius far wider than the
+fault. The dispatch is also the altitude at which the two distinguishable causes separate (this
+deployment has no VCS provider configured, versus this workspace has connected no repository), and
+both carry the translated `delegated_work_branch_unprepared`.
+
+Which branch is NOT the engine's own answer either: the task's apriori WORKING branch wins when it
+declared one, through the same `resolveAprioriWorkingBranch` the container dispatch and the
+repo-ops controller use. Delegating a step changes nothing about where the run builds, and the
+first cut of this slice hard-coded `cat-factory/<blockId>` on the brief: on a task that named a
+branch, the platform would have created a competing empty ref while the pull request, the `ci` gate
+and the merger all rode the branch the user picked. An apriori branch is probed, never created
+([ADR 0021](../../backend/docs/adr/0021-apriori-branches.md)), so a dispatch onto a missing
+one is refused rather than forked off base.
+
+The alternative considered and rejected was an `ensureWorkBranch()` callback on
+`DelegatedExecutorDeps`. Same write in the same place, but an executor author still has to know to
+call it, and the one who does not is exactly the one the declaration exists to catch.
+
+### D12. The GitHub Actions helper resolves its workflow per dispatch
+
+`GitHubActionsExecutorDescription` fixed `owner` / `repo` / `workflowFile` / `ref` at registration,
+which cannot express the ordinary multi-repo shape: a caller shim committed to each onboarded
+repository puts the workflow wherever the work is, so the dispatch target varies per brief while
+the registration stays one. Everything else in the helper was already per-call, and the result
+reader already took the work repo off `handle.repo`; the dispatch was the single part that could
+not follow.
+
+The requested remedy was to make the four fields `(brief) => string`. Rejected: `poll` and `cancel`
+are handed a HANDLE, not a brief, so that signature type-checks at dispatch and then addresses a
+different repository on every call after it, reporting a live run as one that never appeared. What
+landed instead is one `workflow` field that is a location OR a function of a
+`GitHubActionsWorkflowScope`, deliberately narrowed to the INTERSECTION of what a brief and a
+handle carry, so the failure is unrepresentable rather than merely documented. A handle that names
+no work repository is refused rather than defaulted, exactly as the result reader refuses a handle
+with no branches.
+
 ### D7. Completion is poll-driven first; push-wake is an additive second slice
 
 The `awaiting_job` park is a poll loop on both drivers and that is enough for the stated
@@ -397,6 +466,20 @@ like `/v1/artifacts/ingest`, not public API.
       step card and `llm.reporting` on both run rollups, i18n in all ten locales.
 - [x] **PR 4: the GitHub Actions helper and the example package** (D10):
       `@cat-factory/delegation-github-actions` and `backend/internal/example-delegated-executor`.
+- [x] **PR 6: the first consumer's gaps** (D11, D12). `DelegationBrief.blockId`, so the
+      `repoFiles` resolver in the deps bundle is reachable from `start`, which is the only moment
+      its stated purpose ("before starting") exists; `workBranch` on the definition plus the
+      engine's idempotent create and the entry-point assertion; the helper's `workflow` resolver.
+      Landed BEFORE the first publish, so all three are the shape the seam ships with rather than a
+      second one beside the first.
+- [ ] **Converge the container path's work-branch ensure onto `RepoFiles`.** The delegated path
+      creates the branch through the provider-neutral binding a pre/post-op writes with; the
+      container path still uses `server/src/github/ensureWorkBranch.ts`, which is GitHub REST over
+      a minted installation token (so GitLab needs a second implementation) and answers a
+      best-effort boolean where a dispatch has to be refused. Two implementations of one operation
+      is one too many, and a change to the create semantics has to be made in both or the paths
+      quietly disagree about what the work branch means. Not folded into PR 6: it changes a wired
+      port on both facades and belongs with its own conformance assertion.
 - [ ] **PR 5: push-wake and per-call telemetry ingest** (D7 second half, D8's second and third hooks).
       See "What is still open" below: the first is blocked on the drivers' park machinery, and the
       second has no consumer until an executor reports.
@@ -490,6 +573,24 @@ counts delegated steps whose step metrics hold no calls, so an executor that dec
   configured repository found nothing on every run and reported every one as having opened no pull
   request. A guess on either puts the wrong pull request on the block, which becomes the `ci`
   gate's checks and the merger's diff.
+- **Every dispatch-time fact an executor needs has to be ON THE BRIEF, and every later one on the
+  HANDLE.** The deps bundle is built ONCE per app, so a resolver in it is keyed by arguments the
+  call site must supply: `repoFiles` takes `{ workspaceId, blockId }`, and with no `blockId` on the
+  brief the one dependency that exists for the DISPATCH path was reachable only from `poll` and
+  `cancel`, where staging a context layer is too late to matter. The first consumer reached the
+  repository over a second credential of its own instead. `task.id` is not a substitute: it falls
+  back to the run for a context carrying no block.
+- **A branch-naming rule with three call sites gains a fourth silently.** `branches.work` on the
+  delegated brief was written as a literal `cat-factory/<blockId>` beside three sites that resolve
+  the task's apriori working branch first, and nothing failed: the derived name is right for every
+  task that declares no branch, which is most of them. Anything naming a ref, a checkout or a base
+  goes through the shared rule in `@cat-factory/contracts`, never a template literal.
+- **A JOIN neither side owns is a gap even when both sides are correct.** The work branch was the
+  worked example: the engine had a defensible reason not to create it (no empty refs for runs that
+  never landed) and the executor had no way to know that was the contract, so the prose on one side
+  and the code on the other disagreed with nothing failing. When a new fact is like this, DECLARE
+  it on the definition rather than defaulting it, and let the entry point assert what the
+  declaration then requires.
 - **`step.delegated` is not the question; `inFlightDelegation(step)` is.** The record OUTLIVES the
   work it describes, deliberately: its attempt log is the evidence for why a step is being re-run,
   and `resetStepForRerun` clears `jobId` and keeps the record. So a step that delegated its own work
@@ -514,6 +615,27 @@ counts delegated steps whose step metrics hold no calls, so an executor that dec
   somewhere else, and only the executor can turn the first into the second. The composite's two
   arms are independent resources: an unguarded container reclaim that throws skipped the external
   cancel entirely and recorded every live delegation as "could not stop the external work".
+
+## Checked and genuinely fine
+
+Verified while working the first consumer's report, recorded so the next round does not
+re-investigate them.
+
+- **The three problems `@cat-factory/delegation-github-actions` solves are the right three**, and
+  the consumer said so independently: correlating a 204, mapping Actions conclusions onto a
+  retryable/terminal pair, and recovering a result from the repository are each a day of getting
+  subtly wrong and none is about anybody's workflow. D12 is a complaint about one signature.
+- **The telemetry stance survives contact with a real executor that reports nothing.** The consumer
+  declared `telemetry: 'not-reported'`, read "usage not reported by ‹executor›" on the step card and
+  `delegatedStepsWithoutUsage` in the rollup, and reported the outcome as "honest but real" rather
+  than as a defect. Nothing to change: the gap is in what Ratchet publishes, and the platform
+  already says it does not know.
+- **`correlationKey` plus a caller-rendered `run-name` is the only handle Actions offers**, checked
+  again against the alternatives the consumer also ruled out (inputs are not queryable, `created`
+  has one-second granularity, a called workflow cannot set its caller's run name).
+- **`poll` reporting the workflow STEP as its phase is the finest progress the API exposes** for a
+  run whose stages live in one step's stdout. That is the executor's ceiling, not the seam's: the
+  port takes whatever phase vocabulary the executor has.
 
 ## Deliberately NOT pursued
 

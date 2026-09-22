@@ -7,6 +7,8 @@ import {
   type DelegationBrief,
   type DelegationHandle,
   type DelegationUpdate,
+  type RepoFiles,
+  type ResolveRunRepoContext,
 } from '@cat-factory/kernel'
 import { defaultAgentKindRegistry, type AgentKindRegistry } from '@cat-factory/agents'
 import {
@@ -49,6 +51,8 @@ export interface FakeDelegatedExecutorOptions {
   cancelable?: boolean
   /** Whether it declares its own telemetry. Absent ⇒ `not-reported`, the honest default. */
   telemetry?: DelegatedExecutorDefinition['telemetry']
+  /** Who creates the work branch. Absent ⇒ the executor, which is what this fake claims. */
+  workBranch?: DelegatedExecutorDefinition['workBranch']
 }
 
 const DEFAULT_UPDATES: DelegationUpdate[] = [
@@ -90,6 +94,10 @@ export function fakeDelegatedExecutor(options: FakeDelegatedExecutorOptions = {}
     },
     poll: { intervalMs: 1000, maxDurationMs: 10_000 },
     telemetry: options.telemetry ?? 'not-reported',
+    // Absent ⇒ the executor makes its own branch, which is what a fake that pushes nowhere claims.
+    // A suite asserting the platform's half passes `'platform-creates'` together with
+    // {@link ConformanceAppOptions.delegatedRepoFiles}.
+    workBranch: options.workBranch ?? 'executor-creates',
     create: () => ({
       async start(brief) {
         calls.starts.push(brief)
@@ -114,6 +122,37 @@ export function fakeDelegatedExecutor(options: FakeDelegatedExecutorOptions = {}
     }),
   }
   return { definition, calls }
+}
+
+/** What {@link fakeDelegationRepoFiles} recorded, so a suite asserts the ENGINE's write. */
+export interface FakeDelegationRepo {
+  repoFiles: RepoFiles
+  /** The repository's refs, so a suite states what exists rather than scripting a call order. */
+  heads: Record<string, string>
+  created: { branch: string; fromSha: string }[]
+}
+
+/**
+ * A `RepoFiles` over an in-memory ref table: what a `platform-creates` dispatch writes through.
+ *
+ * In memory rather than against each facade's real VCS adapter because the fact under test is not
+ * the adapter: it is that BOTH facades hand the delegated arm a repo binding at all. The Worker
+ * threads `late.resolveRunRepoContext` and Node threads `githubGateDeps.resolveRunRepoContext`
+ * through two different assemblies, and a facade that simply omitted it would dispatch every
+ * `platform-creates` step onto a branch nobody created, which nothing else here would catch.
+ */
+export function fakeDelegationRepoFiles(heads: Record<string, string> = {}): FakeDelegationRepo {
+  const created: { branch: string; fromSha: string }[] = []
+  const repoFiles = {
+    async headSha(branch: string) {
+      return heads[branch] ?? null
+    },
+    async createBranch(branch: string, fromSha: string) {
+      created.push({ branch, fromSha })
+      heads[branch] = fromSha
+    },
+  } as unknown as RepoFiles
+  return { repoFiles, heads, created }
 }
 
 /** A registry carrying one fake executor, as a facade's composition root would hold it. */
@@ -176,14 +215,24 @@ export function withDelegatedArm(
   registries: {
     delegatedExecutorRegistry?: DelegatedExecutorRegistry
     agentKindRegistry?: AgentKindRegistry
+    /**
+     * The repo binding a `platform-creates` dispatch creates its work branch through. Absent ⇒
+     * the arm is built with none, which is a deployment that configured no VCS provider and which
+     * the suite also asserts (such a dispatch is refused, never silently started).
+     */
+    delegatedRepoFiles?: RepoFiles
   },
 ): AgentExecutor {
   // Both or neither. The kind registry is what says which kinds are delegated, so wrapping with
   // only the executor registry would compose a composite that can never route to it: green, and
   // asserting nothing. Every other conformance app is left exactly as it was.
-  const { delegatedExecutorRegistry, agentKindRegistry } = registries
+  const { delegatedExecutorRegistry, agentKindRegistry, delegatedRepoFiles } = registries
   if (!delegatedExecutorRegistry || !agentKindRegistry) return fake
+  const resolveRunRepoContext: ResolveRunRepoContext | undefined = delegatedRepoFiles
+    ? async () => ({ repo: delegatedRepoFiles, baseBranch: 'main', repoId: '1001' })
+    : undefined
   const delegated = buildDelegatedAgentExecutor({
+    ...(resolveRunRepoContext ? { resolveRunRepoContext } : {}),
     delegatedExecutorRegistry,
     agentKindRegistry,
     resolveRepoTarget: async () => ({

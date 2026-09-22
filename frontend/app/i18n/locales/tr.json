@@ -637,7 +637,8 @@
         "service_catalog_response_too_large": "Geliştirici portalı, bu platformun tek bir yanıtta tutacağından daha fazla veri döndürdü. Servis kataloğu ayarlarını açıp servis sınırını düşürün ya da arayüz tanımlarının aktarımını kapatın, sonra yeniden aktarın.",
         "assistant_generation_failed": "Asistanın model sağlayıcısı yanıt vermedi. Doğru yapılandırılmış durumda ve burada kurulacak bir şey yok: isteği birazdan yeniden deneyin.",
         "assistant_reply_unreadable": "Asistanın modeli, bu platformun karar olarak uygulayamayacağı bir yanıt verdi. Yeniden ifade etmek nadiren işe yarar: model ayarlarından asistan için başka bir model seçin.",
-        "delegated_executor_failed": "Dış yürütücü bu adımı başlatamadı. Sorun bu kurulumda değil, işi yapan sistemde: onun kendi günlüklerine bakıp yeniden deneyin."
+        "delegated_executor_failed": "Dış yürütücü bu adımı başlatamadı. Sorun bu kurulumda değil, işi yapan sistemde: onun kendi günlüklerine bakıp yeniden deneyin.",
+        "delegated_work_branch_unprepared": "Platform, bu adımın yürütücüsünün gönderildiği çalışma dalını hazırlayamadı, bu yüzden hiçbir şey başlatılmadı. Ya depo bağlantısının bu dala yazma izni yok ya da görev henüz var olmayan bir dalı belirtiyor: ayrıntılar hangisi olduğunu söylüyor."
       }
     },
     "reason": {

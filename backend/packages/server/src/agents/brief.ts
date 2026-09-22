@@ -119,6 +119,7 @@ export function composeDelegationBrief(
   args: {
     correlationKey: string
     workspaceId: string
+    blockId: string
     runId: string
     stepIndex: number
     target: DelegationBriefTarget
@@ -143,11 +144,16 @@ export function composeDelegationBrief(
   return {
     correlationKey: args.correlationKey,
     workspaceId: args.workspaceId,
+    // The same value `task.id` carries, stated twice because the two are different contracts: this
+    // one is the LOOKUP KEY `deps.repoFiles` takes beside the workspace, and `task` is the work's
+    // identity as an executor records it. An executor keying its repository read off the identity
+    // is one rename away from a resolver that answers nothing.
+    blockId: args.blockId,
     runId: args.runId,
     stepIndex: args.stepIndex,
     agentKind: context.agentKind,
     task: {
-      id: context.block.id ?? args.runId,
+      id: args.blockId,
       title: context.block.title,
       description: context.block.description,
       ...(args.target.trackerRef ? { trackerRef: args.target.trackerRef } : {}),

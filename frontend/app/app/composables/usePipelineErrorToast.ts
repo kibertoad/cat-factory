@@ -463,6 +463,8 @@ const REASON_DESCRIPTION_KEYS: Record<UnavailableReason | BootstrapReferenceReas
   assistant_generation_failed: 'errors.unavailable.description.assistant_generation_failed',
   assistant_reply_unreadable: 'errors.unavailable.description.assistant_reply_unreadable',
   delegated_executor_failed: 'errors.unavailable.description.delegated_executor_failed',
+  delegated_work_branch_unprepared:
+    'errors.unavailable.description.delegated_work_branch_unprepared',
 }
 
 /**

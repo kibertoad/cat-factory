@@ -22,6 +22,7 @@ const EXECUTOR: DelegatedExecutorDefinition = {
   presentation: { label: 'Acme', icon: 'i-lucide-bot', description: 'Acme runs the change' },
   poll: { intervalMs: 60_000, maxDurationMs: 3_600_000 },
   telemetry: 'not-reported',
+  workBranch: 'executor-creates',
   create: () => ({
     start: async () => ({ externalId: 'x' }),
     poll: async () => ({ state: 'running' }),
@@ -150,6 +151,20 @@ describe('DelegatedExecutorRegistry.register', () => {
     expect(() =>
       defaultDelegatedExecutorRegistry().register({ ...EXECUTOR, id: 'executor' }),
     ).toThrow(DelegatedExecutorRegistrationError)
+  })
+
+  it('refuses a work-branch policy this build does not know', () => {
+    // Every `=== 'platform-creates'` test in the engine skips an unrecognised value, so a
+    // misspelling silently means "the executor makes its own branch": the deployment believes it
+    // opted in, nothing is written, and the failure surfaces hours later as a checkout against a
+    // branch that is not there. The type catches nothing where a registration comes from
+    // JavaScript or from a JSON-driven composition module, which is where this reaches.
+    expect(() =>
+      defaultDelegatedExecutorRegistry().register({
+        ...EXECUTOR,
+        workBranch: 'platform_creates' as DelegatedExecutorDefinition['workBranch'],
+      }),
+    ).toThrow(/work-branch policy/)
   })
 
   it('refuses a window shorter than one poll interval', () => {

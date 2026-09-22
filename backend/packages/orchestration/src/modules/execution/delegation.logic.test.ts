@@ -70,6 +70,7 @@ function registries(options: { registerExecutor?: boolean } = {}) {
       presentation: { label: 'Acme', icon: 'i-lucide-bot', description: 'Acme runs it' },
       poll: POLL,
       telemetry: 'not-reported',
+      workBranch: 'executor-creates',
       create: () => ({
         start: async () => ({ externalId: 'x' }),
         poll: async () => ({ state: 'running' }),
