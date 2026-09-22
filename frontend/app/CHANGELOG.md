@@ -1,5 +1,116 @@
 # @cat-factory/app
 
+## 0.303.0
+
+### Minor Changes
+
+- bc073ab: Delegated executors: a pipeline step can now run in a system the deployment already operates (its own GitHub-Actions loop, job runner or PR bot) while cat-factory keeps the intake, the standards, the CI gate, the merge policy and the notifications around it.
+  
+  A deployment registers a `DelegatedExecutorDefinition` on the new app-owned `DelegatedExecutorRegistry` and points an agent kind at it with `agent: { surface: 'delegated', executor }`. The executor is handed the same brief the container harness composes, so a workspace's prompt overrides and agreed standards reach both identically; its credentials resolve per call through the existing `ToolSecretResolver` port and never touch the brief.
+  
+  Each definition declares who creates the work branch its dispatches name. `workBranch: 'platform-creates'` has the engine create it at the base head just before `start`, idempotently, which is what an external CI runner needs: `actions/checkout` on a branch that is not there fails the job before any of the work begins, and a runner that quietly substitutes a branch of its own publishes to a ref the platform never recorded. `workBranch: 'executor-creates'` writes nothing, so a run whose external work never landed leaves no empty ref behind. Either way the branch is the one the rest of the run uses: a task's own apriori working branch when it declared one (probed, never created, exactly as the container dispatch treats it), else `cat-factory/<blockId>`.
+  
+  Two things the platform states rather than guesses. A delegated step's model calls never reach this deployment's proxy, so the step card says "usage not reported by <executor>" and the run rollups carry `llm.reporting.delegatedStepsWithoutUsage` instead of rendering a zero. And a run stopped while external work is still running records whether it actually stopped: an executor that declares no `cancel` leaves its run alive, and the record says so.
+  
+  Ships with `@cat-factory/delegation-github-actions` (a `DelegatedExecutor` over Actions: correlation by run name, since `workflow_dispatch` returns no run id) and a runnable example under `backend/internal/example-delegated-executor`. Its `workflow` is a location or a function of the dispatch, so one registration can dispatch against every repository a deployment onboards; the resolver sees only facts a brief and a handle both carry, because `poll` and `cancel` run hours later holding just the handle.
+  
+  A failure the executor calls `retryable` (a cancelled run, a runner-pool restart, a rate limit) buys one fresh dispatch on an engine-set budget, and everything else is terminal. Registered executors reach their own systems through a fetch the platform has already guarded: the deployment's outbound-URL policy on the first URL and on every redirect hop (the same guard the notification webhook sender uses), a deadline so a hung endpoint cannot hold a poll open indefinitely, and a running byte cap on what one response may return.
+  
+  Two declaration-time refusals, because neither has a reading under which it does something. A definition whose credentials resolve to the same injection name is refused at registration: the bag an executor is handed is keyed by the name it reads, so one name can carry only one value. And a delegated kind naming an executor this process does not register is refused by name at dispatch rather than falling through to the container harness, which is the mothership-mode case where nothing boot-validates the kinds a node resolves.
+  
+  Public API 1.75.0, both additive: `AgentFailureKind` gains `delegated_failed`, so an external system's verdict is classified as its own thing rather than as a container that was shut down, and the `llm` totals on the two debug run surfaces gain `reporting`, saying how many of a run's steps ran on an executor that files no usage.
+  
+  Internals: `AgentSurface` gains `delegated`, `AsyncAgentExecutor.reclaimRun` may return a `RunReclaimReport`, `AgentJobHandle` and `DelegationHandle` carry the run's block (so a poll and a cancel resolve credentials in the scope the dispatch used), and `PipelineStep` gains `delegated` plus `delegatedRetries`. Five new `error.details.reason` values, all additive: `delegated_executor_unwired` (409), `delegated_step_async_only` (409), `delegated_claim_missing` (409), `delegated_executor_failed` (503) and `delegated_work_branch_unprepared` (503, the platform's own VCS write rather than the executor's system).
+- 5118fdd: Themes as Nuxt UI theme editor documents, with a theme switch. The Appearance picker gains a
+  Theme group with two built-ins: Cat Factory (indigo on slate, the default) and the editor's own
+  Mono preset (black on a pure grey neutral, generous radius, Geist). A theme is the sparse document
+  the editor (https://ui.nuxt.com/theme) edits and shares, applied at runtime: aliases land on
+  `app.config` `ui.colors`, default variants on `ui.<component>`, tokens / radius / fonts on one
+  injected stylesheet. The pre-JS loading shell wears the active theme from a per-theme, per-mode
+  cache of its computed colours. The built-in faces (Geist, Geist Mono) are self-hosted through
+  `@nuxt/fonts`. Importing a user's own theme is the next change.
+- cc7d5b7: Import a theme built in the Nuxt UI theme editor (https://ui.nuxt.com/theme). The Appearance
+  menu gains "Import a Nuxt UI theme": paste the editor's share link or the raw document JSON, name
+  it, and the theme is stored in this browser and applied; the active imported theme can be removed
+  from the same menu. A shorthand link that names an editor preset rebuilds from the preset table.
+  A name another theme already uses is disambiguated ("Mono (2)") and the dialog shows the name that
+  will be saved while the user types. An imported theme's font is applied as a family name only, so
+  the deployment provides the face.
+- 7c185f1: Light mode and a colour-mode switcher.
+  
+  Colour mode now follows the visitor's system preference and the new Appearance picker at the
+  sidebar bottom (system / light / dark), instead of being pinned dark; the browser chrome follows
+  the app's pick, not the OS.
+  
+  Every colour in the SPA is now a theme token. Status surfaces move from fixed palette shades
+  (`text-amber-300`, `bg-rose-950/40`) onto the app's mirrored `app-<alias>-<n>` tokens, whose dark
+  value is the exact shade the raw class used and whose light value is the mirrored shade; brand
+  accents move from numbered indigo shades onto Nuxt UI's bare `primary` alias (a few shades collapse
+  to one per mode); the per-kind identity colours (agent kinds, task types, step kinds) move from hex
+  onto mode-adaptive `app-hue-<h>` tokens, while task status, step state and
+  verdict colours take the semantic aliases directly (`done` is now the muted grey of a finished
+  state rather than a second green one shade from `pr_ready`); the board canvas, the dot grid, the
+  prose reader and the status halos ride tokens too. Dark mode is unchanged; light mode renders coherently. `red` and `rose` unify on
+  the `error` alias (rose), a small hue shift on the few `red` sites. `scripts/check-frontend-palette.mjs`
+  now bans every fixed-palette colour utility, not only slate/indigo.
+
+### Patch Changes
+
+- 1fc4ff1: Dependency refresh, direct and transitive, held to the 24h `minimumReleaseAge` window.
+  
+  Three majors move with it. The `@toad-contracts/*` family goes `0.x` to `1.0.0`, which redesigns
+  how a contract declares a non-JSON response: a status code now carries a media-type content map
+  rather than a tagged marker, and the `ContractNoBody` symbol is request-body-only. Every response
+  declaring it becomes `noBodyResponse()`, the form that survives; the symbol stays where it already
+  meant a request. `@vueuse/core` goes to `15.0.0` and `@openrouter/ai-sdk-provider` to `3.1.0`.
+  
+  The Vercel AI SDK family moves as one set (`ai@7.0.107` with `@ai-sdk/anthropic@4.0.58`,
+  `@ai-sdk/openai@4.0.71`, `@ai-sdk/openai-compatible@3.0.53`, `@ai-sdk/amazon-bedrock@5.0.88`),
+  staying inside the majors `workers-ai-provider@4` pairs with, so `@ai-sdk/provider` keeps a single
+  identity across the proxy and the inline callers. Also `@aws-sdk/client-s3@3.1136.0`,
+  `pg-boss@12.33.2`, `turbo@2.11.2` and `@types/node@26.6.2`.
+  
+  `vitest` stays on 4: `@cloudflare/vitest-pool-workers@0.22.0` peer-requires `^4.1.0`, so taking
+  vitest 5 would leave the Worker suite running against a pool that never declared it.
+  `wrangler` and `@cloudflare/workers-types` stay put for the same kind of reason: the pool still
+  pins `wrangler@4.124.0`, and the types' version IS the resolved workerd's date.
+- 09bd94b: Dependency refresh, direct and transitive, held to the 24h `minimumReleaseAge` window.
+  
+  The Vercel AI SDK family moves as one set (`ai@7.0.102 → 7.0.106` with `@ai-sdk/anthropic@4.0.57`,
+  `@ai-sdk/openai@4.0.70`, `@ai-sdk/openai-compatible@3.0.52`, `@ai-sdk/amazon-bedrock@5.0.87`,
+  `@ai-sdk/provider@4.0.17`), staying inside the majors `workers-ai-provider@4` pairs with. Every
+  member resolves the same `@ai-sdk/provider@4.0.17` and `@ai-sdk/provider-utils@5.0.44`, so the
+  provider interface stays a single identity across the proxy and the inline callers.
+  
+  Also `@aws-sdk/client-s3@3.1135.0`, `pg-boss@12.33.1`, `knip@6.37.0`, and on the frontend the whole
+  pinned Vue family to `3.5.43` with `vue-router` to `5.3.1`.
+  
+  `wrangler` and `@cloudflare/workers-types` deliberately stay put: `@cloudflare/vitest-pool-workers`
+  still pins `wrangler@4.124.0`, and the types' version IS the resolved workerd's date, so moving
+  either alone splits the runtime the Worker suite proves from the one that ships.
+- facb6a2: Add a fixed white/black rule to the SPA colour-token guard
+  (`scripts/check-frontend-palette.mjs`), the lexical half of the #2242 review
+  follow-up: `bg-white`, `text-black`, `border-white/5` and the like are invisible
+  or wrong in light mode, so they join the existing raw-palette, numbered-alias and
+  colour-literal bans. A deliberate exception says why with a `fixed-colour-ok:`
+  comment, on the line or the one above. The one in-tree offender, the
+  difference-composite canvas in `ImageCompare.vue`, carries that marker. No
+  behaviour change.
+- c5df391: Route every SPA colour through the Nuxt UI theme so `app.config.ts` actually drives the UI, and
+  make the theme light-capable. Greys move from raw Tailwind palette classes (`bg-slate-900`,
+  `text-slate-400`) onto Nuxt UI role tokens (`bg-default`, `text-muted`, `border-default`, ...) that
+  flip with the colour mode; the five grey shades with no role token use hand-defined `app-*` flipping
+  tokens; `text-white` becomes `text-highlighted`; brand accents use the `primary` alias.
+  
+  Dark mode is unchanged (every role/`app-*` token resolves to the exact shade it replaced; verified
+  by pixel-diff against the prior build, with one sub-perceptual `backdrop-blur` toolbar artifact
+  noted). `colorMode` shipped pinned dark when this landed; the theme layer is light-capable and the
+  stacked follow-up in this release turns light on and adds the colour-mode switch. A new e2e `palette-token-parity` dark-identity test
+  and `scripts/check-frontend-palette.mjs` guard against regressions.
+- Updated dependencies [1fc4ff1]
+- Updated dependencies [bc073ab]
+  - @cat-factory/contracts@0.356.0
+
 ## 0.302.2
 
 ### Patch Changes
