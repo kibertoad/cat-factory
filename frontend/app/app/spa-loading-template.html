@@ -4,6 +4,29 @@
      brand name (a proper noun, identical in every locale) so it stays locale-neutral.
      Wired via app.spaLoadingTemplate in nuxt.config.ts. -->
 <div class="cf-spa-loader" role="status" aria-label="Cat Factory is starting">
+  <!-- Wear the ACTIVE theme, not the default: the theme plugin caches the computed colours of the
+       few tokens this shell paints with, per colour mode, under `cf-boot-palette` (see
+       utils/theme/bootPalette.ts). The colour-mode script in <head> has already classed <html>, so
+       pick that mode's entry; a mode never seen since the theme was picked keeps the defaults below.
+       Values are computed colours applied through setProperty, so nothing here can be injected. -->
+  <script>
+    ;(function () {
+      try {
+        var mode = document.documentElement.classList.contains('light') ? 'light' : 'dark'
+        var palette = JSON.parse(localStorage.getItem('cf-boot-palette') || '{}')[mode]
+        if (!palette) return
+        var el = document.currentScript.parentElement
+        var slots = ['bg', 'track', 'accent', 'status']
+        for (var i = 0; i < slots.length; i++) {
+          if (typeof palette[slots[i]] === 'string') {
+            el.style.setProperty('--cf-' + slots[i], palette[slots[i]])
+          }
+        }
+      } catch (e) {
+        /* storage unavailable: the shell keeps its default colours */
+      }
+    })()
+  </script>
   <div class="cf-spa-loader__badge">
     <div class="cf-spa-loader__ring"></div>
     <!-- Cat face, drawn inline so it paints without the icon font. -->
@@ -38,9 +61,9 @@
     align-items: center;
     justify-content: center;
     gap: 1.5rem;
-    /* The token values the shell paints with (slate-950 / slate-200 canvas, indigo primary),
-       hardcoded because main.css is not loaded yet; the colour-mode script in <head> has already
-       put `light` or `dark` on <html>, so the light block below applies. */
+    /* Defaults are the default theme's tokens (slate-950 / slate-200 canvas, indigo primary),
+       hardcoded because main.css is not loaded yet; the inline script above overrides the
+       `--cf-*` slots with the active theme's cached colours when it has them. */
     --cf-bg: #020618;
     --cf-track: #1e293b;
     --cf-accent: #818cf8;
