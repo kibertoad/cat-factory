@@ -637,7 +637,8 @@
         "service_catalog_response_too_large": "Portal deweloperski zwrócił więcej danych, niż ta platforma przyjmuje w jednej odpowiedzi. Otwórz ustawienia katalogu usług i obniż limit usług albo wyłącz importowanie definicji interfejsów, a następnie zaimportuj ponownie.",
         "assistant_generation_failed": "Dostawca modelu asystenta nie odpowiedział. Jest poprawnie skonfigurowany i nie ma tu nic do ustawienia: spróbuj ponowić żądanie za chwilę.",
         "assistant_reply_unreadable": "Model asystenta odpowiedział czymś, czego ta platforma nie może wykonać jako decyzji. Przeformułowanie rzadko pomaga: wybierz inny model dla asystenta w ustawieniach modeli.",
-        "delegated_executor_failed": "Zewnętrzny executor nie zdołał uruchomić tego kroku. Problem leży w systemie wykonującym pracę, a nie w tej instalacji: sprawdź jego własne logi i spróbuj ponownie."
+        "delegated_executor_failed": "Zewnętrzny executor nie zdołał uruchomić tego kroku. Problem leży w systemie wykonującym pracę, a nie w tej instalacji: sprawdź jego własne logi i spróbuj ponownie.",
+        "delegated_work_branch_unprepared": "Platforma nie mogła utworzyć gałęzi roboczej, na którą wysyłany jest executor tego kroku, więc nic nie zostało uruchomione. Sprawdź, czy połączenie z repozytorium ma prawo zapisu, i spróbuj ponownie."
       }
     },
     "reason": {

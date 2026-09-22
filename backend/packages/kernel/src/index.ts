@@ -514,6 +514,7 @@ export type {
   DelegatedExecutorTelemetry,
   DelegatedPollPolicy,
   DelegatedRepoFilesResolver,
+  DelegatedWorkBranchPolicy,
   DelegationBrief,
   DelegationHandle,
   DelegationResult,

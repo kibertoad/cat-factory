@@ -49,6 +49,20 @@ export interface DelegationBrief {
    */
   correlationKey: string
   workspaceId: string
+  /**
+   * The board block the work is for, the pair {@link DelegatedExecutorDeps.repoFiles} is keyed by.
+   *
+   * On the BRIEF because the dispatch is the only moment "before starting" exists, which is the
+   * stated purpose of that resolver: an executor staging its own context layer onto the work branch
+   * has to do it before the external system checks the branch out. Left off, the one dependency in
+   * the bundle that exists for the dispatch path was reachable only from `poll` and `cancel`, where
+   * staging a context layer is too late to matter, and an executor that wanted it had to reach the
+   * repository over a second credential of its own.
+   *
+   * Not `task.id`, which falls back to the run when a context carries no block: an executor keying
+   * a repository read off that would resolve nothing on exactly the dispatches that have no block.
+   */
+  blockId: string
   runId: string
   /** Which step of the run this is, so an executor's own record can name it. */
   stepIndex: number
@@ -72,7 +86,15 @@ export interface DelegationBrief {
   branches: {
     /** The repo's default branch: what a change is diffed against and what work forks from. */
     base: string
-    /** The deterministic per-task work branch every step of this run's pipeline shares. */
+    /**
+     * The deterministic per-task work branch every step of this run's pipeline shares.
+     *
+     * Whether the REF already exists when `start` is called is
+     * {@link DelegatedExecutorDefinition.workBranch}, and it is a declaration rather than an
+     * assumption because neither answer is safe to guess: a CI system told to check out a branch
+     * that is not there fails the job before any work begins, and a ref created for an executor
+     * that makes its own leaves one behind for every run whose external work never landed.
+     */
     work: string
   }
   /** Role, standards and trait guidance, with the workspace's prompt override already applied. */
@@ -276,7 +298,12 @@ export interface DelegatedFetchResponse {
   json(): Promise<unknown>
 }
 
-/** Checkout-free repo access for one run, for an executor that stages its own context layer. */
+/**
+ * Checkout-free repo access for one run, for an executor that stages its own context layer.
+ *
+ * Both keys are on {@link DelegationBrief} and on {@link DelegationHandle}, so it is callable from
+ * `start`, `poll` and `cancel` alike.
+ */
 export type DelegatedRepoFilesResolver = (input: {
   workspaceId: string
   blockId: string
@@ -301,6 +328,10 @@ export interface DelegatedExecutorDeps {
   /**
    * Checkout-free repo access for a run, for an executor that wants to commit its own context
    * layer onto the work branch before starting. Absent when the facade wired no VCS client.
+   *
+   * It is the SAME binding a registered kind's pre/post-ops run over, and the same one the engine
+   * creates a {@link DelegatedExecutorDefinition.workBranch} of `platform-creates` through, so an
+   * executor never needs a second credential to reach the repository it was already given.
    */
   repoFiles?: DelegatedRepoFilesResolver
 }
@@ -326,6 +357,29 @@ export interface DelegatedExecutorDeps {
  * open slice.
  */
 export type DelegatedExecutorTelemetry = 'not-reported' | 'self-reported'
+
+/**
+ * Who creates the work branch a dispatch names, declared rather than assumed.
+ *
+ * The join neither side owned. A container step's work branch comes into existence as part of the
+ * harness's own clone; nothing does that for a delegated step, so the ref the brief names does not
+ * exist when `start` is called unless someone made it. Both plausible defaults are wrong for half
+ * the executors there are, which is why this is the executor's own answer:
+ *
+ * - `platform-creates`: the engine creates {@link DelegationBrief.branches}`.work` at the base
+ *   branch's head before calling `start`, idempotently, and the external system is handed a ref it
+ *   can check out. What a CI runner needs: `actions/checkout` on a missing branch fails the job
+ *   before any of the work begins, and a runner that silently substitutes a branch of its own is
+ *   worse, publishing to a ref the platform never recorded while the run reads as having produced
+ *   nothing. Requires a facade with a VCS client wired, asserted where the arm is built.
+ * - `executor-creates`: the external system makes the branch itself when it pushes. The platform
+ *   writes nothing, so a run whose work never landed leaves no empty ref behind.
+ *
+ * REQUIRED, like {@link DelegatedExecutorDefinition.telemetry} and for the same reason: the
+ * executor that never answered the question is the one that fails at checkout, hours into a run,
+ * with a message about a missing branch and nothing naming who was supposed to make it.
+ */
+export type DelegatedWorkBranchPolicy = 'platform-creates' | 'executor-creates'
 
 /** How a delegated step is polled: per executor, never the harness's job defaults. */
 export interface DelegatedPollPolicy {
@@ -367,6 +421,8 @@ export interface DelegatedExecutorDefinition {
   credentials?: CapabilityCredential[]
   poll: DelegatedPollPolicy
   telemetry: DelegatedExecutorTelemetry
+  /** Who creates the work branch the brief names. See {@link DelegatedWorkBranchPolicy}. */
+  workBranch: DelegatedWorkBranchPolicy
   /** Build the executor once, over the bound deps the composition root supplies. */
   create(deps: DelegatedExecutorDeps): DelegatedExecutor
 }

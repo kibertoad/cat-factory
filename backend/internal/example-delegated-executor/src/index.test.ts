@@ -81,6 +81,7 @@ describe('the example executor', () => {
     const brief = {
       correlationKey: 'ex_1-example',
       workspaceId: 'ws',
+      blockId: 'blk',
       runId: 'ex_1',
       stepIndex: 0,
       agentKind: EXAMPLE_DELEGATED_KIND,
@@ -113,6 +114,7 @@ describe('the example executor', () => {
       {
         correlationKey: 'ex_1-example',
         workspaceId: 'ws',
+        blockId: 'blk',
         runId: 'ex_1',
         stepIndex: 0,
         agentKind: EXAMPLE_DELEGATED_KIND,

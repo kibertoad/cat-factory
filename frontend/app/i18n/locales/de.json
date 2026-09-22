@@ -6225,7 +6225,8 @@
         "service_catalog_response_too_large": "Das Entwicklerportal hat mit mehr Daten geantwortet, als diese Plattform in einer Antwort aufnimmt. Öffne die Servicekatalog-Einstellungen und senke das Service-Limit oder deaktiviere den Import von Schnittstellendefinitionen, und importiere dann erneut.",
         "assistant_generation_failed": "Der Modellanbieter des Assistenten hat nicht geantwortet. Er ist korrekt konfiguriert und hier muss nichts eingerichtet werden: Versuchen Sie die Anfrage gleich noch einmal.",
         "assistant_reply_unreadable": "Das Modell des Assistenten hat etwas geantwortet, das diese Plattform nicht als Entscheidung ausführen kann. Eine Umformulierung hilft selten: Wählen Sie in den Modelleinstellungen ein anderes Modell für den Assistenten.",
-        "delegated_executor_failed": "Der externe Executor konnte diesen Schritt nicht starten. Das Problem liegt im System, das die Arbeit ausführt, nicht in dieser Installation: prüfe dessen Logs und versuche es erneut."
+        "delegated_executor_failed": "Der externe Executor konnte diesen Schritt nicht starten. Das Problem liegt im System, das die Arbeit ausführt, nicht in dieser Installation: prüfe dessen Logs und versuche es erneut.",
+        "delegated_work_branch_unprepared": "Die Plattform konnte den Arbeitsbranch nicht anlegen, auf den der Executor dieses Schritts geschickt wird, daher wurde nichts gestartet. Prüfe, ob die Repository-Verbindung darauf schreiben darf, und versuche es erneut."
       }
     },
     "reason": {

@@ -15,6 +15,8 @@ import {
   type DelegatedExecutorDefinition,
   type DelegatedExecutorDeps,
   type DelegatedExecutorRegistry,
+  type DelegatedRepoFilesResolver,
+  type DelegationBrief,
   type DelegationHandle,
   type DelegationUpdate,
   type Logger,
@@ -26,6 +28,7 @@ import {
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import { delegatedExecutorFor } from '@cat-factory/agents'
 import { composeDelegationBrief, briefRepoProvider } from './brief.js'
+import { ensureDelegatedWorkBranch } from './delegationWorkBranch.js'
 import { recordAgentContextSnapshot } from './agentContextRecord.js'
 import { resolveDelegationCredentials } from './delegationCredentials.js'
 import type { ResolveRepoTarget, ResolveRepoOrigin } from './repoTargeting.js'
@@ -81,6 +84,15 @@ export interface DelegatedAgentExecutorDependencies {
   agentContextObservability?: AgentContextRecorder
   /** The bound deps every registered executor is BUILT over. */
   executorDeps: DelegatedExecutorDeps
+  /**
+   * The checkout-free repo binding the engine writes a `platform-creates` work branch through.
+   *
+   * The SAME resolver `executorDeps.repoFiles` carries, named here as its own dependency because
+   * the engine's use of it is not the executor's: reaching into another collaborator's bundle is
+   * how the two come to disagree about which binding is live. Absent ⇒ the facade wired no VCS
+   * client, which is refused where the arm is built for any executor that declared it needs one.
+   */
+  resolveRepoFiles?: DelegatedRepoFilesResolver
   logger: Logger
   clock: Clock
 }
@@ -165,6 +177,10 @@ export class DelegatedAgentExecutor implements AsyncAgentExecutor {
       resolveToolSecrets: this.deps.resolveToolSecrets,
       logger: jobLog,
     })
+    // Last, so a dispatch refused for any other reason leaves no ref behind, and before `start`,
+    // because a CI system handed a branch that is not there fails at checkout rather than
+    // reporting anything this platform can act on.
+    await this.prepareWorkBranch(definition, brief, jobLog)
     let started
     try {
       started = await executor.start(brief, credentials)
@@ -413,6 +429,32 @@ export class DelegatedAgentExecutor implements AsyncAgentExecutor {
     return built
   }
 
+  /**
+   * Honour the executor's {@link DelegatedExecutorDefinition.workBranch} declaration.
+   *
+   * `executor-creates` writes nothing, which is what keeps a run whose external work never landed
+   * from leaving an empty ref behind. The unwired case throws rather than passing through: the
+   * executor said its system cannot make the branch, so dispatching anyway buys a checkout failure
+   * an hour later instead of a refusal now.
+   */
+  private async prepareWorkBranch(
+    definition: DelegatedExecutorDefinition,
+    brief: DelegationBrief,
+    jobLog: Logger,
+  ): Promise<void> {
+    if (definition.workBranch !== 'platform-creates') return
+    const resolveRepoFiles = this.deps.resolveRepoFiles
+    if (!resolveRepoFiles) {
+      throw new UnavailableError(
+        `The "${definition.id}" executor is dispatched onto a work branch this platform creates, ` +
+          'and this deployment wired no repository client to create it with.',
+        'delegated_work_branch_unprepared',
+        { executor: definition.id, branch: brief.branches.work },
+      )
+    }
+    await ensureDelegatedWorkBranch({ resolveRepoFiles, logger: jobLog }, brief, definition.id)
+  }
+
   /** Resolve the repo + branches this dispatch targets, then compose the brief over them. */
   private async composeBrief(
     context: AgentRunContext,
@@ -431,6 +473,7 @@ export class DelegatedAgentExecutor implements AsyncAgentExecutor {
     return composeDelegationBrief(context, this.deps.agentKindRegistry, {
       correlationKey: ids.correlationKey,
       workspaceId: ids.workspaceId,
+      blockId: ids.blockId,
       runId: ids.executionId,
       stepIndex: context.stepIndex ?? 0,
       target: {
@@ -445,9 +488,8 @@ export class DelegatedAgentExecutor implements AsyncAgentExecutor {
           base: repo.baseBranch,
           // The deterministic per-task branch every step of this run's pipeline shares: the same
           // name the container path resolves, so a delegated producer and a later container fixer
-          // work on ONE branch. The platform does not create it: a delegated executor makes its
-          // own branch when it pushes, and creating an empty ref here would leave one behind for
-          // every run whose external work never landed.
+          // work on ONE branch. Whether the REF exists when the executor is called is its own
+          // `workBranch` declaration, honoured just before `start`.
           work: `cat-factory/${ids.blockId}`,
         },
         ...(trackerRef ? { trackerRef } : {}),

@@ -49,6 +49,8 @@ export interface FakeDelegatedExecutorOptions {
   cancelable?: boolean
   /** Whether it declares its own telemetry. Absent ⇒ `not-reported`, the honest default. */
   telemetry?: DelegatedExecutorDefinition['telemetry']
+  /** Who creates the work branch. Absent ⇒ the executor, which is what this fake claims. */
+  workBranch?: DelegatedExecutorDefinition['workBranch']
 }
 
 const DEFAULT_UPDATES: DelegationUpdate[] = [
@@ -90,6 +92,10 @@ export function fakeDelegatedExecutor(options: FakeDelegatedExecutorOptions = {}
     },
     poll: { intervalMs: 1000, maxDurationMs: 10_000 },
     telemetry: options.telemetry ?? 'not-reported',
+    // The fake writes to no repository, and a conformance app has no VCS connection to write
+    // through. Engine-side branch creation is pinned by `delegationWorkBranch.spec.ts`, which owns
+    // a fake `RepoFiles`; this fixture exists to drive the parts a facade can get wrong alone.
+    workBranch: options.workBranch ?? 'executor-creates',
     create: () => ({
       async start(brief) {
         calls.starts.push(brief)

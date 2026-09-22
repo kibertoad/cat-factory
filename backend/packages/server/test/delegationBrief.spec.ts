@@ -125,6 +125,7 @@ async function delegationBrief(): Promise<DelegationBrief> {
     presentation: { label: 'Acme', icon: 'i-lucide-bot', description: 'Acme runs it' },
     poll: { intervalMs: 1000, maxDurationMs: 60_000 },
     telemetry: 'not-reported',
+    workBranch: 'executor-creates',
     create: () => ({
       async start(brief: DelegationBrief): Promise<DelegationStart> {
         briefs.push(brief)
@@ -205,6 +206,7 @@ describe('the brief and the harness job body compose the same instructions', () 
       presentation: { label: 'Acme', icon: 'i-lucide-bot', description: 'Acme runs it' },
       poll: { intervalMs: 1000, maxDurationMs: 60_000 },
       telemetry: 'not-reported',
+      workBranch: 'executor-creates',
       create: () => ({
         async start(brief) {
           seen = brief

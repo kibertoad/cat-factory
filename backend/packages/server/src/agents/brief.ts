@@ -119,6 +119,7 @@ export function composeDelegationBrief(
   args: {
     correlationKey: string
     workspaceId: string
+    blockId: string
     runId: string
     stepIndex: number
     target: DelegationBriefTarget
@@ -143,6 +144,10 @@ export function composeDelegationBrief(
   return {
     correlationKey: args.correlationKey,
     workspaceId: args.workspaceId,
+    // The resolved block, not `task.id` below: that one falls back to the run for a context with
+    // no block, and an executor keying its `repoFiles` read off it would resolve nothing on
+    // exactly those dispatches.
+    blockId: args.blockId,
     runId: args.runId,
     stepIndex: args.stepIndex,
     agentKind: context.agentKind,

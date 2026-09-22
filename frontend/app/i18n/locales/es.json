@@ -637,7 +637,8 @@
         "service_catalog_response_too_large": "El portal de desarrollo respondió con más datos de los que esta plataforma admite en una sola respuesta. Abre la configuración del catálogo de servicios y reduce el límite de servicios, o desactiva la importación de definiciones de interfaz, y vuelve a importar.",
         "assistant_generation_failed": "El proveedor de modelos del asistente no respondió. Está configurado correctamente y aquí no hay nada que configurar: vuelve a intentar la solicitud en un momento.",
         "assistant_reply_unreadable": "El modelo del asistente respondió con algo que esta plataforma no puede ejecutar como decisión. Reformular rara vez ayuda: elige otro modelo para el asistente en la configuración de modelos.",
-        "delegated_executor_failed": "El ejecutor externo no pudo iniciar este paso. El problema está en el sistema que realiza el trabajo, no en esta instalación: revisa sus propios registros e inténtalo de nuevo."
+        "delegated_executor_failed": "El ejecutor externo no pudo iniciar este paso. El problema está en el sistema que realiza el trabajo, no en esta instalación: revisa sus propios registros e inténtalo de nuevo.",
+        "delegated_work_branch_unprepared": "La plataforma no pudo crear la rama de trabajo a la que se envía el ejecutor de este paso, así que no se inició nada. Comprueba que la conexión al repositorio pueda escribir en ella y vuelve a intentarlo."
       }
     },
     "reason": {

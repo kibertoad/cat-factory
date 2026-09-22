@@ -22,6 +22,7 @@ const EXECUTOR: DelegatedExecutorDefinition = {
   presentation: { label: 'Acme', icon: 'i-lucide-bot', description: 'Acme runs the change' },
   poll: { intervalMs: 60_000, maxDurationMs: 3_600_000 },
   telemetry: 'not-reported',
+  workBranch: 'executor-creates',
   create: () => ({
     start: async () => ({ externalId: 'x' }),
     poll: async () => ({ state: 'running' }),

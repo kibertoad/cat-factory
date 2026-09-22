@@ -6,8 +6,18 @@ stand between it and the seam, and none of them is about that company's workflow
 solved once, here, rather than in every deployment repo.
 
 **Entry:** `src/index.ts` → `githubActionsDelegatedExecutor(description, deps)`. A deployment's
-registration becomes a description of its own workflow (`owner`, `repo`, `workflowFile`, `ref`,
-`inputs(brief)`) plus an optional `resultFrom`.
+registration becomes a description of its own workflow (`workflow`, `inputs(brief)`) plus an
+optional `resultFrom`.
+
+**`workflow` is a location OR a function of the dispatch**, and the function is what a multi-repo
+deployment needs: a caller shim committed to each onboarded repository means the workflow lives
+wherever the work does, so one registration dispatches against every repo the deployment onboards.
+The resolver is handed a `GitHubActionsWorkflowScope`, deliberately narrowed to the INTERSECTION of
+what a brief and a handle carry: `start` holds a brief and `poll`/`cancel` hold a handle written
+hours earlier in another process, so a resolver reading a brief-only fact would dispatch into one
+repository and poll another, reporting a live run as one that never appeared. A handle that names
+no work repository (a record written before it was persisted) is REFUSED rather than defaulted, for
+the reason the result reader refuses a handle with no branches.
 
 **The three problems, and where each is solved:**
 
@@ -30,8 +40,8 @@ registration becomes a description of its own workflow (`owner`, `repo`, `workfl
   repo the WORK targeted**. Both facts come off the delegation HANDLE, which the platform persists
   for exactly this. The repo matters as much as the branch and for a sharper reason: `ref` is a
   branch that holds the WORKFLOW, so a central automation repo dispatching against many product
-  repos is the ordinary shape, and reading the result out of the automation repo finds nothing on
-  every run. When a record carries no branch the reader **refuses to guess**: a wrong pull request
+  repos is one of the two ordinary shapes, and reading the result out of the automation repo finds
+  nothing on every run. When a record carries no branch the reader **refuses to guess**: a wrong pull request
   on the block becomes the `ci` gate's checks and the merger's diff.
 
 **Key files:** `executor.ts` (the `DelegatedExecutor`), `correlation.ts` (finding the run),

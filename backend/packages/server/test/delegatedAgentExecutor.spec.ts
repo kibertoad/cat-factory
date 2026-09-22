@@ -125,6 +125,7 @@ function build(
     presentation: { label: 'Acme', icon: 'i-lucide-bot', description: 'Acme runs it' },
     poll: { intervalMs: 1000, maxDurationMs: 60_000 },
     telemetry: 'not-reported',
+    workBranch: 'executor-creates',
     ...(options.credentials ? { credentials: options.credentials } : {}),
     create: (deps) => {
       options.onDeps?.(deps)
@@ -252,6 +253,7 @@ describe('DelegatedAgentExecutor: dispatch', () => {
       presentation: { label: 'Acme', icon: 'i-lucide-bot', description: 'Acme runs it' },
       poll: { intervalMs: 1000, maxDurationMs: 60_000 },
       telemetry: 'not-reported',
+      workBranch: 'executor-creates',
       create: (deps) => {
         seen = deps
         return fake.executor

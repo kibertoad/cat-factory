@@ -10,6 +10,7 @@ import { noopLogger } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import { correlationRunName } from './correlation.js'
 import { githubActionsDelegatedExecutor } from './executor.js'
+import type { GitHubActionsWorkflowScope } from './workflow.js'
 
 // The three problems this helper exists for, each asserted as the failure it prevents:
 //
@@ -68,6 +69,7 @@ function brief(): DelegationBrief {
   return {
     correlationKey: 'ex_1-acme:impl',
     workspaceId: 'ws_1',
+    blockId: 'blk_1',
     runId: 'ex_1',
     stepIndex: 0,
     agentKind: 'acme:impl',
@@ -100,11 +102,15 @@ function handle(overrides: Partial<DelegationHandle> = {}): DelegationHandle {
   }
 }
 
-const DESCRIPTION = {
+const WORKFLOW = {
   owner: 'acme',
   repo: 'widgets',
   workflowFile: 'implement.yml',
   ref: 'main',
+}
+
+const DESCRIPTION = {
+  workflow: WORKFLOW,
   inputs: (b: DelegationBrief) => ({ spec: b.userPrompt }),
 }
 
@@ -326,7 +332,7 @@ describe('poll: what the run produced', () => {
         ],
       }),
     })
-    const automation = { ...DESCRIPTION, owner: 'acme', repo: 'automation' }
+    const automation = { ...DESCRIPTION, workflow: { ...WORKFLOW, repo: 'automation' } }
     const update = await githubActionsDelegatedExecutor(automation, deps(fetchImpl)).poll(
       handle({ repo: { owner: 'acme', name: 'widgets' } }),
       CREDS,
@@ -419,5 +425,75 @@ describe('cancel', () => {
     const { fetchImpl, calls } = fakeFetch({ '/actions/runs/4242': () => ({ body: RUN }) })
     await githubActionsDelegatedExecutor(DESCRIPTION, deps(fetchImpl)).cancel?.(handle(), CREDS)
     expect(calls.some((c) => c.url.endsWith('/cancel'))).toBe(false)
+  })
+})
+
+describe('a workflow resolved per dispatch', () => {
+  // A caller shim committed to each onboarded repository means the workflow lives wherever the
+  // work does, so one registration dispatches against every repo a deployment onboards. A fixed
+  // owner/repo made the dispatch the only part of this helper that could not follow the brief.
+  const perRepo = {
+    ...DESCRIPTION,
+    workflow: (scope: GitHubActionsWorkflowScope) => ({
+      owner: scope.repo.owner,
+      repo: scope.repo.name,
+      workflowFile: 'cat-factory-ratchet.yml',
+      ref: 'main',
+    }),
+  }
+
+  it('dispatches into the repository the WORK targets', async () => {
+    let listed = 0
+    const { fetchImpl, calls } = fakeFetch({
+      '/dispatches': () => ({ status: 204 }),
+      '/runs?': () => ({
+        body: { workflow_runs: listed++ === 0 ? [] : [{ ...RUN, status: 'queued' }] },
+      }),
+    })
+    const target = { ...brief(), repo: { ...brief().repo, owner: 'acme', name: 'payments' } }
+    await githubActionsDelegatedExecutor(perRepo, deps(fetchImpl)).start(target, CREDS)
+    expect(
+      calls.some((c) =>
+        c.url.includes('/repos/acme/payments/actions/workflows/cat-factory-ratchet.yml/dispatches'),
+      ),
+    ).toBe(true)
+  })
+
+  it('addresses the SAME repository on a later poll, which holds only the handle', async () => {
+    const { fetchImpl, calls } = fakeFetch({
+      '/actions/runs/4242': () => ({ body: { ...RUN, status: 'in_progress', conclusion: null } }),
+    })
+    // The scope is the intersection of a brief and a handle for exactly this reason: a resolver
+    // reading a brief-only fact would dispatch into one repository and poll another, and the run
+    // would read as one that never appeared.
+    const update = await githubActionsDelegatedExecutor(perRepo, deps(fetchImpl)).poll(
+      handle({ repo: { owner: 'acme', name: 'payments' } }),
+      CREDS,
+    )
+    expect(update).toMatchObject({ state: 'running' })
+    expect(calls.some((c) => c.url.includes('/repos/acme/payments/actions/runs/4242'))).toBe(true)
+  })
+
+  it('REFUSES a handle that names no work repository rather than guessing one', async () => {
+    const { fetchImpl } = fakeFetch({ '/actions/runs/4242': () => ({ body: RUN }) })
+    await expect(
+      githubActionsDelegatedExecutor(perRepo, deps(fetchImpl)).poll(
+        handle({ repo: undefined }),
+        CREDS,
+      ),
+    ).rejects.toThrow(/no work repository/)
+  })
+
+  it('leaves a LITERAL description addressable from a handle that predates the work repo', async () => {
+    const { fetchImpl, calls } = fakeFetch({
+      '/actions/runs/4242': () => ({ body: RUN }),
+      '/pulls?': () => ({ body: [] }),
+    })
+    const update = await githubActionsDelegatedExecutor(DESCRIPTION, deps(fetchImpl)).poll(
+      handle({ repo: undefined }),
+      CREDS,
+    )
+    expect(update).toMatchObject({ state: 'done' })
+    expect(calls.some((c) => c.url.includes('/repos/acme/widgets/pulls?'))).toBe(true)
   })
 })

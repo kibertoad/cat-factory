@@ -104,6 +104,11 @@ export function exampleDelegatedExecutor(system = new FakeExternalSystem()): {
     },
     poll: { intervalMs: 5_000, maxDurationMs: 600_000 },
     telemetry: 'not-reported',
+    // The fake system pushes nothing, so nothing needs a ref: the platform writes no branch and a
+    // run that produced no work leaves none behind. A real GitHub-Actions executor declares
+    // 'platform-creates' instead, because `actions/checkout` on a branch that is not there fails
+    // the job before any of the work begins.
+    workBranch: 'executor-creates',
     create: (deps: DelegatedExecutorDeps): DelegatedExecutor => {
       const log = deps.logger.child({ executor: EXAMPLE_EXECUTOR_ID })
       return {
