@@ -408,8 +408,9 @@ currently open and what each one is trying to change.
 - [`docs/README.md`](./docs/README.md): a map of the repo-wide docs, sorted into
   reference, in-flight initiatives, contributor-only material and point-in-time
   records.
-- [`AGENTS.md`](./AGENTS.md): orientation for coding agents; each `backend/packages/*` and
-  `backend/runtimes/*` also carries its own `AGENTS.md` with a "where things live" map.
+- [`AGENTS.md`](./AGENTS.md): orientation for coding agents; each `backend/packages/*`,
+  `backend/runtimes/*` and `frontend/app` also carries its own `AGENTS.md` with a "where things
+  live" map.
 
 **Integrations & features**
 

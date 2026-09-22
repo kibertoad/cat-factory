@@ -8,8 +8,8 @@ growth must displace something.
 Where everything else lives:
 
 - **Orientation**: [`README.md`](./README.md) (the CI-guarded layout table),
-  [`backend/README.md`](./backend/README.md), and an `AGENTS.md` in every `backend/packages/*` and
-  `backend/runtimes/*` with its entry point and a "where things live" map.
+  [`backend/README.md`](./backend/README.md), and an `AGENTS.md` in every `backend/packages/*`,
+  `backend/runtimes/*` and `frontend/app` with its entry point and a "where things live" map.
 - **Vocabulary** (block vs task vs card, runner/executor/transport, `runtimes/cloudflare` =
   `@cat-factory/worker`): [`docs/glossary.md`](./docs/glossary.md).
 - **The runtime flows**, one entry each with its deadliest trap:

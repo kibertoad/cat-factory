@@ -42,7 +42,8 @@ over the WebSocket. How that sync works is written up in
 
 ## Tech stack
 
-- **Nuxt 4 / Vue 3** SPA: single route (`pages/index.vue`).
+- **Nuxt 4 / Vue 3** SPA: the board is `pages/index.vue`, beside three standalone routes
+  (`mcp-authorize.vue`, `mcp-oauth-callback.vue`, `reset-password.vue`).
 - **Pinia** (+ `pinia-plugin-persistedstate`): feature stores.
 - **Vue Flow** (`core`, `background`, `controls`, `node-resizer`): the canvas.
 - **Nuxt UI** + Tailwind: components and styling.
@@ -51,15 +52,15 @@ over the WebSocket. How that sync works is written up in
 
 ## Layout
 
-| Path              | Contents                                                                                                                                              |
-| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `app.vue`         | Root; wraps the page in `AuthGate`.                                                                                                                   |
-| `pages/index.vue` | The only route: mounts the sidebar, canvas, toolbar, inspector, focus view, and all modals.                                                           |
-| `components/`     | UI grouped by area (see [Key UI surfaces](#key-ui-surfaces)).                                                                                         |
-| `composables/`    | `useApi` (typed client), `useWorkspaceStream` (WebSocket sync), `useBlockDrag`, `useBlockQueries`, `useBoardFlow`, `useSemanticZoom`, `useDepLabels`. |
-| `stores/`         | Pinia stores, one per feature domain.                                                                                                                 |
-| `types/`          | TypeScript domain unions (`domain.ts`) and wire types mirroring the contracts.                                                                        |
-| `utils/`          | Small pure helpers.                                                                                                                                   |
+| Path           | Contents                                                                                                                                                                     |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app.vue`      | Root; wraps the page in `AuthGate`.                                                                                                                                          |
+| `pages/`       | The board (`index.vue`: sidebar, canvas, toolbar, inspector, focus view, all modals), plus the standalone `mcp-authorize`, `mcp-oauth-callback` and `reset-password` routes. |
+| `components/`  | UI grouped by area (see [Key UI surfaces](#key-ui-surfaces)).                                                                                                                |
+| `composables/` | `useApi` (typed client), `useWorkspaceStream` (WebSocket sync), `useBlockDrag`, `useBlockQueries`, `useBoardFlow`, `useSemanticZoom`, `useDepLabels`.                        |
+| `stores/`      | Pinia stores, one per feature domain.                                                                                                                                        |
+| `types/`       | TypeScript domain unions (`domain.ts`) and wire types mirroring the contracts.                                                                                               |
+| `utils/`       | Small pure helpers.                                                                                                                                                          |
 
 ### The board's top overlay region has ONE owner
 
@@ -312,9 +313,11 @@ The SPA runs on Nuxt UI 4. Two first-party sources carry the rules this repo doe
   well (the variant-weight table, one solid primary per view, semantic utility roles). It is
   vendored under `.claude/skills/nuxt-ui/`, beside the project's own skills, so the rules version
   with the code and every contributor on Claude Code reads the same text. This is the Claude Code
-  surface: `.claude/skills/` and the repo `.mcp.json` auto-load for a local Claude Code session, and
-  another tool that reads `AGENTS.md` (Codex, for one) gets the pointers below but not an auto-loaded
-  skill or an auto-wired server. Making the platform's OWN coder agents (Claude Code, Codex, Pi in
+  surface: `.claude/skills/` auto-loads for a local Claude Code session, and the repo `.mcp.json` is
+  offered once for approval on the first session in the repo (re-offered when the file changes); a
+  decline is remembered, and `claude mcp reset-project-choices` un-sticks it. Another tool that reads
+  `AGENTS.md` (Codex, for one) gets the pointers below but not an auto-loaded skill or an auto-wired
+  server. Making the platform's OWN coder agents (Claude Code, Codex, Pi in
   the runner image) apply the skill is a separate, backend change: they stage skills and tool
   servers per run through the agent-capabilities system (ADR 0024 /
   [`custom-agents.md`](https://github.com/kibertoad/cat-factory/blob/main/backend/docs/custom-agents.md)), not from these repo files. The `@nuxt/ui` npm
@@ -322,8 +325,9 @@ The SPA runs on Nuxt UI 4. Two first-party sources carry the rules this repo doe
   `v4` branch of `nuxt/ui` (which tracks the 4.x line) and pinned by convention to the Nuxt UI
   major in [`package.json`](./package.json) (`@nuxt/ui@^4.11`). Refresh it by re-vendoring
   `skills/nuxt-ui/` from that branch (or `npx skills add nuxt/ui`) when the major moves. The
-  vendored files are kept byte-for-byte as upstream (oxfmt ignores them) so a refresh is a clean
-  diff.
+  vendored files are kept byte-for-byte as upstream: `.oxfmtrc.json` exempts them from the
+  formatter and `scripts/check-doc-links.mjs` skips them, so a refresh stays a clean diff even when
+  upstream ships a link this repo's own doc rules would reject.
 - **The [`nuxt-ui` MCP server](https://github.com/kibertoad/cat-factory/blob/main/.mcp.json)** (`https://ui.nuxt.com/mcp`, declared repo-level)
   answers WHAT a component accepts: props, slots, events, theme files and examples per component.
   The skill defers to it for every API question.
@@ -334,6 +338,16 @@ protects, so the two never contradict silently:
 - **Visible copy is an i18n key, never a literal string.** The skill's examples hard-code labels and
   placeholders (`label="Email"`, `placeholder="you@example.com"`); here every user-facing string
   goes through `@nuxtjs/i18n` and lands in the catalog. [Rule](#internationalization-i18n-authoring).
+- **Schema validation goes through valibot, never zod.** The skill's `forms.md` recipe opens with
+  `import * as z from 'zod'` and validates through `z.object({...})`; this package depends on
+  `valibot` (and `@toad-contracts/valibot`) and has no `zod`, so a `zod` import fails typecheck and
+  "fixing" it pulls in a dependency the repo deliberately lacks (which then has to clear the 24h
+  `minimumReleaseAge` gate). Validate with valibot, mirroring the wire contracts
+  ([`@cat-factory/contracts`](https://github.com/kibertoad/cat-factory/tree/main/backend/packages/contracts)).
+- **A backend-declared form renders through `DescriptorFields.vue`, not a hand-built `UForm`.** The
+  skill teaches the hand-rolled `UForm` + `UFormField` shape for every form; when the backend
+  declares the fields and the SPA only collects them, that shape is forbidden here.
+  [Rule](#a-backend-declared-form-renders-through-descriptorfieldsvue).
 - **Failure toasts go through the funnel, not a bare `toast.add`.** The skill uses `useToast()`
   freely; here a failed backend call is reported with `usePipelineErrorToast().present(error, key)`.
   [Rule](#every-failure-toast-goes-through-one-funnel).
