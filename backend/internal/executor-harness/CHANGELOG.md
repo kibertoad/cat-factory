@@ -1,5 +1,39 @@
 # @cat-factory/executor-harness
 
+## 1.161.4
+
+### Patch Changes
+
+- 09bd94b: Runner image: take Claude Code to `2.1.278`.
+  
+  The three agent CLI pins are the documented exception to the 24h release-age window the workspace
+  dependencies are held to, so this takes the newest published release rather than the newest aged
+  one. Pi stays at `0.85.1` and Codex at `0.154.0`, both of which are where they already were: Pi
+  because that is still its latest, Codex by request.
+  
+  Image content changed, so the harness version and every tag pin move with it, which is what makes a
+  deployment's next `image:publish` actually roll out.
+- 1fc4ff1: Runner image: take Pi to `0.86.0`.
+  
+  The three agent CLI pins are the documented exception to the 24h release-age window the workspace
+  dependencies are held to, so this takes the newest published release rather than the newest aged
+  one. Claude Code stays at `2.1.278`, which is still its newest, and Codex at `0.154.0` by request.
+  
+  Image content changed, so the harness version and every tag pin move with it, which is what makes a
+  deployment's next `image:publish` actually roll out.
+- 89112e4: Move the workspace to pnpm 12.5.1, in `packageManager` and in the UI runner image.
+  
+  pnpm 12 is the Rust rewrite: same commands, settings and lockfile format, so the main document of
+  `pnpm-lock.yaml` re-resolves byte-identical. What it adds is a second lockfile document recording
+  `packageManagerDependencies`, the platform binaries pnpm self-manages for the pinned version, which
+  the `minimumReleaseAge` gate vets like any other entry. Nothing this repo does hits the 12.0
+  removals: no `--frozen-lockfile false` call site, no `--resolution-only`, no `.pnpmfile`, no
+  `pnpm.overrides` block, and `pnpm-workspace.yaml` passes the newly strict settings validation as it
+  stands.
+  
+  The UI image's pnpm moves with the field, as it always has, so a repo under test builds with the
+  same manager CI does. Image content changed, so the harness version and every tag pin move with it.
+
 ## 1.161.0
 
 ### Minor Changes
