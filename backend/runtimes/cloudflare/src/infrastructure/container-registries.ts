@@ -5,7 +5,12 @@ import {
   defaultStepResolverRegistry,
   defaultVcsRegistry,
 } from '@cat-factory/kernel'
-import { defaultAgentKindRegistry, defaultInitiativePresetRegistry } from '@cat-factory/agents'
+import {
+  type AgentKindRegistry,
+  defaultAgentKindRegistry,
+  defaultInitiativePresetRegistry,
+  registerNuxtUiCapability,
+} from '@cat-factory/agents'
 import { createBackendRegistries } from '@cat-factory/integrations'
 import { gateRegistryWithBuiltins } from '@cat-factory/gates'
 import { promptFragmentRegistryWithBuiltins } from '@cat-factory/prompt-fragments'
@@ -44,6 +49,20 @@ export type WorkerRegistries = Required<
  * the opt-in AWS EKS backends are registered by reference exactly as before (`register` is
  * idempotent, so a re-used injected registry from the conformance harness is safe).
  */
+/**
+ * The Worker facade's OWN default agent-kind registry: the built-ins plus the opt-in Nuxt UI
+ * capability (the vendored skill + MCP server on the coder kinds). Used at EVERY point the facade
+ * mints its own default rather than taking a deployment's injected instance: the entry point
+ * (`resolveEntryRegistries`, whose instance boot validation and `GET /internal/agent-kinds` serve)
+ * and the override-less `buildContainer(env)` builders (the durable driver). Defaulting in only one
+ * of the two is the split-brain this guards against. Mirrors the Node facade's `resolveNodeAppRegistries`.
+ */
+export function defaultWorkerAgentKindRegistry(): AgentKindRegistry {
+  const registry = defaultAgentKindRegistry()
+  registerNuxtUiCapability(registry)
+  return registry
+}
+
 export function resolveWorkerRegistries(overrides: Partial<CoreDependencies>): WorkerRegistries {
   const defaultRegistries = createBackendRegistries()
   const environmentBackendRegistry =
@@ -54,8 +73,13 @@ export function resolveWorkerRegistries(overrides: Partial<CoreDependencies>): W
     overrides.customManifestTypeRegistry ?? defaultRegistries.customManifestTypeRegistry
   const userSecretKindRegistry =
     overrides.userSecretKindRegistry ?? defaultRegistries.userSecretKindRegistry
-  // The app-owned agent-kind registry (built-ins + any a deployment registered by reference).
-  const agentKindRegistry = overrides.agentKindRegistry ?? defaultAgentKindRegistry()
+  // The app-owned agent-kind registry (built-ins + any a deployment registered by reference). This
+  // resolver runs inside `buildContainer`, which the durable driver calls with NO overrides
+  // (`buildContainer(env)`), so this is where those override-less builders get the facade's own
+  // default — the one carrying the opt-in Nuxt UI capability. The REQUEST path is defaulted one
+  // level up in `resolveEntryRegistries`, whose result is spread into these overrides, so an
+  // injected instance (a deployment's, or the entry point's own default) always wins here.
+  const agentKindRegistry = overrides.agentKindRegistry ?? defaultWorkerAgentKindRegistry()
   // The app-owned gate registry: the injected instance, else a fresh one with the built-in
   // `@cat-factory/gates` suite installed — so a container built directly for a scheduled/cron sweep
   // (no overrides) still has the gates its re-driven runs need.

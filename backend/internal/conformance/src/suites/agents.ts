@@ -1,4 +1,8 @@
-import { defaultAgentKindRegistry } from '@cat-factory/agents'
+import {
+  defaultAgentKindRegistry,
+  NUXT_UI_SKILL_ID,
+  registerNuxtUiCapability,
+} from '@cat-factory/agents'
 import { NANO_BANANA_GENERATOR_ID } from '@cat-factory/contracts'
 import { ConflictError } from '@cat-factory/kernel'
 import type { AgentRunContext, Pipeline, RepoFiles, WorkspaceSnapshot } from '@cat-factory/kernel'
@@ -311,6 +315,37 @@ function registerKindCapabilityTests(harness: ConformanceHarness): void {
       expect(dispatched?.skills?.[0]?.resources[0]?.body).toBe('# rubric')
       const exec = executions.find((e) => e.blockId === 'task_login')
       expect(exec?.steps[0]?.skillVersions).toBeUndefined()
+    })
+
+    // The opt-in Nuxt UI capability (issue #2262) attached to the BUILT-IN `coder` by
+    // `registerNuxtUiCapability`, driven through a real coder run: the skill declared by
+    // ASSIGNMENT (the `assignSkills('coder', …)` path, which `all()` would miss) has to reach the
+    // dispatched run context on every runtime, or a facade that threaded the registry into the HTTP
+    // layer but not the engine would ship a coder that silently works without the playbook.
+    it('a coder’s assigned Nuxt UI skill reaches the dispatched run context', async () => {
+      const contexts: AgentRunContext[] = []
+      const agentKindRegistry = defaultAgentKindRegistry()
+      registerNuxtUiCapability(agentKindRegistry)
+
+      const app = harness.makeApp({ onContext: (c) => contexts.push(c) }, { agentKindRegistry })
+      const { workspace } = await app.createWorkspace()
+      const wsId = workspace.id
+      const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+        name: 'Build the login screen',
+        purpose: 'build',
+        agentKinds: ['coder'],
+      })
+      const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+        pipelineId: pipeline.body.id,
+      })
+      expect(start.status).toBe(201)
+      await app.drive(wsId)
+
+      const dispatched = contexts.find((c) => c.agentKind === 'coder')
+      expect(dispatched?.skills?.map((s) => s.skillId)).toContain(NUXT_UI_SKILL_ID)
+      expect(dispatched?.skills?.find((s) => s.skillId === NUXT_UI_SKILL_ID)?.origin).toBe(
+        'bundled',
+      )
     })
 
     // The `binary-output` trait is the one trait with a UI consequence: a step of such a kind

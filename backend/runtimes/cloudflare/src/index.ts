@@ -6,6 +6,7 @@ import type {
 } from '@cloudflare/workers-types'
 import { type CreateAppOptions, createApp } from './app'
 import { loadConfig } from './infrastructure/config'
+import { defaultWorkerAgentKindRegistry } from './infrastructure/container-registries'
 import type {
   Env,
   ExecutionStartMessage,
@@ -97,7 +98,7 @@ import {
 } from '@cat-factory/orchestration'
 import { binaryGeneratorRegistryWithBuiltins } from '@cat-factory/binary-generators'
 import { promptFragmentRegistryWithBuiltins } from '@cat-factory/prompt-fragments'
-import { defaultAgentKindRegistry, defaultInitiativePresetRegistry } from '@cat-factory/agents'
+import { defaultInitiativePresetRegistry } from '@cat-factory/agents'
 import { gateRegistryWithBuiltins } from '@cat-factory/gates'
 import {
   DEFAULT_WORKSPACE_SETTINGS,
@@ -456,10 +457,13 @@ export { DEFAULT_MODEL_PRESET_ID, MODEL_PRESET_SEED_IDS } from '@cat-factory/ker
  * seam: a deployment registers its kinds/gates/pipelines/estate on its own instance and passes it
  * in, exactly as it would through `start({ … })` / `startLocal({ … })` on the other two facades.
  */
-function resolveEntryRegistries(overrides: Partial<CoreDependencies>) {
+export function resolveEntryRegistries(overrides: Partial<CoreDependencies>) {
   return {
-    // Custom agent kinds (the built-ins plus anything a deployment registered by reference).
-    agentKindRegistry: overrides.agentKindRegistry ?? defaultAgentKindRegistry(),
+    // Custom agent kinds (the built-ins plus anything a deployment registered by reference). Our
+    // OWN default carries the opt-in Nuxt UI capability, and this is the instance both boot
+    // validation and `GET /internal/agent-kinds` read, so the request path must default through the
+    // same helper the override-less `buildContainer(env)` builders use, or the two disagree.
+    agentKindRegistry: overrides.agentKindRegistry ?? defaultWorkerAgentKindRegistry(),
     // Custom initiative presets — the same DI seam as `agentKindRegistry`.
     initiativePresetRegistry:
       overrides.initiativePresetRegistry ?? defaultInitiativePresetRegistry(),

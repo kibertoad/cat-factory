@@ -29,7 +29,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:run": "vitest run",
-    "precompile:templates": "node scripts/precompile-prompts.mjs"
+    "precompile:templates": "node scripts/precompile-prompts.mjs",
+    "generate:nuxt-ui-skill": "node ../../../scripts/generate-nuxt-ui-skill.mjs"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.58",

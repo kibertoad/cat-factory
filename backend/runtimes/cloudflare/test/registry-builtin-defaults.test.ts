@@ -1,4 +1,10 @@
+import {
+  NUXT_UI_SKILL_ID,
+  NUXT_UI_TOOL_SERVER_ID,
+  defaultAgentKindRegistry,
+} from '@cat-factory/agents'
 import { describe, expect, it } from 'vitest'
+import { resolveEntryRegistries } from '../src/index'
 import { resolveWorkerRegistries } from '../src/infrastructure/container-registries'
 
 // ---------------------------------------------------------------------------
@@ -38,5 +44,45 @@ describe('resolveWorkerRegistries with no overrides', () => {
     const injected = resolveWorkerRegistries({ promptFragmentRegistry })
 
     expect(injected.promptFragmentRegistry).toBe(promptFragmentRegistry)
+  })
+
+  it('opts the override-less buildContainer default into the Nuxt UI capability', () => {
+    // The durable driver builds `buildContainer(env)` with no overrides, so this resolver mints the
+    // facade's own default. Issue #2262.
+    const { agentKindRegistry } = resolveWorkerRegistries({})
+    expect(agentKindRegistry.skillsFor('coder').bundled.map((s) => s.id)).toContain(
+      NUXT_UI_SKILL_ID,
+    )
+    expect(agentKindRegistry.toolServersFor('coder').servers.map((s) => s.id)).toContain(
+      NUXT_UI_TOOL_SERVER_ID,
+    )
+  })
+
+  it('opts the ENTRY-POINT default into the capability too, so the request path agrees', () => {
+    // The bug the review caught: `createWorker` spreads `resolveEntryRegistries`'s result into the
+    // overrides every request-path container is built from, so `resolveWorkerRegistries` never sees
+    // an empty `agentKindRegistry` on that path. Boot validation and `GET /internal/agent-kinds`
+    // read THIS instance, so defaulting only in `resolveWorkerRegistries` left the request path
+    // (and every mothership node) with a coder that had no skill or MCP server while the durable
+    // driver's bare-`buildContainer` coder did. Both must default through the same helper.
+    const { agentKindRegistry } = resolveEntryRegistries({})
+    expect(agentKindRegistry.skillsFor('coder').bundled.map((s) => s.id)).toContain(
+      NUXT_UI_SKILL_ID,
+    )
+    expect(agentKindRegistry.toolServersFor('coder').servers.map((s) => s.id)).toContain(
+      NUXT_UI_TOOL_SERVER_ID,
+    )
+  })
+
+  it('lets an injected agent-kind registry win on both entry point and builder', () => {
+    // The opt-in boundary: a deployment that injects its own registry gets exactly what it
+    // registered, not our Nuxt UI capability layered on silently, at either resolution point.
+    const injected = defaultAgentKindRegistry()
+    expect(resolveEntryRegistries({ agentKindRegistry: injected }).agentKindRegistry).toBe(injected)
+    const { agentKindRegistry } = resolveWorkerRegistries({ agentKindRegistry: injected })
+    expect(agentKindRegistry).toBe(injected)
+    expect(agentKindRegistry.skillsFor('coder').bundled.map((s) => s.id)).not.toContain(
+      NUXT_UI_SKILL_ID,
+    )
   })
 })

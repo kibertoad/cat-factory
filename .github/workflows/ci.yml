@@ -503,6 +503,13 @@ jobs:
       - name: Guard SPA theme aliases
         run: node scripts/check-frontend-palette.mjs
 
+      # The bundled Nuxt UI skill (`backend/packages/agents/.../nuxt-ui/skill.generated.ts`) is
+      # inlined from the vendored `.claude/skills/nuxt-ui/` tree so the platform's own coder agents
+      # apply the same text a local Claude Code session does. This fails if the two have drifted, so
+      # there is no second copy anyone maintains by hand. Pure node; no install.
+      - name: Guard the bundled Nuxt UI skill
+        run: node scripts/generate-nuxt-ui-skill.mjs --check
+
       # Bans `.catch(() => {})` in backend non-test source — a swallowed failure with no log and
       # no cause (observability-logging-gaps.md, B1). `runBestEffort` keeps the swallow and adds
       # the evidence; a genuinely-silent drop annotates itself. Pure node; no install.
