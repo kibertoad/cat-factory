@@ -11,9 +11,9 @@ requirements review, the merge/gate lifecycle, telemetry). **Read `CLAUDE.md` fi
   tables in [`README.md`](./README.md#repository-layout) (guarded by
   `scripts/check-package-catalog.mjs` so it can't drift). Backend architecture:
   [`backend/README.md`](./backend/README.md).
-- **Local orientation**: each `backend/packages/*` and `backend/runtimes/*` has its own
-  `AGENTS.md` with that package's public entry point and a "where things live" map. Open the
-  one next to the code you're editing.
+- **Local orientation**: each `backend/packages/*`, `backend/runtimes/*` and `frontend/app` has
+  its own `AGENTS.md` with that package's public entry point and a "where things live" map. Open
+  the one next to the code you're editing.
 - **Vocabulary & naming**: [`docs/glossary.md`](./docs/glossary.md) resolves the traps: `block`
   vs `task` vs `card`; the dir↔package name map (`runtimes/cloudflare` = `@cat-factory/worker`);
   `runner`/`executor`/`transport`/`provider`; and where the cross-cutting concepts (gates,

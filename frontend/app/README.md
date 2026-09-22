@@ -15,6 +15,7 @@ The SPA source lives under `app/` (the Nuxt srcDir).
 - [What it is](#what-it-is)
 - [Tech stack](#tech-stack)
 - [Layout](#layout)
+- [Nuxt UI: agent tooling and overrides](#nuxt-ui-agent-tooling-and-where-the-spa-overrides-the-skill)
 - [Task swimlanes](#task-swimlanes)
 - [Roles (engineer / product manager / designer)](#roles-engineer--product-manager--designer)
 - [Interface modes (basic / advanced)](#interface-modes-basic--advanced)
@@ -41,7 +42,8 @@ over the WebSocket. How that sync works is written up in
 
 ## Tech stack
 
-- **Nuxt 4 / Vue 3** SPA: single route (`pages/index.vue`).
+- **Nuxt 4 / Vue 3** SPA: the board is `pages/index.vue`, beside three standalone routes
+  (`mcp-authorize.vue`, `mcp-oauth-callback.vue`, `reset-password.vue`).
 - **Pinia** (+ `pinia-plugin-persistedstate`): feature stores.
 - **Vue Flow** (`core`, `background`, `controls`, `node-resizer`): the canvas.
 - **Nuxt UI** + Tailwind: components and styling.
@@ -50,15 +52,15 @@ over the WebSocket. How that sync works is written up in
 
 ## Layout
 
-| Path              | Contents                                                                                                                                              |
-| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `app.vue`         | Root; wraps the page in `AuthGate`.                                                                                                                   |
-| `pages/index.vue` | The only route: mounts the sidebar, canvas, toolbar, inspector, focus view, and all modals.                                                           |
-| `components/`     | UI grouped by area (see [Key UI surfaces](#key-ui-surfaces)).                                                                                         |
-| `composables/`    | `useApi` (typed client), `useWorkspaceStream` (WebSocket sync), `useBlockDrag`, `useBlockQueries`, `useBoardFlow`, `useSemanticZoom`, `useDepLabels`. |
-| `stores/`         | Pinia stores, one per feature domain.                                                                                                                 |
-| `types/`          | TypeScript domain unions (`domain.ts`) and wire types mirroring the contracts.                                                                        |
-| `utils/`          | Small pure helpers.                                                                                                                                   |
+| Path           | Contents                                                                                                                                                                     |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app.vue`      | Root; wraps the page in `AuthGate`.                                                                                                                                          |
+| `pages/`       | The board (`index.vue`: sidebar, canvas, toolbar, inspector, focus view, all modals), plus the standalone `mcp-authorize`, `mcp-oauth-callback` and `reset-password` routes. |
+| `components/`  | UI grouped by area (see [Key UI surfaces](#key-ui-surfaces)).                                                                                                                |
+| `composables/` | `useApi` (typed client), `useWorkspaceStream` (WebSocket sync), `useBlockDrag`, `useBlockQueries`, `useBoardFlow`, `useSemanticZoom`, `useDepLabels`.                        |
+| `stores/`      | Pinia stores, one per feature domain.                                                                                                                                        |
+| `types/`       | TypeScript domain unions (`domain.ts`) and wire types mirroring the contracts.                                                                                               |
+| `utils/`       | Small pure helpers.                                                                                                                                                          |
 
 ### The board's top overlay region has ONE owner
 
@@ -303,6 +305,64 @@ Every colour in the SPA is a token that follows the THEME and the colour MODE. T
 A **theme** is a Nuxt UI theme editor document (https://ui.nuxt.com/theme): the sparse `ThemeDoc` the editor edits and shares as a `?doc=` link, decoded by `utils/theme/link.ts` and typed in `utils/theme/doc.ts` (a port of the editor engine's tables). The app speaks THAT format rather than one of its own, so a theme built in the editor imports as-is and a built-in theme is a document a user could have exported. `utils/theme/builtins.ts` ships `Cat Factory` (the default; its `colors` MUST equal `app.config.ts`'s `ui.colors`, which paints the first frame) and the editor's own `Mono` preset, referenced from the preset table rather than copied. The `theme` store persists the pick and the user's imported documents in this browser; `plugins/theme.client.ts` applies the active document at runtime: aliases onto `appConfig.ui.colors` (Nuxt UI's own colours plugin re-emits the ramps), default variants and component overrides onto `appConfig.ui.<component>` merged INTO the layer's own overrides, and tokens / radius / fonts onto one `<style id="app-theme">` whose selectors anchor on the `data-theme` attribute on `<html>` (`utils/theme/css.ts`, which is also the write boundary for untrusted values). The faces the built-in themes name (Geist, Geist Mono) are self-hosted through `@nuxt/fonts` (`fonts.families` in `nuxt.config.ts`, pinned by `builtins.spec.ts`); a font an IMPORTED theme names is applied as a family name only, so it renders when the device or the deployment provides it. A editor link whose document equals one of the editor's presets collapses to `{ preset: 'mono' }`; `utils/theme/presets.ts` is a copy of the editor's preset table so such a link rebuilds (a decode table, not menu entries).
 
 **Colour mode** (system / light / dark) is `@nuxtjs/color-mode`'s, registered by Nuxt UI, with its own persistence; `nuxt.config.ts` follows the system preference and falls back to dark. `AppearanceSwitcher` at the sidebar bottom is the one control for both axes. The pre-JS loading shell (`spa-loading-template.html`) cannot resolve a token (no stylesheet is loaded yet), so the plugin caches the computed colours of the four tokens the shell paints with, per colour mode, in `localStorage` (`utils/theme/bootPalette.ts`), and a two-line inline script in the shell applies the entry for the mode the `<head>` colour-mode script has already put on `<html>`. The hardcoded defaults are the default theme's, used only until a theme has been seen in that mode.
+
+## Nuxt UI: agent tooling and where the SPA overrides the skill
+
+The SPA runs on Nuxt UI 4. Two first-party sources carry the rules this repo does not restate:
+
+- **The vendored [`nuxt-ui` skill](https://github.com/kibertoad/cat-factory/tree/main/.claude/skills/nuxt-ui)** teaches WHEN to reach for which
+  component (Modal vs Slideover vs Drawer, Tabs vs NavigationMenu, Toast vs Alert) and HOW to build
+  well (the variant-weight table, one solid primary per view, semantic utility roles). It is
+  vendored under `.claude/skills/nuxt-ui/`, beside the project's own skills, so the rules version
+  with the code and every contributor on Claude Code reads the same text. This is the Claude Code
+  surface: `.claude/skills/` auto-loads for a local Claude Code session, and the repo `.mcp.json` is
+  offered once for approval on the first session in the repo (re-offered when the file changes); a
+  decline is remembered, and `claude mcp reset-project-choices` un-sticks it. Another tool that reads
+  `AGENTS.md` (Codex, for one) gets the pointers below but not an auto-loaded skill or an auto-wired
+  server. Making the platform's OWN coder agents (Claude Code, Codex, Pi in
+  the runner image) apply the skill is a separate, backend change: they stage skills and tool
+  servers per run through the agent-capabilities system (ADR 0024 /
+  [`custom-agents.md`](https://github.com/kibertoad/cat-factory/blob/main/backend/docs/custom-agents.md)), not from these repo files. The `@nuxt/ui` npm
+  package does not ship the skill, so it cannot move with `pnpm update`: it is vendored from the
+  `v4` branch of `nuxt/ui` (which tracks the 4.x line) and pinned by convention to the Nuxt UI
+  major in [`package.json`](./package.json) (`@nuxt/ui@^4.11`). Refresh it by re-vendoring
+  `skills/nuxt-ui/` from that branch (or `npx skills add nuxt/ui`) when the major moves. The
+  vendored files are kept byte-for-byte as upstream: `.oxfmtrc.json` exempts them from the
+  formatter and `scripts/check-doc-links.mjs` skips them, so a refresh stays a clean diff even when
+  upstream ships a link this repo's own doc rules would reject.
+- **The [`nuxt-ui` MCP server](https://github.com/kibertoad/cat-factory/blob/main/.mcp.json)** (`https://ui.nuxt.com/mcp`, declared repo-level)
+  answers WHAT a component accepts: props, slots, events, theme files and examples per component.
+  The skill defers to it for every API question.
+
+The SPA's own rules win where they and the skill disagree. Each entry below links the rule it
+protects, so the two never contradict silently:
+
+- **Visible copy is an i18n key, never a literal string.** The skill's examples hard-code labels and
+  placeholders (`label="Email"`, `placeholder="you@example.com"`); here every user-facing string
+  goes through `@nuxtjs/i18n` and lands in the catalog. [Rule](#internationalization-i18n-authoring).
+- **Schema validation goes through valibot, never zod.** The skill's `forms.md` recipe opens with
+  `import * as z from 'zod'` and validates through `z.object({...})`; this package depends on
+  `valibot` (and `@toad-contracts/valibot`) and has no `zod`, so a `zod` import fails typecheck and
+  "fixing" it pulls in a dependency the repo deliberately lacks (which then has to clear the 24h
+  `minimumReleaseAge` gate). Validate with valibot, mirroring the wire contracts
+  ([`@cat-factory/contracts`](https://github.com/kibertoad/cat-factory/tree/main/backend/packages/contracts)).
+- **A backend-declared form renders through `DescriptorFields.vue`, not a hand-built `UForm`.** The
+  skill teaches the hand-rolled `UForm` + `UFormField` shape for every form; when the backend
+  declares the fields and the SPA only collects them, that shape is forbidden here.
+  [Rule](#a-backend-declared-form-renders-through-descriptorfieldsvue).
+- **Failure toasts go through the funnel, not a bare `toast.add`.** The skill uses `useToast()`
+  freely; here a failed backend call is reported with `usePipelineErrorToast().present(error, key)`.
+  [Rule](#every-failure-toast-goes-through-one-funnel).
+- **Icon-only buttons carry an accessible name.** Use `common/IconButton.vue`
+  ([source](./app/components/common/IconButton.vue)), which applies `label` as both `title` and
+  `aria-label`, rather than a bare `<UButton icon>`.
+- **Colour goes through theme tokens, never a fixed palette shade.** The skill bans raw Tailwind
+  hues; this repo also bans fixed numbered aliases, enforced by
+  [`scripts/check-frontend-palette.mjs`](https://github.com/kibertoad/cat-factory/blob/main/scripts/check-frontend-palette.mjs).
+  [Rule](#colour-through-theme-tokens-never-a-fixed-palette-shade).
+- **Confirmation dialogs use the shared `useConfirm`.** The skill shows `useOverlay()` per call
+  site; here callers `await useConfirm().confirm({...})`
+  ([source](./app/composables/useConfirm.ts)) against one app-mounted `<ConfirmDialog />`.
 
 ## Task swimlanes
 
@@ -1357,12 +1417,21 @@ wrong place is invisible until a user cannot find it:
 
 ## Develop & test
 
+This package has no `dev` or `lint` script of its own: it is a layer, consumed through `extends`,
+and linting is whole-tree from the repo root (CLAUDE.md). The `AGENTS.md` verify checklist carries
+the same list, plus the install-free frontend guards.
+
 ```bash
+# From the repo root:
 pnpm install
-pnpm dev          # Nuxt dev server (expects the Worker running; set NUXT_PUBLIC_API_BASE)
-pnpm test         # vitest
-pnpm typecheck    # nuxt typecheck
-pnpm lint         # oxlint + oxfmt --check
+pnpm dev:frontend                                    # Nuxt dev server via deploy/frontend; set NUXT_PUBLIC_API_BASE to a running Worker
+pnpm exec turbo run typecheck --filter=@cat-factory/app   # typecheck goes through Turbo
+pnpm lint                                            # oxlint + oxfmt over the whole tree
+
+# From frontend/app:
+pnpm exec vitest run <file>                          # run the spec your change touched
+pnpm i18n:check                                      # catalog is well-formed
+pnpm i18n:parity                                     # locales are in parity
 ```
 
 > Building/deploying the static site is covered in the deployment docs: see the
