@@ -98,6 +98,12 @@ harness lifts it onto `openPullRequest`; when the target repo ships a PR templat
 template, filled in. Trap: the guidance rides EVERY agent pass, so the coverage test classifies every
 agent-running mode as PR-opening or not. Doc: [`pipeline-pr-descriptions.md`](../backend/docs/pipeline-pr-descriptions.md).
 
+**Delegated executors**: a step runs in a system the DEPLOYMENT already operates, on
+`DelegatedExecutorRegistry` + an `agent.surface: 'delegated'` kind; everything around it (intake,
+standards, `ci`, the merge policy, notifications) is the engine unchanged. Deadliest trap: both drivers
+REPLAY, so the engine commits a delegation CLAIM before `start()` and the executor owes idempotency per
+`correlationKey`, or one task gets two external runs and two PRs. Doc: [`delegated-executors.md`](../backend/docs/delegated-executors.md).
+
 **Consensus panels**: an eligible step runs as a multi-model panel (`@cat-factory/consensus`). Traps: a
 panel participant has NO checkout and `dispatchDeliversCheckout` is the one definition every layer asks;
 the tier is chosen by the ENGINE at dispatch, deterministically. Doc:

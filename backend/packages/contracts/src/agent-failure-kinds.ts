@@ -26,6 +26,8 @@ import * as v from 'valibot'
  *   - `timeout`          — a container watchdog fired (inactivity or max-duration).
  *   - `agent`            — the agent / git push reported a failure.
  *   - `job_failed`       — an async container job came back failed. [execution]
+ *   - `delegated_failed` : a step's work ran on an EXTERNAL executor and that system reported a
+ *                          terminal failure. [execution]
  *   - `rejected`         — a human rejected a gated proposal, stopping the run. [execution]
  *   - `cancelled`        — the user (or an orphan sweep) explicitly stopped the run.
  *   - `unknown`          — anything not otherwise classified.
@@ -46,6 +48,13 @@ export const agentFailureKindSchema = v.picklist([
   'timeout',
   'agent',
   'job_failed',
+  // The DELEGATED sibling of `job_failed`: a step whose work ran on a registered external executor
+  // and that system called its verdict final. Its own member rather than a reuse of
+  // `harness_shutdown`, which is what it borrowed while the two shared a "terminal, do not retry"
+  // flag: a delegated step never had a harness, so that name told an operator their container had
+  // been stopped and bucketed external CI verdicts under container eviction in every rollup. The
+  // remedy is also different in kind, because the logs are somebody else's.
+  'delegated_failed',
   'rejected',
   // A companion agent could not return a parseable quality assessment (truncated /
   // malformed) even after a repair retry, so the run was failed for human attention.

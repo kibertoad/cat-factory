@@ -22,6 +22,7 @@ public enum DebugRunFailureKind {
     TIMEOUT("timeout"),
     AGENT("agent"),
     JOB_FAILED("job_failed"),
+    DELEGATED_FAILED("delegated_failed"),
     REJECTED("rejected"),
     COMPANION_REJECTED("companion_rejected"),
     STALLED("stalled"),

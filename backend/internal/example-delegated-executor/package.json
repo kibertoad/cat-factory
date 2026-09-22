@@ -1,0 +1,31 @@
+{
+  "name": "@cat-factory/example-delegated-executor",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Worked example of a deployment plugging its own EXTERNAL executor in as the executor of a pipeline step: a DelegatedExecutorDefinition, an agent kind that runs on it, and a pipeline that keeps cat-factory's own CI gate and merge tail around it. The executor is a fake, so the example runs with no external system.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest",
+    "test:run": "vitest run"
+  },
+  "dependencies": {
+    "@cat-factory/agents": "workspace:*",
+    "@cat-factory/kernel": "workspace:*"
+  },
+  "devDependencies": {
+    "@cat-factory/orchestration": "workspace:*",
+    "typescript": "7.0.2",
+    "vitest": "^4.1.11"
+  }
+}
