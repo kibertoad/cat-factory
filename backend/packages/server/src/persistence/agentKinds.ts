@@ -37,7 +37,7 @@ import { UnavailableError, describeError } from '@cat-factory/kernel'
  * each kind that declares it (see `AgentKindSource`), so a large playbook on several kinds inflates
  * this response well past a plain table (the Nuxt UI capability is ~99 KB x 3 kinds). If that grows,
  * serve bundled skills by reference here the way `catalog` refs are, rather than caching a read
- * whose whole point is to be current. Tracked separately.
+ * whose whole point is to be current. Tracked in #2269.
  */
 export class HttpAgentKindSource implements AgentKindSource {
   constructor(

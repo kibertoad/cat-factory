@@ -53,7 +53,7 @@ export interface AgentKindCapabilityView {
  * (instructions plus every resource blob) into each kind that declares it, so one large playbook
  * assigned to several kinds serialises N times. The Nuxt UI capability is the first to do this at
  * scale (~99 KB x 3 kinds). If more land, serve bundled skills by reference on this route the way
- * `catalog` refs already are (id plus body fetched on demand). Tracked separately.
+ * `catalog` refs already are (id plus body fetched on demand). Tracked in #2269.
  */
 export interface AgentKindSource {
   capabilities(): Promise<AgentKindCapabilityView[]>
