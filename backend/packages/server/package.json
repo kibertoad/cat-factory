@@ -49,9 +49,9 @@
   },
   "devDependencies": {
     "@types/node": "^26.6.2",
-    "ai": "^7.0.107",
+    "ai": "^7.0.111",
     "typescript": "7.0.2",
-    "undici": "^8.10.2",
+    "undici": "^8.11.0",
     "vitest": "^4.1.11"
   }
 }

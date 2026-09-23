@@ -122,9 +122,9 @@ RUN echo 'harness:100000:65536' > /etc/subuid \
 # The Codex pin also carries a FLOOR the catalog depends on: `gpt-6-astra` resolves only from
 # Codex 0.153.0 onward, and an older CLI answers `Unknown model` rather than falling back, so
 # moving this pin below that version silently breaks that catalog entry at dispatch.
-ARG PI_VERSION=0.86.0
-ARG CLAUDE_CODE_VERSION=2.1.278
-ARG CODEX_VERSION=0.154.0
+ARG PI_VERSION=0.87.1
+ARG CLAUDE_CODE_VERSION=2.1.281
+ARG CODEX_VERSION=0.156.1
 RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
     sh -eu -c 'apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl procps psmisc python3 jq ripgrep && rm -rf /var/lib/apt/lists/*; \
     if [ -s /tmp/extra_ca.crt ]; then export NODE_EXTRA_CA_CERTS=/tmp/extra_ca.crt; fi; \

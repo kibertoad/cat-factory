@@ -34,7 +34,7 @@
     "@modular-vue/runtime": "^1.4.1",
     "@modular-vue/vue": "^1.4.1",
     "@nuxt/fonts": "^0.14.0",
-    "@nuxt/ui": "^4.11.1",
+    "@nuxt/ui": "^4.11.2",
     "@nuxtjs/i18n": "^10.6.0",
     "@pinia/nuxt": "^1.0.2",
     "@toad-contracts/core": "1.0.0",

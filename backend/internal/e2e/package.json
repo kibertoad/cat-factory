@@ -25,7 +25,7 @@
     "@cat-factory/orchestration": "workspace:*",
     "@playwright/test": "^1.63.0",
     "@types/node": "^26.6.2",
-    "ai": "^7.0.107",
+    "ai": "^7.0.111",
     "typescript": "7.0.2",
     "vitest": "^4.1.11"
   }

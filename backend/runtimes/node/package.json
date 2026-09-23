@@ -61,9 +61,9 @@
     "@hono/node-server": "^2.1.1",
     "drizzle-orm": "1.0.0-rc.4",
     "hono": "^4.13.8",
-    "layered-loader": "^16.1.1",
+    "layered-loader": "^17.0.0",
     "pg": "^8.23.0",
-    "pg-boss": "^12.33.2",
+    "pg-boss": "^12.33.6",
     "toad-scheduler": "^4.2.0",
     "ws": "^8.21.3"
   },

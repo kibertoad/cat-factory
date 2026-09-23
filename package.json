@@ -37,11 +37,11 @@
     "@stryker-mutator/api": "10.0.0",
     "@valibot/to-json-schema": "^1.8.0",
     "knip": "^6.37.0",
-    "oxfmt": "^0.68.0",
-    "oxlint": "^1.83.0",
+    "oxfmt": "^0.70.0",
+    "oxlint": "^1.85.0",
     "publint": "^0.3.24",
     "sherif": "^1.13.0",
-    "turbo": "^2.11.2",
+    "turbo": "^2.11.3",
     "typescript": "7.0.2"
   },
   "engines": {
