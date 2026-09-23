@@ -217,8 +217,8 @@ Several shapes of entry fall out of this:
   carries it. It is a **separate entry rather than a `bedrock` flavour on `claude-opus`**,
   because Bedrock lags Anthropic: folding it in would silently run 4.8 for a block pinned
   to Opus 5. Any entry whose model Bedrock serves at the SAME generation (`gpt-5.5`,
-  `gpt-oss-120b`, `claude-fable-5-1`, `claude-opus-5-5`) does carry the flavour directly. Fable 5.1 is the case
-  where that lag closed: Bedrock listed `anthropic.claude-fable-5-1` on Anthropic's own launch
+  `gpt-oss-120b`, `claude-fable-5-1`, `claude-opus-5-5`) does carry the flavour directly.
+  Fable 5.1 is the case where that lag closed: Bedrock listed `anthropic.claude-fable-5-1` on Anthropic's own launch
   day, which is why it is the first Claude entry here to carry subscription, OpenRouter and
   Bedrock arms at once. It is also now the most expensive model this catalog can select on
   Bedrock, so the bare `bedrock` price row (which cannot match per model, because a Bedrock ref
@@ -230,8 +230,8 @@ Several shapes of entry fall out of this:
 - **Subscription-only**: `claude-sonnet`. No Cloudflare/direct/OpenRouter base; the
   subscription harness is the _only_ way to run it, so it requires a connected vendor
   token (§6) and there is **no inline fallback** (§5). `claude-fable`, `claude-fable-5-1`,
-  `claude-opus`, `claude-opus-5-5` and the GPT-6 / GPT-5.6 / GPT-5.5 tiers pair their subscription flavour
-  with an OpenRouter pay-as-you-go base, so they are dual-mode rather than subscription-only.
+  `claude-opus`, `claude-opus-5-5` and the GPT-6 / GPT-5.6 / GPT-5.5 tiers pair their
+  subscription flavour with an OpenRouter pay-as-you-go base, so they are dual-mode rather than subscription-only.
   `gpt-6-astra` carries one more constraint the others do not: Codex resolves that slug only
   from CLI 0.153.0 onward, so a deployment running an older executor image gets `Unknown model`
   rather than a fallback. `gpt-6-sol` and `gpt-6-luna` carry the same trap with a 0.156.1 floor.

@@ -547,7 +547,7 @@ export const MODEL_CATALOG: SelectableModel[] = [
     family: 'glm',
     label: 'GLM-5.3 FlashX',
     description:
-      "The high-speed tier of GLM-5.3 Flash (up to 200 tokens/s): same multimodal model, " +
+      'The high-speed tier of GLM-5.3 Flash (up to 200 tokens/s): same multimodal model, ' +
       'about 2.5 times the price. Pay-as-you-go through OpenRouter.',
     // Z.ai lists GLM-5.3-FlashX on its own price page ($0.37 in / $0.075 cached / $1.25 out per
     // 1M) and OpenRouter serves it at those rates since 2026-09-18. Neither Workers AI (which
