@@ -7,7 +7,7 @@ growth must displace something.
 
 Where everything else lives:
 
-- **Orientation**: [`README.md`](./README.md) (the CI-guarded layout table),
+- **Orientation**: [`README.md`](./README.md), the CI-guarded [layout](./docs/repository-layout.md),
   [`backend/README.md`](./backend/README.md), and an `AGENTS.md` in every `backend/packages/*`,
   `backend/runtimes/*` and `frontend/app` with its entry point and a "where things live" map.
 - **Vocabulary** (block vs task vs card, runner/executor/transport, `runtimes/cloudflare` =
@@ -104,7 +104,7 @@ Docs are part of the change and CI catches only broken LINKS, never staleness. M
 the blast radius (a one-line internal fix needs none; a new export / env var / capability / flow
 does):
 
-- The package's own `README.md` + `AGENTS.md`; the root `README.md`'s layout and feature-guide rows.
+- The package's own `README.md` + `AGENTS.md`; the [layout](./docs/repository-layout.md) and [feature guide](./docs/README.md#feature-guide).
 - This file, only for a new CROSS-CUTTING rule. Detail about one flow goes in that flow's doc, and a
   higher-level doc POINTS AT a new deeper one or the deeper one is lost.
 - **Does this change behaviour a catfactory.ai page describes? Then it ships with a WEBSITE PR,
@@ -284,7 +284,7 @@ Rollout recipe, release-PR re-sync, new-published-package checklist:
 serves the same `@cat-factory/server` app behind the same kernel ports, so a new repository, port
 implementation, table, migration, cron task, gateway or wiring added to one has to land in the other
 (D1 migration ⇄ Drizzle schema + `pnpm db:generate`; a Cloudflare `scheduled` cron ⇄ a Node
-`setInterval` sweeper; a D1 repo ⇄ a Drizzle repo). What each facade supplies is the root README's
+`setInterval` sweeper; a D1 repo ⇄ a Drizzle repo). What each facade supplies is the repository
 layout table; the internals that bite are each one's `AGENTS.md`
 ([cloudflare](./backend/runtimes/cloudflare/AGENTS.md), [node](./backend/runtimes/node/AGENTS.md),
 [local](./backend/runtimes/local/AGENTS.md)).
