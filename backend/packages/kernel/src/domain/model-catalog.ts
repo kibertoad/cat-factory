@@ -192,6 +192,29 @@ export const MODEL_CATALOG: SelectableModel[] = [
     },
   },
   {
+    id: 'qwen3.8-max-prime',
+    family: 'qwen',
+    label: 'Qwen3.8 Max Prime',
+    description:
+      'Qwen3.8 Max on higher-throughput serving: the same model, 1M window and image input, ' +
+      'answering faster at twice the price. Pay-as-you-go through OpenRouter.',
+    // A SPEED tier, not a new model, and still its own entry: the choice between it and
+    // `qwen3.8-max` is a per-block trade of rate against latency that an operator makes with the
+    // price in front of them, which is the two-entry shape the Muse Spark tiers set. OpenRouter
+    // lists it (2026-09-23) as a separate SKU at $4 in / $0.50 cached / $12 out per 1M, and
+    // DashScope publishes no id for it, so the gateway arm is the only verified route.
+    openrouter: {
+      ref: {
+        provider: 'openrouter',
+        model: 'qwen/qwen3.8-max-prime',
+        contextTokens: 1_000_000,
+        acceptsImages: true,
+      },
+      keyEnv: 'OPENROUTER_API_KEY',
+      providerLabel: 'OpenRouter',
+    },
+  },
+  {
     id: 'qwen3.8-flash',
     family: 'qwen',
     label: 'Qwen3.8 Flash',
@@ -454,6 +477,24 @@ export const MODEL_CATALOG: SelectableModel[] = [
     },
   },
   {
+    id: 'glm-5.3-prime',
+    family: 'glm',
+    label: 'GLM-5.3 Prime',
+    description:
+      'GLM-5.3 on accelerated serving: the same model at 1.5 to 2 times the output speed, ' +
+      'for twice the price. Pay-as-you-go through OpenRouter.',
+    // Same speed-tier reasoning as `qwen3.8-max-prime`: one model, two prices, so the operator
+    // picks per block. OpenRouter lists it (2026-09-23) at $2.80 in / $0.56 cached / $8.80 out
+    // per 1M with a 1M window. Z.ai's own price list does not carry it yet and it is not on the
+    // coding plan, so only the gateway arm is declared, and no `acceptsImages`: the route
+    // publishes text input only, as GLM-5.3 itself does.
+    openrouter: {
+      ref: { provider: 'openrouter', model: 'z-ai/glm-5.3-prime', contextTokens: 1_000_000 },
+      keyEnv: 'OPENROUTER_API_KEY',
+      providerLabel: 'OpenRouter',
+    },
+  },
+  {
     id: 'glm-5.3-flash',
     family: 'glm',
     label: 'GLM-5.3 Flash',
@@ -499,6 +540,29 @@ export const MODEL_CATALOG: SelectableModel[] = [
         contextTokens: 1_000_000,
       },
       vendor: 'glm',
+    },
+  },
+  {
+    id: 'glm-5.3-flashx',
+    family: 'glm',
+    label: 'GLM-5.3 FlashX',
+    description:
+      'The high-speed tier of GLM-5.3 Flash (up to 200 tokens/s): same multimodal model, ' +
+      'about 2.5 times the price. Pay-as-you-go through OpenRouter.',
+    // Z.ai lists GLM-5.3-FlashX on its own price page ($0.37 in / $0.075 cached / $1.25 out per
+    // 1M) and OpenRouter serves it at those rates since 2026-09-18. Neither Workers AI (which
+    // serves the Flash weights, not this serving tier) nor the coding plan carries it, so the
+    // gateway is the one verified route. Image input as on its Flash sibling: the route
+    // publishes text, image and video.
+    openrouter: {
+      ref: {
+        provider: 'openrouter',
+        model: 'z-ai/glm-5.3-flashx',
+        contextTokens: 1_048_576,
+        acceptsImages: true,
+      },
+      keyEnv: 'OPENROUTER_API_KEY',
+      providerLabel: 'OpenRouter',
     },
   },
   {
@@ -619,6 +683,45 @@ export const MODEL_CATALOG: SelectableModel[] = [
     },
   },
   {
+    id: 'claude-opus-5-5',
+    family: 'claude',
+    label: 'Claude Opus 5.5',
+    description:
+      "Anthropic's newest Opus: close to Fable 5.1 on most coding work at a fifth cheaper than " +
+      'Opus 5. Run via Claude Code on your Claude subscription, on AWS Bedrock in your own ' +
+      'account, or pay-as-you-go through OpenRouter (billed at Anthropic rates).',
+    // Released 2026-09-22 and, like Fable 5.1, on Bedrock the same day: the model card names
+    // `anthropic.claude-opus-5-5` on `bedrock-runtime` with the 1M window and image input, so
+    // all three arms are declared against verified routes. Its own entry beside `claude-opus`
+    // rather than a re-point of it, so a block pinned to Opus 5 keeps running Opus 5.
+    bedrock: {
+      baseModelId: 'anthropic.claude-opus-5-5',
+      contextTokens: 1_000_000,
+      acceptsImages: true,
+    },
+    openrouter: {
+      ref: {
+        // DOTTED on the gateway, dashed on Anthropic's API, as with Fable 5.1 above.
+        provider: 'openrouter',
+        model: 'anthropic/claude-opus-5.5',
+        contextTokens: 1_000_000,
+        acceptsImages: true,
+      },
+      keyEnv: 'OPENROUTER_API_KEY',
+      providerLabel: 'OpenRouter',
+    },
+    subscription: {
+      ref: {
+        provider: 'anthropic',
+        model: 'claude-opus-5-5',
+        harness: 'claude-code',
+        contextTokens: 1_000_000,
+        acceptsImages: true,
+      },
+      vendor: 'claude',
+    },
+  },
+  {
     id: 'claude-opus',
     family: 'claude',
     label: 'Claude Opus 5',
@@ -724,6 +827,69 @@ export const MODEL_CATALOG: SelectableModel[] = [
       ref: {
         provider: 'openai',
         model: 'gpt-6-astra',
+        harness: 'codex',
+        contextTokens: 1_050_000,
+        acceptsImages: true,
+      },
+      vendor: 'codex',
+    },
+  },
+  // GPT-6 Sol and Luna (2026-09-22) complete the GPT-6 family below Astra, at half the GPT-5.6
+  // tiers' rates. Codex resolves both slugs only from 0.156.1 onward, the same `Unknown model`
+  // trap as Astra's 0.153.0 floor. OpenRouter also mints `-pro` slugs for both; they are the same
+  // model with `reasoning.mode` set to `pro` at identical pricing, so they get no entry, for the
+  // reason the Astra note gives.
+  {
+    id: 'gpt-6-sol',
+    family: 'openai',
+    label: 'GPT-6 Sol',
+    description:
+      "OpenAI's cost-efficient high-end GPT-6 tier for demanding coding and research, below " +
+      'Astra: a 1.05M window that reads images. Run via Codex on your ChatGPT subscription, ' +
+      'or pay-as-you-go through OpenRouter (billed at OpenAI rates).',
+    openrouter: {
+      ref: {
+        provider: 'openrouter',
+        model: 'openai/gpt-6-sol',
+        contextTokens: 1_050_000,
+        acceptsImages: true,
+      },
+      keyEnv: 'OPENROUTER_API_KEY',
+      providerLabel: 'OpenRouter',
+    },
+    subscription: {
+      ref: {
+        provider: 'openai',
+        model: 'gpt-6-sol',
+        harness: 'codex',
+        contextTokens: 1_050_000,
+        acceptsImages: true,
+      },
+      vendor: 'codex',
+    },
+  },
+  {
+    id: 'gpt-6-luna',
+    family: 'openai',
+    label: 'GPT-6 Luna',
+    description:
+      "OpenAI's fast, cheapest GPT-6 tier for high-volume and latency-sensitive steps: a " +
+      '1.05M window that reads images. Run via Codex on your ChatGPT subscription, or ' +
+      'pay-as-you-go through OpenRouter (billed at OpenAI rates).',
+    openrouter: {
+      ref: {
+        provider: 'openrouter',
+        model: 'openai/gpt-6-luna',
+        contextTokens: 1_050_000,
+        acceptsImages: true,
+      },
+      keyEnv: 'OPENROUTER_API_KEY',
+      providerLabel: 'OpenRouter',
+    },
+    subscription: {
+      ref: {
+        provider: 'openai',
+        model: 'gpt-6-luna',
         harness: 'codex',
         contextTokens: 1_050_000,
         acceptsImages: true,
@@ -931,6 +1097,38 @@ export const MODEL_CATALOG: SelectableModel[] = [
         provider: 'openrouter',
         model: 'google/gemini-3.6-flash',
         contextTokens: 1_048_576,
+        acceptsImages: true,
+      },
+      keyEnv: 'OPENROUTER_API_KEY',
+      providerLabel: 'OpenRouter',
+    },
+  },
+  {
+    id: 'grok-4.7',
+    family: 'grok',
+    label: 'Grok 4.7',
+    description:
+      "xAI's newest flagship (2026-09-21): a larger base model with a longer RL run on " +
+      'multi-hour tasks, at Grok 4.6 prices and the same 500K window with image input. Direct ' +
+      'via an xAI key or pay-as-you-go through OpenRouter.',
+    // Its own entry beside `grok` (4.6), so a pinned block keeps its model. The same routes and
+    // the same gaps as that entry: Cloudflare carries Grok only through AI Gateway, not the
+    // Workers AI binding, and Bedrock's xAI line stops at Grok 4.3.
+    direct: {
+      ref: {
+        provider: 'xai',
+        model: 'grok-4.7',
+        contextTokens: 500_000,
+        acceptsImages: true,
+      },
+      keyEnv: 'XAI_API_KEY',
+      providerLabel: 'xAI',
+    },
+    openrouter: {
+      ref: {
+        provider: 'openrouter',
+        model: 'x-ai/grok-4.7',
+        contextTokens: 500_000,
         acceptsImages: true,
       },
       keyEnv: 'OPENROUTER_API_KEY',
