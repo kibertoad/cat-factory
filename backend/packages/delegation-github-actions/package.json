@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/delegation-github-actions",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A DelegatedExecutor over GitHub Actions: dispatch a workflow, correlate the run the platform's own key, poll status/conclusion, and read a result back. Solves the three problems every GitHub-hosted deployment hits when plugging its own implement/review/test loop in as the executor of a cat-factory pipeline step.",
   "repository": {
     "type": "git",
