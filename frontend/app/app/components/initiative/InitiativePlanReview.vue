@@ -249,7 +249,7 @@ async function copyPlan() {
            `5xl` shell), so a cap was dead markup and the comment here said so. On a window that now
            spans the viewport it is the only thing between the plan and 200-character lines, and it
            is the step reader's own measure (`AgentStepDetail`, `mx-auto max-w-3xl` over the same
-           13px `.reader-prose`) rather than a second opinion about how wide prose should be. The
+           `text-sm` `.reader-prose`) rather than a second opinion about how wide prose should be. The
            leftover width is the document's margins; the LAYOUT is what the extra space bought —
            outline and rail no longer competing with the plan for one 5xl card. -->
       <div class="mx-auto w-full max-w-3xl">

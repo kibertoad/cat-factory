@@ -369,7 +369,10 @@ const showOriginalDescription = ref(false)
               <UBadge :color="statusMeta.chip" variant="subtle" size="sm">
                 {{ statusLabel }}
               </UBadge>
-              <SectionLabel as="span">{{ level }}</SectionLabel>
+              <!-- The block's LEVEL, beside its status chip: a category this block is in, not a
+                   heading over what follows, so it keeps its own classes rather than adopting the
+                   eyebrow recipe (`common/SectionLabel.vue`). -->
+              <span class="text-3xs uppercase tracking-wide text-dimmed">{{ level }}</span>
             </div>
           </div>
         </div>

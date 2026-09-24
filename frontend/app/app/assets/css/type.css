@@ -36,6 +36,14 @@
  * and 14px. The two counts that carry the volume, 11px (1029) and 10px (255), are exact on the two
  * steps above, so they render unchanged.
  *
+ * THOSE FOUR MOVE THEIR LINE HEIGHT TOO, which the paragraph above is the reason for: `text-xs`
+ * and `text-sm` are Tailwind's own steps and DO declare a paired value, where the literal they
+ * replace declared none and inherited preflight's `1.5`. So a `text-[12px]` paragraph that carried
+ * no `leading-*` of its own went from 18px lines to `text-xs`'s 16px, roughly 250 sites tightening
+ * by a ninth. It is the cost of folding onto a step someone else owns rather than declaring a
+ * fifth one, and it is why the two steps THIS file declares pair nothing. A block that wants the
+ * old rhythm back says `leading-normal`.
+ *
  * `scripts/check-frontend-type-scale.mjs` bans the literal forms these replace. */
 
 @theme {

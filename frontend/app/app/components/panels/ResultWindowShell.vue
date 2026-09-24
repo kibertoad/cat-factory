@@ -69,8 +69,8 @@ const props = withDefaults(
      * worse, not better.
      *
      * The obligation that comes with it: CONTINUOUS PROSE inside a `full` window carries its
-     * own reading measure (`PROSE_MEASURE_CLASS`, the step reader's own, over the same 13px
-     * `.reader-prose`), or the width lands as 200-character lines.
+     * own reading measure (`PROSE_MEASURE_CLASS`, the step reader's own, over the same
+     * `text-sm` `.reader-prose`), or the width lands as 200-character lines.
      *
      * The unit that obligation attaches to is the PARAGRAPH, not the section — which is the
      * distinction to get right, because "a findings list reads better at the full span" is

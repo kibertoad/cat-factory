@@ -8,7 +8,6 @@ import AccountModelPolicySettings from '~/components/layout/AccountModelPolicySe
 import AccountPlatformAlertSettings from '~/components/layout/AccountPlatformAlertSettings.vue'
 import AccountRunCredentialSettings from '~/components/layout/AccountRunCredentialSettings.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
-import SectionLabel from '~/components/common/SectionLabel.vue'
 
 // Team settings for an org account: the member roster (with combinable admin /
 // developer / product roles), pending email invitations, and the per-account
@@ -241,9 +240,12 @@ async function disconnectEmail() {
             class="w-44"
             @update:model-value="(r: AccountRole[]) => updateMemberRoles(m.userId, r)"
           />
-          <SectionLabel v-else as="span">
+          <!-- The roles a member HOLDS, read-only where the select would be: the row's data, not
+               a heading over it, so it keeps its own classes rather than adopting the eyebrow
+               recipe (`common/SectionLabel.vue`). -->
+          <span v-else class="text-xs uppercase tracking-wide text-muted">
             {{ m.roles.join(', ') }}
-          </SectionLabel>
+          </span>
           <!-- Offboarding: end every session this member holds, leaving their membership and
                roles alone. Confirmed, because it is not undoable from here (the person simply
                signs in again) and because it is the sort of thing a mis-click should not do. -->
@@ -291,9 +293,10 @@ async function disconnectEmail() {
         >
           <span class="truncate">{{ inv.email }}</span>
           <span class="flex items-center gap-2 text-xs">
-            <SectionLabel as="span">
+            <!-- The invitation's STATE, which is what this row is about. Not an eyebrow. -->
+            <span class="uppercase tracking-wide text-muted">
               {{ invitationStatusLabel(inv.status) }}
-            </SectionLabel>
+            </span>
             <UButton
               v-if="inv.status === 'pending'"
               size="xs"
