@@ -137,22 +137,20 @@ watch(
             <p v-if="accountName" class="truncate text-xs text-dimmed">{{ accountName }}</p>
           </div>
           <div class="ms-auto flex items-center gap-1.5">
-            <div class="me-1 flex rounded-lg border border-default p-0.5 text-xs">
-              <button
-                v-for="opt in WINDOWS"
-                :key="opt.value"
-                class="rounded-md px-2.5 py-1 transition"
-                :class="
-                  platform.window === opt.value
-                    ? 'bg-elevated text-app-100'
-                    : 'text-muted hover:text-default'
-                "
-                :data-testid="`operator-window-${opt.value}`"
-                @click="setWindow(opt.value)"
-              >
-                {{ opt.label }}
-              </button>
-            </div>
+            <UTabs
+              :model-value="platform.window"
+              :items="WINDOWS"
+              :content="false"
+              size="xs"
+              class="me-1"
+              @update:model-value="setWindow($event as PlatformObservabilityWindow)"
+            >
+              <!-- UTabs renders its own triggers and forwards nothing from an item, so this
+                   slot is the one place a stable per-window selector can live. -->
+              <template #default="{ item }">
+                <span :data-testid="`operator-window-${item.value}`">{{ item.label }}</span>
+              </template>
+            </UTabs>
             <button
               class="rounded-lg border border-default p-1.5 text-muted transition hover:text-default"
               :title="t('platformObservability.refresh')"

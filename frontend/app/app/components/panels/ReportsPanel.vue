@@ -219,22 +219,20 @@ watch(
               data-testid="reports-board-filter"
               @update:model-value="reports.setWorkspaceFilter($event || null)"
             />
-            <div class="me-1 flex rounded-lg border border-default p-0.5 text-xs">
-              <button
-                v-for="opt in WINDOWS"
-                :key="opt.value"
-                class="rounded-md px-2.5 py-1 transition"
-                :class="
-                  reports.window === opt.value
-                    ? 'bg-elevated text-app-100'
-                    : 'text-muted hover:text-default'
-                "
-                :data-testid="`reports-window-${opt.value}`"
-                @click="reports.setWindow(opt.value)"
-              >
-                {{ opt.label }}
-              </button>
-            </div>
+            <UTabs
+              :model-value="reports.window"
+              :items="WINDOWS"
+              :content="false"
+              size="xs"
+              class="me-1"
+              @update:model-value="reports.setWindow($event as ReportWindow)"
+            >
+              <!-- UTabs renders its own triggers and forwards nothing from an item, so this
+                   slot is the one place a stable per-window selector can live. -->
+              <template #default="{ item }">
+                <span :data-testid="`reports-window-${item.value}`">{{ item.label }}</span>
+              </template>
+            </UTabs>
             <button
               class="rounded-lg border border-default p-1.5 text-muted transition hover:text-default"
               :aria-label="t('reports.refresh')"
@@ -465,22 +463,17 @@ watch(
                 <SectionLabel as="h2">
                   {{ t('reports.breakdown.title') }}
                 </SectionLabel>
-                <div class="flex rounded-lg border border-default p-0.5 text-xs">
-                  <button
-                    v-for="opt in DIMENSIONS"
-                    :key="opt.value"
-                    class="rounded-md px-2.5 py-1 transition"
-                    :class="
-                      dimension === opt.value
-                        ? 'bg-elevated text-app-100'
-                        : 'text-muted hover:text-default'
-                    "
-                    :data-testid="`reports-dimension-${opt.value}`"
-                    @click="dimension = opt.value"
-                  >
-                    {{ opt.label }}
-                  </button>
-                </div>
+                <UTabs
+                  :model-value="dimension"
+                  :items="DIMENSIONS"
+                  :content="false"
+                  size="xs"
+                  @update:model-value="dimension = $event as ReportActivityDimension"
+                >
+                  <template #default="{ item }">
+                    <span :data-testid="`reports-dimension-${item.value}`">{{ item.label }}</span>
+                  </template>
+                </UTabs>
               </div>
               <div class="grid gap-6 md:grid-cols-2">
                 <div>

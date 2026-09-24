@@ -167,6 +167,22 @@ function openToolsView() {
   ensureTrajectoryLoaded()
 }
 
+const viewTabs = computed(() => [
+  { value: 'calls', label: t('observability.modelActivity') },
+  { value: 'tools', label: t('observability.toolCalls.title') },
+  { value: 'context', label: t('observability.providedContext') },
+  { value: 'search', label: t('observability.webSearch') },
+])
+
+/** The tools view has a side effect (lazy trajectory load), so selection routes through here. */
+function selectView(next: string) {
+  if (next === 'tools') {
+    openToolsView()
+    return
+  }
+  view.value = next as typeof view.value
+}
+
 /**
  * Load the trajectory the first time it is actually looked at.
  *
@@ -531,44 +547,17 @@ function exportJson() {
             </p>
           </div>
           <div class="ms-auto flex items-center gap-1.5">
-            <div class="me-1 flex rounded-lg border border-default p-0.5 text-xs">
-              <button
-                class="rounded-md px-2.5 py-1 transition"
-                :class="
-                  view === 'calls' ? 'bg-elevated text-app-100' : 'text-muted hover:text-default'
-                "
-                @click="view = 'calls'"
-              >
-                {{ t('observability.modelActivity') }}
-              </button>
-              <button
-                class="rounded-md px-2.5 py-1 transition"
-                :class="
-                  view === 'tools' ? 'bg-elevated text-app-100' : 'text-muted hover:text-default'
-                "
-                @click="openToolsView()"
-              >
-                {{ t('observability.toolCalls.title') }}
-              </button>
-              <button
-                class="rounded-md px-2.5 py-1 transition"
-                :class="
-                  view === 'context' ? 'bg-elevated text-app-100' : 'text-muted hover:text-default'
-                "
-                @click="view = 'context'"
-              >
-                {{ t('observability.providedContext') }}
-              </button>
-              <button
-                class="rounded-md px-2.5 py-1 transition"
-                :class="
-                  view === 'search' ? 'bg-elevated text-app-100' : 'text-muted hover:text-default'
-                "
-                @click="view = 'search'"
-              >
-                {{ t('observability.webSearch') }}
-              </button>
-            </div>
+            <!-- Four VIEWS of the same run, which is what tabs mean. The trajectory is loaded
+                 lazily the first time the tools view is opened, so the change is watched rather
+                 than bound straight to `view`. -->
+            <UTabs
+              :model-value="view"
+              :items="viewTabs"
+              :content="false"
+              size="xs"
+              class="me-1"
+              @update:model-value="selectView(String($event))"
+            />
             <UButton
               v-if="view === 'calls'"
               icon="i-lucide-download"
