@@ -39,22 +39,31 @@ export async function apiGet<T>(fetchImpl: DelegatedFetch, request: GitHubReques
 }
 
 /**
- * POST a body and answer nothing.
+ * POST a body and answer what came back, or undefined for an empty body.
  *
- * `workflow_dispatch` replies `204 No Content`, so there is deliberately no return value to
- * mistake for an identifier: what was started is found by {@link findRunByCorrelation}, not by
- * anything this call hands back.
+ * Unknown rather than typed: `workflow_dispatch` answers `200` with the run it queued on
+ * github.com and `204 No Content` on a server that predates that, so the caller has to check the
+ * shape before trusting it as an identifier.
  */
 export async function apiPost(
   fetchImpl: DelegatedFetch,
   request: GitHubRequest & { body: unknown },
-): Promise<void> {
+): Promise<unknown> {
   const response = await fetchImpl(`${request.apiBase}${request.path}`, {
     method: 'POST',
     headers: { ...headers(request.token), 'content-type': 'application/json' },
     body: JSON.stringify(request.body),
   })
   if (!response.ok) throw new GitHubActionsApiError(response.status, await tail(response))
+  const text = await response.text()
+  if (!text) return undefined
+  try {
+    return JSON.parse(text) as unknown
+  } catch {
+    // silent-catch-ok: the call SUCCEEDED, and a 2xx body that is not JSON carries nothing this
+    // helper reads. Throwing would fail a dispatch that queued a run.
+    return undefined
+  }
 }
 
 function headers(token: string): Record<string, string> {

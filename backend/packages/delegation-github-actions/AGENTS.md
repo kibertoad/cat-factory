@@ -24,10 +24,13 @@ resolver that reads a config map or counts a metric sees one addressing decision
 
 **The three problems, and where each is solved:**
 
-- **`workflow_dispatch` answers `204` with no run id**, and the run does not exist yet when it
-  answers, so there is nothing to poll and nothing to look up. `correlation.ts` solves it with the
-  brief's `correlationKey`: the caller workflow renders `correlationRunName(key)` into its own
-  `run-name:`, and the run becomes findable by a string the platform chose. **The marker is matched
+- **A replayed `start` holds only the brief.** github.com answers a dispatch `200` with
+  `workflow_run_id`, and `start` returns that id with no scan. But an attempt that dispatched and
+  died before its answer was persisted leaves the replay nothing to go on, and a server that
+  predates the change answers `204` with no id while the run does not exist yet. `correlation.ts`
+  solves both with the brief's `correlationKey`: the caller workflow renders
+  `correlationRunName(key)` into its own `run-name:`, and the run becomes findable by a string the
+  platform chose. **The marker is matched
   against `display_title`**, which is where GitHub puts an evaluated `run-name:`; `name` keeps the
   workflow's own `name:` and is read only as a fallback for an Enterprise release with no
   `display_title`. **`start` is idempotent because it looks first**, which is the whole point: both

@@ -24,8 +24,10 @@ import {
 // review / test loop into a cat-factory step hits the same three problems, and none of them is
 // about that company's workflow:
 //
-//   1. `workflow_dispatch` returns 204 and no run id, so there is nothing to poll. Solved by the
-//      brief's correlation key plus a `run-name` the caller workflow renders (see ./correlation).
+//   1. `start` must be idempotent, and a replay has only the brief to find its run by: the
+//      dispatch's own answer (the run id on github.com, nothing on a server that replies 204) was
+//      lost with the attempt that got it. Solved by the brief's correlation key plus a `run-name`
+//      the caller workflow renders (see ./correlation).
 //   2. The run's own conclusion vocabulary is not the platform's. Mapped here, once, including the
 //      three conclusions that are neither success nor an ordinary failure.
 //   3. A `workflow_dispatch` workflow declares no outputs, so what it PRODUCED has to be recovered
@@ -76,7 +78,7 @@ export interface GitHubActionsExecutorDescription {
    * under {@link CORRELATION_INPUT}. Supply it yourself only if your workflow names it something
    * else, in which case yours wins.
    *
-   * Actions caps each input at 1 MiB and the whole set at ten entries, and it REJECTS the dispatch
+   * Actions caps each input at 1 MiB and the whole set at 25 entries, and it REJECTS the dispatch
    * rather than truncating: a deployment folding a large brief in has to decide what it sends,
    * which is why this is a function of the brief rather than a fixed mapping.
    */
@@ -104,6 +106,37 @@ export interface GitHubActionsExecutorDescription {
    * keeps asking.
    */
   correlationScanSize?: number
+}
+
+/**
+ * Dispatch the workflow, answering the run it queued, or undefined when the server named none.
+ *
+ * github.com answers `200` with `workflow_run_id`, which settles the id without a scan. The
+ * `html_url` is optional here because the id alone is enough to poll by; a start without a url
+ * gains one on the first running poll.
+ */
+async function dispatch(
+  fetchImpl: DelegatedExecutorDeps['fetchImpl'],
+  input: {
+    apiBase: string
+    token: string
+    workflow: GitHubActionsWorkflowLocation
+    inputs: Record<string, string>
+  },
+): Promise<DelegationStart | undefined> {
+  const { workflow } = input
+  const answer = await apiPost(fetchImpl, {
+    apiBase: input.apiBase,
+    token: input.token,
+    path:
+      `/repos/${workflow.owner}/${workflow.repo}/actions/workflows/` +
+      `${encodeURIComponent(workflow.workflowFile)}/dispatches`,
+    body: { ref: workflow.ref, inputs: input.inputs },
+  })
+  if (typeof answer !== 'object' || answer === null) return undefined
+  const { workflow_run_id: id, html_url: url } = answer as Record<string, unknown>
+  if (typeof id !== 'number' || !Number.isSafeInteger(id)) return undefined
+  return { externalId: String(id), ...(typeof url === 'string' ? { url } : {}) }
 }
 
 /** The `workflow_dispatch` input this helper adds, carrying the platform's correlation key. */
@@ -183,21 +216,13 @@ export function githubActionsDelegatedExecutor(
           note: 'Re-attached to the run this dispatch had already started.',
         }
       }
-      await apiPost(deps.fetchImpl, {
-        apiBase,
-        token,
-        path:
-          `/repos/${workflow.owner}/${workflow.repo}/actions/workflows/` +
-          `${encodeURIComponent(workflow.workflowFile)}/dispatches`,
-        body: {
-          ref: workflow.ref,
-          inputs: { [CORRELATION_INPUT]: brief.correlationKey, ...description.inputs(brief) },
-        },
-      })
-      // The dispatch answered 204 and the run does not exist yet. Look once (it usually does by
-      // now) and, failing that, answer with the correlation key as the external id so the step is
-      // recorded and the FIRST POLL recovers the real one. Refusing here instead would fail a step
-      // whose workflow is queued and about to run.
+      const inputs = { [CORRELATION_INPUT]: brief.correlationKey, ...description.inputs(brief) }
+      const dispatched = await dispatch(deps.fetchImpl, { apiBase, token, workflow, inputs })
+      if (dispatched) return dispatched
+      // A server that answers 204 queued a run that may not exist yet. Look once (it usually does
+      // by now) and, failing that, answer with the correlation key as the external id so the step
+      // is recorded and the FIRST POLL recovers the real one. Refusing here instead would fail a
+      // step whose workflow is queued and about to run.
       const started = await locate(workflow, brief.correlationKey, token)
       if (started) return { externalId: String(started.id), url: started.html_url }
       return {
