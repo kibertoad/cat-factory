@@ -132,10 +132,10 @@ async function attach(item: PendingContext) {
     />
 
     <div v-if="linked.length" class="space-y-1">
-      <a
+      <ULink
         v-for="issue in linked"
         :key="`${issue.source}:${issue.externalId}`"
-        :href="issue.url"
+        :to="issue.url"
         target="_blank"
         rel="noopener"
         class="flex items-center gap-1.5 rounded-md border border-default bg-default/60 px-2 py-1.5 text-xs text-toned hover:bg-elevated/60"
@@ -148,7 +148,7 @@ async function attach(item: PendingContext) {
         <UBadge color="neutral" variant="soft" size="xs" class="ms-auto shrink-0">
           {{ issue.status }}
         </UBadge>
-      </a>
+      </ULink>
     </div>
     <p v-else class="text-2xs text-dimmed">
       {{ emptyHint }}

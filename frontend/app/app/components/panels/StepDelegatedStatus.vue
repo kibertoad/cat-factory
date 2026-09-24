@@ -106,15 +106,15 @@ const { copy: copyText } = useCopyToClipboard()
              it is: refusing to follow it is right, and hiding it would report a run that named
              no link at all. -->
         <dd class="truncate font-mono text-2xs text-toned">
-          <a
+          <ULink
             v-if="runHref"
-            :href="runHref"
+            :to="runHref"
             target="_blank"
             rel="noopener noreferrer"
             class="hover:underline"
           >
             {{ record.url }}
-          </a>
+          </ULink>
           <span v-else>{{ record.url }}</span>
         </dd>
         <UButton
@@ -166,15 +166,15 @@ const { copy: copyText } = useCopyToClipboard()
           <span class="truncate">{{
             attempt.outcome || t('panels.stepMeta.delegated.noOutcome')
           }}</span>
-          <a
+          <ULink
             v-if="externalRunHref(attempt.url)"
-            :href="externalRunHref(attempt.url)!"
+            :to="externalRunHref(attempt.url)!"
             target="_blank"
             rel="noopener noreferrer"
             class="ms-auto shrink-0 font-mono hover:underline"
           >
             {{ t('panels.stepMeta.delegated.openRun') }}
-          </a>
+          </ULink>
         </li>
       </ul>
     </div>

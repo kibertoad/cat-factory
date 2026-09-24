@@ -329,14 +329,14 @@ async function remove(k: ApiKey) {
     >
       <li v-for="(step, i) in selected.steps" :key="i">{{ step }}</li>
       <li>
-        <a
-          :href="selected.url"
+        <ULink
+          :to="selected.url"
           target="_blank"
           rel="noopener noreferrer"
           class="text-primary underline"
         >
           {{ t('providers.apiKeys.openKeys', { provider: selected.label }) }}
-        </a>
+        </ULink>
       </li>
     </ol>
 

@@ -303,7 +303,7 @@ async function submitPrompt() {
     <!-- create / rename prompt -->
     <UModal v-model:open="promptOpen" :title="prompt ? promptMeta[prompt].title : ''">
       <template #body>
-        <form class="space-y-3" @submit.prevent="submitPrompt">
+        <UForm class="space-y-3" @submit="submitPrompt">
           <UFormField :label="t('layout.boardSwitcher.prompt.nameLabel')">
             <UInput
               v-model="promptValue"
@@ -341,7 +341,7 @@ async function submitPrompt() {
               {{ prompt ? promptMeta[prompt].cta : '' }}
             </UButton>
           </div>
-        </form>
+        </UForm>
       </template>
     </UModal>
   </div>

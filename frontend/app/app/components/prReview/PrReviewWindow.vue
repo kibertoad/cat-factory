@@ -292,14 +292,14 @@ const { requestClose } = useUnsavedGuard({
     @close="requestClose"
   >
     <template v-if="state?.prUrl" #header-extras>
-      <a
-        :href="state.prUrl"
+      <ULink
+        :to="state.prUrl"
         target="_blank"
         rel="noopener"
         class="rounded-md px-2 py-1 text-2xs text-primary hover:bg-elevated"
       >
         {{ t('prReview.openPr') }}
-      </a>
+      </ULink>
     </template>
 
     <div class="flex min-h-0 flex-1">

@@ -221,7 +221,7 @@ function memberLabel(userId: string, name?: string | null, email?: string | null
         {{ t('layout.workspaceMembers.add.noAccount') }}
       </p>
       <template v-else>
-        <form class="flex gap-2" @submit.prevent="addMember">
+        <UForm class="flex gap-2" @submit="addMember">
           <USelect
             v-model="addUserId"
             :items="candidates"
@@ -242,7 +242,7 @@ function memberLabel(userId: string, name?: string | null, email?: string | null
           >
             {{ t('layout.workspaceMembers.add.submit') }}
           </UButton>
-        </form>
+        </UForm>
         <p v-if="candidates.length === 0" class="mt-2 text-dimmed">
           {{ t('layout.workspaceMembers.add.allAdded') }}
         </p>

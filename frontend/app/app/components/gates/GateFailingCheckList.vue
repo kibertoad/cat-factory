@@ -31,9 +31,9 @@ const { t } = useI18n()
         class="shrink-0 text-app-error-400"
         :class="dense ? 'h-3 w-3' : 'h-3.5 w-3.5'"
       />
-      <a
+      <ULink
         v-if="c.url"
-        :href="c.url"
+        :to="c.url"
         target="_blank"
         rel="noopener"
         class="group min-w-0 flex-1 truncate text-app-info-300 hover:text-app-info-200 hover:underline"
@@ -45,7 +45,7 @@ const { t } = useI18n()
           name="i-lucide-external-link"
           class="ms-0.5 inline h-3 w-3 opacity-60 group-hover:opacity-100"
         />
-      </a>
+      </ULink>
       <span
         v-else
         class="min-w-0 flex-1 truncate"

@@ -134,14 +134,14 @@ const { copy: copyText } = useCopyToClipboard()
             {{ t('panels.stepMeta.container.url') }}
           </SectionLabel>
           <dd class="truncate font-mono text-2xs text-toned">
-            <a
-              :href="step.container.url"
+            <ULink
+              :to="step.container.url"
               target="_blank"
               rel="noopener noreferrer"
               class="hover:underline"
             >
               {{ step.container.url }}
-            </a>
+            </ULink>
           </dd>
           <UButton
             icon="i-lucide-copy"

@@ -183,16 +183,16 @@ const canDestroy = computed(
                 t(ENV_STATUS_LABEL[env.status])
               }}</span>
             </div>
-            <a
+            <ULink
               v-if="env.url"
-              :href="env.url"
+              :to="env.url"
               target="_blank"
               rel="noopener"
               class="inline-flex items-center gap-1.5 break-all text-sm text-app-info-300 hover:underline"
             >
               <UIcon name="i-lucide-external-link" class="h-3.5 w-3.5 shrink-0" />
               {{ env.url }}
-            </a>
+            </ULink>
             <p v-else class="text-xs italic text-dimmed">
               {{ t('humanTest.environment.noUrl') }}
             </p>

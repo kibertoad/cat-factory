@@ -245,12 +245,12 @@ function manageKeys() {
             <li>
               <i18n-t keypath="settings.openRouterCatalog.step1" tag="span" scope="global">
                 <template #link>
-                  <a
-                    href="https://openrouter.ai/keys"
+                  <ULink
+                    to="https://openrouter.ai/keys"
                     target="_blank"
                     rel="noopener noreferrer"
                     class="text-primary underline"
-                    >{{ t('settings.openRouterCatalog.step1Link') }}</a
+                    >{{ t('settings.openRouterCatalog.step1Link') }}</ULink
                   >
                 </template>
               </i18n-t>

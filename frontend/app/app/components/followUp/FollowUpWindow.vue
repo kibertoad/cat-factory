@@ -204,14 +204,14 @@ function hasRecordedAnswer(item: FollowUpItem): boolean {
                 {{ item.suggestedAction }}
               </p>
               <p v-if="item.status === 'filed' && item.ticketUrl" class="mt-1 text-2xs">
-                <a
-                  :href="item.ticketUrl"
+                <ULink
+                  :to="item.ticketUrl"
                   target="_blank"
                   rel="noopener"
                   class="text-app-success-300 hover:underline"
                 >
                   {{ item.ticketExternalId ?? t('followUp.viewIssue') }}
-                </a>
+                </ULink>
               </p>
               <p v-if="hasRecordedAnswer(item)" class="mt-1 text-2xs text-toned">
                 <span class="text-dimmed">

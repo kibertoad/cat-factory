@@ -136,14 +136,14 @@ function preview(externalId: string) {
           >
             <div class="flex items-start justify-between gap-2">
               <div class="min-w-0">
-                <a
-                  :href="doc.url"
+                <ULink
+                  :to="doc.url"
                   target="_blank"
                   rel="noopener"
                   class="truncate text-sm font-medium text-highlighted hover:underline"
                 >
                   {{ doc.title }}
-                </a>
+                </ULink>
                 <p class="mt-0.5 line-clamp-2 text-xs text-dimmed">{{ doc.excerpt }}</p>
                 <DocumentSyncState :doc="doc" class="mt-1" />
               </div>

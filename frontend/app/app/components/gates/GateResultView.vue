@@ -271,16 +271,16 @@ const conflictVerdict = computed(() => {
                 {{ gate.lastFailureSummary }}
               </p>
             </div>
-            <a
+            <ULink
               v-if="prUrl"
-              :href="prUrl"
+              :to="prUrl"
               target="_blank"
               rel="noopener"
               class="mt-2 inline-flex items-center gap-1 text-xs text-app-info-300 hover:text-app-info-200 hover:underline"
             >
               {{ t('gates.humanReview.reviewPr') }}
               <UIcon name="i-lucide-external-link" class="h-3 w-3" />
-            </a>
+            </ULink>
 
             <!-- Freeform fix request: dispatch the fixer now with these instructions. -->
             <section v-if="status !== 'gave-up'" class="mt-4">
@@ -345,16 +345,16 @@ const conflictVerdict = computed(() => {
             <p v-else class="text-sm leading-relaxed text-toned">
               {{ t('gates.docQuality.findingsFallback') }}
             </p>
-            <a
+            <ULink
               v-if="prUrl"
-              :href="prUrl"
+              :to="prUrl"
               target="_blank"
               rel="noopener"
               class="mt-2 inline-flex items-center gap-1 text-xs text-app-info-300 hover:text-app-info-200 hover:underline"
             >
               {{ t('gates.docQuality.viewPr') }}
               <UIcon name="i-lucide-external-link" class="h-3 w-3" />
-            </a>
+            </ULink>
           </template>
 
           <!-- Conflicts: verdict + the resolver's account of what it left -->
@@ -384,16 +384,16 @@ const conflictVerdict = computed(() => {
                 {{ gate.lastFailureSummary }}
               </p>
             </div>
-            <a
+            <ULink
               v-if="prUrl"
-              :href="prUrl"
+              :to="prUrl"
               target="_blank"
               rel="noopener"
               class="mt-2 inline-flex items-center gap-1 text-xs text-app-info-300 hover:text-app-info-200 hover:underline"
             >
               {{ t('gates.conflicts.viewPr') }}
               <UIcon name="i-lucide-external-link" class="h-3 w-3" />
-            </a>
+            </ULink>
           </template>
 
           <!-- Attempt history (both gates): what each helper run did and how it ended. -->

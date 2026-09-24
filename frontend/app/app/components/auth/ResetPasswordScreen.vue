@@ -76,7 +76,7 @@ function goToLogin() {
         </UButton>
       </template>
 
-      <form v-else class="space-y-3" @submit.prevent="submit">
+      <UForm v-else class="space-y-3" @submit="submit">
         <SecretInput
           v-model="password"
           required
@@ -102,7 +102,7 @@ function goToLogin() {
             {{ t('auth.resetPassword.backToSignIn') }}
           </button>
         </p>
-      </form>
+      </UForm>
     </div>
   </div>
 </template>
