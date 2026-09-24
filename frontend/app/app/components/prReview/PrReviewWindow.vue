@@ -589,7 +589,7 @@ const { requestClose } = useUnsavedGuard({
               <UButton
                 color="primary"
                 variant="link"
-                class="text-primary hover:underline"
+                class="p-0 text-2xs text-primary hover:underline"
                 @click="selectAll"
               >
                 {{ t('prReview.selectAll') }}
@@ -597,7 +597,7 @@ const { requestClose } = useUnsavedGuard({
               <UButton
                 color="primary"
                 variant="link"
-                class="text-primary hover:underline"
+                class="p-0 text-2xs text-primary hover:underline"
                 @click="clearAll"
               >
                 {{ t('prReview.clear') }}
@@ -763,7 +763,7 @@ const { requestClose } = useUnsavedGuard({
                         variant="link"
                         v-if="!isRetracted(f)"
                         data-testid="pr-review-finding-challenge"
-                        class="flex items-center gap-1 text-primary hover:underline disabled:opacity-50"
+                        class="p-0 text-2xs flex items-center gap-1 text-primary hover:underline disabled:opacity-50"
                         :disabled="!canResolve || !access.canExecuteRuns.value"
                         @click="openChallenge(f.id)"
                       >
@@ -778,7 +778,7 @@ const { requestClose } = useUnsavedGuard({
                         color="neutral"
                         variant="link"
                         data-testid="pr-review-finding-dismiss"
-                        class="flex items-center gap-1 text-muted hover:text-app-error-300 hover:underline disabled:opacity-50"
+                        class="p-0 text-xs flex items-center gap-1 text-muted hover:text-app-error-300 hover:underline disabled:opacity-50"
                         :disabled="!canResolve || !access.canExecuteRuns.value"
                         @click="onDismiss(f.id)"
                       >

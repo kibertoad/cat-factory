@@ -101,7 +101,7 @@ function goToLogin() {
           <UButton
             color="primary"
             variant="link"
-            class="text-primary hover:underline"
+            class="p-0 text-xs text-primary hover:underline"
             @click="goToLogin"
           >
             {{ t('auth.resetPassword.backToSignIn') }}

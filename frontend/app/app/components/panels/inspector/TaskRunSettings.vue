@@ -437,7 +437,7 @@ const technicalLabel = computed(() => {
               <UButton
                 color="neutral"
                 variant="link"
-                class="font-medium text-app-warning-100 underline-offset-2 hover:underline"
+                class="p-0 text-xs font-medium text-app-warning-100 underline-offset-2 hover:underline"
                 @click="ui.openModelConfig()"
               >
                 {{ t('inspector.runSettings.editPresets') }}
@@ -445,7 +445,7 @@ const technicalLabel = computed(() => {
               <UButton
                 color="neutral"
                 variant="link"
-                class="font-medium text-app-warning-100 underline-offset-2 hover:underline"
+                class="p-0 text-xs font-medium text-app-warning-100 underline-offset-2 hover:underline"
                 @click="ui.openVendorCredentials()"
               >
                 {{ t('inspector.runSettings.configureVendors') }}

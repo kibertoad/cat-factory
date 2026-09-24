@@ -567,7 +567,7 @@ const PHASE_ICON: Record<string, string> = {
               <UButton
                 color="neutral"
                 variant="link"
-                class="underline hover:text-app-success-200"
+                class="p-0 text-2xs underline hover:text-app-success-200"
                 @click="openSpawnedTask(finding.spawn.taskId)"
               >
                 {{ t('bugFishing.finding.openTask') }}

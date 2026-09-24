@@ -1180,7 +1180,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
             <UButton
               color="neutral"
               variant="link"
-              class="underline underline-offset-2 hover:text-toned"
+              class="p-0 text-3xs underline underline-offset-2 hover:text-toned"
               data-testid="pipeline-library-purpose-toggle"
               @click="browseEveryPurpose = !browseEveryPurpose"
             >

@@ -47,7 +47,7 @@ const title = computed(() =>
         <UButton
           color="neutral"
           variant="link"
-          class="text-toned underline-offset-2 hover:underline"
+          class="p-0 text-xs text-toned underline-offset-2 hover:underline"
           @click="auth.logout()"
         >
           {{ t('github.onboarding.signOut') }}

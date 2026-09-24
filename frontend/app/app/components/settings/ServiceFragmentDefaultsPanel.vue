@@ -102,7 +102,7 @@ function remove(id: string) {
       <UButton
         color="primary"
         variant="link"
-        class="font-medium text-primary hover:underline"
+        class="p-0 text-2xs font-medium text-primary hover:underline"
         @click="ui.openFragmentLibrary()"
       >
         {{ t('settings.serviceFragmentDefaults.footer.manageBoard') }}
@@ -110,7 +110,7 @@ function remove(id: string) {
       <UButton
         color="primary"
         variant="link"
-        class="font-medium text-primary hover:underline"
+        class="p-0 text-2xs font-medium text-primary hover:underline"
         @click="ui.openAccountSettings('fragments')"
       >
         {{ t('settings.serviceFragmentDefaults.footer.manageAccount') }}

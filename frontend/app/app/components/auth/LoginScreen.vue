@@ -429,7 +429,7 @@ const noSignInMethod = computed(
                 <UButton
                   color="primary"
                   variant="link"
-                  class="text-primary hover:underline"
+                  class="p-0 text-xs text-primary hover:underline"
                   @click="setMode('signup')"
                 >
                   {{ t('auth.login.signUp') }}
@@ -443,7 +443,7 @@ const noSignInMethod = computed(
                 <UButton
                   color="primary"
                   variant="link"
-                  class="text-primary hover:underline"
+                  class="p-0 text-xs text-primary hover:underline"
                   @click="setMode('login')"
                 >
                   {{ t('auth.login.signIn') }}
@@ -456,7 +456,7 @@ const noSignInMethod = computed(
           <UButton
             color="primary"
             variant="link"
-            class="text-primary hover:underline"
+            class="p-0 text-xs text-primary hover:underline"
             @click="setMode('forgot')"
           >
             {{ t('auth.login.forgotPassword') }}
@@ -578,7 +578,7 @@ const noSignInMethod = computed(
           <UButton
             color="primary"
             variant="link"
-            class="text-primary hover:underline"
+            class="p-0 text-xs text-primary hover:underline"
             @click="setMode('login')"
           >
             {{ t('auth.login.backToSignIn') }}
