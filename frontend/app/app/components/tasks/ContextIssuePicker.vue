@@ -293,7 +293,7 @@ onMounted(() => {
     <div class="flex items-center gap-1.5">
       <span
         :id="sourceLabelId"
-        class="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-dimmed"
+        class="shrink-0 text-2xs font-semibold uppercase tracking-wide text-dimmed"
       >
         {{ t('tasks.picker.sourceLabel') }}
       </span>
@@ -335,7 +335,7 @@ onMounted(() => {
       @keydown.enter="refRow && pickRef(refRow)"
     />
 
-    <p v-if="searchError" class="px-1 text-[11px] text-app-warning-400">
+    <p v-if="searchError" class="px-1 text-2xs text-app-warning-400">
       {{ searchError }}
     </p>
 

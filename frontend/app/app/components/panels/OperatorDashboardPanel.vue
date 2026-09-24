@@ -124,7 +124,7 @@ watch(
             <p v-if="accountName" class="truncate text-xs text-dimmed">{{ accountName }}</p>
           </div>
           <div class="ms-auto flex items-center gap-1.5">
-            <div class="me-1 flex rounded-lg border border-default p-0.5 text-[12px]">
+            <div class="me-1 flex rounded-lg border border-default p-0.5 text-xs">
               <button
                 v-for="opt in WINDOWS"
                 :key="opt.value"
@@ -297,7 +297,7 @@ watch(
                     />
                   </div>
                 </div>
-                <div class="mt-2 flex items-center gap-4 text-[11px] text-dimmed">
+                <div class="mt-2 flex items-center gap-4 text-2xs text-dimmed">
                   <span class="flex items-center gap-1"
                     ><span class="h-2 w-2 rounded-sm bg-app-success-500/80" />{{
                       t('platformObservability.trend.done')
@@ -327,7 +327,7 @@ watch(
                   {{ t('platformObservability.gates.empty') }}
                 </p>
                 <table v-else class="w-full text-left text-xs" data-testid="operator-gates">
-                  <thead class="text-[11px] uppercase tracking-wide text-dimmed">
+                  <thead class="text-2xs uppercase tracking-wide text-dimmed">
                     <tr>
                       <th class="pb-2 pe-3 font-medium">
                         {{ t('platformObservability.gates.gate') }}
@@ -382,7 +382,7 @@ watch(
                     </tr>
                   </tbody>
                 </table>
-                <p class="mt-3 text-[11px] leading-relaxed text-dimmed">
+                <p class="mt-3 text-2xs leading-relaxed text-dimmed">
                   {{ t('platformObservability.gates.hint') }}
                 </p>
               </div>
@@ -427,7 +427,7 @@ watch(
                   >
                     <div>
                       <p class="text-lg font-semibold text-app-info-400">{{ view.live.running }}</p>
-                      <p class="text-[11px] text-dimmed">
+                      <p class="text-2xs text-dimmed">
                         {{ t('platformObservability.outcomes.running') }}
                       </p>
                     </div>
@@ -435,19 +435,19 @@ watch(
                       <p class="text-lg font-semibold text-app-warning-400">
                         {{ view.live.blocked }}
                       </p>
-                      <p class="text-[11px] text-dimmed">
+                      <p class="text-2xs text-dimmed">
                         {{ t('platformObservability.outcomes.blocked') }}
                       </p>
                     </div>
                     <div>
                       <p class="text-lg font-semibold text-toned">{{ view.live.paused }}</p>
-                      <p class="text-[11px] text-dimmed">
+                      <p class="text-2xs text-dimmed">
                         {{ t('platformObservability.outcomes.paused') }}
                       </p>
                     </div>
                     <div>
                       <p class="text-lg font-semibold text-toned">{{ view.live.pending }}</p>
-                      <p class="text-[11px] text-dimmed">
+                      <p class="text-2xs text-dimmed">
                         {{ t('platformObservability.outcomes.pending') }}
                       </p>
                     </div>
@@ -470,7 +470,7 @@ watch(
                       data-testid="operator-durations"
                     >
                       <div>
-                        <dt class="text-[11px] text-dimmed">
+                        <dt class="text-2xs text-dimmed">
                           {{ t('platformObservability.durations.avg') }}
                         </dt>
                         <dd class="font-semibold text-highlighted">
@@ -478,7 +478,7 @@ watch(
                         </dd>
                       </div>
                       <div>
-                        <dt class="text-[11px] text-dimmed">
+                        <dt class="text-2xs text-dimmed">
                           {{ t('platformObservability.durations.min') }}
                         </dt>
                         <dd class="font-semibold text-toned">
@@ -486,7 +486,7 @@ watch(
                         </dd>
                       </div>
                       <div>
-                        <dt class="text-[11px] text-dimmed">
+                        <dt class="text-2xs text-dimmed">
                           {{ t('platformObservability.durations.max') }}
                         </dt>
                         <dd class="font-semibold text-toned">
@@ -494,7 +494,7 @@ watch(
                         </dd>
                       </div>
                       <div>
-                        <dt class="text-[11px] text-dimmed">
+                        <dt class="text-2xs text-dimmed">
                           {{ t('platformObservability.durations.p50') }}
                         </dt>
                         <dd class="font-semibold text-toned" data-testid="operator-duration-p50">
@@ -502,7 +502,7 @@ watch(
                         </dd>
                       </div>
                       <div>
-                        <dt class="text-[11px] text-dimmed">
+                        <dt class="text-2xs text-dimmed">
                           {{ t('platformObservability.durations.p90') }}
                         </dt>
                         <dd class="font-semibold text-toned" data-testid="operator-duration-p90">
@@ -510,7 +510,7 @@ watch(
                         </dd>
                       </div>
                       <div>
-                        <dt class="text-[11px] text-dimmed">
+                        <dt class="text-2xs text-dimmed">
                           {{ t('platformObservability.durations.p99') }}
                         </dt>
                         <dd class="font-semibold text-toned" data-testid="operator-duration-p99">

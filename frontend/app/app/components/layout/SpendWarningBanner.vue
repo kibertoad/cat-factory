@@ -54,7 +54,7 @@ async function resume() {
 
             <dl class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
               <div class="rounded-lg bg-app-error-900/50 px-3 py-2">
-                <dt class="text-[11px] uppercase tracking-wide text-app-error-300/80">
+                <dt class="text-2xs uppercase tracking-wide text-app-error-300/80">
                   {{ t('layout.spendWarningBanner.spent') }}
                 </dt>
                 <dd class="text-base font-semibold tabular-nums text-app-error-50">
@@ -62,7 +62,7 @@ async function resume() {
                 </dd>
               </div>
               <div class="rounded-lg bg-app-error-900/50 px-3 py-2">
-                <dt class="text-[11px] uppercase tracking-wide text-app-error-300/80">
+                <dt class="text-2xs uppercase tracking-wide text-app-error-300/80">
                   {{ t('layout.spendWarningBanner.budget') }}
                 </dt>
                 <dd class="text-base font-semibold tabular-nums text-app-error-50">
@@ -70,7 +70,7 @@ async function resume() {
                 </dd>
               </div>
               <div class="rounded-lg bg-app-error-900/50 px-3 py-2">
-                <dt class="text-[11px] uppercase tracking-wide text-app-error-300/80">
+                <dt class="text-2xs uppercase tracking-wide text-app-error-300/80">
                   {{ t('layout.spendWarningBanner.tokens') }}
                 </dt>
                 <dd class="text-base font-semibold tabular-nums text-app-error-50">{{ tokens }}</dd>

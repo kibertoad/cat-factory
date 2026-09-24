@@ -52,7 +52,7 @@ const dim = computed(() => (props.size === 'sm' ? 'h-7 w-7' : 'h-9 w-9'))
         />
       </span>
     </div>
-    <span v-if="size !== 'sm'" class="text-[10px] leading-none text-toned">
+    <span v-if="size !== 'sm'" class="text-3xs leading-none text-toned">
       {{ archetype.label }}
     </span>
   </div>

@@ -105,7 +105,7 @@ async function save() {
       <h3 class="text-sm font-semibold text-default">
         {{ t('settings.defaultProvision.title') }}
       </h3>
-      <p class="mt-1 text-[11px] leading-snug text-dimmed">
+      <p class="mt-1 text-2xs leading-snug text-dimmed">
         {{ t('settings.defaultProvision.hint') }}
       </p>
     </div>
@@ -125,7 +125,7 @@ async function save() {
     </div>
 
     <div v-if="selection.type === 'custom'" class="space-y-1">
-      <label class="text-[11px] text-muted">
+      <label class="text-2xs text-muted">
         {{ t('inspector.testConfig.customManifestId') }}
       </label>
       <USelect
@@ -138,7 +138,7 @@ async function save() {
         :placeholder="t('inspector.testConfig.customManifestIdPlaceholder')"
         @update:model-value="(v: string) => setManifestId(v)"
       />
-      <p v-else class="text-[11px] leading-snug text-app-warning-300/80">
+      <p v-else class="text-2xs leading-snug text-app-warning-300/80">
         {{ t('inspector.testConfig.customNoTypes') }}
       </p>
     </div>
@@ -147,7 +147,7 @@ async function save() {
          the workspace still has nothing stored. -->
     <p
       v-if="unset && selection.type"
-      class="text-[11px] leading-snug text-app-warning-300/80"
+      class="text-2xs leading-snug text-app-warning-300/80"
       data-testid="default-provision-suggestion-hint"
     >
       {{ t('settings.defaultProvision.suggestionHint') }}
@@ -165,7 +165,7 @@ async function save() {
       >
         {{ t('settings.defaultProvision.save') }}
       </UButton>
-      <span v-if="!unset && !dirty" class="text-[11px] text-dimmed">
+      <span v-if="!unset && !dirty" class="text-2xs text-dimmed">
         {{ t('settings.defaultProvision.savedState') }}
       </span>
     </div>

@@ -174,7 +174,7 @@ function resetToDefaults() {
         </div>
 
         <template v-else>
-          <div class="flex items-center gap-3 px-2 text-[10px] uppercase tracking-wide text-dimmed">
+          <div class="flex items-center gap-3 px-2 text-3xs uppercase tracking-wide text-dimmed">
             <span class="flex-1">{{ t('notificationSettings.column.event') }}</span>
             <span class="w-16 text-center">{{ t('notificationSettings.column.inApp') }}</span>
             <span class="w-16 text-center">{{ t('notificationSettings.column.email') }}</span>
@@ -198,13 +198,13 @@ function resetToDefaults() {
             </div>
           </div>
 
-          <p class="text-[11px] text-dimmed">
+          <p class="text-2xs text-dimmed">
             {{ t('notificationSettings.panel.inAppNote') }}
           </p>
-          <p class="text-[11px] text-dimmed">
+          <p class="text-2xs text-dimmed">
             {{ t('notificationSettings.panel.emailNote') }}
           </p>
-          <p class="text-[11px] text-dimmed">
+          <p class="text-2xs text-dimmed">
             {{ t('notificationSettings.panel.otherChannelsNote') }}
             <UButton
               v-if="slack.available"

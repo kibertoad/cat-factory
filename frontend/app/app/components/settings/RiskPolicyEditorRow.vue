@@ -156,7 +156,7 @@ const deleteBlocked = computed(
 
     <div class="grid grid-cols-1 gap-3 sm:grid-cols-4">
       <label v-for="axis in RISK_POLICY_AXES" :key="axis" class="block">
-        <span class="mb-1 block text-[10px] uppercase tracking-wide text-dimmed">
+        <span class="mb-1 block text-3xs uppercase tracking-wide text-dimmed">
           {{ t(CEILING_LABEL_KEYS[axis]) }}
         </span>
         <UInput
@@ -168,13 +168,13 @@ const deleteBlocked = computed(
         />
       </label>
       <label class="block">
-        <span class="mb-1 block text-[10px] uppercase tracking-wide text-dimmed">
+        <span class="mb-1 block text-3xs uppercase tracking-wide text-dimmed">
           {{ t('settings.riskPolicy.field.ciMaxAttempts') }}
         </span>
         <UInput v-model.number="draft.ciMaxAttempts" type="number" :min="0" :max="50" size="sm" />
       </label>
       <label class="block">
-        <span class="mb-1 block text-[10px] uppercase tracking-wide text-dimmed">
+        <span class="mb-1 block text-3xs uppercase tracking-wide text-dimmed">
           {{ t('settings.riskPolicy.field.maxRequirementIterations') }}
         </span>
         <UInput
@@ -186,7 +186,7 @@ const deleteBlocked = computed(
         />
       </label>
       <label class="block">
-        <span class="mb-1 block text-[10px] uppercase tracking-wide text-dimmed">
+        <span class="mb-1 block text-3xs uppercase tracking-wide text-dimmed">
           {{ t('settings.riskPolicy.field.companionMaxReworks') }}
         </span>
         <UInput
@@ -198,7 +198,7 @@ const deleteBlocked = computed(
         />
       </label>
       <label class="block">
-        <span class="mb-1 block text-[10px] uppercase tracking-wide text-dimmed">
+        <span class="mb-1 block text-3xs uppercase tracking-wide text-dimmed">
           {{ t('settings.riskPolicy.field.maxRequirementConcernAllowed') }}
         </span>
         <USelect
@@ -245,7 +245,7 @@ const deleteBlocked = computed(
       />
       <div v-if="draft.forkEnabled" class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-4">
         <label v-for="axis in RISK_POLICY_AXES" :key="axis" class="block">
-          <span class="mb-1 block text-[10px] uppercase tracking-wide text-dimmed">
+          <span class="mb-1 block text-3xs uppercase tracking-wide text-dimmed">
             {{ t(FORK_FLOOR_LABEL_KEYS[axis]) }}
           </span>
           <UInput
@@ -257,7 +257,7 @@ const deleteBlocked = computed(
           />
         </label>
         <label class="block">
-          <span class="mb-1 block text-[10px] uppercase tracking-wide text-dimmed">
+          <span class="mb-1 block text-3xs uppercase tracking-wide text-dimmed">
             {{ t('settings.riskPolicy.forkDecision.onMissingLabel') }}
           </span>
           <USelect v-model="draft.forkOnMissing" :items="onMissingOptions" size="sm" />
@@ -283,7 +283,7 @@ const deleteBlocked = computed(
            on an attended policy would be a control over a decision this policy never makes. It is
            not hidden as an "advanced override" — it is inert, which is a different thing. -->
       <label v-if="draft.unattended" class="mt-3 block">
-        <span class="mb-1 block text-[10px] uppercase tracking-wide text-dimmed">
+        <span class="mb-1 block text-3xs uppercase tracking-wide text-dimmed">
           {{ t('settings.riskPolicy.autoAnswer.label') }}
         </span>
         <UInput
@@ -294,7 +294,7 @@ const deleteBlocked = computed(
           size="sm"
           data-testid="risk-policy-auto-answer-floor"
         />
-        <span class="mt-1 block text-[11px] text-dimmed">
+        <span class="mt-1 block text-2xs text-dimmed">
           {{ t('settings.riskPolicy.autoAnswer.hint') }}
         </span>
       </label>

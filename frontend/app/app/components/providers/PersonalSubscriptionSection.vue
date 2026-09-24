@@ -228,7 +228,7 @@ async function disconnect(v: SubscriptionVendor) {
       <div>
         <span class="font-medium text-default">{{ sub.label }}</span>
         <span class="ms-2 text-xs text-dimmed">{{ vendorLabel(sub.vendor) }}</span>
-        <div class="text-[11px] text-dimmed">
+        <div class="text-2xs text-dimmed">
           <template v-if="sub.expiresAt">
             {{ t('personalSubscriptions.expires', { date: d(new Date(sub.expiresAt), 'short') }) }}
           </template>

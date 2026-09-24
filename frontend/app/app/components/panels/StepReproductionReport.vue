@@ -56,13 +56,13 @@ function phaseLabel(outcome: ReproductionPhaseOutcome): string {
   >
     <div
       v-if="variant === 'card'"
-      class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted"
+      class="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wide text-muted"
     >
       <UIcon :name="presentation.icon" class="h-3.5 w-3.5" />
       <span>{{ t('panels.stepDetail.reproduction.heading') }}</span>
     </div>
 
-    <p class="text-[11px] text-muted" data-testid="reproduction-verdict">
+    <p class="text-2xs text-muted" data-testid="reproduction-verdict">
       {{ t(presentation.verdict) }}
     </p>
 
@@ -72,7 +72,7 @@ function phaseLabel(outcome: ReproductionPhaseOutcome): string {
          is exactly the inference that gets it wrong. -->
     <p
       v-if="report.note"
-      class="text-[11px] text-app-warning-300"
+      class="text-2xs text-app-warning-300"
       data-testid="reproduction-observation"
     >
       {{ report.note }}
@@ -82,19 +82,19 @@ function phaseLabel(outcome: ReproductionPhaseOutcome): string {
          This is what keeps "could not be reproduced" from looking like "nobody tried". -->
     <template v-if="report.status === 'declared_infeasible'">
       <div v-if="report.reason" class="rounded-md border border-default bg-app-950/40 p-2">
-        <p class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+        <p class="text-2xs font-semibold uppercase tracking-wide text-muted">
           {{ t('panels.stepDetail.reproduction.reason') }}
         </p>
-        <p class="mt-1 whitespace-pre-wrap text-[12px] text-toned">{{ report.reason }}</p>
+        <p class="mt-1 whitespace-pre-wrap text-xs text-toned">{{ report.reason }}</p>
       </div>
       <div
         v-if="report.alternativeVerification"
         class="rounded-md border border-default bg-app-950/40 p-2"
       >
-        <p class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+        <p class="text-2xs font-semibold uppercase tracking-wide text-muted">
           {{ t('panels.stepDetail.reproduction.alternative') }}
         </p>
-        <p class="mt-1 whitespace-pre-wrap text-[12px] text-toned">
+        <p class="mt-1 whitespace-pre-wrap text-xs text-toned">
           {{ report.alternativeVerification }}
         </p>
       </div>
@@ -102,17 +102,17 @@ function phaseLabel(outcome: ReproductionPhaseOutcome): string {
 
     <template v-else>
       <div v-if="report.command" class="flex items-baseline gap-2">
-        <span class="shrink-0 text-[11px] text-dimmed">{{
+        <span class="shrink-0 text-2xs text-dimmed">{{
           t('panels.stepDetail.reproduction.command')
         }}</span>
-        <span class="truncate font-mono text-[11px] text-toned">{{ report.command }}</span>
+        <span class="truncate font-mono text-2xs text-toned">{{ report.command }}</span>
       </div>
 
       <!-- A dropped path can leave the pre-fix tree without the reproduction, which greens it and
            reads as "the test does not capture the defect". Stated, never implied. -->
       <p
         v-if="report.omittedTestPaths"
-        class="text-[11px] text-app-warning-300"
+        class="text-2xs text-app-warning-300"
         data-testid="reproduction-omitted-paths"
       >
         {{
@@ -142,10 +142,10 @@ function phaseLabel(outcome: ReproductionPhaseOutcome): string {
                 : 'text-app-600'
             "
           />
-          <span class="text-[12px] font-medium text-default">
+          <span class="text-xs font-medium text-default">
             {{ t(phase.label) }}
           </span>
-          <span class="ms-auto shrink-0 text-[11px] tabular-nums text-muted">
+          <span class="ms-auto shrink-0 text-2xs tabular-nums text-muted">
             {{
               phase.outcome ? phaseLabel(phase.outcome) : t('panels.stepDetail.reproduction.notRun')
             }}
@@ -153,12 +153,12 @@ function phaseLabel(outcome: ReproductionPhaseOutcome): string {
         </div>
         <pre
           v-if="phase.outcome?.outputTail"
-          class="mt-1.5 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded bg-app-950 p-2 font-mono text-[11px] text-muted"
+          class="mt-1.5 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded bg-app-950 p-2 font-mono text-2xs text-muted"
           data-testid="reproduction-output"
           >{{ phase.outcome.outputTail }}</pre>
       </div>
 
-      <p class="text-[11px] text-dimmed">
+      <p class="text-2xs text-dimmed">
         {{
           t('panels.stepDetail.reproduction.attempts', {
             attempts: report.attempts,

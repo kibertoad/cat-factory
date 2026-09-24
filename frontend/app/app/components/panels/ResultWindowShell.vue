@@ -289,7 +289,7 @@ const panelClass = computed(() => [
           </span>
           <div class="min-w-0 flex-1">
             <h2 class="truncate text-sm font-semibold text-app-100">{{ title }}</h2>
-            <p v-if="subtitle" class="truncate text-[11px] text-muted">{{ subtitle }}</p>
+            <p v-if="subtitle" class="truncate text-2xs text-muted">{{ subtitle }}</p>
           </div>
           <!-- Window-specific header content (status badges, counts). -->
           <slot name="header-extras" />
@@ -329,16 +329,16 @@ const panelClass = computed(() => [
             @click="effortOpen = !effortOpen"
           >
             <UIcon name="i-lucide-gauge" class="h-3.5 w-3.5 shrink-0 text-muted" />
-            <span class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+            <span class="text-2xs font-semibold uppercase tracking-wide text-muted">
               {{ t('panels.stepDetail.effort.heading') }}
             </span>
             <span
-              class="shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium tabular-nums"
+              class="shrink-0 rounded px-1.5 py-0.5 text-2xs font-medium tabular-nums"
               :class="chipClass"
             >
               {{ t('panels.stepDetail.effort.outOfTen', { value: effortReport.difficulty }) }}
             </span>
-            <span v-if="hint" class="min-w-0 flex-1 truncate text-[12px] text-muted">
+            <span v-if="hint" class="min-w-0 flex-1 truncate text-xs text-muted">
               {{ hint }}
             </span>
             <UIcon
@@ -371,11 +371,11 @@ const panelClass = computed(() => [
               class="h-3.5 w-3.5 shrink-0"
               :class="validationReport.passed ? 'text-app-success-400' : 'text-app-error-400'"
             />
-            <span class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+            <span class="text-2xs font-semibold uppercase tracking-wide text-muted">
               {{ t('panels.stepDetail.validation.heading') }}
             </span>
             <span
-              class="shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium tabular-nums"
+              class="shrink-0 rounded px-1.5 py-0.5 text-2xs font-medium tabular-nums"
               :class="
                 validationReport.passed
                   ? 'bg-app-success-500/15 text-app-success-300'
@@ -388,7 +388,7 @@ const panelClass = computed(() => [
                   : t('panels.stepDetail.validation.failed')
               }}
             </span>
-            <span class="min-w-0 flex-1 truncate text-[12px] text-muted">
+            <span class="min-w-0 flex-1 truncate text-xs text-muted">
               {{
                 t('panels.stepDetail.validation.attempts', {
                   attempts: validationReport.attempts,
@@ -427,11 +427,11 @@ const panelClass = computed(() => [
               class="h-3.5 w-3.5 shrink-0"
               :class="reproductionKeys!.proven ? 'text-app-success-400' : 'text-app-warning-400'"
             />
-            <span class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+            <span class="text-2xs font-semibold uppercase tracking-wide text-muted">
               {{ t('panels.stepDetail.reproduction.heading') }}
             </span>
             <span
-              class="shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium"
+              class="shrink-0 rounded px-1.5 py-0.5 text-2xs font-medium"
               :class="
                 reproductionKeys!.proven
                   ? 'bg-app-success-500/15 text-app-success-300'
@@ -440,7 +440,7 @@ const panelClass = computed(() => [
             >
               {{ t(reproductionKeys!.chip) }}
             </span>
-            <span class="min-w-0 flex-1 truncate text-[12px] text-muted">
+            <span class="min-w-0 flex-1 truncate text-xs text-muted">
               {{ t(reproductionKeys!.verdict) }}
             </span>
             <UIcon
@@ -471,10 +471,10 @@ const panelClass = computed(() => [
             @click="binaryOutputsOpen = !binaryOutputsOpen"
           >
             <UIcon name="i-lucide-image" class="h-3.5 w-3.5 shrink-0 text-muted" />
-            <span class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+            <span class="text-2xs font-semibold uppercase tracking-wide text-muted">
               {{ t('binaryOutput.heading') }}
             </span>
-            <span class="min-w-0 flex-1 truncate text-[12px] text-muted">
+            <span class="min-w-0 flex-1 truncate text-xs text-muted">
               {{ binaryOutputSummary }}
             </span>
             <UIcon

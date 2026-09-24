@@ -132,7 +132,7 @@ async function unlink(doc: SourceDocument) {
 
           <!-- Template (singular per kind) ------------------------------------ -->
           <section class="rounded-lg border border-default bg-default/50 p-3">
-            <h3 class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+            <h3 class="text-2xs font-semibold uppercase tracking-wide text-muted">
               {{ t('documents.templates.templateHeading') }}
             </h3>
             <p class="mt-0.5 text-xs text-dimmed">
@@ -167,7 +167,7 @@ async function unlink(doc: SourceDocument) {
 
           <!-- Exemplars (multi per kind) -------------------------------------- -->
           <section class="rounded-lg border border-default bg-default/50 p-3">
-            <h3 class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+            <h3 class="text-2xs font-semibold uppercase tracking-wide text-muted">
               {{ t('documents.templates.exemplarsHeading') }}
             </h3>
             <p class="mt-0.5 text-xs text-dimmed">

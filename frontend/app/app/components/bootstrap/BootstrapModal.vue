@@ -648,7 +648,7 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
 
         <!-- launch -->
         <section class="space-y-4">
-          <h3 class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+          <h3 class="text-2xs font-semibold uppercase tracking-wide text-muted">
             {{ t('bootstrap.section.newRepo') }}
           </h3>
 
@@ -912,7 +912,7 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
 
         <!-- recent jobs -->
         <section v-if="agentRuns.bootstrapJobs.length" class="space-y-2">
-          <h3 class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+          <h3 class="text-2xs font-semibold uppercase tracking-wide text-muted">
             {{ t('bootstrap.recent.title') }}
           </h3>
           <div
@@ -922,7 +922,7 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
           >
             <div class="min-w-0">
               <div class="truncate text-default">{{ job.repoName }}</div>
-              <div class="truncate text-[11px] text-dimmed">
+              <div class="truncate text-2xs text-dimmed">
                 {{
                   job.referenceArchitectureName
                     ? t('bootstrap.recent.fromArch', { name: job.referenceArchitectureName })
@@ -935,7 +935,7 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
                 v-if="job.repoUrl"
                 :to="job.repoUrl"
                 target="_blank"
-                class="text-[11px] text-primary hover:underline"
+                class="text-2xs text-primary hover:underline"
               >
                 {{ t('bootstrap.recent.open') }}
               </ULink>
@@ -947,7 +947,7 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
                 v-if="job.prUrl"
                 :to="job.prUrl"
                 target="_blank"
-                class="text-[11px] text-primary hover:underline"
+                class="text-2xs text-primary hover:underline"
               >
                 {{ t('bootstrap.recent.openPr') }}
               </ULink>
@@ -963,7 +963,7 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
         <!-- reference architecture management -->
         <section class="space-y-3">
           <div class="flex items-center justify-between">
-            <h3 class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+            <h3 class="text-2xs font-semibold uppercase tracking-wide text-muted">
               {{ t('bootstrap.arch.title') }}
             </h3>
             <UButton
@@ -984,7 +984,7 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
           >
             <div class="min-w-0">
               <div class="truncate text-sm text-default">{{ a.name }}</div>
-              <div class="truncate text-[11px] text-dimmed">{{ a.repoOwner }}/{{ a.repoName }}</div>
+              <div class="truncate text-2xs text-dimmed">{{ a.repoOwner }}/{{ a.repoName }}</div>
             </div>
             <div class="flex items-center gap-1">
               <UButton

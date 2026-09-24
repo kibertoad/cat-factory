@@ -132,10 +132,10 @@ async function disconnect() {
           >
             {{ t('documents.connect.oauth.action', { source: descriptor.label }) }}
           </UButton>
-          <p class="text-[11px] text-dimmed">
+          <p class="text-2xs text-dimmed">
             {{ t('documents.connect.oauth.scopes', { scopes: oauth.scopes.join(', ') }) }}
           </p>
-          <p class="text-[11px] text-dimmed">{{ t('documents.connect.oauth.fallback') }}</p>
+          <p class="text-2xs text-dimmed">{{ t('documents.connect.oauth.fallback') }}</p>
         </div>
 
         <div class="space-y-3">

@@ -31,7 +31,7 @@ useEnvironmentWizardTarget(() => props.input.frameId)
       <UInput v-model="store.handlerLabel" class="w-full" data-testid="env-setup-handler-label" />
     </UFormField>
 
-    <div class="rounded-md border border-default bg-default/40 p-3 text-[12px] text-toned">
+    <div class="rounded-md border border-default bg-default/40 p-3 text-xs text-toned">
       <p>
         {{
           t('environmentWizard.save.summary', {
@@ -44,7 +44,7 @@ useEnvironmentWizardTarget(() => props.input.frameId)
 
     <p
       v-if="store.saveError"
-      class="text-[12px] text-app-error-300/80"
+      class="text-xs text-app-error-300/80"
       data-testid="env-setup-save-error"
     >
       {{ store.saveError }}
@@ -66,7 +66,7 @@ useEnvironmentWizardTarget(() => props.input.frameId)
     <!-- saved: confirmation + optional trial provision -->
     <template v-else>
       <div
-        class="flex items-center gap-2 rounded-md border border-app-success-800/50 bg-app-success-950/30 p-2 text-[12px] text-app-success-200"
+        class="flex items-center gap-2 rounded-md border border-app-success-800/50 bg-app-success-950/30 p-2 text-xs text-app-success-200"
         data-testid="env-setup-saved"
       >
         <UIcon name="i-lucide-check-circle" class="h-4 w-4" />
@@ -74,7 +74,7 @@ useEnvironmentWizardTarget(() => props.input.frameId)
       </div>
 
       <div class="flex items-center justify-between gap-2">
-        <p class="text-[11px] text-dimmed">{{ t('environmentWizard.trial.hint') }}</p>
+        <p class="text-2xs text-dimmed">{{ t('environmentWizard.trial.hint') }}</p>
         <UButton
           size="xs"
           variant="soft"
@@ -88,7 +88,7 @@ useEnvironmentWizardTarget(() => props.input.frameId)
           {{ t('environmentWizard.trial.run') }}
         </UButton>
       </div>
-      <p v-if="store.trialError" class="text-[11px] text-app-error-300/80">
+      <p v-if="store.trialError" class="text-2xs text-app-error-300/80">
         {{ store.trialError }}
       </p>
       <ProvisioningLogsDrawer v-if="store.trialStarted" subsystem="environment" />

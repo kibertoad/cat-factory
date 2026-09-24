@@ -67,7 +67,7 @@ async function connect() {
       />
     </UFormField>
 
-    <p class="text-[11px] text-dimmed">
+    <p class="text-2xs text-dimmed">
       <ULink :to="tokenUrl" target="_blank" class="text-primary hover:underline">
         {{ t('vcs.connect.gitlab.createToken') }}
       </ULink>

@@ -115,7 +115,7 @@ function when(epochMs: number): string {
 <template>
   <div class="rounded-lg border border-muted bg-default/50">
     <div class="flex items-center justify-between border-b border-default px-3 py-2">
-      <p class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+      <p class="text-2xs font-semibold uppercase tracking-wide text-muted">
         {{ t('provisioning.title') }}
       </p>
       <UButton
@@ -129,17 +129,17 @@ function when(epochMs: number): string {
       </UButton>
     </div>
 
-    <p v-if="state.error" class="px-3 py-2 text-[12px] text-app-error-300">{{ state.error }}</p>
+    <p v-if="state.error" class="px-3 py-2 text-xs text-app-error-300">{{ state.error }}</p>
     <p
       v-else-if="!state.loading && state.entries.length === 0"
-      class="px-3 py-3 text-[12px] text-dimmed"
+      class="px-3 py-3 text-xs text-dimmed"
     >
       {{ t('provisioning.empty') }}
     </p>
 
     <ul v-else class="max-h-80 divide-y divide-default overflow-auto">
       <li v-for="entry in state.entries" :key="entry.id" class="px-3 py-2">
-        <div class="flex items-center gap-2 text-[12px]">
+        <div class="flex items-center gap-2 text-xs">
           <UIcon
             :name="entry.outcome === 'success' ? 'i-lucide-check-circle' : 'i-lucide-x-circle'"
             class="h-3.5 w-3.5 shrink-0"
@@ -147,7 +147,7 @@ function when(epochMs: number): string {
           />
           <span class="font-medium text-default">{{ OPERATION_LABEL[entry.operation] }}</span>
           <span
-            class="rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide"
+            class="rounded px-1.5 py-0.5 text-3xs uppercase tracking-wide"
             :class="
               entry.outcome === 'success'
                 ? 'bg-app-success-950/60 text-app-success-300'
@@ -155,15 +155,15 @@ function when(epochMs: number): string {
             "
             >{{ OUTCOME_LABEL[entry.outcome] }}</span
           >
-          <span class="ms-auto text-[11px] text-dimmed">{{ when(entry.createdAt) }}</span>
+          <span class="ms-auto text-2xs text-dimmed">{{ when(entry.createdAt) }}</span>
         </div>
-        <div v-if="entry.targetId" class="mt-0.5 text-[11px] text-dimmed">
+        <div v-if="entry.targetId" class="mt-0.5 text-2xs text-dimmed">
           {{ entry.providerId ? `${entry.providerId} · ` : '' }}{{ entry.targetId }}
         </div>
         <!-- The verbatim provider/runtime error on a failed attempt. -->
         <pre
           v-if="entry.error"
-          class="mt-1 max-h-28 overflow-auto whitespace-pre-wrap rounded border border-app-error-900/50 bg-app-error-950/30 p-1.5 text-[11px] text-app-error-200/90"
+          class="mt-1 max-h-28 overflow-auto whitespace-pre-wrap rounded border border-app-error-900/50 bg-app-error-950/30 p-1.5 text-2xs text-app-error-200/90"
           >{{ entry.error }}</pre>
       </li>
     </ul>

@@ -234,7 +234,7 @@ async function clear() {
         />
       </UFormField>
 
-      <p class="text-[11px] text-dimmed">
+      <p class="text-2xs text-dimmed">
         {{ t('inspector.validationChecks.hint') }}
       </p>
 
@@ -273,7 +273,7 @@ async function clear() {
         />
       </div>
 
-      <p v-if="rows.length === 0" class="text-[11px] text-dimmed" data-testid="validation-empty">
+      <p v-if="rows.length === 0" class="text-2xs text-dimmed" data-testid="validation-empty">
         {{ t('inspector.validationChecks.empty') }}
       </p>
 

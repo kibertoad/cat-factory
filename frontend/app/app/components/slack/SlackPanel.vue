@@ -224,7 +224,7 @@ async function saveMapping() {
             {{ t('slack.connect.addToSlack') }}
           </UButton>
           <div class="space-y-1">
-            <span class="block text-[10px] uppercase tracking-wide text-dimmed">
+            <span class="block text-3xs uppercase tracking-wide text-dimmed">
               {{ t('slack.connect.orPasteToken') }}
             </span>
             <div class="flex gap-2">
@@ -267,7 +267,7 @@ async function saveMapping() {
 
           <!-- routing -->
           <div class="space-y-3">
-            <p class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+            <p class="text-2xs font-semibold uppercase tracking-wide text-muted">
               {{ t('slack.routing.heading') }}
             </p>
             <div
@@ -311,10 +311,10 @@ async function saveMapping() {
 
           <!-- member mapping -->
           <div v-if="mentionsEnabled" class="space-y-2">
-            <p class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+            <p class="text-2xs font-semibold uppercase tracking-wide text-muted">
               {{ t('slack.members.heading') }}
             </p>
-            <p class="text-[11px] leading-snug text-dimmed">
+            <p class="text-2xs leading-snug text-dimmed">
               <i18n-t keypath="slack.members.hint" tag="span">
                 <template #product>
                   <span class="font-medium text-muted">{{ t('slack.members.productLabel') }}</span>

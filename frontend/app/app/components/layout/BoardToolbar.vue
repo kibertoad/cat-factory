@@ -160,7 +160,7 @@ const decisionItems = computed(() =>
       @click="resetZoom()"
     >
       {{ zoomPct }}%
-      <span class="hidden text-[9px] uppercase tracking-wide text-dimmed sm:block">{{
+      <span class="hidden text-3xs uppercase tracking-wide text-dimmed sm:block">{{
         lodLabel
       }}</span>
     </button>

@@ -259,7 +259,7 @@ async function revokeToken(key: PublicApiKey) {
                   {{ boundLabel(key) }}
                 </UBadge>
               </div>
-              <div class="text-[11px] text-dimmed">
+              <div class="text-2xs text-dimmed">
                 {{
                   t('settings.apiTokens.list.created', {
                     date: d(new Date(key.createdAt), 'short'),

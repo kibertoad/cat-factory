@@ -157,7 +157,7 @@ function onRefInput(e: Event) {
 <template>
   <div class="rounded-lg border border-default bg-default/60 p-3">
     <div class="mb-2 flex items-center justify-between gap-2">
-      <h3 class="min-w-0 truncate text-[12px] font-semibold text-default">{{ view }}</h3>
+      <h3 class="min-w-0 truncate text-xs font-semibold text-default">{{ view }}</h3>
       <!-- Mode switch -->
       <div
         v-if="MODES.length > 1"
@@ -179,7 +179,7 @@ function onRefInput(e: Event) {
     <!-- SIDE BY SIDE -->
     <div v-if="mode === 'side-by-side'" class="grid grid-cols-2 gap-3">
       <figure class="space-y-1">
-        <figcaption class="text-[10px] uppercase tracking-wide text-dimmed">
+        <figcaption class="text-3xs uppercase tracking-wide text-dimmed">
           {{ t('media.compare.actual') }}
         </figcaption>
         <button
@@ -195,7 +195,7 @@ function onRefInput(e: Event) {
         </button>
         <div
           v-else
-          class="flex h-32 items-center justify-center rounded border border-dashed border-muted text-[11px] text-app-600"
+          class="flex h-32 items-center justify-center rounded border border-dashed border-muted text-2xs text-app-600"
         >
           {{
             props.blobs.statusFor(actualId) === 'error'
@@ -208,7 +208,7 @@ function onRefInput(e: Event) {
       </figure>
 
       <figure class="space-y-1">
-        <figcaption class="text-[10px] uppercase tracking-wide text-dimmed">
+        <figcaption class="text-3xs uppercase tracking-wide text-dimmed">
           {{ t('media.compare.reference') }}
           <span v-if="referenceOrigin === 'design'" class="text-app-warning-300/80">
             {{ t('media.compare.fromLinkedDesign') }}
@@ -225,7 +225,7 @@ function onRefInput(e: Event) {
             class="w-full cursor-zoom-in"
           />
           <span
-            class="absolute bottom-1 end-1 rounded bg-app-950/80 px-1.5 py-0.5 text-[10px] text-toned opacity-0 group-hover:opacity-100"
+            class="absolute bottom-1 end-1 rounded bg-app-950/80 px-1.5 py-0.5 text-3xs text-toned opacity-0 group-hover:opacity-100"
             @click.stop="refInput?.click()"
           >
             {{ t('media.compare.replace') }}
@@ -234,7 +234,7 @@ function onRefInput(e: Event) {
         <!-- Drop zone when no reference yet -->
         <div
           v-else
-          class="flex h-32 cursor-pointer flex-col items-center justify-center gap-1 rounded border border-dashed text-[11px] transition"
+          class="flex h-32 cursor-pointer flex-col items-center justify-center gap-1 rounded border border-dashed text-2xs transition"
           :class="
             dragOver
               ? 'border-app-warning-500 bg-app-warning-500/5 text-app-warning-300'
@@ -263,7 +263,7 @@ function onRefInput(e: Event) {
           :style="{ opacity: overlayOpacity / 100 }"
         />
       </div>
-      <div class="flex items-center gap-2 text-[10px] uppercase tracking-wide text-dimmed">
+      <div class="flex items-center gap-2 text-3xs uppercase tracking-wide text-dimmed">
         <span>{{ t('media.compare.reference') }}</span>
         <input
           v-model.number="overlayOpacity"
@@ -312,11 +312,11 @@ function onRefInput(e: Event) {
         </span>
       </div>
       <span
-        class="absolute left-1 top-1 rounded bg-app-950/70 px-1 text-[9px] uppercase text-toned"
+        class="absolute left-1 top-1 rounded bg-app-950/70 px-1 text-3xs uppercase text-toned"
         >{{ t('media.compare.actual') }}</span
       >
       <span
-        class="absolute right-1 top-1 rounded bg-app-950/70 px-1 text-[9px] uppercase text-toned"
+        class="absolute right-1 top-1 rounded bg-app-950/70 px-1 text-3xs uppercase text-toned"
         >{{ t('media.compare.reference') }}</span
       >
     </div>
@@ -324,7 +324,7 @@ function onRefInput(e: Event) {
     <!-- DIFF (canvas) -->
     <div v-else-if="mode === 'diff'" class="space-y-1">
       <canvas ref="diffCanvas" :class="DIFF_CANVAS_CLASS" />
-      <p class="text-[10px] text-dimmed">{{ t('media.compare.diffHint') }}</p>
+      <p class="text-3xs text-dimmed">{{ t('media.compare.diffHint') }}</p>
     </div>
 
     <!-- Hidden file input shared by replace/drop zone -->

@@ -200,7 +200,7 @@ const filteredGroups = computed<ProviderGroup[]>(() => {
         </p>
 
         <section v-for="group in filteredGroups" :key="group.title">
-          <h3 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-muted">
+          <h3 class="mb-2 px-1 text-2xs font-semibold uppercase tracking-wide text-muted">
             {{ group.title }}
           </h3>
           <div class="space-y-1.5">
@@ -219,7 +219,7 @@ const filteredGroups = computed<ProviderGroup[]>(() => {
                   <UBadge v-if="item.connected" color="success" variant="subtle" size="sm">
                     {{ item.status || t('layout.modelProvidersHub.status.connected') }}
                   </UBadge>
-                  <span v-else class="text-[11px] text-dimmed">{{
+                  <span v-else class="text-2xs text-dimmed">{{
                     t('layout.modelProvidersHub.status.notConnected')
                   }}</span>
                   <UBadge
@@ -239,7 +239,7 @@ const filteredGroups = computed<ProviderGroup[]>(() => {
               />
             </button>
           </div>
-          <p v-if="group.note" class="mt-1.5 px-1 text-[11px] text-dimmed">{{ group.note }}</p>
+          <p v-if="group.note" class="mt-1.5 px-1 text-2xs text-dimmed">{{ group.note }}</p>
         </section>
       </div>
     </template>

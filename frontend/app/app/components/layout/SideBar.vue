@@ -250,7 +250,7 @@ watch(
         <section>
           <h2
             v-if="!railed"
-            class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-muted"
+            class="mb-2 px-1 text-2xs font-semibold uppercase tracking-wide text-muted"
           >
             {{ t(section.labelKey) }}
           </h2>

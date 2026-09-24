@@ -264,7 +264,7 @@ function optional(label: string): string {
 
 <template>
   <div class="rounded-lg border border-dashed border-muted p-3 space-y-3">
-    <p class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+    <p class="text-2xs font-semibold uppercase tracking-wide text-muted">
       {{
         connection?.kind === 'kubernetes'
           ? t('settings.providerConnection.form.updateConfiguration')
@@ -295,7 +295,7 @@ function optional(label: string): string {
            and the operator may legitimately overrule it. -->
       <p
         v-if="tokenProblem"
-        class="mt-1 text-[11px]"
+        class="mt-1 text-2xs"
         :class="tokenBlocking ? 'text-app-error-400' : 'text-app-warning-400'"
         data-testid="service-account-token-problem"
       >

@@ -1,0 +1,39 @@
+/* The app's own type steps below Tailwind's `text-xs` (issue #2248).
+ *
+ * The SPA's dense surfaces (board nodes, inspector panels, result windows) read below Tailwind's
+ * smallest named step. Before this file they said so in PIXEL LITERALS (`text-[11px]`,
+ * `text-[10px]`, `text-[9px]`), which cost two things:
+ *
+ *   1. A theme document's `fontSize` is applied as `html[data-theme] { font-size: Npx }`
+ *      (`utils/theme/css.ts`). Tailwind's named steps are rem and scale with it; a pixel literal
+ *      does not. So a user who raised the font size saw Nuxt UI's components grow while most of
+ *      the app's own text stayed exactly where it was.
+ *   2. Nuxt UI sizes its components on the same rem scale, so a `UBadge size="sm"` sitting beside
+ *      an `11px` label was sized by a system the label could not name.
+ *
+ * Two steps cover the band. Both are rem, so both scale with a theme's `fontSize`:
+ *
+ *   --text-2xs  0.6875rem  (11px at the 16px default)  the dense body size: panel rows, node
+ *                                                      metadata, inline detail. The app's single
+ *                                                      most-used size.
+ *   --text-3xs  0.625rem   (10px)                      the eyebrow/caption tier: section labels
+ *                                                      (see `common/SectionLabel.vue`), badge text
+ *                                                      on a board node, axis and legend captions.
+ *
+ * NEITHER STEP DECLARES A LINE HEIGHT, and that is deliberate. Tailwind pairs `--text-<n>` with an
+ * optional `--text-<n>--line-height`, and when one exists the utility sets BOTH properties. The
+ * pixel literals these replace set font-size alone and inherited their line height from the
+ * surrounding block, so pairing a line height here would re-flow every one of the ~1280 sites the
+ * migration touches for no reason anyone asked for. A block that wants a specific rhythm keeps
+ * saying so with `leading-*`, which wins over a step's paired value anyway.
+ *
+ * The two steps BELOW them were retired rather than named: `text-[9px]` (23 uses, board-node micro
+ * labels) folds onto `--text-3xs`, and `text-[12.5px]` (2 uses) onto `text-xs`. Neither count earns
+ * a step of its own, and a 9px label is below the size at which the rest of the app is legible.
+ *
+ * `scripts/check-frontend-type-scale.mjs` bans the literal forms these replace. */
+
+@theme {
+  --text-2xs: 0.6875rem;
+  --text-3xs: 0.625rem;
+}

@@ -54,7 +54,7 @@ function go(action: () => void) {
         </i18n-t>
 
         <div class="rounded-lg border border-muted bg-default/50 p-3">
-          <p class="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-dimmed">
+          <p class="mb-1.5 text-2xs font-semibold uppercase tracking-wide text-dimmed">
             {{ t('providers.presetMismatch.unavailable') }}
           </p>
           <div class="flex flex-wrap gap-1.5">
@@ -70,7 +70,7 @@ function go(action: () => void) {
           </div>
         </div>
 
-        <p class="text-[13px] text-muted">
+        <p class="text-sm text-muted">
           {{ t('providers.presetMismatch.advice') }}
         </p>
 

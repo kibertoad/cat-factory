@@ -82,13 +82,13 @@ function outcomeClass(outcome: EnvironmentProbeReport['operations'][number]['out
 
 <template>
   <div class="space-y-2 rounded border border-default bg-muted p-2" data-testid="env-probe-report">
-    <p class="text-[11px] font-medium" :class="verdictClass" data-testid="env-probe-verdict">
+    <p class="text-2xs font-medium" :class="verdictClass" data-testid="env-probe-verdict">
       {{ verdictLabel }}
     </p>
 
     <!-- The tallies the PLATFORM computed from the agent's per-operation judgements, including
          how many successes were behind authentication: the count the verdict turns on. -->
-    <p class="text-[11px] text-muted">
+    <p class="text-2xs text-muted">
       {{
         t('inspector.testConfig.envProbe.counts', {
           succeeded: report.succeeded,
@@ -101,19 +101,19 @@ function outcomeClass(outcome: EnvironmentProbeReport['operations'][number]['out
     <!-- What the platform did not tell the agent: the actionable half of the report, so it comes
          before the evidence. -->
     <div v-if="report.missingContext.length" data-testid="env-probe-missing">
-      <p class="text-[11px] font-medium text-app-warning-300/90">
+      <p class="text-2xs font-medium text-app-warning-300/90">
         {{ t('inspector.testConfig.envProbe.missingContext') }}
       </p>
-      <ul class="mt-0.5 list-disc space-y-0.5 pl-4 text-[11px] text-toned">
+      <ul class="mt-0.5 list-disc space-y-0.5 pl-4 text-2xs text-toned">
         <li v-for="(line, i) in report.missingContext" :key="i">{{ line }}</li>
       </ul>
     </div>
 
     <div v-if="report.blockers.length" data-testid="env-probe-blockers">
-      <p class="text-[11px] font-medium text-app-error-300/90">
+      <p class="text-2xs font-medium text-app-error-300/90">
         {{ t('inspector.testConfig.envProbe.blockers') }}
       </p>
-      <ul class="mt-0.5 space-y-0.5 text-[11px] text-toned">
+      <ul class="mt-0.5 space-y-0.5 text-2xs text-toned">
         <li v-for="(blocker, i) in report.blockers" :key="i">
           <span class="text-muted">{{ failureLabel(blocker.kind) }}:</span>
           {{ blocker.detail }}
@@ -124,10 +124,10 @@ function outcomeClass(outcome: EnvironmentProbeReport['operations'][number]['out
     <!-- The operations, as evidence for the verdict above. This is the "what was attempted" a dry
          run exists to report: without it a verdict is an opinion. -->
     <div v-if="report.operations.length" data-testid="env-probe-operations">
-      <p class="text-[11px] font-medium text-toned">
+      <p class="text-2xs font-medium text-toned">
         {{ t('inspector.testConfig.envProbe.operations') }}
       </p>
-      <ul class="mt-0.5 space-y-1 text-[11px]">
+      <ul class="mt-0.5 space-y-1 text-2xs">
         <li v-for="(op, i) in report.operations" :key="i" class="flex items-start gap-1.5">
           <UIcon
             :name="outcomeIcon(op.outcome)"
@@ -151,12 +151,12 @@ function outcomeClass(outcome: EnvironmentProbeReport['operations'][number]['out
            whole attempt. The two ways an operation fails to reach the list are rendered SEPARATELY
            because they send a reader somewhere different: one says the agent reported more than is
            shown, the other says its reply was malformed. -->
-      <p v-if="report.operationsOmitted" class="mt-1 text-[11px] text-dimmed">
+      <p v-if="report.operationsOmitted" class="mt-1 text-2xs text-dimmed">
         {{
           t('inspector.testConfig.envProbe.operationsOmitted', { count: report.operationsOmitted })
         }}
       </p>
-      <p v-if="report.operationsUnreadable" class="mt-1 text-[11px] text-dimmed">
+      <p v-if="report.operationsUnreadable" class="mt-1 text-2xs text-dimmed">
         {{
           t('inspector.testConfig.envProbe.operationsUnreadable', {
             count: report.operationsUnreadable,
@@ -165,8 +165,8 @@ function outcomeClass(outcome: EnvironmentProbeReport['operations'][number]['out
       </p>
     </div>
 
-    <p v-if="report.summary" class="text-[11px] text-muted">{{ report.summary }}</p>
-    <p v-if="report.model" class="text-[11px] text-app-600">
+    <p v-if="report.summary" class="text-2xs text-muted">{{ report.summary }}</p>
+    <p v-if="report.model" class="text-2xs text-app-600">
       {{ t('inspector.testConfig.envProbe.model', { model: report.model }) }}
     </p>
   </div>

@@ -56,12 +56,12 @@ function submit() {
 
 <template>
   <div class="rounded-lg border border-dashed border-muted p-3">
-    <p class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
+    <p class="mb-2 text-2xs font-semibold uppercase tracking-wide text-muted">
       {{ t('settings.riskPolicy.newPreset') }}
     </p>
     <div class="flex flex-wrap items-end gap-3">
       <label class="block min-w-40 flex-1">
-        <span class="mb-1 block text-[10px] uppercase tracking-wide text-dimmed">
+        <span class="mb-1 block text-3xs uppercase tracking-wide text-dimmed">
           {{ t('settings.riskPolicy.create.name') }}
         </span>
         <UInput
@@ -72,7 +72,7 @@ function submit() {
         />
       </label>
       <label class="block w-20">
-        <span class="mb-1 block text-[10px] uppercase tracking-wide text-dimmed">
+        <span class="mb-1 block text-3xs uppercase tracking-wide text-dimmed">
           {{ t('settings.riskPolicy.create.complexity') }}
         </span>
         <UInput
@@ -85,7 +85,7 @@ function submit() {
         />
       </label>
       <label class="block w-20">
-        <span class="mb-1 block text-[10px] uppercase tracking-wide text-dimmed">
+        <span class="mb-1 block text-3xs uppercase tracking-wide text-dimmed">
           {{ t('settings.riskPolicy.create.risk') }}
         </span>
         <UInput
@@ -98,7 +98,7 @@ function submit() {
         />
       </label>
       <label class="block w-20">
-        <span class="mb-1 block text-[10px] uppercase tracking-wide text-dimmed">
+        <span class="mb-1 block text-3xs uppercase tracking-wide text-dimmed">
           {{ t('settings.riskPolicy.create.impact') }}
         </span>
         <UInput
@@ -111,13 +111,13 @@ function submit() {
         />
       </label>
       <label class="block w-20">
-        <span class="mb-1 block text-[10px] uppercase tracking-wide text-dimmed">
+        <span class="mb-1 block text-3xs uppercase tracking-wide text-dimmed">
           {{ t('settings.riskPolicy.create.ciFix') }}
         </span>
         <UInput v-model.number="draft.ciMaxAttempts" type="number" :min="0" :max="50" size="sm" />
       </label>
       <label class="block w-20">
-        <span class="mb-1 block text-[10px] uppercase tracking-wide text-dimmed">
+        <span class="mb-1 block text-3xs uppercase tracking-wide text-dimmed">
           {{ t('settings.riskPolicy.create.reqIter') }}
         </span>
         <UInput
@@ -129,7 +129,7 @@ function submit() {
         />
       </label>
       <label class="block w-20">
-        <span class="mb-1 block text-[10px] uppercase tracking-wide text-dimmed">
+        <span class="mb-1 block text-3xs uppercase tracking-wide text-dimmed">
           {{ t('settings.riskPolicy.create.companionRework') }}
         </span>
         <UInput
@@ -141,7 +141,7 @@ function submit() {
         />
       </label>
       <label class="block w-32">
-        <span class="mb-1 block text-[10px] uppercase tracking-wide text-dimmed">
+        <span class="mb-1 block text-3xs uppercase tracking-wide text-dimmed">
           {{ t('settings.riskPolicy.create.autoPass') }}
         </span>
         <USelect

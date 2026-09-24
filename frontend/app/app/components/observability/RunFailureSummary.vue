@@ -86,15 +86,15 @@ const earlierFailedToolCalls = computed(() =>
     <div class="flex items-start gap-3">
       <UIcon name="i-lucide-siren" class="mt-0.5 h-5 w-5 shrink-0 text-app-error-400" />
       <div class="min-w-0 flex-1">
-        <h2 class="text-[13px] font-semibold text-app-error-200">
+        <h2 class="text-sm font-semibold text-app-error-200">
           {{ t('observability.failure.title') }}
         </h2>
 
         <!-- The run's own structured record. Absent on a run that is still going, or that
              failed without one; the evidence below stands on its own either way. -->
         <template v-if="evidence.failure">
-          <p class="mt-1 text-[13px] text-default">{{ evidence.failure.message }}</p>
-          <div class="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-dimmed">
+          <p class="mt-1 text-sm text-default">{{ evidence.failure.message }}</p>
+          <div class="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-2xs text-dimmed">
             <span>{{ t('observability.failure.kind', { kind: failureKindLabel }) }}</span>
             <span v-if="evidence.failure.stepIndex != null">
               {{ t('observability.failure.atStep', { index: evidence.failure.stepIndex + 1 }) }}
@@ -108,10 +108,10 @@ const earlierFailedToolCalls = computed(() =>
           <FailureDetail
             :detail="evidence.failure.detail"
             :message="evidence.failure.message"
-            summary-class="text-[11px] text-dimmed hover:text-toned"
-            pre-class="bg-app-950/60 text-[11px] text-muted"
+            summary-class="text-2xs text-dimmed hover:text-toned"
+            pre-class="bg-app-950/60 text-2xs text-muted"
           />
-          <p v-if="evidence.failure.hint" class="mt-1.5 text-[12px] text-toned">
+          <p v-if="evidence.failure.hint" class="mt-1.5 text-xs text-toned">
             {{ evidence.failure.hint }}
           </p>
         </template>
@@ -133,7 +133,7 @@ const earlierFailedToolCalls = computed(() =>
           :style="{ color: agentMeta(evidence.lastErroredCall.agentKind).color }"
         />
         <div class="min-w-0 flex-1">
-          <div class="flex flex-wrap items-baseline gap-x-2 text-[12px]">
+          <div class="flex flex-wrap items-baseline gap-x-2 text-xs">
             <span class="font-medium text-default">
               {{ t('observability.failure.lastErroredCall') }}
             </span>
@@ -145,13 +145,10 @@ const earlierFailedToolCalls = computed(() =>
               {{ evidence.lastErroredCall.httpStatus ?? t('observability.call.error') }}
             </UBadge>
           </div>
-          <p
-            v-if="evidence.lastErroredCall.errorMessage"
-            class="mt-0.5 text-[12px] text-app-error-300"
-          >
+          <p v-if="evidence.lastErroredCall.errorMessage" class="mt-0.5 text-xs text-app-error-300">
             {{ evidence.lastErroredCall.errorMessage }}
           </p>
-          <p v-if="evidence.erroredCallCount > 1" class="mt-0.5 text-[11px] text-dimmed">
+          <p v-if="evidence.erroredCallCount > 1" class="mt-0.5 text-2xs text-dimmed">
             {{
               t(
                 'observability.failure.moreErroredCalls',
@@ -173,7 +170,7 @@ const earlierFailedToolCalls = computed(() =>
       >
         <UIcon name="i-lucide-wrench" class="mt-0.5 h-4 w-4 shrink-0 text-app-error-400" />
         <div class="min-w-0 flex-1">
-          <div class="flex flex-wrap items-baseline gap-x-2 text-[12px]">
+          <div class="flex flex-wrap items-baseline gap-x-2 text-xs">
             <span class="font-medium text-default">
               <!-- "One of the failing calls" when even the failures were bounded: the row is
                    real either way, but calling it the LAST would be a claim about rows this
@@ -191,16 +188,16 @@ const earlierFailedToolCalls = computed(() =>
           </div>
           <pre
             v-if="failedToolResult"
-            class="mt-1 max-h-32 overflow-auto whitespace-pre-wrap text-[11px] leading-relaxed text-app-error-300"
+            class="mt-1 max-h-32 overflow-auto whitespace-pre-wrap text-2xs leading-relaxed text-app-error-300"
             >{{ failedToolResult }}</pre>
-          <p v-else class="mt-0.5 text-[11px] italic text-dimmed">
+          <p v-else class="mt-0.5 text-2xs italic text-dimmed">
             {{
               evidence.lastFailedToolCall.bodies === 'stored'
                 ? t('observability.failure.toolReturnedNothing')
                 : t('observability.failure.toolBodiesWithheld')
             }}
           </p>
-          <p v-if="earlierFailedToolCalls" class="mt-0.5 text-[11px] text-dimmed">
+          <p v-if="earlierFailedToolCalls" class="mt-0.5 text-2xs text-dimmed">
             {{
               t(
                 'observability.failure.moreFailedToolCalls',
@@ -220,7 +217,7 @@ const earlierFailedToolCalls = computed(() =>
            come back from being reported as one that came back clean. -->
       <div
         v-else-if="emptyReason"
-        class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed px-3 py-2 text-[12px]"
+        class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed px-3 py-2 text-xs"
         :class="
           emptyReason === 'sink-unreachable'
             ? 'border-app-warning-900/60 text-app-warning-300'

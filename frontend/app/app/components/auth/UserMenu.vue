@@ -50,7 +50,7 @@ const items = computed<DropdownMenuItem[][]>(() => [
         <div class="truncate text-xs font-medium text-highlighted">
           {{ auth.user.name || auth.user.login }}
         </div>
-        <div class="truncate text-[10px] text-dimmed">@{{ auth.user.login }}</div>
+        <div class="truncate text-3xs text-dimmed">@{{ auth.user.login }}</div>
       </div>
       <UIcon v-if="!collapsed" name="i-lucide-chevron-up" class="h-4 w-4 shrink-0 text-dimmed" />
     </button>

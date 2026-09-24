@@ -424,7 +424,7 @@ async function save() {
                       />
                     </div>
                   </div>
-                  <div class="mt-1.5 text-[11px] text-muted">
+                  <div class="mt-1.5 text-2xs text-muted">
                     {{ t('settings.modelConfiguration.list.basePrefix') }}
                     <span class="text-toned">{{ modelLabel(p.baseModelId) }}</span>
                     <span v-if="Object.keys(p.overrides).length">
@@ -461,7 +461,7 @@ async function save() {
               <div class="space-y-4 rounded-xl border border-default bg-default/50 p-4">
                 <div>
                   <label
-                    class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted"
+                    class="mb-1 block text-2xs font-semibold uppercase tracking-wide text-muted"
                   >
                     {{ t('settings.modelConfiguration.editor.nameLabel') }}
                   </label>
@@ -475,7 +475,7 @@ async function save() {
 
                 <div>
                   <label
-                    class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted"
+                    class="mb-1 block text-2xs font-semibold uppercase tracking-wide text-muted"
                   >
                     {{ t('settings.modelConfiguration.editor.baseModelLabel') }}
                   </label>
@@ -514,7 +514,7 @@ async function save() {
 
               <div>
                 <div class="mb-1 flex items-start justify-between gap-3">
-                  <span class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+                  <span class="text-2xs font-semibold uppercase tracking-wide text-muted">
                     {{ t('settings.modelConfiguration.editor.perAgentOverrides') }}
                   </span>
                   <AgentTierSelect class="w-56 shrink-0" :hidden-count="hiddenByTier" />

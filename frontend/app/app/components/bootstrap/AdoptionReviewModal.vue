@@ -239,7 +239,7 @@ watch(open, (isOpen) => {
                 class="flex items-baseline gap-2"
               >
                 <span
-                  class="shrink-0 font-mono text-[10px] uppercase"
+                  class="shrink-0 font-mono text-3xs uppercase"
                   :class="entry.outcome === 'read' ? 'text-dimmed' : 'text-app-warning-400/80'"
                 >
                   {{ t(`bootstrap.adoption.survey.outcome.${entry.outcome}`) }}
@@ -289,7 +289,7 @@ watch(open, (isOpen) => {
               <div class="flex items-start justify-between gap-3">
                 <div>
                   <p class="text-sm font-medium text-app-100">{{ decision.title }}</p>
-                  <p class="text-[11px] uppercase tracking-wide text-dimmed">
+                  <p class="text-2xs uppercase tracking-wide text-dimmed">
                     {{ t(`bootstrap.adoption.area.${decision.area}`) }}
                   </p>
                 </div>
@@ -321,7 +321,7 @@ watch(open, (isOpen) => {
 
               <!-- The evidence is what makes the suggestion checkable rather than an assertion,
                    so it is shown, not tucked away. -->
-              <p v-if="decision.evidence.length" class="text-[11px] text-dimmed">
+              <p v-if="decision.evidence.length" class="text-2xs text-dimmed">
                 {{ t('bootstrap.adoption.evidence') }}
                 <span class="font-mono">{{ decision.evidence.join(', ') }}</span>
               </p>

@@ -549,7 +549,7 @@ const STATUS_KEYS: Record<BugHuntAnalysisStatus, string> = {
                 <p v-if="candidate.analysis?.rationale" class="text-xs text-toned">
                   {{ candidate.analysis.rationale }}
                 </p>
-                <div class="flex flex-wrap items-center gap-2 text-[11px] text-dimmed">
+                <div class="flex flex-wrap items-center gap-2 text-2xs text-dimmed">
                   <span v-if="candidate.priority">{{ candidate.priority }}</span>
                   <span v-for="label in candidate.labels" :key="label">{{ label }}</span>
                   <span v-if="createdAtDate(candidate.createdAt)">

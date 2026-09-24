@@ -61,7 +61,7 @@ const state = computed(() => {
   >
     <div
       v-if="variant === 'card'"
-      class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted"
+      class="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wide text-muted"
     >
       <UIcon name="i-lucide-image" class="h-3.5 w-3.5" />
       <span>{{ t('binaryOutput.heading') }}</span>
@@ -72,7 +72,7 @@ const state = computed(() => {
          question the artifacts below cannot answer. An AUTOMATIC keep says so: nobody looked. -->
     <p
       v-if="candidates && candidates.state.candidates.length > 0"
-      class="text-[12px] leading-relaxed text-toned"
+      class="text-xs leading-relaxed text-toned"
       data-testid="binary-output-candidate-decision"
     >
       {{
@@ -92,7 +92,7 @@ const state = computed(() => {
     <!-- What happened, in one sentence, before any list. Four of the five states have no list
          at all, and the fifth still needs its qualifications read alongside it. -->
     <p
-      class="flex items-start gap-2 text-[12px] leading-relaxed"
+      class="flex items-start gap-2 text-xs leading-relaxed"
       :class="state.tone"
       data-testid="binary-output-state"
       :data-state="view.state"
@@ -106,7 +106,7 @@ const state = computed(() => {
          so — it is a real state (a trait-carrying kind dispatched under an overriding kind
          records a declaration against a step that never held one), and rendering a blank
          would read as a missing value rather than an absent comparison. -->
-    <dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[11px]">
+    <dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-2xs">
       <dt class="text-dimmed">{{ t('binaryOutput.target') }}</dt>
       <dd
         v-if="view.target"
@@ -158,10 +158,8 @@ const state = computed(() => {
           :label="row.entity ?? row.description"
           class="mb-2 pe-8"
         />
-        <code class="block break-all pe-8 font-mono text-[11px] text-default">{{
-          row.location
-        }}</code>
-        <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-dimmed">
+        <code class="block break-all pe-8 font-mono text-2xs text-default">{{ row.location }}</code>
+        <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-3xs text-dimmed">
           <span class="font-mono">{{ row.service }}</span>
           <!-- The join the report cannot make on its own, and the question a human opens this
                for: did it go where the step pointed it? -->
@@ -225,7 +223,7 @@ const state = computed(() => {
             {{ t('binaryOutput.missizedBadge') }}
           </UBadge>
         </div>
-        <p v-if="row.description" class="mt-1 text-[11px] leading-relaxed text-muted">
+        <p v-if="row.description" class="mt-1 text-2xs leading-relaxed text-muted">
           {{ row.description }}
         </p>
       </li>
@@ -234,7 +232,7 @@ const state = computed(() => {
     <!-- Every qualification the report counted, each naming its own number. Never folded into
          one "some entries were dropped": the fix for an unknown service id is not the fix for
          a malformed entry, and neither is the fix for a list that stops short of the tail. -->
-    <ul class="space-y-1 text-[11px] text-app-warning-400">
+    <ul class="space-y-1 text-2xs text-app-warning-400">
       <!-- The step's OWN target went missing from the catalog, and an id the AGENT invented,
            are two different failures with two different fixes (re-register it, versus correct
            the declaration). `binaryOutputView` returns them as DISJOINT fields precisely so

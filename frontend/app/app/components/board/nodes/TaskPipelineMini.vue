@@ -101,7 +101,7 @@ const ITEM_ICON: Record<string, string> = {
 
 <template>
   <div v-if="showSteps" class="mt-2 space-y-1 border-t border-default pt-2">
-    <div class="flex items-center gap-1 text-[9px] uppercase tracking-wide text-dimmed">
+    <div class="flex items-center gap-1 text-3xs uppercase tracking-wide text-dimmed">
       <UIcon name="i-lucide-workflow" class="h-2.5 w-2.5" />
       {{ t('board.task.buildSteps') }}
     </div>
@@ -117,7 +117,7 @@ const ITEM_ICON: Record<string, string> = {
           class="h-3 w-3 shrink-0"
           :style="{ color: agentKindMeta(s.agentKind).color }"
         />
-        <span class="truncate text-[10px] text-default">
+        <span class="truncate text-3xs text-default">
           {{ agentKindMeta(s.agentKind).label }}
         </span>
         <UIcon
@@ -129,7 +129,7 @@ const ITEM_ICON: Record<string, string> = {
              live — its slice progress reads better as Slicing… / Reviewing X/Y slices. -->
         <span
           v-if="s.subtasks && s.subtasks.total > 0 && !prPhaseActive(s)"
-          class="ms-auto shrink-0 font-mono text-[9px] tabular-nums text-muted"
+          class="ms-auto shrink-0 font-mono text-3xs tabular-nums text-muted"
         >
           {{ s.subtasks.completed }}/{{ s.subtasks.total }}
         </span>
@@ -149,7 +149,7 @@ const ITEM_ICON: Record<string, string> = {
         v-if="prPhaseActive(s)"
         :step="s"
         :run-failed="runFailed"
-        class="ms-4 mt-1 text-[9px]"
+        class="ms-4 mt-1 text-3xs"
       />
 
       <!-- pending approval gate: jump straight to the conclusions reader. Suppressed
@@ -162,7 +162,7 @@ const ITEM_ICON: Record<string, string> = {
           !reviews.isBackground(s.agentKind, props.taskId)
         "
         type="button"
-        class="mt-1 flex w-full items-center justify-center gap-1 rounded bg-app-warning-500 px-1.5 py-0.5 text-[9px] font-semibold text-app-warning-50 dark:text-app-warning-950 transition hover:bg-app-warning-400"
+        class="mt-1 flex w-full items-center justify-center gap-1 rounded bg-app-warning-500 px-1.5 py-0.5 text-3xs font-semibold text-app-warning-50 dark:text-app-warning-950 transition hover:bg-app-warning-400"
         @click.stop="ui.openApprovalDetail(instance.id, s.approval.id)"
       >
         <UIcon name="i-lucide-shield-check" class="h-2.5 w-2.5" />
@@ -183,7 +183,7 @@ const ITEM_ICON: Record<string, string> = {
       <!-- conditionally-run companion (the gate's ci-fixer / conflict-resolver, or the
            Tester's fixer): a compact running/ran/skipped line, so a gate that's working
            its helper reads as actively fixing rather than a frozen subtask list. -->
-      <div v-if="companionByStep[i]" class="mt-1 flex items-center gap-1 text-[9px]">
+      <div v-if="companionByStep[i]" class="mt-1 flex items-center gap-1 text-3xs">
         <UIcon
           :name="agentKindMeta(companionByStep[i]!.kind).icon"
           class="h-2.5 w-2.5 shrink-0"
@@ -208,7 +208,7 @@ const ITEM_ICON: Record<string, string> = {
         <li
           v-for="(item, j) in s.subtasks.items"
           :key="j"
-          class="flex items-start gap-1 text-[9px]"
+          class="flex items-start gap-1 text-3xs"
           :class="
             item.status === 'completed'
               ? 'text-dimmed line-through'

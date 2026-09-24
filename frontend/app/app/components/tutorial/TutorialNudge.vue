@@ -75,7 +75,7 @@ function take(tourId: string) {
           class="text-primary mt-0.5 h-4 w-4 shrink-0"
         />
         <div class="min-w-0 flex-1">
-          <p class="text-[11px] tracking-wide text-muted uppercase">
+          <p class="text-2xs tracking-wide text-muted uppercase">
             {{ t('tutorial.nudge.label') }}
           </p>
           <p class="mt-0.5 text-sm font-medium text-app-100">{{ t(offered.titleKey) }}</p>

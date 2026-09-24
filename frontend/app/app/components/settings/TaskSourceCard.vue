@@ -95,7 +95,7 @@ const STATUS_UI: Record<
         <UIcon :name="state.icon" class="h-5 w-5 shrink-0 text-toned" />
         <div class="min-w-0">
           <div class="text-sm font-medium text-default">{{ state.label }}</div>
-          <div class="text-[11px] text-dimmed">{{ subtitle }}</div>
+          <div class="text-2xs text-dimmed">{{ subtitle }}</div>
         </div>
       </div>
       <div class="flex shrink-0 items-center gap-2">
@@ -139,7 +139,7 @@ const STATUS_UI: Record<
       variant="subtle"
       :icon="STATUS_UI[diagnostic.status].icon"
       :description="diagnostic.message + (diagnostic.detail ? ` ${diagnostic.detail}` : '')"
-      :ui="{ description: 'text-[11px]' }"
+      :ui="{ description: 'text-2xs' }"
     />
   </div>
 </template>

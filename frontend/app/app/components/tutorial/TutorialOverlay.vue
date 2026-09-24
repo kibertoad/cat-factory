@@ -628,7 +628,7 @@ onUnmounted(() => {
           class="mt-3 rounded-lg border border-muted/70 bg-elevated/40 p-2.5"
           data-testid="tutorial-next-tour"
         >
-          <p class="text-[11px] tracking-wide text-muted uppercase">
+          <p class="text-2xs tracking-wide text-muted uppercase">
             {{ t('tutorial.overlay.nextUp') }}
           </p>
           <p class="mt-0.5 text-sm font-medium text-app-100">{{ t(nextTour.titleKey) }}</p>

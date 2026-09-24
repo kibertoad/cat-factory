@@ -940,7 +940,7 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
             >
               <p
                 v-if="row.caption"
-                class="mb-1 px-1 text-[11px] font-semibold uppercase tracking-wide text-dimmed"
+                class="mb-1 px-1 text-2xs font-semibold uppercase tracking-wide text-dimmed"
                 data-testid="task-type-category"
               >
                 {{ row.caption }}
@@ -981,7 +981,7 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
         </UFormField>
 
         <!-- Recurring tasks are configured as a schedule on the service frame. -->
-        <div v-if="isRecurring" class="rounded-lg border border-default p-3 text-[11px] text-muted">
+        <div v-if="isRecurring" class="rounded-lg border border-default p-3 text-2xs text-muted">
           <template v-if="recurringFrameId">
             {{ t('board.addTask.recurringWithFrame') }}
           </template>
@@ -1023,7 +1023,7 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
                 :ui="{ base: 'cursor-default text-toned' }"
               />
             </UFormField>
-            <p v-if="resolvingIssueBodies" class="text-[11px] text-dimmed">
+            <p v-if="resolvingIssueBodies" class="text-2xs text-dimmed">
               {{ t('board.addTask.loadingIssue') }}
             </p>
 
@@ -1054,7 +1054,7 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
               <span class="text-sm text-default">{{ t('board.addTask.technical') }}</span>
             </template>
             <template #description>
-              <span class="text-[11px] text-dimmed">
+              <span class="text-2xs text-dimmed">
                 {{ t('board.addTask.technicalHint') }}
               </span>
             </template>
@@ -1106,7 +1106,7 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
                 <label
                   v-for="phase in BUG_FISHING_PHASES"
                   :key="phase.id"
-                  class="flex items-start gap-2 rounded-md px-1.5 py-1 text-[12px] hover:bg-elevated/40"
+                  class="flex items-start gap-2 rounded-md px-1.5 py-1 text-xs hover:bg-elevated/40"
                 >
                   <input
                     v-model="fishingPhaseIds"
@@ -1117,11 +1117,11 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
                   />
                   <span class="min-w-0">
                     <span class="block text-default">{{ phase.title }}</span>
-                    <span class="block text-[11px] text-dimmed">{{ phase.goal }}</span>
+                    <span class="block text-2xs text-dimmed">{{ phase.goal }}</span>
                   </span>
                 </label>
               </div>
-              <p v-if="fishingPhaseIds.length === 0" class="mt-1.5 text-[11px] text-dimmed">
+              <p v-if="fishingPhaseIds.length === 0" class="mt-1.5 text-2xs text-dimmed">
                 {{ t('board.addTask.bugFishingFields.angles.allSelected') }}
               </p>
             </UFormField>
@@ -1385,11 +1385,11 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
           </div>
 
           <div v-if="configDescriptors.length" class="space-y-3">
-            <span class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+            <span class="text-2xs font-semibold uppercase tracking-wide text-muted">
               {{ t('board.addTask.agentConfiguration') }}
             </span>
             <div v-for="d in configDescriptors" :key="d.id" class="space-y-1">
-              <div class="text-[11px] text-muted">{{ d.label }}</div>
+              <div class="text-2xs text-muted">{{ d.label }}</div>
               <div v-if="d.type === 'select'" class="flex flex-wrap gap-1">
                 <UButton
                   v-for="opt in d.options"
@@ -1411,7 +1411,7 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
                 :data-testid="`agent-config-${d.id}`"
                 @update:model-value="(v: string | number) => setConfig(d.id, String(v))"
               />
-              <p class="text-[11px] leading-snug text-dimmed">{{ d.description }}</p>
+              <p class="text-2xs leading-snug text-dimmed">{{ d.description }}</p>
             </div>
           </div>
 
@@ -1440,7 +1440,7 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
             :issues-hint="t('board.addTask.noIssuesHint')"
           />
 
-          <p class="text-[11px] text-dimmed">
+          <p class="text-2xs text-dimmed">
             {{ t('board.addTask.plannedHint') }}
           </p>
         </template>

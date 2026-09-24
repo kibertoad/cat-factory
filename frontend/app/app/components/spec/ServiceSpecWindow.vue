@@ -285,14 +285,14 @@ function kindLabel(item: RequirementItem): string {
           {{ t('spec.overview') }}
         </UButton>
         <div v-for="(mod, mi) in modules" :key="mi" class="mb-3">
-          <div class="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-dimmed">
+          <div class="px-2 pb-1 text-2xs font-semibold uppercase tracking-wide text-dimmed">
             {{ mod.name }}
           </div>
           <ul class="space-y-0.5">
             <li v-for="(group, gi) in mod.groups ?? []" :key="gi">
               <button
                 type="button"
-                class="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-start text-[13px] transition"
+                class="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-start text-sm transition"
                 :class="
                   selected?.m === mi && selected?.g === gi
                     ? 'bg-primary/15 text-primary'
@@ -301,12 +301,12 @@ function kindLabel(item: RequirementItem): string {
                 @click="selectGroup(mi, gi)"
               >
                 <span class="truncate">{{ group.name }}</span>
-                <span class="shrink-0 text-[10px] text-dimmed">{{ reqCount(group) }}</span>
+                <span class="shrink-0 text-3xs text-dimmed">{{ reqCount(group) }}</span>
               </button>
             </li>
             <li
               v-if="(mod.groups?.length ?? 0) === 0"
-              class="px-2 py-1 text-[11px] italic text-app-600"
+              class="px-2 py-1 text-2xs italic text-app-600"
             >
               {{ t('spec.noFeatureGroups') }}
             </li>
@@ -352,7 +352,7 @@ function kindLabel(item: RequirementItem): string {
 
         <!-- selected feature group -->
         <template v-else-if="selectedGroup">
-          <div class="mb-1 text-[11px] uppercase tracking-wide text-dimmed">
+          <div class="mb-1 text-2xs uppercase tracking-wide text-dimmed">
             {{ selectedModule?.name }}
           </div>
           <h2 class="text-lg font-semibold text-highlighted">{{ selectedGroup.name }}</h2>
@@ -364,7 +364,7 @@ function kindLabel(item: RequirementItem): string {
           <template v-if="mode === 'gherkin'">
             <pre
               v-if="selectedFeature"
-              class="mt-4 overflow-x-auto rounded-lg border border-default bg-app-950/60 p-4 text-[12.5px] leading-relaxed text-default"
+              class="mt-4 overflow-x-auto rounded-lg border border-default bg-app-950/60 p-4 text-xs leading-relaxed text-default"
             ><code>{{ selectedFeature.content }}</code></pre>
             <div
               v-else
@@ -385,7 +385,7 @@ function kindLabel(item: RequirementItem): string {
               class="mt-4 flex flex-wrap items-center justify-between gap-2"
               data-testid="spec-state-filter"
             >
-              <div class="flex items-center gap-1.5 text-[11px] text-dimmed">
+              <div class="flex items-center gap-1.5 text-2xs text-dimmed">
                 <UIcon
                   :name="STATE_META.established.icon"
                   class="h-3.5 w-3.5 text-app-success-400"
@@ -466,7 +466,7 @@ function kindLabel(item: RequirementItem): string {
                     <UBadge color="neutral" variant="subtle" size="sm">{{ kindLabel(req) }}</UBadge>
                   </div>
                 </div>
-                <p class="mt-1.5 whitespace-pre-line text-[13px] leading-relaxed text-toned">
+                <p class="mt-1.5 whitespace-pre-line text-sm leading-relaxed text-toned">
                   {{ req.statement }}
                 </p>
                 <!-- acceptance criteria (Given/When/Then) -->
@@ -474,7 +474,7 @@ function kindLabel(item: RequirementItem): string {
                   <div
                     v-for="ac in req.acceptance ?? []"
                     :key="ac.id"
-                    class="rounded-md border border-default bg-app-950/50 px-3 py-2 text-[12.5px] leading-relaxed"
+                    class="rounded-md border border-default bg-app-950/50 px-3 py-2 text-xs leading-relaxed"
                   >
                     <p class="text-toned">
                       <span class="font-semibold text-app-success-400">{{
@@ -502,7 +502,7 @@ function kindLabel(item: RequirementItem): string {
             <!-- domain rules / invariants scoped to this group -->
             <div v-if="(selectedGroup.rules?.length ?? 0) > 0" class="mt-6">
               <div
-                class="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted"
+                class="mb-2 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wide text-muted"
               >
                 <UIcon name="i-lucide-shield-check" class="h-3.5 w-3.5" />
                 {{ t('spec.domainRules') }}
@@ -511,7 +511,7 @@ function kindLabel(item: RequirementItem): string {
                 <li
                   v-for="rule in selectedGroup.rules ?? []"
                   :key="rule.id"
-                  class="rounded-md border border-default bg-default/60 px-3 py-2 text-[13px] text-toned"
+                  class="rounded-md border border-default bg-default/60 px-3 py-2 text-sm text-toned"
                 >
                   {{ rule.rule }}
                   <span v-if="rule.rationale" class="text-dimmed">{{

@@ -106,11 +106,11 @@ const envInTransition = computed(
 
 <template>
   <section class="rounded-lg border border-default bg-default/60 p-3">
-    <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-dimmed">
+    <h3 class="mb-2 text-2xs font-semibold uppercase tracking-wide text-dimmed">
       {{ t('environments.title') }}
     </h3>
     <div v-if="environment" class="space-y-2">
-      <div class="flex items-center gap-2 text-[13px]">
+      <div class="flex items-center gap-2 text-sm">
         <UIcon
           :name="ENV_STATUS_META[environment.status].icon"
           class="h-3.5 w-3.5"
@@ -128,22 +128,22 @@ const envInTransition = computed(
         :href="environment.url"
         target="_blank"
         rel="noopener"
-        class="inline-flex items-center gap-1.5 break-all text-[13px] text-app-info-300 hover:underline"
+        class="inline-flex items-center gap-1.5 break-all text-sm text-app-info-300 hover:underline"
       >
         <UIcon name="i-lucide-external-link" class="h-3.5 w-3.5 shrink-0" />
         {{ environment.url }}
       </a>
-      <p v-if="environment.expiresAt" class="text-[11px] text-dimmed">
+      <p v-if="environment.expiresAt" class="text-2xs text-dimmed">
         {{ t('environments.expires', { date: d(new Date(environment.expiresAt), 'long') }) }}
       </p>
       <!-- The resolved provision type + engine recorded at provision time, so a run states
            exactly what was provisioned and how (the what/where ÷ how split). -->
       <dl v-if="provisionTypeLabel || engineLabel" class="flex flex-wrap gap-x-4 gap-y-0.5">
-        <div v-if="provisionTypeLabel" class="flex items-center gap-1 text-[11px]">
+        <div v-if="provisionTypeLabel" class="flex items-center gap-1 text-2xs">
           <dt class="text-dimmed">{{ t('environments.provisionTypeLabel') }}</dt>
           <dd class="text-toned">{{ provisionTypeLabel }}</dd>
         </div>
-        <div v-if="engineLabel" class="flex items-center gap-1 text-[11px]">
+        <div v-if="engineLabel" class="flex items-center gap-1 text-2xs">
           <dt class="text-dimmed">{{ t('environments.engineLabel') }}</dt>
           <dd class="text-toned">{{ engineLabel }}</dd>
         </div>
@@ -151,7 +151,7 @@ const envInTransition = computed(
       <!-- The verbatim provider error when the environment failed/expired. -->
       <pre
         v-if="failureShown"
-        class="mt-1 max-h-32 overflow-auto whitespace-pre-wrap rounded border border-app-error-900/60 bg-app-error-950/40 p-1.5 text-[11px] text-app-error-200/90"
+        class="mt-1 max-h-32 overflow-auto whitespace-pre-wrap rounded border border-app-error-900/60 bg-app-error-950/40 p-1.5 text-2xs text-app-error-200/90"
         >{{ environment.lastError }}</pre>
       <!-- What the provider says it is still waiting on. Muted rather than alarming: an
            environment mid-rollout is healthy, and styling this like the error above would report
@@ -159,12 +159,12 @@ const envInTransition = computed(
            prose. -->
       <p
         v-if="statusNote"
-        class="mt-1 max-h-32 overflow-auto whitespace-pre-wrap break-words text-[11px] text-muted"
+        class="mt-1 max-h-32 overflow-auto whitespace-pre-wrap break-words text-2xs text-muted"
       >
         {{ t('environments.statusNote', { note: statusNote }) }}
       </p>
     </div>
-    <p v-else class="text-[12px] text-dimmed">
+    <p v-else class="text-xs text-dimmed">
       {{ degradedReason ?? t('environments.empty') }}
     </p>
   </section>

@@ -182,9 +182,9 @@ async function copyRunId() {
 
 <template>
   <div>
-    <dl class="grid grid-cols-2 gap-x-6 gap-y-3 text-[13px] sm:grid-cols-3">
+    <dl class="grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-3">
       <div>
-        <dt class="text-[11px] uppercase tracking-wide text-dimmed">
+        <dt class="text-2xs uppercase tracking-wide text-dimmed">
           {{ t('panels.stepMeta.stateLabel') }}
         </dt>
         <dd class="mt-0.5 flex items-center gap-1.5 text-default">
@@ -199,7 +199,7 @@ async function copyRunId() {
         </dd>
       </div>
       <div>
-        <dt class="text-[11px] uppercase tracking-wide text-dimmed">
+        <dt class="text-2xs uppercase tracking-wide text-dimmed">
           {{ t('panels.stepMeta.duration') }}
         </dt>
         <dd class="mt-0.5 flex items-center gap-1.5 tabular-nums text-default">
@@ -210,13 +210,13 @@ async function copyRunId() {
           />
           <span v-if="durationLabel">{{ durationLabel }}</span>
           <span v-else class="text-dimmed">—</span>
-          <span v-if="isRunning" class="text-[11px] text-dimmed">{{
+          <span v-if="isRunning" class="text-2xs text-dimmed">{{
             t('panels.stepMeta.elapsed')
           }}</span>
         </dd>
       </div>
       <div>
-        <dt class="text-[11px] uppercase tracking-wide text-dimmed">
+        <dt class="text-2xs uppercase tracking-wide text-dimmed">
           {{ t('panels.stepMeta.step') }}
         </dt>
         <dd class="mt-0.5 text-default">
@@ -224,19 +224,19 @@ async function copyRunId() {
         </dd>
       </div>
       <div>
-        <dt class="text-[11px] uppercase tracking-wide text-dimmed">
+        <dt class="text-2xs uppercase tracking-wide text-dimmed">
           {{ t('panels.stepMeta.started') }}
         </dt>
         <dd class="mt-0.5 text-toned">{{ formatClock(step.startedAt) ?? '—' }}</dd>
       </div>
       <div>
-        <dt class="text-[11px] uppercase tracking-wide text-dimmed">
+        <dt class="text-2xs uppercase tracking-wide text-dimmed">
           {{ t('panels.stepMeta.finished') }}
         </dt>
         <dd class="mt-0.5 text-toned">{{ formatClock(step.finishedAt) ?? '—' }}</dd>
       </div>
       <div>
-        <dt class="text-[11px] uppercase tracking-wide text-dimmed">
+        <dt class="text-2xs uppercase tracking-wide text-dimmed">
           {{ t('panels.stepMeta.model') }}
         </dt>
         <dd class="mt-0.5 truncate text-toned" :title="step.model">
@@ -244,21 +244,21 @@ async function copyRunId() {
         </dd>
       </div>
       <div v-if="promptVariant">
-        <dt class="text-[11px] uppercase tracking-wide text-dimmed">
+        <dt class="text-2xs uppercase tracking-wide text-dimmed">
           {{ t('panels.stepMeta.promptVariant') }}
         </dt>
         <dd class="mt-0.5 truncate text-toned">{{ promptVariant.label }}</dd>
-        <dd v-if="promptVariant.note" class="mt-0.5 text-[11px] text-app-warning-400/80">
+        <dd v-if="promptVariant.note" class="mt-0.5 text-2xs text-app-warning-400/80">
           {{ promptVariant.note }}
         </dd>
       </div>
       <!-- The run id this step belongs to, surfaced for debugging (copyable). -->
       <div class="col-span-2 sm:col-span-3">
-        <dt class="text-[11px] uppercase tracking-wide text-dimmed">
+        <dt class="text-2xs uppercase tracking-wide text-dimmed">
           {{ t('panels.stepMeta.run') }}
         </dt>
         <dd
-          class="mt-0.5 cursor-pointer truncate font-mono text-[12px] text-muted hover:text-default"
+          class="mt-0.5 cursor-pointer truncate font-mono text-xs text-muted hover:text-default"
           :title="t('panels.stepMeta.clickToCopy', { id: step.runId ?? instanceId ?? '' })"
           @click="copyRunId"
         >
@@ -284,7 +284,7 @@ async function copyRunId() {
 
     <!-- live subtask breakdown -->
     <div v-if="step.subtasks && step.subtasks.total > 0" class="mt-4">
-      <div class="text-[11px] uppercase tracking-wide text-dimmed">
+      <div class="text-2xs uppercase tracking-wide text-dimmed">
         {{
           t('panels.stepMeta.subtasks', {
             completed: step.subtasks.completed,
@@ -304,7 +304,7 @@ async function copyRunId() {
         <li
           v-for="(item, idx) in step.subtasks.items"
           :key="idx"
-          class="flex items-start gap-1.5 text-[12px]"
+          class="flex items-start gap-1.5 text-xs"
           :class="
             item.status === 'completed'
               ? 'text-dimmed line-through'
@@ -336,7 +336,7 @@ async function copyRunId() {
     <!-- standards (prompt fragments) folded into this step -->
     <div v-if="step.selectedFragmentIds && step.selectedFragmentIds.length" class="mt-4">
       <div
-        class="text-[11px] uppercase tracking-wide text-dimmed"
+        class="text-2xs uppercase tracking-wide text-dimmed"
         :title="t('panels.stepMeta.standardsAppliedHint')"
       >
         {{ t('panels.stepMeta.standardsApplied') }}
@@ -356,28 +356,28 @@ async function copyRunId() {
 
     <!-- decision raised on this step -->
     <div v-if="step.decision" class="mt-4">
-      <div class="text-[11px] uppercase tracking-wide text-dimmed">
+      <div class="text-2xs uppercase tracking-wide text-dimmed">
         {{ t('panels.stepMeta.decision') }}
       </div>
-      <p class="mt-0.5 text-[13px] text-default">{{ step.decision.question }}</p>
+      <p class="mt-0.5 text-sm text-default">{{ step.decision.question }}</p>
       <p
         v-if="step.decision.chosen"
-        class="mt-0.5 flex items-center gap-1 text-[12px] text-app-success-400"
+        class="mt-0.5 flex items-center gap-1 text-xs text-app-success-400"
       >
         <UIcon name="i-lucide-check" class="h-3 w-3 shrink-0" />
         {{ step.decision.chosen }}
       </p>
-      <p v-else class="mt-0.5 text-[12px] text-app-warning-400">
+      <p v-else class="mt-0.5 text-xs text-app-warning-400">
         {{ t('panels.stepMeta.awaitingChoice') }}
       </p>
     </div>
 
     <!-- approval gate state -->
     <div v-if="step.approval" class="mt-4">
-      <div class="text-[11px] uppercase tracking-wide text-dimmed">
+      <div class="text-2xs uppercase tracking-wide text-dimmed">
         {{ t('panels.stepMeta.approvalGate') }}
       </div>
-      <p class="mt-0.5 text-[13px] text-default">
+      <p class="mt-0.5 text-sm text-default">
         {{ approvalStatusLabel }}
       </p>
     </div>
@@ -385,7 +385,7 @@ async function copyRunId() {
     <!-- companion verdict + full correction sequence -->
     <div v-if="companionVerdicts.length" class="mt-4">
       <div class="flex items-center justify-between">
-        <span class="text-[11px] uppercase tracking-wide text-dimmed">
+        <span class="text-2xs uppercase tracking-wide text-dimmed">
           {{ t('panels.stepMeta.companionReview') }}
         </span>
         <!-- The COLOUR is the verdict (`passed`) and the GLYPH is the arithmetic, which are no
@@ -410,9 +410,9 @@ async function copyRunId() {
           class="relative rounded-lg border border-default bg-default/60 px-3 py-2"
         >
           <CopyButton v-if="v.feedback" :text="v.feedback" class="absolute end-1 top-1" />
-          <div class="flex items-center gap-2 text-[12px]">
+          <div class="flex items-center gap-2 text-xs">
             <span
-              class="inline-flex h-4 shrink-0 items-center rounded px-1 font-mono text-[11px] tabular-nums"
+              class="inline-flex h-4 shrink-0 items-center rounded px-1 font-mono text-2xs tabular-nums"
               :class="
                 v.passed
                   ? 'bg-app-success-500/15 text-app-success-300'
@@ -429,7 +429,7 @@ async function copyRunId() {
             v-if="v.feedback"
             :text="v.feedback"
             data-testid="companion-verdict-summary"
-            class="mt-1.5 pe-6 text-[12px] leading-relaxed text-toned"
+            class="mt-1.5 pe-6 text-xs leading-relaxed text-toned"
           />
           <ul v-if="findings.length" class="mt-2 space-y-1.5">
             <li
@@ -448,13 +448,13 @@ async function copyRunId() {
               </UBadge>
               <MarkdownProse
                 :text="finding.body"
-                class="min-w-0 text-[12px] leading-relaxed text-toned"
+                class="min-w-0 text-xs leading-relaxed text-toned"
               />
             </li>
           </ul>
         </li>
       </ol>
-      <p v-if="companionVerdicts.length > 1" class="mt-1 text-[11px] text-dimmed">
+      <p v-if="companionVerdicts.length > 1" class="mt-1 text-2xs text-dimmed">
         {{
           t(
             'panels.stepMeta.correctionIterations',

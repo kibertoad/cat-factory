@@ -442,7 +442,7 @@ function toastRemoved() {
             disabled
             size="lg"
             :label="t('settings.infrastructure.handler.connectionEstablished')"
-            :ui="{ label: 'text-[13px] font-semibold text-app-success-300' }"
+            :ui="{ label: 'text-sm font-semibold text-app-success-300' }"
           />
           <UButton
             icon="i-lucide-trash-2"
@@ -454,7 +454,7 @@ function toastRemoved() {
             @click="removeKube"
           />
         </div>
-        <p class="pl-7 text-[11px] text-toned">
+        <p class="pl-7 text-2xs text-toned">
           {{ t('settings.infrastructure.handler.activeEngine') }}
           <span class="text-default">{{ kubeHandlerEngineLabel }}</span>
         </p>
@@ -472,13 +472,13 @@ function toastRemoved() {
           <ConnectionTestVerdict :result="kubeSavedTestResult" />
         </div>
       </div>
-      <p v-else class="flex items-center gap-1.5 text-[12px] text-dimmed">
+      <p v-else class="flex items-center gap-1.5 text-xs text-dimmed">
         <UIcon name="i-lucide-circle-dashed" class="h-3.5 w-3.5" />
         {{ t('settings.infrastructure.handler.notConnected') }}
       </p>
 
       <div class="space-y-1">
-        <span class="text-[11px] text-muted">{{
+        <span class="text-2xs text-muted">{{
           t('settings.infrastructure.handler.engineLabel')
         }}</span>
         <div class="flex flex-wrap gap-1">
@@ -515,7 +515,7 @@ function toastRemoved() {
       <div v-if="userOverridesOn" class="border-t border-default pt-2">
         <button
           type="button"
-          class="flex w-full items-center gap-1.5 text-start text-[11px] font-semibold uppercase tracking-wide text-dimmed hover:text-toned"
+          class="flex w-full items-center gap-1.5 text-start text-2xs font-semibold uppercase tracking-wide text-dimmed hover:text-toned"
           @click="showKubeOverride = !showKubeOverride"
         >
           <UIcon
@@ -528,7 +528,7 @@ function toastRemoved() {
           </UBadge>
         </button>
         <div v-if="showKubeOverride" class="mt-2 space-y-2">
-          <p class="text-[11px] text-dimmed">
+          <p class="text-2xs text-dimmed">
             {{ t('settings.infrastructure.handler.personalOverrideHint') }}
           </p>
           <p v-if="kubeUserHandler" class="flex justify-end">
@@ -562,7 +562,7 @@ function toastRemoved() {
       <h3 class="text-sm font-semibold text-default">
         {{ t('inspector.testConfig.provisionTypes.docker-compose') }}
       </h3>
-      <p class="text-[12px] text-muted">
+      <p class="text-xs text-muted">
         {{ t('settings.infrastructure.dockerComposeInfo') }}
       </p>
     </section>
@@ -580,7 +580,7 @@ function toastRemoved() {
       <CustomManifestTypeEditor />
 
       <div v-if="infra.customTypes.length" class="space-y-2 border-t border-default pt-3">
-        <p class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+        <p class="text-2xs font-semibold uppercase tracking-wide text-muted">
           {{ t('settings.infrastructure.handler.customHandlerTitle') }}
         </p>
         <UFormField :label="t('settings.infrastructure.handler.customTypeLabel')">
@@ -595,10 +595,7 @@ function toastRemoved() {
         >
           <USelect v-model="selectedBackendKind" :items="customBackendOptions" />
         </UFormField>
-        <p
-          v-if="customHandler"
-          class="flex items-center justify-between gap-2 text-[12px] text-toned"
-        >
+        <p v-if="customHandler" class="flex items-center justify-between gap-2 text-xs text-toned">
           <span class="text-app-success-400">{{
             t('settings.infrastructure.handler.customConnected')
           }}</span>

@@ -31,12 +31,12 @@ function openObservability() {
 <template>
   <div v-if="instanceId || hasCalls">
     <div class="mb-1 flex items-center justify-between">
-      <span class="text-[11px] font-semibold uppercase tracking-wide text-dimmed">
+      <span class="text-2xs font-semibold uppercase tracking-wide text-dimmed">
         {{ t('observability.modelActivity') }}
       </span>
       <button
         v-if="instanceId"
-        class="text-[11px] text-app-info-400 hover:text-app-info-300"
+        class="text-2xs text-app-info-400 hover:text-app-info-300"
         @click="openObservability"
       >
         {{ t('observability.viewAllCalls') }}

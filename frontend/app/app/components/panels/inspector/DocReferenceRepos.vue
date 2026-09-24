@@ -83,7 +83,7 @@ function detach(repoId: number) {
 <template>
   <div data-testid="doc-reference-repos">
     <div class="mb-1 flex items-center justify-between">
-      <span class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+      <span class="text-2xs font-semibold uppercase tracking-wide text-muted">
         {{ t('inspector.referenceRepos.title') }}
       </span>
     </div>
@@ -133,11 +133,11 @@ function detach(repoId: number) {
         />
       </template>
     </UInputMenu>
-    <div v-else class="text-[11px] text-dimmed">
+    <div v-else class="text-2xs text-dimmed">
       {{ t('inspector.referenceRepos.connectFirst') }}
     </div>
 
-    <div class="mt-1 text-[11px] text-dimmed">
+    <div class="mt-1 text-2xs text-dimmed">
       {{ t('inspector.referenceRepos.hint') }}
     </div>
   </div>

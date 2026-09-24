@@ -114,7 +114,7 @@ const canLeaveReview = computed(
     <div class="flex items-center justify-between gap-2">
       <div class="min-w-0">
         <p class="text-sm font-medium text-default">{{ store.targetFrame?.title }}</p>
-        <p class="text-[11px] text-dimmed">{{ t('environmentWizard.review.detectHint') }}</p>
+        <p class="text-2xs text-dimmed">{{ t('environmentWizard.review.detectHint') }}</p>
       </div>
       <UButton
         size="xs"
@@ -130,12 +130,12 @@ const canLeaveReview = computed(
       </UButton>
     </div>
 
-    <p v-if="!store.hasRepo" class="text-[12px] text-app-warning-300/80">
+    <p v-if="!store.hasRepo" class="text-xs text-app-warning-300/80">
       {{ t('environmentWizard.review.noRepo') }}
     </p>
     <p
       v-else-if="store.detectError"
-      class="text-[12px] text-app-error-300/80"
+      class="text-xs text-app-error-300/80"
       data-testid="env-setup-detect-error"
     >
       {{ t('environmentWizard.review.detectError') }}
@@ -149,7 +149,7 @@ const canLeaveReview = computed(
       >
         <p
           v-if="repoCliHint"
-          class="mb-2 flex items-start gap-1.5 text-[11px] text-primary"
+          class="mb-2 flex items-start gap-1.5 text-2xs text-primary"
           data-testid="env-setup-cli-nudge"
         >
           <UIcon name="i-lucide-lightbulb" class="mt-0.5 h-3.5 w-3.5 shrink-0" />
@@ -157,10 +157,10 @@ const canLeaveReview = computed(
         </p>
         <div class="flex items-center justify-between gap-2">
           <div class="min-w-0">
-            <p class="text-[12px] font-medium text-toned">
+            <p class="text-xs font-medium text-toned">
               {{ t('environmentWizard.analysis.title') }}
             </p>
-            <p class="text-[11px] text-dimmed">{{ t('environmentWizard.analysis.hint') }}</p>
+            <p class="text-2xs text-dimmed">{{ t('environmentWizard.analysis.hint') }}</p>
           </div>
           <UButton
             size="xs"
@@ -177,14 +177,14 @@ const canLeaveReview = computed(
         </div>
         <p
           v-if="!store.canAnalyze"
-          class="mt-2 text-[11px] text-dimmed"
+          class="mt-2 text-2xs text-dimmed"
           data-testid="env-setup-analysis-unavailable"
         >
           {{ t('environmentWizard.analysis.unavailable') }}
         </p>
         <p
           v-else-if="store.analysisStatus === 'failed'"
-          class="mt-2 text-[11px] text-app-error-300/80"
+          class="mt-2 text-2xs text-app-error-300/80"
         >
           {{ t('environmentWizard.analysis.failed') }}
         </p>
@@ -193,7 +193,7 @@ const canLeaveReview = computed(
           class="mt-2 space-y-2"
           data-testid="env-setup-analysis-ready"
         >
-          <p v-if="store.merged?.summary" class="text-[11px] leading-snug text-muted">
+          <p v-if="store.merged?.summary" class="text-2xs leading-snug text-muted">
             {{ store.merged.summary }}
           </p>
           <UButton
@@ -211,7 +211,7 @@ const canLeaveReview = computed(
 
       <!-- per-field provenance -->
       <div v-if="store.merged?.fields.length" class="space-y-1.5">
-        <p class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+        <p class="text-2xs font-semibold uppercase tracking-wide text-muted">
           {{ t('environmentWizard.review.provenanceTitle') }}
         </p>
         <div class="flex flex-wrap gap-1.5">
@@ -261,7 +261,7 @@ const canLeaveReview = computed(
 
       <!-- compose file layering -->
       <div v-if="composeFileCandidates.length" class="space-y-1.5">
-        <p class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+        <p class="text-2xs font-semibold uppercase tracking-wide text-muted">
           {{ t('environmentWizard.review.composeFiles') }}
         </p>
         <div class="flex flex-wrap gap-1.5">
@@ -275,14 +275,14 @@ const canLeaveReview = computed(
             :data-testid="`env-setup-file-${c.name}`"
             @click="store.toggleComposeFile(c.path)"
           >
-            {{ c.name }}<span v-if="c.os" class="ms-1 text-[9px] opacity-70">{{ c.os }}</span>
+            {{ c.name }}<span v-if="c.os" class="ms-1 text-3xs opacity-70">{{ c.os }}</span>
           </UButton>
         </div>
       </div>
 
       <!-- compose profiles -->
       <div v-if="profileCandidates.length" class="space-y-1.5">
-        <p class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+        <p class="text-2xs font-semibold uppercase tracking-wide text-muted">
           {{ t('environmentWizard.review.profiles') }}
         </p>
         <div class="flex flex-wrap gap-1.5">
@@ -303,7 +303,7 @@ const canLeaveReview = computed(
 
       <!-- seed dumps -->
       <div v-if="seedDumpCandidates.length" class="space-y-1.5">
-        <p class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+        <p class="text-2xs font-semibold uppercase tracking-wide text-muted">
           {{ t('environmentWizard.review.seedDumps') }}
         </p>
         <div class="space-y-1">
@@ -312,7 +312,7 @@ const canLeaveReview = computed(
             :key="c.path"
             class="flex items-center justify-between gap-2 rounded border border-default bg-default/40 px-2 py-1"
           >
-            <span class="truncate text-[11px] text-toned">{{ c.path }}</span>
+            <span class="truncate text-2xs text-toned">{{ c.path }}</span>
             <UButton
               size="xs"
               :color="seedAdded(c.path) ? 'success' : 'neutral'"
@@ -348,12 +348,12 @@ const canLeaveReview = computed(
           <UTextarea
             v-model="rawText"
             :rows="10"
-            class="w-full font-mono text-[11px]"
+            class="w-full font-mono text-2xs"
             data-testid="env-setup-raw-text"
           />
           <p
             v-if="rawError"
-            class="text-[11px] text-app-error-300/80"
+            class="text-2xs text-app-error-300/80"
             data-testid="env-setup-raw-error"
           >
             {{ rawError }}

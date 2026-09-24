@@ -183,7 +183,7 @@ async function doSpawnEpic() {
 
         <!-- Secondary: spawn a parent/epic issue as a whole linked task group. -->
         <div class="space-y-2 border-t border-default pt-3">
-          <span class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+          <span class="text-2xs font-semibold uppercase tracking-wide text-muted">
             {{ t('tasks.import.asEpic') }}
           </span>
           <div class="flex items-end gap-2">

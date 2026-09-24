@@ -276,7 +276,7 @@ function indexOf(cmd: Command) {
           </p>
 
           <div v-for="group in groups" :key="group.name" class="mb-1">
-            <p class="px-2 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-dimmed">
+            <p class="px-2 pb-1 pt-2 text-2xs font-semibold uppercase tracking-wide text-dimmed">
               {{ group.name }}
             </p>
             <button

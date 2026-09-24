@@ -306,7 +306,7 @@ async function mergePr() {
     <div v-if="instance">
       <div class="mb-1 flex items-center justify-between">
         <span class="flex min-w-0 items-center gap-1.5">
-          <span class="truncate text-[11px] font-semibold uppercase tracking-wide text-muted">
+          <span class="truncate text-2xs font-semibold uppercase tracking-wide text-muted">
             {{ instance.pipelineName }}
           </span>
           <!-- A sandboxed run looks exactly like one that simply has not reached the merge yet,
@@ -406,7 +406,7 @@ async function mergePr() {
               </span>
               <span
                 v-if="isCompanionKind(s.agentKind)"
-                class="shrink-0 rounded bg-accented/60 px-1 text-[9px] font-medium uppercase tracking-wide text-toned"
+                class="shrink-0 rounded bg-accented/60 px-1 text-3xs font-medium uppercase tracking-wide text-toned"
                 :title="t('inspector.execution.companionTooltip')"
               >
                 {{ t('inspector.execution.companion') }}
@@ -418,7 +418,7 @@ async function mergePr() {
             </button>
             <span
               v-if="s.subtasks && s.subtasks.total > 0"
-              class="ms-auto font-mono text-[10px] tabular-nums text-toned"
+              class="ms-auto font-mono text-3xs tabular-nums text-toned"
               data-testid="run-subtasks"
               :title="
                 s.subtasks.inProgress > 0
@@ -436,7 +436,7 @@ async function mergePr() {
               {{ s.subtasks.completed }}/{{ s.subtasks.total }}
             </span>
             <span
-              class="inline-flex items-center gap-1 text-[10px]"
+              class="inline-flex items-center gap-1 text-3xs"
               :class="[
                 stepFailed(s) ? 'text-app-error-400' : 'text-muted',
                 { 'ms-auto': !s.subtasks },
@@ -467,7 +467,7 @@ async function mergePr() {
                  indicator, NOT a "Review" gate (the human is summoned only if needed) -->
             <span
               v-else-if="reviews.isBackground(s.agentKind, block.id) && reviewStage"
-              class="inline-flex shrink-0 items-center gap-1 text-[10px] text-primary"
+              class="inline-flex shrink-0 items-center gap-1 text-3xs text-primary"
             >
               <UIcon name="i-lucide-loader-circle" class="h-3 w-3 animate-spin" />
               {{ reviewStageLabel }}
@@ -560,7 +560,7 @@ async function mergePr() {
           </div>
           <div
             v-if="s.model"
-            class="mt-0.5 flex items-center gap-1 ps-6 text-[10px] text-dimmed"
+            class="mt-0.5 flex items-center gap-1 ps-6 text-3xs text-dimmed"
             :title="s.model"
           >
             <UIcon name="i-lucide-cpu" class="h-3 w-3" />
@@ -569,7 +569,7 @@ async function mergePr() {
           <!-- Prompt-fragment standards the library selected for this step. -->
           <div
             v-if="s.selectedFragmentIds && s.selectedFragmentIds.length"
-            class="mt-0.5 flex flex-wrap items-center gap-1 ps-6 text-[10px] text-dimmed"
+            class="mt-0.5 flex flex-wrap items-center gap-1 ps-6 text-3xs text-dimmed"
             :title="
               t('inspector.execution.fragmentsTooltip', {
                 fragments: s.selectedFragmentIds.join(', '),
@@ -589,7 +589,7 @@ async function mergePr() {
                completed/skipped, so it's clear whether a fix pass ran. -->
           <div
             v-if="gateCompanionFor(s, runFailed)"
-            class="mt-0.5 flex items-center gap-1.5 ps-6 text-[10px]"
+            class="mt-0.5 flex items-center gap-1.5 ps-6 text-3xs"
           >
             <UIcon
               :name="agentKindMeta(gateCompanionFor(s, runFailed)!.kind).icon"
@@ -641,7 +641,7 @@ async function mergePr() {
 
     <!-- Open PR: link straight to it on GitHub -->
     <div v-if="pr" class="space-y-2">
-      <span class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+      <span class="text-2xs font-semibold uppercase tracking-wide text-muted">
         {{ t('inspector.execution.pullRequest') }}
       </span>
       <UButton
@@ -663,7 +663,7 @@ async function mergePr() {
           </UBadge>
         </span>
       </UButton>
-      <p v-if="pr.branch" class="flex items-center gap-1 truncate text-[10px] text-dimmed">
+      <p v-if="pr.branch" class="flex items-center gap-1 truncate text-3xs text-dimmed">
         <UIcon name="i-lucide-git-branch" class="h-3 w-3 shrink-0" />
         <span class="truncate" :title="pr.branch">{{ pr.branch }}</span>
       </p>

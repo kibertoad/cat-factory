@@ -383,7 +383,7 @@ function fieldHelp(key: string): string | undefined {
     >
       <div>
         <span class="font-medium text-default">{{ connection.label }}</span>
-        <div class="text-[11px] text-app-success-400">
+        <div class="text-2xs text-app-success-400">
           {{ t('settings.providerConnection.connectedAt', { baseUrl: connection.baseUrl }) }}
         </div>
       </div>
@@ -426,14 +426,14 @@ function fieldHelp(key: string): string | undefined {
 
     <!-- NATIVE provider: the friendly, descriptor-driven flat field form. -->
     <div v-else-if="isNative" class="rounded-lg border border-dashed border-muted p-3 space-y-3">
-      <p class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+      <p class="text-2xs font-semibold uppercase tracking-wide text-muted">
         {{
           connection
             ? t('settings.providerConnection.form.updateConfiguration')
             : t('settings.providerConnection.form.connect')
         }}
       </p>
-      <p v-if="connection && hasSecretFields" class="text-[11px] text-app-warning-300/80">
+      <p v-if="connection && hasSecretFields" class="text-2xs text-app-warning-300/80">
         {{
           t(
             'settings.providerConnection.form.reenterSecrets',

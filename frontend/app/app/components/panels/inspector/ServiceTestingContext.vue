@@ -89,7 +89,7 @@ function revert() {
   >
     <!-- This text reaches the model in the prompt, so it must never hold a real secret. -->
     <div
-      class="flex items-start gap-2 rounded-md border border-muted bg-elevated/40 px-2.5 py-2 text-[11px] leading-snug text-toned"
+      class="flex items-start gap-2 rounded-md border border-muted bg-elevated/40 px-2.5 py-2 text-2xs leading-snug text-toned"
     >
       <UIcon name="i-lucide-info" class="mt-0.5 h-4 w-4 shrink-0 text-muted" />
       <span>{{ t('inspector.testingContext.notSecret') }}</span>
@@ -104,7 +104,7 @@ function revert() {
     />
 
     <div class="flex items-center justify-between gap-2">
-      <p class="text-[11px] text-dimmed" :class="{ 'text-app-error-400': tooLong }">
+      <p class="text-2xs text-dimmed" :class="{ 'text-app-error-400': tooLong }">
         {{
           t('inspector.testingContext.length', {
             count: outgoing.length,

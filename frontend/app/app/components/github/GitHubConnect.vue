@@ -118,7 +118,7 @@ async function connectManually() {
           <UIcon v-else name="i-lucide-github" class="h-4 w-4 text-muted" />
           <div class="min-w-0">
             <div class="truncate text-sm text-default">{{ inst.accountLogin }}</div>
-            <div class="text-[11px] text-dimmed">
+            <div class="text-2xs text-dimmed">
               {{
                 t('github.connect.installationMeta', {
                   targetType: inst.targetType,

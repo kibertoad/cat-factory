@@ -453,7 +453,7 @@ async function add() {
           <USwitch v-model="onDemand" :disabled="onDemandLocked" size="sm" class="mt-0.5" />
           <div class="space-y-0.5">
             <p class="text-xs font-medium text-default">{{ t('board.recurring.onDemand') }}</p>
-            <p class="text-[11px] text-dimmed">
+            <p class="text-2xs text-dimmed">
               {{
                 onDemandLocked
                   ? t('board.recurring.onDemandLockedHint')
@@ -466,10 +466,10 @@ async function add() {
         <RecurringRecurrenceEditor v-if="!onDemand" v-model="recurrence" />
 
         <div v-if="filesTicket" class="space-y-3 rounded-lg border border-default p-3">
-          <p class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+          <p class="text-2xs font-semibold uppercase tracking-wide text-muted">
             {{ t('board.recurring.issueTracker') }}
           </p>
-          <p class="text-[11px] text-dimmed">
+          <p class="text-2xs text-dimmed">
             {{ t('board.recurring.issueTrackerHint') }}
           </p>
           <div class="flex gap-1">
@@ -541,22 +541,22 @@ async function add() {
             <p class="text-xs font-medium text-default">
               {{ t('board.recurring.trackerTrigger') }}
             </p>
-            <p class="text-[11px] text-dimmed">
+            <p class="text-2xs text-dimmed">
               {{ t('board.recurring.trackerTriggerHint') }}
             </p>
           </div>
         </div>
 
         <div v-if="showIntake" class="space-y-3 rounded-lg border border-default p-3">
-          <p class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+          <p class="text-2xs font-semibold uppercase tracking-wide text-muted">
             {{ t('board.recurring.intake') }}
           </p>
-          <p class="text-[11px] text-dimmed">
+          <p class="text-2xs text-dimmed">
             {{ t('board.recurring.intakeHint') }}
           </p>
           <!-- Two different remedies: connect something, versus connect something ELSE. A source
                that is connected but cannot run a scheduled search is not an absent connection. -->
-          <p v-if="intakeSources.length === 0" class="text-[11px] text-app-warning-500">
+          <p v-if="intakeSources.length === 0" class="text-2xs text-app-warning-500">
             {{
               tasks.anyOffered
                 ? t('board.recurring.intakeNoIntakeSources')
@@ -626,7 +626,7 @@ async function add() {
           </UFormField>
 
           <template v-if="intakeSource">
-            <p class="text-[11px] text-dimmed">
+            <p class="text-2xs text-dimmed">
               {{
                 intakeDispatch === 'per-ticket'
                   ? t('board.recurring.intakeDispatchPerTicketHint')
@@ -677,7 +677,7 @@ async function add() {
           </template>
         </div>
 
-        <p class="text-[11px] text-dimmed">
+        <p class="text-2xs text-dimmed">
           {{ t('board.recurring.footerHint') }}
         </p>
       </div>

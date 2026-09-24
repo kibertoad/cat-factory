@@ -50,7 +50,7 @@ const items = computed<DropdownMenuItem[][]>(() => [
     >
       <UIcon name="i-lucide-languages" class="h-4 w-4 shrink-0 text-muted" />
       <div v-if="!collapsed" class="min-w-0 flex-1">
-        <div class="truncate text-[10px] uppercase tracking-wide text-dimmed">
+        <div class="truncate text-3xs uppercase tracking-wide text-dimmed">
           {{ t('language.switcher') }}
         </div>
         <div class="truncate text-xs font-medium text-highlighted">{{ current }}</div>

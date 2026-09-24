@@ -76,7 +76,7 @@ function manageAccount() {
 <template>
   <div>
     <div class="mb-1 flex items-center justify-between gap-2">
-      <span v-if="label" class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+      <span v-if="label" class="text-2xs font-semibold uppercase tracking-wide text-muted">
         {{ label }}
       </span>
       <span v-else />
@@ -99,7 +99,7 @@ function manageAccount() {
               <template v-if="categoryGroups.length">
                 <div v-for="group in categoryGroups" :key="group.category">
                   <p
-                    class="px-2 pb-0.5 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-dimmed"
+                    class="px-2 pb-0.5 pt-1.5 text-2xs font-semibold uppercase tracking-wide text-dimmed"
                   >
                     {{ group.category }}
                   </p>
@@ -123,7 +123,7 @@ function manageAccount() {
                   </button>
                 </div>
               </template>
-              <p v-else class="px-2 py-3 text-[12px] text-dimmed">
+              <p v-else class="px-2 py-3 text-xs text-dimmed">
                 {{ t('inspector.fragments.pickerEmpty') }}
               </p>
 
@@ -178,7 +178,7 @@ function manageAccount() {
         {{ f.title }}<UIcon name="i-lucide-x" class="ms-0.5 h-3 w-3" />
       </UBadge>
     </div>
-    <div v-else-if="emptyText" class="text-[11px] text-dimmed">
+    <div v-else-if="emptyText" class="text-2xs text-dimmed">
       {{ emptyText }}
     </div>
   </div>

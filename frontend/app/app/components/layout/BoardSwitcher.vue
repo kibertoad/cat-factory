@@ -265,7 +265,7 @@ async function submitPrompt() {
           :name="accounts.activeAccount?.type === 'org' ? 'i-lucide-users' : 'i-lucide-user'"
           class="h-3.5 w-3.5 shrink-0 text-muted"
         />
-        <span class="truncate text-[11px] font-medium uppercase tracking-wide text-muted">
+        <span class="truncate text-2xs font-medium uppercase tracking-wide text-muted">
           {{ accounts.activeAccount?.name ?? t('layout.boardSwitcher.accountFallback') }}
         </span>
         <UIcon name="i-lucide-chevrons-up-down" class="ms-auto h-3.5 w-3.5 shrink-0 text-app-600" />

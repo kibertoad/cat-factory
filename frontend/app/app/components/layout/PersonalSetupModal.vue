@@ -117,7 +117,7 @@ const groups = computed<PersonalGroup[]>(() => {
         </p>
 
         <section v-for="group in groups" :key="group.title">
-          <h3 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-muted">
+          <h3 class="mb-2 px-1 text-2xs font-semibold uppercase tracking-wide text-muted">
             {{ group.title }}
           </h3>
           <div class="space-y-1.5">
@@ -135,7 +135,7 @@ const groups = computed<PersonalGroup[]>(() => {
                   <UBadge v-if="item.connected" color="success" variant="subtle" size="sm">
                     {{ item.status || t('layout.personalSetup.connected') }}
                   </UBadge>
-                  <span v-else class="text-[11px] text-dimmed">
+                  <span v-else class="text-2xs text-dimmed">
                     {{ t('layout.personalSetup.notConnected') }}
                   </span>
                 </div>

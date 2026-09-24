@@ -202,7 +202,7 @@ function vendorLabel(v: SubscriptionVendor): string {
               class="flex items-center gap-3 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2.5"
             >
               <UIcon name="i-lucide-user" class="h-5 w-5 shrink-0 text-primary" />
-              <p class="min-w-0 flex-1 text-[13px] text-toned">
+              <p class="min-w-0 flex-1 text-sm text-toned">
                 {{ t('providers.vendorCredentials.personalCallout.text') }}
               </p>
               <UButton
@@ -284,7 +284,7 @@ function vendorLabel(v: SubscriptionVendor): string {
                   <UBadge v-if="!c.enabled" color="neutral" variant="subtle" size="sm" class="ms-2">
                     {{ t('providers.vendorCredentials.disabledBadge') }}
                   </UBadge>
-                  <div class="text-[11px] tabular-nums text-dimmed">
+                  <div class="text-2xs tabular-nums text-dimmed">
                     {{
                       t(
                         'providers.vendorCredentials.usage',

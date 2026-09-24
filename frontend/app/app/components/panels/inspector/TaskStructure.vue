@@ -83,7 +83,7 @@ function setFragments(ids: string[]) {
   <InspectorSection :title="t('inspector.structure.title')" :hint="t('inspector.structure.hint')">
     <!-- module assignment -->
     <div>
-      <div class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted">
+      <div class="mb-1 text-2xs font-semibold uppercase tracking-wide text-muted">
         {{ t('inspector.structure.module') }}
       </div>
       <USelectMenu
@@ -99,7 +99,7 @@ function setFragments(ids: string[]) {
         @update:model-value="setModule"
         @create="setModule"
       />
-      <p class="mt-1 text-[11px] leading-snug text-dimmed">
+      <p class="mt-1 text-2xs leading-snug text-dimmed">
         {{ t('inspector.structure.moduleHint') }}
       </p>
     </div>
@@ -113,7 +113,7 @@ function setFragments(ids: string[]) {
         :empty-text="t('inspector.structure.bestPracticesEmpty')"
         @update:model-value="setFragments"
       />
-      <p class="mt-1 text-[11px] leading-snug text-dimmed">
+      <p class="mt-1 text-2xs leading-snug text-dimmed">
         {{ t('inspector.structure.bestPracticesHint') }}
       </p>
     </div>

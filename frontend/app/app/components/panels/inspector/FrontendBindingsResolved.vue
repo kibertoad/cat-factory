@@ -66,13 +66,13 @@ const rows = computed(() => {
 
 <template>
   <div v-if="rows.length || duplicates.length" class="space-y-1.5" data-testid="frontend-resolved">
-    <div class="text-[11px] font-semibold uppercase tracking-wide text-dimmed">
+    <div class="text-2xs font-semibold uppercase tracking-wide text-dimmed">
       {{ t('inspector.frontendConfig.resolved.title') }}
     </div>
 
     <p
       v-if="duplicates.length"
-      class="text-[11px] leading-snug text-app-warning-300/80"
+      class="text-2xs leading-snug text-app-warning-300/80"
       data-testid="frontend-resolved-duplicates"
     >
       {{ t('inspector.frontendConfig.resolved.duplicateWarning', { vars: duplicates.join(', ') }) }}
@@ -82,7 +82,7 @@ const rows = computed(() => {
       <li
         v-for="row in rows"
         :key="row.envVar"
-        class="flex items-baseline gap-1.5 text-[11px] leading-snug"
+        class="flex items-baseline gap-1.5 text-2xs leading-snug"
         data-testid="frontend-resolved-row"
       >
         <span

@@ -54,7 +54,7 @@ function commit(axis: EstimateAxis, raw: string) {
 
 <template>
   <div class="flex flex-wrap items-center gap-2 border-t border-default pt-2">
-    <span class="text-[10px] text-dimmed" :title="t(OUTCOME_HINT_KEYS[outcome])">
+    <span class="text-3xs text-dimmed" :title="t(OUTCOME_HINT_KEYS[outcome])">
       {{ t('pipeline.builder.runWhenAny') }}
     </span>
     <template v-for="f in fields" :key="f.axis">

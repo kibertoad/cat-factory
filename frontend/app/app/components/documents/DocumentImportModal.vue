@@ -125,7 +125,7 @@ function preview(externalId: string) {
         </div>
 
         <div v-if="sourceDocs.length" class="space-y-2">
-          <h3 class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+          <h3 class="text-2xs font-semibold uppercase tracking-wide text-muted">
             {{ t('documents.import.importedHeading') }}
           </h3>
           <div

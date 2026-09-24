@@ -292,7 +292,7 @@ const ITEM_ICON: Record<string, string> = {
         <span
           v-for="l in legend"
           :key="l.state"
-          class="inline-flex items-center gap-1.5 text-[11px] text-muted"
+          class="inline-flex items-center gap-1.5 text-2xs text-muted"
         >
           <span
             class="h-2 w-2 rounded-full"
@@ -365,15 +365,13 @@ const ITEM_ICON: Record<string, string> = {
                 </span>
                 <span
                   v-if="isCompanionKind(s.agentKind)"
-                  class="shrink-0 rounded bg-accented/60 px-1 text-[9px] font-medium uppercase tracking-wide text-toned"
+                  class="shrink-0 rounded bg-accented/60 px-1 text-3xs font-medium uppercase tracking-wide text-toned"
                   :title="t('pipeline.progress.companionTooltip')"
                 >
                   {{ t('pipeline.progress.companion') }}
                 </span>
               </div>
-              <div
-                class="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-dimmed"
-              >
+              <div class="flex items-center gap-1.5 text-3xs uppercase tracking-wide text-dimmed">
                 <span>{{ t('pipeline.progress.stepOf', { current: i + 1, total }) }}</span>
                 <!-- live elapsed clock: a running step counts up (so no-subtask steps
                      don't read as hung), a finished step shows its total duration -->
@@ -388,7 +386,7 @@ const ITEM_ICON: Record<string, string> = {
               </div>
             </div>
             <span
-              class="ms-auto shrink-0 text-[11px] font-medium"
+              class="ms-auto shrink-0 text-2xs font-medium"
               :style="{ color: stepVisual(s).color }"
             >
               {{ stepVisual(s).label }}
@@ -458,7 +456,7 @@ const ITEM_ICON: Record<string, string> = {
           <!-- container cold-boot phase: shown while the container is spinning up. -->
           <div
             v-if="s.container?.status === 'starting' && !runFailed"
-            class="mt-2 flex items-center gap-1.5 text-[11px] text-app-info-300"
+            class="mt-2 flex items-center gap-1.5 text-2xs text-app-info-300"
           >
             <UIcon name="i-lucide-loader-circle" class="h-3.5 w-3.5 shrink-0 animate-spin" />
             <span>{{ t('pipeline.progress.spinningUpContainer') }}</span>
@@ -468,7 +466,7 @@ const ITEM_ICON: Record<string, string> = {
                making calls) so the step isn't a blank "working" before subtasks appear. -->
           <div
             v-else-if="stepPhaseLabel(s) && !runFailed"
-            class="mt-2 flex items-center gap-1.5 text-[11px] text-app-success-300"
+            class="mt-2 flex items-center gap-1.5 text-2xs text-app-success-300"
           >
             <UIcon name="i-lucide-box" class="h-3.5 w-3.5 shrink-0" />
             <span>{{ stepPhaseLabel(s) }}</span>
@@ -481,14 +479,14 @@ const ITEM_ICON: Record<string, string> = {
             v-if="prPhaseActive(s)"
             :step="s"
             :run-failed="runFailed"
-            class="mt-2 text-[11px]"
+            class="mt-2 text-2xs"
           />
 
           <!-- live subtask counts from the agent's todo list -->
           <div v-if="s.subtasks && s.subtasks.total > 0" class="mt-2">
             <div
               v-if="!prPhaseActive(s)"
-              class="flex items-center justify-between text-[10px] text-muted"
+              class="flex items-center justify-between text-3xs text-muted"
             >
               <span>
                 {{
@@ -515,7 +513,7 @@ const ITEM_ICON: Record<string, string> = {
               <li
                 v-for="(item, i) in s.subtasks.items"
                 :key="i"
-                class="flex items-start gap-1.5 text-[11px]"
+                class="flex items-start gap-1.5 text-2xs"
                 :class="
                   item.status === 'completed'
                     ? 'text-dimmed line-through'
@@ -537,7 +535,7 @@ const ITEM_ICON: Record<string, string> = {
           <!-- model used for this step -->
           <p
             v-if="s.model"
-            class="mt-2 flex items-center gap-1 truncate text-[10px] text-dimmed"
+            class="mt-2 flex items-center gap-1 truncate text-3xs text-dimmed"
             :title="s.model"
           >
             <UIcon name="i-lucide-cpu" class="h-3 w-3 shrink-0" />
@@ -557,7 +555,7 @@ const ITEM_ICON: Record<string, string> = {
 
           <!-- A one-line hint that the agent produced prose; the full output (and
                all step metadata) lives in the step-detail overlay opened by click. -->
-          <p v-if="stepHasOutput(s)" class="mt-2 flex items-center gap-1 text-[11px] text-dimmed">
+          <p v-if="stepHasOutput(s)" class="mt-2 flex items-center gap-1 text-2xs text-dimmed">
             <UIcon name="i-lucide-book-open-text" class="h-3 w-3 shrink-0" />
             {{ t('pipeline.progress.clickToRead') }}
           </p>
@@ -567,7 +565,7 @@ const ITEM_ICON: Record<string, string> = {
                which reads as a tester that silently did its job. -->
           <p
             v-if="stepSkipReasonKey(s)"
-            class="mt-2 flex items-center gap-1 text-[11px] text-dimmed"
+            class="mt-2 flex items-center gap-1 text-2xs text-dimmed"
             data-testid="step-skip-reason"
           >
             <UIcon name="i-lucide-skip-forward" class="h-3 w-3 shrink-0" />
@@ -593,12 +591,12 @@ const ITEM_ICON: Record<string, string> = {
                 ]"
               />
             </span>
-            <span class="min-w-0 flex-1 truncate text-[12px] text-toned">
+            <span class="min-w-0 flex-1 truncate text-xs text-toned">
               {{ agentKindMeta(companionByStep[i]!.kind).label }}
               <span class="text-dimmed">{{ t('pipeline.progress.companionSuffix') }}</span>
             </span>
             <span
-              class="shrink-0 text-[11px] font-medium"
+              class="shrink-0 text-2xs font-medium"
               :class="COMPANION_STATE_META[companionByStep[i]!.state].text"
             >
               {{ COMPANION_STATE_META[companionByStep[i]!.state].label }}
@@ -624,12 +622,12 @@ const ITEM_ICON: Record<string, string> = {
             >
               <UIcon :name="FOLLOW_UP_COMPANION_META.icon" class="h-3 w-3 text-app-hue-pink" />
             </span>
-            <span class="min-w-0 flex-1 truncate text-[12px] text-toned">
+            <span class="min-w-0 flex-1 truncate text-xs text-toned">
               {{ FOLLOW_UP_COMPANION_META.label }}
               <span class="text-dimmed">{{ t('pipeline.progress.companionSuffix') }}</span>
             </span>
             <span
-              class="shrink-0 text-[11px] font-medium"
+              class="shrink-0 text-2xs font-medium"
               :class="followUpPending(s) > 0 ? 'text-app-hue-pink' : 'text-muted'"
             >
               {{ followUpLabel(s) }}
@@ -663,7 +661,7 @@ const ITEM_ICON: Record<string, string> = {
                 :class="forkPhase(s) === 'proposing' ? 'animate-spin' : ''"
               />
             </span>
-            <span class="min-w-0 flex-1 truncate text-[12px] text-toned">
+            <span class="min-w-0 flex-1 truncate text-xs text-toned">
               {{
                 forkPhase(s) === 'proposing'
                   ? t('pipeline.progress.forkDecision.proposing')
@@ -687,7 +685,7 @@ const ITEM_ICON: Record<string, string> = {
             >
               <UIcon name="i-lucide-clipboard-check" class="h-3 w-3 text-primary" />
             </span>
-            <span class="min-w-0 flex-1 truncate text-[12px] text-toned">
+            <span class="min-w-0 flex-1 truncate text-xs text-toned">
               {{ t('pipeline.progress.prReview.review') }}
             </span>
           </button>
@@ -712,7 +710,7 @@ const ITEM_ICON: Record<string, string> = {
                 class="h-3 w-3 text-app-hue-cyan"
               />
             </span>
-            <span class="min-w-0 flex-1 truncate text-[12px] text-toned">
+            <span class="min-w-0 flex-1 truncate text-xs text-toned">
               {{ t('pipeline.progress.binaryCandidates.choose') }}
             </span>
           </button>
@@ -721,7 +719,7 @@ const ITEM_ICON: Record<string, string> = {
                NOT a "Review & approve" gate (the human is summoned only if needed) -->
           <div
             v-if="reviewStageLabel(s.agentKind)"
-            class="mt-3 inline-flex items-center gap-1 text-[11px] text-primary"
+            class="mt-3 inline-flex items-center gap-1 text-2xs text-primary"
           >
             <UIcon name="i-lucide-loader-circle" class="h-3 w-3 animate-spin" />
             {{ reviewStageLabel(s.agentKind) }}
@@ -766,7 +764,7 @@ const ITEM_ICON: Record<string, string> = {
           </div>
           <p
             v-else-if="s.decision?.chosen"
-            class="mt-2 flex items-center gap-1 truncate text-[11px] text-app-success-400"
+            class="mt-2 flex items-center gap-1 truncate text-2xs text-app-success-400"
             :title="s.decision.chosen"
           >
             <UIcon name="i-lucide-check" class="h-3 w-3 shrink-0" />

@@ -75,7 +75,7 @@ const icon = computed(() => {
          saying "all of them" would be a row of chrome carrying no information. -->
     <div
       v-if="groupKey !== 'none'"
-      class="flex items-center gap-1 px-0.5 text-[10px] uppercase tracking-wide text-dimmed"
+      class="flex items-center gap-1 px-0.5 text-3xs uppercase tracking-wide text-dimmed"
     >
       <UIcon v-if="icon" :name="icon" class="h-3 w-3 shrink-0" />
       <span class="truncate" :title="label">{{ label }}</span>

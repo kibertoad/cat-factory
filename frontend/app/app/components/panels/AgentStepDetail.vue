@@ -402,13 +402,13 @@ async function copyOutput() {
       class="hidden w-72 shrink-0 flex-col border-e border-default bg-default/60 md:flex"
     >
       <div class="border-b border-default px-4 py-3">
-        <div class="text-[11px] font-semibold uppercase tracking-wide text-dimmed">
+        <div class="text-2xs font-semibold uppercase tracking-wide text-dimmed">
           {{ t('panels.stepDetail.contents') }}
         </div>
       </div>
       <nav class="flex-1 space-y-0.5 overflow-auto px-2 py-3">
         <button
-          class="block w-full truncate rounded-md px-2 py-1 text-start text-[13px] transition"
+          class="block w-full truncate rounded-md px-2 py-1 text-start text-sm transition"
           :class="
             activeId === 'step-details'
               ? 'bg-primary/15 font-medium text-primary'
@@ -421,7 +421,7 @@ async function copyOutput() {
         <button
           v-for="s in tocSections"
           :key="s.id"
-          class="block w-full truncate rounded-md px-2 py-1 text-start text-[13px] transition"
+          class="block w-full truncate rounded-md px-2 py-1 text-start text-sm transition"
           :class="
             activeId === s.id
               ? 'bg-primary/15 font-medium text-primary'
@@ -603,7 +603,7 @@ async function copyOutput() {
             data-testid="dedicated-park-redirect"
             :data-park="dedicatedPark"
           >
-            <p class="text-[13px] leading-relaxed text-app-warning-200/90">
+            <p class="text-sm leading-relaxed text-app-warning-200/90">
               {{ t(parkPresentation.noticeKey) }}
             </p>
             <UButton
@@ -640,7 +640,7 @@ async function copyOutput() {
             <li
               v-for="(note, i) in runNotes"
               :key="i"
-              class="flex items-start gap-1.5 text-[11px] leading-snug text-app-warning-300/80"
+              class="flex items-start gap-1.5 text-2xs leading-snug text-app-warning-300/80"
             >
               <UIcon name="i-lucide-info" class="mt-0.5 h-3.5 w-3.5 shrink-0" />
               <span>{{ note }}</span>
@@ -755,7 +755,7 @@ async function copyOutput() {
           <!-- edit-then-approve: a direct editor over the raw conclusions; the
                edits become the approved proposal that flows to the next step -->
           <section v-if="editing" class="scroll-mt-4">
-            <div class="mb-2 flex items-center gap-1.5 text-[11px] text-app-warning-400">
+            <div class="mb-2 flex items-center gap-1.5 text-2xs text-app-warning-400">
               <UIcon name="i-lucide-pencil" class="h-3.5 w-3.5" />
               <span class="font-semibold uppercase tracking-wide">{{
                 t('panels.stepDetail.editingConclusions')
@@ -767,7 +767,7 @@ async function copyOutput() {
               autoresize
               size="sm"
               class="w-full"
-              :ui="{ base: 'font-mono text-[12px] leading-relaxed' }"
+              :ui="{ base: 'font-mono text-xs leading-relaxed' }"
               :placeholder="t('panels.stepDetail.editConclusionsPlaceholder')"
             />
           </section>
@@ -800,7 +800,7 @@ async function copyOutput() {
               <!-- eslint-disable-next-line vue/no-v-html -->
               <div
                 v-show="!collapsed[s.id]"
-                class="reader-prose mt-1 text-[13px] leading-relaxed text-toned"
+                class="reader-prose mt-1 text-sm leading-relaxed text-toned"
                 :class="[
                   s.depth > 0 ? 'ps-6' : '',
                   genericApprovalPending && !editing ? 'review-mode' : '',
@@ -829,25 +829,21 @@ async function copyOutput() {
       class="absolute inset-x-0 bottom-0 z-10 flex max-h-[70dvh] flex-col rounded-t-2xl border-t border-muted bg-default/95 shadow-2xl backdrop-blur lg:static lg:inset-auto lg:z-auto lg:max-h-none lg:w-96 lg:shrink-0 lg:rounded-none lg:border-s lg:border-t-0 lg:border-default lg:bg-default/60 lg:shadow-none lg:backdrop-blur-none"
     >
       <div class="border-b border-default px-4 py-3">
-        <div class="text-[11px] font-semibold uppercase tracking-wide text-app-warning-400">
+        <div class="text-2xs font-semibold uppercase tracking-wide text-app-warning-400">
           {{
             editing
               ? t('panels.stepDetail.approveWithCorrections')
               : t('panels.stepDetail.reviewAndApprove')
           }}
         </div>
-        <p class="mt-1 text-[12px] text-muted">
+        <p class="mt-1 text-xs text-muted">
           {{ editing ? t('panels.stepDetail.editHint') : t('panels.stepDetail.reviewHint') }}
         </p>
         <!-- The gate's configured POLICY, when it has one. Both lines exist because an
            approve on such a gate legitimately may not advance the run: without the tally, a
            correctly-recorded approval is indistinguishable from a call that failed, and
            without the refusal a person would press a button the server answers 403. -->
-        <p
-          v-if="gateQuorum"
-          class="mt-1 text-[12px] text-app-warning-300/90"
-          data-testid="gate-quorum"
-        >
+        <p v-if="gateQuorum" class="mt-1 text-xs text-app-warning-300/90" data-testid="gate-quorum">
           {{
             t('panels.stepDetail.quorumProgress', {
               recorded: gateQuorum.recorded,
@@ -856,7 +852,7 @@ async function copyOutput() {
           }}
           <span v-if="viewerHasApproved">{{ t('panels.stepDetail.quorumYours') }}</span>
         </p>
-        <p v-if="gateRefusal" class="mt-1 text-[12px] text-muted" data-testid="gate-not-approver">
+        <p v-if="gateRefusal" class="mt-1 text-xs text-muted" data-testid="gate-not-approver">
           {{ t(GATE_REFUSAL_KEYS[gateRefusal]) }}
         </p>
       </div>
@@ -864,7 +860,7 @@ async function copyOutput() {
       <div class="flex-1 space-y-3 overflow-auto overscroll-contain px-4 py-3">
         <p
           v-if="editing"
-          class="rounded-lg border border-app-warning-500/30 bg-app-warning-500/5 p-3 text-[12px] leading-relaxed text-app-warning-200/90"
+          class="rounded-lg border border-app-warning-500/30 bg-app-warning-500/5 p-3 text-xs leading-relaxed text-app-warning-200/90"
         >
           {{ t('panels.stepDetail.editingNotice') }}
         </p>
@@ -875,11 +871,11 @@ async function copyOutput() {
             data-testid="step-review-composer"
             class="rounded-lg border border-primary/40 bg-primary/5 p-3"
           >
-            <div class="mb-1 text-[10px] uppercase tracking-wide text-primary">
+            <div class="mb-1 text-3xs uppercase tracking-wide text-primary">
               {{ t('panels.stepDetail.commentingOn') }}
             </div>
             <pre
-              class="mb-2 max-h-24 overflow-auto whitespace-pre-wrap rounded bg-app-950/60 p-2 text-[11px] text-toned"
+              class="mb-2 max-h-24 overflow-auto whitespace-pre-wrap rounded bg-app-950/60 p-2 text-2xs text-toned"
               >{{ draftTarget.quotedSource }}</pre>
             <UTextarea
               v-model="draftBody"
@@ -914,7 +910,7 @@ async function copyOutput() {
             class="rounded-lg border border-default bg-default/50 p-3"
           >
             <div class="mb-1 flex items-start justify-between gap-2">
-              <div class="text-[10px] uppercase tracking-wide text-dimmed">
+              <div class="text-3xs uppercase tracking-wide text-dimmed">
                 {{ t('panels.stepDetail.commentN', { number: idx + 1 }) }}
               </div>
               <button
@@ -926,13 +922,13 @@ async function copyOutput() {
               </button>
             </div>
             <pre
-              class="mb-1 max-h-20 overflow-auto whitespace-pre-wrap rounded bg-app-950/50 p-1.5 text-[10px] text-muted"
+              class="mb-1 max-h-20 overflow-auto whitespace-pre-wrap rounded bg-app-950/50 p-1.5 text-3xs text-muted"
               >{{ c.quotedSource }}</pre>
-            <p class="text-[12px] text-default">{{ c.body }}</p>
+            <p class="text-xs text-default">{{ c.body }}</p>
           </div>
 
           <div>
-            <label class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted">
+            <label class="mb-1 block text-2xs font-semibold uppercase tracking-wide text-muted">
               {{ t('panels.stepDetail.overallFeedback') }}
             </label>
             <UTextarea
@@ -1005,14 +1001,14 @@ async function copyOutput() {
         </UButton>
         <p
           v-else-if="!proposalEditable"
-          class="text-[10px] text-dimmed"
+          class="text-3xs text-dimmed"
           data-testid="step-rendered-output-note"
         >
           {{ t('panels.stepDetail.renderedOutputNote') }}
         </p>
         <!-- Withheld only until the quorum is one approval away, so it says so rather than
            leaving a reviewer to wonder where the affordance went. -->
-        <p v-else class="text-[10px] text-dimmed" data-testid="step-quorum-edit-locked">
+        <p v-else class="text-3xs text-dimmed" data-testid="step-quorum-edit-locked">
           {{ t('panels.stepDetail.quorumEditLocked') }}
         </p>
 
@@ -1021,7 +1017,7 @@ async function copyOutput() {
           v-if="rejectArmed"
           class="rounded-lg border border-app-error-500/40 bg-app-error-500/5 p-2.5"
         >
-          <p class="mb-2 text-[11px] text-app-error-200">
+          <p class="mb-2 text-2xs text-app-error-200">
             {{ t('panels.stepDetail.rejectConfirmPrompt') }}
           </p>
           <div class="flex gap-2">
@@ -1073,7 +1069,7 @@ async function copyOutput() {
             {{ t('panels.stepDetail.reject') }}
           </UButton>
         </div>
-        <p class="text-[10px] text-dimmed">
+        <p class="text-3xs text-dimmed">
           {{ t('panels.stepDetail.requestChangesHint') }}
         </p>
       </div>

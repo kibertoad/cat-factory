@@ -84,7 +84,7 @@ function createAnyway() {
         <p class="text-sm text-toned">{{ body }}</p>
 
         <div class="rounded-lg border border-muted bg-default/50 p-2">
-          <p class="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-wide text-dimmed">
+          <p class="mb-1.5 px-1 text-2xs font-semibold uppercase tracking-wide text-dimmed">
             {{ t('errors.reviewFriction.waitingHeading') }}
           </p>
           <ul class="space-y-1">
@@ -98,7 +98,7 @@ function createAnyway() {
                 <span class="truncate text-default">
                   {{ item.title || t('errors.reviewFriction.untitled') }}
                 </span>
-                <span class="shrink-0 text-[12px] text-dimmed">
+                <span class="shrink-0 text-xs text-dimmed">
                   {{ t('errors.reviewFriction.waiting', { minutes: item.waitingMinutes }) }}
                 </span>
               </button>

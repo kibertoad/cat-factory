@@ -343,7 +343,7 @@ async function remove(k: ApiKey) {
          the caching flavour, so long agentic runs stop re-billing the whole prompt. -->
     <p
       v-if="cachesPrompts(selected.value)"
-      class="flex items-center gap-1.5 text-[12px] text-app-success-400/90"
+      class="flex items-center gap-1.5 text-xs text-app-success-400/90"
     >
       <UIcon name="i-lucide-zap" class="h-3.5 w-3.5 shrink-0" />
       {{ t('providers.apiKeys.cachingNote', { provider: selected.label }) }}
@@ -395,7 +395,7 @@ async function remove(k: ApiKey) {
           <UBadge v-if="!k.enabled" color="neutral" variant="subtle" size="sm" class="ms-2">
             {{ t('providers.apiKeys.disabledBadge') }}
           </UBadge>
-          <div class="text-[11px] tabular-nums text-dimmed">
+          <div class="text-2xs tabular-nums text-dimmed">
             {{
               t(
                 'providers.apiKeys.usage',

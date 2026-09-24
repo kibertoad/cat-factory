@@ -68,29 +68,29 @@ const tone = computed(() => {
       </span>
     </div>
 
-    <p v-if="grading.status === 'scheduled'" class="mt-2 text-[11px] text-dimmed">
+    <p v-if="grading.status === 'scheduled'" class="mt-2 text-2xs text-dimmed">
       {{ t('kaizen.scheduledHint') }}
     </p>
 
     <template v-else-if="grading.status === 'complete'">
       <p v-if="grading.summary" class="mt-2 text-xs text-toned">{{ grading.summary }}</p>
       <div v-if="grading.recommendations.length" class="mt-2">
-        <p class="text-[11px] font-medium uppercase tracking-wide text-dimmed">
+        <p class="text-2xs font-medium uppercase tracking-wide text-dimmed">
           {{ t('kaizen.recommendations') }}
         </p>
         <ul class="mt-1 list-disc space-y-0.5 ps-4 text-xs text-toned">
           <li v-for="(r, i) in grading.recommendations" :key="i">{{ r }}</li>
         </ul>
       </div>
-      <p v-else class="mt-2 text-[11px] text-app-success-400/80">
+      <p v-else class="mt-2 text-2xs text-app-success-400/80">
         {{ t('kaizen.noImprovements') }}
       </p>
-      <p v-if="grading.graderModel" class="mt-2 text-[10px] text-app-600">
+      <p v-if="grading.graderModel" class="mt-2 text-3xs text-app-600">
         {{ t('kaizen.gradedBy', { model: grading.graderModel }) }}
       </p>
     </template>
 
-    <p v-else-if="grading.status === 'failed'" class="mt-2 text-[11px] text-app-error-400/80">
+    <p v-else-if="grading.status === 'failed'" class="mt-2 text-2xs text-app-error-400/80">
       {{ grading.error ?? t('kaizen.failedFallback') }}
     </p>
   </section>

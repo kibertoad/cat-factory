@@ -37,14 +37,14 @@ function stepDescription(kind: string): string {
     <div class="text-sm font-semibold text-app-100">{{ pipeline.name }}</div>
     <p
       v-if="pipeline.description"
-      class="text-[12px] leading-snug text-muted"
+      class="text-xs leading-snug text-muted"
       data-testid="pipeline-preview-description"
     >
       {{ pipeline.description }}
     </p>
 
     <div
-      class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] uppercase tracking-wide text-dimmed"
+      class="flex flex-wrap items-center gap-x-3 gap-y-1 text-3xs uppercase tracking-wide text-dimmed"
     >
       <span class="inline-flex items-center gap-1">
         <UIcon name="i-lucide-workflow" class="h-3 w-3" />
@@ -76,7 +76,7 @@ function stepDescription(kind: string): string {
       >
         <div class="flex flex-col items-center">
           <span
-            class="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-elevated font-mono text-[9px] tabular-nums text-muted"
+            class="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-elevated font-mono text-3xs tabular-nums text-muted"
           >
             {{ i + 1 }}
           </span>
@@ -101,7 +101,7 @@ function stepDescription(kind: string): string {
           </div>
           <!-- Clamped: the catalog prose runs long for some kinds, and <AgentKindIcon> already
                carries the full text in its hover tooltip. -->
-          <p class="line-clamp-2 text-[11px] leading-snug text-dimmed">
+          <p class="line-clamp-2 text-2xs leading-snug text-dimmed">
             {{ stepDescription(s.kind) }}
           </p>
         </div>

@@ -55,7 +55,7 @@ const pinnedTitle = computed(
   >
     <UIcon :name="icon" class="h-4 w-4 shrink-0 text-dimmed" />
     <div v-if="!collapsed" class="min-w-0 flex-1">
-      <div class="truncate text-[10px] uppercase tracking-wide text-dimmed">
+      <div class="truncate text-3xs uppercase tracking-wide text-dimmed">
         {{ t('uiMode.switcher') }}
       </div>
       <div class="truncate text-xs font-medium text-toned">{{ currentLabel }}</div>
@@ -76,13 +76,13 @@ const pinnedTitle = computed(
     @click="uiMode.toggleMode()"
   >
     <UIcon :name="icon" class="h-4 w-4 shrink-0 text-primary" />
-    <span class="w-full truncate text-center text-[9px] font-medium uppercase text-toned">
+    <span class="w-full truncate text-center text-3xs font-medium uppercase text-toned">
       {{ currentLabel }}
     </span>
   </button>
 
   <div v-else data-testid="ui-mode-switcher" class="w-full">
-    <div class="mb-1 px-1 text-[10px] uppercase tracking-wide text-dimmed">
+    <div class="mb-1 px-1 text-3xs uppercase tracking-wide text-dimmed">
       {{ t('uiMode.switcher') }}
     </div>
     <div
@@ -111,7 +111,7 @@ const pinnedTitle = computed(
 
   <!-- The one-line "what this tier gives you", so the choice is self-explanatory. Dropped in
        the collapsed rail, where the tooltip above carries the mode instead. -->
-  <p v-if="!collapsed" class="px-1 text-[10px] leading-snug text-dimmed">
+  <p v-if="!collapsed" class="px-1 text-3xs leading-snug text-dimmed">
     {{ t(MODE_HINTS[uiMode.mode]) }}
   </p>
 </template>

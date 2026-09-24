@@ -96,7 +96,7 @@ const items = computed<DropdownMenuItem[][]>(() => [
     >
       <UIcon :name="MODE_ICONS[preference]" class="h-4 w-4 shrink-0 text-muted" />
       <div v-if="!collapsed" class="min-w-0 flex-1">
-        <div class="truncate text-[10px] uppercase tracking-wide text-dimmed">
+        <div class="truncate text-3xs uppercase tracking-wide text-dimmed">
           {{ t('appearance.switcher') }}
         </div>
         <div class="truncate text-xs font-medium text-highlighted">{{ summary }}</div>

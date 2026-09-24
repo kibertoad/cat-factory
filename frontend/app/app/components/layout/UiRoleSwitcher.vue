@@ -47,7 +47,7 @@ const items = computed(() =>
       class="flex w-full flex-col items-center gap-0.5 rounded-lg border border-muted bg-default/60 px-1 py-1.5 transition hover:border-primary/60 hover:bg-elevated/60"
     >
       <UIcon :name="current.icon" class="h-4 w-4 shrink-0 text-primary" />
-      <span class="w-full truncate text-center text-[9px] font-medium uppercase text-toned">
+      <span class="w-full truncate text-center text-3xs font-medium uppercase text-toned">
         {{ currentLabel }}
       </span>
     </button>
@@ -62,7 +62,7 @@ const items = computed(() =>
     >
       <UIcon :name="current.icon" class="h-4 w-4 shrink-0 text-primary" />
       <div class="min-w-0 flex-1">
-        <div class="truncate text-[10px] uppercase tracking-wide text-dimmed">
+        <div class="truncate text-3xs uppercase tracking-wide text-dimmed">
           {{ t('uiRole.switcher') }}
         </div>
         <div class="truncate text-xs font-medium text-default">{{ currentLabel }}</div>

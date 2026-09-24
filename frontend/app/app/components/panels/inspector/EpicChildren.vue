@@ -52,23 +52,23 @@ const groups = computed(() => {
     default-open
   >
     <template #actions>
-      <span class="text-[11px] text-dimmed">{{
+      <span class="text-2xs text-dimmed">{{
         t('inspector.epicChildren.doneCount', { done, total: members.length })
       }}</span>
     </template>
 
-    <div v-if="members.length === 0" class="text-[11px] text-dimmed">
+    <div v-if="members.length === 0" class="text-2xs text-dimmed">
       {{ t('inspector.epicChildren.empty') }}
     </div>
 
     <div v-else class="space-y-2">
       <div v-for="(group, gi) in groups" :key="gi" class="rounded-md border border-muted/60 p-2">
-        <div class="mb-1 flex items-center gap-1 text-[11px] font-medium text-toned">
+        <div class="mb-1 flex items-center gap-1 text-2xs font-medium text-toned">
           <UIcon name="i-lucide-box" class="h-3 w-3 text-dimmed" />
           {{ group.service?.title ?? t('inspector.epicChildren.unassigned') }}
         </div>
         <div v-for="(mod, mi) in [...group.modules.values()]" :key="mi" class="ps-1">
-          <div v-if="mod.module" class="text-[10px] uppercase tracking-wide text-dimmed">
+          <div v-if="mod.module" class="text-3xs uppercase tracking-wide text-dimmed">
             {{ mod.module.title }}
           </div>
           <button
@@ -83,7 +83,7 @@ const groups = computed(() => {
               :style="{ backgroundColor: STATUS_META[task.status].color }"
             />
             <span class="truncate">{{ task.title }}</span>
-            <span class="ms-auto shrink-0 text-[10px] text-dimmed">
+            <span class="ms-auto shrink-0 text-3xs text-dimmed">
               {{ STATUS_META[task.status].label }}
             </span>
           </button>

@@ -179,10 +179,10 @@ function unhide(presetId: string) {
     <!-- Inherited FIRST: they are the org's posture, and a board reading its own list wants to see
          what it is working from before what it has changed. -->
     <section v-if="inherited.length > 0" class="space-y-2">
-      <p class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+      <p class="text-2xs font-semibold uppercase tracking-wide text-muted">
         {{ t('settings.riskPolicy.inherited.heading') }}
       </p>
-      <p class="text-[11px] text-dimmed">{{ t('settings.riskPolicy.inherited.hint') }}</p>
+      <p class="text-2xs text-dimmed">{{ t('settings.riskPolicy.inherited.hint') }}</p>
       <RiskPolicyInheritedRow
         v-for="policy in inherited"
         :key="policy.id"
@@ -196,7 +196,7 @@ function unhide(presetId: string) {
     <section class="space-y-4">
       <p
         v-if="inherited.length > 0"
-        class="text-[11px] font-semibold uppercase tracking-wide text-muted"
+        class="text-2xs font-semibold uppercase tracking-wide text-muted"
       >
         {{ t('settings.riskPolicy.own.heading') }}
       </p>
@@ -217,10 +217,10 @@ function unhide(presetId: string) {
          whether it still shadows an account policy: one whose policy the account has since withdrawn
          withholds nothing, and reading it as a live opt-out would misstate what the board is doing. -->
     <section v-if="store.suppressions.length > 0 || suppressionsFailed" class="space-y-2">
-      <p class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+      <p class="text-2xs font-semibold uppercase tracking-wide text-muted">
         {{ t('settings.riskPolicy.hidden.heading') }}
       </p>
-      <p v-if="suppressionsFailed" class="text-[11px] text-app-warning-400">
+      <p v-if="suppressionsFailed" class="text-2xs text-app-warning-400">
         {{ t('settings.riskPolicy.hidden.loadFailed') }}
       </p>
       <div
@@ -230,8 +230,8 @@ function unhide(presetId: string) {
         data-testid="risk-policy-hidden-row"
         :data-policy-id="entry.id"
       >
-        <span class="flex-1 truncate text-[12px] text-toned">{{ entry.name }}</span>
-        <span v-if="!entry.inherited" class="text-[11px] text-dimmed">
+        <span class="flex-1 truncate text-xs text-toned">{{ entry.name }}</span>
+        <span v-if="!entry.inherited" class="text-2xs text-dimmed">
           {{ t('settings.riskPolicy.hidden.withdrawn') }}
         </span>
         <UButton

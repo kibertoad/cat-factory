@@ -134,7 +134,7 @@ function choose(id: string) {
         <!-- right: preview of the hovered (or selected) pipeline -->
         <div class="w-1/2 overflow-y-auto p-3">
           <PipelinePreview v-if="previewPipeline" :pipeline="previewPipeline" />
-          <div v-else class="text-[12px] leading-snug text-dimmed">{{ emptyHint }}</div>
+          <div v-else class="text-xs leading-snug text-dimmed">{{ emptyHint }}</div>
         </div>
       </div>
     </template>

@@ -150,7 +150,7 @@ function removeDisabled(entry: AprioriBranch): boolean {
 <template>
   <div v-if="repo" data-testid="apriori-branches">
     <div class="mb-1 flex items-center justify-between">
-      <span class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+      <span class="text-2xs font-semibold uppercase tracking-wide text-muted">
         {{ t('inspector.aprioriBranches.title') }}
       </span>
     </div>
@@ -220,14 +220,14 @@ function removeDisabled(entry: AprioriBranch): boolean {
       class="w-full"
       data-testid="apriori-branch-search"
     />
-    <div v-else class="text-[11px] text-dimmed">
+    <div v-else class="text-2xs text-dimmed">
       {{ t('inspector.aprioriBranches.connectFirst') }}
     </div>
 
     <!-- A protected branch pushed to by the run is likely to be rejected — warn, don't block. -->
     <div
       v-if="workingName && isProtected(workingName)"
-      class="mt-1.5 flex items-start gap-1.5 rounded-md border border-app-warning-500/40 bg-app-warning-950/40 p-2 text-[11px] text-app-warning-200/90"
+      class="mt-1.5 flex items-start gap-1.5 rounded-md border border-app-warning-500/40 bg-app-warning-950/40 p-2 text-2xs text-app-warning-200/90"
       data-testid="apriori-branch-protected-warning"
     >
       <UIcon
@@ -237,7 +237,7 @@ function removeDisabled(entry: AprioriBranch): boolean {
       <span>{{ t('inspector.aprioriBranches.protectedWarning', { branch: workingName }) }}</span>
     </div>
 
-    <div class="mt-1 text-[11px] text-dimmed">
+    <div class="mt-1 text-2xs text-dimmed">
       {{ t('inspector.aprioriBranches.hint') }}
       <template v-if="isMultiRepo">
         {{ t('inspector.aprioriBranches.multiRepoHint') }}

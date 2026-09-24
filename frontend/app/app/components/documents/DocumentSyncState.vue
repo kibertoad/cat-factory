@@ -165,7 +165,7 @@ async function refresh() {
 </script>
 
 <template>
-  <div class="flex items-center gap-1.5 text-[11px] text-dimmed">
+  <div class="flex items-center gap-1.5 text-2xs text-dimmed">
     <span class="truncate">
       {{ t('documents.freshness.updated', { when: d(new Date(props.doc.syncedAt), 'long') }) }}
     </span>

@@ -83,13 +83,13 @@ function setRule(changeClass: (typeof RULEABLE_CHANGE_CLASSES)[number], rule: Me
 <template>
   <div data-testid="merge-class-rules" class="space-y-2">
     <div>
-      <span class="block text-[10px] uppercase tracking-wide text-dimmed">
+      <span class="block text-3xs uppercase tracking-wide text-dimmed">
         {{ t('settings.riskPolicy.classRules.heading') }}
       </span>
-      <p class="mt-0.5 text-[11px] leading-snug text-dimmed">
+      <p class="mt-0.5 text-2xs leading-snug text-dimmed">
         {{ t('settings.riskPolicy.classRules.help') }}
       </p>
-      <p v-if="!autoMergeEnabled" class="mt-1 text-[11px] leading-snug text-app-warning-400/90">
+      <p v-if="!autoMergeEnabled" class="mt-1 text-2xs leading-snug text-app-warning-400/90">
         {{ t('settings.riskPolicy.classRules.autoMergeOffWarning') }}
       </p>
     </div>
@@ -111,7 +111,7 @@ function setRule(changeClass: (typeof RULEABLE_CHANGE_CLASSES)[number], rule: Me
         :data-testid="`merge-class-rule-${row.changeClass}`"
         @update:model-value="setRule(row.changeClass, $event as MergeClassRule)"
       />
-      <span class="text-[11px] text-dimmed" :data-testid="`merge-class-record-${row.changeClass}`">
+      <span class="text-2xs text-dimmed" :data-testid="`merge-class-record-${row.changeClass}`">
         <template v-if="row.merged === 0">
           {{ t('settings.riskPolicy.classRules.noData') }}
         </template>

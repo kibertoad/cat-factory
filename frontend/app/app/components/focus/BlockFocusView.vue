@@ -226,22 +226,22 @@ function openApprovalFor(approvalId: string) {
       <!-- side: details -->
       <aside class="space-y-4 overflow-auto rounded-2xl border border-default bg-default/60 p-5">
         <div>
-          <div class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted">
+          <div class="mb-1 text-2xs font-semibold uppercase tracking-wide text-muted">
             {{ t('focus.description') }}
           </div>
           <p class="text-sm text-toned">{{ block.description }}</p>
         </div>
         <div v-if="instance">
-          <div class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted">
+          <div class="mb-1 text-2xs font-semibold uppercase tracking-wide text-muted">
             {{ t('focus.overallProgress') }}
           </div>
           <UProgress :model-value="Math.round(block.progress * 100)" />
-          <div class="mt-1 text-[11px] text-muted">
+          <div class="mt-1 text-2xs text-muted">
             {{ n(block.progress, 'percent') }}
           </div>
         </div>
         <div>
-          <div class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted">
+          <div class="mb-1 text-2xs font-semibold uppercase tracking-wide text-muted">
             {{ t('focus.dependencies') }}
           </div>
           <div v-if="deps.length" class="flex flex-wrap gap-1">
@@ -249,7 +249,7 @@ function openApprovalFor(approvalId: string) {
               {{ d.title }}
             </UBadge>
           </div>
-          <div v-else class="text-[11px] text-dimmed">{{ t('focus.noDependencies') }}</div>
+          <div v-else class="text-2xs text-dimmed">{{ t('focus.noDependencies') }}</div>
         </div>
       </aside>
     </div>

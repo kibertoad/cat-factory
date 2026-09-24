@@ -28,7 +28,7 @@ if (props.defaultOpen) open.value = true
     <div class="flex items-center gap-1.5">
       <button
         type="button"
-        class="flex min-w-0 flex-1 items-center gap-1.5 text-start text-[11px] font-semibold uppercase tracking-wide text-muted hover:text-default"
+        class="flex min-w-0 flex-1 items-center gap-1.5 text-start text-2xs font-semibold uppercase tracking-wide text-muted hover:text-default"
         :aria-expanded="open"
         data-testid="inspector-section-toggle"
         @click="open = !open"
@@ -53,7 +53,7 @@ if (props.defaultOpen) open.value = true
       </div>
     </div>
     <div v-if="open" class="mt-2 space-y-3">
-      <p v-if="hint" class="text-[11px] leading-snug text-dimmed">{{ hint }}</p>
+      <p v-if="hint" class="text-2xs leading-snug text-dimmed">{{ hint }}</p>
       <slot />
     </div>
   </section>

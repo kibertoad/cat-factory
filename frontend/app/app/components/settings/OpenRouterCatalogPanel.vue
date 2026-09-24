@@ -361,7 +361,7 @@ function manageKeys() {
               />
               <span class="min-w-0 flex-1">
                 <span class="block truncate text-default">{{ m.name }}</span>
-                <span class="block truncate font-mono text-[11px] text-dimmed">{{ m.id }}</span>
+                <span class="block truncate font-mono text-2xs text-dimmed">{{ m.id }}</span>
                 <!--
                   A withdrawal date is the one fact about a model that fails SILENTLY: past it the
                   route simply stops answering and the run falls through to whatever the picker
@@ -369,11 +369,11 @@ function manageKeys() {
                 -->
                 <span
                   v-if="m.expirationDate"
-                  class="block truncate text-[11px] text-app-warning-400"
+                  class="block truncate text-2xs text-app-warning-400"
                   >{{ t('settings.openRouterCatalog.retiresOn', { date: m.expirationDate }) }}</span
                 >
               </span>
-              <span class="shrink-0 text-end text-[11px] text-dimmed">
+              <span class="shrink-0 text-end text-2xs text-dimmed">
                 <span v-if="m.contextLength" class="block">{{
                   contextLabel(m.contextLength)
                 }}</span>
