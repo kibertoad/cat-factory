@@ -86,7 +86,7 @@ export function createVcsProviderViews(ctx: GitHubStoreContext): VcsProviderView
  * serves, and the per-workspace **PAT** connect (GitLab today). The GitHub-App installation
  * lifecycle lives in {@link createGitHubConnectionActions}; everything AFTER connecting — repos,
  * branches, pulls, issues — is the one GitHub-shaped surface both providers ride, so there is no
- * GitLab store (see the VCS section of CLAUDE.md).
+ * GitLab store (see the VCS section of AGENTS.md).
  */
 export function createVcsConnectActions(ctx: GitHubStoreContext) {
   const { api, workspace, available, connection, connectOptions, load } = ctx

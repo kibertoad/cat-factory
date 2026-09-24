@@ -38,7 +38,7 @@ function requireWebhooks<E extends AppEnv>(c: Context<E>): NotificationWebhookSe
  * The signing secret is write-only: `put` accepts it, the projection reports only `hasSecret`, and
  * nothing reads it back. Mounted under `/workspaces/:workspaceId` behind `integrations.manage` —
  * one permission for the whole controller, so a route added later inherits the correct gate (see
- * the workspace-RBAC section of CLAUDE.md). BOTH prefixes are listed: `/notification-webhook` is
+ * the workspace-RBAC section of AGENTS.md). BOTH prefixes are listed: `/notification-webhook` is
  * registered as `ALL /notification-webhook/*`, which does not match the plural path, so the
  * collection would otherwise be ungated.
  */

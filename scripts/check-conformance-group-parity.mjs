@@ -3,7 +3,7 @@
 // the aggregate to stay total over the same list.
 //
 // The rule it protects: `@cat-factory/conformance` is what makes a facade-parity gap a test
-// failure instead of a production surprise, and CLAUDE.md treats such a gap as a showstopper. The
+// failure instead of a production surprise, and AGENTS.md treats such a gap as a showstopper. The
 // suite used to be one `defineConformanceSuite(harness)` call per facade, so wiring it was a
 // single line nobody could half-do. It is now five group functions × three facades = fifteen
 // registrations spread over fifteen spec files, and nothing joins them: add a sixth group and the

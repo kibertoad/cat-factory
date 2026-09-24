@@ -13,7 +13,7 @@ a minimal deployment is just boards + pipelines.
 
 > For the end-to-end runtime flows (execution + events, bootstrap, blueprints,
 > requirements review, the board/repo-linkage model) read
-> [`../CLAUDE.md`](../CLAUDE.md). This README is the package-level map.
+> [`../AGENTS.md`](../AGENTS.md). This README is the package-level map.
 
 ## Table of contents
 
@@ -257,7 +257,7 @@ flow uses **no container and no durable driver**: it calls the `ModelProvider`
 port inline (like the document planner) and returns the updated entity, which the
 SPA patches directly. One live review per block; the model resolves exactly like
 an agent step (a block's pinned model wins, else the routing default, falling back
-to Workers AI). Full flow in [`../CLAUDE.md`](../CLAUDE.md).
+to Workers AI). Full flow in [`../AGENTS.md`](../AGENTS.md).
 
 ## Service blueprints
 
@@ -270,7 +270,7 @@ reuses the whole execution engine, runs on the prior `coder` step's PR branch wh
 present (else the repo default branch), and is also kicked off after a successful
 bootstrap to seed the initial map. There is **no** standalone "scan repository"
 command: repository decomposition is always this pipeline agent. Full flow in
-[`../CLAUDE.md`](../CLAUDE.md).
+[`../AGENTS.md`](../AGENTS.md).
 
 ## Ephemeral environments + the Deployer agent (optional)
 
@@ -792,7 +792,7 @@ provisional **service frame** on the board; a durable `BootstrapWorkflow` (bindi
 `BOOTSTRAP_WORKFLOW`, declared in `wrangler.toml` like `EXECUTION_WORKFLOW`) polls the container,
 streams live subtask progress over the WebSocket events hub, and on success links the new repo to
 that frame so it becomes a real, droppable service (on failure the frame is marked blocked). See
-[`CLAUDE.md`](../CLAUDE.md) for the end-to-end flow. Managing reference architectures (the CRUD
+[`AGENTS.md`](../AGENTS.md) for the end-to-end flow. Managing reference architectures (the CRUD
 under `/bootstrap/reference-architectures`) always works, but **kicking off a run** needs the same
 machinery as container implementation. When
 any prerequisite is missing the endpoint returns:

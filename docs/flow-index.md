@@ -4,7 +4,7 @@ An INDEX of the runtime flows: what each flow is, plus the trap a change would h
 is the authority, and new flow detail belongs THERE, not here; an entry stays a handful of lines.
 
 The cross-cutting rules these flows established (concurrency and idempotency, untrusted text,
-degrade loudly, the harness rules) are stated once in the root [`CLAUDE.md`](../CLAUDE.md), which
+degrade loudly, the harness rules) are stated once in the root [`AGENTS.md`](../AGENTS.md), which
 is where a rule binding more than one flow goes. The step vocabulary an entry assumes (agents,
 gates, one-shot engine steps, judges, companions) is
 [`step-taxonomy.md`](../backend/docs/step-taxonomy.md).

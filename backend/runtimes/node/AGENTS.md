@@ -3,7 +3,7 @@
 > Directory `backend/runtimes/node`, published as `@cat-factory/node-server`.
 
 One of **three runtime facades** serving the same `@cat-factory/server` Hono app; keep them
-**symmetric** (`CLAUDE.md` → "Keep the runtimes symmetric"). Node differentiators:
+**symmetric** (`AGENTS.md` → "Keep the runtimes symmetric"). Node differentiators:
 **Drizzle/Postgres** persistence, **pg-boss** durable execution, a raw-WebSocket real-time
 transport, and Node model provisioning.
 
@@ -123,4 +123,4 @@ rename prompt that can't run in a non-TTY shell). Instead:
 3. Check `migration.sql` still encodes the delta to the merged schema.
 4. Verify with `pnpm db:check`. Keep the symmetric D1 migration in step.
 
-**See also:** `CLAUDE.md` → "Keep the runtimes symmetric", "Migrations".
+**See also:** `AGENTS.md` → "Keep the runtimes symmetric", "Migrations".

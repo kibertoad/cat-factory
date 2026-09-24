@@ -142,6 +142,20 @@ describe('the seeded opening context', () => {
     expect(citable(survey)).toContain('template:jest.config.js')
   })
 
+  it('surveys BOTH agent-instruction filenames, because a consumer repo may ship either', async () => {
+    // `AGENTS.md` and `CLAUDE.md` are two names for the same thing, and which one a repo ships
+    // says nothing about whether it holds the house conventions. Dropping either entry from
+    // CONVENTION_FILES is silent: the survey still succeeds and just never cites the file, so the
+    // plan is written without the rules the repo wrote down. This repo picked one name for
+    // ITSELF, which is exactly the change that nearly took the other out of the probe.
+    for (const instructionFile of ['AGENTS.md', 'CLAUDE.md']) {
+      const session = await surveyMonorepo(
+        request({ monorepo: side({ 'package.json': '{}', [instructionFile]: '# house rules' }) }),
+      )
+      expect(citable(session.survey())).toContain(`monorepo:${instructionFile}`)
+    }
+  })
+
   it('offers EVERY qualifying sibling, so a monorepo that disagrees with itself can say so', async () => {
     // One sibling is a sample of size one. A six-year-old Java service beside three TypeScript
     // ones has no house convention, and naming whichever directory sorted first reports the

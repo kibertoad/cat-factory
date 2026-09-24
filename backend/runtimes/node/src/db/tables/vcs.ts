@@ -14,7 +14,7 @@ import { bigint, index, integer, pgTable, primaryKey, text, uniqueIndex } from '
 //
 // Naming note: these tables predate the provider-neutral VCS vocabulary and are
 // deliberately still GitHub-NAMED while serving both providers (their shapes are not
-// GitHub-specific — see the incremental-migration note in CLAUDE.md). Do NOT read them
+// GitHub-specific — see the incremental-migration note in AGENTS.md). Do NOT read them
 // as license to name a NEW field `githubId`.
 // ---------------------------------------------------------------------------
 

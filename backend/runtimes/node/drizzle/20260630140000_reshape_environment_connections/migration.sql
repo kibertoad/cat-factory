@@ -1,7 +1,7 @@
 -- Per-service provision type + per-type infra handlers (slice 2b, breaking). Reshape
 -- environment_connections from a single per-workspace provider binding into a multi-row
 -- per-provision-type handler table keyed by (workspace_id, provision_type, manifest_id).
--- Backwards compatibility is NOT a goal (CLAUDE.md): clean DROP/CREATE, stale rows dropped.
+-- Backwards compatibility is NOT a goal (AGENTS.md): clean DROP/CREATE, stale rows dropped.
 DROP TABLE IF EXISTS "environment_connections" CASCADE;
 --> statement-breakpoint
 CREATE TABLE "environment_connections" (

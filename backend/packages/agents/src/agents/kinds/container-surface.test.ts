@@ -109,7 +109,7 @@ describe('deliverableIsReply', () => {
 
   it('is FALSE for a kind that PUSHES its work', () => {
     // The whole reason the rule exists: a `container-coding` kind's deliverable is the commit, and
-    // CLAUDE.md has it ending with no final text at all, so its reply proves nothing either way.
+    // AGENTS.md has it ending with no final text at all, so its reply proves nothing either way.
     for (const kind of ['coder', 'ci-fixer', 'doc-writer']) {
       expect(deliverableIsReply(kind, registry())).toBe(false)
     }

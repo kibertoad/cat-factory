@@ -205,10 +205,10 @@ slices; each section is roughly one PR.
   has, so no per-field vigilance is needed. Do NOT re-add a Nuxt UI `:ui` font-size default
   for this; the CSS rule is the single source of truth. `max(16px, 1em)` floors without
   shrinking a deliberately larger field.
-- All user-facing copy added while fixing these goes through i18n per CLAUDE.md (all
+- All user-facing copy added while fixing these goes through i18n per AGENTS.md (all
   locales in the same PR); every `@cat-factory/app` change needs a changeset.
 - Line-number refs in this doc were taken on 2026-07-14; re-verify anchors before edits.
 
 **When the committed scope (A–D) is complete**, convert this tracker to an ADR under
-`backend/docs/adr/` and `git rm` this file, per the CLAUDE.md tracker lifecycle. E-items
+`backend/docs/adr/` and `git rm` this file, per the AGENTS.md tracker lifecycle. E-items
 that were consciously not pursued go in the ADR's Consequences section.

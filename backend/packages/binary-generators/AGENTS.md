@@ -32,7 +32,7 @@ document rendered into the agent's `.cat-context/`), `index.ts` (the catalog + r
 - **The id is owned by `@cat-factory/contracts`** (`NANO_BANANA_GENERATOR_ID`), because kernel's
   seed catalog selects it and cannot import this package.
 
-**See also:** `CLAUDE.md` → "Binary-output steps";
+**See also:** `AGENTS.md` → "Binary-output steps";
 [`binary-output-foundational-storage.md`](../../../docs/initiatives/binary-output-foundational-storage.md)
 (the whole model); kernel `domain/binary-generator-registration.ts` (the rules `defineBinaryGenerator`
 runs, shared with the boot validator); [its README](./README.md) (using it, and writing your own).

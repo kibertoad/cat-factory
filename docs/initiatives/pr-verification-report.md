@@ -127,7 +127,7 @@ The reference implementation is the merge/mergeability provider shape: a kernel 
 - **`getPullRequestBody` is a REQUIRED port method, not optional.** Both `FetchGitHubClient`
   and `FetchGitLabClient` implement it, `vcsBackedGitHubClient` bridges it, and
   `providerRoutingGitHubClient` routes it: otherwise a GitLab deployment silently loses the
-  feature (the "provider-neutral" rule in CLAUDE.md).
+  feature (the "provider-neutral" rule in AGENTS.md).
 - **File-size ratchets are split triggers.** `ExecutionService.ts` had 3 lines of headroom
   under its 2650 allowance, so this PR split the ~360-line `ExecutionServiceDependencies`
   declaration block into its own module (re-exported, so no call site changed) and ratcheted
@@ -233,7 +233,7 @@ The reference implementation is the merge/mergeability provider shape: a kernel 
 | 5   | `GitHubPrReportPublisher` + both-facade wiring (Worker ⇄ Node/local)                                                                                                                                     | 🟩 done    | this |
 | 6   | Conformance suite `execution-pr-report.ts` (both runtimes, fake publisher)                                                                                                                               | 🟩 done    | this |
 | 7   | SPA: minimal `?run=…&view=observability` deep-link replay so the emitted link resolves                                                                                                                   | 🟩 done    | this |
-| 8   | Docs sweep: root README capability row, package READMEs/AGENTS.md, CLAUDE.md flow note                                                                                                                   | 🟩 done    | this |
+| 8   | Docs sweep: root README capability row, package READMEs/AGENTS.md, AGENTS.md flow note                                                                                                                   | 🟩 done    | this |
 | 8a  | Review hardening: text boundary (auto-link/table/fence), `redactSecrets` scrub, list caps + `truncations`                                                                                                | 🟩 done    | this |
 | 8b  | Per-workspace `publishPrVerificationReport` opt-out (contracts + D1 ⇄ Drizzle + SPA + 10 locales + conformance)                                                                                          | 🟩 done    | this |
 | 9   | **Phase 2**; harness-captured raw command output (test/build/lint logs captured by the executor-harness rather than summarized by the agent)                                                             | 🟩 done    | this |

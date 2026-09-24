@@ -43,7 +43,7 @@ driver this instrument is meant to rank, not a settled cause:
    report, follow-up generation (a trivial run emitted 3 follow-ups at `maxLoops: 3`), the coder
    fork decision. Each is turns an interactive session never spends.
 3. **A large always-on prefix, re-sent every turn.** Role + folded fragments + spec / blueprint /
-   trait / effort / follow-up guidance + the repo's own (uncapped) `CLAUDE.md` / `AGENTS.md`. Base
+   trait / effort / follow-up guidance + the repo's own (uncapped) `AGENTS.md` / `AGENTS.md`. Base
    prefix × N turns is the cache-read pile.
 4. **No trimming or summarization.** Every file read stays verbatim in the window and is re-sent on
    every subsequent turn (turns × context is superlinear in how much each early turn loads).
@@ -85,7 +85,7 @@ driver this instrument is meant to rank, not a settled cause:
 - **Slice 4: the baseline & the decision.** Run the same trivial task ("bump pnpm") as (a) an
   interactive Claude Code session and (b) a full pipeline run, and compare the ratio + the
   per-phase breakdown. The breakdown _decides the fix_ rather than us guessing:
-  - prefix size dominates → prompt/`CLAUDE.md` trimming + compaction;
+  - prefix size dominates → prompt/`AGENTS.md` trimming + compaction;
   - turn count dominates → a per-run turn budget / `ProgressGuard` extension to productive-but-
     excessive runs;
   - the pipeline does redundant work on trivial tasks → trivial-task routing to a single-shot

@@ -1418,7 +1418,7 @@ wrong place is invisible until a user cannot find it:
 ## Develop & test
 
 This package has no `dev` or `lint` script of its own: it is a layer, consumed through `extends`,
-and linting is whole-tree from the repo root (CLAUDE.md). The `AGENTS.md` verify checklist carries
+and linting is whole-tree from the repo root (AGENTS.md). The `AGENTS.md` verify checklist carries
 the same list, plus the install-free frontend guards.
 
 ```bash

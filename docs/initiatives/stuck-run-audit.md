@@ -338,7 +338,7 @@ fix, F2's option (a), and any future "let the sweeper re-drive a terminal instan
 is a cross-workflow refactor (execution + bootstrap + env-config-repair, plus tracking the
 current attempt for `signal`/`cancel`), which is why it was carved out of D rather than bolted
 onto it. **When it lands, this tracker's scope is complete: convert it to an ADR and `git rm` it**
-per the CLAUDE.md rule.
+per the AGENTS.md rule.
 
 ### Group A implementation notes (landed)
 
@@ -526,7 +526,7 @@ covers all three. Runner image `1.97.0`.
   - **A caller with no tool loop wires no window**, and says so: `handleInline` documents the
     omission, because a window an inline one-shot could never beat can only ever expire.
   - **Derived from `JOB_MAX_DURATION_MS` (half), not a constant**, per the harness rule in
-    CLAUDE.md: a fixed 30 minutes sits past the entire budget of a deployment running 20-minute
+    AGENTS.md: a fixed 30 minutes sits past the entire budget of a deployment running 20-minute
     jobs, i.e. is silently disabled exactly where it is configured tightest.
   - **The gone-quiet case is kept with inactivity at the FIRE SITE, not by the clamp.** The
     default window is still floored at `JOB_INACTIVITY_MS`, but that floor cannot order the two:
@@ -536,7 +536,7 @@ covers all three. Runner image `1.97.0`.
     output arrived DURING the window that elapsed, which is exactly what `no-tool-progress`
     claims; a window that passed in silence re-arms and leaves the kill to inactivity.
   - **Derived from `JOB_MAX_DURATION_MS` (half), not a constant**, per the harness rule in
-    CLAUDE.md: a fixed 30 minutes sits past the entire budget of a deployment running 20-minute
+    AGENTS.md: a fixed 30 minutes sits past the entire budget of a deployment running 20-minute
     jobs, i.e. is silently disabled exactly where it is configured tightest.
   - **Clamped to at least `JOB_INACTIVITY_MS`**, so it can never fire before the gone-quiet
     watchdog, which owns that case and has the clearer diagnostic for it. That ordering is also
@@ -661,7 +661,7 @@ D's two non-harness findings, landed together as the engine slice the harness sl
 ## Conventions & gotchas for implementers
 
 - **Runtime symmetry is mandatory** for anything touching engine/sweeper/notification
-  behaviour (F3, F7, F9, F10, F11): land Worker + Node together, per the CLAUDE.md rule. A
+  behaviour (F3, F7, F9, F10, F11): land Worker + Node together, per the AGENTS.md rule. A
   conformance assertion is what proves it when a fix touches per-facade state (F3 did: a new
   notification type crossing both notification repos); a fix that only reorders or widens logic
   inside ONE shared orchestration service (F7, F10, F11) has no per-facade surface to diverge,
@@ -670,7 +670,7 @@ D's two non-harness findings, landed together as the engine slice the harness sl
   transport both facades resolve.
 - **Harness changes are image-bumping:** bump `@cat-factory/executor-harness`'s
   version + the three tag pins (`deploy/backend/package.json`, `deploy/backend/wrangler.toml`,
-  `RECOMMENDED_HARNESS_IMAGE`) per the release rules in CLAUDE.md: keep them separate from
+  `RECOMMENDED_HARNESS_IMAGE`) per the release rules in AGENTS.md: keep them separate from
   non-harness slices. This is why F8 left Group C and why D split in half; **the remaining D
   findings (F9, F12) touch no harness file, so they are one clean engine slice.**
 - **`sweepStuckRuns` is pure orchestration over `SweepDeps`**: extend its fake-based unit

@@ -22,7 +22,7 @@ beyond adding new co-located tests for the extracted unit.
   helpers under `frontend/app/app/utils/`.
 - Any change to a versioned package needs a changeset.
 - Shared `@cat-factory/server` changes are runtime-neutral; facade-specific changes must
-  stay symmetric across `runtimes/cloudflare` ⇄ `runtimes/node` (see CLAUDE.md).
+  stay symmetric across `runtimes/cloudflare` ⇄ `runtimes/node` (see AGENTS.md).
 
 ## Scope: Backend DI / executor
 

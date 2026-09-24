@@ -72,7 +72,7 @@ export interface AgentDispatchDeps {
  * It also owns the facts that can only be RECORDED AT DISPATCH, which is why they live with it
  * rather than with the poll: the durable poll path rebuilds its handle from the STEP alone, so the
  * resolved model, the job's attribution and the investigation diagnostics have to be stamped here
- * or they are silently absent in production (see the dispatch-attribution rule in CLAUDE.md).
+ * or they are silently absent in production (see the dispatch-attribution rule in AGENTS.md).
  * `RunDispatcher` keeps thin delegates, so no call site moved.
  */
 export class AgentDispatchController {

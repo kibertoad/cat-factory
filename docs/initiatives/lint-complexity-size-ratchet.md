@@ -69,9 +69,9 @@ The rules live in the root [`.oxlintrc.json`](../../.oxlintrc.json) `rules` bloc
 2. Refactor **every** offender above that step's threshold (split the function/file along a
    cohesive seam: the `RunDispatcher` controller extractions and the `max-params` options-object /
    context-bundle sweep are the models; see the file-size guard notes in
-   [`CLAUDE.md`](../../CLAUDE.md) → "Run the CI guard scripts"). A refactor that touches the
+   [`AGENTS.md`](../../AGENTS.md) → "Run the CI guard scripts"). A refactor that touches the
    executor-harness `src/**` MUST bump the runner image tag (see the harness image rules in
-   `CLAUDE.md`).
+   `AGENTS.md`).
 3. Lower that rule's `max` in `.oxlintrc.json` to the step value and run the whole-tree lint
    (`pnpm lint`, i.e. `oxlint` from the repo root: **never** a file subset).
 4. If green, commit + update this checklist row. If a straggler remains, either fold it into
@@ -159,7 +159,7 @@ ownerId)` pair, a spend-ledger row's rollup keys) to `persistenceRpcTenantSurfac
 > controller pattern), leaving thin delegates so no HTTP call site changed; `RunDispatcher` (2390)
 > lost two, the RUNNING half of the poll branch tree (`PollRunningController`, the exact sibling of
 > the settled-poll `PollCompletionController`) and the one-shot engine steps `tracker` /
-> `bug-intake` / `initiative-committer` (`OneShotStepController`; the taxonomy bucket CLAUDE.md
+> `bug-intake` / `initiative-committer` (`OneShotStepController`; the taxonomy bucket AGENTS.md
 > already names, whose fourth member `deployer` had its own controller since the first pass); the
 > Worker `container.ts` (2214) split three ways along the Node facade's OWN module names
 > (`container-model-resolver.ts`, `container-executor-deps.ts`, `container-vcs-identity.ts`), with
@@ -487,7 +487,7 @@ Update the `Status` cell + the live `max` in `.oxlintrc.json` at the end of each
 - **`error`, not `warn`.** The rules match the repo's `correctness: error` posture so a
   regression fails CI (`pnpm lint`), not just prints a warning.
 - **Whole-tree lint only.** Verify a step with `pnpm lint` / `oxlint` from the repo root:
-  never pass file paths (same rule as `oxfmt`; see CLAUDE.md).
+  never pass file paths (same rule as `oxfmt`; see AGENTS.md).
 - **Test suites dominate the size rules.** `internal/conformance/src/suites/*` are the top
   `max-lines` / `max-lines-per-function` offenders and are legitimately large table-driven
   suites: prefer an `overrides` looser ceiling for test globs over contorting them (decide

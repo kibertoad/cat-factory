@@ -60,7 +60,7 @@ export const useConsensusStore = defineStore('consensus', () => {
       const { session } = await api.getConsensusSession(wsId, blockId)
       // Reconcile rather than blind-replace: a `load` resolving AFTER a fresher live
       // `consensus` push (or after a newer concurrent load) must not regress the transcript —
-      // the out-of-order-overwrite hazard the CLAUDE.md live-push rules warn about. Keep
+      // the out-of-order-overwrite hazard the AGENTS.md live-push rules warn about. Keep
       // whichever session is newer by `updatedAt` (any id), and never overwrite an existing
       // (possibly live-pushed) session with a raced "none".
       const existing = sessions.value[blockId]

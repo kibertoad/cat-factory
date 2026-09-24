@@ -148,7 +148,7 @@ instances, no module globals).
    two-`AppCaches`-instances test in the caching package that drives the notification pair
    through an injected fake pub/sub (the `RedisWebSocketPropagator` tests' fake-client
    pattern) and a real-ioredis integration test in the Node runtime suite.
-7. **Publish contract**: the new package needs the full checklist from CLAUDE.md ("Adding
+7. **Publish contract**: the new package needs the full checklist from AGENTS.md ("Adding
    a new published package"); `prepublishOnly`, `files: ["dist"]`, registration in
    `backend/tsconfig.build.json` `references`, an initial-release changeset.
 

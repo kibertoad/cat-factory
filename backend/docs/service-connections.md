@@ -200,7 +200,7 @@ newBranch?, pr?, serviceDirectory? }`). A per-repo token is optional (defaults t
   prompt, to the operator in a log) rather than dropped, since the repo on a recorded
   peer PR is harness-reported and writing off an unconfirmed identity is worse.
 - **Image**: any harness `src/**` change bumps `@cat-factory/executor-harness` + the
-  three pinned tags per the CLAUDE.md image rules.
+  three pinned tags per the AGENTS.md image rules.
 
 ## Phase 4: gates + merger generalization (designed, not yet implemented)
 

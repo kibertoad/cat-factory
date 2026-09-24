@@ -12,7 +12,7 @@
 //   check-doc-anchors.mjs         resolves only the URLs that CODE builds.
 //
 // So nothing read an ordinary markdown link. `git rm`ing a doc, renaming one, or getting the `../`
-// depth wrong was green, and that matters most where this repo deletes docs ON PURPOSE: CLAUDE.md
+// depth wrong was green, and that matters most where this repo deletes docs ON PURPOSE: AGENTS.md
 // says a completed initiative tracker converts to an ADR and is `git rm`ed in the same pull request,
 // which dangles every doc that linked it. Three such links were live when this guard was written,
 // pointing at trackers that became ADRs 0013, 0016 and 0028.

@@ -49,7 +49,7 @@ how a turn is bounded:
 | SPA: `AssistantModal.vue`, `stores/assistant.ts`, nav contribution (`intake`, basic tier)     | done   |
 | i18n: `assistant.*` + `nav.assistant` + the palette entry, all ten locales                    | done   |
 | The ANSWER half of a turn (`kind: 'answer'`), so a clarification terminates deterministically | done   |
-| Design doc + this tracker + the CLAUDE.md flow entry                                          | done   |
+| Design doc + this tracker + the AGENTS.md flow entry                                          | done   |
 
 ### Phase 2: open the catalog to deployments (not started)
 

@@ -99,7 +99,7 @@ import { DrizzleUserRepoAccessRepository } from '../src/repositories/userRepoAcc
 
 // There is deliberately NO `pending` member. It used to be the surface-completion BACKLOG, and
 // the backlog is now empty: every org/durable method is either allow-listed or has one of the
-// permanent reasons below. Retiring the member is what keeps it that way — CLAUDE.md requires a
+// permanent reasons below. Retiring the member is what keeps it that way — AGENTS.md requires a
 // new repository method to pick its bucket in the SAME PR, and while "pending" existed that rule
 // had a landing pad. A new method that belongs on the machine API now fails this test until it is
 // actually proxied, rather than until someone types a word.

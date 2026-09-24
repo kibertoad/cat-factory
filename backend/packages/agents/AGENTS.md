@@ -255,6 +255,6 @@
   steering the registration spreads onto its `promptAdditions`; see
   `docs/initiatives/tech-migration-preset-and-mssql-postgres-pilot.md`).
 
-**See also:** `CLAUDE.md` → "Custom agents", "Conventions" (the `FINAL_ANSWER_IN_REPLY` rule);
+**See also:** `AGENTS.md` → "Custom agents", "Conventions" (the `FINAL_ANSWER_IN_REPLY` rule);
 `backend/docs/custom-agent-roles.md` (authoring a registered kind's prompt / skills / tool
 servers on these seams); `backend/docs/model-support.md`.

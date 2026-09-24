@@ -14,7 +14,7 @@
 --
 -- DEFAULT 0 so every existing row is valid without a backfill. Note that existing TOKENS are not:
 -- they carry no generation claim at all and are refused after this ships, which logs everyone out
--- once. That is the deliberate pre-1.0 internal break (CLAUDE.md → "Internals: backwards
+-- once. That is the deliberate pre-1.0 internal break (AGENTS.md → "Internals: backwards
 -- compatibility is NOT a goal") rather than a dual-read that would leave a permanent
 -- claim-less-means-valid hole — precisely the hole an attacker would aim at.
 --

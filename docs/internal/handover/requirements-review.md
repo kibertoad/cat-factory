@@ -243,7 +243,7 @@ Move Brave/SearXNG creds from env → a UI-managed connection (mirror `observabi
 - Backend build: `pnpm -r --filter './backend/**' build` (green).
 - Frontend typecheck: `cd frontend/app && pnpm typecheck` (green).
 - Full backend suite (Postgres needed for the Node suite): `pnpm test:run` from the repo root.
-  Note (CLAUDE.md): the Worker integration suite only runs cleanly on Linux/macOS; on Windows
+  Note (AGENTS.md): the Worker integration suite only runs cleanly on Linux/macOS; on Windows
   verify pure-logic changes from `backend/packages/orchestration`.
 - Manual (local facade, `deploy/local`): start a task pipeline → in the requirements window,
   type an answer (auto-saves on blur), mark a finding "Recommend something" → "Request

@@ -4,7 +4,7 @@ How the per-run Cloudflare Container instances that back agent work
 (`ExecutionContainer`, bind `EXEC_CONTAINER`) get stopped and reclaimed,
 and where that logic currently has gaps that leave **dangling (warm, billed)
 instances**. Companion to the execution / bootstrap flow notes in
-[`../../CLAUDE.md`](../../CLAUDE.md).
+[`../../AGENTS.md`](../../AGENTS.md).
 
 Status (2026-06): reaping is **best-effort across four layers** below. Every
 terminal path now reclaims explicitly (success **and** failure, for both flows),
@@ -255,7 +255,7 @@ the upgrade the install-scoped enumerations no longer match them: a pre-upgrade 
 member** is left running and won't be auto-reaped, and a pre-upgrade **per-run** container
 can't be re-attached to (its run classifies as evicted and retries on a fresh, correctly
 labelled container). This is a one-time transient: backwards compatibility with the old
-label scheme is intentionally not preserved (see CLAUDE.md, "Backwards compatibility is NOT
+label scheme is intentionally not preserved (see AGENTS.md, "Backwards compatibility is NOT
 a goal"). To clean up leaked pre-upgrade containers, delete anything under
 `cat-factory.managed=local-docker` / the `cf-` name prefix that lacks the new install label
 (e.g. `docker rm -f $(docker ps -aq --filter label=cat-factory.managed=local-docker)` while

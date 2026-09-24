@@ -11,7 +11,7 @@ Supersedes the `tracker-webhook-intake` initiative tracker, whose committed scop
 ## Context
 
 The task-source layer was complete on the write side and on the POLLING read side (see the
-"Requirements review flow" and bug-triage notes in [`CLAUDE.md`](../../../CLAUDE.md), plus
+"Requirements review flow" and bug-triage notes in [`AGENTS.md`](../../../AGENTS.md), plus
 [ADR 0047](./0047-headless-clarification-loop.md)). Two
 asymmetries remained:
 

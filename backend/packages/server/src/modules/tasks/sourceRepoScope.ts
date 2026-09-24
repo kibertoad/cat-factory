@@ -72,7 +72,7 @@ async function requireRepoScope<E extends AppEnv>(
   }
   if (!target) {
     // A machine-readable reason so the SPA can render a localized message; the prose is the
-    // untranslated last resort (CLAUDE.md "Backend strings"). It names no vendor, because the
+    // untranslated last resort (AGENTS.md "Backend strings"). It names no vendor, because the
     // link that is missing is the board's own service→repo link and the source asking for it
     // may be any repo-backed one: naming GitHub here sends a GitLab deployment to an
     // integration it does not run.

@@ -82,4 +82,4 @@ anti-runaway budget).
   spec is a follow-up (the `RalphLoopResultView` already carries `data-testid`s).
 
 When these are picked up (or explicitly dropped), convert this tracker into a numbered ADR
-under `backend/docs/adr/` and `git rm` this file, per CLAUDE.md.
+under `backend/docs/adr/` and `git rm` this file, per AGENTS.md.

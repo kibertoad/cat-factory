@@ -438,7 +438,7 @@ export type ImportTaskInput = v.InferOutput<typeof importTaskSchema>
  * Machine-readable causes of a REFUSED task-source read (an issue search, a board listing),
  * carried on the 400's `error.details.reason` so the SPA can word each case precisely — and,
  * for the two that have a fix attached, point at it — instead of showing the backend's
- * untranslated prose (CLAUDE.md "Backend strings").
+ * untranslated prose (AGENTS.md "Backend strings").
  *
  * Single source of truth lives HERE, like {@link CONFLICT_REASONS}, because the emit sites and
  * the consumer sit in different packages: `@cat-factory/server` and `@cat-factory/integrations`

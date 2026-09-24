@@ -72,7 +72,7 @@ now. Pairs naturally with #8 (the shared container builder consumes this registr
 
 **Problem.** Every persisted table has **two** repository implementations: a D1 (SQLite)
 one and a Drizzle (Postgres) one: that are behaviourally identical port implementations
-differing only in the SQL dialect and the row shape. `CLAUDE.md`'s "keep the runtimes
+differing only in the SQL dialect and the row shape. `AGENTS.md`'s "keep the runtimes
 symmetric" rule means every schema change, every new batch (`listByIds`-shaped) read, and
 every new table must be written **twice**, and drift is caught only if a conformance test
 happens to cover it. The shared `mappers.ts` (the field-map factory, now landed: see
@@ -99,7 +99,7 @@ behind the cross-runtime conformance suite. Compose with the now-landed Drizzle 
 
 **Problem.** The two facade composition roots are near-identical: same repository wiring,
 same service instantiation, same gateway composition; differing essentially only in which
-concrete repository/gateway class is constructed. `CLAUDE.md`'s "keep the runtimes
+concrete repository/gateway class is constructed. `AGENTS.md`'s "keep the runtimes
 symmetric" rule is currently enforced by hand: every new repository or integration must be
 wired into **both** files, and forgetting one is a silent divergence caught only if a
 conformance test happens to cover it. (The model-provider wiring is already shared via
@@ -123,16 +123,16 @@ rewrites both facade boot paths at once and must be conformance-verified on both
 
 Not code refactors, but recorded here so they aren't lost. The package-map completeness +
 drift guard, the per-package `AGENTS.md` orientation layer, `docs/glossary.md`, and the
-`CLAUDE.md` slim-down have landed; the remaining optional item:
+`AGENTS.md` slim-down have landed; the remaining optional item:
 
-- **Move the surviving flow entries to co-located `docs/flows/*`.** `CLAUDE.md` has been cut
+- **Move the surviving flow entries to co-located `docs/flows/*`.** `AGENTS.md` has been cut
   roughly in half: the flow narratives are now a short INDEX (what the flow is + the trap a
   change would hit + a link to its ADR/initiative doc), the rules those flows established are
   hoisted into state-once sections (concurrency/idempotency, untrusted text, degrade loudly,
   harness rules), the package-by-package layout defers to the root README's CI-guarded table,
   and three descriptive sections whose content lives in `backend/docs/` were dropped outright.
   What remains for a future pass is relocation rather than deletion: each index entry could
-  become a `docs/flows/<flow>.md` linked from both `CLAUDE.md` and the owning package's
+  become a `docs/flows/<flow>.md` linked from both `AGENTS.md` and the owning package's
   `AGENTS.md`, for the flows that have no ADR/initiative doc of their own (built-in catalog
   lifecycle, repo bootstrap, blueprints, merge lifecycle, consensus panels). Still deferred
   because it is pure relocation with inbound-link blast radius; do it as its own change.

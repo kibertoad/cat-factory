@@ -320,7 +320,7 @@ function registerRbacMemberManagementTests(
     // writes need no valid body and no configured module — a member is refused whether or not
     // the integration is wired (its config is never revealed). One representative write per
     // admin controller, so a controller that forgot to mount the gate fails HERE, not silently
-    // in production (the drift the CLAUDE.md "add a NEW admin controller" note warns about).
+    // in production (the drift the AGENTS.md "add a NEW admin controller" note warns about).
     await app.call('PUT', `/workspaces/${wsId}/access-mode`, { accessMode: 'restricted' }, ha)
     await app.call('POST', `/workspaces/${wsId}/members`, { userId: c, role: 'member' }, ha)
     const hc = bearer(await app.session({ id: c }))

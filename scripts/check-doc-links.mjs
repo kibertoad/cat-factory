@@ -3,7 +3,7 @@
 //
 // The class it closes, and why the two guards that sound like they cover it do not, is in
 // `doc-links.mjs`. The short version: nothing else opens an ordinary markdown link, so `git rm`ing
-// a doc (which CLAUDE.md requires when an initiative tracker converts to an ADR), renaming one, or
+// a doc (which AGENTS.md requires when an initiative tracker converts to an ADR), renaming one, or
 // getting the `../` depth wrong was green.
 //
 // Usage:  node scripts/check-doc-links.mjs

@@ -52,7 +52,7 @@ export const SERVED_OPENAPI_PATH = resolve(
 // `docs/openapi.json` go stale on every release, so the drift guard (`check:openapi`) would fail
 // spuriously on the next PR that merges a release even when no contract changed.
 //
-// The public API is STABLE (see CLAUDE.md "The public API does not break"): an additive change
+// The public API is STABLE (see AGENTS.md "The public API does not break"): an additive change
 // bumps the minor here, and a breaking one is not allowed on `/api/v1` at all (it means a new
 // `/api/v2` prefix served beside v1 through a deprecation window, and a new spec version with it).
 //

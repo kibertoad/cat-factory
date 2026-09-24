@@ -90,7 +90,7 @@ Only the first two become repo items.
 | `recommendations` empty, `grade` 3 or lower                                                        | read the `summary`: it sometimes names a cause it did not turn into a recommendation                                          | file only if the summary names something concrete; else ledger only                  |
 | `comboKey` carries `\|w<N>` or `\|v<id>@<fp>`                                                      | the step ran a WORKSPACE-edited prompt or a deployment-registered variant, so the text graded is not text this repo ships     | **Handed to the workspace**, with the suffix quoted as the reason                    |
 | the recommendation is about the task's own inputs (vague description, missing acceptance criteria) | a workspace authoring problem                                                                                                 | **Handed to the workspace**                                                          |
-| the recommendation contradicts a rule in `CLAUDE.md` or an ADR                                     | a claim this repo declines                                                                                                    | **Dismissed**, citing the rule or ADR                                                |
+| the recommendation contradicts a rule in `AGENTS.md` or an ADR                                     | a claim this repo declines                                                                                                    | **Dismissed**, citing the rule or ADR                                                |
 
 The combo-key suffixes are the trap worth reading twice. `agentKind|model|promptVersion` alone is
 the shipped prompt; `|w<N>` means a workspace rewrote that kind's prompt and `|v<id>@<fp>` means a
@@ -179,7 +179,7 @@ Then open the PR (`gh pr create`, or this session's GitHub tooling). The descrip
 briefing, not a restated diff: what the graders are converging on, which items are new versus
 recurring, what was dismissed and why, and anything the pull could not read. Name the numbers that
 decide whether the sweep is trustworthy (entries read, filed, truncated or not). No em-dashes, per
-`CLAUDE.md`.
+`AGENTS.md`.
 
 **No code changes in this PR**, not even an obvious one-line prompt fix an item asks for. It goes in
 the PR that closes the item, which is where a reviewer expects to argue about it.

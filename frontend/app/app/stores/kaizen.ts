@@ -46,7 +46,7 @@ export const useKaizenStore = defineStore('kaizen', () => {
   // Monotonic load-ordering guard for the OVERVIEW, which is not coalesced (it takes no key and
   // the screen can legitimately re-ask). It REPLACES state that also arrives live over the stream
   // (`upsert`), so a slower/staler fetch resolving AFTER a newer one would clobber the fresher
-  // history (the CLAUDE.md live-push out-of-order hazard, the same one
+  // history (the AGENTS.md live-push out-of-order hazard, the same one
   // `stores/provisioningLogs.ts` guards). Each load takes a ticket; only the newest-issued one
   // commits. NOT reactive: pure bookkeeping the UI never reads.
   let loadTicket = 0

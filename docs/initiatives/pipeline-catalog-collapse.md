@@ -95,7 +95,7 @@ The genuine hard dependencies are four, and each already has its own guard:
 | `bug-intake` → schedule            | `assertPipelineLaunchable`                                  | never gatable             |
 
 So gatability is a **per-kind capability**, not a category test. Built-in kinds are not
-`AgentKindDefinition` entries (CLAUDE.md: "the built-in agents aren't migrated to this model"), so it
+`AgentKindDefinition` entries (AGENTS.md: "the built-in agents aren't migrated to this model"), so it
 follows the established per-concern idiom; a `BUILTIN_*` table beside a registry accessor, exactly
 like `read-only.ts` and `tuning.ts`. The one departure from that idiom is WHERE the table lives: in
 `@cat-factory/contracts`, because the SPA needs the same answer and cannot see `@cat-factory/agents`

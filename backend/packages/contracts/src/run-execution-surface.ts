@@ -188,7 +188,7 @@ export type RunDelegation = v.InferOutput<typeof runDelegationSchema>
  * Here rather than in the engine because both sides have to agree about the answer: the backend
  * folds it into the debug overview's reporting gaps, and the SPA prints "usage not reported by
  * <executor>" on the step card. Stated twice, the two drifted in both directions at once, which is
- * what this seam exists to make impossible (see the contracts rule in CLAUDE.md).
+ * what this seam exists to make impossible (see the contracts rule in AGENTS.md).
  *
  * Read off the STEP's own record, never off the executor's declared `telemetry`. The declaration
  * is a deployment's INTENTION, and what a reader needs is what actually landed: an executor

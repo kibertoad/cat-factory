@@ -167,7 +167,7 @@ async function runSearch() {
     results.value = []
     // "This service has no repo" is the one failure with an action attached, so it gets its
     // own localized copy off the backend's machine-readable reason rather than the raw
-    // message (CLAUDE.md "Backend strings"). Anything else keeps the generic wording.
+    // message (AGENTS.md "Backend strings"). Anything else keeps the generic wording.
     const notLinked: TaskSourceReadReason = 'repo_not_linked'
     searchError.value =
       apiErrorReason(e) === notLinked

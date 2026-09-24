@@ -118,7 +118,7 @@ detection (`provision-detect.logic.ts`), per-frame `ServiceProvisioning`
 ## Target architecture
 
 Each primitive names its seam. **Persistence-touching slices land D1 ⇄ Drizzle + a conformance
-assertion in the same PR** (CLAUDE.md "Keep the runtimes symmetric"); runtime-_bound_ execution
+assertion in the same PR** (AGENTS.md "Keep the runtimes symmetric"); runtime-_bound_ execution
 (host daemon) registers only on the local facade: the documented compose exception.
 
 ### 1. `StackRecipe` (contracts extension of `ServiceProvisioning`)

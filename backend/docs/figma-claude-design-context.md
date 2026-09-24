@@ -354,5 +354,5 @@ platform had.
   (provider port, connect/import/link surface, credential sealing).
 - [`visual-confirmation.md`](./visual-confirmation.md): the binary-artifact store + Visual
   Confirmation gate (the image-capable surface this text path does not cover).
-- `CLAUDE.md` → "Telemetry & agent-context observability": how to inspect, after a run, the exact
+- `AGENTS.md` → "Telemetry & agent-context observability": how to inspect, after a run, the exact
   `.cat-context/*` content an agent was given (the manual-verification surface for this feature).

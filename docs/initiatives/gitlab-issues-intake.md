@@ -98,7 +98,7 @@ tracker rather than a one-PR change.
   `https://github.com/…`; a self-managed GitLab lives at the deployment's own host, and the
   issue path is `/-/issues/N`, not `/issues/N`. Take the URL the API returned and fall back to
   one built from the CONNECTION's base URL, never a constant. This is the "never re-hardcode
-  `github.com`" rule in CLAUDE.md, at the intake boundary.
+  `github.com`" rule in AGENTS.md, at the intake boundary.
 - **`iid` vs `id`.** GitLab issues carry a per-project `iid` (what a human sees and what
   `/projects/:id/issues/:iid` takes) and a global `id`. `FetchGitLabClient.searchIssues`
   already maps `iid`; a new read must not reach for `id` because it is the field named `id`.
@@ -368,4 +368,4 @@ fallback)(…)` reads fine and throws a `TypeError` for any deployment implement
   and that decision is what the slice is, not the GitLab call itself.
 
 When the committed scope completes, convert this tracker into a numbered ADR under
-`backend/docs/adr/` and `git rm` this file, per CLAUDE.md.
+`backend/docs/adr/` and `git rm` this file, per AGENTS.md.

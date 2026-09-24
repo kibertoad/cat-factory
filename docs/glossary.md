@@ -29,7 +29,7 @@ Both are in `backend/packages/contracts/src/primitives.ts`:
   "service" on the board is a block with `level: 'frame'`, `parentId: null`; modules are
   sub-frames; **tasks are the leaves**. A module no longer renders as a box on the board: its
   tasks appear in the enclosing frame's status swimlanes, grouped by module name, so `module` is
-  a structural parent rather than a visual container. (See `CLAUDE.md` → "Board / service /
+  a structural parent rather than a visual container. (See `AGENTS.md` → "Board / service /
   repo-linkage model".)
 - **Block type**: `blockTypeSchema`, a _separate_ axis (`taskType` field) chosen by the human
   at creation; drives the card's icon/badge and which pipeline runs.
@@ -197,7 +197,7 @@ enum: the kinds are string constants across two homes:
   `kernel/src/domain/gate-logic.ts` as `*_AGENT_KIND` constants.
 - **Catalog agent kinds** (coder, spec-writer, blueprints, tester, merger, the companions, …):
   `@cat-factory/agents` under `src/agents/kinds/` + `src/agents/prompts/`.
-- **Custom/registered kinds**: added via `registerAgentKind` (`CLAUDE.md` → "Custom agents").
+- **Custom/registered kinds**: added via `registerAgentKind` (`AGENTS.md` → "Custom agents").
 - **Judge kinds**: a deployment's own, registered on the app-owned `JudgeRegistry`; the platform
   ships none (see "Judges" above).
 
@@ -259,7 +259,7 @@ and naming one is refused rather than honoured.
 
 ### D1 ⇄ Drizzle migration parity
 
-Every persisted table has two schemas that must stay in step (`CLAUDE.md` → "Keep the runtimes
+Every persisted table has two schemas that must stay in step (`AGENTS.md` → "Keep the runtimes
 symmetric"):
 
 - **Cloudflare (D1/SQLite)**: hand-numbered SQL across **five** dirs at the
@@ -268,7 +268,7 @@ symmetric"):
   Duplicate numeric prefixes are fine (they apply in lexical order).
 - **Node (Drizzle/Postgres)**: one `backend/runtimes/node/drizzle/` dir of generated migrations
   - the single source of truth `backend/runtimes/node/src/db/schema.ts`. It is a content-addressed
-    DAG (`prevIds`), not a linear journal: see `CLAUDE.md` → "Resolving conflicting Drizzle
+    DAG (`prevIds`), not a linear journal: see `AGENTS.md` → "Resolving conflicting Drizzle
     migrations (post-merge)".
 
 The two systems share no naming convention, so correlating a pair means reading the SQL bodies;

@@ -14,7 +14,7 @@
 // pulls that pinned tag at boot (see server.ts `preflightHarnessImage`) so it can't go stale.
 //
 // RELEASE RULE: bump `RECOMMENDED_HARNESS_IMAGE` in lockstep with the harness image — see
-// CLAUDE.md "Any change that affects the runner image MUST bump the image tag". The image and
+// AGENTS.md "Any change that affects the runner image MUST bump the image tag". The image and
 // the backend are a matched set and must be released together.
 
 import { isImageVariantName, isPlatformImageVariant } from '@cat-factory/kernel'
