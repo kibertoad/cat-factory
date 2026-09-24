@@ -15,6 +15,7 @@ import type {
 type HumanTestRoundOutcome = NonNullable<HumanTestRound['outcome']>
 import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const board = useBoardStore()
 const execution = useExecutionStore()
@@ -168,11 +169,11 @@ const canDestroy = computed(
       <template v-else>
         <!-- Environment -->
         <section class="rounded-lg border border-default bg-default/60 p-4">
-          <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-dimmed">
+          <SectionLabel as="h3" class="mb-2">
             {{ t('humanTest.environment.heading') }}
-          </h3>
+          </SectionLabel>
           <div v-if="env" class="space-y-2">
-            <div class="flex items-center gap-2 text-[13px]">
+            <div class="flex items-center gap-2 text-sm">
               <UIcon
                 name="i-lucide-circle-dot"
                 class="h-3.5 w-3.5"
@@ -187,22 +188,22 @@ const canDestroy = computed(
               :href="env.url"
               target="_blank"
               rel="noopener"
-              class="inline-flex items-center gap-1.5 break-all text-[13px] text-app-info-300 hover:underline"
+              class="inline-flex items-center gap-1.5 break-all text-sm text-app-info-300 hover:underline"
             >
               <UIcon name="i-lucide-external-link" class="h-3.5 w-3.5 shrink-0" />
               {{ env.url }}
             </a>
-            <p v-else class="text-[12px] italic text-dimmed">
+            <p v-else class="text-xs italic text-dimmed">
               {{ t('humanTest.environment.noUrl') }}
             </p>
-            <p v-if="env.expiresAt" class="text-[11px] text-dimmed">
+            <p v-if="env.expiresAt" class="text-2xs text-dimmed">
               {{ t('humanTest.environment.expires', { date: d(new Date(env.expiresAt), 'long') }) }}
             </p>
           </div>
-          <p v-else class="text-[12px] text-app-warning-300/90">
+          <p v-else class="text-xs text-app-warning-300/90">
             {{ ht.degradedReason ?? t('humanTest.environment.none') }}
           </p>
-          <p v-if="env && ht.degradedReason" class="mt-2 text-[12px] text-app-warning-300/90">
+          <p v-if="env && ht.degradedReason" class="mt-2 text-xs text-app-warning-300/90">
             {{ ht.degradedReason }}
           </p>
 
@@ -249,7 +250,7 @@ const canDestroy = computed(
         <!-- Working state -->
         <p
           v-if="working"
-          class="flex items-center gap-2 rounded-lg border border-default bg-app-950/40 px-3 py-2 text-[12px] text-toned"
+          class="flex items-center gap-2 rounded-lg border border-default bg-app-950/40 px-3 py-2 text-xs text-toned"
         >
           <UIcon name="i-lucide-loader" class="h-3.5 w-3.5 animate-spin text-app-warning-300" />
           {{ phase ? t(PHASE_LABEL[phase]) : '' }}
@@ -258,11 +259,11 @@ const canDestroy = computed(
         <!-- Findings / fix -->
         <section v-if="awaitingHuman" class="rounded-lg border border-default bg-default/60 p-4">
           <div class="flex items-center justify-between">
-            <h3 class="text-[11px] font-semibold uppercase tracking-wide text-dimmed">
+            <SectionLabel as="h3">
               {{ t('humanTest.fix.heading') }}
-            </h3>
+            </SectionLabel>
             <button
-              class="text-[12px] text-muted hover:text-default"
+              class="text-xs text-muted hover:text-default"
               @click="showFindings = !showFindings"
             >
               {{ showFindings ? t('humanTest.fix.cancel') : t('humanTest.fix.requestFix') }}
@@ -273,7 +274,7 @@ const canDestroy = computed(
               v-model="findings"
               rows="4"
               :placeholder="t('humanTest.fix.placeholder')"
-              class="w-full rounded-md border border-muted bg-app-950 px-3 py-2 text-[13px] text-default placeholder:text-app-600 focus:border-app-warning-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-app-warning-500/60"
+              class="w-full rounded-md border border-muted bg-app-950 px-3 py-2 text-sm text-default placeholder:text-app-600 focus:border-app-warning-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-app-warning-500/60"
             />
             <UButton
               size="sm"
@@ -294,11 +295,11 @@ const canDestroy = computed(
           v-if="ht.rounds && ht.rounds.length"
           class="rounded-lg border border-default bg-default/60 p-4"
         >
-          <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-dimmed">
+          <SectionLabel as="h3" class="mb-2">
             {{ t('humanTest.history.heading', { count: ht.attempts }, ht.attempts) }}
-          </h3>
+          </SectionLabel>
           <ol class="space-y-2">
-            <li v-for="(r, i) in ht.rounds" :key="i" class="flex items-start gap-2 text-[12px]">
+            <li v-for="(r, i) in ht.rounds" :key="i" class="flex items-start gap-2 text-xs">
               <UIcon
                 :name="r.kind === 'fix' ? 'i-lucide-wrench' : 'i-lucide-git-merge'"
                 class="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted"
@@ -310,7 +311,7 @@ const canDestroy = computed(
                     : t('humanTest.history.pulledMain')
                 }}</span>
                 <span
-                  class="ms-1.5 rounded px-1 text-[10px] uppercase"
+                  class="ms-1.5 rounded px-1 text-3xs uppercase"
                   :class="
                     r.outcome === 'completed'
                       ? 'bg-app-success-500/15 text-app-success-300'

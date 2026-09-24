@@ -11,6 +11,7 @@ import BranchProtectionPreflight from './BranchProtectionPreflight.vue'
 import VcsConnectSurfaces from '~/components/vcs/VcsConnectSurfaces.vue'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import { VCS_PROVIDER_ICONS, VCS_PROVIDER_LABELS } from '~/utils/vcs'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -317,7 +318,7 @@ async function merge(pr: GitHubPullRequest) {
                 <div class="truncate text-sm text-default">
                   {{ github.connection?.accountLogin }}
                 </div>
-                <div class="text-[11px] text-dimmed">{{ connectionMeta }}</div>
+                <div class="text-2xs text-dimmed">{{ connectionMeta }}</div>
               </div>
             </div>
             <div class="flex items-center gap-1">
@@ -380,9 +381,9 @@ async function merge(pr: GitHubPullRequest) {
           <section v-else-if="tab === 'repos'" class="space-y-2">
             <!-- manage which repos this board links -->
             <div class="flex items-center justify-between">
-              <span class="text-[11px] uppercase tracking-wide text-dimmed">
+              <SectionLabel as="span">
                 {{ t('github.panel.linkedToBoard') }}
-              </span>
+              </SectionLabel>
               <UButton
                 size="xs"
                 color="neutral"
@@ -399,7 +400,7 @@ async function merge(pr: GitHubPullRequest) {
             </div>
 
             <div v-if="managing" class="space-y-2 rounded-md border border-muted bg-default/80 p-3">
-              <p class="text-[12px] text-muted">
+              <p class="text-xs text-muted">
                 {{
                   isAppConnection ? t('vcs.panel.manageHintApp') : t('vcs.panel.manageHintToken')
                 }}
@@ -503,13 +504,13 @@ async function merge(pr: GitHubPullRequest) {
                   </UBadge>
                 </button>
                 <div class="flex items-center gap-2">
-                  <span v-if="repo.defaultBranch" class="text-[11px] text-dimmed">
+                  <span v-if="repo.defaultBranch" class="text-2xs text-dimmed">
                     {{ repo.defaultBranch }}
                   </span>
                   <ULink
                     :to="github.repoUrl(repo.githubId) ?? '#'"
                     target="_blank"
-                    class="text-[11px] text-primary hover:underline"
+                    class="text-2xs text-primary hover:underline"
                   >
                     {{ t('github.panel.open') }}
                   </ULink>
@@ -523,7 +524,7 @@ async function merge(pr: GitHubPullRequest) {
                 <div
                   v-for="b in github.branches[repo.githubId] ?? []"
                   :key="b.name"
-                  class="flex items-center justify-between gap-2 text-[12px]"
+                  class="flex items-center justify-between gap-2 text-xs"
                 >
                   <span class="flex items-center gap-1.5 truncate text-toned">
                     <UIcon name="i-lucide-git-branch" class="h-3.5 w-3.5 text-dimmed" />
@@ -532,7 +533,7 @@ async function merge(pr: GitHubPullRequest) {
                       {{ t('github.panel.protected') }}
                     </UBadge>
                   </span>
-                  <code class="text-[10px] text-dimmed">{{ b.headSha.slice(0, 7) }}</code>
+                  <code class="text-3xs text-dimmed">{{ b.headSha.slice(0, 7) }}</code>
                 </div>
 
                 <!-- new branch -->
@@ -644,7 +645,7 @@ async function merge(pr: GitHubPullRequest) {
                 <div class="truncate text-sm text-default">
                   <span class="text-dimmed">#{{ pr.number }}</span> {{ pr.title }}
                 </div>
-                <div class="truncate text-[11px] text-dimmed">
+                <div class="truncate text-2xs text-dimmed">
                   {{ github.repoFor(pr.repoGithubId)?.name }} · {{ pr.headRef }} → {{ pr.baseRef }}
                 </div>
               </div>
@@ -669,7 +670,7 @@ async function merge(pr: GitHubPullRequest) {
                 <ULink
                   :to="github.pullUrl(pr) ?? '#'"
                   target="_blank"
-                  class="text-[11px] text-primary hover:underline"
+                  class="text-2xs text-primary hover:underline"
                 >
                   {{ t('github.panel.open') }}
                 </ULink>
@@ -691,7 +692,7 @@ async function merge(pr: GitHubPullRequest) {
                 <div class="truncate text-sm text-default">
                   <span class="text-dimmed">#{{ issue.number }}</span> {{ issue.title }}
                 </div>
-                <div class="truncate text-[11px] text-dimmed">
+                <div class="truncate text-2xs text-dimmed">
                   {{ github.repoFor(issue.repoGithubId)?.name }}
                   <span v-if="issue.labels.length">· {{ issue.labels.join(', ') }}</span>
                 </div>
@@ -707,7 +708,7 @@ async function merge(pr: GitHubPullRequest) {
                 <ULink
                   :to="github.issueUrl(issue) ?? '#'"
                   target="_blank"
-                  class="text-[11px] text-primary hover:underline"
+                  class="text-2xs text-primary hover:underline"
                 >
                   {{ t('github.panel.open') }}
                 </ULink>

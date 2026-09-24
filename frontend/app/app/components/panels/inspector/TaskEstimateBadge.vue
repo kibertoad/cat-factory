@@ -79,12 +79,8 @@ function barClass(n: number): string {
     default-open
   >
     <div class="space-y-1.5 rounded-lg border border-default bg-default/40 p-2.5">
-      <p class="text-[11px] text-dimmed" data-testid="task-estimate-basis">{{ basisLabel }}</p>
-      <p
-        v-if="supersededLabel"
-        class="text-[11px] text-dimmed"
-        data-testid="task-estimate-superseded"
-      >
+      <p class="text-2xs text-dimmed" data-testid="task-estimate-basis">{{ basisLabel }}</p>
+      <p v-if="supersededLabel" class="text-2xs text-dimmed" data-testid="task-estimate-superseded">
         {{ supersededLabel }}
       </p>
       <div v-for="axis in AXES" :key="axis.key" class="flex items-center gap-2">
@@ -98,7 +94,7 @@ function barClass(n: number): string {
         </div>
         <span
           v-if="axis.was"
-          class="shrink-0 text-[11px] tabular-nums text-dimmed"
+          class="shrink-0 text-2xs tabular-nums text-dimmed"
           :data-testid="`task-estimate-was-${axis.key}`"
           >{{ t('inspector.estimate.was', { value: axis.was }) }}</span
         >

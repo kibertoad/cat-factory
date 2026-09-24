@@ -19,6 +19,7 @@ import { computed, ref, watch } from 'vue'
 import { providerCachesPrompts } from '@cat-factory/contracts'
 import type { ApiKey, ApiKeyProvider } from '~/types/domain'
 import SecretInput from '~/components/common/SecretInput.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const props = withDefaults(defineProps<{ accountId?: string; category?: 'direct' | 'proxy' }>(), {
   category: 'direct',
@@ -264,13 +265,13 @@ async function remove(k: ApiKey) {
 <template>
   <div class="space-y-4">
     <div>
-      <h4 class="text-xs font-semibold uppercase tracking-wide text-dimmed">
+      <SectionLabel as="h4">
         {{
           category === 'proxy'
             ? t('providers.apiKeys.proxyHeading')
             : t('providers.apiKeys.directHeading')
         }}
-      </h4>
+      </SectionLabel>
       <template v-if="category === 'proxy'">
         <p v-if="isAccount" class="mt-1 text-sm text-muted">
           {{ t('providers.apiKeys.proxyAccountIntro') }}
@@ -343,7 +344,7 @@ async function remove(k: ApiKey) {
          the caching flavour, so long agentic runs stop re-billing the whole prompt. -->
     <p
       v-if="cachesPrompts(selected.value)"
-      class="flex items-center gap-1.5 text-[12px] text-app-success-400/90"
+      class="flex items-center gap-1.5 text-xs text-app-success-400/90"
     >
       <UIcon name="i-lucide-zap" class="h-3.5 w-3.5 shrink-0" />
       {{ t('providers.apiKeys.cachingNote', { provider: selected.label }) }}
@@ -380,9 +381,9 @@ async function remove(k: ApiKey) {
 
     <!-- connected keys for the selected scope -->
     <div v-if="connected.length" class="space-y-2">
-      <h5 class="text-xs font-semibold uppercase tracking-wide text-dimmed">
+      <SectionLabel as="h5">
         {{ t('providers.apiKeys.connected', { count: connected.length }) }}
-      </h5>
+      </SectionLabel>
       <div
         v-for="k in connected"
         :key="k.id"
@@ -395,7 +396,7 @@ async function remove(k: ApiKey) {
           <UBadge v-if="!k.enabled" color="neutral" variant="subtle" size="sm" class="ms-2">
             {{ t('providers.apiKeys.disabledBadge') }}
           </UBadge>
-          <div class="text-[11px] tabular-nums text-dimmed">
+          <div class="text-2xs tabular-nums text-dimmed">
             {{
               t(
                 'providers.apiKeys.usage',

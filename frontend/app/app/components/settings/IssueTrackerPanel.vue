@@ -204,7 +204,7 @@ async function checkSetup(source: TaskSourceKind) {
         <h3 class="text-sm font-semibold text-default">
           {{ t('settings.issueTracker.filing.heading') }}
         </h3>
-        <p class="mt-1 text-[11px] text-muted">
+        <p class="mt-1 text-2xs text-muted">
           <i18n-t keypath="settings.issueTracker.filing.description" tag="span" scope="global">
             <template #none>
               <span class="text-toned">{{ t('settings.issueTracker.filing.none') }}</span>
@@ -269,10 +269,7 @@ async function checkSetup(source: TaskSourceKind) {
       </div>
 
       <!-- Inline readiness hints for the picked tracker. -->
-      <p
-        v-if="trackerKind === 'github' && !githubAvailable"
-        class="text-[11px] text-app-warning-400"
-      >
+      <p v-if="trackerKind === 'github' && !githubAvailable" class="text-2xs text-app-warning-400">
         <i18n-t keypath="settings.issueTracker.filing.githubHint" tag="span" scope="global">
           <template #link>
             <button class="underline" @click="ui.openGitHub()">
@@ -281,10 +278,7 @@ async function checkSetup(source: TaskSourceKind) {
           </template>
         </i18n-t>
       </p>
-      <p
-        v-else-if="trackerKind === 'jira' && !jiraConnected"
-        class="text-[11px] text-app-warning-400"
-      >
+      <p v-else-if="trackerKind === 'jira' && !jiraConnected" class="text-2xs text-app-warning-400">
         <i18n-t keypath="settings.issueTracker.filing.jiraHint" tag="span" scope="global">
           <template #link>
             <button class="underline" @click="ui.openTaskConnect('jira')">
@@ -295,7 +289,7 @@ async function checkSetup(source: TaskSourceKind) {
       </p>
       <p
         v-else-if="trackerKind === 'linear' && !linearConnected"
-        class="text-[11px] text-app-warning-400"
+        class="text-2xs text-app-warning-400"
       >
         <i18n-t keypath="settings.issueTracker.filing.linearHint" tag="span" scope="global">
           <template #link>
@@ -313,7 +307,7 @@ async function checkSetup(source: TaskSourceKind) {
       >
         <UInput v-model="jiraProjectKey" placeholder="ENG" size="sm" class="w-full" />
         <template #help>
-          <span class="text-[11px] text-dimmed">
+          <span class="text-2xs text-dimmed">
             {{ t('settings.issueTracker.filing.jiraProjectKeyHelp') }}
           </span>
         </template>
@@ -340,7 +334,7 @@ async function checkSetup(source: TaskSourceKind) {
         />
         <UInput v-else v-model="linearTeamId" placeholder="team_…" size="sm" class="w-full" />
         <template #help>
-          <span class="text-[11px] text-dimmed">
+          <span class="text-2xs text-dimmed">
             {{ t('settings.issueTracker.filing.linearTeamIdHelp') }}
           </span>
         </template>
@@ -353,7 +347,7 @@ async function checkSetup(source: TaskSourceKind) {
         <h3 class="text-sm font-semibold text-default">
           {{ t('settings.issueTracker.linking.heading') }}
         </h3>
-        <p class="mt-1 text-[11px] text-muted">
+        <p class="mt-1 text-2xs text-muted">
           {{ t('settings.issueTracker.linking.description') }}
         </p>
       </div>
@@ -370,7 +364,7 @@ async function checkSetup(source: TaskSourceKind) {
         @remedy="openRemedy(source)"
       />
 
-      <p v-if="tasks.sources.length === 0" class="text-[11px] text-dimmed">
+      <p v-if="tasks.sources.length === 0" class="text-2xs text-dimmed">
         {{ t('settings.issueTracker.linking.none') }}
       </p>
     </section>
@@ -381,7 +375,7 @@ async function checkSetup(source: TaskSourceKind) {
         <h3 class="text-sm font-semibold text-default">
           {{ t('settings.issueTracker.writeback.heading') }}
         </h3>
-        <p class="mt-1 text-[11px] text-muted">
+        <p class="mt-1 text-2xs text-muted">
           <i18n-t keypath="settings.issueTracker.writeback.description" tag="span" scope="global">
             <template #done>
               <span class="text-toned">{{ t('settings.issueTracker.writeback.done') }}</span>

@@ -13,6 +13,7 @@ import type { JudgeFinding, JudgeStepState } from '~/types/execution'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import CopyButton from '~/components/common/CopyButton.vue'
 import MarkdownProse from '~/components/common/MarkdownProse.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const board = useBoardStore()
 const execution = useExecutionStore()
@@ -162,23 +163,23 @@ async function act(choice: 'proceed' | 'bounce' | 'stop') {
           class="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-default bg-app-950/40 px-3 py-2.5"
           data-testid="judge-score"
         >
-          <span class="text-[13px] font-semibold text-app-100">
+          <span class="text-sm font-semibold text-app-100">
             {{ score === null ? t('judge.notScored') : n(score, 'percent') }}
           </span>
           <span
             v-if="threshold !== null"
-            class="text-[12px] text-muted"
+            class="text-xs text-muted"
             :title="t('judge.thresholdHint')"
           >
             {{ t('judge.threshold', { threshold: n(threshold, 'percent') }) }}
           </span>
-          <span v-if="judge.disposition" class="text-[12px] text-muted">
+          <span v-if="judge.disposition" class="text-xs text-muted">
             · {{ DISPOSITION_LABELS[judge.disposition] }}
           </span>
-          <span v-if="judge.rubricOverridden" class="text-[11px] text-app-secondary-300">
+          <span v-if="judge.rubricOverridden" class="text-2xs text-app-secondary-300">
             · {{ t('judge.rubricOverridden') }}
           </span>
-          <span v-if="(judge.maxBounces ?? 0) > 0" class="text-[11px] text-dimmed">
+          <span v-if="(judge.maxBounces ?? 0) > 0" class="text-2xs text-dimmed">
             ·
             {{ t('judge.reworkRounds', { spent: judge.bounces ?? 0, budget: judge.maxBounces }) }}
           </span>
@@ -189,7 +190,7 @@ async function act(choice: 'proceed' | 'bounce' | 'stop') {
              name doesn't, and being overridden by the task's own choice is the normal outcome. -->
         <p
           v-if="judge.modelPin?.status === 'unavailable'"
-          class="mt-2 rounded-md border border-app-warning-500/30 bg-app-warning-500/5 px-3 py-2 text-[12px] leading-relaxed text-app-warning-200"
+          class="mt-2 rounded-md border border-app-warning-500/30 bg-app-warning-500/5 px-3 py-2 text-xs leading-relaxed text-app-warning-200"
           data-testid="judge-model-pin"
         >
           {{ t('judge.modelPinUnavailable', { model: judge.modelPin.requested }) }}
@@ -199,7 +200,7 @@ async function act(choice: 'proceed' | 'bounce' | 'stop') {
              like a clean pass. -->
         <p
           v-if="judge.note"
-          class="mt-2 rounded-md border border-default bg-app-950/40 px-3 py-2 text-[12px] leading-relaxed text-muted"
+          class="mt-2 rounded-md border border-default bg-app-950/40 px-3 py-2 text-xs leading-relaxed text-muted"
         >
           {{ judge.note }}
         </p>
@@ -210,14 +211,14 @@ async function act(choice: 'proceed' | 'bounce' | 'stop') {
           <CopyButton :text="verdict.summary" class="absolute end-1 top-1" />
           <MarkdownProse
             :text="verdict.summary"
-            class="pe-8 text-[13px] leading-relaxed text-default"
+            class="pe-8 text-sm leading-relaxed text-default"
           />
         </div>
 
         <section v-if="findings.length" class="mt-4">
-          <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-dimmed">
+          <SectionLabel as="h3" class="mb-2">
             {{ t('judge.findingsHeading') }}
-          </h3>
+          </SectionLabel>
           <ul class="flex flex-col gap-2">
             <li
               v-for="(finding, i) in findings"
@@ -227,20 +228,18 @@ async function act(choice: 'proceed' | 'bounce' | 'stop') {
             >
               <div class="flex flex-wrap items-center gap-2">
                 <span
-                  class="rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide"
+                  class="rounded border px-1.5 py-0.5 text-3xs uppercase tracking-wide"
                   :class="SEVERITY_CLASSES[finding.severity]"
                 >
                   {{ SEVERITY_LABELS[finding.severity] }}
                 </span>
-                <span class="text-[13px] font-medium text-app-100">{{ finding.title }}</span>
-                <code v-if="finding.where" class="text-[11px] text-dimmed">{{
-                  finding.where
-                }}</code>
+                <span class="text-sm font-medium text-app-100">{{ finding.title }}</span>
+                <code v-if="finding.where" class="text-2xs text-dimmed">{{ finding.where }}</code>
               </div>
               <MarkdownProse
                 v-if="finding.detail"
                 :text="finding.detail"
-                class="mt-1 text-[12px] leading-relaxed text-muted"
+                class="mt-1 text-xs leading-relaxed text-muted"
               />
             </li>
           </ul>
@@ -248,10 +247,10 @@ async function act(choice: 'proceed' | 'bounce' | 'stop') {
 
         <!-- The decision. Only shown while the run is actually parked on this verdict. -->
         <section v-if="awaiting" class="mt-5" data-testid="judge-decision">
-          <h3 class="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-dimmed">
+          <SectionLabel as="h3" class="mb-1.5">
             {{ t('judge.decisionHeading') }}
-          </h3>
-          <p class="mb-2 text-[11px] leading-relaxed text-dimmed">
+          </SectionLabel>
+          <p class="mb-2 text-2xs leading-relaxed text-dimmed">
             {{ t('judge.decisionDescription') }}
           </p>
           <textarea
@@ -259,9 +258,9 @@ async function act(choice: 'proceed' | 'bounce' | 'stop') {
             rows="3"
             :disabled="busy"
             :placeholder="t('judge.feedbackPlaceholder')"
-            class="w-full resize-y rounded-md border border-default bg-app-950/60 px-3 py-2 text-[13px] text-default placeholder:text-app-600 focus:border-app-warning-500/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-app-warning-500/60"
+            class="w-full resize-y rounded-md border border-default bg-app-950/60 px-3 py-2 text-sm text-default placeholder:text-app-600 focus:border-app-warning-500/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-app-warning-500/60"
           />
-          <p v-if="judgeStore.error" class="mt-2 text-[12px] text-app-error-300">
+          <p v-if="judgeStore.error" class="mt-2 text-xs text-app-error-300">
             {{ judgeStore.error }}
           </p>
           <div class="mt-2 flex flex-wrap justify-end gap-2">
@@ -307,21 +306,21 @@ async function act(choice: 'proceed' | 'bounce' | 'stop') {
 
         <!-- The round history: a looping judge must not be a black box (the gate-attempt rule). -->
         <section v-if="rounds.length > 1" class="mt-5">
-          <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-dimmed">
+          <SectionLabel as="h3" class="mb-2">
             {{ t('judge.roundsHeading') }}
-          </h3>
+          </SectionLabel>
           <ul class="flex flex-col gap-1.5">
             <li
               v-for="round in rounds"
               :key="round.round"
-              class="flex flex-wrap items-center gap-2 rounded-md border border-default bg-app-950/40 px-3 py-1.5 text-[12px] text-toned"
+              class="flex flex-wrap items-center gap-2 rounded-md border border-default bg-app-950/40 px-3 py-1.5 text-xs text-toned"
               data-testid="judge-round"
               :data-round-disposition="round.disposition"
             >
               <span class="text-dimmed">{{ t('judge.round', { round: round.round }) }}</span>
               <span class="font-medium text-app-100">{{ n(round.verdict.score, 'percent') }}</span>
               <span class="text-muted">{{ DISPOSITION_LABELS[round.disposition] }}</span>
-              <code v-if="round.model" class="text-[11px] text-dimmed">{{ round.model }}</code>
+              <code v-if="round.model" class="text-2xs text-dimmed">{{ round.model }}</code>
             </li>
           </ul>
         </section>

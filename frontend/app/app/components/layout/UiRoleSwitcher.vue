@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { ROLE_PRESENTATION, UI_ROLES } from '~/utils/uiRole'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 // Role picker, at the TOP of the sidebar beside the interface-tier switcher: one place answers
 // "how much of the app do I see", and the role is the outer of the two (it can cap the tier, see
@@ -47,7 +48,7 @@ const items = computed(() =>
       class="flex w-full flex-col items-center gap-0.5 rounded-lg border border-muted bg-default/60 px-1 py-1.5 transition hover:border-primary/60 hover:bg-elevated/60"
     >
       <UIcon :name="current.icon" class="h-4 w-4 shrink-0 text-primary" />
-      <span class="w-full truncate text-center text-[9px] font-medium uppercase text-toned">
+      <span class="w-full truncate text-center text-3xs font-medium uppercase text-toned">
         {{ currentLabel }}
       </span>
     </button>
@@ -62,9 +63,9 @@ const items = computed(() =>
     >
       <UIcon :name="current.icon" class="h-4 w-4 shrink-0 text-primary" />
       <div class="min-w-0 flex-1">
-        <div class="truncate text-[10px] uppercase tracking-wide text-dimmed">
+        <SectionLabel class="truncate">
           {{ t('uiRole.switcher') }}
-        </div>
+        </SectionLabel>
         <div class="truncate text-xs font-medium text-default">{{ currentLabel }}</div>
       </div>
       <UIcon name="i-lucide-chevron-down" class="h-3.5 w-3.5 shrink-0 text-dimmed" />

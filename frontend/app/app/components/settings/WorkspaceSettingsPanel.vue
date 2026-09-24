@@ -24,6 +24,7 @@ import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import type { AppSlots } from '~/modular/slots'
 import { usePipelinesStore } from '~/stores/pipelines'
 import { pipelineAllowedForTaskType } from '~/utils/pipeline'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const { t, te } = useI18n()
 const ui = useUiStore()
@@ -360,7 +361,7 @@ async function save() {
               <h3 class="text-sm font-semibold text-default">
                 {{ t('settings.workspaceSettings.waiting.heading') }}
               </h3>
-              <p class="text-[11px] text-muted">
+              <p class="text-2xs text-muted">
                 <i18n-t keypath="settings.workspaceSettings.waiting.body" tag="span" scope="global">
                   <template #overdue>
                     <span class="text-app-error-400">{{
@@ -370,9 +371,9 @@ async function save() {
                 </i18n-t>
               </p>
               <label class="block w-48">
-                <span class="mb-1 block text-[10px] uppercase tracking-wide text-dimmed">
+                <SectionLabel as="span" class="mb-1 block">
                   {{ t('settings.workspaceSettings.waiting.escalateAfter') }}
-                </span>
+                </SectionLabel>
                 <UInput
                   v-model.number="draft.waitingEscalationMinutes"
                   type="number"
@@ -387,13 +388,13 @@ async function save() {
               <h3 class="text-sm font-semibold text-default">
                 {{ t('settings.workspaceSettings.taskLimit.heading') }}
               </h3>
-              <p class="text-[11px] text-muted">
+              <p class="text-2xs text-muted">
                 {{ t('settings.workspaceSettings.taskLimit.body') }}
               </p>
               <label class="block w-64">
-                <span class="mb-1 block text-[10px] uppercase tracking-wide text-dimmed">{{
+                <SectionLabel as="span" class="mb-1 block">{{
                   t('settings.workspaceSettings.taskLimit.mode')
-                }}</span>
+                }}</SectionLabel>
                 <USelect
                   v-model="draft.taskLimitMode"
                   :items="MODES"
@@ -404,17 +405,17 @@ async function save() {
               </label>
 
               <label v-if="draft.taskLimitMode === 'shared'" class="block w-48">
-                <span class="mb-1 block text-[10px] uppercase tracking-wide text-dimmed">
+                <SectionLabel as="span" class="mb-1 block">
                   {{ t('settings.workspaceSettings.taskLimit.maxRunning') }}
-                </span>
+                </SectionLabel>
                 <UInput v-model.number="draft.taskLimitShared" type="number" :min="1" size="sm" />
               </label>
 
               <div v-else-if="draft.taskLimitMode === 'per_type'" class="grid grid-cols-2 gap-3">
                 <label v-for="taskType in TASK_TYPES" :key="taskType" class="block">
-                  <span class="mb-1 block text-[10px] uppercase tracking-wide text-dimmed">
+                  <SectionLabel as="span" class="mb-1 block">
                     {{ maxTaskTypeLabel(taskType) }}
-                  </span>
+                  </SectionLabel>
                   <UInput
                     v-model.number="draft.perType[taskType]"
                     type="number"
@@ -431,13 +432,13 @@ async function save() {
               <h3 class="text-sm font-semibold text-default">
                 {{ t('settings.workspaceSettings.inputGate.heading') }}
               </h3>
-              <p class="text-[11px] text-muted">
+              <p class="text-2xs text-muted">
                 {{ t('settings.workspaceSettings.inputGate.body') }}
               </p>
               <label class="block w-64">
-                <span class="mb-1 block text-[10px] uppercase tracking-wide text-dimmed">{{
+                <SectionLabel as="span" class="mb-1 block">{{
                   t('settings.workspaceSettings.inputGate.mode')
-                }}</span>
+                }}</SectionLabel>
                 <USelect
                   v-model="draft.inputGateMode"
                   :items="INPUT_GATE_MODES"
@@ -454,13 +455,13 @@ async function save() {
               <h3 class="text-sm font-semibold text-default">
                 {{ t('settings.workspaceSettings.reviewFriction.heading') }}
               </h3>
-              <p class="text-[11px] text-muted">
+              <p class="text-2xs text-muted">
                 {{ t('settings.workspaceSettings.reviewFriction.body') }}
               </p>
               <label class="block w-64">
-                <span class="mb-1 block text-[10px] uppercase tracking-wide text-dimmed">{{
+                <SectionLabel as="span" class="mb-1 block">{{
                   t('settings.workspaceSettings.reviewFriction.mode')
-                }}</span>
+                }}</SectionLabel>
                 <USelect
                   v-model="draft.reviewFrictionMode"
                   :items="REVIEW_FRICTION_MODES"
@@ -471,9 +472,9 @@ async function save() {
               </label>
 
               <label v-if="draft.reviewFrictionMode !== 'off'" class="block w-48">
-                <span class="mb-1 block text-[10px] uppercase tracking-wide text-dimmed">
+                <SectionLabel as="span" class="mb-1 block">
                   {{ t('settings.workspaceSettings.reviewFriction.warnCount') }}
-                </span>
+                </SectionLabel>
                 <UInput
                   v-model.number="draft.reviewFrictionWarnCount"
                   type="number"
@@ -483,19 +484,19 @@ async function save() {
               </label>
 
               <div v-if="draft.reviewFrictionMode === 'enforce'" class="space-y-2">
-                <p class="text-[11px] text-muted">
+                <p class="text-2xs text-muted">
                   {{ t('settings.workspaceSettings.reviewFriction.enforceHint') }}
                 </p>
                 <label class="flex items-center gap-2">
                   <USwitch v-model="draft.reviewFrictionBlockCountEnabled" size="sm" />
-                  <span class="text-[13px] text-toned">{{
+                  <span class="text-sm text-toned">{{
                     t('settings.workspaceSettings.reviewFriction.blockCountToggle')
                   }}</span>
                 </label>
                 <label v-if="draft.reviewFrictionBlockCountEnabled" class="block w-48">
-                  <span class="mb-1 block text-[10px] uppercase tracking-wide text-dimmed">
+                  <SectionLabel as="span" class="mb-1 block">
                     {{ t('settings.workspaceSettings.reviewFriction.blockCount') }}
-                  </span>
+                  </SectionLabel>
                   <UInput
                     v-model.number="draft.reviewFrictionBlockCount"
                     type="number"
@@ -505,14 +506,14 @@ async function save() {
                 </label>
                 <label class="flex items-center gap-2">
                   <USwitch v-model="draft.reviewFrictionBlockStuckEnabled" size="sm" />
-                  <span class="text-[13px] text-toned">{{
+                  <span class="text-sm text-toned">{{
                     t('settings.workspaceSettings.reviewFriction.blockStuckToggle')
                   }}</span>
                 </label>
                 <label v-if="draft.reviewFrictionBlockStuckEnabled" class="block w-48">
-                  <span class="mb-1 block text-[10px] uppercase tracking-wide text-dimmed">
+                  <SectionLabel as="span" class="mb-1 block">
                     {{ t('settings.workspaceSettings.reviewFriction.blockStuckMinutes') }}
-                  </span>
+                  </SectionLabel>
                   <UInput
                     v-model.number="draft.reviewFrictionBlockStuckMinutes"
                     type="number"
@@ -528,7 +529,7 @@ async function save() {
               <h3 class="text-sm font-semibold text-default">
                 {{ t('settings.workspaceSettings.observability.heading') }}
               </h3>
-              <p class="text-[11px] text-muted">
+              <p class="text-2xs text-muted">
                 {{ t('settings.workspaceSettings.observability.body') }}
               </p>
               <label class="flex items-center gap-2">
@@ -544,7 +545,7 @@ async function save() {
               <h3 class="text-sm font-semibold text-default">
                 {{ t('settings.workspaceSettings.prReport.heading') }}
               </h3>
-              <p class="text-[11px] text-muted">
+              <p class="text-2xs text-muted">
                 {{ t('settings.workspaceSettings.prReport.body') }}
               </p>
               <label class="flex items-center gap-2">
@@ -560,13 +561,13 @@ async function save() {
               <h3 class="text-sm font-semibold text-default">
                 {{ t('settings.workspaceSettings.retention.heading') }}
               </h3>
-              <p class="text-[11px] text-muted">
+              <p class="text-2xs text-muted">
                 {{ t('settings.workspaceSettings.retention.body') }}
               </p>
               <label class="block w-48">
-                <span class="mb-1 block text-[10px] uppercase tracking-wide text-dimmed">
+                <SectionLabel as="span" class="mb-1 block">
                   {{ t('settings.workspaceSettings.retention.days') }}
-                </span>
+                </SectionLabel>
                 <UInput
                   v-model.number="draft.artifactRetentionDays"
                   type="number"
@@ -582,13 +583,13 @@ async function save() {
               <h3 class="text-sm font-semibold text-default">
                 {{ t('settings.workspaceSettings.doneLane.heading') }}
               </h3>
-              <p class="text-[11px] text-muted">
+              <p class="text-2xs text-muted">
                 {{ t('settings.workspaceSettings.doneLane.body') }}
               </p>
               <label class="block w-48">
-                <span class="mb-1 block text-[10px] uppercase tracking-wide text-dimmed">
+                <SectionLabel as="span" class="mb-1 block">
                   {{ t('settings.workspaceSettings.doneLane.maxItems') }}
-                </span>
+                </SectionLabel>
                 <UInput
                   v-model.number="draft.doneLaneMaxItems"
                   type="number"
@@ -598,19 +599,19 @@ async function save() {
                   data-testid="done-lane-max-items"
                 />
               </label>
-              <p v-if="draft.doneLaneMaxItems === 0" class="text-[11px] text-dimmed">
+              <p v-if="draft.doneLaneMaxItems === 0" class="text-2xs text-dimmed">
                 {{ t('settings.workspaceSettings.doneLane.zeroHint') }}
               </p>
               <label class="flex items-center gap-2">
                 <UCheckbox v-model="draft.doneLaneRetentionEnabled" size="sm" />
-                <span class="text-[11px] text-toned">{{
+                <span class="text-2xs text-toned">{{
                   t('settings.workspaceSettings.doneLane.ageToggle')
                 }}</span>
               </label>
               <label v-if="draft.doneLaneRetentionEnabled" class="block w-48">
-                <span class="mb-1 block text-[10px] uppercase tracking-wide text-dimmed">
+                <SectionLabel as="span" class="mb-1 block">
                   {{ t('settings.workspaceSettings.doneLane.days') }}
-                </span>
+                </SectionLabel>
                 <UInput
                   v-model.number="draft.doneLaneRetentionDays"
                   type="number"
@@ -620,7 +621,7 @@ async function save() {
                   data-testid="done-lane-retention-days"
                 />
               </label>
-              <p class="text-[11px] text-dimmed">
+              <p class="text-2xs text-dimmed">
                 {{ t('settings.workspaceSettings.doneLane.hidesOnlyHint') }}
               </p>
             </section>
@@ -630,7 +631,7 @@ async function save() {
               <h3 class="text-sm font-semibold text-default">
                 {{ t('settings.workspaceSettings.runCredential.heading') }}
               </h3>
-              <p class="text-[11px] text-muted">
+              <p class="text-2xs text-muted">
                 {{ t('settings.workspaceSettings.runCredential.body') }}
               </p>
               <label class="flex items-center gap-2">
@@ -643,14 +644,14 @@ async function save() {
                   t('settings.workspaceSettings.runCredential.toggle')
                 }}</span>
               </label>
-              <p v-if="!draft.allowInitiatorPat" class="text-[11px] text-app-warning-300">
+              <p v-if="!draft.allowInitiatorPat" class="text-2xs text-app-warning-300">
                 {{ t('settings.workspaceSettings.runCredential.offHint') }}
               </p>
               <!-- Stated rather than read: the account floor lives behind an ACCOUNT-admin
                    endpoint, which a workspace admin may not hold, so probing it here would 403
                    for exactly the people this note is for. A static line sets the expectation
                    without pretending to report a value we cannot see. -->
-              <p v-if="draft.allowInitiatorPat" class="text-[11px] text-dimmed">
+              <p v-if="draft.allowInitiatorPat" class="text-2xs text-dimmed">
                 {{ t('settings.workspaceSettings.runCredential.accountFloorNote') }}
               </p>
             </section>
@@ -662,7 +663,7 @@ async function save() {
               <h3 class="text-sm font-semibold text-default">
                 {{ t('settings.workspaceSettings.bugFishing.heading') }}
               </h3>
-              <p class="text-[11px] text-muted">
+              <p class="text-2xs text-muted">
                 {{ t('settings.workspaceSettings.bugFishing.body') }}
               </p>
               <USelectMenu
@@ -680,7 +681,7 @@ async function save() {
               <h3 class="text-sm font-semibold text-default">
                 {{ t('settings.workspaceSettings.kaizen.heading') }}
               </h3>
-              <p class="text-[11px] text-muted">
+              <p class="text-2xs text-muted">
                 {{ t('settings.workspaceSettings.kaizen.body') }}
               </p>
               <label class="flex items-center gap-2">

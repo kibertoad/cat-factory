@@ -10,6 +10,7 @@
 import { computed } from 'vue'
 import { autoMergeShare, frictionlessShare, RULEABLE_CHANGE_CLASSES } from '@cat-factory/contracts'
 import type { MergeClassRule, MergeClassRules } from '~/types/merge'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const props = defineProps<{
   /** The preset's current rules; an absent class means "use the score ceilings". */
@@ -83,13 +84,13 @@ function setRule(changeClass: (typeof RULEABLE_CHANGE_CLASSES)[number], rule: Me
 <template>
   <div data-testid="merge-class-rules" class="space-y-2">
     <div>
-      <span class="block text-[10px] uppercase tracking-wide text-dimmed">
+      <SectionLabel as="span" class="block">
         {{ t('settings.riskPolicy.classRules.heading') }}
-      </span>
-      <p class="mt-0.5 text-[11px] leading-snug text-dimmed">
+      </SectionLabel>
+      <p class="mt-0.5 text-2xs leading-snug text-dimmed">
         {{ t('settings.riskPolicy.classRules.help') }}
       </p>
-      <p v-if="!autoMergeEnabled" class="mt-1 text-[11px] leading-snug text-app-warning-400/90">
+      <p v-if="!autoMergeEnabled" class="mt-1 text-2xs leading-snug text-app-warning-400/90">
         {{ t('settings.riskPolicy.classRules.autoMergeOffWarning') }}
       </p>
     </div>
@@ -111,7 +112,7 @@ function setRule(changeClass: (typeof RULEABLE_CHANGE_CLASSES)[number], rule: Me
         :data-testid="`merge-class-rule-${row.changeClass}`"
         @update:model-value="setRule(row.changeClass, $event as MergeClassRule)"
       />
-      <span class="text-[11px] text-dimmed" :data-testid="`merge-class-record-${row.changeClass}`">
+      <span class="text-2xs text-dimmed" :data-testid="`merge-class-record-${row.changeClass}`">
         <template v-if="row.merged === 0">
           {{ t('settings.riskPolicy.classRules.noData') }}
         </template>

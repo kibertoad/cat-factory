@@ -288,7 +288,7 @@ async function remove(stack: SharedStack) {
                 {{ statusLabel(stack.status) }}
               </UBadge>
             </div>
-            <p class="truncate text-[11px] text-dimmed">{{ stack.cloneUrl }}</p>
+            <p class="truncate text-2xs text-dimmed">{{ stack.cloneUrl }}</p>
             <div v-if="stack.managedNetworks.length" class="flex flex-wrap gap-1">
               <UBadge
                 v-for="net in stack.managedNetworks"
@@ -347,7 +347,7 @@ async function remove(stack: SharedStack) {
             />
           </div>
         </div>
-        <p v-if="stack.lastError" class="text-[11px] text-app-error-400">{{ stack.lastError }}</p>
+        <p v-if="stack.lastError" class="text-2xs text-app-error-400">{{ stack.lastError }}</p>
       </div>
     </section>
 
@@ -407,12 +407,12 @@ async function remove(stack: SharedStack) {
         >
           {{ t('settings.sharedStacks.detect.button') }}
         </UButton>
-        <span class="text-[11px] text-dimmed">{{ t('settings.sharedStacks.detect.hint') }}</span>
+        <span class="text-2xs text-dimmed">{{ t('settings.sharedStacks.detect.hint') }}</span>
       </div>
 
       <p
         v-if="detectedEnvFiles.length"
-        class="text-[11px] text-dimmed"
+        class="text-2xs text-dimmed"
         data-testid="shared-stack-env-files"
       >
         {{ t('settings.sharedStacks.detect.envFiles') }}
@@ -428,7 +428,7 @@ async function remove(stack: SharedStack) {
           <li
             v-for="(label, index) in layerLabels"
             :key="index"
-            class="font-mono text-[11px] text-dimmed"
+            class="font-mono text-2xs text-dimmed"
           >
             {{ label }}
           </li>

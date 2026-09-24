@@ -4,6 +4,7 @@ import { onKeyStroke } from '@vueuse/core'
 import type { PlatformObservabilityWindow } from '~/types/execution'
 import { formatMs } from '~/utils/observability'
 import { FAILURE_KIND_KEYS, isAgentFailureKind } from '~/utils/failureKinds'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 // Deployment-level (platform-operator) observability dashboard: the aggregate health of the
 // active account's runs — outcome totals + success rate, a time-bucketed outcome trend, the
@@ -124,7 +125,7 @@ watch(
             <p v-if="accountName" class="truncate text-xs text-dimmed">{{ accountName }}</p>
           </div>
           <div class="ms-auto flex items-center gap-1.5">
-            <div class="me-1 flex rounded-lg border border-default p-0.5 text-[12px]">
+            <div class="me-1 flex rounded-lg border border-default p-0.5 text-xs">
               <button
                 v-for="opt in WINDOWS"
                 :key="opt.value"
@@ -221,9 +222,9 @@ watch(
 
             <!-- Outcome summary tiles -->
             <section>
-              <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-dimmed">
+              <SectionLabel as="h2" class="mb-2">
                 {{ t('platformObservability.outcomes.title') }}
-              </h2>
+              </SectionLabel>
               <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <div class="rounded-lg border border-default bg-default/40 p-3">
                   <p class="text-2xl font-semibold text-highlighted">
@@ -269,9 +270,9 @@ watch(
 
             <!-- Outcome trend sparkline -->
             <section>
-              <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-dimmed">
+              <SectionLabel as="h2" class="mb-2">
                 {{ t('platformObservability.trend.title') }}
-              </h2>
+              </SectionLabel>
               <div class="rounded-lg border border-default bg-default/40 p-4">
                 <div v-if="view.outcomes.total === 0" class="py-6 text-center text-xs text-dimmed">
                   {{ t('platformObservability.trend.empty') }}
@@ -297,7 +298,7 @@ watch(
                     />
                   </div>
                 </div>
-                <div class="mt-2 flex items-center gap-4 text-[11px] text-dimmed">
+                <div class="mt-2 flex items-center gap-4 text-2xs text-dimmed">
                   <span class="flex items-center gap-1"
                     ><span class="h-2 w-2 rounded-sm bg-app-success-500/80" />{{
                       t('platformObservability.trend.done')
@@ -319,15 +320,15 @@ watch(
 
             <!-- Gate / CI-fixer attempt statistics -->
             <section>
-              <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-dimmed">
+              <SectionLabel as="h2" class="mb-2">
                 {{ t('platformObservability.gates.title') }}
-              </h2>
+              </SectionLabel>
               <div class="overflow-x-auto rounded-lg border border-default bg-default/40 p-4">
                 <p v-if="!view.gates.length" class="py-4 text-center text-xs text-dimmed">
                   {{ t('platformObservability.gates.empty') }}
                 </p>
                 <table v-else class="w-full text-left text-xs" data-testid="operator-gates">
-                  <thead class="text-[11px] uppercase tracking-wide text-dimmed">
+                  <thead class="text-2xs uppercase tracking-wide text-dimmed">
                     <tr>
                       <th class="pb-2 pe-3 font-medium">
                         {{ t('platformObservability.gates.gate') }}
@@ -382,7 +383,7 @@ watch(
                     </tr>
                   </tbody>
                 </table>
-                <p class="mt-3 text-[11px] leading-relaxed text-dimmed">
+                <p class="mt-3 text-2xs leading-relaxed text-dimmed">
                   {{ t('platformObservability.gates.hint') }}
                 </p>
               </div>
@@ -391,9 +392,9 @@ watch(
             <div class="grid gap-6 md:grid-cols-2">
               <!-- Failure taxonomy -->
               <section>
-                <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-dimmed">
+                <SectionLabel as="h2" class="mb-2">
                   {{ t('platformObservability.failures.title') }}
-                </h2>
+                </SectionLabel>
                 <div class="rounded-lg border border-default bg-default/40 p-4">
                   <div v-if="!view.failures.length" class="py-4 text-center text-xs text-dimmed">
                     {{ t('platformObservability.failures.empty') }}
@@ -418,16 +419,16 @@ watch(
               <!-- Live depth + durations -->
               <section class="flex flex-col gap-4">
                 <div>
-                  <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-dimmed">
+                  <SectionLabel as="h2" class="mb-2">
                     {{ t('platformObservability.live.title') }}
-                  </h2>
+                  </SectionLabel>
                   <div
                     class="grid grid-cols-4 gap-2 rounded-lg border border-default bg-default/40 p-3 text-center"
                     data-testid="operator-live"
                   >
                     <div>
                       <p class="text-lg font-semibold text-app-info-400">{{ view.live.running }}</p>
-                      <p class="text-[11px] text-dimmed">
+                      <p class="text-2xs text-dimmed">
                         {{ t('platformObservability.outcomes.running') }}
                       </p>
                     </div>
@@ -435,28 +436,28 @@ watch(
                       <p class="text-lg font-semibold text-app-warning-400">
                         {{ view.live.blocked }}
                       </p>
-                      <p class="text-[11px] text-dimmed">
+                      <p class="text-2xs text-dimmed">
                         {{ t('platformObservability.outcomes.blocked') }}
                       </p>
                     </div>
                     <div>
                       <p class="text-lg font-semibold text-toned">{{ view.live.paused }}</p>
-                      <p class="text-[11px] text-dimmed">
+                      <p class="text-2xs text-dimmed">
                         {{ t('platformObservability.outcomes.paused') }}
                       </p>
                     </div>
                     <div>
                       <p class="text-lg font-semibold text-toned">{{ view.live.pending }}</p>
-                      <p class="text-[11px] text-dimmed">
+                      <p class="text-2xs text-dimmed">
                         {{ t('platformObservability.outcomes.pending') }}
                       </p>
                     </div>
                   </div>
                 </div>
                 <div>
-                  <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-dimmed">
+                  <SectionLabel as="h2" class="mb-2">
                     {{ t('platformObservability.durations.title') }}
-                  </h2>
+                  </SectionLabel>
                   <div class="rounded-lg border border-default bg-default/40 p-3 text-sm">
                     <div
                       v-if="view.durations.count === 0"
@@ -470,7 +471,7 @@ watch(
                       data-testid="operator-durations"
                     >
                       <div>
-                        <dt class="text-[11px] text-dimmed">
+                        <dt class="text-2xs text-dimmed">
                           {{ t('platformObservability.durations.avg') }}
                         </dt>
                         <dd class="font-semibold text-highlighted">
@@ -478,7 +479,7 @@ watch(
                         </dd>
                       </div>
                       <div>
-                        <dt class="text-[11px] text-dimmed">
+                        <dt class="text-2xs text-dimmed">
                           {{ t('platformObservability.durations.min') }}
                         </dt>
                         <dd class="font-semibold text-toned">
@@ -486,7 +487,7 @@ watch(
                         </dd>
                       </div>
                       <div>
-                        <dt class="text-[11px] text-dimmed">
+                        <dt class="text-2xs text-dimmed">
                           {{ t('platformObservability.durations.max') }}
                         </dt>
                         <dd class="font-semibold text-toned">
@@ -494,7 +495,7 @@ watch(
                         </dd>
                       </div>
                       <div>
-                        <dt class="text-[11px] text-dimmed">
+                        <dt class="text-2xs text-dimmed">
                           {{ t('platformObservability.durations.p50') }}
                         </dt>
                         <dd class="font-semibold text-toned" data-testid="operator-duration-p50">
@@ -502,7 +503,7 @@ watch(
                         </dd>
                       </div>
                       <div>
-                        <dt class="text-[11px] text-dimmed">
+                        <dt class="text-2xs text-dimmed">
                           {{ t('platformObservability.durations.p90') }}
                         </dt>
                         <dd class="font-semibold text-toned" data-testid="operator-duration-p90">
@@ -510,7 +511,7 @@ watch(
                         </dd>
                       </div>
                       <div>
-                        <dt class="text-[11px] text-dimmed">
+                        <dt class="text-2xs text-dimmed">
                           {{ t('platformObservability.durations.p99') }}
                         </dt>
                         <dd class="font-semibold text-toned" data-testid="operator-duration-p99">

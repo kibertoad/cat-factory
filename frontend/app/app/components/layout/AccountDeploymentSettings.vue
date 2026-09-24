@@ -435,7 +435,7 @@ async function clearWeb() {
   <div v-if="store.available !== false" class="space-y-6">
     <div>
       <h3 class="mb-1 font-semibold text-highlighted">{{ t('layout.accountDeployment.title') }}</h3>
-      <p class="text-[11px] text-muted">
+      <p class="text-2xs text-muted">
         {{ t('layout.accountDeployment.intro') }}
       </p>
     </div>
@@ -458,7 +458,7 @@ async function clearWeb() {
           }}
         </UBadge>
       </div>
-      <p class="text-[11px] text-muted">
+      <p class="text-2xs text-muted">
         {{ t('layout.accountDeployment.slack.description') }}
       </p>
       <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -519,7 +519,7 @@ async function clearWeb() {
           }}
         </UBadge>
       </div>
-      <p class="text-[11px] text-muted">
+      <p class="text-2xs text-muted">
         {{ t('layout.accountDeployment.linear.description') }}
       </p>
       <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -580,7 +580,7 @@ async function clearWeb() {
           }}
         </UBadge>
       </div>
-      <p class="text-[11px] text-muted">
+      <p class="text-2xs text-muted">
         {{ t('layout.accountDeployment.figma.description') }}
       </p>
       <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -637,7 +637,7 @@ async function clearWeb() {
           }}
         </UBadge>
       </div>
-      <p class="text-[11px] text-muted">
+      <p class="text-2xs text-muted">
         {{ t('layout.accountDeployment.web.description') }}
       </p>
       <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -706,16 +706,16 @@ async function clearWeb() {
           }}
         </UBadge>
       </div>
-      <p class="text-[11px] text-muted">
+      <p class="text-2xs text-muted">
         {{ t('layout.accountDeployment.contentStorage.description') }}
       </p>
       <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <USelect v-model="csBackend" :items="backendItems" value-key="value" size="sm" />
       </div>
-      <p v-if="selectedCustomStore?.summary" class="text-[11px] text-muted">
+      <p v-if="selectedCustomStore?.summary" class="text-2xs text-muted">
         {{ selectedCustomStore.summary }}
       </p>
-      <p v-if="unregisteredStoreId" class="text-[11px] text-app-warning-400">
+      <p v-if="unregisteredStoreId" class="text-2xs text-app-warning-400">
         {{
           t('layout.accountDeployment.contentStorage.unregisteredStoreWarning', {
             store: unregisteredStoreId,
@@ -762,7 +762,7 @@ async function clearWeb() {
           size="sm"
         />
         <div class="flex items-center gap-2">
-          <span class="text-[11px] text-muted">
+          <span class="text-2xs text-muted">
             {{ t('layout.accountDeployment.contentStorage.accessKeys') }}
           </span>
           <UBadge
@@ -789,7 +789,7 @@ async function clearWeb() {
             size="sm"
           />
         </div>
-        <p class="text-[11px] text-muted">
+        <p class="text-2xs text-muted">
           {{ t('layout.accountDeployment.contentStorage.keysHint') }}
         </p>
       </template>

@@ -19,6 +19,7 @@ import type {
   ReviewItemSeverity,
   ReviewItemStatus,
 } from '~/types/brainstorm'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const board = useBoardStore()
 const brainstorm = useBrainstormStore()
@@ -384,9 +385,9 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                     v-if="item.reply"
                     class="mt-2 max-w-3xl rounded-md border-s-2 border-muted bg-app-950/40 px-3 py-1.5 text-sm text-toned"
                   >
-                    <span class="text-[10px] uppercase tracking-wide text-dimmed">
+                    <SectionLabel as="span">
                       {{ t('brainstorm.yourChoice') }}
-                    </span>
+                    </SectionLabel>
                     <p class="whitespace-pre-line">{{ item.reply }}</p>
                   </div>
 
@@ -454,7 +455,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
 
           <!-- converged document: the standard-format direction -->
           <section v-if="outline" class="mt-6 border-t border-default pt-5">
-            <div class="mb-3 flex items-center gap-1.5 text-[11px] text-app-success-400">
+            <div class="mb-3 flex items-center gap-1.5 text-2xs text-app-success-400">
               <UIcon name="i-lucide-file-check-2" class="h-3.5 w-3.5" />
               <span class="font-semibold uppercase tracking-wide">
                 {{ incorporated ? docNoun : t('brainstorm.docDraft', { doc: docNoun }) }}
@@ -482,7 +483,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
               </button>
               <div
                 v-show="!s.title || !collapsed[s.id]"
-                class="reader-prose mt-1 ps-5.5 text-[13px] leading-relaxed text-toned"
+                class="reader-prose mt-1 ps-5.5 text-sm leading-relaxed text-toned"
                 v-html="s.bodyHtml"
               />
             </div>
@@ -541,7 +542,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
             >
               {{ t('brainstorm.incorporateChoices') }}
             </UButton>
-            <p class="text-[11px] leading-relaxed text-dimmed">
+            <p class="text-2xs leading-relaxed text-dimmed">
               <template v-if="canProceed">
                 {{ t('brainstorm.hint.allDismissed') }}
               </template>
@@ -603,14 +604,14 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                 {{ t('brainstorm.redoWithDirection') }}
               </UButton>
             </div>
-            <p class="text-[11px] leading-relaxed text-dimmed">
+            <p class="text-2xs leading-relaxed text-dimmed">
               {{ t('brainstorm.mergedHint') }}
             </p>
           </div>
 
           <div
             v-if="session && incorporated"
-            class="border-t border-default pt-4 text-[11px] leading-relaxed text-dimmed"
+            class="border-t border-default pt-4 text-2xs leading-relaxed text-dimmed"
           >
             {{ t('brainstorm.incorporatedFooter') }}
           </div>

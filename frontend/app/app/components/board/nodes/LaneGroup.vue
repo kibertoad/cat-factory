@@ -4,6 +4,7 @@ import { MODULE_META, taskTypeMeta } from '~/utils/catalog'
 import { LANE_GEOMETRY } from '~/utils/laneGeometry'
 import type { LaneGroup, LaneGroupKey } from '~/utils/laneSort'
 import { LANE_REASON_LABEL_KEYS, type LaneReason } from '~/utils/swimlanes'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 /**
  * One labelled run of cards inside a lane.
@@ -73,14 +74,11 @@ const icon = computed(() => {
   <div :data-drop-zone="dropZone ?? undefined" class="space-y-1.5">
     <!-- `none` grouping renders no header: one unlabelled group IS the flat lane, and a header
          saying "all of them" would be a row of chrome carrying no information. -->
-    <div
-      v-if="groupKey !== 'none'"
-      class="flex items-center gap-1 px-0.5 text-[10px] uppercase tracking-wide text-dimmed"
-    >
+    <SectionLabel v-if="groupKey !== 'none'" class="flex items-center gap-1 px-0.5">
       <UIcon v-if="icon" :name="icon" class="h-3 w-3 shrink-0" />
       <span class="truncate" :title="label">{{ label }}</span>
       <span class="ms-auto shrink-0 tabular-nums">{{ group.entries.length }}</span>
-    </div>
+    </SectionLabel>
     <div :class="layout === 'grid' ? 'flex flex-wrap items-start gap-2' : 'space-y-1.5'">
       <LaneTask
         v-for="entry in group.entries"

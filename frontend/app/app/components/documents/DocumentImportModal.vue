@@ -2,6 +2,7 @@
 import type { DocumentSourceKind } from '~/types/domain'
 import DocumentSyncState from '~/components/documents/DocumentSyncState.vue'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 // Import pages from a connected document source and pick one to expand into
 // board structure. A source selector lets the user choose which connected source
@@ -125,9 +126,9 @@ function preview(externalId: string) {
         </div>
 
         <div v-if="sourceDocs.length" class="space-y-2">
-          <h3 class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+          <SectionLabel as="h3">
             {{ t('documents.import.importedHeading') }}
-          </h3>
+          </SectionLabel>
           <div
             v-for="doc in sourceDocs"
             :key="`${doc.source}:${doc.externalId}`"

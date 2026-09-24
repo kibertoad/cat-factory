@@ -39,6 +39,7 @@ import {
   PanelsResultWindowShell as ResultWindowShell,
   PanelsStepRunMeta as StepRunMeta,
   CommonMarkdownProse as MarkdownProse,
+  CommonSectionLabel as SectionLabel,
 } from '#components'
 
 /** The structured assessment the backend `security-auditor` kind returns as `result.custom`
@@ -116,7 +117,7 @@ const headerTitle = computed(() =>
     <template #header-extras>
       <span
         v-if="riskLabel"
-        class="rounded-md bg-app-error-500/15 px-2 py-0.5 text-[11px] font-semibold text-app-error-300"
+        class="rounded-md bg-app-error-500/15 px-2 py-0.5 text-2xs font-semibold text-app-error-300"
         data-testid="acme-security-risk"
       >
         {{ t('acme.securityReport.riskBadge', { risk: riskLabel }) }}
@@ -129,18 +130,18 @@ const headerTitle = computed(() =>
         <MarkdownProse
           v-if="assessment?.summary"
           :text="assessment.summary"
-          class="mb-4 text-[13px] leading-relaxed text-toned"
+          class="mb-4 text-sm leading-relaxed text-toned"
         />
         <MarkdownProse
           v-else-if="step?.output"
           :text="step.output"
-          class="mb-4 text-[13px] leading-relaxed text-toned"
+          class="mb-4 text-sm leading-relaxed text-toned"
         />
 
         <template v-if="findings.length">
-          <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-dimmed">
+          <SectionLabel as="h3" class="mb-2">
             {{ t('acme.securityReport.findingsHeading') }}
-          </h3>
+          </SectionLabel>
           <ul class="flex flex-col gap-2">
             <li
               v-for="(finding, i) in findings"
@@ -149,18 +150,18 @@ const headerTitle = computed(() =>
               data-testid="acme-security-finding"
             >
               <div class="flex items-center gap-2">
-                <span class="text-[13px] font-medium text-default">
+                <span class="text-sm font-medium text-default">
                   {{ finding.title ?? t('acme.securityReport.untitledFinding') }}
                 </span>
                 <span
                   v-if="finding.severity"
-                  class="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase"
+                  class="rounded px-1.5 py-0.5 text-3xs font-semibold uppercase"
                   :class="SEVERITY_CLASS[finding.severity]"
                 >
                   {{ t(`acme.securityReport.severity.${finding.severity}`) }}
                 </span>
               </div>
-              <p v-if="finding.detail" class="mt-1 text-[12px] leading-relaxed text-muted">
+              <p v-if="finding.detail" class="mt-1 text-xs leading-relaxed text-muted">
                 {{ finding.detail }}
               </p>
             </li>

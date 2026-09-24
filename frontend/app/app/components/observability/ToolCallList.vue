@@ -5,6 +5,7 @@ import type { ToolOutcomeFilter } from '~/utils/observability'
 import { filterToolCallsByOutcome, formatMs } from '~/utils/observability'
 import { agentKindMeta } from '~/utils/catalog'
 import OutcomeFilterChips from '~/components/observability/OutcomeFilterChips.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 // The tool-call TRAJECTORY drill-down: what the run's agents DID, oldest first, in the order
 // they did it. The sibling of the model-call list, and the one that holds the failures no LLM
@@ -142,10 +143,10 @@ function prettyArgs(raw: string): string {
   <div class="space-y-4">
     <div class="flex flex-wrap items-center justify-between gap-2">
       <div>
-        <h2 class="text-[11px] uppercase tracking-wide text-dimmed">
+        <SectionLabel as="h2">
           {{ t('observability.toolCalls.title') }}
-        </h2>
-        <p class="text-[11px] text-app-600">{{ t('observability.toolCalls.subtitle') }}</p>
+        </SectionLabel>
+        <p class="text-2xs text-app-600">{{ t('observability.toolCalls.subtitle') }}</p>
       </div>
       <OutcomeFilterChips v-model="filter" :options="filterOptions" />
     </div>
@@ -198,7 +199,7 @@ function prettyArgs(raw: string): string {
            implies has to explain itself here. -->
       <p
         v-if="boundedNotice"
-        class="rounded-lg border border-dashed border-app-warning-900/50 px-3 py-2 text-[11px] text-app-warning-300/90"
+        class="rounded-lg border border-dashed border-app-warning-900/50 px-3 py-2 text-2xs text-app-warning-300/90"
       >
         {{ boundedNotice }}
       </p>
@@ -225,8 +226,8 @@ function prettyArgs(raw: string): string {
               :style="{ color: agentMeta(call.agentKind).color }"
               :title="agentMeta(call.agentKind).label"
             />
-            <span class="font-mono text-[13px] text-default">{{ call.tool }}</span>
-            <div class="ms-auto flex items-center gap-2.5 text-[11px] tabular-nums text-muted">
+            <span class="font-mono text-sm text-default">{{ call.tool }}</span>
+            <div class="ms-auto flex items-center gap-2.5 text-2xs tabular-nums text-muted">
               <span :title="t('observability.toolCalls.durationHint')">
                 {{ formatMs(Math.max(0, call.endedAt - call.startedAt)) }}
               </span>
@@ -238,20 +239,18 @@ function prettyArgs(raw: string): string {
           </button>
 
           <div v-if="expanded[call.id]" class="border-t border-default px-4 py-3 space-y-3">
-            <div class="flex flex-wrap gap-x-5 gap-y-1 text-[11px] text-dimmed">
+            <div class="flex flex-wrap gap-x-5 gap-y-1 text-2xs text-dimmed">
               <span>{{ t('observability.toolCalls.dispatch', { jobId: call.jobId }) }}</span>
               <span>{{ t('observability.toolCalls.seq', { seq: call.seq }) }}</span>
             </div>
             <!-- `withheld` is not an empty body: nothing was captured, so an empty `args` here
                must not read as a tool that took none. -->
-            <p v-if="call.bodies !== 'stored'" class="text-[12px] italic text-dimmed">
+            <p v-if="call.bodies !== 'stored'" class="text-xs italic text-dimmed">
               {{ t('observability.toolCalls.bodiesWithheld') }}
             </p>
             <template v-else>
               <div>
-                <div
-                  class="mb-1 flex items-center gap-2 text-[11px] uppercase tracking-wide text-dimmed"
-                >
+                <SectionLabel class="mb-1 flex items-center gap-2">
                   <span>{{ t('observability.toolCalls.arguments') }}</span>
                   <span
                     v-if="call.argsDropped > 0"
@@ -259,15 +258,13 @@ function prettyArgs(raw: string): string {
                   >
                     {{ t('observability.toolCalls.dropped', { chars: call.argsDropped }) }}
                   </span>
-                </div>
+                </SectionLabel>
                 <pre
-                  class="max-h-60 overflow-auto rounded-lg bg-app-950/70 p-3 text-[11px] leading-relaxed text-toned"
+                  class="max-h-60 overflow-auto rounded-lg bg-app-950/70 p-3 text-2xs leading-relaxed text-toned"
                   >{{ call.args ? prettyArgs(call.args) : '—' }}</pre>
               </div>
               <div>
-                <div
-                  class="mb-1 flex items-center gap-2 text-[11px] uppercase tracking-wide text-dimmed"
-                >
+                <SectionLabel class="mb-1 flex items-center gap-2">
                   <span>{{ t('observability.toolCalls.result') }}</span>
                   <span
                     v-if="call.resultDropped > 0"
@@ -275,9 +272,9 @@ function prettyArgs(raw: string): string {
                   >
                     {{ t('observability.toolCalls.dropped', { chars: call.resultDropped }) }}
                   </span>
-                </div>
+                </SectionLabel>
                 <pre
-                  class="max-h-60 overflow-auto rounded-lg bg-app-950/70 p-3 text-[11px] leading-relaxed"
+                  class="max-h-60 overflow-auto rounded-lg bg-app-950/70 p-3 text-2xs leading-relaxed"
                   :class="call.ok ? 'text-toned' : 'text-app-error-300'"
                   >{{ call.result || '—' }}</pre>
               </div>

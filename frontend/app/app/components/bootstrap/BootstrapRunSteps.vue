@@ -34,7 +34,7 @@ function stateLabel(state: BootstrapStepState): string {
     <li
       v-for="step in steps"
       :key="step.id"
-      class="flex items-start gap-1.5 text-[11px]"
+      class="flex items-start gap-1.5 text-2xs"
       :data-step="step.id"
       :data-state="step.state"
     >

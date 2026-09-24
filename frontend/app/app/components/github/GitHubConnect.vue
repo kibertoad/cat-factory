@@ -6,6 +6,8 @@
 // successful connect the github store flips `connected`, which the host surfaces
 // react to. Shared by the GitHub panel and the bootstrap modal so the connect
 // flow lives in one place.
+import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const { t } = useI18n()
 const github = useGitHubStore()
 const toast = useToast()
@@ -73,9 +75,9 @@ async function connectManually() {
     <!-- discovered installations: pick one the App is already on -->
     <section class="space-y-2">
       <div class="flex items-center justify-between">
-        <span class="text-xs font-medium uppercase tracking-wide text-dimmed">
+        <SectionLabel as="span">
           {{ t('github.connect.yourInstallations') }}
-        </span>
+        </SectionLabel>
         <UButton
           size="xs"
           color="neutral"
@@ -118,7 +120,7 @@ async function connectManually() {
           <UIcon v-else name="i-lucide-github" class="h-4 w-4 text-muted" />
           <div class="min-w-0">
             <div class="truncate text-sm text-default">{{ inst.accountLogin }}</div>
-            <div class="text-[11px] text-dimmed">
+            <div class="text-2xs text-dimmed">
               {{
                 t('github.connect.installationMeta', {
                   targetType: inst.targetType,

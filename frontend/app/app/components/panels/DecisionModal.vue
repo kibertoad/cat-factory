@@ -93,7 +93,7 @@ async function choose(option: string) {
             {{ opt }}
           </UButton>
         </div>
-        <p class="text-[11px] text-dimmed">
+        <p class="text-2xs text-dimmed">
           {{ t('panels.decision.visualizationHint') }}
         </p>
       </div>

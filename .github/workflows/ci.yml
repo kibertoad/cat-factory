@@ -509,6 +509,14 @@ jobs:
       - name: Guard SPA theme aliases
         run: node scripts/check-frontend-palette.mjs
 
+      # Bans font-size literals (`text-[11px]`) in the SPA: a theme document's `fontSize` is a root
+      # `font-size`, so Tailwind's rem steps follow it and a px literal does not (#2248). The SPA
+      # carried 1653 of them, which is why raising the font size grew Nuxt UI's components and left
+      # the app's own text alone. Its fixtures run in the `node --test` step below. Pure node; no
+      # install.
+      - name: Guard SPA type scale
+        run: node scripts/check-frontend-type-scale.mjs
+
       # The bundled Nuxt UI skill (`backend/packages/agents/.../nuxt-ui/skill.generated.ts`) is
       # inlined from the vendored `.claude/skills/nuxt-ui/` tree so the platform's own coder agents
       # apply the same text a local Claude Code session does. This fails if the two have drifted, so

@@ -191,18 +191,18 @@ function stage() {
               <UIcon name="i-lucide-frame" class="h-4 w-4 text-primary" />
               <span class="truncate">{{ row.label }}</span>
             </div>
-            <p v-if="row.trimmed" class="text-[11px] text-muted">
+            <p v-if="row.trimmed" class="text-2xs text-muted">
               {{ t('documents.startFromDesign.trimmed') }}
             </p>
             <!-- Its own line, in amber: a trim resolves the same page, a drop widens ONE frame to
                  the whole design file, and the second is what a designer needs to see. -->
-            <p v-if="row.droppedScope" class="text-[11px] text-app-warning-300">
+            <p v-if="row.droppedScope" class="text-2xs text-app-warning-300">
               {{ t('documents.startFromDesign.widened', { scope: row.droppedScope }) }}
             </p>
-            <p v-if="row.unchecked && target" class="text-[11px] text-muted">
+            <p v-if="row.unchecked && target" class="text-2xs text-muted">
               {{ t('documents.startFromDesign.unchecked') }}
             </p>
-            <p v-else-if="row.unchecked" class="text-[11px] text-app-warning-300">
+            <p v-else-if="row.unchecked" class="text-2xs text-app-warning-300">
               {{ t('documents.startFromDesign.uncheckedAmbiguous') }}
             </p>
           </div>

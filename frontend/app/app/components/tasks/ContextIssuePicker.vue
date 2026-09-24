@@ -28,6 +28,7 @@ import {
   reconcileSource,
   sourceMenuItems,
 } from '~/utils/sourcePicker'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const props = defineProps<{
   /** contextKeys already staged by the caller, so they're filtered out / not re-offered. */
@@ -291,12 +292,9 @@ onMounted(() => {
          promises a choice that isn't there. `id` labels the trigger, whose own content is the
          tracker name rather than what that name means. -->
     <div class="flex items-center gap-1.5">
-      <span
-        :id="sourceLabelId"
-        class="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-dimmed"
-      >
+      <SectionLabel as="span" :id="sourceLabelId" class="shrink-0">
         {{ t('tasks.picker.sourceLabel') }}
-      </span>
+      </SectionLabel>
       <UDropdownMenu
         v-if="sourcePickable"
         :items="sourceMenu"
@@ -335,7 +333,7 @@ onMounted(() => {
       @keydown.enter="refRow && pickRef(refRow)"
     />
 
-    <p v-if="searchError" class="px-1 text-[11px] text-app-warning-400">
+    <p v-if="searchError" class="px-1 text-2xs text-app-warning-400">
       {{ searchError }}
     </p>
 

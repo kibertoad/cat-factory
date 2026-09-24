@@ -6,6 +6,7 @@
 // infraConfig store (`PUT|DELETE /environments/custom-types/:manifestId`).
 import { computed, reactive, ref } from 'vue'
 import type { CustomManifestType } from '@cat-factory/contracts'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const { t } = useI18n()
 const infra = useInfraConfigStore()
@@ -95,7 +96,7 @@ async function remove(type: CustomManifestType) {
       <h3 class="text-sm font-semibold text-default">
         {{ t('settings.infrastructure.customType.title') }}
       </h3>
-      <p class="text-[11px] text-dimmed">{{ t('settings.infrastructure.customType.hint') }}</p>
+      <p class="text-2xs text-dimmed">{{ t('settings.infrastructure.customType.hint') }}</p>
     </div>
 
     <!-- The catalog: registered (read-only) + workspace (editable). -->
@@ -107,7 +108,7 @@ async function remove(type: CustomManifestType) {
       >
         <div class="min-w-0">
           <div class="flex items-center gap-1.5">
-            <span class="truncate text-[13px] text-default">{{ type.label }}</span>
+            <span class="truncate text-sm text-default">{{ type.label }}</span>
             <UBadge
               :color="type.source === 'workspace' ? 'primary' : 'neutral'"
               variant="subtle"
@@ -116,8 +117,8 @@ async function remove(type: CustomManifestType) {
               {{ t(`settings.infrastructure.customType.source.${type.source}`) }}
             </UBadge>
           </div>
-          <code class="text-[11px] text-dimmed">{{ type.manifestId }}</code>
-          <p v-if="type.description" class="text-[11px] text-muted">{{ type.description }}</p>
+          <code class="text-2xs text-dimmed">{{ type.manifestId }}</code>
+          <p v-if="type.description" class="text-2xs text-muted">{{ type.description }}</p>
         </div>
         <div v-if="type.source === 'workspace'" class="flex shrink-0 items-center gap-0.5">
           <UButton
@@ -139,19 +140,19 @@ async function remove(type: CustomManifestType) {
         </div>
       </li>
     </ul>
-    <p v-else class="text-[11px] text-dimmed">
+    <p v-else class="text-2xs text-dimmed">
       {{ t('settings.infrastructure.customType.empty') }}
     </p>
 
     <!-- Add / edit a workspace-defined type. -->
     <div class="space-y-2 border-t border-default pt-3">
-      <p class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+      <SectionLabel as="p">
         {{
           editing
             ? t('settings.infrastructure.customType.editTitle', { id: draft.manifestId })
             : t('settings.infrastructure.customType.addTitle')
         }}
-      </p>
+      </SectionLabel>
       <UFormField
         v-if="!editing"
         :label="t('settings.infrastructure.customType.manifestId')"

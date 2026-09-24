@@ -39,6 +39,7 @@ import {
   RESULT_WINDOW_WIDTH_CLASS,
   type ResultWindowWidth,
 } from '~/components/panels/ResultWindowShell.logic'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 /** A pipeline step reference — passed by step-result windows to surface the shared
  *  "restart from here" control. `StepRestartControl` self-hides for an off-path open
@@ -68,8 +69,8 @@ const props = withDefaults(
      * worse, not better.
      *
      * The obligation that comes with it: CONTINUOUS PROSE inside a `full` window carries its
-     * own reading measure (`PROSE_MEASURE_CLASS`, the step reader's own, over the same 13px
-     * `.reader-prose`), or the width lands as 200-character lines.
+     * own reading measure (`PROSE_MEASURE_CLASS`, the step reader's own, over the same
+     * `text-sm` `.reader-prose`), or the width lands as 200-character lines.
      *
      * The unit that obligation attaches to is the PARAGRAPH, not the section — which is the
      * distinction to get right, because "a findings list reads better at the full span" is
@@ -289,7 +290,7 @@ const panelClass = computed(() => [
           </span>
           <div class="min-w-0 flex-1">
             <h2 class="truncate text-sm font-semibold text-app-100">{{ title }}</h2>
-            <p v-if="subtitle" class="truncate text-[11px] text-muted">{{ subtitle }}</p>
+            <p v-if="subtitle" class="truncate text-2xs text-muted">{{ subtitle }}</p>
           </div>
           <!-- Window-specific header content (status badges, counts). -->
           <slot name="header-extras" />
@@ -329,16 +330,16 @@ const panelClass = computed(() => [
             @click="effortOpen = !effortOpen"
           >
             <UIcon name="i-lucide-gauge" class="h-3.5 w-3.5 shrink-0 text-muted" />
-            <span class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+            <SectionLabel as="span">
               {{ t('panels.stepDetail.effort.heading') }}
-            </span>
+            </SectionLabel>
             <span
-              class="shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium tabular-nums"
+              class="shrink-0 rounded px-1.5 py-0.5 text-2xs font-medium tabular-nums"
               :class="chipClass"
             >
               {{ t('panels.stepDetail.effort.outOfTen', { value: effortReport.difficulty }) }}
             </span>
-            <span v-if="hint" class="min-w-0 flex-1 truncate text-[12px] text-muted">
+            <span v-if="hint" class="min-w-0 flex-1 truncate text-xs text-muted">
               {{ hint }}
             </span>
             <UIcon
@@ -371,11 +372,11 @@ const panelClass = computed(() => [
               class="h-3.5 w-3.5 shrink-0"
               :class="validationReport.passed ? 'text-app-success-400' : 'text-app-error-400'"
             />
-            <span class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+            <SectionLabel as="span">
               {{ t('panels.stepDetail.validation.heading') }}
-            </span>
+            </SectionLabel>
             <span
-              class="shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium tabular-nums"
+              class="shrink-0 rounded px-1.5 py-0.5 text-2xs font-medium tabular-nums"
               :class="
                 validationReport.passed
                   ? 'bg-app-success-500/15 text-app-success-300'
@@ -388,7 +389,7 @@ const panelClass = computed(() => [
                   : t('panels.stepDetail.validation.failed')
               }}
             </span>
-            <span class="min-w-0 flex-1 truncate text-[12px] text-muted">
+            <span class="min-w-0 flex-1 truncate text-xs text-muted">
               {{
                 t('panels.stepDetail.validation.attempts', {
                   attempts: validationReport.attempts,
@@ -427,11 +428,11 @@ const panelClass = computed(() => [
               class="h-3.5 w-3.5 shrink-0"
               :class="reproductionKeys!.proven ? 'text-app-success-400' : 'text-app-warning-400'"
             />
-            <span class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+            <SectionLabel as="span">
               {{ t('panels.stepDetail.reproduction.heading') }}
-            </span>
+            </SectionLabel>
             <span
-              class="shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium"
+              class="shrink-0 rounded px-1.5 py-0.5 text-2xs font-medium"
               :class="
                 reproductionKeys!.proven
                   ? 'bg-app-success-500/15 text-app-success-300'
@@ -440,7 +441,7 @@ const panelClass = computed(() => [
             >
               {{ t(reproductionKeys!.chip) }}
             </span>
-            <span class="min-w-0 flex-1 truncate text-[12px] text-muted">
+            <span class="min-w-0 flex-1 truncate text-xs text-muted">
               {{ t(reproductionKeys!.verdict) }}
             </span>
             <UIcon
@@ -471,10 +472,10 @@ const panelClass = computed(() => [
             @click="binaryOutputsOpen = !binaryOutputsOpen"
           >
             <UIcon name="i-lucide-image" class="h-3.5 w-3.5 shrink-0 text-muted" />
-            <span class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+            <SectionLabel as="span">
               {{ t('binaryOutput.heading') }}
-            </span>
-            <span class="min-w-0 flex-1 truncate text-[12px] text-muted">
+            </SectionLabel>
+            <span class="min-w-0 flex-1 truncate text-xs text-muted">
               {{ binaryOutputSummary }}
             </span>
             <UIcon

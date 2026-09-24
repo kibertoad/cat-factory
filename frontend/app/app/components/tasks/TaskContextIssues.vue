@@ -150,7 +150,7 @@ async function attach(item: PendingContext) {
         </UBadge>
       </a>
     </div>
-    <p v-else class="text-[11px] text-dimmed">
+    <p v-else class="text-2xs text-dimmed">
       {{ emptyHint }}
     </p>
   </InspectorSection>

@@ -173,7 +173,7 @@ async function removeKey(key: string) {
         </li>
       </ul>
 
-      <p v-if="entry.stored && entry.updatedAt" class="text-[11px] text-dimmed">
+      <p v-if="entry.stored && entry.updatedAt" class="text-2xs text-dimmed">
         {{
           t('settings.capabilityCredentials.storedAt', {
             date: d(new Date(entry.updatedAt), 'short'),
@@ -191,13 +191,13 @@ async function removeKey(key: string) {
            usual one, but a facade that wired the store and dropped the flag lands here too, and
            blaming a custom resolver would make that wiring bug read as a deliberate configuration
            and send the operator to the one place that cannot explain it. -->
-      <p v-else-if="view?.environmentFallback === true" class="text-[11px] text-dimmed">
+      <p v-else-if="view?.environmentFallback === true" class="text-2xs text-dimmed">
         {{ t('settings.capabilityCredentials.notStoredWithFallback') }}
       </p>
-      <p v-else-if="view?.environmentFallback === false" class="text-[11px] text-app-warning-400">
+      <p v-else-if="view?.environmentFallback === false" class="text-2xs text-app-warning-400">
         {{ t('settings.capabilityCredentials.notStored') }}
       </p>
-      <p v-else class="text-[11px] text-dimmed">
+      <p v-else class="text-2xs text-dimmed">
         {{ t('settings.capabilityCredentials.notStoredUnknownFallback') }}
       </p>
 
@@ -268,7 +268,7 @@ async function removeKey(key: string) {
       >
         <div class="min-w-0">
           <code class="font-mono text-sm">{{ orphan.key }}</code>
-          <span class="block text-[11px] text-dimmed">
+          <span class="block text-2xs text-dimmed">
             {{
               t('settings.capabilityCredentials.storedAt', {
                 date: d(new Date(orphan.updatedAt), 'short'),

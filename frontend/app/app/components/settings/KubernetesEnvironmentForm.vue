@@ -15,6 +15,7 @@ import ConnectionWarnings from '~/components/settings/ConnectionWarnings.vue'
 import ConnectionTestVerdict from '~/components/settings/ConnectionTestVerdict.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
 import type { ProviderConnection } from '~/types/providerConnections'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const props = defineProps<{
   connection: ProviderConnection | null
@@ -264,13 +265,13 @@ function optional(label: string): string {
 
 <template>
   <div class="rounded-lg border border-dashed border-muted p-3 space-y-3">
-    <p class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+    <SectionLabel as="p">
       {{
         connection?.kind === 'kubernetes'
           ? t('settings.providerConnection.form.updateConfiguration')
           : t('settings.providerConnection.form.connect')
       }}
-    </p>
+    </SectionLabel>
 
     <UFormField :label="t('settings.providerConnection.kubernetesEnv.label')">
       <UInput
@@ -295,7 +296,7 @@ function optional(label: string): string {
            and the operator may legitimately overrule it. -->
       <p
         v-if="tokenProblem"
-        class="mt-1 text-[11px]"
+        class="mt-1 text-2xs"
         :class="tokenBlocking ? 'text-app-error-400' : 'text-app-warning-400'"
         data-testid="service-account-token-problem"
       >

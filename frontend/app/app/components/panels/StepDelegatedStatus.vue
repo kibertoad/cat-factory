@@ -6,6 +6,7 @@ import {
   externalRunHref,
 } from './StepDelegatedStatus.logic'
 import type { PipelineStep } from '~/types/execution'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 // The EXTERNAL work a delegated step dispatched: which registered executor is running it, what it
 // is doing, and the link to that system's own logs, which is the affordance everything else here
@@ -77,7 +78,7 @@ const { copy: copyText } = useCopyToClipboard()
   <!-- Single conditional root so a passed-through `class` (e.g. layout margin) applies cleanly.
        Renders nothing for a step that dispatched nowhere external. -->
   <div v-if="record" data-testid="step-delegated-status">
-    <div class="rounded-lg border px-3 py-2 text-[12px]" :class="statusView.meta.cls">
+    <div class="rounded-lg border px-3 py-2 text-xs" :class="statusView.meta.cls">
       <div class="flex items-center gap-2">
         <UIcon
           :name="statusView.meta.icon"
@@ -98,13 +99,13 @@ const { copy: copyText } = useCopyToClipboard()
       <!-- The PRIMARY affordance: the executor's own logs. It is the only place the detail of
            what happened exists, which is why a failed delegated step without it is a dead end. -->
       <div v-if="record.url" class="mt-2 flex items-center gap-2">
-        <dt class="shrink-0 text-[11px] uppercase tracking-wide text-dimmed">
+        <SectionLabel as="dt" class="shrink-0">
           {{ t('panels.stepMeta.delegated.run') }}
-        </dt>
+        </SectionLabel>
         <!-- Linked only when the executor's URL is `http(s)`. Anything else is shown as the text
              it is: refusing to follow it is right, and hiding it would report a run that named
              no link at all. -->
-        <dd class="truncate font-mono text-[11px] text-toned">
+        <dd class="truncate font-mono text-2xs text-toned">
           <a
             v-if="runHref"
             :href="runHref"
@@ -132,35 +133,35 @@ const { copy: copyText } = useCopyToClipboard()
            request. Rendered here because the platform holds nothing else about that run's
            product. -->
       <div v-if="landedBranch" class="mt-2 flex items-center gap-2">
-        <dt class="shrink-0 text-[11px] uppercase tracking-wide text-dimmed">
+        <SectionLabel as="dt" class="shrink-0">
           {{ t('panels.stepMeta.delegated.branch') }}
-        </dt>
-        <dd class="truncate font-mono text-[11px] text-toned">{{ landedBranch }}</dd>
+        </SectionLabel>
+        <dd class="truncate font-mono text-2xs text-toned">{{ landedBranch }}</dd>
       </div>
 
       <!-- What the platform could not do, stated rather than left to read as a clean outcome:
            a cancelled run whose executor declares no cancel is still going. -->
-      <p v-if="record.note" class="mt-2 text-[11px] text-toned">{{ record.note }}</p>
+      <p v-if="record.note" class="mt-2 text-2xs text-toned">{{ record.note }}</p>
     </div>
 
     <!-- "Absent" and "zero" must never render the same. Without this line a delegated step shows
          no tokens beside a container step that shows some, and the only available reading is that
          it was free. -->
-    <p v-if="usageUnreported" class="mt-2 text-[11px] text-dimmed">
+    <p v-if="usageUnreported" class="mt-2 text-2xs text-dimmed">
       {{ t('panels.stepMeta.delegated.usageNotReported', { executor: executorName }) }}
     </p>
 
     <!-- Earlier attempts. Kept across a re-run on purpose: the previous run's logs are the
          evidence for why this step is being run again, and the platform holds nothing else. -->
     <div v-if="priorAttempts.length" class="mt-3">
-      <div class="text-[11px] uppercase tracking-wide text-dimmed">
+      <SectionLabel>
         {{ t('panels.stepMeta.delegated.earlierAttempts') }}
-      </div>
+      </SectionLabel>
       <ul class="mt-1 space-y-1">
         <li
           v-for="(attempt, index) in priorAttempts"
           :key="`${attempt.startedAt}-${index}`"
-          class="flex items-center gap-2 text-[11px] text-muted"
+          class="flex items-center gap-2 text-2xs text-muted"
         >
           <span class="truncate">{{
             attempt.outcome || t('panels.stepMeta.delegated.noOutcome')

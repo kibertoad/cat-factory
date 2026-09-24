@@ -15,6 +15,7 @@ import type {
   SandboxRun,
   SandboxUnsupportedReason,
 } from '~/types/sandbox'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const ui = useUiStore()
 const store = useSandboxStore()
@@ -317,9 +318,9 @@ async function archive(prompt: SandboxPromptVersion) {
         <div v-if="tab === 'experiments'" class="grid gap-4 lg:grid-cols-2">
           <!-- builder -->
           <div class="space-y-3 rounded-lg border border-muted bg-default/40 p-3">
-            <p class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+            <SectionLabel as="p">
               {{ t('sandbox.builder.title') }}
-            </p>
+            </SectionLabel>
 
             <UFormField :label="t('sandbox.builder.agent')">
               <USelect
@@ -331,7 +332,7 @@ async function archive(prompt: SandboxPromptVersion) {
               <p
                 v-for="excluded in unrunnableAgentKinds"
                 :key="excluded.agentKind"
-                class="mt-1 text-[11px] leading-snug text-dimmed"
+                class="mt-1 text-2xs leading-snug text-dimmed"
               >
                 <span class="font-medium text-muted">{{ excluded.label }}:</span>
                 {{
@@ -343,9 +344,9 @@ async function archive(prompt: SandboxPromptVersion) {
             </UFormField>
 
             <div>
-              <span class="mb-1 block text-[10px] uppercase tracking-wide text-dimmed">
+              <SectionLabel as="span" class="mb-1 block">
                 {{ t('sandbox.builder.promptVersions') }}
-              </span>
+              </SectionLabel>
               <div class="max-h-28 space-y-1 overflow-auto pe-1">
                 <label
                   v-for="p in kindPrompts"
@@ -375,9 +376,9 @@ async function archive(prompt: SandboxPromptVersion) {
             </div>
 
             <div>
-              <span class="mb-1 block text-[10px] uppercase tracking-wide text-dimmed">
+              <SectionLabel as="span" class="mb-1 block">
                 {{ t('sandbox.builder.models') }}
-              </span>
+              </SectionLabel>
               <div class="max-h-28 space-y-1 overflow-auto pe-1">
                 <label
                   v-for="m in store.selectableModels"
@@ -399,9 +400,9 @@ async function archive(prompt: SandboxPromptVersion) {
             </div>
 
             <div>
-              <span class="mb-1 block text-[10px] uppercase tracking-wide text-dimmed">
+              <SectionLabel as="span" class="mb-1 block">
                 {{ t('sandbox.builder.fixtures') }}
-              </span>
+              </SectionLabel>
               <div class="max-h-28 space-y-1 overflow-auto pe-1">
                 <label
                   v-for="f in kindFixtures"
@@ -486,7 +487,7 @@ async function archive(prompt: SandboxPromptVersion) {
                       @click="selectedRun = run"
                     >
                       <td class="py-1 pe-2 text-toned">{{ run.promptLabel }}</td>
-                      <td class="py-1 pe-2 font-mono text-[11px] text-muted">
+                      <td class="py-1 pe-2 font-mono text-2xs text-muted">
                         {{ run.model }}
                       </td>
                       <td class="py-1 pe-2 text-muted">{{ fixtureName }}</td>
@@ -521,21 +522,21 @@ async function archive(prompt: SandboxPromptVersion) {
 
               <!-- selected cell output -->
               <div v-if="selectedRun" class="mt-3 border-t border-default pt-2">
-                <p class="mb-1 text-[11px] uppercase tracking-wide text-dimmed">
+                <SectionLabel as="p" class="mb-1">
                   {{ selectedRun.promptLabel }} · {{ selectedRun.model }}
-                </p>
+                </SectionLabel>
                 <p v-if="selectedRun.error" class="text-xs text-app-error-400">
                   {{ selectedRun.error }}
                 </p>
                 <pre
                   v-if="selectedRun.outputText"
-                  class="max-h-48 overflow-auto whitespace-pre-wrap rounded bg-app-950/60 p-2 text-[11px] text-toned"
+                  class="max-h-48 overflow-auto whitespace-pre-wrap rounded bg-app-950/60 p-2 text-2xs text-toned"
                   >{{ selectedRun.outputText }}</pre>
                 <div v-if="gradeByRun.get(selectedRun.id)" class="mt-2 space-y-0.5">
                   <p
                     v-for="d in gradeByRun.get(selectedRun.id)!.scores"
                     :key="d.key"
-                    class="text-[11px] text-muted"
+                    class="text-2xs text-muted"
                   >
                     <span :class="scoreColor(d.score)" class="font-semibold">{{ d.score }}</span>
                     <span class="ms-1 text-toned">{{ d.key }}</span>
@@ -545,9 +546,9 @@ async function archive(prompt: SandboxPromptVersion) {
               </div>
             </div>
 
-            <p class="text-[11px] uppercase tracking-wide text-dimmed">
+            <SectionLabel as="p">
               {{ t('sandbox.results.past') }}
-            </p>
+            </SectionLabel>
             <div class="max-h-56 space-y-1 overflow-auto">
               <button
                 v-for="x in store.experiments"
@@ -591,7 +592,7 @@ async function archive(prompt: SandboxPromptVersion) {
                     }}
                   </UBadge>
                 </div>
-                <span class="text-[11px] text-dimmed">{{ p.agentKind }}</span>
+                <span class="text-2xs text-dimmed">{{ p.agentKind }}</span>
               </div>
               <div class="flex items-center gap-1">
                 <UButton
@@ -632,13 +633,13 @@ async function archive(prompt: SandboxPromptVersion) {
           </div>
 
           <div v-if="editing" class="space-y-2 rounded-lg border border-muted bg-default/40 p-3">
-            <p class="text-[11px] uppercase tracking-wide text-dimmed">
+            <SectionLabel as="p">
               {{
                 editing.origin === 'baseline'
                   ? t('sandbox.prompts.forkOf', { name: editing.name })
                   : t('sandbox.prompts.newVersionOf', { name: editing.name })
               }}
-            </p>
+            </SectionLabel>
             <UTextarea v-model="editText" :rows="16" class="w-full font-mono text-xs" autoresize />
             <div class="flex justify-end gap-2">
               <UButton
@@ -690,7 +691,7 @@ async function archive(prompt: SandboxPromptVersion) {
                 </UBadge>
               </div>
             </div>
-            <p v-if="f.objective?.kind === 'findings'" class="mt-0.5 text-[11px] text-dimmed">
+            <p v-if="f.objective?.kind === 'findings'" class="mt-0.5 text-2xs text-dimmed">
               {{
                 t(
                   'sandbox.fixtures.expectations',

@@ -66,7 +66,7 @@ const max = computed(() => maxOf(props.rows, spendMagnitude))
             :style="{ width: `${segmentPct(row.subscriptionCost, max)}%` }"
           />
         </div>
-        <p class="mt-1 text-[10px] text-dimmed">
+        <p class="mt-1 text-3xs text-dimmed">
           {{ t('reports.spend.calls', { count: row.calls }, row.calls) }} ·
           {{
             t('reports.spend.tokens', {
@@ -77,7 +77,7 @@ const max = computed(() => maxOf(props.rows, spendMagnitude))
         </p>
       </li>
     </ul>
-    <p v-if="cap" class="mt-3 text-[10px] text-dimmed" :data-testid="`${testId}-capped`">
+    <p v-if="cap" class="mt-3 text-3xs text-dimmed" :data-testid="`${testId}-capped`">
       {{
         t('reports.spend.capped', { shown: n(cap.returned), omitted: n(cap.omitted) }, cap.omitted)
       }}

@@ -25,7 +25,7 @@ withDefaults(
     <p :class="compact ? 'text-xs' : 'text-sm'" class="font-medium text-muted">
       {{ title }}
     </p>
-    <p v-if="description" :class="compact ? 'text-[11px]' : 'text-xs'" class="max-w-xs">
+    <p v-if="description" :class="compact ? 'text-2xs' : 'text-xs'" class="max-w-xs">
       {{ description }}
     </p>
     <div v-if="$slots.default" :class="compact ? 'mt-1' : 'mt-2'">

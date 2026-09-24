@@ -24,7 +24,7 @@ function toneClass(option: (typeof props.options)[number], active: boolean): str
 </script>
 
 <template>
-  <div class="flex rounded-lg border border-default p-0.5 text-[12px]">
+  <div class="flex rounded-lg border border-default p-0.5 text-xs">
     <button
       v-for="option in options"
       :key="option.value"

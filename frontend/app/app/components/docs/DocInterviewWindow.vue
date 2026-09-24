@@ -24,6 +24,7 @@ import {
   interviewGatePhase,
   interviewStepReached,
 } from '~/utils/interviewGate'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const board = useBoardStore()
 const docInterview = useDocInterviewStore()
@@ -131,7 +132,7 @@ const onProceed = () =>
       </div>
 
       <template v-else>
-        <p class="mb-4 text-[13px] leading-relaxed text-toned">
+        <p class="mb-4 text-sm leading-relaxed text-toned">
           {{ t('docInterview.intro') }}
         </p>
 
@@ -171,20 +172,20 @@ const onProceed = () =>
           class="rounded-lg border border-default bg-app-950/40 p-4"
           data-testid="doc-interview-converged"
         >
-          <p class="mb-2 text-[11px] font-medium uppercase tracking-wide text-dimmed">
+          <SectionLabel as="p" class="mb-2">
             {{ t('docInterview.brief') }}
-          </p>
+          </SectionLabel>
           <pre
             v-if="session.brief"
-            class="whitespace-pre-wrap break-words text-[13px] leading-relaxed text-toned"
+            class="whitespace-pre-wrap break-words text-sm leading-relaxed text-toned"
             >{{ session.brief }}</pre>
-          <p v-else class="text-[13px] text-muted">{{ t('docInterview.converged') }}</p>
+          <p v-else class="text-sm text-muted">{{ t('docInterview.converged') }}</p>
         </div>
 
         <!-- No pending questions but not yet converged -->
         <div
           v-else-if="questions.length === 0"
-          class="rounded-lg border border-default bg-app-950/40 p-4 text-center text-[13px] text-muted"
+          class="rounded-lg border border-default bg-app-950/40 p-4 text-center text-sm text-muted"
         >
           {{ t('docInterview.converged') }}
         </div>
@@ -197,7 +198,7 @@ const onProceed = () =>
             class="rounded-lg border border-default bg-app-950/40 p-3"
             data-testid="doc-interview-question"
           >
-            <p class="mb-2 text-[13px] font-medium text-default">{{ q.question }}</p>
+            <p class="mb-2 text-sm font-medium text-default">{{ q.question }}</p>
             <UTextarea
               v-model="drafts[q.key]"
               :rows="2"
@@ -212,7 +213,7 @@ const onProceed = () =>
                  for an answer to go. Saying so beats taking text the flush could only drop. -->
             <p
               v-if="!addressable(q)"
-              class="mt-1 text-[11px] text-app-warning-300"
+              class="mt-1 text-2xs text-app-warning-300"
               data-testid="doc-interview-unanswerable"
             >
               {{ t('docInterview.unanswerable') }}
@@ -228,7 +229,7 @@ const onProceed = () =>
       v-if="session && phase === 'awaiting' && questions.length > 0"
       class="flex items-center justify-between gap-3 border-t border-default px-5 py-3"
     >
-      <p class="text-[11px] text-dimmed">
+      <p class="text-2xs text-dimmed">
         <span
           v-if="unanswered > 0"
           class="text-app-warning-400/90"

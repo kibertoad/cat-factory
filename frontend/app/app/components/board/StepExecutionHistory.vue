@@ -55,7 +55,7 @@ const entries = computed<Entry[]>(() =>
     >
       <!-- a superseded SUCCESSFUL attempt: its output, collapsible + copyable -->
       <template v-if="entry.kind === 'success'">
-        <div class="flex items-center gap-1.5 text-[10px] text-dimmed">
+        <div class="flex items-center gap-1.5 text-3xs text-dimmed">
           <UIcon name="i-lucide-check-circle-2" class="h-3 w-3 shrink-0 text-app-success-400/70" />
           <time>{{ d(new Date(entry.occurredAt), 'long') }}</time>
           <span class="text-app-success-400/80">{{ t('panels.stepDetail.attemptSucceeded') }}</span>
@@ -63,31 +63,31 @@ const entries = computed<Entry[]>(() =>
         <div class="relative mt-1">
           <CopyButton :text="entry.output.output" class="absolute end-1 top-1 z-10" />
           <pre
-            class="max-h-40 overflow-auto whitespace-pre-wrap rounded bg-app-950/80 p-1.5 pe-9 text-[10px] leading-snug text-toned"
+            class="max-h-40 overflow-auto whitespace-pre-wrap rounded bg-app-950/80 p-1.5 pe-9 text-3xs leading-snug text-toned"
             >{{ entry.output.output }}</pre>
         </div>
-        <p v-if="entry.output.truncated" class="mt-1 text-[10px] text-dimmed">
+        <p v-if="entry.output.truncated" class="mt-1 text-3xs text-dimmed">
           {{ t('panels.stepDetail.outputTruncated') }}
         </p>
       </template>
 
       <!-- a FAILED attempt: mirrors FailureHistoryList's entry markup -->
       <template v-else>
-        <div class="flex items-center gap-1.5 text-[10px] text-dimmed">
+        <div class="flex items-center gap-1.5 text-3xs text-dimmed">
           <UIcon name="i-lucide-alert-triangle" class="h-3 w-3 shrink-0 text-app-error-400/70" />
           <time>{{ d(new Date(entry.occurredAt), 'long') }}</time>
         </div>
-        <p class="mt-1 text-[11px] leading-snug text-toned" :title="entry.failure.message">
+        <p class="mt-1 text-2xs leading-snug text-toned" :title="entry.failure.message">
           {{ entry.failure.message }}
         </p>
-        <p v-if="entry.failure.hint" class="mt-1 text-[10px] leading-snug text-dimmed">
+        <p v-if="entry.failure.hint" class="mt-1 text-3xs leading-snug text-dimmed">
           {{ entry.failure.hint }}
         </p>
         <FailureDetail
           :detail="entry.failure.detail"
           :message="entry.failure.message"
-          summary-class="text-[10px] text-dimmed hover:text-toned"
-          pre-class="bg-app-950/80 text-[10px] text-muted"
+          summary-class="text-3xs text-dimmed hover:text-toned"
+          pre-class="bg-app-950/80 text-3xs text-muted"
         />
       </template>
     </li>

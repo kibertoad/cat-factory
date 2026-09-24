@@ -36,10 +36,10 @@ const selected = computed(() => ui.selectedBlockId === props.id)
   >
     <div class="flex items-center gap-1.5">
       <UIcon name="i-lucide-layers" class="h-3.5 w-3.5 shrink-0 text-app-secondary-400" />
-      <span class="text-[10px] font-semibold uppercase tracking-wide text-app-secondary-300">{{
+      <span class="text-3xs font-semibold uppercase tracking-wide text-app-secondary-300">{{
         t('board.epic.label')
       }}</span>
-      <span class="ms-auto text-[10px] text-muted">{{ done }}/{{ total }}</span>
+      <span class="ms-auto text-3xs text-muted">{{ done }}/{{ total }}</span>
     </div>
     <div class="mt-1 truncate text-sm font-medium text-app-100" :title="block.title">
       {{ block.title }}
@@ -50,10 +50,10 @@ const selected = computed(() => ui.selectedBlockId === props.id)
         :style="{ width: total ? `${Math.round((done / total) * 100)}%` : '0%' }"
       />
     </div>
-    <div v-if="active" class="mt-1 text-[10px] text-muted">
+    <div v-if="active" class="mt-1 text-3xs text-muted">
       {{ t('board.epic.activeCount', { count: active }) }}
     </div>
-    <div v-else-if="total === 0" class="mt-1 text-[10px] text-dimmed">
+    <div v-else-if="total === 0" class="mt-1 text-3xs text-dimmed">
       {{ t('board.epic.noTasksYet') }}
     </div>
   </div>

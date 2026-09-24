@@ -104,7 +104,7 @@ const routes = computed<Route[]>(() => [
                   {{ r.badge }}
                 </UBadge>
               </div>
-              <p class="mt-0.5 text-[13px] leading-relaxed text-muted">{{ r.body }}</p>
+              <p class="mt-0.5 text-sm leading-relaxed text-muted">{{ r.body }}</p>
             </div>
             <UButton
               size="sm"
@@ -118,7 +118,7 @@ const routes = computed<Route[]>(() => [
           </div>
         </div>
 
-        <p class="text-[11px] leading-relaxed text-dimmed">
+        <p class="text-2xs leading-relaxed text-dimmed">
           {{ t('providers.onboarding.operatorNote') }}
         </p>
       </div>

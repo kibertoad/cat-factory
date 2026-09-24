@@ -116,7 +116,7 @@ async function check() {
 <template>
   <section class="space-y-2" data-testid="branch-protection-preflight">
     <h3 class="text-sm font-semibold text-default">{{ t('vcs.branchProtection.heading') }}</h3>
-    <p class="text-[11px] text-muted">{{ t('vcs.branchProtection.body') }}</p>
+    <p class="text-2xs text-muted">{{ t('vcs.branchProtection.body') }}</p>
 
     <UButton
       color="neutral"
@@ -146,7 +146,7 @@ async function check() {
       >
         {{ t('errors.generic.showDetail') }}
       </UButton>
-      <p v-if="showFailureDetail" class="font-mono text-[10px] break-all text-dimmed">
+      <p v-if="showFailureDetail" class="font-mono text-3xs break-all text-dimmed">
         {{ failure.detail }}
       </p>
     </div>
@@ -182,11 +182,11 @@ async function check() {
         >
           <div class="flex items-baseline justify-between gap-2">
             <span class="font-mono text-xs text-toned">{{ row.owner }}/{{ row.name }}</span>
-            <span class="text-[11px]" :class="STATE_STYLE[row.protection.state]">
+            <span class="text-2xs" :class="STATE_STYLE[row.protection.state]">
               {{ STATE_LABEL[row.protection.state]() }}
             </span>
           </div>
-          <p class="text-[10px] text-dimmed">
+          <p class="text-3xs text-dimmed">
             {{ row.defaultBranch }}<span v-if="detailLine(row)"> — {{ detailLine(row) }}</span>
           </p>
         </li>
@@ -194,7 +194,7 @@ async function check() {
 
       <!-- A cap that truncated silently would read as "these are all your repositories", which
            on a security report is the same failure as calling an unprobed repo protected. -->
-      <p v-if="report.omittedRepos > 0" class="text-[11px] text-app-warning-300">
+      <p v-if="report.omittedRepos > 0" class="text-2xs text-app-warning-300">
         {{ t('vcs.branchProtection.omitted', { count: report.omittedRepos }, report.omittedRepos) }}
       </p>
     </template>

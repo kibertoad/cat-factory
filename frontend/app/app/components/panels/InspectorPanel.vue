@@ -10,6 +10,7 @@ import AgentStopButton from '~/components/board/AgentStopButton.vue'
 import BootstrapRunSteps from '~/components/bootstrap/BootstrapRunSteps.vue'
 import { BLUEPRINT_AGENT_KIND } from '@cat-factory/contracts'
 import { VCS_PROVIDER_ICONS } from '~/utils/vcs'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const board = useBoardStore()
 const pipelines = usePipelinesStore()
@@ -368,7 +369,10 @@ const showOriginalDescription = ref(false)
               <UBadge :color="statusMeta.chip" variant="subtle" size="sm">
                 {{ statusLabel }}
               </UBadge>
-              <span class="text-[10px] uppercase tracking-wide text-dimmed">{{ level }}</span>
+              <!-- The block's LEVEL, beside its status chip: a category this block is in, not a
+                   heading over what follows, so it keeps its own classes rather than adopting the
+                   eyebrow recipe (`common/SectionLabel.vue`). -->
+              <span class="text-3xs uppercase tracking-wide text-dimmed">{{ level }}</span>
             </div>
           </div>
         </div>
@@ -403,16 +407,16 @@ const showOriginalDescription = ref(false)
         <template v-if="frozenByRework">
           <div class="rounded-lg border border-app-success-900/60 bg-app-success-950/20 p-3">
             <div
-              class="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-app-success-400"
+              class="mb-1.5 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wide text-app-success-400"
             >
               <UIcon name="i-lucide-file-check-2" class="h-3.5 w-3.5" />
               {{ t('panels.inspector.reworkedRequirements') }}
             </div>
-            <p class="line-clamp-5 whitespace-pre-line text-[13px] leading-relaxed text-toned">
+            <p class="line-clamp-5 whitespace-pre-line text-sm leading-relaxed text-toned">
               {{ reqReworkedText }}
             </p>
             <div class="mt-2 flex items-center justify-between gap-2">
-              <p class="text-[11px] text-dimmed">
+              <p class="text-2xs text-dimmed">
                 {{ t('panels.inspector.agentStepsUseDocument') }}
               </p>
               <UButton
@@ -464,23 +468,21 @@ const showOriginalDescription = ref(false)
             @change="saveDescription"
             @blur="saveDescription"
           />
-          <p v-if="isTask && !editable" class="flex items-center gap-1 text-[11px] text-dimmed">
+          <p v-if="isTask && !editable" class="flex items-center gap-1 text-2xs text-dimmed">
             <UIcon name="i-lucide-lock" class="h-3 w-3" />
             {{ t('panels.inspector.taskStartedLocked') }}
           </p>
 
           <!-- prior incorporated requirements kept as a base after a review-driven reset -->
           <div v-if="reqHasPriorDoc" class="rounded-lg border border-muted bg-elevated/40 p-3">
-            <div
-              class="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted"
-            >
+            <SectionLabel class="mb-1.5 flex items-center gap-1.5">
               <UIcon name="i-lucide-history" class="h-3.5 w-3.5" />
               {{ t('panels.inspector.lastIncorporatedRequirements') }}
-            </div>
-            <p class="line-clamp-5 whitespace-pre-line text-[13px] leading-relaxed text-toned">
+            </SectionLabel>
+            <p class="line-clamp-5 whitespace-pre-line text-sm leading-relaxed text-toned">
               {{ reqReworkedText }}
             </p>
-            <p class="mt-2 text-[11px] text-dimmed">
+            <p class="mt-2 text-2xs text-dimmed">
               {{ t('panels.inspector.priorDocHint') }}
             </p>
           </div>
@@ -586,7 +588,7 @@ const showOriginalDescription = ref(false)
       >
         {{ t('panels.inspector.mapService') }}
       </UButton>
-      <p v-if="isFrame && !serviceRepo" class="text-[11px] text-dimmed">
+      <p v-if="isFrame && !serviceRepo" class="text-2xs text-dimmed">
         {{ t('panels.inspector.mapServiceNoRepo') }}
       </p>
 
@@ -613,7 +615,7 @@ const showOriginalDescription = ref(false)
            on a disabled button doesn't fire hover events. -->
       <p
         v-if="isTask && runBlockedReason"
-        class="flex items-start gap-1.5 text-[11px] text-app-warning-300/90"
+        class="flex items-start gap-1.5 text-2xs text-app-warning-300/90"
         data-testid="run-blocked-reason"
       >
         <UIcon name="i-lucide-lock" class="mt-px h-3 w-3 shrink-0" />

@@ -10,6 +10,7 @@ import {
   isRevisionConflict,
   saveIntent,
 } from '~/components/pipeline/AgentPromptEditor.logic'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 // The per-workspace system-prompt editor for ONE agent kind, opened from the pipeline builder
 // (where the kinds are actually chosen). It edits the SHIPPED track prompt only: the platform
@@ -192,14 +193,14 @@ function revisionLabel(revision: AgentPromptRevision): string {
         <!-- The workspace-wide output ceiling for this kind. Same per-agent-kind scope as the
              prompt below it; saves on change, since there is no revision log to commit to. -->
         <div class="flex flex-wrap items-center gap-2">
-          <span class="text-[11px] text-muted">{{ t('pipeline.outputBudget.kindLabel') }}</span>
+          <span class="text-2xs text-muted">{{ t('pipeline.outputBudget.kindLabel') }}</span>
           <OutputBudgetInput
             class="w-32"
             :model-value="budget"
             :disabled="agentSettings.saving"
             @update:model-value="saveBudget"
           />
-          <span class="text-[10px] text-dimmed">
+          <span class="text-3xs text-dimmed">
             {{ t('pipeline.outputBudget.kindHint') }}
           </span>
         </div>
@@ -207,7 +208,7 @@ function revisionLabel(revision: AgentPromptRevision): string {
         <!-- What the platform appends is SHOWN, not described. A prose summary of it is copy
              that silently goes stale the moment a directive is added, and a user who does not
              know what is already there writes a prompt that fights it. -->
-        <p v-if="directives" class="text-[11px] leading-relaxed text-dimmed">
+        <p v-if="directives" class="text-2xs leading-relaxed text-dimmed">
           {{ t('agentPrompt.managedNotice') }}
           <UButton
             variant="link"
@@ -222,11 +223,11 @@ function revisionLabel(revision: AgentPromptRevision): string {
           v-if="directives && showDirectives"
           class="rounded-md border border-default bg-app-950/60 p-2"
         >
-          <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted">
+          <SectionLabel as="h4" class="mb-1">
             {{ t('agentPrompt.appendedHeading') }}
-          </h4>
+          </SectionLabel>
           <pre
-            class="max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] text-toned"
+            class="max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-2xs text-toned"
             >{{ directives.trim() }}</pre>
         </div>
 
@@ -278,25 +279,25 @@ function revisionLabel(revision: AgentPromptRevision): string {
           >
             {{ showBuiltin ? t('agentPrompt.hideBuiltin') : t('agentPrompt.showBuiltin') }}
           </UButton>
-          <span v-if="restoredFrom !== undefined" class="text-[11px] text-muted">
+          <span v-if="restoredFrom !== undefined" class="text-2xs text-muted">
             {{ t('agentPrompt.restoringFrom', { n: restoredFrom }) }}
           </span>
         </div>
 
         <div v-if="showBuiltin" class="rounded-md border border-default bg-app-950/60 p-2">
-          <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted">
+          <SectionLabel as="h4" class="mb-1">
             {{ t('agentPrompt.builtinHeading') }}
-          </h4>
+          </SectionLabel>
           <pre
-            class="max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] text-toned"
+            class="max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-2xs text-toned"
             >{{ detail.builtinText }}</pre>
         </div>
 
         <div>
-          <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted">
+          <SectionLabel as="h4" class="mb-1">
             {{ t('agentPrompt.historyHeading') }}
-          </h4>
-          <p v-if="!detail.revisions.length" class="text-[11px] text-dimmed">
+          </SectionLabel>
+          <p v-if="!detail.revisions.length" class="text-2xs text-dimmed">
             {{ t('agentPrompt.historyEmpty') }}
           </p>
           <ul v-else class="max-h-52 divide-y divide-default overflow-y-auto text-xs">
@@ -316,7 +317,7 @@ function revisionLabel(revision: AgentPromptRevision): string {
               <span class="min-w-0 flex-1 truncate text-toned">
                 {{ revisionLabel(revision) }}
               </span>
-              <span class="shrink-0 text-[11px] text-dimmed">
+              <span class="shrink-0 text-2xs text-dimmed">
                 {{ d(new Date(revision.createdAt), 'short') }}
               </span>
               <UButton

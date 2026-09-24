@@ -28,6 +28,7 @@ import type {
   ReviewItemSeverity,
   ReviewItemStatus,
 } from '~/types/requirements'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const board = useBoardStore()
 const requirements = useRequirementsStore()
@@ -806,11 +807,11 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                   </span>
                   <span class="h-px flex-1 bg-accented" />
                 </div>
-                <p class="mt-0.5 text-[11px] text-dimmed">{{ CLASS_HINTS[group] }}</p>
+                <p class="mt-0.5 text-2xs text-dimmed">{{ CLASS_HINTS[group] }}</p>
               </div>
               <div v-if="startsAttentionGroup(index)" class="flex items-center gap-2 pt-1">
                 <span
-                  class="text-[11px] font-semibold uppercase tracking-wide"
+                  class="text-2xs font-semibold uppercase tracking-wide"
                   :class="ATTENTION_LABEL_COLOR[attention]"
                 >
                   {{ ATTENTION_LABELS[attention] }}
@@ -873,9 +874,9 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                       v-if="item.reply && item.status !== 'open' && item.status !== 'answered'"
                       class="mt-2 max-w-3xl rounded-md border-s-2 border-muted bg-app-950/40 px-3 py-1.5 text-sm text-toned"
                     >
-                      <span class="text-[10px] uppercase tracking-wide text-dimmed">
+                      <SectionLabel as="span">
                         {{ t('requirements.answerLabel') }}
-                      </span>
+                      </SectionLabel>
                       <p class="whitespace-pre-line">{{ item.reply }}</p>
                     </div>
 
@@ -964,7 +965,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                         />
                         <p
                           v-if="isUserAnswered(item)"
-                          class="mt-1 flex items-center gap-1 text-[11px] text-app-success-400"
+                          class="mt-1 flex items-center gap-1 text-2xs text-app-success-400"
                         >
                           <UIcon name="i-lucide-check" class="h-3 w-3 shrink-0" />
                           {{ t('requirements.userAnswered') }}
@@ -1093,7 +1094,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                             :placeholder="t('requirements.guidancePlaceholder')"
                             :disabled="frozen"
                           />
-                          <p class="mt-1 flex items-center gap-1 text-[11px] text-primary/80">
+                          <p class="mt-1 flex items-center gap-1 text-2xs text-primary/80">
                             <UIcon name="i-lucide-wand-2" class="h-3 w-3 shrink-0" />
                             {{ t('requirements.guidanceHint') }}
                           </p>
@@ -1101,7 +1102,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                       </template>
 
                       <!-- DISMISS: nothing to fill in — a short note explains the effect -->
-                      <p v-else class="mt-2 text-[11px] text-dimmed">
+                      <p v-else class="mt-2 text-2xs text-dimmed">
                         {{ t('requirements.dismissedHint') }}
                       </p>
                     </template>
@@ -1116,7 +1117,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                    off-screen); the per-heading toggles below still work when it's expanded. -->
           <section v-if="outline" class="mt-6 border-t border-default pt-5">
             <button
-              class="mb-3 flex w-full items-center gap-1.5 text-[11px] text-app-success-400"
+              class="mb-3 flex w-full items-center gap-1.5 text-2xs text-app-success-400"
               @click="toggleDoc"
             >
               <UIcon
@@ -1157,7 +1158,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                 </button>
                 <div
                   v-show="!s.title || !collapsed[s.id]"
-                  class="reader-prose mt-1 ps-5.5 text-[13px] leading-relaxed text-toned"
+                  class="reader-prose mt-1 ps-5.5 text-sm leading-relaxed text-toned"
                   v-html="s.bodyHtml"
                 />
               </div>
@@ -1277,7 +1278,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
             >
               {{ t('requirements.actions.incorporateAnswers') }}
             </UButton>
-            <p class="text-[11px] leading-relaxed text-dimmed">
+            <p class="text-2xs leading-relaxed text-dimmed">
               <template v-if="canProceed">
                 {{ t('requirements.help.canProceed') }}
               </template>
@@ -1341,14 +1342,14 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                 {{ t('requirements.actions.redoWithDirection') }}
               </UButton>
             </div>
-            <p class="text-[11px] leading-relaxed text-dimmed">
+            <p class="text-2xs leading-relaxed text-dimmed">
               {{ t('requirements.help.merged') }}
             </p>
           </div>
 
           <div
             v-if="review && incorporated"
-            class="border-t border-default pt-4 text-[11px] leading-relaxed text-dimmed"
+            class="border-t border-default pt-4 text-2xs leading-relaxed text-dimmed"
           >
             {{ t('requirements.settledFooter') }}
           </div>

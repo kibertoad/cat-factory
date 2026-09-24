@@ -38,7 +38,7 @@ const emit = defineEmits<{ resolve: [choice: IterationCapChoice] }>()
       <UIcon name="i-lucide-alert-triangle" class="h-5 w-5 shrink-0" />
       {{ heading }}
     </div>
-    <p class="mt-1 text-[12px] text-app-warning-200/80">{{ detail }}</p>
+    <p class="mt-1 text-xs text-app-warning-200/80">{{ detail }}</p>
     <div class="mt-3 flex flex-wrap gap-2">
       <UButton
         color="primary"

@@ -240,6 +240,9 @@ async function disconnectEmail() {
             class="w-44"
             @update:model-value="(r: AccountRole[]) => updateMemberRoles(m.userId, r)"
           />
+          <!-- The roles a member HOLDS, read-only where the select would be: the row's data, not
+               a heading over it, so it keeps its own classes rather than adopting the eyebrow
+               recipe (`common/SectionLabel.vue`). -->
           <span v-else class="text-xs uppercase tracking-wide text-muted">
             {{ m.roles.join(', ') }}
           </span>
@@ -290,6 +293,7 @@ async function disconnectEmail() {
         >
           <span class="truncate">{{ inv.email }}</span>
           <span class="flex items-center gap-2 text-xs">
+            <!-- The invitation's STATE, which is what this row is about. Not an eyebrow. -->
             <span class="uppercase tracking-wide text-muted">
               {{ invitationStatusLabel(inv.status) }}
             </span>

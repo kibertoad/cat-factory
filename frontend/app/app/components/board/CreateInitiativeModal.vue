@@ -216,7 +216,7 @@ async function create() {
                 <span class="block text-sm font-medium text-default">
                   {{ p.presentation.label }}
                 </span>
-                <span class="block text-[11px] text-muted">
+                <span class="block text-2xs text-muted">
                   {{ p.presentation.description }}
                 </span>
               </span>
@@ -264,7 +264,7 @@ async function create() {
           :issues-hint="t('initiative.create.contextIssuesHint')"
         />
 
-        <p class="text-[11px] text-dimmed">
+        <p class="text-2xs text-dimmed">
           {{ t('initiative.create.hint') }}
         </p>
       </div>
