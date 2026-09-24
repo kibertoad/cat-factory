@@ -151,7 +151,9 @@ watch(
                 <span :data-testid="`operator-window-${item.value}`">{{ item.label }}</span>
               </template>
             </UTabs>
-            <button
+            <UButton
+              color="neutral"
+              variant="ghost"
               class="rounded-lg border border-default p-1.5 text-muted transition hover:text-default"
               :title="t('platformObservability.refresh')"
               :aria-label="t('platformObservability.refresh')"
@@ -163,8 +165,10 @@ watch(
                 class="h-4 w-4"
                 :class="{ 'animate-spin': loading }"
               />
-            </button>
-            <button
+            </UButton>
+            <UButton
+              color="neutral"
+              variant="ghost"
               class="rounded-lg border border-default p-1.5 text-muted transition hover:text-default"
               :title="t('platformObservability.close')"
               :aria-label="t('platformObservability.close')"
@@ -172,7 +176,7 @@ watch(
               @click="close"
             >
               <UIcon name="i-lucide-x" class="h-4 w-4" />
-            </button>
+            </UButton>
           </div>
         </header>
 
@@ -182,12 +186,14 @@ watch(
             class="mx-auto max-w-2xl rounded-lg border border-app-error-800/60 bg-app-error-950/40 p-4 text-sm text-app-error-200"
           >
             <p>{{ error }}</p>
-            <button
+            <UButton
+              color="neutral"
+              variant="ghost"
               class="mt-2 rounded-md border border-app-error-700 px-3 py-1 text-xs hover:bg-app-error-900/40"
               @click="refresh"
             >
               {{ t('platformObservability.retry') }}
-            </button>
+            </UButton>
           </div>
 
           <div v-else-if="loading && !view" class="py-16 text-center text-sm text-muted">
@@ -366,9 +372,10 @@ watch(
                   </template>
                   <template #helperFailures-cell="{ row }">
                     <span class="block text-end tabular-nums">
-                      <span :class="row.original.helperFailures > 0 ? 'text-app-warning-400' : ''">{{
-                        row.original.helperFailures
-                      }}</span>
+                      <span
+                        :class="row.original.helperFailures > 0 ? 'text-app-warning-400' : ''"
+                        >{{ row.original.helperFailures }}</span
+                      >
                     </span>
                   </template>
                   <template #exhausted-cell="{ row }">

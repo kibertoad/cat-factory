@@ -426,34 +426,41 @@ const noSignInMethod = computed(
           <template v-if="mode === 'login'">
             <i18n-t keypath="auth.login.needAccount" tag="span" scope="global">
               <template #signUp>
-                <button
-                  type="button"
+                <UButton
+                  color="primary"
+                  variant="link"
                   class="text-primary hover:underline"
                   @click="setMode('signup')"
                 >
                   {{ t('auth.login.signUp') }}
-                </button>
+                </UButton>
               </template>
             </i18n-t>
           </template>
           <template v-else>
             <i18n-t keypath="auth.login.haveAccount" tag="span" scope="global">
               <template #signIn>
-                <button
-                  type="button"
+                <UButton
+                  color="primary"
+                  variant="link"
                   class="text-primary hover:underline"
                   @click="setMode('login')"
                 >
                   {{ t('auth.login.signIn') }}
-                </button>
+                </UButton>
               </template>
             </i18n-t>
           </template>
         </p>
         <p v-if="mode === 'login'" class="text-center text-xs text-muted">
-          <button type="button" class="text-primary hover:underline" @click="setMode('forgot')">
+          <UButton
+            color="primary"
+            variant="link"
+            class="text-primary hover:underline"
+            @click="setMode('forgot')"
+          >
             {{ t('auth.login.forgotPassword') }}
-          </button>
+          </UButton>
         </p>
       </UForm>
 
@@ -568,9 +575,14 @@ const noSignInMethod = computed(
           </UButton>
         </template>
         <p class="text-center text-xs text-muted">
-          <button type="button" class="text-primary hover:underline" @click="setMode('login')">
+          <UButton
+            color="primary"
+            variant="link"
+            class="text-primary hover:underline"
+            @click="setMode('login')"
+          >
             {{ t('auth.login.backToSignIn') }}
-          </button>
+          </UButton>
         </p>
       </UForm>
     </div>

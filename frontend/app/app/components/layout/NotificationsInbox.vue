@@ -429,13 +429,15 @@ function revealDecision(n: Notification) {
             />
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-1.5">
-                <button
+                <UButton
+                  color="neutral"
+                  variant="link"
                   class="block min-w-0 flex-1 truncate text-start text-sm font-medium text-default hover:underline"
                   :title="n.title"
                   @click="reveal(n)"
                 >
                   {{ n.title }}
-                </button>
+                </UButton>
                 <span
                   v-if="isUrgent(n)"
                   class="shrink-0 rounded bg-app-error-500/20 px-1.5 py-0.5 text-3xs font-semibold uppercase tracking-wide text-app-error-400"

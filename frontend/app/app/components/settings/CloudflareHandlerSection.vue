@@ -249,10 +249,7 @@ async function remove() {
           <div class="mt-2 space-y-2">
             <!-- The placeholder is a FORMAT EXAMPLE containing vue-i18n metacharacters, so it
                  stays inline rather than becoming a catalog key. -->
-            <UFormField
-              size="xs"
-              :label="t('settings.infrastructure.cloudflare.workerTemplate')"
-            >
+            <UFormField size="xs" :label="t('settings.infrastructure.cloudflare.workerTemplate')">
               <UInput
                 v-model="workerNameTemplate"
                 size="xs"

@@ -235,24 +235,24 @@ watch(open, (isOpen) => {
             />
             <template #content>
               <ul class="mt-2 space-y-1">
-              <!-- Keyed by POSITION: the transcript is append-only and rendered in order, and
+                <!-- Keyed by POSITION: the transcript is append-only and rendered in order, and
                    the same path legitimately appears twice (a body refused by the seed and then
                    served to the model, a path the model retried). Keying on the path patched
                    those two rows against each other and rendered a note beside the wrong one. -->
-              <li
-                v-for="(entry, index) in surveyReads"
-                :key="index"
-                class="flex items-baseline gap-2"
-              >
-                <span
-                  class="shrink-0 font-mono text-3xs uppercase"
-                  :class="entry.outcome === 'read' ? 'text-dimmed' : 'text-app-warning-400/80'"
+                <li
+                  v-for="(entry, index) in surveyReads"
+                  :key="index"
+                  class="flex items-baseline gap-2"
                 >
-                  {{ t(`bootstrap.adoption.survey.outcome.${entry.outcome}`) }}
-                </span>
-                <span class="font-mono text-muted">{{ entry.path }}</span>
-                <span v-if="entry.note" class="text-app-600">{{ entry.note }}</span>
-              </li>
+                  <span
+                    class="shrink-0 font-mono text-3xs uppercase"
+                    :class="entry.outcome === 'read' ? 'text-dimmed' : 'text-app-warning-400/80'"
+                  >
+                    {{ t(`bootstrap.adoption.survey.outcome.${entry.outcome}`) }}
+                  </span>
+                  <span class="font-mono text-muted">{{ entry.path }}</span>
+                  <span v-if="entry.note" class="text-app-600">{{ entry.note }}</span>
+                </li>
               </ul>
             </template>
           </UCollapsible>

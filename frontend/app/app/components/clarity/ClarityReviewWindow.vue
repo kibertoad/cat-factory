@@ -491,7 +491,9 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                  `width` prop): the window is `full`-width now, and this is continuous prose that
                  would otherwise run to 200-character lines. -->
             <div v-for="s in outline.sections" :key="s.id" class="mb-2 max-w-3xl">
-              <button
+              <UButton
+                color="neutral"
+                variant="ghost"
                 v-if="s.title"
                 class="group flex w-full items-center gap-2 text-start"
                 @click="toggle(s.id)"
@@ -506,7 +508,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                   :class="s.depth <= 1 ? 'text-base' : s.depth === 2 ? 'text-sm' : 'text-xs'"
                   v-html="s.titleHtml"
                 />
-              </button>
+              </UButton>
               <div
                 v-show="!s.title || !collapsed[s.id]"
                 class="reader-prose mt-1 ps-5.5 text-sm leading-relaxed text-toned"

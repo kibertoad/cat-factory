@@ -180,39 +180,47 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
           {{ t('media.lightbox.counter', { current: index + 1, total }) }}
         </span>
         <div class="flex shrink-0 items-center gap-1">
-          <button
+          <UButton
+            color="neutral"
+            variant="ghost"
             class="rounded-md p-1.5 text-muted hover:bg-elevated hover:text-default disabled:opacity-40"
             :title="t('media.lightbox.zoomOut')"
             :disabled="scale <= MIN_SCALE"
             @click="zoomBy(1 / 1.25)"
           >
             <UIcon name="i-lucide-zoom-out" class="h-4 w-4" />
-          </button>
+          </UButton>
           <span class="w-10 text-center text-2xs tabular-nums text-dimmed">{{
             n(scale, 'percent')
           }}</span>
-          <button
+          <UButton
+            color="neutral"
+            variant="ghost"
             class="rounded-md p-1.5 text-muted hover:bg-elevated hover:text-default disabled:opacity-40"
             :title="t('media.lightbox.zoomIn')"
             :disabled="scale >= MAX_SCALE"
             @click="zoomBy(1.25)"
           >
             <UIcon name="i-lucide-zoom-in" class="h-4 w-4" />
-          </button>
-          <button
+          </UButton>
+          <UButton
+            color="neutral"
+            variant="ghost"
             class="rounded-md p-1.5 text-muted hover:bg-elevated hover:text-default"
             :title="t('media.lightbox.reset')"
             @click="resetView"
           >
             <UIcon name="i-lucide-maximize" class="h-4 w-4" />
-          </button>
-          <button
+          </UButton>
+          <UButton
+            color="neutral"
+            variant="ghost"
             class="ms-1 rounded-md p-1.5 text-muted hover:bg-elevated hover:text-default"
             :title="t('media.lightbox.close')"
             @click="close"
           >
             <UIcon name="i-lucide-x" class="h-4 w-4" />
-          </button>
+          </UButton>
         </div>
       </div>
 
@@ -222,14 +230,16 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
         @wheel="onWheel"
         @click.self="close"
       >
-        <button
+        <UButton
+          color="neutral"
+          variant="ghost"
           v-if="total > 1"
           class="absolute start-3 top-1/2 z-10 -translate-y-1/2 rounded-full bg-default/80 p-2 text-toned hover:bg-elevated hover:text-highlighted"
           :title="t('media.lightbox.prev')"
           @click="go(-1)"
         >
           <UIcon name="i-lucide-chevron-left" class="h-5 w-5 rtl:-scale-x-100" />
-        </button>
+        </UButton>
 
         <img
           v-if="url"
@@ -257,23 +267,27 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
           <p class="text-xs">
             {{ state === 'error' ? t('media.lightbox.failed') : t('media.lightbox.loading') }}
           </p>
-          <button
+          <UButton
+            color="neutral"
+            variant="link"
             v-if="state === 'error' && current"
             class="text-xs text-app-warning-300 hover:underline"
             @click="props.blobs.retry(current.artifactId)"
           >
             {{ t('common.retry') }}
-          </button>
+          </UButton>
         </div>
 
-        <button
+        <UButton
+          color="neutral"
+          variant="ghost"
           v-if="total > 1"
           class="absolute end-3 top-1/2 z-10 -translate-y-1/2 rounded-full bg-default/80 p-2 text-toned hover:bg-elevated hover:text-highlighted"
           :title="t('media.lightbox.next')"
           @click="go(1)"
         >
           <UIcon name="i-lucide-chevron-right" class="h-5 w-5 rtl:-scale-x-100" />
-        </button>
+        </UButton>
       </div>
     </div>
   </Teleport>

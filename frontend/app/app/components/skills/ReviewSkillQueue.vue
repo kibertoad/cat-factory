@@ -84,10 +84,11 @@ function toggle(id: string) {
           >
             <div class="min-h-0 flex-1 overflow-y-auto p-1">
               <template v-if="offered.length">
-                <button
+                <UButton
+                  color="neutral"
+                  variant="ghost"
                   v-for="s in offered"
                   :key="s.id"
-                  type="button"
                   class="flex w-full items-start gap-2 rounded px-2 py-1.5 text-start text-sm hover:bg-elevated/60 disabled:cursor-not-allowed disabled:opacity-40"
                   :class="selectedSet.has(s.id) ? 'text-app-100' : 'text-toned'"
                   :disabled="atCap && !selectedSet.has(s.id)"
@@ -106,7 +107,7 @@ function toggle(id: string) {
                       {{ s.description }}
                     </span>
                   </span>
-                </button>
+                </UButton>
               </template>
               <p v-else class="px-2 py-3 text-xs text-dimmed">
                 {{ t('skills.reviewQueue.pickerEmpty') }}

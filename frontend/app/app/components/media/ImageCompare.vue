@@ -157,7 +157,9 @@ watch(pendingRef, (file) => {
         v-if="MODES.length > 1"
         class="flex items-center gap-0.5 rounded-md border border-default bg-app-950/60 p-0.5"
       >
-        <button
+        <UButton
+          color="neutral"
+          variant="ghost"
           v-for="m in MODES"
           :key="m.id"
           class="rounded px-1.5 py-1 text-muted hover:text-default"
@@ -166,7 +168,7 @@ watch(pendingRef, (file) => {
           @click="mode = m.id"
         >
           <UIcon :name="m.icon" class="h-3.5 w-3.5" />
-        </button>
+        </UButton>
       </div>
     </div>
 
@@ -176,9 +178,11 @@ watch(pendingRef, (file) => {
         <figcaption class="text-3xs uppercase tracking-wide text-dimmed">
           {{ t('media.compare.actual') }}
         </figcaption>
-        <button
+        <UButton
           v-if="actualUrl"
-          class="block w-full overflow-hidden rounded border border-default hover:border-app-600"
+          color="neutral"
+          variant="ghost"
+          class="block w-full overflow-hidden rounded border border-default p-0 hover:border-app-600"
           @click="actualId && emit('expand', actualId)"
         >
           <img
@@ -186,7 +190,7 @@ watch(pendingRef, (file) => {
             :alt="t('media.compare.actualAlt', { view })"
             class="w-full cursor-zoom-in"
           />
-        </button>
+        </UButton>
         <div
           v-else
           class="flex h-32 items-center justify-center rounded border border-dashed border-muted text-2xs text-app-600"
@@ -319,6 +323,5 @@ watch(pendingRef, (file) => {
       <canvas ref="diffCanvas" :class="DIFF_CANVAS_CLASS" />
       <p class="text-3xs text-dimmed">{{ t('media.compare.diffHint') }}</p>
     </div>
-
   </div>
 </template>

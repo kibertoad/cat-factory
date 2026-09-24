@@ -259,7 +259,10 @@ const { requestClose } = useUnsavedGuard({
                   <span class="text-app-600">•</span>{{ tr }}
                 </span>
               </span>
-              <span v-if="item.fork.riskNotes" class="mt-1.5 block text-2xs text-app-warning-300/90">
+              <span
+                v-if="item.fork.riskNotes"
+                class="mt-1.5 block text-2xs text-app-warning-300/90"
+              >
                 <span class="text-app-warning-500/70">{{ t('forkDecision.riskNotes') }}</span>
                 {{ item.fork.riskNotes }}
               </span>
@@ -337,12 +340,11 @@ const { requestClose } = useUnsavedGuard({
                   ? t('forkDecision.chat.budgetSpent')
                   : t('forkDecision.chat.placeholder')
               "
-             
               @keydown.enter.exact.prevent="onSend"
-    size="xs"
-    class="min-h-0 flex-1"
-    :ui="{ base: 'resize-y' }"
-  />
+              size="xs"
+              class="min-h-0 flex-1"
+              :ui="{ base: 'resize-y' }"
+            />
             <UButton
               data-testid="fork-chat-send"
               color="neutral"

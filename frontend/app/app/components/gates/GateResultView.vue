@@ -295,10 +295,10 @@ const conflictVerdict = computed(() => {
                 :rows="3"
                 :disabled="fixBusy"
                 :placeholder="t('gates.humanReview.requestFixPlaceholder')"
-    size="sm"
-    class="w-full"
-    :ui="{ base: 'resize-y' }"
-  />
+                size="sm"
+                class="w-full"
+                :ui="{ base: 'resize-y' }"
+              />
               <div class="mt-2 flex justify-end">
                 <UButton
                   size="sm"

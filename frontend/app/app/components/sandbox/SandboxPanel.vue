@@ -558,7 +558,9 @@ async function archive(prompt: SandboxPromptVersion) {
               {{ t('sandbox.results.past') }}
             </SectionLabel>
             <div class="max-h-56 space-y-1 overflow-auto">
-              <button
+              <UButton
+                color="neutral"
+                variant="ghost"
                 v-for="x in store.experiments"
                 :key="x.id"
                 class="flex w-full items-center justify-between rounded-md border border-default bg-default/40 px-2 py-1.5 text-start text-sm hover:bg-elevated/50"
@@ -566,7 +568,7 @@ async function archive(prompt: SandboxPromptVersion) {
               >
                 <span class="truncate text-toned">{{ x.name }}</span>
                 <UBadge variant="soft" size="xs">{{ EXPERIMENT_STATUS_LABEL[x.status] }}</UBadge>
-              </button>
+              </UButton>
               <p v-if="!store.experiments.length" class="text-xs text-dimmed">
                 {{ t('sandbox.results.empty') }}
               </p>

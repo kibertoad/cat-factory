@@ -339,10 +339,11 @@ onMounted(() => {
 
     <div class="max-h-56 space-y-0.5 overflow-y-auto">
       <!-- Already-imported issues (linked directly, no re-fetch). -->
-      <button
+      <UButton
+        color="neutral"
+        variant="ghost"
         v-for="row in importedRows"
         :key="`imp:${row.externalId}`"
-        type="button"
         class="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-start text-xs text-toned hover:bg-elevated/70"
         @click="pickImported(row)"
       >
@@ -351,13 +352,14 @@ onMounted(() => {
         <UBadge color="neutral" variant="soft" size="xs" class="ms-auto shrink-0">{{
           t('tasks.picker.imported')
         }}</UBadge>
-      </button>
+      </UButton>
 
       <!-- Tracker search hits (imported on add). -->
-      <button
+      <UButton
+        color="neutral"
+        variant="ghost"
         v-for="r in searchRows"
         :key="`hit:${r.externalId}`"
-        type="button"
         class="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-start text-xs text-toned hover:bg-elevated/70"
         @click="pickSearch(r)"
       >
@@ -366,12 +368,13 @@ onMounted(() => {
         <UBadge v-if="r.status" color="neutral" variant="soft" size="xs" class="ms-auto shrink-0">
           {{ r.status }}
         </UBadge>
-      </button>
+      </UButton>
 
       <!-- Explicit URL/key reference (imported on add). -->
-      <button
+      <UButton
+        color="neutral"
+        variant="ghost"
         v-if="refRow"
-        type="button"
         class="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-start text-xs text-toned hover:bg-elevated/70"
         @click="pickRef(refRow)"
       >
@@ -383,7 +386,7 @@ onMounted(() => {
             </template>
           </i18n-t>
         </span>
-      </button>
+      </UButton>
 
       <EmptyState
         v-if="empty"

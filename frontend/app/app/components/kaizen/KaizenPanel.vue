@@ -176,7 +176,9 @@ const historyColumns = computed<TableColumn<KaizenGrading>[]>(() => [
               }"
             >
               <template #when-cell="{ row }">
-                <span class="whitespace-nowrap text-dimmed">{{ when(row.original.createdAt) }}</span>
+                <span class="whitespace-nowrap text-dimmed">{{
+                  when(row.original.createdAt)
+                }}</span>
               </template>
               <template #agent-cell="{ row }">
                 <span class="flex items-center gap-1.5">

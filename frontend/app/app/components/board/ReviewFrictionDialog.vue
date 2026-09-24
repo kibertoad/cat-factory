@@ -90,8 +90,9 @@ function createAnyway() {
           </SectionLabel>
           <ul class="space-y-1">
             <li v-for="item in ctx.debt" :key="item.blockId">
-              <button
-                type="button"
+              <UButton
+                color="neutral"
+                variant="ghost"
                 class="flex w-full items-center justify-between gap-3 rounded-md px-2 py-1.5 text-left text-sm hover:bg-elevated/60 disabled:opacity-50"
                 :disabled="pending"
                 @click="goToBlock(item.blockId)"
@@ -102,7 +103,7 @@ function createAnyway() {
                 <span class="shrink-0 text-xs text-dimmed">
                   {{ t('errors.reviewFriction.waiting', { minutes: item.waitingMinutes }) }}
                 </span>
-              </button>
+              </UButton>
             </li>
           </ul>
         </div>

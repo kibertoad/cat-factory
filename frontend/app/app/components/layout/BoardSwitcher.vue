@@ -257,8 +257,9 @@ async function submitPrompt() {
       :content="{ align: 'start' }"
       class="w-full"
     >
-      <button
-        type="button"
+      <UButton
+        color="neutral"
+        variant="ghost"
         class="flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-start transition hover:bg-elevated/60"
         :disabled="busy"
       >
@@ -270,13 +271,14 @@ async function submitPrompt() {
           {{ accounts.activeAccount?.name ?? t('layout.boardSwitcher.accountFallback') }}
         </SectionLabel>
         <UIcon name="i-lucide-chevrons-up-down" class="ms-auto h-3.5 w-3.5 shrink-0 text-app-600" />
-      </button>
+      </UButton>
     </UDropdownMenu>
 
     <!-- board selector -->
     <UDropdownMenu :items="boardItems" :content="{ align: 'start' }" class="w-full">
-      <button
-        type="button"
+      <UButton
+        color="neutral"
+        variant="ghost"
         :title="
           collapsed
             ? (workspace.activeWorkspace?.name ?? t('layout.boardSwitcher.boardFallback'))
@@ -297,7 +299,7 @@ async function submitPrompt() {
           name="i-lucide-chevron-down"
           class="ms-auto h-4 w-4 shrink-0 text-dimmed"
         />
-      </button>
+      </UButton>
     </UDropdownMenu>
 
     <!-- create / rename prompt -->

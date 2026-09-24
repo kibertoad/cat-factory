@@ -121,9 +121,10 @@ const earlierFailedToolCalls = computed(() =>
     <!-- The failing calls themselves. -->
     <div class="mt-3 space-y-2">
       <!-- Last model call that FAILED outright. -->
-      <button
+      <UButton
+        color="neutral"
+        variant="ghost"
         v-if="evidence.lastErroredCall"
-        type="button"
         class="flex w-full items-start gap-3 rounded-lg border border-app-error-900/50 bg-app-950/50 px-3 py-2 text-start transition hover:bg-default/70"
         @click="emit('showCall', evidence.lastErroredCall.id)"
       >
@@ -159,12 +160,13 @@ const earlierFailedToolCalls = computed(() =>
           </p>
         </div>
         <UIcon name="i-lucide-chevron-right" class="mt-0.5 h-4 w-4 shrink-0 text-app-600" />
-      </button>
+      </UButton>
 
       <!-- Last TOOL call that failed: the row no rollup counts. -->
-      <button
+      <UButton
+        color="neutral"
+        variant="ghost"
         v-if="evidence.lastFailedToolCall"
-        type="button"
         class="flex w-full items-start gap-3 rounded-lg border border-app-error-900/50 bg-app-950/50 px-3 py-2 text-start transition hover:bg-default/70"
         @click="emit('showFailingTools')"
       >
@@ -208,7 +210,7 @@ const earlierFailedToolCalls = computed(() =>
           </p>
         </div>
         <UIcon name="i-lucide-chevron-right" class="mt-0.5 h-4 w-4 shrink-0 text-app-600" />
-      </button>
+      </UButton>
 
       <!-- Nothing failing to point at. Which of the reasons it is decides what an operator should
            do next, so each gets its own sentence rather than one shared shrug. `emptyReason` is

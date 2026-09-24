@@ -408,7 +408,9 @@ async function copyOutput() {
         </SectionLabel>
       </div>
       <nav class="flex-1 space-y-0.5 overflow-auto px-2 py-3">
-        <button
+        <UButton
+          color="neutral"
+          variant="ghost"
           class="block w-full truncate rounded-md px-2 py-1 text-start text-sm transition"
           :class="
             activeId === 'step-details'
@@ -418,8 +420,10 @@ async function copyOutput() {
           @click="goTo('step-details')"
         >
           {{ t('panels.stepDetail.details') }}
-        </button>
-        <button
+        </UButton>
+        <UButton
+          color="neutral"
+          variant="ghost"
           v-for="s in tocSections"
           :key="s.id"
           class="block w-full truncate rounded-md px-2 py-1 text-start text-sm transition"
@@ -433,7 +437,7 @@ async function copyOutput() {
           @click="goTo(s.id)"
         >
           {{ s.title }}
-        </button>
+        </UButton>
       </nav>
     </aside>
 
@@ -782,7 +786,9 @@ async function copyOutput() {
               :ref="(el) => (sectionEls[s.id] = el as HTMLElement | null)"
               class="scroll-mt-4"
             >
-              <button
+              <UButton
+                color="neutral"
+                variant="ghost"
                 v-if="s.depth > 0"
                 class="group flex w-full items-center gap-2 rounded-md py-1 text-start transition hover:text-highlighted"
                 @click="toggle(s.id)"
@@ -797,7 +803,7 @@ async function copyOutput() {
                   :class="s.depth <= 1 ? 'text-lg' : s.depth === 2 ? 'text-base' : 'text-sm'"
                   v-html="s.titleHtml"
                 />
-              </button>
+              </UButton>
               <!-- eslint-disable-next-line vue/no-v-html -->
               <div
                 v-show="!collapsed[s.id]"
@@ -914,13 +920,15 @@ async function copyOutput() {
               <SectionLabel>
                 {{ t('panels.stepDetail.commentN', { number: idx + 1 }) }}
               </SectionLabel>
-              <button
+              <UButton
+                color="neutral"
+                variant="ghost"
                 class="text-dimmed transition hover:text-app-error-400"
                 :title="t('panels.stepDetail.removeComment')"
                 @click="removeComment(idx)"
               >
                 <UIcon name="i-lucide-x" class="h-3.5 w-3.5" />
-              </button>
+              </UButton>
             </div>
             <pre
               class="mb-1 max-h-20 overflow-auto whitespace-pre-wrap rounded bg-app-950/50 p-1.5 text-3xs text-muted"

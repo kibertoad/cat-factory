@@ -559,14 +559,15 @@ function done() {
                     class="inline-flex items-center gap-1 rounded bg-elevated px-2 py-0.5 text-xs text-default"
                   >
                     <code class="text-default">{{ dir }}</code>
-                    <button
-                      type="button"
+                    <UButton
+                      color="neutral"
+                      variant="ghost"
                       class="text-muted hover:text-app-100"
                       :aria-label="t('github.addService.removeService', { directory: dir })"
                       @click="removeSelected(dir)"
                     >
                       <UIcon name="i-lucide-x" class="h-3 w-3" />
-                    </button>
+                    </UButton>
                   </span>
                 </div>
                 <p v-else class="text-xs text-dimmed">

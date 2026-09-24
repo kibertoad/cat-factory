@@ -267,8 +267,9 @@ const PHASE_ICON: Record<string, string> = {
         <SectionLabel as="p" class="mb-2 px-1">
           {{ t('bugFishing.phases.heading') }}
         </SectionLabel>
-        <button
-          type="button"
+        <UButton
+          color="neutral"
+          variant="ghost"
           class="mb-1 w-full rounded-md px-2 py-1.5 text-left text-xs"
           :class="
             selectedPassKey === null
@@ -278,7 +279,7 @@ const PHASE_ICON: Record<string, string> = {
           @click="selectedPassKey = null"
         >
           {{ t('bugFishing.phases.all', { count: findings.length }) }}
-        </button>
+        </UButton>
         <!-- Grouped by TERRITORY on a partitioned codebase. A codebase small enough to fish
              whole has one group with no label, which renders as the flat angle rail. -->
         <div v-for="group in territoryGroups" :key="group.id ?? 'whole'" class="mb-2">
@@ -291,8 +292,9 @@ const PHASE_ICON: Record<string, string> = {
           </p>
           <ul class="space-y-0.5">
             <li v-for="phase in group.passes" :key="passKey(phase)">
-              <button
-                type="button"
+              <UButton
+                color="neutral"
+                variant="ghost"
                 class="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left"
                 :class="
                   selectedPassKey === passKey(phase)
@@ -341,7 +343,7 @@ const PHASE_ICON: Record<string, string> = {
                     </span>
                   </span>
                 </span>
-              </button>
+              </UButton>
             </li>
           </ul>
         </div>
@@ -562,13 +564,14 @@ const PHASE_ICON: Record<string, string> = {
                   })
                 }}
               </span>
-              <button
-                type="button"
+              <UButton
+                color="neutral"
+                variant="link"
                 class="underline hover:text-app-success-200"
                 @click="openSpawnedTask(finding.spawn.taskId)"
               >
                 {{ t('bugFishing.finding.openTask') }}
-              </button>
+              </UButton>
             </div>
 
             <!-- A claim held by a marking still in flight. No task to link yet, and no Fix

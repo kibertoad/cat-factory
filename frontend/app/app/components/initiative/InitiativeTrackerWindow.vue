@@ -404,22 +404,26 @@ const { requestClose } = useUnsavedGuard({
                   {{ t('initiative.checkpoint.pausedBody', { phase: checkpointPhase!.title }) }}
                 </p>
                 <div class="mt-2.5 flex flex-wrap gap-2">
-                  <button
+                  <UButton
+                    color="neutral"
+                    variant="ghost"
                     class="rounded bg-primary/90 px-2.5 py-1 text-2xs font-medium text-inverted hover:bg-primary disabled:opacity-50"
                     :disabled="initiatives.controlling"
                     data-testid="initiative-checkpoint-resume"
                     @click="checkpointControl('resume')"
                   >
                     {{ t('initiative.inspector.resume') }}
-                  </button>
-                  <button
+                  </UButton>
+                  <UButton
+                    color="neutral"
+                    variant="ghost"
                     class="rounded border border-app-error-500/50 px-2.5 py-1 text-2xs font-medium text-app-error-300 hover:bg-app-error-500/10 disabled:opacity-50"
                     :disabled="initiatives.controlling"
                     data-testid="initiative-checkpoint-cancel"
                     @click="checkpointControl('cancel')"
                   >
                     {{ t('initiative.inspector.cancel') }}
-                  </button>
+                  </UButton>
                 </div>
               </div>
             </div>
@@ -587,14 +591,16 @@ const { requestClose } = useUnsavedGuard({
               <SectionLabel as="h3">
                 {{ t('initiative.tracker.policy') }}
               </SectionLabel>
-              <button
+              <UButton
+                color="neutral"
+                variant="ghost"
                 v-if="editable && !editingPolicy"
                 class="rounded border border-muted px-1.5 py-0.5 text-3xs text-toned hover:bg-elevated"
                 data-testid="initiative-policy-edit"
                 @click="startEditPolicy"
               >
                 {{ t('initiative.curation.edit') }}
-              </button>
+              </UButton>
             </div>
             <ul v-if="!editingPolicy" class="text-xs text-toned">
               <li>
@@ -647,20 +653,24 @@ const { requestClose } = useUnsavedGuard({
                 />
               </UFormField>
               <div class="flex gap-2">
-                <button
+                <UButton
+                  color="neutral"
+                  variant="ghost"
                   class="rounded bg-primary/90 px-2 py-1 text-2xs text-inverted hover:bg-primary disabled:opacity-50"
                   :disabled="initiatives.curating"
                   data-testid="initiative-policy-save"
                   @click="savePolicy"
                 >
                   {{ t('initiative.curation.save') }}
-                </button>
-                <button
+                </UButton>
+                <UButton
+                  color="neutral"
+                  variant="ghost"
                   class="rounded border border-muted px-2 py-1 text-2xs text-toned hover:bg-elevated"
                   @click="editingPolicy = false"
                 >
                   {{ t('initiative.curation.cancel') }}
-                </button>
+                </UButton>
               </div>
             </div>
           </section>
@@ -736,38 +746,46 @@ const { requestClose } = useUnsavedGuard({
                       data-testid="initiative-promote-title"
                     />
                     <div class="flex gap-2">
-                      <button
+                      <UButton
+                        color="neutral"
+                        variant="ghost"
                         class="rounded bg-primary/90 px-2 py-1 text-2xs text-inverted hover:bg-primary disabled:opacity-50"
                         :disabled="initiatives.curating || !promoteForm.phaseId"
                         data-testid="initiative-promote-submit"
                         @click="submitPromote(f)"
                       >
                         {{ t('initiative.curation.promoteConfirm') }}
-                      </button>
-                      <button
+                      </UButton>
+                      <UButton
+                        color="neutral"
+                        variant="ghost"
                         class="rounded border border-muted px-2 py-1 text-2xs text-toned hover:bg-elevated"
                         @click="promotingId = null"
                       >
                         {{ t('initiative.curation.cancel') }}
-                      </button>
+                      </UButton>
                     </div>
                   </div>
                   <div v-else class="flex gap-1.5">
-                    <button
+                    <UButton
+                      color="neutral"
+                      variant="ghost"
                       class="rounded border border-muted px-1.5 py-0.5 text-3xs text-toned hover:bg-elevated"
                       data-testid="initiative-followup-promote"
                       @click="startPromote(f)"
                     >
                       {{ t('initiative.curation.promote') }}
-                    </button>
-                    <button
+                    </UButton>
+                    <UButton
+                      color="neutral"
+                      variant="ghost"
                       class="rounded border border-muted px-1.5 py-0.5 text-3xs text-toned hover:bg-elevated disabled:opacity-50"
                       :disabled="initiatives.curating"
                       data-testid="initiative-followup-dismiss"
                       @click="dismissFollowUp(f)"
                     >
                       {{ t('initiative.curation.dismiss') }}
-                    </button>
+                    </UButton>
                   </div>
                 </div>
               </li>

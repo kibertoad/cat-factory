@@ -67,9 +67,10 @@ const pinnedTitle = computed(
   <!-- Rail: one button, flips the tier. The label rides under the glyph so the rail still says
        which tier is on — the audience that needs to find the advanced half is exactly the one
        sitting in basic mode's collapsed default. -->
-  <button
+  <UButton
+    color="neutral"
+    variant="ghost"
     v-else-if="collapsed"
-    type="button"
     data-testid="ui-mode-toggle"
     :aria-label="t('uiMode.switchTo', { mode: t(MODE_LABELS[otherMode]) })"
     :title="t('uiMode.switchTo', { mode: t(MODE_LABELS[otherMode]) })"
@@ -80,7 +81,7 @@ const pinnedTitle = computed(
     <span class="w-full truncate text-center text-3xs font-medium uppercase text-toned">
       {{ currentLabel }}
     </span>
-  </button>
+  </UButton>
 
   <div v-else data-testid="ui-mode-switcher" class="w-full">
     <SectionLabel class="mb-1 px-1">
@@ -91,10 +92,11 @@ const pinnedTitle = computed(
       :aria-label="t('uiMode.switcher')"
       class="flex w-full gap-1 rounded-lg border border-muted bg-default/60 p-1"
     >
-      <button
+      <UButton
+        color="neutral"
+        variant="ghost"
         v-for="mode in UI_MODES"
         :key="mode"
-        type="button"
         :data-testid="`ui-mode-option-${mode}`"
         :aria-pressed="mode === uiMode.mode"
         class="flex-1 truncate rounded-md px-2 py-1 text-xs font-medium transition"
@@ -106,7 +108,7 @@ const pinnedTitle = computed(
         @click="uiMode.setMode(mode)"
       >
         {{ t(MODE_LABELS[mode]) }}
-      </button>
+      </UButton>
     </div>
   </div>
 

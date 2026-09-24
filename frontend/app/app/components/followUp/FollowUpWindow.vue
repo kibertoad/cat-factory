@@ -235,10 +235,10 @@ function hasRecordedAnswer(item: FollowUpItem): boolean {
                     v-model="drafts[item.id]"
                     :rows="2"
                     :placeholder="t('followUp.answerPlaceholder')"
-    size="xs"
-    class="w-full"
-    :ui="{ base: 'resize-y' }"
-  />
+                    size="xs"
+                    class="w-full"
+                    :ui="{ base: 'resize-y' }"
+                  />
                   <!-- Wraps, like the follow-up row below: three buttons whose labels are two
                        words each in English are one long line in most of the other locales, and
                        the result window is a narrow panel. -->

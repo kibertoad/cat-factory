@@ -233,7 +233,9 @@ watch(
                 <span :data-testid="`reports-window-${item.value}`">{{ item.label }}</span>
               </template>
             </UTabs>
-            <button
+            <UButton
+              color="neutral"
+              variant="ghost"
               class="rounded-lg border border-default p-1.5 text-muted transition hover:text-default"
               :aria-label="t('reports.refresh')"
               :title="t('reports.refresh')"
@@ -244,14 +246,16 @@ watch(
                 class="h-4 w-4"
                 :class="{ 'animate-spin': loading }"
               />
-            </button>
-            <button
+            </UButton>
+            <UButton
+              color="neutral"
+              variant="ghost"
               class="rounded-lg border border-default p-1.5 text-muted transition hover:text-default"
               :aria-label="t('common.close')"
               @click="close"
             >
               <UIcon name="i-lucide-x" class="h-4 w-4" />
-            </button>
+            </UButton>
           </div>
         </header>
 
@@ -262,12 +266,14 @@ watch(
           >
             <p>{{ t('reports.error') }}</p>
             <p v-if="error" class="mt-1 text-xs text-app-error-300/80">{{ error }}</p>
-            <button
+            <UButton
+              color="neutral"
+              variant="ghost"
               class="mt-2 rounded-md border border-app-error-700 px-3 py-1 text-xs hover:bg-app-error-900/40"
               @click="refresh"
             >
               {{ t('reports.retry') }}
-            </button>
+            </UButton>
           </div>
 
           <div v-else-if="loading && !view" class="py-16 text-center text-sm text-muted">

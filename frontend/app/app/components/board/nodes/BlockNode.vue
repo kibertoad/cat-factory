@@ -559,15 +559,16 @@ const ITEM_ICON: Record<string, string> = {
 
           <FrameSwimlanes v-if="hasTasks" :frame-id="block.id" :lane-body-height="laneBodyHeight" />
 
-          <button
+          <UButton
+            color="neutral"
+            variant="ghost"
             v-if="!hasTasks && access.canWriteBoard.value"
-            type="button"
             data-testid="frame-add-task-empty"
             class="absolute inset-4 flex items-center justify-center gap-1 rounded-lg border border-dashed border-muted text-2xs text-dimmed hover:border-app-500 hover:text-toned"
             @click.stop="addTask"
           >
             <UIcon name="i-lucide-plus" class="h-3.5 w-3.5" /> {{ t('board.frame.addFirstTask') }}
-          </button>
+          </UButton>
         </div>
       </div>
 

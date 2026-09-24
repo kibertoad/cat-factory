@@ -262,21 +262,23 @@ const canDestroy = computed(
             <SectionLabel as="h3">
               {{ t('humanTest.fix.heading') }}
             </SectionLabel>
-            <button
+            <UButton
+              color="neutral"
+              variant="ghost"
               class="text-xs text-muted hover:text-default"
               @click="showFindings = !showFindings"
             >
               {{ showFindings ? t('humanTest.fix.cancel') : t('humanTest.fix.requestFix') }}
-            </button>
+            </UButton>
           </div>
           <div v-if="showFindings" class="mt-2 space-y-2">
             <UTextarea
               v-model="findings"
               :rows="4"
               :placeholder="t('humanTest.fix.placeholder')"
-    size="sm"
-    class="w-full"
-  />
+              size="sm"
+              class="w-full"
+            />
             <UButton
               size="sm"
               color="warning"

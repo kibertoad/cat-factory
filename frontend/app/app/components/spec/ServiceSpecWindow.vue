@@ -291,8 +291,9 @@ function kindLabel(item: RequirementItem): string {
           </SectionLabel>
           <ul class="space-y-0.5">
             <li v-for="(group, gi) in mod.groups ?? []" :key="gi">
-              <button
-                type="button"
+              <UButton
+                color="neutral"
+                variant="ghost"
                 class="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-start text-sm transition"
                 :class="
                   selected?.m === mi && selected?.g === gi
@@ -303,7 +304,7 @@ function kindLabel(item: RequirementItem): string {
               >
                 <span class="truncate">{{ group.name }}</span>
                 <span class="shrink-0 text-3xs text-dimmed">{{ reqCount(group) }}</span>
-              </button>
+              </UButton>
             </li>
             <li
               v-if="(mod.groups?.length ?? 0) === 0"

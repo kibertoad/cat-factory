@@ -386,8 +386,9 @@ async function mergePr() {
           <div class="flex items-center gap-2">
             <!-- Every agent is clickable: it opens the step-detail overlay (timing,
                  model, subtasks + the prose output when there is one). -->
-            <button
-              type="button"
+            <UButton
+              color="neutral"
+              variant="ghost"
               class="flex min-w-0 cursor-pointer items-center gap-2 text-start transition hover:text-highlighted"
               data-testid="run-step-open"
               :title="
@@ -416,7 +417,7 @@ async function mergePr() {
                 :name="stepHasOutput(s) ? 'i-lucide-book-open-text' : 'i-lucide-info'"
                 class="h-3.5 w-3.5 shrink-0 text-dimmed"
               />
-            </button>
+            </UButton>
             <span
               v-if="s.subtasks && s.subtasks.total > 0"
               class="ms-auto font-mono text-3xs tabular-nums text-toned"

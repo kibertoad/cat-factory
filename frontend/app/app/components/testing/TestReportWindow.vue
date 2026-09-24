@@ -672,7 +672,9 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
               :key="g.key"
               class="overflow-hidden rounded-lg border border-default bg-default/60"
             >
-              <button
+              <UButton
+                color="neutral"
+                variant="ghost"
                 class="flex w-full items-center gap-2 px-3 py-2 text-start hover:bg-elevated/40"
                 @click="toggle(g.key)"
               >
@@ -710,7 +712,7 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                     {{ t('testing.concernCount', { count: g.concerns.length }, g.concerns.length) }}
                   </template>
                 </span>
-              </button>
+              </UButton>
 
               <div v-if="!collapsed.has(g.key)" class="space-y-1 px-3 pb-3 ps-9">
                 <!-- Outcomes -->
@@ -768,7 +770,9 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
 
                 <!-- Screenshots captured for this scenario -->
                 <div v-if="g.screenshots.length" class="mt-2 flex flex-wrap gap-2">
-                  <button
+                  <UButton
+                    color="neutral"
+                    variant="ghost"
                     v-for="(s, si) in g.screenshots"
                     :key="`shot${si}`"
                     data-testid="tester-screenshot"
@@ -796,7 +800,7 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                       class="absolute inset-x-0 bottom-0 truncate bg-app-950/80 px-1 py-0.5 text-3xs text-toned"
                       >{{ s.view }}</span
                     >
-                  </button>
+                  </UButton>
                 </div>
               </div>
             </li>
@@ -808,7 +812,9 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
               {{ t('testing.screenshots') }}
             </SectionLabel>
             <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              <button
+              <UButton
+                color="neutral"
+                variant="ghost"
                 v-for="(s, si) in ungroupedScreenshots"
                 :key="`gal${si}`"
                 class="group relative aspect-video overflow-hidden rounded-lg border border-default bg-app-950/60 hover:border-app-600"
@@ -835,7 +841,7 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                   class="absolute inset-x-0 bottom-0 truncate bg-app-950/80 px-1.5 py-0.5 text-3xs text-toned"
                   >{{ s.view }}</span
                 >
-              </button>
+              </UButton>
             </div>
           </section>
         </template>

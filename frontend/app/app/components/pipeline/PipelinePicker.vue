@@ -94,8 +94,9 @@ function choose(id: string) {
         <!-- left: selectable options -->
         <ul class="w-1/2 shrink-0 overflow-y-auto border-e border-default p-1">
           <li v-if="noneLabel !== undefined">
-            <button
-              type="button"
+            <UButton
+              color="neutral"
+              variant="ghost"
               class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-start text-sm hover:bg-elevated/60"
               :class="modelValue ? 'text-toned' : 'text-app-100'"
               data-testid="pipeline-option-none"
@@ -109,11 +110,12 @@ function choose(id: string) {
                 name="i-lucide-check"
                 class="h-4 w-4 shrink-0 text-primary"
               />
-            </button>
+            </UButton>
           </li>
           <li v-for="p in options" :key="p.id">
-            <button
-              type="button"
+            <UButton
+              color="neutral"
+              variant="ghost"
               class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-start text-sm hover:bg-elevated/60"
               :class="modelValue === p.id ? 'text-app-100' : 'text-toned'"
               :data-testid="`pipeline-option-${p.id}`"
@@ -127,7 +129,7 @@ function choose(id: string) {
                 name="i-lucide-check"
                 class="h-4 w-4 shrink-0 text-primary"
               />
-            </button>
+            </UButton>
           </li>
         </ul>
 

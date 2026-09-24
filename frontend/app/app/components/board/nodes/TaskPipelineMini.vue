@@ -107,8 +107,9 @@ const ITEM_ICON: Record<string, string> = {
       {{ t('board.task.buildSteps') }}
     </SectionLabel>
     <div v-for="(s, i) in steps" :key="i" class="rounded bg-default/60 px-1.5 py-1">
-      <button
-        type="button"
+      <UButton
+        color="neutral"
+        variant="ghost"
         class="flex w-full cursor-pointer items-center gap-1 rounded text-start focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
         :title="`${agentKindMeta(s.agentKind).label} — ${agentKindMeta(s.agentKind).description}\n${t('board.task.clickToViewStep')}`"
         @click.stop="openStep(i)"
@@ -141,7 +142,7 @@ const ITEM_ICON: Record<string, string> = {
           :class="stepSpinning(s) ? 'animate-spin' : ''"
           :style="{ color: stepVisual(s).color }"
         />
-      </button>
+      </UButton>
 
       <!-- PR reviewer: the precise sub-phase (slicing vs reviewing N/M slices), so the board
            card tells the reviewer's progress apart from a bare subtask count. Self-hides once
@@ -155,20 +156,21 @@ const ITEM_ICON: Record<string, string> = {
 
       <!-- pending approval gate: jump straight to the conclusions reader. Suppressed
            while a reviewer gate is folding/re-reviewing in the background (no human needed). -->
-      <button
+      <UButton
+        color="neutral"
+        variant="ghost"
         v-if="
           s.approval &&
           s.approval.status === 'pending' &&
           instance &&
           !reviews.isBackground(s.agentKind, props.taskId)
         "
-        type="button"
         class="mt-1 flex w-full items-center justify-center gap-1 rounded bg-app-warning-500 px-1.5 py-0.5 text-3xs font-semibold text-app-warning-50 dark:text-app-warning-950 transition hover:bg-app-warning-400"
         @click.stop="ui.openApprovalDetail(instance.id, s.approval.id)"
       >
         <UIcon name="i-lucide-shield-check" class="h-2.5 w-2.5" />
         {{ t('board.task.reviewAndApprove') }}
-      </button>
+      </UButton>
 
       <!-- per-step subtask progress bar -->
       <div

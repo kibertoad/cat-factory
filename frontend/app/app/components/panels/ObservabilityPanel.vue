@@ -405,15 +405,6 @@ const phaseRollup = computed<{ available: boolean; rows: ReturnType<typeof foldR
       : { available: false, rows: [] },
 )
 const phaseRows = computed(() => phaseRollup.value.rows)
-// Column definitions rather than hand-written `<th>`s. The cost column is still conditional: a
-// deployment with no rate table must not be shown a column of em dashes.
-const phaseColumns = computed<TableColumn<(typeof phaseRows.value)[number]>[]>(() => [
-  { id: 'phase' },
-  { id: 'turns' },
-  { id: 'tokens' },
-  ...(showCost.value ? [{ id: 'cost' } as TableColumn<(typeof phaseRows.value)[number]>] : []),
-  { id: 'carryCost' },
-])
 const phaseCarryTotal = computed(() =>
   phaseRows.value.reduce((acc, p) => acc + p.carryCostTokens, 0),
 )
@@ -437,6 +428,15 @@ const costCurrency = computed(
 const showCost = computed(
   () => !!costCurrency.value && phaseRows.value.some((p) => p.costEstimate != null),
 )
+// Column definitions rather than hand-written `<th>`s. The cost column stays conditional on the
+// same signal: a deployment with no rate table must not be shown a column of em dashes.
+const phaseColumns = computed<TableColumn<(typeof phaseRows.value)[number]>[]>(() => [
+  { id: 'phase' },
+  { id: 'turns' },
+  { id: 'tokens' },
+  ...(showCost.value ? [{ id: 'cost' } as TableColumn<(typeof phaseRows.value)[number]>] : []),
+  { id: 'carryCost' },
+])
 /**
  * The run's estimated cost, folded from the same SQL rollup the phase table shows — NOT from
  * the capped call list the token totals beside it use, which would silently under-report a run
@@ -879,7 +879,9 @@ function exportJson() {
                   class="overflow-hidden rounded-xl border border-default bg-default/40"
                   :class="!c.ok ? 'border-app-error-900/60' : ''"
                 >
-                  <button
+                  <UButton
+                    color="neutral"
+                    variant="ghost"
                     class="flex w-full items-center gap-3 px-4 py-2.5 text-start transition hover:bg-default/70"
                     @click="toggle(c)"
                   >
@@ -951,7 +953,7 @@ function exportJson() {
                       }}</span>
                       <span class="hidden text-app-600 md:inline">{{ clock(c.createdAt) }}</span>
                     </div>
-                  </button>
+                  </UButton>
 
                   <div v-if="expanded[c.id]" class="border-t border-default px-4 py-3 space-y-3">
                     <p v-if="c.errorMessage" class="text-xs text-app-error-400">
@@ -1104,7 +1106,9 @@ function exportJson() {
                 :key="s.id"
                 class="overflow-hidden rounded-xl border border-default bg-default/40"
               >
-                <button
+                <UButton
+                  color="neutral"
+                  variant="ghost"
                   class="flex w-full items-center gap-3 px-4 py-2.5 text-start transition hover:bg-default/70"
                   @click="toggleCtx(s)"
                 >
@@ -1131,7 +1135,7 @@ function exportJson() {
                     }}</span>
                     <span class="hidden text-app-600 md:inline">{{ clock(s.createdAt) }}</span>
                   </div>
-                </button>
+                </UButton>
 
                 <div v-if="expandedCtx[s.id]" class="border-t border-default px-4 py-3 space-y-3">
                   <div>

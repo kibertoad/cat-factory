@@ -259,16 +259,17 @@ function reveal(blockId: string): void {
               {{ t('assistant.examplesTitle') }}
             </SectionLabel>
             <div class="flex flex-col gap-1">
-              <button
+              <UButton
+                color="neutral"
+                variant="ghost"
                 v-for="entry in examples"
                 :key="entry.actionId"
-                type="button"
                 class="rounded-md px-2 py-1 text-left text-sm text-toned hover:bg-elevated"
                 @click="useExample(entry.example)"
               >
                 <span class="text-muted">{{ entry.label }}</span>
                 <span class="block text-xs text-dimmed">“{{ entry.example }}”</span>
-              </button>
+              </UButton>
             </div>
           </div>
 

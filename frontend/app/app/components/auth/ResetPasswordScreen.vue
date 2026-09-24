@@ -98,9 +98,14 @@ function goToLogin() {
           {{ t('auth.resetPassword.submit') }}
         </UButton>
         <p class="text-center text-xs text-muted">
-          <button type="button" class="text-primary hover:underline" @click="goToLogin">
+          <UButton
+            color="primary"
+            variant="link"
+            class="text-primary hover:underline"
+            @click="goToLogin"
+          >
             {{ t('auth.resetPassword.backToSignIn') }}
-          </button>
+          </UButton>
         </p>
       </UForm>
     </div>

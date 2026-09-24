@@ -258,10 +258,10 @@ async function act(choice: 'proceed' | 'bounce' | 'stop') {
             :rows="3"
             :disabled="busy"
             :placeholder="t('judge.feedbackPlaceholder')"
-    size="sm"
-    class="w-full"
-    :ui="{ base: 'resize-y' }"
-  />
+            size="sm"
+            class="w-full"
+            :ui="{ base: 'resize-y' }"
+          />
           <p v-if="judgeStore.error" class="mt-2 text-xs text-app-error-300">
             {{ judgeStore.error }}
           </p>

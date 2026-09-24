@@ -185,7 +185,9 @@ async function copyPlan() {
         :aria-label="t('panels.stepDetail.contents')"
         class="flex-1 space-y-0.5 overflow-y-auto px-2 py-2"
       >
-        <button
+        <UButton
+          color="neutral"
+          variant="ghost"
           v-for="s in tocSections"
           :key="s.id"
           class="block w-full truncate rounded-md px-2 py-1 text-start text-xs transition"
@@ -199,7 +201,7 @@ async function copyPlan() {
           @click="goTo(s.id)"
         >
           {{ s.title }}
-        </button>
+        </UButton>
       </nav>
       <!-- Run details (the model, the run id, the token telemetry). Filled by the host, which
            already resolves the bundle through `useResultViewRunMeta`; it keeps its home in a
@@ -212,8 +214,9 @@ async function copyPlan() {
         class="flex flex-col"
         :class="outline.hasToc ? 'max-h-[45%] shrink-0 border-t border-default' : 'min-h-0 flex-1'"
       >
-        <button
-          type="button"
+        <UButton
+          color="neutral"
+          variant="ghost"
           data-testid="initiative-plan-run-meta-toggle"
           class="flex shrink-0 items-center gap-1.5 px-3 py-2 text-start transition hover:bg-elevated/40"
           :aria-expanded="runDetailsOpen"
@@ -226,7 +229,7 @@ async function copyPlan() {
             :name="runDetailsOpen ? 'i-lucide-chevron-down' : 'i-lucide-chevron-up'"
             class="h-3.5 w-3.5 shrink-0 text-dimmed"
           />
-        </button>
+        </UButton>
         <div
           v-if="runDetailsOpen"
           data-testid="initiative-plan-run-meta"
@@ -260,7 +263,9 @@ async function copyPlan() {
           :ref="(el) => (sectionEls[s.id] = el as HTMLElement | null)"
           class="scroll-mt-2"
         >
-          <button
+          <UButton
+            color="neutral"
+            variant="ghost"
             v-if="s.depth > 0"
             class="group flex w-full items-center gap-1.5 rounded py-0.5 text-start transition hover:text-highlighted"
             :aria-expanded="!collapsed[s.id]"
@@ -276,7 +281,7 @@ async function copyPlan() {
               :class="s.depth <= 1 ? 'text-base' : s.depth === 2 ? 'text-sm' : 'text-xs'"
               v-html="s.titleHtml"
             />
-          </button>
+          </UButton>
           <!-- `review-mode` carries the click-to-comment affordance, so it tracks the same RBAC
                gate the composer does — a viewer gets the document, not hover targets that lead
                nowhere. -->
@@ -362,13 +367,15 @@ async function copyPlan() {
             <SectionLabel>
               {{ t('panels.stepDetail.commentN', { number: idx + 1 }) }}
             </SectionLabel>
-            <button
+            <UButton
+              color="neutral"
+              variant="ghost"
               class="text-dimmed transition hover:text-app-error-400"
               :title="t('panels.stepDetail.removeComment')"
               @click="removeComment(idx)"
             >
               <UIcon name="i-lucide-x" class="h-3.5 w-3.5" />
-            </button>
+            </UButton>
           </div>
           <pre
             class="mb-1 max-h-16 overflow-auto whitespace-pre-wrap rounded bg-app-950/50 p-1.5 text-3xs text-muted"

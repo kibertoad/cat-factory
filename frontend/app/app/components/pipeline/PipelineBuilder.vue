@@ -491,9 +491,14 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
               class="gap-1"
             >
               {{ l }}
-              <button type="button" class="hover:text-app-error-400" @click="removeLabel(l)">
+              <UButton
+                color="neutral"
+                variant="ghost"
+                class="hover:text-app-error-400"
+                @click="removeLabel(l)"
+              >
                 <UIcon name="i-lucide-x" class="h-3 w-3" />
-              </button>
+              </UButton>
             </UBadge>
             <UInput
               v-model="newLabel"
@@ -940,10 +945,11 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                     {{ t('pipeline.builder.consensusGroupsHint') }}
                   </p>
                   <div class="flex flex-wrap gap-1">
-                    <button
+                    <UButton
+                      color="neutral"
+                      variant="ghost"
                       v-for="group in consensusGroups.groups"
                       :key="group.id"
-                      type="button"
                       class="rounded border px-1.5 py-0.5 text-2xs"
                       :class="
                         isGroupSelected(unit.index, group.id)
@@ -955,7 +961,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                     >
                       {{ group.name }}
                       <span class="ms-1 text-dimmed">{{ groupBarLabel(group.id) }}</span>
-                    </button>
+                    </UButton>
                   </div>
                 </div>
 
@@ -1170,8 +1176,9 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                     )
               }}
             </span>
-            <button
-              type="button"
+            <UButton
+              color="neutral"
+              variant="link"
               class="underline underline-offset-2 hover:text-toned"
               data-testid="pipeline-library-purpose-toggle"
               @click="browseEveryPurpose = !browseEveryPurpose"
@@ -1181,7 +1188,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                   ? t('pipeline.builder.narrowToDraftPurpose')
                   : t('pipeline.builder.listEveryPurpose')
               }}
-            </button>
+            </UButton>
           </div>
 
           <ul class="flex-1 space-y-1.5 pe-1 lg:min-h-0 lg:overflow-y-auto">
@@ -1192,8 +1199,9 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
               :class="{ 'opacity-60': p.archived }"
             >
               <div class="flex items-center gap-2 px-2 py-1.5">
-                <button
-                  type="button"
+                <UButton
+                  color="neutral"
+                  variant="ghost"
                   class="flex min-w-0 flex-1 items-center gap-2 text-start"
                   @click="toggleSaved(p.id)"
                 >
@@ -1258,7 +1266,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                       )
                     }}
                   </span>
-                </button>
+                </UButton>
                 <div
                   class="flex shrink-0 items-center opacity-0 transition group-hover:opacity-100"
                 >

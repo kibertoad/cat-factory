@@ -360,15 +360,16 @@ function selectTask() {
         {{ statusText }}
       </span>
       <!-- drag-to-connect handle: drag onto another task to make it depend on this one -->
-      <button
-        type="button"
+      <UButton
+        color="neutral"
+        variant="ghost"
         class="nodrag shrink-0 cursor-crosshair touch-none rounded-full p-0.5 text-dimmed hover:bg-elevated hover:text-app-warning-400 pointer-coarse:p-2.5"
         :title="t('board.task.dragToConnect')"
         @pointerdown.stop="startConnect(task.id, $event)"
         @click.stop
       >
         <UIcon name="i-lucide-spline" class="h-3 w-3 pointer-coarse:h-5 pointer-coarse:w-5" />
-      </button>
+      </UButton>
     </div>
 
     <!-- title gets a full-width row so long titles wrap to two lines rather than

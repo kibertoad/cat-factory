@@ -72,10 +72,11 @@ const groups = computed(() => {
           <SectionLabel v-if="mod.module">
             {{ mod.module.title }}
           </SectionLabel>
-          <button
+          <UButton
+            color="neutral"
+            variant="ghost"
             v-for="task in mod.tasks"
             :key="task.id"
-            type="button"
             class="flex w-full items-center gap-1.5 rounded px-1 py-0.5 text-start text-xs text-default hover:bg-elevated"
             @click="ui.select(task.id)"
           >
@@ -87,7 +88,7 @@ const groups = computed(() => {
             <span class="ms-auto shrink-0 text-3xs text-dimmed">
               {{ STATUS_META[task.status].label }}
             </span>
-          </button>
+          </UButton>
         </div>
       </div>
     </div>

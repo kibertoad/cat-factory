@@ -302,7 +302,9 @@ watch(pendingUpload, async (file) => {
             />
             <!-- Per-view note (folded into the fixer findings) -->
             <div v-if="awaitingHuman" class="px-1">
-              <button
+              <UButton
+                color="neutral"
+                variant="ghost"
                 class="flex items-center gap-1.5 text-2xs text-muted hover:text-default"
                 @click="noteOpen[p.view] = !noteOpen[p.view]"
               >
@@ -316,15 +318,15 @@ watch(pendingUpload, async (file) => {
                   class="rounded-full bg-app-warning-500/15 px-1.5 text-3xs text-app-warning-300"
                   >{{ t('visualConfirm.noted') }}</span
                 >
-              </button>
+              </UButton>
               <UTextarea
                 v-if="noteOpen[p.view]"
                 v-model="perViewNotes[p.view]"
                 :rows="2"
                 :placeholder="t('visualConfirm.notePlaceholder', { view: p.view })"
-    size="xs"
-    class="mt-1 w-full"
-  />
+                size="xs"
+                class="mt-1 w-full"
+              />
             </div>
           </div>
         </section>
@@ -376,9 +378,9 @@ watch(pendingUpload, async (file) => {
             v-model="globalFindings"
             :rows="3"
             :placeholder="t('visualConfirm.requestFix.placeholder')"
-    size="sm"
-    class="w-full"
-  />
+            size="sm"
+            class="w-full"
+          />
           <div class="mt-2 flex items-center justify-between">
             <span class="text-2xs text-dimmed">
               {{ t('visualConfirm.requestFix.foldedHint') }}

@@ -607,9 +607,10 @@ const ITEM_ICON: Record<string, string> = {
           <!-- Follow-up companion (future-looking Coder): a blinking chip that lights up the
                moment the Coder streams an item; click to triage. Blinks while any item is
                undecided (the gate holds the pipeline until they're all decided). -->
-          <button
+          <UButton
+            color="neutral"
+            variant="ghost"
             v-if="s.followUps?.enabled"
-            type="button"
             class="mt-3 flex w-full items-center gap-2 rounded-lg border border-dashed px-2.5 py-1.5 text-start transition hover:border-app-hue-pink/60"
             :class="
               followUpPending(s) > 0
@@ -633,13 +634,14 @@ const ITEM_ICON: Record<string, string> = {
             >
               {{ followUpLabel(s) }}
             </span>
-          </button>
+          </UButton>
 
           <!-- Implementation-fork decision phase (Coder step): a spinner while the proposer
                surfaces approaches, then a clickable chip to choose one. -->
-          <button
+          <UButton
+            color="neutral"
+            variant="ghost"
             v-if="forkPhase(s)"
-            type="button"
             data-testid="fork-decision-open"
             :data-fork-phase="forkPhase(s)"
             class="mt-3 flex w-full items-center gap-2 rounded-lg border border-dashed px-2.5 py-1.5 text-start transition hover:border-app-secondary-400/60"
@@ -669,14 +671,15 @@ const ITEM_ICON: Record<string, string> = {
                   : t('pipeline.progress.forkDecision.choose')
               }}
             </span>
-          </button>
+          </UButton>
 
           <!-- PR deep-review parked for a human to select which findings matter: a
                purpose-built chip opening the findings-selection window, ahead of the
                generic approval gate (mirrors the fork-decision chip above). -->
-          <button
+          <UButton
+            color="neutral"
+            variant="ghost"
             v-if="prReviewAwaiting(s)"
-            type="button"
             data-testid="pr-review-open"
             class="mt-3 flex w-full items-center gap-2 rounded-lg border border-dashed border-primary/50 bg-primary/10 px-2.5 py-1.5 text-start transition followup-blink hover:border-primary/60"
             @click="ui.openPrReview(instance.id, i)"
@@ -689,16 +692,17 @@ const ITEM_ICON: Record<string, string> = {
             <span class="min-w-0 flex-1 truncate text-xs text-toned">
               {{ t('pipeline.progress.prReview.review') }}
             </span>
-          </button>
+          </UButton>
 
           <!-- A generating step parked between its candidate pass and its delivering pass: a
                purpose-built chip opening the comparison window, ahead of the generic approval
                gate (mirrors the fork-decision and pr-review chips above). Without it the step
                shows no action at all, because the generic gate below is suppressed for every
                park a dedicated window owns. -->
-          <button
+          <UButton
+            color="neutral"
+            variant="ghost"
             v-if="candidatesAwaiting(s)"
-            type="button"
             data-testid="binary-candidates-open"
             class="mt-3 flex w-full items-center gap-2 rounded-lg border border-dashed border-app-hue-cyan/50 bg-app-hue-cyan/10 px-2.5 py-1.5 text-start transition followup-blink hover:border-app-hue-cyan/60"
             @click="ui.openBinaryCandidates(instance.id, i)"
@@ -714,7 +718,7 @@ const ITEM_ICON: Record<string, string> = {
             <span class="min-w-0 flex-1 truncate text-xs text-toned">
               {{ t('pipeline.progress.binaryCandidates.choose') }}
             </span>
-          </button>
+          </UButton>
 
           <!-- reviewer gate folding/re-reviewing in the background: a working indicator,
                NOT a "Review & approve" gate (the human is summoned only if needed) -->

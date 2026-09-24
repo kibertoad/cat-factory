@@ -39,9 +39,10 @@ const items = computed(() =>
 <template>
   <UDropdownMenu :items="items" :ui="{ content: 'min-w-48' }">
     <!-- Rail: glyph over the role name, matching the tier button beside it. -->
-    <button
+    <UButton
+      color="neutral"
+      variant="ghost"
       v-if="collapsed"
-      type="button"
       data-testid="ui-role-toggle"
       :aria-label="`${t('uiRole.switcher')}: ${currentLabel}`"
       :title="`${t('uiRole.switcher')}: ${currentLabel}`"
@@ -51,11 +52,12 @@ const items = computed(() =>
       <span class="w-full truncate text-center text-3xs font-medium uppercase text-toned">
         {{ currentLabel }}
       </span>
-    </button>
+    </UButton>
 
-    <button
+    <UButton
+      color="neutral"
+      variant="ghost"
       v-else
-      type="button"
       data-testid="ui-role-switcher"
       :aria-label="t('uiRole.switcher')"
       :title="t(current.hintKey)"
@@ -69,6 +71,6 @@ const items = computed(() =>
         <div class="truncate text-xs font-medium text-default">{{ currentLabel }}</div>
       </div>
       <UIcon name="i-lucide-chevron-down" class="h-3.5 w-3.5 shrink-0 text-dimmed" />
-    </button>
+    </UButton>
   </UDropdownMenu>
 </template>
