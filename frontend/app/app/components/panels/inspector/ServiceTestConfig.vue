@@ -19,6 +19,7 @@ import type {
 import RepoTreeBrowser from '~/components/github/RepoTreeBrowser.vue'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
 import ServiceSelfTests from '~/components/panels/inspector/ServiceSelfTests.vue'
+import IconButton from '~/components/common/IconButton.vue'
 import { apiErrorEnvelope } from '~/composables/api/errors'
 
 // Service-level (frame) configuration: the service-owned PROVISIONING — the provision
@@ -634,13 +635,13 @@ function setSize(value: InstanceSize) {
               (e: KeyboardEvent) => setComposePath((e.target as HTMLInputElement).value)
             "
           />
-          <UButton
+          <IconButton
             v-if="repoContext"
             size="xs"
             variant="soft"
             color="neutral"
             icon="i-lucide-folder-search"
-            :title="t('inspector.testConfig.browseRepo')"
+            :label="t('inspector.testConfig.browseRepo')"
             @click="openBrowse('compose')"
           />
         </div>
@@ -715,13 +716,13 @@ function setSize(value: InstanceSize) {
             @blur="(e: FocusEvent) => setKubePath((e.target as HTMLInputElement).value)"
             @keydown.enter="(e: KeyboardEvent) => setKubePath((e.target as HTMLInputElement).value)"
           />
-          <UButton
+          <IconButton
             v-if="repoContext && kubeSourceType === 'colocated'"
             size="xs"
             variant="soft"
             color="neutral"
             icon="i-lucide-folder-search"
-            :title="t('inspector.testConfig.browseRepo')"
+            :label="t('inspector.testConfig.browseRepo')"
             @click="openBrowse('k8s')"
           />
         </div>

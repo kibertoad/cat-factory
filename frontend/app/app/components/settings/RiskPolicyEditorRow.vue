@@ -24,6 +24,7 @@ import { RISK_POLICY_AXES, RISK_POLICY_CEILING_FIELD } from '~/utils/riskPolicy'
 import MergeClassRulesEditor from '~/components/settings/MergeClassRulesEditor.vue'
 import MergeRolePolicyEditor from '~/components/settings/MergeRolePolicyEditor.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import IconButton from '~/components/common/IconButton.vue'
 
 const props = defineProps<{
   policy: RiskPolicyLibraryEntry
@@ -144,13 +145,13 @@ const deleteBlocked = computed(
           {{ t('settings.riskPolicy.makeDefault') }}
         </UButton>
       </template>
-      <UButton
+      <IconButton
         color="error"
         variant="ghost"
         size="xs"
         icon="i-lucide-trash-2"
         :disabled="deleteBlocked || busy?.startsWith(policy.id)"
-        :title="deleteBlockedReason"
+        :label="deleteBlockedReason"
         @click="emit('remove')"
       />
     </div>

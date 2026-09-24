@@ -23,6 +23,7 @@ import ConsensusGroupsSection from '~/components/settings/ConsensusGroupsSection
 import ProviderPreferenceEditor from '~/components/settings/ProviderPreferenceEditor.vue'
 import { showOverrideField } from '~/utils/uiMode'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import IconButton from '~/components/common/IconButton.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -391,32 +392,32 @@ async function save() {
                       {{ t('settings.modelConfiguration.list.default') }}
                     </UBadge>
                     <div class="ms-auto flex items-center gap-1">
-                      <UButton
+                      <IconButton
                         v-if="!p.isDefault"
                         size="xs"
                         variant="ghost"
                         color="neutral"
                         icon="i-lucide-star"
                         :loading="busy"
-                        :title="t('settings.modelConfiguration.list.setDefaultTitle')"
+                        :label="t('settings.modelConfiguration.list.setDefaultTitle')"
                         @click="setDefault(p)"
                       />
-                      <UButton
+                      <IconButton
                         size="xs"
                         variant="ghost"
                         color="neutral"
                         icon="i-lucide-pencil"
-                        :title="t('settings.modelConfiguration.list.editTitle')"
+                        :label="t('settings.modelConfiguration.list.editTitle')"
                         @click="startEdit(p)"
                       />
-                      <UButton
+                      <IconButton
                         size="xs"
                         variant="ghost"
                         color="error"
                         icon="i-lucide-trash-2"
                         :disabled="p.isDefault"
                         :loading="busy"
-                        :title="
+                        :label="
                           p.isDefault
                             ? t('settings.modelConfiguration.list.deleteDisabledTitle')
                             : t('settings.modelConfiguration.list.deleteTitle')

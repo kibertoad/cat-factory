@@ -30,6 +30,7 @@ import {
 import InputGateNotice from '~/components/inputGate/InputGateNotice.vue'
 import RunDetailLoadState from '~/components/panels/RunDetailLoadState.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import IconButton from '~/components/common/IconButton.vue'
 
 // Detail overlay for a single pipeline step. Opened by clicking an agent in the
 // inspector list (TaskExecution) or the focus-view pipeline (PipelineProgress) via
@@ -486,13 +487,13 @@ async function copyOutput() {
             "
             @click="setAll(!allCollapsed)"
           />
-          <UButton
+          <IconButton
             v-if="hasOutput"
             icon="i-lucide-copy"
             color="neutral"
             variant="ghost"
             size="sm"
-            :title="t('panels.stepDetail.copyRawOutput')"
+            :label="t('panels.stepDetail.copyRawOutput')"
             @click="copyOutput"
           />
           <!-- Restart the pipeline from this step (shared two-click confirm; resetting
@@ -504,12 +505,12 @@ async function copyOutput() {
             :step-index="ctx?.stepIndex ?? null"
             @restarted="close"
           />
-          <UButton
+          <IconButton
             icon="i-lucide-x"
             color="neutral"
             variant="ghost"
             size="sm"
-            :title="t('panels.stepDetail.closeEsc')"
+            :label="t('panels.stepDetail.closeEsc')"
             @click="close"
           />
         </div>

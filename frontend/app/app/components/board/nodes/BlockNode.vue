@@ -9,6 +9,7 @@ import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
 import AgentStopButton from '~/components/board/AgentStopButton.vue'
 import AdoptionReviewModal from '~/components/bootstrap/AdoptionReviewModal.vue'
 import BootstrapRunSteps from '~/components/bootstrap/BootstrapRunSteps.vue'
+import IconButton from '~/components/common/IconButton.vue'
 import { useBlockDrag } from '~/composables/useBlockDrag'
 import { useFrameStacking } from '~/composables/useFrameStacking'
 import { useViewport } from '~/composables/useViewport'
@@ -440,24 +441,24 @@ const ITEM_ICON: Record<string, string> = {
                    are `board.write`, hidden for a read-only viewer, who keeps the status badge
                    (the one view-only affordance here). -->
               <template v-if="access.canWriteBoard.value">
-                <UButton
+                <IconButton
                   class="nodrag"
                   data-testid="frame-add-task"
                   :size="isTouch ? 'sm' : 'xs'"
                   variant="ghost"
                   color="neutral"
                   icon="i-lucide-plus"
-                  :title="t('board.frame.addTaskTitle')"
+                  :label="t('board.frame.addTaskTitle')"
                   @click.stop="addTask"
                 />
-                <UButton
+                <IconButton
                   v-if="tasks.anyOffered"
                   class="nodrag"
                   :size="isTouch ? 'sm' : 'xs'"
                   variant="ghost"
                   color="neutral"
                   icon="i-lucide-ticket"
-                  :title="t('board.frame.createTaskFromIssueTitle')"
+                  :label="t('board.frame.createTaskFromIssueTitle')"
                   @click.stop="createTaskFromIssue"
                 />
                 <UButton
@@ -479,7 +480,7 @@ const ITEM_ICON: Record<string, string> = {
                      badges its task card and opens its inspector panel, and an initiative is
                      still a block on the board with its own inspector — so what a basic-mode
                      user loses is the ability to author a new one, not sight of one. -->
-                <UButton
+                <IconButton
                   v-if="uiMode.isAdvanced"
                   class="nodrag"
                   data-testid="frame-add-recurring"
@@ -487,10 +488,10 @@ const ITEM_ICON: Record<string, string> = {
                   variant="ghost"
                   color="neutral"
                   icon="i-lucide-repeat"
-                  :title="t('board.frame.addRecurringTitle')"
+                  :label="t('board.frame.addRecurringTitle')"
                   @click.stop="addRecurring"
                 />
-                <UButton
+                <IconButton
                   v-if="uiMode.isAdvanced"
                   class="nodrag"
                   data-testid="frame-add-initiative"
@@ -498,7 +499,7 @@ const ITEM_ICON: Record<string, string> = {
                   variant="ghost"
                   color="neutral"
                   icon="i-lucide-milestone"
-                  :title="t('board.frame.createInitiativeTitle')"
+                  :label="t('board.frame.createInitiativeTitle')"
                   @click.stop="createInitiative"
                 />
                 <!-- Hunting a tracker board for a bug worth adopting is TRIAGE, not intake: it
@@ -506,7 +507,7 @@ const ITEM_ICON: Record<string, string> = {
                      engineer/PM judgement call. So it is dropped for a narrowed role, whose three
                      routes in (a new task, a task from a named ticket, a task from a design) all
                      start from work somebody has already decided to do. -->
-                <UButton
+                <IconButton
                   v-if="tasks.anyOffered && uiRole.fullSurface"
                   class="nodrag"
                   data-testid="frame-hunt-bugs"
@@ -514,7 +515,7 @@ const ITEM_ICON: Record<string, string> = {
                   variant="ghost"
                   color="neutral"
                   icon="i-lucide-radar"
-                  :title="t('board.frame.huntBugsTitle')"
+                  :label="t('board.frame.huntBugsTitle')"
                   @click.stop="huntBugs"
                 />
               </template>

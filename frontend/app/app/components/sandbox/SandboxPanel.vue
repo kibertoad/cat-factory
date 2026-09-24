@@ -17,6 +17,7 @@ import type {
   SandboxUnsupportedReason,
 } from '~/types/sandbox'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import IconButton from '~/components/common/IconButton.vue'
 
 const ui = useUiStore()
 const store = useSandboxStore()
@@ -605,12 +606,12 @@ async function archive(prompt: SandboxPromptVersion) {
                 <span class="text-2xs text-dimmed">{{ p.agentKind }}</span>
               </div>
               <div class="flex items-center gap-1">
-                <UButton
+                <IconButton
                   icon="i-lucide-pencil"
                   color="neutral"
                   variant="ghost"
                   size="xs"
-                  :title="
+                  :label="
                     p.origin === 'baseline'
                       ? t('sandbox.prompts.forkTitle')
                       : t('sandbox.prompts.editTitle')
@@ -620,14 +621,14 @@ async function archive(prompt: SandboxPromptVersion) {
                 <!-- Deploy: make this version the workspace's live prompt for its agent kind.
                      Offered on a graded candidate and on an older workspace revision (rolling
                      back), but not on the one already live, where it would be a no-op. -->
-                <UButton
+                <IconButton
                   v-if="canPromote(p)"
                   icon="i-lucide-rocket"
                   color="primary"
                   variant="ghost"
                   size="xs"
                   :loading="promoting === p.id"
-                  :title="t('sandbox.prompts.promoteTitle')"
+                  :label="t('sandbox.prompts.promoteTitle')"
                   @click="promote(p)"
                 />
                 <UButton

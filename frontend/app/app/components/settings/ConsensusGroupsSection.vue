@@ -14,6 +14,7 @@ import type { ConsensusGroup, ConsensusStrategy } from '~/types/consensus'
 import { isSelectable } from '~/stores/models'
 import { uid } from '~/utils/catalog'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import IconButton from '~/components/common/IconButton.vue'
 
 const { t } = useI18n()
 const groups = useConsensusGroupsStore()
@@ -257,21 +258,21 @@ async function remove(group: ConsensusGroup) {
             <span class="truncate text-sm font-semibold text-app-100">{{ g.name }}</span>
             <UBadge color="neutral" variant="subtle" size="xs">{{ barLabel(g) }}</UBadge>
             <div class="ms-auto flex items-center gap-1">
-              <UButton
+              <IconButton
                 size="xs"
                 variant="ghost"
                 color="neutral"
                 icon="i-lucide-pencil"
-                :title="t('settings.consensusGroups.list.editTitle')"
+                :label="t('settings.consensusGroups.list.editTitle')"
                 @click="startEdit(g)"
               />
-              <UButton
+              <IconButton
                 size="xs"
                 variant="ghost"
                 color="error"
                 icon="i-lucide-trash-2"
                 :loading="busy"
-                :title="t('settings.consensusGroups.list.deleteTitle')"
+                :label="t('settings.consensusGroups.list.deleteTitle')"
                 @click="remove(g)"
               />
             </div>
@@ -365,13 +366,13 @@ async function remove(group: ConsensusGroup) {
             :placeholder="t('settings.consensusGroups.editor.framingPlaceholder')"
           />
           <USelect v-model="p.modelId" :items="participantModelItems" size="xs" class="w-44" />
-          <UButton
+          <IconButton
             icon="i-lucide-x"
             color="error"
             variant="ghost"
             size="xs"
             :disabled="editor.participants.length <= 2"
-            :title="t('pipeline.builder.removeParticipant')"
+            :label="t('pipeline.builder.removeParticipant')"
             @click="removeParticipant(index)"
           />
         </div>

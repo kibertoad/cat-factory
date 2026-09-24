@@ -12,6 +12,7 @@ import type {
 } from '~/types/domain'
 import FrontendBindingsResolved from '~/components/panels/inspector/FrontendBindingsResolved.vue'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
+import IconButton from '~/components/common/IconButton.vue'
 import { apiErrorEnvelope } from '~/composables/api/errors'
 
 // Frontend-frame (`type: 'frontend'`) configuration: how to build, serve, and mock this
@@ -556,12 +557,12 @@ onUnmounted(() => preview.stopPolling(props.block.id))
               class="flex-1"
               @update:model-value="(v: string) => setBindingSource(i, v)"
             />
-            <UButton
+            <IconButton
               size="xs"
               variant="ghost"
               color="neutral"
               icon="i-lucide-x"
-              :title="t('inspector.frontendConfig.bindings.remove')"
+              :label="t('inspector.frontendConfig.bindings.remove')"
               @click="removeBinding(i)"
             />
           </div>

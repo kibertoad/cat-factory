@@ -29,6 +29,7 @@ import {
 } from '~/utils/catalog'
 import type { ConsensusStrategy } from '~/types/consensus'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import IconButton from '~/components/common/IconButton.vue'
 
 type DraftUnit = { index: number; kind: AgentKind; companionIndex: number | null }
 
@@ -738,43 +739,43 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                   />
                   <!-- System prompt: replace what this agent kind ships with, for every run in
                      this workspace, with the full revision history to switch back through. -->
-                  <UButton
+                  <IconButton
                     v-if="showPromptEditor(unit.kind)"
                     icon="i-lucide-file-pen-line"
                     :color="agentPrompts.isCustomized(unit.kind) ? 'warning' : 'neutral'"
                     variant="ghost"
                     size="xs"
-                    :title="
+                    :label="
                       agentPrompts.isCustomized(unit.kind)
                         ? t('pipeline.builder.promptEditedTooltip')
                         : t('pipeline.builder.promptEditTooltip')
                     "
                     @click="promptEditorKind = unit.kind"
                   />
-                  <UButton
+                  <IconButton
                     icon="i-lucide-chevron-up"
                     color="neutral"
                     variant="ghost"
                     size="xs"
-                    :title="t('pipeline.builder.moveUp')"
+                    :label="t('pipeline.builder.moveUp')"
                     :disabled="vi === 0"
                     @click="pipelines.moveUnit(vi, vi - 1)"
                   />
-                  <UButton
+                  <IconButton
                     icon="i-lucide-chevron-down"
                     color="neutral"
                     variant="ghost"
                     size="xs"
-                    :title="t('pipeline.builder.moveDown')"
+                    :label="t('pipeline.builder.moveDown')"
                     :disabled="vi === pipelines.units.length - 1"
                     @click="pipelines.moveUnit(vi, vi + 1)"
                   />
-                  <UButton
+                  <IconButton
                     icon="i-lucide-x"
                     color="error"
                     variant="ghost"
                     size="xs"
-                    :title="t('pipeline.builder.removeStep')"
+                    :label="t('pipeline.builder.removeStep')"
                     @click="removeUnit(unit)"
                   />
                 </div>
@@ -879,7 +880,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                   </span>
                   <!-- A companion is an agent kind with a prompt of its own, and this row is its
                      only route to it — so the affordance belongs here too, not only on producers. -->
-                  <UButton
+                  <IconButton
                     v-if="showPromptEditor(pipelines.draft[unit.companionIndex]!)"
                     icon="i-lucide-file-pen-line"
                     :color="
@@ -889,7 +890,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                     "
                     variant="ghost"
                     size="xs"
-                    :title="
+                    :label="
                       agentPrompts.isCustomized(pipelines.draft[unit.companionIndex]!)
                         ? t('pipeline.builder.promptEditedTooltip')
                         : t('pipeline.builder.promptEditTooltip')
@@ -1011,13 +1012,13 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                         class="flex-1"
                         :placeholder="t('pipeline.builder.modelIdPlaceholder')"
                       />
-                      <UButton
+                      <IconButton
                         icon="i-lucide-x"
                         color="error"
                         variant="ghost"
                         size="xs"
                         :disabled="pipelines.draftConsensus[unit.index]!.participants.length <= 2"
-                        :title="t('pipeline.builder.removeParticipant')"
+                        :label="t('pipeline.builder.removeParticipant')"
                         @click="removeParticipant(unit.index, pIdx)"
                       />
                     </div>
@@ -1316,35 +1317,35 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                   />
                   <!-- Clone is available on every pipeline — it's how a read-only
                          built-in template becomes an editable copy. -->
-                  <UButton
+                  <IconButton
                     icon="i-lucide-copy"
                     color="neutral"
                     variant="ghost"
                     size="xs"
-                    :title="
+                    :label="
                       p.builtin ? t('pipeline.builder.cloneDefault') : t('pipeline.builder.clone')
                     "
                     @click="clone(p)"
                   />
                   <!-- Built-in templates are read-only; only custom pipelines edit in place. -->
-                  <UButton
+                  <IconButton
                     v-if="!p.builtin"
                     icon="i-lucide-pencil"
                     color="neutral"
                     variant="ghost"
                     size="xs"
-                    :title="t('pipeline.builder.edit')"
+                    :label="t('pipeline.builder.edit')"
                     @click="edit(p)"
                   />
                   <!-- Built-in templates are read-only — they can be cloned but not
                          deleted (the backend rejects it too); only custom ones delete. -->
-                  <UButton
+                  <IconButton
                     v-if="!p.builtin"
                     icon="i-lucide-trash-2"
                     color="neutral"
                     variant="ghost"
                     size="xs"
-                    :title="t('pipeline.builder.delete')"
+                    :label="t('pipeline.builder.delete')"
                     @click="removePipeline(p)"
                   />
                 </div>

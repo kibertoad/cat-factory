@@ -8,6 +8,7 @@ import AccountModelPolicySettings from '~/components/layout/AccountModelPolicySe
 import AccountPlatformAlertSettings from '~/components/layout/AccountPlatformAlertSettings.vue'
 import AccountRunCredentialSettings from '~/components/layout/AccountRunCredentialSettings.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
+import IconButton from '~/components/common/IconButton.vue'
 
 // Team settings for an org account: the member roster (with combinable admin /
 // developer / product roles), pending email invitations, and the per-account
@@ -249,14 +250,13 @@ async function disconnectEmail() {
           <!-- Offboarding: end every session this member holds, leaving their membership and
                roles alone. Confirmed, because it is not undoable from here (the person simply
                signs in again) and because it is the sort of thing a mis-click should not do. -->
-          <UButton
+          <IconButton
             v-if="isAdmin"
             size="xs"
             color="neutral"
             variant="ghost"
             icon="i-lucide-log-out"
-            :title="t('layout.accountTeam.members.revokeSessions')"
-            :aria-label="t('layout.accountTeam.members.revokeSessions')"
+            :label="t('layout.accountTeam.members.revokeSessions')"
             data-testid="revoke-member-sessions"
             @click="revokeSessions(m.userId, m.name || m.email || m.userId)"
           />

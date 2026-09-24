@@ -31,6 +31,7 @@ import OutcomeFilterChips from '~/components/observability/OutcomeFilterChips.vu
 import RunFailureSummary from '~/components/observability/RunFailureSummary.vue'
 import ToolCallList from '~/components/observability/ToolCallList.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import IconButton from '~/components/common/IconButton.vue'
 
 /** No run selected: the same empty, NOT-truncated trajectory the store answers with. */
 const EMPTY_TRAJECTORY: RunToolCallTrajectory = Object.freeze({
@@ -571,12 +572,12 @@ function exportJson() {
             >
               {{ t('observability.exportJson') }}
             </UButton>
-            <UButton
+            <IconButton
               icon="i-lucide-x"
               color="neutral"
               variant="ghost"
               size="sm"
-              :title="t('observability.closeEsc')"
+              :label="t('observability.closeEsc')"
               @click="close"
             />
           </div>

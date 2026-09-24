@@ -7,6 +7,7 @@ import {
 } from './StepDelegatedStatus.logic'
 import type { PipelineStep } from '~/types/execution'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import IconButton from '~/components/common/IconButton.vue'
 
 // The EXTERNAL work a delegated step dispatched: which registered executor is running it, what it
 // is doing, and the link to that system's own logs, which is the affordance everything else here
@@ -117,14 +118,13 @@ const { copy: copyText } = useCopyToClipboard()
           </ULink>
           <span v-else>{{ record.url }}</span>
         </dd>
-        <UButton
+        <IconButton
           icon="i-lucide-copy"
           color="neutral"
           variant="ghost"
           size="xs"
           class="ms-auto shrink-0"
-          :title="t('panels.stepMeta.delegated.copyUrl')"
-          :aria-label="t('panels.stepMeta.delegated.copyUrl')"
+          :label="t('panels.stepMeta.delegated.copyUrl')"
           @click="copyText(record.url)"
         />
       </div>

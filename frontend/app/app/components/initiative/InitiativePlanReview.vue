@@ -31,6 +31,7 @@ import { useStepProse } from '~/composables/useStepProse'
 import { useProseComments } from '~/composables/useProseComments'
 import InitiativePlanDecision from '~/components/initiative/InitiativePlanDecision.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import IconButton from '~/components/common/IconButton.vue'
 
 const props = defineProps<{
   /** The parked gate under review. */
@@ -170,12 +171,12 @@ async function copyPlan() {
           "
           @click="setAll(!allCollapsed)"
         />
-        <UButton
+        <IconButton
           icon="i-lucide-copy"
           color="neutral"
           variant="ghost"
           size="xs"
-          :title="t('panels.stepDetail.copyRawOutput')"
+          :label="t('panels.stepDetail.copyRawOutput')"
           @click="copyPlan"
         />
       </div>

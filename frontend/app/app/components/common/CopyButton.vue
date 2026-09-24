@@ -18,13 +18,14 @@ const label = computed(() => props.label ?? t('common.copy'))
 </script>
 
 <template>
-  <UButton
-    icon="i-lucide-copy"
-    color="neutral"
-    variant="ghost"
-    :size="size ?? 'xs'"
-    :title="label"
-    :aria-label="label"
-    @click.stop="copy(text)"
-  />
+  <UTooltip :text="label">
+    <UButton
+      icon="i-lucide-copy"
+      color="neutral"
+      variant="ghost"
+      :size="size ?? 'xs'"
+      :aria-label="label"
+      @click.stop="copy(text)"
+    />
+  </UTooltip>
 </template>
