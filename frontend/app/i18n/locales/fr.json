@@ -6281,7 +6281,8 @@
       "heading": "Importer une maquette de référence",
       "viewPlaceholder": "Nom de la vue (ex. login)",
       "tipReady": "Astuce : déposez une image directement sur une paire ci-dessus pour définir sa référence.",
-      "tipNeedView": "Saisissez d'abord un nom de vue, puis choisissez un fichier. Ou déposez une image directement sur une paire ci-dessus."
+      "tipNeedView": "Saisissez d'abord un nom de vue, puis choisissez un fichier. Ou déposez une image directement sur une paire ci-dessus.",
+      "choose": "Choisir un fichier"
     },
     "requestFix": {
       "heading": "Demander une correction",

@@ -266,22 +266,20 @@ const { requestClose } = useUnsavedGuard({
                  and toggled, then the forwarded click toggled back. On a checkbox that nets to no
                  change, which means no re-render, which leaves the box ticked over a candidate
                  that is no longer selected. -->
-            <label
+            <!-- One control either way. Single-select is still a checkbox rather than a radio
+                 group, because the rows are rendered per candidate and `toggle` already enforces
+                 the single-selection rule; a radio group would need the whole set in one place. -->
+            <UCheckbox
               v-if="view.awaiting"
-              class="mb-1.5 flex cursor-pointer items-center gap-2 text-2xs text-muted"
+              size="xs"
+              class="mb-1.5"
+              :model-value="selected.includes(row.id)"
+              :label="candidateLabel(row)"
+              :aria-label="candidateLabel(row)"
+              data-testid="binary-candidate-select"
               @click.stop
-            >
-              <input
-                :type="view.multiSelect ? 'checkbox' : 'radio'"
-                name="binary-candidate"
-                class="accent-app-info-500"
-                :checked="selected.includes(row.id)"
-                :aria-label="candidateLabel(row)"
-                data-testid="binary-candidate-select"
-                @change="toggle(row.id)"
-              />
-              <span class="truncate">{{ candidateLabel(row) }}</span>
-            </label>
+              @update:model-value="toggle(row.id)"
+            />
             <!-- Staged through the platform's OWN asset storage: we hold the bytes, so the card
                  renders them (and offers to open or save one) rather than waiting for a public
                  link the shipped storage never issues. Checked first because a candidate can

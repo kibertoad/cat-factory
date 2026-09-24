@@ -204,21 +204,22 @@ async function uploadFor(view: string, file: File) {
   await visualConfirm.uploadReference(blockId.value, file, view)
 }
 const uploadView = ref('')
-const fileInput = ref<HTMLInputElement | null>(null)
-async function onFilePicked(e: Event) {
-  const input = e.target as HTMLInputElement
-  const file = input.files?.[0]
+// The views this run already captured, offered as suggestions on the combobox.
+const viewSuggestions = computed(() => pairs.value.map((p) => p.view))
+const pendingUpload = ref<File | null>(null)
+watch(pendingUpload, async (file) => {
   const view = uploadView.value.trim()
   // Require a view name: a reference with no view can't pair with any captured screenshot,
-  // so it would be silently orphaned. The input is also disabled until a view is entered.
+  // so it would be silently orphaned. The control is also disabled until a view is entered.
   if (!file || !blockId.value || !view) {
-    if (fileInput.value) fileInput.value.value = ''
+    pendingUpload.value = null
     return
   }
   await visualConfirm.uploadReference(blockId.value, file, view)
   uploadView.value = ''
-  if (fileInput.value) fileInput.value.value = ''
-}
+  // Cleared so re-picking the SAME file fires the watcher again.
+  pendingUpload.value = null
+})
 </script>
 
 <template>
@@ -337,22 +338,24 @@ async function onFilePicked(e: Event) {
             {{ t('visualConfirm.upload.heading') }}
           </SectionLabel>
           <div class="flex flex-wrap items-center gap-2">
-            <input
+            <!-- The known views are suggestions, not a closed list: a reference can be uploaded
+                 for a view the run has not produced yet. -->
+            <UInputMenu
               v-model="uploadView"
-              list="vc-views"
+              :items="viewSuggestions"
+              size="xs"
+              create-item
               :placeholder="t('visualConfirm.upload.viewPlaceholder')"
-              class="rounded-md border border-muted bg-app-950 px-2 py-1 text-xs text-default placeholder:text-app-600"
+              @create="uploadView = $event"
             />
-            <datalist id="vc-views">
-              <option v-for="p in pairs" :key="p.view" :value="p.view" />
-            </datalist>
-            <input
-              ref="fileInput"
-              type="file"
+            <UFileUpload
+              v-model="pendingUpload"
+              variant="button"
+              size="xs"
               accept="image/png,image/jpeg"
+              :preview="false"
               :disabled="busy || !uploadView.trim()"
-              class="text-xs text-toned file:me-2 file:rounded file:border-0 file:bg-elevated file:px-2 file:py-1 file:text-default disabled:opacity-40"
-              @change="onFilePicked"
+              :label="t('visualConfirm.upload.choose')"
             />
           </div>
           <p class="mt-1.5 text-3xs text-app-600">
@@ -445,13 +448,13 @@ async function onFilePicked(e: Event) {
         :failure-at="instance?.failure?.occurredAt"
       />
       <div class="flex items-center gap-2">
-        <label
+        <UCheckbox
           v-if="awaitingHuman && needsAck"
-          class="flex items-center gap-1.5 text-2xs text-app-warning-300/90"
-        >
-          <input v-model="ackDegraded" type="checkbox" class="accent-app-warning-500" />
-          {{ t('visualConfirm.reviewedManually') }}
-        </label>
+          v-model="ackDegraded"
+          size="xs"
+          color="warning"
+          :label="t('visualConfirm.reviewedManually')"
+        />
         <UButton
           size="sm"
           variant="soft"

@@ -7011,7 +7011,8 @@
       "heading": "Carica un design di riferimento",
       "viewPlaceholder": "Nome della vista (es. login)",
       "tipReady": "Suggerimento: trascina un'immagine direttamente su una coppia sopra per impostarne il riferimento.",
-      "tipNeedView": "Inserisci prima un nome per la vista, poi scegli un file. Oppure trascina un'immagine direttamente su una coppia sopra."
+      "tipNeedView": "Inserisci prima un nome per la vista, poi scegli un file. Oppure trascina un'immagine direttamente su una coppia sopra.",
+      "choose": "Scegli un file"
     },
     "requestFix": {
       "heading": "Richiedi una correzione",

@@ -6281,7 +6281,8 @@
       "heading": "Referans tasarım yükle",
       "viewPlaceholder": "Görünüm adı (örn. login)",
       "tipReady": "İpucu: referansını ayarlamak için bir görseli doğrudan yukarıdaki bir çiftin üzerine bırakın.",
-      "tipNeedView": "Önce bir görünüm adı girin, ardından bir dosya seçin. Veya bir görseli doğrudan yukarıdaki bir çiftin üzerine bırakın."
+      "tipNeedView": "Önce bir görünüm adı girin, ardından bir dosya seçin. Veya bir görseli doğrudan yukarıdaki bir çiftin üzerine bırakın.",
+      "choose": "Dosya seç"
     },
     "requestFix": {
       "heading": "Düzeltme iste",

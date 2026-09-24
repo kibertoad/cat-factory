@@ -450,10 +450,7 @@ const PHASE_ICON: Record<string, string> = {
           <p class="text-2xs text-muted">
             {{ t('bugFishing.counts', { untriaged: untriagedCount, spawned: spawnedCount }) }}
           </p>
-          <label class="flex items-center gap-1.5 text-2xs text-muted">
-            <input v-model="showTriaged" type="checkbox" class="accent-app-info-500" />
-            {{ t('bugFishing.showTriaged') }}
-          </label>
+          <UCheckbox v-model="showTriaged" size="xs" :label="t('bugFishing.showTriaged')" />
         </div>
 
         <p v-if="bugFishing.error" class="mb-3 text-xs text-app-error-300">

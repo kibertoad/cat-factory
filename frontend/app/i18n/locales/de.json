@@ -7011,7 +7011,8 @@
       "heading": "Ein Referenzdesign hochladen",
       "viewPlaceholder": "Ansichtsname (z. B. login)",
       "tipReady": "Tipp: Ziehe ein Bild direkt auf ein Paar oben, um dessen Referenz festzulegen.",
-      "tipNeedView": "Gib zuerst einen Ansichtsnamen ein und wähle dann eine Datei. Oder ziehe ein Bild direkt auf ein Paar oben."
+      "tipNeedView": "Gib zuerst einen Ansichtsnamen ein und wähle dann eine Datei. Oder ziehe ein Bild direkt auf ein Paar oben.",
+      "choose": "Datei auswählen"
     },
     "requestFix": {
       "heading": "Eine Korrektur anfordern",

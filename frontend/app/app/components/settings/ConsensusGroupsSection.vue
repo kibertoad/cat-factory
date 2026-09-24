@@ -399,10 +399,11 @@ async function remove(group: ConsensusGroup) {
 
       <!-- the estimate bar -->
       <div class="space-y-2 rounded-lg border border-default bg-app-950/40 p-3">
-        <label class="flex items-center gap-2 text-xs text-toned">
-          <input v-model="editor.gated" type="checkbox" class="accent-app-success-500" />
-          {{ t('settings.consensusGroups.editor.gatedLabel') }}
-        </label>
+        <UCheckbox
+          v-model="editor.gated"
+          size="xs"
+          :label="t('settings.consensusGroups.editor.gatedLabel')"
+        />
         <p class="text-2xs text-dimmed">
           {{ t('settings.consensusGroups.editor.gatedHint') }}
         </p>

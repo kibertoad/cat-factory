@@ -615,14 +615,14 @@ const { requestClose } = useUnsavedGuard({
                 ]"
               >
                 <div class="flex items-start gap-2">
-                  <input
+                  <UCheckbox
                     v-if="awaiting || challenging"
-                    type="checkbox"
-                    class="mt-1 accent-primary"
+                    size="xs"
+                    class="mt-1"
                     data-testid="pr-review-finding-toggle"
-                    :checked="selected.has(f.id) && !isRetracted(f)"
+                    :model-value="selected.has(f.id) && !isRetracted(f)"
                     :disabled="!awaiting || isRetracted(f)"
-                    @change="toggle(f.id)"
+                    @update:model-value="toggle(f.id)"
                   />
                   <div class="min-w-0 flex-1">
                     <div class="flex flex-wrap items-center gap-1.5">

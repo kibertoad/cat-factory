@@ -615,26 +615,37 @@ const { requestClose } = useUnsavedGuard({
             </ul>
             <!-- Edit form: the two scalar knobs; planner-authored rules are preserved. -->
             <div v-else class="flex flex-col gap-2 rounded-lg border border-default p-3">
-              <label class="flex items-center gap-2 text-xs text-toned">
-                <span class="w-40">{{ t('initiative.curation.maxConcurrentField') }}</span>
-                <input
-                  v-model.number="policyForm.maxConcurrent"
-                  type="number"
-                  min="1"
-                  max="20"
-                  class="w-20 rounded border border-muted bg-app-950 px-2 py-1 text-default"
+              <UFormField
+                size="xs"
+                :label="t('initiative.curation.maxConcurrentField')"
+                :ui="{ root: 'flex items-center gap-2', label: 'w-40', container: 'mt-0' }"
+              >
+                <UInputNumber
+                  v-model="policyForm.maxConcurrent"
+                  :min="1"
+                  :max="20"
+                  size="xs"
+                  class="w-28"
                   data-testid="initiative-policy-max-concurrent"
                 />
-              </label>
-              <label class="flex items-center gap-2 text-xs text-toned">
-                <span class="w-40">{{ t('initiative.curation.defaultPipelineField') }}</span>
-                <input
+              </UFormField>
+              <UFormField
+                size="xs"
+                :label="t('initiative.curation.defaultPipelineField')"
+                :ui="{
+                  root: 'flex items-center gap-2',
+                  label: 'w-40',
+                  container: 'flex-1 mt-0',
+                }"
+              >
+                <UInput
                   v-model="policyForm.defaultPipelineId"
-                  type="text"
-                  class="flex-1 rounded border border-muted bg-app-950 px-2 py-1 font-mono text-2xs text-default"
+                  size="xs"
+                  class="w-full"
+                  :ui="{ base: 'font-mono' }"
                   data-testid="initiative-policy-default-pipeline"
                 />
-              </label>
+              </UFormField>
               <div class="flex gap-2">
                 <button
                   class="rounded bg-primary/90 px-2 py-1 text-2xs text-inverted hover:bg-primary disabled:opacity-50"

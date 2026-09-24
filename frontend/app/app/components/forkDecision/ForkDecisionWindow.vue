@@ -64,6 +64,12 @@ const canChat = computed(() => awaiting.value && !chatBudgetSpent.value && !fork
 
 // The human's selection: a proposed fork id, or the sentinel 'custom' for the free-text path.
 const selected = ref<string | null>(null)
+// The proposed forks and "my own approach" are one choice, so they are one item list. `fork` is
+// null on the custom entry, which is what the label and description slots branch on.
+const forkItems = computed(() => [
+  ...forks.value.map((fork) => ({ value: fork.id, label: fork.title, fork })),
+  { value: 'custom', label: t('forkDecision.custom.title'), fork: null as ForkOption | null },
+])
 const customText = ref('')
 const note = ref('')
 const chatInput = ref('')
@@ -217,95 +223,71 @@ const { requestClose } = useUnsavedGuard({
           {{ state.seamSummary }}
         </p>
 
-        <!-- Proposed fork cards -->
-        <article
-          v-for="fork in forks"
-          :key="fork.id"
-          data-testid="fork-option-card"
-          class="cursor-pointer rounded-xl border px-4 py-3 transition"
-          :class="
-            selected === fork.id
-              ? 'border-app-secondary-500/70 bg-app-secondary-500/5'
-              : 'border-default bg-default/60 hover:border-muted'
-          "
-          @click="selected = fork.id"
+        <!-- The proposed forks and "my own approach" are ONE choice, so they are one radio
+             group rather than a set of cards each holding their own radio. `variant="card"`
+             is the shape these already had; the rich body rides the description slot. -->
+        <URadioGroup
+          :model-value="selected ?? undefined"
+          variant="card"
+          :items="forkItems"
+          data-testid="fork-options"
+          :ui="{ item: 'px-4 py-3' }"
+          @update:model-value="selected = String($event)"
         >
-          <div class="flex items-start gap-2">
-            <input
-              type="radio"
-              class="mt-1 accent-app-secondary-500"
-              :checked="selected === fork.id"
-              @change="selected = fork.id"
-            />
-            <div class="min-w-0 flex-1">
-              <div class="flex items-center gap-2">
-                <h3 class="min-w-0 flex-1 text-sm font-medium text-app-100">
-                  {{ fork.title }}
-                </h3>
-                <UBadge v-if="fork.recommended" color="primary" variant="subtle" size="sm">
-                  {{ t('forkDecision.recommended') }}
-                </UBadge>
-              </div>
-              <p v-if="fork.summary" class="mt-0.5 text-xs text-muted">
-                {{ fork.summary }}
-              </p>
-              <p class="mt-1.5 whitespace-pre-wrap text-xs text-toned">
-                {{ fork.approach }}
-              </p>
-              <ul v-if="fork.tradeoffs.length" class="mt-1.5 space-y-0.5">
-                <li
-                  v-for="(tr, i) in fork.tradeoffs"
+          <template #label="{ item }">
+            <span class="flex items-center gap-2">
+              <span class="min-w-0 flex-1 text-sm font-medium text-app-100">{{ item.label }}</span>
+              <UBadge v-if="item.fork?.recommended" color="primary" variant="subtle" size="sm">
+                {{ t('forkDecision.recommended') }}
+              </UBadge>
+            </span>
+          </template>
+          <template #description="{ item }">
+            <template v-if="item.fork">
+              <span v-if="item.fork.summary" class="block text-xs text-muted">
+                {{ item.fork.summary }}
+              </span>
+              <span class="mt-1.5 block whitespace-pre-wrap text-xs text-toned">
+                {{ item.fork.approach }}
+              </span>
+              <span v-if="item.fork.tradeoffs.length" class="mt-1.5 block space-y-0.5">
+                <span
+                  v-for="(tr, i) in item.fork.tradeoffs"
                   :key="i"
                   class="flex gap-1.5 text-2xs text-muted"
                 >
                   <span class="text-app-600">•</span>{{ tr }}
-                </li>
-              </ul>
-              <p v-if="fork.riskNotes" class="mt-1.5 text-2xs text-app-warning-300/90">
+                </span>
+              </span>
+              <span v-if="item.fork.riskNotes" class="mt-1.5 block text-2xs text-app-warning-300/90">
                 <span class="text-app-warning-500/70">{{ t('forkDecision.riskNotes') }}</span>
-                {{ fork.riskNotes }}
-              </p>
-            </div>
-          </div>
-        </article>
-
-        <!-- Custom approach -->
-        <article
-          class="rounded-xl border px-4 py-3 transition"
-          :class="
-            selected === 'custom'
-              ? 'border-app-secondary-500/70 bg-app-secondary-500/5'
-              : 'border-default bg-default/60'
-          "
-        >
-          <label class="flex cursor-pointer items-center gap-2" @click="selected = 'custom'">
-            <input type="radio" class="accent-app-secondary-500" :checked="selected === 'custom'" />
-            <span class="text-sm font-medium text-app-100">{{
-              t('forkDecision.custom.title')
-            }}</span>
-          </label>
-          <UTextarea
-            v-model="customText"
-            data-testid="fork-custom-input"
-            :rows="3"
-            :placeholder="t('forkDecision.custom.placeholder')"
-           
-            @focus="selected = 'custom'"
-    size="xs"
-    class="mt-2 w-full"
-    :ui="{ base: 'resize-y' }"
-  />
-        </article>
+                {{ item.fork.riskNotes }}
+              </span>
+            </template>
+            <UTextarea
+              v-else
+              v-model="customText"
+              data-testid="fork-custom-input"
+              :rows="3"
+              size="xs"
+              class="mt-2 w-full"
+              :ui="{ base: 'resize-y' }"
+              :placeholder="t('forkDecision.custom.placeholder')"
+              @focus="selected = 'custom'"
+            />
+          </template>
+        </URadioGroup>
 
         <!-- Optional steering note -->
         <div>
-          <label class="mb-1 block text-2xs text-muted">{{ t('forkDecision.noteLabel') }}</label>
-          <input
-            v-model="note"
-            type="text"
-            :placeholder="t('forkDecision.notePlaceholder')"
-            class="w-full rounded-md border border-muted bg-app-950/60 px-2.5 py-1.5 text-xs text-app-100 placeholder:text-app-600 focus:border-app-secondary-500 focus:outline-none"
-          />
+          <UFormField size="xs" :label="t('forkDecision.noteLabel')">
+            <UInput
+              v-model="note"
+              size="xs"
+              class="w-full"
+              :placeholder="t('forkDecision.notePlaceholder')"
+            />
+          </UFormField>
         </div>
 
         <!-- Grounded chat: ask about the forks before deciding. -->

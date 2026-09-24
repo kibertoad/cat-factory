@@ -56,6 +56,8 @@ const ROLE_OPTIONS = computed<{ label: string; value: SlackMemberRole }[]>(() =>
 ])
 
 // Local editable copies, synced from the store on load.
+const channelSuggestions = computed(() => slack.channels.map((ch) => `#${ch.name}`))
+
 const routes = reactive<Record<NotificationType, SlackRoute>>({
   merge_review: { enabled: false, channel: '' },
   pipeline_complete: { enabled: false, channel: '' },
@@ -278,18 +280,19 @@ async function saveMapping() {
             >
               <USwitch v-model="routes[row.type]!.enabled" size="sm" />
               <span class="w-32 text-sm text-toned">{{ row.label }}</span>
-              <UInput
+              <!-- The workspace's channels are suggestions, not a closed list: a route may name
+                   a channel the bot cannot enumerate yet. -->
+              <UInputMenu
                 v-model="routes[row.type]!.channel"
+                :items="channelSuggestions"
                 size="sm"
                 class="flex-1"
+                create-item
                 :placeholder="t('slack.routing.channelPlaceholder')"
                 :disabled="!routes[row.type]!.enabled"
-                list="slack-channels"
+                @create="routes[row.type]!.channel = $event"
               />
             </div>
-            <datalist id="slack-channels">
-              <option v-for="ch in slack.channels" :key="ch.id" :value="`#${ch.name}`" />
-            </datalist>
 
             <label class="flex items-center gap-2">
               <USwitch v-model="mentionsEnabled" size="sm" />

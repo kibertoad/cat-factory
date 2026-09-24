@@ -495,10 +495,11 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                 <UIcon name="i-lucide-x" class="h-3 w-3" />
               </button>
             </UBadge>
-            <input
+            <UInput
               v-model="newLabel"
+              size="xs"
+              class="w-20 focus-within:w-28"
               :placeholder="t('pipeline.builder.labelPlaceholder')"
-              class="w-20 rounded border border-muted bg-default px-1.5 py-0.5 text-2xs text-default focus:w-28"
               @keydown.enter.prevent="addLabel"
               @blur="addLabel"
             />
@@ -975,14 +976,13 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                       class="ms-2 text-muted"
                       >{{ t('pipeline.builder.rounds') }}</label
                     >
-                    <input
+                    <UInputNumber
                       v-if="pipelines.draftConsensus[unit.index]!.strategy === 'debate'"
-                      v-model.number="pipelines.draftConsensus[unit.index]!.rounds"
-                      type="number"
-                      min="1"
-                      max="5"
-                      placeholder="2"
-                      class="w-12 rounded border border-muted bg-default px-1.5 py-0.5 text-app-100"
+                      v-model="pipelines.draftConsensus[unit.index]!.rounds"
+                      :min="1"
+                      :max="5"
+                      size="xs"
+                      class="w-24"
                     />
                   </div>
 
@@ -993,15 +993,17 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                       :key="p.id"
                       class="flex items-center gap-1.5"
                     >
-                      <input
+                      <UInput
                         v-model="p.role"
+                        size="xs"
+                        class="w-28"
                         :placeholder="t('pipeline.builder.rolePlaceholder')"
-                        class="w-28 rounded border border-muted bg-default px-1.5 py-0.5 text-app-100"
                       />
-                      <input
+                      <UInput
                         v-model="p.modelId"
+                        size="xs"
+                        class="flex-1"
                         :placeholder="t('pipeline.builder.modelIdPlaceholder')"
-                        class="flex-1 rounded border border-muted bg-default px-1.5 py-0.5 text-toned"
                       />
                       <UButton
                         icon="i-lucide-x"
