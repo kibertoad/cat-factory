@@ -3,7 +3,6 @@ import { useBoardFlow, BOARD_MIN_ZOOM, BOARD_MAX_ZOOM } from '~/composables/useB
 import NotificationsInbox from '~/components/layout/NotificationsInbox.vue'
 import IconButton from '~/components/common/IconButton.vue'
 import LaneViewControl from '~/components/board/LaneViewControl.vue'
-import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const ui = useUiStore()
 const board = useBoardStore()
@@ -161,7 +160,13 @@ const decisionItems = computed(() =>
       @click="resetZoom()"
     >
       {{ zoomPct }}%
-      <SectionLabel as="span" class="hidden sm:block">{{ lodLabel }}</SectionLabel>
+      <!-- The zoom band this readout is currently in, under the percentage: a second VALUE
+           annotating the first, not a heading over what follows, so it keeps its own classes
+           rather than adopting the eyebrow recipe (`common/SectionLabel.vue`). On the recipe it
+           rendered at 11px semibold inside a `w-20` button and competed with the percentage. -->
+      <span class="hidden text-3xs uppercase tracking-wide text-dimmed sm:block">{{
+        lodLabel
+      }}</span>
     </button>
     <IconButton
       :label="t('board.toolbar.zoomIn')"
