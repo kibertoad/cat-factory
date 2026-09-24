@@ -2,6 +2,7 @@
 import type { DropdownMenuItem } from '@nuxt/ui'
 import type { CloudProvider } from '~/types/domain'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 // Account + board switching. Picks the active account (personal / org) and the
 // active board within it, and manages boards (new / rename / delete). The account
 // row is shown only when accounts exist (auth on); in dev it falls back to a plain

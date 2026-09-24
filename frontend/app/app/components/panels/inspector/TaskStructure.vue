@@ -3,6 +3,7 @@ import type { Block } from '~/types/domain'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
 import FragmentSelector from '~/components/fragments/FragmentSelector.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const props = defineProps<{ block: Block }>()
 
 const board = useBoardStore()

@@ -18,6 +18,7 @@ import { computed, ref } from 'vue'
 import { MAX_REVIEW_SKILLS } from '@cat-factory/contracts'
 import { useSkillsStore } from '~/stores/skills'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const props = defineProps<{
   /** The queued skill ids, in the order the reviewer applies them (`v-model`). */
   modelValue: string[]

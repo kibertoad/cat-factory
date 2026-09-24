@@ -11,6 +11,7 @@ import { computed } from 'vue'
 import { autoMergeShare, frictionlessShare, RULEABLE_CHANGE_CLASSES } from '@cat-factory/contracts'
 import type { MergeClassRule, MergeClassRules } from '~/types/merge'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const props = defineProps<{
   /** The preset's current rules; an absent class means "use the score ceilings". */
   modelValue: MergeClassRules

@@ -16,6 +16,7 @@
 import { aprioriWorkingBranch } from '@cat-factory/contracts'
 import type { AprioriBranch, Block } from '~/types/domain'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const props = defineProps<{ block: Block }>()
 
 const { t } = useI18n()

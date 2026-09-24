@@ -22,6 +22,7 @@ import RepoTreeBrowser from '~/components/github/RepoTreeBrowser.vue'
 import VcsConnectSurfaces from '~/components/vcs/VcsConnectSurfaces.vue'
 import { appInstallationManageUrl, newRepoUrl, VCS_PROVIDER_LABELS } from '~/utils/vcs'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const ui = useUiStore()
 const bootstrap = useBootstrapStore()
 const agentRuns = useAgentRunsStore()

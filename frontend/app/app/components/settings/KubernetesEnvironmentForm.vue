@@ -16,6 +16,7 @@ import ConnectionTestVerdict from '~/components/settings/ConnectionTestVerdict.v
 import SecretInput from '~/components/common/SecretInput.vue'
 import type { ProviderConnection } from '~/types/providerConnections'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const props = defineProps<{
   connection: ProviderConnection | null
   supportsTest: boolean

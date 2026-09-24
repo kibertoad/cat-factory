@@ -11,6 +11,7 @@
 import type { AgentEffortReport } from '~/types/execution'
 import { effortBand } from '~/utils/effort'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const props = withDefaults(
   defineProps<{ report: AgentEffortReport; variant?: 'card' | 'flat' }>(),
   { variant: 'card' },

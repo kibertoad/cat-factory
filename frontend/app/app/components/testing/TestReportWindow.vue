@@ -23,6 +23,7 @@ import ProvisioningLogsDrawer from '~/components/provisioning/ProvisioningLogsDr
 import MarkdownProse from '~/components/common/MarkdownProse.vue'
 import { runIsActive } from '~/utils/pipelineRender'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const board = useBoardStore()
 const execution = useExecutionStore()
 const { t, d, n } = useI18n()

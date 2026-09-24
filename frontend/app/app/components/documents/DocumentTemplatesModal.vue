@@ -4,6 +4,7 @@ import type { DocKind, DocumentLinkRole, SourceDocument } from '~/types/domain'
 import DocumentOriginLink from '~/components/documents/DocumentOriginLink.vue'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 // Manage the workspace's per-DocKind TEMPLATE (singular) + EXEMPLAR (multi) document links (WS1).
 // A kind can be pointed at one of the workspace's already-imported documents so its parsed
 // sections override the built-in skeleton (template) and the author agents study it (exemplar).

@@ -4,6 +4,7 @@ import { computed, ref } from 'vue'
 import ThemeImportModal from '~/components/theme/ThemeImportModal.vue'
 import { useThemeStore } from '~/stores/theme'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 // Appearance picker, shown at the sidebar bottom beside the language switcher: colour MODE
 // (system / light / dark) and THEME (the built-ins plus anything the user imported from the Nuxt
 // UI theme editor) in one dropdown, because they are two halves of one question ("what does the

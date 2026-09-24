@@ -12,6 +12,7 @@ import VcsConnectSurfaces from '~/components/vcs/VcsConnectSurfaces.vue'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import { VCS_PROVIDER_ICONS, VCS_PROVIDER_LABELS } from '~/utils/vcs'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const { t } = useI18n()
 const ui = useUiStore()
 const access = useWorkspaceAccess()

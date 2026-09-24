@@ -3,6 +3,7 @@ import type { DocumentSourceKind } from '~/types/domain'
 import DocumentSyncState from '~/components/documents/DocumentSyncState.vue'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 // Import pages from a connected document source and pick one to expand into
 // board structure. A source selector lets the user choose which connected source
 // to import from (Confluence, Notion, …). "Preview & spawn" always creates new

@@ -18,6 +18,7 @@ import { binaryCandidateView } from '~/utils/binaryCandidates'
 import CopyButton from '~/components/common/CopyButton.vue'
 import StoredAssetView from '~/components/binaryOutput/StoredAssetView.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 // Two callers, one renderer — the same split `StepEffortReport` makes: the generic step-detail
 // panel drops it in as a `card` (its own heading + border, among the other detail sections),
 // and `ResultWindowShell`'s collapsible footer embeds it `flat`, where the disclosure row is

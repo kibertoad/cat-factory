@@ -24,6 +24,7 @@ import { RISK_POLICY_AXES, RISK_POLICY_CEILING_FIELD } from '~/utils/riskPolicy'
 import MergeClassRulesEditor from '~/components/settings/MergeClassRulesEditor.vue'
 import MergeRolePolicyEditor from '~/components/settings/MergeRolePolicyEditor.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const props = defineProps<{
   policy: RiskPolicyLibraryEntry
   /** Which single control is mid-request, keyed `<policyId>[:<action>]` by the owning panel. */

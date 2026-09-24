@@ -7,6 +7,7 @@ import PipelineProgress from '~/components/pipeline/PipelineProgress.vue'
 import IconButton from '~/components/common/IconButton.vue'
 import { useInitiativePlanning } from '~/composables/useInitiativePlanning'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const board = useBoardStore()
 const pipelines = usePipelinesStore()
 const execution = useExecutionStore()

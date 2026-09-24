@@ -4,6 +4,7 @@ import type { PipelineStep } from '~/types/execution'
 import { useStepTimer } from '~/composables/useStepTimer'
 import StepModelActivity from '~/components/observability/StepModelActivity.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 // Shared run-metadata + observability block for the step-backed result windows
 // (the CI/conflicts gate, the tester report). It carries the facts every step has in
 // common — step position, live duration, model, run id, and the LLM model-activity

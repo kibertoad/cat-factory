@@ -30,6 +30,7 @@ import {
 import InputGateNotice from '~/components/inputGate/InputGateNotice.vue'
 import RunDetailLoadState from '~/components/panels/RunDetailLoadState.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 // Detail overlay for a single pipeline step. Opened by clicking an agent in the
 // inspector list (TaskExecution) or the focus-view pipeline (PipelineProgress) via
 // `ui.openStepDetail(instanceId, stepIndex)`. It resolves the step from the

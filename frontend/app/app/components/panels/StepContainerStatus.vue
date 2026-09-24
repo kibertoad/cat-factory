@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import type { PipelineStep, RunContainerStatus } from '~/types/execution'
 import { containerPhaseLabel } from '~/utils/pipelineRender'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 // The per-run container lifecycle for a container-backed step: its status (spinning up /
 // running / errored / reclaimed), the live phase (preparing the checkout vs the agent
 // making calls), and the container's id + reachable URL once up. Shared by the generic

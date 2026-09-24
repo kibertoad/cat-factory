@@ -25,6 +25,7 @@ import {
   interviewStepReached,
 } from '~/utils/interviewGate'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const board = useBoardStore()
 const docInterview = useDocInterviewStore()
 const execution = useExecutionStore()

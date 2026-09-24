@@ -14,6 +14,7 @@ import StepDelegatedStatus from '~/components/panels/StepDelegatedStatus.vue'
 import CopyButton from '~/components/common/CopyButton.vue'
 import MarkdownProse from '~/components/common/MarkdownProse.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 // The step's metadata card body: state/timing/model/run id, the container cold-boot
 // phase, the live subtask breakdown, the LLM observability rollup, the applied
 // standards, any raised decision/approval gate, and the companion verdict sequence.

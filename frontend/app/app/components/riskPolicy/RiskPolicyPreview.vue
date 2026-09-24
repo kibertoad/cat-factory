@@ -11,6 +11,7 @@ import { computed } from 'vue'
 import type { RiskPolicy, WorkspaceRole } from '~/types/merge'
 import { riskPolicyCeilings, rolePolicySummary, type RiskPolicyAxis } from '~/utils/riskPolicy'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const props = defineProps<{ policy: RiskPolicy }>()
 const { t, n } = useI18n()
 

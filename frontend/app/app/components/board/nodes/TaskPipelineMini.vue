@@ -13,6 +13,7 @@ import { lodAtLeast } from '~/composables/useSemanticZoom'
 import { prReviewPhase } from '~/utils/prReviewProgress'
 import PrReviewPhaseBadge from '~/components/prReview/PrReviewPhaseBadge.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 // Drill-down inside a task card: the task's build-pipeline steps appear on hover (at any
 // zoom level) or once the `steps` zoom band is reached, and one band deeper (`subtasks`)
 // each step's live todo breakdown expands — done / in-progress / pending — exactly the way

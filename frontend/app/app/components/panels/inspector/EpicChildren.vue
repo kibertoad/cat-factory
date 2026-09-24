@@ -4,6 +4,7 @@ import type { Block } from '~/types/domain'
 import { STATUS_META } from '~/utils/catalog'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 // The epic inspector body: the full tree of member tasks (which may live under different
 // services/modules), grouped service → module → task. Each task row selects it. Membership
 // is the task's `epicId`; the epic is non-structural, so this reads across the whole board.

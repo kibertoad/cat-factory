@@ -8,6 +8,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { SubscriptionVendor } from '~/types/domain'
 import SecretInput from '~/components/common/SecretInput.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const personal = usePersonalSubscriptionsStore()
 const auth = useAuthStore()
 const workspace = useWorkspaceStore()

@@ -20,6 +20,7 @@ import type {
   ReviewItemStatus,
 } from '~/types/clarity'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const board = useBoardStore()
 const clarity = useClarityStore()
 const models = useModelsStore()

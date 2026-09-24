@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import type { ReproductionPhaseOutcome, ReproductionReport } from '~/types/reproduction'
 import { REPRODUCTION_STATUS_KEYS, REPRODUCTION_TREE_KEYS } from '~/utils/reproduction'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 // The BUGFIX REPRODUCTION PROOF for a step: the declared reproducing check as the
 // executor-harness ran it against the pre-fix tree and against the final tree, with both captured
 // outputs. The verdict is computed from the two exit codes by the harness — never self-reported by

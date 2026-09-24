@@ -18,6 +18,7 @@ import {
 import type { WorkspaceMetadataFieldDefinition } from '~/modular/workspace-metadata'
 import type { AppSlots } from '~/modular/slots'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const { t } = useI18n()
 const slots = useReactiveSlots<AppSlots>()
 const store = useWorkspaceSettingsStore()

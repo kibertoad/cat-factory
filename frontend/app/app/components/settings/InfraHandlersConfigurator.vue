@@ -31,6 +31,7 @@ import CloudflareHandlerSection from '~/components/settings/CloudflareHandlerSec
 import ConnectionTestVerdict from '~/components/settings/ConnectionTestVerdict.vue'
 import { consumeKubernetesScrollAnchor } from '~/components/settings/InfraHandlersConfigurator.logic'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const { t } = useI18n()
 const infra = useInfraConfigStore()
 const auth = useAuthStore()

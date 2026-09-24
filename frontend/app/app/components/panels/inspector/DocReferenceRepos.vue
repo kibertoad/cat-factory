@@ -7,6 +7,7 @@
 import type { Block, GitHubAvailableRepo, ReferenceRepo } from '~/types/domain'
 import RepoSearchEmpty from '~/components/github/RepoSearchEmpty.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const props = defineProps<{ block: Block }>()
 
 const { t } = useI18n()

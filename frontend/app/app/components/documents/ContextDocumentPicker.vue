@@ -50,6 +50,7 @@ import {
   sourceMenuItems,
 } from '~/utils/sourcePicker'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 // Repo-backed document sources pick a FILE out of a repository (repo search → file
 // search / tree browse) instead of the generic free-text catalogue search. Today only
 // `github` (which transparently covers GitLab via the VCS adapter) is repo-backed.

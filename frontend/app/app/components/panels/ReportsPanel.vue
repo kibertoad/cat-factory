@@ -20,6 +20,7 @@ import {
 } from './ReportsPanel.logic'
 import ReportsSpendBreakdown from '~/components/panels/ReportsSpendBreakdown.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 // Reports: cross-cutting usage analytics for the active account — where the spend and the
 // work actually go. Spend per model and agent kind, spend + run activity per workspace /
 // service / task type, and a spend trend, over a selectable window and optionally narrowed

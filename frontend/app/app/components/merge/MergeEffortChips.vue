@@ -11,6 +11,7 @@ import { computed } from 'vue'
 import { REVIEW_EFFORTS } from '@cat-factory/contracts'
 import type { ChangeClass, MergeClassRollup, ReviewEffort } from '~/types/merge'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const props = defineProps<{
   /** The currently picked effort, or null for "not chosen". */
   modelValue: ReviewEffort | null

@@ -15,6 +15,7 @@ import type {
 import JourneyStepNav from '~/components/environments/steps/JourneyStepNav.vue'
 import { useEnvironmentWizardTarget } from '~/modular/journeys/environmentSetup.frame'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const props = defineProps<{
   input: { frameId: string | null }
   exit: (name: 'advance') => void

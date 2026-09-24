@@ -8,6 +8,7 @@
 // fixed (or all its models become available).
 import { computed } from 'vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const { t } = useI18n()
 const ui = useUiStore()
 const models = useModelsStore()

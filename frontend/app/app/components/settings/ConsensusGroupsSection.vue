@@ -14,6 +14,7 @@ import type { ConsensusGroup, ConsensusStrategy } from '~/types/consensus'
 import { isSelectable } from '~/stores/models'
 import { uid } from '~/utils/catalog'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const { t } = useI18n()
 const groups = useConsensusGroupsStore()
 const models = useModelsStore()

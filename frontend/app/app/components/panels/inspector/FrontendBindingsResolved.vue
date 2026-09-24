@@ -8,6 +8,7 @@ import {
   type ResolvedFrontendBinding,
 } from '@cat-factory/contracts'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 // The resolution of a frontend frame's backend bindings — each env var → a bound service's live
 // ephemeral URL, or WireMock. Two modes, same view:
 //   - **Live** (frame inspector, `resolved` omitted): resolves against the workspace's CURRENT env

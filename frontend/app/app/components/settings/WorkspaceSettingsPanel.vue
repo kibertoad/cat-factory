@@ -25,6 +25,7 @@ import type { AppSlots } from '~/modular/slots'
 import { usePipelinesStore } from '~/stores/pipelines'
 import { pipelineAllowedForTaskType } from '~/utils/pipeline'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const { t, te } = useI18n()
 const ui = useUiStore()
 const store = useWorkspaceSettingsStore()

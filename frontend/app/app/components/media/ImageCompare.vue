@@ -10,6 +10,7 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import type { ArtifactBlobs } from '~/composables/useArtifactBlobs'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const props = defineProps<{
   view: string
   actualId: string | null | undefined

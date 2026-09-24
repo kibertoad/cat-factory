@@ -21,6 +21,7 @@ import {
 } from './TutorialOverlay.logic'
 import type { TutorialAdvanceCause, TutorialDirection } from './TutorialOverlay.logic'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 // The one shared tour runtime: resolves the running tour from the `tutorialTours` slot,
 // anchors a highlight ring + tooltip to the current step's `data-testid`, and advances
 // on Next or on a real click on the highlighted control. Mounted (from `pages/index.vue`)

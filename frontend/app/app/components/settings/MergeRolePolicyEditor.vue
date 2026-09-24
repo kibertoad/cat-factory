@@ -35,6 +35,7 @@ import {
   type RoleRuleSelection,
 } from '~/components/settings/MergeRolePolicyEditor.logic'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const props = defineProps<{
   /** The preset's per-role narrowing map; a role with no entry is exactly the base rules. */
   classRulesByRole: ClassRulesByRole

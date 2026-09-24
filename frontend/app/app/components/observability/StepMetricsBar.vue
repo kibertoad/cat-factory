@@ -12,6 +12,7 @@ import {
   transportRatio,
 } from '~/utils/observability'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 // Compact, at-a-glance LLM rollup for one pipeline step: token usage, an
 // output-limit headroom bar (how close the step ran to truncation), a
 // transport-vs-execution latency split, and error/warning badges. Rendered inline
@@ -89,8 +90,8 @@ const headroomTone = computed(() => headroomColor(headroom.value, m.value.trunca
           {{ onSubscription ? `~${cost}` : cost }}
         </span>
         <SectionLabel
-          as="span"
           v-if="onSubscription"
+          as="span"
           :title="t('observability.metricsBar.subscriptionCostHint')"
         >
           {{ t('observability.metricsBar.subscription') }}

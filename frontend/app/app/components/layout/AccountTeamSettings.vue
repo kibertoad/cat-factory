@@ -9,6 +9,7 @@ import AccountPlatformAlertSettings from '~/components/layout/AccountPlatformAle
 import AccountRunCredentialSettings from '~/components/layout/AccountRunCredentialSettings.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 // Team settings for an org account: the member roster (with combinable admin /
 // developer / product roles), pending email invitations, and the per-account
 // transactional-email sender. Admin-only mutations are enforced by the backend; this
@@ -240,7 +241,7 @@ async function disconnectEmail() {
             class="w-44"
             @update:model-value="(r: AccountRole[]) => updateMemberRoles(m.userId, r)"
           />
-          <SectionLabel as="span" v-else>
+          <SectionLabel v-else as="span">
             {{ m.roles.join(', ') }}
           </SectionLabel>
           <!-- Offboarding: end every session this member holds, leaving their membership and

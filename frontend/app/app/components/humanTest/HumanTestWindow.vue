@@ -16,6 +16,7 @@ type HumanTestRoundOutcome = NonNullable<HumanTestRound['outcome']>
 import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const board = useBoardStore()
 const execution = useExecutionStore()
 const humanTest = useHumanTestStore()

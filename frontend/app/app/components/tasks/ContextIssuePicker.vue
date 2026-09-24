@@ -29,6 +29,7 @@ import {
   sourceMenuItems,
 } from '~/utils/sourcePicker'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const props = defineProps<{
   /** contextKeys already staged by the caller, so they're filtered out / not re-offered. */
   chosenKeys?: string[]

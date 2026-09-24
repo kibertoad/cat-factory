@@ -10,6 +10,7 @@
 // and "the analysis never ran" would otherwise look identical and lead to opposite conclusions.
 import type { AdoptionSource, BootstrapJob } from '~/types/domain'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const props = defineProps<{ job: BootstrapJob }>()
 const emit = defineEmits<{ close: [] }>()
 

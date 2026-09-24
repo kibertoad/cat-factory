@@ -33,6 +33,7 @@ import {
 } from '~/components/panels/StepToolServers.logic'
 import { agentKindMeta } from '~/utils/catalog'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const props = defineProps<{
   toolServers: StepToolServers
   /**

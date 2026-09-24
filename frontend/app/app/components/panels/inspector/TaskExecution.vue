@@ -23,6 +23,7 @@ import InputGateNotice from '~/components/inputGate/InputGateNotice.vue'
 import { inputGateNoticeFor } from '~/utils/inputGate'
 import { composeRunOutcome, hasOutcomeToShow } from '~/utils/runOutcome'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const props = defineProps<{ block: Block }>()
 
 const execution = useExecutionStore()

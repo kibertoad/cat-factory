@@ -26,6 +26,7 @@ import type {
 } from '~/types/notifications'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const ui = useUiStore()
 const notifications = useNotificationsStore()
 const slack = useSlackStore()

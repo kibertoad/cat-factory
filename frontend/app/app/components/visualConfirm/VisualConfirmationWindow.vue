@@ -15,6 +15,7 @@ import ArtifactLightbox from '~/components/media/ArtifactLightbox.vue'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const board = useBoardStore()
 const execution = useExecutionStore()
 const visualConfirm = useVisualConfirmStore()

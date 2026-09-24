@@ -6,6 +6,7 @@ import { filterToolCallsByOutcome, formatMs } from '~/utils/observability'
 import { agentKindMeta } from '~/utils/catalog'
 import OutcomeFilterChips from '~/components/observability/OutcomeFilterChips.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 // The tool-call TRAJECTORY drill-down: what the run's agents DID, oldest first, in the order
 // they did it. The sibling of the model-call list, and the one that holds the failures no LLM
 // rollup counts — a tool that errors inside the container leaves the call that requested it

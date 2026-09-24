@@ -11,6 +11,7 @@
 import type { PromptFragment } from '~/types/domain'
 import { buildFragmentCategoryGroups } from '~/utils/fragmentPicker'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const props = withDefaults(
   defineProps<{
     /** The selected fragment ids (`v-model`). */
@@ -76,7 +77,7 @@ function manageAccount() {
 <template>
   <div>
     <div class="mb-1 flex items-center justify-between gap-2">
-      <SectionLabel as="span" v-if="label">
+      <SectionLabel v-if="label" as="span">
         {{ label }}
       </SectionLabel>
       <span v-else />

@@ -7,6 +7,7 @@
 // pages/index.vue. See backend/docs/review-debt-friction.md.
 import { computed } from 'vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const { t } = useI18n()
 const ui = useUiStore()
 

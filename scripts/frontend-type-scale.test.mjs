@@ -24,6 +24,23 @@ describe('findTypeLiterals', () => {
     assert.deepEqual(findTypeLiterals('class="text-[9pt]"'), ['text-[9pt]'])
   })
 
+  it('flags the other three spellings of the same declaration', () => {
+    // Banning one spelling and not its siblings teaches the next contributor the siblings.
+    assert.deepEqual(findTypeLiterals('class="text-[length:11px]"'), ['text-[length:11px]'])
+    assert.deepEqual(findTypeLiterals('class="[font-size:11px]"'), ['[font-size:11px]'])
+    assert.deepEqual(findTypeLiterals('class="sm:[font-size:0.7rem]"'), ['[font-size:0.7rem]'])
+    assert.deepEqual(findTypeLiterals('  font-size: 11px;'), ['font-size: 11px'])
+  })
+
+  it('leaves a raw declaration that already follows the root alone', () => {
+    // `rem` and `em` track the `font-size` a theme document sets, so only `px` is a literal here.
+    assert.deepEqual(findTypeLiterals('  font-size: 0.8rem;'), [])
+    assert.deepEqual(findTypeLiterals('  font-size: 0.95em;'), [])
+    assert.deepEqual(findTypeLiterals('  font-size: max(16px, 1em);'), [])
+    // The theme writer itself, the one place a px root is the point (`utils/theme/css.ts`).
+    assert.deepEqual(findTypeLiterals('lines.push(`html[data-theme] { font-size: ${n}px; }`)'), [])
+  })
+
   it('flags a literal behind a variant, and deduplicates within a line', () => {
     assert.deepEqual(findTypeLiterals('class="sm:text-[11px]"'), ['text-[11px]'])
     assert.deepEqual(findTypeLiterals('class="hover:text-[11px] text-[11px]"'), ['text-[11px]'])

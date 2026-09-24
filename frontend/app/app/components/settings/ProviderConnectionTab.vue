@@ -20,6 +20,7 @@ import ProvisioningLogsDrawer from '~/components/provisioning/ProvisioningLogsDr
 import ProviderManifestEditor from '~/components/settings/ProviderManifestEditor.vue'
 import KubernetesEnvironmentForm from '~/components/settings/KubernetesEnvironmentForm.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const props = defineProps<{
   kind: ProviderConnectionKind
   /** The selected backend-kind slug — chosen by the parent picker's radio, not a local

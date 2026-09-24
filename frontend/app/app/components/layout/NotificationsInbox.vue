@@ -2,6 +2,7 @@
 import type { Notification } from '~/types/domain'
 import type { ReviewEffort } from '~/types/merge'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 // The board's notification inbox: a bell with an open-count badge that opens a
 // panel of human-actionable items (a PR awaiting a merge decision, a completed
 // pipeline awaiting confirmation, CI that gave up). Each item can be acted on

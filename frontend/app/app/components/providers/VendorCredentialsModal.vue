@@ -10,6 +10,7 @@ import type { SubscriptionVendor } from '~/types/domain'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const { t, n } = useI18n()
 const ui = useUiStore()
 const workspace = useWorkspaceStore()

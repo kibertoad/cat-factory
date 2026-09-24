@@ -46,6 +46,7 @@ import MarkdownProse from '~/components/common/MarkdownProse.vue'
 import EmptyState from '~/components/common/EmptyState.vue'
 import type { BadgeColor } from '~/utils/badge'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const board = useBoardStore()
 const documents = useDocumentsStore()
 const execution = useExecutionStore()

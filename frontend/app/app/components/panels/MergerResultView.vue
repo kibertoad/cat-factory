@@ -12,6 +12,7 @@ import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import MarkdownProse from '~/components/common/MarkdownProse.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const board = useBoardStore()
 const execution = useExecutionStore()
 const agents = useAgentsStore()

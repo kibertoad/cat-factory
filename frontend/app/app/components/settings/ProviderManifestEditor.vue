@@ -23,6 +23,7 @@ import ConnectionWarnings from '~/components/settings/ConnectionWarnings.vue'
 import ConnectionTestVerdict from '~/components/settings/ConnectionTestVerdict.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const props = defineProps<{
   kind: ProviderConnectionKind
   /** The provider's current saved manifest (secret-ref keys only, no values). */

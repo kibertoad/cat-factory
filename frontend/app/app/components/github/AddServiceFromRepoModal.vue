@@ -28,6 +28,7 @@ import ServiceTestConfig from '~/components/panels/inspector/ServiceTestConfig.v
 import ServiceFragments from '~/components/panels/inspector/ServiceFragments.vue'
 import { appInstallationManageUrl, VCS_PROVIDER_LABELS } from '~/utils/vcs'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const { t } = useI18n()
 
 // The behavioural repo role for the imported frame. `service` (backend) is the default so

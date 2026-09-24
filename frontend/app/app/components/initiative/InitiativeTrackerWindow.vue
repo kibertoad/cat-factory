@@ -30,6 +30,7 @@ import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 import InitiativePlanReview from '~/components/initiative/InitiativePlanReview.vue'
 import InitiativePlanNotice from '~/components/initiative/InitiativePlanNotice.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const board = useBoardStore()
 const initiatives = useInitiativesStore()
 const access = useWorkspaceAccess()

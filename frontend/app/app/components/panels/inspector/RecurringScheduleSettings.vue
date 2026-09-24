@@ -5,6 +5,7 @@
 import type { Block } from '~/types/domain'
 import type { Recurrence } from '~/types/recurring'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const props = defineProps<{ block: Block }>()
 const recurring = useRecurringPipelinesStore()
 const pipelines = usePipelinesStore()

@@ -18,6 +18,7 @@ import type {
 import { isKubernetesUrlSource } from '@cat-factory/contracts'
 import type { K3sSetupPrefill } from '~/stores/ui'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 // The kube branch of the discriminated handler config this form produces (the `local-k3s` /
 // `remote-kubernetes` engines share `kubernetesEngineConfigSchema`). Emitting this typed
 // (rather than a bare `Record`) lets the parent pass it straight to registerHandler with no

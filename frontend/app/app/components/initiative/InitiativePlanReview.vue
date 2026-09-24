@@ -31,6 +31,7 @@ import { useStepProse } from '~/composables/useStepProse'
 import { useProseComments } from '~/composables/useProseComments'
 import InitiativePlanDecision from '~/components/initiative/InitiativePlanDecision.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const props = defineProps<{
   /** The parked gate under review. */
   approval: StepApproval
@@ -150,7 +151,7 @@ async function copyPlan() {
       class="hidden w-52 shrink-0 flex-col border-e border-default bg-default/60 lg:flex"
     >
       <div class="flex items-center gap-0.5 border-b border-default px-3 py-2">
-        <SectionLabel as="span" v-if="outline.hasToc" class="min-w-0 flex-1 truncate">
+        <SectionLabel v-if="outline.hasToc" as="span" class="min-w-0 flex-1 truncate">
           {{ t('panels.stepDetail.contents') }}
         </SectionLabel>
         <span v-else class="flex-1" />
@@ -272,7 +273,7 @@ async function copyPlan() {
             />
             <span
               class="font-semibold text-app-100"
-              :class="s.depth <= 1 ? 'text-base' : 'text-sm'"
+              :class="s.depth <= 1 ? 'text-base' : s.depth === 2 ? 'text-sm' : 'text-xs'"
               v-html="s.titleHtml"
             />
           </button>

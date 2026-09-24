@@ -10,6 +10,7 @@ import {
   showsProviderFailure,
 } from '~/components/environments/EnvironmentStatusPanel.logic'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const props = defineProps<{
   environment: RunEnvironment | null
   /**

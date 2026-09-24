@@ -23,6 +23,7 @@ import type {
   ProvisioningSubsystem,
 } from '~/types/provisioningLogs'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const props = defineProps<{
   subsystem?: ProvisioningSubsystem
   executionId?: string

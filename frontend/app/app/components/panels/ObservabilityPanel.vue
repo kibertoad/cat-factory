@@ -30,6 +30,7 @@ import OutcomeFilterChips from '~/components/observability/OutcomeFilterChips.vu
 import RunFailureSummary from '~/components/observability/RunFailureSummary.vue'
 import ToolCallList from '~/components/observability/ToolCallList.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 /** No run selected: the same empty, NOT-truncated trajectory the store answers with. */
 const EMPTY_TRAJECTORY: RunToolCallTrajectory = Object.freeze({
   toolCalls: Object.freeze([]) as never,

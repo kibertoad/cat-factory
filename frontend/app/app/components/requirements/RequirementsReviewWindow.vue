@@ -29,6 +29,7 @@ import type {
   ReviewItemStatus,
 } from '~/types/requirements'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const board = useBoardStore()
 const requirements = useRequirementsStore()
 const models = useModelsStore()

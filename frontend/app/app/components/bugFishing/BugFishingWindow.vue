@@ -29,6 +29,7 @@ import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 import MarkdownProse from '~/components/common/MarkdownProse.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const execution = useExecutionStore()
 const board = useBoardStore()
 const pipelines = usePipelinesStore()

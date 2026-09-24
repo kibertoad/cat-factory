@@ -21,6 +21,7 @@ import PrReviewPhaseBadge from '~/components/prReview/PrReviewPhaseBadge.vue'
 import { useNowTick, stepDurationLabel } from '~/composables/useStepTimer'
 import type { BadgeColor } from '~/utils/badge'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const props = defineProps<{ instance: ExecutionInstance }>()
 const emit = defineEmits<{
   openDecision: [decisionId: string]

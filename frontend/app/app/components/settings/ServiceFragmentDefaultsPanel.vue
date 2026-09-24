@@ -8,6 +8,7 @@
 import { onMounted, ref } from 'vue'
 import { buildFragmentPickerGroups } from '~/utils/fragmentPicker'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const { t } = useI18n()
 const fragments = useFragmentsStore()
 const defaults = useServiceFragmentDefaultsStore()

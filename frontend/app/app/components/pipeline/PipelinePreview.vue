@@ -19,6 +19,7 @@ import {
 } from '~/utils/pipeline'
 import AgentKindIcon from '~/components/pipeline/AgentKindIcon.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const props = defineProps<{ pipeline: Pipeline }>()
 const { t } = useI18n()
 

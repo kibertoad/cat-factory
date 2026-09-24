@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, watch } from 'vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 // Per-step Kaizen grading status, shown inside the run window (NOT on the board). Reads
 // the grading for this run's step from the kaizen store, lazily loading the run's
 // gradings on first mount, and renders the scheduled→running→complete status plus the

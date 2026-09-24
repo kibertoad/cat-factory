@@ -20,6 +20,7 @@ import { providerCachesPrompts } from '@cat-factory/contracts'
 import type { ApiKey, ApiKeyProvider } from '~/types/domain'
 import SecretInput from '~/components/common/SecretInput.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const props = withDefaults(defineProps<{ accountId?: string; category?: 'direct' | 'proxy' }>(), {
   category: 'direct',
 })

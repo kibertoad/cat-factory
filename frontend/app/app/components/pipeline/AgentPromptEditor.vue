@@ -11,6 +11,7 @@ import {
   saveIntent,
 } from '~/components/pipeline/AgentPromptEditor.logic'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 // The per-workspace system-prompt editor for ONE agent kind, opened from the pipeline builder
 // (where the kinds are actually chosen). It edits the SHIPPED track prompt only: the platform
 // re-applies its own directives on top of whatever is saved here, so they cannot be deleted by

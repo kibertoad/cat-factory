@@ -6,6 +6,7 @@
 // shown here. See docs/initiatives/tiered-budgets.md.
 import { computed, reactive, ref, watch, type Ref } from 'vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const { t, n } = useI18n()
 const toast = useToast()
 const { present } = usePipelineErrorToast()

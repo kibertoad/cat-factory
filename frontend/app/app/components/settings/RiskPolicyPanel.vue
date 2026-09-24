@@ -14,6 +14,7 @@ import RiskPolicyCreateForm from '~/components/settings/RiskPolicyCreateForm.vue
 import RiskPolicyEditorRow from '~/components/settings/RiskPolicyEditorRow.vue'
 import RiskPolicyInheritedRow from '~/components/settings/RiskPolicyInheritedRow.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const { t } = useI18n()
 
 const store = useRiskPoliciesStore()
@@ -194,7 +195,7 @@ function unhide(presetId: string) {
     </section>
 
     <section class="space-y-4">
-      <SectionLabel as="p" v-if="inherited.length > 0">
+      <SectionLabel v-if="inherited.length > 0" as="p">
         {{ t('settings.riskPolicy.own.heading') }}
       </SectionLabel>
       <RiskPolicyEditorRow

@@ -47,6 +47,7 @@ import { descriptorFieldDefaults } from '@cat-factory/contracts'
 import { pipelineAllowedForManualStart } from '~/utils/pipeline'
 import { buildTaskTypePickerRows } from '~/utils/taskTypePicker'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const ui = useUiStore()
 // Interface tier. In BASIC mode this form asks for the task itself (type, title,
 // description, per-type fields, context, the pipeline) and hides the OVERRIDES: the run
@@ -939,8 +940,8 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
               :data-task-type-row="row.id"
             >
               <SectionLabel
-                as="p"
                 v-if="row.caption"
+                as="p"
                 class="mb-1 px-1"
                 data-testid="task-type-category"
               >

@@ -22,6 +22,7 @@ import { connectableSources } from '~/utils/sourcePicker'
 import ContextDocumentPicker from '~/components/documents/ContextDocumentPicker.vue'
 import ContextIssuePicker from '~/components/tasks/ContextIssuePicker.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const props = defineProps<{
   /** The staged attachments; the host owns the array and commits it after creating the block. */
   modelValue: PendingContext[]

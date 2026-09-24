@@ -23,6 +23,7 @@ import {
 } from './ServiceSpecWindow.logic'
 import type { BadgeColor } from '~/utils/badge'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const { t } = useI18n()
 const board = useBoardStore()
 const serviceSpec = useServiceSpecStore()

@@ -5,6 +5,7 @@ import { LANE_GEOMETRY } from '~/utils/laneGeometry'
 import type { LaneGroup, LaneGroupKey } from '~/utils/laneSort'
 import { LANE_REASON_LABEL_KEYS, type LaneReason } from '~/utils/swimlanes'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 /**
  * One labelled run of cards inside a lane.
  *

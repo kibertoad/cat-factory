@@ -12,6 +12,7 @@ import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import MarkdownProse from '~/components/common/MarkdownProse.vue'
 import CopyButton from '~/components/common/CopyButton.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const board = useBoardStore()
 const execution = useExecutionStore()
 const agents = useAgentsStore()

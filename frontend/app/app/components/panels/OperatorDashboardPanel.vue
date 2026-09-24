@@ -5,6 +5,7 @@ import type { PlatformObservabilityWindow } from '~/types/execution'
 import { formatMs } from '~/utils/observability'
 import { FAILURE_KIND_KEYS, isAgentFailureKind } from '~/utils/failureKinds'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 // Deployment-level (platform-operator) observability dashboard: the aggregate health of the
 // active account's runs — outcome totals + success rate, a time-bucketed outcome trend, the
 // failure-kind taxonomy, live/parked depth, and duration stats — over a selectable window.

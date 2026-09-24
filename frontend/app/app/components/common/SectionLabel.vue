@@ -6,12 +6,22 @@
 // three sizes (`text-[11px]`, `text-[10px]`, `text-[9px]`), two weights (`font-semibold`,
 // `font-medium`) and two colours (`text-dimmed`, `text-muted`), so two panels side by side
 // disagreed about what a section heading looks like. The recipe below is the plurality of what
-// was already there, so most call sites render byte-identically:
+// was already there:
 //
 //   text-2xs  font-semibold  uppercase  tracking-wide  text-dimmed
 //
 // Those five are the whole component and are NOT overridable. A caller that wants a different
 // size or colour wants a different thing, not a variant of this one.
+//
+// So adopting the component is a VISIBLE change at every site that was not already on the
+// plurality: a label that was `text-[10px]` or `text-[9px]` grows to 11px, one that carried no
+// weight gains `font-semibold`, and one that was `text-muted` goes a step fainter. That is the
+// "decide it once" half of #2248 rather than a side effect.
+//
+// A label that merely SHARES the uppercase styling is not this component: a pill or chip carrying
+// a fill and a radius, an accent-coloured label signalling state or category, or a metadata row
+// (`board/nodes/BlockNode.vue`'s composition line) that states counts rather than titling the
+// block after it. Those keep their own classes on a named step.
 //
 // What a caller DOES control:
 //   - `as`, the element. The default `div` suits a label that titles a region without being a

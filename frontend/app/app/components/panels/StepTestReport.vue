@@ -4,6 +4,7 @@ import type { TesterStepState } from '~/types/execution'
 import { resolveVerdictMeta, type VerdictMeta } from './StepTestReport.logic'
 import MarkdownProse from '~/components/common/MarkdownProse.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 // A tester step's latest structured report (what was tested, the per-area outcomes,
 // the concerns it raised and the greenlight verdict) plus the fixer-loop phase.
 defineProps<{

@@ -8,6 +8,7 @@
 import type { FragmentAdherence } from '~/types/execution'
 import MarkdownProse from '~/components/common/MarkdownProse.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const props = defineProps<{ items: FragmentAdherence }>()
 const { t } = useI18n()
 

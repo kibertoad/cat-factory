@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 // The contextual offer's surface: one walkthrough, offered beside the work that just made it
 // relevant. Deliberately NOT a modal — the whole point is the moment, and a modal would
 // interrupt whatever the user was doing to reach it (answering a parked run, reading a failure).

@@ -21,6 +21,7 @@ import UserMenu from '~/components/auth/UserMenu.vue'
 import { useViewport } from '~/composables/useViewport'
 import type { NavContribution } from '~/modular/nav-contributions'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const { t } = useI18n()
 
 const documents = useDocumentsStore()
@@ -248,7 +249,7 @@ watch(
       <template v-for="section in sidebarGroups" :key="section.group">
         <USeparator />
         <section>
-          <SectionLabel as="h2" v-if="!railed" class="mb-2 px-1">
+          <SectionLabel v-if="!railed" as="h2" class="mb-2 px-1">
             {{ t(section.labelKey) }}
           </SectionLabel>
           <div class="space-y-1.5">

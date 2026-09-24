@@ -10,6 +10,7 @@ import RiskPolicyPicker from '~/components/riskPolicy/RiskPolicyPicker.vue'
 import TaskAprioriBranches from '~/components/panels/inspector/TaskAprioriBranches.vue'
 import DocReferenceRepos from '~/components/panels/inspector/DocReferenceRepos.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const props = defineProps<{ block: Block }>()
 
 const board = useBoardStore()

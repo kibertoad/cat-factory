@@ -23,6 +23,7 @@
 import type { AssistantActionId, AssistantOutcome } from '~/types/domain'
 import { answerFor, assistantSurface, revealTarget, submitGate } from './AssistantModal.logic'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const { t } = useI18n()
 const ui = useUiStore()
 const assistant = useAssistantStore()

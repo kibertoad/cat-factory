@@ -7,6 +7,7 @@
 import { computed, reactive, ref } from 'vue'
 import type { CustomManifestType } from '@cat-factory/contracts'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const { t } = useI18n()
 const infra = useInfraConfigStore()
 const { present } = usePipelineErrorToast()

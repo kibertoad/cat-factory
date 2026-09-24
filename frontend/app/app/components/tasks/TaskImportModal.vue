@@ -18,6 +18,7 @@ import { type AddSourceLabels, addChoicesOf, buildSourceChoices } from '~/utils/
 import ContextIssuePicker from '~/components/tasks/ContextIssuePicker.vue'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const { t } = useI18n()
 const ui = useUiStore()
 const tasks = useTasksStore()

@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { ROLE_PRESENTATION, UI_ROLES } from '~/utils/uiRole'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 // Role picker, at the TOP of the sidebar beside the interface-tier switcher: one place answers
 // "how much of the app do I see", and the role is the outer of the two (it can cap the tier, see
 // `resolveUiMode`), so it sits above it.

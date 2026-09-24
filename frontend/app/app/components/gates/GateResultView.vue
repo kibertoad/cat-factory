@@ -14,6 +14,7 @@ import AttemptEntryHeader from '~/components/panels/AttemptEntryHeader.vue'
 import GateFailingCheckList from '~/components/gates/GateFailingCheckList.vue'
 import CopyButton from '~/components/common/CopyButton.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const board = useBoardStore()
 const execution = useExecutionStore()
 const { t } = useI18n()

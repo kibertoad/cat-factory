@@ -11,6 +11,7 @@ import BootstrapRunSteps from '~/components/bootstrap/BootstrapRunSteps.vue'
 import { BLUEPRINT_AGENT_KIND } from '@cat-factory/contracts'
 import { VCS_PROVIDER_ICONS } from '~/utils/vcs'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const board = useBoardStore()
 const pipelines = usePipelinesStore()
 const execution = useExecutionStore()

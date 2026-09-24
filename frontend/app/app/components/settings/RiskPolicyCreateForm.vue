@@ -11,6 +11,7 @@ import {
   forkGatingFromDraft,
 } from '~/utils/riskPolicyDraft'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const props = defineProps<{ busy: boolean }>()
 
 const emit = defineEmits<{ create: [input: CreateRiskPolicyInput] }>()

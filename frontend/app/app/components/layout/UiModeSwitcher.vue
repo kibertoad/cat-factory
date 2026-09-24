@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { UI_MODES, type UiMode } from '~/utils/uiMode'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 // Interface-tier picker, shown at the TOP of the sidebar under the board switcher. Basic mode
 // hides the power-user destinations and the less-used run options; advanced shows everything.
 //

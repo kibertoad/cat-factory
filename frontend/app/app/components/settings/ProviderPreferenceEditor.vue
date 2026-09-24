@@ -27,6 +27,7 @@ import {
   subscriptionOverridesOrder,
 } from '~/components/settings/ProviderPreferenceEditor.logic'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const props = defineProps<{
   /** The preset's stored order; empty/absent ⇒ the deployment's default order. */
   modelValue: ModelFlavor[] | undefined

@@ -39,8 +39,8 @@ import {
   PanelsResultWindowShell as ResultWindowShell,
   PanelsStepRunMeta as StepRunMeta,
   CommonMarkdownProse as MarkdownProse,
+  CommonSectionLabel as SectionLabel,
 } from '#components'
-import { CommonSectionLabel as SectionLabel } from '#components'
 
 /** The structured assessment the backend `security-auditor` kind returns as `result.custom`
  *  (mirrors `@cat-factory/example-custom-agent`'s `securityAssessment`). Read defensively —

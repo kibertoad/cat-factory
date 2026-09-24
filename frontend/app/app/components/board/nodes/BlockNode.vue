@@ -13,7 +13,6 @@ import { useBlockDrag } from '~/composables/useBlockDrag'
 import { useFrameStacking } from '~/composables/useFrameStacking'
 import { useViewport } from '~/composables/useViewport'
 import { laneBodyHeightIn } from '~/utils/laneGeometry'
-import SectionLabel from '~/components/common/SectionLabel.vue'
 // Vue Flow passes the node's `id` and `data` as props to custom node components.
 // Only frames are rendered as board nodes; their tasks live inside the card.
 const props = defineProps<{ id: string }>()
@@ -528,7 +527,10 @@ const ITEM_ICON: Record<string, string> = {
                the canvas answers precisely — and the one people misread, since it counts
                every task ever added to the service rather than the work in flight. What
                stays is what the canvas can't show at a glance. -->
-          <SectionLabel v-if="modules.length || prTasks" class="flex items-center gap-2">
+          <div
+            v-if="modules.length || prTasks"
+            class="flex items-center gap-2 text-3xs uppercase tracking-wide text-dimmed"
+          >
             <span v-if="modules.length">{{
               t('board.frame.moduleCount', { count: modules.length }, modules.length)
             }}</span>
@@ -536,7 +538,7 @@ const ITEM_ICON: Record<string, string> = {
             <span v-if="prTasks" class="text-app-success-400">{{
               t('board.frame.prReadyCount', { count: prTasks })
             }}</span>
-          </SectionLabel>
+          </div>
         </div>
 
         <!-- The frame's canvas. Tasks are laid out in status swimlanes rather than at

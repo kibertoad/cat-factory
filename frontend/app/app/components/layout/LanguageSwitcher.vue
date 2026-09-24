@@ -3,6 +3,7 @@ import type { DropdownMenuItem } from '@nuxt/ui'
 import { computed } from 'vue'
 import { useLocaleStore } from '~/stores/locale'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 // Language picker for the SPA's supported locales, shown at the sidebar bottom next to
 // the user menu. The list is data-driven from the i18n config (`useI18n().locales`), so
 // adding a locale in nuxt.config.ts surfaces it here automatically. Selecting one switches

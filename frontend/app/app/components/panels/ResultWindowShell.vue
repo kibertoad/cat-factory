@@ -40,6 +40,7 @@ import {
   type ResultWindowWidth,
 } from '~/components/panels/ResultWindowShell.logic'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 /** A pipeline step reference — passed by step-result windows to surface the shared
  *  "restart from here" control. `StepRestartControl` self-hides for an off-path open
  *  (null ids), so a block-keyed window simply omits this prop. */

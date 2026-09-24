@@ -29,6 +29,7 @@ import {
 } from '~/utils/catalog'
 import type { ConsensusStrategy } from '~/types/consensus'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 type DraftUnit = { index: number; kind: AgentKind; companionIndex: number | null }
 
 const pipelines = usePipelinesStore()

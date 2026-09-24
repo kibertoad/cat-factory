@@ -20,6 +20,7 @@ import type {
   ReviewItemStatus,
 } from '~/types/brainstorm'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const board = useBoardStore()
 const brainstorm = useBrainstormStore()
 const toast = useToast()

@@ -7,6 +7,7 @@ import {
 } from './StepDelegatedStatus.logic'
 import type { PipelineStep } from '~/types/execution'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 // The EXTERNAL work a delegated step dispatched: which registered executor is running it, what it
 // is doing, and the link to that system's own logs, which is the affordance everything else here
 // exists to frame.

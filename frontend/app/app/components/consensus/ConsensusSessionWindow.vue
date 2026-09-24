@@ -13,6 +13,7 @@ import MarkdownProse from '~/components/common/MarkdownProse.vue'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import { agentKindMeta } from '~/utils/catalog'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const { t, n } = useI18n()
 
 const board = useBoardStore()

@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import type { StepMetrics } from '~/types/execution'
 import StepMetricsBar from '~/components/observability/StepMetricsBar.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+
 // The shared "Model activity" block: the LLM observability rollup (StepMetricsBar) under
 // a labelled header with a "View all calls →" link into the full per-call panel. Used by
 // every step surface that shows a single step's metrics (the step metadata card, the
