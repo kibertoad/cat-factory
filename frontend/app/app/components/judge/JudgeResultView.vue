@@ -253,13 +253,15 @@ async function act(choice: 'proceed' | 'bounce' | 'stop') {
           <p class="mb-2 text-2xs leading-relaxed text-dimmed">
             {{ t('judge.decisionDescription') }}
           </p>
-          <textarea
+          <UTextarea
             v-model="feedback"
-            rows="3"
+            :rows="3"
             :disabled="busy"
             :placeholder="t('judge.feedbackPlaceholder')"
-            class="w-full resize-y rounded-md border border-default bg-app-950/60 px-3 py-2 text-sm text-default placeholder:text-app-600 focus:border-app-warning-500/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-app-warning-500/60"
-          />
+    size="sm"
+    class="w-full"
+    :ui="{ base: 'resize-y' }"
+  />
           <p v-if="judgeStore.error" class="mt-2 text-xs text-app-error-300">
             {{ judgeStore.error }}
           </p>

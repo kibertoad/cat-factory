@@ -116,6 +116,17 @@ const selectableModelIds = computed(() => {
     .map((m) => ({ id: m.id, label: m.label }))
 })
 
+// The two model pickers differ only in what "inherit the step's model" is worth on the wire:
+// a participant leaves it `undefined`, the synthesizer leaves it an empty string.
+const participantModelItems = computed(() => [
+  { label: t('settings.consensusGroups.editor.stepModel'), value: undefined },
+  ...selectableModelIds.value.map((m) => ({ label: m.label, value: m.id })),
+])
+const synthesizerModelItems = computed(() => [
+  { label: t('settings.consensusGroups.editor.stepModel'), value: '' },
+  ...selectableModelIds.value.map((m) => ({ label: m.label, value: m.id })),
+])
+
 /**
  * A threshold field's value as the contract wants it, or undefined when the author left it blank.
  *
@@ -302,12 +313,7 @@ async function remove(group: ConsensusGroup) {
           <SectionLabel as="label" class="mb-1 block">
             {{ t('settings.consensusGroups.editor.strategyLabel') }}
           </SectionLabel>
-          <select
-            v-model="editor.strategy"
-            class="w-full rounded border border-muted bg-default px-2 py-1.5 text-sm text-app-100"
-          >
-            <option v-for="s in STRATEGIES" :key="s.value" :value="s.value">{{ s.label }}</option>
-          </select>
+          <USelect v-model="editor.strategy" :items="STRATEGIES" size="sm" class="w-full" />
         </div>
       </div>
 
@@ -358,13 +364,7 @@ async function remove(group: ConsensusGroup) {
             class="min-w-40 flex-1"
             :placeholder="t('settings.consensusGroups.editor.framingPlaceholder')"
           />
-          <select
-            v-model="p.modelId"
-            class="w-44 rounded border border-muted bg-default px-1.5 py-1 text-xs text-toned"
-          >
-            <option :value="undefined">{{ t('settings.consensusGroups.editor.stepModel') }}</option>
-            <option v-for="m in selectableModelIds" :key="m.id" :value="m.id">{{ m.label }}</option>
-          </select>
+          <USelect v-model="p.modelId" :items="participantModelItems" size="xs" class="w-44" />
           <UButton
             icon="i-lucide-x"
             color="error"
@@ -382,13 +382,12 @@ async function remove(group: ConsensusGroup) {
           <SectionLabel as="label" class="mb-1 block">
             {{ t('settings.consensusGroups.editor.synthesizerLabel') }}
           </SectionLabel>
-          <select
+          <USelect
             v-model="editor.synthesizerModelId"
-            class="w-full rounded border border-muted bg-default px-2 py-1.5 text-sm text-app-100"
-          >
-            <option value="">{{ t('settings.consensusGroups.editor.stepModel') }}</option>
-            <option v-for="m in selectableModelIds" :key="m.id" :value="m.id">{{ m.label }}</option>
-          </select>
+            :items="synthesizerModelItems"
+            size="sm"
+            class="w-full"
+          />
         </div>
         <div v-if="editor.strategy === 'debate'">
           <SectionLabel as="label" class="mb-1 block">

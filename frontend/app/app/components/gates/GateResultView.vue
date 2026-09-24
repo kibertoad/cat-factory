@@ -290,13 +290,15 @@ const conflictVerdict = computed(() => {
               <p class="mb-2 text-2xs leading-relaxed text-dimmed">
                 {{ t('gates.humanReview.requestFixDescription') }}
               </p>
-              <textarea
+              <UTextarea
                 v-model="fixInstructions"
-                rows="3"
+                :rows="3"
                 :disabled="fixBusy"
                 :placeholder="t('gates.humanReview.requestFixPlaceholder')"
-                class="w-full resize-y rounded-md border border-default bg-app-950/60 px-3 py-2 text-sm text-default placeholder:text-app-600 focus:border-app-secondary-500/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-app-secondary-500/60"
-              />
+    size="sm"
+    class="w-full"
+    :ui="{ base: 'resize-y' }"
+  />
               <div class="mt-2 flex justify-end">
                 <UButton
                   size="sm"

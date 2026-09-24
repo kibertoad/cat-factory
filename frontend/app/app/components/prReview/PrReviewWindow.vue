@@ -779,13 +779,15 @@ const { requestClose } = useUnsavedGuard({
                       data-testid="pr-review-challenge-box"
                       class="mt-2 rounded-md border border-primary/40 bg-default/80 p-2"
                     >
-                      <textarea
+                      <UTextarea
                         v-model="challengeText"
                         data-testid="pr-review-challenge-input"
-                        rows="2"
+                        :rows="2"
                         :placeholder="t('prReview.challenge.placeholder')"
-                        class="w-full resize-y rounded border border-muted bg-app-950/60 px-2 py-1 text-xs text-default outline-none focus:border-primary"
-                      />
+    size="xs"
+    class="w-full"
+    :ui="{ base: 'resize-y' }"
+  />
                       <p class="mt-1 text-3xs text-dimmed">
                         {{ t('prReview.challenge.hint') }}
                       </p>

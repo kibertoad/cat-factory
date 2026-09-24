@@ -520,19 +520,31 @@ const PHASE_ICON: Record<string, string> = {
             <!-- Evidence is rendered apart from the detail for the reason the contract keeps them
                  apart: a finding that cannot point at the code it describes is speculating, and
                  that should be visible without reading the prose for it. -->
-            <details v-if="finding.evidence" class="mt-2">
-              <summary class="cursor-pointer text-2xs text-muted hover:text-default">
-                {{ t('bugFishing.finding.evidence') }}
-              </summary>
-              <MarkdownProse :text="finding.evidence" class="mt-1 max-w-3xl text-xs" />
-            </details>
+            <UCollapsible v-if="finding.evidence" class="mt-2">
+              <UButton
+                variant="link"
+                color="neutral"
+                size="xs"
+                :label="t('bugFishing.finding.evidence')"
+                :ui="{ base: 'w-full justify-start p-0 text-2xs text-muted hover:text-default' }"
+              />
+              <template #content>
+                <MarkdownProse :text="finding.evidence" class="mt-1 max-w-3xl text-xs" />
+              </template>
+            </UCollapsible>
 
-            <details v-if="finding.suggestedFix" class="mt-1">
-              <summary class="cursor-pointer text-2xs text-muted hover:text-default">
-                {{ t('bugFishing.finding.suggestedFix') }}
-              </summary>
-              <MarkdownProse :text="finding.suggestedFix" class="mt-1 max-w-3xl text-xs" />
-            </details>
+            <UCollapsible v-if="finding.suggestedFix" class="mt-1">
+              <UButton
+                variant="link"
+                color="neutral"
+                size="xs"
+                :label="t('bugFishing.finding.suggestedFix')"
+                :ui="{ base: 'w-full justify-start p-0 text-2xs text-muted hover:text-default' }"
+              />
+              <template #content>
+                <MarkdownProse :text="finding.suggestedFix" class="mt-1 max-w-3xl text-xs" />
+              </template>
+            </UCollapsible>
 
             <!-- Already marked: say what was created and let the reader follow it. The three
                  spawn states are rendered apart because they are three different facts — a task

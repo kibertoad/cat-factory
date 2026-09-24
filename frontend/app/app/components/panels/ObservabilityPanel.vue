@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { onKeyStroke } from '@vueuse/core'
+import type { TableColumn } from '@nuxt/ui'
 import { isLlmWarningFinishReason } from '@cat-factory/contracts'
 import type {
   AgentContextSnapshot,
@@ -388,6 +389,15 @@ const phaseRollup = computed<{ available: boolean; rows: ReturnType<typeof foldR
       : { available: false, rows: [] },
 )
 const phaseRows = computed(() => phaseRollup.value.rows)
+// Column definitions rather than hand-written `<th>`s. The cost column is still conditional: a
+// deployment with no rate table must not be shown a column of em dashes.
+const phaseColumns = computed<TableColumn<(typeof phaseRows.value)[number]>[]>(() => [
+  { id: 'phase' },
+  { id: 'turns' },
+  { id: 'tokens' },
+  ...(showCost.value ? [{ id: 'cost' } as TableColumn<(typeof phaseRows.value)[number]>] : []),
+  { id: 'carryCost' },
+])
 const phaseCarryTotal = computed(() =>
   phaseRows.value.reduce((acc, p) => acc + p.carryCostTokens, 0),
 )
@@ -732,76 +742,93 @@ function exportJson() {
                 {{ t('observability.phase.noRollup') }}
               </p>
               <div v-else class="mt-3 overflow-x-auto">
-                <table class="w-full min-w-[32rem] text-xs">
-                  <thead>
-                    <tr class="text-2xs uppercase tracking-wide text-dimmed">
-                      <th class="py-1 pe-3 text-start font-normal">
-                        {{ t('observability.phase.columns.phase') }}
-                      </th>
-                      <th class="py-1 px-3 text-end font-normal">
-                        {{ t('observability.phase.columns.turns') }}
-                      </th>
-                      <th class="py-1 px-3 text-end font-normal">
-                        {{ t('observability.phase.columns.tokensInOut') }}
-                      </th>
-                      <th v-if="showCost" class="py-1 px-3 text-end font-normal">
-                        <span :title="t('observability.phase.costHint')">
-                          {{ t('observability.phase.columns.cost') }}
-                        </span>
-                      </th>
-                      <!-- The sort key, MARKED as one. Rows lead with carry cost rather than
-                           with tokens, and the two orders genuinely differ: a phase that runs
-                           late carries almost nothing however much it spent (nothing after it
-                           re-sends its context). Leaving that implicit invites reading row 1
-                           as "the phase that burned the most", which is the neighbouring
-                           column. -->
-                      <th aria-sort="descending" class="py-1 ps-3 text-end font-normal">
-                        <span :title="t('observability.phase.carryCostHint')">
-                          {{ t('observability.phase.columns.carryCost') }} ↓
-                        </span>
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="p in phaseRows" :key="p.phase" class="border-t border-default/70">
-                      <td class="py-1.5 pe-3 text-default">
-                        <span :class="p.phase ? '' : 'text-muted italic'">
-                          {{ phaseLabel(p.phase) }}
-                        </span>
-                        <span v-if="!p.phase" class="ms-1.5 text-2xs text-app-600">
-                          {{ t('observability.phase.unattributedHint') }}
-                        </span>
-                        <UBadge
-                          v-if="p.errors"
-                          color="error"
-                          variant="subtle"
-                          size="sm"
-                          class="ms-2"
-                        >
-                          {{ t('observability.metricsBar.errors', { count: p.errors }, p.errors) }}
-                        </UBadge>
-                      </td>
-                      <td class="py-1.5 px-3 text-end tabular-nums text-toned">
-                        {{ p.calls }}
-                      </td>
-                      <td class="py-1.5 px-3 text-end tabular-nums text-toned">
-                        {{ formatTokens(totalInputTokens(p)) }}↑
-                        {{ formatTokens(p.completionTokens) }}↓
-                      </td>
-                      <td v-if="showCost" class="py-1.5 px-3 text-end tabular-nums text-toned">
-                        <!-- An em dash, not 0: this phase's model had no rate, and a zero here
-                             would read as a phase that cost nothing. -->
-                        {{ formatCost(p.costEstimate, costCurrency) ?? '—' }}
-                      </td>
-                      <td class="py-1.5 ps-3 text-end tabular-nums text-toned">
-                        {{ formatTokens(p.carryCostTokens) }}
-                        <span v-if="carryShare(p.carryCostTokens) !== null" class="text-app-600">
-                          · {{ carryShare(p.carryCostTokens) }}%
-                        </span>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
+                <UTable
+                  :data="phaseRows"
+                  :columns="phaseColumns"
+                  :ui="{ base: 'min-w-[32rem] text-xs' }"
+                >
+                  <template #phase-header>
+                    {{ t('observability.phase.columns.phase') }}
+                  </template>
+                  <template #turns-header>
+                    <span class="block text-end">
+                      {{ t('observability.phase.columns.turns') }}
+                    </span>
+                  </template>
+                  <template #tokens-header>
+                    <span class="block text-end">
+                      {{ t('observability.phase.columns.tokensInOut') }}
+                    </span>
+                  </template>
+                  <template #cost-header>
+                    <span class="block text-end" :title="t('observability.phase.costHint')">
+                      {{ t('observability.phase.columns.cost') }}
+                    </span>
+                  </template>
+                  <!-- The sort key, MARKED as one. Rows lead with carry cost rather than
+                       with tokens, and the two orders genuinely differ: a phase that runs
+                       late carries almost nothing however much it spent (nothing after it
+                       re-sends its context). Leaving that implicit invites reading row 1
+                       as "the phase that burned the most", which is the neighbouring
+                       column. -->
+                  <template #carryCost-header>
+                    <span class="block text-end" :title="t('observability.phase.carryCostHint')">
+                      {{ t('observability.phase.columns.carryCost') }} &darr;
+                    </span>
+                  </template>
+                  <template #phase-cell="{ row }">
+                    <span :class="row.original.phase ? '' : 'text-muted italic'">
+                      {{ phaseLabel(row.original.phase) }}
+                    </span>
+                    <span v-if="!row.original.phase" class="ms-1.5 text-2xs text-app-600">
+                      {{ t('observability.phase.unattributedHint') }}
+                    </span>
+                    <UBadge
+                      v-if="row.original.errors"
+                      color="error"
+                      variant="subtle"
+                      size="sm"
+                      class="ms-2"
+                    >
+                      {{
+                        t(
+                          'observability.metricsBar.errors',
+                          { count: row.original.errors },
+                          row.original.errors,
+                        )
+                      }}
+                    </UBadge>
+                  </template>
+                  <template #turns-cell="{ row }">
+                    <span class="block text-end tabular-nums text-toned">{{
+                      row.original.calls
+                    }}</span>
+                  </template>
+                  <template #tokens-cell="{ row }">
+                    <span class="block text-end tabular-nums text-toned">
+                      {{ formatTokens(totalInputTokens(row.original)) }}&uarr;
+                      {{ formatTokens(row.original.completionTokens) }}&darr;
+                    </span>
+                  </template>
+                  <!-- An em dash, not 0: this phase's model had no rate, and a zero here
+                       would read as a phase that cost nothing. -->
+                  <template #cost-cell="{ row }">
+                    <span class="block text-end tabular-nums text-toned">
+                      {{ formatCost(row.original.costEstimate, costCurrency) ?? '—' }}
+                    </span>
+                  </template>
+                  <template #carryCost-cell="{ row }">
+                    <span class="block text-end tabular-nums text-toned">
+                      {{ formatTokens(row.original.carryCostTokens) }}
+                      <span
+                        v-if="carryShare(row.original.carryCostTokens) !== null"
+                        class="text-app-600"
+                      >
+                        · {{ carryShare(row.original.carryCostTokens) }}%
+                      </span>
+                    </span>
+                  </template>
+                </UTable>
               </div>
             </section>
 

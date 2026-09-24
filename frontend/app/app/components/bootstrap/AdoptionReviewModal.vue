@@ -225,11 +225,16 @@ watch(open, (isOpen) => {
           <p v-if="recordsDropped > 0" class="text-app-warning-300/90">
             {{ t('bootstrap.adoption.survey.truncated', { count: recordsDropped }) }}
           </p>
-          <details>
-            <summary class="cursor-pointer text-dimmed hover:text-toned">
-              {{ t('bootstrap.adoption.survey.show') }}
-            </summary>
-            <ul class="mt-2 space-y-1">
+          <UCollapsible>
+            <UButton
+              variant="link"
+              color="neutral"
+              size="xs"
+              :label="t('bootstrap.adoption.survey.show')"
+              :ui="{ base: 'w-full justify-start p-0 text-dimmed hover:text-toned' }"
+            />
+            <template #content>
+              <ul class="mt-2 space-y-1">
               <!-- Keyed by POSITION: the transcript is append-only and rendered in order, and
                    the same path legitimately appears twice (a body refused by the seed and then
                    served to the model, a path the model retried). Keying on the path patched
@@ -248,8 +253,9 @@ watch(open, (isOpen) => {
                 <span class="font-mono text-muted">{{ entry.path }}</span>
                 <span v-if="entry.note" class="text-app-600">{{ entry.note }}</span>
               </li>
-            </ul>
-          </details>
+              </ul>
+            </template>
+          </UCollapsible>
         </div>
 
         <!-- The reviewer's own instructions, on BOTH paths. With no suggestion to answer this is

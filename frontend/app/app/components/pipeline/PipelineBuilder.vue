@@ -965,14 +965,11 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                 <template v-else>
                   <div class="flex items-center gap-2">
                     <label class="text-muted">{{ t('pipeline.builder.strategy') }}</label>
-                    <select
+                    <USelect
                       v-model="pipelines.draftConsensus[unit.index]!.strategy"
-                      class="rounded border border-muted bg-default px-1.5 py-0.5 text-app-100"
-                    >
-                      <option v-for="s in CONSENSUS_STRATEGIES" :key="s.value" :value="s.value">
-                        {{ s.label }}
-                      </option>
-                    </select>
+                      :items="CONSENSUS_STRATEGIES"
+                      size="xs"
+                    />
                     <label
                       v-if="pipelines.draftConsensus[unit.index]!.strategy === 'debate'"
                       class="ms-2 text-muted"

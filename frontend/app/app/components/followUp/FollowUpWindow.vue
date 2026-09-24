@@ -231,12 +231,14 @@ function hasRecordedAnswer(item: FollowUpItem): boolean {
               <div v-if="item.status === 'pending'" class="mt-2.5">
                 <!-- A question: answer it -->
                 <div v-if="item.kind === 'question'" class="space-y-2">
-                  <textarea
+                  <UTextarea
                     v-model="drafts[item.id]"
-                    rows="2"
+                    :rows="2"
                     :placeholder="t('followUp.answerPlaceholder')"
-                    class="w-full resize-y rounded-md border border-muted bg-app-950/60 px-2.5 py-1.5 text-xs text-app-100 placeholder:text-app-600 focus:border-app-info-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-app-info-500/60"
-                  />
+    size="xs"
+    class="w-full"
+    :ui="{ base: 'resize-y' }"
+  />
                   <!-- Wraps, like the follow-up row below: three buttons whose labels are two
                        words each in English are one long line in most of the other locales, and
                        the result window is a narrow panel. -->

@@ -270,12 +270,13 @@ const canDestroy = computed(
             </button>
           </div>
           <div v-if="showFindings" class="mt-2 space-y-2">
-            <textarea
+            <UTextarea
               v-model="findings"
-              rows="4"
+              :rows="4"
               :placeholder="t('humanTest.fix.placeholder')"
-              class="w-full rounded-md border border-muted bg-app-950 px-3 py-2 text-sm text-default placeholder:text-app-600 focus:border-app-warning-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-app-warning-500/60"
-            />
+    size="sm"
+    class="w-full"
+  />
             <UButton
               size="sm"
               color="warning"

@@ -137,6 +137,11 @@ const maxRuns = computed(() => maxOf(activityByDimension.value, (row) => row.run
 
 /** Boards the filter offers — the active account's, since the report is account-scoped. */
 const boards = computed(() => workspace.accountWorkspaces)
+// The empty value is "every board", which the store holds as null.
+const boardFilterItems = computed(() => [
+  { label: t('reports.filter.allBoards'), value: '' },
+  ...boards.value.map((board) => ({ label: board.name, value: board.id })),
+])
 
 function trendTooltip(point: { start: number; meteredCost: number; subscriptionCost: number }) {
   return `${d(new Date(point.start), 'short')} · ${t('reports.legend.metered')} ${money(point.meteredCost)} · ${t('reports.legend.subscription')} ${money(point.subscriptionCost)}`
@@ -206,20 +211,14 @@ watch(
           </div>
           <!-- Filters in ONE row above the charts: window, then board scope. -->
           <div class="ms-auto flex flex-wrap items-center gap-1.5">
-            <select
-              class="rounded-lg border border-default bg-default px-2.5 py-1.5 text-xs text-default"
-              :value="reports.workspaceFilter ?? ''"
+            <USelect
+              :model-value="reports.workspaceFilter ?? ''"
+              :items="boardFilterItems"
+              size="xs"
               :aria-label="t('reports.filter.board')"
               data-testid="reports-board-filter"
-              @change="
-                reports.setWorkspaceFilter(($event.target as HTMLSelectElement).value || null)
-              "
-            >
-              <option value="">{{ t('reports.filter.allBoards') }}</option>
-              <option v-for="board in boards" :key="board.id" :value="board.id">
-                {{ board.name }}
-              </option>
-            </select>
+              @update:model-value="reports.setWorkspaceFilter($event || null)"
+            />
             <div class="me-1 flex rounded-lg border border-default p-0.5 text-xs">
               <button
                 v-for="opt in WINDOWS"

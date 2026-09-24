@@ -284,14 +284,17 @@ const { requestClose } = useUnsavedGuard({
               t('forkDecision.custom.title')
             }}</span>
           </label>
-          <textarea
+          <UTextarea
             v-model="customText"
             data-testid="fork-custom-input"
-            rows="3"
+            :rows="3"
             :placeholder="t('forkDecision.custom.placeholder')"
-            class="mt-2 w-full resize-y rounded-md border border-muted bg-app-950/60 px-2.5 py-1.5 text-xs text-app-100 placeholder:text-app-600 focus:border-app-secondary-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-app-secondary-500/60"
+           
             @focus="selected = 'custom'"
-          />
+    size="xs"
+    class="mt-2 w-full"
+    :ui="{ base: 'resize-y' }"
+  />
         </article>
 
         <!-- Optional steering note -->
@@ -342,19 +345,22 @@ const { requestClose } = useUnsavedGuard({
             {{ t('forkDecision.chat.hint') }}
           </p>
           <div class="mt-2 flex items-end gap-2">
-            <textarea
+            <UTextarea
               v-model="chatInput"
               data-testid="fork-chat-input"
-              rows="2"
+              :rows="2"
               :disabled="!canChat"
               :placeholder="
                 chatBudgetSpent
                   ? t('forkDecision.chat.budgetSpent')
                   : t('forkDecision.chat.placeholder')
               "
-              class="min-h-0 flex-1 resize-y rounded-md border border-muted bg-app-950/60 px-2.5 py-1.5 text-xs text-app-100 placeholder:text-app-600 focus:border-app-secondary-500 focus:outline-none disabled:opacity-50"
+             
               @keydown.enter.exact.prevent="onSend"
-            />
+    size="xs"
+    class="min-h-0 flex-1"
+    :ui="{ base: 'resize-y' }"
+  />
             <UButton
               data-testid="fork-chat-send"
               color="neutral"

@@ -6,6 +6,7 @@
 // and Fixtures (the graded inputs each run is scored against). Loaded on demand when the
 // window opens; 503 (the deployment hasn't provisioned the Sandbox DB) shows a notice.
 import { computed, ref, watch } from 'vue'
+import type { TableColumn } from '@nuxt/ui'
 import type {
   SandboxExperimentStatus,
   SandboxFixtureKind,
@@ -221,6 +222,16 @@ const detailRows = computed(() =>
   })),
 )
 const selectedRun = ref<SandboxRun | null>(null)
+
+// Column definitions rather than hand-written `<th>`s: the header typography then comes from the
+// table theme instead of a per-file recipe.
+const detailColumns = computed<TableColumn<(typeof detailRows.value)[number]>[]>(() => [
+  { id: 'prompt', header: t('sandbox.results.col.prompt') },
+  { id: 'model', header: t('sandbox.results.col.model') },
+  { id: 'fixture', header: t('sandbox.results.col.fixture') },
+  { id: 'score', header: t('sandbox.results.col.score') },
+  { id: 'objective', header: t('sandbox.results.col.objective') },
+])
 
 function scoreColor(score: number): string {
   if (score >= 4) return 'text-app-success-400'
@@ -469,55 +480,52 @@ async function archive(prompt: SandboxPromptVersion) {
                 }}</UBadge>
               </div>
               <div class="overflow-auto">
-                <table class="w-full text-start text-xs">
-                  <thead class="text-dimmed">
-                    <tr>
-                      <th class="py-1 pe-2 font-medium">{{ t('sandbox.results.col.prompt') }}</th>
-                      <th class="py-1 pe-2 font-medium">{{ t('sandbox.results.col.model') }}</th>
-                      <th class="py-1 pe-2 font-medium">{{ t('sandbox.results.col.fixture') }}</th>
-                      <th class="py-1 pe-2 font-medium">{{ t('sandbox.results.col.score') }}</th>
-                      <th class="py-1 font-medium">{{ t('sandbox.results.col.objective') }}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr
-                      v-for="{ run, grade, fixtureName } in detailRows"
-                      :key="run.id"
-                      class="cursor-pointer border-t border-default hover:bg-elevated/40"
-                      @click="selectedRun = run"
+                <UTable
+                  :data="detailRows"
+                  :columns="detailColumns"
+                  :ui="{ base: 'text-xs', tr: 'cursor-pointer' }"
+                  @select="(_event, row) => (selectedRun = row.original.run)"
+                >
+                  <template #prompt-cell="{ row }">
+                    <span class="text-toned">{{ row.original.run.promptLabel }}</span>
+                  </template>
+                  <template #model-cell="{ row }">
+                    <span class="font-mono text-2xs text-muted">{{ row.original.run.model }}</span>
+                  </template>
+                  <template #fixture-cell="{ row }">
+                    <span class="text-muted">{{ row.original.fixtureName }}</span>
+                  </template>
+                  <template #score-cell="{ row }">
+                    <span
+                      v-if="row.original.grade"
+                      :class="scoreColor(row.original.grade.weightedTotal)"
+                      class="font-semibold"
                     >
-                      <td class="py-1 pe-2 text-toned">{{ run.promptLabel }}</td>
-                      <td class="py-1 pe-2 font-mono text-2xs text-muted">
-                        {{ run.model }}
-                      </td>
-                      <td class="py-1 pe-2 text-muted">{{ fixtureName }}</td>
-                      <td class="py-1 pe-2">
-                        <span
-                          v-if="grade"
-                          :class="scoreColor(grade.weightedTotal)"
-                          class="font-semibold"
-                        >
-                          {{ grade.weightedTotal.toFixed(2) }}
-                        </span>
-                        <span v-else-if="run.status === 'failed'" class="text-app-error-400">{{
-                          t('sandbox.results.failed')
-                        }}</span>
-                        <span v-else class="text-app-600">—</span>
-                      </td>
-                      <td class="py-1">
-                        <span
-                          v-if="grade?.objective"
-                          :class="
-                            grade.objective.pass ? 'text-app-success-400' : 'text-app-warning-400'
-                          "
-                        >
-                          {{ grade.objective.caught }}/{{ grade.objective.total }}
-                        </span>
-                        <span v-else class="text-app-600">—</span>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
+                      {{ row.original.grade.weightedTotal.toFixed(2) }}
+                    </span>
+                    <span
+                      v-else-if="row.original.run.status === 'failed'"
+                      class="text-app-error-400"
+                      >{{ t('sandbox.results.failed') }}</span
+                    >
+                    <span v-else class="text-app-600">&mdash;</span>
+                  </template>
+                  <template #objective-cell="{ row }">
+                    <span
+                      v-if="row.original.grade?.objective"
+                      :class="
+                        row.original.grade.objective.pass
+                          ? 'text-app-success-400'
+                          : 'text-app-warning-400'
+                      "
+                    >
+                      {{ row.original.grade.objective.caught }}/{{
+                        row.original.grade.objective.total
+                      }}
+                    </span>
+                    <span v-else class="text-app-600">&mdash;</span>
+                  </template>
+                </UTable>
               </div>
 
               <!-- selected cell output -->

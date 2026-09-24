@@ -316,13 +316,14 @@ async function onFilePicked(e: Event) {
                   >{{ t('visualConfirm.noted') }}</span
                 >
               </button>
-              <textarea
+              <UTextarea
                 v-if="noteOpen[p.view]"
                 v-model="perViewNotes[p.view]"
-                rows="2"
+                :rows="2"
                 :placeholder="t('visualConfirm.notePlaceholder', { view: p.view })"
-                class="mt-1 w-full rounded-md border border-muted bg-app-950 px-2 py-1.5 text-xs text-default placeholder:text-app-600 focus:border-app-warning-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-app-warning-500/60"
-              />
+    size="xs"
+    class="mt-1 w-full"
+  />
             </div>
           </div>
         </section>
@@ -368,12 +369,13 @@ async function onFilePicked(e: Event) {
           <SectionLabel as="h3" class="mb-2">
             {{ t('visualConfirm.requestFix.heading') }}
           </SectionLabel>
-          <textarea
+          <UTextarea
             v-model="globalFindings"
-            rows="3"
+            :rows="3"
             :placeholder="t('visualConfirm.requestFix.placeholder')"
-            class="w-full rounded-md border border-muted bg-app-950 px-3 py-2 text-sm text-default placeholder:text-app-600 focus:border-app-warning-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-app-warning-500/60"
-          />
+    size="sm"
+    class="w-full"
+  />
           <div class="mt-2 flex items-center justify-between">
             <span class="text-2xs text-dimmed">
               {{ t('visualConfirm.requestFix.foldedHint') }}

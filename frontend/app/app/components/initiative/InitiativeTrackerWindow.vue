@@ -13,6 +13,7 @@
 // request-changes rail has to live here or the gate has no resolving surface at all —
 // which is exactly how an approved-only-over-REST plan gate shipped.
 import { computed, reactive, ref } from 'vue'
+import type { TableColumn } from '@nuxt/ui'
 import type { InitiativeFollowUp, InitiativeItem } from '~/types/domain'
 import { useInitiativePlanning } from '~/composables/useInitiativePlanning'
 import {
@@ -86,6 +87,16 @@ const phases = computed(() => initiative.value?.phases ?? [])
 function itemsOf(phaseId: string): InitiativeItem[] {
   return (initiative.value?.items ?? []).filter((i) => i.phaseId === phaseId)
 }
+
+// One column set for every phase's table, so the header typography is the table theme's rather
+// than a per-file recipe.
+const phaseItems = computed(() => phases.value.map((p) => ({ label: p.title, value: p.id })))
+
+const itemColumns = computed<TableColumn<InitiativeItem>[]>(() => [
+  { id: 'item', header: t('initiative.tracker.colItem') },
+  { id: 'status', header: t('initiative.tracker.colStatus') },
+  { id: 'pr', header: t('initiative.tracker.colPr') },
+])
 
 const progress = computed(() => initiativeProgress(initiative.value?.items))
 const progressPct = computed(() =>
@@ -490,84 +501,84 @@ const { requestClose } = useUnsavedGuard({
               </UBadge>
             </h3>
             <p v-if="phase.goal" class="mb-2 text-xs text-muted">{{ phase.goal }}</p>
-            <div class="overflow-x-auto rounded-lg border border-default">
-              <table class="w-full text-xs">
-                <thead>
-                  <tr class="border-b border-default text-left text-dimmed">
-                    <th class="px-3 py-2 font-medium">{{ t('initiative.tracker.colItem') }}</th>
-                    <th class="px-3 py-2 font-medium">{{ t('initiative.tracker.colStatus') }}</th>
-                    <th class="px-3 py-2 font-medium">{{ t('initiative.tracker.colPr') }}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr
-                    v-for="item in itemsOf(phase.id)"
-                    :key="item.id"
-                    class="border-b border-default/60 last:border-0"
-                  >
-                    <td class="px-3 py-2 align-top">
-                      <div class="font-medium text-default">{{ item.title }}</div>
-                      <div v-if="item.dependsOn?.length" class="mt-0.5 text-3xs text-dimmed">
-                        {{
-                          t('initiative.tracker.dependsOn', {
-                            items: item.dependsOn.join(', '),
-                          })
-                        }}
-                      </div>
-                      <div
-                        v-if="item.note"
-                        class="mt-0.5 max-w-3xl text-3xs text-app-warning-300/80"
-                      >
-                        {{ item.note }}
-                      </div>
-                      <div
-                        v-if="editable && (item.status === 'blocked' || item.status === 'pending')"
-                        class="mt-1 flex gap-1.5"
-                      >
-                        <button
-                          v-if="item.status === 'blocked'"
-                          class="rounded border border-muted px-1.5 py-0.5 text-3xs text-toned hover:bg-elevated disabled:opacity-50"
-                          :disabled="initiatives.curating"
-                          :data-testid="`initiative-item-retry-${item.id}`"
-                          @click="itemAction(item, 'retry')"
-                        >
-                          {{ t('initiative.curation.retry') }}
-                        </button>
-                        <button
-                          class="rounded border border-muted px-1.5 py-0.5 text-3xs text-toned hover:bg-elevated disabled:opacity-50"
-                          :disabled="initiatives.curating"
-                          :data-testid="`initiative-item-skip-${item.id}`"
-                          @click="itemAction(item, 'skip')"
-                        >
-                          {{ t('initiative.curation.skip') }}
-                        </button>
-                      </div>
-                    </td>
-                    <td class="px-3 py-2 align-top">
-                      <UBadge
-                        :color="INITIATIVE_ITEM_STATUS_CHIPS[item.status]"
-                        variant="subtle"
-                        size="sm"
-                      >
-                        {{ t(INITIATIVE_ITEM_STATUS_LABEL_KEYS[item.status]) }}
-                      </UBadge>
-                    </td>
-                    <td class="px-3 py-2 align-top">
-                      <a
-                        v-if="item.pr"
-                        :href="item.pr.url"
-                        target="_blank"
-                        rel="noopener"
-                        class="text-app-info-400 hover:underline"
-                      >
-                        {{ item.pr.number ? `#${item.pr.number}` : t('initiative.tracker.prLink') }}
-                      </a>
-                      <span v-else class="text-app-600">—</span>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+            <UTable
+              :data="itemsOf(phase.id)"
+              :columns="itemColumns"
+              :ui="{
+                root: 'overflow-x-auto rounded-lg border border-default',
+                base: 'text-xs',
+                tr: 'align-top',
+              }"
+            >
+              <template #item-cell="{ row }">
+                <div class="font-medium text-default">{{ row.original.title }}</div>
+                <div v-if="row.original.dependsOn?.length" class="mt-0.5 text-3xs text-dimmed">
+                  {{
+                    t('initiative.tracker.dependsOn', {
+                      items: row.original.dependsOn.join(', '),
+                    })
+                  }}
+                </div>
+                <div
+                  v-if="row.original.note"
+                  class="mt-0.5 max-w-3xl text-3xs text-app-warning-300/80"
+                >
+                  {{ row.original.note }}
+                </div>
+                <div
+                  v-if="
+                    editable &&
+                    (row.original.status === 'blocked' || row.original.status === 'pending')
+                  "
+                  class="mt-1 flex gap-1.5"
+                >
+                  <UButton
+                    v-if="row.original.status === 'blocked'"
+                    color="neutral"
+                    variant="outline"
+                    size="xs"
+                    :label="t('initiative.curation.retry')"
+                    :disabled="initiatives.curating"
+                    :data-testid="`initiative-item-retry-${row.original.id}`"
+                    @click="itemAction(row.original, 'retry')"
+                  />
+                  <UButton
+                    color="neutral"
+                    variant="outline"
+                    size="xs"
+                    :label="t('initiative.curation.skip')"
+                    :disabled="initiatives.curating"
+                    :data-testid="`initiative-item-skip-${row.original.id}`"
+                    @click="itemAction(row.original, 'skip')"
+                  />
+                </div>
+              </template>
+              <template #status-cell="{ row }">
+                <UBadge
+                  :color="INITIATIVE_ITEM_STATUS_CHIPS[row.original.status]"
+                  variant="subtle"
+                  size="sm"
+                >
+                  {{ t(INITIATIVE_ITEM_STATUS_LABEL_KEYS[row.original.status]) }}
+                </UBadge>
+              </template>
+              <template #pr-cell="{ row }">
+                <ULink
+                  v-if="row.original.pr"
+                  :to="row.original.pr.url"
+                  target="_blank"
+                  rel="noopener"
+                  class="text-app-info-400 hover:underline"
+                >
+                  {{
+                    row.original.pr.number
+                      ? `#${row.original.pr.number}`
+                      : t('initiative.tracker.prLink')
+                  }}
+                </ULink>
+                <span v-else class="text-app-600">&mdash;</span>
+              </template>
+            </UTable>
           </section>
 
           <!-- Execution policy -->
@@ -694,22 +705,22 @@ const { requestClose } = useUnsavedGuard({
                 <!-- Triage actions for an open follow-up (only while executing) -->
                 <div v-if="editable && f.status === 'open'" class="mt-2">
                   <div v-if="promotingId === f.id" class="flex flex-col gap-2">
-                    <label class="flex items-center gap-2 text-xs">
-                      <span class="text-muted">{{ t('initiative.curation.phaseField') }}</span>
-                      <select
+                    <UFormField
+                      size="xs"
+                      :label="t('initiative.curation.phaseField')"
+                      :ui="{ root: 'flex items-center gap-2', container: 'flex-1 mt-0' }"
+                    >
+                      <USelect
                         v-model="promoteForm.phaseId"
-                        class="flex-1 rounded border border-muted bg-app-950 px-2 py-1 text-default"
+                        :items="phaseItems"
+                        size="xs"
+                        class="w-full"
                         data-testid="initiative-promote-phase"
-                      >
-                        <option v-for="p in phases" :key="p.id" :value="p.id">
-                          {{ p.title }}
-                        </option>
-                      </select>
-                    </label>
-                    <input
+                      />
+                    </UFormField>
+                    <UInput
                       v-model="promoteForm.title"
-                      type="text"
-                      class="rounded border border-muted bg-app-950 px-2 py-1 text-xs text-default"
+                      size="xs"
                       :placeholder="t('initiative.curation.itemTitlePlaceholder')"
                       data-testid="initiative-promote-title"
                     />
