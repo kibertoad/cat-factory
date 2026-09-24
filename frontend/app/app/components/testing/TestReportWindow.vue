@@ -22,7 +22,7 @@ import EnvironmentStatusPanel from '~/components/environments/EnvironmentStatusP
 import ProvisioningLogsDrawer from '~/components/provisioning/ProvisioningLogsDrawer.vue'
 import MarkdownProse from '~/components/common/MarkdownProse.vue'
 import { runIsActive } from '~/utils/pipelineRender'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const board = useBoardStore()
 const execution = useExecutionStore()
 const { t, d, n } = useI18n()
@@ -384,9 +384,9 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
           data-testid="tester-infrastructure"
           class="space-y-3"
         >
-          <h3 class="text-2xs font-semibold uppercase tracking-wide text-dimmed">
+          <SectionLabel as="h3">
             {{ t('testing.infrastructure') }}
-          </h3>
+          </SectionLabel>
           <StepContainerStatus :step="step" :run-failed="runFailed" :run-active="runActive" />
           <EnvironmentStatusPanel
             v-if="stepEnvironment"
@@ -504,9 +504,9 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                  how it ended), so the otherwise-opaque fixer sub-jobs have a surface — the
                  analogue of the polling gate's attempt history. -->
         <section v-if="fixerAttempts.length" data-testid="tester-fixer-attempts" class="space-y-2">
-          <h3 class="text-2xs font-semibold uppercase tracking-wide text-dimmed">
+          <SectionLabel as="h3">
             {{ t('testing.fixerAttempts') }}
-          </h3>
+          </SectionLabel>
           <ol class="space-y-2">
             <li
               v-for="a in fixerAttempts"
@@ -566,9 +566,9 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
           class="space-y-2"
         >
           <div class="flex items-center gap-2">
-            <h3 class="text-2xs font-semibold uppercase tracking-wide text-dimmed">
+            <SectionLabel as="h3">
               {{ t('testing.quality.heading') }}
-            </h3>
+            </SectionLabel>
             <span
               v-if="quality.attempts"
               class="text-2xs text-muted"
@@ -662,9 +662,9 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
             class="mb-4 max-w-3xl text-sm leading-relaxed text-toned"
           />
 
-          <h3 class="mb-2 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+          <SectionLabel as="h3" class="mb-2">
             {{ t('testing.scenariosOutcomes') }}
-          </h3>
+          </SectionLabel>
           <ul class="space-y-2">
             <li
               v-for="g in groups"
@@ -803,9 +803,9 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
 
           <!-- Standalone gallery: any captures not mapped to a scenario above -->
           <section v-if="ungroupedScreenshots.length" class="mt-5">
-            <h3 class="mb-2 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+            <SectionLabel as="h3" class="mb-2">
               {{ t('testing.screenshots') }}
-            </h3>
+            </SectionLabel>
             <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
               <button
                 v-for="(s, si) in ungroupedScreenshots"
@@ -845,9 +845,9 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
         class="hidden w-60 shrink-0 flex-col gap-4 border-s border-default bg-default/50 px-4 py-4 lg:flex"
       >
         <div v-if="report">
-          <h4 class="mb-2 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+          <SectionLabel as="h4" class="mb-2">
             {{ t('testing.verdict.heading') }}
-          </h4>
+          </SectionLabel>
           <div class="flex items-center gap-2 text-sm">
             <UIcon
               :name="report.greenlight ? 'i-lucide-circle-check' : 'i-lucide-circle-x'"
@@ -861,9 +861,9 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
         </div>
 
         <div v-if="report">
-          <h4 class="mb-2 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+          <SectionLabel as="h4" class="mb-2">
             {{ t('testing.outcomes.heading') }}
-          </h4>
+          </SectionLabel>
           <dl class="space-y-1 text-xs">
             <div class="flex items-center justify-between">
               <dt class="text-muted">{{ t('testing.outcomes.passed') }}</dt>
@@ -892,9 +892,9 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
         </div>
 
         <div v-if="report?.environment">
-          <h4 class="mb-1 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+          <SectionLabel as="h4" class="mb-1">
             {{ t('testing.environment') }}
-          </h4>
+          </SectionLabel>
           <p class="text-xs capitalize text-toned">{{ report.environment }}</p>
         </div>
 

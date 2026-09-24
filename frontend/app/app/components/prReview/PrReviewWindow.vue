@@ -30,7 +30,7 @@ import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 import StepFragmentAdherence from '~/components/panels/StepFragmentAdherence.vue'
 import MarkdownProse from '~/components/common/MarkdownProse.vue'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const execution = useExecutionStore()
 const board = useBoardStore()
 const prReview = usePrReviewStore()
@@ -397,9 +397,9 @@ const { requestClose } = useUnsavedGuard({
 
             <!-- Every chunk with its explicit status (Reviewed / Reviewing… / Queued). -->
             <template v-if="subtasks!.items?.length">
-              <p class="mb-1.5 mt-3 text-3xs font-semibold uppercase tracking-wide text-muted">
+              <SectionLabel as="p" class="mb-1.5 mt-3">
                 {{ t('prReview.reviewing.chunksHeading') }}
-              </p>
+              </SectionLabel>
               <ul class="space-y-1.5" data-testid="pr-review-chunks">
                 <li
                   v-for="(item, i) in subtasks!.items"
@@ -595,9 +595,9 @@ const { requestClose } = useUnsavedGuard({
 
             <!-- Findings grouped by slice -->
             <section v-for="g in groups" :key="g.id" class="mb-4">
-              <h3 class="mb-1.5 text-2xs font-semibold uppercase tracking-wide text-muted">
+              <SectionLabel as="h3" class="mb-1.5">
                 {{ g.title }}
-              </h3>
+              </SectionLabel>
               <p v-if="g.rationale" class="mb-1.5 max-w-3xl text-2xs text-dimmed">
                 {{ g.rationale }}
               </p>

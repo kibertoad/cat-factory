@@ -22,7 +22,7 @@ import type { ProviderConnectionKind } from '~/types/providerConnections'
 import ConnectionWarnings from '~/components/settings/ConnectionWarnings.vue'
 import ConnectionTestVerdict from '~/components/settings/ConnectionTestVerdict.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const props = defineProps<{
   kind: ProviderConnectionKind
   /** The provider's current saved manifest (secret-ref keys only, no values). */
@@ -197,9 +197,9 @@ function onSave() {
 
 <template>
   <div class="space-y-3 rounded-lg border border-dashed border-muted p-3">
-    <p class="text-2xs font-semibold uppercase tracking-wide text-muted">
+    <SectionLabel as="p">
       {{ t('settings.providerConnection.manifestEditor.title') }}
-    </p>
+    </SectionLabel>
 
     <UFormField
       :label="t('settings.providerConnection.manifestEditor.jsonLabel')"
@@ -236,9 +236,9 @@ function onSave() {
 
     <!-- Secret sub-form: one write-only input per secret key the manifest references. -->
     <div class="space-y-2">
-      <p class="text-2xs font-semibold uppercase tracking-wide text-muted">
+      <SectionLabel as="p">
         {{ t('settings.providerConnection.manifestEditor.secretsLabel') }}
-      </p>
+      </SectionLabel>
       <p v-if="!secretKeys.length" class="text-2xs text-dimmed">
         {{ t('settings.providerConnection.manifestEditor.noSecrets') }}
       </p>

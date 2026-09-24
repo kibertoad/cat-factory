@@ -9,7 +9,7 @@ import {
   readStatusNote,
   showsProviderFailure,
 } from '~/components/environments/EnvironmentStatusPanel.logic'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const props = defineProps<{
   environment: RunEnvironment | null
   /**
@@ -106,9 +106,9 @@ const envInTransition = computed(
 
 <template>
   <section class="rounded-lg border border-default bg-default/60 p-3">
-    <h3 class="mb-2 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+    <SectionLabel as="h3" class="mb-2">
       {{ t('environments.title') }}
-    </h3>
+    </SectionLabel>
     <div v-if="environment" class="space-y-2">
       <div class="flex items-center gap-2 text-sm">
         <UIcon

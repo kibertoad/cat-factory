@@ -19,7 +19,7 @@ import ConnectionTestVerdict from '~/components/settings/ConnectionTestVerdict.v
 import ProvisioningLogsDrawer from '~/components/provisioning/ProvisioningLogsDrawer.vue'
 import ProviderManifestEditor from '~/components/settings/ProviderManifestEditor.vue'
 import KubernetesEnvironmentForm from '~/components/settings/KubernetesEnvironmentForm.vue'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const props = defineProps<{
   kind: ProviderConnectionKind
   /** The selected backend-kind slug — chosen by the parent picker's radio, not a local
@@ -426,13 +426,13 @@ function fieldHelp(key: string): string | undefined {
 
     <!-- NATIVE provider: the friendly, descriptor-driven flat field form. -->
     <div v-else-if="isNative" class="rounded-lg border border-dashed border-muted p-3 space-y-3">
-      <p class="text-2xs font-semibold uppercase tracking-wide text-muted">
+      <SectionLabel as="p">
         {{
           connection
             ? t('settings.providerConnection.form.updateConfiguration')
             : t('settings.providerConnection.form.connect')
         }}
-      </p>
+      </SectionLabel>
       <p v-if="connection && hasSecretFields" class="text-2xs text-app-warning-300/80">
         {{
           t(

@@ -39,7 +39,7 @@ import {
   RESULT_WINDOW_WIDTH_CLASS,
   type ResultWindowWidth,
 } from '~/components/panels/ResultWindowShell.logic'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 /** A pipeline step reference — passed by step-result windows to surface the shared
  *  "restart from here" control. `StepRestartControl` self-hides for an off-path open
  *  (null ids), so a block-keyed window simply omits this prop. */
@@ -329,9 +329,9 @@ const panelClass = computed(() => [
             @click="effortOpen = !effortOpen"
           >
             <UIcon name="i-lucide-gauge" class="h-3.5 w-3.5 shrink-0 text-muted" />
-            <span class="text-2xs font-semibold uppercase tracking-wide text-muted">
+            <SectionLabel as="span">
               {{ t('panels.stepDetail.effort.heading') }}
-            </span>
+            </SectionLabel>
             <span
               class="shrink-0 rounded px-1.5 py-0.5 text-2xs font-medium tabular-nums"
               :class="chipClass"
@@ -371,9 +371,9 @@ const panelClass = computed(() => [
               class="h-3.5 w-3.5 shrink-0"
               :class="validationReport.passed ? 'text-app-success-400' : 'text-app-error-400'"
             />
-            <span class="text-2xs font-semibold uppercase tracking-wide text-muted">
+            <SectionLabel as="span">
               {{ t('panels.stepDetail.validation.heading') }}
-            </span>
+            </SectionLabel>
             <span
               class="shrink-0 rounded px-1.5 py-0.5 text-2xs font-medium tabular-nums"
               :class="
@@ -427,9 +427,9 @@ const panelClass = computed(() => [
               class="h-3.5 w-3.5 shrink-0"
               :class="reproductionKeys!.proven ? 'text-app-success-400' : 'text-app-warning-400'"
             />
-            <span class="text-2xs font-semibold uppercase tracking-wide text-muted">
+            <SectionLabel as="span">
               {{ t('panels.stepDetail.reproduction.heading') }}
-            </span>
+            </SectionLabel>
             <span
               class="shrink-0 rounded px-1.5 py-0.5 text-2xs font-medium"
               :class="
@@ -471,9 +471,9 @@ const panelClass = computed(() => [
             @click="binaryOutputsOpen = !binaryOutputsOpen"
           >
             <UIcon name="i-lucide-image" class="h-3.5 w-3.5 shrink-0 text-muted" />
-            <span class="text-2xs font-semibold uppercase tracking-wide text-muted">
+            <SectionLabel as="span">
               {{ t('binaryOutput.heading') }}
-            </span>
+            </SectionLabel>
             <span class="min-w-0 flex-1 truncate text-xs text-muted">
               {{ binaryOutputSummary }}
             </span>

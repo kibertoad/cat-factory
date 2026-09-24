@@ -10,7 +10,7 @@
 // second one plus a nested border would just be chrome inside chrome.
 import type { AgentEffortReport } from '~/types/execution'
 import { effortBand } from '~/utils/effort'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const props = withDefaults(
   defineProps<{ report: AgentEffortReport; variant?: 'card' | 'flat' }>(),
   { variant: 'card' },
@@ -37,13 +37,10 @@ const difficultyClass = computed(() => BAR_CLASS[effortBand(props.report.difficu
       variant === 'card' ? 'scroll-mt-4 rounded-xl border border-default bg-default/50 p-4' : ''
     "
   >
-    <div
-      v-if="variant === 'card'"
-      class="mb-2 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wide text-muted"
-    >
+    <SectionLabel v-if="variant === 'card'" class="mb-2 flex items-center gap-1.5">
       <UIcon name="i-lucide-gauge" class="h-3.5 w-3.5" />
       <span>{{ t('panels.stepDetail.effort.heading') }}</span>
-    </div>
+    </SectionLabel>
 
     <div class="flex items-center gap-2">
       <span class="text-xs text-toned" :title="t('panels.stepDetail.effort.difficultyHint')">
@@ -70,18 +67,18 @@ const difficultyClass = computed(() => BAR_CLASS[effortBand(props.report.difficu
     </p>
 
     <div v-if="report.reducedEffectiveness" class="mt-3">
-      <p class="text-2xs font-semibold uppercase tracking-wide text-dimmed">
+      <SectionLabel as="p">
         {{ t('panels.stepDetail.effort.reduced') }}
-      </p>
+      </SectionLabel>
       <p class="mt-0.5 whitespace-pre-wrap text-xs text-toned">
         {{ report.reducedEffectiveness }}
       </p>
     </div>
 
     <div v-if="report.obstacles?.length" class="mt-3">
-      <p class="text-2xs font-semibold uppercase tracking-wide text-dimmed">
+      <SectionLabel as="p">
         {{ t('panels.stepDetail.effort.obstacles') }}
-      </p>
+      </SectionLabel>
       <ul class="mt-0.5 space-y-1">
         <li
           v-for="(obstacle, i) in report.obstacles"

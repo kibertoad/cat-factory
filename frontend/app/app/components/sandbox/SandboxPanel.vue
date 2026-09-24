@@ -15,7 +15,7 @@ import type {
   SandboxRun,
   SandboxUnsupportedReason,
 } from '~/types/sandbox'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const ui = useUiStore()
 const store = useSandboxStore()
 const toast = useToast()
@@ -317,9 +317,9 @@ async function archive(prompt: SandboxPromptVersion) {
         <div v-if="tab === 'experiments'" class="grid gap-4 lg:grid-cols-2">
           <!-- builder -->
           <div class="space-y-3 rounded-lg border border-muted bg-default/40 p-3">
-            <p class="text-2xs font-semibold uppercase tracking-wide text-muted">
+            <SectionLabel as="p">
               {{ t('sandbox.builder.title') }}
-            </p>
+            </SectionLabel>
 
             <UFormField :label="t('sandbox.builder.agent')">
               <USelect
@@ -343,9 +343,9 @@ async function archive(prompt: SandboxPromptVersion) {
             </UFormField>
 
             <div>
-              <span class="mb-1 block text-3xs uppercase tracking-wide text-dimmed">
+              <SectionLabel as="span" class="mb-1 block">
                 {{ t('sandbox.builder.promptVersions') }}
-              </span>
+              </SectionLabel>
               <div class="max-h-28 space-y-1 overflow-auto pe-1">
                 <label
                   v-for="p in kindPrompts"
@@ -375,9 +375,9 @@ async function archive(prompt: SandboxPromptVersion) {
             </div>
 
             <div>
-              <span class="mb-1 block text-3xs uppercase tracking-wide text-dimmed">
+              <SectionLabel as="span" class="mb-1 block">
                 {{ t('sandbox.builder.models') }}
-              </span>
+              </SectionLabel>
               <div class="max-h-28 space-y-1 overflow-auto pe-1">
                 <label
                   v-for="m in store.selectableModels"
@@ -399,9 +399,9 @@ async function archive(prompt: SandboxPromptVersion) {
             </div>
 
             <div>
-              <span class="mb-1 block text-3xs uppercase tracking-wide text-dimmed">
+              <SectionLabel as="span" class="mb-1 block">
                 {{ t('sandbox.builder.fixtures') }}
-              </span>
+              </SectionLabel>
               <div class="max-h-28 space-y-1 overflow-auto pe-1">
                 <label
                   v-for="f in kindFixtures"
@@ -521,9 +521,9 @@ async function archive(prompt: SandboxPromptVersion) {
 
               <!-- selected cell output -->
               <div v-if="selectedRun" class="mt-3 border-t border-default pt-2">
-                <p class="mb-1 text-2xs uppercase tracking-wide text-dimmed">
+                <SectionLabel as="p" class="mb-1">
                   {{ selectedRun.promptLabel }} · {{ selectedRun.model }}
-                </p>
+                </SectionLabel>
                 <p v-if="selectedRun.error" class="text-xs text-app-error-400">
                   {{ selectedRun.error }}
                 </p>
@@ -545,9 +545,9 @@ async function archive(prompt: SandboxPromptVersion) {
               </div>
             </div>
 
-            <p class="text-2xs uppercase tracking-wide text-dimmed">
+            <SectionLabel as="p">
               {{ t('sandbox.results.past') }}
-            </p>
+            </SectionLabel>
             <div class="max-h-56 space-y-1 overflow-auto">
               <button
                 v-for="x in store.experiments"
@@ -632,13 +632,13 @@ async function archive(prompt: SandboxPromptVersion) {
           </div>
 
           <div v-if="editing" class="space-y-2 rounded-lg border border-muted bg-default/40 p-3">
-            <p class="text-2xs uppercase tracking-wide text-dimmed">
+            <SectionLabel as="p">
               {{
                 editing.origin === 'baseline'
                   ? t('sandbox.prompts.forkOf', { name: editing.name })
                   : t('sandbox.prompts.newVersionOf', { name: editing.name })
               }}
-            </p>
+            </SectionLabel>
             <UTextarea v-model="editText" :rows="16" class="w-full font-mono text-xs" autoresize />
             <div class="flex justify-end gap-2">
               <UButton

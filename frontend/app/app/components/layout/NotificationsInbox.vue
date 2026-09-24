@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Notification } from '~/types/domain'
 import type { ReviewEffort } from '~/types/merge'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 // The board's notification inbox: a bell with an open-count badge that opens a
 // panel of human-actionable items (a PR awaiting a merge decision, a completed
 // pipeline awaiting confirmation, CI that gave up). Each item can be acted on
@@ -406,9 +406,9 @@ function revealDecision(n: Notification) {
 
     <template #content>
       <div class="max-h-[28rem] w-[min(24rem,92vw)] overflow-y-auto p-2">
-        <div class="px-2 py-1 text-2xs font-semibold uppercase tracking-wide text-muted">
+        <SectionLabel class="px-2 py-1">
           {{ t('layout.notifications.heading') }}
-        </div>
+        </SectionLabel>
         <div
           v-for="n in notifications.open"
           :key="n.id"

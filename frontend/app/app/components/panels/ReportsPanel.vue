@@ -19,7 +19,7 @@ import {
   trendMagnitude,
 } from './ReportsPanel.logic'
 import ReportsSpendBreakdown from '~/components/panels/ReportsSpendBreakdown.vue'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 // Reports: cross-cutting usage analytics for the active account — where the spend and the
 // work actually go. Spend per model and agent kind, spend + run activity per workspace /
 // service / task type, and a spend trend, over a selectable window and optionally narrowed
@@ -320,9 +320,9 @@ watch(
 
             <!-- Headline totals. A stat tile, not a chart: these are single numbers. -->
             <section>
-              <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-dimmed">
+              <SectionLabel as="h2" class="mb-2">
                 {{ t('reports.totals.title') }}
-              </h2>
+              </SectionLabel>
               <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <div class="rounded-lg border border-default bg-default/40 p-3">
                   <p
@@ -359,9 +359,9 @@ watch(
 
             <!-- Spend over time. One axis, two stacked series, legend always present. -->
             <section>
-              <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-dimmed">
+              <SectionLabel as="h2" class="mb-2">
                 {{ t('reports.trend.title') }}
-              </h2>
+              </SectionLabel>
               <div class="rounded-lg border border-default bg-default/40 p-4">
                 <div v-if="!hasSpend" class="py-6 text-center text-xs text-dimmed">
                   {{ t('reports.trend.empty') }}
@@ -404,9 +404,9 @@ watch(
             <!-- Spend by model + by agent kind: the two axes a run has no single value for. -->
             <div class="grid gap-6 md:grid-cols-2">
               <section>
-                <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-dimmed">
+                <SectionLabel as="h2" class="mb-2">
                   {{ t('reports.spend.byModel') }}
-                </h2>
+                </SectionLabel>
                 <ReportsSpendBreakdown
                   :rows="view.spend.byModel"
                   :currency="currency"
@@ -415,9 +415,9 @@ watch(
                 />
               </section>
               <section>
-                <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-dimmed">
+                <SectionLabel as="h2" class="mb-2">
                   {{ t('reports.spend.byAgentKind') }}
-                </h2>
+                </SectionLabel>
                 <ReportsSpendBreakdown
                   :rows="view.spend.byAgentKind"
                   :currency="currency"
@@ -434,9 +434,9 @@ watch(
                  breakdowns the projection caps, and each says so under its own card. -->
             <div class="grid gap-6 md:grid-cols-2">
               <section>
-                <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-dimmed">
+                <SectionLabel as="h2" class="mb-2">
                   {{ t('reports.spend.byTicket') }}
-                </h2>
+                </SectionLabel>
                 <ReportsSpendBreakdown
                   :rows="view.spend.byTicket"
                   :currency="currency"
@@ -446,9 +446,9 @@ watch(
                 />
               </section>
               <section>
-                <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-dimmed">
+                <SectionLabel as="h2" class="mb-2">
                   {{ t('reports.spend.byRun') }}
-                </h2>
+                </SectionLabel>
                 <ReportsSpendBreakdown
                   :rows="view.spend.byRun"
                   :currency="currency"
@@ -462,9 +462,9 @@ watch(
             <!-- The shared axis: spend AND activity for the same grouping, side by side. -->
             <section class="flex flex-col gap-3">
               <div class="flex flex-wrap items-center gap-2">
-                <h2 class="text-xs font-semibold uppercase tracking-wide text-dimmed">
+                <SectionLabel as="h2">
                   {{ t('reports.breakdown.title') }}
-                </h2>
+                </SectionLabel>
                 <div class="flex rounded-lg border border-default p-0.5 text-xs">
                   <button
                     v-for="opt in DIMENSIONS"

@@ -12,7 +12,7 @@ import { BUILTIN_TASK_SOURCE_KINDS } from '@cat-factory/contracts'
 import { apiErrorReason } from '~/composables/api/errors'
 import { pipelineAllowedForSchedule } from '~/utils/pipeline'
 import { appliesIntakePredicate } from '~/utils/intakePredicates'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const ui = useUiStore()
 const board = useBoardStore()
 const pipelines = usePipelinesStore()
@@ -466,9 +466,9 @@ async function add() {
         <RecurringRecurrenceEditor v-if="!onDemand" v-model="recurrence" />
 
         <div v-if="filesTicket" class="space-y-3 rounded-lg border border-default p-3">
-          <p class="text-2xs font-semibold uppercase tracking-wide text-muted">
+          <SectionLabel as="p">
             {{ t('board.recurring.issueTracker') }}
-          </p>
+          </SectionLabel>
           <p class="text-2xs text-dimmed">
             {{ t('board.recurring.issueTrackerHint') }}
           </p>
@@ -548,9 +548,9 @@ async function add() {
         </div>
 
         <div v-if="showIntake" class="space-y-3 rounded-lg border border-default p-3">
-          <p class="text-2xs font-semibold uppercase tracking-wide text-muted">
+          <SectionLabel as="p">
             {{ t('board.recurring.intake') }}
-          </p>
+          </SectionLabel>
           <p class="text-2xs text-dimmed">
             {{ t('board.recurring.intakeHint') }}
           </p>

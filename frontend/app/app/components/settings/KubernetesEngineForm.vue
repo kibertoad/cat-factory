@@ -17,7 +17,7 @@ import type {
 } from '@cat-factory/contracts'
 import { isKubernetesUrlSource } from '@cat-factory/contracts'
 import type { K3sSetupPrefill } from '~/stores/ui'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 // The kube branch of the discriminated handler config this form produces (the `local-k3s` /
 // `remote-kubernetes` engines share `kubernetesEngineConfigSchema`). Emitting this typed
 // (rather than a bare `Record`) lets the parent pass it straight to registerHandler with no
@@ -369,13 +369,13 @@ async function copyAutoSetupCommand() {
 
 <template>
   <div class="rounded-lg border border-dashed border-muted p-3 space-y-3">
-    <p class="text-2xs font-semibold uppercase tracking-wide text-muted">
+    <SectionLabel as="p">
       {{
         connected
           ? t('settings.providerConnection.form.updateConfiguration')
           : t('settings.providerConnection.form.connect')
       }}
-    </p>
+    </SectionLabel>
 
     <p
       v-if="engine === 'local-k3s'"

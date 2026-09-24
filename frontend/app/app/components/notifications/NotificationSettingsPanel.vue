@@ -25,7 +25,7 @@ import type {
   NotificationType,
 } from '~/types/notifications'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const ui = useUiStore()
 const notifications = useNotificationsStore()
 const slack = useSlackStore()
@@ -174,11 +174,11 @@ function resetToDefaults() {
         </div>
 
         <template v-else>
-          <div class="flex items-center gap-3 px-2 text-3xs uppercase tracking-wide text-dimmed">
+          <SectionLabel class="flex items-center gap-3 px-2">
             <span class="flex-1">{{ t('notificationSettings.column.event') }}</span>
             <span class="w-16 text-center">{{ t('notificationSettings.column.inApp') }}</span>
             <span class="w-16 text-center">{{ t('notificationSettings.column.email') }}</span>
-          </div>
+          </SectionLabel>
 
           <div class="max-h-[50vh] space-y-1 overflow-y-auto pr-1">
             <div

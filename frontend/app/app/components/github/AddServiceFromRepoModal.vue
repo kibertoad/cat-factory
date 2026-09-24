@@ -27,7 +27,7 @@ import VcsConnectSurfaces from '~/components/vcs/VcsConnectSurfaces.vue'
 import ServiceTestConfig from '~/components/panels/inspector/ServiceTestConfig.vue'
 import ServiceFragments from '~/components/panels/inspector/ServiceFragments.vue'
 import { appInstallationManageUrl, VCS_PROVIDER_LABELS } from '~/utils/vcs'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const { t } = useI18n()
 
 // The behavioural repo role for the imported frame. `service` (backend) is the default so
@@ -548,9 +548,9 @@ function done() {
               <!-- the selection cart + the add action sit right beside the tree, so the
                    picked services and the button that adds them are never scrolled apart -->
               <div class="space-y-2 rounded-md border border-default bg-app-950/40 p-2.5">
-                <p class="text-2xs font-semibold uppercase tracking-wide text-muted">
+                <SectionLabel as="p">
                   {{ t('github.addService.selectedServices') }}
-                </p>
+                </SectionLabel>
                 <div v-if="selectedDirectories.length" class="flex flex-wrap gap-1.5">
                   <span
                     v-for="dir in selectedDirectories"

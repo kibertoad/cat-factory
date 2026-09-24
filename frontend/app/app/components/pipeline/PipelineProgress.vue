@@ -20,7 +20,7 @@ import StepMetricsBar from '~/components/observability/StepMetricsBar.vue'
 import PrReviewPhaseBadge from '~/components/prReview/PrReviewPhaseBadge.vue'
 import { useNowTick, stepDurationLabel } from '~/composables/useStepTimer'
 import type { BadgeColor } from '~/utils/badge'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const props = defineProps<{ instance: ExecutionInstance }>()
 const emit = defineEmits<{
   openDecision: [decisionId: string]
@@ -371,7 +371,7 @@ const ITEM_ICON: Record<string, string> = {
                   {{ t('pipeline.progress.companion') }}
                 </span>
               </div>
-              <div class="flex items-center gap-1.5 text-3xs uppercase tracking-wide text-dimmed">
+              <SectionLabel class="flex items-center gap-1.5">
                 <span>{{ t('pipeline.progress.stepOf', { current: i + 1, total }) }}</span>
                 <!-- live elapsed clock: a running step counts up (so no-subtask steps
                      don't read as hung), a finished step shows its total duration -->
@@ -383,7 +383,7 @@ const ITEM_ICON: Record<string, string> = {
                   <UIcon name="i-lucide-clock" class="h-2.5 w-2.5 shrink-0" />
                   {{ stepElapsed(s) }}
                 </span>
-              </div>
+              </SectionLabel>
             </div>
             <span
               class="ms-auto shrink-0 text-2xs font-medium"

@@ -13,6 +13,8 @@
 // is a five-minute flow that touches a repo and can trial-provision a stack, so "when you need
 // this / when you don't" has to be answerable BEFORE opening it — most services on most boards
 // never need it at all.
+import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const { t } = useI18n()
 const ui = useUiStore()
 
@@ -53,9 +55,9 @@ function start() {
     </div>
 
     <div class="rounded border border-default bg-default/40 p-3">
-      <p class="text-2xs font-medium uppercase tracking-wide text-muted">
+      <SectionLabel as="p">
         {{ t('settings.composeEnvSetup.how.title') }}
-      </p>
+      </SectionLabel>
       <ol class="mt-2 list-decimal space-y-1 ps-4 text-2xs leading-relaxed text-muted">
         <li v-for="(step, i) in steps" :key="`how-${i}`">{{ step }}</li>
       </ol>

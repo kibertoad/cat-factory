@@ -3,7 +3,7 @@ import { useBoardFlow, BOARD_MIN_ZOOM, BOARD_MAX_ZOOM } from '~/composables/useB
 import NotificationsInbox from '~/components/layout/NotificationsInbox.vue'
 import IconButton from '~/components/common/IconButton.vue'
 import LaneViewControl from '~/components/board/LaneViewControl.vue'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const ui = useUiStore()
 const board = useBoardStore()
 // Toolbar contributions from the shared nav manifest (backend/docs/adr/0049-modular-vue-adoption.md,
@@ -160,9 +160,7 @@ const decisionItems = computed(() =>
       @click="resetZoom()"
     >
       {{ zoomPct }}%
-      <span class="hidden text-3xs uppercase tracking-wide text-dimmed sm:block">{{
-        lodLabel
-      }}</span>
+      <SectionLabel as="span" class="hidden sm:block">{{ lodLabel }}</SectionLabel>
     </button>
     <IconButton
       :label="t('board.toolbar.zoomIn')"

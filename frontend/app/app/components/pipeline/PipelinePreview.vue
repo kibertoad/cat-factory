@@ -18,7 +18,7 @@ import {
   pipelineGateCount,
 } from '~/utils/pipeline'
 import AgentKindIcon from '~/components/pipeline/AgentKindIcon.vue'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const props = defineProps<{ pipeline: Pipeline }>()
 const { t } = useI18n()
 
@@ -43,9 +43,7 @@ function stepDescription(kind: string): string {
       {{ pipeline.description }}
     </p>
 
-    <div
-      class="flex flex-wrap items-center gap-x-3 gap-y-1 text-3xs uppercase tracking-wide text-dimmed"
-    >
+    <SectionLabel class="flex flex-wrap items-center gap-x-3 gap-y-1">
       <span class="inline-flex items-center gap-1">
         <UIcon name="i-lucide-workflow" class="h-3 w-3" />
         {{ t('pipeline.preview.stepCount', { count: steps.length }, steps.length) }}
@@ -62,7 +60,7 @@ function stepDescription(kind: string): string {
         <UIcon name="i-lucide-git-branch" class="h-3 w-3" />
         {{ t('pipeline.preview.conditionalCount', { count: conditionalCount }, conditionalCount) }}
       </span>
-    </div>
+    </SectionLabel>
 
     <!-- The ordered steps. The number column doubles as the flow connector (a rule drawn between
          consecutive numbers), so the list reads as a sequence rather than an unordered set. -->

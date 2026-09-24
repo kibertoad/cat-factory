@@ -12,7 +12,7 @@ import {
 import { lodAtLeast } from '~/composables/useSemanticZoom'
 import { prReviewPhase } from '~/utils/prReviewProgress'
 import PrReviewPhaseBadge from '~/components/prReview/PrReviewPhaseBadge.vue'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 // Drill-down inside a task card: the task's build-pipeline steps appear on hover (at any
 // zoom level) or once the `steps` zoom band is reached, and one band deeper (`subtasks`)
 // each step's live todo breakdown expands — done / in-progress / pending — exactly the way
@@ -101,10 +101,10 @@ const ITEM_ICON: Record<string, string> = {
 
 <template>
   <div v-if="showSteps" class="mt-2 space-y-1 border-t border-default pt-2">
-    <div class="flex items-center gap-1 text-3xs uppercase tracking-wide text-dimmed">
+    <SectionLabel class="flex items-center gap-1">
       <UIcon name="i-lucide-workflow" class="h-2.5 w-2.5" />
       {{ t('board.task.buildSteps') }}
-    </div>
+    </SectionLabel>
     <div v-for="(s, i) in steps" :key="i" class="rounded bg-default/60 px-1.5 py-1">
       <button
         type="button"

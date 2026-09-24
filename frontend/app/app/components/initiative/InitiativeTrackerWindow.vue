@@ -29,7 +29,7 @@ import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 import InitiativePlanReview from '~/components/initiative/InitiativePlanReview.vue'
 import InitiativePlanNotice from '~/components/initiative/InitiativePlanNotice.vue'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const board = useBoardStore()
 const initiatives = useInitiativesStore()
 const access = useWorkspaceAccess()
@@ -418,33 +418,33 @@ const { requestClose } = useUnsavedGuard({
                structure that reads better at the full span, but these are paragraphs and bullets
                of agent-written text that would otherwise run the width of the display. -->
           <section v-if="initiative.goal" class="mb-4">
-            <h3 class="mb-1 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+            <SectionLabel as="h3" class="mb-1">
               {{ t('initiative.tracker.goal') }}
-            </h3>
+            </SectionLabel>
             <p class="max-w-3xl whitespace-pre-wrap text-sm leading-relaxed text-toned">
               {{ initiative.goal }}
             </p>
           </section>
           <section v-if="initiative.constraints?.length" class="mb-4">
-            <h3 class="mb-1 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+            <SectionLabel as="h3" class="mb-1">
               {{ t('initiative.tracker.constraints') }}
-            </h3>
+            </SectionLabel>
             <ul class="max-w-3xl list-inside list-disc text-sm text-toned">
               <li v-for="(c, i) in initiative.constraints" :key="i">{{ c }}</li>
             </ul>
           </section>
           <section v-if="initiative.nonGoals?.length" class="mb-4">
-            <h3 class="mb-1 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+            <SectionLabel as="h3" class="mb-1">
               {{ t('initiative.tracker.nonGoals') }}
-            </h3>
+            </SectionLabel>
             <ul class="max-w-3xl list-inside list-disc text-sm text-toned">
               <li v-for="(g, i) in initiative.nonGoals" :key="i">{{ g }}</li>
             </ul>
           </section>
           <section v-if="initiative.analysisSummary" class="mb-4">
-            <h3 class="mb-1 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+            <SectionLabel as="h3" class="mb-1">
               {{ t('initiative.tracker.analysis') }}
-            </h3>
+            </SectionLabel>
             <p class="max-w-3xl whitespace-pre-wrap text-sm leading-relaxed text-toned">
               {{ initiative.analysisSummary }}
             </p>
@@ -572,9 +572,9 @@ const { requestClose } = useUnsavedGuard({
           <!-- Execution policy -->
           <section v-if="initiative.policy" class="mb-4">
             <div class="mb-1 flex items-center gap-2">
-              <h3 class="text-2xs font-semibold uppercase tracking-wide text-dimmed">
+              <SectionLabel as="h3">
                 {{ t('initiative.tracker.policy') }}
-              </h3>
+              </SectionLabel>
               <button
                 v-if="editable && !editingPolicy"
                 class="rounded border border-muted px-1.5 py-0.5 text-3xs text-toned hover:bg-elevated"
@@ -644,9 +644,9 @@ const { requestClose } = useUnsavedGuard({
 
           <!-- Logs -->
           <section v-if="initiative.decisions?.length" class="mb-4">
-            <h3 class="mb-1 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+            <SectionLabel as="h3" class="mb-1">
               {{ t('initiative.tracker.decisions') }}
-            </h3>
+            </SectionLabel>
             <ul class="list-inside list-disc text-sm text-toned">
               <li v-for="d in initiative.decisions" :key="d.id">
                 <span class="font-medium">{{ d.title }}</span>
@@ -655,9 +655,9 @@ const { requestClose } = useUnsavedGuard({
             </ul>
           </section>
           <section v-if="initiative.deviations?.length" class="mb-4">
-            <h3 class="mb-1 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+            <SectionLabel as="h3" class="mb-1">
               {{ t('initiative.tracker.deviations') }}
-            </h3>
+            </SectionLabel>
             <ul class="max-w-3xl list-inside list-disc text-sm text-toned">
               <li v-for="d in initiative.deviations" :key="d.id">
                 <code v-if="d.itemId" class="text-muted">{{ d.itemId }}</code>
@@ -667,9 +667,9 @@ const { requestClose } = useUnsavedGuard({
             </ul>
           </section>
           <section v-if="initiative.followUps?.length" class="mb-4">
-            <h3 class="mb-1 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+            <SectionLabel as="h3" class="mb-1">
               {{ t('initiative.tracker.followUps') }}
-            </h3>
+            </SectionLabel>
             <ul class="flex flex-col gap-2 text-sm text-toned">
               <li
                 v-for="f in initiative.followUps"
@@ -751,9 +751,9 @@ const { requestClose } = useUnsavedGuard({
             </ul>
           </section>
           <section v-if="initiative.caveats?.length" class="mb-4">
-            <h3 class="mb-1 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+            <SectionLabel as="h3" class="mb-1">
               {{ t('initiative.tracker.caveats') }}
-            </h3>
+            </SectionLabel>
             <ul class="max-w-3xl list-inside list-disc text-sm text-toned">
               <li v-for="(c, i) in initiative.caveats" :key="i">{{ c }}</li>
             </ul>

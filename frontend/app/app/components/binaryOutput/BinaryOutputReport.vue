@@ -17,7 +17,7 @@ import { BINARY_OUTPUT_STATE_KEYS, binaryOutputView } from '~/utils/binaryOutput
 import { binaryCandidateView } from '~/utils/binaryCandidates'
 import CopyButton from '~/components/common/CopyButton.vue'
 import StoredAssetView from '~/components/binaryOutput/StoredAssetView.vue'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 // Two callers, one renderer — the same split `StepEffortReport` makes: the generic step-detail
 // panel drops it in as a `card` (its own heading + border, among the other detail sections),
 // and `ResultWindowShell`'s collapsible footer embeds it `flat`, where the disclosure row is
@@ -59,13 +59,10 @@ const state = computed(() => {
     "
     data-testid="binary-output-report"
   >
-    <div
-      v-if="variant === 'card'"
-      class="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wide text-muted"
-    >
+    <SectionLabel v-if="variant === 'card'" class="flex items-center gap-1.5">
       <UIcon name="i-lucide-image" class="h-3.5 w-3.5" />
       <span>{{ t('binaryOutput.heading') }}</span>
-    </div>
+    </SectionLabel>
 
     <!-- The CANDIDATE decision, when this step compared before delivering. It sits ABOVE the
          delivery outcome because it happened first, and because "which of four was this" is the

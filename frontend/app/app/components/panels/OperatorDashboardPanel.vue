@@ -4,7 +4,7 @@ import { onKeyStroke } from '@vueuse/core'
 import type { PlatformObservabilityWindow } from '~/types/execution'
 import { formatMs } from '~/utils/observability'
 import { FAILURE_KIND_KEYS, isAgentFailureKind } from '~/utils/failureKinds'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 // Deployment-level (platform-operator) observability dashboard: the aggregate health of the
 // active account's runs — outcome totals + success rate, a time-bucketed outcome trend, the
 // failure-kind taxonomy, live/parked depth, and duration stats — over a selectable window.
@@ -221,9 +221,9 @@ watch(
 
             <!-- Outcome summary tiles -->
             <section>
-              <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-dimmed">
+              <SectionLabel as="h2" class="mb-2">
                 {{ t('platformObservability.outcomes.title') }}
-              </h2>
+              </SectionLabel>
               <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <div class="rounded-lg border border-default bg-default/40 p-3">
                   <p class="text-2xl font-semibold text-highlighted">
@@ -269,9 +269,9 @@ watch(
 
             <!-- Outcome trend sparkline -->
             <section>
-              <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-dimmed">
+              <SectionLabel as="h2" class="mb-2">
                 {{ t('platformObservability.trend.title') }}
-              </h2>
+              </SectionLabel>
               <div class="rounded-lg border border-default bg-default/40 p-4">
                 <div v-if="view.outcomes.total === 0" class="py-6 text-center text-xs text-dimmed">
                   {{ t('platformObservability.trend.empty') }}
@@ -319,9 +319,9 @@ watch(
 
             <!-- Gate / CI-fixer attempt statistics -->
             <section>
-              <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-dimmed">
+              <SectionLabel as="h2" class="mb-2">
                 {{ t('platformObservability.gates.title') }}
-              </h2>
+              </SectionLabel>
               <div class="overflow-x-auto rounded-lg border border-default bg-default/40 p-4">
                 <p v-if="!view.gates.length" class="py-4 text-center text-xs text-dimmed">
                   {{ t('platformObservability.gates.empty') }}
@@ -391,9 +391,9 @@ watch(
             <div class="grid gap-6 md:grid-cols-2">
               <!-- Failure taxonomy -->
               <section>
-                <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-dimmed">
+                <SectionLabel as="h2" class="mb-2">
                   {{ t('platformObservability.failures.title') }}
-                </h2>
+                </SectionLabel>
                 <div class="rounded-lg border border-default bg-default/40 p-4">
                   <div v-if="!view.failures.length" class="py-4 text-center text-xs text-dimmed">
                     {{ t('platformObservability.failures.empty') }}
@@ -418,9 +418,9 @@ watch(
               <!-- Live depth + durations -->
               <section class="flex flex-col gap-4">
                 <div>
-                  <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-dimmed">
+                  <SectionLabel as="h2" class="mb-2">
                     {{ t('platformObservability.live.title') }}
-                  </h2>
+                  </SectionLabel>
                   <div
                     class="grid grid-cols-4 gap-2 rounded-lg border border-default bg-default/40 p-3 text-center"
                     data-testid="operator-live"
@@ -454,9 +454,9 @@ watch(
                   </div>
                 </div>
                 <div>
-                  <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-dimmed">
+                  <SectionLabel as="h2" class="mb-2">
                     {{ t('platformObservability.durations.title') }}
-                  </h2>
+                  </SectionLabel>
                   <div class="rounded-lg border border-default bg-default/40 p-3 text-sm">
                     <div
                       v-if="view.durations.count === 0"

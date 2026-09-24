@@ -7,7 +7,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { SubscriptionVendor } from '~/types/domain'
 import SecretInput from '~/components/common/SecretInput.vue'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const personal = usePersonalSubscriptionsStore()
 const auth = useAuthStore()
 const workspace = useWorkspaceStore()
@@ -208,9 +208,9 @@ async function disconnect(v: SubscriptionVendor) {
 <template>
   <div class="space-y-3">
     <div>
-      <h4 class="text-xs font-semibold uppercase tracking-wide text-dimmed">
+      <SectionLabel as="h4">
         {{ t('personalSubscriptions.heading') }}
-      </h4>
+      </SectionLabel>
       <p class="mt-1 text-sm text-muted">{{ t('personalSubscriptions.intro') }}</p>
     </div>
 

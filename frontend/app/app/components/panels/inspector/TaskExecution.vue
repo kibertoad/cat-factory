@@ -22,7 +22,7 @@ import MergeEffortChips from '~/components/merge/MergeEffortChips.vue'
 import InputGateNotice from '~/components/inputGate/InputGateNotice.vue'
 import { inputGateNoticeFor } from '~/utils/inputGate'
 import { composeRunOutcome, hasOutcomeToShow } from '~/utils/runOutcome'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const props = defineProps<{ block: Block }>()
 
 const execution = useExecutionStore()
@@ -306,9 +306,9 @@ async function mergePr() {
     <div v-if="instance">
       <div class="mb-1 flex items-center justify-between">
         <span class="flex min-w-0 items-center gap-1.5">
-          <span class="truncate text-2xs font-semibold uppercase tracking-wide text-muted">
+          <SectionLabel as="span" class="truncate">
             {{ instance.pipelineName }}
-          </span>
+          </SectionLabel>
           <!-- A sandboxed run looks exactly like one that simply has not reached the merge yet,
                right up until it stops there, so it says what it is from the start. -->
           <UBadge
@@ -641,9 +641,9 @@ async function mergePr() {
 
     <!-- Open PR: link straight to it on GitHub -->
     <div v-if="pr" class="space-y-2">
-      <span class="text-2xs font-semibold uppercase tracking-wide text-muted">
+      <SectionLabel as="span">
         {{ t('inspector.execution.pullRequest') }}
-      </span>
+      </SectionLabel>
       <UButton
         :to="pr.url"
         target="_blank"

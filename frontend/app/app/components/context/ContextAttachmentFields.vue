@@ -21,7 +21,7 @@ import { claimCandidates, firstLinkCandidate } from '~/components/context/pasted
 import { connectableSources } from '~/utils/sourcePicker'
 import ContextDocumentPicker from '~/components/documents/ContextDocumentPicker.vue'
 import ContextIssuePicker from '~/components/tasks/ContextIssuePicker.vue'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const props = defineProps<{
   /** The staged attachments; the host owns the array and commits it after creating the block. */
   modelValue: PendingContext[]
@@ -188,9 +188,9 @@ function removePending(item: PendingContext) {
     <!-- Context documents (ungated; Attach disabled until a source is connected). -->
     <div class="space-y-2">
       <div class="flex items-center justify-between">
-        <span class="text-2xs font-semibold uppercase tracking-wide text-muted">
+        <SectionLabel as="span">
           {{ t('contextAttachments.documents') }}
-        </span>
+        </SectionLabel>
         <UButton
           v-if="docsConnected"
           color="neutral"
@@ -313,9 +313,9 @@ function removePending(item: PendingContext) {
     <!-- Context issues (ungated; Attach disabled until a tracker is connected). -->
     <div class="space-y-2">
       <div class="flex items-center justify-between">
-        <span class="text-2xs font-semibold uppercase tracking-wide text-muted">
+        <SectionLabel as="span">
           {{ t('contextAttachments.issues') }}
-        </span>
+        </SectionLabel>
         <UButton
           v-if="issuesConnected"
           color="neutral"

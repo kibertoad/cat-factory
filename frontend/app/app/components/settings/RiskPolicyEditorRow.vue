@@ -23,7 +23,7 @@ import {
 import { RISK_POLICY_AXES, RISK_POLICY_CEILING_FIELD } from '~/utils/riskPolicy'
 import MergeClassRulesEditor from '~/components/settings/MergeClassRulesEditor.vue'
 import MergeRolePolicyEditor from '~/components/settings/MergeRolePolicyEditor.vue'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const props = defineProps<{
   policy: RiskPolicyLibraryEntry
   /** Which single control is mid-request, keyed `<policyId>[:<action>]` by the owning panel. */
@@ -156,9 +156,9 @@ const deleteBlocked = computed(
 
     <div class="grid grid-cols-1 gap-3 sm:grid-cols-4">
       <label v-for="axis in RISK_POLICY_AXES" :key="axis" class="block">
-        <span class="mb-1 block text-3xs uppercase tracking-wide text-dimmed">
+        <SectionLabel as="span" class="mb-1 block">
           {{ t(CEILING_LABEL_KEYS[axis]) }}
-        </span>
+        </SectionLabel>
         <UInput
           v-model.number="draft[RISK_POLICY_CEILING_FIELD[axis]]"
           type="number"
@@ -168,15 +168,15 @@ const deleteBlocked = computed(
         />
       </label>
       <label class="block">
-        <span class="mb-1 block text-3xs uppercase tracking-wide text-dimmed">
+        <SectionLabel as="span" class="mb-1 block">
           {{ t('settings.riskPolicy.field.ciMaxAttempts') }}
-        </span>
+        </SectionLabel>
         <UInput v-model.number="draft.ciMaxAttempts" type="number" :min="0" :max="50" size="sm" />
       </label>
       <label class="block">
-        <span class="mb-1 block text-3xs uppercase tracking-wide text-dimmed">
+        <SectionLabel as="span" class="mb-1 block">
           {{ t('settings.riskPolicy.field.maxRequirementIterations') }}
-        </span>
+        </SectionLabel>
         <UInput
           v-model.number="draft.maxRequirementIterations"
           type="number"
@@ -186,9 +186,9 @@ const deleteBlocked = computed(
         />
       </label>
       <label class="block">
-        <span class="mb-1 block text-3xs uppercase tracking-wide text-dimmed">
+        <SectionLabel as="span" class="mb-1 block">
           {{ t('settings.riskPolicy.field.companionMaxReworks') }}
-        </span>
+        </SectionLabel>
         <UInput
           v-model.number="draft.companionMaxReworks"
           type="number"
@@ -198,9 +198,9 @@ const deleteBlocked = computed(
         />
       </label>
       <label class="block">
-        <span class="mb-1 block text-3xs uppercase tracking-wide text-dimmed">
+        <SectionLabel as="span" class="mb-1 block">
           {{ t('settings.riskPolicy.field.maxRequirementConcernAllowed') }}
-        </span>
+        </SectionLabel>
         <USelect
           v-model="draft.maxRequirementConcernAllowed"
           :items="concernOptions"
@@ -245,9 +245,9 @@ const deleteBlocked = computed(
       />
       <div v-if="draft.forkEnabled" class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-4">
         <label v-for="axis in RISK_POLICY_AXES" :key="axis" class="block">
-          <span class="mb-1 block text-3xs uppercase tracking-wide text-dimmed">
+          <SectionLabel as="span" class="mb-1 block">
             {{ t(FORK_FLOOR_LABEL_KEYS[axis]) }}
-          </span>
+          </SectionLabel>
           <UInput
             v-model.number="draft[FORK_FLOOR_FIELD[axis]]"
             type="number"
@@ -257,9 +257,9 @@ const deleteBlocked = computed(
           />
         </label>
         <label class="block">
-          <span class="mb-1 block text-3xs uppercase tracking-wide text-dimmed">
+          <SectionLabel as="span" class="mb-1 block">
             {{ t('settings.riskPolicy.forkDecision.onMissingLabel') }}
-          </span>
+          </SectionLabel>
           <USelect v-model="draft.forkOnMissing" :items="onMissingOptions" size="sm" />
         </label>
       </div>
@@ -283,9 +283,9 @@ const deleteBlocked = computed(
            on an attended policy would be a control over a decision this policy never makes. It is
            not hidden as an "advanced override" — it is inert, which is a different thing. -->
       <label v-if="draft.unattended" class="mt-3 block">
-        <span class="mb-1 block text-3xs uppercase tracking-wide text-dimmed">
+        <SectionLabel as="span" class="mb-1 block">
           {{ t('settings.riskPolicy.autoAnswer.label') }}
-        </span>
+        </SectionLabel>
         <UInput
           v-model.number="draft.minAutoAnswerConfidence"
           type="number"

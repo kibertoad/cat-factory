@@ -10,7 +10,7 @@ import type { ProviderConfigField, UserSecretKind } from '~/types/userSecrets'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
 import ConnectionWarnings from '~/components/settings/ConnectionWarnings.vue'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const { t } = useI18n()
 const ui = useUiStore()
 const store = useUserSecretsStore()
@@ -185,11 +185,11 @@ async function remove() {
         </div>
 
         <div v-if="descriptor" class="rounded-lg border border-dashed border-muted p-3 space-y-3">
-          <p class="text-2xs font-semibold uppercase tracking-wide text-muted">
+          <SectionLabel as="p">
             {{
               status ? t('settings.userSecrets.replaceToken') : t('settings.userSecrets.addToken')
             }}
-          </p>
+          </SectionLabel>
 
           <UFormField :label="t('settings.userSecrets.labelField')">
             <UInput v-model="labelDraft" :placeholder="descriptor.label" />

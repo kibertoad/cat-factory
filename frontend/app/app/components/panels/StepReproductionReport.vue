@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import type { ReproductionPhaseOutcome, ReproductionReport } from '~/types/reproduction'
 import { REPRODUCTION_STATUS_KEYS, REPRODUCTION_TREE_KEYS } from '~/utils/reproduction'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 // The BUGFIX REPRODUCTION PROOF for a step: the declared reproducing check as the
 // executor-harness ran it against the pre-fix tree and against the final tree, with both captured
 // outputs. The verdict is computed from the two exit codes by the harness — never self-reported by
@@ -54,13 +54,10 @@ function phaseLabel(outcome: ReproductionPhaseOutcome): string {
       variant === 'card' ? 'scroll-mt-4 rounded-xl border border-default bg-default/50 p-4' : ''
     "
   >
-    <div
-      v-if="variant === 'card'"
-      class="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wide text-muted"
-    >
+    <SectionLabel v-if="variant === 'card'" class="flex items-center gap-1.5">
       <UIcon :name="presentation.icon" class="h-3.5 w-3.5" />
       <span>{{ t('panels.stepDetail.reproduction.heading') }}</span>
-    </div>
+    </SectionLabel>
 
     <p class="text-2xs text-muted" data-testid="reproduction-verdict">
       {{ t(presentation.verdict) }}
@@ -82,18 +79,18 @@ function phaseLabel(outcome: ReproductionPhaseOutcome): string {
          This is what keeps "could not be reproduced" from looking like "nobody tried". -->
     <template v-if="report.status === 'declared_infeasible'">
       <div v-if="report.reason" class="rounded-md border border-default bg-app-950/40 p-2">
-        <p class="text-2xs font-semibold uppercase tracking-wide text-muted">
+        <SectionLabel as="p">
           {{ t('panels.stepDetail.reproduction.reason') }}
-        </p>
+        </SectionLabel>
         <p class="mt-1 whitespace-pre-wrap text-xs text-toned">{{ report.reason }}</p>
       </div>
       <div
         v-if="report.alternativeVerification"
         class="rounded-md border border-default bg-app-950/40 p-2"
       >
-        <p class="text-2xs font-semibold uppercase tracking-wide text-muted">
+        <SectionLabel as="p">
           {{ t('panels.stepDetail.reproduction.alternative') }}
-        </p>
+        </SectionLabel>
         <p class="mt-1 whitespace-pre-wrap text-xs text-toned">
           {{ report.alternativeVerification }}
         </p>

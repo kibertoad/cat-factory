@@ -24,7 +24,7 @@ import {
   interviewGatePhase,
   interviewStepReached,
 } from '~/utils/interviewGate'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const board = useBoardStore()
 const docInterview = useDocInterviewStore()
 const execution = useExecutionStore()
@@ -171,9 +171,9 @@ const onProceed = () =>
           class="rounded-lg border border-default bg-app-950/40 p-4"
           data-testid="doc-interview-converged"
         >
-          <p class="mb-2 text-2xs font-medium uppercase tracking-wide text-dimmed">
+          <SectionLabel as="p" class="mb-2">
             {{ t('docInterview.brief') }}
-          </p>
+          </SectionLabel>
           <pre
             v-if="session.brief"
             class="whitespace-pre-wrap break-words text-sm leading-relaxed text-toned"

@@ -22,7 +22,7 @@ import {
   type RequirementStateFilter,
 } from './ServiceSpecWindow.logic'
 import type { BadgeColor } from '~/utils/badge'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const { t } = useI18n()
 const board = useBoardStore()
 const serviceSpec = useServiceSpecStore()
@@ -285,9 +285,9 @@ function kindLabel(item: RequirementItem): string {
           {{ t('spec.overview') }}
         </UButton>
         <div v-for="(mod, mi) in modules" :key="mi" class="mb-3">
-          <div class="px-2 pb-1 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+          <SectionLabel class="px-2 pb-1">
             {{ mod.name }}
-          </div>
+          </SectionLabel>
           <ul class="space-y-0.5">
             <li v-for="(group, gi) in mod.groups ?? []" :key="gi">
               <button
@@ -352,9 +352,9 @@ function kindLabel(item: RequirementItem): string {
 
         <!-- selected feature group -->
         <template v-else-if="selectedGroup">
-          <div class="mb-1 text-2xs uppercase tracking-wide text-dimmed">
+          <SectionLabel class="mb-1">
             {{ selectedModule?.name }}
-          </div>
+          </SectionLabel>
           <h2 class="text-lg font-semibold text-highlighted">{{ selectedGroup.name }}</h2>
           <p v-if="selectedGroup.summary" class="mt-1 max-w-3xl text-sm text-muted">
             {{ selectedGroup.summary }}
@@ -501,12 +501,10 @@ function kindLabel(item: RequirementItem): string {
 
             <!-- domain rules / invariants scoped to this group -->
             <div v-if="(selectedGroup.rules?.length ?? 0) > 0" class="mt-6">
-              <div
-                class="mb-2 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wide text-muted"
-              >
+              <SectionLabel class="mb-2 flex items-center gap-1.5">
                 <UIcon name="i-lucide-shield-check" class="h-3.5 w-3.5" />
                 {{ t('spec.domainRules') }}
-              </div>
+              </SectionLabel>
               <ul class="max-w-3xl space-y-1.5">
                 <li
                   v-for="rule in selectedGroup.rules ?? []"

@@ -10,7 +10,7 @@
 import { computed } from 'vue'
 import { autoMergeShare, frictionlessShare, RULEABLE_CHANGE_CLASSES } from '@cat-factory/contracts'
 import type { MergeClassRule, MergeClassRules } from '~/types/merge'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const props = defineProps<{
   /** The preset's current rules; an absent class means "use the score ceilings". */
   modelValue: MergeClassRules
@@ -83,9 +83,9 @@ function setRule(changeClass: (typeof RULEABLE_CHANGE_CLASSES)[number], rule: Me
 <template>
   <div data-testid="merge-class-rules" class="space-y-2">
     <div>
-      <span class="block text-3xs uppercase tracking-wide text-dimmed">
+      <SectionLabel as="span" class="block">
         {{ t('settings.riskPolicy.classRules.heading') }}
-      </span>
+      </SectionLabel>
       <p class="mt-0.5 text-2xs leading-snug text-dimmed">
         {{ t('settings.riskPolicy.classRules.help') }}
       </p>

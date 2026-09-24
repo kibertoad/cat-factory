@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, watch } from 'vue'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 // Per-step Kaizen grading status, shown inside the run window (NOT on the board). Reads
 // the grading for this run's step from the kaizen store, lazily loading the run's
 // gradings on first mount, and renders the scheduled→running→complete status plus the
@@ -75,9 +75,9 @@ const tone = computed(() => {
     <template v-else-if="grading.status === 'complete'">
       <p v-if="grading.summary" class="mt-2 text-xs text-toned">{{ grading.summary }}</p>
       <div v-if="grading.recommendations.length" class="mt-2">
-        <p class="text-2xs font-medium uppercase tracking-wide text-dimmed">
+        <SectionLabel as="p">
           {{ t('kaizen.recommendations') }}
-        </p>
+        </SectionLabel>
         <ul class="mt-1 list-disc space-y-0.5 ps-4 text-xs text-toned">
           <li v-for="(r, i) in grading.recommendations" :key="i">{{ r }}</li>
         </ul>

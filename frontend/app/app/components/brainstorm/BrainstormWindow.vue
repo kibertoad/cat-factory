@@ -19,7 +19,7 @@ import type {
   ReviewItemSeverity,
   ReviewItemStatus,
 } from '~/types/brainstorm'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const board = useBoardStore()
 const brainstorm = useBrainstormStore()
 const toast = useToast()
@@ -384,9 +384,9 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                     v-if="item.reply"
                     class="mt-2 max-w-3xl rounded-md border-s-2 border-muted bg-app-950/40 px-3 py-1.5 text-sm text-toned"
                   >
-                    <span class="text-3xs uppercase tracking-wide text-dimmed">
+                    <SectionLabel as="span">
                       {{ t('brainstorm.yourChoice') }}
-                    </span>
+                    </SectionLabel>
                     <p class="whitespace-pre-line">{{ item.reply }}</p>
                   </div>
 

@@ -12,6 +12,8 @@
 // `ui.openFromModelProviders(...)`, so opening one closes this hub and gives that panel a
 // "Back to Model providers" control (IntegrationBackTitle). Layout mirrors the Integrations
 // hub row-for-row so the two read as siblings.
+import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const { t } = useI18n()
 const ui = useUiStore()
 const apiKeys = useApiKeysStore()
@@ -200,9 +202,9 @@ const filteredGroups = computed<ProviderGroup[]>(() => {
         </p>
 
         <section v-for="group in filteredGroups" :key="group.title">
-          <h3 class="mb-2 px-1 text-2xs font-semibold uppercase tracking-wide text-muted">
+          <SectionLabel as="h3" class="mb-2 px-1">
             {{ group.title }}
-          </h3>
+          </SectionLabel>
           <div class="space-y-1.5">
             <button
               v-for="item in group.items"

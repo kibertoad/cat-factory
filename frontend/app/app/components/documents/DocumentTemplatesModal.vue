@@ -3,7 +3,7 @@ import { DOC_KINDS } from '~/types/domain'
 import type { DocKind, DocumentLinkRole, SourceDocument } from '~/types/domain'
 import DocumentOriginLink from '~/components/documents/DocumentOriginLink.vue'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 // Manage the workspace's per-DocKind TEMPLATE (singular) + EXEMPLAR (multi) document links (WS1).
 // A kind can be pointed at one of the workspace's already-imported documents so its parsed
 // sections override the built-in skeleton (template) and the author agents study it (exemplar).
@@ -132,9 +132,9 @@ async function unlink(doc: SourceDocument) {
 
           <!-- Template (singular per kind) ------------------------------------ -->
           <section class="rounded-lg border border-default bg-default/50 p-3">
-            <h3 class="text-2xs font-semibold uppercase tracking-wide text-muted">
+            <SectionLabel as="h3">
               {{ t('documents.templates.templateHeading') }}
-            </h3>
+            </SectionLabel>
             <p class="mt-0.5 text-xs text-dimmed">
               {{ t('documents.templates.templateHint', { kind }) }}
             </p>
@@ -167,9 +167,9 @@ async function unlink(doc: SourceDocument) {
 
           <!-- Exemplars (multi per kind) -------------------------------------- -->
           <section class="rounded-lg border border-default bg-default/50 p-3">
-            <h3 class="text-2xs font-semibold uppercase tracking-wide text-muted">
+            <SectionLabel as="h3">
               {{ t('documents.templates.exemplarsHeading') }}
-            </h3>
+            </SectionLabel>
             <p class="mt-0.5 text-xs text-dimmed">
               {{ t('documents.templates.exemplarsHint') }}
             </p>

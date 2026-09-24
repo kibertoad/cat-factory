@@ -2,7 +2,7 @@
 import type { Block } from '~/types/domain'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
 import FragmentSelector from '~/components/fragments/FragmentSelector.vue'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const props = defineProps<{ block: Block }>()
 
 const board = useBoardStore()
@@ -83,9 +83,9 @@ function setFragments(ids: string[]) {
   <InspectorSection :title="t('inspector.structure.title')" :hint="t('inspector.structure.hint')">
     <!-- module assignment -->
     <div>
-      <div class="mb-1 text-2xs font-semibold uppercase tracking-wide text-muted">
+      <SectionLabel class="mb-1">
         {{ t('inspector.structure.module') }}
-      </div>
+      </SectionLabel>
       <USelectMenu
         :model-value="selectedModule"
         :items="moduleOptions"

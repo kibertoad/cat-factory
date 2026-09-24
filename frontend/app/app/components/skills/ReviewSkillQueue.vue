@@ -17,7 +17,7 @@
 import { computed, ref } from 'vue'
 import { MAX_REVIEW_SKILLS } from '@cat-factory/contracts'
 import { useSkillsStore } from '~/stores/skills'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const props = defineProps<{
   /** The queued skill ids, in the order the reviewer applies them (`v-model`). */
   modelValue: string[]
@@ -63,9 +63,9 @@ function toggle(id: string) {
 <template>
   <div>
     <div class="mb-1 flex items-center justify-between gap-2">
-      <span class="text-2xs font-semibold uppercase tracking-wide text-muted">
+      <SectionLabel as="span">
         {{ t('skills.reviewQueue.label') }}
-      </span>
+      </SectionLabel>
       <UPopover v-model:open="open" :content="{ align: 'end' }">
         <UButton
           size="xs"

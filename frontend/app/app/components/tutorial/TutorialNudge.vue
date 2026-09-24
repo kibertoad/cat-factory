@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 // The contextual offer's surface: one walkthrough, offered beside the work that just made it
 // relevant. Deliberately NOT a modal — the whole point is the moment, and a modal would
 // interrupt whatever the user was doing to reach it (answering a parked run, reading a failure).
@@ -75,9 +75,9 @@ function take(tourId: string) {
           class="text-primary mt-0.5 h-4 w-4 shrink-0"
         />
         <div class="min-w-0 flex-1">
-          <p class="text-2xs tracking-wide text-muted uppercase">
+          <SectionLabel as="p">
             {{ t('tutorial.nudge.label') }}
-          </p>
+          </SectionLabel>
           <p class="mt-0.5 text-sm font-medium text-app-100">{{ t(offered.titleKey) }}</p>
           <p class="mt-0.5 text-xs text-muted">{{ t(offered.descriptionKey) }}</p>
         </div>

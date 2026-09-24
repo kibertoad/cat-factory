@@ -30,7 +30,7 @@ import CustomManifestTypeEditor from '~/components/settings/CustomManifestTypeEd
 import CloudflareHandlerSection from '~/components/settings/CloudflareHandlerSection.vue'
 import ConnectionTestVerdict from '~/components/settings/ConnectionTestVerdict.vue'
 import { consumeKubernetesScrollAnchor } from '~/components/settings/InfraHandlersConfigurator.logic'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const { t } = useI18n()
 const infra = useInfraConfigStore()
 const auth = useAuthStore()
@@ -513,9 +513,10 @@ function toastRemoved() {
 
       <!-- Local mode: a personal override for THIS machine, layered over the workspace handler. -->
       <div v-if="userOverridesOn" class="border-t border-default pt-2">
-        <button
+        <SectionLabel
+          as="button"
           type="button"
-          class="flex w-full items-center gap-1.5 text-start text-2xs font-semibold uppercase tracking-wide text-dimmed hover:text-toned"
+          class="flex w-full items-center gap-1.5 text-start hover:text-default"
           @click="showKubeOverride = !showKubeOverride"
         >
           <UIcon
@@ -526,7 +527,7 @@ function toastRemoved() {
           <UBadge v-if="kubeUserHandler" color="primary" variant="subtle" size="sm">
             {{ t('settings.infrastructure.handler.overrideActive') }}
           </UBadge>
-        </button>
+        </SectionLabel>
         <div v-if="showKubeOverride" class="mt-2 space-y-2">
           <p class="text-2xs text-dimmed">
             {{ t('settings.infrastructure.handler.personalOverrideHint') }}
@@ -580,9 +581,9 @@ function toastRemoved() {
       <CustomManifestTypeEditor />
 
       <div v-if="infra.customTypes.length" class="space-y-2 border-t border-default pt-3">
-        <p class="text-2xs font-semibold uppercase tracking-wide text-muted">
+        <SectionLabel as="p">
           {{ t('settings.infrastructure.handler.customHandlerTitle') }}
-        </p>
+        </SectionLabel>
         <UFormField :label="t('settings.infrastructure.handler.customTypeLabel')">
           <USelect v-model="selectedCustomId" :items="customTypeItems" />
         </UFormField>

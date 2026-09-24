@@ -9,7 +9,7 @@ import { computed, ref, watch } from 'vue'
 import type { SubscriptionVendor } from '~/types/domain'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const { t, n } = useI18n()
 const ui = useUiStore()
 const workspace = useWorkspaceStore()
@@ -267,11 +267,11 @@ function vendorLabel(v: SubscriptionVendor): string {
 
             <!-- connected pool -->
             <div v-if="creds.credentials.length" class="space-y-2">
-              <h4 class="text-xs font-semibold uppercase tracking-wide text-dimmed">
+              <SectionLabel as="h4">
                 {{
                   t('providers.vendorCredentials.connected', { count: creds.credentials.length })
                 }}
-              </h4>
+              </SectionLabel>
               <div
                 v-for="c in creds.credentials"
                 :key="c.id"

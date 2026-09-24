@@ -22,7 +22,7 @@
 // the retry belongs.
 import type { AssistantActionId, AssistantOutcome } from '~/types/domain'
 import { answerFor, assistantSurface, revealTarget, submitGate } from './AssistantModal.logic'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const { t } = useI18n()
 const ui = useUiStore()
 const assistant = useAssistantStore()
@@ -254,9 +254,9 @@ function reveal(blockId: string): void {
 
           <!-- What it can do, always visible: the catalog is the affordance. -->
           <div v-if="examples.length" class="space-y-2">
-            <p class="text-xs font-medium uppercase tracking-wide text-dimmed">
+            <SectionLabel as="p">
               {{ t('assistant.examplesTitle') }}
-            </p>
+            </SectionLabel>
             <div class="flex flex-col gap-1">
               <button
                 v-for="entry in examples"

@@ -3,7 +3,7 @@ import type { RequirementVerdictStatus, TestReport } from '~/types/domain'
 import type { TesterStepState } from '~/types/execution'
 import { resolveVerdictMeta, type VerdictMeta } from './StepTestReport.logic'
 import MarkdownProse from '~/components/common/MarkdownProse.vue'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 // A tester step's latest structured report (what was tested, the per-area outcomes,
 // the concerns it raised and the greenlight verdict) plus the fixer-loop phase.
 defineProps<{
@@ -45,9 +45,9 @@ function verdictMeta(status: RequirementVerdictStatus): VerdictMeta {
   <section class="mt-4 scroll-mt-4">
     <div class="mb-2 flex items-center gap-1.5 text-2xs">
       <UIcon name="i-lucide-flask-conical" class="h-3.5 w-3.5 text-muted" />
-      <span class="font-semibold uppercase tracking-wide text-muted">
+      <SectionLabel as="span">
         {{ t('panels.testReport.title') }}
-      </span>
+      </SectionLabel>
       <UBadge :color="report.greenlight ? 'success' : 'warning'" variant="subtle" size="sm">
         {{
           report.greenlight ? t('panels.testReport.greenlit') : t('panels.testReport.needsFixes')

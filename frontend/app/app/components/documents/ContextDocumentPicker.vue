@@ -49,7 +49,7 @@ import {
   reconcileSource,
   sourceMenuItems,
 } from '~/utils/sourcePicker'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 // Repo-backed document sources pick a FILE out of a repository (repo search → file
 // search / tree browse) instead of the generic free-text catalogue search. Today only
 // `github` (which transparently covers GitLab via the VCS adapter) is repo-backed.
@@ -420,12 +420,9 @@ onMounted(() => {
          here (each opens the connect modal over the caller's form). Rendered as plain text when
          there is nothing to decide, which for a member is the usual case. -->
     <div class="flex items-center gap-1.5">
-      <span
-        :id="sourceLabelId"
-        class="shrink-0 text-2xs font-semibold uppercase tracking-wide text-dimmed"
-      >
+      <SectionLabel as="span" :id="sourceLabelId" class="shrink-0">
         {{ t('documents.picker.sourceLabel') }}
-      </span>
+      </SectionLabel>
       <UDropdownMenu
         v-if="sourcePickable"
         :items="sourceMenu"

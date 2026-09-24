@@ -10,7 +10,7 @@ import AgentStopButton from '~/components/board/AgentStopButton.vue'
 import BootstrapRunSteps from '~/components/bootstrap/BootstrapRunSteps.vue'
 import { BLUEPRINT_AGENT_KIND } from '@cat-factory/contracts'
 import { VCS_PROVIDER_ICONS } from '~/utils/vcs'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const board = useBoardStore()
 const pipelines = usePipelinesStore()
 const execution = useExecutionStore()
@@ -368,7 +368,7 @@ const showOriginalDescription = ref(false)
               <UBadge :color="statusMeta.chip" variant="subtle" size="sm">
                 {{ statusLabel }}
               </UBadge>
-              <span class="text-3xs uppercase tracking-wide text-dimmed">{{ level }}</span>
+              <SectionLabel as="span">{{ level }}</SectionLabel>
             </div>
           </div>
         </div>
@@ -471,12 +471,10 @@ const showOriginalDescription = ref(false)
 
           <!-- prior incorporated requirements kept as a base after a review-driven reset -->
           <div v-if="reqHasPriorDoc" class="rounded-lg border border-muted bg-elevated/40 p-3">
-            <div
-              class="mb-1.5 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wide text-muted"
-            >
+            <SectionLabel class="mb-1.5 flex items-center gap-1.5">
               <UIcon name="i-lucide-history" class="h-3.5 w-3.5" />
               {{ t('panels.inspector.lastIncorporatedRequirements') }}
-            </div>
+            </SectionLabel>
             <p class="line-clamp-5 whitespace-pre-line text-sm leading-relaxed text-toned">
               {{ reqReworkedText }}
             </p>

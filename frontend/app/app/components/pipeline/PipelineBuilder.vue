@@ -28,7 +28,7 @@ import {
   mayCarrySkipAxis,
 } from '~/utils/catalog'
 import type { ConsensusStrategy } from '~/types/consensus'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 type DraftUnit = { index: number; kind: AgentKind; companionIndex: number | null }
 
 const pipelines = usePipelinesStore()
@@ -423,9 +423,9 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
           data-testid="pipeline-builder-palette"
         >
           <div class="mb-2 flex shrink-0 items-center justify-between gap-2">
-            <h3 class="text-xs font-semibold uppercase tracking-wide text-muted">
+            <SectionLabel as="h3">
               {{ t('pipeline.builder.agentPalette') }}
-            </h3>
+            </SectionLabel>
             <UButton
               color="primary"
               variant="soft"
@@ -447,9 +447,9 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
           data-testid="pipeline-builder-draft"
         >
           <div class="mb-2 flex items-center justify-between gap-2">
-            <h3 class="text-xs font-semibold uppercase tracking-wide text-muted">
+            <SectionLabel as="h3">
               {{ t('pipeline.builder.pipeline') }}
-            </h3>
+            </SectionLabel>
             <UButton
               color="neutral"
               variant="soft"
@@ -1103,9 +1103,9 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
              moved to the task card / inspector when the palettes were removed). -->
         <div v-if="pipelines.pipelines.length" class="flex flex-col lg:min-h-0 lg:overflow-hidden">
           <div class="mb-2 flex shrink-0 items-center justify-between gap-2">
-            <h3 class="text-xs font-semibold uppercase tracking-wide text-muted">
+            <SectionLabel as="h3">
               {{ t('pipeline.builder.savedPipelines') }}
-            </h3>
+            </SectionLabel>
             <UButton
               v-if="library.archivedInScope"
               :icon="showArchived ? 'i-lucide-archive-restore' : 'i-lucide-archive'"
@@ -1400,9 +1400,9 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
     <template #body>
       <div class="space-y-3">
         <div>
-          <label class="mb-1 block text-2xs font-semibold uppercase tracking-wide text-muted">
+          <SectionLabel as="label" class="mb-1 block">
             {{ t('pipeline.builder.addAgentModal.name') }}
-          </label>
+          </SectionLabel>
           <UInput
             v-model="newAgentName"
             :placeholder="t('pipeline.builder.addAgentModal.namePlaceholder')"
@@ -1411,9 +1411,9 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
           />
         </div>
         <div>
-          <label class="mb-1 block text-2xs font-semibold uppercase tracking-wide text-muted">
+          <SectionLabel as="label" class="mb-1 block">
             {{ t('pipeline.builder.addAgentModal.description') }}
-          </label>
+          </SectionLabel>
           <UTextarea
             v-model="newAgentDesc"
             :rows="2"

@@ -10,7 +10,7 @@
 import { computed } from 'vue'
 import type { RiskPolicy, WorkspaceRole } from '~/types/merge'
 import { riskPolicyCeilings, rolePolicySummary, type RiskPolicyAxis } from '~/utils/riskPolicy'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const props = defineProps<{ policy: RiskPolicy }>()
 const { t, n } = useI18n()
 
@@ -56,10 +56,10 @@ const ceilings = computed(() =>
 
     <!-- the three ceilings, grouped under one heading that names what they are -->
     <div v-if="policy.autoMergeEnabled">
-      <div class="mb-1 flex items-center gap-1 text-3xs uppercase tracking-wide text-dimmed">
+      <SectionLabel class="mb-1 flex items-center gap-1">
         <UIcon name="i-lucide-git-merge" class="h-3 w-3" />
         {{ t('riskPolicy.preview.autoMergeHeading') }}
-      </div>
+      </SectionLabel>
       <dl class="space-y-1">
         <div
           v-for="c in ceilings"
@@ -77,10 +77,10 @@ const ceilings = computed(() =>
       </p>
     </div>
     <div v-else>
-      <div class="mb-1 flex items-center gap-1 text-3xs uppercase tracking-wide text-dimmed">
+      <SectionLabel class="mb-1 flex items-center gap-1">
         <UIcon name="i-lucide-user-check" class="h-3 w-3" />
         {{ t('riskPolicy.preview.manualHeading') }}
-      </div>
+      </SectionLabel>
       <p class="text-xs leading-snug text-muted">
         {{ t('riskPolicy.preview.manualExplainer') }}
       </p>
@@ -88,10 +88,10 @@ const ceilings = computed(() =>
 
     <!-- Who started the run changes what may land, on a policy that says so. -->
     <div v-if="roleLayer.any" data-testid="risk-policy-preview-roles">
-      <div class="mb-1 flex items-center gap-1 text-3xs uppercase tracking-wide text-dimmed">
+      <SectionLabel class="mb-1 flex items-center gap-1">
         <UIcon name="i-lucide-users" class="h-3 w-3" />
         {{ t('riskPolicy.preview.roleHeading') }}
-      </div>
+      </SectionLabel>
       <p v-if="roleLayer.sandboxed" class="text-xs leading-snug text-muted">
         {{ t('riskPolicy.preview.roleSandboxed', { roles: roleLayer.sandboxed }) }}
       </p>
@@ -104,10 +104,10 @@ const ceilings = computed(() =>
     </div>
 
     <div>
-      <div class="mb-1 flex items-center gap-1 text-3xs uppercase tracking-wide text-dimmed">
+      <SectionLabel class="mb-1 flex items-center gap-1">
         <UIcon name="i-lucide-wrench" class="h-3 w-3" />
         {{ t('riskPolicy.preview.ciHeading') }}
-      </div>
+      </SectionLabel>
       <p class="text-xs leading-snug text-muted">
         {{
           t('riskPolicy.preview.ciAttempts', { count: policy.ciMaxAttempts }, policy.ciMaxAttempts)

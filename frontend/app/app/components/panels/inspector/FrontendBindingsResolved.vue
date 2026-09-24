@@ -7,7 +7,7 @@ import {
   type FrontendConfig,
   type ResolvedFrontendBinding,
 } from '@cat-factory/contracts'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 // The resolution of a frontend frame's backend bindings — each env var → a bound service's live
 // ephemeral URL, or WireMock. Two modes, same view:
 //   - **Live** (frame inspector, `resolved` omitted): resolves against the workspace's CURRENT env
@@ -66,9 +66,9 @@ const rows = computed(() => {
 
 <template>
   <div v-if="rows.length || duplicates.length" class="space-y-1.5" data-testid="frontend-resolved">
-    <div class="text-2xs font-semibold uppercase tracking-wide text-dimmed">
+    <SectionLabel>
       {{ t('inspector.frontendConfig.resolved.title') }}
-    </div>
+    </SectionLabel>
 
     <p
       v-if="duplicates.length"

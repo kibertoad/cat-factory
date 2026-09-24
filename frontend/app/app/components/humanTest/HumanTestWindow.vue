@@ -15,7 +15,7 @@ import type {
 type HumanTestRoundOutcome = NonNullable<HumanTestRound['outcome']>
 import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const board = useBoardStore()
 const execution = useExecutionStore()
 const humanTest = useHumanTestStore()
@@ -168,9 +168,9 @@ const canDestroy = computed(
       <template v-else>
         <!-- Environment -->
         <section class="rounded-lg border border-default bg-default/60 p-4">
-          <h3 class="mb-2 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+          <SectionLabel as="h3" class="mb-2">
             {{ t('humanTest.environment.heading') }}
-          </h3>
+          </SectionLabel>
           <div v-if="env" class="space-y-2">
             <div class="flex items-center gap-2 text-sm">
               <UIcon
@@ -258,9 +258,9 @@ const canDestroy = computed(
         <!-- Findings / fix -->
         <section v-if="awaitingHuman" class="rounded-lg border border-default bg-default/60 p-4">
           <div class="flex items-center justify-between">
-            <h3 class="text-2xs font-semibold uppercase tracking-wide text-dimmed">
+            <SectionLabel as="h3">
               {{ t('humanTest.fix.heading') }}
-            </h3>
+            </SectionLabel>
             <button
               class="text-xs text-muted hover:text-default"
               @click="showFindings = !showFindings"
@@ -294,9 +294,9 @@ const canDestroy = computed(
           v-if="ht.rounds && ht.rounds.length"
           class="rounded-lg border border-default bg-default/60 p-4"
         >
-          <h3 class="mb-2 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+          <SectionLabel as="h3" class="mb-2">
             {{ t('humanTest.history.heading', { count: ht.attempts }, ht.attempts) }}
-          </h3>
+          </SectionLabel>
           <ol class="space-y-2">
             <li v-for="(r, i) in ht.rounds" :key="i" class="flex items-start gap-2 text-xs">
               <UIcon

@@ -30,7 +30,7 @@ import type { StepApproval } from '~/types/execution'
 import { useStepProse } from '~/composables/useStepProse'
 import { useProseComments } from '~/composables/useProseComments'
 import InitiativePlanDecision from '~/components/initiative/InitiativePlanDecision.vue'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const props = defineProps<{
   /** The parked gate under review. */
   approval: StepApproval
@@ -150,12 +150,9 @@ async function copyPlan() {
       class="hidden w-52 shrink-0 flex-col border-e border-default bg-default/60 lg:flex"
     >
       <div class="flex items-center gap-0.5 border-b border-default px-3 py-2">
-        <span
-          v-if="outline.hasToc"
-          class="min-w-0 flex-1 truncate text-2xs font-semibold uppercase tracking-wide text-dimmed"
-        >
+        <SectionLabel as="span" v-if="outline.hasToc" class="min-w-0 flex-1 truncate">
           {{ t('panels.stepDetail.contents') }}
-        </span>
+        </SectionLabel>
         <span v-else class="flex-1" />
         <!-- Collapse-all tracks the outline: with no headings the only section is the untitled
              preamble, which renders no toggle of its own, so collapsing it would hide the whole
@@ -221,9 +218,9 @@ async function copyPlan() {
           :aria-expanded="runDetailsOpen"
           @click="runDetailsOpen = !runDetailsOpen"
         >
-          <span class="flex-1 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+          <SectionLabel as="span" class="flex-1">
             {{ t('panels.stepDetail.details') }}
-          </span>
+          </SectionLabel>
           <UIcon
             :name="runDetailsOpen ? 'i-lucide-chevron-down' : 'i-lucide-chevron-up'"
             class="h-3.5 w-3.5 shrink-0 text-dimmed"
@@ -361,9 +358,9 @@ async function copyPlan() {
           class="rounded-lg border border-default bg-default/50 p-2.5"
         >
           <div class="mb-1 flex items-start justify-between gap-2">
-            <div class="text-3xs uppercase tracking-wide text-dimmed">
+            <SectionLabel>
               {{ t('panels.stepDetail.commentN', { number: idx + 1 }) }}
-            </div>
+            </SectionLabel>
             <button
               class="text-dimmed transition hover:text-app-error-400"
               :title="t('panels.stepDetail.removeComment')"

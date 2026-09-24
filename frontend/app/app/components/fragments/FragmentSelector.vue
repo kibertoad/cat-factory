@@ -10,7 +10,7 @@
 // (labelled by their raw id) so they stay visible and removable.
 import type { PromptFragment } from '~/types/domain'
 import { buildFragmentCategoryGroups } from '~/utils/fragmentPicker'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const props = withDefaults(
   defineProps<{
     /** The selected fragment ids (`v-model`). */
@@ -76,9 +76,9 @@ function manageAccount() {
 <template>
   <div>
     <div class="mb-1 flex items-center justify-between gap-2">
-      <span v-if="label" class="text-2xs font-semibold uppercase tracking-wide text-muted">
+      <SectionLabel as="span" v-if="label">
         {{ label }}
-      </span>
+      </SectionLabel>
       <span v-else />
       <UPopover v-model:open="open" :content="{ align: 'end' }">
         <UButton
@@ -98,11 +98,9 @@ function manageAccount() {
             <div class="min-h-0 flex-1 overflow-y-auto p-1">
               <template v-if="categoryGroups.length">
                 <div v-for="group in categoryGroups" :key="group.category">
-                  <p
-                    class="px-2 pb-0.5 pt-1.5 text-2xs font-semibold uppercase tracking-wide text-dimmed"
-                  >
+                  <SectionLabel as="p" class="px-2 pb-0.5 pt-1.5">
                     {{ group.category }}
-                  </p>
+                  </SectionLabel>
                   <button
                     v-for="f in group.fragments"
                     :key="f.id"

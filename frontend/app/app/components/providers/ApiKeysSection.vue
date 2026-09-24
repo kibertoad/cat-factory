@@ -19,7 +19,7 @@ import { computed, ref, watch } from 'vue'
 import { providerCachesPrompts } from '@cat-factory/contracts'
 import type { ApiKey, ApiKeyProvider } from '~/types/domain'
 import SecretInput from '~/components/common/SecretInput.vue'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const props = withDefaults(defineProps<{ accountId?: string; category?: 'direct' | 'proxy' }>(), {
   category: 'direct',
 })
@@ -264,13 +264,13 @@ async function remove(k: ApiKey) {
 <template>
   <div class="space-y-4">
     <div>
-      <h4 class="text-xs font-semibold uppercase tracking-wide text-dimmed">
+      <SectionLabel as="h4">
         {{
           category === 'proxy'
             ? t('providers.apiKeys.proxyHeading')
             : t('providers.apiKeys.directHeading')
         }}
-      </h4>
+      </SectionLabel>
       <template v-if="category === 'proxy'">
         <p v-if="isAccount" class="mt-1 text-sm text-muted">
           {{ t('providers.apiKeys.proxyAccountIntro') }}
@@ -380,9 +380,9 @@ async function remove(k: ApiKey) {
 
     <!-- connected keys for the selected scope -->
     <div v-if="connected.length" class="space-y-2">
-      <h5 class="text-xs font-semibold uppercase tracking-wide text-dimmed">
+      <SectionLabel as="h5">
         {{ t('providers.apiKeys.connected', { count: connected.length }) }}
-      </h5>
+      </SectionLabel>
       <div
         v-for="k in connected"
         :key="k.id"

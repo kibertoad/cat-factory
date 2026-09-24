@@ -12,7 +12,7 @@ import CopyButton from '~/components/common/CopyButton.vue'
 import MarkdownProse from '~/components/common/MarkdownProse.vue'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import { agentKindMeta } from '~/utils/catalog'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const { t, n } = useI18n()
 
 const board = useBoardStore()
@@ -165,9 +165,9 @@ function topScore(c: ConsensusContribution): { label: string; value: number } | 
         <!-- synthesized result -->
         <section v-if="session.synthesis" class="mb-6">
           <div class="mb-2 flex items-center gap-2">
-            <h3 class="text-xs font-semibold uppercase tracking-wide text-muted">
+            <SectionLabel as="h3">
               {{ t('consensus.synthesizedResult') }}
-            </h3>
+            </SectionLabel>
             <span
               v-if="session.confidence != null"
               class="rounded bg-app-success-500/15 px-1.5 py-0.5 text-xs text-app-success-300"
@@ -193,9 +193,9 @@ function topScore(c: ConsensusContribution): { label: string; value: number } | 
 
         <!-- participants -->
         <section class="mb-6">
-          <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
+          <SectionLabel as="h3" class="mb-2">
             {{ t('consensus.panel') }}
-          </h3>
+          </SectionLabel>
           <div class="flex flex-wrap gap-2">
             <div
               v-for="(p, i) in session.participants"
@@ -215,10 +215,10 @@ function topScore(c: ConsensusContribution): { label: string; value: number } | 
 
         <!-- rounds -->
         <section v-for="round in session.rounds" :key="round.index" class="mb-5">
-          <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
+          <SectionLabel as="h3" class="mb-2">
             {{ t('consensus.round.heading', { n: round.index + 1 }) }} ·
             {{ roundLabel(round.kind) }}
-          </h3>
+          </SectionLabel>
           <div class="space-y-3">
             <div
               v-for="c in round.contributions"

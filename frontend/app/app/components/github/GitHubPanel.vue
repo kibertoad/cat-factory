@@ -11,7 +11,7 @@ import BranchProtectionPreflight from './BranchProtectionPreflight.vue'
 import VcsConnectSurfaces from '~/components/vcs/VcsConnectSurfaces.vue'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import { VCS_PROVIDER_ICONS, VCS_PROVIDER_LABELS } from '~/utils/vcs'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const { t } = useI18n()
 const ui = useUiStore()
 const access = useWorkspaceAccess()
@@ -380,9 +380,9 @@ async function merge(pr: GitHubPullRequest) {
           <section v-else-if="tab === 'repos'" class="space-y-2">
             <!-- manage which repos this board links -->
             <div class="flex items-center justify-between">
-              <span class="text-2xs uppercase tracking-wide text-dimmed">
+              <SectionLabel as="span">
                 {{ t('github.panel.linkedToBoard') }}
-              </span>
+              </SectionLabel>
               <UButton
                 size="xs"
                 color="neutral"

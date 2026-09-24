@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { UI_MODES, type UiMode } from '~/utils/uiMode'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 // Interface-tier picker, shown at the TOP of the sidebar under the board switcher. Basic mode
 // hides the power-user destinations and the less-used run options; advanced shows everything.
 //
@@ -55,9 +55,9 @@ const pinnedTitle = computed(
   >
     <UIcon :name="icon" class="h-4 w-4 shrink-0 text-dimmed" />
     <div v-if="!collapsed" class="min-w-0 flex-1">
-      <div class="truncate text-3xs uppercase tracking-wide text-dimmed">
+      <SectionLabel class="truncate">
         {{ t('uiMode.switcher') }}
-      </div>
+      </SectionLabel>
       <div class="truncate text-xs font-medium text-toned">{{ currentLabel }}</div>
     </div>
     <UIcon v-if="!collapsed" name="i-lucide-lock" class="h-3.5 w-3.5 shrink-0 text-app-600" />
@@ -82,9 +82,9 @@ const pinnedTitle = computed(
   </button>
 
   <div v-else data-testid="ui-mode-switcher" class="w-full">
-    <div class="mb-1 px-1 text-3xs uppercase tracking-wide text-dimmed">
+    <SectionLabel class="mb-1 px-1">
       {{ t('uiMode.switcher') }}
-    </div>
+    </SectionLabel>
     <div
       role="group"
       :aria-label="t('uiMode.switcher')"

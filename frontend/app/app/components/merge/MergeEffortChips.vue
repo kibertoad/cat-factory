@@ -10,7 +10,7 @@
 import { computed } from 'vue'
 import { REVIEW_EFFORTS } from '@cat-factory/contracts'
 import type { ChangeClass, MergeClassRollup, ReviewEffort } from '~/types/merge'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const props = defineProps<{
   /** The currently picked effort, or null for "not chosen". */
   modelValue: ReviewEffort | null
@@ -87,12 +87,9 @@ function pick(effort: ReviewEffort) {
 <template>
   <div data-testid="merge-effort-chips" class="mt-2">
     <div class="flex items-center gap-1.5">
-      <span
-        class="text-3xs uppercase tracking-wide text-dimmed"
-        :title="t('merge.effort.promptHint')"
-      >
+      <SectionLabel as="span" :title="t('merge.effort.promptHint')">
         {{ t('merge.effort.prompt') }}
-      </span>
+      </SectionLabel>
       <UBadge
         v-if="classLabel"
         data-testid="merge-effort-class"

@@ -15,7 +15,7 @@ import ConnectionWarnings from '~/components/settings/ConnectionWarnings.vue'
 import ConnectionTestVerdict from '~/components/settings/ConnectionTestVerdict.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
 import type { ProviderConnection } from '~/types/providerConnections'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const props = defineProps<{
   connection: ProviderConnection | null
   supportsTest: boolean
@@ -264,13 +264,13 @@ function optional(label: string): string {
 
 <template>
   <div class="rounded-lg border border-dashed border-muted p-3 space-y-3">
-    <p class="text-2xs font-semibold uppercase tracking-wide text-muted">
+    <SectionLabel as="p">
       {{
         connection?.kind === 'kubernetes'
           ? t('settings.providerConnection.form.updateConfiguration')
           : t('settings.providerConnection.form.connect')
       }}
-    </p>
+    </SectionLabel>
 
     <UFormField :label="t('settings.providerConnection.kubernetesEnv.label')">
       <UInput

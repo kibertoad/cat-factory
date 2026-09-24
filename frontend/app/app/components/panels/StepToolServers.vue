@@ -32,7 +32,7 @@ import {
   unattributedObservations,
 } from '~/components/panels/StepToolServers.logic'
 import { agentKindMeta } from '~/utils/catalog'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const props = defineProps<{
   toolServers: StepToolServers
   /**
@@ -109,12 +109,10 @@ const drops = computed(() =>
     data-testid="step-tool-servers"
     class="scroll-mt-4 rounded-xl border border-default bg-default/50 p-4"
   >
-    <div
-      class="mb-2 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wide text-muted"
-    >
+    <SectionLabel class="mb-2 flex items-center gap-1.5">
       <UIcon name="i-lucide-plug" class="h-3.5 w-3.5" />
       <span>{{ t('panels.stepDetail.toolServers.heading') }}</span>
-    </div>
+    </SectionLabel>
 
     <p
       v-if="dispatchedAs"

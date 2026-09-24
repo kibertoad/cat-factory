@@ -7,7 +7,7 @@
 // auto-opens once per session (driven from pages/index.vue) and clears once the preset is
 // fixed (or all its models become available).
 import { computed } from 'vue'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const { t } = useI18n()
 const ui = useUiStore()
 const models = useModelsStore()
@@ -54,9 +54,9 @@ function go(action: () => void) {
         </i18n-t>
 
         <div class="rounded-lg border border-muted bg-default/50 p-3">
-          <p class="mb-1.5 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+          <SectionLabel as="p" class="mb-1.5">
             {{ t('providers.presetMismatch.unavailable') }}
-          </p>
+          </SectionLabel>
           <div class="flex flex-wrap gap-1.5">
             <UBadge
               v-for="label in unavailableLabels"

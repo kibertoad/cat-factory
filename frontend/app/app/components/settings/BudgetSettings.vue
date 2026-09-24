@@ -5,7 +5,7 @@
 // operator sets a hard cap env var, the account/user input cannot exceed it and the cap is
 // shown here. See docs/initiatives/tiered-budgets.md.
 import { computed, reactive, ref, watch, type Ref } from 'vue'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const { t, n } = useI18n()
 const toast = useToast()
 const { present } = usePipelineErrorToast()
@@ -133,9 +133,9 @@ function saveUser() {
       </h3>
       <div class="grid grid-cols-2 gap-3">
         <label class="block">
-          <span class="mb-1 block text-3xs uppercase tracking-wide text-dimmed">
+          <SectionLabel as="span" class="mb-1 block">
             {{ t('settings.workspaceSettings.budget.monthlyLimit') }}
-          </span>
+          </SectionLabel>
           <UInput
             v-model="wsDraft.spendMonthlyLimit"
             type="number"
@@ -145,9 +145,9 @@ function saveUser() {
           />
         </label>
         <label class="block">
-          <span class="mb-1 block text-3xs uppercase tracking-wide text-dimmed">
+          <SectionLabel as="span" class="mb-1 block">
             {{ t('settings.workspaceSettings.budget.currency') }}
-          </span>
+          </SectionLabel>
           <UInput
             v-model="wsDraft.spendCurrency"
             placeholder="EUR"
@@ -187,9 +187,9 @@ function saveUser() {
         {{ t('settings.workspaceSettings.budget.accountBody') }}
       </p>
       <label class="block">
-        <span class="mb-1 block text-3xs uppercase tracking-wide text-dimmed">
+        <SectionLabel as="span" class="mb-1 block">
           {{ t('settings.workspaceSettings.budget.monthlyLimit') }}
-        </span>
+        </SectionLabel>
         <UInput
           v-model="accountDraft"
           type="number"
@@ -242,9 +242,9 @@ function saveUser() {
         {{ t('settings.workspaceSettings.budget.userBody') }}
       </p>
       <label class="block">
-        <span class="mb-1 block text-3xs uppercase tracking-wide text-dimmed">
+        <SectionLabel as="span" class="mb-1 block">
           {{ t('settings.workspaceSettings.budget.monthlyLimit') }}
-        </span>
+        </SectionLabel>
         <UInput
           v-model="userDraft"
           type="number"

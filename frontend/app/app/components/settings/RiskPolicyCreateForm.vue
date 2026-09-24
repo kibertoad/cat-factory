@@ -10,7 +10,7 @@ import {
   blankRiskPolicyDraft,
   forkGatingFromDraft,
 } from '~/utils/riskPolicyDraft'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const props = defineProps<{ busy: boolean }>()
 
 const emit = defineEmits<{ create: [input: CreateRiskPolicyInput] }>()
@@ -56,14 +56,14 @@ function submit() {
 
 <template>
   <div class="rounded-lg border border-dashed border-muted p-3">
-    <p class="mb-2 text-2xs font-semibold uppercase tracking-wide text-muted">
+    <SectionLabel as="p" class="mb-2">
       {{ t('settings.riskPolicy.newPreset') }}
-    </p>
+    </SectionLabel>
     <div class="flex flex-wrap items-end gap-3">
       <label class="block min-w-40 flex-1">
-        <span class="mb-1 block text-3xs uppercase tracking-wide text-dimmed">
+        <SectionLabel as="span" class="mb-1 block">
           {{ t('settings.riskPolicy.create.name') }}
-        </span>
+        </SectionLabel>
         <UInput
           v-model="draft.name"
           size="sm"
@@ -72,9 +72,9 @@ function submit() {
         />
       </label>
       <label class="block w-20">
-        <span class="mb-1 block text-3xs uppercase tracking-wide text-dimmed">
+        <SectionLabel as="span" class="mb-1 block">
           {{ t('settings.riskPolicy.create.complexity') }}
-        </span>
+        </SectionLabel>
         <UInput
           v-model.number="draft.maxComplexity"
           type="number"
@@ -85,9 +85,9 @@ function submit() {
         />
       </label>
       <label class="block w-20">
-        <span class="mb-1 block text-3xs uppercase tracking-wide text-dimmed">
+        <SectionLabel as="span" class="mb-1 block">
           {{ t('settings.riskPolicy.create.risk') }}
-        </span>
+        </SectionLabel>
         <UInput
           v-model.number="draft.maxRisk"
           type="number"
@@ -98,9 +98,9 @@ function submit() {
         />
       </label>
       <label class="block w-20">
-        <span class="mb-1 block text-3xs uppercase tracking-wide text-dimmed">
+        <SectionLabel as="span" class="mb-1 block">
           {{ t('settings.riskPolicy.create.impact') }}
-        </span>
+        </SectionLabel>
         <UInput
           v-model.number="draft.maxImpact"
           type="number"
@@ -111,15 +111,15 @@ function submit() {
         />
       </label>
       <label class="block w-20">
-        <span class="mb-1 block text-3xs uppercase tracking-wide text-dimmed">
+        <SectionLabel as="span" class="mb-1 block">
           {{ t('settings.riskPolicy.create.ciFix') }}
-        </span>
+        </SectionLabel>
         <UInput v-model.number="draft.ciMaxAttempts" type="number" :min="0" :max="50" size="sm" />
       </label>
       <label class="block w-20">
-        <span class="mb-1 block text-3xs uppercase tracking-wide text-dimmed">
+        <SectionLabel as="span" class="mb-1 block">
           {{ t('settings.riskPolicy.create.reqIter') }}
-        </span>
+        </SectionLabel>
         <UInput
           v-model.number="draft.maxRequirementIterations"
           type="number"
@@ -129,9 +129,9 @@ function submit() {
         />
       </label>
       <label class="block w-20">
-        <span class="mb-1 block text-3xs uppercase tracking-wide text-dimmed">
+        <SectionLabel as="span" class="mb-1 block">
           {{ t('settings.riskPolicy.create.companionRework') }}
-        </span>
+        </SectionLabel>
         <UInput
           v-model.number="draft.companionMaxReworks"
           type="number"
@@ -141,9 +141,9 @@ function submit() {
         />
       </label>
       <label class="block w-32">
-        <span class="mb-1 block text-3xs uppercase tracking-wide text-dimmed">
+        <SectionLabel as="span" class="mb-1 block">
           {{ t('settings.riskPolicy.create.autoPass') }}
-        </span>
+        </SectionLabel>
         <USelect
           v-model="draft.maxRequirementConcernAllowed"
           :items="concernOptions"

@@ -21,7 +21,7 @@ import {
 import RepoTreeBrowser from '~/components/github/RepoTreeBrowser.vue'
 import VcsConnectSurfaces from '~/components/vcs/VcsConnectSurfaces.vue'
 import { appInstallationManageUrl, newRepoUrl, VCS_PROVIDER_LABELS } from '~/utils/vcs'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const ui = useUiStore()
 const bootstrap = useBootstrapStore()
 const agentRuns = useAgentRunsStore()
@@ -648,9 +648,9 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
 
         <!-- launch -->
         <section class="space-y-4">
-          <h3 class="text-2xs font-semibold uppercase tracking-wide text-muted">
+          <SectionLabel as="h3">
             {{ t('bootstrap.section.newRepo') }}
-          </h3>
+          </SectionLabel>
 
           <UFormField :label="t('bootstrap.target.label')" required>
             <URadioGroup v-model="target" :items="targetItems" />
@@ -912,9 +912,9 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
 
         <!-- recent jobs -->
         <section v-if="agentRuns.bootstrapJobs.length" class="space-y-2">
-          <h3 class="text-2xs font-semibold uppercase tracking-wide text-muted">
+          <SectionLabel as="h3">
             {{ t('bootstrap.recent.title') }}
-          </h3>
+          </SectionLabel>
           <div
             v-for="job in agentRuns.bootstrapJobs.slice(0, 5)"
             :key="job.id"
@@ -963,9 +963,9 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
         <!-- reference architecture management -->
         <section class="space-y-3">
           <div class="flex items-center justify-between">
-            <h3 class="text-2xs font-semibold uppercase tracking-wide text-muted">
+            <SectionLabel as="h3">
               {{ t('bootstrap.arch.title') }}
-            </h3>
+            </SectionLabel>
             <UButton
               size="xs"
               color="neutral"

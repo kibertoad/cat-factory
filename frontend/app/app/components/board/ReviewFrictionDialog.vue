@@ -6,7 +6,7 @@
 // flag); the hard `blocked` tier does not. Driven by `ui.reviewFrictionContext`, mounted in
 // pages/index.vue. See backend/docs/review-debt-friction.md.
 import { computed } from 'vue'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const { t } = useI18n()
 const ui = useUiStore()
 
@@ -84,9 +84,9 @@ function createAnyway() {
         <p class="text-sm text-toned">{{ body }}</p>
 
         <div class="rounded-lg border border-muted bg-default/50 p-2">
-          <p class="mb-1.5 px-1 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+          <SectionLabel as="p" class="mb-1.5 px-1">
             {{ t('errors.reviewFriction.waitingHeading') }}
-          </p>
+          </SectionLabel>
           <ul class="space-y-1">
             <li v-for="item in ctx.debt" :key="item.blockId">
               <button

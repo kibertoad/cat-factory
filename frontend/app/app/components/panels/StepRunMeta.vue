@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import type { PipelineStep } from '~/types/execution'
 import { useStepTimer } from '~/composables/useStepTimer'
 import StepModelActivity from '~/components/observability/StepModelActivity.vue'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 // Shared run-metadata + observability block for the step-backed result windows
 // (the CI/conflicts gate, the tester report). It carries the facts every step has in
 // common — step position, live duration, model, run id, and the LLM model-activity
@@ -57,18 +57,18 @@ async function copyRunId() {
 <template>
   <div class="flex flex-col gap-4">
     <div v-if="stepNumber && totalSteps">
-      <h4 class="mb-1 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+      <SectionLabel as="h4" class="mb-1">
         {{ t('panels.stepMeta.step') }}
-      </h4>
+      </SectionLabel>
       <p class="text-xs text-toned">
         {{ t('panels.stepMeta.stepOf', { number: stepNumber, total: totalSteps }) }}
       </p>
     </div>
 
     <div v-if="durationLabel">
-      <h4 class="mb-1 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+      <SectionLabel as="h4" class="mb-1">
         {{ t('panels.stepMeta.duration') }}
-      </h4>
+      </SectionLabel>
       <p class="flex items-center gap-1.5 text-xs tabular-nums text-toned">
         <UIcon
           v-if="isRunning"
@@ -86,9 +86,9 @@ async function copyRunId() {
          the elapsed clock above — a long, quiet phase keeps this small while elapsed climbs, so a
          genuinely-active-but-quiet run reads apart from a wedged one. Only while actively running. -->
     <div v-if="isRunning && activityAgoLabel" data-testid="step-activity">
-      <h4 class="mb-1 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+      <SectionLabel as="h4" class="mb-1">
         {{ t('panels.stepMeta.activity') }}
-      </h4>
+      </SectionLabel>
       <p class="flex items-center gap-1.5 text-xs tabular-nums text-toned">
         <span class="h-1.5 w-1.5 rounded-full bg-app-success-400" />
         {{ t('panels.stepMeta.activityAgo', { duration: activityAgoLabel }) }}
@@ -96,32 +96,32 @@ async function copyRunId() {
     </div>
 
     <div v-if="formatClock(step.startedAt)">
-      <h4 class="mb-1 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+      <SectionLabel as="h4" class="mb-1">
         {{ t('panels.stepMeta.started') }}
-      </h4>
+      </SectionLabel>
       <p class="text-xs text-toned">{{ formatClock(step.startedAt) }}</p>
     </div>
 
     <div v-if="formatClock(step.finishedAt)">
-      <h4 class="mb-1 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+      <SectionLabel as="h4" class="mb-1">
         {{ t('panels.stepMeta.finished') }}
-      </h4>
+      </SectionLabel>
       <p class="text-xs text-toned">{{ formatClock(step.finishedAt) }}</p>
     </div>
 
     <div v-if="step.model">
-      <h4 class="mb-1 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+      <SectionLabel as="h4" class="mb-1">
         {{ t('panels.stepMeta.model') }}
-      </h4>
+      </SectionLabel>
       <p class="break-all text-xs text-toned" :title="step.model">
         {{ modelLabel ?? step.model }}
       </p>
     </div>
 
     <div v-if="promptVariant">
-      <h4 class="mb-1 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+      <SectionLabel as="h4" class="mb-1">
         {{ t('panels.stepMeta.promptVariant') }}
-      </h4>
+      </SectionLabel>
       <p class="break-all text-xs text-toned">{{ promptVariant.label }}</p>
       <p v-if="promptVariant.note" class="mt-0.5 text-2xs text-app-warning-400/80">
         {{ promptVariant.note }}
@@ -129,9 +129,9 @@ async function copyRunId() {
     </div>
 
     <div v-if="runId">
-      <h4 class="mb-1 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+      <SectionLabel as="h4" class="mb-1">
         {{ t('panels.stepMeta.run') }}
-      </h4>
+      </SectionLabel>
       <p
         class="cursor-pointer break-all font-mono text-xs text-muted hover:text-default"
         :title="t('panels.stepMeta.clickToCopy', { id: runId })"

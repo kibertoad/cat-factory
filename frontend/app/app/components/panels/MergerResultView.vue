@@ -11,7 +11,7 @@ import type { ChangeClass, MergeAxis, MergeDecision, WorkspaceRole } from '@cat-
 import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import MarkdownProse from '~/components/common/MarkdownProse.vue'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const board = useBoardStore()
 const execution = useExecutionStore()
 const agents = useAgentsStore()
@@ -223,9 +223,9 @@ const reasonText = computed(() => {
 
           <!-- Scores vs the resolved preset's ceilings. -->
           <template v-if="axes.length">
-            <h3 class="mb-2 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+            <SectionLabel as="h3" class="mb-2">
               {{ t('panels.mergerResult.scores') }}
-            </h3>
+            </SectionLabel>
             <div class="space-y-2 rounded-lg border border-default bg-app-950/40 p-3">
               <div v-for="axis in axes" :key="axis.key" class="flex items-center gap-2">
                 <span class="w-20 shrink-0 text-xs text-muted">{{ axis.label }}</span>
@@ -255,9 +255,9 @@ const reasonText = computed(() => {
 
           <!-- The agent's prose justification. -->
           <template v-if="decision.assessment?.rationale">
-            <h3 class="mb-2 mt-4 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+            <SectionLabel as="h3" class="mb-2 mt-4">
               {{ t('panels.mergerResult.rationale') }}
-            </h3>
+            </SectionLabel>
             <MarkdownProse
               :text="decision.assessment.rationale"
               class="text-sm leading-relaxed text-toned"

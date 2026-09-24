@@ -11,7 +11,7 @@ import { computed, ref, watch } from 'vue'
 import type { OpenRouterModelMeta } from '~/types/openrouter'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const { t } = useI18n()
 const ui = useUiStore()
 const workspace = useWorkspaceStore()
@@ -237,9 +237,9 @@ function manageKeys() {
           v-if="!keyConnected"
           class="space-y-3 rounded-lg border border-muted bg-default/60 p-4"
         >
-          <h4 class="text-xs font-semibold uppercase tracking-wide text-dimmed">
+          <SectionLabel as="h4">
             {{ t('settings.openRouterCatalog.connectHeading') }}
-          </h4>
+          </SectionLabel>
           <ol class="list-decimal space-y-1 ps-5 text-sm text-toned">
             <li>
               <i18n-t keypath="settings.openRouterCatalog.step1" tag="span" scope="global">

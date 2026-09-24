@@ -10,7 +10,7 @@ import {
   isRevisionConflict,
   saveIntent,
 } from '~/components/pipeline/AgentPromptEditor.logic'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 // The per-workspace system-prompt editor for ONE agent kind, opened from the pipeline builder
 // (where the kinds are actually chosen). It edits the SHIPPED track prompt only: the platform
 // re-applies its own directives on top of whatever is saved here, so they cannot be deleted by
@@ -222,9 +222,9 @@ function revisionLabel(revision: AgentPromptRevision): string {
           v-if="directives && showDirectives"
           class="rounded-md border border-default bg-app-950/60 p-2"
         >
-          <h4 class="mb-1 text-2xs font-semibold uppercase tracking-wide text-muted">
+          <SectionLabel as="h4" class="mb-1">
             {{ t('agentPrompt.appendedHeading') }}
-          </h4>
+          </SectionLabel>
           <pre
             class="max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-2xs text-toned"
             >{{ directives.trim() }}</pre>
@@ -284,18 +284,18 @@ function revisionLabel(revision: AgentPromptRevision): string {
         </div>
 
         <div v-if="showBuiltin" class="rounded-md border border-default bg-app-950/60 p-2">
-          <h4 class="mb-1 text-2xs font-semibold uppercase tracking-wide text-muted">
+          <SectionLabel as="h4" class="mb-1">
             {{ t('agentPrompt.builtinHeading') }}
-          </h4>
+          </SectionLabel>
           <pre
             class="max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-2xs text-toned"
             >{{ detail.builtinText }}</pre>
         </div>
 
         <div>
-          <h4 class="mb-1 text-2xs font-semibold uppercase tracking-wide text-muted">
+          <SectionLabel as="h4" class="mb-1">
             {{ t('agentPrompt.historyHeading') }}
-          </h4>
+          </SectionLabel>
           <p v-if="!detail.revisions.length" class="text-2xs text-dimmed">
             {{ t('agentPrompt.historyEmpty') }}
           </p>

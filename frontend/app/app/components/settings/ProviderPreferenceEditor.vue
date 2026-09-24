@@ -26,7 +26,7 @@ import {
   moveFlavor,
   subscriptionOverridesOrder,
 } from '~/components/settings/ProviderPreferenceEditor.logic'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const props = defineProps<{
   /** The preset's stored order; empty/absent ⇒ the deployment's default order. */
   modelValue: ModelFlavor[] | undefined
@@ -90,9 +90,9 @@ function reset() {
 <template>
   <div>
     <div class="mb-1 flex items-start justify-between gap-3">
-      <span class="text-2xs font-semibold uppercase tracking-wide text-muted">
+      <SectionLabel as="span">
         {{ t('settings.modelConfiguration.routeOrder.label') }}
-      </span>
+      </SectionLabel>
       <UButton
         v-if="isCustom"
         size="xs"

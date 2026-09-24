@@ -6,7 +6,7 @@ import {
   externalRunHref,
 } from './StepDelegatedStatus.logic'
 import type { PipelineStep } from '~/types/execution'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 // The EXTERNAL work a delegated step dispatched: which registered executor is running it, what it
 // is doing, and the link to that system's own logs, which is the affordance everything else here
 // exists to frame.
@@ -98,9 +98,9 @@ const { copy: copyText } = useCopyToClipboard()
       <!-- The PRIMARY affordance: the executor's own logs. It is the only place the detail of
            what happened exists, which is why a failed delegated step without it is a dead end. -->
       <div v-if="record.url" class="mt-2 flex items-center gap-2">
-        <dt class="shrink-0 text-2xs uppercase tracking-wide text-dimmed">
+        <SectionLabel as="dt" class="shrink-0">
           {{ t('panels.stepMeta.delegated.run') }}
-        </dt>
+        </SectionLabel>
         <!-- Linked only when the executor's URL is `http(s)`. Anything else is shown as the text
              it is: refusing to follow it is right, and hiding it would report a run that named
              no link at all. -->
@@ -132,9 +132,9 @@ const { copy: copyText } = useCopyToClipboard()
            request. Rendered here because the platform holds nothing else about that run's
            product. -->
       <div v-if="landedBranch" class="mt-2 flex items-center gap-2">
-        <dt class="shrink-0 text-2xs uppercase tracking-wide text-dimmed">
+        <SectionLabel as="dt" class="shrink-0">
           {{ t('panels.stepMeta.delegated.branch') }}
-        </dt>
+        </SectionLabel>
         <dd class="truncate font-mono text-2xs text-toned">{{ landedBranch }}</dd>
       </div>
 
@@ -153,9 +153,9 @@ const { copy: copyText } = useCopyToClipboard()
     <!-- Earlier attempts. Kept across a re-run on purpose: the previous run's logs are the
          evidence for why this step is being run again, and the platform holds nothing else. -->
     <div v-if="priorAttempts.length" class="mt-3">
-      <div class="text-2xs uppercase tracking-wide text-dimmed">
+      <SectionLabel>
         {{ t('panels.stepMeta.delegated.earlierAttempts') }}
-      </div>
+      </SectionLabel>
       <ul class="mt-1 space-y-1">
         <li
           v-for="(attempt, index) in priorAttempts"

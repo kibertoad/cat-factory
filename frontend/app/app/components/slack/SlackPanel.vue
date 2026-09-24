@@ -16,7 +16,7 @@ import {
 } from '~/utils/slackMemberMapping'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const ui = useUiStore()
 const slack = useSlackStore()
 const toast = useToast()
@@ -224,9 +224,9 @@ async function saveMapping() {
             {{ t('slack.connect.addToSlack') }}
           </UButton>
           <div class="space-y-1">
-            <span class="block text-3xs uppercase tracking-wide text-dimmed">
+            <SectionLabel as="span" class="block">
               {{ t('slack.connect.orPasteToken') }}
-            </span>
+            </SectionLabel>
             <div class="flex gap-2">
               <SecretInput v-model="tokenInput" size="sm" class="flex-1" placeholder="xoxb-…" />
               <UButton
@@ -267,9 +267,9 @@ async function saveMapping() {
 
           <!-- routing -->
           <div class="space-y-3">
-            <p class="text-2xs font-semibold uppercase tracking-wide text-muted">
+            <SectionLabel as="p">
               {{ t('slack.routing.heading') }}
-            </p>
+            </SectionLabel>
             <div
               v-for="row in ROUTABLE"
               :key="row.type"
@@ -311,9 +311,9 @@ async function saveMapping() {
 
           <!-- member mapping -->
           <div v-if="mentionsEnabled" class="space-y-2">
-            <p class="text-2xs font-semibold uppercase tracking-wide text-muted">
+            <SectionLabel as="p">
               {{ t('slack.members.heading') }}
-            </p>
+            </SectionLabel>
             <p class="text-2xs leading-snug text-dimmed">
               <i18n-t keypath="slack.members.hint" tag="span">
                 <template #product>

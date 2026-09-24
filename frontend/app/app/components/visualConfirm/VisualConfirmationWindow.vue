@@ -14,7 +14,7 @@ import ImageCompare from '~/components/media/ImageCompare.vue'
 import ArtifactLightbox from '~/components/media/ArtifactLightbox.vue'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import StepRunMeta from '~/components/panels/StepRunMeta.vue'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const board = useBoardStore()
 const execution = useExecutionStore()
 const visualConfirm = useVisualConfirmStore()
@@ -331,9 +331,9 @@ async function onFilePicked(e: Event) {
 
         <!-- Upload a reference for any view -->
         <section class="rounded-lg border border-default bg-default/60 p-3">
-          <h3 class="mb-2 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+          <SectionLabel as="h3" class="mb-2">
             {{ t('visualConfirm.upload.heading') }}
-          </h3>
+          </SectionLabel>
           <div class="flex flex-wrap items-center gap-2">
             <input
               v-model="uploadView"
@@ -364,9 +364,9 @@ async function onFilePicked(e: Event) {
 
         <!-- Request fix -->
         <section v-if="awaitingHuman" class="rounded-lg border border-default bg-default/60 p-3">
-          <h3 class="mb-2 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+          <SectionLabel as="h3" class="mb-2">
             {{ t('visualConfirm.requestFix.heading') }}
-          </h3>
+          </SectionLabel>
           <textarea
             v-model="globalFindings"
             rows="3"
@@ -396,9 +396,9 @@ async function onFilePicked(e: Event) {
           v-if="vc.rounds && vc.rounds.length"
           class="rounded-lg border border-default bg-default/60 p-3"
         >
-          <h3 class="mb-2 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+          <SectionLabel as="h3" class="mb-2">
             {{ t('visualConfirm.history.heading', { count: vc.attempts }, vc.attempts) }}
-          </h3>
+          </SectionLabel>
           <ol class="space-y-2">
             <li v-for="(r, i) in vc.rounds" :key="i" class="flex items-start gap-2 text-xs">
               <UIcon name="i-lucide-wrench" class="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted" />

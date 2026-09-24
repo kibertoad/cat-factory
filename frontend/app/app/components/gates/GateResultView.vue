@@ -13,7 +13,7 @@ import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 import AttemptEntryHeader from '~/components/panels/AttemptEntryHeader.vue'
 import GateFailingCheckList from '~/components/gates/GateFailingCheckList.vue'
 import CopyButton from '~/components/common/CopyButton.vue'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const board = useBoardStore()
 const execution = useExecutionStore()
 const { t } = useI18n()
@@ -283,9 +283,9 @@ const conflictVerdict = computed(() => {
 
             <!-- Freeform fix request: dispatch the fixer now with these instructions. -->
             <section v-if="status !== 'gave-up'" class="mt-4">
-              <h3 class="mb-1.5 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+              <SectionLabel as="h3" class="mb-1.5">
                 {{ t('gates.humanReview.requestFixHeading') }}
-              </h3>
+              </SectionLabel>
               <p class="mb-2 text-2xs leading-relaxed text-dimmed">
                 {{ t('gates.humanReview.requestFixDescription') }}
               </p>
@@ -316,9 +316,9 @@ const conflictVerdict = computed(() => {
 
           <!-- CI: failing checks -->
           <template v-else-if="isCi">
-            <h3 class="mb-2 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+            <SectionLabel as="h3" class="mb-2">
               {{ t('gates.ci.failingChecks') }}
-            </h3>
+            </SectionLabel>
             <GateFailingCheckList v-if="failingChecks.length" :checks="failingChecks" />
             <p v-else class="text-sm leading-relaxed text-toned">
               {{ gate.lastFailureSummary || t('gates.ci.failureFallback') }}
@@ -327,9 +327,9 @@ const conflictVerdict = computed(() => {
 
           <!-- Doc quality: the deterministic structural findings the gate raised -->
           <template v-else-if="isDocQuality">
-            <h3 class="mb-2 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+            <SectionLabel as="h3" class="mb-2">
               {{ t('gates.docQuality.findings') }}
-            </h3>
+            </SectionLabel>
             <div
               v-if="gate.lastFailureSummary"
               class="relative rounded-md border border-default bg-app-950/40 px-3 py-2"
@@ -356,9 +356,9 @@ const conflictVerdict = computed(() => {
 
           <!-- Conflicts: verdict + the resolver's account of what it left -->
           <template v-else>
-            <h3 class="mb-2 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+            <SectionLabel as="h3" class="mb-2">
               {{ t('gates.conflicts.mergeability') }}
-            </h3>
+            </SectionLabel>
             <div
               class="flex items-center gap-2 rounded-md border border-default bg-app-950/40 px-3 py-2"
             >
@@ -395,9 +395,9 @@ const conflictVerdict = computed(() => {
 
           <!-- Attempt history (both gates): what each helper run did and how it ended. -->
           <section v-if="attempts.length" class="mt-5">
-            <h3 class="mb-2 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+            <SectionLabel as="h3" class="mb-2">
               {{ t('gates.attemptsHeading', { helper: helperMeta.label }) }}
-            </h3>
+            </SectionLabel>
             <ol class="space-y-2">
               <li
                 v-for="a in attempts"
@@ -454,9 +454,9 @@ const conflictVerdict = computed(() => {
         class="hidden w-60 shrink-0 flex-col gap-4 border-s border-default bg-default/50 px-4 py-4 lg:flex"
       >
         <div v-if="gate">
-          <h4 class="mb-2 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+          <SectionLabel as="h4" class="mb-2">
             {{ t('gates.sidebar.state') }}
-          </h4>
+          </SectionLabel>
           <div class="flex items-center gap-2 text-sm">
             <UIcon
               :name="STATUS_META[status].icon"
@@ -468,9 +468,9 @@ const conflictVerdict = computed(() => {
         </div>
 
         <div v-if="gate">
-          <h4 class="mb-1 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+          <SectionLabel as="h4" class="mb-1">
             {{ helperMeta.label }}
-          </h4>
+          </SectionLabel>
           <p class="text-xs text-toned">
             <!-- The human-review gate's budget is effectively unbounded (it waits for a human
                      indefinitely), so render a plain round count rather than "0/9007199254740991". -->
@@ -496,9 +496,9 @@ const conflictVerdict = computed(() => {
         </div>
 
         <div v-if="shortSha">
-          <h4 class="mb-1 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+          <SectionLabel as="h4" class="mb-1">
             {{ t('gates.sidebar.gatedCommit') }}
-          </h4>
+          </SectionLabel>
           <p class="font-mono text-xs text-toned">{{ shortSha }}</p>
         </div>
 

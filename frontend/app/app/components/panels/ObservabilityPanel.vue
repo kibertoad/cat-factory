@@ -29,7 +29,7 @@ import {
 import OutcomeFilterChips from '~/components/observability/OutcomeFilterChips.vue'
 import RunFailureSummary from '~/components/observability/RunFailureSummary.vue'
 import ToolCallList from '~/components/observability/ToolCallList.vue'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 /** No run selected: the same empty, NOT-truncated trajectory the store answers with. */
 const EMPTY_TRAJECTORY: RunToolCallTrajectory = Object.freeze({
   toolCalls: Object.freeze([]) as never,
@@ -599,15 +599,15 @@ function exportJson() {
             <section class="rounded-xl border border-default bg-default/50 p-4">
               <dl class="grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-4">
                 <div>
-                  <dt class="text-2xs uppercase tracking-wide text-dimmed">
+                  <SectionLabel as="dt">
                     {{ t('observability.summary.calls') }}
-                  </dt>
+                  </SectionLabel>
                   <dd class="mt-0.5 tabular-nums text-default">{{ totals.calls }}</dd>
                 </div>
                 <div v-if="showCost || !phaseRollup.available">
-                  <dt class="text-2xs uppercase tracking-wide text-dimmed">
+                  <SectionLabel as="dt">
                     {{ t('observability.summary.cost') }}
-                  </dt>
+                  </SectionLabel>
                   <dd class="mt-0.5 tabular-nums text-default">
                     {{ runCost ?? '—' }}
                     <span class="mt-0.5 block text-2xs text-dimmed">
@@ -616,9 +616,9 @@ function exportJson() {
                   </dd>
                 </div>
                 <div>
-                  <dt class="text-2xs uppercase tracking-wide text-dimmed">
+                  <SectionLabel as="dt">
                     {{ t('observability.summary.tokensInOut') }}
-                  </dt>
+                  </SectionLabel>
                   <dd class="mt-0.5 tabular-nums text-default">
                     <span :title="t('observability.summary.inputTokensHint')">
                       {{ formatTokens(totals.inputTokens) }} /
@@ -665,9 +665,9 @@ function exportJson() {
                   </dd>
                 </div>
                 <div>
-                  <dt class="text-2xs uppercase tracking-wide text-dimmed">
+                  <SectionLabel as="dt">
                     {{ t('observability.summary.transportOverhead') }}
-                  </dt>
+                  </SectionLabel>
                   <dd class="mt-0.5 tabular-nums text-default">
                     <span v-if="totals.transportPct !== null">
                       {{ totals.transportPct }}% · {{ formatMs(totals.overheadMs) }}
@@ -676,9 +676,9 @@ function exportJson() {
                   </dd>
                 </div>
                 <div>
-                  <dt class="text-2xs uppercase tracking-wide text-dimmed">
+                  <SectionLabel as="dt">
                     {{ t('observability.summary.modelExecution') }}
-                  </dt>
+                  </SectionLabel>
                   <dd class="mt-0.5 tabular-nums text-default">
                     {{ formatMs(totals.upstreamMs) }}
                   </dd>
@@ -718,9 +718,9 @@ function exportJson() {
               class="rounded-xl border border-default bg-default/50 p-4"
             >
               <div class="flex items-baseline gap-2">
-                <h2 class="text-2xs uppercase tracking-wide text-dimmed">
+                <SectionLabel as="h2">
                   {{ t('observability.phase.title') }}
-                </h2>
+                </SectionLabel>
                 <span v-if="phaseRollup.available" class="text-2xs text-app-600">
                   {{ t('observability.phase.subtitle') }}
                 </span>
@@ -838,9 +838,9 @@ function exportJson() {
             <!-- per-call list, narrowable by outcome -->
             <template v-else>
               <div class="flex flex-wrap items-center justify-between gap-2">
-                <h2 class="text-2xs uppercase tracking-wide text-dimmed">
+                <SectionLabel as="h2">
                   {{ t('observability.callsTitle') }}
-                </h2>
+                </SectionLabel>
                 <OutcomeFilterChips v-model="callFilter" :options="callFilterOptions" />
               </div>
 
@@ -977,9 +977,7 @@ function exportJson() {
                       </span>
                     </div>
                     <div>
-                      <div
-                        class="mb-1 flex items-center gap-2 text-2xs uppercase tracking-wide text-dimmed"
-                      >
+                      <SectionLabel class="mb-1 flex items-center gap-2">
                         <span>{{ t('observability.call.prompt') }}</span>
                         <span
                           v-if="c.promptPrefixCount > 0"
@@ -991,23 +989,23 @@ function exportJson() {
                             })
                           }}
                         </span>
-                      </div>
+                      </SectionLabel>
                       <pre
                         class="max-h-72 overflow-auto rounded-lg bg-app-950/70 p-3 text-2xs leading-relaxed text-toned"
                         >{{ prettyPrompt(c.promptText) }}</pre>
                     </div>
                     <div>
-                      <div class="mb-1 text-2xs uppercase tracking-wide text-dimmed">
+                      <SectionLabel class="mb-1">
                         {{ t('observability.call.response') }}
-                      </div>
+                      </SectionLabel>
                       <pre
                         class="max-h-72 overflow-auto rounded-lg bg-app-950/70 p-3 text-2xs leading-relaxed text-toned"
                         >{{ c.responseText || '—' }}</pre>
                     </div>
                     <div v-if="c.reasoningText">
-                      <div class="mb-1 text-2xs uppercase tracking-wide text-dimmed">
+                      <SectionLabel class="mb-1">
                         {{ t('observability.call.reasoning') }}
-                      </div>
+                      </SectionLabel>
                       <pre
                         class="max-h-72 overflow-auto rounded-lg bg-app-950/70 p-3 text-2xs leading-relaxed text-muted"
                         >{{ c.reasoningText }}</pre>
@@ -1120,25 +1118,25 @@ function exportJson() {
 
                 <div v-if="expandedCtx[s.id]" class="border-t border-default px-4 py-3 space-y-3">
                   <div>
-                    <div class="mb-1 text-2xs uppercase tracking-wide text-dimmed">
+                    <SectionLabel class="mb-1">
                       {{ t('observability.context.systemPrompt') }}
-                    </div>
+                    </SectionLabel>
                     <pre
                       class="max-h-72 overflow-auto rounded-lg bg-app-950/70 p-3 text-2xs leading-relaxed text-toned"
                       >{{ s.systemPrompt || '—' }}</pre>
                   </div>
                   <div>
-                    <div class="mb-1 text-2xs uppercase tracking-wide text-dimmed">
+                    <SectionLabel class="mb-1">
                       {{ t('observability.context.userPrompt') }}
-                    </div>
+                    </SectionLabel>
                     <pre
                       class="max-h-72 overflow-auto rounded-lg bg-app-950/70 p-3 text-2xs leading-relaxed text-toned"
                       >{{ s.userPrompt || '—' }}</pre>
                   </div>
                   <div v-if="s.fragments.length">
-                    <div class="mb-1 text-2xs uppercase tracking-wide text-dimmed">
+                    <SectionLabel class="mb-1">
                       {{ t('observability.context.bestPracticeFragments') }}
-                    </div>
+                    </SectionLabel>
                     <div
                       v-for="f in s.fragments"
                       :key="f.id"
@@ -1151,9 +1149,9 @@ function exportJson() {
                     </div>
                   </div>
                   <div v-if="s.contextFiles.length">
-                    <div class="mb-1 text-2xs uppercase tracking-wide text-dimmed">
+                    <SectionLabel class="mb-1">
                       {{ t('observability.context.injectedFiles') }}
-                    </div>
+                    </SectionLabel>
                     <div
                       v-for="file in s.contextFiles"
                       :key="file.path"
@@ -1169,9 +1167,9 @@ function exportJson() {
                     </div>
                   </div>
                   <div>
-                    <div class="mb-1 text-2xs uppercase tracking-wide text-dimmed">
+                    <SectionLabel class="mb-1">
                       {{ t('observability.context.details') }}
-                    </div>
+                    </SectionLabel>
                     <pre
                       class="max-h-48 overflow-auto rounded-lg bg-app-950/70 p-3 text-2xs leading-relaxed text-muted"
                       >{{ prettyExtras(s.extras) }}</pre>
@@ -1187,9 +1185,9 @@ function exportJson() {
               v-if="searchAvailability"
               class="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-default bg-default/50 px-4 py-3 text-sm"
             >
-              <span class="text-2xs uppercase tracking-wide text-dimmed">
+              <SectionLabel as="span">
                 {{ t('observability.webSearch') }}
-              </span>
+              </SectionLabel>
               <span
                 class="inline-flex items-center gap-1.5"
                 :class="searchAvailability.available ? 'text-app-success-300' : 'text-muted'"
@@ -1225,9 +1223,9 @@ function exportJson() {
             </p>
 
             <div v-else>
-              <div class="mb-2 text-2xs uppercase tracking-wide text-dimmed">
+              <SectionLabel class="mb-2">
                 {{ t('observability.search.queriesTitle') }}
-              </div>
+              </SectionLabel>
               <ul class="space-y-2">
                 <li
                   v-for="q in searchQueries"

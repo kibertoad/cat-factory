@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { DropdownMenuItem } from '@nuxt/ui'
 import type { CloudProvider } from '~/types/domain'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 // Account + board switching. Picks the active account (personal / org) and the
 // active board within it, and manages boards (new / rename / delete). The account
 // row is shown only when accounts exist (auth on); in dev it falls back to a plain
@@ -265,9 +265,9 @@ async function submitPrompt() {
           :name="accounts.activeAccount?.type === 'org' ? 'i-lucide-users' : 'i-lucide-user'"
           class="h-3.5 w-3.5 shrink-0 text-muted"
         />
-        <span class="truncate text-2xs font-medium uppercase tracking-wide text-muted">
+        <SectionLabel as="span" class="truncate">
           {{ accounts.activeAccount?.name ?? t('layout.boardSwitcher.accountFallback') }}
-        </span>
+        </SectionLabel>
         <UIcon name="i-lucide-chevrons-up-down" class="ms-auto h-3.5 w-3.5 shrink-0 text-app-600" />
       </button>
     </UDropdownMenu>

@@ -9,7 +9,7 @@
 // is no suggestion at all as its own state, because "the two repositories agreed on everything"
 // and "the analysis never ran" would otherwise look identical and lead to opposite conclusions.
 import type { AdoptionSource, BootstrapJob } from '~/types/domain'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const props = defineProps<{ job: BootstrapJob }>()
 const emit = defineEmits<{ close: [] }>()
 
@@ -289,9 +289,9 @@ watch(open, (isOpen) => {
               <div class="flex items-start justify-between gap-3">
                 <div>
                   <p class="text-sm font-medium text-app-100">{{ decision.title }}</p>
-                  <p class="text-2xs uppercase tracking-wide text-dimmed">
+                  <SectionLabel as="p">
                     {{ t(`bootstrap.adoption.area.${decision.area}`) }}
-                  </p>
+                  </SectionLabel>
                 </div>
                 <UBadge v-if="!touched.has(decision.id)" color="warning" variant="subtle" size="sm">
                   {{ t('bootstrap.adoption.needsYou') }}

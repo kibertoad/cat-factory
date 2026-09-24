@@ -34,7 +34,7 @@ import {
   toggleSubmissionClass,
   type RoleRuleSelection,
 } from '~/components/settings/MergeRolePolicyEditor.logic'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const props = defineProps<{
   /** The preset's per-role narrowing map; a role with no entry is exactly the base rules. */
   classRulesByRole: ClassRulesByRole
@@ -162,9 +162,9 @@ function setSubmissionClass(
 <template>
   <div data-testid="merge-role-policy" class="space-y-2">
     <div>
-      <span class="block text-3xs uppercase tracking-wide text-dimmed">
+      <SectionLabel as="span" class="block">
         {{ t('settings.riskPolicy.roleRules.heading') }}
-      </span>
+      </SectionLabel>
       <p class="mt-0.5 text-2xs leading-snug text-dimmed">
         {{ t('settings.riskPolicy.roleRules.help') }}
       </p>

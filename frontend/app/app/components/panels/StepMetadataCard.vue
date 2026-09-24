@@ -13,7 +13,7 @@ import StepContainerStatus from '~/components/panels/StepContainerStatus.vue'
 import StepDelegatedStatus from '~/components/panels/StepDelegatedStatus.vue'
 import CopyButton from '~/components/common/CopyButton.vue'
 import MarkdownProse from '~/components/common/MarkdownProse.vue'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 // The step's metadata card body: state/timing/model/run id, the container cold-boot
 // phase, the live subtask breakdown, the LLM observability rollup, the applied
 // standards, any raised decision/approval gate, and the companion verdict sequence.
@@ -184,9 +184,9 @@ async function copyRunId() {
   <div>
     <dl class="grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-3">
       <div>
-        <dt class="text-2xs uppercase tracking-wide text-dimmed">
+        <SectionLabel as="dt">
           {{ t('panels.stepMeta.stateLabel') }}
-        </dt>
+        </SectionLabel>
         <dd class="mt-0.5 flex items-center gap-1.5 text-default">
           <UIcon
             v-if="runFailed && step.state === 'working'"
@@ -199,9 +199,9 @@ async function copyRunId() {
         </dd>
       </div>
       <div>
-        <dt class="text-2xs uppercase tracking-wide text-dimmed">
+        <SectionLabel as="dt">
           {{ t('panels.stepMeta.duration') }}
-        </dt>
+        </SectionLabel>
         <dd class="mt-0.5 flex items-center gap-1.5 tabular-nums text-default">
           <UIcon
             v-if="isRunning"
@@ -216,37 +216,37 @@ async function copyRunId() {
         </dd>
       </div>
       <div>
-        <dt class="text-2xs uppercase tracking-wide text-dimmed">
+        <SectionLabel as="dt">
           {{ t('panels.stepMeta.step') }}
-        </dt>
+        </SectionLabel>
         <dd class="mt-0.5 text-default">
           {{ t('panels.stepMeta.stepOf', { number: stepNumber, total: totalSteps }) }}
         </dd>
       </div>
       <div>
-        <dt class="text-2xs uppercase tracking-wide text-dimmed">
+        <SectionLabel as="dt">
           {{ t('panels.stepMeta.started') }}
-        </dt>
+        </SectionLabel>
         <dd class="mt-0.5 text-toned">{{ formatClock(step.startedAt) ?? '—' }}</dd>
       </div>
       <div>
-        <dt class="text-2xs uppercase tracking-wide text-dimmed">
+        <SectionLabel as="dt">
           {{ t('panels.stepMeta.finished') }}
-        </dt>
+        </SectionLabel>
         <dd class="mt-0.5 text-toned">{{ formatClock(step.finishedAt) ?? '—' }}</dd>
       </div>
       <div>
-        <dt class="text-2xs uppercase tracking-wide text-dimmed">
+        <SectionLabel as="dt">
           {{ t('panels.stepMeta.model') }}
-        </dt>
+        </SectionLabel>
         <dd class="mt-0.5 truncate text-toned" :title="step.model">
           {{ modelLabel ?? t('panels.stepMeta.notRecorded') }}
         </dd>
       </div>
       <div v-if="promptVariant">
-        <dt class="text-2xs uppercase tracking-wide text-dimmed">
+        <SectionLabel as="dt">
           {{ t('panels.stepMeta.promptVariant') }}
-        </dt>
+        </SectionLabel>
         <dd class="mt-0.5 truncate text-toned">{{ promptVariant.label }}</dd>
         <dd v-if="promptVariant.note" class="mt-0.5 text-2xs text-app-warning-400/80">
           {{ promptVariant.note }}
@@ -254,9 +254,9 @@ async function copyRunId() {
       </div>
       <!-- The run id this step belongs to, surfaced for debugging (copyable). -->
       <div class="col-span-2 sm:col-span-3">
-        <dt class="text-2xs uppercase tracking-wide text-dimmed">
+        <SectionLabel as="dt">
           {{ t('panels.stepMeta.run') }}
-        </dt>
+        </SectionLabel>
         <dd
           class="mt-0.5 cursor-pointer truncate font-mono text-xs text-muted hover:text-default"
           :title="t('panels.stepMeta.clickToCopy', { id: step.runId ?? instanceId ?? '' })"
@@ -284,14 +284,14 @@ async function copyRunId() {
 
     <!-- live subtask breakdown -->
     <div v-if="step.subtasks && step.subtasks.total > 0" class="mt-4">
-      <div class="text-2xs uppercase tracking-wide text-dimmed">
+      <SectionLabel>
         {{
           t('panels.stepMeta.subtasks', {
             completed: step.subtasks.completed,
             total: step.subtasks.total,
           })
         }}
-      </div>
+      </SectionLabel>
       <div class="mt-1 h-1 overflow-hidden rounded-full bg-accented/60">
         <div
           class="h-full rounded-full bg-primary transition-all duration-500"
@@ -335,12 +335,9 @@ async function copyRunId() {
 
     <!-- standards (prompt fragments) folded into this step -->
     <div v-if="step.selectedFragmentIds && step.selectedFragmentIds.length" class="mt-4">
-      <div
-        class="text-2xs uppercase tracking-wide text-dimmed"
-        :title="t('panels.stepMeta.standardsAppliedHint')"
-      >
+      <SectionLabel :title="t('panels.stepMeta.standardsAppliedHint')">
         {{ t('panels.stepMeta.standardsApplied') }}
-      </div>
+      </SectionLabel>
       <div class="mt-1 flex flex-wrap gap-1">
         <UBadge
           v-for="id in step.selectedFragmentIds"
@@ -356,9 +353,9 @@ async function copyRunId() {
 
     <!-- decision raised on this step -->
     <div v-if="step.decision" class="mt-4">
-      <div class="text-2xs uppercase tracking-wide text-dimmed">
+      <SectionLabel>
         {{ t('panels.stepMeta.decision') }}
-      </div>
+      </SectionLabel>
       <p class="mt-0.5 text-sm text-default">{{ step.decision.question }}</p>
       <p
         v-if="step.decision.chosen"
@@ -374,9 +371,9 @@ async function copyRunId() {
 
     <!-- approval gate state -->
     <div v-if="step.approval" class="mt-4">
-      <div class="text-2xs uppercase tracking-wide text-dimmed">
+      <SectionLabel>
         {{ t('panels.stepMeta.approvalGate') }}
-      </div>
+      </SectionLabel>
       <p class="mt-0.5 text-sm text-default">
         {{ approvalStatusLabel }}
       </p>
@@ -385,9 +382,9 @@ async function copyRunId() {
     <!-- companion verdict + full correction sequence -->
     <div v-if="companionVerdicts.length" class="mt-4">
       <div class="flex items-center justify-between">
-        <span class="text-2xs uppercase tracking-wide text-dimmed">
+        <SectionLabel as="span">
           {{ t('panels.stepMeta.companionReview') }}
-        </span>
+        </SectionLabel>
         <!-- The COLOUR is the verdict (`passed`) and the GLYPH is the arithmetic, which are no
              longer the same fact: a round holding an open `blocker` fails at a rating that cleared
              its bar, and reading the inequality off `passed` printed "95% < 80%" over the findings

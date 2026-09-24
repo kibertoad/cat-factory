@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { showOverrideField } from '~/utils/uiMode'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 // The Integrations hub: a single modal that lists the OPTIONAL external systems the WORKSPACE
 // can enable or link in — the ones that feed a run its context (source control, documents,
 // trackers) or receive its output (chat, observability). Each row reuses the existing
@@ -422,9 +422,9 @@ const filteredGroups = computed<IntegrationGroup[]>(() => {
         </p>
 
         <section v-for="group in filteredGroups" :key="group.title">
-          <h3 class="mb-2 px-1 text-2xs font-semibold uppercase tracking-wide text-muted">
+          <SectionLabel as="h3" class="mb-2 px-1">
             {{ group.title }}
-          </h3>
+          </SectionLabel>
           <div class="space-y-1.5">
             <button
               v-for="item in group.items"

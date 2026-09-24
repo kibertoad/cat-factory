@@ -17,7 +17,7 @@ import type { PendingContext } from '~/composables/useContextLinking'
 import { type AddSourceLabels, addChoicesOf, buildSourceChoices } from '~/utils/sourcePicker'
 import ContextIssuePicker from '~/components/tasks/ContextIssuePicker.vue'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const { t } = useI18n()
 const ui = useUiStore()
 const tasks = useTasksStore()
@@ -183,9 +183,9 @@ async function doSpawnEpic() {
 
         <!-- Secondary: spawn a parent/epic issue as a whole linked task group. -->
         <div class="space-y-2 border-t border-default pt-3">
-          <span class="text-2xs font-semibold uppercase tracking-wide text-muted">
+          <SectionLabel as="span">
             {{ t('tasks.import.asEpic') }}
-          </span>
+          </SectionLabel>
           <div class="flex items-end gap-2">
             <UFormField :label="descriptor?.refLabel ?? t('tasks.import.refLabel')" class="flex-1">
               <UInput

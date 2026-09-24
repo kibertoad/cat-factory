@@ -9,7 +9,7 @@
 // as a drag-and-drop / click upload target (emits `uploadReference`).
 import { computed, nextTick, ref, watch } from 'vue'
 import type { ArtifactBlobs } from '~/composables/useArtifactBlobs'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const props = defineProps<{
   view: string
   actualId: string | null | undefined
@@ -263,7 +263,7 @@ function onRefInput(e: Event) {
           :style="{ opacity: overlayOpacity / 100 }"
         />
       </div>
-      <div class="flex items-center gap-2 text-3xs uppercase tracking-wide text-dimmed">
+      <SectionLabel class="flex items-center gap-2">
         <span>{{ t('media.compare.reference') }}</span>
         <input
           v-model.number="overlayOpacity"
@@ -273,7 +273,7 @@ function onRefInput(e: Event) {
           class="flex-1 accent-app-warning-500"
         />
         <span>{{ t('media.compare.actual') }}</span>
-      </div>
+      </SectionLabel>
     </div>
 
     <!-- SWIPE (split slider) -->

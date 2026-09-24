@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import type { Block } from '~/types/domain'
 import { STATUS_META } from '~/utils/catalog'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 // The epic inspector body: the full tree of member tasks (which may live under different
 // services/modules), grouped service → module → task. Each task row selects it. Membership
 // is the task's `epicId`; the epic is non-structural, so this reads across the whole board.
@@ -68,9 +68,9 @@ const groups = computed(() => {
           {{ group.service?.title ?? t('inspector.epicChildren.unassigned') }}
         </div>
         <div v-for="(mod, mi) in [...group.modules.values()]" :key="mi" class="ps-1">
-          <div v-if="mod.module" class="text-3xs uppercase tracking-wide text-dimmed">
+          <SectionLabel v-if="mod.module">
             {{ mod.module.title }}
-          </div>
+          </SectionLabel>
           <button
             v-for="task in mod.tasks"
             :key="task.id"

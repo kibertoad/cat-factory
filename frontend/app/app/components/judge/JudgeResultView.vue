@@ -13,7 +13,7 @@ import type { JudgeFinding, JudgeStepState } from '~/types/execution'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import CopyButton from '~/components/common/CopyButton.vue'
 import MarkdownProse from '~/components/common/MarkdownProse.vue'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const board = useBoardStore()
 const execution = useExecutionStore()
 const judgeStore = useJudgeStore()
@@ -215,9 +215,9 @@ async function act(choice: 'proceed' | 'bounce' | 'stop') {
         </div>
 
         <section v-if="findings.length" class="mt-4">
-          <h3 class="mb-2 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+          <SectionLabel as="h3" class="mb-2">
             {{ t('judge.findingsHeading') }}
-          </h3>
+          </SectionLabel>
           <ul class="flex flex-col gap-2">
             <li
               v-for="(finding, i) in findings"
@@ -246,9 +246,9 @@ async function act(choice: 'proceed' | 'bounce' | 'stop') {
 
         <!-- The decision. Only shown while the run is actually parked on this verdict. -->
         <section v-if="awaiting" class="mt-5" data-testid="judge-decision">
-          <h3 class="mb-1.5 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+          <SectionLabel as="h3" class="mb-1.5">
             {{ t('judge.decisionHeading') }}
-          </h3>
+          </SectionLabel>
           <p class="mb-2 text-2xs leading-relaxed text-dimmed">
             {{ t('judge.decisionDescription') }}
           </p>
@@ -305,9 +305,9 @@ async function act(choice: 'proceed' | 'bounce' | 'stop') {
 
         <!-- The round history: a looping judge must not be a black box (the gate-attempt rule). -->
         <section v-if="rounds.length > 1" class="mt-5">
-          <h3 class="mb-2 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+          <SectionLabel as="h3" class="mb-2">
             {{ t('judge.roundsHeading') }}
-          </h3>
+          </SectionLabel>
           <ul class="flex flex-col gap-1.5">
             <li
               v-for="round in rounds"

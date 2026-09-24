@@ -17,7 +17,7 @@ import {
 } from '~/modular/workspace-metadata'
 import type { WorkspaceMetadataFieldDefinition } from '~/modular/workspace-metadata'
 import type { AppSlots } from '~/modular/slots'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const { t } = useI18n()
 const slots = useReactiveSlots<AppSlots>()
 const store = useWorkspaceSettingsStore()
@@ -106,9 +106,9 @@ function selectItems(field: WorkspaceMetadataFieldDefinition) {
       <div class="space-y-4">
         <label v-for="field in fields" :key="field.key" class="block">
           <!-- Field labels are deployment DATA, rendered verbatim (see the module docs). -->
-          <span class="mb-1 block text-3xs uppercase tracking-wide text-dimmed">
+          <SectionLabel as="span" class="mb-1 block">
             {{ field.label }}
-          </span>
+          </SectionLabel>
           <USelect
             v-if="field.type === 'select'"
             v-model="draft[field.key]"

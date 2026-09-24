@@ -22,7 +22,7 @@ import type {
   ProvisioningOutcome,
   ProvisioningSubsystem,
 } from '~/types/provisioningLogs'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const props = defineProps<{
   subsystem?: ProvisioningSubsystem
   executionId?: string
@@ -115,9 +115,9 @@ function when(epochMs: number): string {
 <template>
   <div class="rounded-lg border border-muted bg-default/50">
     <div class="flex items-center justify-between border-b border-default px-3 py-2">
-      <p class="text-2xs font-semibold uppercase tracking-wide text-muted">
+      <SectionLabel as="p">
         {{ t('provisioning.title') }}
-      </p>
+      </SectionLabel>
       <UButton
         icon="i-lucide-rotate-ccw"
         variant="ghost"

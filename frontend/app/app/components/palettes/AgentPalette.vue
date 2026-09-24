@@ -6,6 +6,7 @@ import AgentTierSelect from '~/components/palettes/AgentTierSelect.vue'
 import PipelinePurposeSelect from '~/components/palettes/PipelinePurposeSelect.vue'
 import { groupAgentPalette, narrowAgentPalette } from '~/utils/agentPalette'
 import { AGENT_CATEGORIES, OBSERVABILITY_GATE_ARCHETYPE } from '~/utils/catalog'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const { t } = useI18n()
 const agents = useAgentsStore()
@@ -73,9 +74,10 @@ function toggle(id: string) {
     </div>
     <div class="space-y-2">
       <section v-for="g in groups" :key="g.id">
-        <button
+        <SectionLabel
+          as="button"
           type="button"
-          class="flex w-full items-center gap-1.5 rounded px-1 py-1 text-start text-2xs font-semibold uppercase tracking-wide text-muted transition hover:text-default"
+          class="flex w-full items-center gap-1.5 rounded px-1 py-1 text-start transition hover:text-default"
           @click="toggle(g.id)"
         >
           <UIcon
@@ -84,7 +86,7 @@ function toggle(id: string) {
           />
           <span>{{ g.label }}</span>
           <span class="ms-auto text-app-600">{{ g.agents.length }}</span>
-        </button>
+        </SectionLabel>
         <div v-if="!isCollapsed(g.id)" class="mt-1 space-y-1.5">
           <button
             v-for="a in g.agents"

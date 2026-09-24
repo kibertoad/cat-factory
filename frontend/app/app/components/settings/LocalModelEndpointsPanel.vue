@@ -17,7 +17,7 @@ import {
 } from '~/types/localModels'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const { t } = useI18n()
 const ui = useUiStore()
 const store = useLocalModelsStore()
@@ -352,13 +352,13 @@ async function remove(p: LocalRunner) {
 
         <!-- add / edit form -->
         <div class="rounded-lg border border-dashed border-muted p-3 space-y-3">
-          <p class="text-2xs font-semibold uppercase tracking-wide text-muted">
+          <SectionLabel as="p">
             {{
               existing
                 ? t('settings.localModelEndpoints.editRunner')
                 : t('settings.localModelEndpoints.addRunner')
             }}
-          </p>
+          </SectionLabel>
 
           <div class="flex flex-wrap items-end gap-3">
             <UFormField :label="t('settings.localModelEndpoints.runnerType')">
@@ -435,9 +435,9 @@ async function remove(p: LocalRunner) {
 
           <!-- discovered models multi-select, each with its declared image support -->
           <div v-if="discovered.length" class="space-y-1.5">
-            <span class="block text-3xs uppercase tracking-wide text-dimmed">
+            <SectionLabel as="span" class="block">
               {{ t('settings.localModelEndpoints.enableModels') }}
-            </span>
+            </SectionLabel>
             <p class="text-2xs text-dimmed">
               {{ t('settings.localModelEndpoints.imageInputHint') }}
             </p>

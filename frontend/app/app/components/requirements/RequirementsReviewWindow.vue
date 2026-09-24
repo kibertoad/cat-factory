@@ -28,7 +28,7 @@ import type {
   ReviewItemSeverity,
   ReviewItemStatus,
 } from '~/types/requirements'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const board = useBoardStore()
 const requirements = useRequirementsStore()
 const models = useModelsStore()
@@ -873,9 +873,9 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                       v-if="item.reply && item.status !== 'open' && item.status !== 'answered'"
                       class="mt-2 max-w-3xl rounded-md border-s-2 border-muted bg-app-950/40 px-3 py-1.5 text-sm text-toned"
                     >
-                      <span class="text-3xs uppercase tracking-wide text-dimmed">
+                      <SectionLabel as="span">
                         {{ t('requirements.answerLabel') }}
-                      </span>
+                      </SectionLabel>
                       <p class="whitespace-pre-line">{{ item.reply }}</p>
                     </div>
 

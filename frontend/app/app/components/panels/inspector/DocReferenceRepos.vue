@@ -6,7 +6,7 @@
 // search as the add-service picker (`useRepoSearch`), not a filter over the synced projection.
 import type { Block, GitHubAvailableRepo, ReferenceRepo } from '~/types/domain'
 import RepoSearchEmpty from '~/components/github/RepoSearchEmpty.vue'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const props = defineProps<{ block: Block }>()
 
 const { t } = useI18n()
@@ -83,9 +83,9 @@ function detach(repoId: number) {
 <template>
   <div data-testid="doc-reference-repos">
     <div class="mb-1 flex items-center justify-between">
-      <span class="text-2xs font-semibold uppercase tracking-wide text-muted">
+      <SectionLabel as="span">
         {{ t('inspector.referenceRepos.title') }}
-      </span>
+      </SectionLabel>
     </div>
 
     <!-- Attached reference repos: chips with a remove control. -->

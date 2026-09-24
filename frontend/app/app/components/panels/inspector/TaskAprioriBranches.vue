@@ -15,7 +15,7 @@
 // mint the user's branch name across every involved repo).
 import { aprioriWorkingBranch } from '@cat-factory/contracts'
 import type { AprioriBranch, Block } from '~/types/domain'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const props = defineProps<{ block: Block }>()
 
 const { t } = useI18n()
@@ -150,9 +150,9 @@ function removeDisabled(entry: AprioriBranch): boolean {
 <template>
   <div v-if="repo" data-testid="apriori-branches">
     <div class="mb-1 flex items-center justify-between">
-      <span class="text-2xs font-semibold uppercase tracking-wide text-muted">
+      <SectionLabel as="span">
         {{ t('inspector.aprioriBranches.title') }}
-      </span>
+      </SectionLabel>
     </div>
 
     <!-- Attached branches: one row each — name, mode badge + toggle, remove. -->

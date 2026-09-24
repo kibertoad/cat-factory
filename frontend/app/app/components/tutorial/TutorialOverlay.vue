@@ -20,7 +20,7 @@ import {
   waitBudgetMs,
 } from './TutorialOverlay.logic'
 import type { TutorialAdvanceCause, TutorialDirection } from './TutorialOverlay.logic'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 // The one shared tour runtime: resolves the running tour from the `tutorialTours` slot,
 // anchors a highlight ring + tooltip to the current step's `data-testid`, and advances
 // on Next or on a real click on the highlighted control. Mounted (from `pages/index.vue`)
@@ -628,9 +628,9 @@ onUnmounted(() => {
           class="mt-3 rounded-lg border border-muted/70 bg-elevated/40 p-2.5"
           data-testid="tutorial-next-tour"
         >
-          <p class="text-2xs tracking-wide text-muted uppercase">
+          <SectionLabel as="p">
             {{ t('tutorial.overlay.nextUp') }}
-          </p>
+          </SectionLabel>
           <p class="mt-0.5 text-sm font-medium text-app-100">{{ t(nextTour.titleKey) }}</p>
           <p class="mt-0.5 text-xs text-muted">{{ t(nextTour.descriptionKey) }}</p>
           <UButton

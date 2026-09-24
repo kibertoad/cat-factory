@@ -45,7 +45,7 @@ import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import MarkdownProse from '~/components/common/MarkdownProse.vue'
 import EmptyState from '~/components/common/EmptyState.vue'
 import type { BadgeColor } from '~/utils/badge'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const board = useBoardStore()
 const documents = useDocumentsStore()
 const execution = useExecutionStore()
@@ -458,9 +458,9 @@ function openTestReport() {
 
       <!-- What was asked, in the requester's own words. -->
       <section class="mb-5">
-        <h3 class="mb-1.5 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+        <SectionLabel as="h3" class="mb-1.5">
           {{ t('outcome.ask.title') }}
-        </h3>
+        </SectionLabel>
         <MarkdownProse
           v-if="outcome.ask"
           :text="outcome.ask"
@@ -477,9 +477,9 @@ function openTestReport() {
            agents actually read, and every section below is a statement about work done against
            it. A design that moved mid-run is the reading that changes all of them. -->
       <section class="mb-5" data-testid="outcome-sources">
-        <h3 class="mb-1.5 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+        <SectionLabel as="h3" class="mb-1.5">
           {{ t('outcome.sources.title') }}
-        </h3>
+        </SectionLabel>
         <div v-if="outcome.sources.status === 'reported'" class="space-y-1">
           <div
             v-for="source in sourceRows"
@@ -517,9 +517,9 @@ function openTestReport() {
 
       <!-- Requirement coverage: which required behaviours were checked, and what was seen. -->
       <section class="mb-5" data-testid="outcome-requirements">
-        <h3 class="mb-1.5 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+        <SectionLabel as="h3" class="mb-1.5">
           {{ t('outcome.requirements.title') }}
-        </h3>
+        </SectionLabel>
         <template v-if="outcome.requirements.status === 'reported'">
           <div class="mb-2 flex flex-wrap items-center gap-1.5">
             <UBadge color="success" variant="subtle" size="sm">
@@ -588,9 +588,9 @@ function openTestReport() {
                   >
                     {{ t('outcome.requirements.regressionTag') }}
                   </UBadge>
-                  <span class="text-3xs uppercase tracking-wide text-dimmed">
+                  <SectionLabel as="span">
                     {{ t(VERDICT_META[req.verdict].key) }}
-                  </span>
+                  </SectionLabel>
                 </div>
                 <p v-if="req.detail" class="mt-0.5 text-xs leading-relaxed text-muted">
                   {{ req.detail }}
@@ -607,9 +607,9 @@ function openTestReport() {
       <!-- How it was tested: the tester's own verdict and prose, attributed as its account. -->
       <section class="mb-5" data-testid="outcome-tests">
         <div class="mb-1.5 flex flex-wrap items-center gap-2">
-          <h3 class="text-2xs font-semibold uppercase tracking-wide text-dimmed">
+          <SectionLabel as="h3">
             {{ t('outcome.tests.title') }}
-          </h3>
+          </SectionLabel>
           <UBadge
             v-if="outcome.tests.status === 'reported'"
             :color="TESTS_VERDICT_COLOR[outcome.tests.verdict]"
@@ -680,9 +680,9 @@ function openTestReport() {
 
       <!-- What it looks like: the captured views, and whether a human was asked about them. -->
       <section class="mb-5" data-testid="outcome-visuals">
-        <h3 class="mb-1.5 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+        <SectionLabel as="h3" class="mb-1.5">
           {{ t('outcome.visuals.title') }}
-        </h3>
+        </SectionLabel>
         <template v-if="outcome.visuals.status === 'reported'">
           <p class="mb-2 text-xs leading-relaxed text-muted">
             {{
@@ -750,9 +750,9 @@ function openTestReport() {
            not read diffs starts from. Beside the captured views on purpose: the shots are what
            this run saw, this is the thing itself. -->
       <section class="mb-5" data-testid="outcome-environments">
-        <h3 class="mb-1.5 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+        <SectionLabel as="h3" class="mb-1.5">
           {{ t('outcome.environments.title') }}
-        </h3>
+        </SectionLabel>
         <template v-if="outcome.environments.status === 'reported'">
           <div
             v-for="row in environmentRows"
@@ -829,9 +829,9 @@ function openTestReport() {
 
       <!-- The machine checks, listed only where one actually recorded a verdict. -->
       <section v-if="checkRows.length" data-testid="outcome-checks">
-        <h3 class="mb-1.5 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+        <SectionLabel as="h3" class="mb-1.5">
           {{ t('outcome.checks.title') }}
-        </h3>
+        </SectionLabel>
         <div class="flex flex-wrap items-center gap-1.5">
           <UBadge
             v-for="check in checkRows"

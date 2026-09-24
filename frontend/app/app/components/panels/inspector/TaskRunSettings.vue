@@ -9,7 +9,7 @@ import InspectorSection from '~/components/panels/inspector/InspectorSection.vue
 import RiskPolicyPicker from '~/components/riskPolicy/RiskPolicyPicker.vue'
 import TaskAprioriBranches from '~/components/panels/inspector/TaskAprioriBranches.vue'
 import DocReferenceRepos from '~/components/panels/inspector/DocReferenceRepos.vue'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const props = defineProps<{ block: Block }>()
 
 const board = useBoardStore()
@@ -283,9 +283,9 @@ const technicalLabel = computed(() => {
     <!-- pipeline -->
     <div>
       <div class="mb-1 flex items-center justify-between">
-        <span class="text-2xs font-semibold uppercase tracking-wide text-muted">
+        <SectionLabel as="span">
           {{ t('inspector.runSettings.pipeline') }}
-        </span>
+        </SectionLabel>
         <PipelinePicker
           :model-value="block.pipelineId ?? ''"
           :options="selectablePipelines"
@@ -325,9 +325,9 @@ const technicalLabel = computed(() => {
     <!-- merge policy preset (advanced, or basic with an override already set) -->
     <div v-if="showOverrideField(uiMode.isAdvanced, block.riskPolicyId)">
       <div class="mb-1 flex items-center justify-between">
-        <span class="text-2xs font-semibold uppercase tracking-wide text-muted">
+        <SectionLabel as="span">
           {{ t('inspector.runSettings.mergePolicy') }}
-        </span>
+        </SectionLabel>
         <RiskPolicyPicker
           :model-value="block.riskPolicyId ?? ''"
           :options="riskPolicies.presets"
@@ -384,9 +384,9 @@ const technicalLabel = computed(() => {
     <!-- model preset (advanced, or basic with an override already set) -->
     <div v-if="showOverrideField(uiMode.isAdvanced, block.modelPresetId)">
       <div class="mb-1 flex items-center justify-between">
-        <span class="text-2xs font-semibold uppercase tracking-wide text-muted">
+        <SectionLabel as="span">
           {{ t('inspector.runSettings.modelPreset') }}
-        </span>
+        </SectionLabel>
         <UDropdownMenu :items="modelPresetMenu">
           <UButton
             size="xs"
@@ -458,9 +458,9 @@ const technicalLabel = computed(() => {
     <!-- technical label (tri-state) — unset lets the engine infer it -->
     <div v-if="showOverrideField(uiMode.isAdvanced, block.technical)">
       <div class="mb-1 flex items-center justify-between">
-        <span class="text-2xs font-semibold uppercase tracking-wide text-muted">
+        <SectionLabel as="span">
           {{ t('inspector.runSettings.taskKind') }}
-        </span>
+        </SectionLabel>
         <UDropdownMenu :items="technicalMenu">
           <UButton
             size="xs"
@@ -489,9 +489,9 @@ const technicalLabel = computed(() => {
     <!-- involved services: connected services this task spans (envs + possible code changes) -->
     <div data-testid="involved-services">
       <div class="mb-1 flex items-center justify-between">
-        <span class="text-2xs font-semibold uppercase tracking-wide text-muted">
+        <SectionLabel as="span">
           {{ t('inspector.runSettings.involvedServices') }}
-        </span>
+        </SectionLabel>
       </div>
       <div v-if="connectedServices.length" class="space-y-1">
         <UCheckbox
@@ -543,9 +543,9 @@ const technicalLabel = computed(() => {
       "
     >
       <div class="mb-1 flex items-center justify-between">
-        <span class="text-2xs font-semibold uppercase tracking-wide text-muted">
+        <SectionLabel as="span">
           {{ t('inspector.runSettings.issueWriteback') }}
-        </span>
+        </SectionLabel>
       </div>
       <div class="space-y-1.5">
         <div class="flex items-center justify-between">
@@ -596,9 +596,9 @@ const technicalLabel = computed(() => {
     <!-- responsible product person -->
     <div>
       <div class="mb-1 flex items-center justify-between">
-        <span class="text-2xs font-semibold uppercase tracking-wide text-muted">
+        <SectionLabel as="span">
           {{ t('inspector.runSettings.responsibleProduct') }}
-        </span>
+        </SectionLabel>
         <UDropdownMenu :items="responsibleMenu">
           <UButton
             size="xs"
@@ -628,9 +628,9 @@ const technicalLabel = computed(() => {
     <!-- auto-start dependents: when this task merges, start the tasks that depend on it -->
     <div>
       <div class="flex items-center justify-between gap-2">
-        <span class="text-2xs font-semibold uppercase tracking-wide text-muted">
+        <SectionLabel as="span">
           {{ t('inspector.runSettings.autoStartDependents') }}
-        </span>
+        </SectionLabel>
         <USwitch
           size="sm"
           :model-value="block.autoStartDependents ?? false"

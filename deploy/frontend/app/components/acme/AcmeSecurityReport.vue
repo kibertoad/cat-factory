@@ -40,6 +40,7 @@ import {
   PanelsStepRunMeta as StepRunMeta,
   CommonMarkdownProse as MarkdownProse,
 } from '#components'
+import { CommonSectionLabel as SectionLabel } from '#components'
 
 /** The structured assessment the backend `security-auditor` kind returns as `result.custom`
  *  (mirrors `@cat-factory/example-custom-agent`'s `securityAssessment`). Read defensively —
@@ -138,9 +139,9 @@ const headerTitle = computed(() =>
         />
 
         <template v-if="findings.length">
-          <h3 class="mb-2 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+          <SectionLabel as="h3" class="mb-2">
             {{ t('acme.securityReport.findingsHeading') }}
-          </h3>
+          </SectionLabel>
           <ul class="flex flex-col gap-2">
             <li
               v-for="(finding, i) in findings"

@@ -6,7 +6,7 @@
 // infraConfig store (`PUT|DELETE /environments/custom-types/:manifestId`).
 import { computed, reactive, ref } from 'vue'
 import type { CustomManifestType } from '@cat-factory/contracts'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const { t } = useI18n()
 const infra = useInfraConfigStore()
 const { present } = usePipelineErrorToast()
@@ -145,13 +145,13 @@ async function remove(type: CustomManifestType) {
 
     <!-- Add / edit a workspace-defined type. -->
     <div class="space-y-2 border-t border-default pt-3">
-      <p class="text-2xs font-semibold uppercase tracking-wide text-muted">
+      <SectionLabel as="p">
         {{
           editing
             ? t('settings.infrastructure.customType.editTitle', { id: draft.manifestId })
             : t('settings.infrastructure.customType.addTitle')
         }}
-      </p>
+      </SectionLabel>
       <UFormField
         v-if="!editing"
         :label="t('settings.infrastructure.customType.manifestId')"

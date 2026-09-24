@@ -6,7 +6,7 @@ import { pipelineAllowedForManualStart } from '~/utils/pipeline'
 import PipelineProgress from '~/components/pipeline/PipelineProgress.vue'
 import IconButton from '~/components/common/IconButton.vue'
 import { useInitiativePlanning } from '~/composables/useInitiativePlanning'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const board = useBoardStore()
 const pipelines = usePipelinesStore()
 const execution = useExecutionStore()
@@ -203,9 +203,9 @@ function openApprovalFor(approvalId: string) {
       >
         <div class="mb-4 flex items-center gap-2">
           <UIcon name="i-lucide-workflow" class="h-4 w-4 text-dimmed" />
-          <h2 class="text-sm font-semibold uppercase tracking-wide text-muted">
+          <SectionLabel as="h2">
             {{ instance ? instance.pipelineName : t('focus.noPipelineRunning') }}
-          </h2>
+          </SectionLabel>
         </div>
 
         <PipelineProgress
@@ -226,24 +226,24 @@ function openApprovalFor(approvalId: string) {
       <!-- side: details -->
       <aside class="space-y-4 overflow-auto rounded-2xl border border-default bg-default/60 p-5">
         <div>
-          <div class="mb-1 text-2xs font-semibold uppercase tracking-wide text-muted">
+          <SectionLabel class="mb-1">
             {{ t('focus.description') }}
-          </div>
+          </SectionLabel>
           <p class="text-sm text-toned">{{ block.description }}</p>
         </div>
         <div v-if="instance">
-          <div class="mb-1 text-2xs font-semibold uppercase tracking-wide text-muted">
+          <SectionLabel class="mb-1">
             {{ t('focus.overallProgress') }}
-          </div>
+          </SectionLabel>
           <UProgress :model-value="Math.round(block.progress * 100)" />
           <div class="mt-1 text-2xs text-muted">
             {{ n(block.progress, 'percent') }}
           </div>
         </div>
         <div>
-          <div class="mb-1 text-2xs font-semibold uppercase tracking-wide text-muted">
+          <SectionLabel class="mb-1">
             {{ t('focus.dependencies') }}
-          </div>
+          </SectionLabel>
           <div v-if="deps.length" class="flex flex-wrap gap-1">
             <UBadge v-for="d in deps" :key="d.id" color="neutral" variant="subtle" size="sm">
               {{ d.title }}

@@ -29,7 +29,7 @@ import {
 } from '~/utils/pipelineRender'
 import InputGateNotice from '~/components/inputGate/InputGateNotice.vue'
 import RunDetailLoadState from '~/components/panels/RunDetailLoadState.vue'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 // Detail overlay for a single pipeline step. Opened by clicking an agent in the
 // inspector list (TaskExecution) or the focus-view pipeline (PipelineProgress) via
 // `ui.openStepDetail(instanceId, stepIndex)`. It resolves the step from the
@@ -402,9 +402,9 @@ async function copyOutput() {
       class="hidden w-72 shrink-0 flex-col border-e border-default bg-default/60 md:flex"
     >
       <div class="border-b border-default px-4 py-3">
-        <div class="text-2xs font-semibold uppercase tracking-wide text-dimmed">
+        <SectionLabel>
           {{ t('panels.stepDetail.contents') }}
-        </div>
+        </SectionLabel>
       </div>
       <nav class="flex-1 space-y-0.5 overflow-auto px-2 py-3">
         <button
@@ -910,9 +910,9 @@ async function copyOutput() {
             class="rounded-lg border border-default bg-default/50 p-3"
           >
             <div class="mb-1 flex items-start justify-between gap-2">
-              <div class="text-3xs uppercase tracking-wide text-dimmed">
+              <SectionLabel>
                 {{ t('panels.stepDetail.commentN', { number: idx + 1 }) }}
-              </div>
+              </SectionLabel>
               <button
                 class="text-dimmed transition hover:text-app-error-400"
                 :title="t('panels.stepDetail.removeComment')"
@@ -928,9 +928,9 @@ async function copyOutput() {
           </div>
 
           <div>
-            <label class="mb-1 block text-2xs font-semibold uppercase tracking-wide text-muted">
+            <SectionLabel as="label" class="mb-1 block">
               {{ t('panels.stepDetail.overallFeedback') }}
-            </label>
+            </SectionLabel>
             <UTextarea
               v-model="feedback"
               data-testid="step-review-feedback"

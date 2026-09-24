@@ -4,7 +4,7 @@
 // (lazily loaded; retained ~1 week on the backend).
 import type { Block } from '~/types/domain'
 import type { Recurrence } from '~/types/recurring'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const props = defineProps<{ block: Block }>()
 const recurring = useRecurringPipelinesStore()
 const pipelines = usePipelinesStore()
@@ -213,9 +213,9 @@ function fmtTime(ms: number) {
 
     <!-- run history -->
     <div v-if="runs.length" class="space-y-1 border-t border-default pt-2">
-      <span class="text-3xs font-semibold uppercase tracking-wide text-dimmed">
+      <SectionLabel as="span">
         {{ t('inspector.recurring.recentRuns') }}
-      </span>
+      </SectionLabel>
       <div v-for="run in runs" :key="run.id" class="flex items-center gap-2 text-2xs">
         <span :class="RUN_COLOR[run.status] ?? 'text-muted'" class="w-14 shrink-0">
           {{ runStatusLabel(run.status) }}

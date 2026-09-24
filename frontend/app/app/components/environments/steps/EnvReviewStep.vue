@@ -14,7 +14,7 @@ import type {
 } from '@cat-factory/contracts'
 import JourneyStepNav from '~/components/environments/steps/JourneyStepNav.vue'
 import { useEnvironmentWizardTarget } from '~/modular/journeys/environmentSetup.frame'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const props = defineProps<{
   input: { frameId: string | null }
   exit: (name: 'advance') => void
@@ -211,9 +211,9 @@ const canLeaveReview = computed(
 
       <!-- per-field provenance -->
       <div v-if="store.merged?.fields.length" class="space-y-1.5">
-        <p class="text-2xs font-semibold uppercase tracking-wide text-muted">
+        <SectionLabel as="p">
           {{ t('environmentWizard.review.provenanceTitle') }}
-        </p>
+        </SectionLabel>
         <div class="flex flex-wrap gap-1.5">
           <UBadge
             v-for="f in store.merged.fields"
@@ -261,9 +261,9 @@ const canLeaveReview = computed(
 
       <!-- compose file layering -->
       <div v-if="composeFileCandidates.length" class="space-y-1.5">
-        <p class="text-2xs font-semibold uppercase tracking-wide text-muted">
+        <SectionLabel as="p">
           {{ t('environmentWizard.review.composeFiles') }}
-        </p>
+        </SectionLabel>
         <div class="flex flex-wrap gap-1.5">
           <UButton
             v-for="c in composeFileCandidates"
@@ -282,9 +282,9 @@ const canLeaveReview = computed(
 
       <!-- compose profiles -->
       <div v-if="profileCandidates.length" class="space-y-1.5">
-        <p class="text-2xs font-semibold uppercase tracking-wide text-muted">
+        <SectionLabel as="p">
           {{ t('environmentWizard.review.profiles') }}
-        </p>
+        </SectionLabel>
         <div class="flex flex-wrap gap-1.5">
           <UButton
             v-for="c in profileCandidates"
@@ -303,9 +303,9 @@ const canLeaveReview = computed(
 
       <!-- seed dumps -->
       <div v-if="seedDumpCandidates.length" class="space-y-1.5">
-        <p class="text-2xs font-semibold uppercase tracking-wide text-muted">
+        <SectionLabel as="p">
           {{ t('environmentWizard.review.seedDumps') }}
-        </p>
+        </SectionLabel>
         <div class="space-y-1">
           <div
             v-for="c in seedDumpCandidates"

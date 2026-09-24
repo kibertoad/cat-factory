@@ -8,7 +8,7 @@ import AccountModelPolicySettings from '~/components/layout/AccountModelPolicySe
 import AccountPlatformAlertSettings from '~/components/layout/AccountPlatformAlertSettings.vue'
 import AccountRunCredentialSettings from '~/components/layout/AccountRunCredentialSettings.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 // Team settings for an org account: the member roster (with combinable admin /
 // developer / product roles), pending email invitations, and the per-account
 // transactional-email sender. Admin-only mutations are enforced by the backend; this
@@ -240,9 +240,9 @@ async function disconnectEmail() {
             class="w-44"
             @update:model-value="(r: AccountRole[]) => updateMemberRoles(m.userId, r)"
           />
-          <span v-else class="text-xs uppercase tracking-wide text-muted">
+          <SectionLabel as="span" v-else>
             {{ m.roles.join(', ') }}
-          </span>
+          </SectionLabel>
           <!-- Offboarding: end every session this member holds, leaving their membership and
                roles alone. Confirmed, because it is not undoable from here (the person simply
                signs in again) and because it is the sort of thing a mis-click should not do. -->
@@ -290,9 +290,9 @@ async function disconnectEmail() {
         >
           <span class="truncate">{{ inv.email }}</span>
           <span class="flex items-center gap-2 text-xs">
-            <span class="uppercase tracking-wide text-muted">
+            <SectionLabel as="span">
               {{ invitationStatusLabel(inv.status) }}
-            </span>
+            </SectionLabel>
             <UButton
               v-if="inv.status === 'pending'"
               size="xs"

@@ -7,7 +7,7 @@
 // summary instead (so there is nothing to show here).
 import type { FragmentAdherence } from '~/types/execution'
 import MarkdownProse from '~/components/common/MarkdownProse.vue'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const props = defineProps<{ items: FragmentAdherence }>()
 const { t } = useI18n()
 
@@ -34,14 +34,12 @@ function label(item: FragmentAdherence[number]): string {
     data-testid="step-fragment-adherence"
     class="scroll-mt-4 rounded-xl border border-default bg-default/50 p-4"
   >
-    <div
-      class="mb-2 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wide text-muted"
-    >
+    <SectionLabel class="mb-2 flex items-center gap-1.5">
       <UIcon name="i-lucide-clipboard-check" class="h-3.5 w-3.5" />
       <span :title="t('panels.stepDetail.adherence.headingHint')">
         {{ t('panels.stepDetail.adherence.heading') }}
       </span>
-    </div>
+    </SectionLabel>
 
     <div class="space-y-2.5">
       <article
@@ -74,9 +72,9 @@ function label(item: FragmentAdherence[number]): string {
           class="mt-1 text-xs leading-relaxed text-toned"
         />
         <div v-if="item.relatedFindings.length" class="mt-1.5">
-          <p class="text-3xs font-semibold uppercase tracking-wide text-dimmed">
+          <SectionLabel as="p">
             {{ t('panels.stepDetail.adherence.relatedFindings') }}
-          </p>
+          </SectionLabel>
           <ul class="mt-0.5 space-y-0.5">
             <li
               v-for="(finding, fi) in item.relatedFindings"

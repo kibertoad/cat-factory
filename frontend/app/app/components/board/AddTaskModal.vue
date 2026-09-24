@@ -46,7 +46,7 @@ import {
 import { descriptorFieldDefaults } from '@cat-factory/contracts'
 import { pipelineAllowedForManualStart } from '~/utils/pipeline'
 import { buildTaskTypePickerRows } from '~/utils/taskTypePicker'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const ui = useUiStore()
 // Interface tier. In BASIC mode this form asks for the task itself (type, title,
 // description, per-type fields, context, the pipeline) and hides the OVERRIDES: the run
@@ -938,13 +938,14 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
               data-testid="task-type-row"
               :data-task-type-row="row.id"
             >
-              <p
+              <SectionLabel
+                as="p"
                 v-if="row.caption"
-                class="mb-1 px-1 text-2xs font-semibold uppercase tracking-wide text-dimmed"
+                class="mb-1 px-1"
                 data-testid="task-type-category"
               >
                 {{ row.caption }}
-              </p>
+              </SectionLabel>
               <div class="flex flex-wrap gap-1">
                 <UButton
                   v-for="ty in row.choices"
@@ -1385,9 +1386,9 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
           </div>
 
           <div v-if="configDescriptors.length" class="space-y-3">
-            <span class="text-2xs font-semibold uppercase tracking-wide text-muted">
+            <SectionLabel as="span">
               {{ t('board.addTask.agentConfiguration') }}
-            </span>
+            </SectionLabel>
             <div v-for="d in configDescriptors" :key="d.id" class="space-y-1">
               <div class="text-2xs text-muted">{{ d.label }}</div>
               <div v-if="d.type === 'select'" class="flex flex-wrap gap-1">

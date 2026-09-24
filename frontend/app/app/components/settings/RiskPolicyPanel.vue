@@ -13,7 +13,7 @@ import { riskPolicyCopyName } from '~/utils/riskPolicy'
 import RiskPolicyCreateForm from '~/components/settings/RiskPolicyCreateForm.vue'
 import RiskPolicyEditorRow from '~/components/settings/RiskPolicyEditorRow.vue'
 import RiskPolicyInheritedRow from '~/components/settings/RiskPolicyInheritedRow.vue'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const { t } = useI18n()
 
 const store = useRiskPoliciesStore()
@@ -179,9 +179,9 @@ function unhide(presetId: string) {
     <!-- Inherited FIRST: they are the org's posture, and a board reading its own list wants to see
          what it is working from before what it has changed. -->
     <section v-if="inherited.length > 0" class="space-y-2">
-      <p class="text-2xs font-semibold uppercase tracking-wide text-muted">
+      <SectionLabel as="p">
         {{ t('settings.riskPolicy.inherited.heading') }}
-      </p>
+      </SectionLabel>
       <p class="text-2xs text-dimmed">{{ t('settings.riskPolicy.inherited.hint') }}</p>
       <RiskPolicyInheritedRow
         v-for="policy in inherited"
@@ -194,12 +194,9 @@ function unhide(presetId: string) {
     </section>
 
     <section class="space-y-4">
-      <p
-        v-if="inherited.length > 0"
-        class="text-2xs font-semibold uppercase tracking-wide text-muted"
-      >
+      <SectionLabel as="p" v-if="inherited.length > 0">
         {{ t('settings.riskPolicy.own.heading') }}
-      </p>
+      </SectionLabel>
       <RiskPolicyEditorRow
         v-for="policy in own"
         :key="policy.id"
@@ -217,9 +214,9 @@ function unhide(presetId: string) {
          whether it still shadows an account policy: one whose policy the account has since withdrawn
          withholds nothing, and reading it as a live opt-out would misstate what the board is doing. -->
     <section v-if="store.suppressions.length > 0 || suppressionsFailed" class="space-y-2">
-      <p class="text-2xs font-semibold uppercase tracking-wide text-muted">
+      <SectionLabel as="p">
         {{ t('settings.riskPolicy.hidden.heading') }}
-      </p>
+      </SectionLabel>
       <p v-if="suppressionsFailed" class="text-2xs text-app-warning-400">
         {{ t('settings.riskPolicy.hidden.loadFailed') }}
       </p>

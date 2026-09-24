@@ -28,7 +28,7 @@ import type { BugFishingFinding, BugFishingSeverity, BugFishingStepState } from 
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 import MarkdownProse from '~/components/common/MarkdownProse.vue'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const execution = useExecutionStore()
 const board = useBoardStore()
 const pipelines = usePipelinesStore()
@@ -263,9 +263,9 @@ const PHASE_ICON: Record<string, string> = {
         data-testid="bug-fishing-phases"
         class="w-60 shrink-0 overflow-y-auto border-r border-default px-3 py-4"
       >
-        <p class="mb-2 px-1 text-3xs font-semibold uppercase tracking-wide text-dimmed">
+        <SectionLabel as="p" class="mb-2 px-1">
           {{ t('bugFishing.phases.heading') }}
-        </p>
+        </SectionLabel>
         <button
           type="button"
           class="mb-1 w-full rounded-md px-2 py-1.5 text-left text-xs"
@@ -510,9 +510,9 @@ const PHASE_ICON: Record<string, string> = {
             <MarkdownProse :text="finding.detail" class="mt-2 max-w-3xl text-xs" />
 
             <div v-if="finding.failureScenario" class="mt-2 text-xs text-toned">
-              <span class="text-3xs font-semibold uppercase tracking-wide text-dimmed">
+              <SectionLabel as="span">
                 {{ t('bugFishing.finding.failureScenario') }}
-              </span>
+              </SectionLabel>
               <MarkdownProse :text="finding.failureScenario" class="mt-0.5 max-w-3xl" />
             </div>
 

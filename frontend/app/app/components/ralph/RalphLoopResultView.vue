@@ -10,7 +10,7 @@ import type { RalphStepState } from '~/types/execution'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 import CopyButton from '~/components/common/CopyButton.vue'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const board = useBoardStore()
 const execution = useExecutionStore()
 const { t, d } = useI18n()
@@ -145,9 +145,9 @@ const STATUS_META = computed<
 
         <template v-else>
           <!-- The completion criterion. -->
-          <h3 class="mb-1.5 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+          <SectionLabel as="h3" class="mb-1.5">
             {{ t('ralph.validationCommand') }}
-          </h3>
+          </SectionLabel>
           <div class="relative rounded-md border border-default bg-app-950/60 px-3 py-2">
             <CopyButton :text="ralph.validationCommand" class="absolute end-1 top-1" />
             <code class="block whitespace-pre-wrap pe-8 font-mono text-xs text-default">{{
@@ -157,9 +157,9 @@ const STATUS_META = computed<
 
           <!-- The most recent validation output. -->
           <template v-if="ralph.lastValidationTail">
-            <h3 class="mb-1.5 mt-4 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+            <SectionLabel as="h3" class="mb-1.5 mt-4">
               {{ t('ralph.lastOutput', { exit: ralph.lastExitCode ?? '?' }) }}
-            </h3>
+            </SectionLabel>
             <div class="relative rounded-md border border-default bg-app-950/60 px-3 py-2">
               <CopyButton :text="ralph.lastValidationTail" class="absolute end-1 top-1" />
               <pre class="whitespace-pre-wrap pe-8 font-mono text-2xs leading-relaxed text-muted">{{
@@ -191,9 +191,9 @@ const STATUS_META = computed<
 
           <!-- Iteration history: what each pass produced and whether its validation passed. -->
           <section v-if="attempts.length" class="mt-5">
-            <h3 class="mb-2 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+            <SectionLabel as="h3" class="mb-2">
               {{ t('ralph.iterationsHeading') }}
-            </h3>
+            </SectionLabel>
             <!-- The log is capped (it rides the run's detail blob); say so rather than letting a
                  long loop's partial history read as if those iterations never ran. -->
             <p
@@ -244,9 +244,9 @@ const STATUS_META = computed<
         class="hidden w-60 shrink-0 flex-col gap-4 border-s border-default bg-default/50 px-4 py-4 lg:flex"
       >
         <div v-if="ralph">
-          <h4 class="mb-2 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+          <SectionLabel as="h4" class="mb-2">
             {{ t('ralph.sidebar.state') }}
-          </h4>
+          </SectionLabel>
           <div class="flex items-center gap-2 text-sm">
             <UIcon
               :name="STATUS_META[status].icon"
@@ -257,9 +257,9 @@ const STATUS_META = computed<
           </div>
         </div>
         <div v-if="ralph">
-          <h4 class="mb-1 text-2xs font-semibold uppercase tracking-wide text-dimmed">
+          <SectionLabel as="h4" class="mb-1">
             {{ t('ralph.sidebar.iterations') }}
-          </h4>
+          </SectionLabel>
           <p class="text-xs text-toned" data-testid="ralph-iteration-count">
             {{ t('ralph.sidebar.count', { attempts: ralph.attempts, max: ralph.maxIterations }) }}
           </p>

@@ -11,7 +11,7 @@ import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import MarkdownProse from '~/components/common/MarkdownProse.vue'
 import CopyButton from '~/components/common/CopyButton.vue'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const board = useBoardStore()
 const execution = useExecutionStore()
 const agents = useAgentsStore()
@@ -76,9 +76,9 @@ const customJson = computed<string | null>(() => {
 
         <template v-if="customJson">
           <div class="mb-2 flex items-center gap-2">
-            <h3 class="text-2xs font-semibold uppercase tracking-wide text-dimmed">
+            <SectionLabel as="h3">
               {{ t('panels.structuredResult.structuredOutput') }}
-            </h3>
+            </SectionLabel>
             <CopyButton :text="customJson" class="-my-1" />
           </div>
           <pre

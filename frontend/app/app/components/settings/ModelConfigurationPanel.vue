@@ -22,7 +22,7 @@ import { cachingLabel, contextLabel, costLabel, displayFlavor, isSelectable } fr
 import ConsensusGroupsSection from '~/components/settings/ConsensusGroupsSection.vue'
 import ProviderPreferenceEditor from '~/components/settings/ProviderPreferenceEditor.vue'
 import { showOverrideField } from '~/utils/uiMode'
-
+import SectionLabel from '~/components/common/SectionLabel.vue'
 const { t } = useI18n()
 const ui = useUiStore()
 const uiMode = useUiModeStore()
@@ -460,11 +460,9 @@ async function save() {
             <template v-else>
               <div class="space-y-4 rounded-xl border border-default bg-default/50 p-4">
                 <div>
-                  <label
-                    class="mb-1 block text-2xs font-semibold uppercase tracking-wide text-muted"
-                  >
+                  <SectionLabel as="label" class="mb-1 block">
                     {{ t('settings.modelConfiguration.editor.nameLabel') }}
-                  </label>
+                  </SectionLabel>
                   <UInput
                     v-model="editor.name"
                     :placeholder="t('settings.modelConfiguration.editor.namePlaceholder')"
@@ -474,11 +472,9 @@ async function save() {
                 </div>
 
                 <div>
-                  <label
-                    class="mb-1 block text-2xs font-semibold uppercase tracking-wide text-muted"
-                  >
+                  <SectionLabel as="label" class="mb-1 block">
                     {{ t('settings.modelConfiguration.editor.baseModelLabel') }}
-                  </label>
+                  </SectionLabel>
                   <UDropdownMenu
                     :items="baseMenu"
                     :ui="{ content: 'max-h-80 overflow-y-auto z-[60]' }"
@@ -514,9 +510,9 @@ async function save() {
 
               <div>
                 <div class="mb-1 flex items-start justify-between gap-3">
-                  <span class="text-2xs font-semibold uppercase tracking-wide text-muted">
+                  <SectionLabel as="span">
                     {{ t('settings.modelConfiguration.editor.perAgentOverrides') }}
-                  </span>
+                  </SectionLabel>
                   <AgentTierSelect class="w-56 shrink-0" :hidden-count="hiddenByTier" />
                 </div>
                 <UInput
