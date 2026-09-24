@@ -14,8 +14,9 @@ import type { GitHubActionsWorkflowScope } from './workflow.js'
 
 // The three problems this helper exists for, each asserted as the failure it prevents:
 //
-//   1. `workflow_dispatch` answers 204 with no run id, so a replayed dispatch would queue a SECOND
-//      workflow: two workflows on one branch, two pull requests for one task.
+//   1. A replayed dispatch holds only the brief (the run id the first attempt was answered with
+//      died with it, and a 204 server answers none), so it would queue a SECOND workflow: two
+//      workflows on one branch, two pull requests for one task.
 //   2. Actions' conclusion vocabulary is not the platform's, and three of its values are the only
 //      ones a fresh attempt could survive.
 //   3. The workflow declares no outputs, so what it produced has to be found in the repository:
@@ -128,7 +129,49 @@ const RUN = {
 }
 
 describe('start: idempotency', () => {
-  it('dispatches once and correlates the run it queued', async () => {
+  it('takes the run id from the dispatch answer, with no scan after it', async () => {
+    let listed = 0
+    const { fetchImpl, calls } = fakeFetch({
+      '/dispatches': () => ({
+        body: {
+          workflow_run_id: 4242,
+          run_url: 'https://api.github.com/repos/acme/widgets/actions/runs/4242',
+          html_url: 'https://github.com/acme/widgets/actions/runs/4242',
+        },
+      }),
+      '/runs?': () => {
+        listed++
+        return { body: { workflow_runs: [] } }
+      },
+    })
+    const executor = githubActionsDelegatedExecutor(DESCRIPTION, deps(fetchImpl))
+    const start = await executor.start(brief(), CREDS)
+    expect(start).toEqual({
+      externalId: '4242',
+      url: 'https://github.com/acme/widgets/actions/runs/4242',
+    })
+    expect(calls.filter((c) => c.url.includes('/dispatches'))).toHaveLength(1)
+    // The one scan is the idempotency look BEFORE the dispatch, which a replay still needs.
+    expect(listed).toBe(1)
+  })
+
+  it('falls back to the scan when the answer carries no usable run id', async () => {
+    for (const body of [{}, { workflow_run_id: '4242' }, { workflow_run_id: 1.5 }]) {
+      let listed = 0
+      const { fetchImpl } = fakeFetch({
+        '/dispatches': () => ({ body }),
+        '/runs?': () => ({
+          body: { workflow_runs: listed++ === 0 ? [] : [{ ...RUN, status: 'queued' }] },
+        }),
+      })
+      const executor = githubActionsDelegatedExecutor(DESCRIPTION, deps(fetchImpl))
+      const start = await executor.start(brief(), CREDS)
+      expect(start.externalId).toBe('4242')
+      expect(listed).toBe(2)
+    }
+  })
+
+  it('dispatches once and correlates the run it queued on a server that answers 204', async () => {
     let listed = 0
     const { fetchImpl, calls } = fakeFetch({
       '/dispatches': () => ({ status: 204 }),

@@ -4,11 +4,12 @@ import { apiGet } from './http.js'
 // ---------------------------------------------------------------------------
 // CORRELATION: finding the workflow run you just started.
 //
-// `POST /actions/workflows/{file}/dispatches` answers `204 No Content`. It returns no run id, no
-// url, and nothing that identifies what it queued, and the run does not exist yet when it answers,
-// so there is nothing to look up either. Every GitHub-hosted deployment plugging its own executor
-// into a cat-factory step hits this on day one, which is why it is solved here rather than in each
-// deployment's repo.
+// `POST /actions/workflows/{file}/dispatches` answers `200` with the run it queued on github.com,
+// and `start` uses that. What the answer cannot serve is a REPLAY: `start` must be idempotent, and
+// an attempt that dispatched and then died before its answer was persisted leaves the next attempt
+// holding only the brief. A server that predates the change answers `204 No Content` with nothing
+// at all, and the run does not exist yet when it answers. Both cases need the run findable from
+// the brief alone, which is why this is solved here rather than in each deployment's repo.
 //
 // The solution the platform makes possible: the brief carries a `correlationKey`, the caller
 // workflow puts it in its own `run-name`, and the run is then FINDABLE by a string the platform
