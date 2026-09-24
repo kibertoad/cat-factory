@@ -105,13 +105,21 @@ const RETIRED_PRIMARY = new RegExp(`(?<![\\w-])${PREFIX}-app-primary-${SHADE}`, 
 
 // A colour LITERAL outside the token system: a hex colour (6 or 8 digits, or 3 or 4 when a value
 // terminator follows, so a template slot like `#add` or an ID selector like `#app {` stays clear
-// while `#fff;` and `#fff8;` do not), or an `rgb()` / `hsl()` / `oklch()` / `oklab()` / `lab()` / `lch()` / `color()` function. These hide in SVG
+// while `#fff;`, `#fff8;` and the arbitrary-value `_#fff]` do not), or an `rgb()` / `hsl()` / `oklch()` / `oklab()` / `lab()` / `lch()` / `color()` function. These hide in SVG
 // `fill`/`stroke` attributes, scoped `<style>` blocks and keyframes, where no utility class exists
 // for the utility rules above to catch. The pre-JS loading shell is HTML and is not scanned; a line
 // that must carry a literal (the first-paint `theme-color` fallbacks) says why with
 // `colour-literal-ok:`.
+//
+// `(?<![0-9a-z/])` is a LEFT boundary on the hex branches: a `#` glued to a letter, a digit or a
+// `/` is an issue/URL reference (`acme/web#123`, `page#abcdef`), never a colour, because a real
+// hex is preceded by a value opener (`:`, whitespace, quote, `(`) or the line start (issue #2261).
+// The class leaves out `_` on purpose: a Tailwind arbitrary value spells its spaces as `_`, so
+// `shadow-[0_0_4px_#f59e0b]` must stay flagged. One residue is deliberate: `solid#fff` in CSS is
+// character-for-character the same shape as `page#abcdef` to a preceding-char check, so it is not
+// flagged. A colour function needs no such guard: `myrgb(` is not a thing.
 const COLOUR_LITERAL =
-  /#[0-9a-f]{6}(?:[0-9a-f]{2})?\b|#[0-9a-f]{3,4}(?=["');,\s])|\b(?:rgba?|hsla?|oklch|oklab|lab|lch|color)\(/gi
+  /(?<![0-9a-z/])#[0-9a-f]{6}(?:[0-9a-f]{2})?\b|(?<![0-9a-z/])#[0-9a-f]{3,4}(?=["');,\s\]])|\b(?:rgba?|hsla?|oklch|oklab|lab|lch|color)\(/gi
 // Appending a hex alpha to a colour value: valid on a hex, garbage on a `var(--app-hue-*)`, and
 // nothing in the type system tells the two apart. `tint()` (`utils/colorTint.ts`) is the seam.
 const ALPHA_CONCAT =
