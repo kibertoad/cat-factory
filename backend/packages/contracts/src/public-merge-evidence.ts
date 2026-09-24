@@ -25,7 +25,7 @@ import { vcsProviderSchema } from './routes/auth.js'
 //     the preset editor renders each class's rule against. A second, API-shaped projection of
 //     one `GROUP BY` is how two surfaces start reporting different auto-merge shares for one
 //     workspace. The consequence is worth stating: that schema is now part of the STABLE public
-//     surface and grows additively (CLAUDE.md, "The public API does not break").
+//     surface and grows additively (AGENTS.md, "The public API does not break").
 //  2. **The RECORD is projected, because its id vocabulary differs.** `/api/v1` says `taskId`
 //     and `runId` where the stored row says `blockId` and `executionId`; publishing the row
 //     as-is would hand a caller two ids it cannot address anything with, next to the ones it

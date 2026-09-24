@@ -60,7 +60,7 @@ notifications and the palette alike.
 
 ## Conventions & gotchas
 
-- **Deep-link replay must respect the real-time readiness ordering** (see CLAUDE.md
+- **Deep-link replay must respect the real-time readiness ordering** (see AGENTS.md
   "Real-time store coherence"): apply the params only after the on-connect resync settles
   (`data-connected`), or a stale hydrate can clobber the opened view.
 - **Search is workspace-scoped and authz-checked** like every other `/workspaces/:ws/*`

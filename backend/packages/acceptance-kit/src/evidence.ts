@@ -4,7 +4,7 @@
 // acceptance test that greps a coder's final reply for "fixed the off-by-one" is testing the
 // model's turn of phrase; swap the model and it goes red having found nothing wrong. The
 // verification report exists precisely because the platform derives its verdicts in code from
-// captured facts (`CLAUDE.md` → "The model JUDGES; the platform COMPUTES"), so `reproduction.verdict`,
+// captured facts (`AGENTS.md` → "The model JUDGES; the platform COMPUTES"), so `reproduction.verdict`,
 // `environments.proof` and `ci.verdict` are stable claims about what happened, and they are what
 // this file reduces.
 //

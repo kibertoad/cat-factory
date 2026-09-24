@@ -27,7 +27,7 @@ import {
 //
 // Runtime-neutral: it depends only on the kernel ports + the shared client (global
 // `fetch`, present on both runtimes), so the Cloudflare and Node facades compose
-// the SAME class (see CLAUDE.md "Keep the runtimes symmetric").
+// the SAME class (see AGENTS.md "Keep the runtimes symmetric").
 
 export class LinearDocumentProvider implements DocumentSourceProvider {
   readonly kind = 'linear' as const

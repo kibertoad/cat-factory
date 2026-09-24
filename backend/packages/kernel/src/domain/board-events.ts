@@ -90,7 +90,7 @@ export function deliverableBoardBlock(block: Block | null | undefined): Block | 
  *
  * The assembly lives here rather than in each facade because the interesting part of it is the
  * {@link deliverableBoardBlock} call: symmetry between the runtimes is a rule
- * (`CLAUDE.md`: "Keep the runtimes symmetric"), and two hand-copied literals only ever agree by
+ * (`AGENTS.md`: "Keep the runtimes symmetric"), and two hand-copied literals only ever agree by
  * inspection. `blockId` deliberately does NOT ride: it is how the backend resolved which
  * workspaces to publish to, already spent by the time this is called.
  */

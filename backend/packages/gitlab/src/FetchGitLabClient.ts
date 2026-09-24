@@ -84,7 +84,7 @@ export interface FetchGitLabClientDependencies {
   /**
    * Warned when a listing hits the {@link MAX_PAGES} page cap with more results still available,
    * and when a read falls back to a deprecated endpoint — so a truncated sync is surfaced rather
-   * than silently dropped (CLAUDE.md "no silent caps"). Optional so the client stays constructible
+   * than silently dropped (AGENTS.md "no silent caps"). Optional so the client stays constructible
    * standalone in a unit test; normalised ONCE to `noopLogger`, never null-checked per call. The
    * FACADE-facing builders in `index.ts` take it as REQUIRED, which is what stops a composition
    * root from quietly running the whole GitLab path on a no-op.
@@ -106,7 +106,7 @@ interface GitLabResponse {
 }
 
 export class FetchGitLabClient implements VcsClient {
-  /** Normalised once (CLAUDE.md's logging convention), so no call site null-checks the sink. */
+  /** Normalised once (AGENTS.md's logging convention), so no call site null-checks the sink. */
   private readonly log: Logger
 
   constructor(private readonly deps: FetchGitLabClientDependencies) {
@@ -1129,7 +1129,7 @@ export class FetchGitLabClient implements VcsClient {
       // No advance, no error ⇒ already up to date (a clean no-op).
       return 'merged'
     }
-    // Still in progress after the cap: surface it (CLAUDE.md "no silent caps") and treat the
+    // Still in progress after the cap: surface it (AGENTS.md "no silent caps") and treat the
     // branch as updated — a genuine conflict still surfaces on the gate's next mergeability
     // probe, so we never wedge the gate on a slow rebase.
     this.deps.logger?.warn(

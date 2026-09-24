@@ -42,7 +42,7 @@ at it.
   integrators building on the public surface. The test: the reader can act on the page without
   cloning this repository.
 - **This repository is for people who change the code**: flow docs, ADRs, initiative trackers,
-  `AGENTS.md` maps, package `README`s, the CI/test/release process, `CLAUDE.md`. The test: the doc
+  `AGENTS.md` maps, package `README`s, the CI/test/release process, `AGENTS.md`. The test: the doc
   is updated in the same pull request as the code it describes, or it describes this repository's
   own process.
 
@@ -148,7 +148,7 @@ creating the cluster went to the site
 ## Consequences
 
 **Where a doc goes is now decidable, and stated in three places a contributor already reads**:
-`docs/README.md` and `CONTRIBUTING.md` ("Where does a new doc go?") and `CLAUDE.md`'s
+`docs/README.md` and `CONTRIBUTING.md` ("Where does a new doc go?") and `AGENTS.md`'s
 documentation-staleness sweep.
 
 **The ordering rule is phrased as an ACTION, because as a belief it failed.** Open the website pull

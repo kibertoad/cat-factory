@@ -21,7 +21,7 @@ gaps in the shape an operator acts on) is the website's
 [Security Model & Hardening](https://www.catfactory.ai/reference/security-model.html); this page
 keeps the full layer-by-layer mechanism and the code it lives in. Related: [github-integration.md](./github-integration.md) (App setup and token
 plumbing), [ADR 0025](./adr/0025-workspace-rbac.md) (who may trigger runs at all), and the
-"Untrusted text crossing a rendered surface" and "Harness rules" sections of the root `CLAUDE.md`
+"Untrusted text crossing a rendered surface" and "Harness rules" sections of the root `AGENTS.md`
 (contributor-facing rules that keep these properties true).
 
 ## Threat model
@@ -672,7 +672,7 @@ documented control into advice:
   because it spends the installation's rate limit, which the CI gate and the merger draw on.
 
 Changing any of those means updating the website page in the same PR, per the documentation sweep in
-the root `CLAUDE.md`.
+the root `AGENTS.md`.
 
 ## Known gaps
 

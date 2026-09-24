@@ -53,7 +53,7 @@ Escalating from the deployer also removes two costs the gate version carried:
   one bounded remediation attempt first, and falls through to the byte-identical terminal failure
   whenever the loop does not apply.
 
-This is NOT another `evaluateX` / `pollX` / `awaiting_x` triple (the thing CLAUDE.md bans): the
+This is NOT another `evaluateX` / `pollX` / `awaiting_x` triple (the thing AGENTS.md bans): the
 deployer already has its own poll path and its own `awaiting_job` park, and the loop rides both.
 The gate would have been the new machinery.
 

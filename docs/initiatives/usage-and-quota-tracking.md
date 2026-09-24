@@ -51,7 +51,7 @@ always where the quota data lives. Verdicts per vendor:
 
 - Getting _real_ Claude/GLM numbers requires the **executor-harness to make the side-channel
   call and return a quota snapshot on `RunnerJobResult`** → an **executor-harness image
-  bump** (per the harness-image rules in CLAUDE.md). Plan this as its own image-bumping
+  bump** (per the harness-image rules in AGENTS.md). Plan this as its own image-bumping
   slice.
 - Codex + pooled vendors get a **modeled** 5h / weekly window anchored at first-observed use,
   with per-plan absolute ceilings taken from config/defaults (no vendor publishes absolute
@@ -200,7 +200,7 @@ The pilot landed the modeled quota model end-to-end; B2/B3 extend it rather than
 - **Part B real reads = an image bump.** The harness side-channel calls change the runner
   image; bump `@cat-factory/executor-harness` + the three pinned tags
   (`deploy/backend/package.json`, `deploy/backend/wrangler.toml`, `RECOMMENDED_HARNESS_IMAGE`)
-  and add a changeset, per CLAUDE.md.
+  and add a changeset, per AGENTS.md.
 - **No N+1 in the breakdown.** The Usage tab is one GROUP BY query, not a per-model loop.
 - **Undocumented endpoints are best-effort.** Claude `/api/oauth/usage` and GLM
   `/api/monitor/*` are unofficial; a failed/absent read degrades to the modeled window, never

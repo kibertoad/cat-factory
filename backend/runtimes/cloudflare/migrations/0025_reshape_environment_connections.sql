@@ -9,7 +9,7 @@
 -- '' ⇄ null). `manifest_json` is renamed `handler_json` (it now carries the engine
 -- connection, sans secrets; the manifests to apply come from the service at provision time).
 --
--- Backwards compatibility is NOT a goal (CLAUDE.md): this is a clean DROP/CREATE, so any
+-- Backwards compatibility is NOT a goal (AGENTS.md): this is a clean DROP/CREATE, so any
 -- pre-reshape connection rows are dropped and must be re-registered.
 DROP TABLE IF EXISTS environment_connections;
 CREATE TABLE environment_connections (

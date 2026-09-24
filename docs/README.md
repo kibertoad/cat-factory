@@ -41,7 +41,7 @@ cloning this repo reads the website, and a doc here links it rather than restati
 
 | Capability                       | Using it                                                                                                                                                                             | How it is built                                                                                                                                                                                           |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Boards, services & repo linkage  | [Designing your board](https://www.catfactory.ai/guide/designing-your-board.html)                                                                                                    | [`CLAUDE.md` → Board / service / repo-linkage model](../CLAUDE.md)                                                                                                                                        |
+| Boards, services & repo linkage  | [Designing your board](https://www.catfactory.ai/guide/designing-your-board.html)                                                                                                    | [`AGENTS.md` → Board / service / repo-linkage model](../AGENTS.md)                                                                                                                                        |
 | Execution & real-time events     | [Running pipelines](https://www.catfactory.ai/guide/running-pipelines.html)                                                                                                          | [Backend → Execution & real-time events](../backend/README.md)                                                                                                                                            |
 | Model support & subscriptions    | [Model providers](https://www.catfactory.ai/guide/model-providers.html)                                                                                                              | [`model-support.md`](../backend/docs/model-support.md)                                                                                                                                                    |
 | Requirements review              | [Requirements](https://www.catfactory.ai/guide/requirements.html)                                                                                                                    | [`requirements-review.md`](../backend/docs/requirements-review.md)                                                                                                                                        |
@@ -182,7 +182,7 @@ is only partly built, so none of them describes what ships today. Index, reading
 guide and lifecycle: [`initiatives/README.md`](./initiatives/README.md).
 
 (These are contributor material too, but they stay here rather than under
-`internal/`: essentially every flow doc and CLAUDE.md entry links them, and
+`internal/`: essentially every flow doc and AGENTS.md entry links them, and
 moving the tree would rewrite those references, generated CHANGELOGs included,
 for no reader's benefit.)
 

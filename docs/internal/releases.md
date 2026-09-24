@@ -1,7 +1,7 @@
 # Releases: the runner image and new published packages
 
 Versioning is changesets (root `pnpm changeset` / `ci:publish`); the rule that every change to a
-versioned package needs a changeset lives in CLAUDE.md. This doc holds the release mechanics with
+versioned package needs a changeset lives in AGENTS.md. This doc holds the release mechanics with
 non-obvious failure modes: how the version commit reaches GitHub, keeping the changelogs it
 rewrites small, rolling out the runner image, and wiring a NEW published package so it doesn't
 ship as an empty shell.
@@ -137,5 +137,5 @@ nothing. Detection lives in `publish-payload.mjs`, with fixtures in `publish-pay
 
 - SDK publishing is gated on a VERSION CHANGE, not a file change; see
   [`sdk/README.md`](../../sdk/README.md) and `.github/workflows/sdk-release.yml`.
-- The `minimumReleaseAge` supply-chain gate on installs: CLAUDE.md, "Dependencies, releases, new
+- The `minimumReleaseAge` supply-chain gate on installs: AGENTS.md, "Dependencies, releases, new
   packages".

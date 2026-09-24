@@ -69,7 +69,7 @@ nobody enters real/production secrets.
 - `kernel` is ES2022-only (no DOM/Node lib): `new URL(...)` does not typecheck there. Put
   URL-parsing helpers in a DOM-lib package (`agents`/`server`/`integrations`).
 - Slice B must land **both** runtimes (D1 + Drizzle) + a conformance assertion in the same
-  change (CLAUDE.md "Keep the runtimes symmetric").
+  change (AGENTS.md "Keep the runtimes symmetric").
 - Pre-existing (unrelated) `@cat-factory/server` **test-file** typecheck errors exist on `main`
   (`WebCryptoSecretCipher.spec.ts`, `ensureWorkBranch.spec.ts`, `web-search-upstreams.spec.ts`):
   not caused by this work.

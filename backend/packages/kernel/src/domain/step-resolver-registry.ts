@@ -118,7 +118,7 @@ export type StepResolverFactory = (ctx: ResolverContext) => StepCompletionResolv
  * gotcha: a deployment registers extra resolvers by reference
  * (`registry.register(kind, factory)`) on the instance the facade injects. Empty by default
  * (the built-in `merger` resolver is a privileged engine-internal built-in, not a registry
- * entry — see the step taxonomy in `CLAUDE.md`).
+ * entry — see the step taxonomy in `AGENTS.md`).
  */
 export class StepResolverRegistry {
   private readonly registry = new Map<string, StepResolverFactory>()

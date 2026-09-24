@@ -205,7 +205,7 @@ All ten catalogs are otherwise at full key parity with `en`.
 
 ## Per-phase checklist
 
-For each phase (see `CLAUDE.md` → Internationalization for the full rules):
+For each phase (see `AGENTS.md` → Internationalization for the full rules):
 
 1. Replace every user-facing string (visible text, `placeholder`, `title`/tooltip,
    `aria-label`, button labels, toast `title`/`description`, script-built labels)

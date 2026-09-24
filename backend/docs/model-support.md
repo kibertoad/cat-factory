@@ -662,7 +662,7 @@ Block.modelId ──► resolveStepModelRef
 - Using and configuring models (the user-facing authority):
   [catfactory.ai → Model Providers](https://www.catfactory.ai/guide/model-providers.html).
 - Runtime flows (execution, merge lifecycle, requirements review):
-  [`CLAUDE.md`](../../CLAUDE.md).
+  [`AGENTS.md`](../../AGENTS.md).
 - Backend layering & the `GET /models` endpoint: [`backend/README.md`](../README.md).
 - Spend safeguard: `@cat-factory/spend`.
 - Self-hosted runner pool (where container steps dispatch off-Cloudflare):

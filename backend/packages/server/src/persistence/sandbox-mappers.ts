@@ -14,7 +14,7 @@ import type {
 // read path lives here once — a new field is mapped in a single place instead of being
 // mirrored per runtime. JSON-shaped columns are stored as TEXT JSON and parsed here.
 // The write path (positional D1 SQL vs the Drizzle builder) legitimately differs and
-// stays in each repo. See backend/CLAUDE.md "Keep the runtimes symmetric".
+// stays in each repo. See backend/README.md "Keep the runtimes symmetric".
 
 export function parseSandboxJson<T>(raw: string | null | undefined, fallback: T): T {
   if (!raw) return fallback

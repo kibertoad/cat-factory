@@ -50,7 +50,7 @@ The sharper argument is that the account model policy already ships
 `trustedProviders: ['bedrock']`, whose whole purpose is to let an otherwise-blocked family
 through **on a residency-guaranteed route**. With no selectable Bedrock flavour that
 exemption is only reachable by repointing the entire deployment's routing default, so the
-feature is half-wired today, which is exactly what `CLAUDE.md` says not to leave behind.
+feature is half-wired today, which is exactly what `AGENTS.md` says not to leave behind.
 
 Preference has to be per-preset rather than per-deployment because it is a per-workload
 choice: the same workspace legitimately wants a compliance preset pinned to Bedrock and an

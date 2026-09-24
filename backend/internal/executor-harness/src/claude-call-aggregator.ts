@@ -248,7 +248,7 @@ function createBoundedTranscript(
  * `messageCount` stays real, because it is a COUNT rather than a body and every consumer of the
  * metric wants it. The point is not to omit data the gate would keep; it is that serialising a
  * transcript the gate is about to drop is pure cost, and the whole reason bodies travel to the
- * recorder as thunks (`CLAUDE.md` → "Telemetry & agent-context observability").
+ * recorder as thunks (`AGENTS.md` → "Telemetry & agent-context observability").
  */
 function createCountingTranscript(seed: TranscriptTurn[]): Transcript {
   let messageCount = seed.length

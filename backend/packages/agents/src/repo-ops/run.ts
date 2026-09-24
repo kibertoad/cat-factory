@@ -13,7 +13,7 @@ import type { RepoOp, RepoOpContext, RepoOpResult } from '@cat-factory/kernel'
  *
  * Lives in `@cat-factory/agents` (which owns the kind registry + the render lib the
  * post-ops use) so the orchestration engine can drive it without importing the server
- * HTTP layer — the engine sits below the server, see CLAUDE.md "Conventions".
+ * HTTP layer — the engine sits below the server, see AGENTS.md "Conventions".
  */
 export async function runRepoOps(
   ops: readonly RepoOp[],

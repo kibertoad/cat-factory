@@ -87,6 +87,6 @@ k3d image import cat-factory-mock-harness:it nginx:1.27-alpine -c cf-local
 $env:K8S_IT_RUNNER_IMAGE = 'cat-factory-mock-harness:it'
 ```
 
-> **Windows test caveat (CLAUDE.md):** the Cloudflare **worker** vitest suite does not run on
+> **Windows test caveat (AGENTS.md):** the Cloudflare **worker** vitest suite does not run on
 > Windows. These two suites are pure Node plus the CLIs, so they do run on Windows against a local
 > k3d cluster, which is what makes the toolchain above worth installing.

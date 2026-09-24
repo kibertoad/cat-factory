@@ -12,7 +12,7 @@ stall, or cost that much"**: in practice, an LLM handed an API key and asked to 
 Everything it returns was already captured: the per-call LLM telemetry, the per-dispatch agent
 context, the searches an agent performed, the tool calls it made, and the provisioning event log (see
 [`storage-and-retention.md`](./storage-and-retention.md) and the "Telemetry & agent-context
-observability" section of the root [`CLAUDE.md`](../../CLAUDE.md)). What was missing is a way to
+observability" section of the root [`AGENTS.md`](../../AGENTS.md)). What was missing is a way to
 **walk** it: the SPA's observability drill-down loads a run's whole telemetry into a browser, which
 is fine for a human with a scrollbar and useless for a caller with a fixed context budget.
 

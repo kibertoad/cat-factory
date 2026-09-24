@@ -5,7 +5,7 @@
 // It lives in contracts rather than kernel because BOTH sides have to agree about the answer:
 // kernel is invisible to the SPA, so a rule kept there would be restated by hand on the form and
 // the two would drift. What the backend must NOT do is phrase the verdict, so this returns a
-// machine-readable code and the SPA maps it to a translated message (the CLAUDE.md rule for a
+// machine-readable code and the SPA maps it to a translated message (the AGENTS.md rule for a
 // localizable condition).
 //
 // Why it earns its place: the guided `cat-factory k3s` flow ends with "copy this token out of your

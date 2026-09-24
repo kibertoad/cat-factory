@@ -219,7 +219,7 @@ export interface AppCaches {
    * content-storage config + S3 credentials), grouped AND keyed by account id. Read on the
    * runtime integration paths (the Slack/Linear OAuth resolvers, the web-search proxy, the
    * per-account S3 blob backend) — slow-moving, admin-changed. This is the slice that
-   * replaces the service's legacy 30s homebrew TTL `Map` (the anti-pattern CLAUDE.md names):
+   * replaces the service's legacy 30s homebrew TTL `Map` (the anti-pattern AGENTS.md names):
    * coherence is invalidation-driven — the sole write path (`AccountSettingsService.write`,
    * behind the account-settings update controller) drops the account's entry after the write
    * commits, so a credential change is visible on the very next read on any replica. The

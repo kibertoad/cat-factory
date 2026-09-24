@@ -110,4 +110,4 @@ top-level files are the domain contracts.
   own absence policy: the report writes prose onto a parsed host surface, the summary emits
   machine-readable `gap` codes the SPA maps to translated copy.
 
-**See also:** `docs/glossary.md`, `CLAUDE.md` → "Board / service / repo-linkage model".
+**See also:** `docs/glossary.md`, `AGENTS.md` → "Board / service / repo-linkage model".

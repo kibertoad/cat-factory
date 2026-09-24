@@ -5,7 +5,7 @@
  * instead of dumping the raw message — and, for `providers_unconfigured`, surface the
  * SAME guidance + "Configure AI" jump as the no-AI-provider startup banner.
  *
- * i18n boundary (see CLAUDE.md / the i18n plan): user-facing title AND description are both
+ * i18n boundary (see AGENTS.md / the i18n plan): user-facing title AND description are both
  * resolved from `errors.conflict.*` message keys by the machine-readable `reason` (G1). The raw
  * backend `message` is shown only as the last-resort description fallback (an unmapped reason, or a
  * locale missing the key) and stays untranslated — the contract is "if a server message must be

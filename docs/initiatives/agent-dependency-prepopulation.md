@@ -106,7 +106,7 @@ had to be preserved deliberately, and each has a test:
 
 - **An image bump.** The harness gained `src/dependency-install.ts` and a call in every
   checkout-having mode, so the runner image and its four pinned tags move together (see
-  CONTRIBUTING / CLAUDE.md).
+  CONTRIBUTING / AGENTS.md).
 - **Installed artifacts are hidden from git.** The paths the install adds are written to
   `.git/info/exclude`, computed by diffing the untracked paths either side of the run, so it is
   what the install actually materialised rather than a guess at directory names. Without it, a

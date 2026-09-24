@@ -64,7 +64,7 @@ export function apiErrorEnvelope(error: unknown): ApiErrorEnvelope | undefined {
 /**
  * The backend's machine-readable `error.details.reason` code, when it sent one.
  *
- * This is the client half of the "backend strings" contract (see CLAUDE.md): a localizable
+ * This is the client half of the "backend strings" contract (see AGENTS.md): a localizable
  * server condition emits a stable code and the SPA maps it to a message key, with the raw
  * prose `message` as the untranslated last resort. Callers compare the result against a union
  * imported from `@cat-factory/contracts`, so a renamed code fails the typecheck instead of

@@ -238,4 +238,4 @@ repo almost always shells out to the command the Go detector already suggested.
 - **Playwright e2e spec**: covered by conformance + unit tests for v1.
 
 When these are picked up (or explicitly dropped), convert this tracker into a numbered ADR
-under `backend/docs/adr/` and `git rm` this file, per CLAUDE.md.
+under `backend/docs/adr/` and `git rm` this file, per AGENTS.md.

@@ -210,9 +210,9 @@ Everything above is about using the platform. This part is for changing it.
 
 - [`CONTRIBUTING.md`](./CONTRIBUTING.md): setting up the workspace, the common commands, and the
   changeset every PR needs.
-- [`CLAUDE.md`](./CLAUDE.md): the rules every change is held to (runtime symmetry, size ratchets,
-  compatibility, logging and more). [`AGENTS.md`](./AGENTS.md) orients coding agents, and each
-  package carries its own `AGENTS.md` with a "where things live" map.
+- [`AGENTS.md`](./AGENTS.md): the rules every change is held to (runtime symmetry, size ratchets,
+  compatibility, logging and more). It is also what orients a coding agent, and each package
+  carries its own `AGENTS.md` with a "where things live" map.
 - [`docs/README.md`](./docs/README.md): the map of this repository's docs, including the feature
   guide that pairs each capability with its website page and its design doc.
 - [`docs/glossary.md`](./docs/glossary.md): the code-level naming map (block vs task vs card,

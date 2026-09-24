@@ -3,8 +3,8 @@
 The user-facing app, packaged as a **reusable Nuxt 4 layer** a deployment consumes with
 `extends: ['@cat-factory/app']`. Thin client, no business logic: every mutation calls the backend
 Worker and the Pinia stores hydrate from server snapshots and live WebSocket updates. The full
-guide is [`README.md`](./README.md); this file is the short orientation and the pointers Claude
-Code loads as instructions (via the sibling [`CLAUDE.md`](./CLAUDE.md)).
+guide is [`README.md`](./README.md); this file is the short orientation and the pointers a coding
+agent loads as instructions when it reads a file here.
 
 **Entry:** `nuxt.config.ts` (the layer's `main`). Source lives under `app/` (the Nuxt srcDir):
 `app.vue` is the root; `app/pages/index.vue` is the board, beside three standalone routes
@@ -43,7 +43,7 @@ never drift. Where the SPA's own rules override the skill: [`README.md` → Nuxt
 ## Verify
 
 The frontend has no `dev` or `lint` script of its own: it is consumed through `extends`, and linting
-is whole-tree from the root (CLAUDE.md). Run these where stated:
+is whole-tree from the root (AGENTS.md). Run these where stated:
 
 - `pnpm dev:frontend` from the repo root, with `NUXT_PUBLIC_API_BASE` pointing at a running Worker
   (the dev server lives in `deploy/frontend`).

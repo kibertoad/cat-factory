@@ -127,7 +127,7 @@ export interface EnvironmentEvidenceBundle {
    * Its own member rather than extra `diagnosis.gaps`, because a gap is the PROVIDER's list of
    * reads it could not make: attributing a cap to the provider would have the investigator reason
    * about a control plane that in fact answered fine. Absent ⇒ nothing was cut, which is a
-   * different fact from a cut nobody recorded (CLAUDE.md's "every cap records what it dropped").
+   * different fact from a cut nobody recorded (AGENTS.md's "every cap records what it dropped").
    */
   evidenceCaps?: string[]
   /** The failure the run recorded, which is what the investigation is about. */

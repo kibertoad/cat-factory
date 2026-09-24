@@ -238,7 +238,7 @@ const LEGACY_ALLOWANCES = new Map([
 ])
 
 /**
- * Ratcheted ceilings for PROSE files with a documented tendency to regrow. CLAUDE.md's own
+ * Ratcheted ceilings for PROSE files with a documented tendency to regrow. AGENTS.md's own
  * charter says flow-specific detail belongs in each flow's doc, and the file still regrew from
  * ~700 to ~1,850 lines between hand audits; this entry turns that regrowth into a CI failure.
  * Shrink-only, like LEGACY_ALLOWANCES: move detail into the linked authority doc rather than
@@ -253,7 +253,7 @@ const LEGACY_ALLOWANCES = new Map([
  * to the rule plus the link. Nothing was dropped without a home: the earlier entries below are the
  * record of how expensive it is to find one line at a time, which is why this moved bodies instead.
  *
- * `docs/internal/running-tests.md` is here for a second reason: CLAUDE.md points an agent at it
+ * `docs/internal/running-tests.md` is here for a second reason: AGENTS.md points an agent at it
  * by name, so its whole length is a context cost paid on every read, and it sits in the tree
  * (contributor setup notes) that regrows most easily. A pointer out of a ratcheted file into an
  * unratcheted one relocates the growth rather than bounding it, which is what this entry closes.
@@ -266,7 +266,7 @@ const LEGACY_ALLOWANCES = new Map([
  * and strict-env passages trades a trap that cost someone an afternoon for a new section, which is
  * not the shrink this ratchet asks for. Moving the new section (or the Postgres recipe) to an
  * unratcheted doc is the relocation the paragraph above already refuses, and it relocates the wrong
- * thing: CLAUDE.md's pointer exists FOR the reader who is about to run tests, so scoping advice is
+ * thing: AGENTS.md's pointer exists FOR the reader who is about to run tests, so scoping advice is
  * the most load-bearing content in the file, not the least. Re-wrapping the prose wider buys ~12
  * lines and is pure metric-gaming, since the guard counts lines. What DID land is real: the
  * cancelled-sibling fact the section had duplicated now sits once, in the section that owns it.
@@ -274,7 +274,7 @@ const LEGACY_ALLOWANCES = new Map([
  * and the next addition has to earn its own justification instead of spending this one's headroom.
  */
 const DOC_ALLOWANCES = new Map([
-  ['CLAUDE.md', 689],
+  ['AGENTS.md', 689],
   ['docs/internal/running-tests.md', 96],
 ])
 

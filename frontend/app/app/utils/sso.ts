@@ -3,7 +3,7 @@ import { type SsoErrorReason } from '@cat-factory/contracts'
 // ---------------------------------------------------------------------------
 // Enterprise SSO presentation, in ONE place — the same convention as `utils/vcs.ts`.
 //
-// The backend does not localize prose (CLAUDE.md's i18n rule): a refused SSO round-trip lands
+// The backend does not localize prose (AGENTS.md's i18n rule): a refused SSO round-trip lands
 // back here with a machine-readable reason, and this module is where each reason becomes copy.
 // ---------------------------------------------------------------------------
 

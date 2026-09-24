@@ -112,7 +112,7 @@ function makeApp(
     await next()
   })
   app.route('/workspaces/:workspaceId', environmentController())
-  // Without this a refusal reads as a 500 (CLAUDE.md, the controller rules).
+  // Without this a refusal reads as a 500 (AGENTS.md, the controller rules).
   app.onError(handleError)
   return {
     app,

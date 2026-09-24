@@ -426,7 +426,7 @@
 - **Every org/durable repository method is now allow-listed or PERMANENTLY classified**, and the
   drift guard has retired `pending` from its reason vocabulary. That is the part worth keeping: as
   long as the word existed, "a new method picks its bucket in the same PR" had a landing pad, and
-  the rule CLAUDE.md states was enforceable only by a reviewer noticing. A method that belongs on
+  the rule AGENTS.md states was enforceable only by a reviewer noticing. A method that belongs on
   the machine API now fails the guard until it is actually proxied.
   - **The VCS sync + repo-write surface** (the slice five earlier entries deferred to). The premise
     that parked it was "the mothership owns GitHub sync, since the App and the webhooks live

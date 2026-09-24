@@ -51,7 +51,7 @@ import {
 export class CompositeAgentExecutor implements AsyncAgentExecutor {
   /** The app-owned agent-kind registry: decides whether a registered custom kind needs a container. */
   private readonly registry: AgentKindRegistry
-  /** Normalised once, so the one best-effort site below can log unconditionally (CLAUDE.md). */
+  /** Normalised once, so the one best-effort site below can log unconditionally (AGENTS.md). */
   private readonly log: Logger
 
   constructor(

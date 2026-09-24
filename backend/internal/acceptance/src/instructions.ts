@@ -50,7 +50,7 @@ export function serviceTitles(prefix: string): { backend: string; frontend: stri
  *
  * Part of this file rather than of the scenario because it is a brief like the others: a service frame's
  * description is what kernel's `describeOwnService` lifts into `AgentRunContext.ownService`, so this
- * text reaches EVERY agent the suite runs (CLAUDE.md: "a step's prompt names the service the work
+ * text reaches EVERY agent the suite runs (AGENTS.md: "a step's prompt names the service the work
  * belongs to"). A pass marker in this field told each coder, tester and reviewer that the system
  * under work was called `Acceptance pass 20260810203000`, which is the suite degrading the very
  * context it exists to grade the product on.

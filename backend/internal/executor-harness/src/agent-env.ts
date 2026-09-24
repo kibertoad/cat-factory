@@ -16,7 +16,7 @@
 // production mode) and the native host transport sets the same variable on the harness process it
 // spawns, so an image-only fix would have left the developer's own machine leaking it.
 //
-// Per-job env NEVER goes through `process.env` (CLAUDE.md, "Harness rules"): the native transport
+// Per-job env NEVER goes through `process.env` (AGENTS.md, "Harness rules"): the native transport
 // serves every concurrent `ambientAuth` job from one long-lived process, so a mutation here would
 // be a cross-job leak. This function only READS the process env and returns a fresh object.
 

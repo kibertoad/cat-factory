@@ -51,7 +51,7 @@ RUN groupadd --system harness \
 # fetch the CLIs), then the pinned kubectl / kustomize / helm binaries. All three are
 # pinned to exact versions so the image is reproducible and a bad upstream release can't
 # silently break a deploy — bump deliberately, and bump the image tag (CONTRIBUTING /
-# CLAUDE.md) when you do. git's dubious-ownership guard is disabled system-wide because
+# AGENTS.md) when you do. git's dubious-ownership guard is disabled system-wide because
 # the clone may be owned by another uid in some runtimes.
 ARG KUBECTL_VERSION=v1.36.4
 ARG KUSTOMIZE_VERSION=v5.8.1

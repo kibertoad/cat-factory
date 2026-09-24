@@ -142,7 +142,7 @@ transport + the GitHub token/client seams differ.
   opened (and a row this node provisions is sealed) BY the mothership, addressed by row, through
   the `secretDelegate` `composeMothership` builds. So a mothership-mode node provisions
   environments and probes release-health monitors for real without ever holding the org key. Read
-  `docs/initiatives/mothership-mode.md` before touching any of it, and `CLAUDE.md` → "Every new
+  `docs/initiatives/mothership-mode.md` before touching any of it, and `AGENTS.md` → "Every new
   feature ships MOTHERSHIP-READY" before adding a repository method anywhere in the backend.
 - `sqlite/db.ts`: the shared open/init for every local `node:sqlite` store, plus the typed
   `queryAll<Row>` / `queryOne<Row>` every read goes through. `StatementSync.all()` is typed
@@ -195,7 +195,7 @@ transport + the GitHub token/client seams differ.
   what its own prune took (`telemetry_pruned_runs`) BEFORE deleting, since afterwards there is
   nothing left to tell; the retention sweep forgets a marker once its run has no local rows left.
 - `harnessImage.ts`: `RECOMMENDED_HARNESS_IMAGE`, the executor image tag local mode pulls at
-  boot (must stay a matched set with the backend; `CLAUDE.md` → "Releases & changesets"), plus
+  boot (must stay a matched set with the backend; `AGENTS.md` → "Releases & changesets"), plus
   `RECOMMENDED_UI_HARNESS_IMAGE`, its browser-carrying sibling. The UI image is NOT pre-pulled at
   boot: a stock start should not spend gigabytes on tooling most deployments never dispatch to,
   so the runtime pulls it on the first `image: 'ui'` dispatch.
@@ -208,7 +208,7 @@ transport + the GitHub token/client seams differ.
   `doc-researcher` here is 16+ calls over 8 minutes, so per-call-and-live is the difference between
   a step that is observable while it works and one that reports nothing until it exits. The rows are
   filed by the MODEL (`CliInlineLanguageModel`, handed the facade's recorder through the wrap deps),
-  not by the instrumentation middleware around it; see `CLAUDE.md` → "Telemetry & agent-context
+  not by the instrumentation middleware around it; see `AGENTS.md` → "Telemetry & agent-context
   observability". Two things about that reader are memory rules, not niceties: the reconstruction it
   drives is retained in THIS process, so it is bounded (`MAX_TRANSCRIPT_CHARS`) and skipped entirely
   when the deployment retains no prompts (`recordInlineBodies`); see `OUTPUT_TAIL_RETAIN_CHARS` in
@@ -226,4 +226,4 @@ its seams, and the exports a superset of its registry constructors. That derivat
 here, because `startLocal` withholds `buildContainer`, so a seam this facade cannot construct is one
 a local deployment cannot register AT ALL.
 
-**See also:** `deploy/local/README.md`, `CLAUDE.md` → "Keep the runtimes symmetric".
+**See also:** `deploy/local/README.md`, `AGENTS.md` → "Keep the runtimes symmetric".

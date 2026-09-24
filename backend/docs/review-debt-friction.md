@@ -298,7 +298,7 @@ INTEGER NOT NULL DEFAULT 3`, `review_friction_block_count INTEGER`,
 4. Runtimes: D1 migration ⇄ Drizzle schema + migration; settings repo column mapping.
 5. Conformance slice; unit tests.
 6. Frontend: settings panel group, friction dialog, pre-warn badge, i18n (all locales).
-7. Docs sweep: this document gains links to the landed code; `CLAUDE.md` gets a pointer if
+7. Docs sweep: this document gains links to the landed code; `AGENTS.md` gets a pointer if
    the flow proves non-obvious; changesets for every touched versioned package.
 
 ## Alternatives considered

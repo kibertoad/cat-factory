@@ -28,7 +28,7 @@ export const IMAGES = [
     image: 'cat-factory-executor',
     harnessPkg: 'backend/internal/executor-harness/package.json',
     // RECOMMENDED_HARNESS_IMAGE — the tag local mode pins + pulls at boot; must stay a
-    // matched set with the backend (see CLAUDE.md → Releases & changesets). The sync writes it
+    // matched set with the backend (see AGENTS.md → Releases & changesets). The sync writes it
     // and the guard verifies it, like every other pin below.
     extraPins: ['backend/runtimes/local/src/harnessImage.ts'],
     sourcePrefixes: ['backend/internal/executor-harness/src/'],

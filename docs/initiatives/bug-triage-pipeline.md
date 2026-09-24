@@ -360,7 +360,7 @@ the initiative is complete once it merges.
 | `task-estimator` placement + gating validation over the new shape (`pipelineShape.ts`)                  | done   |
 | End-to-end conformance: schedule fire → intake → investigate → clarity → repro → fix → merge (fakes)    | done   |
 | e2e spec (live pushed UI updates for the recurring run; `data-testid`s as needed)                       | done   |
-| Docs: glossary entries (`bug-intake`, `repro-test`), CLAUDE.md flow note if warranted                   | done   |
+| Docs: glossary entries (`bug-intake`, `repro-test`), AGENTS.md flow note if warranted                   | done   |
 
 Notes:
 
@@ -410,7 +410,7 @@ task-estimator → repro-test → coder → reviewer → tester-api → conflict
   predicates are pushed into the vendor query (JQL / search qualifiers / GraphQL filter),
   never fetch-all-then-filter.
 - **Most phases are harness-free** (backend TypeScript + registered kinds), but a genuinely new
-  container CAPABILITY needs a harness change + image bump per the CLAUDE.md rules (bump
+  container CAPABILITY needs a harness change + image bump per the AGENTS.md rules (bump
   `@cat-factory/executor-harness` + `pnpm sync:image-tags`): Phase B (sibling checkouts), Phase F
   (read-only multi-repo explore), and Phase G (structured output on the coding surface). Phases
   C/D/E were harness-free.
@@ -422,7 +422,7 @@ task-estimator → repro-test → coder → reviewer → tester-api → conflict
 - Changeset per PR (empty for docs-only); SPA strings through i18n with all locales in
   the same PR (the locale-parity CI gate).
 - Two branches adding Drizzle migrations merge into "Non-commutative migrations": re-root
-  with `node scripts/rebase-migration-snapshot.mjs <later-folder>` (see CLAUDE.md).
+  with `node scripts/rebase-migration-snapshot.mjs <later-folder>` (see AGENTS.md).
 - **The multi-repo fan-out gate**: the executor keeps a small allow-list of PRE-REGISTRY
   built-ins (`coder`, `ci-fixer`), but a REGISTERED kind opts in via `fanOutMultiRepo: true` on
   its definition (the `bug-investigator` in Phase F, and now `repro-test` in Phase G), so neither
