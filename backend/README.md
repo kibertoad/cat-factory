@@ -38,8 +38,8 @@ a minimal deployment is just boards + pipelines.
 ## Packages
 
 The **complete** package/runtime/deployment catalog (every published library, runtime facade,
-internal package, and example deployment) is the layout tables in the
-[root README](../README.md#repository-layout). The table below is the domain-layer summary; the
+internal package, and example deployment) is the layout tables in
+[`docs/repository-layout.md`](../docs/repository-layout.md). The table below is the domain-layer summary; the
 rows after it list the opt-in libraries and the runtime facades so this doc stays self-contained.
 
 | Package                                                                                             | Role                                                                                                            |
@@ -578,7 +578,7 @@ driven from the example **deployment** package
 [`deploy/backend`](../deploy/backend), which re-exports this library's handler
 and holds the `wrangler.toml`, the per-deployment `[vars]`, and the secrets. The
 end-to-end walkthrough (deploy order, migrations, the reference URLs) lives in the
-[top-level README → Deployment](../README.md#deployment) and
+[Deploy to Cloudflare](https://www.catfactory.ai/deploy/cloudflare.html) guide and
 [`deploy/backend/README.md`](../deploy/backend/README.md). **This section is the
 configuration reference**: what every var/secret does and how to turn each opt-in
 feature on. The canonical, fully-commented list of bindings + vars is the typed

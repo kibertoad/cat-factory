@@ -143,6 +143,26 @@ describe('findColourLiterals', () => {
     assert.deepEqual(findColourLiterals(':style="{ backgroundColor: tint(a.color) }"'), [])
   })
 
+  it('ignores an issue or URL reference glued to a letter, digit or slash (issue #2261)', () => {
+    // `#NNN` after a letter, a digit or `/` is a reference, not a 3/4-digit hex colour.
+    assert.deepEqual(findColourLiterals("      refPlaceholder: 'acme/web#123',"), [])
+    assert.deepEqual(findColourLiterals("  const ref = 'owner/repo#456'"), [])
+    assert.deepEqual(findColourLiterals("  url: 'https://x.test/page#abcdef',"), [])
+    // A `#` glued directly to a `/` is a root-relative fragment, so the `/` boundary earns its
+    // place: a 3/6-hex route hash is a reference, not a colour.
+    assert.deepEqual(findColourLiterals("  to: '/#fff',"), [])
+    assert.deepEqual(findColourLiterals("  href: '/#abcdef',"), [])
+    // A real short/long hex keeps being flagged: it is preceded by a value opener, not a word char.
+    assert.deepEqual(findColourLiterals("  accent: '#123',"), ['#123'])
+    assert.deepEqual(findColourLiterals('  color: #abc;'), ['#abc'])
+    assert.deepEqual(findColourLiterals("  accent: '#abcdef',"), ['#abcdef'])
+    // A Tailwind arbitrary value spells spaces as `_`, so a hex after `_` is still a colour.
+    assert.deepEqual(findColourLiterals('class="shadow-[0_0_4px_#f59e0b]"'), ['#f59e0b'])
+    assert.deepEqual(findColourLiterals('class="shadow-[0_0_0_1px_#fff]"'), ['#fff'])
+    // Accepted residue: `solid#fff` has the same shape as `page#abcdef`, so it is not flagged.
+    assert.deepEqual(findColourLiterals('  border:1px solid#fff;'), [])
+  })
+
   it('accepts tokens, template slots, url(#id) references and comments', () => {
     assert.deepEqual(findColourLiterals('  color: var(--ui-text-highlighted);'), [])
     assert.deepEqual(findColourLiterals("  fill: 'var(--app-hue-blue)',"), [])

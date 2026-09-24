@@ -186,9 +186,11 @@ Several shapes of entry fall out of this:
   once Z.ai published the weights and Workers AI picked the model up; it shipped
   subscription-only, which is the usual path into this list.
 - **No Cloudflare floor**: `gemini`, `gemini-flash`, `gemini-3.8-flash`, `kimi-k3`,
-  `qwen3.8-max`, `qwen3.8-max-0902`, `qwen3.8-flash`, `muse-spark`, `muse-spark-contributor`.
+  `qwen3.8-max`, `qwen3.8-max-0902`, `qwen3.8-max-prime`, `qwen3.8-flash`, `glm-5.3-prime`,
+  `glm-5.3-flashx`, `grok`, `grok-4.7`, `muse-spark`, `muse-spark-contributor`.
   Nothing serves these on the binding, so each stays unavailable until a key is pooled: the
-  Gemini and Muse Spark entries through OpenRouter alone; `kimi-k3`, `qwen3.8-max-0902` and
+  Gemini, Muse Spark and speed-tier (`-prime`, `-flashx`) entries through OpenRouter alone;
+  `grok` and `grok-4.7` direct (xAI) or through OpenRouter; `kimi-k3`, `qwen3.8-max-0902` and
   `qwen3.8-flash` direct (Moonshot / DashScope) or through OpenRouter; and `qwen3.8-max` on
   DashScope alone, because OpenRouter withdrew the undated Qwen alias in favour of the dated
   snapshot. A vendor's newest flagship lands here first, because Workers AI serves the open
@@ -199,6 +201,11 @@ Several shapes of entry fall out of this:
   an operator has to make with the price in front of them, and one entry could only make it
   silently. The SPA's "enable recommended" OpenRouter set deliberately omits the contributor
   slug for the same reason.
+- **Two entries for one model, split by SPEED**: `qwen3.8-max-prime`, `glm-5.3-prime` and
+  `glm-5.3-flashx` are faster serving of a model the catalog already carries, at roughly twice
+  its price. Same reasoning as the terms split: the rate-against-latency trade is a per-block
+  choice made with the price in view. A variant at the SAME price (OpenRouter's `-pro` GPT-6
+  slugs, which only set a reasoning mode) gets no entry.
 - **Operator-hosted-gateway entries**: `bifrost-default`, `litellm-default`. One generic entry
   each for the two self-hosted gateways (Bifrost, LiteLLM), because what such a gateway serves
   is its operator's configuration and no catalog here can enumerate it. Both are `direct`-flavour
@@ -210,8 +217,8 @@ Several shapes of entry fall out of this:
   carries it. It is a **separate entry rather than a `bedrock` flavour on `claude-opus`**,
   because Bedrock lags Anthropic: folding it in would silently run 4.8 for a block pinned
   to Opus 5. Any entry whose model Bedrock serves at the SAME generation (`gpt-5.5`,
-  `gpt-oss-120b`, `claude-fable-5-1`) does carry the flavour directly. Fable 5.1 is the case
-  where that lag closed: Bedrock listed `anthropic.claude-fable-5-1` on Anthropic's own launch
+  `gpt-oss-120b`, `claude-fable-5-1`, `claude-opus-5-5`) does carry the flavour directly.
+  Fable 5.1 is the case where that lag closed: Bedrock listed `anthropic.claude-fable-5-1` on Anthropic's own launch
   day, which is why it is the first Claude entry here to carry subscription, OpenRouter and
   Bedrock arms at once. It is also now the most expensive model this catalog can select on
   Bedrock, so the bare `bedrock` price row (which cannot match per model, because a Bedrock ref
@@ -223,11 +230,11 @@ Several shapes of entry fall out of this:
 - **Subscription-only**: `claude-sonnet`. No Cloudflare/direct/OpenRouter base; the
   subscription harness is the _only_ way to run it, so it requires a connected vendor
   token (§6) and there is **no inline fallback** (§5). `claude-fable`, `claude-fable-5-1`,
-  `claude-opus` and the GPT-6 Astra / GPT-5.6 / GPT-5.5 tiers pair their subscription flavour
-  with an OpenRouter pay-as-you-go base, so they are dual-mode rather than subscription-only.
+  `claude-opus`, `claude-opus-5-5` and the GPT-6 / GPT-5.6 / GPT-5.5 tiers pair their
+  subscription flavour with an OpenRouter pay-as-you-go base, so they are dual-mode rather than subscription-only.
   `gpt-6-astra` carries one more constraint the others do not: Codex resolves that slug only
   from CLI 0.153.0 onward, so a deployment running an older executor image gets `Unknown model`
-  rather than a fallback.
+  rather than a fallback. `gpt-6-sol` and `gpt-6-luna` carry the same trap with a 0.156.1 floor.
 - **Local (per-user)**: locally-run models on a user's own runner (Ollama / LM Studio /
   llama.cpp / vLLM / custom OpenAI-compatible). NOT static catalog entries: each user
   configures runners in the UI ("My local runners", stored per-user in

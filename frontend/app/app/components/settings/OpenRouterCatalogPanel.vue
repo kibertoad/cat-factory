@@ -35,8 +35,10 @@ const back = useIntegrationBack(open)
 // that trade on somebody's behalf.
 const RECOMMENDED_SLUGS = [
   'anthropic/claude-fable-5.1',
+  'anthropic/claude-opus-5.5',
   'anthropic/claude-opus-5',
   'openai/gpt-6-astra',
+  'openai/gpt-6-sol',
   'openai/gpt-5.6-sol',
   'openai/gpt-5.6-terra',
   'google/gemini-3.1-pro-preview',
@@ -44,6 +46,7 @@ const RECOMMENDED_SLUGS = [
   'meta/muse-spark-1.3',
   'deepseek/deepseek-v4.1-flash',
   'moonshotai/kimi-k2.7-code',
+  'x-ai/grok-4.7',
   'z-ai/glm-5.3',
   'z-ai/glm-5.2',
 ]

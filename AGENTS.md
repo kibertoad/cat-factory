@@ -8,7 +8,7 @@ requirements review, the merge/gate lifecycle, telemetry). **Read `CLAUDE.md` fi
 ## Finding your way around
 
 - **What exists & where**: the complete package/runtime/deployment catalog is the layout
-  tables in [`README.md`](./README.md#repository-layout) (guarded by
+  tables in [`docs/repository-layout.md`](./docs/repository-layout.md) (guarded by
   `scripts/check-package-catalog.mjs` so it can't drift). Backend architecture:
   [`backend/README.md`](./backend/README.md).
 - **Local orientation**: each `backend/packages/*`, `backend/runtimes/*` and `frontend/app` has
@@ -20,8 +20,8 @@ requirements review, the merge/gate lifecycle, telemetry). **Read `CLAUDE.md` fi
   vs `task` vs `card`; the dir↔package name map (`runtimes/cloudflare` = `@cat-factory/worker`);
   `runner`/`executor`/`transport`/`provider`; and where the cross-cutting concepts (gates,
   agent kinds, D1⇄Drizzle migration parity) live.
-- **Feature deep-dives**: the Documentation index in [`README.md`](./README.md) and
-  `backend/docs/*`.
+- **Feature deep-dives**: the feature guide and topic index in
+  [`docs/README.md`](./docs/README.md), and `backend/docs/*`.
 
 ## Non-negotiables (see `CLAUDE.md` for the full text)
 

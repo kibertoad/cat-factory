@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/provider-bedrock",
-  "version": "0.7.546",
+  "version": "0.7.547",
   "description": "Opt-in AWS Bedrock model registry for the Agent Architecture Board's AI provisioning facade. Mix into a CompositeModelProvider to add the `bedrock` provider.",
   "repository": {
     "type": "git",
@@ -31,10 +31,10 @@
     "test:run": "vitest run"
   },
   "dependencies": {
-    "@ai-sdk/amazon-bedrock": "^5.0.88",
+    "@ai-sdk/amazon-bedrock": "^5.0.91",
     "@cat-factory/agents": "workspace:*",
     "@cat-factory/kernel": "workspace:*",
-    "ai": "^7.0.107"
+    "ai": "^7.0.111"
   },
   "devDependencies": {
     "typescript": "7.0.2",
