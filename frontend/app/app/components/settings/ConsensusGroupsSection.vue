@@ -304,7 +304,7 @@ async function remove(group: ConsensusGroup) {
           </SectionLabel>
           <select
             v-model="editor.strategy"
-            class="w-full rounded border border-muted bg-default px-2 py-1.5 text-sm text-app-100"
+            class="w-full rounded-sm border border-muted bg-default px-2 py-1.5 text-sm text-app-100"
           >
             <option v-for="s in STRATEGIES" :key="s.value" :value="s.value">{{ s.label }}</option>
           </select>
@@ -360,7 +360,7 @@ async function remove(group: ConsensusGroup) {
           />
           <select
             v-model="p.modelId"
-            class="w-44 rounded border border-muted bg-default px-1.5 py-1 text-xs text-toned"
+            class="w-44 rounded-sm border border-muted bg-default px-1.5 py-1 text-xs text-toned"
           >
             <option :value="undefined">{{ t('settings.consensusGroups.editor.stepModel') }}</option>
             <option v-for="m in selectableModelIds" :key="m.id" :value="m.id">{{ m.label }}</option>
@@ -384,7 +384,7 @@ async function remove(group: ConsensusGroup) {
           </SectionLabel>
           <select
             v-model="editor.synthesizerModelId"
-            class="w-full rounded border border-muted bg-default px-2 py-1.5 text-sm text-app-100"
+            class="w-full rounded-sm border border-muted bg-default px-2 py-1.5 text-sm text-app-100"
           >
             <option value="">{{ t('settings.consensusGroups.editor.stepModel') }}</option>
             <option v-for="m in selectableModelIds" :key="m.id" :value="m.id">{{ m.label }}</option>

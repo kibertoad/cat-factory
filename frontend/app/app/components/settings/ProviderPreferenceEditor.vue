@@ -145,7 +145,7 @@ function reset() {
         :data-testid="`preset-route-${flavor}`"
       >
         <span
-          class="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-elevated text-3xs font-semibold text-muted"
+          class="flex h-5 w-5 shrink-0 items-center justify-center rounded-sm bg-elevated text-3xs font-semibold text-muted"
         >
           {{ index + 1 }}
         </span>

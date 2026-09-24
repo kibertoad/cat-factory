@@ -229,7 +229,7 @@ onUnmounted(() => preview.stopPolling(props.block.id))
          persisted until Apply. Only shown when the frame is linked to a repo. -->
     <div
       v-if="repoLink"
-      class="space-y-2 rounded border border-default bg-default/40 p-2"
+      class="space-y-2 rounded-sm border border-default bg-default/40 p-2"
       data-testid="frontend-detect"
     >
       <div class="flex items-center justify-between gap-2">

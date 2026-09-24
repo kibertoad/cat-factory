@@ -88,7 +88,7 @@ const withheldNote = computed(() => {
              fact the lane carries, and counting only the visible cards would understate it by
              two orders of magnitude. -->
         <span
-          class="shrink-0 rounded px-1 text-3xs font-semibold tabular-nums"
+          class="shrink-0 rounded-sm px-1 text-3xs font-semibold tabular-nums"
           :style="{
             backgroundColor: tint(LANE_META.done.color),
             color: LANE_META.done.color,

@@ -1,4 +1,4 @@
-import type { ThemeDoc } from '~/utils/theme/doc'
+import { THEME_DEFAULTS, type ThemeDoc } from '~/utils/theme/doc'
 import { presets } from '~/utils/theme/presets'
 
 /**
@@ -24,12 +24,18 @@ export const DEFAULT_THEME_ID = 'cat-factory'
  * Status hues are the app's long-standing choices (amber for warning, rose for error, emerald
  * for success, sky for info, violet for the secondary accent), named here as aliases so a theme
  * that recolours `warning` recolours every warning surface.
+ *
+ * `radius` is stated even though it equals `THEME_DEFAULTS.radius`, so the value every surface in
+ * the app derives from has one visible home. It writes no CSS at that value (`css.ts` skips a
+ * default), which is the point: changing the number here is the whole edit, and Nuxt UI's
+ * `--radius-*` scale carries it to every `rounded-*` step (issue #2251).
  */
 export const CAT_FACTORY_THEME: NamedTheme = {
   id: DEFAULT_THEME_ID,
   name: 'Cat Factory',
   doc: {
     version: 1,
+    radius: THEME_DEFAULTS.radius,
     colors: {
       primary: 'indigo',
       secondary: 'violet',

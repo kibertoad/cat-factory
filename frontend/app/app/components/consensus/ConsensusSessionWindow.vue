@@ -171,7 +171,7 @@ function topScore(c: ConsensusContribution): { label: string; value: number } | 
             </SectionLabel>
             <span
               v-if="session.confidence != null"
-              class="rounded bg-app-success-500/15 px-1.5 py-0.5 text-xs text-app-success-300"
+              class="rounded-sm bg-app-success-500/15 px-1.5 py-0.5 text-xs text-app-success-300"
               >{{ t('consensus.confidence', { pct: pct(session.confidence) }) }}</span
             >
             <CopyButton :text="session.synthesis" class="ms-auto -my-1" />
@@ -233,7 +233,7 @@ function topScore(c: ConsensusContribution): { label: string; value: number } | 
                 <span class="text-xs text-dimmed">{{ roleFor(c.participantId) }}</span>
                 <span
                   v-if="topScore(c)"
-                  class="ms-auto rounded bg-elevated px-1.5 py-0.5 text-xs text-toned"
+                  class="ms-auto rounded-sm bg-elevated px-1.5 py-0.5 text-xs text-toned"
                   >{{
                     t('consensus.topScore', {
                       label: topScore(c)!.label,
@@ -248,7 +248,7 @@ function topScore(c: ConsensusContribution): { label: string; value: number } | 
                 <span
                   v-for="s in c.scores"
                   :key="s.dimension"
-                  class="rounded bg-elevated/80 px-1.5 py-0.5 text-xs text-muted"
+                  class="rounded-sm bg-elevated/80 px-1.5 py-0.5 text-xs text-muted"
                   >{{ s.dimension }}: {{ pct(s.value) }}</span
                 >
               </div>

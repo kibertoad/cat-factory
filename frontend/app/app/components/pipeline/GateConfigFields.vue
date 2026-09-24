@@ -161,7 +161,7 @@ const gateFieldValues = computed<DescriptorFieldValues>({
           min="1"
           :max="MAX_GATE_APPROVALS"
           step="1"
-          class="w-14 rounded border border-muted bg-default px-1.5 py-0.5 text-app-100"
+          class="w-14 rounded-sm border border-muted bg-default px-1.5 py-0.5 text-app-100"
           data-testid="gate-required-approvals"
           @change="setRequiredApprovals(($event.target as HTMLInputElement).value)"
         />

@@ -48,7 +48,7 @@ const isEmpty = computed(() => props.rendered.groups.every((g) => g.entries.leng
       <UIcon :name="meta.icon" class="h-3.5 w-3.5 shrink-0" :style="{ color: meta.color }" />
       <span class="truncate text-2xs font-semibold text-default">{{ t(meta.labelKey) }}</span>
       <span
-        class="ms-auto shrink-0 rounded px-1 text-3xs font-semibold tabular-nums"
+        class="ms-auto shrink-0 rounded-sm px-1 text-3xs font-semibold tabular-nums"
         :style="{ backgroundColor: tint(meta.color), color: meta.color }"
         :data-testid="`lane-count-${rendered.lane}`"
         >{{ rendered.total }}</span

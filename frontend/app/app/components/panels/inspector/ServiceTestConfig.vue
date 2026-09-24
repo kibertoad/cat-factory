@@ -452,7 +452,7 @@ function setSize(value: InstanceSize) {
          provisions the compose stack, rather than editing the raw path inline. -->
     <div
       v-if="provisionType === 'docker-compose'"
-      class="flex items-center justify-between gap-2 rounded border border-primary/40 bg-primary/10 p-2"
+      class="flex items-center justify-between gap-2 rounded-sm border border-primary/40 bg-primary/10 p-2"
       data-testid="env-setup-nudge"
     >
       <div class="min-w-0">
@@ -477,7 +477,7 @@ function setSize(value: InstanceSize) {
 
     <!-- Auto-detect a recommended provisioning config from the repo (slice 11). Non-binding:
          it prefills the form below + the kube edit refs; the user confirms/edits everything. -->
-    <div v-if="repoContext" class="space-y-2 rounded border border-default bg-default/40 p-2">
+    <div v-if="repoContext" class="space-y-2 rounded-sm border border-default bg-default/40 p-2">
       <div class="flex items-center justify-between gap-2">
         <span class="text-2xs text-muted">{{ t('inspector.testConfig.detect.title') }}</span>
         <UButton
@@ -801,7 +801,7 @@ function setSize(value: InstanceSize) {
            shown when the selected type declares a fixer prompt. -->
       <div
         v-if="manifestFixerAvailable && repoContext"
-        class="space-y-1.5 rounded border border-default bg-default/40 p-2"
+        class="space-y-1.5 rounded-sm border border-default bg-default/40 p-2"
       >
         <div class="flex items-center justify-between gap-2">
           <span class="text-2xs text-muted">{{

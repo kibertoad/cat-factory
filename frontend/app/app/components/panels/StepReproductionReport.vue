@@ -151,7 +151,7 @@ function phaseLabel(outcome: ReproductionPhaseOutcome): string {
         </div>
         <pre
           v-if="phase.outcome?.outputTail"
-          class="mt-1.5 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded bg-app-950 p-2 font-mono text-2xs text-muted"
+          class="mt-1.5 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-sm bg-app-950 p-2 font-mono text-2xs text-muted"
           data-testid="reproduction-output"
           >{{ phase.outcome.outputTail }}</pre>
       </div>

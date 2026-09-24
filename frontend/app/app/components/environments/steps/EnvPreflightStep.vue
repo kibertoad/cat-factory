@@ -79,7 +79,7 @@ const PREFLIGHT_COLOR: Record<'pass' | 'warn' | 'fail', 'success' | 'warning' | 
       <li
         v-for="r in store.preflightResults"
         :key="r.title"
-        class="rounded border border-default bg-default/40 p-2"
+        class="rounded-sm border border-default bg-default/40 p-2"
       >
         <div class="flex items-center gap-2">
           <UBadge :color="PREFLIGHT_COLOR[r.status]" variant="subtle" size="sm">
@@ -93,7 +93,7 @@ const PREFLIGHT_COLOR: Record<'pass' | 'warn' | 'fail', 'success' | 'warning' | 
         <p v-if="r.detail" class="mt-1 text-2xs text-muted">{{ r.detail }}</p>
         <pre
           v-if="r.status !== 'pass' && r.remediation"
-          class="mt-1 max-h-40 overflow-auto whitespace-pre-wrap rounded border border-app-warning-900/40 bg-app-warning-950/20 p-1.5 text-2xs text-app-warning-200/90"
+          class="mt-1 max-h-40 overflow-auto whitespace-pre-wrap rounded-sm border border-app-warning-900/40 bg-app-warning-950/20 p-1.5 text-2xs text-app-warning-200/90"
           >{{ r.remediation }}</pre>
       </li>
     </ul>

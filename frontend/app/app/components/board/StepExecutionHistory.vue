@@ -63,7 +63,7 @@ const entries = computed<Entry[]>(() =>
         <div class="relative mt-1">
           <CopyButton :text="entry.output.output" class="absolute end-1 top-1 z-10" />
           <pre
-            class="max-h-40 overflow-auto whitespace-pre-wrap rounded bg-app-950/80 p-1.5 pe-9 text-3xs leading-snug text-toned"
+            class="max-h-40 overflow-auto whitespace-pre-wrap rounded-sm bg-app-950/80 p-1.5 pe-9 text-3xs leading-snug text-toned"
             >{{ entry.output.output }}</pre>
         </div>
         <p v-if="entry.output.truncated" class="mt-1 text-3xs text-dimmed">

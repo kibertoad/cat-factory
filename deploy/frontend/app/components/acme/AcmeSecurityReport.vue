@@ -155,7 +155,7 @@ const headerTitle = computed(() =>
                 </span>
                 <span
                   v-if="finding.severity"
-                  class="rounded px-1.5 py-0.5 text-3xs font-semibold uppercase"
+                  class="rounded-sm px-1.5 py-0.5 text-3xs font-semibold uppercase"
                   :class="SEVERITY_CLASS[finding.severity]"
                 >
                   {{ t(`acme.securityReport.severity.${finding.severity}`) }}

@@ -75,7 +75,7 @@ async function toggle(row: TaskTypeSuppression, offered: boolean) {
       <li
         v-for="row in rows"
         :key="row.taskType.taskType"
-        class="flex items-start justify-between gap-3 rounded border border-default px-3 py-2"
+        class="flex items-start justify-between gap-3 rounded-sm border border-default px-3 py-2"
         data-testid="task-type-suppression"
         :data-task-type="row.taskType.taskType"
       >

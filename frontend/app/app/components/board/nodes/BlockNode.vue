@@ -315,9 +315,9 @@ const ITEM_ICON: Record<string, string> = {
             }}
           </span>
         </div>
-        <div class="mt-1.5 h-1 w-full overflow-hidden rounded bg-app-warning-900/40">
+        <div class="mt-1.5 h-1 w-full overflow-hidden rounded-sm bg-app-warning-900/40">
           <div
-            class="h-full rounded bg-app-warning-400 transition-all"
+            class="h-full rounded-sm bg-app-warning-400 transition-all"
             :style="{ width: bootstrapPct + '%' }"
           />
         </div>

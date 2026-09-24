@@ -17,7 +17,7 @@
 .reader-prose.review-mode [data-src-start] {
   position: relative;
   cursor: pointer;
-  border-radius: 0.375rem;
+  border-radius: var(--radius-md);
   transition: background 0.12s ease;
 }
 .reader-prose.review-mode [data-src-start]:hover {
@@ -34,7 +34,7 @@
   width: 1.1rem;
   align-items: center;
   justify-content: center;
-  border-radius: 0.25rem;
+  border-radius: var(--radius-sm);
   background: var(--ui-primary);
   color: var(--ui-text-inverted);
   font-size: 0.8rem;
@@ -81,7 +81,7 @@
   font-style: italic;
 }
 .reader-prose code {
-  border-radius: 0.25rem;
+  border-radius: var(--radius-sm);
   background: var(--ui-bg-elevated);
   padding: 0.1rem 0.3rem;
   font-family: var(--font-mono);
@@ -91,7 +91,7 @@
 .reader-prose pre {
   margin: 0.6rem 0;
   overflow: auto;
-  border-radius: 0.5rem;
+  border-radius: var(--radius-lg);
   background: var(--app-bg-canvas);
   padding: 0.75rem 0.9rem;
 }

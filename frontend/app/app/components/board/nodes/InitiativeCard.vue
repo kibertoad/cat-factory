@@ -86,9 +86,9 @@ function select() {
         {{ t('initiative.card.kind') }}
       </div>
       <div v-if="progress" class="mt-2 space-y-1">
-        <div class="h-1.5 overflow-hidden rounded bg-elevated">
+        <div class="h-1.5 overflow-hidden rounded-sm bg-elevated">
           <div
-            class="h-full rounded bg-primary"
+            class="h-full rounded-sm bg-primary"
             :style="{ width: `${Math.round((progress.settled / progress.total) * 100)}%` }"
           />
         </div>

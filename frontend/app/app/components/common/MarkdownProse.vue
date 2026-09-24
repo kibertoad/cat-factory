@@ -55,7 +55,7 @@ const html = computed(() => renderMarkdown(props.text))
   font-style: italic;
 }
 .cf-prose :deep(code) {
-  border-radius: 0.25rem;
+  border-radius: var(--radius-sm);
   background: var(--ui-bg-elevated);
   padding: 0.1rem 0.3rem;
   font-family: var(--font-mono);
@@ -65,7 +65,7 @@ const html = computed(() => renderMarkdown(props.text))
 .cf-prose :deep(pre) {
   margin: 0.6rem 0;
   overflow: auto;
-  border-radius: 0.5rem;
+  border-radius: var(--radius-lg);
   background: var(--app-bg-canvas);
   padding: 0.75rem 0.9rem;
 }

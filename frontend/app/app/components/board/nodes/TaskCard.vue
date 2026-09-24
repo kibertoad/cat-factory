@@ -327,7 +327,7 @@ function selectTask() {
            hover. Renders a built-in OR a deployment-registered custom type via `taskTypeMeta`. -->
       <span
         v-if="typeBadge"
-        class="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded"
+        class="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm"
         :style="{ color: typeBadge.color, backgroundColor: tint(typeBadge.color) }"
         :title="typeBadge.label"
         :data-task-type-badge="task.taskType"
@@ -415,7 +415,7 @@ function selectTask() {
       <span
         v-for="d in deps"
         :key="d.id"
-        class="inline-flex items-center gap-0.5 rounded bg-elevated/80 px-1 py-0.5 text-3xs"
+        class="inline-flex items-center gap-0.5 rounded-sm bg-elevated/80 px-1 py-0.5 text-3xs"
         :class="d.status === 'done' ? 'text-muted' : 'text-app-warning-300'"
         :title="depLabel(d)"
       >
@@ -565,7 +565,7 @@ function selectTask() {
       class="mt-2 flex flex-wrap items-center gap-1 border-t border-default pt-2"
     >
       <span
-        class="inline-flex items-center gap-1 rounded bg-app-secondary-500/15 px-1.5 py-0.5 text-3xs text-app-secondary-200"
+        class="inline-flex items-center gap-1 rounded-sm bg-app-secondary-500/15 px-1.5 py-0.5 text-3xs text-app-secondary-200"
         :title="t('board.task.module', { name: task.moduleName })"
       >
         <UIcon :name="MODULE_META.icon" class="h-3 w-3" :style="{ color: MODULE_META.color }" />

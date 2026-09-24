@@ -485,12 +485,12 @@ const PHASE_ICON: Record<string, string> = {
           >
             <div class="flex flex-wrap items-center gap-2">
               <span
-                class="rounded border px-1.5 py-0.5 text-3xs font-semibold uppercase"
+                class="rounded-sm border px-1.5 py-0.5 text-3xs font-semibold uppercase"
                 :class="SEVERITY_CLASS[finding.severity]"
               >
                 {{ t(`bugFishing.severity.${finding.severity}`) }}
               </span>
-              <span class="rounded bg-elevated px-1.5 py-0.5 text-3xs text-toned">
+              <span class="rounded-sm bg-elevated px-1.5 py-0.5 text-3xs text-toned">
                 {{ t(`bugFishing.kind.${finding.kind}`) }}
               </span>
               <span class="text-3xs text-dimmed">

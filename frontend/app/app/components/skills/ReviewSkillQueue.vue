@@ -88,7 +88,7 @@ function toggle(id: string) {
                   v-for="s in offered"
                   :key="s.id"
                   type="button"
-                  class="flex w-full items-start gap-2 rounded px-2 py-1.5 text-start text-sm hover:bg-elevated/60 disabled:cursor-not-allowed disabled:opacity-40"
+                  class="flex w-full items-start gap-2 rounded-sm px-2 py-1.5 text-start text-sm hover:bg-elevated/60 disabled:cursor-not-allowed disabled:opacity-40"
                   :class="selectedSet.has(s.id) ? 'text-app-100' : 'text-toned'"
                   :disabled="atCap && !selectedSet.has(s.id)"
                   :aria-pressed="selectedSet.has(s.id)"

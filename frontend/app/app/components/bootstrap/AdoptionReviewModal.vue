@@ -300,7 +300,7 @@ watch(open, (isOpen) => {
               </div>
 
               <div class="grid gap-2 text-xs sm:grid-cols-2">
-                <div class="rounded bg-default/60 p-2">
+                <div class="rounded-sm bg-default/60 p-2">
                   <p class="mb-1 font-semibold text-toned">
                     {{ t('bootstrap.adoption.side.monorepo') }}
                   </p>
@@ -308,7 +308,7 @@ watch(open, (isOpen) => {
                     {{ decision.monorepoPractice ?? t('bootstrap.adoption.side.nothing') }}
                   </p>
                 </div>
-                <div class="rounded bg-default/60 p-2">
+                <div class="rounded-sm bg-default/60 p-2">
                   <p class="mb-1 font-semibold text-toned">
                     {{ t('bootstrap.adoption.side.template') }}
                   </p>

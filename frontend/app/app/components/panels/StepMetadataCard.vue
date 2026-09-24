@@ -410,7 +410,7 @@ async function copyRunId() {
           <CopyButton v-if="v.feedback" :text="v.feedback" class="absolute end-1 top-1" />
           <div class="flex items-center gap-2 text-xs">
             <span
-              class="inline-flex h-4 shrink-0 items-center rounded px-1 font-mono text-2xs tabular-nums"
+              class="inline-flex h-4 shrink-0 items-center rounded-sm px-1 font-mono text-2xs tabular-nums"
               :class="
                 v.passed
                   ? 'bg-app-success-500/15 text-app-success-300'

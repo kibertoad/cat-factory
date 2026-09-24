@@ -153,7 +153,7 @@ const decisionItems = computed(() =>
          drops on narrow viewports) so the zoom level is never a mystery. -->
     <button
       type="button"
-      class="w-16 rounded text-center text-xs tabular-nums text-toned hover:bg-elevated focus-visible:ring-2 focus-visible:ring-app-400/60 sm:w-20"
+      class="w-16 rounded-sm text-center text-xs tabular-nums text-toned hover:bg-elevated focus-visible:ring-2 focus-visible:ring-app-400/60 sm:w-20"
       :title="t('board.toolbar.resetZoom')"
       :aria-label="t('board.toolbar.resetZoom')"
       data-testid="board-zoom-reset"

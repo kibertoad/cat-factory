@@ -65,7 +65,7 @@ const ceilings = computed(() =>
         <div
           v-for="c in ceilings"
           :key="c.axis"
-          class="flex items-baseline justify-between gap-3 rounded bg-elevated/70 px-1.5 py-0.5 text-xs"
+          class="flex items-baseline justify-between gap-3 rounded-sm bg-elevated/70 px-1.5 py-0.5 text-xs"
         >
           <dt class="text-toned">{{ c.label }}</dt>
           <dd class="tabular-nums text-app-100">
