@@ -474,6 +474,53 @@ describe('a workflow resolved per dispatch', () => {
     expect(calls.some((c) => c.url.includes('/repos/acme/payments/actions/runs/4242'))).toBe(true)
   })
 
+  it('hands the resolver the base branch, from the brief and from the handle alike', async () => {
+    // A caller shim is dispatched on the branch that holds it, which is the work repository's own
+    // base. Without it on the scope every deployment restated the default-branch name per repo.
+    const refs: string[] = []
+    const onBase = {
+      ...DESCRIPTION,
+      workflow: (scope: GitHubActionsWorkflowScope) => {
+        refs.push(scope.baseBranch)
+        return {
+          owner: scope.repo.owner,
+          repo: scope.repo.name,
+          workflowFile: 'w.yml',
+          ref: scope.baseBranch,
+        }
+      },
+    }
+    const { fetchImpl, calls } = fakeFetch({
+      '/dispatches': () => ({ status: 204 }),
+      '/runs?': () => ({ body: { workflow_runs: [] } }),
+      '/actions/runs/4242': () => ({ body: { ...RUN, status: 'in_progress', conclusion: null } }),
+    })
+    const executor = githubActionsDelegatedExecutor(onBase, deps(fetchImpl))
+    await executor.start(
+      { ...brief(), branches: { base: 'master', work: 'cat-factory/blk_1' } },
+      CREDS,
+    )
+    await executor.poll(
+      handle({
+        repo: { owner: 'acme', name: 'widgets' },
+        branches: { base: 'master', work: 'cat-factory/blk_1' },
+      }),
+      CREDS,
+    )
+    expect(refs).toEqual(['master', 'master'])
+    expect(calls.find((c) => c.url.includes('/dispatches'))?.body).toMatchObject({ ref: 'master' })
+  })
+
+  it('REFUSES a handle that names no base branch rather than assuming one', async () => {
+    const { fetchImpl } = fakeFetch({ '/actions/runs/4242': () => ({ body: RUN }) })
+    await expect(
+      githubActionsDelegatedExecutor(perRepo, deps(fetchImpl)).poll(
+        handle({ repo: { owner: 'acme', name: 'widgets' }, branches: undefined }),
+        CREDS,
+      ),
+    ).rejects.toThrow(/no base branch/)
+  })
+
   it('REFUSES a handle that names no work repository rather than guessing one', async () => {
     const { fetchImpl } = fakeFetch({ '/actions/runs/4242': () => ({ body: RUN }) })
     await expect(
