@@ -80,7 +80,7 @@ const CONVENTION_FILES = [
   'docker-compose.yml',
   'compose.yaml',
   'AGENTS.md',
-  'AGENTS.md',
+  'CLAUDE.md',
   'CONTRIBUTING.md',
   'README.md',
 ] as const

@@ -21,7 +21,7 @@ import { log, type Logger } from './logger.js'
 // itself. It still reports that weaker fact alongside, since a check that could not be carried
 // out is what the boot record has to be read against, and nothing else establishes it.
 //
-// The three-valued shape is deliberate and is the point (AGENTS.md, "Degrade loudly"): a daemon
+// The three-valued shape is deliberate and is the point (CLAUDE.md, "Degrade loudly"): a daemon
 // that FAILED and a daemon nobody asked about are different facts with different correct
 // reactions, and collapsing them would either refuse stand-ups that work or silently attempt
 // ones that cannot. Only a DECIDED `false` refuses.

@@ -91,7 +91,7 @@ RUN echo 'harness:100000:65536' > /etc/subuid \
 # carry no credentials either: a leased subscription OAuth token (Claude) /
 # auth.json bundle (Codex) is handed over per job and the CLI talks DIRECT to the
 # vendor (no proxy). All three pinned to exact versions for reproducibility — bump
-# deliberately, and bump the image tag (see CONTRIBUTING / AGENTS.md) when you do.
+# deliberately, and bump the image tag (see CONTRIBUTING / CLAUDE.md) when you do.
 #
 # `procps` + `psmisc` (ps, pgrep, pkill, killall, fuser) are here for the AGENT, not
 # for us: an agent that has just smoke-tested a service it built needs to stop it
