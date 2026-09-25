@@ -117,14 +117,14 @@ const selectableModelIds = computed(() => {
     .map((m) => ({ id: m.id, label: m.label }))
 })
 
-// The two model pickers differ only in what "inherit the step's model" is worth on the wire:
-// a participant leaves it `undefined`, the synthesizer leaves it an empty string.
-const participantModelItems = computed(() => [
-  { label: t('settings.consensusGroups.editor.stepModel'), value: undefined },
-  ...selectableModelIds.value.map((m) => ({ label: m.label, value: m.id })),
-])
-const synthesizerModelItems = computed(() => [
-  { label: t('settings.consensusGroups.editor.stepModel'), value: '' },
+// "Inherit the step's model" is a NAMED sentinel in the picker, never an empty string and never
+// `undefined`: a Select reserves both for "nothing selected", so an item carrying one either
+// throws (empty string) or renders the placeholder over its own label (undefined). One item list
+// serves both pickers; each binding below maps the sentinel to what its field holds on the wire,
+// which is `undefined` for a participant and an empty string for the synthesizer.
+const STEP_MODEL = '__step__'
+const modelItems = computed(() => [
+  { label: t('settings.consensusGroups.editor.stepModel'), value: STEP_MODEL },
   ...selectableModelIds.value.map((m) => ({ label: m.label, value: m.id })),
 ])
 
@@ -365,7 +365,13 @@ async function remove(group: ConsensusGroup) {
             class="min-w-40 flex-1"
             :placeholder="t('settings.consensusGroups.editor.framingPlaceholder')"
           />
-          <USelect v-model="p.modelId" :items="participantModelItems" size="xs" class="w-44" />
+          <USelect
+            :model-value="p.modelId || STEP_MODEL"
+            :items="modelItems"
+            size="xs"
+            class="w-44"
+            @update:model-value="p.modelId = $event === STEP_MODEL ? undefined : String($event)"
+          />
           <IconButton
             icon="i-lucide-x"
             color="error"
@@ -384,10 +390,13 @@ async function remove(group: ConsensusGroup) {
             {{ t('settings.consensusGroups.editor.synthesizerLabel') }}
           </SectionLabel>
           <USelect
-            v-model="editor.synthesizerModelId"
-            :items="synthesizerModelItems"
+            :model-value="editor.synthesizerModelId || STEP_MODEL"
+            :items="modelItems"
             size="sm"
             class="w-full"
+            @update:model-value="
+              editor.synthesizerModelId = $event === STEP_MODEL ? '' : String($event)
+            "
           />
         </div>
         <div v-if="editor.strategy === 'debate'">

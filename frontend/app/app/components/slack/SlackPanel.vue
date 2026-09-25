@@ -281,16 +281,17 @@ async function saveMapping() {
               <USwitch v-model="routes[row.type]!.enabled" size="sm" />
               <span class="w-32 text-sm text-toned">{{ row.label }}</span>
               <!-- The workspace's channels are suggestions, not a closed list: a route may name
-                   a channel the bot cannot enumerate yet. -->
+                   a channel the bot cannot enumerate yet. `mode="autocomplete"` is what makes the
+                   typed name the value: the DEFAULT combobox mode writes its model only when
+                   something is SELECTED, so a channel typed and then saved would be dropped. -->
               <UInputMenu
                 v-model="routes[row.type]!.channel"
+                mode="autocomplete"
                 :items="channelSuggestions"
                 size="sm"
                 class="flex-1"
-                create-item
                 :placeholder="t('slack.routing.channelPlaceholder')"
                 :disabled="!routes[row.type]!.enabled"
-                @create="routes[row.type]!.channel = $event"
               />
             </div>
 

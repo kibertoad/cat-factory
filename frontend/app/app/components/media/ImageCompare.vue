@@ -143,7 +143,9 @@ const ACCEPTED = /^image\/(png|jpeg)$/
 const pendingRef = ref<File | null>(null)
 watch(pendingRef, (file) => {
   if (file && ACCEPTED.test(file.type)) emit('uploadReference', file)
-  // Cleared either way, so re-picking the SAME file fires the watcher again.
+  // Cleared either way, so a fresh pick is a fresh file. `UFileUpload` carries `reset` for the
+  // other half of this: clearing the model alone leaves the native input holding the file it
+  // already has, and the browser fires no change event when the same one is chosen twice.
   if (file) pendingRef.value = null
 })
 </script>
@@ -214,6 +216,7 @@ watch(pendingRef, (file) => {
         </figcaption>
         <UFileUpload
           v-model="pendingRef"
+          reset
           accept="image/png,image/jpeg"
           :disabled="busy"
           :preview="false"

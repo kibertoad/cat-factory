@@ -259,27 +259,28 @@ const { requestClose } = useUnsavedGuard({
                  mode, because `toggle` replaces the selection across every subject rather than per
                  group.
 
-                 `@click.stop` belongs on the LABEL, which is the element the card's own toggle has
-                 to be shielded from. On the input alone it stopped the wrong click: activating a
-                 label forwards a synthetic click to its input (which `.stop` there does not
-                 prevent, only its propagation), so a click on the label TEXT bubbled to the card
-                 and toggled, then the forwarded click toggled back. On a checkbox that nets to no
-                 change, which means no re-render, which leaves the box ticked over a candidate
-                 that is no longer selected. -->
+                 `@click.stop` belongs on the WRAPPER, which is what the card's own toggle has to
+                 be shielded from, and NOT on the control: activating a label forwards a synthetic
+                 click to its control (which `.stop` there does not prevent, only its
+                 propagation), so a click on the label TEXT bubbles to the card and toggles, then
+                 the forwarded click toggles back. On a checkbox that nets to no change, which
+                 means no re-render, which leaves the box ticked over a candidate that is no
+                 longer selected. UCheckbox is not the place for it either: Nuxt UI forwards
+                 `$attrs` onto the inner checkbox button rather than onto its root, so a listener
+                 put there is the same "on the control alone" mistake spelled differently. -->
             <!-- One control either way. Single-select is still a checkbox rather than a radio
                  group, because the rows are rendered per candidate and `toggle` already enforces
                  the single-selection rule; a radio group would need the whole set in one place. -->
-            <UCheckbox
-              v-if="view.awaiting"
-              size="xs"
-              class="mb-1.5"
-              :model-value="selected.includes(row.id)"
-              :label="candidateLabel(row)"
-              :aria-label="candidateLabel(row)"
-              data-testid="binary-candidate-select"
-              @click.stop
-              @update:model-value="toggle(row.id)"
-            />
+            <div v-if="view.awaiting" class="mb-1.5" @click.stop>
+              <UCheckbox
+                size="xs"
+                :model-value="selected.includes(row.id)"
+                :label="candidateLabel(row)"
+                :aria-label="candidateLabel(row)"
+                data-testid="binary-candidate-select"
+                @update:model-value="toggle(row.id)"
+              />
+            </div>
             <!-- Staged through the platform's OWN asset storage: we hold the bytes, so the card
                  renders them (and offers to open or save one) rather than waiting for a public
                  link the shipped storage never issues. Checked first because a candidate can

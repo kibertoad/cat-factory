@@ -8,7 +8,15 @@
 
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { findRawControls, findRedundantTitle, templateHalf } from './check-frontend-primitives.mjs'
+import {
+  findRawControls,
+  findRedundantTitle,
+  openingTag,
+  templateHalf,
+} from './check-frontend-primitives.mjs'
+
+/** The scanner's own `tagOf`, so a fixture can be written as the wrapped lines it really is. */
+const tagReader = (lines, index) => (from) => openingTag(lines, index, from)
 
 test('claims each banned control', () => {
   assert.deepEqual(findRawControls('  <button type="button">Go</button>'), ['button'])
@@ -62,6 +70,46 @@ test('the waiver is honoured on the line and on the one before it', () => {
   assert.deepEqual(findRawControls('  <button />', '  <!-- raw-control-ok: reason -->'), [])
   // ...and nowhere else, so a waiver two lines up cannot silence an unrelated control.
   assert.deepEqual(findRawControls('  <button />', '  <div>'), ['button'])
+})
+
+test('an attribute rule reads the whole opening tag, not one line', () => {
+  // The bug this pins: the formatter wraps every multi-attribute tag, so an `<a>` carries its
+  // `href` and an IconButton its `title` on a LATER line than the one that opens the tag. Read a
+  // line at a time, both rules matched nothing in the whole SPA.
+  const anchor = [
+    '          <a',
+    '            :href="url"',
+    '            target="_blank"',
+    '          >',
+  ]
+  assert.deepEqual(findRawControls(anchor[0], '', tagReader(anchor, 0)), ['a'])
+
+  // ...and a wrapped anchor with no destination is still just a scroll target.
+  const target = ['          <a', '            id="section-3"', '          />']
+  assert.deepEqual(findRawControls(target[0], '', tagReader(target, 0)), [])
+
+  const icon = [
+    '          <IconButton',
+    '            :title="hint"',
+    '            icon="i-lucide-x"',
+    '          />',
+  ]
+  assert.deepEqual(findRedundantTitle(icon[0], '', tagReader(icon, 0)), ['title'])
+
+  const labelled = [
+    '          <IconButton',
+    '            :label="hint"',
+    '            icon="i-lucide-x"',
+    '          />',
+  ]
+  assert.deepEqual(findRedundantTitle(labelled[0], '', tagReader(labelled, 0)), [])
+})
+
+test('the opening tag stops at its own `>`, not a sibling`s', () => {
+  // `from` is the element's match offset, so an earlier tag closing on the same line cannot
+  // truncate the one being read.
+  const lines = ['  <div><a', '    :href="url"', '  >']
+  assert.equal(openingTag(lines, 0, lines[0].indexOf('<a')), '<a\n    :href="url"\n  >')
 })
 
 test('title= is banned on the primitives that own their tooltip', () => {

@@ -137,9 +137,12 @@ const maxRuns = computed(() => maxOf(activityByDimension.value, (row) => row.run
 
 /** Boards the filter offers — the active account's, since the report is account-scoped. */
 const boards = computed(() => workspace.accountWorkspaces)
-// The empty value is "every board", which the store holds as null.
+// "Every board" is a NAMED sentinel, not an empty string: an empty string is what a Select
+// reserves for "nothing selected", and Reka throws on an item that carries one. The store holds
+// the same state as null, so the two are mapped at the boundary below.
+const ALL_BOARDS = 'all'
 const boardFilterItems = computed(() => [
-  { label: t('reports.filter.allBoards'), value: '' },
+  { label: t('reports.filter.allBoards'), value: ALL_BOARDS },
   ...boards.value.map((board) => ({ label: board.name, value: board.id })),
 ])
 
@@ -212,12 +215,14 @@ watch(
           <!-- Filters in ONE row above the charts: window, then board scope. -->
           <div class="ms-auto flex flex-wrap items-center gap-1.5">
             <USelect
-              :model-value="reports.workspaceFilter ?? ''"
+              :model-value="reports.workspaceFilter ?? ALL_BOARDS"
               :items="boardFilterItems"
               size="xs"
               :aria-label="t('reports.filter.board')"
               data-testid="reports-board-filter"
-              @update:model-value="reports.setWorkspaceFilter($event || null)"
+              @update:model-value="
+                reports.setWorkspaceFilter($event === ALL_BOARDS ? null : String($event))
+              "
             />
             <UTabs
               :model-value="reports.window"

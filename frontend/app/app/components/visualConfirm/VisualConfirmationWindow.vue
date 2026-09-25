@@ -217,7 +217,8 @@ watch(pendingUpload, async (file) => {
   }
   await visualConfirm.uploadReference(blockId.value, file, view)
   uploadView.value = ''
-  // Cleared so re-picking the SAME file fires the watcher again.
+  // Cleared so a fresh pick is a fresh file. `UFileUpload` carries `reset` for the other half of
+  // this: without it the native input keeps its value and the SAME file fires no change event.
   pendingUpload.value = null
 })
 </script>
@@ -341,19 +342,24 @@ watch(pendingUpload, async (file) => {
           </SectionLabel>
           <div class="flex flex-wrap items-center gap-2">
             <!-- The known views are suggestions, not a closed list: a reference can be uploaded
-                 for a view the run has not produced yet. -->
+                 for a view the run has not produced yet, which is the case this field exists for.
+                 `mode="autocomplete"` is what makes that work: the DEFAULT combobox mode writes
+                 its model only when something is SELECTED, so typing a new view name would leave
+                 `uploadView` empty and the picker beside it disabled. -->
             <UInputMenu
               v-model="uploadView"
+              mode="autocomplete"
               :items="viewSuggestions"
               size="xs"
-              create-item
               :placeholder="t('visualConfirm.upload.viewPlaceholder')"
-              @create="uploadView = $event"
             />
+            <!-- `reset` so the native input is cleared on every open: re-picking the SAME file
+                 after a rejected or completed upload otherwise fires no change event at all. -->
             <UFileUpload
               v-model="pendingUpload"
               variant="button"
               size="xs"
+              reset
               accept="image/png,image/jpeg"
               :preview="false"
               :disabled="busy || !uploadView.trim()"

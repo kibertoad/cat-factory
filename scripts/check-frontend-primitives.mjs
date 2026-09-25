@@ -68,6 +68,9 @@ export const REPLACEMENTS = {
 }
 
 const RAW_OK = 'raw-control-ok:'
+// How far an opening tag is followed for its attributes. The longest in the tree is well under
+// this; the cap is only so a file with an unbalanced `<` cannot make the scan quadratic.
+const MAX_TAG_LINES = 40
 // A line that opens with a comment marker is prose about the rule, not an application of it.
 const COMMENT_LINE = /^\s*(?:\/\/|\/?\*|<!--)/
 
@@ -80,25 +83,57 @@ const COMMENT_LINE = /^\s*(?:\/\/|\/?\*|<!--)/
  *
  * Pure, so the companion test can drive it with fixture strings.
  */
-export function findRawControls(line, prevLine = '') {
+export function findRawControls(line, prevLine = '', tagOf = () => line) {
   if (COMMENT_LINE.test(line)) return []
   if (line.includes(RAW_OK) || prevLine.includes(RAW_OK)) return []
   const found = []
   for (const element of Object.keys(REPLACEMENTS)) {
     const re = new RegExp(`<${element}(?![a-zA-Z0-9-])`, 'g')
-    if (!re.test(line)) continue
+    const match = re.exec(line)
+    if (!match) continue
     // An anchor is only a link when it has a destination; a bare `<a>` is an anchor target.
-    if (element === 'a' && !/\s:?href=/.test(line)) continue
+    // Read the WHOLE opening tag: the formatter wraps a multi-attribute tag, so every `<a href>`
+    // in this tree carries its `href` on a later line than its `<a`.
+    if (element === 'a' && !/\s:?href[=\s>]/.test(tagOf(match.index))) continue
     found.push(element)
   }
   return found
 }
 
 /** `title=` on a primitive that already owns its tooltip. */
-export function findRedundantTitle(line, prevLine = '') {
+export function findRedundantTitle(line, prevLine = '', tagOf = () => line) {
   if (COMMENT_LINE.test(line)) return []
   if (line.includes(RAW_OK) || prevLine.includes(RAW_OK)) return []
-  return /<(?:IconButton|CopyButton)\b[^>]*\s:?title=/.test(line) ? ['title'] : []
+  const match = /<(?:IconButton|CopyButton)(?![a-zA-Z0-9-])/.exec(line)
+  if (!match) return []
+  // Same reason as the anchor above: an IconButton with a `title` is never one line long.
+  return /\s:?title[=\s>]/.test(tagOf(match.index)) ? ['title'] : []
+}
+
+/**
+ * The opening tag that starts at `from` on `lines[index]`, up to its first `>`.
+ *
+ * The two ATTRIBUTE rules above read attributes, and the formatter breaks any tag carrying more
+ * than a couple of them across lines. Reading one line saw only the tags short enough to fit on
+ * one, which is not the shape this repo writes: every `<a href>` and every `IconButton` in the
+ * SPA is wrapped, so both rules matched nothing at all.
+ *
+ * A `>` inside an attribute VALUE ends the tag early here. That costs a rule nothing it was
+ * getting before (the single-line read had the same blind spot and a shorter reach), and the
+ * alternative is a parser.
+ */
+export function openingTag(lines, index, from = 0) {
+  let text = ''
+  for (let i = index; i < lines.length && i - index < MAX_TAG_LINES; i++) {
+    const slice = i === index ? lines[i].slice(from) : lines[i]
+    const end = slice.indexOf('>')
+    if (end === -1) {
+      text += `${slice}\n`
+      continue
+    }
+    return text + slice.slice(0, end + 1)
+  }
+  return text
 }
 
 /**
@@ -132,8 +167,9 @@ function main() {
     const lines = templateHalf(readFileSync(file, 'utf8')).split('\n')
     lines.forEach((line, i) => {
       const prev = lines[i - 1] ?? ''
-      const controls = findRawControls(line, prev)
-      const titles = findRedundantTitle(line, prev)
+      const tagOf = (from) => openingTag(lines, i, from)
+      const controls = findRawControls(line, prev, tagOf)
+      const titles = findRedundantTitle(line, prev, tagOf)
       if (controls.length || titles.length) {
         offenders.push({
           file: relative(repoRoot, file),

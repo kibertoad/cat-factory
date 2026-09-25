@@ -436,8 +436,14 @@ const phaseColumns = computed<TableColumn<(typeof phaseRows.value)[number]>[]>((
   { id: 'turns' },
   { id: 'tokens' },
   ...(showCost.value ? [{ id: 'cost' } as TableColumn<(typeof phaseRows.value)[number]>] : []),
-  { id: 'carryCost' },
+  // `enableSorting` is what makes UTable emit `aria-sort` on the header cell. The rows arrive in
+  // this order from the rollup, so `manualSorting` below keeps TanStack from re-deriving it: the
+  // declaration MARKS the order, it does not produce it, and nothing here offers a sort control.
+  { id: 'carryCost', enableSorting: true },
 ])
+/** The order the rollup already returns, stated so the header can say which column it is. */
+const PHASE_SORTING = [{ id: 'carryCost', desc: true }]
+const PHASE_SORTING_OPTIONS = { manualSorting: true }
 /**
  * The run's estimated cost, folded from the same SQL rollup the phase table shows — NOT from
  * the capped call list the token totals beside it use, which would silently under-report a run
@@ -735,6 +741,8 @@ function exportJson() {
                 <UTable
                   :data="phaseRows"
                   :columns="phaseColumns"
+                  :sorting="PHASE_SORTING"
+                  :sorting-options="PHASE_SORTING_OPTIONS"
                   :ui="{ base: 'min-w-[32rem] text-xs' }"
                 >
                   <template #phase-header>
