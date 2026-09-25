@@ -469,7 +469,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                 color="neutral"
                 variant="ghost"
                 v-if="s.title"
-                class="group flex w-full items-center gap-2 p-0 text-start"
+                class="group flex w-full items-center gap-2 p-0 text-start hover:bg-transparent"
                 @click="toggle(s.id)"
               >
                 <UIcon

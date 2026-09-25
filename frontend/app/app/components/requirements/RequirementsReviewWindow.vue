@@ -1119,7 +1119,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
             <UButton
               color="neutral"
               variant="ghost"
-              class="mb-3 flex w-full items-center gap-1.5 p-0 text-2xs text-app-success-400"
+              class="mb-3 flex w-full items-center gap-1.5 p-0 text-2xs text-app-success-400 hover:bg-transparent"
               @click="toggleDoc"
             >
               <UIcon
@@ -1146,7 +1146,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                   color="neutral"
                   variant="ghost"
                   v-if="s.title"
-                  class="group flex w-full items-center gap-2 p-0 text-start"
+                  class="group flex w-full items-center gap-2 p-0 text-start hover:bg-transparent"
                   @click="toggle(s.id)"
                 >
                   <UIcon

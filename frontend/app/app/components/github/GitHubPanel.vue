@@ -488,7 +488,7 @@ async function merge(pr: GitHubPullRequest) {
                 <UButton
                   color="neutral"
                   variant="ghost"
-                  class="flex min-w-0 items-center gap-2 p-0 text-start"
+                  class="flex min-w-0 items-center gap-2 p-0 text-start hover:bg-transparent"
                   @click="toggleRepo(repo)"
                 >
                   <UIcon

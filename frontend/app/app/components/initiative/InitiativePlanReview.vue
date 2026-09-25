@@ -268,7 +268,7 @@ async function copyPlan() {
             color="neutral"
             variant="ghost"
             v-if="s.depth > 0"
-            class="group flex w-full items-center gap-1.5 rounded px-0 py-0.5 text-start transition hover:text-highlighted"
+            class="group flex w-full items-center gap-1.5 rounded px-0 py-0.5 text-start transition hover:bg-transparent hover:text-highlighted"
             :aria-expanded="!collapsed[s.id]"
             @click="toggle(s.id)"
           >
@@ -371,7 +371,7 @@ async function copyPlan() {
             <UButton
               color="neutral"
               variant="ghost"
-              class="p-0 text-dimmed transition hover:text-app-error-400"
+              class="p-0 text-dimmed transition hover:bg-transparent hover:text-app-error-400"
               :title="t('panels.stepDetail.removeComment')"
               @click="removeComment(idx)"
             >

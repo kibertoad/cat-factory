@@ -389,7 +389,7 @@ async function mergePr() {
             <UButton
               color="neutral"
               variant="ghost"
-              class="flex min-w-0 cursor-pointer items-center gap-2 p-0 text-start transition hover:text-highlighted"
+              class="flex min-w-0 cursor-pointer items-center gap-2 p-0 text-start transition hover:bg-transparent hover:text-highlighted"
               data-testid="run-step-open"
               :title="
                 stepHasOutput(s)

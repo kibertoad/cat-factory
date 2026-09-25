@@ -184,7 +184,7 @@ watch(pendingRef, (file) => {
           v-if="actualUrl"
           color="neutral"
           variant="ghost"
-          class="block w-full overflow-hidden rounded border border-default p-0 hover:border-app-600"
+          class="block w-full overflow-hidden rounded border border-default p-0 hover:border-app-600 hover:bg-transparent"
           @click="actualId && emit('expand', actualId)"
         >
           <img
@@ -230,7 +230,7 @@ watch(pendingRef, (file) => {
             <UButton
               variant="ghost"
               color="neutral"
-              class="group relative block w-full overflow-hidden rounded border border-default p-0 hover:border-app-600"
+              class="group relative block w-full overflow-hidden rounded border border-default p-0 hover:border-app-600 hover:bg-transparent"
               @click="referenceId && emit('expand', referenceId)"
             >
               <img

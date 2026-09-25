@@ -265,7 +265,7 @@ const canDestroy = computed(
             <UButton
               color="neutral"
               variant="ghost"
-              class="p-0 text-xs text-muted hover:text-default"
+              class="p-0 text-xs text-muted hover:bg-transparent hover:text-default"
               @click="showFindings = !showFindings"
             >
               {{ showFindings ? t('humanTest.fix.cancel') : t('humanTest.fix.requestFix') }}

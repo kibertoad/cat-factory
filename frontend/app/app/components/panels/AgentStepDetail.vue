@@ -791,7 +791,7 @@ async function copyOutput() {
                 color="neutral"
                 variant="ghost"
                 v-if="s.depth > 0"
-                class="group flex w-full items-center gap-2 rounded-md px-0 py-1 text-start transition hover:text-highlighted"
+                class="group flex w-full items-center gap-2 rounded-md px-0 py-1 text-start transition hover:bg-transparent hover:text-highlighted"
                 @click="toggle(s.id)"
               >
                 <UIcon
@@ -924,7 +924,7 @@ async function copyOutput() {
               <UButton
                 color="neutral"
                 variant="ghost"
-                class="p-0 text-dimmed transition hover:text-app-error-400"
+                class="p-0 text-dimmed transition hover:bg-transparent hover:text-app-error-400"
                 :title="t('panels.stepDetail.removeComment')"
                 @click="removeComment(idx)"
               >

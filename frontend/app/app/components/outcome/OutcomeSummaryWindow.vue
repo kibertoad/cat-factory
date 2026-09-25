@@ -698,7 +698,7 @@ function openTestReport() {
               variant="ghost"
               v-for="(view, position) in outcome.visuals.views"
               :key="`${position}:${view.view}`"
-              class="group block overflow-hidden rounded-md border border-default bg-app-950/60 p-0 text-start transition hover:border-app-600"
+              class="group block overflow-hidden rounded-md border border-default bg-app-950/60 p-0 text-start transition hover:border-app-600 hover:bg-transparent"
               :disabled="!view.artifactId"
               data-testid="outcome-shot"
               @click="openShot(view, position)"
