@@ -311,12 +311,13 @@ Every font size in the SPA is a NAMED step, so it scales with the theme and line
 
 ### Radius through the theme scale, never the bare alias
 
-Nuxt UI rebuilds Tailwind's radius scale on top of `--ui-radius`, so `rounded-sm` is `var(--ui-radius)`, `rounded-md` is 1.5x it, `rounded-lg` 2x, `rounded-xl` 3x, `rounded-2xl` 4x and `rounded-3xl` 6x. Every one of those steps already follows a theme document's `radius`, which is why a hand-written box on a named step lines up with the Nuxt UI component beside it.
+Nuxt UI rebuilds SEVEN of Tailwind's radius steps on top of `--ui-radius`: `rounded-xs` is half it, `rounded-sm` is `var(--ui-radius)`, `rounded-md` 1.5x, `rounded-lg` 2x, `rounded-xl` 3x, `rounded-2xl` 4x and `rounded-3xl` 6x. Every one of those follows a theme document's `radius`, which is why a hand-written box on one of them lines up with the Nuxt UI component beside it.
 
-- **Use a named step**, `rounded-sm` through `rounded-3xl`. `rounded-full` (pills, avatars) and `rounded-none` are fine: neither is a step that should scale.
+- **Use one of those seven steps**, `rounded-xs` through `rounded-3xl`. `rounded-full` (pills, avatars) and `rounded-none` are fine: neither is a step that should scale.
 - **Never the bare alias** (`rounded`, and the bare side and corner forms `rounded-t`, `rounded-bl`, `rounded-ss`). These are Tailwind v3 compatibility aliases that resolve through `--radius`, declared `@theme default inline reference`, so the value is inlined as a literal 0.25rem and no custom property survives for `--ui-radius` to override. The SPA carried 144 of them, and picking any theme with a non-default radius rounded the buttons and the cards and left those boxes at 4px. `rounded-sm` is that same 0.25rem at the default theme, so it is the drop-in replacement.
-- **Never an arbitrary value** (`rounded-[10px]`) and **never a raw `border-radius` in px, rem or em**. In CSS use `var(--radius-sm|md|lg|xl|2xl|3xl)`; a `rem` radius tracks the root font size, which is a different theme knob. The pill spellings (`9999px`, `50%`) and `0` are exempt.
-- `scripts/check-frontend-radius.mjs` (CI) bans all three; a line that genuinely needs a fixed radius says why with a `radius-literal-ok:` comment, on that line or the one above.
+- **Never a step off that list**, which today means `rounded-4xl`. Tailwind ships `--radius-4xl: 2rem` and Nuxt UI leaves it alone, so it is the bare alias's defect spelled to read correct: a fixed 32px while every neighbour moves with the theme.
+- **Never an arbitrary value** (`rounded-[10px]`) and **never a raw `border-radius` in px, rem or em**. In CSS use `var(--radius-xs|sm|md|lg|xl|2xl|3xl)`; a `rem` radius tracks the root font size, which is a different theme knob. The pill spellings (`9999px`, `50%`) and `0` are exempt, and a shorthand is read value by value, so `50% 50% 8px 8px` is still caught on the `8px`.
+- `scripts/check-frontend-radius.mjs` (CI) bans all four. It reads a utility only where one can live, inside a quoted string or after `@apply`, because `rounded` is also an ordinary English word. A line that genuinely needs a fixed radius says why with a `radius-literal-ok:` comment, on that line or the one above.
 
 The default `radius` lives on the `Cat Factory` document in `app/utils/theme/builtins.ts`. It equals `THEME_DEFAULTS.radius` and so writes no CSS, which is the point: changing the number there is the whole edit.
 

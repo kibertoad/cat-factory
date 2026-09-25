@@ -21,6 +21,7 @@ imported theme hit this too.
 `radius` is now stated on the `Cat Factory` document. It equals the default and writes no CSS,
 which is the point: the number has one visible home.
 
-`scripts/check-frontend-radius.mjs` keeps the bare alias, arbitrary values like `rounded-[10px]` and
+`scripts/check-frontend-radius.mjs` keeps the bare alias, a step off the seven Nuxt UI rebinds
+(`rounded-4xl`, which is Tailwind's own 2rem literal), arbitrary values like `rounded-[10px]` and
 raw px/rem/em `border-radius` declarations from returning. `rounded-full` and `rounded-none` stay
 allowed.

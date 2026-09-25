@@ -1,10 +1,11 @@
 // Fixtures for the non-scaling-radius ban (issue #2251). Run with `node --test scripts/` — the
 // built-in runner, so CI's guards job stays install-free.
 //
-// The boundary that matters is BARE alias versus NAMED step, because the two differ by one
+// The boundary that matters is BARE alias versus THEME-BACKED step, because the two differ by one
 // character and only one of them follows the theme. `rounded-sm` is allowed and `rounded-s` is not,
-// `rounded-e` is banned and `rounded-2xl` is not, and the guard has to tell those apart without a
-// list of every Tailwind suffix.
+// `rounded-e` is banned and `rounded-2xl` is not. A step is not enough on its own either:
+// `rounded-4xl` reads like the rest of the scale and is a 2rem literal, because Nuxt UI rebinds
+// only xs through 3xl.
 
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
@@ -31,6 +32,13 @@ describe('findFixedRadii', () => {
     assert.deepEqual(findFixedRadii('class="rounded-t-2xl rounded-b-sm rounded-ss-lg"'), [])
   })
 
+  it('flags a step OUTSIDE the seven Nuxt UI rebinds, which reads like the rest of the scale', () => {
+    // Tailwind ships `--radius-4xl: 2rem` and Nuxt UI leaves it alone, so this is the bare alias's
+    // defect wearing a named step's clothes: a fixed 32px while every neighbour follows the theme.
+    assert.deepEqual(findFixedRadii('class="rounded-4xl"'), ['rounded-4xl'])
+    assert.deepEqual(findFixedRadii('class="rounded-t-4xl"'), ['rounded-t-4xl'])
+  })
+
   it('accepts the pill and the square, which have no scale to follow', () => {
     assert.deepEqual(findFixedRadii('class="rounded-full"'), [])
     assert.deepEqual(findFixedRadii('class="rounded-none rounded-t-none"'), [])
@@ -51,6 +59,17 @@ describe('findFixedRadii', () => {
     assert.deepEqual(findFixedRadii('  border-radius: 6px;'), ['border-radius: 6px'])
     assert.deepEqual(findFixedRadii('  border-radius: 0.5em;'), ['border-radius: 0.5em'])
     assert.deepEqual(findFixedRadii('  border-radius: var(--radius-lg);'), [])
+  })
+
+  it('reads each declaration on its own, so a pill beside a literal hides nothing', () => {
+    // The teardrop shape: two pill corners and two real ones. Suppressing the whole line on the
+    // `50%` would let the 8px through.
+    assert.deepEqual(findFixedRadii('  border-radius: 50% 50% 8px 8px;'), [
+      'border-radius: 50% 50% 8px 8px',
+    ])
+    assert.deepEqual(findFixedRadii('  border-radius: 0.25rem; border-radius: 50%;'), [
+      'border-radius: 0.25rem',
+    ])
   })
 
   it('flags an alias behind a variant, and deduplicates within a line', () => {
@@ -75,6 +94,14 @@ describe('findFixedRadii', () => {
     assert.deepEqual(findFixedRadii('// `rounded` was the old spelling'), [])
     assert.deepEqual(findFixedRadii(' * each edge is rounded OUTWARD'), [])
     assert.deepEqual(findFixedRadii('<!-- was rounded -->'), [])
+  })
+
+  it('reads a utility only where one can live, because `rounded` is also an English word', () => {
+    assert.deepEqual(findFixedRadii('      <p>Fully rounded corners on every card</p>'), [])
+    assert.deepEqual(findFixedRadii('const shown = Math.round(ms / 1000) // seconds, rounded'), [])
+    // The three places a class list really is written.
+    assert.deepEqual(findFixedRadii('  @apply rounded bg-elevated;'), ['rounded'])
+    assert.deepEqual(findFixedRadii('    class="rounded border'), ['rounded'])
   })
 
   it('honours the waiver on the line itself and on the line before it', () => {
