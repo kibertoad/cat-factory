@@ -30,7 +30,7 @@ function toneClass(option: (typeof props.options)[number], active: boolean): str
       variant="ghost"
       v-for="option in options"
       :key="option.value"
-      class="rounded-md px-2.5 py-1 transition"
+      class="rounded-md px-2.5 py-1 text-xs transition"
       :class="toneClass(option, option.value === modelValue)"
       :aria-pressed="option.value === modelValue"
       @click="emit('update:modelValue', option.value)"

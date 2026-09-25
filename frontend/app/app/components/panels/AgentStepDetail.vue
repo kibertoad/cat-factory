@@ -791,7 +791,7 @@ async function copyOutput() {
                 color="neutral"
                 variant="ghost"
                 v-if="s.depth > 0"
-                class="group flex w-full items-center gap-2 rounded-md py-1 text-start transition hover:text-highlighted"
+                class="group flex w-full items-center gap-2 rounded-md px-0 py-1 text-start transition hover:text-highlighted"
                 @click="toggle(s.id)"
               >
                 <UIcon

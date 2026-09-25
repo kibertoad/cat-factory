@@ -110,7 +110,7 @@ const ITEM_ICON: Record<string, string> = {
       <UButton
         color="neutral"
         variant="ghost"
-        class="flex w-full cursor-pointer items-center gap-1 rounded text-start focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+        class="flex w-full cursor-pointer items-center gap-1 rounded p-0 text-start focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
         :title="`${agentKindMeta(s.agentKind).label} — ${agentKindMeta(s.agentKind).description}\n${t('board.task.clickToViewStep')}`"
         @click.stop="openStep(i)"
       >

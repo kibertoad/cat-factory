@@ -268,7 +268,7 @@ async function copyPlan() {
             color="neutral"
             variant="ghost"
             v-if="s.depth > 0"
-            class="group flex w-full items-center gap-1.5 rounded py-0.5 text-start transition hover:text-highlighted"
+            class="group flex w-full items-center gap-1.5 rounded px-0 py-0.5 text-start transition hover:text-highlighted"
             :aria-expanded="!collapsed[s.id]"
             @click="toggle(s.id)"
           >

@@ -271,7 +271,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
             color="neutral"
             variant="link"
             v-if="state === 'error' && current"
-            class="text-xs text-app-warning-300 hover:underline"
+            class="p-0 text-xs text-app-warning-300 hover:underline"
             @click="props.blobs.retry(current.artifactId)"
           >
             {{ t('common.retry') }}
