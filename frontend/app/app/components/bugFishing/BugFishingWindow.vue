@@ -520,26 +520,36 @@ const PHASE_ICON: Record<string, string> = {
                  apart: a finding that cannot point at the code it describes is speculating, and
                  that should be visible without reading the prose for it. -->
             <UCollapsible v-if="finding.evidence" class="mt-2">
-              <UButton
-                variant="link"
-                color="neutral"
-                size="xs"
-                :label="t('bugFishing.finding.evidence')"
-                :ui="{ base: 'w-full justify-start p-0 text-2xs text-muted hover:text-default' }"
-              />
+              <template #default="{ open }">
+                <UButton
+                  variant="link"
+                  color="neutral"
+                  size="xs"
+                  :icon="open ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
+                  :label="t('bugFishing.finding.evidence')"
+                  :ui="{
+                    base: 'w-full justify-start gap-1 p-0 text-2xs text-muted hover:text-default',
+                  }"
+                />
+              </template>
               <template #content>
                 <MarkdownProse :text="finding.evidence" class="mt-1 max-w-3xl text-xs" />
               </template>
             </UCollapsible>
 
             <UCollapsible v-if="finding.suggestedFix" class="mt-1">
-              <UButton
-                variant="link"
-                color="neutral"
-                size="xs"
-                :label="t('bugFishing.finding.suggestedFix')"
-                :ui="{ base: 'w-full justify-start p-0 text-2xs text-muted hover:text-default' }"
-              />
+              <template #default="{ open }">
+                <UButton
+                  variant="link"
+                  color="neutral"
+                  size="xs"
+                  :icon="open ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
+                  :label="t('bugFishing.finding.suggestedFix')"
+                  :ui="{
+                    base: 'w-full justify-start gap-1 p-0 text-2xs text-muted hover:text-default',
+                  }"
+                />
+              </template>
               <template #content>
                 <MarkdownProse :text="finding.suggestedFix" class="mt-1 max-w-3xl text-xs" />
               </template>

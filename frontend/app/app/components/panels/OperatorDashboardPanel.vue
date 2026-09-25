@@ -347,7 +347,7 @@ watch(
                   v-else
                   :data="view.gates"
                   :columns="gateColumns"
-                  :ui="{ base: 'text-xs', tbody: 'text-toned' }"
+                  :ui="{ base: 'text-xs', td: 'py-2 pe-3 text-xs', tbody: 'text-toned' }"
                   data-testid="operator-gates"
                 >
                   <template #gate-cell="{ row }">

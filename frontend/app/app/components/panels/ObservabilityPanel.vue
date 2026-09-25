@@ -743,7 +743,7 @@ function exportJson() {
                   :columns="phaseColumns"
                   :sorting="PHASE_SORTING"
                   :sorting-options="PHASE_SORTING_OPTIONS"
-                  :ui="{ base: 'min-w-[32rem] text-xs' }"
+                  :ui="{ base: 'min-w-[32rem] text-xs', td: 'px-3 py-1.5 text-xs' }"
                 >
                   <template #phase-header>
                     {{ t('observability.phase.columns.phase') }}

@@ -228,6 +228,7 @@ const { requestClose } = useUnsavedGuard({
              is the shape these already had; the rich body rides the description slot. -->
         <URadioGroup
           :model-value="selected ?? undefined"
+          color="secondary"
           variant="card"
           :items="forkItems"
           data-testid="fork-options"

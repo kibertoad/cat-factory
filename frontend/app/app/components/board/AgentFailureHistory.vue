@@ -18,16 +18,19 @@ const { t } = useI18n()
     class="nodrag rounded-lg border border-muted/60 bg-default/40 px-3 py-2"
     data-testid="agent-failure-history"
   >
-    <UButton
-      variant="link"
-      color="neutral"
-      size="xs"
-      icon="i-lucide-history"
-      :label="
-        t('board.failure.history.previousErrors', { count: failures.length }, failures.length)
-      "
-      :ui="{ base: 'w-full justify-start gap-1.5 p-0 text-2xs text-muted hover:text-default' }"
-    />
+    <template #default="{ open }">
+      <UButton
+        variant="link"
+        color="neutral"
+        size="xs"
+        icon="i-lucide-history"
+        :trailing-icon="open ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
+        :label="
+          t('board.failure.history.previousErrors', { count: failures.length }, failures.length)
+        "
+        :ui="{ base: 'w-full justify-start gap-1.5 p-0 text-2xs text-muted hover:text-default' }"
+      />
+    </template>
 
     <template #content>
       <FailureHistoryList :failures="props.failures" class="mt-2" />

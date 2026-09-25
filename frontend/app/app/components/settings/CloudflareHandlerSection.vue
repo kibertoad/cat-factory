@@ -238,13 +238,16 @@ async function remove() {
       </div>
 
       <UCollapsible class="rounded-md border border-muted/70 p-2">
-        <UButton
-          variant="link"
-          color="neutral"
-          size="xs"
-          :label="t('settings.infrastructure.cloudflare.advanced')"
-          :ui="{ base: 'w-full justify-start p-0 text-2xs text-muted' }"
-        />
+        <template #default="{ open }">
+          <UButton
+            variant="link"
+            color="neutral"
+            size="xs"
+            :icon="open ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
+            :label="t('settings.infrastructure.cloudflare.advanced')"
+            :ui="{ base: 'w-full justify-start gap-1 p-0 text-2xs text-muted' }"
+          />
+        </template>
         <template #content>
           <div class="mt-2 space-y-2">
             <!-- The placeholder is a FORMAT EXAMPLE containing vue-i18n metacharacters, so it

@@ -484,7 +484,7 @@ async function archive(prompt: SandboxPromptVersion) {
                 <UTable
                   :data="detailRows"
                   :columns="detailColumns"
-                  :ui="{ base: 'text-xs', tr: 'cursor-pointer' }"
+                  :ui="{ base: 'text-xs', td: 'py-1 pe-2 text-xs', tr: 'cursor-pointer' }"
                   @select="(_event, row) => (selectedRun = row.original.run)"
                 >
                   <template #prompt-cell="{ row }">

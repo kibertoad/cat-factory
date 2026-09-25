@@ -226,13 +226,16 @@ watch(open, (isOpen) => {
             {{ t('bootstrap.adoption.survey.truncated', { count: recordsDropped }) }}
           </p>
           <UCollapsible>
-            <UButton
-              variant="link"
-              color="neutral"
-              size="xs"
-              :label="t('bootstrap.adoption.survey.show')"
-              :ui="{ base: 'w-full justify-start p-0 text-dimmed hover:text-toned' }"
-            />
+            <template #default="{ open }">
+              <UButton
+                variant="link"
+                color="neutral"
+                size="xs"
+                :icon="open ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
+                :label="t('bootstrap.adoption.survey.show')"
+                :ui="{ base: 'w-full justify-start gap-1 p-0 text-dimmed hover:text-toned' }"
+              />
+            </template>
             <template #content>
               <ul class="mt-2 space-y-1">
                 <!-- Keyed by POSITION: the transcript is append-only and rendered in order, and
