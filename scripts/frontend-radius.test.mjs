@@ -137,6 +137,70 @@ describe('findFixedRadii', () => {
     ])
   })
 
+  it('reads the CSS universal selector as a rule, not as a JSDoc continuation', () => {
+    // A leading `*` is the shape of both, so what tells them apart is what FOLLOWS: a selector
+    // continues into `{`, `,` or a combinator, where a comment continues into prose. Reading this
+    // one as prose let a reset rule carry a px literal straight past a zero-tolerance guard.
+    assert.deepEqual(findFixedRadii('* { border-radius: 4px; }'), ['border-radius: 4px'])
+    assert.deepEqual(findFixedRadii('*, *::before { border-radius: 0.25rem; }'), [
+      'border-radius: 0.25rem',
+    ])
+    // The JSDoc continuation and the block-comment close still read as prose.
+    assert.deepEqual(findFixedRadii(' * each edge is rounded OUTWARD'), [])
+    assert.deepEqual(findFixedRadii(' */'), [])
+  })
+
+  it('flags a `var()` naming a step Nuxt UI does not rebind', () => {
+    // `--radius-4xl` is Tailwind's own 2rem and `--radius` is the deprecated alias inlined as
+    // 0.25rem, so both are rules 1 and 2 spelled in CSS. A unit check alone waves them through.
+    assert.deepEqual(findFixedRadii('  border-radius: var(--radius-4xl);'), [
+      'border-radius: var(--radius-4xl)',
+    ])
+    assert.deepEqual(findFixedRadii('  border-radius: var(--radius);'), [
+      'border-radius: var(--radius)',
+    ])
+    // The scale variable itself and the seven rebinds stay clean.
+    assert.deepEqual(findFixedRadii('  border-radius: var(--ui-radius);'), [])
+    assert.deepEqual(findFixedRadii('  border-radius: calc(var(--ui-radius) * 2);'), [])
+    assert.deepEqual(findFixedRadii('  border-radius: var(--radius-3xl);'), [])
+  })
+
+  it('flags the JS style spelling a `:style` binding uses', () => {
+    // A camelCase name contains no `border-radius` substring, so the CSS pattern reads it as clean,
+    // and a `:style` binding is the third place a fixed radius can be written.
+    assert.deepEqual(findFixedRadii(`:style="{ borderRadius: '4px' }"`), ['borderRadius: 4px'])
+    // The separator is `:` in an object literal and `=` in an `element.style` assignment.
+    assert.deepEqual(findFixedRadii(`el.style.borderTopLeftRadius = '0.25rem'`), [
+      'borderTopLeftRadius: 0.25rem',
+    ])
+    assert.deepEqual(findFixedRadii(`:style="{ borderStartStartRadius: '6px', top: 0 }"`), [
+      'borderStartStartRadius: 6px',
+    ])
+    assert.deepEqual(findFixedRadii(`:style="{ borderRadius: 'var(--ui-radius)' }"`), [])
+  })
+
+  it('does not strip a pill spelling out of the middle of a longer number', () => {
+    // `999px` sits inside `4999px`: an unbounded removal leaves `4`, which carries no unit, so a
+    // real literal reads as clean.
+    assert.deepEqual(findFixedRadii('  border-radius: 4999px;'), ['border-radius: 4999px'])
+    assert.deepEqual(findFixedRadii('  border-radius: 150%;'), [])
+    // The pill spellings themselves still suppress, on their own and beside a literal.
+    assert.deepEqual(findFixedRadii('  border-radius: 9999px;'), [])
+    assert.deepEqual(findFixedRadii('  border-radius: 100vmax 100vmax 8px 8px;'), [
+      'border-radius: 100vmax 100vmax 8px 8px',
+    ])
+  })
+
+  it('reads code, not a TRAILING comment, so a note about the rule is clean', () => {
+    // `COMMENT_LINE` only sees a line that OPENS with a marker, and the README invites writing
+    // exactly this note. A `//` inside a URL follows a colon and so is not a comment.
+    assert.deepEqual(findFixedRadii(`const n = 1 // was 'rounded' before #2251`), [])
+    assert.deepEqual(findFixedRadii(`const c = 'rounded-sm' /* not 'rounded' */`), [])
+    assert.deepEqual(findFixedRadii(`const u = 'https://x' // fine`), [])
+    // Code before the comment is still code.
+    assert.deepEqual(findFixedRadii(`class="rounded" // an unrelated note`), ['rounded'])
+  })
+
   it('honours the waiver on the line itself and on the line before it', () => {
     assert.deepEqual(findFixedRadii('class="rounded" // radius-literal-ok: reason'), [])
     assert.deepEqual(findFixedRadii('class="rounded"', '// radius-literal-ok: reason'), [])

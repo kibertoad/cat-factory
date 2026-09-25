@@ -30,8 +30,11 @@
 //      px font size is, and unnameable besides. The migration found none; it is banned so the fix
 //      cannot come back wearing a hat.
 //   4. A raw `border-radius` declaration in an absolute unit (the per-corner longhands included,
-//      `border-top-left-radius` and the logical `border-start-start-radius` alike), in a stylesheet
-//      or a `<style>` block, where no utility class exists for rules 1 and 2 to catch. A scoped
+//      `border-top-left-radius` and the logical `border-start-start-radius` alike, and the JS
+//      `borderRadius` spelling a `:style` binding uses), in a stylesheet or a `<style>` block,
+//      where no utility class exists for rules 1 and 2 to catch. Its `var()` is read rather than
+//      waved through, so `var(--radius-4xl)` and the bare `var(--radius)` are caught where rule 2
+//      would catch them in utility form. A scoped
 //      `<style>` block reaches the scale through `var(--ui-radius)`, NOT `var(--radius-sm)`: Nuxt
 //      UI declares the `--radius-*` scale `@theme default inline`, so Tailwind emits those only
 //      when the COMPILED stylesheet graph references them. Unlike the font-size guard, `rem`
@@ -115,15 +118,39 @@ const CLASS_CONTINUATION = /^[^"']*/
 // shorthand, and contains no `border-radius:` substring for a shorthand-only pattern to find.
 const DECLARATION =
   /border-(?:(?:top|bottom|start|end)-(?:left|right|start|end)-)?radius:\s*([^;}]*)/g
+// The same declaration spelled as a JS style property, which is how a Vue `:style` binding and a
+// direct `element.style` assignment write it. No utility class exists there either, so the rule is
+// the shorthand's; only the property name differs, and a camelCase name contains no `border-radius`
+// substring for `DECLARATION` to find. The separator is `:` in an object literal and `=` in an
+// `element.style` assignment, and a JS value ends at a `,` as well as a `;` or a `}`.
+const STYLE_PROPERTY =
+  /border(?:(?:Top|Bottom|Start|End)(?:Left|Right|Start|End))?Radius\s*[:=]\s*([^,;}]*)/g
 // `9999px` and friends are `rounded-full` spelled in CSS: a pill, not a step. They are removed from
 // the value rather than suppressing the whole line, so the `8px` in `50% 50% 8px 8px` still counts.
-const PILL_VALUE = /9999px|999px|100vmax|50%|100%/g
-// px, rem or em. `0`, `50%` and `var(--radius-lg)` carry no absolute unit and so never match.
+// The left boundary keeps the removal from reaching INSIDE a longer number: without it `4999px`
+// loses its `999px` and the leftover `4` carries no unit, so a real literal reads as clean.
+const PILL_VALUE = /(?<![\d.])(?:9999px|999px|100vmax|50%|100%)/g
+// px, rem or em. `0` and `50%` carry no absolute unit and so never match.
 const ABSOLUTE = /\d*\.?\d+(?:px|rem|em)/
+// A `var()` is only as good as the variable it names, so the value is read rather than waved
+// through: `--radius-xs` through `--radius-3xl` are the seven Nuxt UI rebinds, and anything else is
+// a literal hiding behind a variable. `var(--radius-4xl)` is Tailwind's own 2rem and `var(--radius)`
+// is the deprecated alias inlined as 0.25rem, which is rule 1 and rule 2 spelled in CSS. The
+// capture is the step, absent for the bare alias. `var(--ui-radius)` is the scale variable itself
+// and does not match, the `--ui-` prefix sitting where `--radius` would start.
+const RADIUS_VAR = /var\(\s*--radius(?:-([A-Za-z0-9]+))?\s*\)/g
 const LITERAL_OK = 'radius-literal-ok:'
-// A line that opens with a comment marker is prose about the rule, not an application of it. `#` is
-// NOT a comment marker: in a `.css` file a leading `#` is an ID selector.
-const COMMENT_LINE = /^\s*(?:\/\/|\/?\*|<!--)/
+// A line that opens with a comment marker is prose about the rule, not an application of it. Two
+// characters look like markers and are NOT: in a `.css` file a leading `#` is an ID selector, and a
+// leading `*` is the UNIVERSAL selector, so `* { border-radius: 4px }` is a rule to check and not a
+// JSDoc continuation. What tells them apart is what follows: a selector continues into `{`, `,` or
+// another combinator, where a comment continues into prose.
+const COMMENT_LINE = /^\s*(?:\/\/|\/\*|\*(?!\s*[,{]|[:.#[>+~*])|<!--)/
+// A trailing comment is prose too, and `COMMENT_LINE` only sees a line that OPENS with one. The
+// quoted `rounded` in `const n = 1 // was 'rounded' before #2251` is a note about this rule, not a
+// class list, and the README invites writing exactly that. `//` opens a comment only after
+// whitespace or at the start of the line: in `https://...` it follows a colon.
+const TRAILING_COMMENT = /(?:^|\s)\/\/.*$|\/\*.*?\*\/|<!--.*?-->/g
 
 /** The offending shape a `rounded-*` token carries, or null when it follows the theme. */
 function classifyUtility(token) {
@@ -143,32 +170,47 @@ export function findFixedRadii(line, prevLine = '', openClassList = false) {
   if (COMMENT_LINE.test(line)) return []
   if (line.includes(LITERAL_OK) || prevLine.includes(LITERAL_OK)) return []
 
+  const code = stripComments(line)
   const classContext = [
-    ...(openClassList ? (line.match(CLASS_CONTINUATION) ?? []) : []),
-    ...(line.match(QUOTED) ?? []),
-    ...(line.match(APPLY) ?? []),
-    ...(line.match(OPEN_CLASS) ?? []),
+    ...(openClassList ? (code.match(CLASS_CONTINUATION) ?? []) : []),
+    ...(code.match(QUOTED) ?? []),
+    ...(code.match(APPLY) ?? []),
+    ...(code.match(OPEN_CLASS) ?? []),
   ].join(' ')
   const utilities = (classContext.match(UTILITY_TOKEN) ?? []).filter(classifyUtility)
 
   const declarations = []
-  for (const [match, value] of line.matchAll(DECLARATION)) {
-    const property = match.slice(0, match.indexOf(':'))
-    const trimmed = value.trim().replace(/["']\s*$/, '')
-    if (ABSOLUTE.test(trimmed.replaceAll(PILL_VALUE, ''))) {
-      declarations.push(`${property}: ${trimmed}`)
+  for (const pattern of [DECLARATION, STYLE_PROPERTY]) {
+    for (const [match, value] of code.matchAll(pattern)) {
+      const property = match.match(/^[^:=]*/)[0].trim()
+      const trimmed = value.trim().replace(/^["']|["']\s*$/g, '')
+      if (isFixedValue(trimmed)) declarations.push(`${property}: ${trimmed}`)
     }
   }
 
   return [...new Set([...utilities, ...declarations])]
 }
 
+/** Whether a declaration's VALUE is welded to a number: an absolute unit outside the pill
+ * spellings, or a `var()` naming a step Nuxt UI does not rebind. */
+function isFixedValue(value) {
+  if (ABSOLUTE.test(value.replaceAll(PILL_VALUE, ''))) return true
+  return [...value.matchAll(RADIUS_VAR)].some(([, step]) => !step || !THEME_STEPS.has(step))
+}
+
+/** A line with its comments blanked, so a `rounded` a developer WROTE ABOUT is not read as one they
+ * applied. Exported for the companion test; `main()` reaches it through `findFixedRadii`. */
+export function stripComments(line) {
+  return line.replaceAll(TRAILING_COMMENT, ' ')
+}
+
 /** Whether the class attribute is still open once this line has been read. A wrapped attribute
  * opens on the line carrying `class="` and closes on the first quote after it, so the lines in
  * between are class list too. Pure, so the companion test can drive the wrap as a sequence. */
 export function tracksOpenClassList(line, openClassList = false) {
-  if (openClassList) return !/["']/.test(line)
-  return OPEN_CLASS.test(line)
+  const code = stripComments(line)
+  if (openClassList) return !/["']/.test(code)
+  return OPEN_CLASS.test(code)
 }
 
 function* sourceFiles(dirAbs) {
@@ -217,7 +259,8 @@ function main() {
         'buttons and leave the boxes behind; `rounded-sm` is that same 0.25rem at the default theme.\n' +
         '`rounded-4xl` is off the scale too: Nuxt UI rebinds only xs through 3xl, so 4xl keeps\n' +
         "Tailwind's literal 2rem.\n" +
-        'In a stylesheet reached from `main.css`, `border-radius: var(--radius-sm|md|lg)`; in a\n' +
+        'In a stylesheet reached from `main.css`, `border-radius: var(--radius-xs|sm|md|lg|xl|2xl|3xl)`,\n' +
+        'one of the seven rebinds and never `var(--radius-4xl)` or the bare `var(--radius)`; in a\n' +
         "component's own scoped `<style>` block, `var(--ui-radius)` / `calc(var(--ui-radius) * N)`,\n" +
         'which is the scale variable itself and so needs no Tailwind emission.\n' +
         '`rounded-full` and `rounded-none` are fine.\n' +
