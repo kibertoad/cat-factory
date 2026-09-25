@@ -66,7 +66,7 @@ function commit(axis: EstimateAxis, raw: string) {
         min="0"
         max="1"
         step="0.1"
-        class="w-14 rounded border border-muted bg-default px-1.5 py-0.5 text-app-100"
+        class="w-14 rounded-sm border border-muted bg-default px-1.5 py-0.5 text-app-100"
         @change="commit(f.axis, ($event.target as HTMLInputElement).value)"
       />
     </template>

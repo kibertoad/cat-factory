@@ -384,7 +384,7 @@ async function runProbe(id: string) {
           </UButton>
           <pre
             v-if="expanded[server.id]"
-            class="overflow-x-auto rounded bg-app-950 p-2 font-mono text-3xs text-muted"
+            class="overflow-x-auto rounded-sm bg-app-950 p-2 font-mono text-3xs text-muted"
             >{{ resultFor(server.id)!.error }}</pre>
         </template>
       </div>

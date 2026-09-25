@@ -236,7 +236,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
           :src="url"
           :alt="current?.alt ?? ''"
           draggable="false"
-          class="max-h-full max-w-full select-none rounded shadow-2xl"
+          class="max-h-full max-w-full select-none rounded-sm shadow-2xl"
           :class="[
             scale > 1 ? (dragging ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-zoom-in',
             dragging ? '' : 'transition-transform duration-100',

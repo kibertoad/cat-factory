@@ -556,7 +556,7 @@ function done() {
                   <span
                     v-for="dir in selectedDirectories"
                     :key="dir"
-                    class="inline-flex items-center gap-1 rounded bg-elevated px-2 py-0.5 text-xs text-default"
+                    class="inline-flex items-center gap-1 rounded-sm bg-elevated px-2 py-0.5 text-xs text-default"
                   >
                     <code class="text-default">{{ dir }}</code>
                     <button

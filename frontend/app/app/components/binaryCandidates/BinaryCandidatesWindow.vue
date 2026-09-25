@@ -202,7 +202,7 @@ const { requestClose } = useUnsavedGuard({
            declared its candidates and one whose block was unreadable need different fixes. -->
       <p
         v-if="noChoiceKey"
-        class="mb-3 rounded border border-app-warning-500/30 bg-app-warning-500/5 px-3 py-2 text-xs text-app-warning-200"
+        class="mb-3 rounded-sm border border-app-warning-500/30 bg-app-warning-500/5 px-3 py-2 text-xs text-app-warning-200"
         data-testid="binary-candidates-no-choice"
       >
         {{ t(noChoiceKey) }}
@@ -211,7 +211,7 @@ const { requestClose } = useUnsavedGuard({
       <!-- An automatic keep is NOT a review, and must never render as one. -->
       <p
         v-if="view.automatic"
-        class="mb-3 rounded border border-app-600/40 bg-elevated/40 px-3 py-2 text-xs text-toned"
+        class="mb-3 rounded-sm border border-app-600/40 bg-elevated/40 px-3 py-2 text-xs text-toned"
         data-testid="binary-candidates-automatic"
       >
         {{ t('binaryCandidates.automatic') }}
@@ -243,7 +243,7 @@ const { requestClose } = useUnsavedGuard({
           <div
             v-for="row in group.rows"
             :key="row.id"
-            class="rounded border p-2 transition"
+            class="rounded-sm border p-2 transition"
             :class="[
               selected.includes(row.id) || row.kept
                 ? 'border-app-info-400/60 bg-app-info-500/5'
@@ -297,14 +297,14 @@ const { requestClose } = useUnsavedGuard({
               v-else-if="row.previewUrl"
               :src="row.previewUrl"
               :alt="row.label ?? row.id"
-              class="mb-2 max-h-56 w-full rounded object-contain"
+              class="mb-2 max-h-56 w-full rounded-sm object-contain"
               data-testid="binary-candidate-preview"
             />
             <!-- No preview is ORDINARY (a private asset store issues no link), so it is stated
                  rather than left as an empty frame the reader reads as a failed generation. -->
             <p
               v-else
-              class="mb-2 flex h-24 items-center justify-center rounded bg-elevated/60 px-2 text-center text-3xs text-muted"
+              class="mb-2 flex h-24 items-center justify-center rounded-sm bg-elevated/60 px-2 text-center text-3xs text-muted"
               data-testid="binary-candidate-no-preview"
             >
               {{ t('binaryCandidates.noPreview') }}

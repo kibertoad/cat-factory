@@ -311,7 +311,7 @@ const canLeaveReview = computed(
           <div
             v-for="c in seedDumpCandidates"
             :key="c.path"
-            class="flex items-center justify-between gap-2 rounded border border-default bg-default/40 px-2 py-1"
+            class="flex items-center justify-between gap-2 rounded-sm border border-default bg-default/40 px-2 py-1"
           >
             <span class="truncate text-2xs text-toned">{{ c.path }}</span>
             <UButton

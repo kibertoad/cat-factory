@@ -366,7 +366,7 @@ const ITEM_ICON: Record<string, string> = {
                 </span>
                 <span
                   v-if="isCompanionKind(s.agentKind)"
-                  class="shrink-0 rounded bg-accented/60 px-1 text-3xs font-medium uppercase tracking-wide text-toned"
+                  class="shrink-0 rounded-sm bg-accented/60 px-1 text-3xs font-medium uppercase tracking-wide text-toned"
                   :title="t('pipeline.progress.companionTooltip')"
                 >
                   {{ t('pipeline.progress.companion') }}

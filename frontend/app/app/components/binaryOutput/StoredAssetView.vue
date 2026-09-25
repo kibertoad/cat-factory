@@ -80,7 +80,7 @@ const filename = computed(() => {
       v-if="isImage && url"
       :src="url"
       :alt="label ?? assetId"
-      class="w-full rounded object-contain"
+      class="w-full rounded-sm object-contain"
       :class="previewClass"
       data-testid="stored-asset-preview"
     />
@@ -89,7 +89,7 @@ const filename = computed(() => {
          frame. -->
     <p
       v-else-if="!isImage && url"
-      class="flex items-center gap-1.5 rounded bg-elevated/60 px-2 py-1.5 text-2xs text-toned"
+      class="flex items-center gap-1.5 rounded-sm bg-elevated/60 px-2 py-1.5 text-2xs text-toned"
       data-testid="stored-asset-file"
     >
       <UIcon name="i-lucide-file" class="h-3.5 w-3.5 shrink-0" />

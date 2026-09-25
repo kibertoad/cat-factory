@@ -350,7 +350,7 @@ async function onFilePicked(e: Event) {
               type="file"
               accept="image/png,image/jpeg"
               :disabled="busy || !uploadView.trim()"
-              class="text-xs text-toned file:me-2 file:rounded file:border-0 file:bg-elevated file:px-2 file:py-1 file:text-default disabled:opacity-40"
+              class="text-xs text-toned file:me-2 file:rounded-sm file:border-0 file:bg-elevated file:px-2 file:py-1 file:text-default disabled:opacity-40"
               @change="onFilePicked"
             />
           </div>
@@ -406,7 +406,7 @@ async function onFilePicked(e: Event) {
               <div class="min-w-0 flex-1">
                 <span class="text-default">{{ t('visualConfirm.history.fixRequested') }}</span>
                 <span
-                  class="ms-1.5 rounded px-1 text-3xs uppercase"
+                  class="ms-1.5 rounded-sm px-1 text-3xs uppercase"
                   :class="
                     r.outcome === 'completed'
                       ? 'bg-app-success-500/15 text-app-success-300'
