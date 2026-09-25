@@ -29,8 +29,12 @@
 //   3. An ARBITRARY value (`rounded-[10px]`, `rounded-t-[0.6rem]`). Welded to one number the way a
 //      px font size is, and unnameable besides. The migration found none; it is banned so the fix
 //      cannot come back wearing a hat.
-//   4. A raw `border-radius` declaration in an absolute unit, in a stylesheet or a `<style>` block,
-//      where no utility class exists for rules 1 and 2 to catch. Unlike the font-size guard, `rem`
+//   4. A raw `border-radius` declaration in an absolute unit (the per-corner longhands included,
+//      `border-top-left-radius` and the logical `border-start-start-radius` alike), in a stylesheet
+//      or a `<style>` block, where no utility class exists for rules 1 and 2 to catch. A scoped
+//      `<style>` block reaches the scale through `var(--ui-radius)`, NOT `var(--radius-sm)`: Nuxt
+//      UI declares the `--radius-*` scale `@theme default inline`, so Tailwind emits those only
+//      when the COMPILED stylesheet graph references them. Unlike the font-size guard, `rem`
 //      is claimed too: a rem radius tracks the ROOT FONT SIZE, which is a different theme knob, so
 //      it no more follows `--ui-radius` than a px one does.
 //
@@ -38,10 +42,12 @@
 // `9999px` / `50%` spellings of the same intent) and `rounded-none` / `border-radius: 0`.
 //
 // A UTILITY is read only where a utility can live: inside a quoted string, after `@apply`, or in an
-// unterminated `class="` that runs to the end of the line. `rounded` is also an ordinary English
-// word, and scanning the whole line failed a template's `<p>Fully rounded corners</p>` and a
-// trailing `// value is rounded` with a message about a radius that is not there. A raw declaration
-// is read anywhere on the line, because CSS is not quoted.
+// unterminated `class="` plus the lines a wrapped attribute continues onto. `rounded` is also an
+// ordinary English word, and scanning the whole line failed a template's `<p>Fully rounded
+// corners</p>` and a trailing `// value is rounded` with a message about a radius that is not
+// there. An apostrophe is not a quote either, so the single-quoted arm takes word boundaries: a
+// sentence with two of them is prose, not a class list. A raw declaration is read anywhere on the
+// line, because CSS is not quoted.
 //
 // Policy: ZERO offenders, no ratchet. A line that genuinely needs a fixed radius says why with a
 // `radius-literal-ok:` comment, on that line or the one before it; nothing in the tree needs one.
@@ -93,12 +99,22 @@ const SIDES = new Set([
 const UTILITY_TOKEN = /(?<![\w-])rounded(?:-(?:\[[^\]]*\]|[A-Za-z0-9]+))*(?![\w-])/g
 // Where a utility can live. A class list is always a quoted string (`class="..."`, and the branches
 // of a `:class` expression are quoted inside it), an `@apply` argument, or an unterminated
-// `class="` that a formatter wrapped onto the following lines.
-const QUOTED = /"[^"]*"|'[^']*'|`[^`]*`/g
+// `class="` that a wrapped attribute continues on the lines below.
+// The single-quoted arm needs boundaries the double-quoted one does not: an apostrophe is not a
+// quote, so `It's a rounded corner, don't` would otherwise read as one quoted span and flag prose
+// that has no class list in it (the reason `presets.ts` needs its path exemption).
+const QUOTED = /"[^"]*"|(?<![A-Za-z0-9])'[^']*'(?![A-Za-z0-9])|`[^`]*`/g
 const APPLY = /@apply\b[^;]*/g
 const OPEN_CLASS = /:?class=["'][^"']*$/
-// A raw declaration's VALUE, up to the `;` or the `}` that ends it.
-const DECLARATION = /border-radius:\s*([^;}]*)/g
+// The continuation of a wrapped attribute: everything up to the quote that closes it. Paired with
+// the `openClassList` state main() carries, so a class list wrapped over three lines is read on all
+// three rather than only on the one carrying `class="`.
+const CLASS_CONTINUATION = /^[^"']*/
+// A raw declaration's VALUE, up to the `;` or the `}` that ends it. The per-corner longhands are
+// claimed too, physical and logical alike: `border-top-left-radius: 4px` is the same defect as the
+// shorthand, and contains no `border-radius:` substring for a shorthand-only pattern to find.
+const DECLARATION =
+  /border-(?:(?:top|bottom|start|end)-(?:left|right|start|end)-)?radius:\s*([^;}]*)/g
 // `9999px` and friends are `rounded-full` spelled in CSS: a pill, not a step. They are removed from
 // the value rather than suppressing the whole line, so the `8px` in `50% 50% 8px 8px` still counts.
 const PILL_VALUE = /9999px|999px|100vmax|50%|100%/g
@@ -123,11 +139,12 @@ function classifyUtility(token) {
  * `radius-literal-ok:` waiver is honoured on the line itself OR on the line before it (the
  * `eslint-disable-next-line` shape), so a waiver never forces the class off its own line. Pure, so
  * the companion test can drive it with fixture strings. */
-export function findFixedRadii(line, prevLine = '') {
+export function findFixedRadii(line, prevLine = '', openClassList = false) {
   if (COMMENT_LINE.test(line)) return []
   if (line.includes(LITERAL_OK) || prevLine.includes(LITERAL_OK)) return []
 
   const classContext = [
+    ...(openClassList ? (line.match(CLASS_CONTINUATION) ?? []) : []),
     ...(line.match(QUOTED) ?? []),
     ...(line.match(APPLY) ?? []),
     ...(line.match(OPEN_CLASS) ?? []),
@@ -135,14 +152,23 @@ export function findFixedRadii(line, prevLine = '') {
   const utilities = (classContext.match(UTILITY_TOKEN) ?? []).filter(classifyUtility)
 
   const declarations = []
-  for (const [, value] of line.matchAll(DECLARATION)) {
+  for (const [match, value] of line.matchAll(DECLARATION)) {
+    const property = match.slice(0, match.indexOf(':'))
     const trimmed = value.trim().replace(/["']\s*$/, '')
     if (ABSOLUTE.test(trimmed.replaceAll(PILL_VALUE, ''))) {
-      declarations.push(`border-radius: ${trimmed}`)
+      declarations.push(`${property}: ${trimmed}`)
     }
   }
 
   return [...new Set([...utilities, ...declarations])]
+}
+
+/** Whether the class attribute is still open once this line has been read. A wrapped attribute
+ * opens on the line carrying `class="` and closes on the first quote after it, so the lines in
+ * between are class list too. Pure, so the companion test can drive the wrap as a sequence. */
+export function tracksOpenClassList(line, openClassList = false) {
+  if (openClassList) return !/["']/.test(line)
+  return OPEN_CLASS.test(line)
 }
 
 function* sourceFiles(dirAbs) {
@@ -174,9 +200,11 @@ function main() {
     // by the SPA. Its prose describes radii it does not apply.
     if (rel.endsWith('frontend/app/app/utils/theme/presets.ts')) continue
     const lines = readFileSync(file, 'utf8').split('\n')
+    let openClassList = false
     lines.forEach((line, i) => {
-      const matches = findFixedRadii(line, lines[i - 1] ?? '')
+      const matches = findFixedRadii(line, lines[i - 1] ?? '', openClassList)
       if (matches.length) offenders.push({ file: rel, line: i + 1, matches })
+      openClassList = tracksOpenClassList(line, openClassList)
     })
   }
 
@@ -189,7 +217,10 @@ function main() {
         'buttons and leave the boxes behind; `rounded-sm` is that same 0.25rem at the default theme.\n' +
         '`rounded-4xl` is off the scale too: Nuxt UI rebinds only xs through 3xl, so 4xl keeps\n' +
         "Tailwind's literal 2rem.\n" +
-        'In CSS, `border-radius: var(--radius-sm|md|lg)`. `rounded-full` and `rounded-none` are fine.\n' +
+        'In a stylesheet reached from `main.css`, `border-radius: var(--radius-sm|md|lg)`; in a\n' +
+        "component's own scoped `<style>` block, `var(--ui-radius)` / `calc(var(--ui-radius) * N)`,\n" +
+        'which is the scale variable itself and so needs no Tailwind emission.\n' +
+        '`rounded-full` and `rounded-none` are fine.\n' +
         'A line that genuinely needs a fixed radius says why with a `radius-literal-ok:` comment, on\n' +
         'that line or the one above. See frontend/app/README.md, "Radius through the theme scale".\n',
     )

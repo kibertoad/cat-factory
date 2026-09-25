@@ -55,7 +55,11 @@ const html = computed(() => renderMarkdown(props.text))
   font-style: italic;
 }
 .cf-prose :deep(code) {
-  border-radius: var(--radius-sm);
+  /* `--ui-radius` rather than `--radius-sm`: Nuxt UI declares the `--radius-*` scale in a
+   * `@theme default inline` block, so Tailwind emits those only when the COMPILED stylesheet
+   * graph references them. This scoped block is not part of that compile, and `--ui-radius` is
+   * an ordinary custom property on `:root`. `--radius-sm` is `var(--ui-radius)` (prose.css). */
+  border-radius: var(--ui-radius);
   background: var(--ui-bg-elevated);
   padding: 0.1rem 0.3rem;
   font-family: var(--font-mono);
@@ -65,7 +69,9 @@ const html = computed(() => renderMarkdown(props.text))
 .cf-prose :deep(pre) {
   margin: 0.6rem 0;
   overflow: auto;
-  border-radius: var(--radius-lg);
+  /* `--radius-lg` is `calc(var(--ui-radius) * 2)`; see the note on `code` above for why this
+   * block cannot name the scale variable. */
+  border-radius: calc(var(--ui-radius) * 2);
   background: var(--app-bg-canvas);
   padding: 0.75rem 0.9rem;
 }

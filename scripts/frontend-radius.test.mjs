@@ -9,7 +9,7 @@
 
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { findFixedRadii } from './check-frontend-radius.mjs'
+import { findFixedRadii, tracksOpenClassList } from './check-frontend-radius.mjs'
 
 describe('findFixedRadii', () => {
   it('flags the bare alias the migration removed', () => {
@@ -102,6 +102,39 @@ describe('findFixedRadii', () => {
     // The three places a class list really is written.
     assert.deepEqual(findFixedRadii('  @apply rounded bg-elevated;'), ['rounded'])
     assert.deepEqual(findFixedRadii('    class="rounded border'), ['rounded'])
+  })
+
+  it('reads a class list wrapped over several lines, not only the line carrying `class="`', () => {
+    // The continuation lines hold no quote pair, no `@apply` and no `class=`, so without the
+    // carried state a bare alias parked on one of them ships.
+    const wrapped = ['  class="flex items-center gap-2', '         rounded bg-elevated"', '>']
+    const found = []
+    let open = false
+    for (const [i, line] of wrapped.entries()) {
+      found.push(...findFixedRadii(line, wrapped[i - 1] ?? '', open))
+      open = tracksOpenClassList(line, open)
+    }
+    assert.deepEqual(found, ['rounded'])
+    // The attribute closes on the quote, so the line after it is ordinary code again.
+    assert.equal(tracksOpenClassList('         rounded bg-elevated"', true), false)
+  })
+
+  it('flags a per-corner longhand, physical and logical alike', () => {
+    // No `border-radius:` substring in either, so a shorthand-only pattern reads both as clean.
+    assert.deepEqual(findFixedRadii('  border-top-left-radius: 4px;'), [
+      'border-top-left-radius: 4px',
+    ])
+    assert.deepEqual(findFixedRadii('  border-start-start-radius: 0.25rem;'), [
+      'border-start-start-radius: 0.25rem',
+    ])
+    assert.deepEqual(findFixedRadii('  border-end-end-radius: var(--radius-lg);'), [])
+  })
+
+  it('does not read an apostrophe as a quote, so English prose is not a class list', () => {
+    assert.deepEqual(findFixedRadii("      <p>It's a rounded corner, don't use it</p>"), [])
+    assert.deepEqual(findFixedRadii("    description: 'chunky rounded type, large controls.',"), [
+      'rounded',
+    ])
   })
 
   it('honours the waiver on the line itself and on the line before it', () => {
