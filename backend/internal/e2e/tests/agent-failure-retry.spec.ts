@@ -74,10 +74,11 @@ test.describe('agent run failure + retry', () => {
 
     const history = inspector.getByTestId('agent-failure-history')
     await expect(history).toBeVisible({ timeout: LIVE_TIMEOUT })
-    // Expand the disclosure (its own `summary` is the first one; each entry nests another for
-    // its detail) so the superseded error is genuinely readable, then pin the trail's length:
-    // zero would mean nothing re-dispatched, two that the click fired twice.
-    await history.locator('summary').first().click()
+    // Expand the disclosure so the superseded error is genuinely readable, then pin the trail's
+    // length: zero would mean nothing re-dispatched, two that the click fired twice. The
+    // disclosure is a `UCollapsible` whose trigger is its first button (each entry nests another
+    // for its own detail), where it used to be a `<details>` with a `<summary>`.
+    await history.locator('button').first().click()
     const priorErrors = history.getByTestId('agent-failure-history-entry')
     await expect(priorErrors).toHaveCount(1)
     await expect(priorErrors).toBeVisible()

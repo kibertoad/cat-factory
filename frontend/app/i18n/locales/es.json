@@ -6281,7 +6281,8 @@
       "heading": "Subir un diseño de referencia",
       "viewPlaceholder": "Nombre de la vista (p. ej. login)",
       "tipReady": "Consejo: arrastra una imagen directamente sobre un par de arriba para establecer su referencia.",
-      "tipNeedView": "Introduce primero un nombre de vista y luego elige un archivo. O arrastra una imagen directamente sobre un par de arriba."
+      "tipNeedView": "Introduce primero un nombre de vista y luego elige un archivo. O arrastra una imagen directamente sobre un par de arriba.",
+      "choose": "Elegir un archivo"
     },
     "requestFix": {
       "heading": "Solicitar una corrección",

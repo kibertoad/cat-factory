@@ -20,6 +20,7 @@ import {
   useFoundationalServicesStore,
 } from '~/stores/foundationalServices'
 import FoundationalContractSummary from '~/components/foundational/FoundationalContractSummary.vue'
+import IconButton from '~/components/common/IconButton.vue'
 
 const props = defineProps<{ kind: FoundationalServiceOwnerKind; ownerId: string }>()
 
@@ -203,20 +204,20 @@ async function remove(service: FoundationalService) {
           </p>
         </div>
         <div class="flex shrink-0 gap-1">
-          <UButton
+          <IconButton
             v-if="!s.sourceId"
             icon="i-lucide-pencil"
             size="xs"
             variant="ghost"
-            :title="t('foundational.registry.edit')"
+            :label="t('foundational.registry.edit')"
             @click="openEdit(s)"
           />
-          <UButton
+          <IconButton
             icon="i-lucide-trash-2"
             size="xs"
             color="error"
             variant="ghost"
-            :title="t('foundational.registry.delete')"
+            :label="t('foundational.registry.delete')"
             @click="remove(s)"
           />
         </div>
@@ -289,12 +290,12 @@ async function remove(service: FoundationalService) {
                 class="flex-1"
               />
               <USelect v-model="c.format" :items="formatItems" class="w-56" />
-              <UButton
+              <IconButton
                 icon="i-lucide-x"
                 size="xs"
                 color="error"
                 variant="ghost"
-                :title="t('foundational.registry.removeContract')"
+                :label="t('foundational.registry.removeContract')"
                 @click="removeContract(i)"
               />
             </div>

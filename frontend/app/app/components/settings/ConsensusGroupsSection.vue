@@ -14,6 +14,7 @@ import type { ConsensusGroup, ConsensusStrategy } from '~/types/consensus'
 import { isSelectable } from '~/stores/models'
 import { uid } from '~/utils/catalog'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import IconButton from '~/components/common/IconButton.vue'
 
 const { t } = useI18n()
 const groups = useConsensusGroupsStore()
@@ -115,6 +116,17 @@ const selectableModelIds = computed(() => {
     .filter((m) => isSelectable(m, configured))
     .map((m) => ({ id: m.id, label: m.label }))
 })
+
+// "Inherit the step's model" is a NAMED sentinel in the picker, never an empty string and never
+// `undefined`: a Select reserves both for "nothing selected", so an item carrying one either
+// throws (empty string) or renders the placeholder over its own label (undefined). One item list
+// serves both pickers; each binding below maps the sentinel to what its field holds on the wire,
+// which is `undefined` for a participant and an empty string for the synthesizer.
+const STEP_MODEL = '__step__'
+const modelItems = computed(() => [
+  { label: t('settings.consensusGroups.editor.stepModel'), value: STEP_MODEL },
+  ...selectableModelIds.value.map((m) => ({ label: m.label, value: m.id })),
+])
 
 /**
  * A threshold field's value as the contract wants it, or undefined when the author left it blank.
@@ -246,21 +258,21 @@ async function remove(group: ConsensusGroup) {
             <span class="truncate text-sm font-semibold text-app-100">{{ g.name }}</span>
             <UBadge color="neutral" variant="subtle" size="xs">{{ barLabel(g) }}</UBadge>
             <div class="ms-auto flex items-center gap-1">
-              <UButton
+              <IconButton
                 size="xs"
                 variant="ghost"
                 color="neutral"
                 icon="i-lucide-pencil"
-                :title="t('settings.consensusGroups.list.editTitle')"
+                :label="t('settings.consensusGroups.list.editTitle')"
                 @click="startEdit(g)"
               />
-              <UButton
+              <IconButton
                 size="xs"
                 variant="ghost"
                 color="error"
                 icon="i-lucide-trash-2"
                 :loading="busy"
-                :title="t('settings.consensusGroups.list.deleteTitle')"
+                :label="t('settings.consensusGroups.list.deleteTitle')"
                 @click="remove(g)"
               />
             </div>
@@ -302,12 +314,7 @@ async function remove(group: ConsensusGroup) {
           <SectionLabel as="label" class="mb-1 block">
             {{ t('settings.consensusGroups.editor.strategyLabel') }}
           </SectionLabel>
-          <select
-            v-model="editor.strategy"
-            class="w-full rounded border border-muted bg-default px-2 py-1.5 text-sm text-app-100"
-          >
-            <option v-for="s in STRATEGIES" :key="s.value" :value="s.value">{{ s.label }}</option>
-          </select>
+          <USelect v-model="editor.strategy" :items="STRATEGIES" size="sm" class="w-full" />
         </div>
       </div>
 
@@ -358,20 +365,20 @@ async function remove(group: ConsensusGroup) {
             class="min-w-40 flex-1"
             :placeholder="t('settings.consensusGroups.editor.framingPlaceholder')"
           />
-          <select
-            v-model="p.modelId"
-            class="w-44 rounded border border-muted bg-default px-1.5 py-1 text-xs text-toned"
-          >
-            <option :value="undefined">{{ t('settings.consensusGroups.editor.stepModel') }}</option>
-            <option v-for="m in selectableModelIds" :key="m.id" :value="m.id">{{ m.label }}</option>
-          </select>
-          <UButton
+          <USelect
+            :model-value="p.modelId || STEP_MODEL"
+            :items="modelItems"
+            size="xs"
+            class="w-44"
+            @update:model-value="p.modelId = $event === STEP_MODEL ? undefined : String($event)"
+          />
+          <IconButton
             icon="i-lucide-x"
             color="error"
             variant="ghost"
             size="xs"
             :disabled="editor.participants.length <= 2"
-            :title="t('pipeline.builder.removeParticipant')"
+            :label="t('pipeline.builder.removeParticipant')"
             @click="removeParticipant(index)"
           />
         </div>
@@ -382,13 +389,15 @@ async function remove(group: ConsensusGroup) {
           <SectionLabel as="label" class="mb-1 block">
             {{ t('settings.consensusGroups.editor.synthesizerLabel') }}
           </SectionLabel>
-          <select
-            v-model="editor.synthesizerModelId"
-            class="w-full rounded border border-muted bg-default px-2 py-1.5 text-sm text-app-100"
-          >
-            <option value="">{{ t('settings.consensusGroups.editor.stepModel') }}</option>
-            <option v-for="m in selectableModelIds" :key="m.id" :value="m.id">{{ m.label }}</option>
-          </select>
+          <USelect
+            :model-value="editor.synthesizerModelId || STEP_MODEL"
+            :items="modelItems"
+            size="sm"
+            class="w-full"
+            @update:model-value="
+              editor.synthesizerModelId = $event === STEP_MODEL ? '' : String($event)
+            "
+          />
         </div>
         <div v-if="editor.strategy === 'debate'">
           <SectionLabel as="label" class="mb-1 block">
@@ -400,10 +409,11 @@ async function remove(group: ConsensusGroup) {
 
       <!-- the estimate bar -->
       <div class="space-y-2 rounded-lg border border-default bg-app-950/40 p-3">
-        <label class="flex items-center gap-2 text-xs text-toned">
-          <input v-model="editor.gated" type="checkbox" class="accent-app-success-500" />
-          {{ t('settings.consensusGroups.editor.gatedLabel') }}
-        </label>
+        <UCheckbox
+          v-model="editor.gated"
+          size="xs"
+          :label="t('settings.consensusGroups.editor.gatedLabel')"
+        />
         <p class="text-2xs text-dimmed">
           {{ t('settings.consensusGroups.editor.gatedHint') }}
         </p>

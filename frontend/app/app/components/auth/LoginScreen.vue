@@ -286,16 +286,17 @@ const noSignInMethod = computed(
           <!-- Only when nothing can be installed here: the paste form below carries its own
                per-provider link, so showing these too would offer the same thing twice. -->
           <div v-if="installableProviders.length === 0" class="flex flex-wrap gap-3 px-1">
-            <a
+            <ULink
+              raw
               v-for="p in ALL_PROVIDERS"
               :key="p"
-              :href="tokenCreateUrl(p)"
+              :to="tokenCreateUrl(p)"
               target="_blank"
               rel="noopener noreferrer"
               class="text-xs text-primary hover:underline"
             >
               {{ t('auth.localMode.createToken', { provider: PROVIDER_LABELS[p] }) }}
-            </a>
+            </ULink>
           </div>
         </template>
 
@@ -379,10 +380,10 @@ const noSignInMethod = computed(
       </div>
 
       <!-- Email / password -->
-      <form
+      <UForm
         v-if="auth.providers.password && mode !== 'forgot'"
         class="space-y-3"
-        @submit.prevent="submitPassword"
+        @submit="submitPassword"
       >
         <UInput
           v-if="mode === 'signup'"
@@ -426,36 +427,43 @@ const noSignInMethod = computed(
           <template v-if="mode === 'login'">
             <i18n-t keypath="auth.login.needAccount" tag="span" scope="global">
               <template #signUp>
-                <button
-                  type="button"
-                  class="text-primary hover:underline"
+                <UButton
+                  color="primary"
+                  variant="link"
+                  class="p-0 text-xs text-primary hover:underline"
                   @click="setMode('signup')"
                 >
                   {{ t('auth.login.signUp') }}
-                </button>
+                </UButton>
               </template>
             </i18n-t>
           </template>
           <template v-else>
             <i18n-t keypath="auth.login.haveAccount" tag="span" scope="global">
               <template #signIn>
-                <button
-                  type="button"
-                  class="text-primary hover:underline"
+                <UButton
+                  color="primary"
+                  variant="link"
+                  class="p-0 text-xs text-primary hover:underline"
                   @click="setMode('login')"
                 >
                   {{ t('auth.login.signIn') }}
-                </button>
+                </UButton>
               </template>
             </i18n-t>
           </template>
         </p>
         <p v-if="mode === 'login'" class="text-center text-xs text-muted">
-          <button type="button" class="text-primary hover:underline" @click="setMode('forgot')">
+          <UButton
+            color="primary"
+            variant="link"
+            class="p-0 text-xs text-primary hover:underline"
+            @click="setMode('forgot')"
+          >
             {{ t('auth.login.forgotPassword') }}
-          </button>
+          </UButton>
         </p>
-      </form>
+      </UForm>
 
       <!-- Paste-a-token sign-in: your own PAT on a hosted node; on local mode the token this
            deployment will operate with (see `remotePatProviders`). -->
@@ -472,7 +480,7 @@ const noSignInMethod = computed(
           <span class="h-px flex-1 bg-elevated" /> {{ t('auth.login.or') }}
           <span class="h-px flex-1 bg-elevated" />
         </div>
-        <form class="space-y-3" @submit.prevent="submitRemotePat">
+        <UForm class="space-y-3" @submit="submitRemotePat">
           <div v-if="remotePatProviders.length > 1" class="flex gap-2">
             <UButton
               v-for="p in remotePatProviders"
@@ -517,8 +525,9 @@ const noSignInMethod = computed(
             {{ t('auth.localMode.tokenBecomesCredential') }}
           </p>
           <p class="px-1 text-center">
-            <a
-              :href="tokenCreateUrl(remotePatProvider)"
+            <ULink
+              raw
+              :to="tokenCreateUrl(remotePatProvider)"
               target="_blank"
               rel="noopener noreferrer"
               class="text-xs text-primary hover:underline"
@@ -526,9 +535,9 @@ const noSignInMethod = computed(
               {{
                 t('auth.localMode.createToken', { provider: PROVIDER_LABELS[remotePatProvider] })
               }}
-            </a>
+            </ULink>
           </p>
-        </form>
+        </UForm>
       </template>
 
       <!-- No sign-in method configured on a remote deployment: explain, don't show a blank card -->
@@ -542,10 +551,10 @@ const noSignInMethod = computed(
       />
 
       <!-- Forgot password: request a reset link by email -->
-      <form
+      <UForm
         v-if="auth.providers.password && mode === 'forgot'"
         class="space-y-3"
-        @submit.prevent="submitForgot"
+        @submit="submitForgot"
       >
         <template v-if="forgotSent">
           <p class="text-sm text-toned">
@@ -568,11 +577,16 @@ const noSignInMethod = computed(
           </UButton>
         </template>
         <p class="text-center text-xs text-muted">
-          <button type="button" class="text-primary hover:underline" @click="setMode('login')">
+          <UButton
+            color="primary"
+            variant="link"
+            class="p-0 text-xs text-primary hover:underline"
+            @click="setMode('login')"
+          >
             {{ t('auth.login.backToSignIn') }}
-          </button>
+          </UButton>
         </p>
-      </form>
+      </UForm>
     </div>
   </div>
 </template>

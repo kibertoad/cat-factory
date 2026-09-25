@@ -140,8 +140,9 @@ function choose(id: string) {
         <!-- left: selectable options, NAME ONLY -->
         <ul class="w-1/2 shrink-0 overflow-y-auto border-e border-default p-1">
           <li>
-            <button
-              type="button"
+            <UButton
+              color="neutral"
+              variant="ghost"
               class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-start text-sm"
               :class="[
                 refused.has('') ? 'cursor-not-allowed opacity-50' : 'hover:bg-elevated/60',
@@ -164,11 +165,12 @@ function choose(id: string) {
                 name="i-lucide-check"
                 class="h-4 w-4 shrink-0 text-primary"
               />
-            </button>
+            </UButton>
           </li>
           <li v-for="p in options" :key="p.id">
-            <button
-              type="button"
+            <UButton
+              color="neutral"
+              variant="ghost"
               class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-start text-sm"
               :class="[
                 refused.has(p.id) ? 'cursor-not-allowed opacity-50' : 'hover:bg-elevated/60',
@@ -191,7 +193,7 @@ function choose(id: string) {
                 name="i-lucide-check"
                 class="h-4 w-4 shrink-0 text-primary"
               />
-            </button>
+            </UButton>
           </li>
         </ul>
 

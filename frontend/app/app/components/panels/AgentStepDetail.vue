@@ -30,6 +30,7 @@ import {
 import InputGateNotice from '~/components/inputGate/InputGateNotice.vue'
 import RunDetailLoadState from '~/components/panels/RunDetailLoadState.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import IconButton from '~/components/common/IconButton.vue'
 
 // Detail overlay for a single pipeline step. Opened by clicking an agent in the
 // inspector list (TaskExecution) or the focus-view pipeline (PipelineProgress) via
@@ -408,7 +409,9 @@ async function copyOutput() {
         </SectionLabel>
       </div>
       <nav class="flex-1 space-y-0.5 overflow-auto px-2 py-3">
-        <button
+        <UButton
+          color="neutral"
+          variant="ghost"
           class="block w-full truncate rounded-md px-2 py-1 text-start text-sm transition"
           :class="
             activeId === 'step-details'
@@ -418,8 +421,10 @@ async function copyOutput() {
           @click="goTo('step-details')"
         >
           {{ t('panels.stepDetail.details') }}
-        </button>
-        <button
+        </UButton>
+        <UButton
+          color="neutral"
+          variant="ghost"
           v-for="s in tocSections"
           :key="s.id"
           class="block w-full truncate rounded-md px-2 py-1 text-start text-sm transition"
@@ -433,7 +438,7 @@ async function copyOutput() {
           @click="goTo(s.id)"
         >
           {{ s.title }}
-        </button>
+        </UButton>
       </nav>
     </aside>
 
@@ -482,13 +487,13 @@ async function copyOutput() {
             "
             @click="setAll(!allCollapsed)"
           />
-          <UButton
+          <IconButton
             v-if="hasOutput"
             icon="i-lucide-copy"
             color="neutral"
             variant="ghost"
             size="sm"
-            :title="t('panels.stepDetail.copyRawOutput')"
+            :label="t('panels.stepDetail.copyRawOutput')"
             @click="copyOutput"
           />
           <!-- Restart the pipeline from this step (shared two-click confirm; resetting
@@ -500,12 +505,12 @@ async function copyOutput() {
             :step-index="ctx?.stepIndex ?? null"
             @restarted="close"
           />
-          <UButton
+          <IconButton
             icon="i-lucide-x"
             color="neutral"
             variant="ghost"
             size="sm"
-            :title="t('panels.stepDetail.closeEsc')"
+            :label="t('panels.stepDetail.closeEsc')"
             @click="close"
           />
         </div>
@@ -782,9 +787,11 @@ async function copyOutput() {
               :ref="(el) => (sectionEls[s.id] = el as HTMLElement | null)"
               class="scroll-mt-4"
             >
-              <button
+              <UButton
+                color="neutral"
+                variant="ghost"
                 v-if="s.depth > 0"
-                class="group flex w-full items-center gap-2 rounded-md py-1 text-start transition hover:text-highlighted"
+                class="group flex w-full items-center gap-2 rounded-md px-0 py-1 text-start transition hover:bg-transparent hover:text-highlighted"
                 @click="toggle(s.id)"
               >
                 <UIcon
@@ -797,7 +804,7 @@ async function copyOutput() {
                   :class="s.depth <= 1 ? 'text-lg' : s.depth === 2 ? 'text-base' : 'text-sm'"
                   v-html="s.titleHtml"
                 />
-              </button>
+              </UButton>
               <!-- eslint-disable-next-line vue/no-v-html -->
               <div
                 v-show="!collapsed[s.id]"
@@ -914,13 +921,15 @@ async function copyOutput() {
               <SectionLabel>
                 {{ t('panels.stepDetail.commentN', { number: idx + 1 }) }}
               </SectionLabel>
-              <button
-                class="text-dimmed transition hover:text-app-error-400"
+              <UButton
+                color="neutral"
+                variant="ghost"
+                class="p-0 text-dimmed transition hover:bg-transparent hover:text-app-error-400"
                 :title="t('panels.stepDetail.removeComment')"
                 @click="removeComment(idx)"
               >
                 <UIcon name="i-lucide-x" class="h-3.5 w-3.5" />
-              </button>
+              </UButton>
             </div>
             <pre
               class="mb-1 max-h-20 overflow-auto whitespace-pre-wrap rounded bg-app-950/50 p-1.5 text-3xs text-muted"

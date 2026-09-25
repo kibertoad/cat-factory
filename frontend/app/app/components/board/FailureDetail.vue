@@ -18,18 +18,28 @@ const { t } = useI18n()
 </script>
 
 <template>
-  <details v-if="detail && detail !== message" class="mt-1">
-    <summary class="cursor-pointer" :class="summaryClass">
-      {{ t('board.failure.showDetail') }}
-    </summary>
+  <UCollapsible v-if="detail && detail !== message" class="mt-1">
+    <template #default="{ open }">
+      <UButton
+        variant="link"
+        color="neutral"
+        size="xs"
+        :icon="open ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
+        :label="t('board.failure.showDetail')"
+        :class="summaryClass"
+        :ui="{ base: 'w-full justify-start gap-1 p-0' }"
+      />
+    </template>
     <!-- The stack trace / extended detail: the first thing a user does with it is copy it, so
          offer a copy affordance floated over the scroll box (UX-39). -->
-    <div class="relative mt-1">
-      <CopyButton :text="detail" class="absolute end-1 top-1 z-10" />
-      <pre
-        class="max-h-32 overflow-auto whitespace-pre-wrap rounded p-1.5 pe-9"
-        :class="preClass"
-        >{{ detail }}</pre>
-    </div>
-  </details>
+    <template #content>
+      <div class="relative mt-1">
+        <CopyButton :text="detail" class="absolute end-1 top-1 z-10" />
+        <pre
+          class="max-h-32 overflow-auto whitespace-pre-wrap rounded p-1.5 pe-9"
+          :class="preClass"
+          >{{ detail }}</pre>
+      </div>
+    </template>
+  </UCollapsible>
 </template>

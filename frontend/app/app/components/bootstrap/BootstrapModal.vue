@@ -22,6 +22,7 @@ import RepoTreeBrowser from '~/components/github/RepoTreeBrowser.vue'
 import VcsConnectSurfaces from '~/components/vcs/VcsConnectSurfaces.vue'
 import { appInstallationManageUrl, newRepoUrl, VCS_PROVIDER_LABELS } from '~/utils/vcs'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import IconButton from '~/components/common/IconButton.vue'
 
 const ui = useUiStore()
 const bootstrap = useBootstrapStore()
@@ -701,13 +702,12 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
                     :placeholder="t('bootstrap.monorepo.directory.placeholder')"
                     class="flex-1"
                   />
-                  <UButton
+                  <IconButton
                     v-if="monorepoRepoId !== undefined"
                     variant="soft"
                     color="neutral"
                     icon="i-lucide-folder-search"
-                    :title="t('bootstrap.monorepo.directory.browse')"
-                    :aria-label="t('bootstrap.monorepo.directory.browse')"
+                    :label="t('bootstrap.monorepo.directory.browse')"
                     data-testid="bootstrap-directory-browse"
                     @click="toggleDirectoryBrowse()"
                   />

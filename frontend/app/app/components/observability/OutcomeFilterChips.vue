@@ -25,17 +25,18 @@ function toneClass(option: (typeof props.options)[number], active: boolean): str
 
 <template>
   <div class="flex rounded-lg border border-default p-0.5 text-xs">
-    <button
+    <UButton
+      color="neutral"
+      variant="ghost"
       v-for="option in options"
       :key="option.value"
-      type="button"
-      class="rounded-md px-2.5 py-1 transition"
+      class="rounded-md px-2.5 py-1 text-xs transition"
       :class="toneClass(option, option.value === modelValue)"
       :aria-pressed="option.value === modelValue"
       @click="emit('update:modelValue', option.value)"
     >
       {{ option.label }}
       <span class="tabular-nums opacity-70">{{ option.count }}</span>
-    </button>
+    </UButton>
   </div>
 </template>

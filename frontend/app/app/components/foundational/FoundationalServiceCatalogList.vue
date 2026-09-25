@@ -19,6 +19,7 @@ import { useBusyRows } from '~/composables/useBusyRows'
 import type { ApiContractFormat, FoundationalServiceTier } from '~/types/domain'
 import { useFoundationalServicesStore } from '~/stores/foundationalServices'
 import FoundationalContractSummary from '~/components/foundational/FoundationalContractSummary.vue'
+import IconButton from '~/components/common/IconButton.vue'
 
 const catalog = useFoundationalServicesStore()
 const toast = useToast()
@@ -139,13 +140,13 @@ async function suppress(serviceId: string) {
           <!-- Only an INHERITED entry can be suppressed — an account service or one the
                deployment registered in code; the board's own row is managed in the registry tab,
                where deleting it is the honest action. -->
-          <UButton
+          <IconButton
             v-if="s.tier !== 'workspace'"
             icon="i-lucide-eye-off"
             size="xs"
             variant="ghost"
             :loading="rowBusy(`suppress:${s.id}`)"
-            :title="t('foundational.catalog.suppress')"
+            :label="t('foundational.catalog.suppress')"
             :data-testid="`foundational-suppress-${s.id}`"
             @click="suppress(s.id)"
           />

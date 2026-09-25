@@ -67,8 +67,9 @@ const withheldNote = computed(() => {
          is the one lane whose emptiness says nothing a reader needs (a new service has merged
          nothing, which its three live lanes already show). -->
     <div v-if="doneLane && doneLane.total > 0" class="rounded-lg bg-default/40">
-      <button
-        type="button"
+      <UButton
+        color="neutral"
+        variant="ghost"
         class="nodrag flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-left hover:bg-elevated/40"
         data-testid="done-lane-toggle"
         :aria-expanded="!laneView.doneLaneCollapsed"
@@ -99,7 +100,7 @@ const withheldNote = computed(() => {
         <span v-if="withheldNote" class="ms-auto truncate text-3xs text-dimmed">{{
           withheldNote
         }}</span>
-      </button>
+      </UButton>
 
       <!-- The archive opens as a WIDE GRID: each group takes the strip's full width and wraps its
            own cards across it, and the groups stack. Wrapping the GROUPS instead read correctly

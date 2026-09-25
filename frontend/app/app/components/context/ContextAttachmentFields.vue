@@ -289,13 +289,14 @@ function removePending(item: PendingContext) {
             >
               {{ t('contextAttachments.importsOnAdd') }}
             </UBadge>
-            <button
-              type="button"
-              class="ms-auto shrink-0 text-muted hover:text-default"
+            <UButton
+              color="neutral"
+              variant="ghost"
+              class="ms-auto shrink-0 p-0 text-muted hover:bg-transparent hover:text-default"
               @click="removePending(item)"
             >
               <UIcon name="i-lucide-x" class="h-3.5 w-3.5" />
-            </button>
+            </UButton>
           </div>
           <p
             v-if="item.unreadable"
@@ -397,13 +398,14 @@ function removePending(item: PendingContext) {
             >
               {{ t('contextAttachments.importsOnAdd') }}
             </UBadge>
-            <button
-              type="button"
-              class="ms-auto shrink-0 text-muted hover:text-default"
+            <UButton
+              color="neutral"
+              variant="ghost"
+              class="ms-auto shrink-0 p-0 text-muted hover:bg-transparent hover:text-default"
               @click="removePending(item)"
             >
               <UIcon name="i-lucide-x" class="h-3.5 w-3.5" />
-            </button>
+            </UButton>
           </div>
           <!-- An issue reference gets no pre-flight of its own (there is no `parseRef` to ask a
                tracker), so this line IS its warning: the fetch is attempted when the form opens and

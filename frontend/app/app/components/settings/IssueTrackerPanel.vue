@@ -272,18 +272,28 @@ async function checkSetup(source: TaskSourceKind) {
       <p v-if="trackerKind === 'github' && !githubAvailable" class="text-2xs text-app-warning-400">
         <i18n-t keypath="settings.issueTracker.filing.githubHint" tag="span" scope="global">
           <template #link>
-            <button class="underline" @click="ui.openGitHub()">
+            <UButton
+              color="neutral"
+              variant="link"
+              class="p-0 text-2xs underline"
+              @click="ui.openGitHub()"
+            >
               {{ t('settings.issueTracker.filing.githubHintLink') }}
-            </button>
+            </UButton>
           </template>
         </i18n-t>
       </p>
       <p v-else-if="trackerKind === 'jira' && !jiraConnected" class="text-2xs text-app-warning-400">
         <i18n-t keypath="settings.issueTracker.filing.jiraHint" tag="span" scope="global">
           <template #link>
-            <button class="underline" @click="ui.openTaskConnect('jira')">
+            <UButton
+              color="neutral"
+              variant="link"
+              class="p-0 text-2xs underline"
+              @click="ui.openTaskConnect('jira')"
+            >
               {{ t('settings.issueTracker.filing.connectLink') }}
-            </button>
+            </UButton>
           </template>
         </i18n-t>
       </p>
@@ -293,9 +303,14 @@ async function checkSetup(source: TaskSourceKind) {
       >
         <i18n-t keypath="settings.issueTracker.filing.linearHint" tag="span" scope="global">
           <template #link>
-            <button class="underline" @click="ui.openTaskConnect('linear')">
+            <UButton
+              color="neutral"
+              variant="link"
+              class="p-0 text-2xs underline"
+              @click="ui.openTaskConnect('linear')"
+            >
               {{ t('settings.issueTracker.filing.connectLink') }}
-            </button>
+            </UButton>
           </template>
         </i18n-t>
       </p>

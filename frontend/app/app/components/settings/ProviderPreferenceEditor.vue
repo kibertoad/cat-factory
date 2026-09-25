@@ -27,6 +27,7 @@ import {
   subscriptionOverridesOrder,
 } from '~/components/settings/ProviderPreferenceEditor.logic'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import IconButton from '~/components/common/IconButton.vue'
 
 const props = defineProps<{
   /** The preset's stored order; empty/absent ⇒ the deployment's default order. */
@@ -154,24 +155,22 @@ function reset() {
           <p class="truncate text-2xs text-dimmed">{{ t(ROUTE_HINTS[flavor]) }}</p>
         </div>
         <div class="flex shrink-0 items-center gap-1">
-          <UButton
+          <IconButton
             size="xs"
             variant="ghost"
             color="neutral"
             icon="i-lucide-chevron-up"
             :disabled="index === 0"
-            :title="t('settings.modelConfiguration.routeOrder.moveUp')"
-            :aria-label="t('settings.modelConfiguration.routeOrder.moveUp')"
+            :label="t('settings.modelConfiguration.routeOrder.moveUp')"
             @click="move(index, -1)"
           />
-          <UButton
+          <IconButton
             size="xs"
             variant="ghost"
             color="neutral"
             icon="i-lucide-chevron-down"
             :disabled="index === order.length - 1"
-            :title="t('settings.modelConfiguration.routeOrder.moveDown')"
-            :aria-label="t('settings.modelConfiguration.routeOrder.moveDown')"
+            :label="t('settings.modelConfiguration.routeOrder.moveDown')"
             @click="move(index, 1)"
           />
         </div>

@@ -199,6 +199,16 @@ const items = computed<PickerItem[]>(() => {
   return out
 })
 
+// The same list in the shape URadioGroup reads. `desc` is optional on a PickerItem and an empty
+// string renders an empty description line, so it is dropped rather than passed through blank.
+const backendItems = computed(() =>
+  items.value.map((item) => ({
+    value: item.id,
+    label: item.label,
+    ...(item.desc ? { description: item.desc } : {}),
+  })),
+)
+
 // The active-line label: prefer the registered connection's concrete kind over the generic
 // "delegated" label so "Active: Kubernetes cluster" reads truthfully.
 const activeLabel = computed(() => {
@@ -275,23 +285,13 @@ const labelKey = computed(() =>
       {{ t('settings.infrastructure.active', { backend: activeLabel }) }}
     </p>
 
-    <div class="space-y-1.5" :data-testid="`${axis}-backend-options`">
-      <label v-for="item in items" :key="item.id" class="flex cursor-pointer items-start gap-2">
-        <input
-          type="radio"
-          class="mt-1"
-          :value="item.id"
-          :checked="item.id === selected"
-          :disabled="saving"
-          :data-testid="`${axis}-backend-${item.id}`"
-          @change="select(item.id)"
-        />
-        <span class="min-w-0">
-          <span class="text-sm text-default">{{ item.label }}</span>
-          <span v-if="item.desc" class="block text-2xs text-muted">{{ item.desc }}</span>
-        </span>
-      </label>
-    </div>
+    <URadioGroup
+      :model-value="selected"
+      :items="backendItems"
+      :disabled="saving"
+      :data-testid="`${axis}-backend-options`"
+      @update:model-value="select(String($event))"
+    />
 
     <p v-if="showRegisterHint" class="text-2xs text-app-warning-300/80">
       {{ t('settings.infrastructure.registerHint') }}

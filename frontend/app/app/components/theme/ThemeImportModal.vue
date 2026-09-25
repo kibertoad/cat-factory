@@ -66,7 +66,7 @@ async function submit() {
     :description="t('appearance.import.description')"
   >
     <template #body>
-      <form class="space-y-4" data-testid="theme-import-form" @submit.prevent="submit">
+      <UForm class="space-y-4" data-testid="theme-import-form" @submit="submit">
         <UFormField
           :label="t('appearance.import.linkLabel')"
           :error="error ? t(ERROR_KEYS[error]) : undefined"
@@ -109,7 +109,7 @@ async function submit() {
             {{ t('appearance.import.submit') }}
           </UButton>
         </div>
-      </form>
+      </UForm>
     </template>
   </UModal>
 </template>

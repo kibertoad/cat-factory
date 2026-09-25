@@ -211,7 +211,9 @@ function prettyArgs(raw: string): string {
           class="overflow-hidden rounded-xl border border-default bg-default/40"
           :class="!call.ok ? 'border-app-error-900/60' : ''"
         >
-          <button
+          <UButton
+            color="neutral"
+            variant="ghost"
             class="flex w-full items-center gap-3 px-4 py-2.5 text-start transition hover:bg-default/70"
             @click="toggle(call)"
           >
@@ -236,7 +238,7 @@ function prettyArgs(raw: string): string {
               </UBadge>
               <span class="hidden text-app-600 md:inline">{{ clock(call.startedAt) }}</span>
             </div>
-          </button>
+          </UButton>
 
           <div v-if="expanded[call.id]" class="border-t border-default px-4 py-3 space-y-3">
             <div class="flex flex-wrap gap-x-5 gap-y-1 text-2xs text-dimmed">

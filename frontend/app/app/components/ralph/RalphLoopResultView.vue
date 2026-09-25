@@ -169,16 +169,17 @@ const STATUS_META = computed<
             </div>
           </template>
 
-          <a
+          <ULink
+            raw
             v-if="prUrl"
-            :href="prUrl"
+            :to="prUrl"
             target="_blank"
             rel="noopener"
             class="mt-3 inline-flex items-center gap-1 text-xs text-app-info-300 hover:text-app-info-200 hover:underline"
           >
             {{ t('ralph.viewPr') }}
             <UIcon name="i-lucide-external-link" class="h-3 w-3" />
-          </a>
+          </ULink>
 
           <!-- Why a loop that stopped short of its budget stopped: without this the count in
                the sidebar (e.g. "3 of 20") reads as an unexplained abandonment. -->

@@ -112,22 +112,24 @@ const filename = computed(() => {
     <!-- The two things a person does with a delivered asset. Both hang off the object URL, so
          they appear only once the bytes are in hand. -->
     <div v-if="url" class="flex items-center gap-3 text-2xs">
-      <a
-        :href="url"
+      <ULink
+        raw
+        :to="url"
         target="_blank"
         rel="noopener"
         class="text-app-info-300 hover:underline"
         data-testid="stored-asset-open"
         @click.stop
-        >{{ t('binaryOutput.asset.open') }}</a
+        >{{ t('binaryOutput.asset.open') }}</ULink
       >
-      <a
-        :href="url"
+      <ULink
+        raw
+        :to="url"
         :download="filename"
         class="text-app-info-300 hover:underline"
         data-testid="stored-asset-download"
         @click.stop
-        >{{ t('binaryOutput.asset.download') }}</a
+        >{{ t('binaryOutput.asset.download') }}</ULink
       >
     </div>
   </div>

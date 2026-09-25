@@ -13,18 +13,27 @@ const { t } = useI18n()
 </script>
 
 <template>
-  <details
+  <UCollapsible
     v-if="failures.length"
     class="nodrag rounded-lg border border-muted/60 bg-default/40 px-3 py-2"
     data-testid="agent-failure-history"
   >
-    <summary
-      class="flex cursor-pointer items-center gap-1.5 text-2xs text-muted hover:text-default"
-    >
-      <UIcon name="i-lucide-history" class="h-3.5 w-3.5 shrink-0" />
-      {{ t('board.failure.history.previousErrors', { count: failures.length }, failures.length) }}
-    </summary>
+    <template #default="{ open }">
+      <UButton
+        variant="link"
+        color="neutral"
+        size="xs"
+        icon="i-lucide-history"
+        :trailing-icon="open ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
+        :label="
+          t('board.failure.history.previousErrors', { count: failures.length }, failures.length)
+        "
+        :ui="{ base: 'w-full justify-start gap-1.5 p-0 text-2xs text-muted hover:text-default' }"
+      />
+    </template>
 
-    <FailureHistoryList :failures="props.failures" class="mt-2" />
-  </details>
+    <template #content>
+      <FailureHistoryList :failures="props.failures" class="mt-2" />
+    </template>
+  </UCollapsible>
 </template>

@@ -121,19 +121,15 @@ const gateFieldValues = computed<DescriptorFieldValues>({
     >
       <div class="flex flex-wrap items-center gap-2 text-3xs">
         <span class="text-dimmed">{{ t('pipeline.gateConfig.approversLabel') }}</span>
-        <label
+        <UCheckbox
           v-for="role in APPROVER_ROLES"
           :key="role"
-          class="flex items-center gap-1 text-muted"
-        >
-          <input
-            type="checkbox"
-            :checked="config.approvers?.roles?.includes(role) ?? false"
-            :data-testid="`gate-approver-role-${role}`"
-            @change="toggleRole(role, ($event.target as HTMLInputElement).checked)"
-          />
-          {{ t(ROLE_LABEL_KEYS[role as 'admin' | 'member']) }}
-        </label>
+          size="xs"
+          :model-value="config.approvers?.roles?.includes(role) ?? false"
+          :label="t(ROLE_LABEL_KEYS[role as 'admin' | 'member'])"
+          :data-testid="`gate-approver-role-${role}`"
+          @update:model-value="toggleRole(role, $event === true)"
+        />
       </div>
 
       <div class="flex flex-wrap items-center gap-2 text-3xs">
@@ -155,15 +151,15 @@ const gateFieldValues = computed<DescriptorFieldValues>({
         <label class="text-dimmed" :title="t('pipeline.gateConfig.requiredApprovalsHint')">
           {{ t('pipeline.gateConfig.requiredApprovalsLabel') }}
         </label>
-        <input
-          :value="requiredApprovals"
-          type="number"
-          min="1"
+        <UInputNumber
+          :model-value="Number(requiredApprovals)"
+          :min="1"
           :max="MAX_GATE_APPROVALS"
-          step="1"
-          class="w-14 rounded border border-muted bg-default px-1.5 py-0.5 text-app-100"
+          :step="1"
+          size="xs"
+          class="w-24"
           data-testid="gate-required-approvals"
-          @change="setRequiredApprovals(($event.target as HTMLInputElement).value)"
+          @update:model-value="setRequiredApprovals(String($event ?? ''))"
         />
         <span class="text-dimmed">{{ t('pipeline.gateConfig.requiredApprovalsHint') }}</span>
       </div>

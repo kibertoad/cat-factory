@@ -124,16 +124,17 @@ const envInTransition = computed(
           ENV_STATUS_META[environment.status].label
         }}</span>
       </div>
-      <a
+      <ULink
+        raw
         v-if="environment.url"
-        :href="environment.url"
+        :to="environment.url"
         target="_blank"
         rel="noopener"
         class="inline-flex items-center gap-1.5 break-all text-sm text-app-info-300 hover:underline"
       >
         <UIcon name="i-lucide-external-link" class="h-3.5 w-3.5 shrink-0" />
         {{ environment.url }}
-      </a>
+      </ULink>
       <p v-if="environment.expiresAt" class="text-2xs text-dimmed">
         {{ t('environments.expires', { date: d(new Date(environment.expiresAt), 'long') }) }}
       </p>

@@ -27,6 +27,7 @@ import {
 } from '~/stores/foundationalServices'
 import GitHubRepoSearchSelect from '~/components/github/GitHubRepoSearchSelect.vue'
 import RepoTreeBrowser from '~/components/github/RepoTreeBrowser.vue'
+import IconButton from '~/components/common/IconButton.vue'
 
 const props = defineProps<{ kind: FoundationalServiceOwnerKind; ownerId: string }>()
 
@@ -295,29 +296,29 @@ async function unlink(id: string) {
         {{ t('foundational.sources.changes') }}
       </UBadge>
       <div class="ms-auto flex gap-1">
-        <UButton
+        <IconButton
           icon="i-lucide-search-check"
           size="xs"
           variant="ghost"
           :loading="rowBusy(`check:${s.id}`)"
-          :title="t('foundational.sources.check')"
+          :label="t('foundational.sources.check')"
           @click="check(s.id)"
         />
-        <UButton
+        <IconButton
           icon="i-lucide-refresh-cw"
           size="xs"
           variant="ghost"
           :loading="rowBusy(`sync:${s.id}`)"
-          :title="t('foundational.sources.sync')"
+          :label="t('foundational.sources.sync')"
           @click="sync(s.id)"
         />
-        <UButton
+        <IconButton
           icon="i-lucide-unplug"
           size="xs"
           color="error"
           variant="ghost"
           :loading="rowBusy(`unlink:${s.id}`)"
-          :title="t('foundational.sources.unlink')"
+          :label="t('foundational.sources.unlink')"
           @click="unlink(s.id)"
         />
       </div>

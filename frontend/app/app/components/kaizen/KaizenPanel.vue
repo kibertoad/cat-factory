@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, watch } from 'vue'
 import { onKeyStroke } from '@vueuse/core'
+import type { TableColumn } from '@nuxt/ui'
 import type { KaizenGrading } from '~/types/domain'
 import { agentKindMeta } from '~/utils/catalog'
 
@@ -48,6 +49,16 @@ function statusLabel(g: KaizenGrading): string {
   if (g.status === 'failed') return t('kaizen.status.failed')
   return g.grade != null ? t('kaizen.gradeValue', { grade: g.grade }) : t('kaizen.status.graded')
 }
+
+// Column definitions rather than hand-written `<th>`s, so the header typography comes from the
+// table theme and is the same one every other table in the SPA renders.
+const historyColumns = computed<TableColumn<KaizenGrading>[]>(() => [
+  { id: 'when', header: t('kaizen.history.col.when') },
+  { id: 'agent', header: t('kaizen.history.col.agent') },
+  { id: 'model', header: t('kaizen.history.col.model') },
+  { id: 'grade', header: t('kaizen.history.col.grade') },
+  { id: 'recommendations', header: t('kaizen.history.col.recommendations') },
+])
 </script>
 
 <template>
@@ -155,59 +166,61 @@ function statusLabel(g: KaizenGrading): string {
               <UIcon name="i-lucide-history" class="h-4 w-4 text-app-hue-teal" />
               {{ t('kaizen.history.title') }}
             </h2>
-            <div class="overflow-hidden rounded-lg border border-default">
-              <table class="w-full text-start text-xs">
-                <thead class="bg-default/60 text-2xs uppercase tracking-wide text-dimmed">
-                  <tr>
-                    <th class="px-3 py-2 font-medium">{{ t('kaizen.history.col.when') }}</th>
-                    <th class="px-3 py-2 font-medium">{{ t('kaizen.history.col.agent') }}</th>
-                    <th class="px-3 py-2 font-medium">{{ t('kaizen.history.col.model') }}</th>
-                    <th class="px-3 py-2 font-medium">{{ t('kaizen.history.col.grade') }}</th>
-                    <th class="px-3 py-2 font-medium">
-                      {{ t('kaizen.history.col.recommendations') }}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-default/70">
-                  <tr v-for="g in kaizen.history" :key="g.id" class="align-top">
-                    <td class="whitespace-nowrap px-3 py-2 text-dimmed">
-                      {{ when(g.createdAt) }}
-                    </td>
-                    <td class="px-3 py-2">
-                      <span class="flex items-center gap-1.5">
-                        <UIcon
-                          :name="meta(g.agentKind).icon"
-                          class="h-3.5 w-3.5"
-                          :style="{ color: meta(g.agentKind).color }"
-                        />
-                        <span class="text-default">{{ meta(g.agentKind).label }}</span>
-                        <span class="text-app-600">{{
-                          t('kaizen.promptVersion', { version: g.promptVersion })
-                        }}</span>
-                      </span>
-                    </td>
-                    <td class="max-w-[12rem] truncate px-3 py-2 text-muted" :title="g.model">
-                      {{ g.model }}
-                    </td>
-                    <td class="whitespace-nowrap px-3 py-2 font-semibold" :class="gradeTone(g)">
-                      {{ statusLabel(g) }}
-                    </td>
-                    <td class="px-3 py-2 text-muted">
-                      <ul v-if="g.recommendations.length" class="list-disc space-y-0.5 ps-4">
-                        <li v-for="(r, i) in g.recommendations" :key="i">{{ r }}</li>
-                      </ul>
-                      <span v-else-if="g.status === 'complete'" class="text-app-600">—</span>
-                      <span v-else-if="g.error" class="text-app-error-400/80">{{ g.error }}</span>
-                    </td>
-                  </tr>
-                  <tr v-if="kaizen.history.length === 0">
-                    <td colspan="5" class="px-3 py-6 text-center text-app-600">
-                      {{ t('kaizen.history.empty') }}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+            <UTable
+              :data="kaizen.history"
+              :columns="historyColumns"
+              :ui="{
+                root: 'overflow-hidden rounded-lg border border-default',
+                base: 'text-xs',
+                td: 'px-3 py-2 text-xs whitespace-normal',
+                tr: 'align-top',
+              }"
+            >
+              <template #when-cell="{ row }">
+                <span class="whitespace-nowrap text-dimmed">{{
+                  when(row.original.createdAt)
+                }}</span>
+              </template>
+              <template #agent-cell="{ row }">
+                <span class="flex items-center gap-1.5">
+                  <UIcon
+                    :name="meta(row.original.agentKind).icon"
+                    class="h-3.5 w-3.5"
+                    :style="{ color: meta(row.original.agentKind).color }"
+                  />
+                  <span class="text-default">{{ meta(row.original.agentKind).label }}</span>
+                  <span class="text-app-600">{{
+                    t('kaizen.promptVersion', { version: row.original.promptVersion })
+                  }}</span>
+                </span>
+              </template>
+              <template #model-cell="{ row }">
+                <span class="block max-w-[12rem] truncate text-muted" :title="row.original.model">
+                  {{ row.original.model }}
+                </span>
+              </template>
+              <template #grade-cell="{ row }">
+                <span class="whitespace-nowrap font-semibold" :class="gradeTone(row.original)">
+                  {{ statusLabel(row.original) }}
+                </span>
+              </template>
+              <template #recommendations-cell="{ row }">
+                <div class="text-muted">
+                  <ul v-if="row.original.recommendations.length" class="list-disc space-y-0.5 ps-4">
+                    <li v-for="(r, i) in row.original.recommendations" :key="i">{{ r }}</li>
+                  </ul>
+                  <span v-else-if="row.original.status === 'complete'" class="text-app-600">
+                    &mdash;
+                  </span>
+                  <span v-else-if="row.original.error" class="text-app-error-400/80">
+                    {{ row.original.error }}
+                  </span>
+                </div>
+              </template>
+              <template #empty>
+                <span class="text-app-600">{{ t('kaizen.history.empty') }}</span>
+              </template>
+            </UTable>
           </section>
         </div>
       </div>

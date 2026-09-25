@@ -237,40 +237,43 @@ async function remove() {
         </p>
       </div>
 
-      <details class="rounded-md border border-muted/70 p-2">
-        <summary class="cursor-pointer text-2xs text-muted">
-          {{ t('settings.infrastructure.cloudflare.advanced') }}
-        </summary>
-        <div class="mt-2 space-y-2">
-          <div class="space-y-1">
-            <label class="text-2xs text-muted">{{
-              t('settings.infrastructure.cloudflare.workerTemplate')
-            }}</label>
+      <UCollapsible class="rounded-md border border-muted/70 p-2">
+        <template #default="{ open }">
+          <UButton
+            variant="link"
+            color="neutral"
+            size="xs"
+            :icon="open ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
+            :label="t('settings.infrastructure.cloudflare.advanced')"
+            :ui="{ base: 'w-full justify-start gap-1 p-0 text-2xs text-muted' }"
+          />
+        </template>
+        <template #content>
+          <div class="mt-2 space-y-2">
             <!-- The placeholder is a FORMAT EXAMPLE containing vue-i18n metacharacters, so it
                  stays inline rather than becoming a catalog key. -->
-            <UInput
-              v-model="workerNameTemplate"
+            <UFormField size="xs" :label="t('settings.infrastructure.cloudflare.workerTemplate')">
+              <UInput
+                v-model="workerNameTemplate"
+                size="xs"
+                placeholder="cat-factory-pr-{{pullNumber}}"
+              />
+            </UFormField>
+            <UFormField
               size="xs"
-              placeholder="cat-factory-pr-{{pullNumber}}"
-            />
+              :label="t('settings.infrastructure.cloudflare.environmentTemplate')"
+            >
+              <UInput v-model="environmentNameTemplate" size="xs" placeholder="pr-{{pullNumber}}" />
+            </UFormField>
+            <p class="text-2xs text-dimmed">
+              {{ t('settings.infrastructure.cloudflare.templateHint') }}
+            </p>
+            <UFormField size="xs" :label="t('settings.infrastructure.cloudflare.apiBaseUrl')">
+              <UInput v-model="apiBaseUrl" size="xs" placeholder="https://api.github.com" />
+            </UFormField>
           </div>
-          <div class="space-y-1">
-            <label class="text-2xs text-muted">{{
-              t('settings.infrastructure.cloudflare.environmentTemplate')
-            }}</label>
-            <UInput v-model="environmentNameTemplate" size="xs" placeholder="pr-{{pullNumber}}" />
-          </div>
-          <p class="text-2xs text-dimmed">
-            {{ t('settings.infrastructure.cloudflare.templateHint') }}
-          </p>
-          <div class="space-y-1">
-            <label class="text-2xs text-muted">{{
-              t('settings.infrastructure.cloudflare.apiBaseUrl')
-            }}</label>
-            <UInput v-model="apiBaseUrl" size="xs" placeholder="https://api.github.com" />
-          </div>
-        </div>
-      </details>
+        </template>
+      </UCollapsible>
 
       <div class="flex items-center gap-2">
         <UButton size="xs" :disabled="!canSave || busy" @click="save">

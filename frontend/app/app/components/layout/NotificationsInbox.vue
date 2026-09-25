@@ -429,13 +429,15 @@ function revealDecision(n: Notification) {
             />
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-1.5">
-                <button
-                  class="block min-w-0 flex-1 truncate text-start text-sm font-medium text-default hover:underline"
+                <UButton
+                  color="neutral"
+                  variant="link"
+                  class="block min-w-0 flex-1 truncate p-0 text-start text-sm font-medium text-default hover:underline"
                   :title="n.title"
                   @click="reveal(n)"
                 >
                   {{ n.title }}
-                </button>
+                </UButton>
                 <span
                   v-if="isUrgent(n)"
                   class="shrink-0 rounded bg-app-error-500/20 px-1.5 py-0.5 text-3xs font-semibold uppercase tracking-wide text-app-error-400"
@@ -444,16 +446,17 @@ function revealDecision(n: Notification) {
                 </span>
               </div>
               <p class="mt-0.5 text-2xs leading-snug text-muted">{{ n.body }}</p>
-              <a
+              <ULink
+                raw
                 v-if="n.payload?.prUrl"
-                :href="n.payload.prUrl"
+                :to="n.payload.prUrl"
                 target="_blank"
                 rel="noopener"
                 class="mt-1 inline-flex items-center gap-1 text-2xs text-app-info-400 hover:underline"
               >
                 <UIcon name="i-lucide-external-link" class="h-3 w-3" />
                 {{ t('layout.notifications.openPr') }}
-              </a>
+              </ULink>
               <!--
                 A platform-health card deep-links to the runs it aggregated, so the operator
                 lands on the evidence rather than only on the dashboard.

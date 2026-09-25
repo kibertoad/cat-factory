@@ -136,23 +136,18 @@ async function renderDiff() {
 watch([mode, actualUrl, refUrl], renderDiff, { immediate: true })
 
 // --- reference upload (drag-drop + click) ---
-const dragOver = ref(false)
-const refInput = ref<HTMLInputElement | null>(null)
-// Accept only the formats the file input advertises (PNG/JPEG), so a dropped GIF/SVG/WebP
-// can't slip past the picker's `accept` filter.
+// `UFileUpload` owns the picker, the drop zone and the drag state; the click-to-replace
+// affordance calls its `open()`. The type guard stays ours: `accept` filters the PICKER, and a
+// dropped GIF/SVG/WebP would otherwise arrive anyway.
 const ACCEPTED = /^image\/(png|jpeg)$/
-function pickFile(files: FileList | null | undefined) {
-  const file = files?.[0]
+const pendingRef = ref<File | null>(null)
+watch(pendingRef, (file) => {
   if (file && ACCEPTED.test(file.type)) emit('uploadReference', file)
-}
-function onDrop(e: DragEvent) {
-  dragOver.value = false
-  pickFile(e.dataTransfer?.files)
-}
-function onRefInput(e: Event) {
-  pickFile((e.target as HTMLInputElement).files)
-  if (refInput.value) refInput.value.value = ''
-}
+  // Cleared either way, so a fresh pick is a fresh file. `UFileUpload` carries `reset` for the
+  // other half of this: clearing the model alone leaves the native input holding the file it
+  // already has, and the browser fires no change event when the same one is chosen twice.
+  if (file) pendingRef.value = null
+})
 </script>
 
 <template>
@@ -164,16 +159,18 @@ function onRefInput(e: Event) {
         v-if="MODES.length > 1"
         class="flex items-center gap-0.5 rounded-md border border-default bg-app-950/60 p-0.5"
       >
-        <button
+        <UButton
+          color="neutral"
+          variant="ghost"
           v-for="m in MODES"
           :key="m.id"
-          class="rounded px-1.5 py-1 text-muted hover:text-default"
+          class="rounded px-1.5 py-1 text-muted hover:bg-transparent hover:text-default"
           :class="mode === m.id ? 'bg-elevated text-app-100' : ''"
           :title="m.label"
           @click="mode = m.id"
         >
           <UIcon :name="m.icon" class="h-3.5 w-3.5" />
-        </button>
+        </UButton>
       </div>
     </div>
 
@@ -183,9 +180,11 @@ function onRefInput(e: Event) {
         <figcaption class="text-3xs uppercase tracking-wide text-dimmed">
           {{ t('media.compare.actual') }}
         </figcaption>
-        <button
+        <UButton
           v-if="actualUrl"
-          class="block w-full overflow-hidden rounded border border-default hover:border-app-600"
+          color="neutral"
+          variant="ghost"
+          class="block w-full overflow-hidden rounded border border-default p-0 hover:border-app-600 hover:bg-transparent"
           @click="actualId && emit('expand', actualId)"
         >
           <img
@@ -193,7 +192,7 @@ function onRefInput(e: Event) {
             :alt="t('media.compare.actualAlt', { view })"
             class="w-full cursor-zoom-in"
           />
-        </button>
+        </UButton>
         <div
           v-else
           class="flex h-32 items-center justify-center rounded border border-dashed border-muted text-2xs text-app-600"
@@ -215,40 +214,39 @@ function onRefInput(e: Event) {
             {{ t('media.compare.fromLinkedDesign') }}
           </span>
         </figcaption>
-        <button
-          v-if="refUrl"
-          class="group relative block w-full overflow-hidden rounded border border-default hover:border-app-600"
-          @click="referenceId && emit('expand', referenceId)"
+        <UFileUpload
+          v-model="pendingRef"
+          reset
+          accept="image/png,image/jpeg"
+          :disabled="busy"
+          :preview="false"
+          :label="t('media.compare.dropHint')"
+          icon="i-lucide-image-up"
+          :ui="{ base: 'h-32 text-2xs' }"
         >
-          <img
-            :src="refUrl"
-            :alt="t('media.compare.referenceAlt', { view })"
-            class="w-full cursor-zoom-in"
-          />
-          <span
-            class="absolute bottom-1 end-1 rounded bg-app-950/80 px-1.5 py-0.5 text-3xs text-toned opacity-0 group-hover:opacity-100"
-            @click.stop="refInput?.click()"
-          >
-            {{ t('media.compare.replace') }}
-          </span>
-        </button>
-        <!-- Drop zone when no reference yet -->
-        <div
-          v-else
-          class="flex h-32 cursor-pointer flex-col items-center justify-center gap-1 rounded border border-dashed text-2xs transition"
-          :class="
-            dragOver
-              ? 'border-app-warning-500 bg-app-warning-500/5 text-app-warning-300'
-              : 'border-muted text-app-600 hover:border-app-500 hover:text-muted'
-          "
-          @click="refInput?.click()"
-          @dragover.prevent="dragOver = true"
-          @dragleave.prevent="dragOver = false"
-          @drop.prevent="onDrop"
-        >
-          <UIcon name="i-lucide-image-up" class="h-5 w-5" />
-          <span>{{ t('media.compare.dropHint') }}</span>
-        </div>
+          <!-- With a reference already in place the tile IS the surface: it opens the lightbox,
+               and the hover affordance opens the picker the same drop zone would. -->
+          <template v-if="refUrl" #default="{ open }">
+            <UButton
+              variant="ghost"
+              color="neutral"
+              class="group relative block w-full overflow-hidden rounded border border-default p-0 hover:border-app-600 hover:bg-transparent"
+              @click="referenceId && emit('expand', referenceId)"
+            >
+              <img
+                :src="refUrl"
+                :alt="t('media.compare.referenceAlt', { view })"
+                class="w-full cursor-zoom-in"
+              />
+              <span
+                class="absolute bottom-1 end-1 rounded bg-app-950/80 px-1.5 py-0.5 text-3xs text-toned opacity-0 group-hover:opacity-100"
+                @click.stop="open()"
+              >
+                {{ t('media.compare.replace') }}
+              </span>
+            </UButton>
+          </template>
+        </UFileUpload>
       </figure>
     </div>
 
@@ -266,12 +264,13 @@ function onRefInput(e: Event) {
       </div>
       <SectionLabel class="flex items-center gap-2">
         <span>{{ t('media.compare.reference') }}</span>
-        <input
-          v-model.number="overlayOpacity"
-          type="range"
-          min="0"
-          max="100"
-          class="flex-1 accent-app-warning-500"
+        <USlider
+          v-model="overlayOpacity"
+          :min="0"
+          :max="100"
+          color="warning"
+          size="xs"
+          class="flex-1"
         />
         <span>{{ t('media.compare.actual') }}</span>
       </SectionLabel>
@@ -327,15 +326,5 @@ function onRefInput(e: Event) {
       <canvas ref="diffCanvas" :class="DIFF_CANVAS_CLASS" />
       <p class="text-3xs text-dimmed">{{ t('media.compare.diffHint') }}</p>
     </div>
-
-    <!-- Hidden file input shared by replace/drop zone -->
-    <input
-      ref="refInput"
-      type="file"
-      accept="image/png,image/jpeg"
-      class="hidden"
-      :disabled="busy"
-      @change="onRefInput"
-    />
   </div>
 </template>

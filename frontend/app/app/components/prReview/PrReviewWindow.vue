@@ -292,14 +292,15 @@ const { requestClose } = useUnsavedGuard({
     @close="requestClose"
   >
     <template v-if="state?.prUrl" #header-extras>
-      <a
-        :href="state.prUrl"
+      <ULink
+        raw
+        :to="state.prUrl"
         target="_blank"
         rel="noopener"
         class="rounded-md px-2 py-1 text-2xs text-primary hover:bg-elevated"
       >
         {{ t('prReview.openPr') }}
-      </a>
+      </ULink>
     </template>
 
     <div class="flex min-h-0 flex-1">
@@ -586,12 +587,22 @@ const { requestClose } = useUnsavedGuard({
               <span data-testid="pr-review-selected-count">
                 {{ t('prReview.selectedCount', { count: activeSelectedIds.length }) }}
               </span>
-              <button class="text-primary hover:underline" @click="selectAll">
+              <UButton
+                color="primary"
+                variant="link"
+                class="p-0 text-2xs text-primary hover:underline"
+                @click="selectAll"
+              >
                 {{ t('prReview.selectAll') }}
-              </button>
-              <button class="text-primary hover:underline" @click="clearAll">
+              </UButton>
+              <UButton
+                color="primary"
+                variant="link"
+                class="p-0 text-2xs text-primary hover:underline"
+                @click="clearAll"
+              >
                 {{ t('prReview.clear') }}
-              </button>
+              </UButton>
             </div>
 
             <!-- Findings grouped by slice -->
@@ -615,14 +626,14 @@ const { requestClose } = useUnsavedGuard({
                 ]"
               >
                 <div class="flex items-start gap-2">
-                  <input
+                  <UCheckbox
                     v-if="awaiting || challenging"
-                    type="checkbox"
-                    class="mt-1 accent-primary"
+                    size="xs"
+                    class="mt-1"
                     data-testid="pr-review-finding-toggle"
-                    :checked="selected.has(f.id) && !isRetracted(f)"
+                    :model-value="selected.has(f.id) && !isRetracted(f)"
                     :disabled="!awaiting || isRetracted(f)"
-                    @change="toggle(f.id)"
+                    @update:model-value="toggle(f.id)"
                   />
                   <div class="min-w-0 flex-1">
                     <div class="flex flex-wrap items-center gap-1.5">
@@ -748,10 +759,12 @@ const { requestClose } = useUnsavedGuard({
                       v-if="awaiting && !isInvestigating(f)"
                       class="mt-1.5 flex items-center gap-3 text-2xs"
                     >
-                      <button
+                      <UButton
+                        color="primary"
+                        variant="link"
                         v-if="!isRetracted(f)"
                         data-testid="pr-review-finding-challenge"
-                        class="flex items-center gap-1 text-primary hover:underline disabled:opacity-50"
+                        class="p-0 text-2xs flex items-center gap-1 text-primary hover:underline disabled:opacity-50"
                         :disabled="!canResolve || !access.canExecuteRuns.value"
                         @click="openChallenge(f.id)"
                       >
@@ -761,16 +774,18 @@ const { requestClose } = useUnsavedGuard({
                             ? t('prReview.challenge.reChallenge')
                             : t('prReview.challenge.action')
                         }}
-                      </button>
-                      <button
+                      </UButton>
+                      <UButton
+                        color="neutral"
+                        variant="link"
                         data-testid="pr-review-finding-dismiss"
-                        class="flex items-center gap-1 text-muted hover:text-app-error-300 hover:underline disabled:opacity-50"
+                        class="p-0 text-xs flex items-center gap-1 text-muted hover:text-app-error-300 hover:underline disabled:opacity-50"
                         :disabled="!canResolve || !access.canExecuteRuns.value"
                         @click="onDismiss(f.id)"
                       >
                         <UIcon name="i-lucide-trash-2" class="h-3.5 w-3.5" />
                         {{ t('prReview.challenge.dismiss') }}
-                      </button>
+                      </UButton>
                     </div>
 
                     <!-- The inline challenge box: an OPTIONAL specific concern for the investigator. -->
@@ -779,31 +794,37 @@ const { requestClose } = useUnsavedGuard({
                       data-testid="pr-review-challenge-box"
                       class="mt-2 rounded-md border border-primary/40 bg-default/80 p-2"
                     >
-                      <textarea
+                      <UTextarea
                         v-model="challengeText"
                         data-testid="pr-review-challenge-input"
-                        rows="2"
+                        :rows="2"
                         :placeholder="t('prReview.challenge.placeholder')"
-                        class="w-full resize-y rounded border border-muted bg-app-950/60 px-2 py-1 text-xs text-default outline-none focus:border-primary"
+                        size="xs"
+                        class="w-full"
+                        :ui="{ base: 'resize-y' }"
                       />
                       <p class="mt-1 text-3xs text-dimmed">
                         {{ t('prReview.challenge.hint') }}
                       </p>
                       <div class="mt-1.5 flex justify-end gap-2">
-                        <button
+                        <UButton
+                          color="neutral"
+                          variant="ghost"
                           class="rounded px-2 py-1 text-2xs text-muted hover:text-default"
                           @click="cancelChallenge"
                         >
                           {{ t('common.cancel') }}
-                        </button>
-                        <button
+                        </UButton>
+                        <UButton
+                          color="neutral"
+                          variant="ghost"
                           data-testid="pr-review-challenge-submit"
                           class="rounded bg-primary/80 px-2 py-1 text-2xs font-medium text-inverted hover:bg-primary/90 disabled:opacity-50"
                           :disabled="!canResolve"
                           @click="submitChallenge(f.id)"
                         >
                           {{ t('prReview.challenge.submit') }}
-                        </button>
+                        </UButton>
                       </div>
                     </div>
                   </div>

@@ -31,10 +31,11 @@ function pick(role: UiRole) {
       <div class="space-y-4" data-testid="role-prompt">
         <p class="text-sm text-toned">{{ t('uiRole.prompt.intro') }}</p>
         <div class="space-y-2">
-          <button
+          <UButton
+            color="neutral"
+            variant="ghost"
             v-for="role in UI_ROLES"
             :key="role"
-            type="button"
             :data-testid="`role-option-${role}`"
             :aria-pressed="role === uiRole.role && uiRole.chosen"
             class="flex w-full items-center gap-3 rounded-lg border p-3 text-start transition"
@@ -52,7 +53,7 @@ function pick(role: UiRole) {
               </div>
               <p class="text-xs text-muted">{{ t(ROLE_PRESENTATION[role].hintKey) }}</p>
             </div>
-          </button>
+          </UButton>
         </div>
         <!-- The choice is not a commitment, and saying so is what makes the narrowed role
              pickable: it is one dropdown at the top of the sidebar to leave again. -->

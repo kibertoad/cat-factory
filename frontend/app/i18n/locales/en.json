@@ -6612,7 +6612,8 @@
       "heading": "Upload a reference design",
       "viewPlaceholder": "View name (e.g. login)",
       "tipReady": "Tip: drop an image straight onto a pair above to set its reference.",
-      "tipNeedView": "Enter a view name first, then choose a file. Or drop an image straight onto a pair above."
+      "tipNeedView": "Enter a view name first, then choose a file. Or drop an image straight onto a pair above.",
+      "choose": "Choose a file"
     },
     "requestFix": {
       "heading": "Request a fix",

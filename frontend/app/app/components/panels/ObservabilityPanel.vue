@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { onKeyStroke } from '@vueuse/core'
+import type { TableColumn } from '@nuxt/ui'
 import { isLlmWarningFinishReason } from '@cat-factory/contracts'
 import type {
   AgentContextSnapshot,
@@ -30,6 +31,7 @@ import OutcomeFilterChips from '~/components/observability/OutcomeFilterChips.vu
 import RunFailureSummary from '~/components/observability/RunFailureSummary.vue'
 import ToolCallList from '~/components/observability/ToolCallList.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import IconButton from '~/components/common/IconButton.vue'
 
 /** No run selected: the same empty, NOT-truncated trajectory the store answers with. */
 const EMPTY_TRAJECTORY: RunToolCallTrajectory = Object.freeze({
@@ -164,6 +166,22 @@ function retryFailureEvidence() {
 function openToolsView() {
   view.value = 'tools'
   ensureTrajectoryLoaded()
+}
+
+const viewTabs = computed(() => [
+  { value: 'calls', label: t('observability.modelActivity') },
+  { value: 'tools', label: t('observability.toolCalls.title') },
+  { value: 'context', label: t('observability.providedContext') },
+  { value: 'search', label: t('observability.webSearch') },
+])
+
+/** The tools view has a side effect (lazy trajectory load), so selection routes through here. */
+function selectView(next: string) {
+  if (next === 'tools') {
+    openToolsView()
+    return
+  }
+  view.value = next as typeof view.value
 }
 
 /**
@@ -411,6 +429,23 @@ const costCurrency = computed(
 const showCost = computed(
   () => !!costCurrency.value && phaseRows.value.some((p) => p.costEstimate != null),
 )
+// Column definitions rather than hand-written `<th>`s. The cost column stays conditional on the
+// same signal: a deployment with no rate table must not be shown a column of em dashes.
+const phaseColumns = computed<TableColumn<(typeof phaseRows.value)[number]>[]>(() => [
+  { id: 'phase' },
+  { id: 'turns' },
+  { id: 'tokens' },
+  ...(showCost.value ? [{ id: 'cost' } as TableColumn<(typeof phaseRows.value)[number]>] : []),
+  // `aria-sort` needs BOTH halves: UTable asks `enableSorting && column.getCanSort()`, and
+  // `getCanSort()` is false on a column with no accessor, so `enableSorting` alone emitted
+  // nothing and the header silently stopped stating the order. The rows arrive in this order
+  // from the rollup, so `manualSorting` below keeps TanStack from re-deriving it: the
+  // declaration MARKS the order, it does not produce it, and nothing here offers a sort control.
+  { id: 'carryCost', accessorKey: 'carryCostTokens', enableSorting: true },
+])
+/** The order the rollup already returns, stated so the header can say which column it is. */
+const PHASE_SORTING = [{ id: 'carryCost', desc: true }]
+const PHASE_SORTING_OPTIONS = { manualSorting: true }
 /**
  * The run's estimated cost, folded from the same SQL rollup the phase table shows — NOT from
  * the capped call list the token totals beside it use, which would silently under-report a run
@@ -521,44 +556,17 @@ function exportJson() {
             </p>
           </div>
           <div class="ms-auto flex items-center gap-1.5">
-            <div class="me-1 flex rounded-lg border border-default p-0.5 text-xs">
-              <button
-                class="rounded-md px-2.5 py-1 transition"
-                :class="
-                  view === 'calls' ? 'bg-elevated text-app-100' : 'text-muted hover:text-default'
-                "
-                @click="view = 'calls'"
-              >
-                {{ t('observability.modelActivity') }}
-              </button>
-              <button
-                class="rounded-md px-2.5 py-1 transition"
-                :class="
-                  view === 'tools' ? 'bg-elevated text-app-100' : 'text-muted hover:text-default'
-                "
-                @click="openToolsView()"
-              >
-                {{ t('observability.toolCalls.title') }}
-              </button>
-              <button
-                class="rounded-md px-2.5 py-1 transition"
-                :class="
-                  view === 'context' ? 'bg-elevated text-app-100' : 'text-muted hover:text-default'
-                "
-                @click="view = 'context'"
-              >
-                {{ t('observability.providedContext') }}
-              </button>
-              <button
-                class="rounded-md px-2.5 py-1 transition"
-                :class="
-                  view === 'search' ? 'bg-elevated text-app-100' : 'text-muted hover:text-default'
-                "
-                @click="view = 'search'"
-              >
-                {{ t('observability.webSearch') }}
-              </button>
-            </div>
+            <!-- Four VIEWS of the same run, which is what tabs mean. The trajectory is loaded
+                 lazily the first time the tools view is opened, so the change is watched rather
+                 than bound straight to `view`. -->
+            <UTabs
+              :model-value="view"
+              :items="viewTabs"
+              :content="false"
+              size="xs"
+              class="me-1"
+              @update:model-value="selectView(String($event))"
+            />
             <UButton
               v-if="view === 'calls'"
               icon="i-lucide-download"
@@ -572,12 +580,12 @@ function exportJson() {
             >
               {{ t('observability.exportJson') }}
             </UButton>
-            <UButton
+            <IconButton
               icon="i-lucide-x"
               color="neutral"
               variant="ghost"
               size="sm"
-              :title="t('observability.closeEsc')"
+              :label="t('observability.closeEsc')"
               @click="close"
             />
           </div>
@@ -732,76 +740,98 @@ function exportJson() {
                 {{ t('observability.phase.noRollup') }}
               </p>
               <div v-else class="mt-3 overflow-x-auto">
-                <table class="w-full min-w-[32rem] text-xs">
-                  <thead>
-                    <tr class="text-2xs uppercase tracking-wide text-dimmed">
-                      <th class="py-1 pe-3 text-start font-normal">
-                        {{ t('observability.phase.columns.phase') }}
-                      </th>
-                      <th class="py-1 px-3 text-end font-normal">
-                        {{ t('observability.phase.columns.turns') }}
-                      </th>
-                      <th class="py-1 px-3 text-end font-normal">
-                        {{ t('observability.phase.columns.tokensInOut') }}
-                      </th>
-                      <th v-if="showCost" class="py-1 px-3 text-end font-normal">
-                        <span :title="t('observability.phase.costHint')">
-                          {{ t('observability.phase.columns.cost') }}
-                        </span>
-                      </th>
-                      <!-- The sort key, MARKED as one. Rows lead with carry cost rather than
-                           with tokens, and the two orders genuinely differ: a phase that runs
-                           late carries almost nothing however much it spent (nothing after it
-                           re-sends its context). Leaving that implicit invites reading row 1
-                           as "the phase that burned the most", which is the neighbouring
-                           column. -->
-                      <th aria-sort="descending" class="py-1 ps-3 text-end font-normal">
-                        <span :title="t('observability.phase.carryCostHint')">
-                          {{ t('observability.phase.columns.carryCost') }} ↓
-                        </span>
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="p in phaseRows" :key="p.phase" class="border-t border-default/70">
-                      <td class="py-1.5 pe-3 text-default">
-                        <span :class="p.phase ? '' : 'text-muted italic'">
-                          {{ phaseLabel(p.phase) }}
-                        </span>
-                        <span v-if="!p.phase" class="ms-1.5 text-2xs text-app-600">
-                          {{ t('observability.phase.unattributedHint') }}
-                        </span>
-                        <UBadge
-                          v-if="p.errors"
-                          color="error"
-                          variant="subtle"
-                          size="sm"
-                          class="ms-2"
-                        >
-                          {{ t('observability.metricsBar.errors', { count: p.errors }, p.errors) }}
-                        </UBadge>
-                      </td>
-                      <td class="py-1.5 px-3 text-end tabular-nums text-toned">
-                        {{ p.calls }}
-                      </td>
-                      <td class="py-1.5 px-3 text-end tabular-nums text-toned">
-                        {{ formatTokens(totalInputTokens(p)) }}↑
-                        {{ formatTokens(p.completionTokens) }}↓
-                      </td>
-                      <td v-if="showCost" class="py-1.5 px-3 text-end tabular-nums text-toned">
-                        <!-- An em dash, not 0: this phase's model had no rate, and a zero here
-                             would read as a phase that cost nothing. -->
-                        {{ formatCost(p.costEstimate, costCurrency) ?? '—' }}
-                      </td>
-                      <td class="py-1.5 ps-3 text-end tabular-nums text-toned">
-                        {{ formatTokens(p.carryCostTokens) }}
-                        <span v-if="carryShare(p.carryCostTokens) !== null" class="text-app-600">
-                          · {{ carryShare(p.carryCostTokens) }}%
-                        </span>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
+                <UTable
+                  :data="phaseRows"
+                  :columns="phaseColumns"
+                  :sorting="PHASE_SORTING"
+                  :sorting-options="PHASE_SORTING_OPTIONS"
+                  :ui="{
+                    base: 'min-w-[32rem] text-xs',
+                    td: 'px-3 py-1.5 text-xs whitespace-normal',
+                  }"
+                >
+                  <template #phase-header>
+                    {{ t('observability.phase.columns.phase') }}
+                  </template>
+                  <template #turns-header>
+                    <span class="block text-end">
+                      {{ t('observability.phase.columns.turns') }}
+                    </span>
+                  </template>
+                  <template #tokens-header>
+                    <span class="block text-end">
+                      {{ t('observability.phase.columns.tokensInOut') }}
+                    </span>
+                  </template>
+                  <template #cost-header>
+                    <span class="block text-end" :title="t('observability.phase.costHint')">
+                      {{ t('observability.phase.columns.cost') }}
+                    </span>
+                  </template>
+                  <!-- The sort key, MARKED as one. Rows lead with carry cost rather than
+                       with tokens, and the two orders genuinely differ: a phase that runs
+                       late carries almost nothing however much it spent (nothing after it
+                       re-sends its context). Leaving that implicit invites reading row 1
+                       as "the phase that burned the most", which is the neighbouring
+                       column. -->
+                  <template #carryCost-header>
+                    <span class="block text-end" :title="t('observability.phase.carryCostHint')">
+                      {{ t('observability.phase.columns.carryCost') }} &darr;
+                    </span>
+                  </template>
+                  <template #phase-cell="{ row }">
+                    <span :class="row.original.phase ? '' : 'text-muted italic'">
+                      {{ phaseLabel(row.original.phase) }}
+                    </span>
+                    <span v-if="!row.original.phase" class="ms-1.5 text-2xs text-app-600">
+                      {{ t('observability.phase.unattributedHint') }}
+                    </span>
+                    <UBadge
+                      v-if="row.original.errors"
+                      color="error"
+                      variant="subtle"
+                      size="sm"
+                      class="ms-2"
+                    >
+                      {{
+                        t(
+                          'observability.metricsBar.errors',
+                          { count: row.original.errors },
+                          row.original.errors,
+                        )
+                      }}
+                    </UBadge>
+                  </template>
+                  <template #turns-cell="{ row }">
+                    <span class="block text-end tabular-nums text-toned">{{
+                      row.original.calls
+                    }}</span>
+                  </template>
+                  <template #tokens-cell="{ row }">
+                    <span class="block text-end tabular-nums text-toned">
+                      {{ formatTokens(totalInputTokens(row.original)) }}&uarr;
+                      {{ formatTokens(row.original.completionTokens) }}&darr;
+                    </span>
+                  </template>
+                  <!-- An em dash, not 0: this phase's model had no rate, and a zero here
+                       would read as a phase that cost nothing. -->
+                  <template #cost-cell="{ row }">
+                    <span class="block text-end tabular-nums text-toned">
+                      {{ formatCost(row.original.costEstimate, costCurrency) ?? '—' }}
+                    </span>
+                  </template>
+                  <template #carryCost-cell="{ row }">
+                    <span class="block text-end tabular-nums text-toned">
+                      {{ formatTokens(row.original.carryCostTokens) }}
+                      <span
+                        v-if="carryShare(row.original.carryCostTokens) !== null"
+                        class="text-app-600"
+                      >
+                        · {{ carryShare(row.original.carryCostTokens) }}%
+                      </span>
+                    </span>
+                  </template>
+                </UTable>
               </div>
             </section>
 
@@ -863,7 +893,9 @@ function exportJson() {
                   class="overflow-hidden rounded-xl border border-default bg-default/40"
                   :class="!c.ok ? 'border-app-error-900/60' : ''"
                 >
-                  <button
+                  <UButton
+                    color="neutral"
+                    variant="ghost"
                     class="flex w-full items-center gap-3 px-4 py-2.5 text-start transition hover:bg-default/70"
                     @click="toggle(c)"
                   >
@@ -935,7 +967,7 @@ function exportJson() {
                       }}</span>
                       <span class="hidden text-app-600 md:inline">{{ clock(c.createdAt) }}</span>
                     </div>
-                  </button>
+                  </UButton>
 
                   <div v-if="expanded[c.id]" class="border-t border-default px-4 py-3 space-y-3">
                     <p v-if="c.errorMessage" class="text-xs text-app-error-400">
@@ -1088,7 +1120,9 @@ function exportJson() {
                 :key="s.id"
                 class="overflow-hidden rounded-xl border border-default bg-default/40"
               >
-                <button
+                <UButton
+                  color="neutral"
+                  variant="ghost"
                   class="flex w-full items-center gap-3 px-4 py-2.5 text-start transition hover:bg-default/70"
                   @click="toggleCtx(s)"
                 >
@@ -1115,7 +1149,7 @@ function exportJson() {
                     }}</span>
                     <span class="hidden text-app-600 md:inline">{{ clock(s.createdAt) }}</span>
                   </div>
-                </button>
+                </UButton>
 
                 <div v-if="expandedCtx[s.id]" class="border-t border-default px-4 py-3 space-y-3">
                   <div>

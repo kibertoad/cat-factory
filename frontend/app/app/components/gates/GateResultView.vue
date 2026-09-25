@@ -271,16 +271,17 @@ const conflictVerdict = computed(() => {
                 {{ gate.lastFailureSummary }}
               </p>
             </div>
-            <a
+            <ULink
+              raw
               v-if="prUrl"
-              :href="prUrl"
+              :to="prUrl"
               target="_blank"
               rel="noopener"
               class="mt-2 inline-flex items-center gap-1 text-xs text-app-info-300 hover:text-app-info-200 hover:underline"
             >
               {{ t('gates.humanReview.reviewPr') }}
               <UIcon name="i-lucide-external-link" class="h-3 w-3" />
-            </a>
+            </ULink>
 
             <!-- Freeform fix request: dispatch the fixer now with these instructions. -->
             <section v-if="status !== 'gave-up'" class="mt-4">
@@ -290,12 +291,14 @@ const conflictVerdict = computed(() => {
               <p class="mb-2 text-2xs leading-relaxed text-dimmed">
                 {{ t('gates.humanReview.requestFixDescription') }}
               </p>
-              <textarea
+              <UTextarea
                 v-model="fixInstructions"
-                rows="3"
+                :rows="3"
                 :disabled="fixBusy"
                 :placeholder="t('gates.humanReview.requestFixPlaceholder')"
-                class="w-full resize-y rounded-md border border-default bg-app-950/60 px-3 py-2 text-sm text-default placeholder:text-app-600 focus:border-app-secondary-500/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-app-secondary-500/60"
+                size="sm"
+                class="w-full"
+                :ui="{ base: 'resize-y' }"
               />
               <div class="mt-2 flex justify-end">
                 <UButton
@@ -343,16 +346,17 @@ const conflictVerdict = computed(() => {
             <p v-else class="text-sm leading-relaxed text-toned">
               {{ t('gates.docQuality.findingsFallback') }}
             </p>
-            <a
+            <ULink
+              raw
               v-if="prUrl"
-              :href="prUrl"
+              :to="prUrl"
               target="_blank"
               rel="noopener"
               class="mt-2 inline-flex items-center gap-1 text-xs text-app-info-300 hover:text-app-info-200 hover:underline"
             >
               {{ t('gates.docQuality.viewPr') }}
               <UIcon name="i-lucide-external-link" class="h-3 w-3" />
-            </a>
+            </ULink>
           </template>
 
           <!-- Conflicts: verdict + the resolver's account of what it left -->
@@ -382,16 +386,17 @@ const conflictVerdict = computed(() => {
                 {{ gate.lastFailureSummary }}
               </p>
             </div>
-            <a
+            <ULink
+              raw
               v-if="prUrl"
-              :href="prUrl"
+              :to="prUrl"
               target="_blank"
               rel="noopener"
               class="mt-2 inline-flex items-center gap-1 text-xs text-app-info-300 hover:text-app-info-200 hover:underline"
             >
               {{ t('gates.conflicts.viewPr') }}
               <UIcon name="i-lucide-external-link" class="h-3 w-3" />
-            </a>
+            </ULink>
           </template>
 
           <!-- Attempt history (both gates): what each helper run did and how it ended. -->

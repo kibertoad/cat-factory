@@ -204,21 +204,23 @@ async function uploadFor(view: string, file: File) {
   await visualConfirm.uploadReference(blockId.value, file, view)
 }
 const uploadView = ref('')
-const fileInput = ref<HTMLInputElement | null>(null)
-async function onFilePicked(e: Event) {
-  const input = e.target as HTMLInputElement
-  const file = input.files?.[0]
+// The views this run already captured, offered as suggestions on the combobox.
+const viewSuggestions = computed(() => pairs.value.map((p) => p.view))
+const pendingUpload = ref<File | null>(null)
+watch(pendingUpload, async (file) => {
   const view = uploadView.value.trim()
   // Require a view name: a reference with no view can't pair with any captured screenshot,
-  // so it would be silently orphaned. The input is also disabled until a view is entered.
+  // so it would be silently orphaned. The control is also disabled until a view is entered.
   if (!file || !blockId.value || !view) {
-    if (fileInput.value) fileInput.value.value = ''
+    pendingUpload.value = null
     return
   }
   await visualConfirm.uploadReference(blockId.value, file, view)
   uploadView.value = ''
-  if (fileInput.value) fileInput.value.value = ''
-}
+  // Cleared so a fresh pick is a fresh file. `UFileUpload` carries `reset` for the other half of
+  // this: without it the native input keeps its value and the SAME file fires no change event.
+  pendingUpload.value = null
+})
 </script>
 
 <template>
@@ -301,8 +303,10 @@ async function onFilePicked(e: Event) {
             />
             <!-- Per-view note (folded into the fixer findings) -->
             <div v-if="awaitingHuman" class="px-1">
-              <button
-                class="flex items-center gap-1.5 text-2xs text-muted hover:text-default"
+              <UButton
+                color="neutral"
+                variant="ghost"
+                class="flex items-center gap-1.5 p-0 text-2xs text-muted hover:bg-transparent hover:text-default"
                 @click="noteOpen[p.view] = !noteOpen[p.view]"
               >
                 <UIcon
@@ -315,13 +319,14 @@ async function onFilePicked(e: Event) {
                   class="rounded-full bg-app-warning-500/15 px-1.5 text-3xs text-app-warning-300"
                   >{{ t('visualConfirm.noted') }}</span
                 >
-              </button>
-              <textarea
+              </UButton>
+              <UTextarea
                 v-if="noteOpen[p.view]"
                 v-model="perViewNotes[p.view]"
-                rows="2"
+                :rows="2"
                 :placeholder="t('visualConfirm.notePlaceholder', { view: p.view })"
-                class="mt-1 w-full rounded-md border border-muted bg-app-950 px-2 py-1.5 text-xs text-default placeholder:text-app-600 focus:border-app-warning-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-app-warning-500/60"
+                size="xs"
+                class="mt-1 w-full"
               />
             </div>
           </div>
@@ -336,23 +341,44 @@ async function onFilePicked(e: Event) {
             {{ t('visualConfirm.upload.heading') }}
           </SectionLabel>
           <div class="flex flex-wrap items-center gap-2">
-            <input
+            <!-- The known views are suggestions, not a closed list: a reference can be uploaded
+                 for a view the run has not produced yet, which is the case this field exists for.
+                 `mode="autocomplete"` is what makes that work: the DEFAULT combobox mode writes
+                 its model only when something is SELECTED, so typing a new view name would leave
+                 `uploadView` empty and the picker beside it disabled. -->
+            <UInputMenu
               v-model="uploadView"
-              list="vc-views"
+              mode="autocomplete"
+              :items="viewSuggestions"
+              size="xs"
               :placeholder="t('visualConfirm.upload.viewPlaceholder')"
-              class="rounded-md border border-muted bg-app-950 px-2 py-1 text-xs text-default placeholder:text-app-600"
             />
-            <datalist id="vc-views">
-              <option v-for="p in pairs" :key="p.view" :value="p.view" />
-            </datalist>
-            <input
-              ref="fileInput"
-              type="file"
+            <!-- `reset` so the native input is cleared on every open: re-picking the SAME file
+                 after a rejected or completed upload otherwise fires no change event at all. -->
+            <!-- The trigger is our OWN button in the default slot, not `variant="button"`:
+                 that variant renders the icon alone and drops `label` on the floor, so the
+                 control reached a screen reader with no name at all. -->
+            <UFileUpload
+              v-model="pendingUpload"
+              size="xs"
+              reset
               accept="image/png,image/jpeg"
+              :preview="false"
               :disabled="busy || !uploadView.trim()"
-              class="text-xs text-toned file:me-2 file:rounded file:border-0 file:bg-elevated file:px-2 file:py-1 file:text-default disabled:opacity-40"
-              @change="onFilePicked"
-            />
+              class="w-fit"
+            >
+              <template #default="{ open }">
+                <UButton
+                  color="neutral"
+                  variant="soft"
+                  size="xs"
+                  icon="i-lucide-upload"
+                  :disabled="busy || !uploadView.trim()"
+                  :label="t('visualConfirm.upload.choose')"
+                  @click="open()"
+                />
+              </template>
+            </UFileUpload>
           </div>
           <p class="mt-1.5 text-3xs text-app-600">
             {{
@@ -368,11 +394,12 @@ async function onFilePicked(e: Event) {
           <SectionLabel as="h3" class="mb-2">
             {{ t('visualConfirm.requestFix.heading') }}
           </SectionLabel>
-          <textarea
+          <UTextarea
             v-model="globalFindings"
-            rows="3"
+            :rows="3"
             :placeholder="t('visualConfirm.requestFix.placeholder')"
-            class="w-full rounded-md border border-muted bg-app-950 px-3 py-2 text-sm text-default placeholder:text-app-600 focus:border-app-warning-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-app-warning-500/60"
+            size="sm"
+            class="w-full"
           />
           <div class="mt-2 flex items-center justify-between">
             <span class="text-2xs text-dimmed">
@@ -443,13 +470,13 @@ async function onFilePicked(e: Event) {
         :failure-at="instance?.failure?.occurredAt"
       />
       <div class="flex items-center gap-2">
-        <label
+        <UCheckbox
           v-if="awaitingHuman && needsAck"
-          class="flex items-center gap-1.5 text-2xs text-app-warning-300/90"
-        >
-          <input v-model="ackDegraded" type="checkbox" class="accent-app-warning-500" />
-          {{ t('visualConfirm.reviewedManually') }}
-        </label>
+          v-model="ackDegraded"
+          size="xs"
+          color="warning"
+          :label="t('visualConfirm.reviewedManually')"
+        />
         <UButton
           size="sm"
           variant="soft"

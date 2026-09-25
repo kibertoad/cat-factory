@@ -420,10 +420,11 @@ async function merge(pr: GitHubPullRequest) {
                 }}
               </p>
               <div v-else class="max-h-64 space-y-1 overflow-y-auto">
-                <button
+                <UButton
+                  color="neutral"
+                  variant="ghost"
                   v-for="r in github.availableRepos"
                   :key="r.githubId"
-                  type="button"
                   class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-start transition hover:bg-elevated/60"
                   @click="toggleSelected(r.githubId)"
                 >
@@ -436,7 +437,7 @@ async function merge(pr: GitHubPullRequest) {
                   <UBadge v-if="r.private" color="neutral" variant="subtle" size="sm">
                     {{ t('github.panel.private') }}
                   </UBadge>
-                </button>
+                </UButton>
               </div>
               <div class="flex items-center justify-end gap-2 pt-1">
                 <UButton
@@ -484,8 +485,10 @@ async function merge(pr: GitHubPullRequest) {
               class="rounded-md border border-default bg-default/60"
             >
               <div class="flex items-center justify-between gap-2 px-3 py-2">
-                <button
-                  class="flex min-w-0 items-center gap-2 text-start"
+                <UButton
+                  color="neutral"
+                  variant="ghost"
+                  class="flex min-w-0 items-center gap-2 p-0 text-start hover:bg-transparent"
                   @click="toggleRepo(repo)"
                 >
                   <UIcon
@@ -502,7 +505,7 @@ async function merge(pr: GitHubPullRequest) {
                   <UBadge v-if="repo.private" color="neutral" variant="subtle" size="sm">
                     {{ t('github.panel.private') }}
                   </UBadge>
-                </button>
+                </UButton>
                 <div class="flex items-center gap-2">
                   <span v-if="repo.defaultBranch" class="text-2xs text-dimmed">
                     {{ repo.defaultBranch }}

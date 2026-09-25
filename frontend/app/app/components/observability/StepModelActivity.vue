@@ -35,13 +35,15 @@ function openObservability() {
       <SectionLabel as="span">
         {{ t('observability.modelActivity') }}
       </SectionLabel>
-      <button
+      <UButton
+        color="neutral"
+        variant="ghost"
         v-if="instanceId"
-        class="text-2xs text-app-info-400 hover:text-app-info-300"
+        class="p-0 text-2xs text-app-info-400 hover:bg-transparent hover:text-app-info-300"
         @click="openObservability"
       >
         {{ t('observability.viewAllCalls') }}
-      </button>
+      </UButton>
     </div>
     <StepMetricsBar
       v-if="hasCalls && metrics"

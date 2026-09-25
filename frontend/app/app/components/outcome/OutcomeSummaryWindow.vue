@@ -693,11 +693,12 @@ function openTestReport() {
             }}
           </p>
           <div class="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            <button
+            <UButton
+              color="neutral"
+              variant="ghost"
               v-for="(view, position) in outcome.visuals.views"
               :key="`${position}:${view.view}`"
-              type="button"
-              class="group overflow-hidden rounded-md border border-default bg-app-950/60 text-start transition hover:border-app-600"
+              class="group block overflow-hidden rounded-md border border-default bg-app-950/60 p-0 text-start transition hover:border-app-600 hover:bg-transparent"
               :disabled="!view.artifactId"
               data-testid="outcome-shot"
               @click="openShot(view, position)"
@@ -730,7 +731,7 @@ function openTestReport() {
                 />
                 {{ view.view }}
               </span>
-            </button>
+            </UButton>
           </div>
         </template>
         <template v-else>

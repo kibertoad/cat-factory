@@ -29,6 +29,7 @@ import {
 } from '~/utils/catalog'
 import type { ConsensusStrategy } from '~/types/consensus'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import IconButton from '~/components/common/IconButton.vue'
 
 type DraftUnit = { index: number; kind: AgentKind; companionIndex: number | null }
 
@@ -491,14 +492,21 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
               class="gap-1"
             >
               {{ l }}
-              <button type="button" class="hover:text-app-error-400" @click="removeLabel(l)">
+              <UButton
+                color="neutral"
+                variant="ghost"
+                size="xs"
+                class="p-0 hover:bg-transparent hover:text-app-error-400"
+                @click="removeLabel(l)"
+              >
                 <UIcon name="i-lucide-x" class="h-3 w-3" />
-              </button>
+              </UButton>
             </UBadge>
-            <input
+            <UInput
               v-model="newLabel"
+              size="xs"
+              class="w-20 focus-within:w-28"
               :placeholder="t('pipeline.builder.labelPlaceholder')"
-              class="w-20 rounded border border-muted bg-default px-1.5 py-0.5 text-2xs text-default focus:w-28"
               @keydown.enter.prevent="addLabel"
               @blur="addLabel"
             />
@@ -732,43 +740,43 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                   />
                   <!-- System prompt: replace what this agent kind ships with, for every run in
                      this workspace, with the full revision history to switch back through. -->
-                  <UButton
+                  <IconButton
                     v-if="showPromptEditor(unit.kind)"
                     icon="i-lucide-file-pen-line"
                     :color="agentPrompts.isCustomized(unit.kind) ? 'warning' : 'neutral'"
                     variant="ghost"
                     size="xs"
-                    :title="
+                    :label="
                       agentPrompts.isCustomized(unit.kind)
                         ? t('pipeline.builder.promptEditedTooltip')
                         : t('pipeline.builder.promptEditTooltip')
                     "
                     @click="promptEditorKind = unit.kind"
                   />
-                  <UButton
+                  <IconButton
                     icon="i-lucide-chevron-up"
                     color="neutral"
                     variant="ghost"
                     size="xs"
-                    :title="t('pipeline.builder.moveUp')"
+                    :label="t('pipeline.builder.moveUp')"
                     :disabled="vi === 0"
                     @click="pipelines.moveUnit(vi, vi - 1)"
                   />
-                  <UButton
+                  <IconButton
                     icon="i-lucide-chevron-down"
                     color="neutral"
                     variant="ghost"
                     size="xs"
-                    :title="t('pipeline.builder.moveDown')"
+                    :label="t('pipeline.builder.moveDown')"
                     :disabled="vi === pipelines.units.length - 1"
                     @click="pipelines.moveUnit(vi, vi + 1)"
                   />
-                  <UButton
+                  <IconButton
                     icon="i-lucide-x"
                     color="error"
                     variant="ghost"
                     size="xs"
-                    :title="t('pipeline.builder.removeStep')"
+                    :label="t('pipeline.builder.removeStep')"
                     @click="removeUnit(unit)"
                   />
                 </div>
@@ -873,7 +881,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                   </span>
                   <!-- A companion is an agent kind with a prompt of its own, and this row is its
                      only route to it — so the affordance belongs here too, not only on producers. -->
-                  <UButton
+                  <IconButton
                     v-if="showPromptEditor(pipelines.draft[unit.companionIndex]!)"
                     icon="i-lucide-file-pen-line"
                     :color="
@@ -883,7 +891,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                     "
                     variant="ghost"
                     size="xs"
-                    :title="
+                    :label="
                       agentPrompts.isCustomized(pipelines.draft[unit.companionIndex]!)
                         ? t('pipeline.builder.promptEditedTooltip')
                         : t('pipeline.builder.promptEditTooltip')
@@ -939,11 +947,12 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                     {{ t('pipeline.builder.consensusGroupsHint') }}
                   </p>
                   <div class="flex flex-wrap gap-1">
-                    <button
+                    <UButton
+                      color="neutral"
+                      variant="ghost"
                       v-for="group in consensusGroups.groups"
                       :key="group.id"
-                      type="button"
-                      class="rounded border px-1.5 py-0.5 text-2xs"
+                      class="rounded border px-1.5 py-0.5 text-2xs hover:bg-transparent"
                       :class="
                         isGroupSelected(unit.index, group.id)
                           ? 'border-app-success-600 bg-app-success-900/40 text-app-success-200'
@@ -954,7 +963,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                     >
                       {{ group.name }}
                       <span class="ms-1 text-dimmed">{{ groupBarLabel(group.id) }}</span>
-                    </button>
+                    </UButton>
                   </div>
                 </div>
 
@@ -965,27 +974,24 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                 <template v-else>
                   <div class="flex items-center gap-2">
                     <label class="text-muted">{{ t('pipeline.builder.strategy') }}</label>
-                    <select
+                    <USelect
                       v-model="pipelines.draftConsensus[unit.index]!.strategy"
-                      class="rounded border border-muted bg-default px-1.5 py-0.5 text-app-100"
-                    >
-                      <option v-for="s in CONSENSUS_STRATEGIES" :key="s.value" :value="s.value">
-                        {{ s.label }}
-                      </option>
-                    </select>
+                      :items="CONSENSUS_STRATEGIES"
+                      size="xs"
+                    />
                     <label
                       v-if="pipelines.draftConsensus[unit.index]!.strategy === 'debate'"
                       class="ms-2 text-muted"
                       >{{ t('pipeline.builder.rounds') }}</label
                     >
-                    <input
+                    <UInputNumber
                       v-if="pipelines.draftConsensus[unit.index]!.strategy === 'debate'"
-                      v-model.number="pipelines.draftConsensus[unit.index]!.rounds"
-                      type="number"
-                      min="1"
-                      max="5"
+                      v-model.optional="pipelines.draftConsensus[unit.index]!.rounds"
+                      :min="1"
+                      :max="5"
                       placeholder="2"
-                      class="w-12 rounded border border-muted bg-default px-1.5 py-0.5 text-app-100"
+                      size="xs"
+                      class="w-24"
                     />
                   </div>
 
@@ -996,23 +1002,25 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                       :key="p.id"
                       class="flex items-center gap-1.5"
                     >
-                      <input
+                      <UInput
                         v-model="p.role"
+                        size="xs"
+                        class="w-28"
                         :placeholder="t('pipeline.builder.rolePlaceholder')"
-                        class="w-28 rounded border border-muted bg-default px-1.5 py-0.5 text-app-100"
                       />
-                      <input
+                      <UInput
                         v-model="p.modelId"
+                        size="xs"
+                        class="flex-1"
                         :placeholder="t('pipeline.builder.modelIdPlaceholder')"
-                        class="flex-1 rounded border border-muted bg-default px-1.5 py-0.5 text-toned"
                       />
-                      <UButton
+                      <IconButton
                         icon="i-lucide-x"
                         color="error"
                         variant="ghost"
                         size="xs"
                         :disabled="pipelines.draftConsensus[unit.index]!.participants.length <= 2"
-                        :title="t('pipeline.builder.removeParticipant')"
+                        :label="t('pipeline.builder.removeParticipant')"
                         @click="removeParticipant(unit.index, pIdx)"
                       />
                     </div>
@@ -1171,9 +1179,10 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                     )
               }}
             </span>
-            <button
-              type="button"
-              class="underline underline-offset-2 hover:text-toned"
+            <UButton
+              color="neutral"
+              variant="link"
+              class="p-0 text-3xs underline underline-offset-2 hover:text-toned"
               data-testid="pipeline-library-purpose-toggle"
               @click="browseEveryPurpose = !browseEveryPurpose"
             >
@@ -1182,7 +1191,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                   ? t('pipeline.builder.narrowToDraftPurpose')
                   : t('pipeline.builder.listEveryPurpose')
               }}
-            </button>
+            </UButton>
           </div>
 
           <ul class="flex-1 space-y-1.5 pe-1 lg:min-h-0 lg:overflow-y-auto">
@@ -1193,9 +1202,10 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
               :class="{ 'opacity-60': p.archived }"
             >
               <div class="flex items-center gap-2 px-2 py-1.5">
-                <button
-                  type="button"
-                  class="flex min-w-0 flex-1 items-center gap-2 text-start"
+                <UButton
+                  color="neutral"
+                  variant="ghost"
+                  class="flex min-w-0 flex-1 items-center gap-2 p-0 text-start hover:bg-transparent"
                   @click="toggleSaved(p.id)"
                 >
                   <UIcon
@@ -1259,7 +1269,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                       )
                     }}
                   </span>
-                </button>
+                </UButton>
                 <div
                   class="flex shrink-0 items-center opacity-0 transition group-hover:opacity-100"
                 >
@@ -1309,35 +1319,35 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                   />
                   <!-- Clone is available on every pipeline — it's how a read-only
                          built-in template becomes an editable copy. -->
-                  <UButton
+                  <IconButton
                     icon="i-lucide-copy"
                     color="neutral"
                     variant="ghost"
                     size="xs"
-                    :title="
+                    :label="
                       p.builtin ? t('pipeline.builder.cloneDefault') : t('pipeline.builder.clone')
                     "
                     @click="clone(p)"
                   />
                   <!-- Built-in templates are read-only; only custom pipelines edit in place. -->
-                  <UButton
+                  <IconButton
                     v-if="!p.builtin"
                     icon="i-lucide-pencil"
                     color="neutral"
                     variant="ghost"
                     size="xs"
-                    :title="t('pipeline.builder.edit')"
+                    :label="t('pipeline.builder.edit')"
                     @click="edit(p)"
                   />
                   <!-- Built-in templates are read-only — they can be cloned but not
                          deleted (the backend rejects it too); only custom ones delete. -->
-                  <UButton
+                  <IconButton
                     v-if="!p.builtin"
                     icon="i-lucide-trash-2"
                     color="neutral"
                     variant="ghost"
                     size="xs"
-                    :title="t('pipeline.builder.delete')"
+                    :label="t('pipeline.builder.delete')"
                     @click="removePipeline(p)"
                   />
                 </div>

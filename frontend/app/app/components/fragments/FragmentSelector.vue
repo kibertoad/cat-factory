@@ -102,10 +102,11 @@ function manageAccount() {
                   <SectionLabel as="p" class="px-2 pb-0.5 pt-1.5">
                     {{ group.category }}
                   </SectionLabel>
-                  <button
+                  <UButton
+                    color="neutral"
+                    variant="ghost"
                     v-for="f in group.fragments"
                     :key="f.id"
-                    type="button"
                     class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-start text-sm hover:bg-elevated/60"
                     :class="selectedSet.has(f.id) ? 'text-app-100' : 'text-toned'"
                     :title="f.summary"
@@ -119,7 +120,7 @@ function manageAccount() {
                       :class="selectedSet.has(f.id) ? 'text-primary' : 'text-dimmed'"
                     />
                     <span class="flex-1 truncate">{{ f.title }}</span>
-                  </button>
+                  </UButton>
                 </div>
               </template>
               <p v-else class="px-2 py-3 text-xs text-dimmed">
@@ -127,23 +128,25 @@ function manageAccount() {
               </p>
 
               <div class="mt-1 border-t border-default pt-1">
-                <button
-                  type="button"
+                <UButton
+                  color="neutral"
+                  variant="ghost"
                   class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-start text-sm text-toned hover:bg-elevated/60"
                   @click="manageBoard"
                 >
                   <UIcon name="i-lucide-book-marked" class="h-4 w-4 shrink-0 text-muted" />
                   <span class="flex-1 truncate">{{ t('inspector.fragments.manageBoard') }}</span>
-                </button>
-                <button
+                </UButton>
+                <UButton
+                  color="neutral"
+                  variant="ghost"
                   v-if="accounts.enabled"
-                  type="button"
                   class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-start text-sm text-toned hover:bg-elevated/60"
                   @click="manageAccount"
                 >
                   <UIcon name="i-lucide-users" class="h-4 w-4 shrink-0 text-muted" />
                   <span class="flex-1 truncate">{{ t('inspector.fragments.manageAccount') }}</span>
-                </button>
+                </UButton>
               </div>
             </div>
 

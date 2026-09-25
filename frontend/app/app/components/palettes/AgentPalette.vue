@@ -88,10 +88,11 @@ function toggle(id: string) {
           <span class="ms-auto text-app-600">{{ g.agents.length }}</span>
         </SectionLabel>
         <div v-if="!isCollapsed(g.id)" class="mt-1 space-y-1.5">
-          <button
+          <UButton
+            color="neutral"
+            variant="ghost"
             v-for="a in g.agents"
             :key="a.kind"
-            type="button"
             class="flex w-full items-center gap-2.5 rounded-lg border border-muted bg-elevated/60 p-2 text-start transition hover:border-app-500 hover:bg-elevated"
             :title="a.description"
             :data-testid="`palette-agent-${a.kind}`"
@@ -108,7 +109,7 @@ function toggle(id: string) {
               <div class="truncate text-3xs text-muted">{{ a.description }}</div>
             </div>
             <UIcon name="i-lucide-plus" class="ms-auto h-4 w-4 shrink-0 text-dimmed" />
-          </button>
+          </UButton>
         </div>
       </section>
     </div>
