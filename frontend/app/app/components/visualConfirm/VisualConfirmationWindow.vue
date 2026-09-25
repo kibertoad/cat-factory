@@ -355,16 +355,30 @@ watch(pendingUpload, async (file) => {
             />
             <!-- `reset` so the native input is cleared on every open: re-picking the SAME file
                  after a rejected or completed upload otherwise fires no change event at all. -->
+            <!-- The trigger is our OWN button in the default slot, not `variant="button"`:
+                 that variant renders the icon alone and drops `label` on the floor, so the
+                 control reached a screen reader with no name at all. -->
             <UFileUpload
               v-model="pendingUpload"
-              variant="button"
               size="xs"
               reset
               accept="image/png,image/jpeg"
               :preview="false"
               :disabled="busy || !uploadView.trim()"
-              :label="t('visualConfirm.upload.choose')"
-            />
+              class="w-fit"
+            >
+              <template #default="{ open }">
+                <UButton
+                  color="neutral"
+                  variant="soft"
+                  size="xs"
+                  icon="i-lucide-upload"
+                  :disabled="busy || !uploadView.trim()"
+                  :label="t('visualConfirm.upload.choose')"
+                  @click="open()"
+                />
+              </template>
+            </UFileUpload>
           </div>
           <p class="mt-1.5 text-3xs text-app-600">
             {{
