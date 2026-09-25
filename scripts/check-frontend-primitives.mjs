@@ -14,7 +14,7 @@
 //   <details>   -> UCollapsible
 //   <form>      -> UForm
 //   <a href>    -> ULink
-//   <datalist>  -> UInputMenu with `create-item`, which is what a datalist is
+//   <datalist>  -> UInputMenu with `mode="autocomplete"`, which is what a datalist is
 //
 // SCOPE: the control elements above, in the TEMPLATE half of a `.vue` file. Their structural
 // children (`<option>`, `<summary>`, `<thead>`, `<td>`) are not listed separately: each can only
@@ -64,7 +64,8 @@ export const REPLACEMENTS = {
   details: 'UCollapsible',
   form: 'UForm',
   a: 'ULink',
-  datalist: 'UInputMenu with `create-item`',
+  datalist:
+    'UInputMenu with `mode="autocomplete"` (the DEFAULT mode writes the model only\n              on select, so a typed value is lost)',
 }
 
 const RAW_OK = 'raw-control-ok:'
@@ -89,13 +90,17 @@ export function findRawControls(line, prevLine = '', tagOf = () => line) {
   const found = []
   for (const element of Object.keys(REPLACEMENTS)) {
     const re = new RegExp(`<${element}(?![a-zA-Z0-9-])`, 'g')
-    const match = re.exec(line)
-    if (!match) continue
-    // An anchor is only a link when it has a destination; a bare `<a>` is an anchor target.
-    // Read the WHOLE opening tag: the formatter wraps a multi-attribute tag, so every `<a href>`
-    // in this tree carries its `href` on a later line than its `<a`.
-    if (element === 'a' && !/\s:?href[=\s>]/.test(tagOf(match.index))) continue
-    found.push(element)
+    // EVERY match on the line, not the first: `<a id="top"></a> <a :href="url">` put a bare
+    // anchor in front of a real link, and stopping at the first one let the link through.
+    let match
+    while ((match = re.exec(line))) {
+      // An anchor is only a link when it has a destination; a bare `<a>` is an anchor target.
+      // Read the WHOLE opening tag: the formatter wraps a multi-attribute tag, so every
+      // `<a href>` in this tree carries its `href` on a later line than its `<a`.
+      if (element === 'a' && !/\s:?href[=\s>]/.test(tagOf(match.index))) continue
+      found.push(element)
+      break
+    }
   }
   return found
 }

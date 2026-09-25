@@ -293,6 +293,7 @@ const { requestClose } = useUnsavedGuard({
   >
     <template v-if="state?.prUrl" #header-extras>
       <ULink
+        raw
         :to="state.prUrl"
         target="_blank"
         rel="noopener"

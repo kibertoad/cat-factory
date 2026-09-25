@@ -611,7 +611,7 @@ const ITEM_ICON: Record<string, string> = {
             color="neutral"
             variant="ghost"
             v-if="s.followUps?.enabled"
-            class="mt-3 flex w-full items-center gap-2 rounded-lg border border-dashed px-2.5 py-1.5 text-start transition hover:border-app-hue-pink/60"
+            class="mt-3 flex w-full items-center gap-2 rounded-lg border border-dashed px-2.5 py-1.5 text-start transition hover:border-app-hue-pink/60 hover:bg-transparent"
             :class="
               followUpPending(s) > 0
                 ? 'border-app-hue-pink/50 bg-app-hue-pink/10 followup-blink'
@@ -644,7 +644,7 @@ const ITEM_ICON: Record<string, string> = {
             v-if="forkPhase(s)"
             data-testid="fork-decision-open"
             :data-fork-phase="forkPhase(s)"
-            class="mt-3 flex w-full items-center gap-2 rounded-lg border border-dashed px-2.5 py-1.5 text-start transition hover:border-app-secondary-400/60"
+            class="mt-3 flex w-full items-center gap-2 rounded-lg border border-dashed px-2.5 py-1.5 text-start transition hover:border-app-secondary-400/60 hover:bg-transparent"
             :class="
               forkPhase(s) === 'awaiting_choice'
                 ? 'border-app-secondary-500/50 bg-app-secondary-500/10 followup-blink'
@@ -681,7 +681,7 @@ const ITEM_ICON: Record<string, string> = {
             variant="ghost"
             v-if="prReviewAwaiting(s)"
             data-testid="pr-review-open"
-            class="mt-3 flex w-full items-center gap-2 rounded-lg border border-dashed border-primary/50 bg-primary/10 px-2.5 py-1.5 text-start transition followup-blink hover:border-primary/60"
+            class="mt-3 flex w-full items-center gap-2 rounded-lg border border-dashed border-primary/50 bg-primary/10 px-2.5 py-1.5 text-start transition followup-blink hover:border-primary/60 hover:bg-transparent"
             @click="ui.openPrReview(instance.id, i)"
           >
             <span
@@ -704,7 +704,7 @@ const ITEM_ICON: Record<string, string> = {
             variant="ghost"
             v-if="candidatesAwaiting(s)"
             data-testid="binary-candidates-open"
-            class="mt-3 flex w-full items-center gap-2 rounded-lg border border-dashed border-app-hue-cyan/50 bg-app-hue-cyan/10 px-2.5 py-1.5 text-start transition followup-blink hover:border-app-hue-cyan/60"
+            class="mt-3 flex w-full items-center gap-2 rounded-lg border border-dashed border-app-hue-cyan/50 bg-app-hue-cyan/10 px-2.5 py-1.5 text-start transition followup-blink hover:border-app-hue-cyan/60 hover:bg-transparent"
             @click="ui.openBinaryCandidates(instance.id, i)"
           >
             <span

@@ -447,6 +447,7 @@ function revealDecision(n: Notification) {
               </div>
               <p class="mt-0.5 text-2xs leading-snug text-muted">{{ n.body }}</p>
               <ULink
+                raw
                 v-if="n.payload?.prUrl"
                 :to="n.payload.prUrl"
                 target="_blank"

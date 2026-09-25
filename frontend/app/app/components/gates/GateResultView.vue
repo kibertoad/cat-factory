@@ -272,6 +272,7 @@ const conflictVerdict = computed(() => {
               </p>
             </div>
             <ULink
+              raw
               v-if="prUrl"
               :to="prUrl"
               target="_blank"
@@ -346,6 +347,7 @@ const conflictVerdict = computed(() => {
               {{ t('gates.docQuality.findingsFallback') }}
             </p>
             <ULink
+              raw
               v-if="prUrl"
               :to="prUrl"
               target="_blank"
@@ -385,6 +387,7 @@ const conflictVerdict = computed(() => {
               </p>
             </div>
             <ULink
+              raw
               v-if="prUrl"
               :to="prUrl"
               target="_blank"

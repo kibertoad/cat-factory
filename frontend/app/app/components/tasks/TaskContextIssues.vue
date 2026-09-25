@@ -133,6 +133,7 @@ async function attach(item: PendingContext) {
 
     <div v-if="linked.length" class="space-y-1">
       <ULink
+        raw
         v-for="issue in linked"
         :key="`${issue.source}:${issue.externalId}`"
         :to="issue.url"

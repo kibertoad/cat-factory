@@ -108,6 +108,7 @@ const { copy: copyText } = useCopyToClipboard()
              no link at all. -->
         <dd class="truncate font-mono text-2xs text-toned">
           <ULink
+            raw
             v-if="runHref"
             :to="runHref"
             target="_blank"
@@ -167,6 +168,7 @@ const { copy: copyText } = useCopyToClipboard()
             attempt.outcome || t('panels.stepMeta.delegated.noOutcome')
           }}</span>
           <ULink
+            raw
             v-if="externalRunHref(attempt.url)"
             :to="externalRunHref(attempt.url)!"
             target="_blank"

@@ -42,6 +42,7 @@ function reload() {
             {{ problem.remedy }}
           </p>
           <ULink
+            raw
             v-if="problem.docsUrl"
             :to="problem.docsUrl"
             target="_blank"

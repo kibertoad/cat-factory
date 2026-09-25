@@ -125,6 +125,7 @@ const envInTransition = computed(
         }}</span>
       </div>
       <ULink
+        raw
         v-if="environment.url"
         :to="environment.url"
         target="_blank"

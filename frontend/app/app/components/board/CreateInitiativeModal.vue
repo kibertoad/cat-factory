@@ -200,7 +200,7 @@ async function create() {
               :key="p.id"
               :data-testid="`initiative-preset-option-${p.id}`"
               :aria-pressed="p.id === selectedPresetId"
-              class="flex items-start gap-3 rounded-md border px-3 py-2 text-left transition"
+              class="flex items-start gap-3 rounded-md border px-3 py-2 text-left transition hover:bg-transparent"
               :class="
                 p.id === selectedPresetId
                   ? 'border-primary bg-primary/10'

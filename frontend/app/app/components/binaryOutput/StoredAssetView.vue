@@ -113,6 +113,7 @@ const filename = computed(() => {
          they appear only once the bytes are in hand. -->
     <div v-if="url" class="flex items-center gap-3 text-2xs">
       <ULink
+        raw
         :to="url"
         target="_blank"
         rel="noopener"
@@ -122,6 +123,7 @@ const filename = computed(() => {
         >{{ t('binaryOutput.asset.open') }}</ULink
       >
       <ULink
+        raw
         :to="url"
         :download="filename"
         class="text-app-info-300 hover:underline"

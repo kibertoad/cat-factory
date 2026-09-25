@@ -184,6 +184,7 @@ const canDestroy = computed(
               }}</span>
             </div>
             <ULink
+              raw
               v-if="env.url"
               :to="env.url"
               target="_blank"

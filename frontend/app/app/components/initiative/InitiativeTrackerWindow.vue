@@ -511,7 +511,8 @@ const { requestClose } = useUnsavedGuard({
               :ui="{
                 root: 'overflow-x-auto rounded-lg border border-default',
                 base: 'text-xs',
-                td: 'px-3 py-2 text-xs',
+                td: 'px-3 py-2 text-xs whitespace-normal',
+                empty: 'py-0',
                 tr: 'align-top',
               }"
             >
@@ -569,6 +570,7 @@ const { requestClose } = useUnsavedGuard({
               </template>
               <template #pr-cell="{ row }">
                 <ULink
+                  raw
                   v-if="row.original.pr"
                   :to="row.original.pr.url"
                   target="_blank"
@@ -583,6 +585,9 @@ const { requestClose } = useUnsavedGuard({
                 </ULink>
                 <span v-else class="text-app-600">&mdash;</span>
               </template>
+              <!-- The hand-built table rendered its header and no row; Nuxt UI's fallback is
+                   an untranslated "No data.", so the slot states the same nothing. -->
+              <template #empty />
             </UTable>
           </section>
 
@@ -628,7 +633,7 @@ const { requestClose } = useUnsavedGuard({
                 :ui="{ root: 'flex items-center gap-2', label: 'w-40', container: 'mt-0' }"
               >
                 <UInputNumber
-                  v-model="policyForm.maxConcurrent"
+                  v-model.optional="policyForm.maxConcurrent"
                   :min="1"
                   :max="20"
                   size="xs"

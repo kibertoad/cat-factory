@@ -164,7 +164,7 @@ watch(pendingRef, (file) => {
           variant="ghost"
           v-for="m in MODES"
           :key="m.id"
-          class="rounded px-1.5 py-1 text-muted hover:text-default"
+          class="rounded px-1.5 py-1 text-muted hover:bg-transparent hover:text-default"
           :class="mode === m.id ? 'bg-elevated text-app-100' : ''"
           :title="m.label"
           @click="mode = m.id"

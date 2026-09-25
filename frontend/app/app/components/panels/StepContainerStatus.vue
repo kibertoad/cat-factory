@@ -135,6 +135,7 @@ const { copy: copyText } = useCopyToClipboard()
           </SectionLabel>
           <dd class="truncate font-mono text-2xs text-toned">
             <ULink
+              raw
               :to="step.container.url"
               target="_blank"
               rel="noopener noreferrer"

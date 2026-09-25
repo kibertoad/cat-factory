@@ -32,6 +32,7 @@ const { t } = useI18n()
         :class="dense ? 'h-3 w-3' : 'h-3.5 w-3.5'"
       />
       <ULink
+        raw
         v-if="c.url"
         :to="c.url"
         target="_blank"

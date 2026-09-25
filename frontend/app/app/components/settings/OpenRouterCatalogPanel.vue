@@ -246,6 +246,7 @@ function manageKeys() {
               <i18n-t keypath="settings.openRouterCatalog.step1" tag="span" scope="global">
                 <template #link>
                   <ULink
+                    raw
                     to="https://openrouter.ai/keys"
                     target="_blank"
                     rel="noopener noreferrer"

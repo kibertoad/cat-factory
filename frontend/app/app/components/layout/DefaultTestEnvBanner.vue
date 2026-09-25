@@ -91,6 +91,7 @@ function openConfig(event: MouseEvent) {
             </UButton>
             <!-- The URL itself, shown so it can be read and copied, not just clicked. -->
             <ULink
+              raw
               :to="configUrl"
               class="min-w-0 truncate font-mono text-2xs text-app-info-300/80 underline decoration-dotted underline-offset-2 hover:text-app-info-200"
               data-testid="default-test-env-url"

@@ -436,10 +436,12 @@ const phaseColumns = computed<TableColumn<(typeof phaseRows.value)[number]>[]>((
   { id: 'turns' },
   { id: 'tokens' },
   ...(showCost.value ? [{ id: 'cost' } as TableColumn<(typeof phaseRows.value)[number]>] : []),
-  // `enableSorting` is what makes UTable emit `aria-sort` on the header cell. The rows arrive in
-  // this order from the rollup, so `manualSorting` below keeps TanStack from re-deriving it: the
+  // `aria-sort` needs BOTH halves: UTable asks `enableSorting && column.getCanSort()`, and
+  // `getCanSort()` is false on a column with no accessor, so `enableSorting` alone emitted
+  // nothing and the header silently stopped stating the order. The rows arrive in this order
+  // from the rollup, so `manualSorting` below keeps TanStack from re-deriving it: the
   // declaration MARKS the order, it does not produce it, and nothing here offers a sort control.
-  { id: 'carryCost', enableSorting: true },
+  { id: 'carryCost', accessorKey: 'carryCostTokens', enableSorting: true },
 ])
 /** The order the rollup already returns, stated so the header can say which column it is. */
 const PHASE_SORTING = [{ id: 'carryCost', desc: true }]
@@ -743,7 +745,10 @@ function exportJson() {
                   :columns="phaseColumns"
                   :sorting="PHASE_SORTING"
                   :sorting-options="PHASE_SORTING_OPTIONS"
-                  :ui="{ base: 'min-w-[32rem] text-xs', td: 'px-3 py-1.5 text-xs' }"
+                  :ui="{
+                    base: 'min-w-[32rem] text-xs',
+                    td: 'px-3 py-1.5 text-xs whitespace-normal',
+                  }"
                 >
                   <template #phase-header>
                     {{ t('observability.phase.columns.phase') }}

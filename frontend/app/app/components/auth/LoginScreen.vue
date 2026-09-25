@@ -287,6 +287,7 @@ const noSignInMethod = computed(
                per-provider link, so showing these too would offer the same thing twice. -->
           <div v-if="installableProviders.length === 0" class="flex flex-wrap gap-3 px-1">
             <ULink
+              raw
               v-for="p in ALL_PROVIDERS"
               :key="p"
               :to="tokenCreateUrl(p)"
@@ -525,6 +526,7 @@ const noSignInMethod = computed(
           </p>
           <p class="px-1 text-center">
             <ULink
+              raw
               :to="tokenCreateUrl(remotePatProvider)"
               target="_blank"
               rel="noopener noreferrer"

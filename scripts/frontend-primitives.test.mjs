@@ -112,6 +112,13 @@ test('the opening tag stops at its own `>`, not a sibling`s', () => {
   assert.equal(openingTag(lines, 0, lines[0].indexOf('<a')), '<a\n    :href="url"\n  >')
 })
 
+test('a bare anchor in front of a real link does not hide it', () => {
+  // `re.exec` once per element saw only the first `<a`, so an anchor TARGET shadowed the link
+  // after it on the same line.
+  const line = '  <a id="top"></a> <a :href="url">docs</a>'
+  assert.deepEqual(findRawControls(line), ['a'])
+})
+
 test('a `>` inside a quoted attribute value does not end the tag', () => {
   // `v-if="total > 1"` is how this tree writes a condition. Ending the tag on that `>` read the
   // attributes BEFORE it only, so the two attribute rules matched nothing at the wrapped sites

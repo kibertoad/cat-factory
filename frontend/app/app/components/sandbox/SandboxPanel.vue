@@ -484,7 +484,12 @@ async function archive(prompt: SandboxPromptVersion) {
                 <UTable
                   :data="detailRows"
                   :columns="detailColumns"
-                  :ui="{ base: 'text-xs', td: 'py-1 pe-2 text-xs', tr: 'cursor-pointer' }"
+                  :ui="{
+                    base: 'text-xs',
+                    td: 'ps-0 pe-2 py-1 text-xs whitespace-normal',
+                    tbody: '[&>tr]:cursor-pointer',
+                    empty: 'py-0',
+                  }"
                   @select="(_event, row) => (selectedRun = row.original.run)"
                 >
                   <template #prompt-cell="{ row }">
@@ -526,6 +531,8 @@ async function archive(prompt: SandboxPromptVersion) {
                     </span>
                     <span v-else class="text-app-600">&mdash;</span>
                   </template>
+                  <!-- See InitiativeTrackerWindow: the fallback copy is untranslated. -->
+                  <template #empty />
                 </UTable>
               </div>
 

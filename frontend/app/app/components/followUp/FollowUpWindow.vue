@@ -205,6 +205,7 @@ function hasRecordedAnswer(item: FollowUpItem): boolean {
               </p>
               <p v-if="item.status === 'filed' && item.ticketUrl" class="mt-1 text-2xs">
                 <ULink
+                  raw
                   :to="item.ticketUrl"
                   target="_blank"
                   rel="noopener"

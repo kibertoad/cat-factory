@@ -40,6 +40,7 @@ function dismiss() {
         <i18n-t keypath="language.warning.body" tag="span" scope="global">
           <template #repoLink>
             <ULink
+              raw
               :to="REPO_URL"
               target="_blank"
               rel="noopener noreferrer"

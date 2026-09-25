@@ -137,6 +137,7 @@ function preview(externalId: string) {
             <div class="flex items-start justify-between gap-2">
               <div class="min-w-0">
                 <ULink
+                  raw
                   :to="doc.url"
                   target="_blank"
                   rel="noopener"

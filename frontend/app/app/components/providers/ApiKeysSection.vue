@@ -330,6 +330,7 @@ async function remove(k: ApiKey) {
       <li v-for="(step, i) in selected.steps" :key="i">{{ step }}</li>
       <li>
         <ULink
+          raw
           :to="selected.url"
           target="_blank"
           rel="noopener noreferrer"

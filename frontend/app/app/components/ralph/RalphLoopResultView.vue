@@ -170,6 +170,7 @@ const STATUS_META = computed<
           </template>
 
           <ULink
+            raw
             v-if="prUrl"
             :to="prUrl"
             target="_blank"

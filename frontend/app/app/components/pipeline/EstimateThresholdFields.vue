@@ -67,6 +67,7 @@ function commit(axis: EstimateAxis, raw: number | undefined) {
         :min="0"
         :max="1"
         :step="0.1"
+        :step-snapping="false"
         size="xs"
         class="w-28"
         @update:model-value="commit(f.axis, $event ?? undefined)"

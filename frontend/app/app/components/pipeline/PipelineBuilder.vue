@@ -952,7 +952,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                       variant="ghost"
                       v-for="group in consensusGroups.groups"
                       :key="group.id"
-                      class="rounded border px-1.5 py-0.5 text-2xs"
+                      class="rounded border px-1.5 py-0.5 text-2xs hover:bg-transparent"
                       :class="
                         isGroupSelected(unit.index, group.id)
                           ? 'border-app-success-600 bg-app-success-900/40 text-app-success-200'
@@ -986,9 +986,10 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                     >
                     <UInputNumber
                       v-if="pipelines.draftConsensus[unit.index]!.strategy === 'debate'"
-                      v-model="pipelines.draftConsensus[unit.index]!.rounds"
+                      v-model.optional="pipelines.draftConsensus[unit.index]!.rounds"
                       :min="1"
                       :max="5"
+                      placeholder="2"
                       size="xs"
                       class="w-24"
                     />
