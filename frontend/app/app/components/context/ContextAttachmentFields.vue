@@ -292,7 +292,7 @@ function removePending(item: PendingContext) {
             <UButton
               color="neutral"
               variant="ghost"
-              class="ms-auto shrink-0 text-muted hover:text-default"
+              class="ms-auto shrink-0 p-0 text-muted hover:text-default"
               @click="removePending(item)"
             >
               <UIcon name="i-lucide-x" class="h-3.5 w-3.5" />
@@ -401,7 +401,7 @@ function removePending(item: PendingContext) {
             <UButton
               color="neutral"
               variant="ghost"
-              class="ms-auto shrink-0 text-muted hover:text-default"
+              class="ms-auto shrink-0 p-0 text-muted hover:text-default"
               @click="removePending(item)"
             >
               <UIcon name="i-lucide-x" class="h-3.5 w-3.5" />

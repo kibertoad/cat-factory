@@ -154,7 +154,7 @@ const decisionItems = computed(() =>
     <UButton
       color="neutral"
       variant="ghost"
-      class="w-16 rounded text-center text-xs tabular-nums text-toned hover:bg-elevated focus-visible:ring-2 focus-visible:ring-app-400/60 sm:w-20"
+      class="flex w-16 flex-col items-center gap-0 rounded p-0 text-center text-xs tabular-nums text-toned hover:bg-elevated focus-visible:ring-2 focus-visible:ring-app-400/60 sm:w-20"
       :title="t('board.toolbar.resetZoom')"
       :aria-label="t('board.toolbar.resetZoom')"
       data-testid="board-zoom-reset"

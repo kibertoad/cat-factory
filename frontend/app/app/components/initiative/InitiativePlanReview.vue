@@ -371,7 +371,7 @@ async function copyPlan() {
             <UButton
               color="neutral"
               variant="ghost"
-              class="text-dimmed transition hover:text-app-error-400"
+              class="p-0 text-dimmed transition hover:text-app-error-400"
               :title="t('panels.stepDetail.removeComment')"
               @click="removeComment(idx)"
             >

@@ -562,7 +562,7 @@ function done() {
                     <UButton
                       color="neutral"
                       variant="ghost"
-                      class="text-muted hover:text-app-100"
+                      class="p-0 text-muted hover:text-app-100"
                       :aria-label="t('github.addService.removeService', { directory: dir })"
                       @click="removeSelected(dir)"
                     >

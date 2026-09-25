@@ -776,7 +776,7 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                     v-for="(s, si) in g.screenshots"
                     :key="`shot${si}`"
                     data-testid="tester-screenshot"
-                    class="group relative h-20 w-28 shrink-0 overflow-hidden rounded border border-default bg-app-950/60 hover:border-app-600"
+                    class="group relative block h-20 w-28 shrink-0 overflow-hidden rounded border border-default bg-app-950/60 p-0 hover:border-app-600"
                     :title="s.view"
                     @click="openShot(s.artifactId)"
                   >
@@ -817,7 +817,7 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                 variant="ghost"
                 v-for="(s, si) in ungroupedScreenshots"
                 :key="`gal${si}`"
-                class="group relative aspect-video overflow-hidden rounded-lg border border-default bg-app-950/60 hover:border-app-600"
+                class="group relative block aspect-video overflow-hidden rounded-lg border border-default bg-app-950/60 p-0 hover:border-app-600"
                 :title="s.view"
                 @click="openShot(s.artifactId)"
               >

@@ -112,6 +112,23 @@ test('the opening tag stops at its own `>`, not a sibling`s', () => {
   assert.equal(openingTag(lines, 0, lines[0].indexOf('<a')), '<a\n    :href="url"\n  >')
 })
 
+test('a `>` inside a quoted attribute value does not end the tag', () => {
+  // `v-if="total > 1"` is how this tree writes a condition. Ending the tag on that `>` read the
+  // attributes BEFORE it only, so the two attribute rules matched nothing at the wrapped sites
+  // they exist for.
+  const anchor = ['  <a', '    v-if="total > 1"', '    :href="url"', '  >']
+  assert.deepEqual(findRawControls(anchor[0], '', tagReader(anchor, 0)), ['a'])
+
+  const icon = [
+    '  <IconButton',
+    '    v-if="n > 1"',
+    '    :title="hint"',
+    '    :label="hint"',
+    '  />',
+  ]
+  assert.deepEqual(findRedundantTitle(icon[0], '', tagReader(icon, 0)), ['title'])
+})
+
 test('title= is banned on the primitives that own their tooltip', () => {
   assert.deepEqual(findRedundantTitle('  <IconButton :title="x" icon="i-lucide-x" />'), ['title'])
   assert.deepEqual(findRedundantTitle('  <CopyButton title="Copy" :text="x" />'), ['title'])

@@ -209,7 +209,7 @@ watch(
           <UButton
             color="primary"
             variant="ghost"
-            class="flex items-center gap-2 truncate text-sm text-default hover:text-primary"
+            class="flex items-center gap-2 truncate p-0 text-sm text-default hover:text-primary"
             @click="browseTo(entry.path)"
           >
             <UIcon name="i-lucide-folder" class="h-4 w-4 shrink-0 text-app-warning-400" />
@@ -260,7 +260,7 @@ watch(
             <UButton
               color="primary"
               variant="ghost"
-              class="text-xs text-muted hover:text-primary"
+              class="p-0 text-xs text-muted hover:text-primary"
               @click="toggleAllFiles"
             >
               {{
@@ -287,7 +287,7 @@ watch(
               <UButton
                 color="primary"
                 variant="ghost"
-                class="flex items-center gap-2 truncate text-sm hover:text-primary"
+                class="flex items-center gap-2 truncate p-0 text-sm hover:text-primary"
                 :class="isPicked(entry.path) ? 'text-primary' : 'text-toned'"
                 :disabled="isAdded(entry.path)"
                 @click="pick(entry.path)"

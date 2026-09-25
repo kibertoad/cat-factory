@@ -118,20 +118,28 @@ export function findRedundantTitle(line, prevLine = '', tagOf = () => line) {
  * one, which is not the shape this repo writes: every `<a href>` and every `IconButton` in the
  * SPA is wrapped, so both rules matched nothing at all.
  *
- * A `>` inside an attribute VALUE ends the tag early here. That costs a rule nothing it was
- * getting before (the single-line read had the same blind spot and a shorter reach), and the
- * alternative is a parser.
+ * A `>` inside a QUOTED attribute value does not end the tag, because that `>` is how this tree
+ * writes a condition: `v-if="total > 1"`, `v-if="s.depth >= 2"`, `v-if="x.length > 0"`. Ending
+ * there truncated the tag before its `href` or `title` and the two attribute rules matched
+ * nothing at exactly the sites they exist for. The quote state carries ACROSS lines: the
+ * formatter breaks a long binding expression mid-value.
  */
 export function openingTag(lines, index, from = 0) {
   let text = ''
+  let quote = null
   for (let i = index; i < lines.length && i - index < MAX_TAG_LINES; i++) {
     const slice = i === index ? lines[i].slice(from) : lines[i]
-    const end = slice.indexOf('>')
-    if (end === -1) {
-      text += `${slice}\n`
-      continue
+    for (let c = 0; c < slice.length; c++) {
+      const char = slice[c]
+      if (quote) {
+        if (char === quote) quote = null
+      } else if (char === '"' || char === "'") {
+        quote = char
+      } else if (char === '>') {
+        return text + slice.slice(0, c + 1)
+      }
     }
-    return text + slice.slice(0, end + 1)
+    text += `${slice}\n`
   }
   return text
 }
@@ -203,4 +211,6 @@ function main() {
 }
 
 // Run the filesystem scan only as a CLI; importing for tests must have no side effects.
-if (import.meta.url === pathToFileURL(process.argv[1]).href) main()
+// `argv[1]` is undefined under `node -e` / the REPL, where `pathToFileURL` throws: an import
+// must never be the thing that fails.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main()

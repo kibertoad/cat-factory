@@ -264,7 +264,7 @@ function reveal(blockId: string): void {
                 variant="ghost"
                 v-for="entry in examples"
                 :key="entry.actionId"
-                class="rounded-md px-2 py-1 text-left text-sm text-toned hover:bg-elevated"
+                class="block rounded-md px-2 py-1 text-left text-sm text-toned hover:bg-elevated"
                 @click="useExample(entry.example)"
               >
                 <span class="text-muted">{{ entry.label }}</span>

@@ -432,7 +432,7 @@ function revealDecision(n: Notification) {
                 <UButton
                   color="neutral"
                   variant="link"
-                  class="block min-w-0 flex-1 truncate text-start text-sm font-medium text-default hover:underline"
+                  class="block min-w-0 flex-1 truncate p-0 text-start text-sm font-medium text-default hover:underline"
                   :title="n.title"
                   @click="reveal(n)"
                 >

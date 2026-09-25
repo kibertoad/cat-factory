@@ -306,7 +306,7 @@ watch(pendingUpload, async (file) => {
               <UButton
                 color="neutral"
                 variant="ghost"
-                class="flex items-center gap-1.5 text-2xs text-muted hover:text-default"
+                class="flex items-center gap-1.5 p-0 text-2xs text-muted hover:text-default"
                 @click="noteOpen[p.view] = !noteOpen[p.view]"
               >
                 <UIcon

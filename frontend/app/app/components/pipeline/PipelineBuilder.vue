@@ -495,7 +495,8 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
               <UButton
                 color="neutral"
                 variant="ghost"
-                class="hover:text-app-error-400"
+                size="xs"
+                class="p-0 hover:text-app-error-400"
                 @click="removeLabel(l)"
               >
                 <UIcon name="i-lucide-x" class="h-3 w-3" />
@@ -1203,7 +1204,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                 <UButton
                   color="neutral"
                   variant="ghost"
-                  class="flex min-w-0 flex-1 items-center gap-2 text-start"
+                  class="flex min-w-0 flex-1 items-center gap-2 p-0 text-start"
                   @click="toggleSaved(p.id)"
                 >
                   <UIcon

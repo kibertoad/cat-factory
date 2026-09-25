@@ -39,7 +39,7 @@ function openObservability() {
         color="neutral"
         variant="ghost"
         v-if="instanceId"
-        class="text-2xs text-app-info-400 hover:text-app-info-300"
+        class="p-0 text-2xs text-app-info-400 hover:text-app-info-300"
         @click="openObservability"
       >
         {{ t('observability.viewAllCalls') }}
