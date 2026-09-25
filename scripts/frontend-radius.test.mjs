@@ -130,6 +130,24 @@ describe('findFixedRadii', () => {
     assert.deepEqual(findFixedRadii('  border-end-end-radius: var(--radius-lg);'), [])
   })
 
+  it('does not read a double-quoted SENTENCE as a class list', () => {
+    // A bare double-quoted span is the shape of ordinary prose, so the arm is anchored on the
+    // attribute name. Without that, a sentence, an `alt` and a spec name each failed CI with a
+    // message about a radius the line does not carry, and the only escape was a waiver that lied.
+    assert.deepEqual(findFixedRadii('const msg = "the value is rounded to two places"'), [])
+    assert.deepEqual(findFixedRadii('    <img alt="rounded avatar" :src="src">'), [])
+    assert.deepEqual(findFixedRadii('describe("rounded corners", () => {'), [])
+    // The attribute itself still reads, `:class` and `active-class` included.
+    assert.deepEqual(findFixedRadii('<div active-class="rounded">'), ['rounded'])
+  })
+
+  it('flags an INTERPOLATED step, which cannot be one of the seven', () => {
+    // The right boundary rejected the whole token on the `-` before `${`, so a computed class was
+    // not classified at all and a `size` resolving to `4xl` shipped past a zero-tolerance guard.
+    assert.deepEqual(findFixedRadii(':class="`rounded-${size}`"'), ['rounded-${size}'])
+    assert.deepEqual(findFixedRadii('const c = `rounded-t-${step}`'), ['rounded-t-${step}'])
+  })
+
   it('does not read an apostrophe as a quote, so English prose is not a class list', () => {
     assert.deepEqual(findFixedRadii("      <p>It's a rounded corner, don't use it</p>"), [])
     assert.deepEqual(findFixedRadii("    description: 'chunky rounded type, large controls.',"), [

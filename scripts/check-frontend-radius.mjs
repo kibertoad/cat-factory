@@ -44,13 +44,14 @@
 // NOT banned, because neither is a step that should scale: `rounded-full` (pills, avatars, the
 // `9999px` / `50%` spellings of the same intent) and `rounded-none` / `border-radius: 0`.
 //
-// A UTILITY is read only where a utility can live: inside a quoted string, after `@apply`, or in an
-// unterminated `class="` plus the lines a wrapped attribute continues onto. `rounded` is also an
-// ordinary English word, and scanning the whole line failed a template's `<p>Fully rounded
-// corners</p>` and a trailing `// value is rounded` with a message about a radius that is not
-// there. An apostrophe is not a quote either, so the single-quoted arm takes word boundaries: a
-// sentence with two of them is prose, not a class list. A raw declaration is read anywhere on the
-// line, because CSS is not quoted.
+// A UTILITY is read only where a utility can live: inside a `class=` attribute value, a
+// single-quoted or template string, after `@apply`, or in an unterminated `class="` plus the lines
+// a wrapped attribute continues onto. `rounded` is also an ordinary English word, and scanning the
+// whole line failed a template's `<p>Fully rounded corners</p>` and a trailing
+// `// value is rounded` with a message about a radius that is not there. A double-quoted span is
+// that same prose with quotes around it (`alt="rounded avatar"`), which is why that arm is anchored
+// on the attribute name; an apostrophe is not a quote, so the single-quoted arm takes word
+// boundaries instead. A raw declaration is read anywhere on the line, because CSS is not quoted.
 //
 // Policy: ZERO offenders, no ratchet. A line that genuinely needs a fixed radius says why with a
 // `radius-literal-ok:` comment, on that line or the one before it; nothing in the tree needs one.
@@ -99,14 +100,24 @@ const SIDES = new Set([
 // reading its parts rather than by a regex that has to tell `rounded-s` from `rounded-sm`.
 // `(?<![\w-])` is a LEFT boundary: without it `group-rounded` matches on a substring. `(?![\w-])`
 // closes the right end, so a token is claimed whole or not at all.
-const UTILITY_TOKEN = /(?<![\w-])rounded(?:-(?:\[[^\]]*\]|[A-Za-z0-9]+))*(?![\w-])/g
-// Where a utility can live. A class list is always a quoted string (`class="..."`, and the branches
-// of a `:class` expression are quoted inside it), an `@apply` argument, or an unterminated
-// `class="` that a wrapped attribute continues on the lines below.
-// The single-quoted arm needs boundaries the double-quoted one does not: an apostrophe is not a
-// quote, so `It's a rounded corner, don't` would otherwise read as one quoted span and flag prose
-// that has no class list in it (the reason `presets.ts` needs its path exemption).
-const QUOTED = /"[^"]*"|(?<![A-Za-z0-9])'[^']*'(?![A-Za-z0-9])|`[^`]*`/g
+// An INTERPOLATION is a step too (`rounded-${step}`, `rounded-t-${size}`). Without that arm the
+// right boundary rejects the whole token on the `-` before `${`, so a computed class is not
+// classified at all and a `size` resolving to `4xl` ships past a zero-tolerance guard. The step is
+// unresolvable here, so it can never be one of the seven and is reported off-scale.
+const UTILITY_TOKEN = /(?<![\w-])rounded(?:-(?:\[[^\]]*\]|\$\{[^}]*\}|[A-Za-z0-9]+))*(?![\w-])/g
+// Where a utility can live: a `class=` attribute value, a single-quoted or template string, an
+// `@apply` argument, or an unterminated `class="` that a wrapped attribute continues on the lines
+// below.
+// The double-quoted arm is ANCHORED on `class=` (`:class=` and `active-class=` included, the `\b`
+// sitting where the prefix ends) because a bare double-quoted span is the shape of ordinary
+// English prose: `alt="rounded avatar"`, `describe("rounded corners")` and a sentence saying a
+// value is rounded all read as a class list otherwise, and the waiver that silences them would
+// state something untrue. Nothing is lost by the anchor, because the formatter writes every
+// TypeScript string single-quoted and a class list holds no apostrophe to force the other quote.
+// The single-quoted arm needs boundaries instead: an apostrophe is not a quote, so
+// `It's a rounded corner, don't` would otherwise read as one quoted span and flag prose that has
+// no class list in it (the reason `presets.ts` needs its path exemption).
+const QUOTED = /(?<=\bclass=)"[^"]*"|(?<![A-Za-z0-9])'[^']*'(?![A-Za-z0-9])|`[^`]*`/g
 const APPLY = /@apply\b[^;]*/g
 const OPEN_CLASS = /:?class=["'][^"']*$/
 // The continuation of a wrapped attribute: everything up to the quote that closes it. Paired with
