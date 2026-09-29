@@ -370,19 +370,39 @@ kill "$child" 2>/dev/null || true`,
     // ZOMBIE, which `kill -0` reports as present — so on `kill -0` the readiness wait's early
     // exit never fires, every packaging failure costs the full 60s, and jobs dispatched inside
     // that window read the verdict as undecided and attempt compose anyway.
+    //
+    // The child must OUTLIVE the `exec`: a child that exits while the inner shell is still a shell
+    // is reaped by that shell, `kill -0` then reports it absent, and the precondition this test
+    // rests on is gone. A sleep only makes that ordering likely, so the fixture ENFORCES it: the
+    // child blocks reading a FIFO, the script waits until the supervisor's `/proc` comm shows the
+    // `exec` has happened, and only then opens the FIFO so the child can exit. It then waits for
+    // the child to become a zombie before judging it. Each wait is on a CONDITION, bounded only so
+    // a broken fixture fails instead of hanging.
     const pidDir = mkdtempSync(join(tmpdir(), 'cf-entrypoint-'))
     const pidFile = join(pidDir, 'child.pid')
+    const fifo = join(pidDir, 'release')
     const { stdout } = runSh(
       `set -eu
 ${shellFunctions('process_alive')}
-sh -c 'sleep 0 & echo $! >"$PID_FILE"; exec sleep 5' &
+mkfifo "$FIFO"
+sh -c 'cat "$FIFO" >/dev/null & echo $! >"$PID_FILE"; exec sleep 5' &
 supervisor=$!
-sleep 1
+wait_for() {
+  tries=0
+  until eval "$1"; do
+    tries=$((tries + 1))
+    [ "$tries" -lt 400 ] || { echo "timeout:$1"; exit 1; }
+    sleep 0.025
+  done
+}
+wait_for '[ -s "$PID_FILE" ] && [ "$(cat "/proc/$supervisor/comm" 2>/dev/null)" = sleep ]'
 child="$(cat "$PID_FILE")"
+: >"$FIFO"
+wait_for '[ "$(sed -e "s/.*) //" -e "s/ .*//" "/proc/$child/stat" 2>/dev/null)" = Z ]'
 if kill -0 "$child" 2>/dev/null; then echo "signal:present"; else echo "signal:absent"; fi
 if process_alive "$child"; then echo "verdict:alive"; else echo "verdict:dead"; fi
 kill "$supervisor" 2>/dev/null || true`,
-      { PID_FILE: pidFile },
+      { PID_FILE: pidFile, FIFO: fifo },
     )
     expect(stdout).toContain('signal:present')
     expect(stdout).toContain('verdict:dead')

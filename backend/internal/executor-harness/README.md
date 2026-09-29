@@ -55,10 +55,10 @@ The implementation job (`POST /run`) is the canonical sequence:
 
 1. **clone** the target repo (shallow) with a short-lived GitHub installation token,
 2. write the composed system prompt (role + the block's best-practice fragments)
-   to Pi's **global** context file `~/.pi/agent/AGENTS.md` (outside the checkout,
-   so it never lands in a commit and never clobbers a repo's own `AGENTS.md`:
-   Pi reads and concatenates both), and point Pi at the Worker's LLM proxy via
-   `~/.pi/agent/models.json` (provider `proxy`, `api: openai-completions`): at the
+   to the `AGENTS.md` of a Pi config directory made for this pass (`PI_CODING_AGENT_DIR`,
+   outside the checkout, so it never lands in a commit and never clobbers a repo's own
+   `AGENTS.md`: Pi reads and concatenates both), and point Pi at the Worker's LLM proxy via
+   that directory's `models.json` (provider `proxy`, `api: openai-completions`): at the
    phase-tagged completions path for the pass about to run (`.../phase/<phase>`) when the job
    body's `proxyPhasePath` says the backend serves it, which is how a repair round's model spend
    stays distinguishable from the first pass's in telemetry; without that flag the plain path is
@@ -82,7 +82,8 @@ The implementation job (`POST /run`) is the canonical sequence:
    because neither host applies a template to an API-created pull request, so nothing else would:
    the template only reaches the web form a human opens. A directory of several templates with no
    `default` is left alone deliberately: it exists so a human can choose per pull request,
-5. **run Pi** non-interactively (`pi -p --mode json --model proxy/<model> --approve`),
+5. **run Pi** non-interactively (`pi -p --mode json --model proxy/<model> --no-approve`; the
+   checkout's own `.pi/` resources, its `mcp.json` included, are untrusted and never loaded),
 6. **validate** the checkout, when the job body carries `validationChecks`: the service's
    configured check commands (install/lint/test/build) run with `sh -c` in the checkout, and
    while they fail and the attempt budget remains the agent is re-run with the captured output
@@ -325,6 +326,15 @@ apply and dropped what this harness cannot serve (see
   enforcement; the prompt states it either way. An `allowedTools` entry that is not a single tool
   name is DROPPED at the boundary, the comma above all: the list is joined into one argument with
   commas, so `search_issues,get_issue` in one entry would become a pattern matching nothing.
+- **For Pi, tool servers become the `mcp.json` of the pass's own config directory** (Pi 0.99.0
+  onward). Every `env`/`headers` value is written escaped with Pi's own `$$` / `$!` escapes: Pi
+  runs a value starting with `!` as a shell command and interpolates `$NAME`, and a vendor
+  credential may contain either. The values stay in the file, never in Pi's env, because Pi starts
+  a stdio server with its own whole environment, so an env-borne credential would reach the agent's
+  shell, every repo script and every other server. A narrowed server is `hidden` with each
+  permitted tool re-exposed by name, so `allowedTools` is enforced on Pi. The image reports
+  `piMcpServers` in its body capabilities only when the installed Pi is 0.99.0 or newer (checked
+  with `pi --version` at startup); see `writePiMcpConfig` and `reportedBodyCapabilities`.
 - **An `mcp__*` call is exempt from the no-edit progress bound**, like a read or a subagent
   dispatch: reaching a wired tool server is what the prompt tells the agent to do, so counting it
   would abort an edits-expected run for following its own instructions. It is neutral rather than
@@ -339,8 +349,9 @@ apply and dropped what this harness cannot serve (see
   values are registered for redaction: scrubbing the whole map would turn ordinary config strings
   into `***` in every later log line.
 
-Both config files carry this job's resolved credentials, so they are written to a per-job directory
-(mode `0600`) and never into the checkout or a HOME-global path: see the next section.
+The claude-code, Codex and Pi config files carry this job's resolved credentials, so they are
+written to a per-job directory (mode `0600`) and never into the checkout or a HOME-global path: see
+the next section.
 
 ## Per-job state: never a process- or HOME-global
 
@@ -363,6 +374,7 @@ under a per-job directory:
 | Private-registry auth | `~/.npmrc`; cleared when a job has no entries | per-job `.npmrc` + `npm_config_userconfig`, seeded from the developer's; theirs is never written or removed |
 | Repo-sourced Claude Skill | installed into the isolated `CLAUDE_CONFIG_DIR` | not installed: read from the checkout's `.cat-context/skill/`, like codex |
 | Codex image output | redirected out of the per-run `CODEX_HOME` into the checkout | not redirected: no per-run home exists, so the capability is reported unavailable rather than pointed at the developer's own `~/.codex` |
+| Pi config (`AGENTS.md`, `models.json`, `mcp.json`) | a per-pass `PI_CODING_AGENT_DIR` seeded with the image's installed extensions (`createPiAgentDir`) | n/a: Pi never runs natively |
 
 Two consequences worth knowing:
 
@@ -376,9 +388,10 @@ Two consequences worth knowing:
   spawns (the frontend stand-up's install/build, a ralph validation command) is passed
   `RunOptions.agentEnv` explicitly rather than relying on inheritance.
 
-When you add per-job state, put it in one of those two places. `~/.pi/*` and
-`~/.config/rpiv-web-tools` remain HOME-global, which is fine only because the Pi harness never
-runs natively (the native router sends `ambientAuth` jobs (Claude/Codex only) to the host
+When you add per-job state, put it in one of those two places. `~/.pi/agent` is only READ (the
+seed a per-pass directory takes the image's extensions from), and `~/.config/rpiv-web-tools`
+(the provider NAME only, a deployment-level fact) remains HOME-global, which is fine only because
+the Pi harness never runs natively (the native router sends `ambientAuth` jobs (Claude/Codex only) to the host
 process and everything else to a container).
 
 ## No secrets in the image

@@ -259,7 +259,7 @@ carries it; "done" means that slice has landed.
 | Checklist granularity ((workspace, key) sharing, unscoped list)                   | Standing decisions, unchanged |
 | Env-fallback default `true`; `allowKeys` unset                                    | Tracked elsewhere (below)     |
 | No MCP resources/prompts/elicitation/progress notifications                       | Deferred (below)              |
-| Pi has no MCP client                                                              | Standing non-goal (ADR 0029)  |
+| Pi has no MCP client                                                              | Closed: Pi 0.99 built-in MCP  |
 
 From the 2026-08-05 external-servers review (dispositions follow the same vocabulary):
 

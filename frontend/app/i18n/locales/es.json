@@ -1678,7 +1678,7 @@
         "allTools": "Todas las herramientas que expone este servidor.",
         "narrowed": "Limitado a: {tools}",
         "reason": {
-          "harnessUnsupported": "no estuvo disponible: la CLI del agente de este paso no tiene cliente MCP.",
+          "harnessUnsupported": "no estuvo disponible: la CLI del agente de este paso no pudo ofrecerlo.",
           "transportUnsupported": "no estuvo disponible: la CLI del agente de este paso no puede alcanzar este tipo de servidor.",
           "missingSecret": "no estuvo disponible: falta en este tablero una credencial que necesita.",
           "reservedSecret": "no estuvo disponible: pide una variable que pertenece a la configuración de la plataforma, así que hay que cambiar la declaración.",
@@ -1690,7 +1690,7 @@
           "unknown": "no estuvo disponible ({reason})."
         },
         "remedy": {
-          "harnessUnsupported": "Ejecuta el paso en una CLI de agente que hable MCP, o amplía la lista de harnesses del servidor. Una ejecución de Codex con tu propia sesión de la CLI no tiene dónde guardar el servidor durante esa ejecución, así que usa una credencial de la plataforma.",
+          "harnessUnsupported": "Amplía la lista de harnesses del servidor para incluir la CLI del agente de este paso, o ejecuta el paso en una que figure en ella. A un paso de Pi registrado antes de que Pi pudiera servir servidores de herramientas le basta con volver a ejecutarse en una imagen de runner actual. Una ejecución de Codex con tu propia sesión de la CLI no tiene dónde guardar el servidor durante esa ejecución, así que usa una credencial de la plataforma.",
           "transportUnsupported": "Declara un servidor stdio para él, o ejecuta el paso en una CLI de agente que alcance servidores HTTP.",
           "missingSecret": "Configura la credencial que nombra, ya sea como variable de entorno del despliegue o en las credenciales de capacidades, en la ventana de Infraestructura.",
           "reservedSecret": "Cambia la declaración para que pida otra clave; definir esa variable es justo lo que no ayudará.",

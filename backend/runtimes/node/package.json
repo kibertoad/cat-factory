@@ -60,16 +60,16 @@
     "@cat-factory/spend": "workspace:*",
     "@hono/node-server": "^2.1.1",
     "drizzle-orm": "1.0.0-rc.4",
-    "hono": "^4.13.8",
+    "hono": "^4.13.10",
     "layered-loader": "^17.0.0",
     "pg": "^8.23.0",
-    "pg-boss": "^12.33.6",
+    "pg-boss": "^12.35.0",
     "toad-scheduler": "^4.2.0",
-    "ws": "^8.21.3"
+    "ws": "^8.22.0"
   },
   "devDependencies": {
     "@cat-factory/conformance": "workspace:*",
-    "@types/node": "^26.6.2",
+    "@types/node": "^26.6.3",
     "@types/pg": "^8.23.1",
     "@types/ws": "^8.18.1",
     "drizzle-kit": "1.0.0-rc.4",

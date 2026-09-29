@@ -169,7 +169,7 @@ newBranch?, pr?, serviceDirectory? }`). A per-repo token is optional (defaults t
   (owner-prefixed on a name collision); the agent's cwd is the workspace root. The
   layout is told to the agent twice: a generated "Multi-repo workspace" prompt section
   (which repo is primary; each peer's role from its connection `description`) and the
-  global `~/.pi/agent/AGENTS.md` written outside the checkouts.
+  `AGENTS.md` of Pi's per-pass config directory, written outside the checkouts.
 - **Push/PR fan-out**: the SAME branch name `cat-factory/<blockId>` in every repo;
   commit/push/PR only for DIRTY repos; `noChangesIsError` applies to the union. The
   `git.ts` helpers gain an explicit `dir` parameter.

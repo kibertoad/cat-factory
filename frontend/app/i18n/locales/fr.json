@@ -1678,7 +1678,7 @@
         "allTools": "Tous les outils exposés par ce serveur.",
         "narrowed": "Limité à : {tools}",
         "reason": {
-          "harnessUnsupported": "n'était pas disponible : la CLI d'agent de cette étape n'a pas de client MCP.",
+          "harnessUnsupported": "n'était pas disponible : la CLI d'agent de cette étape ne pouvait pas le fournir.",
           "transportUnsupported": "n'était pas disponible : la CLI d'agent de cette étape ne peut pas atteindre ce type de serveur.",
           "missingSecret": "n'était pas disponible : un identifiant dont il a besoin n'est pas renseigné pour ce tableau.",
           "reservedSecret": "n'était pas disponible : il demande une variable qui appartient à la configuration de la plateforme, la déclaration doit donc changer.",
@@ -1690,7 +1690,7 @@
           "unknown": "n'était pas disponible ({reason})."
         },
         "remedy": {
-          "harnessUnsupported": "Exécutez l’étape sur une CLI d’agent qui parle MCP, ou élargissez la liste de harnesses du serveur. Une exécution Codex connectée avec votre propre session CLI n’a nulle part où conserver le serveur le temps de l’exécution : utilisez plutôt un identifiant de la plateforme.",
+          "harnessUnsupported": "Élargissez la liste de harnesses du serveur pour y inclure la CLI d’agent de cette étape, ou exécutez l’étape sur une CLI qui y figure. Une étape Pi enregistrée avant que Pi puisse servir des serveurs d’outils doit seulement être relancée sur une image de runner à jour. Une exécution Codex connectée avec votre propre session CLI n’a nulle part où conserver le serveur le temps de l’exécution : utilisez plutôt un identifiant de la plateforme.",
           "transportUnsupported": "Déclarez un serveur stdio à sa place, ou exécutez l’étape sur une CLI d’agent qui atteint les serveurs HTTP.",
           "missingSecret": "Renseignez l’identifiant qu’il nomme, soit comme variable d’environnement du déploiement, soit dans les identifiants de capacités, depuis la fenêtre Infrastructure.",
           "reservedSecret": "Modifiez la déclaration pour demander une autre clé ; définir cette variable est précisément ce qui n’aidera pas.",

@@ -2213,7 +2213,7 @@
         "allTools": "Alle Tools, die dieser Server bereitstellt.",
         "narrowed": "Eingeschränkt auf: {tools}",
         "reason": {
-          "harnessUnsupported": "war nicht verfügbar: die Agenten-CLI dieses Schritts hat keinen MCP-Client.",
+          "harnessUnsupported": "war nicht verfügbar: die Agenten-CLI dieses Schritts konnte ihn nicht bereitstellen.",
           "transportUnsupported": "war nicht verfügbar: die Agenten-CLI dieses Schritts erreicht Server dieser Art nicht.",
           "missingSecret": "war nicht verfügbar: eine benötigte Zugangsinformation ist für dieses Board nicht hinterlegt.",
           "reservedSecret": "war nicht verfügbar: er verlangt eine Variable, die zur Konfiguration der Plattform gehört; die Deklaration muss geändert werden.",
@@ -2225,7 +2225,7 @@
           "unknown": "war nicht verfügbar ({reason})."
         },
         "remedy": {
-          "harnessUnsupported": "Führen Sie den Schritt auf einer Agenten-CLI mit MCP aus, oder erweitern Sie die Harness-Liste des Servers. Ein Codex-Lauf mit Ihrer eigenen CLI-Anmeldung hat keinen laufspezifischen Ablageort für den Server; verwenden Sie stattdessen Zugangsdaten der Plattform.",
+          "harnessUnsupported": "Erweitern Sie die Harness-Liste des Servers um die Agenten-CLI dieses Schritts, oder führen Sie den Schritt auf einer CLI aus, die dort aufgeführt ist. Ein Pi-Schritt, der aufgezeichnet wurde, bevor Pi Tool-Server bedienen konnte, muss nur auf einem aktuellen Runner-Image erneut ausgeführt werden. Ein Codex-Lauf mit Ihrer eigenen CLI-Anmeldung hat keinen laufspezifischen Ablageort für den Server; verwenden Sie stattdessen Zugangsdaten der Plattform.",
           "transportUnsupported": "Deklarieren Sie dafür einen stdio-Server, oder führen Sie den Schritt auf einer Agenten-CLI aus, die HTTP-Server erreicht.",
           "missingSecret": "Hinterlegen Sie die genannte Zugangsinformation entweder als Umgebungsvariable des Deployments oder im Infrastruktur-Fenster unter den Capability-Zugangsdaten.",
           "reservedSecret": "Ändern Sie die Deklaration auf einen anderen Schlüssel; das Setzen dieser Variablen hilft gerade nicht.",
