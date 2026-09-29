@@ -751,6 +751,46 @@ export const MODEL_CATALOG: SelectableModel[] = [
     },
   },
   {
+    id: 'claude-sonnet-5-5',
+    family: 'claude',
+    label: 'Claude Sonnet 5.5',
+    description:
+      "Anthropic's newest Sonnet: a clear step up from Sonnet 5 on coding at the same price, " +
+      'with a 1M-token context. Run via Claude Code on your Claude subscription, on AWS ' +
+      'Bedrock in your own account, or pay-as-you-go through OpenRouter (billed at Anthropic ' +
+      'rates).',
+    // Released 2026-09-28 and on Bedrock the same day, as Opus 5.5 was: the model card names
+    // `anthropic.claude-sonnet-5-5` on `bedrock-runtime` with the 1M window and image input, so
+    // all three arms are declared against verified routes. Its own entry beside `claude-sonnet`
+    // rather than a re-point of it, so a block pinned to Sonnet 5 keeps running Sonnet 5.
+    bedrock: {
+      baseModelId: 'anthropic.claude-sonnet-5-5',
+      contextTokens: 1_000_000,
+      acceptsImages: true,
+    },
+    openrouter: {
+      ref: {
+        // DOTTED on the gateway, dashed on Anthropic's API, as with Fable 5.1 above.
+        provider: 'openrouter',
+        model: 'anthropic/claude-sonnet-5.5',
+        contextTokens: 1_000_000,
+        acceptsImages: true,
+      },
+      keyEnv: 'OPENROUTER_API_KEY',
+      providerLabel: 'OpenRouter',
+    },
+    subscription: {
+      ref: {
+        provider: 'anthropic',
+        model: 'claude-sonnet-5-5',
+        harness: 'claude-code',
+        contextTokens: 1_000_000,
+        acceptsImages: true,
+      },
+      vendor: 'claude',
+    },
+  },
+  {
     id: 'claude-sonnet',
     family: 'claude',
     label: 'Claude Sonnet 5',
@@ -827,6 +867,41 @@ export const MODEL_CATALOG: SelectableModel[] = [
       ref: {
         provider: 'openai',
         model: 'gpt-6-astra',
+        harness: 'codex',
+        contextTokens: 1_050_000,
+        acceptsImages: true,
+      },
+      vendor: 'codex',
+    },
+  },
+  // GPT-6.1 Sol (2026-09-29) succeeds GPT-6 Sol at the same rates. Codex resolves the slug only
+  // from 0.159.0 onward, the same `Unknown model` trap as the floors noted above and below.
+  // OpenRouter's `openai/gpt-6.1-sol-pro` is the same model with `reasoning.mode` set to `pro` at
+  // identical pricing, so it gets no entry, for the reason the Astra note gives. No `bedrock`
+  // arm: no published card names a Bedrock id. Its own entry beside `gpt-6-sol` rather than a
+  // re-point of it, so a block pinned to GPT-6 Sol keeps running GPT-6 Sol.
+  {
+    id: 'gpt-6.1-sol',
+    family: 'openai',
+    label: 'GPT-6.1 Sol',
+    description:
+      "OpenAI's newest high-end GPT-6 tier for demanding coding and research, succeeding GPT-6 " +
+      'Sol at the same price: a 1.05M window that reads images. Run via Codex on your ChatGPT ' +
+      'subscription, or pay-as-you-go through OpenRouter (billed at OpenAI rates).',
+    openrouter: {
+      ref: {
+        provider: 'openrouter',
+        model: 'openai/gpt-6.1-sol',
+        contextTokens: 1_050_000,
+        acceptsImages: true,
+      },
+      keyEnv: 'OPENROUTER_API_KEY',
+      providerLabel: 'OpenRouter',
+    },
+    subscription: {
+      ref: {
+        provider: 'openai',
+        model: 'gpt-6.1-sol',
         harness: 'codex',
         contextTokens: 1_050_000,
         acceptsImages: true,
