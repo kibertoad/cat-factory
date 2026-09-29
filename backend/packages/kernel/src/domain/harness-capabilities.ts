@@ -56,11 +56,37 @@ export type HarnessBodyCapability =
 /** Operator-facing prose for each capability: what the body carried, in words. */
 const HARNESS_BODY_CAPABILITY_LABELS: Record<HarnessBodyCapability, string> = {
   mcpServers: 'tool servers (MCP)',
-  piMcpServers: 'tool servers (MCP) on the Pi harness',
+  piMcpServers: 'tool servers (MCP) on the Pi harness (executor image 1.162.0 or newer)',
   skills: 'skills',
   designImages: 'design pictures',
   generateImages: "the agent CLI's own image generation",
 }
+
+/**
+ * The body field each capability is carried in. Every member is its own field but one:
+ * `piMcpServers` is `mcpServers` on a body the harness runs on Pi (see
+ * {@link HARNESS_BODY_CAPABILITY_CARRIED}). Stated once here so the harness's conformity test, which
+ * proves the image parses each capability's field, reads the mapping rather than restating it.
+ */
+export const HARNESS_BODY_CAPABILITY_FIELDS: Readonly<Record<HarnessBodyCapability, string>> = {
+  mcpServers: 'mcpServers',
+  piMcpServers: 'mcpServers',
+  skills: 'skills',
+  designImages: 'designImages',
+  generateImages: 'generateImages',
+}
+
+/**
+ * Capabilities that arrived AFTER the handshake itself, so an image that reports no list at all
+ * cannot serve them: it predates the handshake, and with it the capability. For these, "no report"
+ * is not the `unknown` it is for the older members but a known gap, and the dispatch refuses rather
+ * than run blind. The one other way to report nothing (a pool control plane that does not forward
+ * the harness's acceptance) is refused too, which is the safe side: that pool cannot show it runs
+ * an image new enough, and the refusal names the image it needs.
+ */
+const HARNESS_BODY_CAPABILITIES_NEWER_THAN_HANDSHAKE: ReadonlySet<HarnessBodyCapability> = new Set([
+  'piMcpServers',
+])
 
 /** Every capability the handshake covers. Derived, so it cannot drift from the union. */
 export const HARNESS_BODY_CAPABILITIES = Object.keys(
@@ -97,6 +123,16 @@ export function parseHarnessBodyCapabilities(value: unknown): HarnessBodyCapabil
   return value.filter(isHarnessBodyCapability)
 }
 
+/**
+ * Whether the harness runs this body on Pi. Mirrors the harness's own parser (`parseHarnessAuth`),
+ * which runs every body whose `harness` is neither subscription CLI on Pi, an absent or
+ * unrecognised value included. A narrower test here would let such a body skip the Pi half of the
+ * handshake while the image runs it on Pi all the same.
+ */
+function runsOnPi(body: Readonly<Record<string, unknown>>): boolean {
+  return body.harness !== 'claude-code' && body.harness !== 'codex'
+}
+
 /** A non-empty array: the wire shape of every capability that is simply a list. */
 function isPopulatedList(value: unknown): boolean {
   return Array.isArray(value) && value.length > 0
@@ -119,15 +155,14 @@ function isPopulatedList(value: unknown): boolean {
  * client parsed `mcpServers` (and reports it) because the subscription CLIs serve it, while its Pi
  * path dropped the field on the floor. So "the image parses `mcpServers`" was never the promise a
  * Pi dispatch makes; "the image wires them into Pi" is, and only the harness field says which CLI
- * the body is for. An absent `harness` is Pi, as it is to the harness's own parser.
+ * the body is for, read the way the harness's own parser reads it ({@link runsOnPi}).
  */
 const HARNESS_BODY_CAPABILITY_CARRIED: Record<
   HarnessBodyCapability,
   (body: Readonly<Record<string, unknown>>) => boolean
 > = {
   mcpServers: (body) => isPopulatedList(body.mcpServers),
-  piMcpServers: (body) =>
-    (body.harness === undefined || body.harness === 'pi') && isPopulatedList(body.mcpServers),
+  piMcpServers: (body) => runsOnPi(body) && isPopulatedList(body.mcpServers),
   skills: (body) => isPopulatedList(body.skills),
   // A manifest with no files promises the agent nothing, exactly as an empty server list does.
   designImages: ({ designImages: value }) =>
@@ -178,7 +213,9 @@ export function readRunnerDispatchAck(body: unknown): RunnerDispatchAck | undefi
  * - `supported`: the harness named every one of them. Nothing to say.
  * - `unknown`: the harness reported no list. The dispatch may be fine (any image at or past the
  *   version that added the capability serves it) or blind, and nothing here can tell which. It is
- *   reported as the gap in OBSERVABILITY it is, never as a fault of the run.
+ *   reported as the gap in OBSERVABILITY it is, never as a fault of the run. Except for a
+ *   capability newer than the handshake ({@link HARNESS_BODY_CAPABILITIES_NEWER_THAN_HANDSHAKE}):
+ *   an image reporting no list cannot serve one, so that capability is `unsupported`.
  * - `unsupported`: the harness reported a list and these capabilities are not in it. The prompt
  *   is already promising them, so this run cannot be honest whatever happens next.
  *
@@ -195,7 +232,12 @@ export function resolveHarnessCapabilitySupport(
   reported: readonly HarnessBodyCapability[] | undefined,
 ): HarnessCapabilitySupport {
   if (required.length === 0) return { kind: 'supported' }
-  if (!reported) return { kind: 'unknown', required: [...required] }
+  if (!reported) {
+    const missing = required.filter((c) => HARNESS_BODY_CAPABILITIES_NEWER_THAN_HANDSHAKE.has(c))
+    return missing.length
+      ? { kind: 'unsupported', missing }
+      : { kind: 'unknown', required: [...required] }
+  }
   const missing = required.filter((capability) => !reported.includes(capability))
   return missing.length ? { kind: 'unsupported', missing } : { kind: 'supported' }
 }

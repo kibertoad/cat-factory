@@ -1811,7 +1811,7 @@
           "unknown": "was not available ({reason})."
         },
         "remedy": {
-          "harnessUnsupported": "Widen the server's harness list to include the agent CLI this step ran on, or run the step on one it lists. A Codex run signed in with your own CLI login has nowhere per-run to keep the server, so use a platform credential instead.",
+          "harnessUnsupported": "Widen the server's harness list to include the agent CLI this step ran on, or run the step on one it lists. A Pi step recorded before Pi could serve tool servers needs only a rerun on a current runner image. A Codex run signed in with your own CLI login has nowhere per-run to keep the server, so use a platform credential instead.",
           "transportUnsupported": "Declare a stdio server for it, or run the step on an agent CLI that reaches HTTP servers.",
           "missingSecret": "Set the credential it names, either as a deployment environment variable or under capability credentials in the Infrastructure window.",
           "reservedSecret": "Change the declaration to ask for another key; setting that variable is exactly what will not help.",

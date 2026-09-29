@@ -1690,7 +1690,7 @@
           "unknown": "kullanılamadı ({reason})."
         },
         "remedy": {
-          "harnessUnsupported": "Sunucunun harness listesini bu adımın çalıştığı ajan CLI'sini içerecek şekilde genişletin ya da adımı listedeki bir CLI'de çalıştırın. Kendi CLI oturumunuzla yapılan bir Codex çalıştırmasında sunucuyu o çalıştırmaya özel tutacak bir yer yoktur; bunun yerine bir platform kimlik bilgisi kullanın.",
+          "harnessUnsupported": "Sunucunun harness listesini bu adımın çalıştığı ajan CLI'sini içerecek şekilde genişletin ya da adımı listedeki bir CLI'de çalıştırın. Pi araç sunucularını sunabilmeden önce kaydedilmiş bir Pi adımının yalnızca güncel bir runner imajında yeniden çalıştırılması yeterlidir. Kendi CLI oturumunuzla yapılan bir Codex çalıştırmasında sunucuyu o çalıştırmaya özel tutacak bir yer yoktur; bunun yerine bir platform kimlik bilgisi kullanın.",
           "transportUnsupported": "Onun için bir stdio sunucusu bildirin ya da adımı HTTP sunucularına erişen bir ajan CLI'sinde çalıştırın.",
           "missingSecret": "Adı geçen kimlik bilgisini dağıtımın ortam değişkeni olarak ya da Altyapı penceresindeki yetenek kimlik bilgilerinde ayarlayın.",
           "reservedSecret": "Bildirimi başka bir anahtar isteyecek şekilde değiştirin; o değişkeni ayarlamak tam da yardımcı olmayacak şeydir.",

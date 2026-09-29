@@ -2225,7 +2225,7 @@
           "unknown": "non era disponibile ({reason})."
         },
         "remedy": {
-          "harnessUnsupported": "Amplia l'elenco di harness del server per includere la CLI dell'agente di questo passo, oppure esegui il passo su una CLI presente nell'elenco. Un'esecuzione Codex con il tuo login della CLI non ha dove tenere il server per quell'esecuzione, quindi usa una credenziale della piattaforma.",
+          "harnessUnsupported": "Amplia l'elenco di harness del server per includere la CLI dell'agente di questo passo, oppure esegui il passo su una CLI presente nell'elenco. Un passo Pi registrato prima che Pi potesse servire i server di strumenti richiede solo una nuova esecuzione su un'immagine runner aggiornata. Un'esecuzione Codex con il tuo login della CLI non ha dove tenere il server per quell'esecuzione, quindi usa una credenziale della piattaforma.",
           "transportUnsupported": "Dichiara un server stdio al suo posto, oppure esegui il passo su una CLI dell'agente che raggiunge i server HTTP.",
           "missingSecret": "Imposta la credenziale che indica, come variabile d'ambiente del deployment oppure nelle credenziali delle capability, dalla finestra Infrastruttura.",
           "reservedSecret": "Cambia la dichiarazione perché chieda un'altra chiave; impostare quella variabile è proprio ciò che non aiuterà.",

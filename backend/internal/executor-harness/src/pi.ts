@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process'
+import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process'
 import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -34,7 +34,7 @@ import {
 import { NO_TOOL_WINDOW, type ToolProgressWindow } from './tool-silence.js'
 
 // Drives the Pi coding-agent CLI. Pi is pointed at the Worker's OpenAI-compatible
-// proxy via a custom provider in ~/.pi/agent/models.json, authenticated with the
+// proxy via a custom provider in its config dir's models.json, authenticated with the
 // per-job session token (interpolated from $PI_PROXY_TOKEN) — so no provider key
 // ever lives in the image or in Pi's config on disk.
 
@@ -107,25 +107,16 @@ export function phasedProxyBaseUrl(
   return `${proxyBaseUrl.replace(/\/+$/, '')}/phase/${normalized}`
 }
 
-/**
- * Pi's global config directory, which every per-run file the harness hands Pi lives in (the
- * provider config, the composed AGENTS.md, the tool-server config). HOME-global, which is safe
- * only because Pi runs in a container and never on the native transport (see the executor
- * README's per-job-state section).
- */
-export function piAgentDir(): string {
-  return join(homedir(), '.pi', 'agent')
-}
-
 /** Write the Pi provider config that routes all model calls through the proxy. */
 export async function writePiModelsConfig(opts: {
+  /** This pass's Pi config directory (`createPiAgentDir`). */
+  agentDir: string
   model: string
   proxyBaseUrl: string
   /** Output-token ceiling Pi may request per completion. Defaults to PI_MAX_OUTPUT_TOKENS. */
   maxTokens?: number
 }): Promise<string> {
-  const dir = piAgentDir()
-  await mkdir(dir, { recursive: true })
+  const dir = opts.agentDir
   const config = {
     providers: {
       proxy: {
@@ -204,22 +195,24 @@ staleness checks. Treat the blueprint as orientation, not a task list.`
 // paths consistent. (A non-spec-aware kind is deliberately not told to read the spec.)
 
 /**
- * Write the composed system prompt as Pi's GLOBAL agent context
- * (`~/.pi/agent/AGENTS.md`), which Pi reads automatically and concatenates with
- * any `AGENTS.md`/`CLAUDE.md` the repo itself ships (global file first, then the
+ * Write the composed system prompt as the agent context of this pass's Pi config
+ * directory (`<agentDir>/AGENTS.md`), which Pi reads automatically and concatenates with
+ * any `AGENTS.md`/`CLAUDE.md` the repo itself ships (config-dir file first, then the
  * ones walked up from the run cwd). Deliberately OUTSIDE the checkout (the same
- * `~/.pi/agent` dir `writePiModelsConfig` already uses) so the harness's
- * instructions never enter the git working tree — they can't be committed into a
- * PR and they never clobber a repo's own committed `AGENTS.md`.
+ * directory `writePiModelsConfig` uses) so the harness's instructions never enter the
+ * git working tree — they can't be committed into a PR and they never clobber a repo's
+ * own committed `AGENTS.md`.
  *
- * This relies on Pi's context-file resolution: the global `~/.pi/agent/AGENTS.md`
- * is loaded before the project-trust decision, so it applies in non-interactive
- * (`-p`) runs without a trust prompt. That contract is pinned by `PI_VERSION` in
- * the Dockerfile — revisit this if that bump changes context-file resolution.
+ * This relies on Pi's context-file resolution: the config dir's `AGENTS.md` is not
+ * gated by project trust, so it applies to a run that trusts no project resource
+ * (`--no-approve`, see `runPi`). That contract is pinned by `PI_VERSION` in the
+ * Dockerfile — revisit this if that bump changes context-file resolution.
  */
 export async function writeAgentsContext(
   systemPrompt: string,
   opts: {
+    /** This pass's Pi config directory (`createPiAgentDir`). */
+    agentDir: string
     webSearch?: boolean
     guidance?: string
     serviceDirectory?: string
@@ -238,10 +231,9 @@ export async function writeAgentsContext(
      * which is the normal case: only a capturing kind is sent references at all.
      */
     referenceGuidance?: string
-  } = {},
+  },
 ): Promise<void> {
-  const dir = piAgentDir()
-  await mkdir(dir, { recursive: true })
+  const dir = opts.agentDir
   // Only nudge towards the web tools when they're actually configured, so an agent is
   // never told about tools that would error (no provider key) the moment it calls them.
   // `guidance` is the backend's per-kind nudge; fall back to the generic blurb for jobs
@@ -848,8 +840,52 @@ export function parseTodoProgress(event: Record<string, unknown>): TodoProgress 
 // `progress-guard.ts` — it is shared with the claude-code runner, so it is no longer Pi's.
 
 /**
+ * Start Pi for {@link runPi} and hand it the prompt. The prompt goes over stdin, then stdin is
+ * closed so print mode sees EOF and runs; see `runPi` for the injection rationale and the
+ * `--no-approve` trust decision.
+ */
+function spawnPi(opts: {
+  cwd: string
+  agentDir: string
+  model: string
+  userPrompt: string
+  sessionToken: string
+  extraEnv?: Record<string, string>
+}): ChildProcessWithoutNullStreams {
+  const child = spawn(
+    'pi',
+    ['-p', '--mode', 'json', '--model', `proxy/${opts.model}`, '--no-approve'],
+    {
+      cwd: opts.cwd,
+      env: agentChildEnv(opts.extraEnv, {
+        PI_PROXY_TOKEN: opts.sessionToken,
+        PI_CODING_AGENT_DIR: opts.agentDir,
+      }),
+      // stdin is piped (not 'ignore') so the prompt is delivered out-of-band rather than on argv.
+      stdio: ['pipe', 'pipe', 'pipe'],
+      // Own process group (POSIX) so killChildProcess reaps Pi's grandchildren too.
+      detached: spawnDetached,
+    },
+  )
+  // Ignore stdin errors (e.g. EPIPE if Pi exits before reading): the caller's 'close'/'error'
+  // handlers own the actual failure reporting.
+  child.stdin.on('error', () => {})
+  child.stdin.end(opts.userPrompt)
+  return child
+}
+
+/**
  * Run Pi non-interactively against `cwd` and return its assistant summary. Uses
- * print + JSON mode (`-p --mode json`) with `--approve` so it runs unattended.
+ * print + JSON mode (`-p --mode json`) against the pass's own config directory
+ * (`PI_CODING_AGENT_DIR`, see `createPiAgentDir`).
+ *
+ * `--no-approve` refuses PROJECT TRUST for the checkout, which is the untrusted input here. A
+ * trusted project has Pi load its `.pi/` resources: settings, extensions (code run inside Pi),
+ * skills, prompts, a `SYSTEM.md`, and its own `mcp.json`, whose stdio servers Pi starts at launch
+ * beside the ones the backend declared. Measured on Pi 0.99.1: under `--approve` a committed
+ * `.pi/mcp.json` server started and its tools reached the model; under `--no-approve` it did not.
+ * This is the Pi counterpart of claude-code's `--strict-mcp-config`, and wider, because Pi has no
+ * narrower switch. The repo's own `AGENTS.md` is not trust-gated and is still read.
  *
  * The (untrusted) prompt is fed over stdin, never as an argv positional, so a
  * prompt beginning with `-`/`--` can't be mis-parsed as a Pi CLI flag (Pi has no
@@ -860,6 +896,8 @@ export function parseTodoProgress(event: Record<string, unknown>): TodoProgress 
  */
 export function runPi(opts: {
   cwd: string
+  /** This pass's Pi config directory (`createPiAgentDir`), holding everything staged for it. */
+  agentDir: string
   model: string
   userPrompt: string
   sessionToken: string
@@ -913,24 +951,7 @@ export function runPi(opts: {
       reject(new Error('pi aborted before start'))
       return
     }
-    const child = spawn(
-      'pi',
-      ['-p', '--mode', 'json', '--model', `proxy/${opts.model}`, '--approve'],
-      {
-        cwd: opts.cwd,
-        env: agentChildEnv(opts.extraEnv, { PI_PROXY_TOKEN: opts.sessionToken }),
-        // stdin is piped (not 'ignore') so the prompt is delivered out-of-band
-        // rather than on argv — see the function doc for the injection rationale.
-        stdio: ['pipe', 'pipe', 'pipe'],
-        // Own process group (POSIX) so killChildProcess reaps Pi's grandchildren too.
-        detached: spawnDetached,
-      },
-    )
-    // Hand Pi the prompt over stdin, then close it so print mode sees EOF and
-    // runs. Ignore stdin errors (e.g. EPIPE if Pi exits before reading): the
-    // 'close'/'error' handlers below own the actual failure reporting.
-    child.stdin.on('error', () => {})
-    child.stdin.end(opts.userPrompt)
+    const child = spawnPi(opts)
     // The close-of-run answers (summary, stats, diagnostics, terminal error), FOLDED as the
     // records stream instead of re-parsing the whole of stdout two more times at close: those
     // passes were O(entire output) on the event loop the watchdog timers and the poll endpoints

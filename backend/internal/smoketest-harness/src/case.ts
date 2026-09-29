@@ -13,6 +13,7 @@ import {
 } from '@cat-factory/benchmark-harness'
 import {
   cloneRepo,
+  createPiAgentDir,
   type ProgressGuardLimits,
   runPi,
   writeAgentsContext,
@@ -100,12 +101,12 @@ export async function runCase(opts: RunCaseOptions): Promise<RunCaseOutput> {
   let error: string | undefined
   let filesChanged = 0
 
-  // Like the benchmark harness: writeAgentsContext / writePiModelsConfig write Pi's
-  // GLOBAL config under $HOME/.pi/agent, and `pi` reads it from there. Point both at
-  // a throwaway HOME for the run so we never clobber the developer's own ~/.pi/agent.
+  // Like the benchmark harness: Pi's config (AGENTS.md, models.json) goes into a throwaway
+  // config dir made for the run and handed to `pi` through `runPi`, so the developer's own
+  // ~/.pi/agent is never read or written. Unseeded, so their personal Pi setup stays out of it.
   const dir = await mkdtemp(join(tmpdir(), 'cat-smoke-repo-'))
-  const piHome = await mkdtemp(join(tmpdir(), 'cat-smoke-pihome-'))
-  const realHome = process.env.HOME
+  const piAgentDir = await createPiAgentDir()
+  const agentDir = piAgentDir.path
   const start = performance.now()
   try {
     await cloneRepo({
@@ -114,13 +115,13 @@ export async function runCase(opts: RunCaseOptions): Promise<RunCaseOutput> {
       dir,
       signal: opts.signal,
     })
-    process.env.HOME = piHome
-    await writeAgentsContext(system)
-    await writePiModelsConfig({ model: ref.model, proxyBaseUrl: endpoint.baseUrl })
+    await writeAgentsContext(system, { agentDir })
+    await writePiModelsConfig({ agentDir, model: ref.model, proxyBaseUrl: endpoint.baseUrl })
 
     try {
       await runPi({
         cwd: dir,
+        agentDir,
         model: ref.model,
         userPrompt: user,
         sessionToken,
@@ -145,10 +146,8 @@ export async function runCase(opts: RunCaseOptions): Promise<RunCaseOutput> {
       // Clone may have failed before a working tree existed; leave diff empty.
     }
   } finally {
-    if (realHome === undefined) delete process.env.HOME
-    else process.env.HOME = realHome
     await rm(dir, { recursive: true, force: true })
-    await rm(piHome, { recursive: true, force: true })
+    await piAgentDir.dispose()
   }
 
   const durationMs = Math.round(performance.now() - start)

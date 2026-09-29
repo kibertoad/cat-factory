@@ -15,10 +15,16 @@ list is enforced rather than advisory.
 reported the `mcpServers` capability (for the subscription CLIs) while dropping a Pi run's servers,
 so the handshake could not tell a Pi dispatch it was about to run blind. A Pi dispatch carrying tool
 servers now requires the new `piMcpServers` body capability, and an image that reports a list
-without it REFUSES the run at dispatch, naming the runner image as the fix. Move the pool to
-`cat-factory-executor:1.162.0`, or narrow the affected servers' `harnesses` to `claude-code` /
-`codex` until you do. `HarnessBodyCapability` gains the `piMcpServers` member.
+without it REFUSES the run at dispatch, naming the runner image as the fix. Unlike the older
+capabilities, an image (or a runner pool control plane) that reports NO list is refused for it too
+rather than treated as unknown: every such image predates Pi's MCP client, so that run would be
+blind for certain. Move the pool to `cat-factory-executor:1.162.0`, or narrow the affected servers'
+`harnesses` to `claude-code` / `codex` until you do. `HarnessBodyCapability` gains the
+`piMcpServers` member, and `HARNESS_BODY_CAPABILITY_FIELDS` names the body field each member is
+carried in. A body whose `harness` is absent or unrecognised is treated as Pi, as the harness's own
+parser runs it.
 
-Boot validation no longer warns that a server narrowed to `['pi']` can never apply, and the step
-detail's `harness_unsupported` copy now names the causes that remain (a `harnesses` list that
-excludes the CLI, or an ambient Codex login) in every locale.
+Boot validation no longer warns that a server narrowed to `['pi']` can never apply. The step
+detail's `harness_unsupported` copy names every cause a persisted step can carry, in every locale:
+a `harnesses` list that excludes the CLI, an ambient Codex login, and a Pi step recorded before Pi
+could serve tool servers, which only needs a rerun on a current image.

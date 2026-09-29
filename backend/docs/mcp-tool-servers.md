@@ -175,17 +175,22 @@ the run context keeps them all.
 
 The backend composes one `mcpServers` job-body field; the harness renders it into the config each CLI
 reads (`agent-capabilities.ts`). Claude Code and Codex read a per-run file (`--mcp-config`, a per-run
-`CODEX_HOME`). Pi (0.99.0 onward) reads a global `mcp.json` in its config directory, and three
-properties of that file are what a change to `piMcpConfig` / `writePiMcpConfig` has to keep:
+`CODEX_HOME`). Pi (0.99.0 onward) reads the `mcp.json` in its config directory, which the harness
+makes per pass (`PI_CODING_AGENT_DIR`, `createPiAgentDir`), and four properties are what a change to
+`piMcpConfig` / `writePiMcpConfig` / `runPi` has to keep:
 
-- **Every `env` and `headers` value is a `${NAME}` placeholder**, resolved from Pi's child env. Pi
-  reads a value that starts with `!` as a shell command, and a resolved credential is an opaque
-  vendor string that may start with anything, so no literal value is ever written. A placeholder's
-  resolved value is taken literally (measured against Pi 0.99.1), and the credentials never reach
-  the disk. `command` and `args` stay literal, since Pi interpolates neither.
-- **The file is rewritten on every pass and removed when a job wires nothing.** It sits in the
-  container's home, and a warm-pool container serves one job after another, so a stale file would
-  start the previous job's servers with every placeholder resolving to nothing.
+- **Every `env` and `headers` value is written with Pi's literal escapes** (`$$` for `$`, a leading
+  `$!` for `!`). Pi reads a value that starts with `!` as a shell command and interpolates `$NAME`,
+  and a resolved credential is an opaque vendor string that may contain either (measured against
+  Pi 0.99.1: an escaped `!touch` reached the server as text and ran nothing). `command` and `args`
+  stay literal, since Pi interpolates neither.
+- **The values stay in the file, never in Pi's environment.** Pi starts a stdio server with its own
+  whole environment plus the declared one, so an env-borne credential would reach the agent's shell,
+  every repo script it runs and every OTHER server. The file is owner-only in a directory made for
+  the pass and removed after it, like the claude-code and codex per-run files.
+- **Pi runs with `--no-approve`, so the checkout's own `.pi/mcp.json` never loads.** A trusted
+  project has Pi start the servers it commits beside the declared ones (and load its extensions,
+  skills and `SYSTEM.md`); this is Pi's counterpart of claude-code's `--strict-mcp-config`.
 - **Exposure is `direct`, and `allowedTools` becomes `hidden` plus each permitted tool re-exposed
   by exact name.** So the prompt's `mcp__<server>__<tool>` names are the names the model is
   declared, and Pi is the one CLI where `allowedTools` is enforced rather than advisory.
@@ -216,8 +221,11 @@ There are THREE answers, not two, and which one a dispatch got decides what happ
 `piMcpServers` is the one capability that names no field of its own. Every image before Pi's MCP
 client parsed `mcpServers` for the subscription CLIs (and reports it) while its Pi path dropped the
 field, so a Pi dispatch carrying servers requires `piMcpServers`, which only an image that writes
-Pi's `mcp.json` reports. An older image therefore REFUSES such a run (the second row) rather than
-passing the check on the strength of a promise it keeps for other CLIs only.
+Pi's `mcp.json` reports, and only once its installed `pi --version` is 0.99.0 or newer (the Pi pin is
+a build ARG a pool can override). An older image therefore REFUSES such a run (the second row)
+rather than passing the check on the strength of a promise it keeps for other CLIs only. It is also
+the one capability the THIRD row refuses: it arrived after the handshake, so an image that reports
+no list predates it for certain (`HARNESS_BODY_CAPABILITIES_NEWER_THAN_HANDSHAKE`).
 
 The third row is why this is not a boolean. Every image between "tool servers landed" and "the
 handshake landed" serves them perfectly and reports nothing, so treating silence as a refusal

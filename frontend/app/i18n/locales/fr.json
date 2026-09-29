@@ -1690,7 +1690,7 @@
           "unknown": "n'était pas disponible ({reason})."
         },
         "remedy": {
-          "harnessUnsupported": "Élargissez la liste de harnesses du serveur pour y inclure la CLI d’agent de cette étape, ou exécutez l’étape sur une CLI qui y figure. Une exécution Codex connectée avec votre propre session CLI n’a nulle part où conserver le serveur le temps de l’exécution : utilisez plutôt un identifiant de la plateforme.",
+          "harnessUnsupported": "Élargissez la liste de harnesses du serveur pour y inclure la CLI d’agent de cette étape, ou exécutez l’étape sur une CLI qui y figure. Une étape Pi enregistrée avant que Pi puisse servir des serveurs d’outils doit seulement être relancée sur une image de runner à jour. Une exécution Codex connectée avec votre propre session CLI n’a nulle part où conserver le serveur le temps de l’exécution : utilisez plutôt un identifiant de la plateforme.",
           "transportUnsupported": "Déclarez un serveur stdio à sa place, ou exécutez l’étape sur une CLI d’agent qui atteint les serveurs HTTP.",
           "missingSecret": "Renseignez l’identifiant qu’il nomme, soit comme variable d’environnement du déploiement, soit dans les identifiants de capacités, depuis la fenêtre Infrastructure.",
           "reservedSecret": "Modifiez la déclaration pour demander une autre clé ; définir cette variable est précisément ce qui n’aidera pas.",

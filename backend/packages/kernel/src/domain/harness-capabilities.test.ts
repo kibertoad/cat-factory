@@ -96,14 +96,23 @@ describe('requiredHarnessCapabilities', () => {
 
   it('requires `piMcpServers` for tool servers on a Pi body, and only there', () => {
     // Every image before Pi's MCP client reported `mcpServers` while dropping a Pi run's servers,
-    // so on Pi the promise is the Pi-specific member. An absent `harness` is Pi, as the harness's
-    // own parser reads it.
+    // so on Pi the promise is the Pi-specific member. An absent or unrecognised `harness` is Pi,
+    // as the harness's own parser reads it: the image runs that body on Pi.
     const servers = [{ id: 'docs' }]
     expect(requiredHarnessCapabilities({ harness: 'pi', mcpServers: servers })).toEqual([
       'mcpServers',
       'piMcpServers',
     ])
     expect(requiredHarnessCapabilities({ mcpServers: servers })).toContain('piMcpServers')
+    for (const harness of [null, 'opencode', 42]) {
+      expect(
+        requiredHarnessCapabilities({ harness, mcpServers: servers }),
+        String(harness),
+      ).toContain('piMcpServers')
+    }
+    expect(requiredHarnessCapabilities({ harness: 'claude-code', mcpServers: servers })).toEqual([
+      'mcpServers',
+    ])
     expect(requiredHarnessCapabilities({ harness: 'codex', mcpServers: servers })).toEqual([
       'mcpServers',
     ])
@@ -140,6 +149,15 @@ describe('resolveHarnessCapabilitySupport', () => {
     expect(resolveHarnessCapabilitySupport(['mcpServers'], undefined)).toEqual({
       kind: 'unknown',
       required: ['mcpServers'],
+    })
+  })
+
+  it('is unsupported, not unknown, for a capability newer than the handshake', () => {
+    // An image reporting no list predates the handshake, so it predates Pi's MCP client too: the
+    // run would be blind for certain, not maybe. The older members keep their `unknown`.
+    expect(resolveHarnessCapabilitySupport(['mcpServers', 'piMcpServers'], undefined)).toEqual({
+      kind: 'unsupported',
+      missing: ['piMcpServers'],
     })
   })
 

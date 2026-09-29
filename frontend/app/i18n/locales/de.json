@@ -2225,7 +2225,7 @@
           "unknown": "war nicht verfügbar ({reason})."
         },
         "remedy": {
-          "harnessUnsupported": "Erweitern Sie die Harness-Liste des Servers um die Agenten-CLI dieses Schritts, oder führen Sie den Schritt auf einer CLI aus, die dort aufgeführt ist. Ein Codex-Lauf mit Ihrer eigenen CLI-Anmeldung hat keinen laufspezifischen Ablageort für den Server; verwenden Sie stattdessen Zugangsdaten der Plattform.",
+          "harnessUnsupported": "Erweitern Sie die Harness-Liste des Servers um die Agenten-CLI dieses Schritts, oder führen Sie den Schritt auf einer CLI aus, die dort aufgeführt ist. Ein Pi-Schritt, der aufgezeichnet wurde, bevor Pi Tool-Server bedienen konnte, muss nur auf einem aktuellen Runner-Image erneut ausgeführt werden. Ein Codex-Lauf mit Ihrer eigenen CLI-Anmeldung hat keinen laufspezifischen Ablageort für den Server; verwenden Sie stattdessen Zugangsdaten der Plattform.",
           "transportUnsupported": "Deklarieren Sie dafür einen stdio-Server, oder führen Sie den Schritt auf einer Agenten-CLI aus, die HTTP-Server erreicht.",
           "missingSecret": "Hinterlegen Sie die genannte Zugangsinformation entweder als Umgebungsvariable des Deployments oder im Infrastruktur-Fenster unter den Capability-Zugangsdaten.",
           "reservedSecret": "Ändern Sie die Deklaration auf einen anderen Schlüssel; das Setzen dieser Variablen hilft gerade nicht.",

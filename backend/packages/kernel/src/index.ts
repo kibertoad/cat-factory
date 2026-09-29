@@ -714,6 +714,7 @@ export {
 // the three-state answer a dispatch draws from that. See `domain/harness-capabilities.ts`.
 export {
   HARNESS_BODY_CAPABILITIES,
+  HARNESS_BODY_CAPABILITY_FIELDS,
   type BlindJobStopOutcome,
   type HarnessBodyCapability,
   type HarnessCapabilitySupport,

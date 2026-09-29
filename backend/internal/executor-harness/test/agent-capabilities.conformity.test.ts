@@ -1,5 +1,6 @@
 import {
   HARNESS_BODY_CAPABILITIES as KERNEL_BODY_CAPABILITIES,
+  HARNESS_BODY_CAPABILITY_FIELDS as KERNEL_BODY_CAPABILITY_FIELDS,
   MCP_SERVER_ID_PATTERN,
   MCP_TOOL_NAME_PATTERN,
   isAllowedMcpHttpUrl,
@@ -134,9 +135,6 @@ describe('harness HTTP transport rule conforms to kernel', () => {
   })
 })
 
-/** The body field a capability is carried in, where it is not the capability's own name. */
-const CAPABILITY_FIELD: Record<string, string> = { piMcpServers: 'mcpServers' }
-
 describe('harness body-capability list conforms to kernel', () => {
   it('names exactly the capabilities kernel checks a dispatch against', () => {
     // Order-insensitive: the harness reports a list, the backend does set membership over it.
@@ -176,7 +174,9 @@ describe('harness body-capability list conforms to kernel', () => {
     })
     for (const capability of HARNESS_BODY_CAPABILITIES) {
       expect(
-        (job as unknown as Record<string, unknown>)[CAPABILITY_FIELD[capability] ?? capability],
+        (job as unknown as Record<string, unknown>)[
+          KERNEL_BODY_CAPABILITY_FIELDS[capability as keyof typeof KERNEL_BODY_CAPABILITY_FIELDS]
+        ],
       ).toBeDefined()
     }
   })
@@ -184,7 +184,7 @@ describe('harness body-capability list conforms to kernel', () => {
   it('parses `mcpServers` off a Pi body, which is what `piMcpServers` promises', () => {
     // The one member that names no field of its own: it is `mcpServers` on a Pi run. So the
     // property above has a Pi half, a Pi body whose servers survive onto the parsed job for
-    // `runAgentInWorkspace` to hand to `writePiMcpConfig`.
+    // `runPiPass` to hand to `writePiMcpConfig`.
     const job = parseAgentJob({
       jobId: 'job-2',
       mode: 'coding',

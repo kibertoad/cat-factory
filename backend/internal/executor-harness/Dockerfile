@@ -126,8 +126,10 @@ RUN echo 'harness:100000:65536' > /etc/subuid \
 # `gpt-6.1-sol` from 0.159.0.
 #
 # The Pi pin carries a floor too: built-in MCP support (the `mcp.json` the harness writes for a
-# run's tool servers) arrived in 0.99.0, and `HARNESS_BODY_CAPABILITIES` reports `piMcpServers`
-# on that promise, so this pin may not drop below it.
+# run's tool servers) arrived in 0.99.0. A build below it still boots, but the harness asks the
+# installed binary for its version at startup and then stops reporting `piMcpServers`, so every
+# Pi dispatch carrying tool servers is refused rather than run blind
+# (`src/capability-report.ts`).
 ARG PI_VERSION=0.99.1
 ARG CLAUDE_CODE_VERSION=2.1.285
 ARG CODEX_VERSION=0.159.0

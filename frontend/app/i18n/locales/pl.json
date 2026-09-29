@@ -1690,7 +1690,7 @@
           "unknown": "nie był dostępny ({reason})."
         },
         "remedy": {
-          "harnessUnsupported": "Poszerz listę harnessów serwera o CLI agenta, na którym działał ten krok, albo uruchom krok na CLI z tej listy. Uruchomienie Codex z Twoim własnym logowaniem do CLI nie ma gdzie przechować serwera na czas przebiegu, więc użyj poświadczenia platformy.",
+          "harnessUnsupported": "Poszerz listę harnessów serwera o CLI agenta, na którym działał ten krok, albo uruchom krok na CLI z tej listy. Krok Pi zapisany, zanim Pi potrafił obsługiwać serwery narzędzi, wystarczy uruchomić ponownie na aktualnym obrazie runnera. Uruchomienie Codex z Twoim własnym logowaniem do CLI nie ma gdzie przechować serwera na czas przebiegu, więc użyj poświadczenia platformy.",
           "transportUnsupported": "Zadeklaruj dla niego serwer stdio albo uruchom krok na CLI agenta, które dosięga serwerów HTTP.",
           "missingSecret": "Ustaw wskazane poświadczenie jako zmienną środowiskową wdrożenia albo w poświadczeniach możliwości, w oknie Infrastruktura.",
           "reservedSecret": "Zmień deklarację tak, by prosiła o inny klucz; ustawienie tej zmiennej to właśnie to, co nie pomoże.",

@@ -125,7 +125,7 @@ export async function runBootstrap(job: AgentJob, opts: RunOptions): Promise<Age
  * never reached the model / never wrote anything) is failed rather than force-pushed as an
  * empty repo. With a reference architecture, "produced content" means the agent changed the
  * clone; scaffolding from scratch, it means at least one file now exists in the working
- * directory. (The harness writes its prompt context to Pi's global `~/.pi/agent/AGENTS.md`,
+ * directory. (The harness writes its prompt context to the AGENTS.md of Pi's per-pass config dir,
  * never into `dir`, so nothing here needs to be filtered out as harness boilerplate.)
  */
 export async function producedRepoContent(

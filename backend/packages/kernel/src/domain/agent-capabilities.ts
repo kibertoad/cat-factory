@@ -382,8 +382,10 @@ export interface UnavailableToolServer {
    * the other:
    *
    * - `harness_unsupported` covers a definition whose `harnesses` excludes the resolved CLI, a
-   *   CLI with no MCP client (none today, though the vocabulary keeps the case), AND an
-   *   ambient-auth Codex run, which is reached only AFTER both of those tests passed. There the CLI does speak MCP and is allowed; what is missing is a
+   *   CLI with no MCP client (none today, but every Pi step recorded before Pi's MCP client
+   *   carries this reason for that cause, so the vocabulary and its remedy copy keep it), AND an
+   *   ambient-auth Codex run, which is reached only AFTER both of those tests passed. There the
+   *   CLI does speak MCP and is allowed; what is missing is a
    *   per-run `CODEX_HOME`, so widening the list or switching CLI fixes nothing and only a leased
    *   credential in place of the developer's own login does.
    * - `missing_secret` is one answer from a COMPOSED resolver. The deployment-environment
@@ -409,7 +411,9 @@ export interface UnavailableToolServer {
  *
  * Pi reaches both transports through its built-in MCP client (Pi 0.99.0 onward; the harness writes
  * its `mcp.json`). An image older than that dropped a Pi run's servers while the prompt promised
- * them, which the `piMcpServers` body capability now refuses at dispatch rather than running blind.
+ * them, which the `piMcpServers` body capability now refuses at dispatch rather than running blind,
+ * including on an image that reports no capabilities at all (it predates Pi's client for certain;
+ * see `HARNESS_BODY_CAPABILITIES_NEWER_THAN_HANDSHAKE`).
  * Codex's client is stdio-only, which is why an `http` server on a Codex run is DROPPED with a
  * stated reason rather than advertised in the prompt and then skipped by the harness's TOML writer.
  */

@@ -1690,7 +1690,7 @@
           "unknown": "no estuvo disponible ({reason})."
         },
         "remedy": {
-          "harnessUnsupported": "Amplía la lista de harnesses del servidor para incluir la CLI del agente de este paso, o ejecuta el paso en una que figure en ella. Una ejecución de Codex con tu propia sesión de la CLI no tiene dónde guardar el servidor durante esa ejecución, así que usa una credencial de la plataforma.",
+          "harnessUnsupported": "Amplía la lista de harnesses del servidor para incluir la CLI del agente de este paso, o ejecuta el paso en una que figure en ella. A un paso de Pi registrado antes de que Pi pudiera servir servidores de herramientas le basta con volver a ejecutarse en una imagen de runner actual. Una ejecución de Codex con tu propia sesión de la CLI no tiene dónde guardar el servidor durante esa ejecución, así que usa una credencial de la plataforma.",
           "transportUnsupported": "Declara un servidor stdio para él, o ejecuta el paso en una CLI de agente que alcance servidores HTTP.",
           "missingSecret": "Configura la credencial que nombra, ya sea como variable de entorno del despliegue o en las credenciales de capacidades, en la ventana de Infraestructura.",
           "reservedSecret": "Cambia la declaración para que pida otra clave; definir esa variable es justo lo que no ayudará.",

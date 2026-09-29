@@ -14,6 +14,7 @@ export {
   type TodoItem,
   type TodoProgress,
 } from './pi.js'
+export { createPiAgentDir, type PiAgentDir } from './pi-agent-dir.js'
 export {
   PI_MAX_OUTPUT_TOKENS,
   parsePiOutput,

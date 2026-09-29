@@ -1,39 +1,39 @@
-import { mkdir, rm, writeFile } from 'node:fs/promises'
+import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { type McpServerSpec, mcpServerSecretValues, piMcpConfig } from './agent-capabilities.js'
-import { piAgentDir } from './pi.js'
 import { registerKnownSecrets } from './redact.js'
 
 // Wires a run's tool servers (MCP) into Pi, whose built-in MCP client (0.99.0 onward) reads the
-// global `mcp.json` in its config directory. The document is composed by `piMcpConfig`; this
-// module owns only where it goes and the one lifecycle rule a file there needs.
+// `mcp.json` in its config directory. The document is composed by `piMcpConfig`; this module owns
+// only where it goes.
 
 /**
- * Write (or clear) Pi's `mcp.json` for this pass and return the child env its placeholders
- * resolve from, to be merged into Pi's `extraEnv`.
+ * Write Pi's `mcp.json` into this pass's own config directory (`createPiAgentDir`), or nothing when
+ * the pass wires no server.
  *
- * CLEARING is half the contract, not a tidy-up. The file lives in the container's home, and a
- * warm-pool container serves job after job from the same one, so a job with no tool servers that
- * left the previous job's file in place would start that job's servers, with every placeholder
- * resolving to nothing because the env that filled them went with the job that set it. The
- * config is therefore rewritten on every pass, and removed when there is nothing to wire.
+ * The file carries the resolved credentials, the same as the claude-code and codex per-run configs
+ * do, and for the same reason: a value written into the file reaches only the server it is
+ * declared on. Routing a value through Pi's environment instead would hand it to every process Pi
+ * starts, since Pi spawns a stdio server with its own whole environment plus the declared one: the
+ * agent's shell, every repo script it runs, and every OTHER server. The directory is fresh and
+ * owner-only for each pass and removed after it, so the file needs no clearing and no mode repair.
  *
  * The credential values are registered for redaction here, the same as the claude-code and codex
  * homes do: a stdio server that fails to start echoes its own environment into stderr often
  * enough, and that tail reaches the step's diagnostics.
  */
 export async function writePiMcpConfig(
+  agentDir: string,
   servers: readonly McpServerSpec[] | undefined,
-): Promise<Record<string, string>> {
-  const dir = piAgentDir()
-  const path = join(dir, 'mcp.json')
-  if (!servers?.length) {
-    await rm(path, { force: true })
-    return {}
-  }
+): Promise<void> {
+  if (!servers?.length) return
   registerKnownSecrets(mcpServerSecretValues(servers))
-  const { document, env } = piMcpConfig(servers)
-  await mkdir(dir, { recursive: true })
-  await writeFile(path, `${JSON.stringify(document, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 })
-  return env
+  await writeFile(
+    join(agentDir, 'mcp.json'),
+    `${JSON.stringify(piMcpConfig(servers), null, 2)}\n`,
+    {
+      encoding: 'utf8',
+      mode: 0o600,
+    },
+  )
 }
