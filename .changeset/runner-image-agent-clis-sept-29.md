@@ -2,8 +2,6 @@
 '@cat-factory/executor-harness': minor
 '@cat-factory/deploy-harness': patch
 '@cat-factory/local-server': patch
-'@cat-factory/smoketest-harness': patch
-'@cat-factory/benchmark-harness': patch
 ---
 
 Runner image: take Pi to `0.99.1`, Claude Code to `2.1.285` and Codex to `0.159.0`, and the two Pi
