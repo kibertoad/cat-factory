@@ -1,7 +1,7 @@
 import type { PublicApiScope } from '@cat-factory/contracts'
 import { scopeSatisfies, type PublicApiKeyAuth } from '@cat-factory/integrations'
 import { ForbiddenError, UnauthorizedError, UnavailableError } from '@cat-factory/kernel'
-import type { Context } from 'hono'
+import type { Context, TypedResponse } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 
 // The in-controller bearer-key gate shared by every `/api/v1` controller. The public surface is
@@ -19,6 +19,14 @@ import type { AppEnv } from '../../http/env.js'
 export type KeyResult =
   | { auth: PublicApiKeyAuth }
   | { fail: { status: 401 | 403 | 503; code: string; message: string } }
+
+type KeyFailure = Extract<KeyResult, { fail: unknown }>['fail']
+
+/**
+ * The wire body of a refusal. Spelt out as the declared return type of {@link refuse} because the
+ * type `c.json` infers names a hono-internal alias that a declaration emit cannot reference.
+ */
+type RefusalBody = { error: { code: string; message: string } }
 
 /**
  * The raw key the caller presented, stripped of its `Bearer` prefix.
@@ -43,8 +51,8 @@ export function bearerToken<E extends AppEnv>(c: Context<E>): string | undefined
  */
 export function refuse<E extends AppEnv>(
   c: Context<E>,
-  fail: Extract<KeyResult, { fail: unknown }>['fail'],
-) {
+  fail: KeyFailure,
+): Response & TypedResponse<RefusalBody, KeyFailure['status'], 'json'> {
   return c.json({ error: { code: fail.code, message: fail.message } }, fail.status)
 }
 
