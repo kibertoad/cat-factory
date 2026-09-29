@@ -370,12 +370,17 @@ kill "$child" 2>/dev/null || true`,
     // ZOMBIE, which `kill -0` reports as present — so on `kill -0` the readiness wait's early
     // exit never fires, every packaging failure costs the full 60s, and jobs dispatched inside
     // that window read the verdict as undecided and attempt compose anyway.
+    //
+    // The child must OUTLIVE the `exec`. A child that exits while the inner shell is still a shell
+    // is reaped by that shell, so `kill -0` then reports it absent and the precondition this test
+    // rests on is gone: on a slow runner `sleep 0` finished before the `exec` and CI saw
+    // `signal:absent`. Exiting 0.2s later, it can only die under `sleep 5`, which never reaps.
     const pidDir = mkdtempSync(join(tmpdir(), 'cf-entrypoint-'))
     const pidFile = join(pidDir, 'child.pid')
     const { stdout } = runSh(
       `set -eu
 ${shellFunctions('process_alive')}
-sh -c 'sleep 0 & echo $! >"$PID_FILE"; exec sleep 5' &
+sh -c 'sleep 0.2 & echo $! >"$PID_FILE"; exec sleep 5' &
 supervisor=$!
 sleep 1
 child="$(cat "$PID_FILE")"
