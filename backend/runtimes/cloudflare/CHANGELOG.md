@@ -1,5 +1,35 @@
 # @cat-factory/worker
 
+## 0.218.3
+
+### Patch Changes
+
+- e84b0d5: Dependency refresh within current majors, each at the newest release older than the 24h
+  `minimumReleaseAge` window: the Vercel AI SDK family (`ai` 7.0.120, `@ai-sdk/*` 4.x, `openai-compatible`
+  3.0.58, `amazon-bedrock` 5.0.99), `@aws-sdk/client-s3`, `@modelcontextprotocol/sdk` 1.31.0, `pg-boss`
+  12.35.0, `ws` 8.22.0 and `undici` 8.11.2. `publicApiAuth.refuse` now declares its return type, because
+  hono 4.13.10 ships bundled declarations whose inferred `c.json` return type a declaration emit can no
+  longer name.
+- Updated dependencies [e84b0d5]
+- Updated dependencies [e84b0d5]
+- Updated dependencies [e84b0d5]
+  - @cat-factory/agents@0.168.2
+  - @cat-factory/consensus@0.19.3
+  - @cat-factory/integrations@0.174.5
+  - @cat-factory/kernel@0.351.0
+  - @cat-factory/orchestration@0.314.3
+  - @cat-factory/provider-cloudflare@0.7.549
+  - @cat-factory/server@0.326.3
+  - @cat-factory/spend@0.23.1
+  - @cat-factory/binary-generators@0.3.56
+  - @cat-factory/eks@0.1.395
+  - @cat-factory/caching@0.20.90
+  - @cat-factory/gates@0.11.56
+  - @cat-factory/gitlab@0.23.19
+  - @cat-factory/observability-langfuse@0.11.56
+  - @cat-factory/observability-otel@0.23.49
+  - @cat-factory/prompt-fragments@1.1.52
+
 ## 0.218.2
 
 ### Patch Changes

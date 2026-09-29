@@ -1,5 +1,43 @@
 # @cat-factory/agents
 
+## 0.168.2
+
+### Patch Changes
+
+- e84b0d5: Dependency refresh within current majors, each at the newest release older than the 24h
+  `minimumReleaseAge` window: the Vercel AI SDK family (`ai` 7.0.120, `@ai-sdk/*` 4.x, `openai-compatible`
+  3.0.58, `amazon-bedrock` 5.0.99), `@aws-sdk/client-s3`, `@modelcontextprotocol/sdk` 1.31.0, `pg-boss`
+  12.35.0, `ws` 8.22.0 and `undici` 8.11.2. `publicApiAuth.refuse` now declares its return type, because
+  hono 4.13.10 ships bundled declarations whose inferred `c.json` return type a declaration emit can no
+  longer name.
+- e84b0d5: Tool servers (MCP) now run on the Pi harness. `MCP_HARNESS_TRANSPORTS.pi` is `['stdio', 'http']`,
+  so a declared server no longer drops as `harness_unsupported` on a Pi run: it is wired into Pi's own
+  MCP client through the `mcp.json` the runner image (1.162.0 onward) writes. On Pi an `allowedTools`
+  list is enforced rather than advisory.
+  
+  **Behaviour change for a deployment whose runner pool pins an older image.** Every earlier image
+  reported the `mcpServers` capability (for the subscription CLIs) while dropping a Pi run's servers,
+  so the handshake could not tell a Pi dispatch it was about to run blind. A Pi dispatch carrying tool
+  servers now requires the new `piMcpServers` body capability, and an image that reports a list
+  without it REFUSES the run at dispatch, naming the runner image as the fix. Unlike the older
+  capabilities, an image (or a runner pool control plane) that reports NO list is refused for it too
+  rather than treated as unknown: every such image predates Pi's MCP client, so that run would be
+  blind for certain. Move the pool to `cat-factory-executor:1.162.0`, or narrow the affected servers'
+  `harnesses` to `claude-code` / `codex` until you do. `HarnessBodyCapability` gains the
+  `piMcpServers` member, and `HARNESS_BODY_CAPABILITY_FIELDS` names the body field each member is
+  carried in. A body whose `harness` is absent or unrecognised is treated as Pi, as the harness's own
+  parser runs it.
+  
+  Boot validation no longer warns that a server narrowed to `['pi']` can never apply. The step
+  detail's `harness_unsupported` copy names every cause a persisted step can carry, in every locale:
+  a `harnesses` list that excludes the CLI, an ambient Codex login, and a Pi step recorded before Pi
+  could serve tool servers, which only needs a rerun on a current image.
+- Updated dependencies [e84b0d5]
+- Updated dependencies [e84b0d5]
+- Updated dependencies [e84b0d5]
+  - @cat-factory/kernel@0.351.0
+  - @cat-factory/prompt-fragments@1.1.52
+
 ## 0.168.1
 
 ### Patch Changes
