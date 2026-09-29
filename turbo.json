@@ -10,6 +10,11 @@
   // @cat-factory/contracts before the frontend `nuxt generate`). Declare the edge
   // once here and no entrypoint can run ahead of its dependencies again.
   //
+  // Turbo 2.11.5+ writes a managed "read the bundled turbo docs" block into the root AGENTS.md
+  // whenever it detects an AI agent. That file is this repo's ratcheted cross-cutting rulebook
+  // (check-file-size.mjs budgets it), so the block would both break the budget and dilute rules
+  // every agent is bound by. Opted out here; the turbo docs stay reachable from node_modules.
+  "agentGuidance": false,
   // A change to a shared tsconfig invalidates every cached build/typecheck.
   "globalDependencies": ["backend/tsconfig.base.json"],
   "tasks": {

@@ -48,10 +48,10 @@
     "valibot": "^1.5.0"
   },
   "devDependencies": {
-    "@types/node": "^26.6.2",
-    "ai": "^7.0.111",
+    "@types/node": "^26.6.3",
+    "ai": "^7.0.120",
     "typescript": "7.0.2",
-    "undici": "^8.11.0",
+    "undici": "^8.11.2",
     "vitest": "^4.1.11"
   }
 }
