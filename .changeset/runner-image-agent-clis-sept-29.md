@@ -17,3 +17,6 @@ that, and the Dockerfile records `0.99.0` as the Pi floor it depends on.
 
 Image content changed, so the harness version and every tag pin move with it, which is what makes a
 deployment's next `image:publish` actually roll out.
+
+The deploy image moves to `cat-factory-deploy:0.8.1` for the same reason: the dependency refresh
+raised its `@types/node` floor, which is one of its declared sources.

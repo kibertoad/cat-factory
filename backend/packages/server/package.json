@@ -42,7 +42,7 @@
     "@toad-contracts/core": "1.0.0",
     "@toad-contracts/hono": "1.0.0",
     "@toad-contracts/valibot": "1.0.0",
-    "hono": "^4.13.8",
+    "hono": "^4.13.10",
     "jose": "^6.2.12",
     "pino": "^10.3.1",
     "valibot": "^1.5.0"

@@ -42,8 +42,8 @@
     "@cat-factory/server": "workspace:*",
     "@cat-factory/spend": "workspace:*",
     "@hono/node-server": "^2.1.1",
-    "@types/node": "^26.6.2",
-    "hono": "^4.13.8",
+    "@types/node": "^26.6.3",
+    "hono": "^4.13.10",
     "typescript": "7.0.2",
     "vitest": "^4.1.11"
   }

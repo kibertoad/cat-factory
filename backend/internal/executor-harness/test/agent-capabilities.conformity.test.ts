@@ -175,8 +175,9 @@ describe('harness body-capability list conforms to kernel', () => {
       generateImages: true,
     })
     for (const capability of HARNESS_BODY_CAPABILITIES) {
-      expect((job as unknown as Record<string, unknown>)[CAPABILITY_FIELD[capability] ?? capability])
-        .toBeDefined()
+      expect(
+        (job as unknown as Record<string, unknown>)[CAPABILITY_FIELD[capability] ?? capability],
+      ).toBeDefined()
     }
   })
 
