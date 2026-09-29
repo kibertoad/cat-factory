@@ -1,5 +1,44 @@
 # @cat-factory/app
 
+## 0.303.2
+
+### Patch Changes
+
+- e84b0d5: Add GPT-6.1 Sol and Claude Sonnet 5.5 to the model catalog and the price table, and name the GLM-5.2 gateway cache rate that had fallen below its route.
+  
+  New catalog entries, each declared only on routes verified to serve that exact model:
+  
+  - `gpt-6.1-sol` (GPT-6.1 Sol, 2026-09-29): Codex subscription and OpenRouter (`openai/gpt-6.1-sol`), two-band like every OpenAI row at $2 / $10 short and $4 / $15 long per 1M. Codex resolves the slug only from 0.159.0 onward. OpenRouter's `-pro` slug gets no entry: same model, same price, only a reasoning mode.
+  - `claude-sonnet-5-5` (Claude Sonnet 5.5, 2026-09-28): Claude Code subscription, AWS Bedrock (`anthropic.claude-sonnet-5-5`) and OpenRouter (`anthropic/claude-sonnet-5.5`), $2 / $10 per 1M like Sonnet 5.
+  
+  The existing `gpt-6-sol` and `claude-sonnet` entries keep their ids and models, so a block pinned to GPT-6 Sol or Sonnet 5 runs what it ran before.
+  
+  Price correction, in the safe direction: `openrouter:z-ai/glm-5.2` names its cache read again (0.21 EUR/1M), because the gateway's cached rate moved back above the 0.1x floor its input rate derives.
+  
+  The SPA's "Enable recommended" OpenRouter set gains GPT-6.1 Sol and Sonnet 5.5.
+- e84b0d5: Tool servers (MCP) now run on the Pi harness. `MCP_HARNESS_TRANSPORTS.pi` is `['stdio', 'http']`,
+  so a declared server no longer drops as `harness_unsupported` on a Pi run: it is wired into Pi's own
+  MCP client through the `mcp.json` the runner image (1.162.0 onward) writes. On Pi an `allowedTools`
+  list is enforced rather than advisory.
+  
+  **Behaviour change for a deployment whose runner pool pins an older image.** Every earlier image
+  reported the `mcpServers` capability (for the subscription CLIs) while dropping a Pi run's servers,
+  so the handshake could not tell a Pi dispatch it was about to run blind. A Pi dispatch carrying tool
+  servers now requires the new `piMcpServers` body capability, and an image that reports a list
+  without it REFUSES the run at dispatch, naming the runner image as the fix. Unlike the older
+  capabilities, an image (or a runner pool control plane) that reports NO list is refused for it too
+  rather than treated as unknown: every such image predates Pi's MCP client, so that run would be
+  blind for certain. Move the pool to `cat-factory-executor:1.162.0`, or narrow the affected servers'
+  `harnesses` to `claude-code` / `codex` until you do. `HarnessBodyCapability` gains the
+  `piMcpServers` member, and `HARNESS_BODY_CAPABILITY_FIELDS` names the body field each member is
+  carried in. A body whose `harness` is absent or unrecognised is treated as Pi, as the harness's own
+  parser runs it.
+  
+  Boot validation no longer warns that a server narrowed to `['pi']` can never apply. The step
+  detail's `harness_unsupported` copy names every cause a persisted step can carry, in every locale:
+  a `harnesses` list that excludes the CLI, an ambient Codex login, and a Pi step recorded before Pi
+  could serve tool servers, which only needs a rerun on a current image.
+
 ## 0.303.1
 
 ### Patch Changes

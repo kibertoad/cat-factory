@@ -1,5 +1,14 @@
 # @cat-factory/acceptance-kit
 
+## 0.7.25
+
+### Patch Changes
+
+- Updated dependencies [e84b0d5]
+- Updated dependencies [e84b0d5]
+- Updated dependencies [e84b0d5]
+  - @cat-factory/kernel@0.351.0
+
 ## 0.7.24
 
 ### Patch Changes
