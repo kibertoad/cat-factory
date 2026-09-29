@@ -107,6 +107,16 @@ export function phasedProxyBaseUrl(
   return `${proxyBaseUrl.replace(/\/+$/, '')}/phase/${normalized}`
 }
 
+/**
+ * Pi's global config directory, which every per-run file the harness hands Pi lives in (the
+ * provider config, the composed AGENTS.md, the tool-server config). HOME-global, which is safe
+ * only because Pi runs in a container and never on the native transport (see the executor
+ * README's per-job-state section).
+ */
+export function piAgentDir(): string {
+  return join(homedir(), '.pi', 'agent')
+}
+
 /** Write the Pi provider config that routes all model calls through the proxy. */
 export async function writePiModelsConfig(opts: {
   model: string
@@ -114,7 +124,7 @@ export async function writePiModelsConfig(opts: {
   /** Output-token ceiling Pi may request per completion. Defaults to PI_MAX_OUTPUT_TOKENS. */
   maxTokens?: number
 }): Promise<string> {
-  const dir = join(homedir(), '.pi', 'agent')
+  const dir = piAgentDir()
   await mkdir(dir, { recursive: true })
   const config = {
     providers: {
@@ -230,7 +240,7 @@ export async function writeAgentsContext(
     referenceGuidance?: string
   } = {},
 ): Promise<void> {
-  const dir = join(homedir(), '.pi', 'agent')
+  const dir = piAgentDir()
   await mkdir(dir, { recursive: true })
   // Only nudge towards the web tools when they're actually configured, so an agent is
   // never told about tools that would error (no provider key) the moment it calls them.

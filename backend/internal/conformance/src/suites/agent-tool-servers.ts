@@ -104,15 +104,22 @@ export function defineToolServerConformance(harness: ConformanceHarness): void {
       expect(JSON.stringify(resolved.record)).not.toContain('stored-issue-token')
     })
 
-    it('drops every server on a harness with no MCP client, stating the reason', async () => {
-      // Pi has no MCP client, so a Pi run is the case where "declared" and "available" diverge for
-      // a reason no credential can fix. It is asserted cross-runtime because the transport matrix
-      // is what a facade's resolved harness feeds, and a facade that resolved the harness
-      // differently would advertise tools its CLI cannot call.
+    it('wires tool servers on Pi through its own MCP client, stating what it cannot wire', async () => {
+      // Pi used to be the harness where "declared" and "available" diverged for a reason no
+      // credential could fix. Since Pi 0.99 it serves MCP itself, so a Pi run resolves exactly as
+      // a claude-code one does: the stored credential is wired, the unstored one is stated.
+      // Asserted cross-runtime because the transport matrix is what a facade's resolved harness
+      // feeds, and a facade that resolved the harness differently would drop tools Pi can call.
       const app = harness.makeApp({}, { agentKindRegistry: registryWithToolServers() })
       const probe = app.toolServerDispatch?.()
       if (!probe) return
       const { workspace } = await app.createWorkspace()
+      const stored = await app.call(
+        'PUT',
+        `/workspaces/${workspace.id}/capability-credentials/${STORED_KEY}`,
+        { value: 'stored-issue-token' },
+      )
+      expect(stored.status).toBe(200)
 
       const resolved = await probe.resolveForDispatch({
         workspaceId: workspace.id,
@@ -120,15 +127,14 @@ export function defineToolServerConformance(harness: ConformanceHarness): void {
         harness: 'pi',
       })
 
-      expect(resolved.record.wired).toEqual([])
-      expect(resolved.mcpServers).toEqual([])
-      expect(resolved.record.unavailable.map((s) => s.reason)).toEqual([
-        'harness_unsupported',
-        'harness_unsupported',
+      expect(resolved.record.wired.map((s) => s.id)).toEqual(['issues'])
+      expect(resolved.mcpServers.map((s) => s.id)).toEqual(['issues'])
+      expect(resolved.record.unavailable).toEqual([
+        { id: 'docs', label: 'Docs', reason: 'missing_secret' },
       ])
     })
 
-    it('wires the opt-in Nuxt UI MCP server onto the built-in coder on claude-code', async () => {
+    it('wires the opt-in Nuxt UI MCP server onto the built-in coder on claude-code and Pi', async () => {
       // The deployment capability (issue #2262): `registerNuxtUiCapability` attaches the `nuxt-ui`
       // HTTP server to the built-in `coder` by assignment, which is the path boot validation and
       // this dispatch both reach through `kindsWithCapabilities()`. Asserted cross-runtime because
@@ -163,6 +169,14 @@ export function defineToolServerConformance(harness: ConformanceHarness): void {
       expect(onCodex.record.unavailable.find((s) => s.id === NUXT_UI_TOOL_SERVER_ID)?.reason).toBe(
         'transport_unsupported',
       )
+
+      // Pi's client reaches http too, so the same server is wired there as on claude-code.
+      const onPi = await probe.resolveForDispatch({
+        workspaceId: workspace.id,
+        agentKind: 'coder',
+        harness: 'pi',
+      })
+      expect(onPi.record.wired.map((s) => s.id)).toContain(NUXT_UI_TOOL_SERVER_ID)
     })
 
     it('persists a dispatch’s tool-server record onto the run’s step', async () => {

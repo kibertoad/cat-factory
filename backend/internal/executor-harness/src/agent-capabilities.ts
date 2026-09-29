@@ -341,10 +341,14 @@ export function parseSkillSpecs(value: unknown): SkillSpec[] | undefined {
  * {@link MCP_SERVER_ID_PATTERN} uses.
  *
  * A member is added here in the SAME change that teaches the parser the field, never ahead of it:
- * the whole value of the list is that it is the image's own honest answer.
+ * the whole value of the list is that it is the image's own honest answer. `piMcpServers` is the
+ * one member that names no field of its own: it is `mcpServers` on a Pi run, which this image
+ * wires into Pi's own MCP client (`writePiMcpConfig`) and every image before it silently dropped
+ * while still reporting `mcpServers` for the subscription CLIs.
  */
 export const HARNESS_BODY_CAPABILITIES: readonly string[] = [
   'mcpServers',
+  'piMcpServers',
   'skills',
   'designImages',
   'generateImages',
@@ -557,6 +561,84 @@ export function claudeAllowedToolPatterns(
     s.allowedTools?.length ? s.allowedTools.map((t) => `mcp__${s.id}__${t}`) : [`mcp__${s.id}`],
   )
   return [...mcp, ...builtIns]
+}
+
+/**
+ * The environment-variable name Pi resolves one `env` / `headers` value from: server by index,
+ * value by index, so the name carries no part of the declared key (which may hold any character)
+ * and two servers can never collide.
+ */
+function piMcpValueEnvName(serverIndex: number, valueIndex: number): string {
+  return `CAT_FACTORY_MCP_${serverIndex}_${valueIndex}`
+}
+
+/**
+ * Pi's `mcp.json` for this run, and the child environment its placeholders resolve from.
+ *
+ * EVERY `env` and `headers` value becomes a `${NAME}` placeholder, the credentials and the plain
+ * configuration alike, for two reasons that each hold on their own:
+ *
+ * - Pi reads a value that STARTS WITH `!` as a shell command and substitutes its output. A
+ *   credential is an opaque vendor string and nothing stops one from beginning with `!`, so a
+ *   literal value would hand the harness's own shell whatever the vendor minted. A value Pi
+ *   resolves from a placeholder is taken literally (measured against Pi 0.99.1), so routing every
+ *   value through one closes the class instead of guessing which values are safe.
+ * - The resolved credentials never touch the disk: the file names variables, and the values ride
+ *   Pi's child env only, the same channel the tester's secrets use.
+ *
+ * `command` and `args` stay literal: Pi interpolates neither. Exposure is `direct`, so the tools
+ * are declared to the model like built-ins and the prompt's `mcp__<server>__<tool>` names are the
+ * names the model sees. A server narrowed by `allowedTools` is `hidden` with each permitted tool
+ * re-exposed by exact name, which makes the narrowing ENFORCED on Pi (the other tools are
+ * registered but cannot be called), where on claude-code it is only scoping. Tool names are
+ * validated against {@link MCP_TOOL_NAME_PATTERN}, which admits no `*`, so no entry here can be
+ * read as a pattern. `autoEnableCodemode: false` keeps the run's tool surface what the backend
+ * composed the prompt against: nothing here is exposed through codemode.
+ */
+export function piMcpConfig(servers: readonly McpServerSpec[]): {
+  document: { autoEnableCodemode: false; mcpServers: Record<string, Record<string, unknown>> }
+  env: Record<string, string>
+} {
+  const env: Record<string, string> = {}
+  const mcpServers: Record<string, Record<string, unknown>> = {}
+  servers.forEach((server, serverIndex) => {
+    let valueIndex = 0
+    const placeholders = (values: Record<string, string> | undefined) => {
+      if (!values) return undefined
+      const out: Record<string, string> = {}
+      for (const [key, value] of Object.entries(values)) {
+        const name = piMcpValueEnvName(serverIndex, valueIndex++)
+        env[name] = value
+        out[key] = `\${${name}}`
+      }
+      return out
+    }
+    const exposure = server.allowedTools?.length
+      ? {
+          exposure: 'hidden',
+          toolExposure: Object.fromEntries(server.allowedTools.map((t) => [t, 'direct'])),
+        }
+      : { exposure: 'direct' }
+    if (server.transport === 'http') {
+      const headers = placeholders(server.headers)
+      mcpServers[server.id] = {
+        type: 'http',
+        url: server.url,
+        ...(headers ? { headers } : {}),
+        ...exposure,
+      }
+      return
+    }
+    const serverEnv = placeholders(server.env)
+    mcpServers[server.id] = {
+      type: 'stdio',
+      command: server.command,
+      ...(server.args ? { args: server.args } : {}),
+      ...(serverEnv ? { env: serverEnv } : {}),
+      ...exposure,
+    }
+  })
+  return { document: { autoEnableCodemode: false, mcpServers }, env }
 }
 
 /** Escape a string as a TOML basic string (Codex config is TOML, not JSON). */

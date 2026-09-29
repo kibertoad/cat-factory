@@ -171,6 +171,29 @@ survivors are not a prefix of the declaration. And the drop list itself has no b
 `maxStatedUnavailable` the prompt folds the remainder into a count instead of one line each, while
 the run context keeps them all.
 
+## How each CLI is handed its servers
+
+The backend composes one `mcpServers` job-body field; the harness renders it into the config each CLI
+reads (`agent-capabilities.ts`). Claude Code and Codex read a per-run file (`--mcp-config`, a per-run
+`CODEX_HOME`). Pi (0.99.0 onward) reads a global `mcp.json` in its config directory, and three
+properties of that file are what a change to `piMcpConfig` / `writePiMcpConfig` has to keep:
+
+- **Every `env` and `headers` value is a `${NAME}` placeholder**, resolved from Pi's child env. Pi
+  reads a value that starts with `!` as a shell command, and a resolved credential is an opaque
+  vendor string that may start with anything, so no literal value is ever written. A placeholder's
+  resolved value is taken literally (measured against Pi 0.99.1), and the credentials never reach
+  the disk. `command` and `args` stay literal, since Pi interpolates neither.
+- **The file is rewritten on every pass and removed when a job wires nothing.** It sits in the
+  container's home, and a warm-pool container serves one job after another, so a stale file would
+  start the previous job's servers with every placeholder resolving to nothing.
+- **Exposure is `direct`, and `allowedTools` becomes `hidden` plus each permitted tool re-exposed
+  by exact name.** So the prompt's `mcp__<server>__<tool>` names are the names the model is
+  declared, and Pi is the one CLI where `allowedTools` is enforced rather than advisory.
+  `autoEnableCodemode: false` keeps codemode off, because nothing is exposed through it.
+
+Pi publishes no startup report in print mode (a server that fails to start is silent), so a Pi run
+records the platform's half alone, the same as Codex.
+
 ## Does the runner image serve them at all (the capability handshake)
 
 A runner image older than the `mcpServers` field does not REJECT it, it ignores it. The prompt
@@ -189,6 +212,12 @@ There are THREE answers, not two, and which one a dispatch got decides what happ
 | Named the capability       | The image parses the field                                       | Nothing. The run proceeds.                                                           |
 | Reported a list WITHOUT it | The image said it cannot serve it                                | REFUSED: the started job is STOPPED and the step fails as a `preflight` fault.       |
 | Reported no list at all    | An image older than the handshake, or a pool that did not map it | Proceeds, and the blind spot is logged and counted (`container.capability_unknown`). |
+
+`piMcpServers` is the one capability that names no field of its own. Every image before Pi's MCP
+client parsed `mcpServers` for the subscription CLIs (and reports it) while its Pi path dropped the
+field, so a Pi dispatch carrying servers requires `piMcpServers`, which only an image that writes
+Pi's `mcp.json` reports. An older image therefore REFUSES such a run (the second row) rather than
+passing the check on the strength of a promise it keeps for other CLIs only.
 
 The third row is why this is not a boolean. Every image between "tool servers landed" and "the
 handshake landed" serves them perfectly and reports nothing, so treating silence as a refusal

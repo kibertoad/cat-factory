@@ -5,6 +5,7 @@ import type { RepoSpec, ImageManifestSpec } from './job.js'
 import { deliverJobImages } from './job-images.js'
 import type { McpServerSpec, SkillSpec } from './agent-capabilities.js'
 import { readEffortReport } from './effort.js'
+import { writePiMcpConfig } from './pi-mcp.js'
 import { log } from './logger.js'
 import {
   type ContextFileInfo,
@@ -252,10 +253,10 @@ export interface AgentRunSpec {
    */
   skills?: SkillSpec[]
   /**
-   * Tool servers (MCP) to wire into the agent CLI. Served by the subscription harnesses only —
-   * Pi has no MCP client, and the BACKEND is what decides that (it drops an unservable server and
-   * tells the agent so), which is why this path simply forwards whatever it is given rather than
-   * re-deciding. Absent ⇒ the CLI's built-in tools only.
+   * Tool servers (MCP) to wire into the agent CLI: Pi's `mcp.json` (see `writePiMcpConfig`), or
+   * the subscription CLI's own config. The BACKEND decides which servers a harness can serve (it
+   * drops an unservable one and tells the agent so), which is why this path simply materialises
+   * whatever it is given rather than re-deciding. Absent ⇒ the CLI's built-in tools only.
    */
   mcpServers?: McpServerSpec[]
   /**
@@ -470,10 +471,15 @@ export async function runAgentInWorkspace(
   //    container env, which `webSearchConfigFromEnv` autodetects.
   // The proxy vars are handed to Pi's child via `extraEnv` (not the harness's own
   // process.env), so detection runs against the same merged view the extension sees.
+  // Tool servers (MCP): Pi's `mcp.json` names every value by placeholder, and this is the env
+  // those placeholders resolve from. Rewritten (or removed) on every pass; see `writePiMcpConfig`.
+  // Spread LAST so no per-job variable can shadow a placeholder the config depends on.
+  const mcpEnv = await writePiMcpConfig(spec.mcpServers)
   const extraEnv: Record<string, string> = {
     ...(spec.webSearchProxy ? webSearchProxyEnv(proxyBaseUrl, sessionToken) : {}),
     // Per-job env (tester secrets, a private-registry npmrc pointer) — see `RunOptions.agentEnv`.
     ...opts.agentEnv,
+    ...mcpEnv,
   }
   const webSearch = webSearchConfigFromEnv({ ...process.env, ...extraEnv })
   if (webSearch) await writeWebToolsConfig(webSearch)

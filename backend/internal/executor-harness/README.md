@@ -325,6 +325,13 @@ apply and dropped what this harness cannot serve (see
   enforcement; the prompt states it either way. An `allowedTools` entry that is not a single tool
   name is DROPPED at the boundary, the comma above all: the list is joined into one argument with
   commas, so `search_issues,get_issue` in one entry would become a pattern matching nothing.
+- **For Pi, tool servers become `~/.pi/agent/mcp.json`** (Pi 0.99.0 onward), rewritten on every
+  pass and removed when the job wires nothing, because a warm-pool container reuses the home. Every
+  `env`/`headers` value is a `${CAT_FACTORY_MCP_<server>_<value>}` placeholder resolved from Pi's
+  child env: Pi runs a value starting with `!` as a shell command, and a placeholder's resolved
+  value is taken literally. A narrowed server is `hidden` with each permitted tool re-exposed by
+  name, so `allowedTools` is enforced on Pi. The image reports `piMcpServers` in its body
+  capabilities for this; see `writePiMcpConfig`.
 - **An `mcp__*` call is exempt from the no-edit progress bound**, like a read or a subagent
   dispatch: reaching a wired tool server is what the prompt tells the agent to do, so counting it
   would abort an edits-expected run for following its own instructions. It is neutral rather than
@@ -339,8 +346,10 @@ apply and dropped what this harness cannot serve (see
   values are registered for redaction: scrubbing the whole map would turn ordinary config strings
   into `***` in every later log line.
 
-Both config files carry this job's resolved credentials, so they are written to a per-job directory
-(mode `0600`) and never into the checkout or a HOME-global path: see the next section.
+The claude-code and Codex config files carry this job's resolved credentials, so they are written to
+a per-job directory (mode `0600`) and never into the checkout or a HOME-global path: see the next
+section. Pi's `mcp.json` carries none (only placeholder names), which is what lets it live in Pi's
+HOME-global config directory beside `models.json`.
 
 ## Per-job state: never a process- or HOME-global
 

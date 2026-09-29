@@ -46,11 +46,17 @@ import type { RunnerDispatchAck, RunnerJobStopOutcome } from '../ports/runner-tr
  * harness's `test/agent-capabilities.conformity.test.ts`, the same copy-plus-pin arrangement the
  * id/tool-name patterns use.
  */
-export type HarnessBodyCapability = 'mcpServers' | 'skills' | 'designImages' | 'generateImages'
+export type HarnessBodyCapability =
+  | 'mcpServers'
+  | 'piMcpServers'
+  | 'skills'
+  | 'designImages'
+  | 'generateImages'
 
 /** Operator-facing prose for each capability: what the body carried, in words. */
 const HARNESS_BODY_CAPABILITY_LABELS: Record<HarnessBodyCapability, string> = {
   mcpServers: 'tool servers (MCP)',
+  piMcpServers: 'tool servers (MCP) on the Pi harness',
   skills: 'skills',
   designImages: 'design pictures',
   generateImages: "the agent CLI's own image generation",
@@ -107,23 +113,32 @@ function isPopulatedList(value: unknown): boolean {
  * ignores the manifest while the backend's prompt names a directory nothing wrote. That is
  * precisely the blind run this whole handshake exists to refuse.
  *
- * The KEY is still the body field name, which is what keeps the harness's own list a list of field
- * names and needs no second mapping there; only the emptiness test lives here.
+ * Each predicate reads the WHOLE body. Every member but one is decided by its own field, keyed by
+ * that field's name, which keeps the harness's list a list of field names. `piMcpServers` is the
+ * exception, and the reason is the one this handshake exists for: every image before Pi's MCP
+ * client parsed `mcpServers` (and reports it) because the subscription CLIs serve it, while its Pi
+ * path dropped the field on the floor. So "the image parses `mcpServers`" was never the promise a
+ * Pi dispatch makes; "the image wires them into Pi" is, and only the harness field says which CLI
+ * the body is for. An absent `harness` is Pi, as it is to the harness's own parser.
  */
-const HARNESS_BODY_CAPABILITY_CARRIED: Record<HarnessBodyCapability, (value: unknown) => boolean> =
-  {
-    mcpServers: isPopulatedList,
-    skills: isPopulatedList,
-    // A manifest with no files promises the agent nothing, exactly as an empty server list does.
-    designImages: (value) =>
-      typeof value === 'object' &&
-      value !== null &&
-      isPopulatedList((value as { files?: unknown }).files),
-    // A plain flag, and the only shape here that is neither a list nor a manifest. `=== true`
-    // rather than truthiness, because the field is the wire's own boolean and anything else in it
-    // is a body this backend did not compose.
-    generateImages: (value) => value === true,
-  }
+const HARNESS_BODY_CAPABILITY_CARRIED: Record<
+  HarnessBodyCapability,
+  (body: Readonly<Record<string, unknown>>) => boolean
+> = {
+  mcpServers: (body) => isPopulatedList(body.mcpServers),
+  piMcpServers: (body) =>
+    (body.harness === undefined || body.harness === 'pi') && isPopulatedList(body.mcpServers),
+  skills: (body) => isPopulatedList(body.skills),
+  // A manifest with no files promises the agent nothing, exactly as an empty server list does.
+  designImages: ({ designImages: value }) =>
+    typeof value === 'object' &&
+    value !== null &&
+    isPopulatedList((value as { files?: unknown }).files),
+  // A plain flag, and the only shape here that is neither a list nor a manifest. `=== true`
+  // rather than truthiness, because the field is the wire's own boolean and anything else in it
+  // is a body this backend did not compose.
+  generateImages: (body) => body.generateImages === true,
+}
 
 /**
  * Which capabilities a job body actually CARRIES, which is what the handshake is checked against.
@@ -137,7 +152,7 @@ export function requiredHarnessCapabilities(
   body: Readonly<Record<string, unknown>>,
 ): HarnessBodyCapability[] {
   return HARNESS_BODY_CAPABILITIES.filter((capability) =>
-    HARNESS_BODY_CAPABILITY_CARRIED[capability](body[capability]),
+    HARNESS_BODY_CAPABILITY_CARRIED[capability](body),
   )
 }
 

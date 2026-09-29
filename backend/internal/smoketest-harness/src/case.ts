@@ -51,7 +51,7 @@ export interface RunCaseOptions {
 /**
  * Effectively-unbounded guard limits, used when `relaxGuard` is set.
  *
- * EVERY knob, including the ones a Pi smoketest cannot reach today (Pi has no MCP client): the point
+ * EVERY knob, including the ones a smoketest case never exercises (none wires a tool server): the point
  * of this constant is that the guard never ends a captured run, so a knob missing here is a run cut
  * short by a bound nobody chose. The non-action backstop is the live one, since a Pi loop reads and
  * searches constantly with no action call between.

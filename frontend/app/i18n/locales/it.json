@@ -2213,7 +2213,7 @@
         "allTools": "Tutti gli strumenti esposti da questo server.",
         "narrowed": "Limitato a: {tools}",
         "reason": {
-          "harnessUnsupported": "non era disponibile: la CLI dell'agente di questo passo non ha un client MCP.",
+          "harnessUnsupported": "non era disponibile: la CLI dell'agente di questo passo non poteva fornirlo.",
           "transportUnsupported": "non era disponibile: la CLI dell'agente di questo passo non riesce a raggiungere server di questo tipo.",
           "missingSecret": "non era disponibile: una credenziale che gli serve non è impostata per questa lavagna.",
           "reservedSecret": "non era disponibile: chiede una variabile che appartiene alla configurazione della piattaforma, quindi va cambiata la dichiarazione.",
@@ -2225,7 +2225,7 @@
           "unknown": "non era disponibile ({reason})."
         },
         "remedy": {
-          "harnessUnsupported": "Esegui il passo su una CLI dell'agente che parla MCP, oppure amplia l'elenco di harness del server. Un'esecuzione Codex con il tuo login della CLI non ha dove tenere il server per quell'esecuzione, quindi usa una credenziale della piattaforma.",
+          "harnessUnsupported": "Amplia l'elenco di harness del server per includere la CLI dell'agente di questo passo, oppure esegui il passo su una CLI presente nell'elenco. Un'esecuzione Codex con il tuo login della CLI non ha dove tenere il server per quell'esecuzione, quindi usa una credenziale della piattaforma.",
           "transportUnsupported": "Dichiara un server stdio al suo posto, oppure esegui il passo su una CLI dell'agente che raggiunge i server HTTP.",
           "missingSecret": "Imposta la credenziale che indica, come variabile d'ambiente del deployment oppure nelle credenziali delle capability, dalla finestra Infrastruttura.",
           "reservedSecret": "Cambia la dichiarazione perché chieda un'altra chiave; impostare quella variabile è proprio ciò che non aiuterà.",

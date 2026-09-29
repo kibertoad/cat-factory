@@ -1678,7 +1678,7 @@
         "allTools": "Wszystkie narzędzia udostępniane przez ten serwer.",
         "narrowed": "Ograniczone do: {tools}",
         "reason": {
-          "harnessUnsupported": "nie był dostępny: CLI agenta, na którym działał ten krok, nie ma klienta MCP.",
+          "harnessUnsupported": "nie był dostępny: CLI agenta, na którym działał ten krok, nie mogło go udostępnić.",
           "transportUnsupported": "nie był dostępny: CLI agenta, na którym działał ten krok, nie dosięga serwera tego rodzaju.",
           "missingSecret": "nie był dostępny: potrzebne mu poświadczenie nie jest ustawione dla tej tablicy.",
           "reservedSecret": "nie był dostępny: prosi o zmienną należącą do konfiguracji samej platformy, więc trzeba zmienić deklarację.",
@@ -1690,7 +1690,7 @@
           "unknown": "nie był dostępny ({reason})."
         },
         "remedy": {
-          "harnessUnsupported": "Uruchom krok na CLI agenta, które zna MCP, albo poszerz listę harnessów serwera. Uruchomienie Codex z Twoim własnym logowaniem do CLI nie ma gdzie przechować serwera na czas przebiegu, więc użyj poświadczenia platformy.",
+          "harnessUnsupported": "Poszerz listę harnessów serwera o CLI agenta, na którym działał ten krok, albo uruchom krok na CLI z tej listy. Uruchomienie Codex z Twoim własnym logowaniem do CLI nie ma gdzie przechować serwera na czas przebiegu, więc użyj poświadczenia platformy.",
           "transportUnsupported": "Zadeklaruj dla niego serwer stdio albo uruchom krok na CLI agenta, które dosięga serwerów HTTP.",
           "missingSecret": "Ustaw wskazane poświadczenie jako zmienną środowiskową wdrożenia albo w poświadczeniach możliwości, w oknie Infrastruktura.",
           "reservedSecret": "Zmień deklarację tak, by prosiła o inny klucz; ustawienie tej zmiennej to właśnie to, co nie pomoże.",
