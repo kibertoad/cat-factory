@@ -45,6 +45,12 @@ export interface GitHubActionsWorkflowScope {
    * present: a call that could not name it is refused before a resolver is asked.
    */
   repo: { owner: string; name: string }
+  /**
+   * The work repository's base branch, as the brief's `branches.base` names it. It is what a
+   * caller shim committed to each repository is dispatched on (`ref`), since that is the branch
+   * holding the reviewed definition. Always present, like `repo`.
+   */
+  baseBranch: string
   workspaceId: string
   runId: string
   agentKind: string
@@ -79,6 +85,7 @@ export function workflowAddressing(target: GitHubActionsWorkflowTarget): Workflo
     forBrief: (brief) =>
       target({
         repo: { owner: brief.repo.owner, name: brief.repo.name },
+        baseBranch: brief.branches.base,
         workspaceId: brief.workspaceId,
         runId: brief.runId,
         agentKind: brief.agentKind,
@@ -97,8 +104,18 @@ export function workflowAddressing(target: GitHubActionsWorkflowTarget): Workflo
             'no work repository to resolve one from. Re-run the step: a dispatch persists it.',
         )
       }
+      const baseBranch = handle.branches?.base
+      if (!baseBranch) {
+        // Refused for the same reason and on the same records: a record written before the branch
+        // pair was persisted. Defaulting to `main` would dispatch a definition nobody chose.
+        throw new Error(
+          'This executor resolves its workflow per dispatch, and this delegation record carries ' +
+            'no base branch to resolve one from. Re-run the step: a dispatch persists it.',
+        )
+      }
       return target({
         repo,
+        baseBranch,
         workspaceId: handle.workspaceId,
         runId: handle.runId,
         agentKind: handle.agentKind,
