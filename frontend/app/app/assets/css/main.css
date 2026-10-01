@@ -9,6 +9,25 @@
 /* The app's own type steps below `text-xs` (`text-2xs`, `text-3xs`). */
 @import './type.css';
 
+/* Bind the last two radius steps Nuxt UI leaves alone onto `--ui-radius`, so EVERY `rounded-*`
+ * utility follows a theme document's `radius` (issue #2251).
+ *
+ * Nuxt UI rebuilds seven of Tailwind's steps on `--ui-radius` (`--radius-sm` is it, `--radius-lg`
+ * is twice it, and so on), which is why a hand-written box on a named step already lines up with
+ * the Nuxt UI component beside it. Two spellings sat outside that: the bare `rounded` alias, whose
+ * `--radius` Tailwind declares `@theme default inline reference` and so inlines as a literal
+ * 0.25rem, and `rounded-4xl`, whose `--radius-4xl` keeps Tailwind's own 2rem. Both are `default`,
+ * so declaring them here wins, and `inline` is what lets `rounded` compile to `var(--ui-radius)`
+ * rather than to a value frozen at build time.
+ *
+ * Neither number moves on the default theme: `--ui-radius` is 0.25rem, and 8x it is the 2rem
+ * `--radius-4xl` already held. Declaring them here also EMITS both as ordinary custom properties,
+ * where Tailwind's `reference` kept `--radius` out of the stylesheet entirely. */
+@theme inline {
+  --radius: var(--ui-radius);
+  --radius-4xl: calc(var(--ui-radius) * 8);
+}
+
 /* The two toaster rules below are scoped by the `app-toaster` marker class that
  * `app.config.ts` puts on the toaster's viewport slot, NOT by `[data-slot='viewport']`.
  * That attribute is Nuxt UI's name for the scroll region of ELEVEN components

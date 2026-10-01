@@ -36,9 +36,9 @@ Code loads as instructions (via the sibling [`CLAUDE.md`](./CLAUDE.md)).
   literal, which does not scale with a theme's `fontSize`; a section eyebrow is
   `common/SectionLabel.vue`. [Rule](./README.md#type-through-named-steps-never-a-pixel-literal),
   guarded by `scripts/check-frontend-type-scale.mjs`.
-- **Radius through the seven steps Nuxt UI rebinds** (`rounded-xs` through `rounded-3xl`), never
-  bare `rounded`, `rounded-4xl` or a raw `border-radius` literal, none of which follow a theme's
-  `radius`. [Rule](./README.md#radius-through-the-theme-scale-never-the-bare-alias), guarded by
+- **Radius through any `rounded-*` step** (`main.css` binds the whole scale onto `--ui-radius`),
+  never an arbitrary value; in CSS, `var(--ui-radius)` or a `calc()` of it, never a `--radius-*`
+  variable or a literal. [Rule](./README.md#radius-through-the-theme-scale), guarded by
   `scripts/check-frontend-radius.mjs`.
 
 **Nuxt UI guidance:** the vendored [`nuxt-ui` skill](../../.claude/skills/nuxt-ui/SKILL.md) teaches

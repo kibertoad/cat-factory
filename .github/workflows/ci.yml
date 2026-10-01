@@ -511,12 +511,11 @@ jobs:
       - name: Guard SPA type scale
         run: node scripts/check-frontend-type-scale.mjs
 
-      # Bans corner radii that ignore the theme in the SPA: Nuxt UI rebuilds Tailwind's radius scale
-      # on `--ui-radius`, so every named step follows a theme document's `radius`, but the bare
-      # `rounded` alias resolves through a v4 `reference` variable that is inlined as a literal
-      # 0.25rem (#2251). The SPA carried 144, so any theme with a non-default radius rounded the
-      # buttons and left those boxes behind. Its fixtures run in the `node --test` step below. Pure
-      # node; no install.
+      # Bans corner radii that ignore the theme in the SPA. The scale itself is fixed in
+      # `main.css`, which binds `--radius` and `--radius-4xl` onto `--ui-radius` so every
+      # `rounded-*` utility follows a theme document's `radius` (#2251); what is left to ban is an
+      # arbitrary value and a raw `border-radius` literal, neither of which the rebind can reach.
+      # Its fixtures run in the `node --test` step below. Pure node; no install.
       - name: Guard SPA radius scale
         run: node scripts/check-frontend-radius.mjs
 
