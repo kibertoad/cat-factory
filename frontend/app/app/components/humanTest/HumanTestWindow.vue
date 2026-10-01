@@ -311,7 +311,7 @@ const canDestroy = computed(
                     : t('humanTest.history.pulledMain')
                 }}</span>
                 <span
-                  class="ms-1.5 rounded px-1 text-3xs uppercase"
+                  class="ms-1.5 rounded-sm px-1 text-3xs uppercase"
                   :class="
                     r.outcome === 'completed'
                       ? 'bg-app-success-500/15 text-app-success-300'

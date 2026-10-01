@@ -942,7 +942,7 @@ async function unlinkSource(id: string) {
                   <div
                     v-for="staged in stagedDocRefs"
                     :key="staged.path"
-                    class="flex items-center gap-1.5 rounded bg-elevated/60 px-2 py-1 text-xs text-toned"
+                    class="flex items-center gap-1.5 rounded-sm bg-elevated/60 px-2 py-1 text-xs text-toned"
                   >
                     <UIcon name="i-lucide-file-code-2" class="h-3.5 w-3.5 shrink-0 text-primary" />
                     <span class="truncate">{{ staged.path }}</span>

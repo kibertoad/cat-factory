@@ -27,7 +27,7 @@ const { t } = useI18n()
     <div class="relative mt-1">
       <CopyButton :text="detail" class="absolute end-1 top-1 z-10" />
       <pre
-        class="max-h-32 overflow-auto whitespace-pre-wrap rounded p-1.5 pe-9"
+        class="max-h-32 overflow-auto whitespace-pre-wrap rounded-sm p-1.5 pe-9"
         :class="preClass"
         >{{ detail }}</pre>
     </div>

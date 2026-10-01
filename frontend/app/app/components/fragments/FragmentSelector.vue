@@ -106,7 +106,7 @@ function manageAccount() {
                     v-for="f in group.fragments"
                     :key="f.id"
                     type="button"
-                    class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-start text-sm hover:bg-elevated/60"
+                    class="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-start text-sm hover:bg-elevated/60"
                     :class="selectedSet.has(f.id) ? 'text-app-100' : 'text-toned'"
                     :title="f.summary"
                     :data-testid="`fragment-option-${f.id}`"
@@ -129,7 +129,7 @@ function manageAccount() {
               <div class="mt-1 border-t border-default pt-1">
                 <button
                   type="button"
-                  class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-start text-sm text-toned hover:bg-elevated/60"
+                  class="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-start text-sm text-toned hover:bg-elevated/60"
                   @click="manageBoard"
                 >
                   <UIcon name="i-lucide-book-marked" class="h-4 w-4 shrink-0 text-muted" />
@@ -138,7 +138,7 @@ function manageAccount() {
                 <button
                   v-if="accounts.enabled"
                   type="button"
-                  class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-start text-sm text-toned hover:bg-elevated/60"
+                  class="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-start text-sm text-toned hover:bg-elevated/60"
                   @click="manageAccount"
                 >
                   <UIcon name="i-lucide-users" class="h-4 w-4 shrink-0 text-muted" />

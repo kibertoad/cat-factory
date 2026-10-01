@@ -424,7 +424,7 @@ async function merge(pr: GitHubPullRequest) {
                   v-for="r in github.availableRepos"
                   :key="r.githubId"
                   type="button"
-                  class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-start transition hover:bg-elevated/60"
+                  class="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-start transition hover:bg-elevated/60"
                   @click="toggleSelected(r.githubId)"
                 >
                   <UIcon

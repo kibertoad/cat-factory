@@ -438,7 +438,7 @@ function revealDecision(n: Notification) {
                 </button>
                 <span
                   v-if="isUrgent(n)"
-                  class="shrink-0 rounded bg-app-error-500/20 px-1.5 py-0.5 text-3xs font-semibold uppercase tracking-wide text-app-error-400"
+                  class="shrink-0 rounded-sm bg-app-error-500/20 px-1.5 py-0.5 text-3xs font-semibold uppercase tracking-wide text-app-error-400"
                 >
                   {{ t('layout.notifications.overdue') }}
                 </span>

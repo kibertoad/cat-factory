@@ -498,7 +498,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
             <input
               v-model="newLabel"
               :placeholder="t('pipeline.builder.labelPlaceholder')"
-              class="w-20 rounded border border-muted bg-default px-1.5 py-0.5 text-2xs text-default focus:w-28"
+              class="w-20 rounded-sm border border-muted bg-default px-1.5 py-0.5 text-2xs text-default focus:w-28"
               @keydown.enter.prevent="addLabel"
               @blur="addLabel"
             />
@@ -943,7 +943,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                       v-for="group in consensusGroups.groups"
                       :key="group.id"
                       type="button"
-                      class="rounded border px-1.5 py-0.5 text-2xs"
+                      class="rounded-sm border px-1.5 py-0.5 text-2xs"
                       :class="
                         isGroupSelected(unit.index, group.id)
                           ? 'border-app-success-600 bg-app-success-900/40 text-app-success-200'
@@ -967,7 +967,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                     <label class="text-muted">{{ t('pipeline.builder.strategy') }}</label>
                     <select
                       v-model="pipelines.draftConsensus[unit.index]!.strategy"
-                      class="rounded border border-muted bg-default px-1.5 py-0.5 text-app-100"
+                      class="rounded-sm border border-muted bg-default px-1.5 py-0.5 text-app-100"
                     >
                       <option v-for="s in CONSENSUS_STRATEGIES" :key="s.value" :value="s.value">
                         {{ s.label }}
@@ -985,7 +985,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                       min="1"
                       max="5"
                       placeholder="2"
-                      class="w-12 rounded border border-muted bg-default px-1.5 py-0.5 text-app-100"
+                      class="w-12 rounded-sm border border-muted bg-default px-1.5 py-0.5 text-app-100"
                     />
                   </div>
 
@@ -999,12 +999,12 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                       <input
                         v-model="p.role"
                         :placeholder="t('pipeline.builder.rolePlaceholder')"
-                        class="w-28 rounded border border-muted bg-default px-1.5 py-0.5 text-app-100"
+                        class="w-28 rounded-sm border border-muted bg-default px-1.5 py-0.5 text-app-100"
                       />
                       <input
                         v-model="p.modelId"
                         :placeholder="t('pipeline.builder.modelIdPlaceholder')"
-                        class="flex-1 rounded border border-muted bg-default px-1.5 py-0.5 text-toned"
+                        class="flex-1 rounded-sm border border-muted bg-default px-1.5 py-0.5 text-toned"
                       />
                       <UButton
                         icon="i-lucide-x"
