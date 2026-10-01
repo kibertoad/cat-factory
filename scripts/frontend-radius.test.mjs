@@ -122,9 +122,7 @@ describe('findFixedRadii', () => {
     // A leading `*` is the shape of both. The formatter writes a combinator with spaces around it,
     // and whitespace is itself the descendant combinator, so all of these are rules.
     assert.deepEqual(findFixedRadii('* { border-radius: 4px; }'), ['border-radius: 4px'])
-    assert.deepEqual(findFixedRadii('*, *::before { border-radius: 4px; }'), [
-      'border-radius: 4px',
-    ])
+    assert.deepEqual(findFixedRadii('*, *::before { border-radius: 4px; }'), ['border-radius: 4px'])
     assert.deepEqual(findFixedRadii('* p { border-radius: 4px }'), ['border-radius: 4px'])
     assert.deepEqual(findFixedRadii('* > .x { border-radius: 4px }'), ['border-radius: 4px'])
     assert.deepEqual(findFixedRadii('* + * { border-radius: 4px; }'), ['border-radius: 4px'])

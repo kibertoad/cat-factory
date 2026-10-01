@@ -108,7 +108,10 @@ export function findFixedRadii(line, prevLine = '') {
   const found = [...(code.match(ARBITRARY_UTILITY) ?? [])]
   for (const pattern of [DECLARATION, STYLE_PROPERTY]) {
     for (const [match, value] of code.matchAll(pattern)) {
-      const property = match.match(/^[^:=]*/)[0].trim().replaceAll(/["']/g, '')
+      const property = match
+        .match(/^[^:=]*/)[0]
+        .trim()
+        .replaceAll(/["']/g, '')
       const trimmed = value.trim().replace(/^["']|["']\s*$/g, '')
       if (isFixedValue(trimmed)) found.push(`${property}: ${trimmed}`)
     }
