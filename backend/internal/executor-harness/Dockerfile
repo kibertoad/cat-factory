@@ -130,9 +130,9 @@ RUN echo 'harness:100000:65536' > /etc/subuid \
 # installed binary for its version at startup and then stops reporting `piMcpServers`, so every
 # Pi dispatch carrying tool servers is refused rather than run blind
 # (`src/capability-report.ts`).
-ARG PI_VERSION=0.99.1
-ARG CLAUDE_CODE_VERSION=2.1.285
-ARG CODEX_VERSION=0.159.0
+ARG PI_VERSION=1.0.1
+ARG CLAUDE_CODE_VERSION=2.1.288
+ARG CODEX_VERSION=0.160.0
 RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
     sh -eu -c 'apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl procps psmisc python3 jq ripgrep && rm -rf /var/lib/apt/lists/*; \
     if [ -s /tmp/extra_ca.crt ]; then export NODE_EXTRA_CA_CERTS=/tmp/extra_ca.crt; fi; \
