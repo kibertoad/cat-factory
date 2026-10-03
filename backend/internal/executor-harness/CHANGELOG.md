@@ -1,5 +1,11 @@
 # @cat-factory/executor-harness
 
+## 1.163.2
+
+### Patch Changes
+
+- 072e027: Update the runner image to Pi 1.0.1, Claude Code 2.1.288, and Codex 0.160.0, using the latest npm releases without the 24-hour age threshold. Bump the executor and UI image pins to 1.163.1 so container runners use the updated CLIs.
+
 ## 1.163.0
 
 ### Minor Changes
