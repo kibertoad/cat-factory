@@ -6,6 +6,7 @@ import AgentTierSelect from '~/components/palettes/AgentTierSelect.vue'
 import PipelinePurposeSelect from '~/components/palettes/PipelinePurposeSelect.vue'
 import { groupAgentPalette, narrowAgentPalette } from '~/utils/agentPalette'
 import { AGENT_CATEGORIES, OBSERVABILITY_GATE_ARCHETYPE } from '~/utils/catalog'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const { t } = useI18n()
 const agents = useAgentsStore()
@@ -57,7 +58,7 @@ function toggle(id: string) {
 
 <template>
   <div class="space-y-2">
-    <p class="px-1 text-[11px] text-dimmed">{{ t('palette.hint') }}</p>
+    <p class="px-1 text-2xs text-dimmed">{{ t('palette.hint') }}</p>
     <!-- The two catalog dials, one above the other: what this pipeline is for, and how deep into
          the agent catalog to look. Both narrow the sections below, and each states its own count.
          Stacked rather than side by side because the palette column is a third of the slideover:
@@ -73,9 +74,10 @@ function toggle(id: string) {
     </div>
     <div class="space-y-2">
       <section v-for="g in groups" :key="g.id">
-        <button
+        <SectionLabel
+          as="button"
           type="button"
-          class="flex w-full items-center gap-1.5 rounded px-1 py-1 text-start text-[11px] font-semibold uppercase tracking-wide text-muted transition hover:text-default"
+          class="flex w-full items-center gap-1.5 rounded px-1 py-1 text-start transition hover:text-default"
           @click="toggle(g.id)"
         >
           <UIcon
@@ -84,7 +86,7 @@ function toggle(id: string) {
           />
           <span>{{ g.label }}</span>
           <span class="ms-auto text-app-600">{{ g.agents.length }}</span>
-        </button>
+        </SectionLabel>
         <div v-if="!isCollapsed(g.id)" class="mt-1 space-y-1.5">
           <button
             v-for="a in g.agents"
@@ -103,7 +105,7 @@ function toggle(id: string) {
             </div>
             <div class="min-w-0">
               <div class="text-xs font-semibold text-app-100">{{ a.label }}</div>
-              <div class="truncate text-[10px] text-muted">{{ a.description }}</div>
+              <div class="truncate text-3xs text-muted">{{ a.description }}</div>
             </div>
             <UIcon name="i-lucide-plus" class="ms-auto h-4 w-4 shrink-0 text-dimmed" />
           </button>

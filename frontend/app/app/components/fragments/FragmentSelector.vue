@@ -10,6 +10,7 @@
 // (labelled by their raw id) so they stay visible and removable.
 import type { PromptFragment } from '~/types/domain'
 import { buildFragmentCategoryGroups } from '~/utils/fragmentPicker'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -76,9 +77,9 @@ function manageAccount() {
 <template>
   <div>
     <div class="mb-1 flex items-center justify-between gap-2">
-      <span v-if="label" class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+      <SectionLabel v-if="label" as="span">
         {{ label }}
-      </span>
+      </SectionLabel>
       <span v-else />
       <UPopover v-model:open="open" :content="{ align: 'end' }">
         <UButton
@@ -98,11 +99,9 @@ function manageAccount() {
             <div class="min-h-0 flex-1 overflow-y-auto p-1">
               <template v-if="categoryGroups.length">
                 <div v-for="group in categoryGroups" :key="group.category">
-                  <p
-                    class="px-2 pb-0.5 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-dimmed"
-                  >
+                  <SectionLabel as="p" class="px-2 pb-0.5 pt-1.5">
                     {{ group.category }}
-                  </p>
+                  </SectionLabel>
                   <button
                     v-for="f in group.fragments"
                     :key="f.id"
@@ -123,7 +122,7 @@ function manageAccount() {
                   </button>
                 </div>
               </template>
-              <p v-else class="px-2 py-3 text-[12px] text-dimmed">
+              <p v-else class="px-2 py-3 text-xs text-dimmed">
                 {{ t('inspector.fragments.pickerEmpty') }}
               </p>
 
@@ -178,7 +177,7 @@ function manageAccount() {
         {{ f.title }}<UIcon name="i-lucide-x" class="ms-0.5 h-3 w-3" />
       </UBadge>
     </div>
-    <div v-else-if="emptyText" class="text-[11px] text-dimmed">
+    <div v-else-if="emptyText" class="text-2xs text-dimmed">
       {{ emptyText }}
     </div>
   </div>

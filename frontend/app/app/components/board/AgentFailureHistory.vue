@@ -19,7 +19,7 @@ const { t } = useI18n()
     data-testid="agent-failure-history"
   >
     <summary
-      class="flex cursor-pointer items-center gap-1.5 text-[11px] text-muted hover:text-default"
+      class="flex cursor-pointer items-center gap-1.5 text-2xs text-muted hover:text-default"
     >
       <UIcon name="i-lucide-history" class="h-3.5 w-3.5 shrink-0" />
       {{ t('board.failure.history.previousErrors', { count: failures.length }, failures.length) }}

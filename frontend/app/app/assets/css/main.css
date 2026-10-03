@@ -6,6 +6,9 @@
 /* The app's own mode-adaptive colour tokens (`app-*`), layered on Nuxt UI's. */
 @import './tokens.css';
 
+/* The app's own type steps below `text-xs` (`text-2xs`, `text-3xs`). */
+@import './type.css';
+
 /* The two toaster rules below are scoped by the `app-toaster` marker class that
  * `app.config.ts` puts on the toaster's viewport slot, NOT by `[data-slot='viewport']`.
  * That attribute is Nuxt UI's name for the scroll region of ELEVEN components

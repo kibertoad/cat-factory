@@ -3,6 +3,7 @@ import type { DropdownMenuItem } from '@nuxt/ui'
 import { computed, ref } from 'vue'
 import ThemeImportModal from '~/components/theme/ThemeImportModal.vue'
 import { useThemeStore } from '~/stores/theme'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 // Appearance picker, shown at the sidebar bottom beside the language switcher: colour MODE
 // (system / light / dark) and THEME (the built-ins plus anything the user imported from the Nuxt
@@ -96,9 +97,9 @@ const items = computed<DropdownMenuItem[][]>(() => [
     >
       <UIcon :name="MODE_ICONS[preference]" class="h-4 w-4 shrink-0 text-muted" />
       <div v-if="!collapsed" class="min-w-0 flex-1">
-        <div class="truncate text-[10px] uppercase tracking-wide text-dimmed">
+        <SectionLabel class="truncate">
           {{ t('appearance.switcher') }}
-        </div>
+        </SectionLabel>
         <div class="truncate text-xs font-medium text-highlighted">{{ summary }}</div>
       </div>
       <UIcon v-if="!collapsed" name="i-lucide-chevron-up" class="h-4 w-4 shrink-0 text-dimmed" />

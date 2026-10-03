@@ -288,12 +288,12 @@ const labelKey = computed(() =>
         />
         <span class="min-w-0">
           <span class="text-sm text-default">{{ item.label }}</span>
-          <span v-if="item.desc" class="block text-[11px] text-muted">{{ item.desc }}</span>
+          <span v-if="item.desc" class="block text-2xs text-muted">{{ item.desc }}</span>
         </span>
       </label>
     </div>
 
-    <p v-if="showRegisterHint" class="text-[11px] text-app-warning-300/80">
+    <p v-if="showRegisterHint" class="text-2xs text-app-warning-300/80">
       {{ t('settings.infrastructure.registerHint') }}
     </p>
 

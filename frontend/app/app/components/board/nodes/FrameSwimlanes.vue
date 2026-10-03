@@ -83,12 +83,12 @@ const withheldNote = computed(() => {
           class="h-3.5 w-3.5 shrink-0"
           :style="{ color: LANE_META.done.color }"
         />
-        <span class="text-[11px] font-semibold text-default">{{ t(LANE_META.done.labelKey) }}</span>
+        <span class="text-2xs font-semibold text-default">{{ t(LANE_META.done.labelKey) }}</span>
         <!-- The TOTAL, not what the caps admitted: "this service has finished 312 tasks" is the
              fact the lane carries, and counting only the visible cards would understate it by
              two orders of magnitude. -->
         <span
-          class="shrink-0 rounded px-1 text-[10px] font-semibold tabular-nums"
+          class="shrink-0 rounded px-1 text-3xs font-semibold tabular-nums"
           :style="{
             backgroundColor: tint(LANE_META.done.color),
             color: LANE_META.done.color,
@@ -96,7 +96,7 @@ const withheldNote = computed(() => {
           data-testid="lane-count-done"
           >{{ doneLane.total }}</span
         >
-        <span v-if="withheldNote" class="ms-auto truncate text-[10px] text-dimmed">{{
+        <span v-if="withheldNote" class="ms-auto truncate text-3xs text-dimmed">{{
           withheldNote
         }}</span>
       </button>
@@ -116,10 +116,7 @@ const withheldNote = computed(() => {
       >
         <!-- A zero cap is a real setting ("count them, show none"), so the strip explains why it
              has nothing in it rather than looking broken. -->
-        <p
-          v-if="doneSelection.shown.length === 0"
-          class="px-1 text-[10px] leading-snug text-app-600"
-        >
+        <p v-if="doneSelection.shown.length === 0" class="px-1 text-3xs leading-snug text-app-600">
           {{ t('board.lanes.done.allWithheld') }}
         </p>
         <LaneGroup

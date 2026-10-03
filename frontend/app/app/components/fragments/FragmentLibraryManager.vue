@@ -654,7 +654,7 @@ async function unlinkSource(id: string) {
             >
               {{ t('fragments.catalog.live', { source: f.documentRef.source }) }}
             </UBadge>
-            <span class="ms-auto font-mono text-[11px] text-dimmed">{{ f.id }}</span>
+            <span class="ms-auto font-mono text-2xs text-dimmed">{{ f.id }}</span>
           </div>
           <p class="mt-1 text-sm text-muted">{{ f.summary }}</p>
           <div v-if="f.tags?.length" class="mt-1 flex flex-wrap gap-1">
@@ -859,7 +859,7 @@ async function unlinkSource(id: string) {
               </UBadge>
             </div>
             <p class="text-sm text-muted">{{ f.summary }}</p>
-            <p v-if="f.resolvedAt" class="text-[11px] text-dimmed">
+            <p v-if="f.resolvedAt" class="text-2xs text-dimmed">
               {{
                 t('fragments.documents.lastResolved', { date: d(new Date(f.resolvedAt), 'long') })
               }}

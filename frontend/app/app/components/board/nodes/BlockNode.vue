@@ -13,7 +13,6 @@ import { useBlockDrag } from '~/composables/useBlockDrag'
 import { useFrameStacking } from '~/composables/useFrameStacking'
 import { useViewport } from '~/composables/useViewport'
 import { laneBodyHeightIn } from '~/utils/laneGeometry'
-
 // Vue Flow passes the node's `id` and `data` as props to custom node components.
 // Only frames are rendered as board nodes; their tasks live inside the card.
 const props = defineProps<{ id: string }>()
@@ -249,10 +248,10 @@ const ITEM_ICON: Record<string, string> = {
       }}</span>
     </div>
     <div class="px-3 py-3">
-      <p class="text-[11px] leading-snug text-muted">
+      <p class="text-2xs leading-snug text-muted">
         {{ t('board.frame.accessDenied.hint') }}
       </p>
-      <code class="mt-2 block truncate font-mono text-[11px] text-dimmed">{{ block.id }}</code>
+      <code class="mt-2 block truncate font-mono text-2xs text-dimmed">{{ block.id }}</code>
     </div>
   </div>
 
@@ -327,7 +326,7 @@ const ITEM_ICON: Record<string, string> = {
           <li
             v-for="(item, i) in bootstrapItems"
             :key="i"
-            class="flex items-start gap-1.5 text-[11px]"
+            class="flex items-start gap-1.5 text-2xs"
             :class="
               item.status === 'completed'
                 ? 'text-app-warning-200/60 line-through'
@@ -430,7 +429,7 @@ const ITEM_ICON: Record<string, string> = {
                     {{ t('board.frame.shared') }}
                   </UBadge>
                 </div>
-                <div class="text-[11px] text-muted">{{ typeMeta!.label }}</div>
+                <div class="text-2xs text-muted">{{ typeMeta!.label }}</div>
               </div>
             </div>
             <div class="flex items-center gap-1">
@@ -530,7 +529,7 @@ const ITEM_ICON: Record<string, string> = {
                stays is what the canvas can't show at a glance. -->
           <div
             v-if="modules.length || prTasks"
-            class="flex items-center gap-2 text-[10px] uppercase tracking-wide text-dimmed"
+            class="flex items-center gap-2 text-3xs uppercase tracking-wide text-dimmed"
           >
             <span v-if="modules.length">{{
               t('board.frame.moduleCount', { count: modules.length }, modules.length)
@@ -564,7 +563,7 @@ const ITEM_ICON: Record<string, string> = {
             v-if="!hasTasks && access.canWriteBoard.value"
             type="button"
             data-testid="frame-add-task-empty"
-            class="absolute inset-4 flex items-center justify-center gap-1 rounded-lg border border-dashed border-muted text-[11px] text-dimmed hover:border-app-500 hover:text-toned"
+            class="absolute inset-4 flex items-center justify-center gap-1 rounded-lg border border-dashed border-muted text-2xs text-dimmed hover:border-app-500 hover:text-toned"
             @click.stop="addTask"
           >
             <UIcon name="i-lucide-plus" class="h-3.5 w-3.5" /> {{ t('board.frame.addFirstTask') }}

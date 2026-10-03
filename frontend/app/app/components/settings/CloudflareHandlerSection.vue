@@ -147,7 +147,7 @@ async function remove() {
     <h3 class="text-sm font-semibold text-default">
       {{ t('inspector.testConfig.provisionTypes.cloudflare') }}
     </h3>
-    <p class="text-[11px] text-muted">
+    <p class="text-2xs text-muted">
       {{ t('settings.infrastructure.cloudflare.intro') }}
     </p>
 
@@ -162,7 +162,7 @@ async function remove() {
           disabled
           size="lg"
           :label="t('settings.infrastructure.handler.connectionEstablished')"
-          :ui="{ label: 'text-[13px] font-semibold text-app-success-300' }"
+          :ui="{ label: 'text-sm font-semibold text-app-success-300' }"
         />
         <div class="flex items-center gap-1">
           <UButton
@@ -185,31 +185,31 @@ async function remove() {
           />
         </div>
       </div>
-      <p class="pl-7 text-[11px] text-toned">
+      <p class="pl-7 text-2xs text-toned">
         {{ t('settings.infrastructure.cloudflare.connectedAs', { subdomain: workersSubdomain }) }}
       </p>
     </div>
 
     <div v-else class="space-y-2" data-testid="cloudflare-handler-form">
       <div class="space-y-1">
-        <label class="text-[11px] text-muted">{{
+        <label class="text-2xs text-muted">{{
           t('settings.infrastructure.cloudflare.label')
         }}</label>
         <UInput v-model="label" size="xs" />
       </div>
 
       <div class="space-y-1">
-        <label class="text-[11px] text-muted">{{
+        <label class="text-2xs text-muted">{{
           t('settings.infrastructure.cloudflare.subdomain')
         }}</label>
         <UInput v-model="workersSubdomain" size="xs" placeholder="my-account" />
-        <p class="text-[11px] text-dimmed">
+        <p class="text-2xs text-dimmed">
           {{ t('settings.infrastructure.cloudflare.subdomainHint') }}
         </p>
       </div>
 
       <div class="space-y-1">
-        <label class="text-[11px] text-muted">{{
+        <label class="text-2xs text-muted">{{
           t('settings.infrastructure.cloudflare.token')
         }}</label>
         <UInput
@@ -222,28 +222,28 @@ async function remove() {
               : t('settings.infrastructure.cloudflare.tokenPlaceholder')
           "
         />
-        <p class="text-[11px] text-dimmed">
+        <p class="text-2xs text-dimmed">
           {{ t('settings.infrastructure.cloudflare.tokenHint') }}
         </p>
       </div>
 
       <div class="space-y-1">
-        <label class="text-[11px] text-muted">{{
+        <label class="text-2xs text-muted">{{
           t('settings.infrastructure.cloudflare.repo')
         }}</label>
         <UInput v-model="repo" size="xs" placeholder="owner/repo" />
-        <p class="text-[11px] text-dimmed">
+        <p class="text-2xs text-dimmed">
           {{ t('settings.infrastructure.cloudflare.repoHint') }}
         </p>
       </div>
 
       <details class="rounded-md border border-muted/70 p-2">
-        <summary class="cursor-pointer text-[11px] text-muted">
+        <summary class="cursor-pointer text-2xs text-muted">
           {{ t('settings.infrastructure.cloudflare.advanced') }}
         </summary>
         <div class="mt-2 space-y-2">
           <div class="space-y-1">
-            <label class="text-[11px] text-muted">{{
+            <label class="text-2xs text-muted">{{
               t('settings.infrastructure.cloudflare.workerTemplate')
             }}</label>
             <!-- The placeholder is a FORMAT EXAMPLE containing vue-i18n metacharacters, so it
@@ -255,16 +255,16 @@ async function remove() {
             />
           </div>
           <div class="space-y-1">
-            <label class="text-[11px] text-muted">{{
+            <label class="text-2xs text-muted">{{
               t('settings.infrastructure.cloudflare.environmentTemplate')
             }}</label>
             <UInput v-model="environmentNameTemplate" size="xs" placeholder="pr-{{pullNumber}}" />
           </div>
-          <p class="text-[11px] text-dimmed">
+          <p class="text-2xs text-dimmed">
             {{ t('settings.infrastructure.cloudflare.templateHint') }}
           </p>
           <div class="space-y-1">
-            <label class="text-[11px] text-muted">{{
+            <label class="text-2xs text-muted">{{
               t('settings.infrastructure.cloudflare.apiBaseUrl')
             }}</label>
             <UInput v-model="apiBaseUrl" size="xs" placeholder="https://api.github.com" />
@@ -300,7 +300,7 @@ async function remove() {
 
       <p
         v-if="testResult"
-        class="text-[11px]"
+        class="text-2xs"
         :class="testResult.ok ? 'text-app-success-300' : 'text-app-error-300'"
       >
         {{ testResult.message }}

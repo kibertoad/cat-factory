@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Notification } from '~/types/domain'
 import type { ReviewEffort } from '~/types/merge'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 // The board's notification inbox: a bell with an open-count badge that opens a
 // panel of human-actionable items (a PR awaiting a merge decision, a completed
@@ -406,9 +407,9 @@ function revealDecision(n: Notification) {
 
     <template #content>
       <div class="max-h-[28rem] w-[min(24rem,92vw)] overflow-y-auto p-2">
-        <div class="px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted">
+        <SectionLabel class="px-2 py-1">
           {{ t('layout.notifications.heading') }}
-        </div>
+        </SectionLabel>
         <div
           v-for="n in notifications.open"
           :key="n.id"
@@ -437,18 +438,18 @@ function revealDecision(n: Notification) {
                 </button>
                 <span
                   v-if="isUrgent(n)"
-                  class="shrink-0 rounded bg-app-error-500/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-app-error-400"
+                  class="shrink-0 rounded bg-app-error-500/20 px-1.5 py-0.5 text-3xs font-semibold uppercase tracking-wide text-app-error-400"
                 >
                   {{ t('layout.notifications.overdue') }}
                 </span>
               </div>
-              <p class="mt-0.5 text-[11px] leading-snug text-muted">{{ n.body }}</p>
+              <p class="mt-0.5 text-2xs leading-snug text-muted">{{ n.body }}</p>
               <a
                 v-if="n.payload?.prUrl"
                 :href="n.payload.prUrl"
                 target="_blank"
                 rel="noopener"
-                class="mt-1 inline-flex items-center gap-1 text-[11px] text-app-info-400 hover:underline"
+                class="mt-1 inline-flex items-center gap-1 text-2xs text-app-info-400 hover:underline"
               >
                 <UIcon name="i-lucide-external-link" class="h-3 w-3" />
                 {{ t('layout.notifications.openPr') }}
@@ -467,7 +468,7 @@ function revealDecision(n: Notification) {
                   v-for="run in failingRuns(n)"
                   :key="run.executionId"
                   :type="canOpenFailingRun(run) ? 'button' : undefined"
-                  class="flex items-center gap-1 text-start text-[11px]"
+                  class="flex items-center gap-1 text-start text-2xs"
                   :class="
                     canOpenFailingRun(run)
                       ? 'text-app-info-400 hover:underline'
@@ -486,7 +487,7 @@ function revealDecision(n: Notification) {
                     })
                   }}</span>
                 </component>
-                <span v-if="failingRunsOmitted(n) > 0" class="text-[11px] text-dimmed">
+                <span v-if="failingRunsOmitted(n) > 0" class="text-2xs text-dimmed">
                   {{ t('layout.notifications.failingRunsMore', { count: failingRunsOmitted(n) }) }}
                 </span>
               </div>

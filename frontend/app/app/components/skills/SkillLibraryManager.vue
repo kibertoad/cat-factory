@@ -181,10 +181,10 @@ async function unlinkSource(id: string) {
             <!-- The manifest declared a group this build does not know (a typo, or a member
                  retired since the sync). It is filed under Other, and saying which value was
                  declared is what lets the author fix their frontmatter. -->
-            <p v-if="s.declaredGroup" class="mt-1 text-[11px] text-app-warning-400">
+            <p v-if="s.declaredGroup" class="mt-1 text-2xs text-app-warning-400">
               {{ t('skills.catalog.groupUnknown', { group: s.declaredGroup }) }}
             </p>
-            <p class="mt-1 flex flex-wrap gap-x-3 text-[11px] text-dimmed">
+            <p class="mt-1 flex flex-wrap gap-x-3 text-2xs text-dimmed">
               <span v-if="s.resources.length">
                 {{ t('skills.catalog.resources', { count: s.resources.length }) }}
               </span>

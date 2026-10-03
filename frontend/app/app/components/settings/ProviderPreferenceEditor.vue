@@ -26,6 +26,7 @@ import {
   moveFlavor,
   subscriptionOverridesOrder,
 } from '~/components/settings/ProviderPreferenceEditor.logic'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const props = defineProps<{
   /** The preset's stored order; empty/absent ⇒ the deployment's default order. */
@@ -90,9 +91,9 @@ function reset() {
 <template>
   <div>
     <div class="mb-1 flex items-start justify-between gap-3">
-      <span class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+      <SectionLabel as="span">
         {{ t('settings.modelConfiguration.routeOrder.label') }}
-      </span>
+      </SectionLabel>
       <UButton
         v-if="isCustom"
         size="xs"
@@ -105,7 +106,7 @@ function reset() {
         {{ t('settings.modelConfiguration.routeOrder.reset') }}
       </UButton>
     </div>
-    <p class="mb-2 text-[11px] leading-relaxed text-dimmed">
+    <p class="mb-2 text-2xs leading-relaxed text-dimmed">
       {{
         isCustom
           ? t('settings.modelConfiguration.routeOrder.customHint')
@@ -118,7 +119,7 @@ function reset() {
          route a connected plan quietly overrules is the one thing this control must not do. -->
     <p
       v-if="subscriptionWins"
-      class="mb-2 text-[11px] leading-relaxed text-app-warning-400/90"
+      class="mb-2 text-2xs leading-relaxed text-app-warning-400/90"
       data-testid="preset-route-order-subscription-warning"
     >
       {{ t('settings.modelConfiguration.routeOrder.subscriptionOverrideHint') }}
@@ -128,7 +129,7 @@ function reset() {
          answering a different question than this order asks. -->
     <p
       v-if="badgesShowAnotherOrder"
-      class="mb-2 text-[11px] leading-relaxed text-dimmed"
+      class="mb-2 text-2xs leading-relaxed text-dimmed"
       data-testid="preset-route-order-badge-hint"
     >
       {{ t('settings.modelConfiguration.routeOrder.badgesUseDefaultPresetHint') }}
@@ -144,13 +145,13 @@ function reset() {
         :data-testid="`preset-route-${flavor}`"
       >
         <span
-          class="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-elevated text-[10px] font-semibold text-muted"
+          class="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-elevated text-3xs font-semibold text-muted"
         >
           {{ index + 1 }}
         </span>
         <div class="min-w-0 flex-1">
           <p class="truncate text-sm text-default">{{ t(ROUTE_LABELS[flavor]) }}</p>
-          <p class="truncate text-[11px] text-dimmed">{{ t(ROUTE_HINTS[flavor]) }}</p>
+          <p class="truncate text-2xs text-dimmed">{{ t(ROUTE_HINTS[flavor]) }}</p>
         </div>
         <div class="flex shrink-0 items-center gap-1">
           <UButton

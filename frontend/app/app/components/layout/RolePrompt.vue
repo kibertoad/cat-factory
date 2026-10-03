@@ -56,7 +56,7 @@ function pick(role: UiRole) {
         </div>
         <!-- The choice is not a commitment, and saying so is what makes the narrowed role
              pickable: it is one dropdown at the top of the sidebar to leave again. -->
-        <p class="text-[11px] leading-snug text-dimmed">{{ t('uiRole.prompt.change') }}</p>
+        <p class="text-2xs leading-snug text-dimmed">{{ t('uiRole.prompt.change') }}</p>
       </div>
     </template>
     <template #footer>

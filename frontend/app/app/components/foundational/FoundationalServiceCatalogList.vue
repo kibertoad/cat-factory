@@ -92,7 +92,7 @@ async function suppress(serviceId: string) {
         <div class="min-w-0 flex-1">
           <p class="truncate text-sm font-medium text-app-100">
             {{ s.name }}
-            <code class="ms-1 text-[11px] text-dimmed">{{ s.id }}</code>
+            <code class="ms-1 text-2xs text-dimmed">{{ s.id }}</code>
           </p>
           <p class="text-xs text-muted">{{ s.summary }}</p>
           <div v-if="s.capabilities.length" class="mt-1 flex flex-wrap gap-1">
@@ -124,11 +124,11 @@ async function suppress(serviceId: string) {
               :key="doc.contractId"
               class="rounded-md border border-default bg-app-950/60 p-2"
             >
-              <p class="mb-1 text-[11px] text-muted">
+              <p class="mb-1 text-2xs text-muted">
                 {{ doc.title }}
                 <span v-if="doc.path" class="ms-1 font-mono text-app-600">{{ doc.path }}</span>
               </p>
-              <pre class="max-h-64 overflow-auto text-[11px] text-toned">{{ doc.body }}</pre>
+              <pre class="max-h-64 overflow-auto text-2xs text-toned">{{ doc.body }}</pre>
             </div>
           </div>
         </div>

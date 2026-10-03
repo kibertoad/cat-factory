@@ -115,7 +115,7 @@ async function removeEntry(entryId: string) {
         <div class="min-w-0 space-y-1">
           <div class="flex items-center gap-2">
             <span class="text-sm font-medium">{{ vendorLabel(entry.vendor) }}</span>
-            <span class="text-[11px] text-dimmed">
+            <span class="text-2xs text-dimmed">
               {{ t('settings.packageRegistries.list.tokenTail', { tail: entry.tokenTail }) }}
             </span>
           </div>
@@ -132,7 +132,7 @@ async function removeEntry(entryId: string) {
             <!-- An entry with no scopes authenticates its host without routing any scope to
                  it (the deliberate mixed public/private setup) — say so, or the row reads as
                  half-configured. -->
-            <span v-if="!entry.scopes.length" class="text-[11px] text-dimmed">
+            <span v-if="!entry.scopes.length" class="text-2xs text-dimmed">
               {{ t('settings.packageRegistries.list.noScopes') }}
             </span>
           </div>
@@ -164,7 +164,7 @@ async function removeEntry(entryId: string) {
           data-testid="package-registry-vendor"
         />
       </UFormField>
-      <p class="text-[11px] text-dimmed">
+      <p class="text-2xs text-dimmed">
         {{ t('settings.packageRegistries.add.host', { host: vendorHost }) }}
       </p>
 
@@ -197,7 +197,7 @@ async function removeEntry(entryId: string) {
       </div>
       <!-- Why leaving this empty is often the RIGHT answer — a scope mapping is all-or-nothing,
            so an org publishing some of its `@org` packages publicly breaks under one. -->
-      <p class="text-[11px] text-dimmed">
+      <p class="text-2xs text-dimmed">
         {{ t('settings.packageRegistries.add.scopesNote') }}
       </p>
 

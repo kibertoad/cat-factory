@@ -200,17 +200,17 @@ function choose(id: string) {
           <template v-if="preview.policy">
             <p
               v-if="previewRefusal"
-              class="mb-2 text-[11px] leading-snug text-app-warning-400"
+              class="mb-2 text-2xs leading-snug text-app-warning-400"
               data-testid="risk-policy-refusal"
             >
               {{ t(`riskPolicy.picker.refused.${previewRefusal}`) }}
             </p>
-            <p v-if="preview.viaWorkspaceDefault" class="mb-2 text-[11px] leading-snug text-dimmed">
+            <p v-if="preview.viaWorkspaceDefault" class="mb-2 text-2xs leading-snug text-dimmed">
               {{ t('riskPolicy.picker.workspaceDefaultCaption') }}
             </p>
             <RiskPolicyPreview :policy="preview.policy" />
           </template>
-          <div v-else class="text-[12px] leading-snug text-dimmed">
+          <div v-else class="text-xs leading-snug text-dimmed">
             {{ t('riskPolicy.picker.noneHint') }}
           </div>
         </div>

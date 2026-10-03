@@ -43,7 +43,7 @@ const compliant = computed(() => (block.value?.id.length ?? 0) % 2 === 0)
     <div class="flex flex-col gap-2 pt-1" data-testid="acme-incident-panel">
       <div class="flex items-center gap-2">
         <span
-          class="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase"
+          class="rounded px-1.5 py-0.5 text-3xs font-semibold uppercase"
           :class="
             compliant
               ? 'bg-app-success-500/15 text-app-success-300'
@@ -53,9 +53,9 @@ const compliant = computed(() => (block.value?.id.length ?? 0) % 2 === 0)
         >
           {{ compliant ? t('acme.incidentPanel.compliant') : t('acme.incidentPanel.actionNeeded') }}
         </span>
-        <span class="truncate text-[12px] text-muted">{{ block?.title }}</span>
+        <span class="truncate text-xs text-muted">{{ block?.title }}</span>
       </div>
-      <p class="text-[11px] leading-relaxed text-dimmed">
+      <p class="text-2xs leading-relaxed text-dimmed">
         {{ t('acme.incidentPanel.body') }}
       </p>
     </div>

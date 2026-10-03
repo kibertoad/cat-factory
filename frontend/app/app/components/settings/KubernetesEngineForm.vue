@@ -17,6 +17,7 @@ import type {
 } from '@cat-factory/contracts'
 import { isKubernetesUrlSource } from '@cat-factory/contracts'
 import type { K3sSetupPrefill } from '~/stores/ui'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 // The kube branch of the discriminated handler config this form produces (the `local-k3s` /
 // `remote-kubernetes` engines share `kubernetesEngineConfigSchema`). Emitting this typed
@@ -369,17 +370,17 @@ async function copyAutoSetupCommand() {
 
 <template>
   <div class="rounded-lg border border-dashed border-muted p-3 space-y-3">
-    <p class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+    <SectionLabel as="p">
       {{
         connected
           ? t('settings.providerConnection.form.updateConfiguration')
           : t('settings.providerConnection.form.connect')
       }}
-    </p>
+    </SectionLabel>
 
     <p
       v-if="engine === 'local-k3s'"
-      class="rounded-md border border-app-info-500/30 bg-app-info-500/10 p-2 text-[11px] text-app-info-200"
+      class="rounded-md border border-app-info-500/30 bg-app-info-500/10 p-2 text-2xs text-app-info-200"
     >
       {{ t('settings.infrastructure.kubernetesEngine.localK3sHint') }}
     </p>
@@ -391,16 +392,16 @@ async function copyAutoSetupCommand() {
       v-if="engine === 'local-k3s'"
       class="rounded-md border border-muted bg-default/40 p-2 space-y-1.5"
     >
-      <p class="flex items-center gap-1.5 text-[11px] font-semibold text-toned">
+      <p class="flex items-center gap-1.5 text-2xs font-semibold text-toned">
         <UIcon name="i-lucide-wand-2" class="h-3.5 w-3.5 text-muted" />
         {{ t('settings.infrastructure.kubernetesEngine.autoSetup.title') }}
       </p>
-      <p class="text-[11px] text-muted">
+      <p class="text-2xs text-muted">
         {{ t('settings.infrastructure.kubernetesEngine.autoSetup.description') }}
       </p>
       <div class="flex items-center gap-1.5">
         <code
-          class="flex-1 rounded bg-app-950 px-2 py-1 font-mono text-[11px] text-default select-all"
+          class="flex-1 rounded bg-app-950 px-2 py-1 font-mono text-2xs text-default select-all"
         >
           {{ AUTO_SETUP_COMMAND }}
         </code>
@@ -438,7 +439,7 @@ async function copyAutoSetupCommand() {
       "
     >
       <template v-if="tokenStored" #hint>
-        <span class="inline-flex items-center gap-1 text-[11px] text-app-success-400">
+        <span class="inline-flex items-center gap-1 text-2xs text-app-success-400">
           <UIcon name="i-lucide-check-circle-2" class="h-3.5 w-3.5" />
           {{ t('settings.infrastructure.kubernetesEngine.tokenSaved') }}
         </span>
@@ -457,7 +458,7 @@ async function copyAutoSetupCommand() {
            and the operator may legitimately overrule it. -->
       <p
         v-if="tokenProblem"
-        class="mt-1 text-[11px]"
+        class="mt-1 text-2xs"
         :class="tokenBlocking ? 'text-app-error-400' : 'text-app-warning-400'"
         data-testid="service-account-token-problem"
       >

@@ -17,6 +17,7 @@
 import { computed, ref } from 'vue'
 import { MAX_REVIEW_SKILLS } from '@cat-factory/contracts'
 import { useSkillsStore } from '~/stores/skills'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const props = defineProps<{
   /** The queued skill ids, in the order the reviewer applies them (`v-model`). */
@@ -63,9 +64,9 @@ function toggle(id: string) {
 <template>
   <div>
     <div class="mb-1 flex items-center justify-between gap-2">
-      <span class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+      <SectionLabel as="span">
         {{ t('skills.reviewQueue.label') }}
-      </span>
+      </SectionLabel>
       <UPopover v-model:open="open" :content="{ align: 'end' }">
         <UButton
           size="xs"
@@ -101,20 +102,20 @@ function toggle(id: string) {
                   />
                   <span class="min-w-0 flex-1">
                     <span class="block truncate">{{ s.name }}</span>
-                    <span class="block truncate text-[11px] text-dimmed">
+                    <span class="block truncate text-2xs text-dimmed">
                       {{ s.description }}
                     </span>
                   </span>
                 </button>
               </template>
-              <p v-else class="px-2 py-3 text-[12px] text-dimmed">
+              <p v-else class="px-2 py-3 text-xs text-dimmed">
                 {{ t('skills.reviewQueue.pickerEmpty') }}
               </p>
             </div>
 
             <p
               v-if="atCap"
-              class="border-t border-default px-2 py-1.5 text-[11px] text-app-warning-400"
+              class="border-t border-default px-2 py-1.5 text-2xs text-app-warning-400"
             >
               {{ t('skills.reviewQueue.capped', { max: MAX_REVIEW_SKILLS }) }}
             </p>
@@ -149,7 +150,7 @@ function toggle(id: string) {
         {{ s.name }}<UIcon name="i-lucide-x" class="ms-0.5 h-3 w-3" />
       </UBadge>
     </div>
-    <p v-else class="text-[11px] text-dimmed">
+    <p v-else class="text-2xs text-dimmed">
       {{ t('skills.reviewQueue.hint') }}
     </p>
   </div>

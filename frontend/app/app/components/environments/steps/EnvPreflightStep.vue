@@ -51,21 +51,21 @@ const PREFLIGHT_COLOR: Record<'pass' | 'warn' | 'fail', 'success' | 'warning' | 
 
     <p
       v-if="!store.recipe.prerequisites?.length"
-      class="text-[12px] text-dimmed"
+      class="text-xs text-dimmed"
       data-testid="env-setup-preflight-none"
     >
       {{ t('environmentWizard.preflight.none') }}
     </p>
     <p
       v-else-if="preflightsUnavailable"
-      class="text-[12px] text-app-warning-300/80"
+      class="text-xs text-app-warning-300/80"
       data-testid="env-setup-preflight-unavailable"
     >
       {{ t('environmentWizard.preflight.unavailable') }}
     </p>
     <p
       v-if="store.preflightError"
-      class="text-[12px] text-app-error-300/80"
+      class="text-xs text-app-error-300/80"
       data-testid="env-setup-preflight-error"
     >
       {{ store.preflightError }}
@@ -85,15 +85,15 @@ const PREFLIGHT_COLOR: Record<'pass' | 'warn' | 'fail', 'success' | 'warning' | 
           <UBadge :color="PREFLIGHT_COLOR[r.status]" variant="subtle" size="sm">
             {{ r.status }}
           </UBadge>
-          <span class="text-[12px] text-default">{{ r.title }}</span>
-          <span v-if="!r.required" class="ms-auto text-[10px] text-dimmed">
+          <span class="text-xs text-default">{{ r.title }}</span>
+          <span v-if="!r.required" class="ms-auto text-3xs text-dimmed">
             {{ t('environmentWizard.preflight.optional') }}
           </span>
         </div>
-        <p v-if="r.detail" class="mt-1 text-[11px] text-muted">{{ r.detail }}</p>
+        <p v-if="r.detail" class="mt-1 text-2xs text-muted">{{ r.detail }}</p>
         <pre
           v-if="r.status !== 'pass' && r.remediation"
-          class="mt-1 max-h-40 overflow-auto whitespace-pre-wrap rounded border border-app-warning-900/40 bg-app-warning-950/20 p-1.5 text-[11px] text-app-warning-200/90"
+          class="mt-1 max-h-40 overflow-auto whitespace-pre-wrap rounded border border-app-warning-900/40 bg-app-warning-950/20 p-1.5 text-2xs text-app-warning-200/90"
           >{{ r.remediation }}</pre>
       </li>
     </ul>

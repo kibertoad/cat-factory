@@ -13,6 +13,8 @@
 // is a five-minute flow that touches a repo and can trial-provision a stack, so "when you need
 // this / when you don't" has to be answerable BEFORE opening it — most services on most boards
 // never need it at all.
+import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const { t } = useI18n()
 const ui = useUiStore()
 
@@ -53,33 +55,33 @@ function start() {
     </div>
 
     <div class="rounded border border-default bg-default/40 p-3">
-      <p class="text-[11px] font-medium uppercase tracking-wide text-muted">
+      <SectionLabel as="p">
         {{ t('settings.composeEnvSetup.how.title') }}
-      </p>
-      <ol class="mt-2 list-decimal space-y-1 ps-4 text-[11px] leading-relaxed text-muted">
+      </SectionLabel>
+      <ol class="mt-2 list-decimal space-y-1 ps-4 text-2xs leading-relaxed text-muted">
         <li v-for="(step, i) in steps" :key="`how-${i}`">{{ step }}</li>
       </ol>
-      <p class="mt-2 text-[11px] leading-relaxed text-dimmed">
+      <p class="mt-2 text-2xs leading-relaxed text-dimmed">
         {{ t('settings.composeEnvSetup.how.outcome') }}
       </p>
     </div>
 
     <div class="grid gap-2 sm:grid-cols-2">
       <div class="rounded border border-app-success-900/50 bg-app-success-950/20 p-3">
-        <p class="flex items-center gap-1.5 text-[11px] font-medium text-app-success-200/90">
+        <p class="flex items-center gap-1.5 text-2xs font-medium text-app-success-200/90">
           <UIcon name="i-lucide-check" class="h-3.5 w-3.5 shrink-0" />
           {{ t('settings.composeEnvSetup.needed.title') }}
         </p>
-        <ul class="mt-1.5 list-disc space-y-1 ps-4 text-[11px] leading-relaxed text-muted">
+        <ul class="mt-1.5 list-disc space-y-1 ps-4 text-2xs leading-relaxed text-muted">
           <li v-for="(item, i) in needed" :key="`need-${i}`">{{ item }}</li>
         </ul>
       </div>
       <div class="rounded border border-default bg-default/40 p-3">
-        <p class="flex items-center gap-1.5 text-[11px] font-medium text-toned">
+        <p class="flex items-center gap-1.5 text-2xs font-medium text-toned">
           <UIcon name="i-lucide-minus" class="h-3.5 w-3.5 shrink-0" />
           {{ t('settings.composeEnvSetup.notNeeded.title') }}
         </p>
-        <ul class="mt-1.5 list-disc space-y-1 ps-4 text-[11px] leading-relaxed text-muted">
+        <ul class="mt-1.5 list-disc space-y-1 ps-4 text-2xs leading-relaxed text-muted">
           <li v-for="(item, i) in notNeeded" :key="`skip-${i}`">{{ item }}</li>
         </ul>
       </div>
@@ -96,7 +98,7 @@ function start() {
       >
         {{ t('settings.composeEnvSetup.start') }}
       </UButton>
-      <span class="text-[11px] text-dimmed">{{ t('settings.composeEnvSetup.rerunHint') }}</span>
+      <span class="text-2xs text-dimmed">{{ t('settings.composeEnvSetup.rerunHint') }}</span>
     </div>
   </section>
 </template>

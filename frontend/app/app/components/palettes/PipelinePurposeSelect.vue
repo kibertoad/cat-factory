@@ -71,7 +71,7 @@ const items = computed(() => [
         <span class="truncate"> {{ t('pipeline.builder.purposeLabel') }}: {{ current }} </span>
       </UButton>
     </UDropdownMenu>
-    <p v-if="props.hiddenCount" class="px-1 text-[10px] text-dimmed">
+    <p v-if="props.hiddenCount" class="px-1 text-3xs text-dimmed">
       {{ t('palette.purposeHidden', { count: props.hiddenCount }, props.hiddenCount) }}
     </p>
   </div>

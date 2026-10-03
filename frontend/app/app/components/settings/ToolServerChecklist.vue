@@ -128,10 +128,10 @@ async function runProbe(id: string) {
         <UBadge color="neutral" variant="soft" size="sm">
           {{ TRANSPORT_LABELS[server.transport] }}
         </UBadge>
-        <code class="font-mono text-[11px] text-dimmed">{{ server.id }}</code>
+        <code class="font-mono text-2xs text-dimmed">{{ server.id }}</code>
       </div>
 
-      <p class="truncate font-mono text-[11px] text-dimmed" :title="server.target">
+      <p class="truncate font-mono text-2xs text-dimmed" :title="server.target">
         {{ server.target }}
       </p>
       <p v-if="server.guidance" class="text-xs text-muted">{{ server.guidance }}</p>
@@ -139,12 +139,12 @@ async function runProbe(id: string) {
       <!-- Which agents get it. An EMPTY list is a registration attached to nothing: it never reaches
            a dispatch, so the credentials it asks for are keys an operator fills in for no run. Said
            out loud, because no other surface in the platform can see that state. -->
-      <p v-if="server.declaredBy.length" class="text-[11px] text-muted">
+      <p v-if="server.declaredBy.length" class="text-2xs text-muted">
         {{ t('settings.toolServers.declaredBy', { kinds: server.declaredBy.join(', ') }) }}
       </p>
       <p
         v-else
-        class="text-[11px] text-app-warning-400"
+        class="text-2xs text-app-warning-400"
         :data-testid="`tool-server-orphan-${server.id}`"
       >
         {{ t('settings.toolServers.declaredByNone') }}
@@ -153,21 +153,21 @@ async function runProbe(id: string) {
       <!-- Which harnesses could serve it. EMPTY means the declaration can never run anywhere (an
            `http` server narrowed to Codex, whose MCP client is stdio-only): it is never dropped FOR
            A REASON on any run, so no prompt and no log line ever mentions it. -->
-      <p v-if="server.servableHarnesses.length" class="text-[11px] text-muted">
+      <p v-if="server.servableHarnesses.length" class="text-2xs text-muted">
         {{
           t('settings.toolServers.servableHarnesses', {
             harnesses: server.servableHarnesses.join(', '),
           })
         }}
       </p>
-      <p v-else class="text-[11px] text-app-warning-400">
+      <p v-else class="text-2xs text-app-warning-400">
         {{ t('settings.toolServers.servableHarnessesNone') }}
       </p>
 
-      <p v-if="server.allowedTools?.length" class="text-[11px] text-muted">
+      <p v-if="server.allowedTools?.length" class="text-2xs text-muted">
         {{ t('settings.toolServers.allowedTools', { tools: server.allowedTools.join(', ') }) }}
       </p>
-      <p v-if="server.credentials.length" class="text-[11px] text-muted">
+      <p v-if="server.credentials.length" class="text-2xs text-muted">
         {{
           t('settings.toolServers.credentials', {
             keys: server.credentials.map((c) => c.key).join(', '),
@@ -199,25 +199,25 @@ async function runProbe(id: string) {
                   : t('settings.toolServers.oauth.machineGrant')
             }}
           </UBadge>
-          <span v-if="server.oauth.connectedBy" class="text-[11px] text-muted">
+          <span v-if="server.oauth.connectedBy" class="text-2xs text-muted">
             {{ t('settings.toolServers.oauth.connectedBy', { user: server.oauth.connectedBy }) }}
           </span>
         </div>
 
-        <p v-if="server.oauth.scopes?.length" class="text-[11px] text-muted">
+        <p v-if="server.oauth.scopes?.length" class="text-2xs text-muted">
           {{ t('settings.toolServers.oauth.scopes', { scopes: server.oauth.scopes.join(', ') }) }}
         </p>
         <!-- A grant with no refresh token works until its access token expires and then needs
              granting again by hand. Said BEFORE it happens, which is the only time it is useful. -->
         <p
           v-if="server.oauth.connected && server.oauth.refreshable === false"
-          class="text-[11px] text-app-warning-400"
+          class="text-2xs text-app-warning-400"
         >
           {{ t('settings.toolServers.oauth.notRefreshable') }}
         </p>
         <p
           v-if="server.oauth.lastError"
-          class="text-[11px] text-app-error-400"
+          class="text-2xs text-app-error-400"
           :data-testid="`tool-server-oauth-error-${server.id}`"
         >
           {{ t('settings.toolServers.oauth.lastError', { detail: server.oauth.lastError }) }}
@@ -272,7 +272,7 @@ async function runProbe(id: string) {
              verify it from a run, or change the declaration. -->
         <p
           v-else-if="server.notProbeableReason"
-          class="text-[11px] text-dimmed"
+          class="text-2xs text-dimmed"
           :data-testid="`tool-server-unprobeable-${server.id}`"
         >
           {{ NOT_PROBEABLE_LABELS[server.notProbeableReason] }}
@@ -293,12 +293,12 @@ async function runProbe(id: string) {
           >
             {{ STATUS_LABELS[resultFor(server.id)!.status] }}
           </UBadge>
-          <span v-if="resultFor(server.id)!.httpStatus" class="text-[11px] text-muted">
+          <span v-if="resultFor(server.id)!.httpStatus" class="text-2xs text-muted">
             {{ t('settings.toolServers.httpStatus', { status: resultFor(server.id)!.httpStatus }) }}
           </span>
         </div>
 
-        <p v-if="resultFor(server.id)!.status === 'ok'" class="text-[11px] text-toned">
+        <p v-if="resultFor(server.id)!.status === 'ok'" class="text-2xs text-toned">
           {{
             t('settings.toolServers.okDetail', {
               name: resultFor(server.id)!.serverName || server.id,
@@ -310,7 +310,7 @@ async function runProbe(id: string) {
         </p>
         <!-- A count off a truncated read is a FLOOR, not a total, and the difference decides whether
              the allowedTools verdict below means anything. -->
-        <p v-if="resultFor(server.id)!.toolsComplete === false" class="text-[11px] text-dimmed">
+        <p v-if="resultFor(server.id)!.toolsComplete === false" class="text-2xs text-dimmed">
           {{ t('settings.toolServers.toolsIncomplete') }}
         </p>
 
@@ -319,7 +319,7 @@ async function runProbe(id: string) {
              advertising the tool. Withheld entirely when the tool list was a prefix. -->
         <p
           v-if="resultFor(server.id)!.allowedTools?.unmatched?.length"
-          class="text-[11px] text-app-warning-400"
+          class="text-2xs text-app-warning-400"
           :data-testid="`tool-server-unmatched-${server.id}`"
         >
           {{
@@ -330,14 +330,14 @@ async function runProbe(id: string) {
         </p>
         <p
           v-else-if="resultFor(server.id)!.allowedTools?.checked === false"
-          class="text-[11px] text-dimmed"
+          class="text-2xs text-dimmed"
         >
           {{ t('settings.toolServers.allowedToolsUnchecked') }}
         </p>
 
         <p
           v-if="resultFor(server.id)!.unresolvedCredentials?.length"
-          class="text-[11px] text-app-warning-400"
+          class="text-2xs text-app-warning-400"
         >
           {{
             t('settings.toolServers.unresolvedCredentials', {
@@ -347,7 +347,7 @@ async function runProbe(id: string) {
         </p>
         <p
           v-if="resultFor(server.id)!.refusedCredentials?.length"
-          class="text-[11px] text-app-error-400"
+          class="text-2xs text-app-error-400"
         >
           {{
             t('settings.toolServers.refusedCredentials', {
@@ -357,7 +357,7 @@ async function runProbe(id: string) {
         </p>
         <p
           v-if="resultFor(server.id)!.unusableCredentials?.length"
-          class="text-[11px] text-app-error-400"
+          class="text-2xs text-app-error-400"
         >
           {{
             t('settings.toolServers.unusableCredentials', {
@@ -384,7 +384,7 @@ async function runProbe(id: string) {
           </UButton>
           <pre
             v-if="expanded[server.id]"
-            class="overflow-x-auto rounded bg-app-950 p-2 font-mono text-[10px] text-muted"
+            class="overflow-x-auto rounded bg-app-950 p-2 font-mono text-3xs text-muted"
             >{{ resultFor(server.id)!.error }}</pre>
         </template>
       </div>

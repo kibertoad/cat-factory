@@ -128,10 +128,10 @@ async function toggleEnabled(enabled: boolean) {
 
         <!-- Credentialless source (GitHub Issues): no form, just the on/off toggle. -->
         <template v-if="credentialless">
-          <p class="text-[11px] text-dimmed">
+          <p class="text-2xs text-dimmed">
             {{ t('tasks.connect.credentialless') }}
           </p>
-          <p v-if="!available" class="text-[11px] text-app-warning-400">
+          <p v-if="!available" class="text-2xs text-app-warning-400">
             {{ t('tasks.connect.installAppHint', { label: descriptor.label }) }}
           </p>
         </template>
@@ -149,7 +149,7 @@ async function toggleEnabled(enabled: boolean) {
             >
               {{ t('tasks.connect.oauthButton', { label: descriptor.label }) }}
             </UButton>
-            <p class="text-center text-[11px] text-dimmed">
+            <p class="text-center text-2xs text-dimmed">
               {{ t('tasks.connect.oauthOr') }}
             </p>
           </template>
@@ -167,7 +167,7 @@ async function toggleEnabled(enabled: boolean) {
             />
           </UFormField>
         </div>
-        <p v-else class="text-[11px] text-dimmed">
+        <p v-else class="text-2xs text-dimmed">
           {{
             connection?.label
               ? t('tasks.connect.connectedTo', { label: connection.label })
@@ -184,7 +184,7 @@ async function toggleEnabled(enabled: boolean) {
             <div class="font-medium text-default">
               {{ t('tasks.connect.offerToWorkspace') }}
             </div>
-            <div class="text-[11px] text-dimmed">
+            <div class="text-2xs text-dimmed">
               {{ t('tasks.connect.offerHint', { label: descriptor.label }) }}
             </div>
           </div>

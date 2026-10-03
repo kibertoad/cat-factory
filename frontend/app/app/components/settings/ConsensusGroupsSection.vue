@@ -13,6 +13,7 @@ import { computed, ref } from 'vue'
 import type { ConsensusGroup, ConsensusStrategy } from '~/types/consensus'
 import { isSelectable } from '~/stores/models'
 import { uid } from '~/utils/catalog'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const { t } = useI18n()
 const groups = useConsensusGroupsStore()
@@ -264,8 +265,8 @@ async function remove(group: ConsensusGroup) {
               />
             </div>
           </div>
-          <p v-if="g.description" class="mt-1 text-[11px] text-muted">{{ g.description }}</p>
-          <div class="mt-1.5 text-[11px] text-muted">
+          <p v-if="g.description" class="mt-1 text-2xs text-muted">{{ g.description }}</p>
+          <div class="mt-1.5 text-2xs text-muted">
             {{ t(`pipeline.builder.strategyOption.${g.strategy}`) }}
             ·
             {{
@@ -287,9 +288,9 @@ async function remove(group: ConsensusGroup) {
     <div v-else class="space-y-4 rounded-xl border border-default bg-default/50 p-4">
       <div class="grid gap-3 sm:grid-cols-2">
         <div>
-          <label class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted">
+          <SectionLabel as="label" class="mb-1 block">
             {{ t('settings.consensusGroups.editor.nameLabel') }}
-          </label>
+          </SectionLabel>
           <UInput
             v-model="editor.name"
             size="sm"
@@ -298,9 +299,9 @@ async function remove(group: ConsensusGroup) {
           />
         </div>
         <div>
-          <label class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted">
+          <SectionLabel as="label" class="mb-1 block">
             {{ t('settings.consensusGroups.editor.strategyLabel') }}
-          </label>
+          </SectionLabel>
           <select
             v-model="editor.strategy"
             class="w-full rounded border border-muted bg-default px-2 py-1.5 text-sm text-app-100"
@@ -311,9 +312,9 @@ async function remove(group: ConsensusGroup) {
       </div>
 
       <div>
-        <label class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted">
+        <SectionLabel as="label" class="mb-1 block">
           {{ t('settings.consensusGroups.editor.descriptionLabel') }}
-        </label>
+        </SectionLabel>
         <UInput
           v-model="editor.description"
           size="sm"
@@ -325,9 +326,9 @@ async function remove(group: ConsensusGroup) {
       <!-- participants -->
       <div class="space-y-2">
         <div class="flex items-center justify-between">
-          <span class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+          <SectionLabel as="span">
             {{ t('settings.consensusGroups.editor.participantsLabel') }}
-          </span>
+          </SectionLabel>
           <UButton
             icon="i-lucide-plus"
             color="neutral"
@@ -337,7 +338,7 @@ async function remove(group: ConsensusGroup) {
             @click="addParticipant"
           />
         </div>
-        <p class="text-[11px] text-dimmed">
+        <p class="text-2xs text-dimmed">
           {{ t('settings.consensusGroups.editor.participantsHint') }}
         </p>
         <div
@@ -378,9 +379,9 @@ async function remove(group: ConsensusGroup) {
 
       <div class="grid gap-3 sm:grid-cols-2">
         <div>
-          <label class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted">
+          <SectionLabel as="label" class="mb-1 block">
             {{ t('settings.consensusGroups.editor.synthesizerLabel') }}
-          </label>
+          </SectionLabel>
           <select
             v-model="editor.synthesizerModelId"
             class="w-full rounded border border-muted bg-default px-2 py-1.5 text-sm text-app-100"
@@ -390,9 +391,9 @@ async function remove(group: ConsensusGroup) {
           </select>
         </div>
         <div v-if="editor.strategy === 'debate'">
-          <label class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted">
+          <SectionLabel as="label" class="mb-1 block">
             {{ t('pipeline.builder.rounds') }}
-          </label>
+          </SectionLabel>
           <UInput v-model.number="editor.rounds" type="number" min="1" max="5" size="sm" />
         </div>
       </div>
@@ -403,7 +404,7 @@ async function remove(group: ConsensusGroup) {
           <input v-model="editor.gated" type="checkbox" class="accent-app-success-500" />
           {{ t('settings.consensusGroups.editor.gatedLabel') }}
         </label>
-        <p class="text-[11px] text-dimmed">
+        <p class="text-2xs text-dimmed">
           {{ t('settings.consensusGroups.editor.gatedHint') }}
         </p>
         <div v-if="editor.gated" class="flex flex-wrap items-center gap-3 text-xs">
@@ -453,7 +454,7 @@ async function remove(group: ConsensusGroup) {
             />
           </label>
         </div>
-        <p v-if="gatingIncomplete" class="text-[11px] text-app-warning-400">
+        <p v-if="gatingIncomplete" class="text-2xs text-app-warning-400">
           {{ t('settings.consensusGroups.editor.gatingIncomplete') }}
         </p>
       </div>

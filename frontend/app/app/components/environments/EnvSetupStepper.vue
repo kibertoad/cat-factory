@@ -37,10 +37,10 @@ function stepLabel(key: string | undefined): string {
 
 <template>
   <div class="space-y-2" data-testid="env-setup-stepper">
-    <p v-if="total" class="text-[11px] font-medium text-muted" data-testid="env-setup-progress">
+    <p v-if="total" class="text-2xs font-medium text-muted" data-testid="env-setup-progress">
       {{ t('environmentWizard.progress', { index: index + 1, total }) }}
     </p>
-    <ol class="flex items-center gap-2 text-[11px]">
+    <ol class="flex items-center gap-2 text-2xs">
       <li
         v-for="(step, i) in steps"
         :key="step.entry"
@@ -48,7 +48,7 @@ function stepLabel(key: string | undefined): string {
         :data-testid="`env-setup-crumb-${step.entry}`"
       >
         <span
-          class="flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold"
+          class="flex h-5 w-5 items-center justify-center rounded-full text-3xs font-semibold"
           :class="{
             'bg-primary text-inverted': i === index,
             'bg-app-success-600/70 text-highlighted': i < index,

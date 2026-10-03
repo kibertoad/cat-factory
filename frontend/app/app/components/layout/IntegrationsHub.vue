@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { showOverrideField } from '~/utils/uiMode'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 // The Integrations hub: a single modal that lists the OPTIONAL external systems the WORKSPACE
 // can enable or link in — the ones that feed a run its context (source control, documents,
@@ -422,9 +423,9 @@ const filteredGroups = computed<IntegrationGroup[]>(() => {
         </p>
 
         <section v-for="group in filteredGroups" :key="group.title">
-          <h3 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-muted">
+          <SectionLabel as="h3" class="mb-2 px-1">
             {{ group.title }}
-          </h3>
+          </SectionLabel>
           <div class="space-y-1.5">
             <button
               v-for="item in group.items"
@@ -443,7 +444,7 @@ const filteredGroups = computed<IntegrationGroup[]>(() => {
                   <UBadge v-else-if="item.attention" color="warning" variant="subtle" size="sm">
                     {{ item.attentionLabel || t('layout.integrationsHub.status.needsAttention') }}
                   </UBadge>
-                  <span v-else class="text-[11px] text-dimmed">{{
+                  <span v-else class="text-2xs text-dimmed">{{
                     t('layout.integrationsHub.status.notConnected')
                   }}</span>
                   <UBadge

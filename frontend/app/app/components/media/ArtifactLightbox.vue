@@ -173,10 +173,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
     >
       <!-- Toolbar -->
       <div class="flex items-center gap-3 border-b border-default/60 px-4 py-2.5">
-        <span class="min-w-0 flex-1 truncate text-[13px] font-medium text-default">
+        <span class="min-w-0 flex-1 truncate text-sm font-medium text-default">
           {{ current?.label ?? t('media.lightbox.fallbackTitle') }}
         </span>
-        <span v-if="total > 1" class="shrink-0 text-[12px] tabular-nums text-muted">
+        <span v-if="total > 1" class="shrink-0 text-xs tabular-nums text-muted">
           {{ t('media.lightbox.counter', { current: index + 1, total }) }}
         </span>
         <div class="flex shrink-0 items-center gap-1">
@@ -188,7 +188,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
           >
             <UIcon name="i-lucide-zoom-out" class="h-4 w-4" />
           </button>
-          <span class="w-10 text-center text-[11px] tabular-nums text-dimmed">{{
+          <span class="w-10 text-center text-2xs tabular-nums text-dimmed">{{
             n(scale, 'percent')
           }}</span>
           <button
@@ -254,12 +254,12 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
             class="h-8 w-8"
             :class="state === 'error' ? '' : 'animate-spin'"
           />
-          <p class="text-[12px]">
+          <p class="text-xs">
             {{ state === 'error' ? t('media.lightbox.failed') : t('media.lightbox.loading') }}
           </p>
           <button
             v-if="state === 'error' && current"
-            class="text-[12px] text-app-warning-300 hover:underline"
+            class="text-xs text-app-warning-300 hover:underline"
             @click="props.blobs.retry(current.artifactId)"
           >
             {{ t('common.retry') }}

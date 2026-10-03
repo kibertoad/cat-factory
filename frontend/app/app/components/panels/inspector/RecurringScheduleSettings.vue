@@ -4,6 +4,7 @@
 // (lazily loaded; retained ~1 week on the backend).
 import type { Block } from '~/types/domain'
 import type { Recurrence } from '~/types/recurring'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const props = defineProps<{ block: Block }>()
 const recurring = useRecurringPipelinesStore()
@@ -126,7 +127,7 @@ function fmtTime(ms: number) {
   <div v-if="schedule" class="space-y-2 rounded-lg border border-primary/50 bg-primary/10 p-3">
     <div class="flex items-center justify-between">
       <span
-        class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-primary"
+        class="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wide text-primary"
       >
         <UIcon name="i-lucide-repeat" class="h-3.5 w-3.5" />
         {{ t('inspector.recurring.title') }}
@@ -146,13 +147,13 @@ function fmtTime(ms: number) {
       </UBadge>
     </div>
 
-    <p class="text-[11px] text-muted">
+    <p class="text-2xs text-muted">
       <span class="text-toned">{{ pipelineName }}</span>
     </p>
 
     <!-- On-demand: no cadence, no pause/resume — it fires only when a person triggers it. -->
     <template v-if="schedule.onDemand">
-      <p class="text-[11px] text-dimmed">{{ t('inspector.recurring.onDemandHint') }}</p>
+      <p class="text-2xs text-dimmed">{{ t('inspector.recurring.onDemandHint') }}</p>
       <div class="flex flex-wrap gap-1.5 pt-1">
         <UButton size="xs" variant="soft" icon="i-lucide-play" :loading="busy" @click="runNow">
           {{ t('inspector.recurring.runNow') }}
@@ -161,8 +162,8 @@ function fmtTime(ms: number) {
     </template>
 
     <template v-else-if="!editing">
-      <p class="text-[11px] text-muted">{{ describeCadence(schedule.recurrence) }}</p>
-      <p class="text-[11px] text-dimmed">
+      <p class="text-2xs text-muted">{{ describeCadence(schedule.recurrence) }}</p>
+      <p class="text-2xs text-dimmed">
         {{ t('inspector.recurring.nextRun', { time: fmtTime(schedule.nextRunAt) }) }}
       </p>
       <div class="flex flex-wrap gap-1.5 pt-1">
@@ -213,10 +214,10 @@ function fmtTime(ms: number) {
 
     <!-- run history -->
     <div v-if="runs.length" class="space-y-1 border-t border-default pt-2">
-      <span class="text-[10px] font-semibold uppercase tracking-wide text-dimmed">
+      <SectionLabel as="span">
         {{ t('inspector.recurring.recentRuns') }}
-      </span>
-      <div v-for="run in runs" :key="run.id" class="flex items-center gap-2 text-[11px]">
+      </SectionLabel>
+      <div v-for="run in runs" :key="run.id" class="flex items-center gap-2 text-2xs">
         <span :class="RUN_COLOR[run.status] ?? 'text-muted'" class="w-14 shrink-0">
           {{ runStatusLabel(run.status) }}
         </span>

@@ -119,7 +119,7 @@ const gateFieldValues = computed<DescriptorFieldValues>({
       v-if="gated"
       class="space-y-2 rounded-md border border-app-warning-800/40 bg-app-warning-950/10 p-2"
     >
-      <div class="flex flex-wrap items-center gap-2 text-[10px]">
+      <div class="flex flex-wrap items-center gap-2 text-3xs">
         <span class="text-dimmed">{{ t('pipeline.gateConfig.approversLabel') }}</span>
         <label
           v-for="role in APPROVER_ROLES"
@@ -136,7 +136,7 @@ const gateFieldValues = computed<DescriptorFieldValues>({
         </label>
       </div>
 
-      <div class="flex flex-wrap items-center gap-2 text-[10px]">
+      <div class="flex flex-wrap items-center gap-2 text-3xs">
         <span class="text-dimmed">{{ t('pipeline.gateConfig.namedApproversLabel') }}</span>
         <USelectMenu
           class="w-64"
@@ -151,7 +151,7 @@ const gateFieldValues = computed<DescriptorFieldValues>({
         />
       </div>
 
-      <div class="flex flex-wrap items-center gap-2 text-[10px]">
+      <div class="flex flex-wrap items-center gap-2 text-3xs">
         <label class="text-dimmed" :title="t('pipeline.gateConfig.requiredApprovalsHint')">
           {{ t('pipeline.gateConfig.requiredApprovalsLabel') }}
         </label>
@@ -168,7 +168,7 @@ const gateFieldValues = computed<DescriptorFieldValues>({
         <span class="text-dimmed">{{ t('pipeline.gateConfig.requiredApprovalsHint') }}</span>
       </div>
 
-      <p v-if="!config.approvers" class="text-[10px] text-dimmed">
+      <p v-if="!config.approvers" class="text-3xs text-dimmed">
         {{ t('pipeline.gateConfig.anyoneHint') }}
       </p>
     </div>
@@ -179,7 +179,7 @@ const gateFieldValues = computed<DescriptorFieldValues>({
       v-if="gateFields?.length"
       class="space-y-2 rounded-md border border-default bg-default/40 p-2"
     >
-      <p class="text-[10px] text-dimmed">{{ t('pipeline.gateConfig.gateParametersLabel') }}</p>
+      <p class="text-3xs text-dimmed">{{ t('pipeline.gateConfig.gateParametersLabel') }}</p>
       <DescriptorFields
         v-model="gateFieldValues"
         :fields="gateFields"

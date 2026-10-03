@@ -160,7 +160,11 @@ const decisionItems = computed(() =>
       @click="resetZoom()"
     >
       {{ zoomPct }}%
-      <span class="hidden text-[9px] uppercase tracking-wide text-dimmed sm:block">{{
+      <!-- The zoom band this readout is currently in, under the percentage: a second VALUE
+           annotating the first, not a heading over what follows, so it keeps its own classes
+           rather than adopting the eyebrow recipe (`common/SectionLabel.vue`). On the recipe it
+           rendered at 11px semibold inside a `w-20` button and competed with the percentage. -->
+      <span class="hidden text-3xs uppercase tracking-wide text-dimmed sm:block">{{
         lodLabel
       }}</span>
     </button>

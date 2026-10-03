@@ -19,7 +19,7 @@ function reload() {
         <UIcon name="i-lucide-unplug" class="h-4 w-4 shrink-0 text-app-warning-400" />
         {{ t('errors.asyncView.title') }}
       </div>
-      <p class="mt-2 text-[12px] leading-relaxed text-muted">
+      <p class="mt-2 text-xs leading-relaxed text-muted">
         {{ t('errors.asyncView.body') }}
       </p>
       <UButton class="mt-4" color="primary" variant="soft" size="xs" @click="reload">
