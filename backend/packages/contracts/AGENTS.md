@@ -6,6 +6,13 @@ the single source of truth for wire shapes and the domain vocabulary.
 **Entry:** `src/index.ts`. `src/routes/` holds the per-route request/response contracts; the
 top-level files are the domain contracts.
 
+**No import-time side effects.** `package.json` declares `"sideEffects": false`, so a consumer's
+bundler drops every module whose exports it does not reference. A module may build schemas and
+constants when it loads. It must never register into a shared table, mutate another module's export
+(`withMinScope` assigns onto its argument, so wrap only a contract defined in the same module) or
+set valibot's global config: under Node, Vitest and Vite dev that works, and in a production bundle
+it silently disappears.
+
 **Key files:**
 
 - `primitives.ts`: the block **type** / **status** / **level** enums. There are two "task"
