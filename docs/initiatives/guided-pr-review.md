@@ -82,7 +82,7 @@ Every write answers `200` with the persisted state at once; the work it queued c
 | 3   | Workspace routes for the SPA, `guidedReviewChanged` realtime delta, RBAC                                                              | in progress |                                                             |
 | 4   | Public API, OpenAPI, `surface.mjs`, the four SDKs and MCP, SSE stream                                                                 | in review   | [#2290](https://github.com/kibertoad/cat-factory/pull/2290) |
 | 5   | SPA: guided review window, overview, tabbed threads, suggested questions, drafts panel, i18n in every locale                          | in review   | [#2291](https://github.com/kibertoad/cat-factory/pull/2291) |
-| 6   | Comment drafting and posting (anchor validation, stale-head refusal, per-draft outcomes)                                              | in progress |                                                             |
+| 6   | Comment drafting and posting (anchor validation, stale-head refusal, per-draft outcomes)                                              | in review   | [#2292](https://github.com/kibertoad/cat-factory/pull/2292) |
 | 7   | Deep-dive escalation to a read-only container investigator                                                                            | not started |                                                             |
 | 8   | Website page (opened and merged first), then this tracker becomes an ADR                                                              | not started |                                                             |
 
