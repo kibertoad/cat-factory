@@ -153,7 +153,8 @@ export interface GuidedReviewRepository {
 
   /**
    * Store the drafts a `comment-drafts` message produced and settle that message `complete`, in
-   * one atomic write. False (and nothing written) when the message is not `running`.
+   * one atomic write. Each draft is stored under `messageId`. False (and nothing written) when
+   * the message is not a `running` `comment-drafts` message.
    */
   settleDrafts(
     workspaceId: string,
@@ -176,13 +177,16 @@ export interface GuidedReviewRepository {
     now: number,
   ): Promise<GuidedReviewCommentDraft | null>
   /**
-   * Move the named drafts of a session from `proposed` or `failed` to `posting`. Returns the
-   * drafts this call claimed; a draft already claimed, posted or discarded is left out.
+   * Move the named drafts of a session from `proposed` or `failed` to `posting`, and re-claim a
+   * `posting` draft whose claim is older than `leaseCutoff`, so a poster that died between claim
+   * and settle cannot strand it. Returns the drafts this call claimed; a draft held by a live
+   * claim, posted or discarded is left out.
    */
   claimDraftsForPost(
     workspaceId: string,
     sessionId: string,
     ids: string[],
+    leaseCutoff: number,
     now: number,
   ): Promise<GuidedReviewCommentDraft[]>
   /** Record the host's answer for drafts this caller holds in `posting`. */

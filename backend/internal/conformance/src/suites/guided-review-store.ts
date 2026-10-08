@@ -242,6 +242,10 @@ export function defineGuidedReviewStoreConformance(harness: ConformanceHarness):
         model: 'fake:fake',
       }
       const proposed = [draft('d1'), draft('d2'), draft('d3')]
+      // An answer message cannot carry drafts.
+      await repo.appendExchange(ws, message('q2', 'grt_2'), assistant('a2', 'grt_2'))
+      await repo.claimMessage(ws, 'a2', 0, 100)
+      expect(await repo.settleDrafts(ws, 'a2', [draft('d0')], outcome, 150)).toBe(false)
       expect(await repo.settleDrafts(ws, 'a1', proposed, outcome, 150)).toBe(true)
       expect(await repo.settleDrafts(ws, 'a1', [draft('d4')], outcome, 151)).toBe(false)
       expect((await repo.listDrafts(ws, 'grs_1')).map((d) => d.id)).toEqual(['d1', 'd2', 'd3'])
@@ -265,11 +269,17 @@ export function defineGuidedReviewStoreConformance(harness: ConformanceHarness):
       })
 
       const [a, b] = await Promise.all([
-        repo.claimDraftsForPost(ws, 'grs_1', ['d1', 'd2', 'd3'], 170),
-        repo.claimDraftsForPost(ws, 'grs_1', ['d1', 'd2', 'd3'], 170),
+        repo.claimDraftsForPost(ws, 'grs_1', ['d1', 'd2', 'd3'], 0, 170),
+        repo.claimDraftsForPost(ws, 'grs_1', ['d1', 'd2', 'd3'], 0, 170),
       ])
       const claimed = [...a, ...b].map((d) => d.id).sort()
       expect(claimed).toEqual(['d1', 'd2'])
+      // A live posting claim holds; one past its lease is re-claimable, so a dead poster
+      // cannot strand a draft in `posting`.
+      expect(await repo.claimDraftsForPost(ws, 'grs_1', ['d1', 'd2'], 170, 175)).toEqual([])
+      expect(
+        (await repo.claimDraftsForPost(ws, 'grs_1', ['d2'], 171, 176)).map((d) => d.id),
+      ).toEqual(['d2'])
 
       await repo.settleDraftPosts(
         ws,
@@ -287,9 +297,9 @@ export function defineGuidedReviewStoreConformance(harness: ConformanceHarness):
       })
       // A posted draft is final; a failed one can be edited and claimed again.
       expect(await repo.editDraft(ws, 'd1', byId.get('d1')!.rev, { body: 'x' }, 190)).toBeNull()
-      expect((await repo.claimDraftsForPost(ws, 'grs_1', ['d2'], 200)).map((d) => d.id)).toEqual([
-        'd2',
-      ])
+      expect((await repo.claimDraftsForPost(ws, 'grs_1', ['d2'], 0, 200)).map((d) => d.id)).toEqual(
+        ['d2'],
+      )
     })
 
     it('lists unsettled work older than the cutoff, and deleting a session removes its rows', async () => {

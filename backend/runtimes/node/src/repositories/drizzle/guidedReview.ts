@@ -14,6 +14,12 @@ import type {
   GuidedReviewThread,
   GuidedReviewThreadSummary,
 } from '@cat-factory/kernel'
+import {
+  rowToGuidedReviewDraft as rowToDraft,
+  rowToGuidedReviewMessage as rowToMessage,
+  rowToGuidedReviewSession as rowToSession,
+  rowToGuidedReviewThread as rowToThread,
+} from '@cat-factory/server'
 import { and, asc, desc, eq, inArray, lt, or, sql } from 'drizzle-orm'
 import type { DrizzleDb } from '../../db/client.js'
 import {
@@ -23,98 +29,8 @@ import {
   guidedReviewThreads as threads,
 } from '../../db/schema.js'
 
-type SessionRow = typeof sessions.$inferSelect
-type ThreadRow = typeof threads.$inferSelect
-type MessageRow = typeof messages.$inferSelect
-type DraftRow = typeof drafts.$inferSelect
-
 const LIVE = ['pending', 'running'] as const
 const EDITABLE = ['proposed', 'failed'] as const
-
-function parseJson<T>(raw: string | null, fallback: T): T {
-  if (!raw) return fallback
-  try {
-    return JSON.parse(raw) as T
-  } catch {
-    return fallback
-  }
-}
-
-function rowToSession(row: SessionRow): GuidedReviewSession {
-  return {
-    id: row.id,
-    provider: row.provider as GuidedReviewSession['provider'],
-    repoId: row.repo_id,
-    owner: row.owner,
-    repo: row.repo,
-    prNumber: row.pr_number,
-    prTitle: row.pr_title,
-    reviewedHeadSha: row.reviewed_head_sha,
-    baseRef: row.base_ref,
-    createdBy: row.created_by,
-    overview: {
-      status: row.overview_status as GuidedReviewSession['overview']['status'],
-      generation: row.overview_generation,
-      content: parseJson(row.overview_content, null),
-      failure: parseJson(row.overview_failure, null),
-      model: row.overview_model,
-    },
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  }
-}
-
-function rowToThread(row: ThreadRow): GuidedReviewThread {
-  return {
-    id: row.id,
-    sessionId: row.session_id,
-    title: row.title,
-    createdBy: row.created_by,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  }
-}
-
-function rowToMessage(row: MessageRow): GuidedReviewMessage {
-  return {
-    id: row.id,
-    threadId: row.thread_id,
-    sessionId: row.session_id,
-    seq: row.seq,
-    role: row.role as GuidedReviewMessage['role'],
-    kind: row.kind as GuidedReviewMessage['kind'],
-    depth: row.depth as GuidedReviewMessage['depth'],
-    content: row.content,
-    status: row.status as GuidedReviewMessage['status'],
-    citations: parseJson(row.citations, []),
-    failure: parseJson(row.failure, null),
-    draftReport: parseJson(row.draft_report, null),
-    model: row.model,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  }
-}
-
-function rowToDraft(row: DraftRow): GuidedReviewCommentDraft {
-  return {
-    id: row.id,
-    sessionId: row.session_id,
-    threadId: row.thread_id,
-    messageId: row.message_id,
-    path: row.path,
-    line: row.line,
-    startLine: row.start_line,
-    side: row.side as GuidedReviewCommentDraft['side'],
-    body: row.body,
-    rationale: row.rationale,
-    status: row.status as GuidedReviewCommentDraft['status'],
-    postError: row.post_error,
-    postedUrl: row.posted_url,
-    rev: row.rev,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  }
-}
 
 function messageValues(
   workspaceId: string,
@@ -502,6 +418,7 @@ export class DrizzleGuidedReviewRepository implements GuidedReviewRepository {
             eq(messages.workspace_id, workspaceId),
             eq(messages.id, messageId),
             eq(messages.status, 'running'),
+            eq(messages.kind, 'comment-drafts'),
           ),
         )
         .returning({ id: messages.id })
@@ -513,7 +430,7 @@ export class DrizzleGuidedReviewRepository implements GuidedReviewRepository {
             id: d.id,
             session_id: d.sessionId,
             thread_id: d.threadId,
-            message_id: d.messageId,
+            message_id: messageId,
             path: d.path,
             line: d.line,
             start_line: d.startLine,
@@ -589,6 +506,7 @@ export class DrizzleGuidedReviewRepository implements GuidedReviewRepository {
     workspaceId: string,
     sessionId: string,
     ids: string[],
+    leaseCutoff: number,
     now: number,
   ): Promise<GuidedReviewCommentDraft[]> {
     if (ids.length === 0) return []
@@ -600,7 +518,10 @@ export class DrizzleGuidedReviewRepository implements GuidedReviewRepository {
           eq(drafts.workspace_id, workspaceId),
           eq(drafts.session_id, sessionId),
           inArray(drafts.id, ids),
-          inArray(drafts.status, [...EDITABLE]),
+          or(
+            inArray(drafts.status, [...EDITABLE]),
+            and(eq(drafts.status, 'posting'), lt(drafts.updated_at, leaseCutoff)),
+          ),
         ),
       )
       .returning()
