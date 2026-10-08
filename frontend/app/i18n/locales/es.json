@@ -5121,9 +5121,11 @@
     "title": "Revisión guiada",
     "titleFor": "{repo} #{number}: {title}",
     "loading": "Cargando la revisión…",
+    "outOfDate": "Las actualizaciones en vivo fallaron, así que esta vista puede estar desactualizada.",
     "openFromTask": "Explorar con revisión guiada",
     "picker": {
       "intro": "Elige un repositorio y una pull request. Obtendrás un resumen del cambio y podrás hacer preguntas sobre él en hilos separados.",
+      "loading": "Cargando repositorios…",
       "noRepos": "Todavía no hay repositorios vinculados a este espacio de trabajo.",
       "repo": "Repositorio",
       "openPulls": "Pull requests abiertas",
@@ -5154,6 +5156,7 @@
       "generation_failed": "La llamada al modelo falló.",
       "unreadable_reply": "El modelo respondió de una forma que no se pudo leer.",
       "depth_unavailable": "Las respuestas profundas con un checkout aún no están disponibles.",
+      "head_moved": "La pull request avanzó más allá del commit revisado. Actualiza para revisar su último commit.",
       "detail": "Detalles"
     },
     "dropped": {
@@ -5182,6 +5185,7 @@
     },
     "errors": {
       "load": "No se pudo cargar la revisión",
+      "repos": "No se pudieron cargar los repositorios vinculados",
       "open": "No se pudo abrir la revisión",
       "ask": "No se pudo hacer la pregunta",
       "drafts": "No se pudieron pedir borradores de comentarios",

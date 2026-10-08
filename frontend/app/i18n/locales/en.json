@@ -5315,9 +5315,11 @@
     "title": "Guided review",
     "titleFor": "{repo} #{number}: {title}",
     "loading": "Loading the review…",
+    "outOfDate": "Live updates failed, so this view may be out of date.",
     "openFromTask": "Explore with guided review",
     "picker": {
       "intro": "Pick a repository and a pull request. You get an overview of the change and can ask questions about it in separate threads.",
+      "loading": "Loading repositories…",
       "noRepos": "No repositories are linked to this workspace yet.",
       "repo": "Repository",
       "openPulls": "Open pull requests",
@@ -5348,6 +5350,7 @@
       "generation_failed": "The model call failed.",
       "unreadable_reply": "The model replied in a form that could not be read.",
       "depth_unavailable": "Deep answers that use a checkout are not available yet.",
+      "head_moved": "The pull request moved past the reviewed commit. Refresh to review its latest commit.",
       "detail": "Details"
     },
     "dropped": {
@@ -5376,6 +5379,7 @@
     },
     "errors": {
       "load": "Could not load the review",
+      "repos": "Could not load the linked repositories",
       "open": "Could not open the review",
       "ask": "Could not ask the question",
       "drafts": "Could not request comment drafts",

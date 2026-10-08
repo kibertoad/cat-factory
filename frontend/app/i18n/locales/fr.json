@@ -5121,9 +5121,11 @@
     "title": "Revue guidée",
     "titleFor": "{repo} #{number} : {title}",
     "loading": "Chargement de la revue…",
+    "outOfDate": "Les mises à jour en direct ont échoué, cette vue n'est peut-être plus à jour.",
     "openFromTask": "Explorer avec la revue guidée",
     "picker": {
       "intro": "Choisis un dépôt et une pull request. Tu obtiens une vue d'ensemble du changement et peux poser des questions dans des fils séparés.",
+      "loading": "Chargement des dépôts…",
       "noRepos": "Aucun dépôt n'est encore lié à cet espace de travail.",
       "repo": "Dépôt",
       "openPulls": "Pull requests ouvertes",
@@ -5154,6 +5156,7 @@
       "generation_failed": "L'appel au modèle a échoué.",
       "unreadable_reply": "Le modèle a répondu sous une forme illisible.",
       "depth_unavailable": "Les réponses approfondies avec un checkout ne sont pas encore disponibles.",
+      "head_moved": "La pull request a avancé au-delà du commit revu. Actualise pour revoir son dernier commit.",
       "detail": "Détails"
     },
     "dropped": {
@@ -5182,6 +5185,7 @@
     },
     "errors": {
       "load": "Impossible de charger la revue",
+      "repos": "Impossible de charger les dépôts liés",
       "open": "Impossible d'ouvrir la revue",
       "ask": "Impossible de poser la question",
       "drafts": "Impossible de demander des brouillons de commentaires",

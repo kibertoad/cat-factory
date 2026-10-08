@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
+  GUIDED_REVIEW_FAILURE_REASONS,
+  guidedReviewDroppedDraftReasonSchema,
+} from '@cat-factory/contracts'
+import en from '../../../i18n/locales/en.json'
+import {
   NEW_THREAD_TAB,
   canAsk,
   citationLabel,
@@ -70,11 +75,29 @@ describe('reviewTaskTarget', () => {
     expect(reviewTaskTarget({ prNumber: 7 }, undefined)).toBeNull()
     expect(reviewTaskTarget({ prUrl: 'https://example.com/nothing' }, repo)).toBeNull()
   })
+
+  it('reads the URL the way the dispatch does', () => {
+    expect(reviewTaskTarget({ prUrl: 'acme/shop#88' }, repo)?.prNumber).toBe(88)
+    expect(
+      reviewTaskTarget({ prNumber: 0, prUrl: 'https://github.com/acme/shop/pull/5' }, repo)
+        ?.prNumber,
+    ).toBe(5)
+  })
 })
 
 describe('failure and draft labels', () => {
   it('translates each failure reason under its own key', () => {
     expect(failureKey('budget_exhausted')).toBe('guidedReview.failure.budget_exhausted')
+  })
+
+  it('ships copy for every failure and dropped-draft reason the contract can send', () => {
+    const catalog = en.guidedReview as unknown as Record<string, Record<string, string>>
+    for (const reason of GUIDED_REVIEW_FAILURE_REASONS) {
+      expect(catalog.failure![reason], reason).toBeTruthy()
+    }
+    for (const reason of guidedReviewDroppedDraftReasonSchema.options) {
+      expect(catalog.dropped![reason], reason).toBeTruthy()
+    }
   })
 
   it('names where a draft sits, or would have', () => {

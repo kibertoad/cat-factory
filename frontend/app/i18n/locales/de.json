@@ -4597,9 +4597,11 @@
     "title": "Geführtes Review",
     "titleFor": "{repo} #{number}: {title}",
     "loading": "Review wird geladen…",
+    "outOfDate": "Live-Updates sind fehlgeschlagen, daher ist diese Ansicht möglicherweise veraltet.",
     "openFromTask": "Mit geführtem Review erkunden",
     "picker": {
       "intro": "Wähle ein Repository und einen Pull Request. Du erhältst einen Überblick über die Änderung und kannst in separaten Threads Fragen dazu stellen.",
+      "loading": "Repositories werden geladen…",
       "noRepos": "Mit diesem Workspace sind noch keine Repositories verknüpft.",
       "repo": "Repository",
       "openPulls": "Offene Pull Requests",
@@ -4630,6 +4632,7 @@
       "generation_failed": "Der Modellaufruf ist fehlgeschlagen.",
       "unreadable_reply": "Das Modell hat in einer nicht lesbaren Form geantwortet.",
       "depth_unavailable": "Tiefe Antworten mit einem Checkout sind noch nicht verfügbar.",
+      "head_moved": "Der Pull Request ist über den geprüften Commit hinaus. Aktualisiere, um den neuesten Commit zu prüfen.",
       "detail": "Details"
     },
     "dropped": {
@@ -4658,6 +4661,7 @@
     },
     "errors": {
       "load": "Das Review konnte nicht geladen werden",
+      "repos": "Die verknüpften Repositories konnten nicht geladen werden",
       "open": "Das Review konnte nicht geöffnet werden",
       "ask": "Die Frage konnte nicht gestellt werden",
       "drafts": "Kommentarentwürfe konnten nicht angefordert werden",

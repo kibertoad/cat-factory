@@ -5121,9 +5121,11 @@
     "title": "Rehberli inceleme",
     "titleFor": "{repo} #{number}: {title}",
     "loading": "İnceleme yükleniyor…",
+    "outOfDate": "Canlı güncellemeler başarısız oldu, bu nedenle bu görünüm güncel olmayabilir.",
     "openFromTask": "Rehberli incelemeyle keşfet",
     "picker": {
       "intro": "Bir depo ve bir pull request seçin. Değişikliğin özetini görür, ayrı konularda onunla ilgili soru sorabilirsiniz.",
+      "loading": "Depolar yükleniyor…",
       "noRepos": "Bu çalışma alanına henüz bağlı bir depo yok.",
       "repo": "Depo",
       "openPulls": "Açık pull requestler",
@@ -5154,6 +5156,7 @@
       "generation_failed": "Model çağrısı başarısız oldu.",
       "unreadable_reply": "Model okunamayan bir biçimde yanıt verdi.",
       "depth_unavailable": "Kod kopyası kullanan ayrıntılı yanıtlar henüz kullanılamıyor.",
+      "head_moved": "Pull request incelenen commit'in ötesine geçti. En son commit'ini incelemek için yenileyin.",
       "detail": "Ayrıntılar"
     },
     "dropped": {
@@ -5182,6 +5185,7 @@
     },
     "errors": {
       "load": "İnceleme yüklenemedi",
+      "repos": "Bağlı depolar yüklenemedi",
       "open": "İnceleme açılamadı",
       "ask": "Soru sorulamadı",
       "drafts": "Yorum taslakları istenemedi",

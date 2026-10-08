@@ -10,6 +10,8 @@ const props = defineProps<{
   session: GuidedReviewSession
   stale: boolean
   refreshing: boolean
+  /** A suggested question is opening its thread; the chips wait so one click makes one thread. */
+  asking: boolean
 }>()
 const emit = defineEmits<{ ask: [question: string]; refresh: [] }>()
 const { t } = useI18n()
@@ -145,6 +147,7 @@ const SEVERITY_COLOR = { high: 'error', medium: 'warning', low: 'neutral' } as c
             variant="soft"
             icon="i-lucide-message-circle-question"
             class="text-start"
+            :disabled="asking"
             :data-testid="`guided-review-suggested-${q.id}`"
             @click="emit('ask', q.question)"
           >

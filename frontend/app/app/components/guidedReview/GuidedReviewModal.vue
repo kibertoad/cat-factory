@@ -30,12 +30,17 @@ const open = computed({
 const sessionId = ref<string | null>(null)
 const opening = ref(false)
 const refreshing = ref(false)
+const asking = ref(false)
+const loadingRepos = ref(false)
 const activeTab = ref<string>(NEW_THREAD_TAB)
 const draftOpen = ref(true)
 
 const view = computed(() => (sessionId.value ? store.sessions[sessionId.value] : undefined))
 const session = computed(() => view.value?.session)
 const tabs = computed(() => threadTabs(view.value, draftOpen.value))
+const outOfDate = computed(
+  () => !!sessionId.value && store.refetchFailures[sessionId.value] !== undefined,
+)
 
 const latestHeadSha = computed(() => {
   const s = session.value
@@ -53,10 +58,21 @@ onModalOpen(open, () => {
   sessionId.value = null
   draftOpen.value = true
   activeTab.value = NEW_THREAD_TAB
-  void github.ensureLoaded()
+  void loadRepos()
   if (target?.sessionId) void show(target.sessionId)
   else if (target?.target) void openFor(target.target)
 })
+
+async function loadRepos(): Promise<void> {
+  loadingRepos.value = true
+  try {
+    await github.ensureLoaded()
+  } catch (error) {
+    present(error, 'guidedReview.errors.repos')
+  } finally {
+    loadingRepos.value = false
+  }
+}
 
 async function show(id: string): Promise<void> {
   sessionId.value = id
@@ -68,6 +84,8 @@ async function show(id: string): Promise<void> {
       activeTab.value = first.id
     }
   } catch (error) {
+    // Back to the picker: with no session to show, the loading state would never end.
+    sessionId.value = null
     present(error, 'guidedReview.errors.load')
   }
 }
@@ -112,12 +130,15 @@ function onCreated(threadId: string): void {
 }
 
 async function askSuggested(question: string): Promise<void> {
-  if (!sessionId.value) return
+  if (!sessionId.value || asking.value) return
+  asking.value = true
   try {
     const created = await store.openThread(sessionId.value, suggestedQuestionThread(question))
     onCreated(created.thread.id)
   } catch (error) {
     present(error, 'guidedReview.errors.ask')
+  } finally {
+    asking.value = false
   }
 }
 
@@ -147,7 +168,12 @@ const title = computed(() =>
 <template>
   <UModal v-model:open="open" fullscreen :title="title" data-testid="guided-review-modal">
     <template #body>
-      <GuidedReviewPicker v-if="!sessionId" :opening="opening" @open="openFor" />
+      <GuidedReviewPicker
+        v-if="!sessionId"
+        :opening="opening"
+        :loading="loadingRepos"
+        @open="openFor"
+      />
 
       <p v-else-if="!session" class="flex items-center gap-2 text-sm text-muted">
         <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
@@ -155,11 +181,20 @@ const title = computed(() =>
       </p>
 
       <div v-else class="flex h-full min-h-0 flex-col gap-4 lg:flex-row">
-        <div class="min-h-0 overflow-y-auto lg:w-2/5 lg:pr-2">
+        <div class="min-h-0 space-y-3 overflow-y-auto lg:w-2/5 lg:pr-2">
+          <p
+            v-if="outOfDate"
+            class="flex items-center gap-2 text-xs text-warning"
+            data-testid="guided-review-out-of-date"
+          >
+            <UIcon name="i-lucide-triangle-alert" class="h-4 w-4 shrink-0" />
+            {{ t('guidedReview.outOfDate') }}
+          </p>
           <GuidedReviewOverview
             :session="session"
             :stale="stale"
             :refreshing="refreshing"
+            :asking="asking"
             @ask="askSuggested"
             @refresh="refresh"
           />
