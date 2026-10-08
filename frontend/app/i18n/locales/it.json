@@ -6388,7 +6388,9 @@
         "delegated_executor_unwired": "Esecutore esterno non registrato",
         "delegated_step_async_only": "Questo passo viene interrogato, non atteso",
         "delegated_claim_missing": "Questo passo non ha lavoro esterno da controllare",
-        "thread_busy": "Questa discussione sta ancora rispondendo"
+        "thread_busy": "Questa discussione sta ancora rispondendo",
+        "draft_conflict": "Questa bozza è cambiata",
+        "session_stale": "La pull request è andata avanti"
       },
       "description": {
         "dependencies_unmet": "Questa attività dipende da altre non ancora completate. Completale o sbloccale, poi avviala di nuovo.",
@@ -6446,7 +6448,9 @@
         "delegated_executor_unwired": "Un passaggio di questa pipeline viene eseguito su un esecutore esterno che questa installazione non registra, quindi il lavoro non ha una destinazione. Registra l’esecutore nel codice oppure sostituisci il passaggio con uno eseguito qui.",
         "delegated_step_async_only": "Questo passo gira su un esecutore esterno e può durare ore, quindi viene avviato e poi interrogato invece di essere eseguito dentro una sola richiesta. Avvia l’esecuzione dalla board; se sei arrivato qui dal tuo codice, guida il passo attraverso il percorso asincrono.",
         "delegated_claim_missing": "Manca la registrazione di ciò che l’esecuzione ha inviato all’esecutore esterno, quindi non c’è nulla da interrogare. L’esecutore in sé non ha alcun problema. Ricarica l’esecuzione e rilancia il passo se resta bloccato.",
-        "thread_busy": "La domanda precedente in questa discussione non ha ancora una risposta. Attendi la risposta o chiedi in un'altra discussione."
+        "thread_busy": "La domanda precedente in questa discussione non ha ancora una risposta. Attendi la risposta o chiedi in un'altra discussione.",
+        "draft_conflict": "Questa bozza di commento è stata modificata, pubblicata o scartata da quando l'hai caricata. Ricarica le bozze e ripeti la modifica.",
+        "session_stale": "Sono arrivati nuovi commit dopo la preparazione di questa revisione, quindi le bozze potrebbero puntare alle righe sbagliate. Aggiorna la revisione, controlla le bozze e poi pubblica."
       },
       "action": {
         "connectGitHub": "Collega GitHub",

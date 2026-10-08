@@ -275,8 +275,8 @@ export function defineGuidedReviewStoreConformance(harness: ConformanceHarness):
       })
 
       const [a, b] = await Promise.all([
-        repo.claimDraftsForPost(ws, 'grs_1', ['d1', 'd2', 'd3'], 170),
-        repo.claimDraftsForPost(ws, 'grs_1', ['d1', 'd2', 'd3'], 170),
+        repo.claimDraftsForPost(ws, 'grs_1', ['d1', 'd2', 'd3'], 0, 170),
+        repo.claimDraftsForPost(ws, 'grs_1', ['d1', 'd2', 'd3'], 0, 170),
       ])
       const claimed = [...a, ...b].map((d) => d.id).sort()
       expect(claimed).toEqual(['d1', 'd2'])
@@ -297,9 +297,14 @@ export function defineGuidedReviewStoreConformance(harness: ConformanceHarness):
       })
       // A posted draft is final; a failed one can be edited and claimed again.
       expect(await repo.editDraft(ws, 'd1', byId.get('d1')!.rev, { body: 'x' }, 190)).toBeNull()
-      expect((await repo.claimDraftsForPost(ws, 'grs_1', ['d2'], 200)).map((d) => d.id)).toEqual([
-        'd2',
-      ])
+      expect((await repo.claimDraftsForPost(ws, 'grs_1', ['d2'], 0, 200)).map((d) => d.id)).toEqual(
+        ['d2'],
+      )
+      // A live `posting` claim is not taken over; one whose poster died is, past the cutoff.
+      expect(await repo.claimDraftsForPost(ws, 'grs_1', ['d2'], 0, 210)).toEqual([])
+      expect(
+        (await repo.claimDraftsForPost(ws, 'grs_1', ['d2'], 201, 220)).map((d) => d.id),
+      ).toEqual(['d2'])
     })
 
     it('lists unsettled work older than the cutoff, and deleting a session removes its rows', async () => {

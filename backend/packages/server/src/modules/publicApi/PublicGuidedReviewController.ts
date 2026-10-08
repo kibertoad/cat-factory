@@ -1,11 +1,13 @@
 import {
   askPublicGuidedReviewContract,
   deletePublicGuidedReviewContract,
+  editPublicGuidedReviewDraftContract,
   getPublicGuidedReviewContract,
   getPublicGuidedReviewThreadContract,
   listPublicGuidedReviewsContract,
   openPublicGuidedReviewContract,
   openPublicGuidedReviewThreadContract,
+  postPublicGuidedReviewDraftsContract,
   refreshPublicGuidedReviewContract,
   requestPublicGuidedReviewDraftsContract,
 } from '@cat-factory/contracts'
@@ -153,6 +155,32 @@ export function publicGuidedReviewController(): Hono<AppEnv> {
       c.req.valid('json').instructions ?? '',
     )
     return c.json(exchange, 200)
+  })
+
+  buildHonoRoute(app, editPublicGuidedReviewDraftContract, async (c) => {
+    const gate = await authorize(c, editPublicGuidedReviewDraftContract.minScope)
+    if ('fail' in gate) return refuse(c, gate.fail)
+    const { sessionId, draftId } = c.req.valid('param')
+    const draft = await requireGuidedReview(c).service.editDraft(
+      gate.auth.workspaceId,
+      actor(gate.auth),
+      sessionId,
+      draftId,
+      c.req.valid('json'),
+    )
+    return c.json(draft, 200)
+  })
+
+  buildHonoRoute(app, postPublicGuidedReviewDraftsContract, async (c) => {
+    const gate = await authorize(c, postPublicGuidedReviewDraftsContract.minScope)
+    if ('fail' in gate) return refuse(c, gate.fail)
+    const result = await requireGuidedReview(c).service.postDrafts(
+      gate.auth.workspaceId,
+      actor(gate.auth),
+      c.req.valid('param').sessionId,
+      c.req.valid('json'),
+    )
+    return c.json(result, 200)
   })
 
   registerGuidedReviewStreamRoute(app)

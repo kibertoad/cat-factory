@@ -176,13 +176,15 @@ export interface GuidedReviewRepository {
     now: number,
   ): Promise<GuidedReviewCommentDraft | null>
   /**
-   * Move the named drafts of a session from `proposed` or `failed` to `posting`. Returns the
-   * drafts this call claimed; a draft already claimed, posted or discarded is left out.
+   * Move the named drafts of a session to `posting`: from `proposed` or `failed`, or from a
+   * `posting` claim older than `staleCutoff` (its poster died before recording an answer).
+   * Returns the drafts this call claimed; one held by a live claim, posted or discarded is left out.
    */
   claimDraftsForPost(
     workspaceId: string,
     sessionId: string,
     ids: string[],
+    staleCutoff: number,
     now: number,
   ): Promise<GuidedReviewCommentDraft[]>
   /** Record the host's answer for drafts this caller holds in `posting`. */

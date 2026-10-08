@@ -2,6 +2,9 @@
 // these through `~/types/domain` like every other domain type.
 export type {
   AskGuidedReviewInput,
+  EditGuidedReviewDraftInput,
+  GuidedReviewPostResult,
+  PostGuidedReviewDraftsInput,
   GuidedReviewChange,
   GuidedReviewCommentDraft,
   GuidedReviewDraftReport,

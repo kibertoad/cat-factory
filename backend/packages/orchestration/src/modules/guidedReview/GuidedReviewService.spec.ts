@@ -221,13 +221,37 @@ class InMemoryGuidedReviewRepository implements GuidedReviewRepository {
   async listDrafts(_ws: string, sessionId: string) {
     return [...this.drafts.values()].filter((d) => d.sessionId === sessionId)
   }
-  async editDraft() {
-    return null
+  async editDraft(
+    _ws: string,
+    id: string,
+    rev: number,
+    edit: Partial<GuidedReviewCommentDraft> & { discard?: boolean },
+  ) {
+    const d = this.drafts.get(id)
+    if (!d || d.rev !== rev || !['proposed', 'failed'].includes(d.status)) return null
+    const { discard, ...fields } = edit
+    Object.assign(d, fields, { rev: d.rev + 1 }, discard ? { status: 'discarded' } : {})
+    return d
   }
-  async claimDraftsForPost() {
-    return []
+  async claimDraftsForPost(_ws: string, sessionId: string, ids: string[]) {
+    const claimed = ids
+      .map((id) => this.drafts.get(id))
+      .filter((d): d is GuidedReviewCommentDraft => !!d && d.sessionId === sessionId)
+      .filter((d) => d.status === 'proposed' || d.status === 'failed')
+    for (const d of claimed) d.status = 'posting'
+    return claimed.map((d) => ({ ...d }))
   }
-  async settleDraftPosts() {}
+  async settleDraftPosts(
+    _ws: string,
+    outcomes: { id: string; status: 'posted' | 'failed'; error?: string }[],
+  ) {
+    for (const o of outcomes) {
+      const d = this.drafts.get(o.id)
+      if (d?.status !== 'posting') continue
+      d.status = o.status
+      d.postError = o.status === 'failed' ? (o.error ?? null) : null
+    }
+  }
   async listStaleJobs(_driver: string, cutoff: number) {
     return [...this.messages.values()]
       .filter((m) => m.role === 'assistant' && m.status === 'pending' && m.updatedAt < cutoff)
@@ -247,8 +271,31 @@ const FILES: GitHubChangedFile[] = [
   },
 ]
 
-function fakeRepo(reads: (string | undefined)[]): RepoFiles {
+interface HostState {
+  head: string
+  posted: { path: string; line: number; body: string }[]
+  /** Comment indexes the host refuses. */
+  refuse: Set<number>
+}
+
+function fakeRepo(reads: (string | undefined)[], host: HostState): RepoFiles {
   return {
+    async pullRequestHeadSha() {
+      return host.head
+    },
+    async createReview(
+      _n: number,
+      input: { comments: { path: string; line: number; body: string }[] },
+    ) {
+      return {
+        comments: input.comments.map((c, i) => {
+          if (host.refuse.has(i)) return { posted: false, error: 'line is not part of the diff' }
+          host.posted.push(c)
+          return { posted: true }
+        }),
+        bodyPosted: null,
+      }
+    },
     async getPullRequest() {
       return { title: 'Add retries', headSha: HEAD, baseRef: 'main' }
     },
@@ -273,6 +320,7 @@ function setup(steps: Step[], opts: { overBudget?: boolean } = {}) {
   const woken: GuidedReviewJob[] = []
   const changes: GuidedReviewChange[] = []
   const reads: (string | undefined)[] = []
+  const host: HostState = { head: HEAD, posted: [], refuse: new Set() }
   const { provider, calls } = scriptedProvider(steps)
   let id = 0
   let now = 1_000
@@ -281,7 +329,7 @@ function setup(steps: Step[], opts: { overBudget?: boolean } = {}) {
     runner: { start: async (_ws, job) => void woken.push(job) },
     driver: 'deployment',
     resolveRepoFilesForCoords: async () => ({
-      repo: fakeRepo(reads),
+      repo: fakeRepo(reads, host),
       baseBranch: 'main',
       repoId: '42',
       owner: 'acme',
@@ -295,7 +343,16 @@ function setup(steps: Step[], opts: { overBudget?: boolean } = {}) {
     clock: { now: () => now },
     events: { guidedReviewChanged: async (_ws, change) => void changes.push(change) },
   })
-  return { service, repository, woken, reads, calls, changes, advance: (ms: number) => (now += ms) }
+  return {
+    service,
+    repository,
+    woken,
+    reads,
+    calls,
+    changes,
+    host,
+    advance: (ms: number) => (now += ms),
+  }
 }
 
 const OVERVIEW_JSON = JSON.stringify({
@@ -481,6 +538,78 @@ describe('GuidedReviewService', () => {
     const { thread } = await service.openThread(WS, OWNER, first.id, {})
     await expect(service.getThread(WS, second.id, thread.id)).rejects.toMatchObject({
       code: 'not_found',
+    })
+  })
+
+  describe('comment drafts', () => {
+    const DRAFTS = JSON.stringify({
+      comments: [
+        {
+          path: 'src/pay.ts',
+          line: 3,
+          side: 'RIGHT',
+          body: 'Bound these retries. Closes #12',
+          rationale: 'r',
+        },
+        { path: 'src/pay.ts', line: 2, side: 'RIGHT', body: 'Log the attempt.', rationale: 'r' },
+      ],
+    })
+
+    async function drafted() {
+      const ctx = setup([{ text: DRAFTS }])
+      const session = await ctx.service.open(WS, OWNER, {
+        owner: 'acme',
+        repo: 'shop',
+        prNumber: 7,
+      })
+      const { thread } = await ctx.service.openThread(WS, OWNER, session.id, {})
+      await ctx.service.requestDrafts(WS, OWNER, session.id, thread.id, '')
+      await ctx.service.runJob(WS, ctx.woken.at(-1)!)
+      const drafts = await ctx.repository.listDrafts(WS, session.id)
+      return { ...ctx, session, drafts }
+    }
+
+    it('refuses an edit from a stale revision and one that moves a draft out of the diff', async () => {
+      const { service, session, drafts } = await drafted()
+      const [first] = drafts
+      const edited = await service.editDraft(WS, OWNER, session.id, first!.id, {
+        rev: 1,
+        body: 'Cap the retries at three.',
+      })
+      expect(edited).toMatchObject({ rev: 2, body: 'Cap the retries at three.' })
+      await expect(
+        service.editDraft(WS, OWNER, session.id, first!.id, { rev: 1, body: 'stale' }),
+      ).rejects.toMatchObject({ details: { reason: 'draft_conflict' } })
+      await expect(
+        service.editDraft(WS, OWNER, session.id, first!.id, { rev: 2, line: 90 }),
+      ).rejects.toMatchObject({ details: { reason: 'draft_anchor_outside_diff' } })
+    })
+
+    it('posts each draft once, through the host boundary, and records a partial post per draft', async () => {
+      const { service, session, drafts, host, changes } = await drafted()
+      host.refuse.add(1)
+      const ids = drafts.map((d) => d.id)
+      const result = await service.postDrafts(WS, OWNER, session.id, { draftIds: ids })
+      expect(result).toMatchObject({ posted: 1, failed: 1, skipped: [] })
+      expect(result.drafts.map((d) => d.status)).toEqual(['posted', 'failed'])
+      // A closing keyword in model text must not close an issue on the host.
+      expect(host.posted).toHaveLength(1)
+      expect(host.posted[0]!.body).not.toMatch(/Closes #12/)
+      expect(changes.at(-1)).toEqual({ sessionId: session.id, scope: 'drafts' })
+
+      host.refuse.clear()
+      const again = await service.postDrafts(WS, OWNER, session.id, { draftIds: ids })
+      expect(again).toMatchObject({ posted: 1, failed: 0, skipped: [ids[0]] })
+      expect(host.posted).toHaveLength(2)
+    })
+
+    it('refuses to post once the pull request has moved past the reviewed commit', async () => {
+      const { service, session, drafts, host } = await drafted()
+      host.head = 'newer'
+      await expect(
+        service.postDrafts(WS, OWNER, session.id, { draftIds: [drafts[0]!.id] }),
+      ).rejects.toMatchObject({ details: { reason: 'session_stale' } })
+      expect(host.posted).toEqual([])
     })
   })
 

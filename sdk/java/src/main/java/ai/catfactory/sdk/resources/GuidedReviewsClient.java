@@ -16,8 +16,9 @@ import org.jspecify.annotations.Nullable;
  * Guided pull request review: a structured explanation of a PR (what it does, meaningful changes,
  * consequences, risks, where to focus, suggested questions), independent question threads answered
  * by a model that reads the PR at the reviewed commit, and comment drafts placed on the lines they
- * are about. Following a review takes a `read` key; opening one, asking and drafting take a
- * `write` key because they spend model budget. Nothing here posts to the pull request.
+ * are about. Following a review takes a `read` key; opening one, asking, drafting and posting
+ * drafts take a `write` key. Posting publishes plain comments on the pull request and never
+ * approves or requests changes.
  * Reached from {@link CatFactoryClient}; not constructed directly.
  */
 public final class GuidedReviewsClient {
@@ -51,6 +52,20 @@ public final class GuidedReviewsClient {
      */
     public void delete(String sessionId) {
         transport.requestNoContent("DELETE", "/api/v1/guided-reviews/" + Transport.pathSegment(sessionId), null, Map.of());
+    }
+
+    /**
+     * Edit, re-anchor or discard a comment draft
+     * Change a draft's body or the line it sits on, or discard it with `discard: true`. Send the
+     * `rev` you loaded: a draft edited, posted or discarded since is refused `409` with
+     * `details.reason: "draft_conflict"`, so reload and decide again. A new anchor must be a line
+     * inside the diff on its side, or the edit is `422` with `details.reason:
+     * "draft_anchor_outside_diff"`. Only the session's owner may edit.
+     * {@code PATCH /api/v1/guided-reviews/{sessionId}/comment-drafts/{draftId}} (operation {@code
+     * editPublicGuidedReviewDraft}).
+     */
+    public GuidedReviewCommentDraft editDraft(String sessionId, String draftId, EditGuidedReviewDraft body) {
+        return transport.request("PATCH", "/api/v1/guided-reviews/" + Transport.pathSegment(sessionId) + "/comment-drafts/" + Transport.pathSegment(draftId), body, Map.of(), new TypeReference<GuidedReviewCommentDraft>() {});
     }
 
     /**
@@ -137,6 +152,23 @@ public final class GuidedReviewsClient {
     }
 
     /**
+     * Post comment drafts to the pull request
+     * Publish the named drafts as review comments on the pull request, as the key's identity, with
+     * an optional summary comment. Each comment posts on its own, so a partial post is normal: the
+     * result counts `posted` and `failed` drafts (a failed one carries `postError` and can be
+     * posted again) and lists in `skipped` the named drafts this call did not claim because they
+     * were already posted, discarded or being posted, so a retried call never posts a comment
+     * twice. Refused `409` with `details.reason: "session_stale"` when the pull request has
+     * commits past `reviewedHeadSha`: refresh the review and check the drafts first. Posting never
+     * approves or requests changes.
+     * {@code POST /api/v1/guided-reviews/{sessionId}/comment-drafts/post} (operation {@code
+     * postPublicGuidedReviewDrafts}).
+     */
+    public GuidedReviewPostResult postDrafts(String sessionId, PostGuidedReviewDrafts body) {
+        return transport.request("POST", "/api/v1/guided-reviews/" + Transport.pathSegment(sessionId) + "/comment-drafts/post", body, Map.of(), new TypeReference<GuidedReviewPostResult>() {});
+    }
+
+    /**
      * Point a guided review at the PR's current head
      * Re-read the pull request and regenerate the overview at its current head commit, keeping
      * every thread. Use it after the author pushes: the overview, answers and draft anchors are
@@ -159,7 +191,7 @@ public final class GuidedReviewsClient {
      * Draft review comments from a thread's conclusions
      * Ask the model to turn what the thread concluded into review comments, each placed on the
      * line it is about. Optional `instructions` narrow which ones. Drafts are kept only on lines
-     * inside the PR's diff, and nothing is posted to the pull request. Busy like a question: `409`
+     * inside the PR's diff; posting them is a separate, explicit call. Busy like a question: `409`
      * with `details.reason: "thread_busy"` while the thread is waiting on an answer.
      * {@code POST /api/v1/guided-reviews/{sessionId}/threads/{threadId}/comment-drafts} (operation
      * {@code requestPublicGuidedReviewDrafts}).

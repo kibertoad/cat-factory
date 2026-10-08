@@ -2696,6 +2696,8 @@ Design record: [`docs/initiatives/guided-pr-review.md`](../../docs/initiatives/g
 | GET    | `/guided-reviews/{sessionId}/threads/{threadId}`                | `read`  | The thread's messages                           |
 | POST   | `/guided-reviews/{sessionId}/threads/{threadId}/messages`       | `write` | Ask a question                                  |
 | POST   | `/guided-reviews/{sessionId}/threads/{threadId}/comment-drafts` | `write` | Draft comments from the thread                  |
+| PATCH  | `/guided-reviews/{sessionId}/comment-drafts/{draftId}`          | `write` | Edit, re-anchor or discard a draft (`rev`)      |
+| POST   | `/guided-reviews/{sessionId}/comment-drafts/post`               | `write` | Post drafts on the PR as plain comments         |
 | GET    | `/guided-reviews/{sessionId}/events`                            | `read`  | SSE: `state`, `deleted`, `timeout`              |
 
 - **Identity.** A key bound to a person (`actsAsUserId`) acts as that person: their sessions,
@@ -2704,10 +2706,12 @@ Design record: [`docs/initiatives/guided-pr-review.md`](../../docs/initiatives/g
 - **Writes answer at once.** The overview and each answer are produced in the background. Follow
   the stream, or re-read: an assistant message is `pending`/`running` until it settles `complete`
   or `failed` with a `failure.reason`.
-- **One unanswered question per thread.** A second one is `409` with `details.reason:
-"thread_busy"`; other threads are unaffected, so open more threads for parallel questions.
-- **`write`, not `admin`,** because opening, asking and drafting spend model budget and nothing
-  else: no route here posts to the pull request.
+- **One unanswered question per thread.** A second one is refused `409` with the reason
+  `thread_busy`; other threads are unaffected, so open more threads for parallel questions.
+- **`write`, not `admin`.** Opening, asking and drafting spend model budget; posting publishes
+  plain review comments as the key's identity. Nothing here approves, merges or requests changes.
+- **Posting claims each draft first,** so a retried post never publishes a comment twice, and it
+  is refused with `session_stale` once the PR has commits past `reviewedHeadSha`.
 
 ### Service specification
 

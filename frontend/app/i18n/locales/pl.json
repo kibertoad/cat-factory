@@ -727,7 +727,9 @@
         "delegated_executor_unwired": "Zewnętrzny executor nie jest zarejestrowany",
         "delegated_step_async_only": "Ten krok jest odpytywany, a nie oczekiwany",
         "delegated_claim_missing": "Ten krok nie ma zewnętrznej pracy do sprawdzenia",
-        "thread_busy": "Ten wątek wciąż odpowiada"
+        "thread_busy": "Ten wątek wciąż odpowiada",
+        "draft_conflict": "Ten szkic się zmienił",
+        "session_stale": "Pull request poszedł dalej"
       },
       "description": {
         "dependencies_unmet": "To zadanie zależy od innych, które nie zostały jeszcze ukończone. Ukończ je lub odblokuj, a następnie uruchom je ponownie.",
@@ -785,7 +787,9 @@
         "delegated_executor_unwired": "Krok tego potoku działa na zewnętrznym executorze, którego ta instalacja nie rejestruje, więc pracy nie ma dokąd wysłać. Zarejestruj executor w kodzie albo zmień krok na taki, który działa tutaj.",
         "delegated_step_async_only": "Ten krok działa na zewnętrznym wykonawcy i może trwać godzinami, więc jest wysyłany, a następnie odpytywany, zamiast wykonywany w obrębie jednego żądania. Uruchom przebieg z tablicy; jeśli trafiłeś tu z własnego kodu, steruj krokiem ścieżką asynchroniczną.",
         "delegated_claim_missing": "Brakuje zapisu tego, co przebieg wysłał do zewnętrznego wykonawcy, więc nie ma czego odpytywać. Z samym wykonawcą wszystko jest w porządku. Odśwież przebieg i uruchom krok ponownie, jeśli nadal stoi.",
-        "thread_busy": "Poprzednie pytanie w tym wątku nie ma jeszcze odpowiedzi. Poczekaj na nią albo zapytaj w innym wątku."
+        "thread_busy": "Poprzednie pytanie w tym wątku nie ma jeszcze odpowiedzi. Poczekaj na nią albo zapytaj w innym wątku.",
+        "draft_conflict": "Od wczytania ten szkic komentarza został edytowany, opublikowany lub odrzucony. Wczytaj szkice ponownie i wprowadź zmianę jeszcze raz.",
+        "session_stale": "Po przygotowaniu tej recenzji pojawiły się nowe commity, więc szkice mogą wskazywać złe linie. Odśwież recenzję, sprawdź szkice i dopiero wtedy opublikuj."
       },
       "action": {
         "connectGitHub": "Połącz GitHub",

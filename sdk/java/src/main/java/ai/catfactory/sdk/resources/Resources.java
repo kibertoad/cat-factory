@@ -190,7 +190,7 @@ public abstract class Resources {
         return kaizen;
     }
 
-    /** Guided pull request review: a structured explanation of a PR (what it does, meaningful changes, consequences, risks, where to focus, suggested questions), independent question threads answered by a model that reads the PR at the reviewed commit, and comment drafts placed on the lines they are about. Following a review takes a `read` key; opening one, asking and drafting take a `write` key because they spend model budget. Nothing here posts to the pull request. */
+    /** Guided pull request review: a structured explanation of a PR (what it does, meaningful changes, consequences, risks, where to focus, suggested questions), independent question threads answered by a model that reads the PR at the reviewed commit, and comment drafts placed on the lines they are about. Following a review takes a `read` key; opening one, asking, drafting and posting drafts take a `write` key. Posting publishes plain comments on the pull request and never approves or requests changes. */
     public GuidedReviewsClient guidedReviews() {
         return guidedReviews;
     }

@@ -1,16 +1,20 @@
 import {
   askGuidedReviewContract,
   deleteGuidedReviewContract,
+  editGuidedReviewDraftContract,
   getGuidedReviewContract,
   getGuidedReviewThreadContract,
   listGuidedReviewsContract,
   openGuidedReviewContract,
   openGuidedReviewThreadContract,
+  postGuidedReviewDraftsContract,
   refreshGuidedReviewContract,
   requestGuidedReviewDraftsContract,
 } from '@cat-factory/contracts'
 import type {
   AskGuidedReviewInput,
+  EditGuidedReviewDraftInput,
+  PostGuidedReviewDraftsInput,
   OpenGuidedReviewInput,
   OpenGuidedReviewThreadInput,
 } from '~/types/domain'
@@ -75,6 +79,29 @@ export function guidedReviewApi({ send, ws }: ApiContext) {
         pathPrefix: ws(workspaceId),
         pathParams: { sessionId, threadId },
         body: { instructions },
+      }),
+
+    editGuidedReviewDraft: (
+      workspaceId: string,
+      sessionId: string,
+      draftId: string,
+      body: EditGuidedReviewDraftInput,
+    ) =>
+      send(editGuidedReviewDraftContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { sessionId, draftId },
+        body,
+      }),
+
+    postGuidedReviewDrafts: (
+      workspaceId: string,
+      sessionId: string,
+      body: PostGuidedReviewDraftsInput,
+    ) =>
+      send(postGuidedReviewDraftsContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { sessionId },
+        body,
       }),
   }
 }

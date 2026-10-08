@@ -224,6 +224,8 @@ const SURFACE = {
   getPublicGuidedReviewThread: { group: 'guidedReviews', method: 'getThread' },
   askPublicGuidedReview: { group: 'guidedReviews', method: 'ask' },
   requestPublicGuidedReviewDrafts: { group: 'guidedReviews', method: 'requestDrafts' },
+  editPublicGuidedReviewDraft: { group: 'guidedReviews', method: 'editDraft' },
+  postPublicGuidedReviewDrafts: { group: 'guidedReviews', method: 'postDrafts' },
   streamPublicGuidedReview: { group: 'guidedReviews', method: 'stream' },
 
   // ---- Headless key provisioning (`admin` scope) ------------------------------------------
@@ -404,7 +406,7 @@ export const GROUP_DOCS = {
   kaizen:
     "The platform's own improvement backlog: every post-run grading of an agent step, with the agent kind, model, prompt version and run it came from, what the grader recommended changing, and whether anybody has acted on it yet. Reading takes a `read` key and acknowledging one a `write` key: neither runs anything.",
   guidedReviews:
-    'Guided pull request review: a structured explanation of a PR (what it does, meaningful changes, consequences, risks, where to focus, suggested questions), independent question threads answered by a model that reads the PR at the reviewed commit, and comment drafts placed on the lines they are about. Following a review takes a `read` key; opening one, asking and drafting take a `write` key because they spend model budget. Nothing here posts to the pull request.',
+    'Guided pull request review: a structured explanation of a PR (what it does, meaningful changes, consequences, risks, where to focus, suggested questions), independent question threads answered by a model that reads the PR at the reviewed commit, and comment drafts placed on the lines they are about. Following a review takes a `read` key; opening one, asking, drafting and posting drafts take a `write` key. Posting publishes plain comments on the pull request and never approves or requests changes.',
   keys: "The workspace's own API keys: provision one headlessly, list them, revoke one (and what it minted).",
 }
 

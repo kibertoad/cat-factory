@@ -62,7 +62,7 @@ export const SERVED_OPENAPI_PATH = resolve(
 // it against `origin/main` after every merge rather than trusting a clean one, and write the new
 // entry in the history doc, which is what makes the next collision arrive as a conflict.
 
-const API_VERSION = '1.76.0'
+const API_VERSION = '1.77.0'
 
 /**
  * Named DTOs hoisted into `components.schemas` (so client codegen gets named types and
@@ -116,6 +116,9 @@ const COMPONENT_SCHEMAS = {
   OpenGuidedReviewThread: 'openGuidedReviewThreadSchema',
   AskGuidedReview: 'askGuidedReviewSchema',
   RequestGuidedReviewDrafts: 'requestGuidedReviewDraftsSchema',
+  EditGuidedReviewDraft: 'editGuidedReviewDraftSchema',
+  PostGuidedReviewDrafts: 'postGuidedReviewDraftsSchema',
+  GuidedReviewPostResult: 'guidedReviewPostResultSchema',
   PublicPipeline: 'publicPipelineSchema',
   PublicPipelineList: 'publicPipelineListSchema',
   // The best-practice standard a task pins, hoisted for the reason the spend rows are: it is a
@@ -1045,7 +1048,19 @@ const OPERATION_DOCS = {
     tag: 'Guided review',
     summary: "Draft review comments from a thread's conclusions",
     description:
-      'Ask the model to turn what the thread concluded into review comments, each placed on the line it is about. Optional `instructions` narrow which ones. Drafts are kept only on lines inside the PR\'s diff, and nothing is posted to the pull request. Busy like a question: `409` with `details.reason: "thread_busy"` while the thread is waiting on an answer.',
+      'Ask the model to turn what the thread concluded into review comments, each placed on the line it is about. Optional `instructions` narrow which ones. Drafts are kept only on lines inside the PR\'s diff; posting them is a separate, explicit call. Busy like a question: `409` with `details.reason: "thread_busy"` while the thread is waiting on an answer.',
+  },
+  editPublicGuidedReviewDraft: {
+    tag: 'Guided review',
+    summary: 'Edit, re-anchor or discard a comment draft',
+    description:
+      'Change a draft\'s body or the line it sits on, or discard it with `discard: true`. Send the `rev` you loaded: a draft edited, posted or discarded since is refused `409` with `details.reason: "draft_conflict"`, so reload and decide again. A new anchor must be a line inside the diff on its side, or the edit is `422` with `details.reason: "draft_anchor_outside_diff"`. Only the session\'s owner may edit.',
+  },
+  postPublicGuidedReviewDrafts: {
+    tag: 'Guided review',
+    summary: 'Post comment drafts to the pull request',
+    description:
+      'Publish the named drafts as review comments on the pull request, as the key\'s identity, with an optional summary comment. Each comment posts on its own, so a partial post is normal: the result counts `posted` and `failed` drafts (a failed one carries `postError` and can be posted again) and lists in `skipped` the named drafts this call did not claim because they were already posted, discarded or being posted, so a retried call never posts a comment twice. Refused `409` with `details.reason: "session_stale"` when the pull request has commits past `reviewedHeadSha`: refresh the review and check the drafts first. Posting never approves or requests changes.',
   },
   getPublicServiceSpec: {
     tag: 'Spec',

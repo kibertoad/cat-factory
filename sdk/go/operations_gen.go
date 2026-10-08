@@ -3529,8 +3529,9 @@ func (s *KaizenService) ListEntriesAll(ctx context.Context, query *KaizenListEnt
 // GuidedReviewsService guided pull request review: a structured explanation of a PR (what it does, meaningful changes,
 // consequences, risks, where to focus, suggested questions), independent question threads
 // answered by a model that reads the PR at the reviewed commit, and comment drafts placed on the
-// lines they are about. Following a review takes a `read` key; opening one, asking and drafting
-// take a `write` key because they spend model budget. Nothing here posts to the pull request.
+// lines they are about. Following a review takes a `read` key; opening one, asking, drafting and
+// posting drafts take a `write` key. Posting publishes plain comments on the pull request and
+// never approves or requests changes.
 type GuidedReviewsService struct {
 	client *Client
 }
@@ -3567,6 +3568,27 @@ func (s *GuidedReviewsService) Delete(ctx context.Context, sessionID string) err
 		Path:   fmt.Sprintf("/api/v1/guided-reviews/%s", pathEscape(sessionID)),
 	}
 	return s.client.requestNoContent(ctx, req)
+}
+
+// EditDraft edit, re-anchor or discard a comment draft
+// Change a draft's body or the line it sits on, or discard it with `discard: true`. Send the
+// `rev` you loaded: a draft edited, posted or discarded since is refused `409` with
+// `details.reason: "draft_conflict"`, so reload and decide again. A new anchor must be a line
+// inside the diff on its side, or the edit is `422` with `details.reason:
+// "draft_anchor_outside_diff"`. Only the session's owner may edit.
+// PATCH /api/v1/guided-reviews/{sessionId}/comment-drafts/{draftId} (operation
+// editPublicGuidedReviewDraft).
+func (s *GuidedReviewsService) EditDraft(ctx context.Context, sessionID string, draftID string, body EditGuidedReviewDraft) (*GuidedReviewCommentDraft, error) {
+	req := requestSpec{
+		Method: "PATCH",
+		Path:   fmt.Sprintf("/api/v1/guided-reviews/%s/comment-drafts/%s", pathEscape(sessionID), pathEscape(draftID)),
+		Body:   body,
+	}
+	var out GuidedReviewCommentDraft
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
 }
 
 // Get get a guided review
@@ -3672,6 +3694,30 @@ func (s *GuidedReviewsService) OpenThread(ctx context.Context, sessionID string,
 	return &out, nil
 }
 
+// PostDrafts post comment drafts to the pull request
+// Publish the named drafts as review comments on the pull request, as the key's identity, with an
+// optional summary comment. Each comment posts on its own, so a partial post is normal: the
+// result counts `posted` and `failed` drafts (a failed one carries `postError` and can be posted
+// again) and lists in `skipped` the named drafts this call did not claim because they were
+// already posted, discarded or being posted, so a retried call never posts a comment twice.
+// Refused `409` with `details.reason: "session_stale"` when the pull request has commits past
+// `reviewedHeadSha`: refresh the review and check the drafts first. Posting never approves or
+// requests changes.
+// POST /api/v1/guided-reviews/{sessionId}/comment-drafts/post (operation
+// postPublicGuidedReviewDrafts).
+func (s *GuidedReviewsService) PostDrafts(ctx context.Context, sessionID string, body PostGuidedReviewDrafts) (*GuidedReviewPostResult, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/guided-reviews/%s/comment-drafts/post", pathEscape(sessionID)),
+		Body:   body,
+	}
+	var out GuidedReviewPostResult
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // Refresh point a guided review at the PR's current head
 // Re-read the pull request and regenerate the overview at its current head commit, keeping every
 // thread. Use it after the author pushes: the overview, answers and draft anchors are computed
@@ -3692,7 +3738,7 @@ func (s *GuidedReviewsService) Refresh(ctx context.Context, sessionID string) (*
 // RequestDrafts draft review comments from a thread's conclusions
 // Ask the model to turn what the thread concluded into review comments, each placed on the line
 // it is about. Optional `instructions` narrow which ones. Drafts are kept only on lines inside
-// the PR's diff, and nothing is posted to the pull request. Busy like a question: `409` with
+// the PR's diff; posting them is a separate, explicit call. Busy like a question: `409` with
 // `details.reason: "thread_busy"` while the thread is waiting on an answer.
 // POST /api/v1/guided-reviews/{sessionId}/threads/{threadId}/comment-drafts (operation
 // requestPublicGuidedReviewDrafts).

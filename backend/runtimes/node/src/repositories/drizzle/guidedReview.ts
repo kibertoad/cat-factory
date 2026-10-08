@@ -589,6 +589,7 @@ export class DrizzleGuidedReviewRepository implements GuidedReviewRepository {
     workspaceId: string,
     sessionId: string,
     ids: string[],
+    staleCutoff: number,
     now: number,
   ): Promise<GuidedReviewCommentDraft[]> {
     if (ids.length === 0) return []
@@ -600,7 +601,10 @@ export class DrizzleGuidedReviewRepository implements GuidedReviewRepository {
           eq(drafts.workspace_id, workspaceId),
           eq(drafts.session_id, sessionId),
           inArray(drafts.id, ids),
-          inArray(drafts.status, [...EDITABLE]),
+          or(
+            inArray(drafts.status, [...EDITABLE]),
+            and(eq(drafts.status, 'posting'), lt(drafts.updated_at, staleCutoff)),
+          ),
         ),
       )
       .returning()

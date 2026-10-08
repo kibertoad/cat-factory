@@ -653,6 +653,7 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
     workspaceId: string,
     sessionId: string,
     ids: string[],
+    staleCutoff: number,
     now: number,
   ): Promise<GuidedReviewCommentDraft[]> {
     const claimed: GuidedReviewCommentDraft[] = []
@@ -663,10 +664,11 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
           `UPDATE guided_review_comment_drafts SET status = 'posting', post_error = NULL,
              rev = rev + 1, updated_at = ?
            WHERE workspace_id = ? AND session_id = ? AND id IN (${placeholders})
-             AND status IN ('proposed', 'failed')
+             AND (status IN ('proposed', 'failed')
+                  OR (status = 'posting' AND updated_at < ?))
            RETURNING *`,
         )
-        .bind(now, workspaceId, sessionId, ...chunk)
+        .bind(now, workspaceId, sessionId, ...chunk, staleCutoff)
         .all<DraftRow>()
       claimed.push(...results.map(rowToDraft))
     }
