@@ -6,6 +6,8 @@ import type {
 } from '@cat-factory/contracts'
 import type {
   GitHubChangedFile,
+  GuidedReviewClaim,
+  GuidedReviewDraftProposal,
   GuidedReviewExchange,
   GuidedReviewJob,
   GuidedReviewMessageOutcome,
@@ -131,23 +133,26 @@ class InMemoryGuidedReviewRepository implements GuidedReviewRepository {
   async claimOverview(_ws: string, id: string, generation: number, cutoff: number, now: number) {
     const s = this.sessions.get(id)
     const key = `o:${id}`
-    if (!s || s.overview.generation !== generation) return false
+    if (!s || s.overview.generation !== generation) return null
     const live =
       s.overview.status === 'pending' ||
       (s.overview.status === 'running' && (this.claims.get(key) ?? 0) < cutoff)
-    if (!live) return false
+    if (!live) return null
     s.overview.status = 'running'
     this.claims.set(key, now)
-    return true
+    return { claimedAt: now }
   }
   async settleOverview(
     _ws: string,
     id: string,
     generation: number,
     o: GuidedReviewOverviewOutcome,
+    _now: number,
+    claim: GuidedReviewClaim,
   ) {
     const s = this.sessions.get(id)
     if (!s || s.overview.generation !== generation || s.overview.status !== 'running') return false
+    if (this.claims.get(`o:${id}`) !== claim.claimedAt) return false
     s.overview =
       o.status === 'complete'
         ? { status: 'complete', generation, content: o.content, failure: null, model: o.model }
@@ -222,17 +227,25 @@ class InMemoryGuidedReviewRepository implements GuidedReviewRepository {
   async claimMessage(_ws: string, id: string, cutoff: number, now: number) {
     const m = this.messages.get(id)
     const key = `m:${id}`
-    if (!m) return false
+    if (!m) return null
     const live =
       m.status === 'pending' || (m.status === 'running' && (this.claims.get(key) ?? 0) < cutoff)
-    if (!live) return false
+    if (!live) return null
     m.status = 'running'
     this.claims.set(key, now)
-    return true
+    return { claimedAt: now }
   }
-  async settleMessage(_ws: string, id: string, o: GuidedReviewMessageOutcome) {
+  async settleMessage(
+    _ws: string,
+    id: string,
+    o: GuidedReviewMessageOutcome,
+    _now: number,
+    claim: GuidedReviewClaim,
+  ) {
     const m = this.messages.get(id)
-    if (!m || m.status !== 'running') return false
+    if (!m || m.status !== 'running' || this.claims.get(`m:${id}`) !== claim.claimedAt) {
+      return false
+    }
     if (o.status === 'complete') {
       Object.assign(m, {
         status: 'complete',
@@ -249,11 +262,27 @@ class InMemoryGuidedReviewRepository implements GuidedReviewRepository {
   async settleDrafts(
     ws: string,
     messageId: string,
-    drafts: GuidedReviewCommentDraft[],
+    proposals: GuidedReviewDraftProposal[],
     o: Extract<GuidedReviewMessageOutcome, { status: 'complete' }>,
+    now: number,
+    claim: GuidedReviewClaim,
   ) {
-    if (!(await this.settleMessage(ws, messageId, o))) return false
-    for (const d of drafts) this.drafts.set(d.id, d)
+    const message = this.messages.get(messageId)
+    if (!message || !(await this.settleMessage(ws, messageId, o, now, claim))) return false
+    for (const p of proposals) {
+      this.drafts.set(p.id, {
+        ...p,
+        sessionId: message.sessionId,
+        threadId: message.threadId,
+        messageId,
+        status: 'proposed',
+        postError: null,
+        postedUrl: null,
+        rev: 1,
+        createdAt: now,
+        updatedAt: now,
+      })
+    }
     return true
   }
   async getDraft(_ws: string, id: string) {
@@ -268,7 +297,9 @@ class InMemoryGuidedReviewRepository implements GuidedReviewRepository {
   async claimDraftsForPost() {
     return []
   }
-  async settleDraftPosts() {}
+  async settleDraftPosts() {
+    return []
+  }
   async listStaleJobs(_driver: string, cutoff: number) {
     return [...this.messages.values()]
       .filter((m) => m.role === 'assistant' && m.status === 'pending' && m.updatedAt < cutoff)
