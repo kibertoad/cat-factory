@@ -4724,6 +4724,7 @@ class GuidedReviewFailureReason(StrEnum):
     GENERATION_FAILED = "generation_failed"
     UNREADABLE_REPLY = "unreadable_reply"
     DEPTH_UNAVAILABLE = "depth_unavailable"
+    HEAD_MOVED = "head_moved"
 
 
 @dataclass(frozen=True, slots=True)

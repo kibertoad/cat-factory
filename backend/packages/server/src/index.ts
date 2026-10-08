@@ -607,6 +607,7 @@ export {
 // the Drizzle/Postgres repos — both use the same column shapes).
 export * from './persistence/mappers.js'
 export * from './persistence/sandbox-mappers.js'
+export * from './persistence/guided-review-mappers.js'
 // Validate-on-read guards (enum/JSON) for the persistence boundary, shared by both facades'
 // repositories so a corrupt stored value surfaces loudly instead of via an erased `as` cast.
 export * from './persistence/decode.js'

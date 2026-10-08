@@ -49,8 +49,6 @@ import type {
   CustomManifestTypeRepository,
   DeployCloneTarget,
   DocInterviewRepository,
-  GuidedReviewRepository,
-  GuidedReviewRunner,
   DocumentConnectionRepository,
   DocumentConnectionStore,
   DocumentRepository,
@@ -75,6 +73,8 @@ import type {
   GitHubInstallation,
   GitHubInstallationRepository,
   GitHubProvisioningClient,
+  GuidedReviewRepository,
+  GuidedReviewRunner,
   IdGenerator,
   IncidentEnrichmentConnectionRepository,
   InitiativePresetRegistry,
@@ -980,8 +980,9 @@ export interface CoreDependencies extends ContentLibraryDependencies {
    */
   docInterviewRepository?: DocInterviewRepository
   /**
-   * Guided PR review sessions (docs/initiatives/guided-pr-review.md). Absent ⇒ the guided review
-   * module is not built and its routes report the capability as not configured.
+   * Persistence for guided PR review sessions (docs/initiatives/guided-pr-review.md). Both
+   * runtime facades wire it unconditionally, so the mothership persistence registry, which
+   * reflects these dependencies, serves it to a mothership-mode node.
    */
   guidedReviewRepository?: GuidedReviewRepository
   /**

@@ -599,7 +599,8 @@
               "repo_unavailable",
               "generation_failed",
               "unreadable_reply",
-              "depth_unavailable"
+              "depth_unavailable",
+              "head_moved"
             ],
             "type": "string"
           }
