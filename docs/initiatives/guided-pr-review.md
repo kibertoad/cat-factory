@@ -45,7 +45,7 @@ The schemas live in `@cat-factory/contracts` (`guided-review.ts`).
 
 - `GuidedReviewSession`: `id`, `provider`, `repoId`, `owner`, `repo`, `prNumber`, `prTitle`,
   `reviewedHeadSha`, `baseRef`, `createdBy`, `overview: { status: 'pending' | 'running' |
-'complete' | 'failed', generation, content, error, model }`, timestamps.
+'complete' | 'failed', generation, content, failure: { reason, detail }, model }`, timestamps.
 - Overview content: `summary`, `intent`, `meaningfulChanges[] { title, detail, paths[] }`,
   `consequences[] { title, detail }`, `risks[] { title, detail, severity, paths[] }`,
   `focusAreas[] { title, why, anchors[] { path, startLine?, endLine?, side? } }`,
@@ -53,8 +53,9 @@ The schemas live in `@cat-factory/contracts` (`guided-review.ts`).
 - `GuidedReviewThread`: `id`, `sessionId`, `title`, `createdBy`, timestamps.
 - `GuidedReviewMessage`: `id`, `threadId`, `sessionId`, `seq`, `role: 'user' | 'assistant'`,
   `kind: 'answer' | 'comment-drafts'`, `depth: 'inline' | 'deep'`, `content`, `status: 'pending' |
-'running' | 'complete' | 'failed'`, `citations[] { path, startLine?, endLine?, side? }`, `error`,
-  `model`, timestamps.
+'running' | 'complete' | 'failed'`, `citations[] { path, startLine?, endLine?, side? }`,
+  `failure: { reason, detail }`, `draftReport: { proposed, dropped[] }` (a settled
+  `comment-drafts` message), `model`, timestamps.
 - `GuidedReviewCommentDraft`: `id`, `sessionId`, `threadId`, `messageId`, `path`, `line`,
   `startLine`, `side`, `body`, `rationale`, `status: 'proposed' | 'posting' | 'posted' | 'failed' |
 'discarded'`, `postError`, `postedUrl`, `rev`, timestamps.
