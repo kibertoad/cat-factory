@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_WORKSPACE_SETTINGS } from '@cat-factory/kernel'
+import { DEFAULT_WORKSPACE_SETTINGS, DELEGATED_USAGE_PROVIDER } from '@cat-factory/kernel'
 import type {
   Clock,
   IdGenerator,
@@ -572,6 +572,22 @@ describe('LlmObservabilityService.exportForExecution', () => {
     const out = await service.exportForExecution('ws', 'exec')
     expect(out.totals.costEstimate).not.toBeNull()
     expect(out.insights[0]?.costEstimate).not.toBeNull()
+  })
+
+  it('never prices a delegated executor’s reported usage', async () => {
+    // The table would answer its fallback rate for a model nobody here knows, and the tokens were
+    // billed to the executor's own account.
+    const repo = new MemoryRepo()
+    const service = new LlmObservabilityService({
+      llmCallMetricRepository: repo,
+      idGenerator,
+      clock,
+      modelRates: rates,
+    })
+    await service.record(input({ provider: DELEGATED_USAGE_PROVIDER, model: 'delegated:gha' }))
+    const out = await service.exportForExecution('ws', 'exec')
+    expect(out.totals.promptTokens).toBe(100)
+    expect(out.totals.costEstimate).toBeNull()
   })
 
   it('declines to price a TRUNCATED bundle rather than costing the slice as the run', async () => {

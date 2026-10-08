@@ -32,11 +32,8 @@ import { composeDelegationBrief, briefRepoProvider } from './brief.js'
 import { ensureDelegatedWorkBranch } from './delegationWorkBranch.js'
 import { recordAgentContextSnapshot } from './agentContextRecord.js'
 import { resolveDelegationCredentials } from './delegationCredentials.js'
-import {
-  type RecordHarnessCalls,
-  delegatedModelName,
-  recordDelegatedUsage,
-} from './delegatedUsage.js'
+import { delegatedModelName, recordDelegatedUsage } from './delegatedUsage.js'
+import type { RecordHarnessCalls } from '@cat-factory/orchestration'
 import type { ResolveRepoTarget, ResolveRepoOrigin } from './repoTargeting.js'
 
 // ---------------------------------------------------------------------------
@@ -702,6 +699,8 @@ function toJobUpdate(
         disposition: update.retryable === true ? ('retryable' as const) : ('terminal' as const),
       },
       backend: `delegated:${definition.id}`,
+      // Billed as the done arm's usage is, for the reason stated there.
+      ...(update.usage ? { usage: update.usage, usageBilling: 'subscription' as const } : {}),
     }
   }
   const result = update.result

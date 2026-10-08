@@ -12,6 +12,7 @@ import type {
   UrlSafetyPolicy,
 } from '@cat-factory/kernel'
 import type { AgentKindRegistry } from '@cat-factory/agents'
+import type { RecordHarnessCalls } from '@cat-factory/orchestration'
 import { UnavailableError } from '@cat-factory/kernel'
 import {
   assertSafePublicUrl,
@@ -21,7 +22,6 @@ import {
 } from '@cat-factory/integrations'
 import { DelegatedAgentExecutor } from './DelegatedAgentExecutor.js'
 import type { ResolveRepoOrigin, ResolveRepoTarget } from './repoTargeting.js'
-import type { RecordHarnessCalls } from './delegatedUsage.js'
 
 // ---------------------------------------------------------------------------
 // The ONE place a facade builds the delegated arm.

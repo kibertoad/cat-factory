@@ -522,6 +522,7 @@ export type {
   DelegationUpdate,
 } from './ports/delegated-executor.js'
 export {
+  DELEGATED_USAGE_PROVIDER,
   DELEGATED_WORK_BRANCH_POLICIES,
   DelegatedExecutorRegistrationError,
 } from './ports/delegated-executor.js'

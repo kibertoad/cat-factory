@@ -13,7 +13,12 @@ import type {
   DelegationUpdate,
   ToolSecretResolver,
 } from '@cat-factory/kernel'
-import { defaultDelegatedExecutorRegistry, DomainError, noopLogger } from '@cat-factory/kernel'
+import {
+  DELEGATED_USAGE_PROVIDER,
+  defaultDelegatedExecutorRegistry,
+  DomainError,
+  noopLogger,
+} from '@cat-factory/kernel'
 import { defaultAgentKindRegistry } from '@cat-factory/agents'
 import type { HarnessCallsRecordInput } from '@cat-factory/orchestration'
 import { describe, expect, it } from 'vitest'
@@ -554,7 +559,7 @@ describe('DelegatedAgentExecutor: poll mapping', () => {
         workspaceId: 'ws_1',
         executionId: 'ex_1',
         agentKind: 'acme:impl',
-        provider: 'delegated',
+        provider: DELEGATED_USAGE_PROVIDER,
         model: 'delegated:acme:executor',
         // Keyed on the job, so a replayed poll mints the same row id and re-records nothing.
         jobId: 'ex_1-acme:impl',
@@ -581,7 +586,13 @@ describe('DelegatedAgentExecutor: poll mapping', () => {
       error: 'stopped at review',
       usage: { inputTokens: 500, outputTokens: 40 },
     })
-    expect(settled).toMatchObject({ state: 'failed' })
+    // Carried to the engine as the executor's own spend, so the ledger and the step's billing
+    // label see it as they see a completed result's.
+    expect(settled).toMatchObject({
+      state: 'failed',
+      usage: { inputTokens: 500, outputTokens: 40 },
+      usageBilling: 'subscription',
+    })
     // No split reported, so the whole input is filed as fresh: an over-statement, never an under.
     expect(inputs[0]?.calls[0]).toMatchObject({
       inputTokens: 500,

@@ -3,6 +3,7 @@ import {
   type IdGenerator,
   type StoreAgentContextGate,
   createStoreAgentContextGate,
+  DELEGATED_USAGE_PROVIDER,
   noopLogger,
   normalizeCallPhase,
   priceRollupCells,
@@ -240,7 +241,13 @@ export class LlmObservabilityService {
       cache: workspaceSettingsCache,
     })
     this.log = (logger ?? noopLogger).child({ service: 'llmObservability' })
-    this.modelRates = modelRates
+    // A delegated executor's reported usage names no model the platform knows, so a price table
+    // would answer its fallback rate and present a guess as spend. Refused here so the rollups
+    // and the export, which both read this resolver, agree.
+    this.modelRates =
+      modelRates &&
+      ((provider, model) =>
+        provider === DELEGATED_USAGE_PROVIDER ? null : modelRates(provider, model))
     this.costCurrency = costCurrency
   }
 
@@ -472,6 +479,9 @@ export class LlmObservabilityService {
 }
 
 /** The per-job payload the container executor hands a subscription-harness telemetry recorder. */
+/** Files one job's harness call metrics; what {@link makeHarnessCallRecorder} builds. */
+export type RecordHarnessCalls = (input: HarnessCallsRecordInput) => Promise<void>
+
 export interface HarnessCallsRecordInput {
   workspaceId: string
   executionId: string | null
@@ -522,9 +532,7 @@ export interface HarnessCallsRecordInput {
  * in the routine case, since a job's calls arrive in the BATCHES the live drain delivers them in
  * and the terminal batch is regularly this row alone.
  */
-export function makeHarnessCallRecorder(
-  service: LlmObservabilityService,
-): (input: HarnessCallsRecordInput) => Promise<void> {
+export function makeHarnessCallRecorder(service: LlmObservabilityService): RecordHarnessCalls {
   return async ({ workspaceId, executionId, agentKind, provider, model, jobId, calls }) => {
     for (const [index, call] of calls.entries()) {
       // `seq` is BOTH the row-id key and the turn ordinal, so they cannot drift apart: a

@@ -43,6 +43,7 @@ import {
 import { workerDispatchTokenMint } from './dispatchTokenMint'
 import {
   buildToolTrajectorySinks,
+  buildWorkerHarnessCallRecorder,
   buildWorkerJobAccountingDeps,
   buildWorkerJobAuthDeps,
 } from './container-executor-deps'
@@ -281,10 +282,9 @@ export function selectEnvironmentProbeAgent(deps: {
     // step executor files through. A subscription-routed prober talks to the vendor direct, so the
     // LLM proxy meters none of it and this is the only path its burn reaches the ledger.
     accounting: buildWorkerJobAccountingDeps({
-      env,
-      config,
       db,
       clock,
+      recordHarnessCalls: buildWorkerHarnessCallRecorder({ env, config, db, clock }),
       ...(deps.subscriptions ? { subscriptions: deps.subscriptions } : {}),
     }),
     // Provider-aware, so a GitLab deployment's prober clones its own instance rather than a

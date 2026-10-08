@@ -5,8 +5,8 @@ import type {
   HarnessCallMetric,
   Logger,
 } from '@cat-factory/kernel'
-import { partitionInputTokens, runBestEffort } from '@cat-factory/kernel'
-import type { HarnessCallsRecordInput } from '@cat-factory/orchestration'
+import { DELEGATED_USAGE_PROVIDER, partitionInputTokens, runBestEffort } from '@cat-factory/kernel'
+import type { RecordHarnessCalls } from '@cat-factory/orchestration'
 
 // ---------------------------------------------------------------------------
 // Where a delegated step's REPORTED usage becomes a call metric.
@@ -17,12 +17,9 @@ import type { HarnessCallsRecordInput } from '@cat-factory/orchestration'
 // the same job-level row a subscription CLI's terminal total becomes.
 // ---------------------------------------------------------------------------
 
-/** The recorder the container path files a subscription harness's calls through. */
-export type RecordHarnessCalls = (input: HarnessCallsRecordInput) => Promise<void>
-
 /**
  * The model name a delegated dispatch is filed under. The executor chose its own model, which the
- * platform never sees, so the row names the EXECUTOR under a `delegated` provider instead.
+ * platform never sees, so the row names the EXECUTOR under {@link DELEGATED_USAGE_PROVIDER} instead.
  */
 export function delegatedModelName(definition: DelegatedExecutorDefinition): string {
   return `delegated:${definition.id}`
@@ -90,7 +87,7 @@ export async function recordDelegatedUsage(input: {
       workspaceId: input.scope.workspaceId,
       executionId: input.scope.runId,
       agentKind: input.scope.agentKind,
-      provider: 'delegated',
+      provider: DELEGATED_USAGE_PROVIDER,
       model,
       jobId: input.jobId,
       calls: [delegatedCallMetric(usage, model)],
