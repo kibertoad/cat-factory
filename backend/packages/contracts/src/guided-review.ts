@@ -98,6 +98,8 @@ export const GUIDED_REVIEW_FAILURE_REASONS = [
   'generation_failed',
   'unreadable_reply',
   'depth_unavailable',
+  /** The PR's head moved past the reviewed commit; a refresh re-points the session. */
+  'head_moved',
 ] as const
 export type GuidedReviewFailureReason = (typeof GUIDED_REVIEW_FAILURE_REASONS)[number]
 

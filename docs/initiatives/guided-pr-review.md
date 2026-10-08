@@ -113,6 +113,9 @@ The schemas live in `@cat-factory/contracts` (`guided-review.ts`).
   Only the creator may change a session; any workspace member may read it.
 - A model or VCS failure is settled onto the row with a `failure.reason`; only a repository fault
   propagates, so the driver retries and the claim lease lets the retry take the job back over.
+- The host lists the changed files of the PR's current head only. A job reads them, then the head,
+  and fails `head_moved` when the head is no longer `reviewedHeadSha`, so an answer or a draft
+  anchor never mixes the reviewed commit's files with a later push's diff. A refresh re-points it.
 - A password-gated personal subscription cannot serve a guided-review call: the work runs in a
   background driver with no request to unlock the credential from, so such a preset settles the
   job as `model_unavailable` or `generation_failed`. A preset on a deployment or account key works.

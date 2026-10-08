@@ -32,7 +32,7 @@ describe('SqliteGuidedReviewQueue', () => {
     expect(q.claim(10 + LEASE, LEASE, NONE)?.key).toBe('grm-grm_1')
   })
 
-  it('recovers orphans on boot, and evicts a job after repeated failures', () => {
+  it('recovers orphans on boot, and holds a job off the drive path after repeated failures', () => {
     const q = createGuidedReviewQueue(':memory:')
     q.enqueue('ws', answer, 1)
     q.claim(10, LEASE, NONE)
@@ -44,8 +44,16 @@ describe('SqliteGuidedReviewQueue', () => {
     expect(q.claim(50, LEASE, NONE)).toBeNull()
     expect(q.claim(100, LEASE, NONE)?.attempts).toBe(1)
     q.deferFailure('grm-grm_1', 200)
-    expect(q.evictExhausted(150, 2)).toEqual([])
-    expect(q.evictExhausted(200, 2).map((j) => j.key)).toEqual(['grm-grm_1'])
+    expect(q.holdExhausted(150, 2, 150 + LEASE)).toEqual([])
+    expect(q.holdExhausted(200, 2, 200 + LEASE).map((j) => j.key)).toEqual(['grm-grm_1'])
+    // Held, not deleted: neither a drive nor a second abandonment takes it during the hold.
+    expect(q.claim(201, LEASE, NONE)).toBeNull()
+    expect(q.holdExhausted(201, 2, 201 + LEASE)).toEqual([])
+    // Once the hold lapses an abandonment that did not land is offered again.
+    expect(q.holdExhausted(200 + LEASE, 2, 200 + 2 * LEASE).map((j) => j.key)).toEqual([
+      'grm-grm_1',
+    ])
+    q.complete('grm-grm_1')
     expect(q.size()).toBe(0)
   })
 
