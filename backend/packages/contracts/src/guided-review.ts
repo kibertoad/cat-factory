@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { vcsProviderSchema } from './routes/auth.js'
 
 // Guided PR review: a standalone, per-user exploration session over one pull request. It holds an
 // overview of the PR, any number of question threads answered by a model with read access to the
@@ -97,6 +98,8 @@ export const GUIDED_REVIEW_FAILURE_REASONS = [
   'generation_failed',
   'unreadable_reply',
   'depth_unavailable',
+  /** The PR's head moved past the reviewed commit; a refresh re-points the session. */
+  'head_moved',
 ] as const
 export type GuidedReviewFailureReason = (typeof GUIDED_REVIEW_FAILURE_REASONS)[number]
 
@@ -118,7 +121,7 @@ export type GuidedReviewOverview = v.InferOutput<typeof guidedReviewOverviewSche
 
 export const guidedReviewSessionSchema = v.object({
   id: v.string(),
-  provider: v.picklist(['github', 'gitlab']),
+  provider: vcsProviderSchema,
   repoId: v.string(),
   owner: v.string(),
   repo: v.string(),
@@ -304,7 +307,7 @@ export const openGuidedReviewSchema = v.object({
   owner: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200)),
   repo: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200)),
   prNumber: v.pipe(v.number(), v.integer(), v.minValue(1)),
-  provider: v.optional(v.picklist(['github', 'gitlab'])),
+  provider: v.optional(vcsProviderSchema),
 })
 export type OpenGuidedReviewInput = v.InferOutput<typeof openGuidedReviewSchema>
 
@@ -343,12 +346,14 @@ export const listGuidedReviewsQuerySchema = v.object({
  * session or thread it has open, so a workspace member who is not viewing it learns nothing more
  * than that it moved.
  */
-export interface GuidedReviewChange {
-  sessionId: string
-  /** `session`: the overview or the session itself; `thread`: a thread's messages; `drafts`. */
-  scope: 'session' | 'thread' | 'drafts' | 'deleted'
-  threadId?: string
-}
+export type GuidedReviewChange =
+  /** `session`: the overview or the session itself moved. `deleted`: the session is gone. */
+  | { sessionId: string; scope: 'session' | 'deleted' }
+  /**
+   * `thread`: one thread's messages moved. `drafts`: a thread's message settled with comment
+   * drafts, so the session's drafts moved too.
+   */
+  | { sessionId: string; scope: 'thread' | 'drafts'; threadId: string }
 
 /** Query of the public session list: the most recently updated sessions first. */
 export const listPublicGuidedReviewsQuerySchema = v.object({

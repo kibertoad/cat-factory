@@ -138,6 +138,17 @@ describe('anchorDrafts', () => {
     expect(anchorDrafts(proposals, [], files).kept[0]).toMatchObject({ startLine: null, line: 12 })
   })
 
+  it('narrows a span whose ends sit in two different hunks, which the host refuses', () => {
+    const twoHunks = '@@ -1,2 +1,2 @@\n a\n b\n@@ -20,2 +20,2 @@\n c\n d'
+    const { proposals } = coerceDraftProposals({
+      comments: [{ path: 'src/two.ts', startLine: 2, line: 21, side: 'RIGHT', body: 'Span.' }],
+    })
+    expect(anchorDrafts(proposals, [], [file('src/two.ts', twoHunks)]).kept[0]).toMatchObject({
+      startLine: null,
+      line: 21,
+    })
+  })
+
   it('refuses any line of a file the host returned no patch for', () => {
     const { proposals } = coerceDraftProposals({
       comments: [{ path: 'src/blob.png', line: 1, side: 'RIGHT', body: 'Binary.' }],

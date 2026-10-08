@@ -1169,10 +1169,10 @@ export interface GuidedReviewFailure {
   reason: GuidedReviewFailureReason
 }
 
-export type GuidedReviewFailureReason = 'budget_exhausted' | 'model_unavailable' | 'repo_unavailable' | 'generation_failed' | 'unreadable_reply' | 'depth_unavailable'
+export type GuidedReviewFailureReason = 'budget_exhausted' | 'model_unavailable' | 'repo_unavailable' | 'generation_failed' | 'unreadable_reply' | 'depth_unavailable' | 'head_moved'
 
 /** Every `GuidedReviewFailureReason` value, for exhaustive handling and runtime validation. */
-export const GUIDED_REVIEW_FAILURE_REASON_VALUES = ['budget_exhausted', 'model_unavailable', 'repo_unavailable', 'generation_failed', 'unreadable_reply', 'depth_unavailable'] as const
+export const GUIDED_REVIEW_FAILURE_REASON_VALUES = ['budget_exhausted', 'model_unavailable', 'repo_unavailable', 'generation_failed', 'unreadable_reply', 'depth_unavailable', 'head_moved'] as const
 
 export interface GuidedReviewMessage {
   citations: GuidedReviewAnchor[]
