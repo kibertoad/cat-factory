@@ -725,7 +725,8 @@
         "no_host_frame": "Esta expedición no está bajo un servicio",
         "delegated_executor_unwired": "Ejecutor externo no registrado",
         "delegated_step_async_only": "Este paso se consulta, no se espera",
-        "delegated_claim_missing": "Este paso no tiene trabajo externo que consultar"
+        "delegated_claim_missing": "Este paso no tiene trabajo externo que consultar",
+        "thread_busy": "Este hilo todavía está respondiendo"
       },
       "description": {
         "dependencies_unmet": "Esta tarea depende de otras que aún no están terminadas. Complétalas o desbloquéalas y vuelve a iniciarla.",
@@ -782,7 +783,8 @@
         "no_host_frame": "Una tarea de corrección necesita un servicio donde vivir y un repositorio que arreglar. Mueva la tarea de la expedición bajo un marco de servicio e inténtelo de nuevo.",
         "delegated_executor_unwired": "Un paso de esta canalización se ejecuta en un ejecutor externo que esta instalación no registra, así que no hay dónde enviar el trabajo. Registra el ejecutor en el código o cambia el paso por uno que se ejecute aquí.",
         "delegated_step_async_only": "Este paso se ejecuta en un ejecutor externo y puede tardar horas, así que se lanza y luego se consulta en lugar de ejecutarse dentro de una sola petición. Inicia la ejecución desde el tablero; si has llegado aquí desde tu propio código, conduce el paso por la vía asíncrona.",
-        "delegated_claim_missing": "Falta el registro de lo que la ejecución envió al ejecutor externo, así que no hay nada que consultar. El ejecutor en sí no tiene ningún problema. Recarga la ejecución y vuelve a lanzar el paso si sigue atascado."
+        "delegated_claim_missing": "Falta el registro de lo que la ejecución envió al ejecutor externo, así que no hay nada que consultar. El ejecutor en sí no tiene ningún problema. Recarga la ejecución y vuelve a lanzar el paso si sigue atascado.",
+        "thread_busy": "La pregunta anterior de este hilo aún no tiene respuesta. Espera esa respuesta o pregunta en otro hilo."
       },
       "action": {
         "connectGitHub": "Conectar GitHub",

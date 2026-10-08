@@ -73,16 +73,16 @@ startLine, endLine, side }`, `error?`, `model?`, timestamps.
 
 ## Slices
 
-| #   | Slice                                                                                                                                 | Status      | PR  |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------- | ----------- | --- |
-| 1   | Contracts, kernel domain and repository port, D1 migration ⇄ Drizzle schema, both repositories, mothership buckets, conformance suite | in progress |     |
-| 2   | `GuidedReviewService`, overview generation, inline answering with VCS read tools, `GuidedReviewRunner` on all three runtimes, sweeper | not started |     |
-| 3   | Workspace routes for the SPA, `guidedReviewChanged` realtime delta, RBAC                                                              | not started |     |
-| 4   | Public API, OpenAPI, `surface.mjs`, the four SDKs and MCP, SSE stream                                                                 | not started |     |
-| 5   | SPA: guided review window, overview, tabbed threads, suggested questions, drafts panel, i18n in every locale                          | not started |     |
-| 6   | Comment drafting and posting (anchor validation, stale-head refusal, per-draft outcomes)                                              | not started |     |
-| 7   | Deep-dive escalation to a read-only container investigator                                                                            | not started |     |
-| 8   | Website page (opened and merged first), then this tracker becomes an ADR                                                              | not started |     |
+| #   | Slice                                                                                                                                 | Status      | PR                                                          |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ----------------------------------------------------------- |
+| 1   | Contracts, kernel domain and repository port, D1 migration ⇄ Drizzle schema, both repositories, mothership buckets, conformance suite | in review   | [#2287](https://github.com/kibertoad/cat-factory/pull/2287) |
+| 2   | `GuidedReviewService`, overview generation, inline answering with VCS read tools, `GuidedReviewRunner` on all three runtimes, sweeper | in progress |                                                             |
+| 3   | Workspace routes for the SPA, `guidedReviewChanged` realtime delta, RBAC                                                              | not started |                                                             |
+| 4   | Public API, OpenAPI, `surface.mjs`, the four SDKs and MCP, SSE stream                                                                 | not started |                                                             |
+| 5   | SPA: guided review window, overview, tabbed threads, suggested questions, drafts panel, i18n in every locale                          | not started |                                                             |
+| 6   | Comment drafting and posting (anchor validation, stale-head refusal, per-draft outcomes)                                              | not started |                                                             |
+| 7   | Deep-dive escalation to a read-only container investigator                                                                            | not started |                                                             |
+| 8   | Website page (opened and merged first), then this tracker becomes an ADR                                                              | not started |                                                             |
 
 ## Gotchas
 
@@ -94,5 +94,12 @@ startLine, endLine, side }`, `error?`, `model?`, timestamps.
   read the same `MAX(seq)`, and the loser trips the `seq` index before the live-answer conflict
   target can resolve, so it errors instead of returning `thread_busy`. SQLite serializes writers and
   cannot show this; the store conformance suite's concurrent-question case does.
+- Comment drafting is a message `kind` on its thread, so the busy index covers it and the driver
+  has two job types (overview, message). The drafts and the message settle in one atomic write.
+- Every model call runs as the SESSION CREATOR (`resolveInlineScope` with a `user` subject, and
+  `runInitiatorScope` around each VCS read), because a background driver has no request user.
+  Only the creator may change a session; any workspace member may read it.
+- A model or VCS failure is settled onto the row with a `failure.reason`; only a repository fault
+  propagates, so the driver retries and the claim lease lets the retry take the job back over.
 - A per-thread answer budget (turns and tool steps) is recorded on the message when it cuts an answer
   short, never silently truncated.

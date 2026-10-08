@@ -171,6 +171,10 @@ const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason>, Conf
     titleKey: 'errors.conflict.title.delegated_claim_missing',
     descriptionKey: 'errors.conflict.description.delegated_claim_missing',
   },
+  thread_busy: {
+    titleKey: 'errors.conflict.title.thread_busy',
+    descriptionKey: 'errors.conflict.description.thread_busy',
+  },
   task_limit_reached: {
     titleKey: 'errors.conflict.title.task_limit_reached',
     descriptionKey: 'errors.conflict.description.task_limit_reached',

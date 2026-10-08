@@ -49,6 +49,8 @@ import type {
   CustomManifestTypeRepository,
   DeployCloneTarget,
   DocInterviewRepository,
+  GuidedReviewRepository,
+  GuidedReviewRunner,
   DocumentConnectionRepository,
   DocumentConnectionStore,
   DocumentRepository,
@@ -977,6 +979,22 @@ export interface CoreDependencies extends ContentLibraryDependencies {
    * the raw outline when no model is wired).
    */
   docInterviewRepository?: DocInterviewRepository
+  /**
+   * Guided PR review sessions (docs/initiatives/guided-pr-review.md). Absent ⇒ the guided review
+   * module is not built and its routes report the capability as not configured.
+   */
+  guidedReviewRepository?: GuidedReviewRepository
+  /**
+   * Durably drives guided-review jobs (the Worker's `GuidedReviewWorkflow`, Node's pg-boss queue,
+   * a mothership-mode node's `node:sqlite` queue). Absent ⇒ queued work waits for a test or a
+   * sweeper to call `GuidedReviewService.runJob` directly.
+   */
+  guidedReviewRunner?: GuidedReviewRunner
+  /**
+   * Which host this engine drives guided-review work as: `deployment`, or `node:<nodeId>` on a
+   * mothership-mode node. Absent ⇒ `deployment`.
+   */
+  guidedReviewDriver?: string
   /**
    * Persistence for the Kaizen agent (post-run grading of agent steps + the verified-combo
    * library). Both runtime facades wire both repos unconditionally. The Kaizen module

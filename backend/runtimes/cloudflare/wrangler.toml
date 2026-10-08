@@ -102,6 +102,12 @@ binding = "ENV_TEST_WORKFLOW"
 name = "cat-factory-env-test"
 class_name = "EnvironmentTestWorkflow"
 
+# Durable driver for guided PR review jobs (an overview, or one answer in a thread).
+[[workflows]]
+binding = "GUIDED_REVIEW_WORKFLOW"
+name = "cat-factory-guided-review"
+class_name = "GuidedReviewWorkflow"
+
 # Per-run implementation container. The acceptance suite builds this image from
 # the internal harness package's Dockerfile, so dev/test reference it by local
 # path; the production deployment instead references the published GHCR image

@@ -90,6 +90,11 @@ export type {
   GuidedReviewSessionFilter,
   GuidedReviewStaleJob,
 } from './guided-review-repositories.js'
+export {
+  guidedReviewJobKey,
+  type GuidedReviewJob,
+  type GuidedReviewRunner,
+} from './guided-review-runner.js'
 export type { InitiativeRepository } from './initiative-repositories.js'
 export type {
   KaizenGradingRepository,

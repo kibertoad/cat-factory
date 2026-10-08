@@ -257,16 +257,16 @@ export const guidedReviewCommentDraftSchema = v.object({
 })
 export type GuidedReviewCommentDraft = v.InferOutput<typeof guidedReviewCommentDraftSchema>
 
-/**
- * Machine-readable causes a guided-review refusal carries in `details.reason`. The SPA maps each
- * to translated copy.
- */
-export const GUIDED_REVIEW_REASONS = [
-  'thread_busy',
-  'session_stale',
-  'draft_conflict',
-  'draft_not_postable',
-  'pr_not_found',
-  'repo_not_linked',
-] as const
-export type GuidedReviewReason = (typeof GUIDED_REVIEW_REASONS)[number]
+/** Parse a model-shaped overview against the contract; null when it does not conform. */
+export function parseGuidedReviewOverviewContent(
+  input: unknown,
+): GuidedReviewOverviewContent | null {
+  const parsed = v.safeParse(guidedReviewOverviewContentSchema, input)
+  return parsed.success ? parsed.output : null
+}
+
+/** Parse one model-shaped anchor against the contract; null when it does not conform. */
+export function parseGuidedReviewAnchor(input: unknown): GuidedReviewAnchor | null {
+  const parsed = v.safeParse(guidedReviewAnchorSchema, input)
+  return parsed.success ? parsed.output : null
+}

@@ -83,6 +83,7 @@ import { DurableObjectMachineEventRelay } from './events/DurableObjectMachineEve
 import { WorkflowsBootstrapRunner } from './workflows/WorkflowsBootstrapRunner'
 import { WorkflowsEnvConfigRepairRunner } from './workflows/WorkflowsEnvConfigRepairRunner'
 import { WorkflowsEnvironmentTestRunner } from './workflows/WorkflowsEnvironmentTestRunner'
+import { WorkflowsGuidedReviewRunner } from './workflows/WorkflowsGuidedReviewRunner'
 import { D1AccountRepository } from './repositories/D1AccountRepository'
 import { D1AgentRunRepository } from './repositories/D1AgentRunRepository'
 import { D1BinaryArtifactMetadataStore } from './repositories/D1BinaryArtifactMetadataStore'
@@ -304,6 +305,10 @@ function selectWorkerDurableJobDeps(
     environmentTestRunner: env.ENV_TEST_WORKFLOW
       ? new WorkflowsEnvironmentTestRunner(env.ENV_TEST_WORKFLOW)
       : undefined,
+    guidedReviewRunner: env.GUIDED_REVIEW_WORKFLOW
+      ? new WorkflowsGuidedReviewRunner(env.GUIDED_REVIEW_WORKFLOW)
+      : undefined,
+    guidedReviewDriver: 'deployment',
   }
 }
 

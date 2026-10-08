@@ -131,6 +131,11 @@ export interface Env {
    */
   ENV_TEST_WORKFLOW?: Workflow
   /**
+   * Workflows binding that drives guided PR review jobs (see GuidedReviewWorkflow). Without it a
+   * question is stored but waits for the cron re-drive, which also needs this binding.
+   */
+  GUIDED_REVIEW_WORKFLOW?: Workflow
+  /**
    * Emit threshold for the structured logger: `debug` | `info` | `warn` | `error`.
    * Default `info`. Set it to `debug` (a `wrangler.toml` var, or `wrangler secret`-free
    * `[vars]` edit) to turn on the verbose tier during an incident, then set it back —

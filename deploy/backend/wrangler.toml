@@ -147,6 +147,14 @@ binding = "ENV_TEST_WORKFLOW"
 name = "cat-factory-env-test"
 class_name = "EnvironmentTestWorkflow"
 
+# Durable driver for guided PR review jobs (GuidedReviewWorkflow): the PR overview and each
+# answer or comment-drafting request in an exploration thread. One instance per delivery; the
+# job's claim makes a duplicate a no-op, and the cron re-drives a job whose claim lapsed.
+[[workflows]]
+binding = "GUIDED_REVIEW_WORKFLOW"
+name = "cat-factory-guided-review"
+class_name = "GuidedReviewWorkflow"
+
 # Per-run code-implementation containers (the @cat-factory/executor-harness
 # Pi coding-agent image). Each run addresses its own instance. Container-based
 # implementation is always on — this binding (or a registered runner pool) is a

@@ -6,6 +6,7 @@ import { ExecutionWorkflow } from '../src/infrastructure/workflows/ExecutionWork
 import { BootstrapWorkflow } from '../src/infrastructure/workflows/BootstrapWorkflow'
 import { EnvConfigRepairWorkflow } from '../src/infrastructure/workflows/EnvConfigRepairWorkflow'
 import { EnvironmentTestWorkflow } from '../src/infrastructure/workflows/EnvironmentTestWorkflow'
+import { GuidedReviewWorkflow } from '../src/infrastructure/workflows/GuidedReviewWorkflow'
 import { GitHubBackfillWorkflow } from '../src/infrastructure/workflows/GitHubBackfillWorkflow'
 import type { Env } from '../src/infrastructure/env'
 
@@ -231,13 +232,14 @@ describe('withWorkflowLogExport', () => {
   })
 })
 
-/** Every `WorkflowEntrypoint` the facade exports. A sixth one belongs here the day it lands. */
+/** Every `WorkflowEntrypoint` the facade exports. A seventh one belongs here the day it lands. */
 const WORKFLOWS = [
   ExecutionWorkflow,
   BootstrapWorkflow,
   EnvConfigRepairWorkflow,
   EnvironmentTestWorkflow,
   GitHubBackfillWorkflow,
+  GuidedReviewWorkflow,
 ]
 
 /**

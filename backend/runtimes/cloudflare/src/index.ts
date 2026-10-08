@@ -129,6 +129,7 @@ export { GitHubBackfillWorkflow } from './infrastructure/workflows/GitHubBackfil
 export { BootstrapWorkflow } from './infrastructure/workflows/BootstrapWorkflow'
 export { EnvironmentTestWorkflow } from './infrastructure/workflows/EnvironmentTestWorkflow'
 export { EnvConfigRepairWorkflow } from './infrastructure/workflows/EnvConfigRepairWorkflow'
+export { GuidedReviewWorkflow } from './infrastructure/workflows/GuidedReviewWorkflow'
 // Container-enabled Durable Object backing per-run implementation containers.
 export { ExecutionContainer } from './infrastructure/containers/ExecutionContainer'
 // Container-enabled Durable Object backing per-run DEPLOY containers (the deploy-harness
@@ -879,6 +880,23 @@ function redriveStuckAgentRuns(env: Env, tick: SweepTick, clock: SystemClock): v
   }
 }
 
+/** Re-wake guided-review jobs whose claim lapsed (a lost wake or a dead Workflows instance). */
+function redriveGuidedReviewJobs(env: Env, tick: SweepTick): void {
+  if (!env.GUIDED_REVIEW_WORKFLOW) return
+  tick.run(
+    { name: 'guided-review-sweeper', failureMessage: 'guided-review sweep failed' },
+    (async () => {
+      const service = buildContainer(env).guidedReview?.service
+      if (!service) return
+      const redriven = await service.redriveStale()
+      if (redriven > 0) {
+        logger.warn('guided-review sweep re-drove stale jobs', { redriven })
+        operationalMetrics.increment('sweep.run_redriven', { kind: 'guided-review' }, redriven)
+      }
+    })(),
+  )
+}
+
 /**
  * Env-test self-tests live in their own table (not agent_runs), so the unified run
  * sweep never sees them — this sibling sweep re-drives a run whose Workflows instance
@@ -1202,6 +1220,7 @@ async function runScheduled(
     // Frequent pass (every 2 min): time-sensitive backstops.
     redriveStuckAgentRuns(env, tick, clock)
     redriveStuckEnvTests(env, tick, clock)
+    redriveGuidedReviewJobs(env, tick)
     reclaimExpiredActivations(env, tick, clock)
     reapStaleContainers(env, tick, clock)
     runPeriodicBackstops(env, tick, clock, controller.scheduledTime)
