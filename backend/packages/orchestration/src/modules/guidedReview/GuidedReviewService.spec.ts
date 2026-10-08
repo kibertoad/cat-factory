@@ -7,6 +7,10 @@ import type {
 } from '@cat-factory/contracts'
 import type {
   GitHubChangedFile,
+  GuidedReviewInvestigationHandle,
+  GuidedReviewInvestigationRecord,
+  GuidedReviewInvestigationUpdate,
+  GuidedReviewInvestigator,
   GuidedReviewJob,
   GuidedReviewMessageOutcome,
   GuidedReviewOverviewOutcome,
@@ -76,6 +80,31 @@ class InMemoryGuidedReviewRepository implements GuidedReviewRepository {
   messages = new Map<string, GuidedReviewMessage>()
   drafts = new Map<string, GuidedReviewCommentDraft>()
   claims = new Map<string, number>()
+  investigations = new Map<string, GuidedReviewInvestigationRecord>()
+
+  async recordInvestigation(
+    _ws: string,
+    id: string,
+    record: GuidedReviewInvestigationRecord,
+    now: number,
+  ) {
+    const m = this.messages.get(id)
+    if (m?.status !== 'running') return false
+    this.investigations.set(id, record)
+    this.claims.set(`m:${id}`, now)
+    m.updatedAt = now
+    return true
+  }
+  async getInvestigation(_ws: string, id: string) {
+    return this.investigations.get(id) ?? null
+  }
+  async heartbeatMessage(_ws: string, id: string, now: number) {
+    const m = this.messages.get(id)
+    if (m?.status !== 'running') return false
+    this.claims.set(`m:${id}`, now)
+    m.updatedAt = now
+    return true
+  }
 
   async openSession(_ws: string, s: GuidedReviewSession) {
     const existing = [...this.sessions.values()].find(
@@ -315,7 +344,35 @@ function fakeRepo(reads: (string | undefined)[], host: HostState): RepoFiles {
   } as unknown as RepoFiles
 }
 
-function setup(steps: Step[], opts: { overBudget?: boolean } = {}) {
+/** An investigator answering with a scripted sequence of poll updates. */
+function fakeInvestigator(updates: GuidedReviewInvestigationUpdate[]) {
+  const started: string[] = []
+  const stopped: string[] = []
+  const investigator: GuidedReviewInvestigator & { failStart?: string } = {
+    supports: async () => true,
+    async start(request) {
+      if (investigator.failStart) throw new Error(investigator.failStart)
+      started.push(request.jobId)
+      return {
+        workspaceId: request.workspaceId,
+        jobId: request.jobId,
+        initiatedBy: request.initiatedBy,
+        dispatch: { model: 'fake:deep' },
+      }
+    },
+    poll: async (_handle: GuidedReviewInvestigationHandle) =>
+      updates.shift() ?? { state: 'running' },
+    async stop(handle) {
+      stopped.push(handle.jobId)
+    },
+  }
+  return { investigator, started, stopped }
+}
+
+function setup(
+  steps: Step[],
+  opts: { overBudget?: boolean; investigator?: GuidedReviewInvestigator } = {},
+) {
   const repository = new InMemoryGuidedReviewRepository()
   const woken: GuidedReviewJob[] = []
   const changes: GuidedReviewChange[] = []
@@ -342,6 +399,7 @@ function setup(steps: Step[], opts: { overBudget?: boolean } = {}) {
     idGenerator: { next: (prefix: string) => `${prefix}_${++id}` },
     clock: { now: () => now },
     events: { guidedReviewChanged: async (_ws, change) => void changes.push(change) },
+    ...(opts.investigator ? { investigator: opts.investigator } : {}),
   })
   return {
     service,
@@ -610,6 +668,80 @@ describe('GuidedReviewService', () => {
         service.postDrafts(WS, OWNER, session.id, { draftIds: [drafts[0]!.id] }),
       ).rejects.toMatchObject({ details: { reason: 'session_stale' } })
       expect(host.posted).toEqual([])
+    })
+  })
+
+  describe('deep answers', () => {
+    async function askDeep(investigator: GuidedReviewInvestigator) {
+      const ctx = setup([], { investigator })
+      const session = await ctx.service.open(WS, OWNER, {
+        owner: 'acme',
+        repo: 'shop',
+        prNumber: 7,
+      })
+      const { thread } = await ctx.service.openThread(WS, OWNER, session.id, {
+        question: { content: 'Do the tests cover the retry cap?', depth: 'deep' },
+      })
+      const job = ctx.woken.find((j) => j.kind === 'message')!
+      const reply = () => ctx.repository.listMessages(WS, thread.id).then((m) => m[1]!)
+      return { ...ctx, job, reply }
+    }
+
+    it('dispatches once, polls while it works, and lands the answer the container reported', async () => {
+      const fake = fakeInvestigator([
+        { state: 'running' },
+        {
+          state: 'done',
+          model: 'fake:deep',
+          report: {
+            answer: 'No: `pay.spec.ts` never exceeds two attempts.',
+            citations: [{ path: 'src/pay.spec.ts', startLine: 4, endLine: 9, side: 'RIGHT' }],
+          },
+        },
+      ])
+      const { service, job, reply } = await askDeep(fake.investigator)
+      const [first, second] = await Promise.all([service.runJob(WS, job), service.runJob(WS, job)])
+      expect(fake.started).toHaveLength(1)
+      expect([first, second]).toContainEqual({ done: false, pollAfterMs: 15_000 })
+
+      expect(await service.runJob(WS, job)).toEqual({ done: false, pollAfterMs: 15_000 })
+      expect((await reply()).status).toBe('running')
+      expect(await service.runJob(WS, job)).toEqual({ done: true })
+      expect(await reply()).toMatchObject({
+        status: 'complete',
+        content: 'No: `pay.spec.ts` never exceeds two attempts.',
+        model: 'fake:deep',
+      })
+      expect(fake.stopped).toEqual([])
+    })
+
+    it('stops a container that outlives its time budget and reports why', async () => {
+      const fake = fakeInvestigator([])
+      const { service, job, reply, advance } = await askDeep(fake.investigator)
+      await service.runJob(WS, job)
+      advance(46 * 60_000)
+      expect(await service.runJob(WS, job)).toEqual({ done: true })
+      expect(fake.stopped).toHaveLength(1)
+      expect((await reply()).failure?.reason).toBe('generation_failed')
+    })
+
+    it('settles a dispatch that could not start, and releases a container nobody will read', async () => {
+      const failing = fakeInvestigator([])
+      failing.investigator.failStart = 'no runner'
+      const first = await askDeep(failing.investigator)
+      await first.service.runJob(WS, first.job)
+      expect((await first.reply()).failure).toEqual({
+        reason: 'generation_failed',
+        detail: 'no runner',
+      })
+
+      const fake = fakeInvestigator([])
+      const { service, job, reply } = await askDeep(fake.investigator)
+      await service.runJob(WS, job)
+      await service.abandonJob(WS, job, 'gave up')
+      expect((await reply()).status).toBe('failed')
+      expect(fake.stopped).toHaveLength(1)
+      expect(await service.runJob(WS, job)).toEqual({ done: true })
     })
   })
 

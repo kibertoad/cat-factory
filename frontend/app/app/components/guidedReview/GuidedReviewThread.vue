@@ -26,6 +26,7 @@ const store = useGuidedReviewStore()
 const { present } = usePipelineErrorToast()
 
 const prompt = ref('')
+const deep = ref(false)
 const sending = ref(false)
 const messages = computed(() => props.view?.messages ?? [])
 const ready = computed(() => canAsk(messages.value) && !sending.value)
@@ -36,10 +37,11 @@ async function send(): Promise<void> {
   const content = prompt.value.trim()
   sending.value = true
   try {
+    const question = { content, ...(deep.value ? { depth: 'deep' as const } : {}) }
     if (props.view) {
-      await store.ask(props.sessionId, props.view.thread.id, { content })
+      await store.ask(props.sessionId, props.view.thread.id, question)
     } else {
-      const created = await store.openThread(props.sessionId, { question: { content } })
+      const created = await store.openThread(props.sessionId, { question })
       emit('created', created.thread.id)
     }
     prompt.value = ''
@@ -116,7 +118,11 @@ async function draftComments(): Promise<void> {
         </template>
         <p v-else-if="isLive(m)" class="flex items-center gap-2 text-muted">
           <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
-          {{ t('guidedReview.thread.waiting') }}
+          {{
+            m.depth === 'deep'
+              ? t('guidedReview.thread.investigating')
+              : t('guidedReview.thread.waiting')
+          }}
         </p>
         <GuidedReviewFailure v-else-if="m.status === 'failed' && m.failure" :failure="m.failure" />
         <template v-else-if="m.kind === 'answer'">
@@ -208,6 +214,13 @@ async function draftComments(): Promise<void> {
         @keydown.enter.ctrl.prevent="send"
       />
       <div class="flex flex-wrap items-center gap-2">
+        <USwitch
+          v-model="deep"
+          size="sm"
+          :label="t('guidedReview.thread.deep')"
+          :description="t('guidedReview.thread.deepHint')"
+          data-testid="guided-review-deep"
+        />
         <UButton
           color="primary"
           icon="i-lucide-send"

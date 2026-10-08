@@ -5173,7 +5173,10 @@
       "placeholder": "Değişiklik hakkında bir soru sorun",
       "busy": "Önceki sorunun yanıtı bekleniyor",
       "send": "Sor",
-      "draftRequest": "İnceleme yorumları istendi"
+      "draftRequest": "İnceleme yorumları istendi",
+      "deep": "Derin inceleme",
+      "deepHint": "Deponun bir kopyasından yanıtlar: daha yavaş ama tüm ağaçta arama yapabilir.",
+      "investigating": "Deponun bir kopyasında inceleniyor. Bu birkaç dakika sürebilir."
     },
     "drafts": {
       "title": "Yorum taslakları",

@@ -249,6 +249,10 @@ export {
   type ContainerEnvironmentProbeAgentDependencies,
 } from './agents/ContainerEnvironmentProbeAgent.js'
 export {
+  ContainerGuidedReviewInvestigator,
+  type ContainerGuidedReviewInvestigatorDependencies,
+} from './agents/ContainerGuidedReviewInvestigator.js'
+export {
   ContainerJobAuthResolver,
   type ContainerJobAuth,
   type ContainerJobAuthDependencies,

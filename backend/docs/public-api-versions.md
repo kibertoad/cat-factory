@@ -428,3 +428,11 @@ Additive. What a consumer notices beyond the new operations: `ConflictError` rea
 `draft_conflict` (an edit from a stale `rev`) and `session_stale` (a post after the pull request
 moved past the reviewed commit). The guided review group's `write` scope now also covers posting,
 which publishes on the host under the key's identity; it still never approves or requests changes.
+
+## 1.78.0
+
+A guided review question asked with `depth: "deep"` is now answered from a read-only checkout of
+the repository rather than refused. Its assistant message stays `running` for minutes rather than
+seconds while the container works, and a deployment with no runner still settles it as
+`failed` with `failure.reason: "depth_unavailable"`. No shape changes; the version records that a
+documented value started doing what it names.

@@ -2,6 +2,7 @@ import type {
   GuidedReviewCommentDraft,
   GuidedReviewDraftEdit,
   GuidedReviewDriver,
+  GuidedReviewInvestigationRecord,
   GuidedReviewDraftPostOutcome,
   GuidedReviewMessage,
   GuidedReviewMessageOutcome,
@@ -460,6 +461,53 @@ export class DrizzleGuidedReviewRepository implements GuidedReviewRepository {
             eq(messages.status, 'pending'),
             and(eq(messages.status, 'running'), lt(messages.claimed_at, leaseCutoff)),
           ),
+        ),
+      )
+      .returning({ id: messages.id })
+    return rows.length > 0
+  }
+
+  async recordInvestigation(
+    workspaceId: string,
+    id: string,
+    investigation: GuidedReviewInvestigationRecord,
+    now: number,
+  ): Promise<boolean> {
+    const rows = await this.db
+      .update(messages)
+      .set({ investigation: JSON.stringify(investigation), claimed_at: now, updated_at: now })
+      .where(
+        and(
+          eq(messages.workspace_id, workspaceId),
+          eq(messages.id, id),
+          eq(messages.status, 'running'),
+        ),
+      )
+      .returning({ id: messages.id })
+    return rows.length > 0
+  }
+
+  async getInvestigation(
+    workspaceId: string,
+    id: string,
+  ): Promise<GuidedReviewInvestigationRecord | null> {
+    const rows = await this.db
+      .select({ investigation: messages.investigation })
+      .from(messages)
+      .where(and(eq(messages.workspace_id, workspaceId), eq(messages.id, id)))
+      .limit(1)
+    return parseJson(rows[0]?.investigation ?? null, null)
+  }
+
+  async heartbeatMessage(workspaceId: string, id: string, now: number): Promise<boolean> {
+    const rows = await this.db
+      .update(messages)
+      .set({ claimed_at: now, updated_at: now })
+      .where(
+        and(
+          eq(messages.workspace_id, workspaceId),
+          eq(messages.id, id),
+          eq(messages.status, 'running'),
         ),
       )
       .returning({ id: messages.id })

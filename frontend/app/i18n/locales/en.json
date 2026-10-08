@@ -5367,7 +5367,10 @@
       "placeholder": "Ask a question about the change",
       "busy": "Waiting for the answer to the previous question",
       "send": "Ask",
-      "draftRequest": "Asked for review comments"
+      "draftRequest": "Asked for review comments",
+      "deep": "Deep dive",
+      "deepHint": "Answer from a checkout of the repository: slower, but can search the whole tree.",
+      "investigating": "Investigating in a checkout of the repository. This can take several minutes."
     },
     "drafts": {
       "title": "Comment drafts",

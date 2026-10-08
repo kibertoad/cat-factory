@@ -4645,7 +4645,10 @@
       "placeholder": "Fai una domanda sulla modifica",
       "busy": "In attesa della risposta alla domanda precedente",
       "send": "Chiedi",
-      "draftRequest": "Richiesti commenti di revisione"
+      "draftRequest": "Richiesti commenti di revisione",
+      "deep": "Analisi approfondita",
+      "deepHint": "Risponde da un checkout del repository: più lento, ma può cercare in tutto l'albero.",
+      "investigating": "Analisi in corso in un checkout del repository. Può richiedere alcuni minuti."
     },
     "drafts": {
       "title": "Bozze di commenti",

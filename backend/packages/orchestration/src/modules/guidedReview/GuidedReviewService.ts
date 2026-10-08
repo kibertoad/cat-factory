@@ -29,7 +29,9 @@ import type {
   ExecutionEventPublisher,
   GitHubChangedFile,
   GuidedReviewDriver,
+  GuidedReviewInvestigator,
   GuidedReviewJob,
+  GuidedReviewJobProgress,
   GuidedReviewRepository,
   GuidedReviewRunner,
   GuidedReviewSessionFilter,
@@ -71,6 +73,7 @@ import {
   threadTitleFrom,
 } from './guidedReview.logic.js'
 import { GuidedReviewDrafts } from './GuidedReviewDrafts.js'
+import { GuidedReviewInvestigations } from './GuidedReviewInvestigations.js'
 import { PrExplorer } from './PrExplorer.js'
 
 export interface GuidedReviewServiceDeps extends InlineBlockModelDeps {
@@ -87,6 +90,8 @@ export interface GuidedReviewServiceDeps extends InlineBlockModelDeps {
   idGenerator: IdGenerator
   clock: Clock
   logger?: Logger
+  /** Runs deep answers in a read-only checkout; absent ⇒ a deep question settles unavailable. */
+  investigator?: GuidedReviewInvestigator
   /** Live `guidedReview` deltas; absent ⇒ clients see changes on their next read. */
   events?: Pick<ExecutionEventPublisher, 'guidedReviewChanged'>
 }
@@ -142,6 +147,7 @@ class JobFailure extends Error {
 export class GuidedReviewService {
   private readonly logger: Logger
   private readonly drafts: GuidedReviewDrafts
+  private readonly investigations: GuidedReviewInvestigations | undefined
 
   constructor(private readonly deps: GuidedReviewServiceDeps) {
     this.logger = deps.logger ?? noopLogger
@@ -154,6 +160,19 @@ export class GuidedReviewService {
       asUser: (workspaceId, userId, fn) => this.asUser(workspaceId, userId, fn),
       notify: (workspaceId, change) => this.notify(workspaceId, change),
     })
+    this.investigations = deps.investigator
+      ? new GuidedReviewInvestigations({
+          repository: deps.repository,
+          investigator: deps.investigator,
+          clock: deps.clock,
+          logger: this.logger,
+          isOverBudget: deps.isOverBudget,
+          requireSession: (workspaceId, sessionId) => this.requireSession(workspaceId, sessionId),
+          renderPrompt: (workspaceId, session, message) =>
+            this.renderDeepPrompt(workspaceId, session, message),
+          notify: (workspaceId, change) => this.notify(workspaceId, change),
+        })
+      : undefined
   }
 
   /** Edit, re-anchor or discard a comment draft; refused as `draft_conflict` from a stale rev. */
@@ -318,9 +337,18 @@ export class GuidedReviewService {
   }
 
   /** Drive one job. Idempotent: an already-claimed or settled job is a no-op. */
-  async runJob(workspaceId: string, job: GuidedReviewJob): Promise<void> {
-    if (job.kind === 'overview') await this.runOverview(workspaceId, job.sessionId, job.generation)
-    else await this.runMessage(workspaceId, job.messageId)
+  async runJob(workspaceId: string, job: GuidedReviewJob): Promise<GuidedReviewJobProgress> {
+    if (job.kind === 'overview') {
+      await this.runOverview(workspaceId, job.sessionId, job.generation)
+      return { done: true }
+    }
+    const message = await this.deps.repository.getMessage(workspaceId, job.messageId)
+    if (!message || message.role !== 'assistant') return { done: true }
+    if (message.depth === 'deep' && this.investigations) {
+      return this.investigations.run(workspaceId, message)
+    }
+    await this.runMessage(workspaceId, message)
+    return { done: true }
   }
 
   /**
@@ -356,6 +384,7 @@ export class GuidedReviewService {
     if (!(await this.deps.repository.claimMessage(workspaceId, job.messageId, takeover, now))) {
       return
     }
+    if (message.depth === 'deep') await this.investigations?.releaseFor(workspaceId, message)
     await this.deps.repository.settleMessage(
       workspaceId,
       job.messageId,
@@ -483,9 +512,8 @@ export class GuidedReviewService {
     if (landed) await this.notify(workspaceId, { sessionId, scope: 'session' })
   }
 
-  private async runMessage(workspaceId: string, messageId: string): Promise<void> {
-    const message = await this.deps.repository.getMessage(workspaceId, messageId)
-    if (!message || message.role !== 'assistant') return
+  private async runMessage(workspaceId: string, message: GuidedReviewMessage): Promise<void> {
+    const messageId = message.id
     const now = this.deps.clock.now()
     const claimed = await this.deps.repository.claimMessage(
       workspaceId,
@@ -736,6 +764,30 @@ export class GuidedReviewService {
   private asUser<T>(workspaceId: string, userId: string, fn: () => T): T {
     const scope = this.deps.runInitiatorScope
     return scope ? scope({ workspaceId, initiatedBy: userId }, fn) : fn()
+  }
+
+  /** The thread before `message`, as the deep investigator is asked it. */
+  private async renderDeepPrompt(
+    workspaceId: string,
+    session: GuidedReviewSession,
+    message: GuidedReviewMessage,
+  ): Promise<string> {
+    const messages = await this.deps.repository.listMessages(workspaceId, message.threadId)
+    return renderGuidedReviewAnswerPrompt({
+      pr: {
+        owner: session.owner,
+        repo: session.repo,
+        prNumber: session.prNumber,
+        title: session.prTitle,
+        headSha: session.reviewedHeadSha,
+        baseRef: session.baseRef,
+      },
+      overview: session.overview.content,
+      ...threadHistory(
+        messages.filter((m) => m.seq < message.seq),
+        THREAD_HISTORY_CHARS,
+      ),
+    })
   }
 
   private target(session: GuidedReviewSession) {

@@ -4645,7 +4645,10 @@
       "placeholder": "Stell eine Frage zur Änderung",
       "busy": "Warte auf die Antwort auf die vorherige Frage",
       "send": "Fragen",
-      "draftRequest": "Review-Kommentare angefordert"
+      "draftRequest": "Review-Kommentare angefordert",
+      "deep": "Tiefenanalyse",
+      "deepHint": "Antwort aus einem Checkout des Repositorys: langsamer, kann aber den ganzen Baum durchsuchen.",
+      "investigating": "Untersuchung in einem Checkout des Repositorys. Das kann einige Minuten dauern."
     },
     "drafts": {
       "title": "Kommentarentwürfe",

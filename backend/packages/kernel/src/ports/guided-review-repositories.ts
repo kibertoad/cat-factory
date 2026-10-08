@@ -1,3 +1,4 @@
+import type { GuidedReviewInvestigationDispatch } from './guided-review-investigator.js'
 import type {
   GuidedReviewCommentDraft,
   GuidedReviewDraftReport,
@@ -55,6 +56,12 @@ export type GuidedReviewDraftPostOutcome =
  * re-drives only its own jobs; another host would answer with the wrong model credentials.
  */
 export type GuidedReviewDriver = string
+
+/** A deep answer's container dispatch, recorded on its message. Never on the wire. */
+export interface GuidedReviewInvestigationRecord {
+  dispatchedAt: number
+  dispatch: GuidedReviewInvestigationDispatch
+}
 
 /** A unit of background work the sweeper may have to re-drive. */
 export type GuidedReviewStaleJob =
@@ -143,6 +150,22 @@ export interface GuidedReviewRepository {
   listMessages(workspaceId: string, threadId: string): Promise<GuidedReviewMessage[]>
   /** As {@link claimOverview}, for one assistant message. */
   claimMessage(workspaceId: string, id: string, leaseCutoff: number, now: number): Promise<boolean>
+  /**
+   * Record a deep answer's container dispatch on its `running` message and refresh its claim.
+   * False when the message is no longer `running` (settled or abandoned meanwhile).
+   */
+  recordInvestigation(
+    workspaceId: string,
+    id: string,
+    investigation: GuidedReviewInvestigationRecord,
+    now: number,
+  ): Promise<boolean>
+  getInvestigation(workspaceId: string, id: string): Promise<GuidedReviewInvestigationRecord | null>
+  /**
+   * Refresh a `running` message's claim while its driver polls a long job, so the stale scan does
+   * not take it for a dead one. False when it is no longer `running`.
+   */
+  heartbeatMessage(workspaceId: string, id: string, now: number): Promise<boolean>
   /** Land a claimed message's outcome. False when it is not `running`. */
   settleMessage(
     workspaceId: string,

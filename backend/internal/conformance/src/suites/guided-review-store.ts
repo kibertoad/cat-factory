@@ -193,6 +193,35 @@ export function defineGuidedReviewStoreConformance(harness: ConformanceHarness):
       expect((await repo.listThreads(ws, 'grs_1'))[0]?.pendingMessageId).toBe('a2')
     })
 
+    it('records the container dispatch of a deep answer and keeps its claim fresh', async () => {
+      const { repo, ws } = await seeded()
+      await repo.appendExchange(ws, message('q1', 'grt_1'), assistant('a1', 'grt_1'), HOST)
+      const investigation = {
+        dispatchedAt: 120,
+        dispatch: { model: 'anthropic:claude', subscriptionTokenId: 'tok_1' },
+      }
+      // Only a running message takes a dispatch: a pending one has no claimer yet.
+      expect(await repo.recordInvestigation(ws, 'a1', investigation, 120)).toBe(false)
+      await repo.claimMessage(ws, 'a1', 0, 100)
+      expect(await repo.recordInvestigation(ws, 'a1', investigation, 120)).toBe(true)
+      expect(await repo.getInvestigation(ws, 'a1')).toEqual(investigation)
+
+      // A heartbeat keeps a live poll out of the stale scan.
+      expect(await repo.heartbeatMessage(ws, 'a1', 5_000)).toBe(true)
+      const stale = await repo.listStaleJobs(HOST, 4_000, 10_000)
+      expect(stale.filter((j) => j.workspaceId === ws && j.kind === 'message')).toEqual([])
+
+      await repo.settleMessage(
+        ws,
+        'a1',
+        { status: 'failed', failure: { reason: 'generation_failed', detail: null }, model: null },
+        6_000,
+      )
+      expect(await repo.heartbeatMessage(ws, 'a1', 7_000)).toBe(false)
+      // The record outlives the settle, so a late poll can still release the container.
+      expect(await repo.getInvestigation(ws, 'a1')).toEqual(investigation)
+    })
+
     it('never lets a superseded overview generation land', async () => {
       const { repo, ws } = await seeded()
       expect(await repo.claimOverview(ws, 'grs_1', 1, 0, 100)).toBe(true)

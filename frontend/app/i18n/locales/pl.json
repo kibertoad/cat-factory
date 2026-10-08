@@ -5173,7 +5173,10 @@
       "placeholder": "Zadaj pytanie o zmianę",
       "busy": "Czekam na odpowiedź na poprzednie pytanie",
       "send": "Zapytaj",
-      "draftRequest": "Poproszono o komentarze do przeglądu"
+      "draftRequest": "Poproszono o komentarze do przeglądu",
+      "deep": "Dogłębna analiza",
+      "deepHint": "Odpowiedź z kopii repozytorium: wolniej, ale można przeszukać całe drzewo.",
+      "investigating": "Trwa analiza w kopii repozytorium. Może to potrwać kilka minut."
     },
     "drafts": {
       "title": "Szkice komentarzy",

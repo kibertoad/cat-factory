@@ -96,6 +96,25 @@ export class SqliteGuidedReviewQueue {
   }
 
   /** The drive threw: hold the job off the queue until `notBefore` and count the failure. */
+  /** When the earliest held job becomes claimable, or null when none is waiting. */
+  nextDueAt(): number | null {
+    const row = queryOne<{ due: number | null }>(
+      this.db,
+      `SELECT MIN(lease_until) AS due FROM guided_review_queue WHERE state = 'active'`,
+    )
+    return row?.due ?? null
+  }
+
+  /** Hold a job that made progress until `notBefore`, clearing its failure count. */
+  reschedule(key: string, notBefore: number): void {
+    this.db
+      .prepare(
+        `UPDATE guided_review_queue SET state = 'active', lease_until = ?, attempts = 0
+         WHERE job_key = ?`,
+      )
+      .run(notBefore, key)
+  }
+
   deferFailure(key: string, notBefore: number): void {
     this.db
       .prepare(

@@ -2,6 +2,7 @@ import type {
   GuidedReviewCommentDraft,
   GuidedReviewDraftEdit,
   GuidedReviewDriver,
+  GuidedReviewInvestigationRecord,
   GuidedReviewDraftPostOutcome,
   GuidedReviewMessage,
   GuidedReviewMessageOutcome,
@@ -506,6 +507,44 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
            AND (status = 'pending' OR (status = 'running' AND claimed_at < ?))`,
       )
       .bind(now, now, workspaceId, id, leaseCutoff)
+      .run()
+    return result.meta.changes > 0
+  }
+
+  async recordInvestigation(
+    workspaceId: string,
+    id: string,
+    investigation: GuidedReviewInvestigationRecord,
+    now: number,
+  ): Promise<boolean> {
+    const result = await this.db
+      .prepare(
+        `UPDATE guided_review_messages SET investigation = ?, claimed_at = ?, updated_at = ?
+         WHERE workspace_id = ? AND id = ? AND status = 'running'`,
+      )
+      .bind(JSON.stringify(investigation), now, now, workspaceId, id)
+      .run()
+    return result.meta.changes > 0
+  }
+
+  async getInvestigation(
+    workspaceId: string,
+    id: string,
+  ): Promise<GuidedReviewInvestigationRecord | null> {
+    const row = await this.db
+      .prepare(`SELECT investigation FROM guided_review_messages WHERE workspace_id = ? AND id = ?`)
+      .bind(workspaceId, id)
+      .first<{ investigation: string | null }>()
+    return parseJson(row?.investigation ?? null, null)
+  }
+
+  async heartbeatMessage(workspaceId: string, id: string, now: number): Promise<boolean> {
+    const result = await this.db
+      .prepare(
+        `UPDATE guided_review_messages SET claimed_at = ?, updated_at = ?
+         WHERE workspace_id = ? AND id = ? AND status = 'running'`,
+      )
+      .bind(now, now, workspaceId, id)
       .run()
     return result.meta.changes > 0
   }

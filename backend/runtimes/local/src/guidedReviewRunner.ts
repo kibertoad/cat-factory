@@ -1,4 +1,9 @@
-import type { GuidedReviewJob, GuidedReviewRunner, Logger } from '@cat-factory/kernel'
+import type {
+  GuidedReviewJob,
+  GuidedReviewJobProgress,
+  GuidedReviewRunner,
+  Logger,
+} from '@cat-factory/kernel'
 import { getErrorMessage, runBestEffort } from '@cat-factory/kernel'
 import type { ClaimedGuidedReviewJob, SqliteGuidedReviewQueue } from './sqlite/guidedReviewQueue.js'
 
@@ -15,7 +20,7 @@ export interface SqliteGuidedReviewRunnerOptions {
 
 /** The slice of `GuidedReviewService` the runner drives. */
 export interface GuidedReviewJobDriver {
-  runJob(workspaceId: string, job: GuidedReviewJob): Promise<void>
+  runJob(workspaceId: string, job: GuidedReviewJob): Promise<GuidedReviewJobProgress>
   abandonJob(workspaceId: string, job: GuidedReviewJob, detail: string): Promise<void>
 }
 
@@ -28,6 +33,7 @@ export class SqliteGuidedReviewRunner implements GuidedReviewRunner {
   private driver?: GuidedReviewJobDriver
   private readonly running = new Set<string>()
   private sweepTimer?: ReturnType<typeof setInterval>
+  private wakeTimer?: ReturnType<typeof setTimeout>
   private stopped = false
 
   constructor(
@@ -53,6 +59,7 @@ export class SqliteGuidedReviewRunner implements GuidedReviewRunner {
 
   stop(): void {
     this.stopped = true
+    if (this.wakeTimer) clearTimeout(this.wakeTimer)
     if (this.sweepTimer) clearInterval(this.sweepTimer)
     this.sweepTimer = undefined
   }
@@ -86,7 +93,10 @@ export class SqliteGuidedReviewRunner implements GuidedReviewRunner {
     }
     while (this.running.size < this.opts.concurrency) {
       const claimed = this.queue.claim(this.now(), this.opts.leaseMs, this.running)
-      if (!claimed) return
+      if (!claimed) {
+        this.wakeAtNextDue()
+        return
+      }
       this.running.add(claimed.key)
       void this.drive(driver, claimed)
     }
@@ -97,8 +107,13 @@ export class SqliteGuidedReviewRunner implements GuidedReviewRunner {
     claimed: ClaimedGuidedReviewJob,
   ): Promise<void> {
     try {
-      await driver.runJob(claimed.workspaceId, claimed.job)
-      this.queue.complete(claimed.key)
+      const progress = await driver.runJob(claimed.workspaceId, claimed.job)
+      if (progress.done) {
+        this.queue.complete(claimed.key)
+      } else {
+        // A deep answer still working: re-queue it for its next poll rather than holding a slot.
+        this.queue.reschedule(claimed.key, this.now() + progress.pollAfterMs)
+      }
     } catch (error) {
       this.log.warn('guided-review job failed; retrying after backoff', {
         workspaceId: claimed.workspaceId,
@@ -110,5 +125,18 @@ export class SqliteGuidedReviewRunner implements GuidedReviewRunner {
       this.running.delete(claimed.key)
       this.drain()
     }
+  }
+
+  /**
+   * Wake again when the earliest held job comes due. Computed from the queue rather than set per
+   * re-queue, because a timer runs on a monotonic clock while due times are wall-clock, so a timer
+   * for exactly the delay can fire a millisecond early and leave the job waiting for the sweep.
+   */
+  private wakeAtNextDue(): void {
+    const due = this.queue.nextDueAt()
+    if (due === null) return
+    if (this.wakeTimer) clearTimeout(this.wakeTimer)
+    this.wakeTimer = setTimeout(() => this.drain(), Math.max(1, due - this.now() + 1))
+    this.wakeTimer.unref?.()
   }
 }

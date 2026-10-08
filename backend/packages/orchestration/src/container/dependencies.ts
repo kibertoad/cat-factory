@@ -51,6 +51,7 @@ import type {
   DocInterviewRepository,
   GuidedReviewRepository,
   GuidedReviewRunner,
+  GuidedReviewInvestigator,
   DocumentConnectionRepository,
   DocumentConnectionStore,
   DocumentRepository,
@@ -990,6 +991,11 @@ export interface CoreDependencies extends ContentLibraryDependencies {
    * sweeper to call `GuidedReviewService.runJob` directly.
    */
   guidedReviewRunner?: GuidedReviewRunner
+  /**
+   * Runs DEEP guided-review answers in a read-only container (the server's
+   * `ContainerGuidedReviewInvestigator`). Absent ⇒ a deep question settles as `depth_unavailable`.
+   */
+  guidedReviewInvestigator?: GuidedReviewInvestigator
   /**
    * Which host this engine drives guided-review work as: `deployment`, or `node:<nodeId>` on a
    * mothership-mode node. Absent ⇒ `deployment`.

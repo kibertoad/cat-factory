@@ -420,3 +420,15 @@ export const guidedReviewPostResultSchema = v.object({
   }),
 })
 export type GuidedReviewPostResult = v.InferOutput<typeof guidedReviewPostResultSchema>
+
+/**
+ * What a deep investigation container returns: the answer and the spans it rests on. Lenient on
+ * citations, because a usable answer with one malformed citation is still an answer.
+ */
+export const guidedReviewInvestigationOutputSchema = v.object({
+  answer: v.pipe(v.string(), v.maxLength(GUIDED_REVIEW_ANSWER_MAX)),
+  citations: v.optional(v.array(v.unknown()), []),
+})
+export type GuidedReviewInvestigationOutput = v.InferOutput<
+  typeof guidedReviewInvestigationOutputSchema
+>

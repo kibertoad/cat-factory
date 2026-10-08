@@ -1,4 +1,4 @@
-import type { GuidedReviewJob } from '@cat-factory/kernel'
+import { GUIDED_REVIEW_MAX_PASSES, type GuidedReviewJob } from '@cat-factory/kernel'
 import {
   WorkflowEntrypoint,
   type WorkflowEvent,
@@ -40,8 +40,15 @@ export class GuidedReviewWorkflow extends WorkflowEntrypoint<Env, GuidedReviewWo
       step,
       'guided-review',
     )
-    await step.do('run', STEP_CONFIG, async () => {
-      await container.guidedReview?.service.runJob(params.workspaceId, params.job)
-    })
+    // One short step per pass with a durable sleep between them: a deep answer's container lives
+    // outside the Workflow, which only waits between polls.
+    for (let pass = 0; pass < GUIDED_REVIEW_MAX_PASSES; pass++) {
+      const progress = await step.do(`run-${pass}`, STEP_CONFIG, async () => {
+        const service = container.guidedReview?.service
+        return service ? service.runJob(params.workspaceId, params.job) : { done: true as const }
+      })
+      if (progress.done) return
+      await step.sleep(`wait-${pass}`, progress.pollAfterMs)
+    }
   }
 }

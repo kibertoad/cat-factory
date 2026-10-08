@@ -24,6 +24,7 @@ export function createGuidedReviewModule(
     service: new GuidedReviewService({
       repository: guidedReviewRepository,
       runner: dependencies.guidedReviewRunner,
+      investigator: dependencies.guidedReviewInvestigator,
       driver: dependencies.guidedReviewDriver ?? 'deployment',
       resolveRepoFilesForCoords: dependencies.resolveRepoFilesForCoords,
       runInitiatorScope: dependencies.runInitiatorScope,
