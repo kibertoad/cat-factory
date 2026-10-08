@@ -23,15 +23,39 @@ import {
   reviewQueueDirty,
   reviewSkillQueuePatch,
 } from '~/components/panels/inspector/TaskReviewTarget.logic'
+import { reviewTaskTarget } from '~/components/guidedReview/GuidedReview.logic'
 
 const props = defineProps<{ block: Block }>()
 const board = useBoardStore()
+const github = useGitHubStore()
+const ui = useUiStore()
+const access = useWorkspaceAccess()
 const { t } = useI18n()
 
 const isReview = computed(() => props.block.taskType === 'review')
 const fields = computed(() => props.block.taskTypeFields ?? null)
 const url = computed(() => fields.value?.prUrl?.trim() || '')
 const focus = computed(() => fields.value?.reviewFocus?.trim() || '')
+
+// Opening a guided review is a member-tier write, gated like the sidebar entry that opens one.
+const canGuide = computed(() => isReview.value && access.canWriteBoard.value)
+
+// Nothing loads the repository projection on board open, and the guided-review button below
+// resolves the task's repository from it.
+watch(
+  canGuide,
+  (can) => {
+    if (can) void github.ensureLoaded().catch(() => {})
+  },
+  { immediate: true },
+)
+
+/** The PR as a guided review opens it, when the task's service has a linked repository. */
+const guidedTarget = computed(() => {
+  if (!canGuide.value) return null
+  const frame = board.serviceOf(props.block)
+  return reviewTaskTarget(fields.value, frame ? github.repoForBlock(frame.id) : undefined)
+})
 
 /** `#123` when the number is known, else the raw link — never an empty affordance. */
 const label = computed(() => {
@@ -107,6 +131,18 @@ function revert() {
     >
       {{ label }}
     </p>
+    <UButton
+      v-if="guidedTarget"
+      color="primary"
+      variant="soft"
+      size="sm"
+      icon="i-lucide-scan-search"
+      block
+      data-testid="inspector-review-target-guided"
+      @click="ui.openGuidedReview({ sessionId: null, target: guidedTarget })"
+    >
+      {{ t('guidedReview.openFromTask') }}
+    </UButton>
     <p v-if="focus" class="text-xs leading-relaxed text-dimmed">
       {{ t('inspector.reviewTarget.focus', { focus }) }}
     </p>

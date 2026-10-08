@@ -129,6 +129,7 @@
     "commandBar": "Wyszukaj lub uruchom polecenie…",
     "create": "Utwórz",
     "assistant": "Asystent",
+    "guidedReview": "Przegląd z przewodnikiem",
     "buildPipeline": "Zbuduj potok",
     "repositories": "Repozytoria",
     "addFromRepo": "Dodaj z istniejącego repozytorium",
@@ -2605,6 +2606,7 @@
       "cmd": {
         "newPipeline": "Zbuduj potok",
         "assistant": "Otwórz asystenta",
+        "guidedReview": "Zbadaj pull request",
         "addFromRepo": "Dodaj usługę z istniejącego repozytorium",
         "bootstrapRepo": "Zainicjuj nowe repozytorium",
         "githubManage": "Zarządzaj połączeniem GitHub",
@@ -2633,6 +2635,7 @@
       "keywords": {
         "newPipeline": "potok agenci łańcuch pipeline",
         "assistant": "ai asystent zapytaj polecenie zrób za mnie",
+        "guidedReview": "przegląd z przewodnikiem pull request pr zbadaj wyjaśnij pytania",
         "addFromRepo": "github importuj istniejące",
         "bootstrapRepo": "rusztowanie utwórz architektura referencyjna",
         "github": "git repozytoria pull requesty zgłoszenia",
@@ -5112,6 +5115,81 @@
       "unknown_issue_source": "Żaden podłączony tracker nie rozpoznaje tego odnośnika. Najpierw podłącz tracker, do którego należy.",
       "ambiguous_issue_source": "Dwa podłączone trackery rozpoznają to odwołanie. Wklej zamiast tego pełny adres WWW zgłoszenia.",
       "unresolved_issue_service": "Asystent nie ustalił, pod którą usługą to utworzyć. Podaj usługę w swojej prośbie."
+    }
+  },
+  "guidedReview": {
+    "title": "Przegląd z przewodnikiem",
+    "titleFor": "{repo} #{number}: {title}",
+    "loading": "Wczytywanie przeglądu…",
+    "outOfDate": "Aktualizacje na żywo nie powiodły się, więc ten widok może być nieaktualny.",
+    "openFromTask": "Zbadaj w przeglądzie z przewodnikiem",
+    "picker": {
+      "intro": "Wybierz repozytorium i pull request. Dostaniesz przegląd zmiany i możesz zadawać pytania w osobnych wątkach.",
+      "loading": "Wczytywanie repozytoriów…",
+      "noRepos": "Do tego obszaru roboczego nie podłączono jeszcze żadnych repozytoriów.",
+      "repo": "Repozytorium",
+      "openPulls": "Otwarte pull requesty",
+      "number": "Numer pull requesta",
+      "open": "Otwórz przegląd"
+    },
+    "overview": {
+      "title": "Podsumowanie",
+      "stale": "Pull request ma nowe commity",
+      "refresh": "Odśwież",
+      "working": "Przygotowywanie podsumowania…",
+      "intent": "Cel",
+      "changes": "Istotne zmiany",
+      "consequences": "Konsekwencje",
+      "risks": "Ryzyka",
+      "focus": "Warto sprawdzić",
+      "suggested": "Proponowane pytania"
+    },
+    "severity": {
+      "low": "Niskie",
+      "medium": "Średnie",
+      "high": "Wysokie"
+    },
+    "failure": {
+      "budget_exhausted": "Ten obszar roboczy wyczerpał budżet na modele.",
+      "model_unavailable": "Brak dostępnego modelu dla przeglądu z przewodnikiem.",
+      "repo_unavailable": "Nie udało się odczytać pull requesta z repozytorium.",
+      "generation_failed": "Wywołanie modelu nie powiodło się.",
+      "unreadable_reply": "Model odpowiedział w formie, której nie da się odczytać.",
+      "depth_unavailable": "Szczegółowe odpowiedzi z użyciem checkoutu nie są jeszcze dostępne.",
+      "head_moved": "Pull request wyszedł poza przeglądany commit. Odśwież, aby przejrzeć jego najnowszy commit.",
+      "detail": "Szczegóły"
+    },
+    "dropped": {
+      "outside_diff": "wiersz jest poza diffem",
+      "not_in_pr": "plik nie należy do tego pull requesta",
+      "incomplete": "propozycja była niekompletna"
+    },
+    "thread": {
+      "new": "Nowy wątek",
+      "untitled": "Wątek bez tytułu",
+      "empty": "Zapytaj o cokolwiek w tym pull requeście.",
+      "waiting": "Przygotowywanie odpowiedzi…",
+      "placeholder": "Zadaj pytanie o zmianę",
+      "busy": "Czekam na odpowiedź na poprzednie pytanie",
+      "send": "Zapytaj",
+      "draftRequest": "Poproszono o komentarze do przeglądu"
+    },
+    "drafts": {
+      "title": "Szkice komentarzy",
+      "request": "Przygotuj komentarze do przeglądu",
+      "summary": "Zachowano {kept} z {proposed} proponowanych komentarzy jako szkice.",
+      "side": {
+        "RIGHT": "nowy kod",
+        "LEFT": "stary kod"
+      }
+    },
+    "errors": {
+      "load": "Nie udało się wczytać przeglądu",
+      "repos": "Nie udało się wczytać podłączonych repozytoriów",
+      "open": "Nie udało się otworzyć przeglądu",
+      "ask": "Nie udało się zadać pytania",
+      "drafts": "Nie udało się poprosić o szkice komentarzy",
+      "refresh": "Nie udało się odświeżyć przeglądu"
     }
   },
   "pipeline": {

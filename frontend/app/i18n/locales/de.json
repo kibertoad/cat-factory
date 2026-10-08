@@ -2740,6 +2740,7 @@
       "cmd": {
         "newPipeline": "Eine Pipeline bauen",
         "assistant": "Assistenten öffnen",
+        "guidedReview": "Einen Pull Request erkunden",
         "addFromRepo": "Service aus vorhandenem Repo hinzufügen",
         "bootstrapRepo": "Ein neues Repo bootstrappen",
         "githubManage": "GitHub-Verbindung verwalten",
@@ -2768,6 +2769,7 @@
       "keywords": {
         "newPipeline": "pipeline agents chain",
         "assistant": "ki assistent fragen eingabe für mich erledigen",
+        "guidedReview": "geführtes review pull request pr erkunden erklären fragen",
         "addFromRepo": "github import existing",
         "bootstrapRepo": "scaffold create reference architecture",
         "github": "git repos pull requests issues",
@@ -4591,6 +4593,81 @@
       "unresolved_issue_service": "Der Assistent konnte nicht erkennen, unter welchem Service das angelegt werden soll. Nennen Sie den Service in Ihrer Anfrage."
     }
   },
+  "guidedReview": {
+    "title": "Geführtes Review",
+    "titleFor": "{repo} #{number}: {title}",
+    "loading": "Review wird geladen…",
+    "outOfDate": "Live-Updates sind fehlgeschlagen, daher ist diese Ansicht möglicherweise veraltet.",
+    "openFromTask": "Mit geführtem Review erkunden",
+    "picker": {
+      "intro": "Wähle ein Repository und einen Pull Request. Du erhältst einen Überblick über die Änderung und kannst in separaten Threads Fragen dazu stellen.",
+      "loading": "Repositories werden geladen…",
+      "noRepos": "Mit diesem Workspace sind noch keine Repositories verknüpft.",
+      "repo": "Repository",
+      "openPulls": "Offene Pull Requests",
+      "number": "Nummer des Pull Requests",
+      "open": "Review öffnen"
+    },
+    "overview": {
+      "title": "Überblick",
+      "stale": "Der Pull Request hat neue Commits",
+      "refresh": "Aktualisieren",
+      "working": "Überblick wird erstellt…",
+      "intent": "Absicht",
+      "changes": "Wesentliche Änderungen",
+      "consequences": "Folgen",
+      "risks": "Risiken",
+      "focus": "Lohnt einen Blick",
+      "suggested": "Vorgeschlagene Fragen"
+    },
+    "severity": {
+      "low": "Niedrig",
+      "medium": "Mittel",
+      "high": "Hoch"
+    },
+    "failure": {
+      "budget_exhausted": "Dieser Workspace hat sein Modellbudget aufgebraucht.",
+      "model_unavailable": "Für das geführte Review ist kein Modell verfügbar.",
+      "repo_unavailable": "Der Pull Request konnte nicht aus dem Repository gelesen werden.",
+      "generation_failed": "Der Modellaufruf ist fehlgeschlagen.",
+      "unreadable_reply": "Das Modell hat in einer nicht lesbaren Form geantwortet.",
+      "depth_unavailable": "Tiefe Antworten mit einem Checkout sind noch nicht verfügbar.",
+      "head_moved": "Der Pull Request ist über den geprüften Commit hinaus. Aktualisiere, um den neuesten Commit zu prüfen.",
+      "detail": "Details"
+    },
+    "dropped": {
+      "outside_diff": "die Zeile liegt außerhalb des Diffs",
+      "not_in_pr": "die Datei gehört nicht zu diesem Pull Request",
+      "incomplete": "der Vorschlag war unvollständig"
+    },
+    "thread": {
+      "new": "Neuer Thread",
+      "untitled": "Thread ohne Titel",
+      "empty": "Frag alles zu diesem Pull Request.",
+      "waiting": "Antwort wird erstellt…",
+      "placeholder": "Stell eine Frage zur Änderung",
+      "busy": "Warte auf die Antwort auf die vorherige Frage",
+      "send": "Fragen",
+      "draftRequest": "Review-Kommentare angefordert"
+    },
+    "drafts": {
+      "title": "Kommentarentwürfe",
+      "request": "Review-Kommentare entwerfen",
+      "summary": "{kept} von {proposed} vorgeschlagenen Kommentaren als Entwurf behalten.",
+      "side": {
+        "RIGHT": "neuer Code",
+        "LEFT": "alter Code"
+      }
+    },
+    "errors": {
+      "load": "Das Review konnte nicht geladen werden",
+      "repos": "Die verknüpften Repositories konnten nicht geladen werden",
+      "open": "Das Review konnte nicht geöffnet werden",
+      "ask": "Die Frage konnte nicht gestellt werden",
+      "drafts": "Kommentarentwürfe konnten nicht angefordert werden",
+      "refresh": "Das Review konnte nicht aktualisiert werden"
+    }
+  },
   "pipeline": {
     "iterationCap": {
       "extraRound": "Noch eine Runde",
@@ -6173,6 +6250,7 @@
     "commandBar": "Suchen oder einen Befehl ausführen…",
     "create": "Erstellen",
     "assistant": "Assistent",
+    "guidedReview": "Geführtes Review",
     "buildPipeline": "Eine Pipeline erstellen",
     "repositories": "Repositories",
     "addFromRepo": "Aus vorhandenem Repo hinzufügen",

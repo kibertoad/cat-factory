@@ -137,3 +137,27 @@ export function parseOwnerRepoSlug(query: string): { owner: string; repo: string
   if (!SEG.test(owner) || !SEG.test(repo)) return null
   return { owner, repo }
 }
+
+/**
+ * The number of the pull request a `review` task names: its `prNumber` when that is a positive
+ * integer, else the one in its `prUrl` (GitHub `/pull/<n>`, GitLab `/-/merge_requests/<n>`, or a
+ * trailing `#<n>` / `/<n>`). Null when neither names one. The dispatch and the SPA's guided-review
+ * button both read it, so they cannot disagree about which pull request a task targets.
+ */
+export function resolvePrNumber(
+  fields: { prNumber?: number; prUrl?: string } | null | undefined,
+): number | null {
+  if (!fields) return null
+  if (
+    typeof fields.prNumber === 'number' &&
+    Number.isInteger(fields.prNumber) &&
+    fields.prNumber > 0
+  )
+    return fields.prNumber
+  const url = fields.prUrl?.trim()
+  if (!url) return null
+  const m = url.match(/(?:pull|pulls|merge_requests)\/(\d+)|[#/](\d+)\s*$/)
+  const raw = m?.[1] ?? m?.[2]
+  const n = raw ? Number(raw) : Number.NaN
+  return Number.isInteger(n) && n > 0 ? n : null
+}

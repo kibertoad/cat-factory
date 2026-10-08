@@ -2740,6 +2740,7 @@
       "cmd": {
         "newPipeline": "Costruisci una pipeline",
         "assistant": "Apri l'assistente",
+        "guidedReview": "Esplora una pull request",
         "addFromRepo": "Aggiungi servizio da repo esistente",
         "bootstrapRepo": "Esegui il bootstrap di un nuovo repo",
         "githubManage": "Gestisci la connessione GitHub",
@@ -2768,6 +2769,7 @@
       "keywords": {
         "newPipeline": "pipeline agenti catena",
         "assistant": "ia assistente chiedere richiesta fallo per me",
+        "guidedReview": "revisione guidata pull request pr esplora spiega domande",
         "addFromRepo": "github importa esistente",
         "bootstrapRepo": "scaffold crea architettura di riferimento",
         "github": "git repo pull request issue",
@@ -4591,6 +4593,81 @@
       "unresolved_issue_service": "L'assistente non ha potuto capire sotto quale servizio crearla. Indica il servizio nella richiesta."
     }
   },
+  "guidedReview": {
+    "title": "Revisione guidata",
+    "titleFor": "{repo} #{number}: {title}",
+    "loading": "Caricamento della revisione…",
+    "outOfDate": "Gli aggiornamenti in tempo reale non sono riusciti, quindi questa vista potrebbe non essere aggiornata.",
+    "openFromTask": "Esplora con la revisione guidata",
+    "picker": {
+      "intro": "Scegli un repository e una pull request. Ottieni una panoramica della modifica e puoi fare domande in discussioni separate.",
+      "loading": "Caricamento dei repository…",
+      "noRepos": "Nessun repository è ancora collegato a questo workspace.",
+      "repo": "Repository",
+      "openPulls": "Pull request aperte",
+      "number": "Numero della pull request",
+      "open": "Apri la revisione"
+    },
+    "overview": {
+      "title": "Panoramica",
+      "stale": "La pull request ha nuovi commit",
+      "refresh": "Aggiorna",
+      "working": "Preparazione della panoramica…",
+      "intent": "Intento",
+      "changes": "Modifiche rilevanti",
+      "consequences": "Conseguenze",
+      "risks": "Rischi",
+      "focus": "Da esaminare",
+      "suggested": "Domande suggerite"
+    },
+    "severity": {
+      "low": "Bassa",
+      "medium": "Media",
+      "high": "Alta"
+    },
+    "failure": {
+      "budget_exhausted": "Questo workspace ha esaurito il budget dei modelli.",
+      "model_unavailable": "Nessun modello è disponibile per la revisione guidata.",
+      "repo_unavailable": "Non è stato possibile leggere la pull request dal repository.",
+      "generation_failed": "La chiamata al modello non è riuscita.",
+      "unreadable_reply": "Il modello ha risposto in una forma illeggibile.",
+      "depth_unavailable": "Le risposte approfondite con un checkout non sono ancora disponibili.",
+      "head_moved": "La pull request è andata oltre il commit revisionato. Aggiorna per revisionare il suo ultimo commit.",
+      "detail": "Dettagli"
+    },
+    "dropped": {
+      "outside_diff": "la riga è fuori dal diff",
+      "not_in_pr": "il file non fa parte di questa pull request",
+      "incomplete": "la proposta era incompleta"
+    },
+    "thread": {
+      "new": "Nuova discussione",
+      "untitled": "Discussione senza titolo",
+      "empty": "Chiedi qualsiasi cosa su questa pull request.",
+      "waiting": "Preparazione di una risposta…",
+      "placeholder": "Fai una domanda sulla modifica",
+      "busy": "In attesa della risposta alla domanda precedente",
+      "send": "Chiedi",
+      "draftRequest": "Richiesti commenti di revisione"
+    },
+    "drafts": {
+      "title": "Bozze di commenti",
+      "request": "Prepara commenti di revisione",
+      "summary": "{kept} commenti proposti su {proposed} conservati come bozze.",
+      "side": {
+        "RIGHT": "codice nuovo",
+        "LEFT": "codice precedente"
+      }
+    },
+    "errors": {
+      "load": "Impossibile caricare la revisione",
+      "repos": "Impossibile caricare i repository collegati",
+      "open": "Impossibile aprire la revisione",
+      "ask": "Impossibile fare la domanda",
+      "drafts": "Impossibile richiedere le bozze di commenti",
+      "refresh": "Impossibile aggiornare la revisione"
+    }
+  },
   "pipeline": {
     "iterationCap": {
       "extraRound": "Un altro giro",
@@ -6173,6 +6250,7 @@
     "commandBar": "Cerca o esegui un comando…",
     "create": "Crea",
     "assistant": "Assistente",
+    "guidedReview": "Revisione guidata",
     "buildPipeline": "Crea una pipeline",
     "repositories": "Repository",
     "addFromRepo": "Aggiungi da un repository esistente",

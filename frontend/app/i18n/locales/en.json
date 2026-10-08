@@ -153,6 +153,7 @@
     "commandBar": "Search or run a command…",
     "create": "Create",
     "assistant": "Assistant",
+    "guidedReview": "Guided review",
     "buildPipeline": "Build a pipeline",
     "repositories": "Repositories",
     "addFromRepo": "Add from existing repo",
@@ -2760,6 +2761,7 @@
       "cmd": {
         "newPipeline": "Build a pipeline",
         "assistant": "Open the assistant",
+        "guidedReview": "Explore a pull request",
         "addFromRepo": "Add service from existing repo",
         "bootstrapRepo": "Bootstrap a new repo",
         "githubManage": "Manage GitHub connection",
@@ -2788,6 +2790,7 @@
       "keywords": {
         "newPipeline": "pipeline agents chain",
         "assistant": "ai assistant ask prompt do it for me",
+        "guidedReview": "guided review pull request pr explore explain questions",
         "addFromRepo": "github import existing",
         "bootstrapRepo": "scaffold create reference architecture",
         "github": "git repos pull requests issues",
@@ -5306,6 +5309,81 @@
       "unknown_issue_source": "No connected tracker recognises that issue link. Connect the tracker it belongs to first.",
       "ambiguous_issue_source": "Two connected trackers recognise that reference. Paste the issue's full web address instead.",
       "unresolved_issue_service": "The assistant could not tell which service to file this under. Name the service in your request."
+    }
+  },
+  "guidedReview": {
+    "title": "Guided review",
+    "titleFor": "{repo} #{number}: {title}",
+    "loading": "Loading the review…",
+    "outOfDate": "Live updates failed, so this view may be out of date.",
+    "openFromTask": "Explore with guided review",
+    "picker": {
+      "intro": "Pick a repository and a pull request. You get an overview of the change and can ask questions about it in separate threads.",
+      "loading": "Loading repositories…",
+      "noRepos": "No repositories are linked to this workspace yet.",
+      "repo": "Repository",
+      "openPulls": "Open pull requests",
+      "number": "Pull request number",
+      "open": "Open review"
+    },
+    "overview": {
+      "title": "Overview",
+      "stale": "The pull request has new commits",
+      "refresh": "Refresh",
+      "working": "Preparing the overview…",
+      "intent": "Intent",
+      "changes": "Meaningful changes",
+      "consequences": "Consequences",
+      "risks": "Risks",
+      "focus": "Worth reviewing",
+      "suggested": "Suggested questions"
+    },
+    "severity": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High"
+    },
+    "failure": {
+      "budget_exhausted": "This workspace has spent its model budget.",
+      "model_unavailable": "No model is available for guided review.",
+      "repo_unavailable": "The pull request could not be read from the repository.",
+      "generation_failed": "The model call failed.",
+      "unreadable_reply": "The model replied in a form that could not be read.",
+      "depth_unavailable": "Deep answers that use a checkout are not available yet.",
+      "head_moved": "The pull request moved past the reviewed commit. Refresh to review its latest commit.",
+      "detail": "Details"
+    },
+    "dropped": {
+      "outside_diff": "the line is outside the diff",
+      "not_in_pr": "the file is not part of this pull request",
+      "incomplete": "the proposal was incomplete"
+    },
+    "thread": {
+      "new": "New thread",
+      "untitled": "Untitled thread",
+      "empty": "Ask anything about this pull request.",
+      "waiting": "Working on an answer…",
+      "placeholder": "Ask a question about the change",
+      "busy": "Waiting for the answer to the previous question",
+      "send": "Ask",
+      "draftRequest": "Asked for review comments"
+    },
+    "drafts": {
+      "title": "Comment drafts",
+      "request": "Draft review comments",
+      "summary": "{kept} of {proposed} proposed comments kept as drafts.",
+      "side": {
+        "RIGHT": "new code",
+        "LEFT": "old code"
+      }
+    },
+    "errors": {
+      "load": "Could not load the review",
+      "repos": "Could not load the linked repositories",
+      "open": "Could not open the review",
+      "ask": "Could not ask the question",
+      "drafts": "Could not request comment drafts",
+      "refresh": "Could not refresh the review"
     }
   },
   "pipeline": {

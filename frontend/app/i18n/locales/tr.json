@@ -129,6 +129,7 @@
     "commandBar": "Arayın veya bir komut çalıştırın…",
     "create": "Oluştur",
     "assistant": "Asistan",
+    "guidedReview": "Rehberli inceleme",
     "buildPipeline": "Bir işlem hattı oluştur",
     "repositories": "Depolar",
     "addFromRepo": "Mevcut depodan ekle",
@@ -2605,6 +2606,7 @@
       "cmd": {
         "newPipeline": "Boru hattı oluştur",
         "assistant": "Asistanı aç",
+        "guidedReview": "Bir pull request incele",
         "addFromRepo": "Mevcut depodan servis ekle",
         "bootstrapRepo": "Yeni depo başlat",
         "githubManage": "GitHub bağlantısını yönet",
@@ -2633,6 +2635,7 @@
       "keywords": {
         "newPipeline": "boru hattı ajanlar zincir",
         "assistant": "yapay zeka asistan sor istem benim yerime yap",
+        "guidedReview": "rehberli inceleme pull request pr incele açıkla sorular",
         "addFromRepo": "github içe aktar mevcut",
         "bootstrapRepo": "iskele oluştur referans mimari",
         "github": "git depolar çekme istekleri sorunlar",
@@ -5112,6 +5115,81 @@
       "unknown_issue_source": "Bağlı hiçbir izleyici bu bağlantıyı tanımıyor. Önce ait olduğu izleyiciyi bağlayın.",
       "ambiguous_issue_source": "Bağlı iki izleyici de bu referansı tanıyor. Bunun yerine kaydın tam web adresini yapıştırın.",
       "unresolved_issue_service": "Asistan bunun hangi servis altında oluşturulacağını belirleyemedi. İsteğinizde servisi adıyla belirtin."
+    }
+  },
+  "guidedReview": {
+    "title": "Rehberli inceleme",
+    "titleFor": "{repo} #{number}: {title}",
+    "loading": "İnceleme yükleniyor…",
+    "outOfDate": "Canlı güncellemeler başarısız oldu, bu nedenle bu görünüm güncel olmayabilir.",
+    "openFromTask": "Rehberli incelemeyle keşfet",
+    "picker": {
+      "intro": "Bir depo ve bir pull request seçin. Değişikliğin özetini görür, ayrı konularda onunla ilgili soru sorabilirsiniz.",
+      "loading": "Depolar yükleniyor…",
+      "noRepos": "Bu çalışma alanına henüz bağlı bir depo yok.",
+      "repo": "Depo",
+      "openPulls": "Açık pull requestler",
+      "number": "Pull request numarası",
+      "open": "İncelemeyi aç"
+    },
+    "overview": {
+      "title": "Özet",
+      "stale": "Pull requestte yeni commitler var",
+      "refresh": "Yenile",
+      "working": "Özet hazırlanıyor…",
+      "intent": "Amaç",
+      "changes": "Önemli değişiklikler",
+      "consequences": "Sonuçlar",
+      "risks": "Riskler",
+      "focus": "İncelemeye değer",
+      "suggested": "Önerilen sorular"
+    },
+    "severity": {
+      "low": "Düşük",
+      "medium": "Orta",
+      "high": "Yüksek"
+    },
+    "failure": {
+      "budget_exhausted": "Bu çalışma alanı model bütçesini tüketti.",
+      "model_unavailable": "Rehberli inceleme için kullanılabilir bir model yok.",
+      "repo_unavailable": "Pull request depodan okunamadı.",
+      "generation_failed": "Model çağrısı başarısız oldu.",
+      "unreadable_reply": "Model okunamayan bir biçimde yanıt verdi.",
+      "depth_unavailable": "Kod kopyası kullanan ayrıntılı yanıtlar henüz kullanılamıyor.",
+      "head_moved": "Pull request incelenen commit'in ötesine geçti. En son commit'ini incelemek için yenileyin.",
+      "detail": "Ayrıntılar"
+    },
+    "dropped": {
+      "outside_diff": "satır diff dışında",
+      "not_in_pr": "dosya bu pull requestin parçası değil",
+      "incomplete": "öneri eksikti"
+    },
+    "thread": {
+      "new": "Yeni konu",
+      "untitled": "Başlıksız konu",
+      "empty": "Bu pull request hakkında her şeyi sorabilirsiniz.",
+      "waiting": "Yanıt hazırlanıyor…",
+      "placeholder": "Değişiklik hakkında bir soru sorun",
+      "busy": "Önceki sorunun yanıtı bekleniyor",
+      "send": "Sor",
+      "draftRequest": "İnceleme yorumları istendi"
+    },
+    "drafts": {
+      "title": "Yorum taslakları",
+      "request": "İnceleme yorumları taslağı oluştur",
+      "summary": "Önerilen {proposed} yorumdan {kept} tanesi taslak olarak tutuldu.",
+      "side": {
+        "RIGHT": "yeni kod",
+        "LEFT": "eski kod"
+      }
+    },
+    "errors": {
+      "load": "İnceleme yüklenemedi",
+      "repos": "Bağlı depolar yüklenemedi",
+      "open": "İnceleme açılamadı",
+      "ask": "Soru sorulamadı",
+      "drafts": "Yorum taslakları istenemedi",
+      "refresh": "İnceleme yenilenemedi"
     }
   },
   "pipeline": {

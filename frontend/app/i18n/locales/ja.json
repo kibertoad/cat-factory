@@ -129,6 +129,7 @@
     "commandBar": "検索またはコマンドを実行…",
     "create": "作成",
     "assistant": "アシスタント",
+    "guidedReview": "ガイド付きレビュー",
     "buildPipeline": "パイプラインを構築",
     "repositories": "リポジトリ",
     "addFromRepo": "既存のリポジトリから追加",
@@ -2605,6 +2606,7 @@
       "cmd": {
         "newPipeline": "パイプラインを構築",
         "assistant": "アシスタントを開く",
+        "guidedReview": "プルリクエストを調べる",
         "addFromRepo": "既存リポジトリからサービスを追加",
         "bootstrapRepo": "新しいリポジトリをブートストラップ",
         "githubManage": "GitHub 接続を管理",
@@ -2633,6 +2635,7 @@
       "keywords": {
         "newPipeline": "pipeline agents chain パイプライン エージェント チェーン",
         "assistant": "ai アシスタント 依頼 プロンプト 代わりにやって",
+        "guidedReview": "ガイド付きレビュー プルリクエスト pr 調べる 説明 質問",
         "addFromRepo": "github import existing GitHub インポート 既存",
         "bootstrapRepo": "scaffold create reference architecture スキャフォールド 作成 リファレンスアーキテクチャ",
         "github": "git repos pull requests issues リポジトリ プルリクエスト Issue",
@@ -5112,6 +5115,81 @@
       "unknown_issue_source": "接続済みのトラッカーはこのリンクを認識できません。そのイシューが属するトラッカーを先に接続してください。",
       "ambiguous_issue_source": "接続済みの 2 つのトラッカーがこの参照を認識します。代わりにイシューの完全な Web アドレスを貼り付けてください。",
       "unresolved_issue_service": "どのサービスの下に作成するか判断できませんでした。依頼の中でサービス名を指定してください。"
+    }
+  },
+  "guidedReview": {
+    "title": "ガイド付きレビュー",
+    "titleFor": "{repo} #{number}: {title}",
+    "loading": "レビューを読み込んでいます…",
+    "outOfDate": "ライブ更新に失敗したため、この表示は最新でない可能性があります。",
+    "openFromTask": "ガイド付きレビューで調べる",
+    "picker": {
+      "intro": "リポジトリとプルリクエストを選んでください。変更の概要が表示され、別々のスレッドで質問できます。",
+      "loading": "リポジトリを読み込んでいます…",
+      "noRepos": "このワークスペースにはまだリポジトリがリンクされていません。",
+      "repo": "リポジトリ",
+      "openPulls": "オープン中のプルリクエスト",
+      "number": "プルリクエスト番号",
+      "open": "レビューを開く"
+    },
+    "overview": {
+      "title": "概要",
+      "stale": "プルリクエストに新しいコミットがあります",
+      "refresh": "更新",
+      "working": "概要を準備しています…",
+      "intent": "意図",
+      "changes": "主な変更",
+      "consequences": "影響",
+      "risks": "リスク",
+      "focus": "確認すべき箇所",
+      "suggested": "おすすめの質問"
+    },
+    "severity": {
+      "low": "低",
+      "medium": "中",
+      "high": "高"
+    },
+    "failure": {
+      "budget_exhausted": "このワークスペースはモデルの予算を使い切りました。",
+      "model_unavailable": "ガイド付きレビューに使えるモデルがありません。",
+      "repo_unavailable": "リポジトリからプルリクエストを読み取れませんでした。",
+      "generation_failed": "モデルの呼び出しに失敗しました。",
+      "unreadable_reply": "モデルの応答を読み取れませんでした。",
+      "depth_unavailable": "チェックアウトを使う詳しい回答はまだ利用できません。",
+      "head_moved": "プルリクエストはレビュー対象のコミットより先に進んでいます。更新すると最新のコミットをレビューできます。",
+      "detail": "詳細"
+    },
+    "dropped": {
+      "outside_diff": "行が差分の範囲外です",
+      "not_in_pr": "ファイルがこのプルリクエストに含まれていません",
+      "incomplete": "提案が不完全でした"
+    },
+    "thread": {
+      "new": "新しいスレッド",
+      "untitled": "無題のスレッド",
+      "empty": "このプルリクエストについて何でも質問してください。",
+      "waiting": "回答を作成しています…",
+      "placeholder": "変更について質問する",
+      "busy": "前の質問への回答を待っています",
+      "send": "質問する",
+      "draftRequest": "レビューコメントを依頼しました"
+    },
+    "drafts": {
+      "title": "コメントの下書き",
+      "request": "レビューコメントを下書きする",
+      "summary": "提案された {proposed} 件のうち {kept} 件を下書きとして残しました。",
+      "side": {
+        "RIGHT": "新しいコード",
+        "LEFT": "古いコード"
+      }
+    },
+    "errors": {
+      "load": "レビューを読み込めませんでした",
+      "repos": "リンクされたリポジトリを読み込めませんでした",
+      "open": "レビューを開けませんでした",
+      "ask": "質問できませんでした",
+      "drafts": "コメントの下書きを依頼できませんでした",
+      "refresh": "レビューを更新できませんでした"
     }
   },
   "pipeline": {

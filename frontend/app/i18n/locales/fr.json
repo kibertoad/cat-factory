@@ -129,6 +129,7 @@
     "commandBar": "Rechercher ou exécuter une commande…",
     "create": "Créer",
     "assistant": "Assistant",
+    "guidedReview": "Revue guidée",
     "buildPipeline": "Créer un pipeline",
     "repositories": "Dépôts",
     "addFromRepo": "Ajouter depuis un dépôt existant",
@@ -2605,6 +2606,7 @@
       "cmd": {
         "newPipeline": "Créer un pipeline",
         "assistant": "Ouvrir l'assistant",
+        "guidedReview": "Explorer une pull request",
         "addFromRepo": "Ajouter un service depuis un dépôt existant",
         "bootstrapRepo": "Initialiser un nouveau dépôt",
         "githubManage": "Gérer la connexion GitHub",
@@ -2633,6 +2635,7 @@
       "keywords": {
         "newPipeline": "pipeline agents chaîne",
         "assistant": "ia assistant demander invite fais-le pour moi",
+        "guidedReview": "revue guidée pull request pr explorer expliquer questions",
         "addFromRepo": "github importer existant",
         "bootstrapRepo": "échafaudage créer architecture de référence",
         "github": "git dépôts pull requests tickets",
@@ -5112,6 +5115,81 @@
       "unknown_issue_source": "Aucun outil de suivi connecté ne reconnaît ce lien. Connectez d'abord celui auquel il appartient.",
       "ambiguous_issue_source": "Deux outils de suivi connectés reconnaissent cette référence. Collez plutôt l'adresse web complète du ticket.",
       "unresolved_issue_service": "L'assistant n'a pas pu déterminer dans quel service créer la tâche. Nommez le service dans votre demande."
+    }
+  },
+  "guidedReview": {
+    "title": "Revue guidée",
+    "titleFor": "{repo} #{number} : {title}",
+    "loading": "Chargement de la revue…",
+    "outOfDate": "Les mises à jour en direct ont échoué, cette vue n'est peut-être plus à jour.",
+    "openFromTask": "Explorer avec la revue guidée",
+    "picker": {
+      "intro": "Choisis un dépôt et une pull request. Tu obtiens une vue d'ensemble du changement et peux poser des questions dans des fils séparés.",
+      "loading": "Chargement des dépôts…",
+      "noRepos": "Aucun dépôt n'est encore lié à cet espace de travail.",
+      "repo": "Dépôt",
+      "openPulls": "Pull requests ouvertes",
+      "number": "Numéro de la pull request",
+      "open": "Ouvrir la revue"
+    },
+    "overview": {
+      "title": "Vue d'ensemble",
+      "stale": "La pull request a de nouveaux commits",
+      "refresh": "Actualiser",
+      "working": "Préparation de la vue d'ensemble…",
+      "intent": "Intention",
+      "changes": "Changements importants",
+      "consequences": "Conséquences",
+      "risks": "Risques",
+      "focus": "À examiner",
+      "suggested": "Questions suggérées"
+    },
+    "severity": {
+      "low": "Faible",
+      "medium": "Moyen",
+      "high": "Élevé"
+    },
+    "failure": {
+      "budget_exhausted": "Cet espace de travail a épuisé son budget de modèles.",
+      "model_unavailable": "Aucun modèle n'est disponible pour la revue guidée.",
+      "repo_unavailable": "La pull request n'a pas pu être lue depuis le dépôt.",
+      "generation_failed": "L'appel au modèle a échoué.",
+      "unreadable_reply": "Le modèle a répondu sous une forme illisible.",
+      "depth_unavailable": "Les réponses approfondies avec un checkout ne sont pas encore disponibles.",
+      "head_moved": "La pull request a avancé au-delà du commit revu. Actualise pour revoir son dernier commit.",
+      "detail": "Détails"
+    },
+    "dropped": {
+      "outside_diff": "la ligne est en dehors du diff",
+      "not_in_pr": "le fichier ne fait pas partie de cette pull request",
+      "incomplete": "la proposition était incomplète"
+    },
+    "thread": {
+      "new": "Nouveau fil",
+      "untitled": "Fil sans titre",
+      "empty": "Pose toutes tes questions sur cette pull request.",
+      "waiting": "Réponse en préparation…",
+      "placeholder": "Pose une question sur le changement",
+      "busy": "En attente de la réponse à la question précédente",
+      "send": "Demander",
+      "draftRequest": "Commentaires de revue demandés"
+    },
+    "drafts": {
+      "title": "Brouillons de commentaires",
+      "request": "Rédiger des commentaires de revue",
+      "summary": "{kept} commentaires proposés sur {proposed} conservés comme brouillons.",
+      "side": {
+        "RIGHT": "nouveau code",
+        "LEFT": "ancien code"
+      }
+    },
+    "errors": {
+      "load": "Impossible de charger la revue",
+      "repos": "Impossible de charger les dépôts liés",
+      "open": "Impossible d'ouvrir la revue",
+      "ask": "Impossible de poser la question",
+      "drafts": "Impossible de demander des brouillons de commentaires",
+      "refresh": "Impossible d'actualiser la revue"
     }
   },
   "pipeline": {
