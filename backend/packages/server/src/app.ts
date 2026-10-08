@@ -127,6 +127,7 @@ import { publicEvidenceController } from './modules/publicApi/PublicEvidenceCont
 import { publicSpecController } from './modules/publicApi/PublicSpecController.js'
 import { publicMergeEvidenceController } from './modules/publicApi/PublicMergeEvidenceController.js'
 import { publicKaizenController } from './modules/publicApi/PublicKaizenController.js'
+import { publicGuidedReviewController } from './modules/publicApi/PublicGuidedReviewController.js'
 import { publicDiscoveryController } from './modules/publicApi/PublicDiscoveryController.js'
 import { publicFragmentController } from './modules/publicApi/PublicFragmentController.js'
 import { publicUseCaseController } from './modules/publicApi/PublicUseCaseController.js'
@@ -203,6 +204,7 @@ function registerPublicApiControllers<E extends AppEnv>(app: Hono<E>): void {
   // takes one off the backlog. Reads are `read`; acknowledging is `write`, since recording that a
   // recommendation was triaged starts nothing. See backend/docs/public-api.md.
   app.route('/', publicKaizenController())
+  app.route('/', publicGuidedReviewController())
   // The public SPEND-ANALYTICS read (`/api/v1/usage/spend`): the workspace's money over a window
   // sliced by repository, ticket, run or step kind: the TCO question the period breakdown on
   // `/api/v1/usage` carries no axis for. `read` scope. See backend/docs/public-api.md.

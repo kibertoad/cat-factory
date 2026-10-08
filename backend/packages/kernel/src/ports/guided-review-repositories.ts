@@ -16,6 +16,17 @@ export interface GuidedReviewSessionFilter {
   limit?: number
 }
 
+/**
+ * One keyset page of sessions, newest CREATED first, with `id` breaking ties. `cursor` is
+ * exclusive on that same `(createdAt, id)` composite, so a burst of sessions sharing a millisecond
+ * pages without dropping any. Creation order, never update order: an update would move an unseen
+ * session ahead of the cursor and the caller would never see it.
+ */
+export interface GuidedReviewSessionPage {
+  limit: number
+  cursor?: { createdAt: number; id: string }
+}
+
 /** The PR facts a refresh re-reads from the host before the overview regenerates. */
 export interface GuidedReviewRefresh {
   prTitle: string
@@ -126,6 +137,12 @@ export interface GuidedReviewRepository {
   listSessions(
     workspaceId: string,
     filter: GuidedReviewSessionFilter,
+  ): Promise<GuidedReviewSession[]>
+  /** One {@link GuidedReviewSessionPage} of the sessions matching `filter`. */
+  pageSessions(
+    workspaceId: string,
+    filter: Omit<GuidedReviewSessionFilter, 'limit'>,
+    page: GuidedReviewSessionPage,
   ): Promise<GuidedReviewSession[]>
   /** Removes the session with its threads, messages and drafts. */
   deleteSession(workspaceId: string, id: string): Promise<void>

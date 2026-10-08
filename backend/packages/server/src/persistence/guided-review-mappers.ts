@@ -14,6 +14,7 @@ import {
   guidedReviewMessageKindSchema,
   guidedReviewMessageSchema,
   guidedReviewOverviewContentSchema,
+  guidedReviewOwnerKindSchema,
   guidedReviewWorkStatusSchema,
   vcsProviderSchema,
 } from '@cat-factory/contracts'
@@ -27,10 +28,10 @@ import { ValidationError } from '@cat-factory/kernel'
 import * as v from 'valibot'
 import { decodeEnum, decodeJson } from './decode.js'
 
-// Row mappers for the guided-review tables (D1 migration 0104 and its Drizzle mirror). Both
-// facades read and write the same snake_case columns, so the decode and the encode live here once.
-// Every read decodes against the contracts schemas, so every write is checked against them first:
-// an out-of-contract value is refused at its writer instead of making the row unreadable.
+// Row mappers for the guided-review tables (D1 migrations 0104 and 0105 and their Drizzle mirror).
+// Both facades read and write the same snake_case columns, so the decode and the encode live here
+// once. Every read decodes against the contracts schemas, so every write is checked against them
+// first: an out-of-contract value is refused at its writer instead of making the row unreadable.
 
 export interface GuidedReviewSessionRow {
   id: string
@@ -43,6 +44,7 @@ export interface GuidedReviewSessionRow {
   reviewed_head_sha: string
   base_ref: string
   created_by: string
+  created_by_kind: string
   overview_status: string
   overview_generation: number
   overview_content: string | null
@@ -111,6 +113,10 @@ export function rowToGuidedReviewSession(row: GuidedReviewSessionRow): GuidedRev
     reviewedHeadSha: row.reviewed_head_sha,
     baseRef: row.base_ref,
     createdBy: row.created_by,
+    createdByKind: decodeEnum(guidedReviewOwnerKindSchema, row.created_by_kind, {
+      ...ctx,
+      column: 'created_by_kind',
+    }),
     overview: {
       status: decodeEnum(guidedReviewWorkStatusSchema, row.overview_status, {
         ...ctx,

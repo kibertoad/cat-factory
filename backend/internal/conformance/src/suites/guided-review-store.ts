@@ -10,6 +10,74 @@ import { GUIDED_REVIEW_LIST_MAX } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
 import type { ConformanceHarness } from '../harness.js'
 
+const LEASE = 60_000
+const HOST = 'deployment'
+
+function session(over: Partial<GuidedReviewNewSession> = {}): GuidedReviewNewSession {
+  return {
+    id: 'grs_1',
+    provider: 'github',
+    repoId: '42',
+    owner: 'acme',
+    repo: 'shop',
+    prNumber: 7,
+    prTitle: 'Add checkout',
+    reviewedHeadSha: 'head1',
+    baseRef: 'base1',
+    createdBy: 'usr_1',
+    createdByKind: 'user',
+    createdAt: 1,
+    updatedAt: 1,
+    ...over,
+  }
+}
+
+function exchange(
+  n: number,
+  threadId: string,
+  kind: GuidedReviewMessage['kind'] = 'answer',
+): GuidedReviewExchange {
+  return {
+    sessionId: 'grs_1',
+    threadId,
+    kind,
+    depth: 'inline',
+    questionId: `q${n}`,
+    question: 'Why?',
+    placeholderId: `a${n}`,
+    at: 10,
+  }
+}
+
+function draft(
+  id: string,
+  over: Partial<GuidedReviewDraftProposal> = {},
+): GuidedReviewDraftProposal {
+  return {
+    id,
+    path: 'src/checkout.ts',
+    line: 12,
+    startLine: null,
+    side: 'RIGHT',
+    body: 'This retries without a bound.',
+    rationale: 'The thread established the retry loop is unbounded.',
+    ...over,
+  }
+}
+
+function won(claim: GuidedReviewClaim | null): GuidedReviewClaim {
+  if (!claim) throw new Error('expected the claim to be won')
+  return claim
+}
+
+const answered = {
+  status: 'complete' as const,
+  content: 'Because of the retry loop.',
+  citations: [{ path: 'src/checkout.ts', startLine: 10, endLine: 14, side: 'RIGHT' as const }],
+  draftReport: null,
+  model: 'fake:fake',
+}
+
 /**
  * The guided-review store's concurrency contract, asserted at the repository layer: one session
  * per creator per PR, one live answer per thread, claims a second driver cannot take, and a
@@ -18,73 +86,6 @@ import type { ConformanceHarness } from '../harness.js'
  */
 export function defineGuidedReviewStoreConformance(harness: ConformanceHarness): void {
   describe('guided PR review store', () => {
-    const LEASE = 60_000
-    const HOST = 'deployment'
-
-    function session(over: Partial<GuidedReviewNewSession> = {}): GuidedReviewNewSession {
-      return {
-        id: 'grs_1',
-        provider: 'github',
-        repoId: '42',
-        owner: 'acme',
-        repo: 'shop',
-        prNumber: 7,
-        prTitle: 'Add checkout',
-        reviewedHeadSha: 'head1',
-        baseRef: 'base1',
-        createdBy: 'usr_1',
-        createdAt: 1,
-        updatedAt: 1,
-        ...over,
-      }
-    }
-
-    function exchange(
-      n: number,
-      threadId: string,
-      kind: GuidedReviewMessage['kind'] = 'answer',
-    ): GuidedReviewExchange {
-      return {
-        sessionId: 'grs_1',
-        threadId,
-        kind,
-        depth: 'inline',
-        questionId: `q${n}`,
-        question: 'Why?',
-        placeholderId: `a${n}`,
-        at: 10,
-      }
-    }
-
-    function draft(
-      id: string,
-      over: Partial<GuidedReviewDraftProposal> = {},
-    ): GuidedReviewDraftProposal {
-      return {
-        id,
-        path: 'src/checkout.ts',
-        line: 12,
-        startLine: null,
-        side: 'RIGHT',
-        body: 'This retries without a bound.',
-        rationale: 'The thread established the retry loop is unbounded.',
-        ...over,
-      }
-    }
-
-    function won(claim: GuidedReviewClaim | null): GuidedReviewClaim {
-      if (!claim) throw new Error('expected the claim to be won')
-      return claim
-    }
-
-    const answered = {
-      status: 'complete' as const,
-      content: 'Because of the retry loop.',
-      citations: [{ path: 'src/checkout.ts', startLine: 10, endLine: 14, side: 'RIGHT' as const }],
-      draftReport: null,
-      model: 'fake:fake',
-    }
-
     async function seeded(): Promise<{ repo: GuidedReviewRepository; ws: string }> {
       const app = harness.makeApp()
       const repo = app.guidedReviewRepository()
@@ -139,6 +140,56 @@ export function defineGuidedReviewStoreConformance(harness: ConformanceHarness):
         HOST,
       )
       expect(other.id).toBe('grs_c')
+    })
+
+    it('keeps who owns a session, a person or an API key', async () => {
+      const app = harness.makeApp()
+      const repo = app.guidedReviewRepository()
+      const { workspace } = await app.createWorkspace()
+      await repo.openSession(workspace.id, session(), HOST)
+      await repo.openSession(
+        workspace.id,
+        session({ id: 'grs_k', createdBy: 'pak_1', createdByKind: 'api-key' }),
+        HOST,
+      )
+      expect(await repo.getSession(workspace.id, 'grs_1')).toMatchObject({
+        createdBy: 'usr_1',
+        createdByKind: 'user',
+      })
+      expect(await repo.getSession(workspace.id, 'grs_k')).toMatchObject({
+        createdBy: 'pak_1',
+        createdByKind: 'api-key',
+      })
+    })
+
+    it('pages sessions newest created first, ties broken by id, with no row twice or skipped', async () => {
+      const app = harness.makeApp()
+      const repo = app.guidedReviewRepository()
+      const { workspace } = await app.createWorkspace()
+      // Two share a millisecond, and the oldest was updated last: neither may move a page edge.
+      const seeds = [
+        session({ id: 'grs_a', prNumber: 1, createdAt: 10, updatedAt: 99 }),
+        session({ id: 'grs_b', prNumber: 2, createdAt: 20, updatedAt: 20 }),
+        session({ id: 'grs_c', prNumber: 3, createdAt: 20, updatedAt: 20 }),
+        session({ id: 'grs_d', prNumber: 4, createdAt: 30, updatedAt: 30 }),
+        session({ id: 'grs_e', prNumber: 5, createdAt: 40, updatedAt: 40, createdBy: 'usr_2' }),
+      ]
+      for (const s of seeds) await repo.openSession(workspace.id, s, HOST)
+
+      const seen: string[] = []
+      let cursor: { createdAt: number; id: string } | undefined
+      for (;;) {
+        const page = await repo.pageSessions(
+          workspace.id,
+          { createdBy: 'usr_1' },
+          { limit: 2, ...(cursor ? { cursor } : {}) },
+        )
+        seen.push(...page.map((s) => s.id))
+        const last = page.at(-1)
+        if (page.length < 2 || !last) break
+        cursor = { createdAt: last.createdAt, id: last.id }
+      }
+      expect(seen).toEqual(['grs_d', 'grs_c', 'grs_b', 'grs_a'])
     })
 
     it('admits one live answer per thread and leaves other threads free', async () => {

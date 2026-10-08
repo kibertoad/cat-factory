@@ -62,7 +62,7 @@ export const SERVED_OPENAPI_PATH = resolve(
 // it against `origin/main` after every merge rather than trusting a clean one, and write the new
 // entry in the history doc, which is what makes the next collision arrive as a conflict.
 
-const API_VERSION = '1.75.0'
+const API_VERSION = '1.76.0'
 
 /**
  * Named DTOs hoisted into `components.schemas` (so client codegen gets named types and
@@ -97,6 +97,25 @@ const COMPONENT_SCHEMAS = {
   PublicKaizenEntryCombo: 'publicKaizenEntryComboSchema',
   PublicKaizenEntryList: 'publicKaizenEntryListSchema',
   AcknowledgeKaizenEntry: 'acknowledgeKaizenEntrySchema',
+  // Guided PR review: every shape a session view nests is hoisted, so clients get named types.
+  GuidedReviewSessionView: 'guidedReviewSessionViewSchema',
+  GuidedReviewThreadView: 'guidedReviewThreadViewSchema',
+  GuidedReviewExchange: 'guidedReviewExchangeSchema',
+  GuidedReviewSession: 'guidedReviewSessionSchema',
+  GuidedReviewOverview: 'guidedReviewOverviewSchema',
+  GuidedReviewOverviewContent: 'guidedReviewOverviewContentSchema',
+  GuidedReviewFailure: 'guidedReviewFailureSchema',
+  GuidedReviewThread: 'guidedReviewThreadSchema',
+  GuidedReviewThreadSummary: 'guidedReviewThreadSummarySchema',
+  GuidedReviewMessage: 'guidedReviewMessageSchema',
+  GuidedReviewAnchor: 'guidedReviewAnchorSchema',
+  GuidedReviewDraftReport: 'guidedReviewDraftReportSchema',
+  GuidedReviewCommentDraft: 'guidedReviewCommentDraftSchema',
+  PublicGuidedReviewList: 'publicGuidedReviewListSchema',
+  OpenGuidedReview: 'openGuidedReviewSchema',
+  OpenGuidedReviewThread: 'openGuidedReviewThreadSchema',
+  AskGuidedReview: 'askGuidedReviewSchema',
+  RequestGuidedReviewDrafts: 'requestGuidedReviewDraftsSchema',
   PublicPipeline: 'publicPipelineSchema',
   PublicPipelineList: 'publicPipelineListSchema',
   // The best-practice standard a task pins, hoisted for the reason the spend rows are: it is a
@@ -973,6 +992,60 @@ const OPERATION_DOCS = {
     summary: 'Acknowledge a Kaizen entry',
     description:
       'Record that this entry has been triaged, optionally with a note (a ticket id, why it was dismissed), and take it out of the `acknowledged=false` backlog. Send `{"acknowledged": false}` to undo. A `write` key, not an `admin` one: acknowledging starts nothing and merges nothing. Acknowledging twice is a no-op that returns the row unchanged, so `acknowledgedAt` keeps naming the FIRST triage rather than the last retry. An entry whose grading has not settled yet is refused `409` with `details.reason: "kaizen_entry_not_settled"` (there are no recommendations to have read), and an unknown id is `404` with `details.reason: "kaizen_entry_not_found"`.',
+  },
+  openPublicGuidedReview: {
+    tag: 'Guided review',
+    summary: 'Open a guided review of a pull request',
+    description:
+      'Open a guided review of one pull request in a repository linked to the workspace, or return the one the calling key\'s identity already has for it. A guided review explains the PR (what it does, its meaningful changes, consequences, risks, where to focus, and suggested questions) and holds question threads answered by a model that reads the PR at the commit under review. Answers with the session at once; its overview is generated in the background, so follow `GET /api/v1/guided-reviews/{sessionId}/events` or re-read it. A key bound to a person acts as that person; an unbound key owns its own sessions and runs on the workspace\'s credentials, never a person\'s; `createdByKind` says which of the two owns a session. An unlinked repository is `404` with `details.reason: "repo_not_linked"`, and a PR the host cannot find is `404` with `details.reason: "pr_not_found"`.',
+  },
+  listPublicGuidedReviews: {
+    tag: 'Guided review',
+    summary: "List the workspace's guided reviews",
+    description:
+      'Guided review sessions in the workspace, newest created first, optionally narrowed to one repository (`repoId`), one pull request (`prNumber`) or the calling key\'s own (`mine=true`). Keyset-paginated: up to `limit` rows (default 50, at most 100) per page, and `nextCursor` to pass back as `cursor` for the next page, null on the last. A malformed cursor is `400` with `code: "invalid_cursor"`.',
+  },
+  getPublicGuidedReview: {
+    tag: 'Guided review',
+    summary: 'Get a guided review',
+    description:
+      "The session with its overview, its threads (each naming the answer it is waiting on, if any) and its comment drafts. The overview's `status` is `pending` or `running` while it is generated; a `failed` one carries `failure.reason` (`budget_exhausted`, `model_unavailable`, `repo_unavailable`, `generation_failed`, `unreadable_reply`, or `head_moved` when the author pushed before it finished, which `POST /api/v1/guided-reviews/{sessionId}/refresh` resolves) and the raw cause in `failure.detail`.",
+  },
+  deletePublicGuidedReview: {
+    tag: 'Guided review',
+    summary: 'Delete a guided review',
+    description:
+      'Delete the session with its threads, messages and drafts. Only the identity that opened it may; anyone else is `403` with `details.reason: "not_session_owner"`. Nothing on the pull request is touched.',
+  },
+  refreshPublicGuidedReview: {
+    tag: 'Guided review',
+    summary: "Point a guided review at the PR's current head",
+    description:
+      'Re-read the pull request and regenerate the overview at its current head commit, keeping every thread. Use it after the author pushes: the overview, answers and draft anchors are computed against the commit recorded as `reviewedHeadSha`.',
+  },
+  openPublicGuidedReviewThread: {
+    tag: 'Guided review',
+    summary: 'Open an exploration thread',
+    description:
+      'Open a thread in the session, optionally asking its first question in the same call. A thread is an independent line of questioning: waiting on an answer in one never blocks another. Pass a suggested question from the overview verbatim to ask it.',
+  },
+  getPublicGuidedReviewThread: {
+    tag: 'Guided review',
+    summary: 'Get a thread with its messages',
+    description:
+      "The thread and its messages in order. An assistant message is `pending` or `running` until answered, then `complete` with markdown `content` and the `citations` (file spans) it rests on, or `failed` with a `failure`. A `comment-drafts` message's drafts are on the session; its `draftReport` names every proposed comment that was refused (`outside_diff`, `not_in_pr`, `incomplete`).",
+  },
+  askPublicGuidedReview: {
+    tag: 'Guided review',
+    summary: 'Ask a question in a thread',
+    description:
+      'Append a question and the placeholder that will answer it, and answer with both at once; the answer is produced in the background. A thread holds one unanswered question at a time: asking again before it is answered is `409` with `details.reason: "thread_busy"`, and other threads are unaffected. `depth: "deep"` asks for a read-only checkout and is reported as `depth_unavailable` until that ships.',
+  },
+  requestPublicGuidedReviewDrafts: {
+    tag: 'Guided review',
+    summary: "Draft review comments from a thread's conclusions",
+    description:
+      'Ask the model to turn what the thread concluded into review comments, each placed on the line it is about. Optional `instructions` narrow which ones. Drafts are kept only on lines inside the PR\'s diff, and nothing is posted to the pull request. Busy like a question: `409` with `details.reason: "thread_busy"` while the thread is waiting on an answer.',
   },
   getPublicServiceSpec: {
     tag: 'Spec',

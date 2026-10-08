@@ -38,6 +38,7 @@ public abstract class Resources {
     private final EvidenceClient evidence;
     private final MergeRecordsClient mergeRecords;
     private final KaizenClient kaizen;
+    private final GuidedReviewsClient guidedReviews;
     private final KeysClient keys;
 
     protected Resources(Transport transport) {
@@ -65,6 +66,7 @@ public abstract class Resources {
         this.evidence = new EvidenceClient(transport);
         this.mergeRecords = new MergeRecordsClient(transport);
         this.kaizen = new KaizenClient(transport);
+        this.guidedReviews = new GuidedReviewsClient(transport);
         this.keys = new KeysClient(transport);
     }
 
@@ -186,6 +188,11 @@ public abstract class Resources {
     /** The platform's own improvement backlog: every post-run grading of an agent step, with the agent kind, model, prompt version and run it came from, what the grader recommended changing, and whether anybody has acted on it yet. Reading takes a `read` key and acknowledging one a `write` key: neither runs anything. */
     public KaizenClient kaizen() {
         return kaizen;
+    }
+
+    /** Guided pull request review: a structured explanation of a PR (what it does, meaningful changes, consequences, risks, where to focus, suggested questions), independent question threads answered by a model that reads the PR at the reviewed commit, and comment drafts placed on the lines they are about. Following a review takes a `read` key; opening one, asking and drafting take a `write` key because they spend model budget. Nothing here posts to the pull request. */
+    public GuidedReviewsClient guidedReviews() {
+        return guidedReviews;
     }
 
     /** The workspace's own API keys: provision one headlessly, list them, revoke one (and what it minted). */

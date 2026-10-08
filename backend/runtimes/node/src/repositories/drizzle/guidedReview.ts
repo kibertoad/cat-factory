@@ -14,6 +14,7 @@ import type {
   GuidedReviewRepository,
   GuidedReviewSession,
   GuidedReviewSessionFilter,
+  GuidedReviewSessionPage,
   GuidedReviewStaleJob,
   GuidedReviewThread,
   GuidedReviewThreadSummary,
@@ -57,7 +58,7 @@ function settledMessageSet(outcome: GuidedReviewMessageOutcome, now: number) {
 
 /**
  * Guided PR review sessions over Postgres: the Drizzle mirror of `D1GuidedReviewRepository`
- * (migration 0104). Under READ COMMITTED the one-live-answer rule is the partial unique index
+ * (migrations 0104 and 0105). Under READ COMMITTED the one-live-answer rule is the partial unique index
  * `idx_guided_review_messages_live`, targeted by the placeholder insert, so two concurrent
  * questions on one thread resolve to one winner and one `thread_busy`.
  */
@@ -83,6 +84,7 @@ export class DrizzleGuidedReviewRepository implements GuidedReviewRepository {
         reviewed_head_sha: s.reviewedHeadSha,
         base_ref: s.baseRef,
         created_by: s.createdBy,
+        created_by_kind: s.createdByKind,
         overview_status: 'pending',
         overview_generation: 1,
         overview_content: null,
@@ -128,16 +130,34 @@ export class DrizzleGuidedReviewRepository implements GuidedReviewRepository {
     const rows = await this.db
       .select()
       .from(sessions)
-      .where(
-        and(
-          eq(sessions.workspace_id, workspaceId),
-          filter.repoId === undefined ? undefined : eq(sessions.repo_id, filter.repoId),
-          filter.prNumber === undefined ? undefined : eq(sessions.pr_number, filter.prNumber),
-          filter.createdBy === undefined ? undefined : eq(sessions.created_by, filter.createdBy),
-        ),
-      )
+      .where(sessionFilter(workspaceId, filter))
       .orderBy(desc(sessions.updated_at), asc(sessions.id))
       .limit(filter.limit ?? 50)
+    return rows.map(rowToSession)
+  }
+
+  async pageSessions(
+    workspaceId: string,
+    filter: Omit<GuidedReviewSessionFilter, 'limit'>,
+    page: GuidedReviewSessionPage,
+  ): Promise<GuidedReviewSession[]> {
+    const { cursor } = page
+    const rows = await this.db
+      .select()
+      .from(sessions)
+      .where(
+        and(
+          sessionFilter(workspaceId, filter),
+          cursor
+            ? or(
+                lt(sessions.created_at, cursor.createdAt),
+                and(eq(sessions.created_at, cursor.createdAt), lt(sessions.id, cursor.id)),
+              )
+            : undefined,
+        ),
+      )
+      .orderBy(desc(sessions.created_at), desc(sessions.id))
+      .limit(page.limit)
     return rows.map(rowToSession)
   }
 
@@ -641,4 +661,14 @@ export class DrizzleGuidedReviewRepository implements GuidedReviewRepository {
       .slice(0, limit)
       .map((j) => j.job)
   }
+}
+
+/** The WHERE clause both session lists share: the workspace plus each filter the caller set. */
+function sessionFilter(workspaceId: string, filter: Omit<GuidedReviewSessionFilter, 'limit'>) {
+  return and(
+    eq(sessions.workspace_id, workspaceId),
+    filter.repoId === undefined ? undefined : eq(sessions.repo_id, filter.repoId),
+    filter.prNumber === undefined ? undefined : eq(sessions.pr_number, filter.prNumber),
+    filter.createdBy === undefined ? undefined : eq(sessions.created_by, filter.createdBy),
+  )
 }
