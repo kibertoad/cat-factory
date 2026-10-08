@@ -16,6 +16,7 @@ import type {
   GuidedReviewThread,
   GuidedReviewThreadSummary,
 } from '@cat-factory/kernel'
+import { GUIDED_REVIEW_LIVE_STATUSES } from '@cat-factory/contracts'
 import {
   rowToGuidedReviewDraft as rowToDraft,
   rowToGuidedReviewMessage as rowToMessage,
@@ -31,7 +32,7 @@ import {
   guidedReviewThreads as threads,
 } from '../../db/schema.js'
 
-const LIVE = ['pending', 'running'] as const
+const LIVE = GUIDED_REVIEW_LIVE_STATUSES
 const EDITABLE = ['proposed', 'failed'] as const
 
 function settledMessageSet(outcome: GuidedReviewMessageOutcome, now: number) {
@@ -135,8 +136,11 @@ export class DrizzleGuidedReviewRepository implements GuidedReviewRepository {
   }
 
   async deleteSession(workspaceId: string, id: string): Promise<void> {
+    // Parents before children: deleting the threads waits on an in-flight `appendExchange`'s row
+    // lock, and each later DELETE then sees the rows that writer committed instead of orphaning
+    // them (READ COMMITTED takes a fresh snapshot per statement). Likewise for `settleDrafts`.
     await this.db.transaction(async (tx) => {
-      for (const table of [drafts, messages, threads]) {
+      for (const table of [threads, messages, drafts]) {
         await tx
           .delete(table)
           .where(and(eq(table.workspace_id, workspaceId), eq(table.session_id, id)))
@@ -432,15 +436,16 @@ export class DrizzleGuidedReviewRepository implements GuidedReviewRepository {
             eq(messages.kind, 'comment-drafts'),
           ),
         )
-        .returning({ id: messages.id })
-      if (settled.length === 0) return false
+        .returning({ sessionId: messages.session_id, threadId: messages.thread_id })
+      const message = settled[0]
+      if (!message) return false
       if (proposed.length > 0) {
         await tx.insert(drafts).values(
           proposed.map((d) => ({
             workspace_id: workspaceId,
             id: d.id,
-            session_id: d.sessionId,
-            thread_id: d.threadId,
+            session_id: message.sessionId,
+            thread_id: message.threadId,
             message_id: messageId,
             path: d.path,
             line: d.line,

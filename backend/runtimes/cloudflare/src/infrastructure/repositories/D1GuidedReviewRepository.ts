@@ -16,6 +16,7 @@ import type {
   GuidedReviewThread,
   GuidedReviewThreadSummary,
 } from '@cat-factory/kernel'
+import { GUIDED_REVIEW_LIVE_STATUSES } from '@cat-factory/contracts'
 import {
   rowToGuidedReviewDraft as rowToDraft,
   rowToGuidedReviewMessage as rowToMessage,
@@ -31,7 +32,7 @@ import { chunkForIn } from './chunk'
 
 type ThreadRow = GuidedReviewThreadRow & { pending_message_id: string | null }
 
-const LIVE = `('pending', 'running')`
+const LIVE = `(${GUIDED_REVIEW_LIVE_STATUSES.map((s) => `'${s}'`).join(', ')})`
 
 /**
  * Guided PR review sessions over D1 (migration 0104). Every conditional transition is a single
@@ -127,9 +128,9 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
 
   async deleteSession(workspaceId: string, id: string): Promise<void> {
     const tables = [
-      'guided_review_comment_drafts',
-      'guided_review_messages',
       'guided_review_threads',
+      'guided_review_messages',
+      'guided_review_comment_drafts',
     ] as const
     await this.db.batch([
       ...tables.map((t) =>
@@ -416,25 +417,22 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
     now: number,
   ): Promise<boolean> {
     // Each draft is inserted only while its message is still a `running` `comment-drafts`
-    // message; the message settles last, so either the whole set lands with it or none does.
-    const running = `EXISTS (SELECT 1 FROM guided_review_messages
-                              WHERE workspace_id = ? AND id = ? AND status = 'running'
-                                AND kind = 'comment-drafts')`
+    // message, and takes its session and thread from that message. The message settles last, so
+    // either the whole set lands with it or none does.
     const inserts = drafts.map((d) =>
       this.db
         .prepare(
           `INSERT INTO guided_review_comment_drafts
              (workspace_id, id, session_id, thread_id, message_id, path, line, start_line, side,
               body, rationale, status, post_error, posted_url, rev, created_at, updated_at)
-           SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-           WHERE ${running}`,
+           SELECT m.workspace_id, ?, m.session_id, m.thread_id, m.id, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                  ?, ?, ?
+             FROM guided_review_messages m
+            WHERE m.workspace_id = ? AND m.id = ? AND m.status = 'running'
+              AND m.kind = 'comment-drafts'`,
         )
         .bind(
-          workspaceId,
           d.id,
-          d.sessionId,
-          d.threadId,
-          messageId,
           d.path,
           d.line,
           d.startLine,
@@ -518,23 +516,22 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
     leaseCutoff: number,
     now: number,
   ): Promise<GuidedReviewCommentDraft[]> {
-    const claimed: GuidedReviewCommentDraft[] = []
-    for (const chunk of chunkForIn(ids)) {
-      const placeholders = chunk.map(() => '?').join(', ')
-      const { results } = await this.db
-        .prepare(
-          `UPDATE guided_review_comment_drafts SET status = 'posting', post_error = NULL,
-             rev = rev + 1, updated_at = ?
-           WHERE workspace_id = ? AND session_id = ? AND id IN (${placeholders})
-             AND (status IN ('proposed', 'failed')
-                  OR (status = 'posting' AND updated_at < ?))
-           RETURNING *`,
-        )
-        .bind(now, workspaceId, sessionId, ...chunk, leaseCutoff)
-        .all<DraftRow>()
-      claimed.push(...results.map(rowToDraft))
-    }
-    return claimed
+    if (ids.length === 0) return []
+    const results = await this.db.batch<DraftRow>(
+      chunkForIn(ids).map((chunk) =>
+        this.db
+          .prepare(
+            `UPDATE guided_review_comment_drafts SET status = 'posting', post_error = NULL,
+               rev = rev + 1, updated_at = ?
+             WHERE workspace_id = ? AND session_id = ? AND id IN (${chunk.map(() => '?').join(', ')})
+               AND (status IN ('proposed', 'failed')
+                    OR (status = 'posting' AND updated_at < ?))
+             RETURNING *`,
+          )
+          .bind(now, workspaceId, sessionId, ...chunk, leaseCutoff),
+      ),
+    )
+    return results.flatMap((r) => r.results.map(rowToDraft))
   }
 
   async settleDraftPosts(

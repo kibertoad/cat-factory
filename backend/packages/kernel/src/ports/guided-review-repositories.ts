@@ -173,8 +173,9 @@ export interface GuidedReviewRepository {
 
   /**
    * Store the drafts a `comment-drafts` message produced and settle that message `complete`, in
-   * one atomic write. Each draft is stored under `messageId`. False (and nothing written) when
-   * the message is not a `running` `comment-drafts` message.
+   * one atomic write. Each draft is stored under `messageId` and that message's session and thread,
+   * whatever the draft itself names. False (and nothing written) when the message is not a
+   * `running` `comment-drafts` message.
    */
   settleDrafts(
     workspaceId: string,
