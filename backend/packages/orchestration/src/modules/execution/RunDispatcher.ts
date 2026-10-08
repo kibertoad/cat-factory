@@ -33,12 +33,7 @@ import type {
   StepCompletionResolver,
   StepResolverRegistry,
 } from '@cat-factory/kernel'
-import {
-  isAsyncAgentExecutor,
-  noopLogger,
-  runBestEffort,
-  RunContendedError,
-} from '@cat-factory/kernel'
+import { isAsyncAgentExecutor, noopLogger, runBestEffort } from '@cat-factory/kernel'
 import { buildStepApproval } from './stepApproval.js'
 import { parseBlueprintService, parseSpecDoc } from '@cat-factory/contracts'
 import type { DispatchToolServers, StepSkipReason } from '@cat-factory/contracts'
@@ -103,7 +98,7 @@ import {
   type StepHandler,
   type StepHandlerContext,
 } from './step-handler-registry.js'
-import type { AdvanceOptions, AdvanceResult } from './advance.js'
+import { type AdvanceOptions, type AdvanceResult, redriveOnContention } from './advance.js'
 import {
   type DispatcherRegistryDeps,
   buildStepCompletionInterceptors as buildStepCompletionInterceptorsImpl,
@@ -376,6 +371,7 @@ export class RunDispatcher {
     this.pollCompletion = new PollCompletionController({
       blockRepository: deps.blockRepository,
       clock: deps.clock,
+      spend: this.spend,
       runStateMachine: deps.runStateMachine,
       testerController: deps.testerController,
       humanTestController: deps.humanTestController,
@@ -492,26 +488,6 @@ export class RunDispatcher {
     }
   }
 
-  /**
-   * Run a durable-driver entry point, turning a lost optimistic-concurrency race into a
-   * re-drive. A driver write ({@link RunStateMachine.casPersist}) throws {@link RunContendedError}
-   * when a concurrent human action moved the row or a `cancel`/`stopRun` removed/terminated it;
-   * we swallow that and return `{ kind: 'continue' }` so the durable loop re-enters
-   * `advanceInstance`, reloads FRESH state, and either re-applies the mechanical step on the
-   * winning snapshot or no-ops on a gone/terminal run — never clobbering the winner or
-   * resurrecting a cancelled run (race-audit 2.2 driver-half / 2.3). This MUST run inside each
-   * entry point (ahead of the drivers' generic `catch`→`failRun` and Cloudflare's `step.do`
-   * retry); every other error propagates so real failures still fail the run.
-   */
-  private async redriveOnContention(run: () => Promise<AdvanceResult>): Promise<AdvanceResult> {
-    try {
-      return await run()
-    } catch (error) {
-      if (error instanceof RunContendedError) return { kind: 'continue' }
-      throw error
-    }
-  }
-
   // ---- Dispatch-side pass-throughs ----------------------------------------
   // The dispatch half of a step lives on {@link AgentDispatchController}; these thin delegations
   // keep the dispatcher the single surface `ExecutionService` and the step registries re-export.
@@ -566,7 +542,7 @@ export class RunDispatcher {
    * simply lets the driver advance the now-current step.
    */
   async pollAgentJob(workspaceId: string, executionId: string): Promise<AdvanceResult> {
-    return this.redriveOnContention(() => this.pollAgentJobInner(workspaceId, executionId))
+    return redriveOnContention(() => this.pollAgentJobInner(workspaceId, executionId))
   }
 
   private async pollAgentJobInner(
@@ -670,7 +646,7 @@ export class RunDispatcher {
    * step is a gate actively in its `checking` phase.
    */
   async pollGate(workspaceId: string, executionId: string): Promise<AdvanceResult> {
-    return this.redriveOnContention(() => this.pollGateInner(workspaceId, executionId))
+    return redriveOnContention(() => this.pollGateInner(workspaceId, executionId))
   }
 
   private async pollGateInner(workspaceId: string, executionId: string): Promise<AdvanceResult> {
@@ -711,9 +687,7 @@ export class RunDispatcher {
     workspaceId: string,
     executionId: string,
   ): Promise<AdvanceResult> {
-    return this.redriveOnContention(() =>
-      this.resolveGatePollExhaustionInner(workspaceId, executionId),
-    )
+    return redriveOnContention(() => this.resolveGatePollExhaustionInner(workspaceId, executionId))
   }
 
   private async resolveGatePollExhaustionInner(

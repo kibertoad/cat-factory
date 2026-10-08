@@ -49,7 +49,7 @@ import type {
 import {
   AgentContextObservabilityService,
   type CoreDependencies,
-  type HarnessCallsRecordInput,
+  type RecordHarnessCalls,
   type ToolCallsRecordInput,
 } from '@cat-factory/orchestration'
 import { createLangfuseSink } from '@cat-factory/observability-langfuse'
@@ -302,7 +302,7 @@ export interface NodeContainerExecutorDeps {
    * which is what makes it safe to be optional.
    */
   resolveToolServerOAuth?: McpOAuthTokenSource
-  recordHarnessCalls?: (input: HarnessCallsRecordInput) => Promise<void>
+  recordHarnessCalls?: RecordHarnessCalls
   /** The tool-call trajectory drain's two halves; see `@cat-factory/server`'s `toolTrajectory.ts`. */
   recordToolCalls?: (input: ToolCallsRecordInput) => Promise<void>
   toolBodyGate?: StoreAgentContextGate

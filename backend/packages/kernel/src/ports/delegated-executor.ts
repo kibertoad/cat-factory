@@ -242,6 +242,12 @@ export type DelegationUpdate =
        * the executor already called final.
        */
       retryable?: boolean
+      /**
+       * What the failed work spent, ONLY when the executor knows it. The same meaning as
+       * {@link DelegationResult.usage}: a run that fails late has usually spent most of its tokens
+       * getting there, and without this channel it reported none of them.
+       */
+      usage?: AgentTokenUsage
     }
 
 /**
@@ -347,18 +353,28 @@ export interface DelegatedExecutorDeps {
  * reported by <executor>" on the step and counts it in the run rollup's
  * `delegatedStepsWithoutUsage`, so a run total is never read as the whole cost.
  *
- * `self-reported` says the executor fills {@link DelegationResult.usage} on completion, which the
- * engine meters exactly as it meters a harness result's usage: the spend ledger, the budget gate
- * and the run totals all see it, and the surfaces stop saying the data is missing. It is a claim
- * about the EXECUTOR, so declaring it and then reporting nothing leaves the step reading as free,
- * which is why the run-level gap is computed from what actually LANDED on each step rather than
- * from this declaration (`llmReportingGaps`).
+ * `self-reported` says the executor fills {@link DelegationResult.usage} on completion, or the
+ * failed update's `usage` on a failure. The engine files that figure as ONE job-level call metric
+ * (the row a CLI's terminal total becomes), so the step's metrics and the run totals carry it and
+ * the surfaces stop saying the data is missing, and the figure lands in the usage ledger on either
+ * outcome. It is tagged `subscription`, so the budget gate never sees it: the tokens were spent on
+ * the executor's own account. The row is filed under {@link DELEGATED_USAGE_PROVIDER}, which the
+ * rollups never price: the platform never learns the model or the rate. It is a claim about the
+ * EXECUTOR, which is why the run-level gap is computed from what actually LANDED on each step
+ * rather than from this declaration (`llmReportingGaps`).
  *
  * Per-CALL telemetry (individual prompts, tool trajectories) has no channel yet: it needs an
  * authenticated ingest route, and there is no executor to call one. See the initiative tracker's
  * open slice.
  */
 export type DelegatedExecutorTelemetry = 'not-reported' | 'self-reported'
+
+/**
+ * The provider a delegated executor's reported usage is filed under. Its rows carry token counts
+ * and no cost: the executor chose a model the platform never saw and billed it to its own account,
+ * so any rate applied to them would be a guess presented as spend.
+ */
+export const DELEGATED_USAGE_PROVIDER = 'delegated'
 
 /**
  * Who creates the work branch a dispatch names, declared rather than assumed.

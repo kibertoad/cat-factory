@@ -12,6 +12,11 @@ import {
 } from '@cat-factory/kernel'
 import { defaultAgentKindRegistry, type AgentKindRegistry } from '@cat-factory/agents'
 import {
+  type LlmObservabilityService,
+  makeHarnessCallRecorder,
+  type RecordHarnessCalls,
+} from '@cat-factory/orchestration'
+import {
   buildDelegatedAgentExecutor,
   CompositeAgentExecutor,
   githubRepoOrigin,
@@ -209,6 +214,9 @@ export function delegatedKindRegistry(base?: AgentKindRegistry): AgentKindRegist
  *
  * `resolveRepoTarget` is a fixture: a conformance app has no VCS connection, and the brief needs a
  * repo the way any producer step does.
+ *
+ * `recordHarnessCalls` is the facade's OWN `llm_call_metrics` writer, required so every harness
+ * answers it: the suite asserts a reported usage lands on the step through that runtime's store.
  */
 export function withDelegatedArm(
   fake: AgentExecutor,
@@ -222,6 +230,7 @@ export function withDelegatedArm(
      */
     delegatedRepoFiles?: RepoFiles
   },
+  recordHarnessCalls: RecordHarnessCalls,
 ): AgentExecutor {
   // Both or neither. The kind registry is what says which kinds are delegated, so wrapping with
   // only the executor registry would compose a composite that can never route to it: green, and
@@ -248,8 +257,34 @@ export function withDelegatedArm(
     // Answered explicitly, because the host requires an answer: this harness configures no
     // outbound widening, which is the strict public-https default every executor is held to.
     urlSafetyPolicy: undefined,
+    recordHarnessCalls,
     logger: noopLogger,
     clock: { now: () => Date.now() },
   })
   return new CompositeAgentExecutor(fake, fake, agentKindRegistry, delegated, noopLogger)
+}
+
+/**
+ * A harness-call recorder bound AFTER the facade's container is built. The delegated arm is
+ * composed into the container's overrides, so the observability service the container builds over
+ * its own store does not exist yet when the arm is wired.
+ *
+ * Recording while unbound THROWS (before {@link bind}, or after binding a container that built no
+ * observability service). The arm files best-effort, so it is the suite's assertion on the step's
+ * metrics that fails, with the warning naming the missing writer.
+ */
+export function lateHarnessCallRecorder(): {
+  record: RecordHarnessCalls
+  bind(service: LlmObservabilityService | undefined): void
+} {
+  let bound: RecordHarnessCalls | undefined
+  return {
+    record: async (input) => {
+      if (!bound) throw new Error('lateHarnessCallRecorder: no LLM observability service is bound')
+      await bound(input)
+    },
+    bind(service) {
+      bound = service ? makeHarnessCallRecorder(service) : undefined
+    },
+  }
 }

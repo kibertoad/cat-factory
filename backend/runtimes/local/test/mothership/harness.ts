@@ -18,6 +18,7 @@ import {
   makeReadyReviewWithOpenItem,
   seedFrameRepoLink,
   withDelegatedArm,
+  lateHarnessCallRecorder,
   type FrameRepoLink,
   type FrameRepoLinkRepositories,
 } from '@cat-factory/conformance'
@@ -62,7 +63,7 @@ import type {
 } from '@cat-factory/kernel'
 import { NoopBootstrapRunner, NoopEnvConfigRepairRunner, NoopWorkRunner } from '@cat-factory/kernel'
 import type { LocalRunner, UpsertLocalModelEndpointInput } from '@cat-factory/contracts'
-import type { CoreDependencies } from '@cat-factory/orchestration'
+import type { CoreDependencies, RecordHarnessCalls } from '@cat-factory/orchestration'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import { createLocalCredentialStore } from '../../src/sqlite/credentialStore.js'
 import { createLocalTelemetryStore } from '../../src/sqlite/telemetryStore.js'
@@ -307,6 +308,7 @@ function buildMothershipOverrides(
   recorder: RecordingEventPublisher,
   agentOptions: FakeAgentOptions | undefined,
   opts: MothershipAppOptions | undefined,
+  recordHarnessCalls: RecordHarnessCalls,
 ): Partial<CoreDependencies> {
   // The custom-kind suites inject a pre-loaded registry: thread it into BOTH the fake executor
   // (so it detects the custom kind's structured output) and the container build below.
@@ -325,6 +327,7 @@ function buildMothershipOverrides(
         ? new AsyncFakeAgentExecutor(agentExecutorOptions)
         : new FakeAgentExecutor(agentExecutorOptions),
       opts ?? {},
+      recordHarnessCalls,
     ),
     workRunner: new NoopWorkRunner(),
     bootstrapRunner: new NoopBootstrapRunner(),
@@ -398,7 +401,10 @@ export function makeMothershipConformanceApp(
   const repos = createRemoteRepositoryRegistry(client, localFirst) as unknown as CoreRepositories
   const credentialStore = createLocalCredentialStore(':memory:')
   const recorder = new RecordingEventPublisher()
-  const overrides = buildMothershipOverrides(recorder, agentOptions, opts)
+  // The arm files a delegated step's reported usage through the container's OWN observability
+  // service, which exists only once the container is built.
+  const harnessCalls = lateHarnessCallRecorder()
+  const overrides = buildMothershipOverrides(recorder, agentOptions, opts, harnessCalls.record)
   const container = buildNodeContainer({
     // No `db`: org/durable state is the remote registry, credentials are the local sqlite store.
     repos,
@@ -442,6 +448,7 @@ export function makeMothershipConformanceApp(
       ? { delegatedExecutorRegistry: opts.delegatedExecutorRegistry }
       : {}),
   })
+  harnessCalls.bind(container.llmObservability)
   const app = createApp(container, SUT_ENV)
 
   async function call<T>(method: string, path: string, body?: unknown) {

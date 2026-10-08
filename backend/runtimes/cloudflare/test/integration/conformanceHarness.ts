@@ -16,7 +16,13 @@ import {
   seedFrameRepoLink,
 } from '@cat-factory/conformance'
 import { env } from 'cloudflare:test'
-import { buildTestContainer, makeApp, fragmentLibraryDeps, tasksDeps } from '../helpers'
+import {
+  buildTestContainer,
+  buildTestHarnessCallRecorder,
+  makeApp,
+  fragmentLibraryDeps,
+  tasksDeps,
+} from '../helpers'
 import { FakeTaskSourceProvider } from '../fakes/FakeTaskSourceProvider'
 import { D1RequirementReviewRepository } from '../../src/infrastructure/repositories/D1RequirementReviewRepository'
 import { D1ClarityReviewRepository } from '../../src/infrastructure/repositories/D1ClarityReviewRepository'
@@ -186,6 +192,7 @@ const harness: ConformanceHarness = {
           ? new AsyncFakeAgentExecutor(fakeOptions)
           : new FakeAgentExecutor(fakeOptions),
         opts ?? {},
+        buildTestHarnessCallRecorder(),
       ),
       buildWorkerConformanceDeps(recorder, opts),
       // The Worker binds `AI` in tests; let the suite force the opt-in flag off so the

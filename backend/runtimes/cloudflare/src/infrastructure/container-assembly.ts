@@ -150,6 +150,7 @@ import {
   selectWorkRunner,
 } from './container.js'
 import { selectDeployDeps } from './containers/deployJobDeps'
+import { buildWorkerHarnessCallRecorder } from './container-executor-deps.js'
 import { selectRecurringDeps } from './container-tracker-deps.js'
 import { selectDocumentsDeps } from './container-documents-deps'
 import { selectGitHubDeps } from './github-deps.js'
@@ -529,6 +530,9 @@ function selectWorkerAgentExecutor(
   // db and no policy-checked fetch wrapper, none of which anything then reads.
   if (overrides.agentExecutor) return { agentExecutor: overrides.agentExecutor }
   const delegatedUrlSafetyPolicy = resolveUrlSafetyPolicy(config.notificationWebhooks)
+  // ONE writer for both arms below: the container executor's subscription-harness calls and the
+  // usage a delegated executor reports land in the same `llm_call_metrics` the step reads.
+  const recordHarnessCalls = buildWorkerHarnessCallRecorder({ env, config, db, clock })
   // The THIRD executor arm: a step whose work runs in a system the deployment already operates.
   // Built unconditionally and symmetrically with the Node facade (see `buildDelegatedAgentExecutor`
   // for why an empty registry is not a reason to skip it).
@@ -551,6 +555,8 @@ function selectWorkerAgentExecutor(
     ...(late.taskRepository ? { taskRepository: late.taskRepository } : {}),
     resolveToolSecrets: toolSecretChain.resolver,
     ...(agentContextObservability ? { agentContextObservability } : {}),
+    // Symmetric with the Node facade.
+    recordHarnessCalls,
     logger,
     clock,
   })
@@ -569,6 +575,7 @@ function selectWorkerAgentExecutor(
         subscriptions,
         personalSubscriptions,
         agentContextObservability,
+        recordHarnessCalls,
         resolvePackageRegistries: executorPackageRegistries,
         resolveBinaryArtifactStore,
         webSearchAccountSettings,
