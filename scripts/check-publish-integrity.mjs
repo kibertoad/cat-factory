@@ -52,7 +52,7 @@ const WORKSPACE_GLOBS = [
 const ATTW_SKIP = new Set(['@cat-factory/app'])
 
 // Per-package extra attw flags. @cat-factory/worker is consumed exclusively through
-// bundler resolution (wrangler / vitest-pool-workers — it cannot run outside workerd), and
+// bundler resolution (wrangler / vitest-plugin, since it cannot run outside workerd), and
 // its d.ts files carry extensionless relative imports that are valid there but never
 // resolve under node16-ESM; suppress that one rule for it rather than mass-adding .js
 // extensions across the facade. Every other package stays on the full esm-only profile.

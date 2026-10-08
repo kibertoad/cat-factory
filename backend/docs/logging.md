@@ -207,7 +207,7 @@ up everywhere. Reach for `getErrorMessage` (a human-facing string) or `describeE
 Four properties of the shared core are worth knowing when you read its output:
 
 - **The chain is capped**, and it SAYS how much it dropped (`[…N more characters of the cause
-chain]`), because a silent slice reads as the whole chain. The two readers have DIFFERENT budgets:
+  chain]`), because a silent slice reads as the whole chain. The two readers have DIFFERENT budgets:
   `MAX_ERROR_CHAIN_CHARS` (400) for a human, `MAX_LOGGED_ERROR_CHAIN_CHARS` for a log field, which is
   where the long detail worth having lives (a quoted SQL statement, a provider's JSON error body).
 - **The outermost link is KEPT**, `fetch failed` and all, unlike `describeConnectionFailure`, which

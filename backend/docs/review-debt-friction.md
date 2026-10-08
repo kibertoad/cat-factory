@@ -263,8 +263,8 @@ invariant (same stance as the task-limit gate).
 
 - Four new columns on `workspace_settings`, mirrored on both runtimes:
   - D1: a new numbered migration (`ALTER TABLE workspace_settings ADD COLUMN
-review_friction_mode TEXT NOT NULL DEFAULT 'off'`, `review_friction_warn_count
-INTEGER NOT NULL DEFAULT 3`, `review_friction_block_count INTEGER`,
+    review_friction_mode TEXT NOT NULL DEFAULT 'off'`, `review_friction_warn_count
+    INTEGER NOT NULL DEFAULT 3`, `review_friction_block_count INTEGER`,
     `review_friction_block_stuck_minutes INTEGER`); the `0012_store_agent_context.sql`
     shape.
   - Node: the same fields on the Drizzle `workspaceSettings` table in `db/schema.ts` +

@@ -90,7 +90,7 @@ The hexagonal architecture is not aspirational; it holds under grep (re-verified
   `backend/runtimes/cloudflare`; no `drizzle-orm`/`pg`/`pg-boss` import exists outside
   `backend/runtimes/node`. The only "hits" elsewhere are prose in comments and scaffolder
   template text in `@cat-factory/cli`. Layering is strictly `contracts → kernel →
-{agents, integrations, orchestration, server} → runtimes → deploy`; kernel imports
+  {agents, integrations, orchestration, server} → runtimes → deploy`; kernel imports
   nothing but contracts.
 - **Ports are genuinely segregated.** 107 port modules under
   `backend/packages/kernel/src/ports/` with a ~50-line median. The one god-interface is

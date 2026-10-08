@@ -344,7 +344,7 @@ per-file patches:
 
 - **UX-32: Hidden gate actions. DONE.** The action rail in both
   `RequirementsReviewWindow.vue` and `ClarityReviewWindow.vue` was `<aside class="hidden
-w-72 … lg:flex">`, so below `lg` (laptop split-screen, tablet) the human could answer
+  w-72 … lg:flex">`, so below `lg` (laptop split-screen, tablet) the human could answer
   findings but had no visible way to advance the gate. The `aside` is now a responsive
   rail: a right-hand column on wide screens (`lg:w-72 lg:border-s`) and a full-width
   bottom action bar below `lg` (`flex w-full border-t`, never hidden). The
@@ -1199,7 +1199,7 @@ The 2026-07 P1 batch is done except UX-45. As of the 2026-08-18 re-audit:
   users all get the reason. Derive the reason from the SAME predicate that disables the control
   (here `board.unmetDeps` ⇄ `isRunnable`) so the two can't drift.
 - **Reveal a hover-only affordance on keyboard focus too.** An `opacity-0
-group-hover:opacity-100` control is invisible to keyboard/touch; add
+  group-hover:opacity-100` control is invisible to keyboard/touch; add
   `group-focus-within:opacity-100` (tabbing into the containing row) and `focus-visible:opacity-100`
   (the control itself focused) so it isn't a pointer-only gesture (UX-42).
 - **Per-item async feedback comes from per-key in-flight tracking, not a shared store

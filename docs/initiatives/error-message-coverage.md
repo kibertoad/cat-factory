@@ -102,7 +102,7 @@ failure class; do NOT invent a seventh:
 - Centralize repo-doc URL construction in one small helper/constant module (per package
   that needs it) rather than scattering string literals, so a docs move is one edit.
   **Established (A1):** `@cat-factory/server`'s `config/docs.ts` exports `repoDocUrl(path,
-anchor?)`, the named `DOCS` helpers (`envVars`, `modelSupport`, `githubIntegration`,
+  anchor?)`, the named `DOCS` helpers (`envVars`, `modelSupport`, `githubIntegration`,
   `githubOperations`, `vcsProviders`, `concurrencyAndRedis`), and the `ENV_VARS_ANCHORS`
   section-slug constants. Extend `DOCS` with a new entry rather than writing a bare
   `https://github.com/.../blob/main/...` literal at a throw site; a package outside the
@@ -371,7 +371,7 @@ union itself DOES bump the image (batch with the F-slice).
   both local transports, and `RunnerPoolTransport`, which re-wraps the pool provider's
   `RunnerPoolApiError`, whose `Runner pool … → <status>` wording matched no dispatch check and so was
   mislabelled `preflight`). Consumers classify via `isDispatchFailure(error)` (or `instanceof
-DispatchError`, reading `.status`), NOT the `/dispatch failed/i` regex, which is demoted to a
+  DispatchError`, reading `.status`), NOT the `/dispatch failed/i` regex, which is demoted to a
   fallback for any producer still throwing a plain `Error` (no image floor to gate on: the signal
   is minted by in-repo transports, so no
   executor-harness bump). Per the doc-URL convention, kernel keeps its own `DISPATCH_DOC_URLS`
@@ -495,7 +495,7 @@ DispatchError`, reading `.status`), NOT the `/dispatch failed/i` regex, which is
   the `git` cause. **F2:** `describePrOpenFailure(status, provider)` maps 401/403/404/422(GitHub)/
   400(GitLab) to a provider-tailored remedy (GitHub App "Pull requests: write" vs GitLab `api`
   scope; PR vs merge-request noun), keeps the `api` cause and the load-bearing `Failed to open …
-(HTTP n)` first line. **F3:** the ONE new structured cause this slice adds: `llm-upstream` (in
+  (HTTP n)` first line. **F3:** the ONE new structured cause this slice adds: `llm-upstream` (in
   BOTH the harness `FailureCause` and the kernel `HARNESS_FAILURE_CAUSES` union, kept in step by
   hand, mapped to the coarse `agent` kind by the `FAILURE_KIND_BY_CAUSE` drift-guard Record). All
   model traffic rides the proxy, so a terminal `terminalRunError` that `classifyLlmUpstreamError`

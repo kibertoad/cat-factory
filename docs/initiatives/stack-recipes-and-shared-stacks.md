@@ -15,7 +15,7 @@ opposite extreme: a **complex multi-repo system**:
 - **acme-monolith**: a PHP (Symfony) monolith + ~25 compose services (app + 8 daemon
   variants + nginx + ~10 private-ECR microservices + 4 node watch-build containers), whose
   bring-up is **imperative**: env-file materialization → secrets → compose up → `composer
-install` → MySQL seed import → Doctrine migrations → ES index build → health-loop gate.
+  install` → MySQL seed import → Doctrine migrations → ES index build → health-loop gate.
 - **acme-shared-services**: a _separate sibling repo_ providing the shared infra stack
   (~17 services: MySQL/Postgres/Valkey/RabbitMQ/Kafka/ES/Mailpit/Envoy/…) that runs **once per
   machine, long-lived**, and that consumer repos attach to over an external Docker network
@@ -286,7 +286,7 @@ provisioning log instead of a mid-provision mystery.
 > `PreflightsModule` (built only when `preflightHostProbes` is present) and threaded into
 > `EnvironmentProvisioningService.runPreflights`; the local facade builds `createDockerPreflightProbes`
 > (docker CLI + `node:*`) alongside the compose runtime. Controller: `POST
-/workspaces/:ws/preflights/run` (`runPreflightsContract`), 503 when the host-probe runtime isn't
+> /workspaces/:ws/preflights/run` (`runPreflightsContract`), 503 when the host-probe runtime isn't
 > wired. Unit tests: the service (fake probe states → every verdict + remediation, the tracker's
 > validation-plan #4), the provider (pass → provision / required fail → fast-fail + remediation /
 > non-required warn → proceed / declared-but-unwired → loud fail / per-check log stream), and the local
@@ -741,7 +741,7 @@ Deployer-side gate this pairs with.
 >   Docker. `valibot` was added as an integrations devDependency (test-only, `^1.4.2` to match the
 >   workspace) for the schema-validity checks.
 > - **Drift alarm**: `scripts/pilot-detect-golden.mjs` (`pnpm --filter @cat-factory/integrations
-pilot:golden`) regenerates (`--write`) or diffs (`--check`, default) the goldens against the fixtures
+>   pilot:golden`) regenerates (`--write`) or diffs (`--check`, default) the goldens against the fixtures
 >   OR live clones (`ACME_MONOLITH_DIR` / `ACME_SHARED_SERVICES_DIR`). Sanitization for the live path is
 >   EXTERNALIZED (a `{from,to}` map via `PILOT_SANITIZE_MAP` or a gitignored
 >   `scripts/pilot-sanitize.local.json`) so no upstream name is ever committed. It imports the compiled

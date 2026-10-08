@@ -154,9 +154,9 @@ messages, code comments, UI copy.
   tool is POSIX sh, so `@'…'@` leaks literal `@` characters into the commit subject. Use
   `git commit -F - <<'EOF'`; `git commit --amend -F -` fixes a mangled message before pushing.
 - **Worker tests DO run on Windows**: name the spec files, and expect one `AI bindings always access
-remote` warning per pool.
+  remote` warning per pool.
 - **The Postgres-backed suites need a reachable server AND `--env-mode=loose`**; a bare `[ELIFECYCLE]
-Command failed` with no vitest summary is a CANCELLED sibling. Recipe, including how to start a
+  Command failed` with no vitest summary is a CANCELLED sibling. Recipe, including how to start a
   cluster where no Docker daemon runs: [`running-tests.md`](./docs/internal/running-tests.md).
 - **ALWAYS format/lint-fix the ENTIRE tree, never a subset.** `pnpm lint:fix` from the root (or
   `pnpm exec oxfmt .`); the only correct argument to `oxfmt`/`oxlint` is `.`, for any reason. On

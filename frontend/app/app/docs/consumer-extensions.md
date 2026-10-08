@@ -47,7 +47,7 @@ export default defineNuxtPlugin(() => {
 - **`registerAppModule` is auto-imported** from the layer (`app/utils/modular.ts`), so you
   need no deep import into the layer's internals.
 - **`enforce: 'post'` is load-bearing.** The layer's own install plugin is `enforce:
-'post'`, and Nuxt runs layer plugins before the consuming app's plugins within one
+  'post'`, and Nuxt runs layer plugins before the consuming app's plugins within one
   enforce bucket. So your registration plugin must run in the **default** (or `pre`) bucket
   , i.e. **do not** put `enforce: 'post'` on it, or it registers too late and is silently
   missed.

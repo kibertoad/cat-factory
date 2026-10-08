@@ -244,7 +244,7 @@ particular file exists):
    "unmet", and it NAMES its cause: the kit's `probeFailure.ts` is a discriminated verdict over three
    states. "Never answered" is classified through kernel's `describeConnectionFailure` (because
    `error.message` renders every transport failure this gate can hit as undici's contentless `fetch
-failed`), with the SDK's own deadline corrected to `timeout` since its abort marker is NAMED
+   failed`), with the SDK's own deadline corrected to `timeout` since its abort marker is NAMED
    `AbortError`. "Answered with a refusal" carries the SDK's typed status, `code` and request id
    (an ENVELOPE-LESS 404 means an unmatched route: a deployment older than the suite, or a base URL
    naming the SPA), and the two unauthenticated root reads answer here too, through

@@ -484,7 +484,7 @@ which mainly exist so a whole-suite run can shift the defaults.
   wave of tasks. Shortened so a just-planned initiative spawns its first decorated task within the
   suite timeouts (the planning run's terminal doesn't poke the loop: only the sweep spawns wave 1).
 - `E2E_CHROMIUM_PATH`: opt-in: launch Chromium from this path instead of a `playwright
-install` download. For sandboxes that ship a preinstalled browser and block the download
+  install` download. For sandboxes that ship a preinstalled browser and block the download
   (e.g. `E2E_CHROMIUM_PATH=/opt/pw-browsers/chromium`). Unset in CI.
 - `PORT` (default `8787`), `E2E_FRONTEND_PORT` (default `3000`), `E2E_BACKEND_URL`,
   `E2E_CONTROL_PORT` (default `PORT + 1`) / `E2E_CONTROL_URL`.

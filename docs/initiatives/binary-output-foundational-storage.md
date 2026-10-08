@@ -19,7 +19,7 @@ catalog, not a second storage subsystem.
 ## Model
 
 - **A generator opts in by TRAIT, never a kind-id list**: `registerAgentKind({ traits:
-['binary-output'] })` (`BINARY_OUTPUT_TRAIT`, `@cat-factory/agents`). No built-in kind carries
+  ['binary-output'] })` (`BINARY_OUTPUT_TRAIT`, `@cat-factory/agents`). No built-in kind carries
   it. The trait contributes the workflow guidance (consult scope first, store through the named
   service's contract, never commit binaries to the repo, declare what you stored).
 - **The step selects the services and the INTEGRATIONS**: `stepOptions.binaryOutput`:

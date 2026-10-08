@@ -418,7 +418,7 @@ freedom to wrap it however your platform works. Two robust shapes:
 Concrete tips for each:
 
 - **Kubernetes / k3s.** A small operator or web service that maps `dispatch → create
-Job`, `poll → read Job + harness status`, `release → delete Job`. Use
+  Job`, `poll → read Job + harness status`, `release → delete Job`. Use
   `{{input.instanceType}}` to pick a node selector / resource request and
   `{{input.kind}}` to select a Job template. Front it with an Ingress (public HTTPS):
   that Ingress URL is your manifest `baseUrl`. Sticky routing falls out naturally
