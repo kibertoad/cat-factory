@@ -322,10 +322,7 @@ export type OpenGuidedReviewThreadInput = v.InferOutput<typeof openGuidedReviewT
 
 export const requestGuidedReviewDraftsSchema = v.object({
   /** Narrows which comments the reviewer wants; empty asks for every conclusion. */
-  instructions: v.optional(
-    v.pipe(v.string(), v.trim(), v.maxLength(GUIDED_REVIEW_QUESTION_MAX)),
-    '',
-  ),
+  instructions: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(GUIDED_REVIEW_QUESTION_MAX))),
 })
 export type RequestGuidedReviewDraftsInput = v.InferOutput<typeof requestGuidedReviewDraftsSchema>
 
@@ -352,3 +349,26 @@ export interface GuidedReviewChange {
   scope: 'session' | 'thread' | 'drafts' | 'deleted'
   threadId?: string
 }
+
+/** Query of the public session list: the most recently updated sessions first. */
+export const listPublicGuidedReviewsQuerySchema = v.object({
+  repoId: v.optional(v.pipe(v.string(), v.maxLength(200))),
+  prNumber: v.optional(v.pipe(v.string(), v.regex(/^\d+$/), v.transform(Number))),
+  /** `true` lists only sessions the calling key's identity owns. */
+  mine: v.optional(
+    v.pipe(
+      v.picklist(['true', 'false']),
+      v.transform((s) => s === 'true'),
+    ),
+  ),
+  limit: v.optional(
+    v.pipe(v.string(), v.regex(/^\d+$/), v.transform(Number), v.minValue(1), v.maxValue(100)),
+  ),
+})
+
+/** A page of sessions. `truncated` says more matched than `limit` returned. */
+export const publicGuidedReviewListSchema = v.object({
+  sessions: v.array(guidedReviewSessionSchema),
+  truncated: v.boolean(),
+})
+export type PublicGuidedReviewList = v.InferOutput<typeof publicGuidedReviewListSchema>

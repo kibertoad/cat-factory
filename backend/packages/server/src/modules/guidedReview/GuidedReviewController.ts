@@ -116,7 +116,7 @@ export function guidedReviewController(): Hono<AppEnv> {
       requireUser(c, SIGNED_IN).id,
       sessionId,
       threadId,
-      c.req.valid('json').instructions,
+      c.req.valid('json').instructions ?? '',
     )
     return c.json(exchange, 200)
   })

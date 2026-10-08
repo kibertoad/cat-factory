@@ -109,6 +109,34 @@ export function addHandDocumentedRoutes(paths, tags) {
   // The artifact BYTES: not a route contract, because the response is an image rather than JSON.
   // Documented by hand for the same reason the two SSE routes above are, and named in the SDK
   // surface table so all four clients expose it (each transport reads the body as bytes).
+  // The guided review stream: the session view pushed whenever it changes, keyed by session.
+  tags.add('Guided review')
+  paths[`${API_PREFIX}/guided-reviews/{sessionId}/events`] = {
+    get: {
+      operationId: 'streamPublicGuidedReview',
+      // Hand-documented route: the handler's own `authorize(c, 'read')` literal, restated here
+      // because there is no contract to read it off. Keep the two in step.
+      'x-min-scope': 'read',
+      tags: ['Guided review'],
+      summary: 'Stream a guided review (SSE)',
+      description:
+        'Server-sent events for one guided review: a `state` frame carrying the session view (the same body `GET /api/v1/guided-reviews/{sessionId}` returns) whenever it changes, `deleted` when the session is removed, and `timeout` when the connection cap is reached (reconnect to continue). A thread whose `pendingMessageId` clears has an answer to fetch with `GET /api/v1/guided-reviews/{sessionId}/threads/{threadId}`. Authenticated by the API key header.',
+      parameters: [{ name: 'sessionId', in: 'path', required: true, schema: { type: 'string' } }],
+      responses: {
+        200: {
+          description: 'An event stream of session updates',
+          content: { 'text/event-stream': { schema: { type: 'string' } } },
+        },
+        '4XX': {
+          description: STATUS_DESCRIPTIONS['4XX'],
+          content: {
+            'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } },
+          },
+        },
+      },
+    },
+  }
+
   tags.add('Evidence')
   paths[`${API_PREFIX}/artifacts/{artifactId}/blob`] = {
     get: {

@@ -28,7 +28,7 @@ browser extension over the host's PR page) can build the same experience.
 | Where does it live       | A standalone session keyed by workspace, repo and PR number, owned by its creator. No task, no run.                                                                                                                | Exploring a PR must not require a board task. Threads are concurrent writers; riding one run step's JSON blob would put every thread behind one rev-guarded write.                                                                                                                                                              |
 | Persistence shape        | Four tables: sessions, threads, messages, comment drafts. One row per message and per draft.                                                                                                                       | Concurrent threads write disjoint rows, so no compare-and-swap loop is shared between them. The session row carries only the overview.                                                                                                                                                                                          |
 | One answer per thread    | A partial UNIQUE index on messages admits one non-terminal assistant message per thread. A second question while one is pending is a `ConflictError` with `reason: 'thread_busy'`.                                 | "One live row per X" is a unique index, never a read-then-insert (AGENTS.md, concurrency). Other threads are unaffected.                                                                                                                                                                                                        |
-| How answers are produced | Durable background work: the request persists a `pending` assistant message and returns `202`; a driver answers it.                                                                                                | A tool-using answer can take a minute. An API client must not hold a connection per question, and a dropped tab must not lose the answer.                                                                                                                                                                                       |
+| How answers are produced | Durable background work: the request persists a `pending` assistant message and returns at once; a driver answers it.                                                                                              | A tool-using answer can take a minute. An API client must not hold a connection per question, and a dropped tab must not lose the answer.                                                                                                                                                                                       |
 | Durable driver           | A `GuidedReviewRunner` port: Cloudflare Workflows ⇄ a pg-boss queue on Node and standard local ⇄ a `node:sqlite` queue on a mothership-mode node (the `SqliteWorkRunner` shape), plus a stale-job sweeper on each. | Copies `EnvironmentTestRunner`. `waitUntil` is capped at 30s after the response on the Worker. A mothership-mode node has no Postgres, so pg-boss would reintroduce the database that mode removes; the local queue only holds the wake-up intent, while the job state lives in the mothership through the `remote` repository. |
 | Claiming a job           | `pending → running` is an atomic conditional update taken before the model call; `running` past its lease is re-claimable; terminal states are not.                                                                | A replaying driver must not answer twice, and a dead claimer must not strand the message.                                                                                                                                                                                                                                       |
 | Code access              | Inline model with read tools over the VCS API pinned to the reviewed head SHA: changed files and patches, file contents (head or base), tree listing, code search where the host has it.                           | Answers arrive in seconds with no runner slot. The tools read through `VcsClient`, so GitHub and GitLab behave the same.                                                                                                                                                                                                        |
@@ -57,19 +57,21 @@ startLine, endLine, side }`, `error?`, `model?`, timestamps.
 
 ## Public API surface (`/api/v1`, scope `read` for GET, `write` otherwise)
 
-| Method | Path                                                     | Effect                                                     |
-| ------ | -------------------------------------------------------- | ---------------------------------------------------------- |
-| POST   | `/guided-reviews`                                        | Open (or return the caller's open) session for a PR. `202` |
-| GET    | `/guided-reviews`                                        | List sessions, filterable by repo and PR                   |
-| GET    | `/guided-reviews/{id}`                                   | Session, overview, threads, drafts                         |
-| POST   | `/guided-reviews/{id}/refresh`                           | Regenerate the overview at the current head                |
-| POST   | `/guided-reviews/{id}/threads`                           | Open a thread, optionally with its first question          |
-| GET    | `/guided-reviews/{id}/threads/{threadId}`                | Thread with its messages                                   |
-| POST   | `/guided-reviews/{id}/threads/{threadId}/messages`       | Ask a question (`depth` optional). `202`                   |
-| POST   | `/guided-reviews/{id}/threads/{threadId}/comment-drafts` | Ask the model to draft comments from the thread. `202`     |
-| PATCH  | `/guided-reviews/{id}/comment-drafts/{draftId}`          | Edit, re-anchor or discard a draft                         |
-| POST   | `/guided-reviews/{id}/comment-drafts/post`               | Post the selected drafts as one review                     |
-| GET    | `/guided-reviews/{id}/events`                            | SSE stream of session deltas                               |
+Every write answers `200` with the persisted state at once; the work it queued completes later.
+
+| Method | Path                                                     | Effect                                            |
+| ------ | -------------------------------------------------------- | ------------------------------------------------- |
+| POST   | `/guided-reviews`                                        | Open (or return the caller's) session for a PR    |
+| GET    | `/guided-reviews`                                        | List sessions, filterable by repo and PR          |
+| GET    | `/guided-reviews/{id}`                                   | Session, overview, threads, drafts                |
+| POST   | `/guided-reviews/{id}/refresh`                           | Regenerate the overview at the current head       |
+| POST   | `/guided-reviews/{id}/threads`                           | Open a thread, optionally with its first question |
+| GET    | `/guided-reviews/{id}/threads/{threadId}`                | Thread with its messages                          |
+| POST   | `/guided-reviews/{id}/threads/{threadId}/messages`       | Ask a question (`depth` optional)                 |
+| POST   | `/guided-reviews/{id}/threads/{threadId}/comment-drafts` | Ask the model to draft comments from the thread   |
+| PATCH  | `/guided-reviews/{id}/comment-drafts/{draftId}`          | Edit, re-anchor or discard a draft                |
+| POST   | `/guided-reviews/{id}/comment-drafts/post`               | Post the selected drafts as one review            |
+| GET    | `/guided-reviews/{id}/events`                            | SSE stream of session deltas                      |
 
 ## Slices
 
@@ -78,7 +80,7 @@ startLine, endLine, side }`, `error?`, `model?`, timestamps.
 | 1   | Contracts, kernel domain and repository port, D1 migration ⇄ Drizzle schema, both repositories, mothership buckets, conformance suite | in review   | [#2287](https://github.com/kibertoad/cat-factory/pull/2287) |
 | 2   | `GuidedReviewService`, overview generation, inline answering with VCS read tools, `GuidedReviewRunner` on all three runtimes, sweeper | in progress |                                                             |
 | 3   | Workspace routes for the SPA, `guidedReviewChanged` realtime delta, RBAC                                                              | in progress |                                                             |
-| 4   | Public API, OpenAPI, `surface.mjs`, the four SDKs and MCP, SSE stream                                                                 | not started |                                                             |
+| 4   | Public API, OpenAPI, `surface.mjs`, the four SDKs and MCP, SSE stream                                                                 | in progress |                                                             |
 | 5   | SPA: guided review window, overview, tabbed threads, suggested questions, drafts panel, i18n in every locale                          | not started |                                                             |
 | 6   | Comment drafting and posting (anchor validation, stale-head refusal, per-draft outcomes)                                              | not started |                                                             |
 | 7   | Deep-dive escalation to a read-only container investigator                                                                            | not started |                                                             |

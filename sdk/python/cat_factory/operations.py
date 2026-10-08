@@ -22,6 +22,7 @@ from .models import (
     ActPublicNotificationRequest,
     AddPublicTaskDependencyRequest,
     AddressPublicRunBugFishingFindingsRequest,
+    AskGuidedReview,
     AttachPublicTaskDocumentRequest,
     ConnectPublicEnvironmentRequest,
     ConnectPublicEnvironmentResponse,
@@ -41,6 +42,9 @@ from .models import (
     GetPublicRunOutcomeResponse,
     GetPublicTrackerWritebackResponse,
     GetPublicVcsConnectionResponse,
+    GuidedReviewExchange,
+    GuidedReviewSessionView,
+    GuidedReviewThreadView,
     InvokePublicUseCaseRequest,
     InvokePublicUseCaseResponse,
     LinkPublicRepoRequest,
@@ -56,6 +60,7 @@ from .models import (
     ListPublicAvailableReposResponse,
     ListPublicEnvironmentConnectionsResponse,
     ListPublicEnvironmentManifestTypesResponse,
+    ListPublicGuidedReviewsMine,
     ListPublicJobsResponse,
     ListPublicKaizenEntriesAcknowledged,
     ListPublicMergeClassRollupsResponse,
@@ -72,6 +77,8 @@ from .models import (
     LlmCallOutcome,
     Notification,
     NotificationWebhook,
+    OpenGuidedReview,
+    OpenGuidedReviewThread,
     PrVerificationReport,
     PublicAnswerFollowUp,
     PublicAnswerInterview,
@@ -80,6 +87,7 @@ from .models import (
     PublicChallengePrReviewFinding,
     PublicChooseFork,
     PublicDecisionList,
+    PublicGuidedReviewList,
     PublicIdentity,
     PublicIncorporate,
     PublicJob,
@@ -116,6 +124,7 @@ from .models import (
     PublicTaskList,
     PublicUsage,
     PutNotificationWebhook,
+    RequestGuidedReviewDrafts,
     RunStatus,
     StartPublicRepoBootstrapRequest,
     StartPublicRepoBootstrapResponse,
@@ -2826,6 +2835,198 @@ class KaizenResource:
             page_cursor = page.next_cursor
 
 
+class GuidedReviewsResource:
+    """Guided pull request review: a structured explanation of a PR (what it does, meaningful
+    changes, consequences, risks, where to focus, suggested questions), independent question
+    threads answered by a model that reads the PR at the reviewed commit, and comment drafts
+    placed on the lines they are about. Following a review takes a `read` key; opening one,
+    asking and drafting take a `write` key because they spend model budget. Nothing here
+    posts to the pull request.
+    """
+
+    def __init__(self, transport: Transport) -> None:
+        self._transport = transport
+
+    def ask(self, session_id: str, thread_id: str, body: AskGuidedReview, *, timeout: float | None = None) -> GuidedReviewExchange:
+        """Ask a question in a thread
+        Append a question and the placeholder that will answer it, and answer with both at
+        once; the answer is produced in the background. A thread holds one unanswered
+        question at a time: asking again before it is answered is `409` with
+        `details.reason: "thread_busy"`, and other threads are unaffected. `depth: "deep"`
+        asks for a read-only checkout and is reported as `depth_unavailable` until that
+        ships.
+        `POST /api/v1/guided-reviews/{sessionId}/threads/{threadId}/messages` (operation
+        `askPublicGuidedReview`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/guided-reviews/{_quote(session_id)}/threads/{_quote(thread_id)}/messages",
+            body=_encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return GuidedReviewExchange.from_dict(raw)
+
+    def delete(self, session_id: str, *, timeout: float | None = None) -> None:
+        """Delete a guided review
+        Delete the session with its threads, messages and drafts. Only the identity that
+        opened it may; anyone else is `403` with `details.reason: "not_session_owner"`.
+        Nothing on the pull request is touched.
+        `DELETE /api/v1/guided-reviews/{sessionId}` (operation `deletePublicGuidedReview`).
+        """
+        self._transport.request_no_content(
+            "DELETE",
+            f"/api/v1/guided-reviews/{_quote(session_id)}",
+            query=None,
+            timeout=timeout,
+        )
+
+    def get(self, session_id: str, *, timeout: float | None = None) -> GuidedReviewSessionView:
+        """Get a guided review
+        The session with its overview, its threads (each naming the answer it is waiting on,
+        if any) and its comment drafts. The overview's `status` is `pending` or `running`
+        while it is generated; a `failed` one carries `failure.reason` (`budget_exhausted`,
+        `model_unavailable`, `repo_unavailable`, `generation_failed`, `unreadable_reply`)
+        and the raw cause in `failure.detail`.
+        `GET /api/v1/guided-reviews/{sessionId}` (operation `getPublicGuidedReview`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/guided-reviews/{_quote(session_id)}",
+            query=None,
+            timeout=timeout,
+        )
+        return GuidedReviewSessionView.from_dict(raw)
+
+    def get_thread(self, session_id: str, thread_id: str, *, timeout: float | None = None) -> GuidedReviewThreadView:
+        """Get a thread with its messages
+        The thread and its messages in order. An assistant message is `pending` or `running`
+        until answered, then `complete` with markdown `content` and the `citations` (file
+        spans) it rests on, or `failed` with a `failure`. A `comment-drafts` message's
+        drafts are on the session; its `draftReport` names every proposed comment that was
+        refused (`outside_diff`, `not_in_pr`, `incomplete`).
+        `GET /api/v1/guided-reviews/{sessionId}/threads/{threadId}` (operation
+        `getPublicGuidedReviewThread`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/guided-reviews/{_quote(session_id)}/threads/{_quote(thread_id)}",
+            query=None,
+            timeout=timeout,
+        )
+        return GuidedReviewThreadView.from_dict(raw)
+
+    def list(self, *, repo_id: str | None = None, pr_number: str | None = None, mine: ListPublicGuidedReviewsMine | None = None, limit: str | None = None, timeout: float | None = None) -> PublicGuidedReviewList:
+        """List the workspace's guided reviews
+        Guided review sessions in the workspace, most recently updated first, optionally
+        narrowed to one repository (`repoId`), one pull request (`prNumber`) or the calling
+        key's own (`mine=true`). Returns at most `limit` (default 50, at most 100) and says
+        in `truncated` whether more matched.
+        `GET /api/v1/guided-reviews` (operation `listPublicGuidedReviews`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/guided-reviews",
+            query={"repoId": repo_id, "prNumber": pr_number, "mine": mine, "limit": limit},
+            timeout=timeout,
+        )
+        return PublicGuidedReviewList.from_dict(raw)
+
+    def open(self, body: OpenGuidedReview, *, timeout: float | None = None) -> GuidedReviewSessionView:
+        """Open a guided review of a pull request
+        Open a guided review of one pull request in a repository linked to the workspace, or
+        return the one the calling key's identity already has for it. A guided review
+        explains the PR (what it does, its meaningful changes, consequences, risks, where to
+        focus, and suggested questions) and holds question threads answered by a model that
+        reads the PR at the commit under review. Answers with the session at once; its
+        overview is generated in the background, so follow `GET
+        /api/v1/guided-reviews/{sessionId}/events` or re-read it. A key bound to a person
+        acts as that person; an unbound key owns its own sessions and runs on the
+        deployment's credentials. An unlinked repository is `404` with `details.reason:
+        "repo_not_linked"`, and a PR the host cannot find is `404` with `details.reason:
+        "pr_not_found"`.
+        `POST /api/v1/guided-reviews` (operation `openPublicGuidedReview`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/guided-reviews",
+            body=_encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return GuidedReviewSessionView.from_dict(raw)
+
+    def open_thread(self, session_id: str, body: OpenGuidedReviewThread | None = None, *, timeout: float | None = None) -> GuidedReviewThreadView:
+        """Open an exploration thread
+        Open a thread in the session, optionally asking its first question in the same call.
+        A thread is an independent line of questioning: waiting on an answer in one never
+        blocks another. Pass a suggested question from the overview verbatim to ask it.
+        `POST /api/v1/guided-reviews/{sessionId}/threads` (operation
+        `openPublicGuidedReviewThread`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/guided-reviews/{_quote(session_id)}/threads",
+            body={} if body is None else _encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return GuidedReviewThreadView.from_dict(raw)
+
+    def refresh(self, session_id: str, *, timeout: float | None = None) -> GuidedReviewSessionView:
+        """Point a guided review at the PR's current head
+        Re-read the pull request and regenerate the overview at its current head commit,
+        keeping every thread. Use it after the author pushes: the overview, answers and
+        draft anchors are computed against the commit recorded as `reviewedHeadSha`.
+        `POST /api/v1/guided-reviews/{sessionId}/refresh` (operation
+        `refreshPublicGuidedReview`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/guided-reviews/{_quote(session_id)}/refresh",
+            query=None,
+            timeout=timeout,
+        )
+        return GuidedReviewSessionView.from_dict(raw)
+
+    def request_drafts(self, session_id: str, thread_id: str, body: RequestGuidedReviewDrafts | None = None, *, timeout: float | None = None) -> GuidedReviewExchange:
+        """Draft review comments from a thread's conclusions
+        Ask the model to turn what the thread concluded into review comments, each placed on
+        the line it is about. Optional `instructions` narrow which ones. Drafts are kept
+        only on lines inside the PR's diff, and nothing is posted to the pull request. Busy
+        like a question: `409` with `details.reason: "thread_busy"` while the thread is
+        waiting on an answer.
+        `POST /api/v1/guided-reviews/{sessionId}/threads/{threadId}/comment-drafts`
+        (operation `requestPublicGuidedReviewDrafts`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/guided-reviews/{_quote(session_id)}/threads/{_quote(thread_id)}/comment-drafts",
+            body={} if body is None else _encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return GuidedReviewExchange.from_dict(raw)
+
+    def stream(self, session_id: str, *, timeout: float | None = None) -> EventStream:
+        """Stream a guided review (SSE)
+        Server-sent events for one guided review: a `state` frame carrying the session view
+        (the same body `GET /api/v1/guided-reviews/{sessionId}` returns) whenever it
+        changes, `deleted` when the session is removed, and `timeout` when the connection
+        cap is reached (reconnect to continue). A thread whose `pendingMessageId` clears has
+        an answer to fetch with `GET /api/v1/guided-reviews/{sessionId}/threads/{threadId}`.
+        Authenticated by the API key header.
+        `GET /api/v1/guided-reviews/{sessionId}/events` (operation
+        `streamPublicGuidedReview`).
+        """
+        return self._transport.stream(
+            "GET",
+            f"/api/v1/guided-reviews/{_quote(session_id)}/events",
+            query=None,
+            timeout=timeout,
+        )
+
+
 class KeysResource:
     """The workspace's own API keys: provision one headlessly, list them, revoke one (and what
     it minted).
@@ -2914,5 +3115,6 @@ def build_resources(transport: Transport) -> dict[str, Any]:
         "evidence": EvidenceResource(transport),
         "merge_records": MergeRecordsResource(transport),
         "kaizen": KaizenResource(transport),
+        "guided_reviews": GuidedReviewsResource(transport),
         "keys": KeysResource(transport),
     }
