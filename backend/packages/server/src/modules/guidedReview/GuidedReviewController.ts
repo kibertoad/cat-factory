@@ -50,7 +50,7 @@ export function guidedReviewController(): Hono<AppEnv> {
     const createdBy = mine ? requireUser(c, SIGNED_IN).id : undefined
     const sessions = await service.listSessions(param(c, 'workspaceId'), {
       ...(repoId ? { repoId } : {}),
-      ...(prNumber ? { prNumber } : {}),
+      ...(prNumber !== undefined ? { prNumber } : {}),
       ...(createdBy ? { createdBy } : {}),
     })
     return c.json(sessions, 200)

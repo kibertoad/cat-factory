@@ -83,7 +83,7 @@ export class GuidedReviewDrafts {
     if (!updated) {
       throw new ConflictError('This draft changed since it was loaded', 'draft_conflict')
     }
-    await this.deps.notify(workspaceId, { sessionId, scope: 'drafts' })
+    await this.deps.notify(workspaceId, { sessionId, scope: 'session' })
     return updated
   }
 
@@ -156,7 +156,7 @@ export class GuidedReviewDrafts {
       }
     })
     await this.deps.repository.settleDraftPosts(workspaceId, outcomes, this.deps.clock.now())
-    if (claimed.length > 0) await this.deps.notify(workspaceId, { sessionId, scope: 'drafts' })
+    if (claimed.length > 0) await this.deps.notify(workspaceId, { sessionId, scope: 'session' })
 
     const drafts = await this.deps.repository.listDrafts(workspaceId, sessionId)
     return {

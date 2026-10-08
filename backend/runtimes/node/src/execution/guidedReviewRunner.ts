@@ -1,4 +1,4 @@
-import { getErrorMessage, guidedReviewJobKey } from '@cat-factory/kernel'
+import { describeError, guidedReviewJobKey } from '@cat-factory/kernel'
 import type { GuidedReviewJob, GuidedReviewRunner, OperationalMetrics } from '@cat-factory/kernel'
 import type { Logger, ServerContainer, SweepHealthTracker } from '@cat-factory/server'
 import type { Job, PgBoss } from 'pg-boss'
@@ -56,7 +56,7 @@ export async function startGuidedReviewWorker(
           log.error('guided-review job failed', {
             workspaceId: data.workspaceId,
             job: guidedReviewJobKey(data.job),
-            err: getErrorMessage(error),
+            ...describeError(error),
           })
           throw error
         }

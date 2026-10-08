@@ -20,6 +20,7 @@ public enum GuidedReviewFailureReason {
     GENERATION_FAILED("generation_failed"),
     UNREADABLE_REPLY("unreadable_reply"),
     DEPTH_UNAVAILABLE("depth_unavailable"),
+    HEAD_MOVED("head_moved"),
 
     /**
      * A value this SDK release does not know.

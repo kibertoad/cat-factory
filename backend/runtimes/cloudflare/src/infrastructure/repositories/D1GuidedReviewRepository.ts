@@ -2,9 +2,11 @@ import type {
   GuidedReviewCommentDraft,
   GuidedReviewDraftEdit,
   GuidedReviewDriver,
+  GuidedReviewExchange,
   GuidedReviewDraftPostOutcome,
   GuidedReviewMessage,
   GuidedReviewMessageOutcome,
+  GuidedReviewNewSession,
   GuidedReviewOverviewOutcome,
   GuidedReviewRefresh,
   GuidedReviewRepository,
@@ -14,164 +16,22 @@ import type {
   GuidedReviewThread,
   GuidedReviewThreadSummary,
 } from '@cat-factory/kernel'
+import {
+  rowToGuidedReviewDraft as rowToDraft,
+  rowToGuidedReviewMessage as rowToMessage,
+  rowToGuidedReviewSession as rowToSession,
+  rowToGuidedReviewThread as rowToThread,
+  type GuidedReviewDraftRow as DraftRow,
+  type GuidedReviewMessageRow as MessageRow,
+  type GuidedReviewSessionRow as SessionRow,
+  type GuidedReviewThreadRow,
+} from '@cat-factory/server'
 import type { D1Database, D1PreparedStatement } from '@cloudflare/workers-types'
 import { chunkForIn } from './chunk'
 
-interface SessionRow {
-  workspace_id: string
-  id: string
-  provider: string
-  repo_id: string
-  owner: string
-  repo: string
-  pr_number: number
-  pr_title: string
-  reviewed_head_sha: string
-  base_ref: string
-  created_by: string
-  overview_status: string
-  overview_generation: number
-  overview_content: string | null
-  overview_failure: string | null
-  overview_model: string | null
-  created_at: number
-  updated_at: number
-}
-
-interface ThreadRow {
-  id: string
-  session_id: string
-  title: string
-  created_by: string
-  created_at: number
-  updated_at: number
-  pending_message_id?: string | null
-}
-
-interface MessageRow {
-  workspace_id: string
-  id: string
-  thread_id: string
-  session_id: string
-  seq: number
-  role: string
-  kind: string
-  depth: string
-  content: string
-  status: string
-  citations: string
-  failure: string | null
-  draft_report: string | null
-  model: string | null
-  created_at: number
-  updated_at: number
-}
-
-interface DraftRow {
-  id: string
-  session_id: string
-  thread_id: string
-  message_id: string
-  path: string
-  line: number
-  start_line: number | null
-  side: string
-  body: string
-  rationale: string
-  status: string
-  post_error: string | null
-  posted_url: string | null
-  rev: number
-  created_at: number
-  updated_at: number
-}
+type ThreadRow = GuidedReviewThreadRow & { pending_message_id: string | null }
 
 const LIVE = `('pending', 'running')`
-
-function parseJson<T>(raw: string | null, fallback: T): T {
-  if (!raw) return fallback
-  try {
-    return JSON.parse(raw) as T
-  } catch {
-    return fallback
-  }
-}
-
-function rowToSession(row: SessionRow): GuidedReviewSession {
-  return {
-    id: row.id,
-    provider: row.provider as GuidedReviewSession['provider'],
-    repoId: row.repo_id,
-    owner: row.owner,
-    repo: row.repo,
-    prNumber: row.pr_number,
-    prTitle: row.pr_title,
-    reviewedHeadSha: row.reviewed_head_sha,
-    baseRef: row.base_ref,
-    createdBy: row.created_by,
-    overview: {
-      status: row.overview_status as GuidedReviewSession['overview']['status'],
-      generation: row.overview_generation,
-      content: parseJson(row.overview_content, null),
-      failure: parseJson(row.overview_failure, null),
-      model: row.overview_model,
-    },
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  }
-}
-
-function rowToThread(row: ThreadRow): GuidedReviewThread {
-  return {
-    id: row.id,
-    sessionId: row.session_id,
-    title: row.title,
-    createdBy: row.created_by,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  }
-}
-
-function rowToMessage(row: MessageRow): GuidedReviewMessage {
-  return {
-    id: row.id,
-    threadId: row.thread_id,
-    sessionId: row.session_id,
-    seq: row.seq,
-    role: row.role as GuidedReviewMessage['role'],
-    kind: row.kind as GuidedReviewMessage['kind'],
-    depth: row.depth as GuidedReviewMessage['depth'],
-    content: row.content,
-    status: row.status as GuidedReviewMessage['status'],
-    citations: parseJson(row.citations, []),
-    failure: parseJson(row.failure, null),
-    draftReport: parseJson(row.draft_report, null),
-    model: row.model,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  }
-}
-
-function rowToDraft(row: DraftRow): GuidedReviewCommentDraft {
-  return {
-    id: row.id,
-    sessionId: row.session_id,
-    threadId: row.thread_id,
-    messageId: row.message_id,
-    path: row.path,
-    line: row.line,
-    startLine: row.start_line,
-    side: row.side as GuidedReviewCommentDraft['side'],
-    body: row.body,
-    rationale: row.rationale,
-    status: row.status as GuidedReviewCommentDraft['status'],
-    postError: row.post_error,
-    postedUrl: row.posted_url,
-    rev: row.rev,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  }
-}
 
 /**
  * Guided PR review sessions over D1 (migration 0104). Every conditional transition is a single
@@ -188,7 +48,7 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
 
   async openSession(
     workspaceId: string,
-    s: GuidedReviewSession,
+    s: GuidedReviewNewSession,
     driver: GuidedReviewDriver,
   ): Promise<GuidedReviewSession> {
     await this.db
@@ -198,7 +58,7 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
             reviewed_head_sha, base_ref, created_by, overview_status, overview_generation,
             overview_content, overview_failure, overview_model, overview_driver, created_at,
             updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 1, NULL, NULL, NULL, ?, ?, ?)
          ON CONFLICT (workspace_id, repo_id, pr_number, created_by) DO NOTHING`,
       )
       .bind(
@@ -213,11 +73,6 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
         s.reviewedHeadSha,
         s.baseRef,
         s.createdBy,
-        s.overview.status,
-        s.overview.generation,
-        s.overview.content ? JSON.stringify(s.overview.content) : null,
-        s.overview.failure ? JSON.stringify(s.overview.failure) : null,
-        s.overview.model,
         driver,
         s.createdAt,
         s.updatedAt,
@@ -408,70 +263,73 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
 
   async appendExchange(
     workspaceId: string,
-    question: Omit<GuidedReviewMessage, 'seq'>,
-    placeholder: Omit<GuidedReviewMessage, 'seq'>,
+    x: GuidedReviewExchange,
     driver: GuidedReviewDriver,
   ): Promise<
     | { ok: true; question: GuidedReviewMessage; placeholder: GuidedReviewMessage }
-    | { ok: false; reason: 'thread_busy' }
+    | { ok: false; reason: 'thread_busy' | 'thread_not_found' }
   > {
-    // The placeholder goes first, conflict-targeted at the one-live-answer index (an INSERT ...
-    // SELECT needs its WHERE so SQLite does not read ON CONFLICT as a join constraint). The
-    // question follows only if that placeholder row now exists. Both sit in one serialized batch.
+    // The placeholder goes first, conflict-targeted at the one-live-answer index and inserted
+    // only while the thread exists in the session. The question follows only if that placeholder
+    // row now exists. Both sit in one serialized batch.
     const columns = `(workspace_id, id, thread_id, session_id, seq, role, kind, depth, content,
                       status, citations, failure, draft_report, model, created_at, updated_at,
                       driver)`
-    const values = (m: Omit<GuidedReviewMessage, 'seq'>) => [
-      workspaceId,
-      m.id,
-      m.threadId,
-      m.sessionId,
-      m.role,
-      m.kind,
-      m.depth,
-      m.content,
-      m.status,
-      JSON.stringify(m.citations),
-      m.failure ? JSON.stringify(m.failure) : null,
-      m.draftReport ? JSON.stringify(m.draftReport) : null,
-      m.model,
-      m.createdAt,
-      m.updatedAt,
-      driver,
-    ]
     const placePlaceholder = this.db
       .prepare(
         `INSERT INTO guided_review_messages ${columns}
          SELECT ?1, ?2, ?3, ?4,
                 (SELECT COALESCE(MAX(seq), 0) + 2 FROM guided_review_messages
                   WHERE workspace_id = ?1 AND thread_id = ?3),
-                ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16
-         WHERE true
+                'assistant', ?5, ?6, '', 'pending', '[]', NULL, NULL, NULL, ?7, ?7, ?8
+         WHERE EXISTS (SELECT 1 FROM guided_review_threads
+                        WHERE workspace_id = ?1 AND id = ?3 AND session_id = ?4)
          ON CONFLICT (workspace_id, thread_id)
            WHERE role = 'assistant' AND status IN ${LIVE} DO NOTHING`,
       )
-      .bind(...values(placeholder))
+      .bind(workspaceId, x.placeholderId, x.threadId, x.sessionId, x.kind, x.depth, x.at, driver)
     const placeQuestion = this.db
       .prepare(
         `INSERT INTO guided_review_messages ${columns}
-         SELECT ?1, ?2, ?3, ?4, p.seq - 1, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16
+         SELECT ?1, ?2, ?3, ?4, p.seq - 1, 'user', ?5, ?6, ?7, 'complete', '[]', NULL, NULL,
+                NULL, ?8, ?8, ?9
            FROM guided_review_messages p
-          WHERE p.workspace_id = ?1 AND p.id = ?17`,
+          WHERE p.workspace_id = ?1 AND p.id = ?10`,
       )
-      .bind(...values(question), placeholder.id)
+      .bind(
+        workspaceId,
+        x.questionId,
+        x.threadId,
+        x.sessionId,
+        x.kind,
+        x.depth,
+        x.question,
+        x.at,
+        driver,
+        x.placeholderId,
+      )
     const [placed] = await this.db.batch([placePlaceholder, placeQuestion])
-    if (!placed || placed.meta.changes === 0) return { ok: false, reason: 'thread_busy' }
+    if (!placed || placed.meta.changes === 0) {
+      const thread = await this.db
+        .prepare(
+          `SELECT 1 AS found FROM guided_review_threads
+             WHERE workspace_id = ? AND id = ? AND session_id = ?`,
+        )
+        .bind(workspaceId, x.threadId, x.sessionId)
+        .first<{ found: number }>()
+      return { ok: false, reason: thread ? 'thread_busy' : 'thread_not_found' }
+    }
     const { results } = await this.db
       .prepare(`SELECT * FROM guided_review_messages WHERE workspace_id = ? AND id IN (?, ?)`)
-      .bind(workspaceId, question.id, placeholder.id)
+      .bind(workspaceId, x.questionId, x.placeholderId)
       .all<MessageRow>()
     const byId = new Map(results.map((r) => [r.id, rowToMessage(r)]))
-    const storedQuestion = byId.get(question.id)
-    const storedPlaceholder = byId.get(placeholder.id)
-    if (!storedQuestion || !storedPlaceholder) {
-      throw new Error(`guided review exchange ${placeholder.id} vanished after insert`)
+    const question = byId.get(x.questionId)
+    const placeholder = byId.get(x.placeholderId)
+    if (!question || !placeholder) {
+      throw new Error(`guided review exchange ${x.placeholderId} vanished after insert`)
     }
-    return { ok: true, question: storedQuestion, placeholder: storedPlaceholder }
+    return { ok: true, question, placeholder }
   }
 
   async getMessage(workspaceId: string, id: string): Promise<GuidedReviewMessage | null> {
@@ -525,6 +383,7 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
     id: string,
     outcome: GuidedReviewMessageOutcome,
     now: number,
+    kind?: GuidedReviewMessage['kind'],
   ): D1PreparedStatement {
     const complete = outcome.status === 'complete'
     return this.db
@@ -532,7 +391,8 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
         `UPDATE guided_review_messages SET
            status = ?, content = ?, citations = ?, failure = ?, draft_report = ?, model = ?,
            claimed_at = NULL, updated_at = ?
-         WHERE workspace_id = ? AND id = ? AND status = 'running'`,
+         WHERE workspace_id = ? AND id = ? AND status = 'running'
+           ${kind ? 'AND kind = ?' : ''}`,
       )
       .bind(
         outcome.status,
@@ -544,6 +404,7 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
         now,
         workspaceId,
         id,
+        ...(kind ? [kind] : []),
       )
   }
 
@@ -554,10 +415,11 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
     outcome: Extract<GuidedReviewMessageOutcome, { status: 'complete' }>,
     now: number,
   ): Promise<boolean> {
-    // Each draft is inserted only while its message is still `running`; the message settles
-    // last, so either the whole set lands with it or none of it does.
+    // Each draft is inserted only while its message is still a `running` `comment-drafts`
+    // message; the message settles last, so either the whole set lands with it or none does.
     const running = `EXISTS (SELECT 1 FROM guided_review_messages
-                              WHERE workspace_id = ? AND id = ? AND status = 'running')`
+                              WHERE workspace_id = ? AND id = ? AND status = 'running'
+                                AND kind = 'comment-drafts')`
     const inserts = drafts.map((d) =>
       this.db
         .prepare(
@@ -572,7 +434,7 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
           d.id,
           d.sessionId,
           d.threadId,
-          d.messageId,
+          messageId,
           d.path,
           d.line,
           d.startLine,
@@ -591,7 +453,7 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
     )
     const results = await this.db.batch([
       ...inserts,
-      this.settleMessageStatement(workspaceId, messageId, outcome, now),
+      this.settleMessageStatement(workspaceId, messageId, outcome, now, 'comment-drafts'),
     ])
     return (results.at(-1)?.meta.changes ?? 0) > 0
   }
@@ -653,7 +515,7 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
     workspaceId: string,
     sessionId: string,
     ids: string[],
-    staleCutoff: number,
+    leaseCutoff: number,
     now: number,
   ): Promise<GuidedReviewCommentDraft[]> {
     const claimed: GuidedReviewCommentDraft[] = []
@@ -668,7 +530,7 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
                   OR (status = 'posting' AND updated_at < ?))
            RETURNING *`,
         )
-        .bind(now, workspaceId, sessionId, ...chunk, staleCutoff)
+        .bind(now, workspaceId, sessionId, ...chunk, leaseCutoff)
         .all<DraftRow>()
       claimed.push(...results.map(rowToDraft))
     }
@@ -706,12 +568,7 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
     cutoff: number,
     limit: number,
   ): Promise<GuidedReviewStaleJob[]> {
-    const [overviews, messages] = await this.db.batch<{
-      workspace_id: string
-      id: string
-      overview_generation?: number
-      updated_at: number
-    }>([
+    const [overviews, messages] = await this.db.batch<Record<string, unknown>>([
       this.db
         .prepare(
           `SELECT workspace_id, id, overview_generation, updated_at FROM guided_review_sessions
@@ -727,17 +584,20 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
         )
         .bind(driver, cutoff, limit),
     ])
+    type Stale = { workspace_id: string; id: string; updated_at: number }
+    const overviewRows = (overviews?.results ?? []) as (Stale & { overview_generation: number })[]
+    const messageRows = (messages?.results ?? []) as Stale[]
     const jobs: { at: number; job: GuidedReviewStaleJob }[] = [
-      ...(overviews?.results ?? []).map((r) => ({
+      ...overviewRows.map((r) => ({
         at: r.updated_at,
         job: {
           kind: 'overview' as const,
           workspaceId: r.workspace_id,
           sessionId: r.id,
-          generation: r.overview_generation ?? 1,
+          generation: r.overview_generation,
         },
       })),
-      ...(messages?.results ?? []).map((r) => ({
+      ...messageRows.map((r) => ({
         at: r.updated_at,
         job: { kind: 'message' as const, workspaceId: r.workspace_id, messageId: r.id },
       })),
