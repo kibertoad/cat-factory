@@ -152,7 +152,7 @@ const envInTransition = computed(
       <!-- The verbatim provider error when the environment failed/expired. -->
       <pre
         v-if="failureShown"
-        class="mt-1 max-h-32 overflow-auto whitespace-pre-wrap rounded border border-app-error-900/60 bg-app-error-950/40 p-1.5 text-2xs text-app-error-200/90"
+        class="mt-1 max-h-32 overflow-auto whitespace-pre-wrap rounded-sm border border-app-error-900/60 bg-app-error-950/40 p-1.5 text-2xs text-app-error-200/90"
         >{{ environment.lastError }}</pre>
       <!-- What the provider says it is still waiting on. Muted rather than alarming: an
            environment mid-rollout is healthy, and styling this like the error above would report

@@ -89,7 +89,7 @@ const diffCanvas = ref<HTMLCanvasElement | null>(null)
 // there reads as "no difference", the same zero the difference composite produces, in either colour
 // mode, so no mode-following token fits. Bound as a const so the guard's `fixed-colour-ok:` marker
 // stays on the class string; the inline-template form gets reflowed off its own line by oxfmt.
-const DIFF_CANVAS_CLASS = 'w-full rounded border border-default bg-black' // fixed-colour-ok: diff canvas backdrop
+const DIFF_CANVAS_CLASS = 'w-full rounded-sm border border-default bg-black' // fixed-colour-ok: diff canvas backdrop
 const CAP = 2000
 // Bumped on every renderDiff entry so a render whose async work (image decode) is overtaken
 // by a newer mode/image change bails out instead of drawing stale pixels onto the canvas.
@@ -167,7 +167,7 @@ function onRefInput(e: Event) {
         <button
           v-for="m in MODES"
           :key="m.id"
-          class="rounded px-1.5 py-1 text-muted hover:text-default"
+          class="rounded-sm px-1.5 py-1 text-muted hover:text-default"
           :class="mode === m.id ? 'bg-elevated text-app-100' : ''"
           :title="m.label"
           @click="mode = m.id"
@@ -185,7 +185,7 @@ function onRefInput(e: Event) {
         </figcaption>
         <button
           v-if="actualUrl"
-          class="block w-full overflow-hidden rounded border border-default hover:border-app-600"
+          class="block w-full overflow-hidden rounded-sm border border-default hover:border-app-600"
           @click="actualId && emit('expand', actualId)"
         >
           <img
@@ -196,7 +196,7 @@ function onRefInput(e: Event) {
         </button>
         <div
           v-else
-          class="flex h-32 items-center justify-center rounded border border-dashed border-muted text-2xs text-app-600"
+          class="flex h-32 items-center justify-center rounded-sm border border-dashed border-muted text-2xs text-app-600"
         >
           {{
             props.blobs.statusFor(actualId) === 'error'
@@ -217,7 +217,7 @@ function onRefInput(e: Event) {
         </figcaption>
         <button
           v-if="refUrl"
-          class="group relative block w-full overflow-hidden rounded border border-default hover:border-app-600"
+          class="group relative block w-full overflow-hidden rounded-sm border border-default hover:border-app-600"
           @click="referenceId && emit('expand', referenceId)"
         >
           <img
@@ -226,7 +226,7 @@ function onRefInput(e: Event) {
             class="w-full cursor-zoom-in"
           />
           <span
-            class="absolute bottom-1 end-1 rounded bg-app-950/80 px-1.5 py-0.5 text-3xs text-toned opacity-0 group-hover:opacity-100"
+            class="absolute bottom-1 end-1 rounded-sm bg-app-950/80 px-1.5 py-0.5 text-3xs text-toned opacity-0 group-hover:opacity-100"
             @click.stop="refInput?.click()"
           >
             {{ t('media.compare.replace') }}
@@ -235,7 +235,7 @@ function onRefInput(e: Event) {
         <!-- Drop zone when no reference yet -->
         <div
           v-else
-          class="flex h-32 cursor-pointer flex-col items-center justify-center gap-1 rounded border border-dashed text-2xs transition"
+          class="flex h-32 cursor-pointer flex-col items-center justify-center gap-1 rounded-sm border border-dashed text-2xs transition"
           :class="
             dragOver
               ? 'border-app-warning-500 bg-app-warning-500/5 text-app-warning-300'
@@ -254,7 +254,7 @@ function onRefInput(e: Event) {
 
     <!-- OVERLAY (onion-skin) -->
     <div v-else-if="mode === 'overlay'" class="space-y-2">
-      <div class="relative w-full overflow-hidden rounded border border-default">
+      <div class="relative w-full overflow-hidden rounded-sm border border-default">
         <img :src="refUrl" :alt="t('media.compare.referenceAlt', { view })" class="w-full" />
         <!-- object-contain so a differing aspect ratio onion-skins undistorted over the reference. -->
         <img
@@ -281,7 +281,7 @@ function onRefInput(e: Event) {
     <div
       v-else-if="mode === 'swipe'"
       ref="swipeBox"
-      class="relative w-full cursor-ew-resize select-none overflow-hidden rounded border border-default"
+      class="relative w-full cursor-ew-resize select-none overflow-hidden rounded-sm border border-default"
       @pointerdown="onSwipeDown"
       @pointermove="moveSwipe"
       @pointerup="onSwipeUp"
@@ -313,11 +313,11 @@ function onRefInput(e: Event) {
         </span>
       </div>
       <span
-        class="absolute left-1 top-1 rounded bg-app-950/70 px-1 text-3xs uppercase text-toned"
+        class="absolute left-1 top-1 rounded-sm bg-app-950/70 px-1 text-3xs uppercase text-toned"
         >{{ t('media.compare.actual') }}</span
       >
       <span
-        class="absolute right-1 top-1 rounded bg-app-950/70 px-1 text-3xs uppercase text-toned"
+        class="absolute right-1 top-1 rounded-sm bg-app-950/70 px-1 text-3xs uppercase text-toned"
         >{{ t('media.compare.reference') }}</span
       >
     </div>

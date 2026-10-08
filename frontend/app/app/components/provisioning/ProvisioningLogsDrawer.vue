@@ -148,7 +148,7 @@ function when(epochMs: number): string {
           />
           <span class="font-medium text-default">{{ OPERATION_LABEL[entry.operation] }}</span>
           <span
-            class="rounded px-1.5 py-0.5 text-3xs uppercase tracking-wide"
+            class="rounded-sm px-1.5 py-0.5 text-3xs uppercase tracking-wide"
             :class="
               entry.outcome === 'success'
                 ? 'bg-app-success-950/60 text-app-success-300'
@@ -164,7 +164,7 @@ function when(epochMs: number): string {
         <!-- The verbatim provider/runtime error on a failed attempt. -->
         <pre
           v-if="entry.error"
-          class="mt-1 max-h-28 overflow-auto whitespace-pre-wrap rounded border border-app-error-900/50 bg-app-error-950/30 p-1.5 text-2xs text-app-error-200/90"
+          class="mt-1 max-h-28 overflow-auto whitespace-pre-wrap rounded-sm border border-app-error-900/50 bg-app-error-950/30 p-1.5 text-2xs text-app-error-200/90"
           >{{ entry.error }}</pre>
       </li>
     </ul>

@@ -47,7 +47,7 @@ const failed = computed(() => props.report.outcomes.filter((o) => !o.passed))
         <span class="truncate font-mono text-2xs text-dimmed">{{ outcome.command }}</span>
         <span
           v-if="!outcome.passed"
-          class="ms-auto shrink-0 rounded bg-app-error-500/15 px-1.5 py-0.5 text-2xs tabular-nums text-app-error-300"
+          class="ms-auto shrink-0 rounded-sm bg-app-error-500/15 px-1.5 py-0.5 text-2xs tabular-nums text-app-error-300"
         >
           {{
             outcome.timedOut
@@ -58,7 +58,7 @@ const failed = computed(() => props.report.outcomes.filter((o) => !o.passed))
       </div>
       <pre
         v-if="outcome.outputTail"
-        class="mt-1.5 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded bg-app-950 p-2 font-mono text-2xs text-muted"
+        class="mt-1.5 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-sm bg-app-950 p-2 font-mono text-2xs text-muted"
         data-testid="validation-output"
         >{{ outcome.outputTail }}</pre>
     </div>

@@ -77,7 +77,7 @@ function toggle(id: string) {
         <SectionLabel
           as="button"
           type="button"
-          class="flex w-full items-center gap-1.5 rounded px-1 py-1 text-start transition hover:text-default"
+          class="flex w-full items-center gap-1.5 rounded-sm px-1 py-1 text-start transition hover:text-default"
           @click="toggle(g.id)"
         >
           <UIcon

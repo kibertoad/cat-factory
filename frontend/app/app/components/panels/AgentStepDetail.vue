@@ -876,7 +876,7 @@ async function copyOutput() {
               {{ t('panels.stepDetail.commentingOn') }}
             </div>
             <pre
-              class="mb-2 max-h-24 overflow-auto whitespace-pre-wrap rounded bg-app-950/60 p-2 text-2xs text-toned"
+              class="mb-2 max-h-24 overflow-auto whitespace-pre-wrap rounded-sm bg-app-950/60 p-2 text-2xs text-toned"
               >{{ draftTarget.quotedSource }}</pre>
             <UTextarea
               v-model="draftBody"
@@ -923,7 +923,7 @@ async function copyOutput() {
               </button>
             </div>
             <pre
-              class="mb-1 max-h-20 overflow-auto whitespace-pre-wrap rounded bg-app-950/50 p-1.5 text-3xs text-muted"
+              class="mb-1 max-h-20 overflow-auto whitespace-pre-wrap rounded-sm bg-app-950/50 p-1.5 text-3xs text-muted"
               >{{ c.quotedSource }}</pre>
             <p class="text-xs text-default">{{ c.body }}</p>
           </div>

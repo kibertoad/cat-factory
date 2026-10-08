@@ -394,7 +394,7 @@ const { requestClose } = useUnsavedGuard({
                 </p>
                 <div class="mt-2.5 flex flex-wrap gap-2">
                   <button
-                    class="rounded bg-primary/90 px-2.5 py-1 text-2xs font-medium text-inverted hover:bg-primary disabled:opacity-50"
+                    class="rounded-sm bg-primary/90 px-2.5 py-1 text-2xs font-medium text-inverted hover:bg-primary disabled:opacity-50"
                     :disabled="initiatives.controlling"
                     data-testid="initiative-checkpoint-resume"
                     @click="checkpointControl('resume')"
@@ -402,7 +402,7 @@ const { requestClose } = useUnsavedGuard({
                     {{ t('initiative.inspector.resume') }}
                   </button>
                   <button
-                    class="rounded border border-app-error-500/50 px-2.5 py-1 text-2xs font-medium text-app-error-300 hover:bg-app-error-500/10 disabled:opacity-50"
+                    class="rounded-sm border border-app-error-500/50 px-2.5 py-1 text-2xs font-medium text-app-error-300 hover:bg-app-error-500/10 disabled:opacity-50"
                     :disabled="initiatives.controlling"
                     data-testid="initiative-checkpoint-cancel"
                     @click="checkpointControl('cancel')"
@@ -526,7 +526,7 @@ const { requestClose } = useUnsavedGuard({
                       >
                         <button
                           v-if="item.status === 'blocked'"
-                          class="rounded border border-muted px-1.5 py-0.5 text-3xs text-toned hover:bg-elevated disabled:opacity-50"
+                          class="rounded-sm border border-muted px-1.5 py-0.5 text-3xs text-toned hover:bg-elevated disabled:opacity-50"
                           :disabled="initiatives.curating"
                           :data-testid="`initiative-item-retry-${item.id}`"
                           @click="itemAction(item, 'retry')"
@@ -534,7 +534,7 @@ const { requestClose } = useUnsavedGuard({
                           {{ t('initiative.curation.retry') }}
                         </button>
                         <button
-                          class="rounded border border-muted px-1.5 py-0.5 text-3xs text-toned hover:bg-elevated disabled:opacity-50"
+                          class="rounded-sm border border-muted px-1.5 py-0.5 text-3xs text-toned hover:bg-elevated disabled:opacity-50"
                           :disabled="initiatives.curating"
                           :data-testid="`initiative-item-skip-${item.id}`"
                           @click="itemAction(item, 'skip')"
@@ -578,7 +578,7 @@ const { requestClose } = useUnsavedGuard({
               </SectionLabel>
               <button
                 v-if="editable && !editingPolicy"
-                class="rounded border border-muted px-1.5 py-0.5 text-3xs text-toned hover:bg-elevated"
+                class="rounded-sm border border-muted px-1.5 py-0.5 text-3xs text-toned hover:bg-elevated"
                 data-testid="initiative-policy-edit"
                 @click="startEditPolicy"
               >
@@ -611,7 +611,7 @@ const { requestClose } = useUnsavedGuard({
                   type="number"
                   min="1"
                   max="20"
-                  class="w-20 rounded border border-muted bg-app-950 px-2 py-1 text-default"
+                  class="w-20 rounded-sm border border-muted bg-app-950 px-2 py-1 text-default"
                   data-testid="initiative-policy-max-concurrent"
                 />
               </label>
@@ -620,13 +620,13 @@ const { requestClose } = useUnsavedGuard({
                 <input
                   v-model="policyForm.defaultPipelineId"
                   type="text"
-                  class="flex-1 rounded border border-muted bg-app-950 px-2 py-1 font-mono text-2xs text-default"
+                  class="flex-1 rounded-sm border border-muted bg-app-950 px-2 py-1 font-mono text-2xs text-default"
                   data-testid="initiative-policy-default-pipeline"
                 />
               </label>
               <div class="flex gap-2">
                 <button
-                  class="rounded bg-primary/90 px-2 py-1 text-2xs text-inverted hover:bg-primary disabled:opacity-50"
+                  class="rounded-sm bg-primary/90 px-2 py-1 text-2xs text-inverted hover:bg-primary disabled:opacity-50"
                   :disabled="initiatives.curating"
                   data-testid="initiative-policy-save"
                   @click="savePolicy"
@@ -634,7 +634,7 @@ const { requestClose } = useUnsavedGuard({
                   {{ t('initiative.curation.save') }}
                 </button>
                 <button
-                  class="rounded border border-muted px-2 py-1 text-2xs text-toned hover:bg-elevated"
+                  class="rounded-sm border border-muted px-2 py-1 text-2xs text-toned hover:bg-elevated"
                   @click="editingPolicy = false"
                 >
                   {{ t('initiative.curation.cancel') }}
@@ -698,7 +698,7 @@ const { requestClose } = useUnsavedGuard({
                       <span class="text-muted">{{ t('initiative.curation.phaseField') }}</span>
                       <select
                         v-model="promoteForm.phaseId"
-                        class="flex-1 rounded border border-muted bg-app-950 px-2 py-1 text-default"
+                        class="flex-1 rounded-sm border border-muted bg-app-950 px-2 py-1 text-default"
                         data-testid="initiative-promote-phase"
                       >
                         <option v-for="p in phases" :key="p.id" :value="p.id">
@@ -709,13 +709,13 @@ const { requestClose } = useUnsavedGuard({
                     <input
                       v-model="promoteForm.title"
                       type="text"
-                      class="rounded border border-muted bg-app-950 px-2 py-1 text-xs text-default"
+                      class="rounded-sm border border-muted bg-app-950 px-2 py-1 text-xs text-default"
                       :placeholder="t('initiative.curation.itemTitlePlaceholder')"
                       data-testid="initiative-promote-title"
                     />
                     <div class="flex gap-2">
                       <button
-                        class="rounded bg-primary/90 px-2 py-1 text-2xs text-inverted hover:bg-primary disabled:opacity-50"
+                        class="rounded-sm bg-primary/90 px-2 py-1 text-2xs text-inverted hover:bg-primary disabled:opacity-50"
                         :disabled="initiatives.curating || !promoteForm.phaseId"
                         data-testid="initiative-promote-submit"
                         @click="submitPromote(f)"
@@ -723,7 +723,7 @@ const { requestClose } = useUnsavedGuard({
                         {{ t('initiative.curation.promoteConfirm') }}
                       </button>
                       <button
-                        class="rounded border border-muted px-2 py-1 text-2xs text-toned hover:bg-elevated"
+                        class="rounded-sm border border-muted px-2 py-1 text-2xs text-toned hover:bg-elevated"
                         @click="promotingId = null"
                       >
                         {{ t('initiative.curation.cancel') }}
@@ -732,14 +732,14 @@ const { requestClose } = useUnsavedGuard({
                   </div>
                   <div v-else class="flex gap-1.5">
                     <button
-                      class="rounded border border-muted px-1.5 py-0.5 text-3xs text-toned hover:bg-elevated"
+                      class="rounded-sm border border-muted px-1.5 py-0.5 text-3xs text-toned hover:bg-elevated"
                       data-testid="initiative-followup-promote"
                       @click="startPromote(f)"
                     >
                       {{ t('initiative.curation.promote') }}
                     </button>
                     <button
-                      class="rounded border border-muted px-1.5 py-0.5 text-3xs text-toned hover:bg-elevated disabled:opacity-50"
+                      class="rounded-sm border border-muted px-1.5 py-0.5 text-3xs text-toned hover:bg-elevated disabled:opacity-50"
                       :disabled="initiatives.curating"
                       data-testid="initiative-followup-dismiss"
                       @click="dismissFollowUp(f)"

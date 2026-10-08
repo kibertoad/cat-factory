@@ -76,7 +76,7 @@ const groups = computed(() => {
             v-for="task in mod.tasks"
             :key="task.id"
             type="button"
-            class="flex w-full items-center gap-1.5 rounded px-1 py-0.5 text-start text-xs text-default hover:bg-elevated"
+            class="flex w-full items-center gap-1.5 rounded-sm px-1 py-0.5 text-start text-xs text-default hover:bg-elevated"
             @click="ui.select(task.id)"
           >
             <span

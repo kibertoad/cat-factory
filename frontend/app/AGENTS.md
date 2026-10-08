@@ -36,6 +36,10 @@ Code loads as instructions (via the sibling [`CLAUDE.md`](./CLAUDE.md)).
   literal, which does not scale with a theme's `fontSize`; a section eyebrow is
   `common/SectionLabel.vue`. [Rule](./README.md#type-through-named-steps-never-a-pixel-literal),
   guarded by `scripts/check-frontend-type-scale.mjs`.
+- **Radius through any `rounded-*` step** (`main.css` binds the whole scale onto `--ui-radius`),
+  never an arbitrary value; in CSS, `var(--ui-radius)` or a `calc()` of it, never a `--radius-*`
+  variable or a literal. [Rule](./README.md#radius-through-the-theme-scale), guarded by
+  `scripts/check-frontend-radius.mjs`.
 
 **Nuxt UI guidance:** the vendored [`nuxt-ui` skill](../../.claude/skills/nuxt-ui/SKILL.md) teaches
 WHEN to use which component and HOW to build well; the [`nuxt-ui` MCP server](../../.mcp.json)
@@ -57,7 +61,8 @@ is whole-tree from the root (CLAUDE.md). Run these where stated:
 - `pnpm lint` from the repo root (oxlint + oxfmt over the whole tree, once).
 - `pnpm --filter @cat-factory/app i18n:check` and `i18n:parity` when you touch copy or the catalog.
 - `node scripts/check-component-imports.mjs`, `node scripts/check-frontend-palette.mjs`,
-  `node scripts/check-frontend-type-scale.mjs`, `node scripts/check-file-size.mjs` from the repo
+  `node scripts/check-frontend-type-scale.mjs`, `node scripts/check-frontend-radius.mjs`,
+  `node scripts/check-file-size.mjs` from the repo
   root (install-free guards CI runs).
 
 **See also:** [`README.md`](./README.md), [`app/docs/architecture.md`](./app/docs/architecture.md),

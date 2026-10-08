@@ -262,7 +262,7 @@ async function copyPlan() {
         >
           <button
             v-if="s.depth > 0"
-            class="group flex w-full items-center gap-1.5 rounded py-0.5 text-start transition hover:text-highlighted"
+            class="group flex w-full items-center gap-1.5 rounded-sm py-0.5 text-start transition hover:text-highlighted"
             :aria-expanded="!collapsed[s.id]"
             @click="toggle(s.id)"
           >
@@ -324,7 +324,7 @@ async function copyPlan() {
             {{ t('panels.stepDetail.commentingOn') }}
           </div>
           <pre
-            class="mb-2 max-h-20 overflow-auto whitespace-pre-wrap rounded bg-app-950/60 p-1.5 text-2xs text-toned"
+            class="mb-2 max-h-20 overflow-auto whitespace-pre-wrap rounded-sm bg-app-950/60 p-1.5 text-2xs text-toned"
             >{{ draftTarget.quotedSource }}</pre>
           <UTextarea
             v-model="draftBody"
@@ -371,7 +371,7 @@ async function copyPlan() {
             </button>
           </div>
           <pre
-            class="mb-1 max-h-16 overflow-auto whitespace-pre-wrap rounded bg-app-950/50 p-1.5 text-3xs text-muted"
+            class="mb-1 max-h-16 overflow-auto whitespace-pre-wrap rounded-sm bg-app-950/50 p-1.5 text-3xs text-muted"
             >{{ c.quotedSource }}</pre>
           <p class="text-xs text-default">{{ c.body }}</p>
         </div>

@@ -428,7 +428,7 @@ const { requestClose } = useUnsavedGuard({
                   </span>
                   <span
                     data-testid="pr-review-chunk-status"
-                    class="shrink-0 rounded px-1.5 py-0.5 text-3xs font-medium uppercase"
+                    class="shrink-0 rounded-sm px-1.5 py-0.5 text-3xs font-medium uppercase"
                     :class="CHUNK_STATUS_CLASS[item.status]"
                   >
                     {{ chunkStatusLabel(item.status) }}
@@ -627,18 +627,18 @@ const { requestClose } = useUnsavedGuard({
                   <div class="min-w-0 flex-1">
                     <div class="flex flex-wrap items-center gap-1.5">
                       <span
-                        class="rounded px-1.5 py-0.5 text-3xs font-semibold uppercase ring-1"
+                        class="rounded-sm px-1.5 py-0.5 text-3xs font-semibold uppercase ring-1"
                         :class="SEVERITY_CLASS[f.severity]"
                       >
                         {{ t(`prReview.severity.${f.severity}`) }}
                       </span>
-                      <span class="rounded bg-elevated px-1.5 py-0.5 text-3xs text-toned">
+                      <span class="rounded-sm bg-elevated px-1.5 py-0.5 text-3xs text-toned">
                         {{ t(`prReview.category.${f.category}`) }}
                       </span>
                       <span
                         v-if="postedIds.has(f.id)"
                         data-testid="pr-review-finding-posted"
-                        class="rounded bg-app-success-500/15 px-1.5 py-0.5 text-3xs font-semibold uppercase text-app-success-300 ring-1 ring-app-success-500/30"
+                        class="rounded-sm bg-app-success-500/15 px-1.5 py-0.5 text-3xs font-semibold uppercase text-app-success-300 ring-1 ring-app-success-500/30"
                       >
                         {{ t('prReview.postReport.postedBadge') }}
                       </span>
@@ -646,35 +646,35 @@ const { requestClose } = useUnsavedGuard({
                       <span
                         v-if="isRetracted(f)"
                         data-testid="pr-review-finding-retracted"
-                        class="rounded bg-app-error-500/15 px-1.5 py-0.5 text-3xs font-semibold uppercase text-app-error-300 ring-1 ring-app-error-500/30"
+                        class="rounded-sm bg-app-error-500/15 px-1.5 py-0.5 text-3xs font-semibold uppercase text-app-error-300 ring-1 ring-app-error-500/30"
                       >
                         {{ t('prReview.challenge.retractedBadge') }}
                       </span>
                       <span
                         v-else-if="isAmended(f)"
                         data-testid="pr-review-finding-amended"
-                        class="rounded bg-app-info-500/15 px-1.5 py-0.5 text-3xs font-semibold uppercase text-app-info-300 ring-1 ring-app-info-500/30"
+                        class="rounded-sm bg-app-info-500/15 px-1.5 py-0.5 text-3xs font-semibold uppercase text-app-info-300 ring-1 ring-app-info-500/30"
                       >
                         {{ t('prReview.challenge.strengthenedBadge') }}
                       </span>
                       <span
                         v-else-if="isUpheld(f)"
                         data-testid="pr-review-finding-upheld"
-                        class="rounded bg-app-success-500/15 px-1.5 py-0.5 text-3xs font-semibold uppercase text-app-success-300 ring-1 ring-app-success-500/30"
+                        class="rounded-sm bg-app-success-500/15 px-1.5 py-0.5 text-3xs font-semibold uppercase text-app-success-300 ring-1 ring-app-success-500/30"
                       >
                         {{ t('prReview.challenge.upheldBadge') }}
                       </span>
                       <span
                         v-else-if="isChallengeFailed(f)"
                         data-testid="pr-review-finding-challenge-failed"
-                        class="rounded bg-app-warning-500/15 px-1.5 py-0.5 text-3xs font-semibold uppercase text-app-warning-300 ring-1 ring-app-warning-500/30"
+                        class="rounded-sm bg-app-warning-500/15 px-1.5 py-0.5 text-3xs font-semibold uppercase text-app-warning-300 ring-1 ring-app-warning-500/30"
                       >
                         {{ t('prReview.challenge.failedBadge') }}
                       </span>
                       <span
                         v-else-if="isInvestigating(f)"
                         data-testid="pr-review-finding-investigating"
-                        class="flex items-center gap-1 rounded bg-primary/15 px-1.5 py-0.5 text-3xs font-semibold uppercase text-primary ring-1 ring-primary/30"
+                        class="flex items-center gap-1 rounded-sm bg-primary/15 px-1.5 py-0.5 text-3xs font-semibold uppercase text-primary ring-1 ring-primary/30"
                       >
                         <UIcon name="i-lucide-loader-circle" class="h-3 w-3 animate-spin" />
                         {{ t('prReview.challenge.investigatingBadge') }}
@@ -784,21 +784,21 @@ const { requestClose } = useUnsavedGuard({
                         data-testid="pr-review-challenge-input"
                         rows="2"
                         :placeholder="t('prReview.challenge.placeholder')"
-                        class="w-full resize-y rounded border border-muted bg-app-950/60 px-2 py-1 text-xs text-default outline-none focus:border-primary"
+                        class="w-full resize-y rounded-sm border border-muted bg-app-950/60 px-2 py-1 text-xs text-default outline-none focus:border-primary"
                       />
                       <p class="mt-1 text-3xs text-dimmed">
                         {{ t('prReview.challenge.hint') }}
                       </p>
                       <div class="mt-1.5 flex justify-end gap-2">
                         <button
-                          class="rounded px-2 py-1 text-2xs text-muted hover:text-default"
+                          class="rounded-sm px-2 py-1 text-2xs text-muted hover:text-default"
                           @click="cancelChallenge"
                         >
                           {{ t('common.cancel') }}
                         </button>
                         <button
                           data-testid="pr-review-challenge-submit"
-                          class="rounded bg-primary/80 px-2 py-1 text-2xs font-medium text-inverted hover:bg-primary/90 disabled:opacity-50"
+                          class="rounded-sm bg-primary/80 px-2 py-1 text-2xs font-medium text-inverted hover:bg-primary/90 disabled:opacity-50"
                           :disabled="!canResolve"
                           @click="submitChallenge(f.id)"
                         >

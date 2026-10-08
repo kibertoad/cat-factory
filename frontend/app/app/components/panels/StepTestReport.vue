@@ -117,11 +117,11 @@ function verdictMeta(status: RequirementVerdictStatus): VerdictMeta {
       <div
         v-for="(c, i) in report.concerns"
         :key="i"
-        class="rounded border border-muted/60 p-2 text-xs"
+        class="rounded-sm border border-muted/60 p-2 text-xs"
       >
         <div class="flex items-center gap-1.5">
           <span
-            class="rounded px-1 text-3xs font-semibold uppercase text-highlighted"
+            class="rounded-sm px-1 text-3xs font-semibold uppercase text-highlighted"
             :style="{ backgroundColor: SEVERITY_COLOR[c.severity] ?? 'var(--ui-text-muted)' }"
             >{{ c.severity }}</span
           >
