@@ -6,8 +6,10 @@ import type {
 } from '@cat-factory/contracts'
 import type {
   GitHubChangedFile,
+  GuidedReviewExchange,
   GuidedReviewJob,
   GuidedReviewMessageOutcome,
+  GuidedReviewNewSession,
   GuidedReviewOverviewOutcome,
   GuidedReviewRepository,
   ModelProvider,
@@ -76,13 +78,17 @@ class InMemoryGuidedReviewRepository implements GuidedReviewRepository {
   drafts = new Map<string, GuidedReviewCommentDraft>()
   claims = new Map<string, number>()
 
-  async openSession(_ws: string, s: GuidedReviewSession) {
+  async openSession(_ws: string, s: GuidedReviewNewSession) {
     const existing = [...this.sessions.values()].find(
       (x) => x.repoId === s.repoId && x.prNumber === s.prNumber && x.createdBy === s.createdBy,
     )
     if (existing) return existing
-    this.sessions.set(s.id, structuredClone(s))
-    return s
+    const session: GuidedReviewSession = {
+      ...s,
+      overview: { status: 'pending', generation: 1, content: null, failure: null, model: null },
+    }
+    this.sessions.set(s.id, structuredClone(session))
+    return session
   }
   async getSession(_ws: string, id: string) {
     return this.sessions.get(id) ?? null
@@ -156,15 +162,40 @@ class InMemoryGuidedReviewRepository implements GuidedReviewRepository {
         (m.status === 'pending' || m.status === 'running'),
     )
   }
-  async appendExchange(
-    _ws: string,
-    q: Omit<GuidedReviewMessage, 'seq'>,
-    p: Omit<GuidedReviewMessage, 'seq'>,
-  ) {
-    if (this.live(q.threadId)) return { ok: false as const, reason: 'thread_busy' as const }
-    const seq = [...this.messages.values()].filter((m) => m.threadId === q.threadId).length
-    const question = { ...q, seq: seq + 1 }
-    const placeholder = { ...p, seq: seq + 2 }
+  async appendExchange(_ws: string, e: GuidedReviewExchange) {
+    if (this.threads.get(e.threadId)?.sessionId !== e.sessionId) {
+      return { ok: false as const, reason: 'thread_not_found' as const }
+    }
+    if (this.live(e.threadId)) return { ok: false as const, reason: 'thread_busy' as const }
+    const seq = [...this.messages.values()].filter((m) => m.threadId === e.threadId).length
+    const base = {
+      threadId: e.threadId,
+      sessionId: e.sessionId,
+      kind: e.kind,
+      depth: e.depth,
+      citations: [],
+      failure: null,
+      draftReport: null,
+      model: null,
+      createdAt: e.at,
+      updatedAt: e.at,
+    }
+    const question: GuidedReviewMessage = {
+      ...base,
+      id: e.questionId,
+      seq: seq + 1,
+      role: 'user',
+      content: e.question,
+      status: 'complete',
+    }
+    const placeholder: GuidedReviewMessage = {
+      ...base,
+      id: e.placeholderId,
+      seq: seq + 2,
+      role: 'assistant',
+      content: '',
+      status: 'pending',
+    }
     this.messages.set(question.id, question)
     this.messages.set(placeholder.id, placeholder)
     return { ok: true as const, question, placeholder }

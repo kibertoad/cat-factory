@@ -26,6 +26,7 @@ import type {
   GitHubChangedFile,
   GuidedReviewDriver,
   GuidedReviewJob,
+  GuidedReviewNewSession,
   GuidedReviewRepository,
   GuidedReviewRunner,
   GuidedReviewSessionFilter,
@@ -147,7 +148,7 @@ export class GuidedReviewService {
     const context = await this.repoFor(workspaceId, input)
     const pr = await this.readPr(workspaceId, userId, context.repo, input.prNumber)
     const now = this.deps.clock.now()
-    const candidate: GuidedReviewSession = {
+    const candidate: GuidedReviewNewSession = {
       id: this.deps.idGenerator.next('grs'),
       provider: context.provider ?? input.provider ?? 'github',
       repoId: context.repoId,
@@ -158,7 +159,6 @@ export class GuidedReviewService {
       reviewedHeadSha: pr.headSha,
       baseRef: pr.baseRef,
       createdBy: userId,
-      overview: { status: 'pending', generation: 1, content: null, failure: null, model: null },
       createdAt: now,
       updatedAt: now,
     }
@@ -338,33 +338,24 @@ export class GuidedReviewService {
     if (kind === 'answer' && !content) {
       throw new ValidationError('A question cannot be empty', { reason: 'empty_question' })
     }
-    const now = this.deps.clock.now()
-    const depth = input.depth ?? 'inline'
-    const base = {
-      threadId: thread.id,
-      sessionId: thread.sessionId,
-      kind,
-      depth,
-      citations: [],
-      failure: null,
-      draftReport: null,
-      model: null,
-      createdAt: now,
-      updatedAt: now,
-    }
     const result = await this.deps.repository.appendExchange(
       workspaceId,
-      { ...base, id: this.deps.idGenerator.next('grm'), role: 'user', content, status: 'complete' },
       {
-        ...base,
-        id: this.deps.idGenerator.next('grm'),
-        role: 'assistant',
-        content: '',
-        status: 'pending',
+        sessionId: thread.sessionId,
+        threadId: thread.id,
+        kind,
+        depth: input.depth ?? 'inline',
+        questionId: this.deps.idGenerator.next('grm'),
+        question: content,
+        placeholderId: this.deps.idGenerator.next('grm'),
+        at: this.deps.clock.now(),
       },
       this.deps.driver,
     )
     if (!result.ok) {
+      if (result.reason === 'thread_not_found') {
+        throw new NotFoundError('Guided review thread', thread.id)
+      }
       throw new ConflictError('This thread is still waiting for its previous answer', 'thread_busy')
     }
     await this.wake(workspaceId, { kind: 'message', messageId: result.placeholder.id })
