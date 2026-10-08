@@ -41,19 +41,23 @@ browser extension over the host's PR page) can build the same experience.
 
 ## Wire model (contracts, valibot)
 
-- `GuidedReviewSession`: `id`, `repoId`, `provider`, `prNumber`, `prTitle`, `reviewedHeadSha`,
-  `baseRef`, `createdBy`, `overview: { status: 'pending' | 'running' | 'ready' | 'failed', content?,
-error?, model? }`, `stale`, timestamps.
+The schemas live in `@cat-factory/contracts` (`guided-review.ts`).
+
+- `GuidedReviewSession`: `id`, `provider`, `repoId`, `owner`, `repo`, `prNumber`, `prTitle`,
+  `reviewedHeadSha`, `baseRef`, `createdBy`, `overview: { status: 'pending' | 'running' |
+'complete' | 'failed', generation, content, error, model }`, timestamps.
 - Overview content: `summary`, `intent`, `meaningfulChanges[] { title, detail, paths[] }`,
   `consequences[] { title, detail }`, `risks[] { title, detail, severity, paths[] }`,
-  `focusAreas[] { title, why, anchors[] { path, startLine?, endLine? } }`,
+  `focusAreas[] { title, why, anchors[] { path, startLine?, endLine?, side? } }`,
   `suggestedQuestions[] { id, question }`.
 - `GuidedReviewThread`: `id`, `sessionId`, `title`, `createdBy`, timestamps.
-- `GuidedReviewMessage`: `id`, `threadId`, `role: 'user' | 'assistant'`, `content`, `status:
-'pending' | 'running' | 'complete' | 'failed'`, `depth: 'inline' | 'deep'`, `citations[] { path,
-startLine, endLine, side }`, `error?`, `model?`, timestamps.
-- `GuidedReviewCommentDraft`: `id`, `threadId`, `path`, `line`, `startLine?`, `side`, `body`,
-  `rationale`, `status: 'proposed' | 'posted' | 'discarded' | 'failed'`, `postOutcome?`, timestamps.
+- `GuidedReviewMessage`: `id`, `threadId`, `sessionId`, `seq`, `role: 'user' | 'assistant'`,
+  `kind: 'answer' | 'comment-drafts'`, `depth: 'inline' | 'deep'`, `content`, `status: 'pending' |
+'running' | 'complete' | 'failed'`, `citations[] { path, startLine?, endLine?, side? }`, `error`,
+  `model`, timestamps.
+- `GuidedReviewCommentDraft`: `id`, `sessionId`, `threadId`, `messageId`, `path`, `line`,
+  `startLine`, `side`, `body`, `rationale`, `status: 'proposed' | 'posting' | 'posted' | 'failed' |
+'discarded'`, `postError`, `postedUrl`, `rev`, timestamps.
 
 ## Public API surface (`/api/v1`, scope `read` for GET, `write` otherwise)
 
@@ -93,7 +97,15 @@ startLine, endLine, side }`, `error?`, `model?`, timestamps.
 - `appendExchange` on Postgres locks the thread row first. Without the lock two concurrent questions
   read the same `MAX(seq)`, and the loser trips the `seq` index before the live-answer conflict
   target can resolve, so it errors instead of returning `thread_busy`. SQLite serializes writers and
-  cannot show this; the store conformance suite's concurrent-question case does.
+  cannot show this; the store conformance suite's concurrent-question case does. A thread that is
+  missing, or belongs to another session, is `thread_not_found` on both runtimes, so the lock never
+  silently locks nothing.
+- The store, not the caller, writes the queued state: `openSession` queues overview generation 1 and
+  `appendExchange` writes the placeholder `pending`. A claim requires `pending` or an expired
+  `claimed_at`, so a row created `running` with no claim would never be driven.
+- A draft held in `posting` past its lease is re-claimable, so a poster that died between claim and
+  settle cannot strand it. If that poster died after the host accepted the comment, a re-claim can
+  post it twice; slice 6 checks the host for the comment before re-posting a re-claimed draft.
 - Comment drafting is a message `kind` on its thread, so the busy index covers it and the driver
   has two job types (overview, message). The drafts and the message settle in one atomic write.
 - Every model call runs as the SESSION CREATOR (`resolveInlineScope` with a `user` subject, and
