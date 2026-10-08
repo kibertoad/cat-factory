@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { GUIDED_REVIEW_POST_LEASE_MS } from '@cat-factory/contracts'
 import {
   GUIDED_REVIEW_FAILURE_REASONS,
   guidedReviewDroppedDraftReasonSchema,
@@ -6,6 +7,9 @@ import {
 import en from '../../../i18n/locales/en.json'
 import {
   NEW_THREAD_TAB,
+  draftEdit,
+  isEditableDraft,
+  postableSelection,
   canAsk,
   citationLabel,
   draftAnchor,
@@ -119,5 +123,57 @@ describe('isStale', () => {
     expect(isStale('a', 'b')).toBe(true)
     expect(isStale('a', 'a')).toBe(false)
     expect(isStale('a', null)).toBe(false)
+  })
+})
+
+describe('draft editing and posting', () => {
+  it('treats proposed and failed drafts as still editable', () => {
+    expect(
+      ['proposed', 'failed', 'posting', 'posted', 'discarded'].map((status) =>
+        isEditableDraft({ status: status as never }),
+      ),
+    ).toEqual([true, true, false, false, false])
+  })
+
+  it('posts only the selected drafts that are still postable, in list order', () => {
+    const drafts = [
+      { id: 'a', status: 'proposed' as const, updatedAt: 0 },
+      { id: 'b', status: 'posted' as const, updatedAt: 0 },
+      { id: 'c', status: 'failed' as const, updatedAt: 0 },
+    ]
+    expect(postableSelection(drafts, new Set(['c', 'b', 'a']), 1)).toEqual(['a', 'c'])
+  })
+
+  it('offers a posting draft again only once its claim outlives the lease', () => {
+    const stranded = [{ id: 'p', status: 'posting' as const, updatedAt: 1_000 }]
+    const selected = new Set(['p'])
+    expect(postableSelection(stranded, selected, 1_000 + GUIDED_REVIEW_POST_LEASE_MS)).toEqual([])
+    expect(postableSelection(stranded, selected, 1_001 + GUIDED_REVIEW_POST_LEASE_MS)).toEqual([
+      'p',
+    ])
+  })
+
+  it('sends only what an edit changed, and nothing for an untouched form', () => {
+    const draft = { body: 'Bound the retries.', line: 3, startLine: null, side: 'RIGHT' as const }
+    expect(draftEdit(draft, { body: ' Bound the retries. ', line: 3, side: 'RIGHT' })).toEqual({})
+    expect(draftEdit(draft, { body: 'Cap at three.', line: 4, side: 'RIGHT' })).toEqual({
+      body: 'Cap at three.',
+      line: 4,
+    })
+  })
+
+  it('drops the start of a multi-line draft only when the edit moves it', () => {
+    const span = { body: 'Span.', line: 8, startLine: 5, side: 'RIGHT' as const }
+    expect(draftEdit(span, { body: 'Reworded.', line: 8, side: 'RIGHT' })).toEqual({
+      body: 'Reworded.',
+    })
+    expect(draftEdit(span, { body: 'Span.', line: 3, side: 'RIGHT' })).toEqual({
+      line: 3,
+      startLine: null,
+    })
+    expect(draftEdit(span, { body: 'Span.', line: 8, side: 'LEFT' })).toEqual({
+      startLine: null,
+      side: 'LEFT',
+    })
   })
 })

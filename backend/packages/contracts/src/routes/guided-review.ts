@@ -7,13 +7,17 @@ import {
 import * as v from 'valibot'
 import {
   askGuidedReviewSchema,
+  editGuidedReviewDraftSchema,
+  guidedReviewCommentDraftSchema,
   guidedReviewExchangeSchema,
+  guidedReviewPostResultSchema,
   guidedReviewSessionSchema,
   guidedReviewSessionViewSchema,
   guidedReviewThreadViewSchema,
   listGuidedReviewsQuerySchema,
   openGuidedReviewSchema,
   openGuidedReviewThreadSchema,
+  postGuidedReviewDraftsSchema,
   requestGuidedReviewDraftsSchema,
 } from '../guided-review.js'
 import { errorResponses, singleStringParam } from './_shared.js'
@@ -92,4 +96,23 @@ export const requestGuidedReviewDraftsContract = defineApiContract({
     `/guided-reviews/${sessionId}/threads/${threadId}/comment-drafts`,
   requestBodySchema: requestGuidedReviewDraftsSchema,
   responsesByStatusCode: { 200: guidedReviewExchangeSchema, ...errorResponses },
+})
+
+const draftParams = withObjectKeys(v.object({ sessionId: v.string(), draftId: v.string() }))
+
+export const editGuidedReviewDraftContract = defineApiContract({
+  method: 'patch',
+  requestPathParamsSchema: draftParams,
+  pathResolver: ({ sessionId, draftId }) =>
+    `/guided-reviews/${sessionId}/comment-drafts/${draftId}`,
+  requestBodySchema: editGuidedReviewDraftSchema,
+  responsesByStatusCode: { 200: guidedReviewCommentDraftSchema, ...errorResponses },
+})
+
+export const postGuidedReviewDraftsContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: sessionParams,
+  pathResolver: ({ sessionId }) => `/guided-reviews/${sessionId}/comment-drafts/post`,
+  requestBodySchema: postGuidedReviewDraftsSchema,
+  responsesByStatusCode: { 200: guidedReviewPostResultSchema, ...errorResponses },
 })

@@ -805,7 +805,9 @@
         "delegated_executor_unwired": "External executor not registered",
         "delegated_step_async_only": "This step is polled, not awaited",
         "delegated_claim_missing": "This step has no external work to check",
-        "thread_busy": "This thread is still answering"
+        "thread_busy": "This thread is still answering",
+        "draft_conflict": "This draft changed",
+        "session_stale": "The pull request has moved on"
       },
       "description": {
         "dependencies_unmet": "This task depends on others that aren't finished yet. Complete or unblock them, then start it again.",
@@ -866,7 +868,9 @@
         "delegated_executor_unwired": "A step in this pipeline runs on an external executor this deployment does not register, so there is nowhere to send the work. Register the executor in code, or change the step to one that runs here.",
         "delegated_step_async_only": "This step runs on an external executor, which can take hours, so it is dispatched and then polled rather than run inside one request. Start the run from the board; if you reached this from your own code, drive the step through the async path.",
         "delegated_claim_missing": "The run’s record of what it sent to the external executor is missing, so there is nothing to poll. Nothing is wrong with the executor itself. Reload the run, and re-run the step if it is still stuck.",
-        "thread_busy": "The previous question in this thread has not been answered yet. Wait for that answer, or ask in another thread."
+        "thread_busy": "The previous question in this thread has not been answered yet. Wait for that answer, or ask in another thread.",
+        "draft_conflict": "Someone edited, posted or discarded this comment draft since you loaded it. Reload the drafts and make your change again.",
+        "session_stale": "New commits landed after this review was prepared, so its drafts may point at the wrong lines. Refresh the review, check the drafts, then post."
       },
       "action": {
         "connectGitHub": "Connect GitHub",
@@ -5375,7 +5379,26 @@
       "side": {
         "RIGHT": "new code",
         "LEFT": "old code"
-      }
+      },
+      "select": "Select this draft for posting",
+      "status": {
+        "proposed": "Draft",
+        "posting": "Posting",
+        "posted": "Posted",
+        "failed": "Not posted",
+        "discarded": "Discarded"
+      },
+      "edit": "Edit",
+      "save": "Save",
+      "cancel": "Cancel",
+      "discard": "Discard",
+      "line": "Line",
+      "sideLabel": "Side",
+      "postFailed": "The host refused this comment",
+      "summaryPlaceholder": "Optional summary comment for the pull request",
+      "summaryFailed": "The host refused the summary comment",
+      "post": "Post {count} to the pull request",
+      "postResult": "{posted} posted, {failed} not posted, {skipped} already handled."
     },
     "errors": {
       "load": "Could not load the review",
@@ -5383,7 +5406,9 @@
       "open": "Could not open the review",
       "ask": "Could not ask the question",
       "drafts": "Could not request comment drafts",
-      "refresh": "Could not refresh the review"
+      "refresh": "Could not refresh the review",
+      "editDraft": "Could not save the draft",
+      "postDrafts": "Could not post the drafts"
     }
   },
   "pipeline": {

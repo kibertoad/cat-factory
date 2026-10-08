@@ -417,3 +417,14 @@ Additive: nine contract operations, one hand-documented stream, and the shapes t
 of those shapes reuse value sets other operations published first (a diff side, a VCS provider and
 a `true`/`false` query flag); the SDK generator pins the existing type names, so no released type
 is renamed. Nothing here posts to a pull request.
+
+## 1.77.0
+
+Guided review drafts can be edited and posted: `PATCH /api/v1/guided-reviews/{sessionId}/comment-drafts/{draftId}`
+edits, re-anchors or discards one, and `POST /api/v1/guided-reviews/{sessionId}/comment-drafts/post`
+publishes the chosen drafts on the pull request as plain review comments.
+
+Additive. What a consumer notices beyond the new operations: `ConflictError` reasons gain
+`draft_conflict` (an edit from a stale `rev`) and `session_stale` (a post after the pull request
+moved past the reviewed commit). The guided review group's `write` scope now also covers posting,
+which publishes on the host under the key's identity; it still never approves or requests changes.

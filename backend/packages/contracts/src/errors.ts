@@ -315,6 +315,12 @@ export const CONFLICT_REASONS = [
   // A guided PR review thread admits one live answer; this question arrived while it waits on one.
   // Other threads of the same review are unaffected, which is what the copy points at.
   'thread_busy',
+  // A guided review draft was edited from a stale revision, or is no longer editable (posted,
+  // discarded or being posted). The client reloads the draft and decides again.
+  'draft_conflict',
+  // The pull request moved past the commit a guided review was computed against, so draft anchors
+  // may point at the wrong lines. Refreshing the review is the remedy.
+  'session_stale',
 ] as const
 
 export type ConflictReason = (typeof CONFLICT_REASONS)[number]

@@ -3,12 +3,16 @@ import { ContractNoBody } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import {
   askGuidedReviewSchema,
+  editGuidedReviewDraftSchema,
+  guidedReviewCommentDraftSchema,
   guidedReviewExchangeSchema,
+  guidedReviewPostResultSchema,
   guidedReviewSessionViewSchema,
   guidedReviewThreadViewSchema,
   listPublicGuidedReviewsQuerySchema,
   openGuidedReviewSchema,
   openGuidedReviewThreadSchema,
+  postGuidedReviewDraftsSchema,
   publicGuidedReviewListSchema,
   requestGuidedReviewDraftsSchema,
 } from '../guided-review.js'
@@ -17,7 +21,8 @@ import { errorResponses, singleStringParam, withMinScope } from './_shared.js'
 // The public guided PR review surface: absolute `/api/v1` paths, authenticated in-controller by a
 // public-API key. The same sessions the app's review window drives, so another UI can offer the
 // whole experience. Reading is `read`; opening, asking and drafting are `write`, because they
-// spend model budget, and nothing here merges or posts on the pull request. Writes answer with
+// spend model budget. Posting drafts is also `write`: it publishes comments on the pull request as
+// the key's identity, and nothing here approves, merges or requests changes. Writes answer with
 // the persisted state at once; the overview and answers complete later, observable on
 // `GET /api/v1/guided-reviews/{sessionId}/events` or by re-reading.
 
@@ -118,5 +123,30 @@ export const requestPublicGuidedReviewDraftsContract = withMinScope(
       `/api/v1/guided-reviews/${sessionId}/threads/${threadId}/comment-drafts`,
     requestBodySchema: requestGuidedReviewDraftsSchema,
     responsesByStatusCode: { 200: guidedReviewExchangeSchema, ...errorResponses },
+  }),
+)
+
+const draftParams = withObjectKeys(v.object({ sessionId: v.string(), draftId: v.string() }))
+
+export const editPublicGuidedReviewDraftContract = withMinScope(
+  'write',
+  defineApiContract({
+    method: 'patch',
+    requestPathParamsSchema: draftParams,
+    pathResolver: ({ sessionId, draftId }) =>
+      `/api/v1/guided-reviews/${sessionId}/comment-drafts/${draftId}`,
+    requestBodySchema: editGuidedReviewDraftSchema,
+    responsesByStatusCode: { 200: guidedReviewCommentDraftSchema, ...errorResponses },
+  }),
+)
+
+export const postPublicGuidedReviewDraftsContract = withMinScope(
+  'write',
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: sessionParams,
+    pathResolver: ({ sessionId }) => `/api/v1/guided-reviews/${sessionId}/comment-drafts/post`,
+    requestBodySchema: postGuidedReviewDraftsSchema,
+    responsesByStatusCode: { 200: guidedReviewPostResultSchema, ...errorResponses },
   }),
 )

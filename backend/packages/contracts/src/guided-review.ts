@@ -290,6 +290,25 @@ export const guidedReviewCommentDraftSchema = v.object({
 })
 export type GuidedReviewCommentDraft = v.InferOutput<typeof guidedReviewCommentDraftSchema>
 
+/**
+ * How long a post holds the drafts it claimed. A `posting` draft older than this lost its poster
+ * before the host's answer was recorded, so another post may claim it again.
+ */
+export const GUIDED_REVIEW_POST_LEASE_MS = 10 * 60_000
+
+/**
+ * Whether a post may claim `draft` at `now`: a `proposed` or `failed` draft, or a `posting` one
+ * whose claim has outlived {@link GUIDED_REVIEW_POST_LEASE_MS}. The server claims by this rule and
+ * the review window offers a draft for posting by it, so a stranded draft stays reachable.
+ */
+export function isPostableDraft(
+  draft: Pick<GuidedReviewCommentDraft, 'status' | 'updatedAt'>,
+  now: number,
+): boolean {
+  if (draft.status === 'proposed' || draft.status === 'failed') return true
+  return draft.status === 'posting' && draft.updatedAt < now - GUIDED_REVIEW_POST_LEASE_MS
+}
+
 /** Parse a model-shaped overview against the contract; null when it does not conform. */
 export function parseGuidedReviewOverviewContent(
   input: unknown,
@@ -387,7 +406,10 @@ export const listGuidedReviewsQuerySchema = v.object({
  * than that it moved.
  */
 export type GuidedReviewChange =
-  /** `session`: the overview or the session itself moved. `deleted`: the session is gone. */
+  /**
+   * `session`: the overview, the session itself, or a draft a human edited or posted moved.
+   * `deleted`: the session is gone.
+   */
   | { sessionId: string; scope: 'session' | 'deleted' }
   /**
    * `thread`: one thread's messages moved. `drafts`: a thread's message settled with comment
@@ -417,3 +439,52 @@ export const publicGuidedReviewListSchema = v.object({
   nextCursor: v.nullable(v.string()),
 })
 export type PublicGuidedReviewList = v.InferOutput<typeof publicGuidedReviewListSchema>
+
+/**
+ * A human edit of a draft. `rev` is the draft's revision the edit was made against; a draft that
+ * moved since is refused as `draft_conflict` rather than overwritten.
+ */
+export const editGuidedReviewDraftSchema = v.object({
+  rev: v.pipe(v.number(), v.integer(), v.minValue(1)),
+  path: v.optional(path),
+  line: v.optional(lineNumber),
+  startLine: v.optional(v.nullable(lineNumber)),
+  side: v.optional(guidedReviewDiffSideSchema),
+  body: v.optional(
+    v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(GUIDED_REVIEW_COMMENT_MAX)),
+  ),
+  /** `true` drops the draft; a discarded draft cannot be posted or edited again. */
+  discard: v.optional(v.boolean()),
+})
+export type EditGuidedReviewDraftInput = v.InferOutput<typeof editGuidedReviewDraftSchema>
+
+/** Post the named drafts as one review, optionally with a summary comment. */
+export const postGuidedReviewDraftsSchema = v.object({
+  draftIds: v.pipe(
+    v.array(v.pipe(v.string(), v.minLength(1))),
+    v.minLength(1),
+    v.maxLength(LIST_MAX),
+  ),
+  /** Posts only alongside a draft this call claims, so an identical retry publishes nothing. */
+  summary: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(GUIDED_REVIEW_COMMENT_MAX))),
+})
+export type PostGuidedReviewDraftsInput = v.InferOutput<typeof postGuidedReviewDraftsSchema>
+
+/**
+ * What a post did. Each comment posts on its own, so a partial post is a normal outcome: every
+ * named draft is `posted`, `failed` (with `postError`, re-postable) or was not claimed because it
+ * was already posted, discarded or being posted.
+ */
+export const guidedReviewPostResultSchema = v.object({
+  drafts: v.array(guidedReviewCommentDraftSchema),
+  posted: v.pipe(v.number(), v.integer(), v.minValue(0)),
+  failed: v.pipe(v.number(), v.integer(), v.minValue(0)),
+  /** Drafts named in the request that this post did not claim. */
+  skipped: v.array(v.string()),
+  summary: v.object({
+    /** null when no summary was sent. */
+    posted: v.nullable(v.boolean()),
+    error: v.nullable(v.string()),
+  }),
+})
+export type GuidedReviewPostResult = v.InferOutput<typeof guidedReviewPostResultSchema>

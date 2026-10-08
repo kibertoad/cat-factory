@@ -727,7 +727,9 @@
         "delegated_executor_unwired": "Ejecutor externo no registrado",
         "delegated_step_async_only": "Este paso se consulta, no se espera",
         "delegated_claim_missing": "Este paso no tiene trabajo externo que consultar",
-        "thread_busy": "Este hilo todavía está respondiendo"
+        "thread_busy": "Este hilo todavía está respondiendo",
+        "draft_conflict": "Este borrador ha cambiado",
+        "session_stale": "La pull request ha avanzado"
       },
       "description": {
         "dependencies_unmet": "Esta tarea depende de otras que aún no están terminadas. Complétalas o desbloquéalas y vuelve a iniciarla.",
@@ -785,7 +787,9 @@
         "delegated_executor_unwired": "Un paso de esta canalización se ejecuta en un ejecutor externo que esta instalación no registra, así que no hay dónde enviar el trabajo. Registra el ejecutor en el código o cambia el paso por uno que se ejecute aquí.",
         "delegated_step_async_only": "Este paso se ejecuta en un ejecutor externo y puede tardar horas, así que se lanza y luego se consulta en lugar de ejecutarse dentro de una sola petición. Inicia la ejecución desde el tablero; si has llegado aquí desde tu propio código, conduce el paso por la vía asíncrona.",
         "delegated_claim_missing": "Falta el registro de lo que la ejecución envió al ejecutor externo, así que no hay nada que consultar. El ejecutor en sí no tiene ningún problema. Recarga la ejecución y vuelve a lanzar el paso si sigue atascado.",
-        "thread_busy": "La pregunta anterior de este hilo aún no tiene respuesta. Espera esa respuesta o pregunta en otro hilo."
+        "thread_busy": "La pregunta anterior de este hilo aún no tiene respuesta. Espera esa respuesta o pregunta en otro hilo.",
+        "draft_conflict": "Este borrador de comentario se ha editado, publicado o descartado desde que lo cargaste. Vuelve a cargar los borradores y repite tu cambio.",
+        "session_stale": "Llegaron commits nuevos después de preparar esta revisión, así que sus borradores pueden apuntar a líneas equivocadas. Actualiza la revisión, revisa los borradores y luego publica."
       },
       "action": {
         "connectGitHub": "Conectar GitHub",
@@ -5181,7 +5185,26 @@
       "side": {
         "RIGHT": "código nuevo",
         "LEFT": "código anterior"
-      }
+      },
+      "select": "Seleccionar este borrador para publicarlo",
+      "status": {
+        "proposed": "Borrador",
+        "posting": "Publicando",
+        "posted": "Publicado",
+        "failed": "No publicado",
+        "discarded": "Descartado"
+      },
+      "edit": "Editar",
+      "save": "Guardar",
+      "cancel": "Cancelar",
+      "discard": "Descartar",
+      "line": "Línea",
+      "sideLabel": "Lado",
+      "postFailed": "El host rechazó este comentario",
+      "summaryPlaceholder": "Comentario de resumen opcional para la pull request",
+      "summaryFailed": "El host rechazó el comentario de resumen",
+      "post": "Publicar {count} en la pull request",
+      "postResult": "{posted} publicados, {failed} sin publicar, {skipped} ya gestionados."
     },
     "errors": {
       "load": "No se pudo cargar la revisión",
@@ -5189,7 +5212,9 @@
       "open": "No se pudo abrir la revisión",
       "ask": "No se pudo hacer la pregunta",
       "drafts": "No se pudieron pedir borradores de comentarios",
-      "refresh": "No se pudo actualizar la revisión"
+      "refresh": "No se pudo actualizar la revisión",
+      "editDraft": "No se pudo guardar el borrador",
+      "postDrafts": "No se pudieron publicar los borradores"
     }
   },
   "pipeline": {

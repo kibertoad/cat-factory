@@ -727,7 +727,9 @@
         "delegated_executor_unwired": "Dış yürütücü kayıtlı değil",
         "delegated_step_async_only": "Bu adım beklenmez, yoklanır",
         "delegated_claim_missing": "Bu adımın kontrol edilecek harici işi yok",
-        "thread_busy": "Bu konu hâlâ yanıtlanıyor"
+        "thread_busy": "Bu konu hâlâ yanıtlanıyor",
+        "draft_conflict": "Bu taslak değişti",
+        "session_stale": "Pull request ilerledi"
       },
       "description": {
         "dependencies_unmet": "Bu görev henüz tamamlanmamış başka görevlere bağlı. Onları tamamla veya engelini kaldır, ardından yeniden başlat.",
@@ -785,7 +787,9 @@
         "delegated_executor_unwired": "Bu hattın bir adımı, bu kurulumun kaydetmediği bir dış yürütücüde çalışıyor; dolayısıyla işin gönderileceği bir yer yok. Yürütücüyü kodda kaydedin ya da adımı burada çalışan biriyle değiştirin.",
         "delegated_step_async_only": "Bu adım harici bir yürütücüde çalışır ve saatler sürebilir; bu yüzden tek bir istek içinde çalıştırılmak yerine gönderilip ardından yoklanır. Çalıştırmayı panodan başlatın; buraya kendi kodunuzdan geldiyseniz adımı asenkron yoldan sürün.",
         "delegated_claim_missing": "Çalıştırmanın harici yürütücüye ne gönderdiğine dair kaydı eksik, dolayısıyla yoklanacak bir şey yok. Yürütücünün kendisinde bir sorun yok. Çalıştırmayı yeniden yükleyin ve adım hâlâ takılıysa yeniden çalıştırın.",
-        "thread_busy": "Bu konudaki önceki soru henüz yanıtlanmadı. Yanıtı bekleyin ya da başka bir konuda sorun."
+        "thread_busy": "Bu konudaki önceki soru henüz yanıtlanmadı. Yanıtı bekleyin ya da başka bir konuda sorun.",
+        "draft_conflict": "Bu yorum taslağı siz yükledikten sonra düzenlendi, gönderildi ya da atıldı. Taslakları yeniden yükleyip değişikliğinizi tekrar yapın.",
+        "session_stale": "Bu inceleme hazırlandıktan sonra yeni commit'ler geldi, bu yüzden taslaklar yanlış satırları gösteriyor olabilir. İncelemeyi yenileyin, taslakları kontrol edin, sonra gönderin."
       },
       "action": {
         "connectGitHub": "GitHub'ı bağla",
@@ -5181,7 +5185,26 @@
       "side": {
         "RIGHT": "yeni kod",
         "LEFT": "eski kod"
-      }
+      },
+      "select": "Bu taslağı göndermek için seç",
+      "status": {
+        "proposed": "Taslak",
+        "posting": "Gönderiliyor",
+        "posted": "Gönderildi",
+        "failed": "Gönderilmedi",
+        "discarded": "Atıldı"
+      },
+      "edit": "Düzenle",
+      "save": "Kaydet",
+      "cancel": "İptal",
+      "discard": "At",
+      "line": "Satır",
+      "sideLabel": "Taraf",
+      "postFailed": "Sunucu bu yorumu reddetti",
+      "summaryPlaceholder": "Pull request için isteğe bağlı özet yorumu",
+      "summaryFailed": "Sunucu özet yorumunu reddetti",
+      "post": "{count} tanesini pull request'e gönder",
+      "postResult": "{posted} gönderildi, {failed} gönderilmedi, {skipped} zaten işlendi."
     },
     "errors": {
       "load": "İnceleme yüklenemedi",
@@ -5189,7 +5212,9 @@
       "open": "İnceleme açılamadı",
       "ask": "Soru sorulamadı",
       "drafts": "Yorum taslakları istenemedi",
-      "refresh": "İnceleme yenilenemedi"
+      "refresh": "İnceleme yenilenemedi",
+      "editDraft": "Taslak kaydedilemedi",
+      "postDrafts": "Taslaklar gönderilemedi"
     }
   },
   "pipeline": {

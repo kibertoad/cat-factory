@@ -175,6 +175,14 @@ const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason>, Conf
     titleKey: 'errors.conflict.title.thread_busy',
     descriptionKey: 'errors.conflict.description.thread_busy',
   },
+  draft_conflict: {
+    titleKey: 'errors.conflict.title.draft_conflict',
+    descriptionKey: 'errors.conflict.description.draft_conflict',
+  },
+  session_stale: {
+    titleKey: 'errors.conflict.title.session_stale',
+    descriptionKey: 'errors.conflict.description.session_stale',
+  },
   task_limit_reached: {
     titleKey: 'errors.conflict.title.task_limit_reached',
     descriptionKey: 'errors.conflict.description.task_limit_reached',

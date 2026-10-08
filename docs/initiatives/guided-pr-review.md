@@ -86,9 +86,9 @@ Every write answers `200` with the persisted state at once; the work it queued c
 | 1   | Contracts, kernel domain and repository port, D1 migration ⇄ Drizzle schema, both repositories, mothership buckets, conformance suite | in review   | [#2287](https://github.com/kibertoad/cat-factory/pull/2287) |
 | 2   | `GuidedReviewService`, overview generation, inline answering with VCS read tools, `GuidedReviewRunner` on all three runtimes, sweeper | in progress |                                                             |
 | 3   | Workspace routes for the SPA, `guidedReviewChanged` realtime delta, RBAC                                                              | in progress |                                                             |
-| 4   | Public API, OpenAPI, `surface.mjs`, the four SDKs and MCP, SSE stream                                                                 | in progress |                                                             |
+| 4   | Public API, OpenAPI, `surface.mjs`, the four SDKs and MCP, SSE stream                                                                 | in review   | [#2290](https://github.com/kibertoad/cat-factory/pull/2290) |
 | 5   | SPA: guided review window, overview, tabbed threads, suggested questions, drafts panel, i18n in every locale                          | in review   | [#2291](https://github.com/kibertoad/cat-factory/pull/2291) |
-| 6   | Comment drafting and posting (anchor validation, stale-head refusal, per-draft outcomes)                                              | not started |                                                             |
+| 6   | Comment drafting and posting (anchor validation, stale-head refusal, per-draft outcomes)                                              | in review   | [#2292](https://github.com/kibertoad/cat-factory/pull/2292) |
 | 7   | Deep-dive escalation to a read-only container investigator                                                                            | not started |                                                             |
 | 8   | Website page (opened and merged first), then this tracker becomes an ADR                                                              | not started |                                                             |
 
@@ -125,5 +125,14 @@ Every write answers `200` with the persisted state at once; the work it queued c
   job as `model_unavailable` or `generation_failed`. A preset on a deployment or account key works.
 - The `guidedReview` event carries ids only (`GuidedReviewChange`) and the SPA store refetches what
   it has loaded, taking a ticket per fetch so a reply overtaken by a newer fetch never lands.
+- Posting claims each draft (`posting`) before the host call and records the host's answer per
+  draft. A `posting` claim older than the lease is re-claimable, so a poster that died does not
+  strand its drafts, and the review window offers such a draft for posting again by the same
+  contracts rule (`isPostableDraft`); the cost is that a repository outage between the host call and the settle can
+  post a comment twice after the lease. Posting refuses with `session_stale` once the PR head
+  moved, because every anchor was computed against `reviewedHeadSha`, and so does moving a draft.
+  The summary comment posts only alongside a claimed draft, so a retry never repeats it.
+- `CreateReviewComment` has no start line, so a multi-line draft posts on its last line. Widening
+  the VCS port to carry a span is a change to both adapters and is left out of this initiative.
 - A per-thread answer budget (turns and tool steps) is recorded on the message when it cuts an answer
   short, never silently truncated.

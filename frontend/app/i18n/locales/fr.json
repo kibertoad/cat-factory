@@ -727,7 +727,9 @@
         "delegated_executor_unwired": "Exécuteur externe non enregistré",
         "delegated_step_async_only": "Cette étape est interrogée, pas attendue",
         "delegated_claim_missing": "Cette étape n’a aucun travail externe à interroger",
-        "thread_busy": "Ce fil répond encore"
+        "thread_busy": "Ce fil répond encore",
+        "draft_conflict": "Ce brouillon a changé",
+        "session_stale": "La pull request a évolué"
       },
       "description": {
         "dependencies_unmet": "Cette tâche dépend d'autres qui ne sont pas encore terminées. Terminez-les ou débloquez-les, puis relancez-la.",
@@ -785,7 +787,9 @@
         "delegated_executor_unwired": "Une étape de ce pipeline s’exécute sur un exécuteur externe que ce déploiement n’enregistre pas : le travail n’a donc nulle part où aller. Enregistrez l’exécuteur dans le code, ou remplacez l’étape par une qui s’exécute ici.",
         "delegated_step_async_only": "Cette étape s’exécute sur un exécuteur externe et peut durer des heures : elle est donc lancée puis interrogée, au lieu d’être exécutée dans une seule requête. Démarrez l’exécution depuis le tableau ; si vous arrivez ici depuis votre propre code, pilotez l’étape par la voie asynchrone.",
         "delegated_claim_missing": "L’enregistrement de ce que l’exécution a envoyé à l’exécuteur externe est absent : il n’y a donc rien à interroger. L’exécuteur lui-même n’a aucun problème. Rechargez l’exécution et relancez l’étape si elle reste bloquée.",
-        "thread_busy": "La question précédente de ce fil n'a pas encore reçu de réponse. Attends cette réponse ou pose ta question dans un autre fil."
+        "thread_busy": "La question précédente de ce fil n'a pas encore reçu de réponse. Attends cette réponse ou pose ta question dans un autre fil.",
+        "draft_conflict": "Ce brouillon de commentaire a été modifié, publié ou abandonné depuis que tu l'as chargé. Recharge les brouillons et refais ta modification.",
+        "session_stale": "De nouveaux commits sont arrivés après la préparation de cette revue, donc ses brouillons peuvent viser les mauvaises lignes. Actualise la revue, vérifie les brouillons, puis publie."
       },
       "action": {
         "connectGitHub": "Connecter GitHub",
@@ -5181,7 +5185,26 @@
       "side": {
         "RIGHT": "nouveau code",
         "LEFT": "ancien code"
-      }
+      },
+      "select": "Sélectionner ce brouillon pour le publier",
+      "status": {
+        "proposed": "Brouillon",
+        "posting": "Publication",
+        "posted": "Publié",
+        "failed": "Non publié",
+        "discarded": "Abandonné"
+      },
+      "edit": "Modifier",
+      "save": "Enregistrer",
+      "cancel": "Annuler",
+      "discard": "Abandonner",
+      "line": "Ligne",
+      "sideLabel": "Côté",
+      "postFailed": "L'hôte a refusé ce commentaire",
+      "summaryPlaceholder": "Commentaire de synthèse facultatif pour la pull request",
+      "summaryFailed": "L'hôte a refusé le commentaire de synthèse",
+      "post": "Publier {count} sur la pull request",
+      "postResult": "{posted} publiés, {failed} non publiés, {skipped} déjà traités."
     },
     "errors": {
       "load": "Impossible de charger la revue",
@@ -5189,7 +5212,9 @@
       "open": "Impossible d'ouvrir la revue",
       "ask": "Impossible de poser la question",
       "drafts": "Impossible de demander des brouillons de commentaires",
-      "refresh": "Impossible d'actualiser la revue"
+      "refresh": "Impossible d'actualiser la revue",
+      "editDraft": "Impossible d'enregistrer le brouillon",
+      "postDrafts": "Impossible de publier les brouillons"
     }
   },
   "pipeline": {

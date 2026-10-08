@@ -2,6 +2,9 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type {
   AskGuidedReviewInput,
+  EditGuidedReviewDraftInput,
+  GuidedReviewCommentDraft,
+  GuidedReviewPostResult,
   GuidedReviewChange,
   GuidedReviewSessionView,
   GuidedReviewThreadView,
@@ -112,6 +115,29 @@ export const useGuidedReviewStore = defineStore('guidedReview', () => {
     await Promise.all([loadThread(sessionId, threadId), loadSession(sessionId)])
   }
 
+  async function editDraft(
+    sessionId: string,
+    draftId: string,
+    input: EditGuidedReviewDraftInput,
+  ): Promise<GuidedReviewCommentDraft> {
+    const draft = await api.editGuidedReviewDraft(workspace.requireId(), sessionId, draftId, input)
+    await loadSession(sessionId)
+    return draft
+  }
+
+  async function postDrafts(
+    sessionId: string,
+    draftIds: string[],
+    summary?: string,
+  ): Promise<GuidedReviewPostResult> {
+    const result = await api.postGuidedReviewDrafts(workspace.requireId(), sessionId, {
+      draftIds,
+      ...(summary?.trim() ? { summary } : {}),
+    })
+    await loadSession(sessionId)
+    return result
+  }
+
   function forget(sessionId: string) {
     delete sessions.value[sessionId]
     delete refetchFailures.value[sessionId]
@@ -193,6 +219,8 @@ export const useGuidedReviewStore = defineStore('guidedReview', () => {
     openThread,
     ask,
     requestDrafts,
+    editDraft,
+    postDrafts,
     applyChange,
     resync,
     reset,

@@ -187,6 +187,18 @@ expectMutuallyAssignable<
   sdk.RequestGuidedReviewDrafts,
   v.InferOutput<typeof contracts.requestGuidedReviewDraftsSchema>
 >()
+expectMutuallyAssignable<
+  sdk.EditGuidedReviewDraft,
+  v.InferOutput<typeof contracts.editGuidedReviewDraftSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PostGuidedReviewDrafts,
+  v.InferOutput<typeof contracts.postGuidedReviewDraftsSchema>
+>()
+expectMutuallyAssignable<
+  sdk.GuidedReviewPostResult,
+  v.InferOutput<typeof contracts.guidedReviewPostResultSchema>
+>()
 expectMutuallyAssignable<sdk.PublicPipeline, v.InferOutput<typeof contracts.publicPipelineSchema>>()
 expectMutuallyAssignable<
   sdk.PublicPipelineList,
@@ -606,6 +618,9 @@ const ASSERTED_COMPONENTS = [
   'OpenGuidedReviewThread',
   'AskGuidedReview',
   'RequestGuidedReviewDrafts',
+  'EditGuidedReviewDraft',
+  'PostGuidedReviewDrafts',
+  'GuidedReviewPostResult',
   'PublicPipeline',
   'PublicPipelineList',
   'PublicPromptFragment',

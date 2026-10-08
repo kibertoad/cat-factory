@@ -1,11 +1,13 @@
 import {
   askGuidedReviewContract,
   deleteGuidedReviewContract,
+  editGuidedReviewDraftContract,
   getGuidedReviewContract,
   getGuidedReviewThreadContract,
   listGuidedReviewsContract,
   openGuidedReviewContract,
   openGuidedReviewThreadContract,
+  postGuidedReviewDraftsContract,
   refreshGuidedReviewContract,
   requestGuidedReviewDraftsContract,
 } from '@cat-factory/contracts'
@@ -119,6 +121,31 @@ export function guidedReviewController(): Hono<AppEnv> {
       c.req.valid('json').instructions,
     )
     return c.json(exchange, 200)
+  })
+
+  buildHonoRoute(app, editGuidedReviewDraftContract, async (c) => {
+    const { service } = requireGuidedReview(c)
+    const { sessionId, draftId } = c.req.valid('param')
+    const draft = await service.editDraft(
+      param(c, 'workspaceId'),
+      requireUser(c, SIGNED_IN).id,
+      sessionId,
+      draftId,
+      c.req.valid('json'),
+    )
+    return c.json(draft, 200)
+  })
+
+  // Publishes the chosen drafts on the pull request under the caller's credential scope.
+  buildHonoRoute(app, postGuidedReviewDraftsContract, async (c) => {
+    const { service } = requireGuidedReview(c)
+    const result = await service.postDrafts(
+      param(c, 'workspaceId'),
+      requireUser(c, SIGNED_IN).id,
+      c.req.valid('param').sessionId,
+      c.req.valid('json'),
+    )
+    return c.json(result, 200)
   })
 
   return app

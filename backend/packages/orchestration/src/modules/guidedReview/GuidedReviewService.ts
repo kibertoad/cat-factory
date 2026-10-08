@@ -1,6 +1,7 @@
 import { generateText, stepCountIs, type ToolSet } from 'ai'
 import {
   guidedReviewFailure,
+  type EditGuidedReviewDraftInput,
   type GuidedReviewChange,
   type GuidedReviewCommentDraft,
   type GuidedReviewDepth,
@@ -9,6 +10,7 @@ import {
   type GuidedReviewMessage,
   type GuidedReviewMessageKind,
   type GuidedReviewOwnerKind,
+  type GuidedReviewPostResult,
   type GuidedReviewSession,
   type GuidedReviewThread,
   type GuidedReviewThreadSummary,
@@ -79,6 +81,7 @@ import {
   threadHistory,
   threadTitleFrom,
 } from './guidedReview.logic.js'
+import { GuidedReviewDrafts } from './GuidedReviewDrafts.js'
 import { PrExplorer } from './PrExplorer.js'
 
 export interface GuidedReviewServiceDeps extends InlineBlockModelDeps {
@@ -158,9 +161,41 @@ class JobFailure extends Error {
  */
 export class GuidedReviewService {
   private readonly logger: Logger
+  private readonly drafts: GuidedReviewDrafts
 
   constructor(private readonly deps: GuidedReviewServiceDeps) {
     this.logger = deps.logger ?? noopLogger
+    this.drafts = new GuidedReviewDrafts({
+      repository: deps.repository,
+      clock: deps.clock,
+      ownedSession: (workspaceId, userId, sessionId) =>
+        this.ownedSession(workspaceId, userId, sessionId),
+      repoOf: async (workspaceId, session) => (await this.repoFor(workspaceId, session)).repo,
+      asOwner: (workspaceId, session, fn) =>
+        this.asUser(workspaceId, sessionCredentialUser(session), fn),
+      notify: (workspaceId, change) => this.notify(workspaceId, change),
+    })
+  }
+
+  /** Edit, re-anchor or discard a comment draft; refused as `draft_conflict` from a stale rev. */
+  editDraft(
+    workspaceId: string,
+    userId: string,
+    sessionId: string,
+    draftId: string,
+    input: EditGuidedReviewDraftInput,
+  ): Promise<GuidedReviewCommentDraft> {
+    return this.drafts.edit(workspaceId, userId, sessionId, draftId, input)
+  }
+
+  /** Post the named drafts to the pull request as one review. */
+  postDrafts(
+    workspaceId: string,
+    userId: string,
+    sessionId: string,
+    input: { draftIds: string[]; summary?: string },
+  ): Promise<GuidedReviewPostResult> {
+    return this.drafts.post(workspaceId, userId, sessionId, input)
   }
 
   async open(
