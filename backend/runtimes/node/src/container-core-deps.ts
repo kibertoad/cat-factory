@@ -482,6 +482,7 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
     // Interactive document-interview sessions (WS5). Wired unconditionally; the interviewer
     // reuses the requirements reviewer's model config resolved just below.
     docInterviewRepository: repos.docInterviewRepository,
+    guidedReviewRepository: repos.guidedReviewRepository,
     // Kaizen agent (post-run grading). Wired unconditionally, mirroring the Cloudflare
     // facade, so the engine schedules gradings at run completion and the background sweep
     // runs them. The grader resolves its model for the `kaizen` kind exactly like a step.

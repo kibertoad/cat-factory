@@ -342,6 +342,15 @@ export type {
   DocInterviewStatus,
   DocInterviewSession,
   AnswerDocInterviewInput,
+  // Guided PR review session shapes.
+  GuidedReviewCommentDraft,
+  GuidedReviewDraftReport,
+  GuidedReviewFailure,
+  GuidedReviewMessage,
+  GuidedReviewOverviewContent,
+  GuidedReviewSession,
+  GuidedReviewThread,
+  GuidedReviewThreadSummary,
   // Kaizen (post-run grading agent) shapes.
   KaizenGradingStatus,
   KaizenGrading,

@@ -14,6 +14,7 @@ import { adHocPipelineIdFor, DEFAULT_TRACKER_WRITEBACK } from '@cat-factory/cont
 import { describe, expect, it } from 'vitest'
 import { FakeTaskSourceProvider } from '../FakeTaskSourceProvider.js'
 import { defineBugHuntConformance } from './bug-hunt.js'
+import { defineGuidedReviewStoreConformance } from './guided-review-store.js'
 import type { ConformanceHarness } from '../harness.js'
 
 /** The default cadence every recurring-schedule test in this file creates against. */
@@ -45,6 +46,8 @@ export function defineMiscConformance(harness: ConformanceHarness): void {
     // The interactive bug hunt, in its own module so this group stays readable — same
     // reasoning as the other extracted conformance describes.
     defineBugHuntConformance(harness)
+
+    defineGuidedReviewStoreConformance(harness)
   })
 }
 

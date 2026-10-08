@@ -79,6 +79,19 @@ export {
 } from './operational-metrics.js'
 export type { RequirementReviewRepository } from './requirement-review-repositories.js'
 export type { DocInterviewRepository } from './doc-interview-repositories.js'
+export type {
+  GuidedReviewDraftEdit,
+  GuidedReviewDriver,
+  GuidedReviewExchange,
+  GuidedReviewDraftPostOutcome,
+  GuidedReviewMessageOutcome,
+  GuidedReviewNewSession,
+  GuidedReviewOverviewOutcome,
+  GuidedReviewRefresh,
+  GuidedReviewRepository,
+  GuidedReviewSessionFilter,
+  GuidedReviewStaleJob,
+} from './guided-review-repositories.js'
 export type { InitiativeRepository } from './initiative-repositories.js'
 export type {
   KaizenGradingRepository,

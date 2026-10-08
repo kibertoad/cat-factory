@@ -399,6 +399,7 @@ export { DrizzleNotificationRepository } from './repositories/notifications.js'
 export { DrizzleDocumentRepository } from './repositories/documents.js'
 export { DrizzleTaskRepository } from './repositories/tasks.js'
 export { DrizzleDocInterviewRepository } from './repositories/drizzle.js'
+export { DrizzleGuidedReviewRepository } from './repositories/drizzle.js'
 export { DrizzleEnvironmentUserHandlerRepository } from './repositories/environmentUserHandler.js'
 export * as schema from './db/schema.js'
 export {

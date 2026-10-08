@@ -85,6 +85,7 @@ import { D1CustomManifestTypeRepository } from './repositories/D1CustomManifestT
 import { D1EnvironmentRegistryRepository } from './repositories/D1EnvironmentRegistryRepository'
 import { D1RequirementReviewRepository } from './repositories/D1RequirementReviewRepository'
 import { D1DocInterviewRepository } from './repositories/D1DocInterviewRepository'
+import { D1GuidedReviewRepository } from './repositories/D1GuidedReviewRepository'
 import { D1KaizenGradingRepository } from './repositories/D1KaizenGradingRepository'
 import { D1KaizenVerifiedComboRepository } from './repositories/D1KaizenVerifiedComboRepository'
 import { D1ClarityReviewRepository } from './repositories/D1ClarityReviewRepository'
@@ -443,6 +444,7 @@ export function selectRequirementsDeps(
   return {
     requirementReviewRepository: new D1RequirementReviewRepository({ db }),
     docInterviewRepository: new D1DocInterviewRepository({ db }),
+    guidedReviewRepository: new D1GuidedReviewRepository({ db }),
     kaizenGradingRepository: new D1KaizenGradingRepository({ db }),
     kaizenVerifiedComboRepository: new D1KaizenVerifiedComboRepository({ db }),
     clarityReviewRepository: new D1ClarityReviewRepository({ db }),

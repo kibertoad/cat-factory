@@ -49,6 +49,8 @@ export * from './tables/observability.js'
 // The account audit log, in its own `audit` schema (see `tables/audit.ts` for why it is a
 // separate store rather than a table in `public`: retention, not write profile).
 export * from './tables/audit.js'
+// Guided PR review sessions, threads, messages and comment drafts (see `tables/guided-review.ts`).
+export * from './tables/guided-review.js'
 
 // ADR 0026 D6.1 — the non-secret fingerprint of the deployment's master ENCRYPTION_KEY,
 // a per-DEPLOYMENT SINGLETON addressed by a fixed `id` ('key'). Seeded once on first boot

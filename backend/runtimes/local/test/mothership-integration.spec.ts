@@ -325,6 +325,47 @@ describe('mothership mode — functional integration (real RPC backend)', () => 
     expect(unknown.status).toBe(404)
   })
 
+  it('serves the guided-review store over the remote persistence RPC', async () => {
+    // Guided review sessions are org state, allow-listed as remote. The registry the mothership
+    // serves reflects `CoreDependencies`, so a facade that left the repository out of its core
+    // deps would answer `unknown_method` here.
+    async function rpc(method: string, args: unknown[]) {
+      const res = await mothershipApp.fetch(
+        new Request('https://mothership.test/internal/persistence', {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            authorization: `Bearer ${machineToken}`,
+          },
+          body: JSON.stringify({ repo: 'guidedReviewRepository', method, args }),
+        }),
+      )
+      return { status: res.status, body: (await res.json()) as { ok: boolean; value?: unknown } }
+    }
+    const opened = await rpc('openSession', [
+      workspaceId,
+      {
+        id: 'grs_rpc',
+        provider: 'github',
+        repoId: '42',
+        owner: 'acme',
+        repo: 'shop',
+        prNumber: 7,
+        prTitle: 'Add checkout',
+        reviewedHeadSha: 'head1',
+        baseRef: 'main',
+        createdBy: ORG_OWNER.id,
+        createdAt: 1,
+        updatedAt: 1,
+      },
+      'node:node_integration-test',
+    ])
+    expect(opened).toMatchObject({ status: 200, body: { ok: true, value: { id: 'grs_rpc' } } })
+    const listed = await rpc('listSessions', [workspaceId, {}])
+    expect(listed.body.ok).toBe(true)
+    expect((listed.body.value as { id: string }[]).map((s) => s.id)).toEqual(['grs_rpc'])
+  })
+
   it('mints a machine token from a whitelisted session (scoped to the user accounts)', async () => {
     // A mothership SESSION for the org owner — as the OAuth callback would produce.
     const session = await mintSession(ORG_OWNER)
