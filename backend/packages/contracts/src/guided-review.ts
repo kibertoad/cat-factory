@@ -86,12 +86,32 @@ export const GUIDED_REVIEW_LIVE_STATUSES = [
   'running',
 ] as const satisfies readonly GuidedReviewWorkStatus[]
 
+/**
+ * Why a piece of background work failed. The SPA translates `reason`; `detail` is the raw cause
+ * (a provider error, a parse failure) shown behind a disclosure.
+ */
+export const GUIDED_REVIEW_FAILURE_REASONS = [
+  'budget_exhausted',
+  'model_unavailable',
+  'repo_unavailable',
+  'generation_failed',
+  'unreadable_reply',
+  'depth_unavailable',
+] as const
+export type GuidedReviewFailureReason = (typeof GUIDED_REVIEW_FAILURE_REASONS)[number]
+
+export const guidedReviewFailureSchema = v.object({
+  reason: v.picklist(GUIDED_REVIEW_FAILURE_REASONS),
+  detail: v.nullable(v.pipe(v.string(), v.maxLength(PROSE_MAX))),
+})
+export type GuidedReviewFailure = v.InferOutput<typeof guidedReviewFailureSchema>
+
 export const guidedReviewOverviewSchema = v.object({
   status: guidedReviewWorkStatusSchema,
   /** Bumped on every refresh, so a driver finishing a superseded generation cannot land it. */
   generation: v.pipe(v.number(), v.integer(), v.minValue(1)),
   content: v.nullable(guidedReviewOverviewContentSchema),
-  error: v.nullable(v.string()),
+  failure: v.nullable(guidedReviewFailureSchema),
   model: v.nullable(v.string()),
 })
 export type GuidedReviewOverview = v.InferOutput<typeof guidedReviewOverviewSchema>
@@ -145,6 +165,39 @@ export type GuidedReviewMessageKind = v.InferOutput<typeof guidedReviewMessageKi
 export const guidedReviewDepthSchema = v.picklist(['inline', 'deep'])
 export type GuidedReviewDepth = v.InferOutput<typeof guidedReviewDepthSchema>
 
+/** Why a proposed comment was not kept as a draft. */
+export const guidedReviewDroppedDraftReasonSchema = v.picklist([
+  /** The line is not inside a diff hunk on that side, so the host would refuse the comment. */
+  'outside_diff',
+  /** The path is not a file the PR changes. */
+  'not_in_pr',
+  /** The proposal was missing a path, a line or a body. */
+  'incomplete',
+])
+export type GuidedReviewDroppedDraftReason = v.InferOutput<
+  typeof guidedReviewDroppedDraftReasonSchema
+>
+
+/**
+ * What a `comment-drafts` message produced: how many comments the model proposed, and each one
+ * that was refused and why, so a dropped proposal is reported rather than silently lost.
+ */
+export const guidedReviewDraftReportSchema = v.object({
+  proposed: v.pipe(v.number(), v.integer(), v.minValue(0)),
+  dropped: v.pipe(
+    v.array(
+      v.object({
+        path: v.string(),
+        line: v.nullable(v.number()),
+        side: guidedReviewDiffSideSchema,
+        reason: guidedReviewDroppedDraftReasonSchema,
+      }),
+    ),
+    v.maxLength(LIST_MAX),
+  ),
+})
+export type GuidedReviewDraftReport = v.InferOutput<typeof guidedReviewDraftReportSchema>
+
 export const guidedReviewMessageSchema = v.object({
   id: v.string(),
   threadId: v.string(),
@@ -158,7 +211,9 @@ export const guidedReviewMessageSchema = v.object({
   /** Always `complete` for a user message. */
   status: guidedReviewWorkStatusSchema,
   citations: v.pipe(v.array(guidedReviewAnchorSchema), v.maxLength(LIST_MAX)),
-  error: v.nullable(v.string()),
+  failure: v.nullable(guidedReviewFailureSchema),
+  /** Present on a settled `comment-drafts` message. */
+  draftReport: v.nullable(guidedReviewDraftReportSchema),
   model: v.nullable(v.string()),
   createdAt: v.number(),
   updatedAt: v.number(),

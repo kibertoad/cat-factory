@@ -30,7 +30,7 @@ export function defineGuidedReviewStoreConformance(harness: ConformanceHarness):
         reviewedHeadSha: 'head1',
         baseRef: 'base1',
         createdBy: 'usr_1',
-        overview: { status: 'pending', generation: 1, content: null, error: null, model: null },
+        overview: { status: 'pending', generation: 1, content: null, failure: null, model: null },
         createdAt: 1,
         updatedAt: 1,
         ...over,
@@ -52,7 +52,8 @@ export function defineGuidedReviewStoreConformance(harness: ConformanceHarness):
         content: 'Why?',
         status: 'complete',
         citations: [],
-        error: null,
+        failure: null,
+        draftReport: null,
         model: null,
         createdAt: 10,
         updatedAt: 10,
@@ -163,6 +164,7 @@ export function defineGuidedReviewStoreConformance(harness: ConformanceHarness):
         citations: [
           { path: 'src/checkout.ts', startLine: 10, endLine: 14, side: 'RIGHT' as const },
         ],
+        draftReport: null,
         model: 'fake:fake',
       }
       expect(await repo.settleMessage(ws, 'a1', outcome, 200)).toBe(true)
@@ -188,7 +190,11 @@ export function defineGuidedReviewStoreConformance(harness: ConformanceHarness):
       expect(await repo.restartOverview(ws, 'grs_1', 1, refresh, HOST, 110)).toBe(true)
       expect(await repo.restartOverview(ws, 'grs_1', 1, refresh, HOST, 111)).toBe(false)
 
-      const failed = { status: 'failed' as const, error: 'late', model: null }
+      const failed = {
+        status: 'failed' as const,
+        failure: { reason: 'generation_failed' as const, detail: 'late' },
+        model: null,
+      }
       expect(await repo.settleOverview(ws, 'grs_1', 1, failed, 120)).toBe(false)
       expect(await repo.claimOverview(ws, 'grs_1', 2, 0, 130)).toBe(true)
 
@@ -209,7 +215,7 @@ export function defineGuidedReviewStoreConformance(harness: ConformanceHarness):
         status: 'complete',
         generation: 2,
         content,
-        error: null,
+        failure: null,
         model: 'fake:fake',
       })
     })
@@ -227,13 +233,23 @@ export function defineGuidedReviewStoreConformance(harness: ConformanceHarness):
         status: 'complete' as const,
         content: '',
         citations: [],
+        draftReport: {
+          proposed: 4,
+          dropped: [
+            { path: 'README.md', line: 3, side: 'RIGHT' as const, reason: 'not_in_pr' as const },
+          ],
+        },
         model: 'fake:fake',
       }
       const proposed = [draft('d1'), draft('d2'), draft('d3')]
       expect(await repo.settleDrafts(ws, 'a1', proposed, outcome, 150)).toBe(true)
       expect(await repo.settleDrafts(ws, 'a1', [draft('d4')], outcome, 151)).toBe(false)
       expect((await repo.listDrafts(ws, 'grs_1')).map((d) => d.id)).toEqual(['d1', 'd2', 'd3'])
-      expect((await repo.getMessage(ws, 'a1'))?.status).toBe('complete')
+      expect(await repo.getMessage(ws, 'a1')).toMatchObject({
+        status: 'complete',
+        draftReport: outcome.draftReport,
+        failure: null,
+      })
 
       const edited = await repo.editDraft(
         ws,

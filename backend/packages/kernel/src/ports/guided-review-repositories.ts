@@ -1,5 +1,7 @@
 import type {
   GuidedReviewCommentDraft,
+  GuidedReviewDraftReport,
+  GuidedReviewFailure,
   GuidedReviewMessage,
   GuidedReviewOverviewContent,
   GuidedReviewSession,
@@ -24,7 +26,7 @@ export interface GuidedReviewRefresh {
 /** How a terminal overview generation ended. */
 export type GuidedReviewOverviewOutcome =
   | { status: 'complete'; content: GuidedReviewOverviewContent; model: string }
-  | { status: 'failed'; error: string; model: string | null }
+  | { status: 'failed'; failure: GuidedReviewFailure; model: string | null }
 
 /** How a terminal assistant message ended. */
 export type GuidedReviewMessageOutcome =
@@ -32,9 +34,10 @@ export type GuidedReviewMessageOutcome =
       status: 'complete'
       content: string
       citations: GuidedReviewMessage['citations']
+      draftReport: GuidedReviewDraftReport | null
       model: string
     }
-  | { status: 'failed'; error: string; model: string | null }
+  | { status: 'failed'; failure: GuidedReviewFailure; model: string | null }
 
 /** The editable fields of a comment draft. */
 export type GuidedReviewDraftEdit = Partial<

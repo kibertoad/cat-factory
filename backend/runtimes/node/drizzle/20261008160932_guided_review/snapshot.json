@@ -1,7 +1,7 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "06368b2b-a89f-4e5c-b48c-6e68fba55ee3",
+  "id": "122a9cfc-4f8a-4151-8824-74cc79d53c7a",
   "prevIds": [
     "4539d749-10a8-47e5-aca7-9377b61ab6d1"
   ],
@@ -14354,7 +14354,20 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "error",
+      "name": "failure",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "guided_review_messages"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "draft_report",
       "entityType": "columns",
       "schema": "public",
       "table": "guided_review_messages"
@@ -14614,7 +14627,7 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "overview_error",
+      "name": "overview_failure",
       "entityType": "columns",
       "schema": "public",
       "table": "guided_review_sessions"

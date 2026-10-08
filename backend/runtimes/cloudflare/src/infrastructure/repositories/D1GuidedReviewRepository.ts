@@ -32,7 +32,7 @@ interface SessionRow {
   overview_status: string
   overview_generation: number
   overview_content: string | null
-  overview_error: string | null
+  overview_failure: string | null
   overview_model: string | null
   created_at: number
   updated_at: number
@@ -60,7 +60,8 @@ interface MessageRow {
   content: string
   status: string
   citations: string
-  error: string | null
+  failure: string | null
+  draft_report: string | null
   model: string | null
   created_at: number
   updated_at: number
@@ -112,7 +113,7 @@ function rowToSession(row: SessionRow): GuidedReviewSession {
       status: row.overview_status as GuidedReviewSession['overview']['status'],
       generation: row.overview_generation,
       content: parseJson(row.overview_content, null),
-      error: row.overview_error,
+      failure: parseJson(row.overview_failure, null),
       model: row.overview_model,
     },
     createdAt: row.created_at,
@@ -143,7 +144,8 @@ function rowToMessage(row: MessageRow): GuidedReviewMessage {
     content: row.content,
     status: row.status as GuidedReviewMessage['status'],
     citations: parseJson(row.citations, []),
-    error: row.error,
+    failure: parseJson(row.failure, null),
+    draftReport: parseJson(row.draft_report, null),
     model: row.model,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -194,7 +196,7 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
         `INSERT INTO guided_review_sessions
            (workspace_id, id, provider, repo_id, owner, repo, pr_number, pr_title,
             reviewed_head_sha, base_ref, created_by, overview_status, overview_generation,
-            overview_content, overview_error, overview_model, overview_driver, created_at,
+            overview_content, overview_failure, overview_model, overview_driver, created_at,
             updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (workspace_id, repo_id, pr_number, created_by) DO NOTHING`,
@@ -214,7 +216,7 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
         s.overview.status,
         s.overview.generation,
         s.overview.content ? JSON.stringify(s.overview.content) : null,
-        s.overview.error,
+        s.overview.failure ? JSON.stringify(s.overview.failure) : null,
         s.overview.model,
         driver,
         s.createdAt,
@@ -299,7 +301,7 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
         `UPDATE guided_review_sessions SET
            pr_title = ?, reviewed_head_sha = ?, base_ref = ?, overview_driver = ?,
            overview_status = 'pending', overview_generation = overview_generation + 1,
-           overview_content = NULL, overview_error = NULL, overview_model = NULL,
+           overview_content = NULL, overview_failure = NULL, overview_model = NULL,
            overview_claimed_at = NULL, updated_at = ?
          WHERE workspace_id = ? AND id = ? AND overview_generation = ?`,
       )
@@ -347,7 +349,7 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
     const result = await this.db
       .prepare(
         `UPDATE guided_review_sessions SET
-           overview_status = ?, overview_content = ?, overview_error = ?, overview_model = ?,
+           overview_status = ?, overview_content = ?, overview_failure = ?, overview_model = ?,
            overview_claimed_at = NULL, updated_at = ?
          WHERE workspace_id = ? AND id = ? AND overview_generation = ?
            AND overview_status = 'running'`,
@@ -355,7 +357,7 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
       .bind(
         outcome.status,
         outcome.status === 'complete' ? JSON.stringify(outcome.content) : null,
-        outcome.status === 'failed' ? outcome.error : null,
+        outcome.status === 'failed' ? JSON.stringify(outcome.failure) : null,
         outcome.model,
         now,
         workspaceId,
@@ -417,7 +419,8 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
     // SELECT needs its WHERE so SQLite does not read ON CONFLICT as a join constraint). The
     // question follows only if that placeholder row now exists. Both sit in one serialized batch.
     const columns = `(workspace_id, id, thread_id, session_id, seq, role, kind, depth, content,
-                      status, citations, error, model, created_at, updated_at, driver)`
+                      status, citations, failure, draft_report, model, created_at, updated_at,
+                      driver)`
     const values = (m: Omit<GuidedReviewMessage, 'seq'>) => [
       workspaceId,
       m.id,
@@ -429,7 +432,8 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
       m.content,
       m.status,
       JSON.stringify(m.citations),
-      m.error,
+      m.failure ? JSON.stringify(m.failure) : null,
+      m.draftReport ? JSON.stringify(m.draftReport) : null,
       m.model,
       m.createdAt,
       m.updatedAt,
@@ -441,7 +445,7 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
          SELECT ?1, ?2, ?3, ?4,
                 (SELECT COALESCE(MAX(seq), 0) + 2 FROM guided_review_messages
                   WHERE workspace_id = ?1 AND thread_id = ?3),
-                ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15
+                ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16
          WHERE true
          ON CONFLICT (workspace_id, thread_id)
            WHERE role = 'assistant' AND status IN ${LIVE} DO NOTHING`,
@@ -450,9 +454,9 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
     const placeQuestion = this.db
       .prepare(
         `INSERT INTO guided_review_messages ${columns}
-         SELECT ?1, ?2, ?3, ?4, p.seq - 1, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15
+         SELECT ?1, ?2, ?3, ?4, p.seq - 1, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16
            FROM guided_review_messages p
-          WHERE p.workspace_id = ?1 AND p.id = ?16`,
+          WHERE p.workspace_id = ?1 AND p.id = ?17`,
       )
       .bind(...values(question), placeholder.id)
     const [placed] = await this.db.batch([placePlaceholder, placeQuestion])
@@ -526,15 +530,16 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
     return this.db
       .prepare(
         `UPDATE guided_review_messages SET
-           status = ?, content = ?, citations = ?, error = ?, model = ?, claimed_at = NULL,
-           updated_at = ?
+           status = ?, content = ?, citations = ?, failure = ?, draft_report = ?, model = ?,
+           claimed_at = NULL, updated_at = ?
          WHERE workspace_id = ? AND id = ? AND status = 'running'`,
       )
       .bind(
         outcome.status,
         complete ? outcome.content : '',
         JSON.stringify(complete ? outcome.citations : []),
-        complete ? null : outcome.error,
+        complete ? null : JSON.stringify(outcome.failure),
+        complete && outcome.draftReport ? JSON.stringify(outcome.draftReport) : null,
         outcome.model,
         now,
         workspaceId,

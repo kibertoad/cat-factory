@@ -344,6 +344,8 @@ export type {
   AnswerDocInterviewInput,
   // Guided PR review session shapes.
   GuidedReviewCommentDraft,
+  GuidedReviewDraftReport,
+  GuidedReviewFailure,
   GuidedReviewMessage,
   GuidedReviewOverviewContent,
   GuidedReviewSession,
