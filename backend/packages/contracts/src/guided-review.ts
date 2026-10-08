@@ -5,7 +5,7 @@ import { vcsProviderSchema } from './routes/auth.js'
 // Guided PR review: a standalone, per-user exploration session over one pull request. It holds an
 // overview of the PR, any number of question threads answered by a model with read access to the
 // PR, and comment drafts the human edits and posts. Design and slice tracker:
-// docs/initiatives/guided-pr-review.md.
+// backend/docs/adr/0066-guided-pr-review.md.
 
 export const GUIDED_REVIEW_QUESTION_MAX = 4000
 export const GUIDED_REVIEW_ANSWER_MAX = 40_000

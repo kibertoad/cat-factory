@@ -981,7 +981,7 @@ export interface CoreDependencies extends ContentLibraryDependencies {
    */
   docInterviewRepository?: DocInterviewRepository
   /**
-   * Persistence for guided PR review sessions (docs/initiatives/guided-pr-review.md). Both
+   * Persistence for guided PR review sessions (backend/docs/adr/0066-guided-pr-review.md). Both
    * runtime facades wire it unconditionally, so the mothership persistence registry, which
    * reflects these dependencies, serves it to a mothership-mode node.
    */

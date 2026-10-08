@@ -19,7 +19,7 @@ import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
 import { requireCapability, requireUser } from '../../http/guards.js'
 
-// Guided PR review for the SPA (docs/initiatives/guided-pr-review.md). Member tier: reading and
+// Guided PR review for the SPA (backend/docs/adr/0066-guided-pr-review.md). Member tier: reading and
 // exploring a pull request is everyday review work, the workspace gate's viewer write floor covers
 // every write, and the service lets only a session's creator change it. Writes return at once;
 // the overview and answers arrive through the `guidedReview` event.

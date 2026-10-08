@@ -157,7 +157,7 @@ class JobFailure extends Error {
 }
 
 /**
- * Guided PR review (docs/initiatives/guided-pr-review.md). Requests persist work and return at
+ * Guided PR review (backend/docs/adr/0066-guided-pr-review.md). Requests persist work and return at
  * once; a durable driver calls {@link runJob} to produce the overview or an assistant message.
  *
  * `runJob` claims its row before any model call, so a duplicate delivery is a no-op. A model or

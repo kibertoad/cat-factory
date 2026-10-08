@@ -4,7 +4,7 @@ import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
 import { CODE_AWARE_TRAIT } from './traits.js'
 
 // The `guided-review-investigator`: the read-only container behind a DEEP guided-review answer
-// (docs/initiatives/guided-pr-review.md). An inline answer reads the PR through the VCS API; this
+// (backend/docs/adr/0066-guided-pr-review.md). An inline answer reads the PR through the VCS API; this
 // one works in a checkout, so it can search the whole tree, follow call sites and run read-only
 // commands. Its own kind so a workspace can route it to a stronger model through its preset.
 // Dispatched standalone by `ContainerGuidedReviewInvestigator`, never as a pipeline step, so it has

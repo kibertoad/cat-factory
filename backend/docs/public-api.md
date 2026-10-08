@@ -2686,7 +2686,7 @@ curl -s -H "$AUTH" "$BASE/api/v1/kaizen/entries?agentKind=coder&since=$LAST_SWEE
 ### Guided PR review (`/api/v1/guided-reviews`)
 
 The sessions the app's guided review window drives, so another UI can offer the same experience.
-Design record: [`docs/initiatives/guided-pr-review.md`](../../docs/initiatives/guided-pr-review.md).
+Design record: [`backend/docs/adr/0066-guided-pr-review.md`](../../backend/docs/adr/0066-guided-pr-review.md).
 
 | Method | Path                                                            | Scope   | Effect                                          |
 | ------ | --------------------------------------------------------------- | ------- | ----------------------------------------------- |

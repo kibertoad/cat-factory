@@ -1,7 +1,7 @@
 import type { GuidedReviewOverviewContent } from '@cat-factory/contracts'
 import { FINAL_ANSWER_IN_REPLY, fenceVerbatim } from './shared.js'
 
-// Guided PR review (docs/initiatives/guided-pr-review.md): the three inline model calls behind a
+// Guided PR review (backend/docs/adr/0066-guided-pr-review.md): the three inline model calls behind a
 // session. Each reads the PR through the tools in `runtime/guided-review-tools.ts` and replies with
 // one JSON object the platform parses, so every prompt ends in FINAL_ANSWER_IN_REPLY.
 
