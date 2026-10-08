@@ -19,6 +19,7 @@ import { streamSSE } from 'hono/streaming'
 import type { AppEnv } from '../../http/env.js'
 import { requireCapability } from '../../http/guards.js'
 import { authorize, refuse } from './publicApiAuth.js'
+import { SSE_MAX_MS, SSE_POLL_MS, SSE_REAUTH_MS } from './publicApiStreamRoutes.js'
 
 // The public guided PR review surface (`/api/v1/guided-reviews`): the sessions the app's review
 // window drives, so another UI can offer the same experience. Refusals THROW so they carry
@@ -26,11 +27,6 @@ import { authorize, refuse } from './publicApiAuth.js'
 
 /** Rows a list returns when the caller names no `limit`. */
 const DEFAULT_SESSION_PAGE = 50
-
-/** The stream's poll interval, connection cap, and how often it re-checks the key. */
-const SSE_POLL_MS = 1000
-const SSE_MAX_MS = 5 * 60 * 1000
-const SSE_REAUTH_MS = 5000
 
 function requireGuidedReview<E extends AppEnv>(c: Context<E>): GuidedReviewModule {
   return requireCapability(c.get('container').guidedReview, 'Guided PR review is not configured')
@@ -64,7 +60,7 @@ export function publicGuidedReviewController(): Hono<AppEnv> {
     // One row past the page, so the response can say whether more matched.
     const rows = await requireGuidedReview(c).service.listSessions(gate.auth.workspaceId, {
       ...(repoId ? { repoId } : {}),
-      ...(prNumber ? { prNumber } : {}),
+      ...(prNumber !== undefined ? { prNumber } : {}),
       ...(mine ? { createdBy: actor(gate.auth) } : {}),
       limit: page + 1,
     })
@@ -150,7 +146,7 @@ export function publicGuidedReviewController(): Hono<AppEnv> {
       actor(gate.auth),
       sessionId,
       threadId,
-      c.req.valid('json').instructions ?? '',
+      c.req.valid('json').instructions,
     )
     return c.json(exchange, 200)
   })

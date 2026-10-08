@@ -22,7 +22,7 @@ public record GuidedReviewsListQuery(
     @Nullable ListPublicGuidedReviewsMine mine,
 
     /** Null means "not sent". */
-    @Nullable String limit
+    @Nullable Integer limit
 ) {
 
     /** An empty parameter set. */
@@ -58,7 +58,7 @@ public record GuidedReviewsListQuery(
         private @Nullable String repoId;
         private @Nullable String prNumber;
         private @Nullable ListPublicGuidedReviewsMine mine;
-        private @Nullable String limit;
+        private @Nullable Integer limit;
 
         /** Set {@code repoId}. */
         public Builder repoId(@Nullable String repoId) {
@@ -79,7 +79,7 @@ public record GuidedReviewsListQuery(
         }
 
         /** Set {@code limit}. */
-        public Builder limit(@Nullable String limit) {
+        public Builder limit(@Nullable Integer limit) {
             this.limit = limit;
             return this;
         }

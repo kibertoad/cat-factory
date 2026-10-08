@@ -284,13 +284,13 @@ export class GuidedReviewService {
     return this.exchange(workspaceId, thread, 'answer', input)
   }
 
-  /** Ask the model to turn the thread's conclusions into comment drafts. */
+  /** Turn the thread's conclusions into comment drafts; empty `instructions` asks for all. */
   async requestDrafts(
     workspaceId: string,
     userId: string,
     sessionId: string,
     threadId: string,
-    instructions: string,
+    instructions = '',
   ): Promise<{ question: GuidedReviewMessage; placeholder: GuidedReviewMessage }> {
     const thread = await this.ownedThread(workspaceId, userId, sessionId, threadId)
     return this.exchange(workspaceId, thread, 'comment-drafts', { content: instructions })
