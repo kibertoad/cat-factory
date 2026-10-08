@@ -743,80 +743,6 @@ describe('GuidedReviewService', () => {
     })
   })
 
-  describe('deep answers', () => {
-    async function askDeep(investigator: GuidedReviewInvestigator) {
-      const ctx = setup([], { investigator })
-      const session = await ctx.service.open(WS, OWNER, {
-        owner: 'acme',
-        repo: 'shop',
-        prNumber: 7,
-      })
-      const { thread } = await ctx.service.openThread(WS, OWNER, session.id, {
-        question: { content: 'Do the tests cover the retry cap?', depth: 'deep' },
-      })
-      const job = ctx.woken.find((j) => j.kind === 'message')!
-      const reply = () => ctx.repository.listMessages(WS, thread.id).then((m) => m[1]!)
-      return { ...ctx, job, reply }
-    }
-
-    it('dispatches once, polls while it works, and lands the answer the container reported', async () => {
-      const fake = fakeInvestigator([
-        { state: 'running' },
-        {
-          state: 'done',
-          model: 'fake:deep',
-          report: {
-            answer: 'No: `pay.spec.ts` never exceeds two attempts.',
-            citations: [{ path: 'src/pay.spec.ts', startLine: 4, endLine: 9, side: 'RIGHT' }],
-          },
-        },
-      ])
-      const { service, job, reply } = await askDeep(fake.investigator)
-      const [first, second] = await Promise.all([service.runJob(WS, job), service.runJob(WS, job)])
-      expect(fake.started).toHaveLength(1)
-      expect([first, second]).toContainEqual({ done: false, pollAfterMs: 15_000 })
-
-      expect(await service.runJob(WS, job)).toEqual({ done: false, pollAfterMs: 15_000 })
-      expect((await reply()).status).toBe('running')
-      expect(await service.runJob(WS, job)).toEqual({ done: true })
-      expect(await reply()).toMatchObject({
-        status: 'complete',
-        content: 'No: `pay.spec.ts` never exceeds two attempts.',
-        model: 'fake:deep',
-      })
-      expect(fake.stopped).toEqual([])
-    })
-
-    it('stops a container that outlives its time budget and reports why', async () => {
-      const fake = fakeInvestigator([])
-      const { service, job, reply, advance } = await askDeep(fake.investigator)
-      await service.runJob(WS, job)
-      advance(46 * 60_000)
-      expect(await service.runJob(WS, job)).toEqual({ done: true })
-      expect(fake.stopped).toHaveLength(1)
-      expect((await reply()).failure?.reason).toBe('generation_failed')
-    })
-
-    it('settles a dispatch that could not start, and releases a container nobody will read', async () => {
-      const failing = fakeInvestigator([])
-      failing.investigator.failStart = 'no runner'
-      const first = await askDeep(failing.investigator)
-      await first.service.runJob(WS, first.job)
-      expect((await first.reply()).failure).toEqual({
-        reason: 'generation_failed',
-        detail: 'no runner',
-      })
-
-      const fake = fakeInvestigator([])
-      const { service, job, reply } = await askDeep(fake.investigator)
-      await service.runJob(WS, job)
-      await service.abandonJob(WS, job, 'gave up')
-      expect((await reply()).status).toBe('failed')
-      expect(fake.stopped).toHaveLength(1)
-      expect(await service.runJob(WS, job)).toEqual({ done: true })
-    })
-  })
-
   it('fails an answer as head_moved once the PR moves past the reviewed commit', async () => {
     const { service, repository, woken, calls, push } = setup([{ text: '{"answer":"Fine."}' }])
     const session = await service.open(WS, OWNER, { owner: 'acme', repo: 'shop', prNumber: 7 })
@@ -884,5 +810,79 @@ describe('GuidedReviewService', () => {
     expect(woken.slice(before)).toEqual([
       { kind: 'message', messageId: expect.stringMatching(/^grm_/) },
     ])
+  })
+})
+
+describe('deep answers', () => {
+  async function askDeep(investigator: GuidedReviewInvestigator) {
+    const ctx = setup([], { investigator })
+    const session = await ctx.service.open(WS, OWNER, {
+      owner: 'acme',
+      repo: 'shop',
+      prNumber: 7,
+    })
+    const { thread } = await ctx.service.openThread(WS, OWNER, session.id, {
+      question: { content: 'Do the tests cover the retry cap?', depth: 'deep' },
+    })
+    const job = ctx.woken.find((j) => j.kind === 'message')!
+    const reply = () => ctx.repository.listMessages(WS, thread.id).then((m) => m[1]!)
+    return { ...ctx, job, reply }
+  }
+
+  it('dispatches once, polls while it works, and lands the answer the container reported', async () => {
+    const fake = fakeInvestigator([
+      { state: 'running' },
+      {
+        state: 'done',
+        model: 'fake:deep',
+        report: {
+          answer: 'No: `pay.spec.ts` never exceeds two attempts.',
+          citations: [{ path: 'src/pay.spec.ts', startLine: 4, endLine: 9, side: 'RIGHT' }],
+        },
+      },
+    ])
+    const { service, job, reply } = await askDeep(fake.investigator)
+    const [first, second] = await Promise.all([service.runJob(WS, job), service.runJob(WS, job)])
+    expect(fake.started).toHaveLength(1)
+    expect([first, second]).toContainEqual({ done: false, pollAfterMs: 15_000 })
+
+    expect(await service.runJob(WS, job)).toEqual({ done: false, pollAfterMs: 15_000 })
+    expect((await reply()).status).toBe('running')
+    expect(await service.runJob(WS, job)).toEqual({ done: true })
+    expect(await reply()).toMatchObject({
+      status: 'complete',
+      content: 'No: `pay.spec.ts` never exceeds two attempts.',
+      model: 'fake:deep',
+    })
+    expect(fake.stopped).toEqual([])
+  })
+
+  it('stops a container that outlives its time budget and reports why', async () => {
+    const fake = fakeInvestigator([])
+    const { service, job, reply, advance } = await askDeep(fake.investigator)
+    await service.runJob(WS, job)
+    advance(46 * 60_000)
+    expect(await service.runJob(WS, job)).toEqual({ done: true })
+    expect(fake.stopped).toHaveLength(1)
+    expect((await reply()).failure?.reason).toBe('generation_failed')
+  })
+
+  it('settles a dispatch that could not start, and releases a container nobody will read', async () => {
+    const failing = fakeInvestigator([])
+    failing.investigator.failStart = 'no runner'
+    const first = await askDeep(failing.investigator)
+    await first.service.runJob(WS, first.job)
+    expect((await first.reply()).failure).toEqual({
+      reason: 'generation_failed',
+      detail: 'no runner',
+    })
+
+    const fake = fakeInvestigator([])
+    const { service, job, reply } = await askDeep(fake.investigator)
+    await service.runJob(WS, job)
+    await service.abandonJob(WS, job, 'gave up')
+    expect((await reply()).status).toBe('failed')
+    expect(fake.stopped).toHaveLength(1)
+    expect(await service.runJob(WS, job)).toEqual({ done: true })
   })
 })
