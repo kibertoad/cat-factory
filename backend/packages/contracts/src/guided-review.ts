@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { vcsProviderSchema } from './routes/auth.js'
 
 // Guided PR review: a standalone, per-user exploration session over one pull request. It holds an
 // overview of the PR, any number of question threads answered by a model with read access to the
@@ -118,7 +119,7 @@ export type GuidedReviewOverview = v.InferOutput<typeof guidedReviewOverviewSche
 
 export const guidedReviewSessionSchema = v.object({
   id: v.string(),
-  provider: v.picklist(['github', 'gitlab']),
+  provider: vcsProviderSchema,
   repoId: v.string(),
   owner: v.string(),
   repo: v.string(),
@@ -304,7 +305,7 @@ export const openGuidedReviewSchema = v.object({
   owner: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200)),
   repo: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200)),
   prNumber: v.pipe(v.number(), v.integer(), v.minValue(1)),
-  provider: v.optional(v.picklist(['github', 'gitlab'])),
+  provider: v.optional(vcsProviderSchema),
 })
 export type OpenGuidedReviewInput = v.InferOutput<typeof openGuidedReviewSchema>
 

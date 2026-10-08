@@ -53,6 +53,7 @@ import {
   runBestEffort,
   UnavailableError,
   ValidationError,
+  VcsCapabilityUnsupportedError,
 } from '@cat-factory/kernel'
 import { type InlineBlockModelDeps, resolveInlineBlockModelRef } from '../../inlineBlockModel.js'
 import {
@@ -149,11 +150,12 @@ export class GuidedReviewService {
     input: OpenGuidedReviewInput,
   ): Promise<GuidedReviewSession> {
     const context = await this.repoFor(workspaceId, input)
-    const pr = await this.readPr(workspaceId, userId, context.repo, input.prNumber)
+    const provider = context.provider ?? input.provider ?? 'github'
+    const pr = await this.readPr(workspaceId, userId, context.repo, provider, input.prNumber)
     const now = this.deps.clock.now()
     const candidate: GuidedReviewSession = {
       id: this.deps.idGenerator.next('grs'),
-      provider: context.provider ?? input.provider ?? 'github',
+      provider,
       repoId: context.repoId,
       owner: context.owner ?? input.owner,
       repo: context.name ?? input.repo,
@@ -182,7 +184,13 @@ export class GuidedReviewService {
   ): Promise<GuidedReviewSession> {
     const session = await this.ownedSession(workspaceId, userId, sessionId)
     const context = await this.repoFor(workspaceId, session)
-    const pr = await this.readPr(workspaceId, userId, context.repo, session.prNumber)
+    const pr = await this.readPr(
+      workspaceId,
+      userId,
+      context.repo,
+      context.provider ?? session.provider,
+      session.prNumber,
+    )
     const generation = session.overview.generation
     const moved = await this.deps.repository.restartOverview(
       workspaceId,
@@ -307,14 +315,14 @@ export class GuidedReviewService {
         now,
       )
       if (!claimed) return
-      await this.deps.repository.settleOverview(
+      const landed = await this.deps.repository.settleOverview(
         workspaceId,
         job.sessionId,
         job.generation,
         { status: 'failed', failure, model: null },
         now,
       )
-      await this.notify(workspaceId, { sessionId: job.sessionId, scope: 'session' })
+      if (landed) await this.notify(workspaceId, { sessionId: job.sessionId, scope: 'session' })
       return
     }
     const message = await this.deps.repository.getMessage(workspaceId, job.messageId)
@@ -322,12 +330,13 @@ export class GuidedReviewService {
     if (!(await this.deps.repository.claimMessage(workspaceId, job.messageId, takeover, now))) {
       return
     }
-    await this.deps.repository.settleMessage(
+    const landed = await this.deps.repository.settleMessage(
       workspaceId,
       job.messageId,
       { status: 'failed', failure, model: null },
       now,
     )
+    if (!landed) return
     await this.notify(workspaceId, {
       sessionId: message.sessionId,
       scope: 'thread',
@@ -683,13 +692,17 @@ export class GuidedReviewService {
     return context
   }
 
-  private async readPr(workspaceId: string, userId: string, repo: RepoFiles, prNumber: number) {
+  private async readPr(
+    workspaceId: string,
+    userId: string,
+    repo: RepoFiles,
+    provider: VcsProvider,
+    prNumber: number,
+  ) {
     const getPullRequest = repo.getPullRequest?.bind(repo)
-    if (!getPullRequest || !repo.listChangedFiles) {
-      throw new UnavailableError(
-        'This source control connection cannot read pull requests',
-        'vcs_pull_requests_unsupported',
-      )
+    if (!getPullRequest) throw new VcsCapabilityUnsupportedError(provider, 'getPullRequest')
+    if (!repo.listChangedFiles) {
+      throw new VcsCapabilityUnsupportedError(provider, 'listChangedFiles')
     }
     const pr = await this.asUser(workspaceId, userId, () => getPullRequest(prNumber))
     if (!pr || !pr.headSha || !pr.baseRef) {
