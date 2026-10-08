@@ -34,6 +34,7 @@ export function createGuidedReviewModule(
       idGenerator: dependencies.idGenerator,
       clock: dependencies.clock,
       logger: dependencies.logger,
+      events: dependencies.executionEventPublisher,
     }),
   }
 }

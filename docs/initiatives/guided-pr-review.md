@@ -77,7 +77,7 @@ startLine, endLine, side }`, `error?`, `model?`, timestamps.
 | --- | ------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ----------------------------------------------------------- |
 | 1   | Contracts, kernel domain and repository port, D1 migration ⇄ Drizzle schema, both repositories, mothership buckets, conformance suite | in review   | [#2287](https://github.com/kibertoad/cat-factory/pull/2287) |
 | 2   | `GuidedReviewService`, overview generation, inline answering with VCS read tools, `GuidedReviewRunner` on all three runtimes, sweeper | in progress |                                                             |
-| 3   | Workspace routes for the SPA, `guidedReviewChanged` realtime delta, RBAC                                                              | not started |                                                             |
+| 3   | Workspace routes for the SPA, `guidedReviewChanged` realtime delta, RBAC                                                              | in progress |                                                             |
 | 4   | Public API, OpenAPI, `surface.mjs`, the four SDKs and MCP, SSE stream                                                                 | not started |                                                             |
 | 5   | SPA: guided review window, overview, tabbed threads, suggested questions, drafts panel, i18n in every locale                          | not started |                                                             |
 | 6   | Comment drafting and posting (anchor validation, stale-head refusal, per-draft outcomes)                                              | not started |                                                             |
@@ -101,5 +101,10 @@ startLine, endLine, side }`, `error?`, `model?`, timestamps.
   Only the creator may change a session; any workspace member may read it.
 - A model or VCS failure is settled onto the row with a `failure.reason`; only a repository fault
   propagates, so the driver retries and the claim lease lets the retry take the job back over.
+- A password-gated personal subscription cannot serve a guided-review call: the work runs in a
+  background driver with no request to unlock the credential from, so such a preset settles the
+  job as `model_unavailable` or `generation_failed`. A preset on a deployment or account key works.
+- The `guidedReview` event carries ids only (`GuidedReviewChange`) and the SPA store refetches what
+  it has loaded, taking a ticket per fetch so a reply overtaken by a newer fetch never lands.
 - A per-thread answer budget (turns and tool steps) is recorded on the message when it cuts an answer
   short, never silently truncated.

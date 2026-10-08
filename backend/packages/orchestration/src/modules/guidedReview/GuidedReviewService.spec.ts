@@ -1,4 +1,5 @@
 import type {
+  GuidedReviewChange,
   GuidedReviewCommentDraft,
   GuidedReviewMessage,
   GuidedReviewSession,
@@ -270,6 +271,7 @@ function fakeRepo(reads: (string | undefined)[]): RepoFiles {
 function setup(steps: Step[], opts: { overBudget?: boolean } = {}) {
   const repository = new InMemoryGuidedReviewRepository()
   const woken: GuidedReviewJob[] = []
+  const changes: GuidedReviewChange[] = []
   const reads: (string | undefined)[] = []
   const { provider, calls } = scriptedProvider(steps)
   let id = 0
@@ -291,8 +293,9 @@ function setup(steps: Step[], opts: { overBudget?: boolean } = {}) {
     isOverBudget: async () => opts.overBudget ?? false,
     idGenerator: { next: (prefix: string) => `${prefix}_${++id}` },
     clock: { now: () => now },
+    events: { guidedReviewChanged: async (_ws, change) => void changes.push(change) },
   })
-  return { service, repository, woken, reads, calls, advance: (ms: number) => (now += ms) }
+  return { service, repository, woken, reads, calls, changes, advance: (ms: number) => (now += ms) }
 }
 
 const OVERVIEW_JSON = JSON.stringify({
@@ -366,7 +369,7 @@ describe('GuidedReviewService', () => {
       question: { content: 'First?' },
     })
     await expect(
-      service.ask(WS, OWNER, busy.thread.id, { content: 'Second?' }),
+      service.ask(WS, OWNER, session.id, busy.thread.id, { content: 'Second?' }),
     ).rejects.toMatchObject({
       constructor: ConflictError,
       details: { reason: 'thread_busy' },
@@ -393,7 +396,13 @@ describe('GuidedReviewService', () => {
     const { service, repository, woken } = setup([{ text: drafts }])
     const session = await service.open(WS, OWNER, { owner: 'acme', repo: 'shop', prNumber: 7 })
     const { thread } = await service.openThread(WS, OWNER, session.id, {})
-    const { placeholder } = await service.requestDrafts(WS, OWNER, thread.id, 'Draft comments.')
+    const { placeholder } = await service.requestDrafts(
+      WS,
+      OWNER,
+      session.id,
+      thread.id,
+      'Draft comments.',
+    )
     await service.runJob(WS, woken.at(-1)!)
 
     expect(await repository.listDrafts(WS, session.id)).toEqual([
@@ -446,6 +455,33 @@ describe('GuidedReviewService', () => {
       detail: null,
     })
     expect(calls()).toBe(0)
+  })
+
+  it('pushes a change after each write lands, naming the thread a client should refetch', async () => {
+    const answer = JSON.stringify({ answer: 'Yes.', citations: [] })
+    const { service, woken, changes } = setup([{ text: OVERVIEW_JSON }, { text: answer }])
+    const session = await service.open(WS, OWNER, { owner: 'acme', repo: 'shop', prNumber: 7 })
+    await service.runJob(WS, woken[0]!)
+    const { thread } = await service.openThread(WS, OWNER, session.id, {
+      question: { content: 'Ok?' },
+    })
+    await service.runJob(WS, woken.at(-1)!)
+    expect(changes).toEqual([
+      { sessionId: session.id, scope: 'session' },
+      { sessionId: session.id, scope: 'session' },
+      { sessionId: session.id, scope: 'thread', threadId: thread.id },
+      { sessionId: session.id, scope: 'thread', threadId: thread.id },
+    ])
+  })
+
+  it('refuses a thread addressed through another session', async () => {
+    const { service } = setup([])
+    const first = await service.open(WS, OWNER, { owner: 'acme', repo: 'shop', prNumber: 7 })
+    const second = await service.open(WS, OWNER, { owner: 'acme', repo: 'shop', prNumber: 8 })
+    const { thread } = await service.openThread(WS, OWNER, first.id, {})
+    await expect(service.getThread(WS, second.id, thread.id)).rejects.toMatchObject({
+      code: 'not_found',
+    })
   })
 
   it('lets only the session owner change it', async () => {

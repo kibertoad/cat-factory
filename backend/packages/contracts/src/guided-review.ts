@@ -270,3 +270,85 @@ export function parseGuidedReviewAnchor(input: unknown): GuidedReviewAnchor | nu
   const parsed = v.safeParse(guidedReviewAnchorSchema, input)
   return parsed.success ? parsed.output : null
 }
+
+/** A session with its threads and drafts: what the review window loads. */
+export const guidedReviewSessionViewSchema = v.object({
+  session: guidedReviewSessionSchema,
+  threads: v.array(guidedReviewThreadSummarySchema),
+  drafts: v.array(guidedReviewCommentDraftSchema),
+})
+export type GuidedReviewSessionView = v.InferOutput<typeof guidedReviewSessionViewSchema>
+
+/** A thread with its messages in order: what one tab loads. */
+export const guidedReviewThreadViewSchema = v.object({
+  thread: guidedReviewThreadSchema,
+  messages: v.array(guidedReviewMessageSchema),
+})
+export type GuidedReviewThreadView = v.InferOutput<typeof guidedReviewThreadViewSchema>
+
+/** The two messages a question appends: the question, and the placeholder that will answer it. */
+export const guidedReviewExchangeSchema = v.object({
+  question: guidedReviewMessageSchema,
+  placeholder: guidedReviewMessageSchema,
+})
+export type GuidedReviewExchange = v.InferOutput<typeof guidedReviewExchangeSchema>
+
+const questionContent = v.pipe(
+  v.string(),
+  v.trim(),
+  v.minLength(1),
+  v.maxLength(GUIDED_REVIEW_QUESTION_MAX),
+)
+
+export const openGuidedReviewSchema = v.object({
+  owner: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200)),
+  repo: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200)),
+  prNumber: v.pipe(v.number(), v.integer(), v.minValue(1)),
+  provider: v.optional(v.picklist(['github', 'gitlab'])),
+})
+export type OpenGuidedReviewInput = v.InferOutput<typeof openGuidedReviewSchema>
+
+export const askGuidedReviewSchema = v.object({
+  content: questionContent,
+  depth: v.optional(guidedReviewDepthSchema),
+})
+export type AskGuidedReviewInput = v.InferOutput<typeof askGuidedReviewSchema>
+
+export const openGuidedReviewThreadSchema = v.object({
+  title: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(GUIDED_REVIEW_TITLE_MAX))),
+  question: v.optional(askGuidedReviewSchema),
+})
+export type OpenGuidedReviewThreadInput = v.InferOutput<typeof openGuidedReviewThreadSchema>
+
+export const requestGuidedReviewDraftsSchema = v.object({
+  /** Narrows which comments the reviewer wants; empty asks for every conclusion. */
+  instructions: v.optional(
+    v.pipe(v.string(), v.trim(), v.maxLength(GUIDED_REVIEW_QUESTION_MAX)),
+    '',
+  ),
+})
+export type RequestGuidedReviewDraftsInput = v.InferOutput<typeof requestGuidedReviewDraftsSchema>
+
+export const listGuidedReviewsQuerySchema = v.object({
+  repoId: v.optional(v.pipe(v.string(), v.maxLength(200))),
+  prNumber: v.optional(v.pipe(v.string(), v.regex(/^\d+$/), v.transform(Number))),
+  /** `true` lists only the caller's own sessions. */
+  mine: v.optional(
+    v.pipe(
+      v.picklist(['true', 'false']),
+      v.transform((s) => s === 'true'),
+    ),
+  ),
+})
+
+/**
+ * What changed in a guided review, pushed live. It carries ids only: a client refetches the
+ * session or thread it has open, so a workspace member who is not viewing it learns nothing more
+ * than that it moved.
+ */
+export interface GuidedReviewChange {
+  sessionId: string
+  /** `session`: the overview or the session itself; `thread`: a thread's messages; `drafts`. */
+  scope: 'session' | 'thread' | 'drafts' | 'deleted'
+  threadId?: string
+}

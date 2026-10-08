@@ -105,6 +105,7 @@ import {
   taskSourceController,
 } from './modules/tasks/TaskSourceController.js'
 import { assistantController } from './modules/assistant/AssistantController.js'
+import { guidedReviewController } from './modules/guidedReview/GuidedReviewController.js'
 import { bugHuntController } from './modules/bugHunt/BugHuntController.js'
 import { workspaceController } from './modules/workspaces/WorkspaceController.js'
 import { workspaceMemberController } from './modules/workspaces/WorkspaceMemberController.js'
@@ -439,6 +440,8 @@ export const WORKSPACE_CONTROLLERS: readonly ControllerEntry[] = [
   // The in-app assistant: a prompt routed to one of the board actions above. Member-tier and
   // ungated, like the bug hunt beside it (see AssistantController for why).
   { name: 'assistant', mount: WORKSPACE_MOUNT, build: () => assistantController() },
+  // Guided PR review: member tier, the service lets only a session's creator change it.
+  { name: 'guidedReview', mount: WORKSPACE_MOUNT, build: () => guidedReviewController() },
   { name: 'environment', mount: WORKSPACE_MOUNT, build: () => environmentController() },
   { name: 'runnerPool', mount: WORKSPACE_MOUNT, build: () => runnerPoolController() },
   { name: 'provisioningLog', mount: WORKSPACE_MOUNT, build: () => provisioningLogController() },

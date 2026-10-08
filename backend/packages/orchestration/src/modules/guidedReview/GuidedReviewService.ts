@@ -1,5 +1,6 @@
 import { generateText, stepCountIs, type ToolSet } from 'ai'
 import type {
+  GuidedReviewChange,
   GuidedReviewCommentDraft,
   GuidedReviewDepth,
   GuidedReviewFailure,
@@ -23,6 +24,7 @@ import {
 } from '@cat-factory/agents'
 import type {
   Clock,
+  ExecutionEventPublisher,
   GitHubChangedFile,
   GuidedReviewDriver,
   GuidedReviewJob,
@@ -82,6 +84,8 @@ export interface GuidedReviewServiceDeps extends InlineBlockModelDeps {
   idGenerator: IdGenerator
   clock: Clock
   logger?: Logger
+  /** Live `guidedReview` deltas; absent ⇒ clients see changes on their next read. */
+  events?: Pick<ExecutionEventPublisher, 'guidedReviewChanged'>
 }
 
 export interface OpenGuidedReviewInput {
@@ -164,6 +168,7 @@ export class GuidedReviewService {
     }
     const session = await this.deps.repository.openSession(workspaceId, candidate, this.deps.driver)
     if (session.id === candidate.id) {
+      await this.notify(workspaceId, { sessionId: session.id, scope: 'session' })
       await this.wake(workspaceId, { kind: 'overview', sessionId: session.id, generation: 1 })
     }
     return session
@@ -188,6 +193,7 @@ export class GuidedReviewService {
       this.deps.clock.now(),
     )
     if (moved) {
+      await this.notify(workspaceId, { sessionId, scope: 'session' })
       await this.wake(workspaceId, { kind: 'overview', sessionId, generation: generation + 1 })
     }
     return this.requireSession(workspaceId, sessionId)
@@ -212,6 +218,7 @@ export class GuidedReviewService {
   async deleteSession(workspaceId: string, userId: string, sessionId: string): Promise<void> {
     await this.ownedSession(workspaceId, userId, sessionId)
     await this.deps.repository.deleteSession(workspaceId, sessionId)
+    await this.notify(workspaceId, { sessionId, scope: 'deleted' })
   }
 
   /** Open a thread, asking its first question when one is given. */
@@ -236,13 +243,18 @@ export class GuidedReviewService {
     await this.deps.repository.createThread(workspaceId, thread)
     if (input.question) {
       await this.exchange(workspaceId, thread, 'answer', input.question)
+    } else {
+      await this.notify(workspaceId, { sessionId, scope: 'thread', threadId: thread.id })
     }
-    return this.getThread(workspaceId, thread.id)
+    return this.getThread(workspaceId, sessionId, thread.id)
   }
 
-  async getThread(workspaceId: string, threadId: string): Promise<GuidedReviewThreadView> {
-    const thread = await this.deps.repository.getThread(workspaceId, threadId)
-    if (!thread) throw new NotFoundError('Guided review thread', threadId)
+  async getThread(
+    workspaceId: string,
+    sessionId: string,
+    threadId: string,
+  ): Promise<GuidedReviewThreadView> {
+    const thread = await this.requireThread(workspaceId, sessionId, threadId)
     const messages = await this.deps.repository.listMessages(workspaceId, threadId)
     return { thread, messages }
   }
@@ -251,10 +263,11 @@ export class GuidedReviewService {
   async ask(
     workspaceId: string,
     userId: string,
+    sessionId: string,
     threadId: string,
     input: AskInput,
   ): Promise<{ question: GuidedReviewMessage; placeholder: GuidedReviewMessage }> {
-    const thread = await this.ownedThread(workspaceId, userId, threadId)
+    const thread = await this.ownedThread(workspaceId, userId, sessionId, threadId)
     return this.exchange(workspaceId, thread, 'answer', input)
   }
 
@@ -262,10 +275,11 @@ export class GuidedReviewService {
   async requestDrafts(
     workspaceId: string,
     userId: string,
+    sessionId: string,
     threadId: string,
     instructions: string,
   ): Promise<{ question: GuidedReviewMessage; placeholder: GuidedReviewMessage }> {
-    const thread = await this.ownedThread(workspaceId, userId, threadId)
+    const thread = await this.ownedThread(workspaceId, userId, sessionId, threadId)
     return this.exchange(workspaceId, thread, 'comment-drafts', { content: instructions })
   }
 
@@ -300,16 +314,25 @@ export class GuidedReviewService {
         { status: 'failed', failure, model: null },
         now,
       )
+      await this.notify(workspaceId, { sessionId: job.sessionId, scope: 'session' })
       return
     }
-    if (!(await this.deps.repository.claimMessage(workspaceId, job.messageId, takeover, now)))
+    const message = await this.deps.repository.getMessage(workspaceId, job.messageId)
+    if (!message) return
+    if (!(await this.deps.repository.claimMessage(workspaceId, job.messageId, takeover, now))) {
       return
+    }
     await this.deps.repository.settleMessage(
       workspaceId,
       job.messageId,
       { status: 'failed', failure, model: null },
       now,
     )
+    await this.notify(workspaceId, {
+      sessionId: message.sessionId,
+      scope: 'thread',
+      threadId: message.threadId,
+    })
   }
 
   /** Re-wake this driver's jobs that no claim has settled within the lease. */
@@ -367,6 +390,11 @@ export class GuidedReviewService {
     if (!result.ok) {
       throw new ConflictError('This thread is still waiting for its previous answer', 'thread_busy')
     }
+    await this.notify(workspaceId, {
+      sessionId: thread.sessionId,
+      scope: 'thread',
+      threadId: thread.id,
+    })
     await this.wake(workspaceId, { kind: 'message', messageId: result.placeholder.id })
     return { question: result.question, placeholder: result.placeholder }
   }
@@ -411,13 +439,14 @@ export class GuidedReviewService {
     } catch (error) {
       outcome = { status: 'failed', ...this.failureOf(error, workspaceId, sessionId) }
     }
-    await this.deps.repository.settleOverview(
+    const landed = await this.deps.repository.settleOverview(
       workspaceId,
       sessionId,
       generation,
       outcome,
       this.deps.clock.now(),
     )
+    if (landed) await this.notify(workspaceId, { sessionId, scope: 'session' })
   }
 
   private async runMessage(workspaceId: string, messageId: string): Promise<void> {
@@ -436,6 +465,8 @@ export class GuidedReviewService {
       this.deps.repository.listMessages(workspaceId, message.threadId),
     ])
     const settledAt = () => this.deps.clock.now()
+    let landed = false
+    let draftsLanded = false
     try {
       if (message.depth === 'deep') {
         throw new JobFailure({ reason: 'depth_unavailable', detail: null }, null)
@@ -456,55 +487,82 @@ export class GuidedReviewService {
         const answer = coerceAnswer(extractJson(text))
         if (!answer)
           throw new JobFailure({ reason: 'unreadable_reply', detail: excerpt(text) }, model)
-        await this.deps.repository.settleMessage(
+        landed = await this.deps.repository.settleMessage(
           workspaceId,
           messageId,
           { status: 'complete', ...answer, draftReport: null, model },
           settledAt(),
         )
-        return
+      } else {
+        draftsLanded = landed = await this.settleDraftJob(
+          workspaceId,
+          session,
+          message,
+          pr.files,
+          promptInput,
+          tools,
+        )
       }
-      const { text, model } = await this.generate(workspaceId, session, 'drafts', {
-        system: GUIDED_REVIEW_DRAFTS_SYSTEM_PROMPT,
-        prompt: renderGuidedReviewDraftsPrompt(promptInput),
-        tools,
-      })
-      const raw = extractJson(text)
-      if (raw === null || typeof raw !== 'object') {
-        throw new JobFailure({ reason: 'unreadable_reply', detail: excerpt(text) }, model)
-      }
-      const { proposals, incomplete } = coerceDraftProposals(raw)
-      const { kept, report } = anchorDrafts(proposals, incomplete, pr.files)
-      const at = settledAt()
-      const drafts: GuidedReviewCommentDraft[] = kept.map((p) => ({
-        id: this.deps.idGenerator.next('grd'),
-        sessionId: session.id,
-        threadId: message.threadId,
-        messageId,
-        ...p,
-        status: 'proposed',
-        postError: null,
-        postedUrl: null,
-        rev: 1,
-        createdAt: at,
-        updatedAt: at,
-      }))
-      await this.deps.repository.settleDrafts(
-        workspaceId,
-        messageId,
-        drafts,
-        { status: 'complete', content: '', citations: [], draftReport: report, model },
-        at,
-      )
     } catch (error) {
       const { failure, model } = this.failureOf(error, workspaceId, session.id)
-      await this.deps.repository.settleMessage(
+      landed = await this.deps.repository.settleMessage(
         workspaceId,
         messageId,
         { status: 'failed', failure, model },
         settledAt(),
       )
     }
+    if (landed) {
+      await this.notify(workspaceId, {
+        sessionId: session.id,
+        scope: 'thread',
+        threadId: message.threadId,
+      })
+    }
+    if (draftsLanded) await this.notify(workspaceId, { sessionId: session.id, scope: 'drafts' })
+  }
+
+  /** Produce a `comment-drafts` message's drafts and land them with it, atomically. */
+  private async settleDraftJob(
+    workspaceId: string,
+    session: GuidedReviewSession,
+    message: GuidedReviewMessage,
+    files: GitHubChangedFile[],
+    promptInput: Parameters<typeof renderGuidedReviewDraftsPrompt>[0],
+    tools: ToolSet,
+  ): Promise<boolean> {
+    const { text, model } = await this.generate(workspaceId, session, 'drafts', {
+      system: GUIDED_REVIEW_DRAFTS_SYSTEM_PROMPT,
+      prompt: renderGuidedReviewDraftsPrompt(promptInput),
+      tools,
+    })
+    const raw = extractJson(text)
+    if (raw === null || typeof raw !== 'object') {
+      throw new JobFailure({ reason: 'unreadable_reply', detail: excerpt(text) }, model)
+    }
+    const { proposals, incomplete } = coerceDraftProposals(raw)
+    const { kept, report } = anchorDrafts(proposals, incomplete, files)
+    const at = this.deps.clock.now()
+    const drafts: GuidedReviewCommentDraft[] = kept.map((p) => ({
+      id: this.deps.idGenerator.next('grd'),
+      sessionId: session.id,
+      threadId: message.threadId,
+      messageId: message.id,
+      ...p,
+      status: 'proposed',
+      postError: null,
+      postedUrl: null,
+      rev: 1,
+      createdAt: at,
+      updatedAt: at,
+    }))
+    return this.deps.repository.settleDrafts(
+      workspaceId,
+      message.id,
+      drafts,
+      { status: 'complete', content: '', citations: [], draftReport: report, model },
+      at,
+    )
   }
 
   /** Run one bounded tool loop under the session creator's model scope and budget. */
@@ -698,15 +756,40 @@ export class GuidedReviewService {
     return session
   }
 
-  private async ownedThread(
+  /** A thread of `sessionId`; one belonging to another session is reported as absent. */
+  private async requireThread(
     workspaceId: string,
-    userId: string,
+    sessionId: string,
     threadId: string,
   ): Promise<GuidedReviewThread> {
     const thread = await this.deps.repository.getThread(workspaceId, threadId)
-    if (!thread) throw new NotFoundError('Guided review thread', threadId)
-    await this.ownedSession(workspaceId, userId, thread.sessionId)
+    if (!thread || thread.sessionId !== sessionId) {
+      throw new NotFoundError('Guided review thread', threadId)
+    }
     return thread
+  }
+
+  private async ownedThread(
+    workspaceId: string,
+    userId: string,
+    sessionId: string,
+    threadId: string,
+  ): Promise<GuidedReviewThread> {
+    const thread = await this.requireThread(workspaceId, sessionId, threadId)
+    await this.ownedSession(workspaceId, userId, sessionId)
+    return thread
+  }
+
+  private async notify(workspaceId: string, change: GuidedReviewChange): Promise<void> {
+    const events = this.deps.events
+    if (!events?.guidedReviewChanged) return
+    // Best-effort: the write is committed, and a client re-reads on reconnect.
+    await runBestEffort(
+      this.logger,
+      'guidedReview.notify',
+      () => events.guidedReviewChanged!(workspaceId, change),
+      { workspaceId, sessionId: change.sessionId },
+    )
   }
 }
 

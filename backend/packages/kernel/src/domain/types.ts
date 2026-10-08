@@ -341,6 +341,7 @@ export type {
   DocInterviewQa,
   DocInterviewStatus,
   DocInterviewSession,
+  GuidedReviewChange,
   AnswerDocInterviewInput,
   // Guided PR review session shapes.
   GuidedReviewCommentDraft,

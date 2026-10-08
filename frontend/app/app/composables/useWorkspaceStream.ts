@@ -34,6 +34,7 @@ export function useWorkspaceStream() {
   const kaizen = useKaizenStore()
   const initiatives = useInitiativesStore()
   const docInterview = useDocInterviewStore()
+  const guidedReview = useGuidedReviewStore()
   const api = useApi()
   const apiBase = useRuntimeConfig().public.apiBase
 
@@ -89,6 +90,7 @@ export function useWorkspaceStream() {
     upsertKaizen: (g) => kaizen.upsert(g),
     upsertInitiative: (i) => initiatives.upsert(i),
     upsertDocInterview: (s) => docInterview.upsert(s),
+    guidedReviewChanged: (change) => void guidedReview.applyChange(change),
     refreshBoard: () => coarse.schedule(),
   }
 
