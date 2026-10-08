@@ -1,0 +1,1 @@
+ALTER TABLE "guided_review_messages" ADD COLUMN "investigation" text;

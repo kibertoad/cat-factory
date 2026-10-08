@@ -250,6 +250,43 @@ export function defineGuidedReviewStoreConformance(harness: ConformanceHarness):
       expect((await repo.listThreads(ws, 'grs_1'))[0]?.pendingMessageId).toBe('a2')
     })
 
+    it('records the container dispatch of a deep answer and keeps its claim fresh', async () => {
+      const { repo, ws } = await seeded()
+      await repo.appendExchange(ws, exchange(1, 'grt_1'), HOST)
+      const investigation = {
+        dispatchedAt: 120,
+        dispatch: { model: 'anthropic:claude', subscriptionTokenId: 'tok_1' },
+      }
+      // Only a running message takes a dispatch: a pending one has no claimer yet.
+      expect(await repo.recordInvestigation(ws, 'a1', investigation, 120, { claimedAt: 0 })).toBe(
+        null,
+      )
+      const claim = won(await repo.claimMessage(ws, 'a1', 0, 100))
+      // A starter whose claim was taken over cannot record its dispatch.
+      expect(await repo.recordInvestigation(ws, 'a1', investigation, 120, { claimedAt: 99 })).toBe(
+        null,
+      )
+      const recorded = won(await repo.recordInvestigation(ws, 'a1', investigation, 120, claim))
+      expect(await repo.getInvestigation(ws, 'a1')).toEqual(investigation)
+
+      // A heartbeat keeps a live poll out of the stale scan and hands the poller a fresh claim.
+      const beat = won(await repo.heartbeatMessage(ws, 'a1', 5_000))
+      const stale = await repo.listStaleJobs(HOST, 4_000, 10_000)
+      expect(stale.filter((j) => j.workspaceId === ws && j.kind === 'message')).toEqual([])
+
+      const failed = {
+        status: 'failed' as const,
+        failure: { reason: 'generation_failed' as const, detail: null },
+        model: null,
+      }
+      // The claim a heartbeat superseded no longer lands.
+      expect(await repo.settleMessage(ws, 'a1', failed, 6_000, recorded)).toBe(false)
+      expect(await repo.settleMessage(ws, 'a1', failed, 6_000, beat)).toBe(true)
+      expect(await repo.heartbeatMessage(ws, 'a1', 7_000)).toBeNull()
+      // The record outlives the settle, so a late poll can still release the container.
+      expect(await repo.getInvestigation(ws, 'a1')).toEqual(investigation)
+    })
+
     it('never lets a superseded overview generation land', async () => {
       const { repo, ws } = await seeded()
       const superseded = won(await repo.claimOverview(ws, 'grs_1', 1, 0, 100))

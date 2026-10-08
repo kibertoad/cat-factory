@@ -1,5 +1,5 @@
 import { createRecordingLogger, type GuidedReviewJob } from '@cat-factory/kernel'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { SqliteGuidedReviewRunner } from './guidedReviewRunner.js'
 import { createGuidedReviewQueue } from './sqlite/guidedReviewQueue.js'
 
@@ -27,6 +27,7 @@ describe('SqliteGuidedReviewRunner', () => {
       runJob: async (_ws, j) => {
         driven.push(j.kind)
         await gate
+        return { done: true }
       },
       abandonJob: async () => {},
     })
@@ -44,9 +45,39 @@ describe('SqliteGuidedReviewRunner', () => {
     queue.claim(2, OPTS.leaseMs, new Set())
     const driven: GuidedReviewJob[] = []
     const runner = new SqliteGuidedReviewRunner(queue, OPTS, createRecordingLogger())
-    runner.bind({ runJob: async (_ws, j) => void driven.push(j), abandonJob: async () => {} })
+    runner.bind({
+      runJob: async (_ws, j) => {
+        driven.push(j)
+        return { done: true }
+      },
+      abandonJob: async () => {},
+    })
     await settle()
     expect(driven).toEqual([job])
+    runner.stop()
+  })
+
+  it('re-queues a job that is still working and drives it again until it settles', async () => {
+    const queue = createGuidedReviewQueue(':memory:')
+    const runner = new SqliteGuidedReviewRunner(queue, OPTS, createRecordingLogger())
+    const progress = [
+      { done: false as const, pollAfterMs: 1 },
+      { done: false as const, pollAfterMs: 1 },
+    ]
+    let calls = 0
+    runner.bind({
+      runJob: async () => {
+        calls += 1
+        return progress.shift() ?? { done: true }
+      },
+      abandonJob: async () => {},
+    })
+    await runner.start('ws', job)
+    // The re-queue wakes on a real timer, so wait for the queue to drain rather than for a tick count.
+    await vi.waitFor(() => expect(queue.size()).toBe(0), { timeout: 2_000, interval: 5 })
+    // Progress is not failure: three passes exceed `maxAttempts` (2) and the job still completes.
+    expect(calls).toBe(3)
+    expect(queue.size()).toBe(0)
     runner.stop()
   })
 

@@ -13,6 +13,19 @@ export function guidedReviewJobKey(job: GuidedReviewJob): string {
 }
 
 /**
+ * What one `GuidedReviewService.runJob` call left behind: settled (or nothing to do), or a deep
+ * answer whose container is still working, to be polled again after `pollAfterMs`.
+ */
+export type GuidedReviewJobProgress = { done: true } | { done: false; pollAfterMs: number }
+
+/**
+ * How many `runJob` passes one driver delivery may make before handing the job back to the stale
+ * scan. Sized past the service's own deep-answer time budget, so the service, not the driver, is
+ * what ends a deep job.
+ */
+export const GUIDED_REVIEW_MAX_PASSES = 240
+
+/**
  * Drives guided-review jobs durably outside the request that queued them (Cloudflare Workflows,
  * pg-boss, or a mothership-mode node's `node:sqlite` queue). `start` may deliver a job more than
  * once; `GuidedReviewService.runJob` claims the row before any model call, so a duplicate is a

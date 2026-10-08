@@ -5176,7 +5176,10 @@
       "placeholder": "Haz una pregunta sobre el cambio",
       "busy": "Esperando la respuesta a la pregunta anterior",
       "send": "Preguntar",
-      "draftRequest": "Se pidieron comentarios de revisión"
+      "draftRequest": "Se pidieron comentarios de revisión",
+      "deep": "Análisis a fondo",
+      "deepHint": "Responde desde una copia del repositorio: más lento, pero puede buscar en todo el árbol.",
+      "investigating": "Investigando en una copia del repositorio. Puede tardar varios minutos."
     },
     "drafts": {
       "title": "Borradores de comentarios",

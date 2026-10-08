@@ -3550,8 +3550,10 @@ type GuidedReviewsService struct {
 // Append a question and the placeholder that will answer it, and answer with both at once; the
 // answer is produced in the background. A thread holds one unanswered question at a time: asking
 // again before it is answered is `409` with `details.reason: "thread_busy"`, and other threads
-// are unaffected. `depth: "deep"` asks for a read-only checkout and is reported as
-// `depth_unavailable` until that ships.
+// are unaffected. `depth: "deep"` answers from a read-only checkout of the repository instead, so
+// it can search the whole tree and run read-only commands; it takes minutes rather than seconds
+// and stays `running` meanwhile, and a deployment with no runner settles it as
+// `depth_unavailable`.
 // POST /api/v1/guided-reviews/{sessionId}/threads/{threadId}/messages (operation
 // askPublicGuidedReview).
 func (s *GuidedReviewsService) Ask(ctx context.Context, sessionID string, threadID string, body AskGuidedReview) (*GuidedReviewExchange, error) {

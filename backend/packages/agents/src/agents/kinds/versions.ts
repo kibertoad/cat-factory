@@ -24,6 +24,7 @@ import {
   GUIDED_REVIEW_DRAFTS_SYSTEM_PROMPT,
   GUIDED_REVIEW_OVERVIEW_SYSTEM_PROMPT,
 } from '../prompts/guided-review.js'
+import { GUIDED_REVIEW_INVESTIGATOR_SYSTEM_PROMPT } from './guided-review-investigator.js'
 import { JUDGE_SYSTEM_PROMPT } from '../prompts/judge.js'
 import { isCompanionKind } from './companions.js'
 import { SPEC_WRITER_SYSTEM_PROMPT } from './spec-blueprints.js'
@@ -124,6 +125,11 @@ export const PROMPT_VERSIONS = {
     id: 'guided-review-answer',
     version: 1,
     text: GUIDED_REVIEW_ANSWER_SYSTEM_PROMPT,
+  },
+  'guided-review-investigator': {
+    id: 'guided-review-investigator',
+    version: 1,
+    text: GUIDED_REVIEW_INVESTIGATOR_SYSTEM_PROMPT,
   },
   'guided-review-drafts': {
     id: 'guided-review-drafts',

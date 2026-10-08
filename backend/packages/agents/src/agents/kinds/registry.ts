@@ -26,6 +26,7 @@ import { registerBugInvestigatorAgent } from './bug-investigator.js'
 import { registerForkProposerAgent } from './fork-proposer.js'
 import { registerPrReviewerAgent } from './pr-reviewer.js'
 import { registerChallengeInvestigatorAgent } from './challenge-investigator.js'
+import { registerGuidedReviewInvestigatorAgent } from './guided-review-investigator.js'
 import { registerDeployFixerAgent } from './deploy-fixer.js'
 import { registerReproTestAgent } from './repro-test.js'
 import { registerIntegrationTestAgent } from './integration-test.js'
@@ -749,6 +750,7 @@ export function defaultAgentKindRegistry(): AgentKindRegistry {
   registerForkProposerAgent(registry)
   registerPrReviewerAgent(registry)
   registerChallengeInvestigatorAgent(registry)
+  registerGuidedReviewInvestigatorAgent(registry)
   registerReproTestAgent(registry)
   registerIntegrationTestAgent(registry)
   registerDeployFixerAgent(registry)

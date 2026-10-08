@@ -5176,7 +5176,10 @@
       "placeholder": "Pose une question sur le changement",
       "busy": "En attente de la réponse à la question précédente",
       "send": "Demander",
-      "draftRequest": "Commentaires de revue demandés"
+      "draftRequest": "Commentaires de revue demandés",
+      "deep": "Analyse approfondie",
+      "deepHint": "Répond depuis un checkout du dépôt : plus lent, mais peut chercher dans toute l'arborescence.",
+      "investigating": "Analyse dans un checkout du dépôt. Cela peut prendre plusieurs minutes."
     },
     "drafts": {
       "title": "Brouillons de commentaires",

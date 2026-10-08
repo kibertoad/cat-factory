@@ -440,6 +440,12 @@ export {
   registerChallengeInvestigatorAgent,
 } from './agents/kinds/challenge-investigator.js'
 export {
+  GUIDED_REVIEW_INVESTIGATOR_KIND,
+  GUIDED_REVIEW_INVESTIGATOR_SYSTEM_PROMPT,
+  guidedReviewInvestigation,
+  registerGuidedReviewInvestigatorAgent,
+} from './agents/kinds/guided-review-investigator.js'
+export {
   FORK_CHAT_AGENT_KIND,
   FORK_CHAT_SYSTEM_PROMPT,
   type ForkChatGrounding,

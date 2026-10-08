@@ -79,6 +79,7 @@ export const guidedReviewMessages = pgTable(
     citations: text('citations').notNull().default('[]'),
     failure: text('failure'),
     draft_report: text('draft_report'),
+    investigation: text('investigation'),
     model: text('model'),
     claimed_at: bigint('claimed_at', { mode: 'number' }),
     driver: text('driver').notNull(),

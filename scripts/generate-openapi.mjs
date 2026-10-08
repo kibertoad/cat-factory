@@ -62,7 +62,7 @@ export const SERVED_OPENAPI_PATH = resolve(
 // it against `origin/main` after every merge rather than trusting a clean one, and write the new
 // entry in the history doc, which is what makes the next collision arrive as a conflict.
 
-const API_VERSION = '1.77.0'
+const API_VERSION = '1.78.0'
 
 /**
  * Named DTOs hoisted into `components.schemas` (so client codegen gets named types and
@@ -1042,7 +1042,7 @@ const OPERATION_DOCS = {
     tag: 'Guided review',
     summary: 'Ask a question in a thread',
     description:
-      'Append a question and the placeholder that will answer it, and answer with both at once; the answer is produced in the background. A thread holds one unanswered question at a time: asking again before it is answered is `409` with `details.reason: "thread_busy"`, and other threads are unaffected. `depth: "deep"` asks for a read-only checkout and is reported as `depth_unavailable` until that ships.',
+      'Append a question and the placeholder that will answer it, and answer with both at once; the answer is produced in the background. A thread holds one unanswered question at a time: asking again before it is answered is `409` with `details.reason: "thread_busy"`, and other threads are unaffected. `depth: "deep"` answers from a read-only checkout of the repository instead, so it can search the whole tree and run read-only commands; it takes minutes rather than seconds and stays `running` meanwhile, and a deployment with no runner settles it as `depth_unavailable`.',
   },
   requestPublicGuidedReviewDrafts: {
     tag: 'Guided review',

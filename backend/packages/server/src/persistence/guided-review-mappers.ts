@@ -16,10 +16,12 @@ import {
   guidedReviewOverviewContentSchema,
   guidedReviewOwnerKindSchema,
   guidedReviewWorkStatusSchema,
+  subscriptionVendorSchema,
   vcsProviderSchema,
 } from '@cat-factory/contracts'
 import type {
   GuidedReviewDraftEdit,
+  GuidedReviewInvestigationRecord,
   GuidedReviewDraftProposal,
   GuidedReviewMessageOutcome,
   GuidedReviewOverviewOutcome,
@@ -293,4 +295,26 @@ export function applyGuidedReviewDraftEdit(
   }
   checkGuidedReviewDraftFields(next)
   return next
+}
+
+const guidedReviewInvestigationSchema = v.object({
+  dispatchedAt: v.number(),
+  dispatch: v.object({
+    model: v.string(),
+    subscriptionTokenId: v.optional(v.string()),
+    subscriptionVendor: v.optional(subscriptionVendorSchema),
+  }),
+})
+
+/** A deep answer's recorded container dispatch, or null when none was recorded. */
+export function decodeGuidedReviewInvestigation(
+  raw: string | null,
+  messageId: string,
+): GuidedReviewInvestigationRecord | null {
+  if (raw === null) return null
+  return decodeJson(guidedReviewInvestigationSchema, raw, {
+    table: 'guided_review_messages',
+    column: 'investigation',
+    id: messageId,
+  })
 }

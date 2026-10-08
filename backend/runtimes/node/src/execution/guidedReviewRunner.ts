@@ -1,10 +1,10 @@
-import { describeError, guidedReviewJobKey } from '@cat-factory/kernel'
+import { describeError, GUIDED_REVIEW_MAX_PASSES, guidedReviewJobKey } from '@cat-factory/kernel'
 import type { GuidedReviewJob, GuidedReviewRunner, OperationalMetrics } from '@cat-factory/kernel'
 import type { Logger, ServerContainer, SweepHealthTracker } from '@cat-factory/server'
 import type { Job, PgBoss } from 'pg-boss'
 import { createQueueWithDeadLetter } from './deadLetter.js'
 import type { AdvanceQueueOptions } from './pgBossRunner.js'
-import { driveJobOptions } from './pgBossRunner.js'
+import { driveJobOptions, sleep } from './pgBossRunner.js'
 import { startSweeper } from '../sweeper.js'
 
 // Durable guided-review driving on pg-boss: the analogue of the Worker's GuidedReviewWorkflow.
@@ -51,7 +51,12 @@ export async function startGuidedReviewWorker(
         const service = container.guidedReview?.service
         if (!service) return
         try {
-          await service.runJob(data.workspaceId, data.job)
+          // A deep answer polls its container until it settles; an inline job is one pass.
+          for (let pass = 0; pass < GUIDED_REVIEW_MAX_PASSES; pass++) {
+            const progress = await service.runJob(data.workspaceId, data.job)
+            if (progress.done) break
+            await sleep(progress.pollAfterMs)
+          }
         } catch (error) {
           log.error('guided-review job failed', {
             workspaceId: data.workspaceId,

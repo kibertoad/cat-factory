@@ -4,6 +4,7 @@ import type {
   GuidedReviewDraftEdit,
   GuidedReviewDraftProposal,
   GuidedReviewDriver,
+  GuidedReviewInvestigationRecord,
   GuidedReviewExchange,
   GuidedReviewDraftPostOutcome,
   GuidedReviewMessage,
@@ -25,6 +26,7 @@ import {
   checkGuidedReviewDraftFields,
   encodeGuidedReviewMessageOutcome,
   encodeGuidedReviewOverviewOutcome,
+  decodeGuidedReviewInvestigation,
   rowToGuidedReviewDraft as rowToDraft,
   rowToGuidedReviewMessage as rowToMessage,
   rowToGuidedReviewSession as rowToSession,
@@ -383,6 +385,49 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
            AND (status = 'pending' OR (status = 'running' AND claimed_at < ?))`,
       )
       .bind(now, now, workspaceId, id, leaseCutoff)
+      .run()
+    return result.meta.changes > 0 ? { claimedAt: now } : null
+  }
+
+  async recordInvestigation(
+    workspaceId: string,
+    id: string,
+    investigation: GuidedReviewInvestigationRecord,
+    now: number,
+    claim: GuidedReviewClaim,
+  ): Promise<GuidedReviewClaim | null> {
+    const result = await this.db
+      .prepare(
+        `UPDATE guided_review_messages SET investigation = ?, claimed_at = ?, updated_at = ?
+         WHERE workspace_id = ? AND id = ? AND status = 'running' AND claimed_at = ?`,
+      )
+      .bind(JSON.stringify(investigation), now, now, workspaceId, id, claim.claimedAt)
+      .run()
+    return result.meta.changes > 0 ? { claimedAt: now } : null
+  }
+
+  async getInvestigation(
+    workspaceId: string,
+    id: string,
+  ): Promise<GuidedReviewInvestigationRecord | null> {
+    const row = await this.db
+      .prepare(`SELECT investigation FROM guided_review_messages WHERE workspace_id = ? AND id = ?`)
+      .bind(workspaceId, id)
+      .first<{ investigation: string | null }>()
+    return decodeGuidedReviewInvestigation(row?.investigation ?? null, id)
+  }
+
+  async heartbeatMessage(
+    workspaceId: string,
+    id: string,
+    now: number,
+  ): Promise<GuidedReviewClaim | null> {
+    const result = await this.db
+      .prepare(
+        `UPDATE guided_review_messages SET claimed_at = ?, updated_at = ?
+         WHERE workspace_id = ? AND id = ? AND status = 'running'`,
+      )
+      .bind(now, now, workspaceId, id)
       .run()
     return result.meta.changes > 0 ? { claimedAt: now } : null
   }

@@ -4,6 +4,7 @@ import type {
   GuidedReviewDraftEdit,
   GuidedReviewDraftProposal,
   GuidedReviewDriver,
+  GuidedReviewInvestigationRecord,
   GuidedReviewExchange,
   GuidedReviewDraftPostOutcome,
   GuidedReviewMessage,
@@ -25,6 +26,7 @@ import {
   checkGuidedReviewDraftFields,
   encodeGuidedReviewMessageOutcome,
   encodeGuidedReviewOverviewOutcome,
+  decodeGuidedReviewInvestigation,
   rowToGuidedReviewDraft as rowToDraft,
   rowToGuidedReviewMessage as rowToMessage,
   rowToGuidedReviewSession as rowToSession,
@@ -420,6 +422,59 @@ export class DrizzleGuidedReviewRepository implements GuidedReviewRepository {
             eq(messages.status, 'pending'),
             and(eq(messages.status, 'running'), lt(messages.claimed_at, leaseCutoff)),
           ),
+        ),
+      )
+      .returning({ id: messages.id })
+    return rows.length > 0 ? { claimedAt: now } : null
+  }
+
+  async recordInvestigation(
+    workspaceId: string,
+    id: string,
+    investigation: GuidedReviewInvestigationRecord,
+    now: number,
+    claim: GuidedReviewClaim,
+  ): Promise<GuidedReviewClaim | null> {
+    const rows = await this.db
+      .update(messages)
+      .set({ investigation: JSON.stringify(investigation), claimed_at: now, updated_at: now })
+      .where(
+        and(
+          eq(messages.workspace_id, workspaceId),
+          eq(messages.id, id),
+          eq(messages.status, 'running'),
+          eq(messages.claimed_at, claim.claimedAt),
+        ),
+      )
+      .returning({ id: messages.id })
+    return rows.length > 0 ? { claimedAt: now } : null
+  }
+
+  async getInvestigation(
+    workspaceId: string,
+    id: string,
+  ): Promise<GuidedReviewInvestigationRecord | null> {
+    const rows = await this.db
+      .select({ investigation: messages.investigation })
+      .from(messages)
+      .where(and(eq(messages.workspace_id, workspaceId), eq(messages.id, id)))
+      .limit(1)
+    return decodeGuidedReviewInvestigation(rows[0]?.investigation ?? null, id)
+  }
+
+  async heartbeatMessage(
+    workspaceId: string,
+    id: string,
+    now: number,
+  ): Promise<GuidedReviewClaim | null> {
+    const rows = await this.db
+      .update(messages)
+      .set({ claimed_at: now, updated_at: now })
+      .where(
+        and(
+          eq(messages.workspace_id, workspaceId),
+          eq(messages.id, id),
+          eq(messages.status, 'running'),
         ),
       )
       .returning({ id: messages.id })

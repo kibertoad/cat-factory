@@ -84,6 +84,7 @@ export type {
   GuidedReviewDraftEdit,
   GuidedReviewDriver,
   GuidedReviewExchange,
+  GuidedReviewInvestigationRecord,
   GuidedReviewDraftPostOutcome,
   GuidedReviewDraftProposal,
   GuidedReviewMessageOutcome,
@@ -97,9 +98,18 @@ export type {
 } from './guided-review-repositories.js'
 export {
   guidedReviewJobKey,
+  GUIDED_REVIEW_MAX_PASSES,
   type GuidedReviewJob,
+  type GuidedReviewJobProgress,
   type GuidedReviewRunner,
 } from './guided-review-runner.js'
+export type {
+  GuidedReviewInvestigationDispatch,
+  GuidedReviewInvestigationHandle,
+  GuidedReviewInvestigationRequest,
+  GuidedReviewInvestigationUpdate,
+  GuidedReviewInvestigator,
+} from './guided-review-investigator.js'
 export type { InitiativeRepository } from './initiative-repositories.js'
 export type {
   KaizenGradingRepository,

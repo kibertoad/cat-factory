@@ -89,7 +89,7 @@ Every write answers `200` with the persisted state at once; the work it queued c
 | 4   | Public API, OpenAPI, `surface.mjs`, the four SDKs and MCP, SSE stream                                                                 | in review   | [#2290](https://github.com/kibertoad/cat-factory/pull/2290) |
 | 5   | SPA: guided review window, overview, tabbed threads, suggested questions, drafts panel, i18n in every locale                          | in review   | [#2291](https://github.com/kibertoad/cat-factory/pull/2291) |
 | 6   | Comment drafting and posting (anchor validation, stale-head refusal, per-draft outcomes)                                              | in review   | [#2292](https://github.com/kibertoad/cat-factory/pull/2292) |
-| 7   | Deep-dive escalation to a read-only container investigator                                                                            | not started |                                                             |
+| 7   | Deep-dive escalation to a read-only container investigator                                                                            | in progress |                                                             |
 | 8   | Website page (opened and merged first), then this tracker becomes an ADR                                                              | not started |                                                             |
 
 ## Gotchas
@@ -134,5 +134,20 @@ Every write answers `200` with the persisted state at once; the work it queued c
   The summary comment posts only alongside a claimed draft, so a retry never repeats it.
 - `CreateReviewComment` has no start line, so a multi-line draft posts on its last line. Widening
   the VCS port to carry a span is a change to both adapters and is left out of this initiative.
+- A deep answer is a state machine on its message row: claim, dispatch the
+  `guided-review-investigator` container (idempotent per message id), record the dispatch, then
+  poll. `runJob` returns `{ done: false, pollAfterMs }` while the container works and every driver
+  loops on it. Each poll refreshes the claim, so the stale scan never takes a live investigation
+  for a dead one, and a replacement driver resumes polling the same container. The service stops a
+  container after 45 minutes; the drivers' pass budget is sized past that.
+- The harness clones a branch, never a bare commit, so the job clones the target branch with full
+  history, fetches the PR head through `reviewPrNumber`, and is told to check out the reviewed
+  commit. Pinning the commit in the harness itself would need a job field and an image bump.
+- The investigator and the environment prober share one standalone-dispatch builder on each facade
+  (`buildWorkerSingleJobDispatch`, `buildNodeSingleJobDispatch`): model, credential, clone token and
+  spend accounting are composed once.
+- The local `node:sqlite` queue wakes at the earliest due job rather than on a timer per re-queue:
+  a timer runs on a monotonic clock while due times are wall-clock, so a timer for exactly the
+  delay can fire a millisecond early and strand the job until the periodic sweep.
 - A per-thread answer budget (turns and tool steps) is recorded on the message when it cuts an answer
   short, never silently truncated.

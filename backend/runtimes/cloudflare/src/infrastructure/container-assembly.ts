@@ -62,6 +62,7 @@ import type { AppConfig } from './config'
 import {
   selectEnvConfigRepairer,
   selectEnvironmentProbeAgent,
+  selectGuidedReviewInvestigator,
   selectRepoBootstrapper,
 } from './container-dispatchers'
 import type { Env } from './env'
@@ -1071,6 +1072,23 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
   })
   if (environmentProbeAgent && !dependencies.environmentProbeAgent) {
     dependencies.environmentProbeAgent = environmentProbeAgent
+  }
+
+  // The container behind a deep guided-review answer, on the prober's prerequisites. A fake
+  // injected by a test harness wins, as above.
+  const guidedReviewInvestigator = selectGuidedReviewInvestigator({
+    env,
+    config,
+    db,
+    clock,
+    caches: input.caches,
+    resolveTransport,
+    agentKindRegistry: registries.agentKindRegistry,
+    ...(subscriptions ? { subscriptions } : {}),
+    ...(personalSubscriptions ? { personalSubscriptions } : {}),
+  })
+  if (guidedReviewInvestigator && !dependencies.guidedReviewInvestigator) {
+    dependencies.guidedReviewInvestigator = guidedReviewInvestigator
   }
 
   // Apply any test-injected gate providers LAST, so they override the config wiring done by the
