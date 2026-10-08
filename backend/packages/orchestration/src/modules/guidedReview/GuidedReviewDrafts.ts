@@ -5,6 +5,7 @@ import type {
   GuidedReviewPostResult,
   GuidedReviewSession,
 } from '@cat-factory/contracts'
+import { GUIDED_REVIEW_POST_LEASE_MS } from '@cat-factory/contracts'
 import type {
   Clock,
   CreateReviewResult,
@@ -19,11 +20,10 @@ import {
   hostMarkdown,
   NotFoundError,
   redactSecrets,
-  UnavailableError,
   ValidationError,
+  VcsCapabilityUnsupportedError,
 } from '@cat-factory/kernel'
-import { computeCommentableLines } from '../execution/prReview.logic.js'
-import { GUIDED_REVIEW_LEASE_MS } from './guidedReview.logic.js'
+import { isCommentableAnchor } from './guidedReview.logic.js'
 
 /** What the drafts collaborator needs from the service, as bound callbacks. */
 export interface GuidedReviewDraftsDeps {
@@ -61,6 +61,9 @@ export class GuidedReviewDrafts {
     const draft = await this.deps.repository.getDraft(workspaceId, draftId)
     if (!draft || draft.sessionId !== sessionId) throw new NotFoundError('Comment draft', draftId)
     const { rev, discard, ...fields } = input
+    if (discard && Object.values(fields).some((value) => value !== undefined)) {
+      throw new ValidationError('A discard cannot also change the draft')
+    }
     const anchor = {
       path: fields.path ?? draft.path,
       line: fields.line ?? draft.line,
@@ -72,7 +75,7 @@ export class GuidedReviewDrafts {
       anchor.line !== draft.line ||
       anchor.startLine !== draft.startLine ||
       anchor.side !== draft.side
-    if (moved && !discard) await this.assertAnchorable(workspaceId, userId, session, anchor)
+    if (moved) await this.assertAnchorable(workspaceId, userId, session, anchor)
     const updated = await this.deps.repository.editDraft(
       workspaceId,
       draftId,
@@ -96,39 +99,26 @@ export class GuidedReviewDrafts {
     const session = await this.deps.ownedSession(workspaceId, userId, sessionId)
     const repo = await this.deps.repoOf(workspaceId, session)
     const createReview = repo.createReview?.bind(repo)
-    if (!createReview) {
-      throw new UnavailableError(
-        'This source control connection cannot post review comments',
-        'vcs_review_posting_unsupported',
-      )
-    }
-    // Anchors were computed against the reviewed commit; a moved head can shift every line.
-    const head = await this.deps.asUser(workspaceId, userId, () =>
-      repo.pullRequestHeadSha ? repo.pullRequestHeadSha(session.prNumber) : null,
-    )
-    if (head && head !== session.reviewedHeadSha) {
-      throw new ConflictError(
-        'The pull request has new commits since this review was prepared',
-        'session_stale',
-        { reviewedHeadSha: session.reviewedHeadSha, currentHeadSha: head },
-      )
-    }
+    if (!createReview) throw new VcsCapabilityUnsupportedError(session.provider, 'createReview')
+    await this.assertReviewedHead(workspaceId, userId, session, repo)
 
     const now = this.deps.clock.now()
     const claimed = await this.deps.repository.claimDraftsForPost(
       workspaceId,
       sessionId,
       input.draftIds,
-      now - GUIDED_REVIEW_LEASE_MS,
+      now - GUIDED_REVIEW_POST_LEASE_MS,
       now,
     )
     const claimedIds = new Set(claimed.map((d) => d.id))
     const skipped = input.draftIds.filter((id) => !claimedIds.has(id))
-    const summary = input.summary?.trim()
+    // The summary rides only with a draft this call claimed, so an identical retry after a
+    // complete post publishes nothing at all rather than the summary a second time.
+    const summary = claimed.length > 0 ? input.summary?.trim() : undefined
 
     let result: CreateReviewResult | null = null
     let failure: string | null = null
-    if (claimed.length > 0 || summary) {
+    if (claimed.length > 0) {
       try {
         result = await this.deps.asUser(workspaceId, userId, () =>
           createReview(session.prNumber, {
@@ -179,22 +169,41 @@ export class GuidedReviewDrafts {
   ): Promise<void> {
     const repo = await this.deps.repoOf(workspaceId, session)
     const listChangedFiles = repo.listChangedFiles?.bind(repo)
-    if (!listChangedFiles) return
+    if (!listChangedFiles) {
+      throw new VcsCapabilityUnsupportedError(session.provider, 'listChangedFiles')
+    }
     const files: GitHubChangedFile[] = await this.deps.asUser(workspaceId, userId, () =>
       listChangedFiles(session.prNumber),
     )
-    const lines = computeCommentableLines(files).get(anchor.path)
-    const side = anchor.side === 'RIGHT' ? lines?.right : lines?.left
-    const inside = (line: number | null) => line === null || (side?.has(line) ?? false)
-    if (!side || !inside(anchor.line) || !inside(anchor.startLine)) {
-      throw new ValidationError('A comment can only be placed on a line inside the diff', {
-        reason: 'draft_anchor_outside_diff',
-      })
+    // The host lists the files of the PR's current head, which describe the reviewed diff only
+    // while the head has not moved. Read after the listing, so a push between the two shows.
+    await this.assertReviewedHead(workspaceId, userId, session, repo)
+    if (!isCommentableAnchor(files, anchor)) {
+      throw new ValidationError(
+        'A comment can only be placed on lines inside one hunk of the diff, starting before the line it ends on',
+        { reason: 'draft_anchor_outside_diff' },
+      )
     }
-    if (anchor.startLine !== null && anchor.startLine >= anchor.line) {
-      throw new ValidationError('A comment span must start before the line it ends on', {
-        reason: 'draft_anchor_outside_diff',
-      })
+  }
+
+  /** Every anchor was computed against the reviewed commit; a moved head can shift every line. */
+  private async assertReviewedHead(
+    workspaceId: string,
+    userId: string,
+    session: GuidedReviewSession,
+    repo: RepoFiles,
+  ): Promise<void> {
+    const getPullRequest = repo.getPullRequest?.bind(repo)
+    if (!getPullRequest) throw new VcsCapabilityUnsupportedError(session.provider, 'getPullRequest')
+    const pr = await this.deps.asUser(workspaceId, userId, () => getPullRequest(session.prNumber))
+    if (!pr) throw new NotFoundError('Pull request', String(session.prNumber))
+    const head = pr.headSha
+    if (head !== session.reviewedHeadSha) {
+      throw new ConflictError(
+        'The pull request has new commits since this review was prepared',
+        'session_stale',
+        { reviewedHeadSha: session.reviewedHeadSha, currentHeadSha: head },
+      )
     }
   }
 }

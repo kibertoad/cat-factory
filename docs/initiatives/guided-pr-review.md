@@ -125,9 +125,11 @@ Every write answers `200` with the persisted state at once; the work it queued c
   it has loaded, taking a ticket per fetch so a reply overtaken by a newer fetch never lands.
 - Posting claims each draft (`posting`) before the host call and records the host's answer per
   draft. A `posting` claim older than the lease is re-claimable, so a poster that died does not
-  strand its drafts; the cost is that a repository outage between the host call and the settle can
+  strand its drafts, and the review window offers such a draft for posting again by the same
+  contracts rule (`isPostableDraft`); the cost is that a repository outage between the host call and the settle can
   post a comment twice after the lease. Posting refuses with `session_stale` once the PR head
-  moved, because every anchor was computed against `reviewedHeadSha`.
+  moved, because every anchor was computed against `reviewedHeadSha`, and so does moving a draft.
+  The summary comment posts only alongside a claimed draft, so a retry never repeats it.
 - `CreateReviewComment` has no start line, so a multi-line draft posts on its last line. Widening
   the VCS port to carry a span is a change to both adapters and is left out of this initiative.
 - A per-thread answer budget (turns and tool steps) is recorded on the message when it cuts an answer

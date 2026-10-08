@@ -260,6 +260,25 @@ export const guidedReviewCommentDraftSchema = v.object({
 })
 export type GuidedReviewCommentDraft = v.InferOutput<typeof guidedReviewCommentDraftSchema>
 
+/**
+ * How long a post holds the drafts it claimed. A `posting` draft older than this lost its poster
+ * before the host's answer was recorded, so another post may claim it again.
+ */
+export const GUIDED_REVIEW_POST_LEASE_MS = 10 * 60_000
+
+/**
+ * Whether a post may claim `draft` at `now`: a `proposed` or `failed` draft, or a `posting` one
+ * whose claim has outlived {@link GUIDED_REVIEW_POST_LEASE_MS}. The server claims by this rule and
+ * the review window offers a draft for posting by it, so a stranded draft stays reachable.
+ */
+export function isPostableDraft(
+  draft: Pick<GuidedReviewCommentDraft, 'status' | 'updatedAt'>,
+  now: number,
+): boolean {
+  if (draft.status === 'proposed' || draft.status === 'failed') return true
+  return draft.status === 'posting' && draft.updatedAt < now - GUIDED_REVIEW_POST_LEASE_MS
+}
+
 /** Parse a model-shaped overview against the contract; null when it does not conform. */
 export function parseGuidedReviewOverviewContent(
   input: unknown,
@@ -406,6 +425,7 @@ export const postGuidedReviewDraftsSchema = v.object({
     v.minLength(1),
     v.maxLength(LIST_MAX),
   ),
+  /** Posts only alongside a draft this call claims, so an identical retry publishes nothing. */
   summary: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(GUIDED_REVIEW_COMMENT_MAX))),
 })
 export type PostGuidedReviewDraftsInput = v.InferOutput<typeof postGuidedReviewDraftsSchema>

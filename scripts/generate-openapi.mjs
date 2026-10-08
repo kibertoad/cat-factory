@@ -1060,7 +1060,7 @@ const OPERATION_DOCS = {
     tag: 'Guided review',
     summary: 'Post comment drafts to the pull request',
     description:
-      'Publish the named drafts as review comments on the pull request, as the key\'s identity, with an optional summary comment. Each comment posts on its own, so a partial post is normal: the result counts `posted` and `failed` drafts (a failed one carries `postError` and can be posted again) and lists in `skipped` the named drafts this call did not claim because they were already posted, discarded or being posted, so a retried call never posts a comment twice. Refused `409` with `details.reason: "session_stale"` when the pull request has commits past `reviewedHeadSha`: refresh the review and check the drafts first. Posting never approves or requests changes.',
+      'Publish the named drafts as review comments on the pull request, as the key\'s identity, with an optional summary comment. Each comment posts on its own, so a partial post is normal: the result counts `posted` and `failed` drafts (a failed one carries `postError` and can be posted again) and lists in `skipped` the named drafts this call did not claim because they were already posted, discarded or being posted, so a retried call never posts a comment twice. The summary posts only alongside a draft this call claimed, so an identical retry after a complete post publishes nothing. Refused `409` with `details.reason: "session_stale"` when the pull request has commits past `reviewedHeadSha`: refresh the review and check the drafts first. Posting never approves or requests changes.',
   },
   getPublicServiceSpec: {
     tag: 'Spec',

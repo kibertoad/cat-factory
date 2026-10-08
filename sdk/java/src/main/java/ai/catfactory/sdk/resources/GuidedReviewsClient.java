@@ -158,9 +158,10 @@ public final class GuidedReviewsClient {
      * result counts `posted` and `failed` drafts (a failed one carries `postError` and can be
      * posted again) and lists in `skipped` the named drafts this call did not claim because they
      * were already posted, discarded or being posted, so a retried call never posts a comment
-     * twice. Refused `409` with `details.reason: "session_stale"` when the pull request has
-     * commits past `reviewedHeadSha`: refresh the review and check the drafts first. Posting never
-     * approves or requests changes.
+     * twice. The summary posts only alongside a draft this call claimed, so an identical retry
+     * after a complete post publishes nothing. Refused `409` with `details.reason:
+     * "session_stale"` when the pull request has commits past `reviewedHeadSha`: refresh the
+     * review and check the drafts first. Posting never approves or requests changes.
      * {@code POST /api/v1/guided-reviews/{sessionId}/comment-drafts/post} (operation {@code
      * postPublicGuidedReviewDrafts}).
      */

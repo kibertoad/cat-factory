@@ -275,6 +275,22 @@ export function anchorDrafts(
   }
 }
 
+/**
+ * Whether a host would accept a comment at `anchor`: its line is inside the diff on its side and a
+ * span starts before that line without leaving its hunk. The rule `anchorDrafts` keeps by, applied
+ * to an anchor a human chose, so an edit cannot place a draft the post would then fail on.
+ */
+export function isCommentableAnchor(
+  files: GitHubChangedFile[],
+  anchor: { path: string; line: number; startLine: number | null; side: GuidedReviewDiffSide },
+): boolean {
+  const lines = computeCommentableLines(files).get(anchor.path)
+  const sideLines = anchor.side === 'RIGHT' ? lines?.right : lines?.left
+  if (!sideLines?.has(anchor.line)) return false
+  if (anchor.startLine === null) return true
+  return anchor.startLine < anchor.line && spanWithinHunk(sideLines, anchor.startLine, anchor.line)
+}
+
 /** Whether every line of `start..end` is commentable on one side, which holds only inside a hunk. */
 function spanWithinHunk(sideLines: ReadonlySet<number>, start: number, end: number): boolean {
   for (let line = start; line <= end; line++) {

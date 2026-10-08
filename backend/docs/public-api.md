@@ -2711,7 +2711,8 @@ Design record: [`docs/initiatives/guided-pr-review.md`](../../docs/initiatives/g
 - **`write`, not `admin`.** Opening, asking and drafting spend model budget; posting publishes
   plain review comments as the key's identity. Nothing here approves, merges or requests changes.
 - **Posting claims each draft first,** so a retried post never publishes a comment twice, and it
-  is refused with `session_stale` once the PR has commits past `reviewedHeadSha`.
+  is refused with `session_stale` once the PR has commits past `reviewedHeadSha`. The summary
+  posts only alongside a draft the call claimed, so an identical retry publishes nothing.
 
 ### Service specification
 

@@ -316,26 +316,26 @@ const FILES: GitHubChangedFile[] = [
 interface HostState {
   head: string
   posted: { path: string; line: number; body: string }[]
+  /** Summary comments the host published. */
+  summaries: string[]
   /** Comment indexes the host refuses. */
   refuse: Set<number>
 }
 
 function fakeRepo(reads: (string | undefined)[], host: HostState): RepoFiles {
   return {
-    async pullRequestHeadSha() {
-      return host.head
-    },
     async createReview(
       _n: number,
-      input: { comments: { path: string; line: number; body: string }[] },
+      input: { body?: string; comments: { path: string; line: number; body: string }[] },
     ) {
+      if (input.body) host.summaries.push(input.body)
       return {
         comments: input.comments.map((c, i) => {
           if (host.refuse.has(i)) return { posted: false, error: 'line is not part of the diff' }
           host.posted.push(c)
           return { posted: true }
         }),
-        bodyPosted: null,
+        bodyPosted: input.body ? true : null,
       }
     },
     async getPullRequest() {
@@ -362,7 +362,7 @@ function setup(steps: Step[], opts: { overBudget?: boolean } = {}) {
   const woken: GuidedReviewJob[] = []
   const changes: GuidedReviewChange[] = []
   const reads: (string | undefined)[] = []
-  const host: HostState = { head: HEAD, posted: [], refuse: new Set() }
+  const host: HostState = { head: HEAD, posted: [], summaries: [], refuse: new Set() }
   const { provider, calls } = scriptedProvider(steps)
   let id = 0
   let now = 1_000
@@ -628,6 +628,10 @@ describe('GuidedReviewService', () => {
       await expect(
         service.editDraft(WS, OWNER, session.id, first!.id, { rev: 2, line: 90 }),
       ).rejects.toMatchObject({ details: { reason: 'draft_anchor_outside_diff' } })
+      // A discard is terminal, so it cannot carry an unchecked anchor along with it.
+      await expect(
+        service.editDraft(WS, OWNER, session.id, first!.id, { rev: 2, discard: true, line: 90 }),
+      ).rejects.toBeInstanceOf(ValidationError)
     })
 
     it('posts each draft once, through the host boundary, and records a partial post per draft', async () => {
@@ -646,6 +650,29 @@ describe('GuidedReviewService', () => {
       const again = await service.postDrafts(WS, OWNER, session.id, { draftIds: ids })
       expect(again).toMatchObject({ posted: 1, failed: 0, skipped: [ids[0]] })
       expect(host.posted).toHaveLength(2)
+    })
+
+    it('publishes the summary once, so an identical retry after a complete post posts nothing', async () => {
+      const { service, session, drafts, host } = await drafted()
+      const input = { draftIds: drafts.map((d) => d.id), summary: 'Two notes on the retries.' }
+      const first = await service.postDrafts(WS, OWNER, session.id, input)
+      expect(first.summary).toEqual({ posted: true, error: null })
+      const again = await service.postDrafts(WS, OWNER, session.id, input)
+      expect(again).toMatchObject({ posted: 0, summary: { posted: null, error: null } })
+      expect(host.summaries).toHaveLength(1)
+      expect(host.posted).toHaveLength(2)
+    })
+
+    it('refuses to move a draft once the pull request has moved past the reviewed commit', async () => {
+      const { service, session, drafts, host } = await drafted()
+      host.head = 'newer'
+      await expect(
+        service.editDraft(WS, OWNER, session.id, drafts[0]!.id, { rev: 1, line: 2 }),
+      ).rejects.toMatchObject({ details: { reason: 'session_stale' } })
+      // A body edit does not depend on the diff, so it still lands.
+      await expect(
+        service.editDraft(WS, OWNER, session.id, drafts[0]!.id, { rev: 1, body: 'Reworded.' }),
+      ).resolves.toMatchObject({ rev: 2 })
     })
 
     it('refuses to post once the pull request has moved past the reviewed commit', async () => {
