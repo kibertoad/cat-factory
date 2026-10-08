@@ -1,5 +1,38 @@
 # @cat-factory/node-server
 
+## 0.236.0
+
+### Minor Changes
+
+- 97175f8: Guided review questions asked with `depth: "deep"` are answered from a read-only checkout of the repository (surface version 1.78.0). A new `guided-review-investigator` container-explore kind runs per question, with its own preset model; `ContainerGuidedReviewInvestigator` dispatches it standalone, the way the environment dry run's prober is dispatched, and files its spend through the same accounting a pipeline step uses. The job clones the target branch with full history, fetches the PR head and checks out the reviewed commit.
+  
+  A deep answer is driven as a state machine on its message: claim, dispatch, record the dispatch, poll. `GuidedReviewService.runJob` now returns `GuidedReviewJobProgress`, and the Workflow, pg-boss and local `node:sqlite` drivers loop on it within `GUIDED_REVIEW_MAX_PASSES`. Each poll refreshes the claim, so the stale scan never mistakes a live investigation for a dead one; a container still working after 45 minutes is stopped and its question reported failed. `GuidedReviewRepository` gains `recordInvestigation`, `getInvestigation` and `heartbeatMessage` (migration 0106 and its Drizzle mirror).
+  
+  The two standalone container flows now share one dispatch builder per facade. The single-kind model resolver accepts a job with no board frame, which resolves on the workspace's default preset. The local guided-review queue now wakes at its earliest due job, so a re-queued job can no longer wait for the periodic sweep when a timer fires early. The review window gains a "Deep dive" switch.
+
+### Patch Changes
+
+- Updated dependencies [97175f8]
+  - @cat-factory/contracts@0.362.0
+  - @cat-factory/kernel@0.355.0
+  - @cat-factory/agents@0.171.0
+  - @cat-factory/orchestration@0.319.0
+  - @cat-factory/server@0.331.0
+  - @cat-factory/binary-generators@0.3.62
+  - @cat-factory/consensus@0.19.9
+  - @cat-factory/eks@0.1.401
+  - @cat-factory/gates@0.11.62
+  - @cat-factory/gitlab@0.23.25
+  - @cat-factory/integrations@0.174.11
+  - @cat-factory/observability-otel@0.23.55
+  - @cat-factory/prompt-fragments@1.1.58
+  - @cat-factory/spend@0.23.7
+  - @cat-factory/caching@0.20.96
+  - @cat-factory/observability-langfuse@0.11.62
+  - @cat-factory/provider-bedrock@0.7.554
+  - @cat-factory/provider-cloudflare@0.7.555
+  - @cat-factory/provider-s3@0.2.469
+
 ## 0.235.2
 
 ### Patch Changes
