@@ -1,5 +1,36 @@
 # @cat-factory/node-server
 
+## 0.234.0
+
+### Minor Changes
+
+- 075ff13: Guided PR review gets its persistence foundation: the session, thread, message and comment-draft contracts, kernel's `GuidedReviewRepository` port, D1 migration 0104 and its Drizzle mirror, and both repositories, wired as `CoreDependencies.guidedReviewRepository` on every facade so a mothership serves it to its nodes. No service reads or writes the tables yet; the service, the durable answering driver and the routes land in later slices (`docs/initiatives/guided-pr-review.md`).
+  
+  Concurrent threads write disjoint rows. A thread admits one live answer through a partial unique index, so a second question while one is pending returns `thread_busy` without writing, and a question on a thread that is missing or belongs to another session returns `thread_not_found`. The store writes the queued state itself (a pending overview on open, a pending placeholder per question), so a caller cannot create work no driver can claim. Driver claims, overview generations and draft posts are conditional writes that report whether they won. Every repository method is `remote` in mothership mode except the cross-workspace stale-job scan, which is a sweeper read. Queued work records which host drives it (`deployment` or `node:<nodeId>`), and the stale scan lists only one driver's jobs, so a hosted sweeper never answers a laptop's question with the deployment's credentials.
+
+### Patch Changes
+
+- Updated dependencies [075ff13]
+  - @cat-factory/contracts@0.358.0
+  - @cat-factory/kernel@0.353.0
+  - @cat-factory/orchestration@0.316.0
+  - @cat-factory/server@0.328.0
+  - @cat-factory/agents@0.168.4
+  - @cat-factory/binary-generators@0.3.58
+  - @cat-factory/consensus@0.19.5
+  - @cat-factory/eks@0.1.397
+  - @cat-factory/gates@0.11.58
+  - @cat-factory/gitlab@0.23.21
+  - @cat-factory/integrations@0.174.7
+  - @cat-factory/observability-otel@0.23.51
+  - @cat-factory/prompt-fragments@1.1.54
+  - @cat-factory/spend@0.23.3
+  - @cat-factory/caching@0.20.92
+  - @cat-factory/observability-langfuse@0.11.58
+  - @cat-factory/provider-bedrock@0.7.550
+  - @cat-factory/provider-cloudflare@0.7.551
+  - @cat-factory/provider-s3@0.2.465
+
 ## 0.233.0
 
 ### Minor Changes
