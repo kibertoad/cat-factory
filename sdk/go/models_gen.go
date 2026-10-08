@@ -2309,20 +2309,35 @@ type GuidedReviewOverviewContentSuggestedQuestion struct {
 
 // GuidedReviewSession is the `GuidedReviewSession` wire model.
 type GuidedReviewSession struct {
-	BaseRef         string               `json:"baseRef"`
-	CreatedAt       float64              `json:"createdAt"`
-	CreatedBy       string               `json:"createdBy"`
-	ID              string               `json:"id"`
-	Overview        GuidedReviewOverview `json:"overview"`
-	Owner           string               `json:"owner"`
-	PRNumber        int                  `json:"prNumber"`
-	PRTitle         string               `json:"prTitle"`
-	Provider        PrReportRunProvider  `json:"provider"`
-	Repo            string               `json:"repo"`
-	RepoID          string               `json:"repoId"`
-	ReviewedHeadSha string               `json:"reviewedHeadSha"`
-	UpdatedAt       float64              `json:"updatedAt"`
+	BaseRef         string                           `json:"baseRef"`
+	CreatedAt       float64                          `json:"createdAt"`
+	CreatedBy       string                           `json:"createdBy"`
+	CreatedByKind   GuidedReviewSessionCreatedByKind `json:"createdByKind"`
+	ID              string                           `json:"id"`
+	Overview        GuidedReviewOverview             `json:"overview"`
+	Owner           string                           `json:"owner"`
+	PRNumber        int                              `json:"prNumber"`
+	PRTitle         string                           `json:"prTitle"`
+	Provider        PrReportRunProvider              `json:"provider"`
+	Repo            string                           `json:"repo"`
+	RepoID          string                           `json:"repoId"`
+	ReviewedHeadSha string                           `json:"reviewedHeadSha"`
+	UpdatedAt       float64                          `json:"updatedAt"`
 }
+
+// GuidedReviewSessionCreatedByKind is the `GuidedReviewSessionCreatedByKind` vocabulary as carried on the wire.
+// A string type rather than an int enum: the wire form IS the string, and an unknown value must
+// round-trip rather than fail to decode — this surface is additive, so a client that refused a
+// value the server legitimately added would break on a release it was never told about.
+type GuidedReviewSessionCreatedByKind string
+
+const (
+	GuidedReviewSessionCreatedByKindUser   GuidedReviewSessionCreatedByKind = "user"
+	GuidedReviewSessionCreatedByKindAPIKey GuidedReviewSessionCreatedByKind = "api-key"
+)
+
+// GuidedReviewSessionCreatedByKindValues lists every GuidedReviewSessionCreatedByKind this SDK release knows.
+var GuidedReviewSessionCreatedByKindValues = []GuidedReviewSessionCreatedByKind{GuidedReviewSessionCreatedByKindUser, GuidedReviewSessionCreatedByKindAPIKey}
 
 // GuidedReviewSessionView is the `GuidedReviewSessionView` wire model.
 type GuidedReviewSessionView struct {
@@ -4810,8 +4825,9 @@ var PublicForkDecisionStatusValues = []PublicForkDecisionStatus{PublicForkDecisi
 
 // PublicGuidedReviewList is the `PublicGuidedReviewList` wire model.
 type PublicGuidedReviewList struct {
-	Sessions  []GuidedReviewSession `json:"sessions"`
-	Truncated bool                  `json:"truncated"`
+	// NextCursor always present; nil when the server has no value for it.
+	NextCursor *string               `json:"nextCursor"`
+	Sessions   []GuidedReviewSession `json:"sessions"`
 }
 
 // PublicHumanTestDecision is the `PublicHumanTestDecision` wire model.

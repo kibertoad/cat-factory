@@ -247,6 +247,7 @@ const QUERY_GUIDED_REVIEWS_LIST: readonly GatekeeperQueryParam[] = [
   { name: 'prNumber', required: false },
   { name: 'mine', required: false },
   { name: 'limit', required: false },
+  { name: 'cursor', required: false },
 ]
 
 /** Every `/api/v1` operation as a policy-annotated binding, in resource-group order. */

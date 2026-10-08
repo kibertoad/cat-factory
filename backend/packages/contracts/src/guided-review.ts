@@ -1,5 +1,5 @@
 import * as v from 'valibot'
-import { booleanQuerySchema, pageLimitSchema } from './public-paging.js'
+import { booleanQuerySchema, cursorSchema, pageLimitSchema } from './public-paging.js'
 import { vcsProviderSchema } from './routes/auth.js'
 
 // Guided PR review: a standalone, per-user exploration session over one pull request. It holds an
@@ -11,9 +11,13 @@ export const GUIDED_REVIEW_QUESTION_MAX = 4000
 export const GUIDED_REVIEW_ANSWER_MAX = 40_000
 export const GUIDED_REVIEW_COMMENT_MAX = 8000
 export const GUIDED_REVIEW_TITLE_MAX = 200
-const PROSE_MAX = 8000
+/** Cap on every free-text field other than an answer, a question, a comment and a title. */
+export const GUIDED_REVIEW_PROSE_MAX = 8000
+/** Cap on every list: overview sections, anchors, citations, dropped drafts. */
+export const GUIDED_REVIEW_LIST_MAX = 40
 const PATH_MAX = 1024
-const LIST_MAX = 40
+const PROSE_MAX = GUIDED_REVIEW_PROSE_MAX
+const LIST_MAX = GUIDED_REVIEW_LIST_MAX
 
 const title = v.pipe(v.string(), v.maxLength(GUIDED_REVIEW_TITLE_MAX))
 const prose = v.pipe(v.string(), v.maxLength(PROSE_MAX))
@@ -110,6 +114,21 @@ export const guidedReviewFailureSchema = v.object({
 })
 export type GuidedReviewFailure = v.InferOutput<typeof guidedReviewFailureSchema>
 
+/**
+ * Build a failure whose `detail` fits the schema. A raw cause (a provider error, a stack) has no
+ * length bound, so a longer one is cut and says how much it lost.
+ */
+export function guidedReviewFailure(
+  reason: GuidedReviewFailureReason,
+  detail: string | null,
+): GuidedReviewFailure {
+  if (detail === null || detail.length <= PROSE_MAX) return { reason, detail }
+  const marker = (dropped: number) => `\n(${dropped} more characters cut)`
+  // Sized against the full length, whose digit count is never below the dropped count's.
+  const keep = PROSE_MAX - marker(detail.length).length
+  return { reason, detail: `${detail.slice(0, keep)}${marker(detail.length - keep)}` }
+}
+
 export const guidedReviewOverviewSchema = v.object({
   status: guidedReviewWorkStatusSchema,
   /** Bumped on every refresh, so a driver finishing a superseded generation cannot land it. */
@@ -119,6 +138,14 @@ export const guidedReviewOverviewSchema = v.object({
   model: v.nullable(v.string()),
 })
 export type GuidedReviewOverview = v.InferOutput<typeof guidedReviewOverviewSchema>
+
+/**
+ * What kind of identity owns a session: a person, or a public-API key bound to nobody. A person's
+ * session reads the PR and calls the model under that person's credentials; a key's runs on the
+ * workspace's own, because a key id is not a user and has no personal credential to resolve.
+ */
+export const guidedReviewOwnerKindSchema = v.picklist(['user', 'api-key'])
+export type GuidedReviewOwnerKind = v.InferOutput<typeof guidedReviewOwnerKindSchema>
 
 export const guidedReviewSessionSchema = v.object({
   id: v.string(),
@@ -131,7 +158,9 @@ export const guidedReviewSessionSchema = v.object({
   /** The PR head the overview, every answer and every draft anchor were computed against. */
   reviewedHeadSha: v.string(),
   baseRef: v.string(),
+  /** A `usr_*` id when `createdByKind` is `user`, the API key's id when it is `api-key`. */
   createdBy: v.string(),
+  createdByKind: guidedReviewOwnerKindSchema,
   overview: guidedReviewOverviewSchema,
   createdAt: v.number(),
   updatedAt: v.number(),
@@ -330,9 +359,19 @@ export const requestGuidedReviewDraftsSchema = v.object({
 })
 export type RequestGuidedReviewDraftsInput = v.InferOutput<typeof requestGuidedReviewDraftsSchema>
 
+/** A pull request number in a query string: digits only, so the published type is an integer. */
+const prNumberQuerySchema = v.pipe(
+  v.string(),
+  v.regex(/^\d+$/, 'Must be a whole number'),
+  v.transform(Number),
+  v.number(),
+  v.integer(),
+  v.minValue(1),
+)
+
 export const listGuidedReviewsQuerySchema = v.object({
   repoId: v.optional(v.pipe(v.string(), v.maxLength(200))),
-  prNumber: v.optional(v.pipe(v.string(), v.regex(/^\d+$/), v.transform(Number))),
+  prNumber: v.optional(prNumberQuerySchema),
   /** `true` lists only the caller's own sessions. */
   mine: v.optional(
     v.pipe(
@@ -356,17 +395,25 @@ export type GuidedReviewChange =
    */
   | { sessionId: string; scope: 'thread' | 'drafts'; threadId: string }
 
-/** Query of the public session list: the most recently updated sessions first. */
+/**
+ * Query of the public session list: one keyset page, newest session first. Ordered by creation
+ * rather than by last update, because an update would move an unseen session ahead of the cursor
+ * and a caller paging the workspace would never see it.
+ */
 export const listPublicGuidedReviewsQuerySchema = v.object({
   ...listGuidedReviewsQuerySchema.entries,
   /** `true` lists only sessions the calling key's identity owns. */
   mine: v.optional(booleanQuerySchema),
+  /** Rows per page (1..100); omitted means 50. */
   limit: v.optional(pageLimitSchema),
+  /** Opaque cursor from a previous page's `nextCursor`. */
+  cursor: v.optional(cursorSchema),
 })
 
-/** A page of sessions. `truncated` says more matched than `limit` returned. */
+/** A page of sessions, newest first. */
 export const publicGuidedReviewListSchema = v.object({
   sessions: v.array(guidedReviewSessionSchema),
-  truncated: v.boolean(),
+  /** Cursor for the next page, or null when this was the last page. */
+  nextCursor: v.nullable(v.string()),
 })
 export type PublicGuidedReviewList = v.InferOutput<typeof publicGuidedReviewListSchema>

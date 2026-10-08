@@ -219,9 +219,10 @@ export type ReposListAvailableQuery = {
 /** Query parameters for `client.guidedReviews.list()`. */
 export type GuidedReviewsListQuery = {
   repoId?: string
-  prNumber?: string
+  prNumber?: number
   mine?: ListPublicGuidedReviewsMine
   limit?: number
+  cursor?: string
 }
 
 /** Query parameters for `client.jobs.list()`. */
@@ -2407,7 +2408,7 @@ export class GuidedReviewsResource {
 
   /**
    * List the workspace's guided reviews
-   * Guided review sessions in the workspace, most recently updated first, optionally narrowed to one repository (`repoId`), one pull request (`prNumber`) or the calling key's own (`mine=true`). Returns at most `limit` (default 50, at most 100) and says in `truncated` whether more matched.
+   * Guided review sessions in the workspace, newest created first, optionally narrowed to one repository (`repoId`), one pull request (`prNumber`) or the calling key's own (`mine=true`). Keyset-paginated: up to `limit` rows (default 50, at most 100) per page, and `nextCursor` to pass back as `cursor` for the next page, null on the last. A malformed cursor is `400` with `code: "invalid_cursor"`.
    * `GET /api/v1/guided-reviews` — operation `listPublicGuidedReviews`.
    */
   list(query: GuidedReviewsListQuery = {}, options: RequestOptions = {}): Promise<PublicGuidedReviewList> {
@@ -2420,8 +2421,24 @@ export class GuidedReviewsResource {
   }
 
   /**
+   * Every `sessions` across every page of `list()`.
+   * Follows `nextCursor` until the server reports no further page. The cursor is opaque
+   * and carries a position, never authority — each page re-applies the key's full scope.
+   */
+  async *listAll(query: GuidedReviewsListQuery = {}, options: RequestOptions = {}): AsyncGenerator<PublicGuidedReviewList['sessions'][number]> {
+    let cursor: string | undefined = query.cursor
+    for (;;) {
+      const page = await this.list({ ...query, cursor }, options)
+      for (const item of page.sessions) yield item
+      if (!page.nextCursor) return
+      if (page.nextCursor === cursor) throw repeatedCursorError()
+      cursor = page.nextCursor
+    }
+  }
+
+  /**
    * Open a guided review of a pull request
-   * Open a guided review of one pull request in a repository linked to the workspace, or return the one the calling key's identity already has for it. A guided review explains the PR (what it does, its meaningful changes, consequences, risks, where to focus, and suggested questions) and holds question threads answered by a model that reads the PR at the commit under review. Answers with the session at once; its overview is generated in the background, so follow `GET /api/v1/guided-reviews/{sessionId}/events` or re-read it. A key bound to a person acts as that person; an unbound key owns its own sessions and runs on the deployment's credentials. An unlinked repository is `404` with `details.reason: "repo_not_linked"`, and a PR the host cannot find is `404` with `details.reason: "pr_not_found"`.
+   * Open a guided review of one pull request in a repository linked to the workspace, or return the one the calling key's identity already has for it. A guided review explains the PR (what it does, its meaningful changes, consequences, risks, where to focus, and suggested questions) and holds question threads answered by a model that reads the PR at the commit under review. Answers with the session at once; its overview is generated in the background, so follow `GET /api/v1/guided-reviews/{sessionId}/events` or re-read it. A key bound to a person acts as that person; an unbound key owns its own sessions and runs on the workspace's credentials, never a person's; `createdByKind` says which of the two owns a session. An unlinked repository is `404` with `details.reason: "repo_not_linked"`, and a PR the host cannot find is `404` with `details.reason: "pr_not_found"`.
    * `POST /api/v1/guided-reviews` — operation `openPublicGuidedReview`.
    */
   open(body: OpenGuidedReview, options: RequestOptions = {}): Promise<GuidedReviewSessionView> {

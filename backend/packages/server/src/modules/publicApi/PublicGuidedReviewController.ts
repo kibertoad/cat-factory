@@ -11,7 +11,7 @@ import {
 } from '@cat-factory/contracts'
 import type { PublicApiKeyAuth } from '@cat-factory/integrations'
 import { NotFoundError } from '@cat-factory/kernel'
-import type { GuidedReviewModule } from '@cat-factory/orchestration'
+import type { GuidedReviewModule, GuidedReviewOwner } from '@cat-factory/orchestration'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
@@ -19,6 +19,7 @@ import { streamSSE } from 'hono/streaming'
 import type { AppEnv } from '../../http/env.js'
 import { requireCapability } from '../../http/guards.js'
 import { authorize, refuse } from './publicApiAuth.js'
+import { decodeTimeCursor, encodeCursor } from './publicApiPaging.js'
 import { SSE_MAX_MS, SSE_POLL_MS, SSE_REAUTH_MS } from './publicApiStreamRoutes.js'
 
 // The public guided PR review surface (`/api/v1/guided-reviews`): the sessions the app's review
@@ -34,11 +35,17 @@ function requireGuidedReview<E extends AppEnv>(c: Context<E>): GuidedReviewModul
 
 /**
  * Who a session belongs to when a key opens it: the person the key acts for, else the key
- * itself. An unbound key's sessions therefore run on the deployment's credentials, never a
- * person's.
+ * itself. A key-owned session runs on the workspace's credentials, never a person's.
  */
+function owner(auth: PublicApiKeyAuth): GuidedReviewOwner {
+  return auth.actsAsUserId
+    ? { id: auth.actsAsUserId, kind: 'user' }
+    : { id: auth.keyId, kind: 'api-key' }
+}
+
+/** The id the service checks ownership against, the same one {@link owner} stores. */
 function actor(auth: PublicApiKeyAuth): string {
-  return auth.actsAsUserId ?? auth.keyId
+  return owner(auth).id
 }
 
 export function publicGuidedReviewController(): Hono<AppEnv> {
@@ -48,23 +55,33 @@ export function publicGuidedReviewController(): Hono<AppEnv> {
     const gate = await authorize(c, openPublicGuidedReviewContract.minScope)
     if ('fail' in gate) return refuse(c, gate.fail)
     const { service } = requireGuidedReview(c)
-    const session = await service.open(gate.auth.workspaceId, actor(gate.auth), c.req.valid('json'))
+    const session = await service.open(gate.auth.workspaceId, owner(gate.auth), c.req.valid('json'))
     return c.json(await service.getSession(gate.auth.workspaceId, session.id), 200)
   })
 
   buildHonoRoute(app, listPublicGuidedReviewsContract, async (c) => {
     const gate = await authorize(c, listPublicGuidedReviewsContract.minScope)
     if ('fail' in gate) return refuse(c, gate.fail)
-    const { repoId, prNumber, mine, limit } = c.req.valid('query')
-    const page = limit ?? DEFAULT_SESSION_PAGE
-    // One row past the page, so the response can say whether more matched.
-    const rows = await requireGuidedReview(c).service.listSessions(gate.auth.workspaceId, {
-      ...(repoId ? { repoId } : {}),
-      ...(prNumber !== undefined ? { prNumber } : {}),
-      ...(mine ? { createdBy: actor(gate.auth) } : {}),
-      limit: page + 1,
-    })
-    return c.json({ sessions: rows.slice(0, page), truncated: rows.length > page }, 200)
+    const { repoId, prNumber, mine, limit = DEFAULT_SESSION_PAGE, cursor } = c.req.valid('query')
+    // A malformed cursor is the list surface's shared `invalid_cursor`, never page 1 again.
+    const after = cursor === undefined ? undefined : decodeTimeCursor(cursor)
+    if (after === null) {
+      return c.json({ error: { code: 'invalid_cursor', message: 'Malformed cursor' } }, 400)
+    }
+    // One row past the page, so "is there another page" costs no second query.
+    const rows = await requireGuidedReview(c).service.pageSessions(
+      gate.auth.workspaceId,
+      {
+        ...(repoId ? { repoId } : {}),
+        ...(prNumber !== undefined ? { prNumber } : {}),
+        ...(mine ? { createdBy: actor(gate.auth) } : {}),
+      },
+      { limit: limit + 1, ...(after ? { cursor: after } : {}) },
+    )
+    const sessions = rows.slice(0, limit)
+    const last = sessions.at(-1)
+    const nextCursor = rows.length > limit && last ? encodeCursor(last.createdAt, last.id) : null
+    return c.json({ sessions, nextCursor }, 200)
   })
 
   buildHonoRoute(app, getPublicGuidedReviewContract, async (c) => {
