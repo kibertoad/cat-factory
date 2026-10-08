@@ -2,7 +2,7 @@ import { sql } from 'drizzle-orm'
 import { bigint, index, integer, pgTable, primaryKey, text, uniqueIndex } from 'drizzle-orm/pg-core'
 
 // Guided PR review sessions (docs/initiatives/guided-pr-review.md), mirroring the Cloudflare D1
-// tables (migration 0104) column-for-column and index-for-index.
+// tables (migrations 0104 and 0105) column-for-column and index-for-index.
 
 export const guidedReviewSessions = pgTable(
   'guided_review_sessions',
@@ -18,6 +18,7 @@ export const guidedReviewSessions = pgTable(
     reviewed_head_sha: text('reviewed_head_sha').notNull(),
     base_ref: text('base_ref').notNull(),
     created_by: text('created_by').notNull(),
+    created_by_kind: text('created_by_kind').notNull().default('user'),
     overview_status: text('overview_status').notNull(),
     overview_generation: integer('overview_generation').notNull(),
     overview_content: text('overview_content'),
@@ -41,6 +42,7 @@ export const guidedReviewSessions = pgTable(
       t.overview_status,
       t.updated_at,
     ),
+    index('idx_guided_review_sessions_created').on(t.workspace_id, t.created_at, t.id),
   ],
 )
 

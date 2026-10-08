@@ -114,6 +114,79 @@ expectMutuallyAssignable<
   sdk.AcknowledgeKaizenEntry,
   v.InferOutput<typeof contracts.acknowledgeKaizenEntrySchema>
 >()
+// Guided PR review: the session view and everything it nests, plus the request bodies.
+expectMutuallyAssignable<
+  sdk.GuidedReviewSessionView,
+  v.InferOutput<typeof contracts.guidedReviewSessionViewSchema>
+>()
+expectMutuallyAssignable<
+  sdk.GuidedReviewThreadView,
+  v.InferOutput<typeof contracts.guidedReviewThreadViewSchema>
+>()
+expectMutuallyAssignable<
+  sdk.GuidedReviewExchange,
+  v.InferOutput<typeof contracts.guidedReviewExchangeSchema>
+>()
+expectMutuallyAssignable<
+  sdk.GuidedReviewSession,
+  v.InferOutput<typeof contracts.guidedReviewSessionSchema>
+>()
+expectMutuallyAssignable<
+  sdk.GuidedReviewOverview,
+  v.InferOutput<typeof contracts.guidedReviewOverviewSchema>
+>()
+expectMutuallyAssignable<
+  sdk.GuidedReviewOverviewContent,
+  v.InferOutput<typeof contracts.guidedReviewOverviewContentSchema>
+>()
+expectMutuallyAssignable<
+  sdk.GuidedReviewFailure,
+  v.InferOutput<typeof contracts.guidedReviewFailureSchema>
+>()
+expectMutuallyAssignable<
+  sdk.GuidedReviewThread,
+  v.InferOutput<typeof contracts.guidedReviewThreadSchema>
+>()
+expectMutuallyAssignable<
+  sdk.GuidedReviewThreadSummary,
+  v.InferOutput<typeof contracts.guidedReviewThreadSummarySchema>
+>()
+expectMutuallyAssignable<
+  sdk.GuidedReviewMessage,
+  v.InferOutput<typeof contracts.guidedReviewMessageSchema>
+>()
+expectMutuallyAssignable<
+  sdk.GuidedReviewAnchor,
+  v.InferOutput<typeof contracts.guidedReviewAnchorSchema>
+>()
+expectMutuallyAssignable<
+  sdk.GuidedReviewDraftReport,
+  v.InferOutput<typeof contracts.guidedReviewDraftReportSchema>
+>()
+expectMutuallyAssignable<
+  sdk.GuidedReviewCommentDraft,
+  v.InferOutput<typeof contracts.guidedReviewCommentDraftSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicGuidedReviewList,
+  v.InferOutput<typeof contracts.publicGuidedReviewListSchema>
+>()
+expectMutuallyAssignable<
+  sdk.OpenGuidedReview,
+  v.InferOutput<typeof contracts.openGuidedReviewSchema>
+>()
+expectMutuallyAssignable<
+  sdk.OpenGuidedReviewThread,
+  v.InferOutput<typeof contracts.openGuidedReviewThreadSchema>
+>()
+expectMutuallyAssignable<
+  sdk.AskGuidedReview,
+  v.InferOutput<typeof contracts.askGuidedReviewSchema>
+>()
+expectMutuallyAssignable<
+  sdk.RequestGuidedReviewDrafts,
+  v.InferOutput<typeof contracts.requestGuidedReviewDraftsSchema>
+>()
 expectMutuallyAssignable<sdk.PublicPipeline, v.InferOutput<typeof contracts.publicPipelineSchema>>()
 expectMutuallyAssignable<
   sdk.PublicPipelineList,
@@ -515,6 +588,24 @@ const ASSERTED_COMPONENTS = [
   'PublicKaizenEntryCombo',
   'PublicKaizenEntryList',
   'AcknowledgeKaizenEntry',
+  'GuidedReviewSessionView',
+  'GuidedReviewThreadView',
+  'GuidedReviewExchange',
+  'GuidedReviewSession',
+  'GuidedReviewOverview',
+  'GuidedReviewOverviewContent',
+  'GuidedReviewFailure',
+  'GuidedReviewThread',
+  'GuidedReviewThreadSummary',
+  'GuidedReviewMessage',
+  'GuidedReviewAnchor',
+  'GuidedReviewDraftReport',
+  'GuidedReviewCommentDraft',
+  'PublicGuidedReviewList',
+  'OpenGuidedReview',
+  'OpenGuidedReviewThread',
+  'AskGuidedReview',
+  'RequestGuidedReviewDrafts',
   'PublicPipeline',
   'PublicPipelineList',
   'PublicPromptFragment',

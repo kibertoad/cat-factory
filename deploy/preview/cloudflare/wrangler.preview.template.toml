@@ -102,6 +102,11 @@ binding = "ENV_TEST_WORKFLOW"
 name = "cat-factory-pr-${PR_NUMBER}-env-test"
 class_name = "EnvironmentTestWorkflow"
 
+[[workflows]]
+binding = "GUIDED_REVIEW_WORKFLOW"
+name = "cat-factory-pr-${PR_NUMBER}-guided-review"
+class_name = "GuidedReviewWorkflow"
+
 # The runner backend. It is NOT optional scenery: the Worker refuses to assemble its agent
 # executor without a runner (EXEC_CONTAINER or a registered pool) and serves the
 # misconfigured app instead — so a preview without this binding would answer every request

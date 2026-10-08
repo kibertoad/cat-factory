@@ -30,6 +30,7 @@ function targets(): WorkspaceEventTargets & { calls: string[] } {
     upsertKaizen: record('upsertKaizen'),
     upsertInitiative: record('upsertInitiative'),
     upsertDocInterview: record('upsertDocInterview'),
+    guidedReviewChanged: record('guidedReviewChanged'),
     refreshBoard: record('refreshBoard'),
   }
 }
@@ -129,6 +130,7 @@ describe('applyWorkspaceEvent: the other branches', () => {
       [{ type: 'kaizen', grading: {} as never, at: 1 }, 'upsertKaizen'],
       [{ type: 'initiative', initiative: {} as never, at: 1 }, 'upsertInitiative'],
       [{ type: 'docInterview', session: {} as never, at: 1 }, 'upsertDocInterview'],
+      [{ type: 'guidedReview', change: {} as never, at: 1 }, 'guidedReviewChanged'],
     ]
 
     for (const [event, expected] of cases) {

@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { booleanQuerySchema, cursorSchema, pageLimitSchema } from './public-paging.js'
 import { vcsProviderSchema } from './routes/auth.js'
 
 // Guided PR review: a standalone, per-user exploration session over one pull request. It holds an
@@ -10,9 +11,13 @@ export const GUIDED_REVIEW_QUESTION_MAX = 4000
 export const GUIDED_REVIEW_ANSWER_MAX = 40_000
 export const GUIDED_REVIEW_COMMENT_MAX = 8000
 export const GUIDED_REVIEW_TITLE_MAX = 200
-const PROSE_MAX = 8000
+/** Cap on every free-text field other than an answer, a question, a comment and a title. */
+export const GUIDED_REVIEW_PROSE_MAX = 8000
+/** Cap on every list: overview sections, anchors, citations, dropped drafts. */
+export const GUIDED_REVIEW_LIST_MAX = 40
 const PATH_MAX = 1024
-const LIST_MAX = 40
+const PROSE_MAX = GUIDED_REVIEW_PROSE_MAX
+const LIST_MAX = GUIDED_REVIEW_LIST_MAX
 
 const title = v.pipe(v.string(), v.maxLength(GUIDED_REVIEW_TITLE_MAX))
 const prose = v.pipe(v.string(), v.maxLength(PROSE_MAX))
@@ -98,6 +103,8 @@ export const GUIDED_REVIEW_FAILURE_REASONS = [
   'generation_failed',
   'unreadable_reply',
   'depth_unavailable',
+  /** The PR's head moved past the reviewed commit; a refresh re-points the session. */
+  'head_moved',
 ] as const
 export type GuidedReviewFailureReason = (typeof GUIDED_REVIEW_FAILURE_REASONS)[number]
 
@@ -106,6 +113,21 @@ export const guidedReviewFailureSchema = v.object({
   detail: v.nullable(v.pipe(v.string(), v.maxLength(PROSE_MAX))),
 })
 export type GuidedReviewFailure = v.InferOutput<typeof guidedReviewFailureSchema>
+
+/**
+ * Build a failure whose `detail` fits the schema. A raw cause (a provider error, a stack) has no
+ * length bound, so a longer one is cut and says how much it lost.
+ */
+export function guidedReviewFailure(
+  reason: GuidedReviewFailureReason,
+  detail: string | null,
+): GuidedReviewFailure {
+  if (detail === null || detail.length <= PROSE_MAX) return { reason, detail }
+  const marker = (dropped: number) => `\n(${dropped} more characters cut)`
+  // Sized against the full length, whose digit count is never below the dropped count's.
+  const keep = PROSE_MAX - marker(detail.length).length
+  return { reason, detail: `${detail.slice(0, keep)}${marker(detail.length - keep)}` }
+}
 
 export const guidedReviewOverviewSchema = v.object({
   status: guidedReviewWorkStatusSchema,
@@ -116,6 +138,14 @@ export const guidedReviewOverviewSchema = v.object({
   model: v.nullable(v.string()),
 })
 export type GuidedReviewOverview = v.InferOutput<typeof guidedReviewOverviewSchema>
+
+/**
+ * What kind of identity owns a session: a person, or a public-API key bound to nobody. A person's
+ * session reads the PR and calls the model under that person's credentials; a key's runs on the
+ * workspace's own, because a key id is not a user and has no personal credential to resolve.
+ */
+export const guidedReviewOwnerKindSchema = v.picklist(['user', 'api-key'])
+export type GuidedReviewOwnerKind = v.InferOutput<typeof guidedReviewOwnerKindSchema>
 
 export const guidedReviewSessionSchema = v.object({
   id: v.string(),
@@ -128,7 +158,9 @@ export const guidedReviewSessionSchema = v.object({
   /** The PR head the overview, every answer and every draft anchor were computed against. */
   reviewedHeadSha: v.string(),
   baseRef: v.string(),
+  /** A `usr_*` id when `createdByKind` is `user`, the API key's id when it is `api-key`. */
   createdBy: v.string(),
+  createdByKind: guidedReviewOwnerKindSchema,
   overview: guidedReviewOverviewSchema,
   createdAt: v.number(),
   updatedAt: v.number(),
@@ -258,16 +290,130 @@ export const guidedReviewCommentDraftSchema = v.object({
 })
 export type GuidedReviewCommentDraft = v.InferOutput<typeof guidedReviewCommentDraftSchema>
 
+/** Parse a model-shaped overview against the contract; null when it does not conform. */
+export function parseGuidedReviewOverviewContent(
+  input: unknown,
+): GuidedReviewOverviewContent | null {
+  const parsed = v.safeParse(guidedReviewOverviewContentSchema, input)
+  return parsed.success ? parsed.output : null
+}
+
+/** Parse one model-shaped anchor against the contract; null when it does not conform. */
+export function parseGuidedReviewAnchor(input: unknown): GuidedReviewAnchor | null {
+  const parsed = v.safeParse(guidedReviewAnchorSchema, input)
+  return parsed.success ? parsed.output : null
+}
+
+/** A session with its threads and drafts: what the review window loads. */
+export const guidedReviewSessionViewSchema = v.object({
+  session: guidedReviewSessionSchema,
+  threads: v.array(guidedReviewThreadSummarySchema),
+  drafts: v.array(guidedReviewCommentDraftSchema),
+})
+export type GuidedReviewSessionView = v.InferOutput<typeof guidedReviewSessionViewSchema>
+
+/** A thread with its messages in order: what one tab loads. */
+export const guidedReviewThreadViewSchema = v.object({
+  thread: guidedReviewThreadSchema,
+  messages: v.array(guidedReviewMessageSchema),
+})
+export type GuidedReviewThreadView = v.InferOutput<typeof guidedReviewThreadViewSchema>
+
+/** The two messages a question appends: the question, and the placeholder that will answer it. */
+export const guidedReviewExchangeSchema = v.object({
+  question: guidedReviewMessageSchema,
+  placeholder: guidedReviewMessageSchema,
+})
+export type GuidedReviewExchange = v.InferOutput<typeof guidedReviewExchangeSchema>
+
+const questionContent = v.pipe(
+  v.string(),
+  v.trim(),
+  v.minLength(1),
+  v.maxLength(GUIDED_REVIEW_QUESTION_MAX),
+)
+
+export const openGuidedReviewSchema = v.object({
+  owner: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200)),
+  repo: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200)),
+  prNumber: v.pipe(v.number(), v.integer(), v.minValue(1)),
+  provider: v.optional(vcsProviderSchema),
+})
+export type OpenGuidedReviewInput = v.InferOutput<typeof openGuidedReviewSchema>
+
+export const askGuidedReviewSchema = v.object({
+  content: questionContent,
+  depth: v.optional(guidedReviewDepthSchema),
+})
+export type AskGuidedReviewInput = v.InferOutput<typeof askGuidedReviewSchema>
+
+export const openGuidedReviewThreadSchema = v.object({
+  title: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(GUIDED_REVIEW_TITLE_MAX))),
+  question: v.optional(askGuidedReviewSchema),
+})
+export type OpenGuidedReviewThreadInput = v.InferOutput<typeof openGuidedReviewThreadSchema>
+
+export const requestGuidedReviewDraftsSchema = v.object({
+  /** Narrows which comments the reviewer wants; empty asks for every conclusion. */
+  instructions: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(GUIDED_REVIEW_QUESTION_MAX))),
+})
+export type RequestGuidedReviewDraftsInput = v.InferOutput<typeof requestGuidedReviewDraftsSchema>
+
+/** A pull request number in a query string: digits only, so the published type is an integer. */
+const prNumberQuerySchema = v.pipe(
+  v.string(),
+  v.regex(/^\d+$/, 'Must be a whole number'),
+  v.transform(Number),
+  v.number(),
+  v.integer(),
+  v.minValue(1),
+)
+
+export const listGuidedReviewsQuerySchema = v.object({
+  repoId: v.optional(v.pipe(v.string(), v.maxLength(200))),
+  prNumber: v.optional(prNumberQuerySchema),
+  /** `true` lists only the caller's own sessions. */
+  mine: v.optional(
+    v.pipe(
+      v.picklist(['true', 'false']),
+      v.transform((s) => s === 'true'),
+    ),
+  ),
+})
+
 /**
- * Machine-readable causes a guided-review refusal carries in `details.reason`. The SPA maps each
- * to translated copy.
+ * What changed in a guided review, pushed live. It carries ids only: a client refetches the
+ * session or thread it has open, so a workspace member who is not viewing it learns nothing more
+ * than that it moved.
  */
-export const GUIDED_REVIEW_REASONS = [
-  'thread_busy',
-  'session_stale',
-  'draft_conflict',
-  'draft_not_postable',
-  'pr_not_found',
-  'repo_not_linked',
-] as const
-export type GuidedReviewReason = (typeof GUIDED_REVIEW_REASONS)[number]
+export type GuidedReviewChange =
+  /** `session`: the overview or the session itself moved. `deleted`: the session is gone. */
+  | { sessionId: string; scope: 'session' | 'deleted' }
+  /**
+   * `thread`: one thread's messages moved. `drafts`: a thread's message settled with comment
+   * drafts, so the session's drafts moved too.
+   */
+  | { sessionId: string; scope: 'thread' | 'drafts'; threadId: string }
+
+/**
+ * Query of the public session list: one keyset page, newest session first. Ordered by creation
+ * rather than by last update, because an update would move an unseen session ahead of the cursor
+ * and a caller paging the workspace would never see it.
+ */
+export const listPublicGuidedReviewsQuerySchema = v.object({
+  ...listGuidedReviewsQuerySchema.entries,
+  /** `true` lists only sessions the calling key's identity owns. */
+  mine: v.optional(booleanQuerySchema),
+  /** Rows per page (1..100); omitted means 50. */
+  limit: v.optional(pageLimitSchema),
+  /** Opaque cursor from a previous page's `nextCursor`. */
+  cursor: v.optional(cursorSchema),
+})
+
+/** A page of sessions, newest first. */
+export const publicGuidedReviewListSchema = v.object({
+  sessions: v.array(guidedReviewSessionSchema),
+  /** Cursor for the next page, or null when this was the last page. */
+  nextCursor: v.nullable(v.string()),
+})
+export type PublicGuidedReviewList = v.InferOutput<typeof publicGuidedReviewListSchema>

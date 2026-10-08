@@ -65,6 +65,7 @@ import { ExecutionService } from './modules/execution/ExecutionService.js'
 import { PipelineService } from './modules/pipelines/PipelineService.js'
 import { WorkspaceService } from '@cat-factory/workspaces'
 import type { AssistantModule } from './container/assistant-module.js'
+import type { GuidedReviewModule } from './container/guided-review-module.js'
 import { WorkspaceMemberService } from '@cat-factory/workspaces'
 import { AccountService } from '@cat-factory/workspaces'
 import { UserService } from '@cat-factory/workspaces'
@@ -338,6 +339,7 @@ export type { FoundationalServiceModule, FragmentLibraryModule, SkillLibraryModu
 // same reason, and is re-exported here so a facade's HTTP layer resolves it off `Core` like any
 // other optional module.
 export type { AssistantModule } from './container/assistant-module.js'
+export type { GuidedReviewModule } from './container/guided-review-module.js'
 
 /**
  * The always-present core services every facade wires — the composition root's SPINE. These
@@ -599,6 +601,8 @@ export interface OptionalCoreModules {
    * the module's own capability read rather than as an absent module the controller 503s on.
    */
   assistant?: AssistantModule
+  /** Guided PR review; present when a `guidedReviewRepository` is wired. */
+  guidedReview?: GuidedReviewModule
   /** Present only when the environment integration is configured (see CoreDependencies). */
   environments?: EnvironmentsModule
   /**

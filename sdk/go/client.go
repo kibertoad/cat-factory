@@ -139,6 +139,8 @@ type Client struct {
 	// The platform's own improvement backlog: post-run gradings of each agent step, and the
 	// acknowledgement that takes one off the backlog.
 	Kaizen *KaizenService
+	// Guided pull request review: a PR explained, question threads about it, and comment drafts.
+	GuidedReviews *GuidedReviewsService
 	// The workspace's own API keys.
 	Keys *KeysService
 }
@@ -206,6 +208,7 @@ func New(options Options) (*Client, error) {
 	client.Evidence = &EvidenceService{client: client}
 	client.MergeRecords = &MergeRecordsService{client: client}
 	client.Kaizen = &KaizenService{client: client}
+	client.GuidedReviews = &GuidedReviewsService{client: client}
 	client.Keys = &KeysService{client: client}
 	if options.PersonalPassword != "" {
 		client.SetPersonalPassword(options.PersonalPassword)

@@ -29,6 +29,7 @@ import { humanTestApi } from './api/humanTest'
 import { infraHandlersApi } from './api/infraHandlers'
 import { initiativeApi } from './api/initiative'
 import { docInterviewApi } from './api/docInterview'
+import { guidedReviewApi } from './api/guidedReview'
 import { visualConfirmApi } from './api/visualConfirm'
 import { kaizenApi } from './api/kaizen'
 import { localSettingsApi } from './api/localSettings'
@@ -160,6 +161,7 @@ export function useApi() {
     ...infraHandlersApi(ctx),
     ...initiativeApi(ctx),
     ...docInterviewApi(ctx),
+    ...guidedReviewApi(ctx),
     ...provisioningLogsApi(ctx),
     ...releaseHealthApi(ctx),
     ...validationChecksApi(ctx),

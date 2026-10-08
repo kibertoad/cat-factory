@@ -404,3 +404,16 @@ this says what they do NOT cover, which is the whole point. A delegated step's m
 reach this deployment's proxy or recorder, so its tokens are in no total here, and a missing number
 is invisible. A caller reading spend off this surface should treat a non-zero
 `delegatedStepsWithoutUsage` as "this run cost more than this number says", not as a zero.
+
+## 1.76.0
+
+`/api/v1/guided-reviews` is new: guided pull request review. A session explains one PR (what it
+does, its meaningful changes, consequences, risks, where to focus, suggested questions) and holds
+independent question threads answered by a model that reads the PR at the commit under review.
+A thread can also turn its conclusions into comment drafts placed on lines inside the diff.
+`GET /api/v1/guided-reviews/{sessionId}/events` streams the session view as it changes.
+
+Additive: nine contract operations, one hand-documented stream, and the shapes they carry. Three
+of those shapes reuse value sets other operations published first (a diff side, a VCS provider and
+a `true`/`false` query flag); the SDK generator pins the existing type names, so no released type
+is renamed. Nothing here posts to a pull request.

@@ -51,6 +51,7 @@ import { executionRuntime } from './execution/config.js'
 import { PgBossBootstrapRunner } from './execution/bootstrapRunner.js'
 import { PgBossEnvConfigRepairRunner } from './execution/envConfigRepairRunner.js'
 import { PgBossEnvironmentTestRunner } from './execution/envTestRunner.js'
+import { PgBossGuidedReviewRunner } from './execution/guidedReviewRunner.js'
 import { PgBossWorkRunner } from './execution/pgBossRunner.js'
 import { createNodeGateways } from './gateways.js'
 import { baseUrlForNode } from './providerEndpoints.js'
@@ -671,29 +672,7 @@ function buildNodeServiceDeps(bundle: NodeCoreDepsBundle) {
           ...(runnerUrlPolicy ? { runnerUrlSafetyPolicy: runnerUrlPolicy } : {}),
         }
       : {}),
-    ...(options.boss
-      ? {
-          workRunner: new PgBossWorkRunner(options.boss, executionRuntime(config, env).queue),
-          // The durable bootstrap driver (analogue of the Worker's BootstrapWorkflow):
-          // BootstrapService.startRun enqueues a drive job that polls the run to terminal.
-          bootstrapRunner: new PgBossBootstrapRunner(
-            options.boss,
-            executionRuntime(config, env).queue,
-          ),
-          // The durable env-config-repair driver (analogue of the Worker's
-          // EnvConfigRepairWorkflow): start enqueues a drive job that polls the run to terminal.
-          envConfigRepairRunner: new PgBossEnvConfigRepairRunner(
-            options.boss,
-            executionRuntime(config, env).queue,
-          ),
-          // The durable ephemeral-environment self-test driver (analogue of the Worker's
-          // EnvironmentTestWorkflow): startRun enqueues a drive job that advances the run.
-          environmentTestRunner: new PgBossEnvironmentTestRunner(
-            options.boss,
-            executionRuntime(config, env).queue,
-          ),
-        }
-      : {}),
+    ...(options.boss ? pgBossRunners(options.boss, executionRuntime(config, env).queue) : {}),
     ...githubGateDeps,
     // GitHub installation + repo/branch/PR/issue/commit/check-run projections + the
     // sync/webhook module (inline ingest persists to these repos on Node).
@@ -1010,5 +989,23 @@ function selectNodeEnvironmentsDeps(config: AppConfig, db: DrizzleDb): Partial<C
     ...(config.environments.detectionConventions
       ? { detectionConventions: config.environments.detectionConventions }
       : {}),
+  }
+}
+
+/**
+ * The pg-boss durable drivers, one per standalone-work kind: each the Node analogue of a Worker
+ * Workflow class. Only wired when the facade booted pg-boss.
+ */
+function pgBossRunners(
+  boss: NonNullable<NodeContainerOptions['boss']>,
+  queue: ReturnType<typeof executionRuntime>['queue'],
+): Partial<CoreDependencies> {
+  return {
+    workRunner: new PgBossWorkRunner(boss, queue),
+    // BootstrapService.startRun enqueues a drive job that polls the run to terminal.
+    bootstrapRunner: new PgBossBootstrapRunner(boss, queue),
+    envConfigRepairRunner: new PgBossEnvConfigRepairRunner(boss, queue),
+    environmentTestRunner: new PgBossEnvironmentTestRunner(boss, queue),
+    guidedReviewRunner: new PgBossGuidedReviewRunner(boss, queue),
   }
 }

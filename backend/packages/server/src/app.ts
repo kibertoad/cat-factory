@@ -105,6 +105,7 @@ import {
   taskSourceController,
 } from './modules/tasks/TaskSourceController.js'
 import { assistantController } from './modules/assistant/AssistantController.js'
+import { guidedReviewController } from './modules/guidedReview/GuidedReviewController.js'
 import { bugHuntController } from './modules/bugHunt/BugHuntController.js'
 import { workspaceController } from './modules/workspaces/WorkspaceController.js'
 import { workspaceMemberController } from './modules/workspaces/WorkspaceMemberController.js'
@@ -126,6 +127,7 @@ import { publicEvidenceController } from './modules/publicApi/PublicEvidenceCont
 import { publicSpecController } from './modules/publicApi/PublicSpecController.js'
 import { publicMergeEvidenceController } from './modules/publicApi/PublicMergeEvidenceController.js'
 import { publicKaizenController } from './modules/publicApi/PublicKaizenController.js'
+import { publicGuidedReviewController } from './modules/publicApi/PublicGuidedReviewController.js'
 import { publicDiscoveryController } from './modules/publicApi/PublicDiscoveryController.js'
 import { publicFragmentController } from './modules/publicApi/PublicFragmentController.js'
 import { publicUseCaseController } from './modules/publicApi/PublicUseCaseController.js'
@@ -202,6 +204,7 @@ function registerPublicApiControllers<E extends AppEnv>(app: Hono<E>): void {
   // takes one off the backlog. Reads are `read`; acknowledging is `write`, since recording that a
   // recommendation was triaged starts nothing. See backend/docs/public-api.md.
   app.route('/', publicKaizenController())
+  app.route('/', publicGuidedReviewController())
   // The public SPEND-ANALYTICS read (`/api/v1/usage/spend`): the workspace's money over a window
   // sliced by repository, ticket, run or step kind: the TCO question the period breakdown on
   // `/api/v1/usage` carries no axis for. `read` scope. See backend/docs/public-api.md.
@@ -439,6 +442,8 @@ export const WORKSPACE_CONTROLLERS: readonly ControllerEntry[] = [
   // The in-app assistant: a prompt routed to one of the board actions above. Member-tier and
   // ungated, like the bug hunt beside it (see AssistantController for why).
   { name: 'assistant', mount: WORKSPACE_MOUNT, build: () => assistantController() },
+  // Guided PR review: member tier, the service lets only a session's creator change it.
+  { name: 'guidedReview', mount: WORKSPACE_MOUNT, build: () => guidedReviewController() },
   { name: 'environment', mount: WORKSPACE_MOUNT, build: () => environmentController() },
   { name: 'runnerPool', mount: WORKSPACE_MOUNT, build: () => runnerPoolController() },
   { name: 'provisioningLog', mount: WORKSPACE_MOUNT, build: () => provisioningLogController() },
