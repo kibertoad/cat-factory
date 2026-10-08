@@ -32,7 +32,11 @@ import { composeDelegationBrief, briefRepoProvider } from './brief.js'
 import { ensureDelegatedWorkBranch } from './delegationWorkBranch.js'
 import { recordAgentContextSnapshot } from './agentContextRecord.js'
 import { resolveDelegationCredentials } from './delegationCredentials.js'
-import { type RecordHarnessCalls, recordDelegatedUsage } from './delegatedUsage.js'
+import {
+  type RecordHarnessCalls,
+  delegatedModelName,
+  recordDelegatedUsage,
+} from './delegatedUsage.js'
 import type { ResolveRepoTarget, ResolveRepoOrigin } from './repoTargeting.js'
 
 // ---------------------------------------------------------------------------
@@ -228,7 +232,7 @@ export class DelegatedAgentExecutor implements AsyncAgentExecutor {
       // There is no model to name: the executor chose one we never saw. Naming the EXECUTOR under
       // a provider of `delegated` says exactly that, where a blank would read as a dispatch that
       // resolved nothing and a borrowed default would name a model that ran nowhere.
-      model: `delegated:${definition.id}`,
+      model: delegatedModelName(definition),
       workspaceId,
       executionId,
     })

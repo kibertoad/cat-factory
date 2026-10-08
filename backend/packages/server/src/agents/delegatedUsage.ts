@@ -5,7 +5,7 @@ import type {
   HarnessCallMetric,
   Logger,
 } from '@cat-factory/kernel'
-import { describeError } from '@cat-factory/kernel'
+import { partitionInputTokens, runBestEffort } from '@cat-factory/kernel'
 import type { HarnessCallsRecordInput } from '@cat-factory/orchestration'
 
 // ---------------------------------------------------------------------------
@@ -20,6 +20,14 @@ import type { HarnessCallsRecordInput } from '@cat-factory/orchestration'
 /** The recorder the container path files a subscription harness's calls through. */
 export type RecordHarnessCalls = (input: HarnessCallsRecordInput) => Promise<void>
 
+/**
+ * The model name a delegated dispatch is filed under. The executor chose its own model, which the
+ * platform never sees, so the row names the EXECUTOR under a `delegated` provider instead.
+ */
+export function delegatedModelName(definition: DelegatedExecutorDefinition): string {
+  return `delegated:${definition.id}`
+}
+
 /** The figure a settled update reports, or undefined while running or when it reports none. */
 export function reportedUsage(update: DelegationUpdate): AgentTokenUsage | undefined {
   if (update.state === 'done') return update.result.usage
@@ -32,20 +40,24 @@ export function reportedUsage(update: DelegationUpdate): AgentTokenUsage | undef
  *
  * `standsForJob` because there is no turn to attribute it to, and `spendOnly` false because it is
  * the job's ONLY record: a step that spent tokens must not read as one that made no calls, which
- * is what the reporting gap counts. A usage with no `inputClasses` files its whole input as fresh,
- * the same over-statement rather than under-statement the meter applies to a lumped count.
+ * is what the reporting gap counts. The classes come from `partitionInputTokens` over the reported
+ * total, so an external executor's split that does not sum to `inputTokens` cannot file a total
+ * the ledger disagrees with, and a usage with no split files its whole input as fresh.
  */
 export function delegatedCallMetric(usage: AgentTokenUsage, model: string): HarnessCallMetric {
-  const classes = usage.inputClasses
+  const classes = partitionInputTokens(
+    usage.inputTokens,
+    usage.inputClasses ?? { cacheReadTokens: 0, cacheWriteTokens: 0 },
+  )
   return {
     model,
     promptText: '',
     messageCount: 0,
     responseText: '',
     reasoningText: '',
-    inputTokens: classes ? classes.promptTokens : usage.inputTokens,
-    cacheReadTokens: classes?.cacheReadTokens ?? 0,
-    cacheWriteTokens: classes?.cacheWriteTokens ?? 0,
+    inputTokens: classes.promptTokens,
+    cacheReadTokens: classes.cacheReadTokens,
+    cacheWriteTokens: classes.cacheWriteTokens,
     outputTokens: usage.outputTokens,
     finishReason: null,
     seq: 0,
@@ -69,12 +81,12 @@ export async function recordDelegatedUsage(input: {
   jobId: string
   logger: Logger
 }): Promise<void> {
+  const { record } = input
   const usage = reportedUsage(input.update)
-  if (!usage || !input.record) return
-  // The SAME model name the dispatch records: the executor chose its own, which we never saw.
-  const model = `delegated:${input.definition.id}`
-  try {
-    await input.record({
+  if (!usage || !record) return
+  const model = delegatedModelName(input.definition)
+  await runBestEffort(input.logger, 'delegatedAgent.recordUsage', () =>
+    record({
       workspaceId: input.scope.workspaceId,
       executionId: input.scope.runId,
       agentKind: input.scope.agentKind,
@@ -82,11 +94,6 @@ export async function recordDelegatedUsage(input: {
       model,
       jobId: input.jobId,
       calls: [delegatedCallMetric(usage, model)],
-    })
-  } catch (error) {
-    input.logger.warn(
-      'could not record the usage a delegated executor reported',
-      describeError(error),
-    )
-  }
+    }),
+  )
 }

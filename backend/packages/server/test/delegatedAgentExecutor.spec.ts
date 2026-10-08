@@ -591,6 +591,25 @@ describe('DelegatedAgentExecutor: poll mapping', () => {
     })
   })
 
+  it("keeps the reported total authoritative over an executor's split that does not sum to it", async () => {
+    const { inputs } = await recorded({
+      state: 'done',
+      result: {
+        summary: 'done',
+        usage: {
+          inputTokens: 1_000,
+          outputTokens: 10,
+          inputClasses: { promptTokens: 50, cacheReadTokens: 900, cacheWriteTokens: 400 },
+        },
+      },
+    })
+    expect(inputs[0]?.calls[0]).toMatchObject({
+      inputTokens: 0,
+      cacheReadTokens: 600,
+      cacheWriteTokens: 400,
+    })
+  })
+
   it('files nothing for a run still in flight, or one that reported no figure', async () => {
     expect((await recorded({ state: 'running' })).inputs).toEqual([])
     expect((await recorded({ state: 'done', result: { summary: 'done' } })).inputs).toEqual([])
