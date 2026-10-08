@@ -1,4 +1,8 @@
-import { isPostableDraft } from '@cat-factory/contracts'
+import {
+  isPostableDraft,
+  resolvePrNumber,
+  type GuidedReviewFailureReason,
+} from '@cat-factory/contracts'
 import type {
   GuidedReviewCommentDraft,
   GuidedReviewMessage,
@@ -64,11 +68,8 @@ export function reviewTaskTarget(
   repo: { owner: string; name: string; provider?: 'github' | 'gitlab' } | undefined,
 ): OpenGuidedReviewInput | null {
   if (!repo) return null
-  const fromUrl = /\/(?:-\/merge_requests|pull|pulls|merge_requests)\/(\d+)/.exec(
-    fields?.prUrl ?? '',
-  )?.[1]
-  const prNumber = fields?.prNumber ?? (fromUrl ? Number(fromUrl) : undefined)
-  if (!prNumber || !Number.isInteger(prNumber) || prNumber < 1) return null
+  const prNumber = resolvePrNumber(fields)
+  if (prNumber === null) return null
   return {
     owner: repo.owner,
     repo: repo.name,
@@ -78,7 +79,7 @@ export function reviewTaskTarget(
 }
 
 /** The catalog key a failure reason is translated under. */
-export function failureKey(reason: string): string {
+export function failureKey(reason: GuidedReviewFailureReason): string {
   return `guidedReview.failure.${reason}`
 }
 

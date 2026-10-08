@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { booleanQuerySchema, pageLimitSchema } from './public-paging.js'
 import { vcsProviderSchema } from './routes/auth.js'
 
 // Guided PR review: a standalone, per-user exploration session over one pull request. It holds an
@@ -379,18 +380,10 @@ export type GuidedReviewChange =
 
 /** Query of the public session list: the most recently updated sessions first. */
 export const listPublicGuidedReviewsQuerySchema = v.object({
-  repoId: v.optional(v.pipe(v.string(), v.maxLength(200))),
-  prNumber: v.optional(v.pipe(v.string(), v.regex(/^\d+$/), v.transform(Number))),
+  ...listGuidedReviewsQuerySchema.entries,
   /** `true` lists only sessions the calling key's identity owns. */
-  mine: v.optional(
-    v.pipe(
-      v.picklist(['true', 'false']),
-      v.transform((s) => s === 'true'),
-    ),
-  ),
-  limit: v.optional(
-    v.pipe(v.string(), v.regex(/^\d+$/), v.transform(Number), v.minValue(1), v.maxValue(100)),
-  ),
+  mine: v.optional(booleanQuerySchema),
+  limit: v.optional(pageLimitSchema),
 })
 
 /** A page of sessions. `truncated` says more matched than `limit` returned. */

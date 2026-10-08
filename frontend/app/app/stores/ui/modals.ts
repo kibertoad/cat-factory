@@ -190,17 +190,17 @@ function createMiscModals() {
   return { builderOpen, decisionContext, openBuilder, openDecision, closeDecision }
 }
 
-/**
- * Document- and task-source integration modals (keyed by source), plus the add-task /
- * add-recurring / create-initiative surfaces. The `open*` connect/import handlers reset the hub
- * came-from markers (they can be reached from the Integrations hub).
- */
 /** What the guided review window opens on: a session, a pull request, or neither (the picker). */
 export interface GuidedReviewOpen {
   sessionId: string | null
   target: OpenGuidedReviewInput | null
 }
 
+/**
+ * Document- and task-source integration modals (keyed by source), plus the add-task /
+ * add-recurring / create-initiative surfaces. The `open*` connect/import handlers reset the hub
+ * came-from markers (they can be reached from the Integrations hub).
+ */
 function createDocumentTaskModals(resetHubReturn: ResetHubReturn) {
   // Document-source integration modals, keyed by source. A spawn always creates new
   // top-level frames: the planner decomposes a document into services, so spawning

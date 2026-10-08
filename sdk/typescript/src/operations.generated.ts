@@ -225,7 +225,7 @@ export type GuidedReviewsListQuery = {
   repoId?: string
   prNumber?: string
   mine?: ListPublicGuidedReviewsMine
-  limit?: string
+  limit?: number
 }
 
 /** Query parameters for `client.jobs.list()`. */
@@ -2399,7 +2399,7 @@ export class GuidedReviewsResource {
 
   /**
    * Get a guided review
-   * The session with its overview, its threads (each naming the answer it is waiting on, if any) and its comment drafts. The overview's `status` is `pending` or `running` while it is generated; a `failed` one carries `failure.reason` (`budget_exhausted`, `model_unavailable`, `repo_unavailable`, `generation_failed`, `unreadable_reply`) and the raw cause in `failure.detail`.
+   * The session with its overview, its threads (each naming the answer it is waiting on, if any) and its comment drafts. The overview's `status` is `pending` or `running` while it is generated; a `failed` one carries `failure.reason` (`budget_exhausted`, `model_unavailable`, `repo_unavailable`, `generation_failed`, `unreadable_reply`, or `head_moved` when the author pushed before it finished, which `POST /api/v1/guided-reviews/{sessionId}/refresh` resolves) and the raw cause in `failure.detail`.
    * `GET /api/v1/guided-reviews/{sessionId}` — operation `getPublicGuidedReview`.
    */
   get(sessionId: string, options: RequestOptions = {}): Promise<GuidedReviewSessionView> {

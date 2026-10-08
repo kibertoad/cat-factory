@@ -95,7 +95,8 @@ top-level files are the domain contracts.
   `normalizeRepoSearchQuery`), shared by the SPA's paste-a-directory fragment import and the
   backend's available-repos picker (which resolves a pasted URL by its slug instead of feeding
   it to the provider's name search). Lives here because contracts is the only package both
-  sides import.
+  sides import. `resolvePrNumber` beside them is the one reading of which pull request a
+  `review` task names, shared by the dispatch and the SPA's guided-review button.
 
 - `run-evidence.ts` + `run-outcome.ts`: how a finished run's evidence is REDUCED, and the reason
   those rules are in a leaf package rather than in the engine. Two documents reduce one run: the PR

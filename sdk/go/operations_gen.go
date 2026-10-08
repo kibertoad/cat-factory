@@ -355,7 +355,7 @@ type GuidedReviewsListQuery struct {
 	// Mine zero value means "not sent".
 	Mine *ListPublicGuidedReviewsMine
 	// Limit zero value means "not sent".
-	Limit *string
+	Limit *int
 }
 
 func (q *GuidedReviewsListQuery) values() map[string]string {
@@ -3595,8 +3595,9 @@ func (s *GuidedReviewsService) EditDraft(ctx context.Context, sessionID string, 
 // The session with its overview, its threads (each naming the answer it is waiting on, if any)
 // and its comment drafts. The overview's `status` is `pending` or `running` while it is
 // generated; a `failed` one carries `failure.reason` (`budget_exhausted`, `model_unavailable`,
-// `repo_unavailable`, `generation_failed`, `unreadable_reply`) and the raw cause in
-// `failure.detail`.
+// `repo_unavailable`, `generation_failed`, `unreadable_reply`, or `head_moved` when the author
+// pushed before it finished, which `POST /api/v1/guided-reviews/{sessionId}/refresh` resolves)
+// and the raw cause in `failure.detail`.
 // GET /api/v1/guided-reviews/{sessionId} (operation getPublicGuidedReview).
 func (s *GuidedReviewsService) Get(ctx context.Context, sessionID string) (*GuidedReviewSessionView, error) {
 	req := requestSpec{
