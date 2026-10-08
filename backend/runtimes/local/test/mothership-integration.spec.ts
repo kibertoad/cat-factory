@@ -355,6 +355,7 @@ describe('mothership mode — functional integration (real RPC backend)', () => 
         reviewedHeadSha: 'head1',
         baseRef: 'main',
         createdBy: ORG_OWNER.id,
+        createdByKind: 'user',
         createdAt: 1,
         updatedAt: 1,
       },
@@ -364,6 +365,9 @@ describe('mothership mode — functional integration (real RPC backend)', () => 
     const listed = await rpc('listSessions', [workspaceId, {}])
     expect(listed.body.ok).toBe(true)
     expect((listed.body.value as { id: string }[]).map((s) => s.id)).toEqual(['grs_rpc'])
+    const paged = await rpc('pageSessions', [workspaceId, {}, { limit: 10 }])
+    expect(paged.body.ok).toBe(true)
+    expect((paged.body.value as { id: string }[]).map((s) => s.id)).toEqual(['grs_rpc'])
   })
 
   it('mints a machine token from a whitelisted session (scoped to the user accounts)', async () => {

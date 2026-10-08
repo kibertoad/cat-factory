@@ -16,13 +16,16 @@ public record GuidedReviewsListQuery(
     @Nullable String repoId,
 
     /** Null means "not sent". */
-    @Nullable String prNumber,
+    @Nullable Integer prNumber,
 
     /** Null means "not sent". */
     @Nullable ListPublicGuidedReviewsMine mine,
 
     /** Null means "not sent". */
-    @Nullable Integer limit
+    @Nullable Integer limit,
+
+    /** Null means "not sent". */
+    @Nullable String cursor
 ) {
 
     /** An empty parameter set. */
@@ -50,15 +53,19 @@ public record GuidedReviewsListQuery(
         if (limit != null) {
             out.put("limit", String.valueOf(limit));
         }
+        if (cursor != null) {
+            out.put("cursor", String.valueOf(cursor));
+        }
         return out;
     }
 
     /** Fluent builder for {@link GuidedReviewsListQuery}. */
     public static final class Builder {
         private @Nullable String repoId;
-        private @Nullable String prNumber;
+        private @Nullable Integer prNumber;
         private @Nullable ListPublicGuidedReviewsMine mine;
         private @Nullable Integer limit;
+        private @Nullable String cursor;
 
         /** Set {@code repoId}. */
         public Builder repoId(@Nullable String repoId) {
@@ -67,7 +74,7 @@ public record GuidedReviewsListQuery(
         }
 
         /** Set {@code prNumber}. */
-        public Builder prNumber(@Nullable String prNumber) {
+        public Builder prNumber(@Nullable Integer prNumber) {
             this.prNumber = prNumber;
             return this;
         }
@@ -84,9 +91,15 @@ public record GuidedReviewsListQuery(
             return this;
         }
 
+        /** Set {@code cursor}. */
+        public Builder cursor(@Nullable String cursor) {
+            this.cursor = cursor;
+            return this;
+        }
+
         /** Build the {@link GuidedReviewsListQuery}. */
         public GuidedReviewsListQuery build() {
-            return new GuidedReviewsListQuery(repoId, prNumber, mine, limit);
+            return new GuidedReviewsListQuery(repoId, prNumber, mine, limit, cursor);
         }
     }
 }

@@ -692,7 +692,7 @@ export const SESSION_METHOD_SIGNATURES: readonly SessionMethodSignature[] = [
   {
     name: 'guided_reviews_list',
     doc: '  /**\n   * List the workspace\'s guided reviews\n   *\n   * `GET /api/v1/guided-reviews`, scope floor `read`.\n   */\n',
-    signature: '  guided_reviews_list(args?: { repoId?: string | number | boolean; prNumber?: string | number | boolean; mine?: string | number | boolean; limit?: string | number | boolean }): Promise<unknown>\n',
+    signature: '  guided_reviews_list(args?: { repoId?: string | number | boolean; prNumber?: string | number | boolean; mine?: string | number | boolean; limit?: string | number | boolean; cursor?: string | number | boolean }): Promise<unknown>\n',
   },
   {
     name: 'guided_reviews_open',

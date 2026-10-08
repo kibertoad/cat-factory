@@ -37,8 +37,8 @@ export interface GuidedReviewDraftsDeps {
   ) => Promise<GuidedReviewSession>
   /** The PR's repository, bound for reading and posting. */
   repoOf: (workspaceId: string, session: GuidedReviewSession) => Promise<RepoFiles>
-  /** Run a VCS call under the user's credential scope. */
-  asUser: <T>(workspaceId: string, userId: string, fn: () => T) => T
+  /** Run a VCS call under the credential scope of the session's owner. */
+  asOwner: <T>(workspaceId: string, session: GuidedReviewSession, fn: () => T) => T
   notify: (workspaceId: string, change: GuidedReviewChange) => Promise<void>
 }
 
@@ -75,7 +75,7 @@ export class GuidedReviewDrafts {
       anchor.line !== draft.line ||
       anchor.startLine !== draft.startLine ||
       anchor.side !== draft.side
-    if (moved) await this.assertAnchorable(workspaceId, userId, session, anchor)
+    if (moved) await this.assertAnchorable(workspaceId, session, anchor)
     const updated = await this.deps.repository.editDraft(
       workspaceId,
       draftId,
@@ -100,7 +100,7 @@ export class GuidedReviewDrafts {
     const repo = await this.deps.repoOf(workspaceId, session)
     const createReview = repo.createReview?.bind(repo)
     if (!createReview) throw new VcsCapabilityUnsupportedError(session.provider, 'createReview')
-    await this.assertReviewedHead(workspaceId, userId, session, repo)
+    await this.assertReviewedHead(workspaceId, session, repo)
 
     const now = this.deps.clock.now()
     const claimed = await this.deps.repository.claimDraftsForPost(
@@ -120,7 +120,7 @@ export class GuidedReviewDrafts {
     let failure: string | null = null
     if (claimed.length > 0) {
       try {
-        result = await this.deps.asUser(workspaceId, userId, () =>
+        result = await this.deps.asOwner(workspaceId, session, () =>
           createReview(session.prNumber, {
             event: 'COMMENT',
             ...(summary ? { body: compose(summary) } : {}),
@@ -138,9 +138,10 @@ export class GuidedReviewDrafts {
     }
     const outcomes: GuidedReviewDraftPostOutcome[] = claimed.map((d, i) => {
       const outcome = result?.comments[i]
-      if (outcome?.posted) return { id: d.id, status: 'posted', postedUrl: null }
+      if (outcome?.posted) return { id: d.id, rev: d.rev, status: 'posted', postedUrl: null }
       return {
         id: d.id,
+        rev: d.rev,
         status: 'failed',
         error: outcome?.error ?? failure ?? 'The host did not report this comment',
       }
@@ -163,7 +164,6 @@ export class GuidedReviewDrafts {
 
   private async assertAnchorable(
     workspaceId: string,
-    userId: string,
     session: GuidedReviewSession,
     anchor: { path: string; line: number; startLine: number | null; side: 'LEFT' | 'RIGHT' },
   ): Promise<void> {
@@ -172,12 +172,12 @@ export class GuidedReviewDrafts {
     if (!listChangedFiles) {
       throw new VcsCapabilityUnsupportedError(session.provider, 'listChangedFiles')
     }
-    const files: GitHubChangedFile[] = await this.deps.asUser(workspaceId, userId, () =>
+    const files: GitHubChangedFile[] = await this.deps.asOwner(workspaceId, session, () =>
       listChangedFiles(session.prNumber),
     )
     // The host lists the files of the PR's current head, which describe the reviewed diff only
     // while the head has not moved. Read after the listing, so a push between the two shows.
-    await this.assertReviewedHead(workspaceId, userId, session, repo)
+    await this.assertReviewedHead(workspaceId, session, repo)
     if (!isCommentableAnchor(files, anchor)) {
       throw new ValidationError(
         'A comment can only be placed on lines inside one hunk of the diff, starting before the line it ends on',
@@ -189,13 +189,12 @@ export class GuidedReviewDrafts {
   /** Every anchor was computed against the reviewed commit; a moved head can shift every line. */
   private async assertReviewedHead(
     workspaceId: string,
-    userId: string,
     session: GuidedReviewSession,
     repo: RepoFiles,
   ): Promise<void> {
     const getPullRequest = repo.getPullRequest?.bind(repo)
     if (!getPullRequest) throw new VcsCapabilityUnsupportedError(session.provider, 'getPullRequest')
-    const pr = await this.deps.asUser(workspaceId, userId, () => getPullRequest(session.prNumber))
+    const pr = await this.deps.asOwner(workspaceId, session, () => getPullRequest(session.prNumber))
     if (!pr) throw new NotFoundError('Pull request', String(session.prNumber))
     const head = pr.headSha
     if (head !== session.reviewedHeadSha) {

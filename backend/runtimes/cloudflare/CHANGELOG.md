@@ -1,5 +1,69 @@
 # @cat-factory/worker
 
+## 0.220.0
+
+### Minor Changes
+
+- 075ff13: Guided PR review gets its persistence foundation: the session, thread, message and comment-draft contracts, kernel's `GuidedReviewRepository` port, D1 migration 0104 and its Drizzle mirror, and both repositories, wired as `CoreDependencies.guidedReviewRepository` on every facade so a mothership serves it to its nodes. No service reads or writes the tables yet; the service, the durable answering driver and the routes land in later slices (`docs/initiatives/guided-pr-review.md`).
+  
+  Concurrent threads write disjoint rows. A thread admits one live answer through a partial unique index, so a second question while one is pending returns `thread_busy` without writing, and a question on a thread that is missing or belongs to another session returns `thread_not_found`. The store writes the queued state itself (a pending overview on open, a pending placeholder per question), so a caller cannot create work no driver can claim. Driver claims, overview generations and draft posts are conditional writes that report whether they won. Every repository method is `remote` in mothership mode except the cross-workspace stale-job scan, which is a sweeper read. Queued work records which host drives it (`deployment` or `node:<nodeId>`), and the stale scan lists only one driver's jobs, so a hosted sweeper never answers a laptop's question with the deployment's credentials.
+
+### Patch Changes
+
+- Updated dependencies [075ff13]
+  - @cat-factory/contracts@0.358.0
+  - @cat-factory/kernel@0.353.0
+  - @cat-factory/orchestration@0.316.0
+  - @cat-factory/server@0.328.0
+  - @cat-factory/agents@0.168.4
+  - @cat-factory/binary-generators@0.3.58
+  - @cat-factory/consensus@0.19.5
+  - @cat-factory/eks@0.1.397
+  - @cat-factory/gates@0.11.58
+  - @cat-factory/gitlab@0.23.21
+  - @cat-factory/integrations@0.174.7
+  - @cat-factory/observability-otel@0.23.51
+  - @cat-factory/prompt-fragments@1.1.54
+  - @cat-factory/spend@0.23.3
+  - @cat-factory/caching@0.20.92
+  - @cat-factory/observability-langfuse@0.11.58
+  - @cat-factory/provider-cloudflare@0.7.551
+
+## 0.219.0
+
+### Minor Changes
+
+- 57d9db3: A delegated executor's reported usage now reaches the step it belongs to. The step's metrics, the run totals and the "usage not reported by <executor>" gap all read `llm_call_metrics`, while a result's `usage` was written only to the usage ledger, so a `self-reported` executor's step still read as unreported. The delegated arm now files the figure as one job-level call metric through the same recorder a subscription harness uses (`standsForJob`, counted as the job's call), keyed on the dispatch's job id so a replayed poll records nothing twice.
+  
+  That row is filed under kernel's new `DELEGATED_USAGE_PROVIDER` and is never priced: `LlmObservabilityService` answers no rate for it, so the step and the run totals show the tokens with an unknown cost instead of the deployment's fallback rate.
+  
+  `DelegationUpdate`'s `failed` arm gains `usage`, with the meaning it has on a result. A run that fails late has usually spent most of its tokens, and it previously had no way to say so. `AgentJobUpdate`'s `failed` arm gains `usage` and `usageBilling` to carry it, and the failed-poll path meters it into the usage ledger and stamps the step's `usageBilling`, as the completion path does for a result.
+  
+  Each settled delegation attempt records `usageReported`, and `delegatedSpendUnreported` reports a gap when the FINAL attempt reported nothing, even if an earlier attempt's row put calls in the step's metrics.
+  
+  `RecordHarnessCalls` is exported from `@cat-factory/orchestration` as the one recorder type. `buildDelegatedAgentExecutor` takes a required `recordHarnessCalls` (its value may be `undefined`), so a facade cannot wire it on one runtime and forget it on the other. The Worker builds one recorder and hands it to both the container and the delegated arm; `buildWorkerJobAccountingDeps` now takes that recorder instead of building its own. Conformance's `withDelegatedArm` takes the facade's recorder, and a new conformance assertion checks on every runtime that a self-reported usage lands on the step unpriced.
+
+### Patch Changes
+
+- Updated dependencies [57d9db3]
+  - @cat-factory/kernel@0.352.0
+  - @cat-factory/contracts@0.357.0
+  - @cat-factory/orchestration@0.315.0
+  - @cat-factory/server@0.327.0
+  - @cat-factory/agents@0.168.3
+  - @cat-factory/binary-generators@0.3.57
+  - @cat-factory/caching@0.20.91
+  - @cat-factory/consensus@0.19.4
+  - @cat-factory/eks@0.1.396
+  - @cat-factory/gates@0.11.57
+  - @cat-factory/gitlab@0.23.20
+  - @cat-factory/integrations@0.174.6
+  - @cat-factory/observability-langfuse@0.11.57
+  - @cat-factory/observability-otel@0.23.50
+  - @cat-factory/prompt-fragments@1.1.53
+  - @cat-factory/provider-cloudflare@0.7.550
+  - @cat-factory/spend@0.23.2
+
 ## 0.218.3
 
 ### Patch Changes

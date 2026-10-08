@@ -1,5 +1,21 @@
 # @cat-factory/example-delegated-executor
 
+## 0.1.5
+
+### Patch Changes
+
+- Updated dependencies [075ff13]
+  - @cat-factory/kernel@0.353.0
+  - @cat-factory/agents@0.168.4
+
+## 0.1.4
+
+### Patch Changes
+
+- Updated dependencies [57d9db3]
+  - @cat-factory/kernel@0.352.0
+  - @cat-factory/agents@0.168.3
+
 ## 0.1.3
 
 ### Patch Changes

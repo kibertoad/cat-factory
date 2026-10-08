@@ -1310,6 +1310,7 @@ export interface GuidedReviewSession {
   baseRef: string
   createdAt: number
   createdBy: string
+  createdByKind: GuidedReviewSessionCreatedByKind
   id: string
   overview: GuidedReviewOverview
   owner: string
@@ -1322,6 +1323,11 @@ export interface GuidedReviewSession {
   reviewedHeadSha: string
   updatedAt: number
 }
+
+export type GuidedReviewSessionCreatedByKind = 'user' | 'api-key'
+
+/** Every `GuidedReviewSessionCreatedByKind` value, for exhaustive handling and runtime validation. */
+export const GUIDED_REVIEW_SESSION_CREATED_BY_KIND_VALUES = ['user', 'api-key'] as const
 
 export interface GuidedReviewSessionView {
   drafts: GuidedReviewCommentDraft[]
@@ -2771,8 +2777,9 @@ export type PublicForkDecisionStatus = 'proposing' | 'awaiting_choice' | 'answer
 export const PUBLIC_FORK_DECISION_STATUS_VALUES = ['proposing', 'awaiting_choice', 'answering', 'chosen', 'single_path', 'skipped'] as const
 
 export interface PublicGuidedReviewList {
+  /** Always present; `null` when the server has no value for it. */
+  nextCursor: string | null
   sessions: GuidedReviewSession[]
-  truncated: boolean
 }
 
 export interface PublicHumanTestDecision {

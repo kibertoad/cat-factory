@@ -20,7 +20,11 @@ function harness(opts: { scope?: PublicApiScope; actsAsUserId?: string | null } 
   const service = {
     open: record('open', { id: 'grs_1' }),
     getSession: record('getSession', { session: { id: 'grs_1' }, threads: [], drafts: [] }),
-    listSessions: record('listSessions', [{ id: 'a' }, { id: 'b' }, { id: 'c' }]),
+    pageSessions: record('pageSessions', [
+      { id: 'c', createdAt: 30 },
+      { id: 'b', createdAt: 20 },
+      { id: 'a', createdAt: 10 },
+    ]),
   }
   const container = {
     guidedReview: { service } as unknown as GuidedReviewModule,
@@ -60,13 +64,16 @@ describe('publicGuidedReviewController', () => {
   it('opens a session as the person a bound key acts for', async () => {
     const { call, calls } = harness({ actsAsUserId: 'usr_9' })
     expect((await call('POST', '/guided-reviews', OPEN)).status).toBe(200)
-    expect(calls[0]).toEqual({ method: 'open', args: ['ws_1', 'usr_9', OPEN] })
+    expect(calls[0]).toEqual({
+      method: 'open',
+      args: ['ws_1', { id: 'usr_9', kind: 'user' }, OPEN],
+    })
   })
 
   it('opens a session as the key itself when it is bound to nobody', async () => {
     const { call, calls } = harness()
     await call('POST', '/guided-reviews', OPEN)
-    expect(calls[0]?.args[1]).toBe('pak_1')
+    expect(calls[0]?.args[1]).toEqual({ id: 'pak_1', kind: 'api-key' })
   })
 
   it('refuses to open with a read key, because opening spends model budget', async () => {
@@ -76,10 +83,30 @@ describe('publicGuidedReviewController', () => {
     expect(calls).toEqual([])
   })
 
-  it('lists at most `limit` sessions, says more matched, and narrows `mine` to the key identity', async () => {
+  it('pages sessions, hands back the cursor of the last row, and narrows `mine` to the key', async () => {
     const { call, calls } = harness({ scope: 'read' })
     const res = await call('GET', '/guided-reviews?limit=2&mine=true')
-    expect(res.body).toEqual({ sessions: [{ id: 'a' }, { id: 'b' }], truncated: true })
-    expect(calls[0]?.args).toEqual(['ws_1', { createdBy: 'pak_1', limit: 3 }])
+    expect(res.body.sessions).toEqual([
+      { id: 'c', createdAt: 30 },
+      { id: 'b', createdAt: 20 },
+    ])
+    expect(calls[0]?.args).toEqual(['ws_1', { createdBy: 'pak_1' }, { limit: 3 }])
+
+    await call('GET', `/guided-reviews?limit=2&cursor=${String(res.body.nextCursor)}`)
+    expect(calls[1]?.args[2]).toEqual({ limit: 3, cursor: { createdAt: 20, id: 'b' } })
+  })
+
+  it('says a page is the last with a null cursor', async () => {
+    const { call } = harness({ scope: 'read' })
+    const res = await call('GET', '/guided-reviews?limit=3')
+    expect(res.body.nextCursor).toBeNull()
+  })
+
+  it('refuses a malformed cursor rather than serving the first page again', async () => {
+    const { call, calls } = harness({ scope: 'read' })
+    const res = await call('GET', '/guided-reviews?cursor=not-a-cursor')
+    expect(res.status).toBe(400)
+    expect(res.body).toMatchObject({ error: { code: 'invalid_cursor' } })
+    expect(calls).toEqual([])
   })
 })

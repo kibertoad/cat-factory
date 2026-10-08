@@ -16,6 +16,17 @@ export interface GuidedReviewSessionFilter {
   limit?: number
 }
 
+/**
+ * One keyset page of sessions, newest CREATED first, with `id` breaking ties. `cursor` is
+ * exclusive on that same `(createdAt, id)` composite, so a burst of sessions sharing a millisecond
+ * pages without dropping any. Creation order, never update order: an update would move an unseen
+ * session ahead of the cursor and the caller would never see it.
+ */
+export interface GuidedReviewSessionPage {
+  limit: number
+  cursor?: { createdAt: number; id: string }
+}
+
 /** The PR facts a refresh re-reads from the host before the overview regenerates. */
 export interface GuidedReviewRefresh {
   prTitle: string
@@ -58,20 +69,44 @@ export type GuidedReviewMessageOutcome =
     }
   | { status: 'failed'; failure: GuidedReviewFailure; model: string | null }
 
+/**
+ * A comment the model proposed, as the driver hands it to `settleDrafts`. The store supplies everything else: the session, thread and message come from the message being
+ * settled, and a new draft is always `proposed` at rev 1.
+ */
+export type GuidedReviewDraftProposal = Pick<
+  GuidedReviewCommentDraft,
+  'id' | 'path' | 'line' | 'startLine' | 'side' | 'body' | 'rationale'
+>
+
 /** The editable fields of a comment draft. */
 export type GuidedReviewDraftEdit = Partial<
   Pick<GuidedReviewCommentDraft, 'path' | 'line' | 'startLine' | 'side' | 'body'>
 > & { discard?: boolean }
 
-/** The host's answer for one claimed draft. */
+/**
+ * The host's answer for one claimed draft. `rev` is the draft's rev as `claimDraftsForPost`
+ * returned it: it identifies the claim, so a poster whose lease lapsed cannot record over the
+ * poster that re-claimed the draft.
+ */
 export type GuidedReviewDraftPostOutcome =
-  | { id: string; status: 'posted'; postedUrl: string | null }
-  | { id: string; status: 'failed'; error: string }
+  | { id: string; rev: number; status: 'posted'; postedUrl: string | null }
+  | { id: string; rev: number; status: 'failed'; error: string }
+
+/**
+ * Proof of a won claim on an overview generation or an assistant message. A settle must present
+ * it: a driver whose lease lapsed and was re-claimed by another holds a stale claim, and its
+ * settle is refused instead of landing over the live one.
+ */
+export interface GuidedReviewClaim {
+  /** The `now` the claim was taken at. A re-claim needs an expired lease, so it always differs. */
+  claimedAt: number
+}
 
 /**
  * Which host drives a session's background work: `deployment` for the hosted engine, or
- * `node:<nodeId>` for a mothership-mode node. Recorded when work is queued so each host's sweeper
- * re-drives only its own jobs; another host would answer with the wrong model credentials.
+ * `node:<nodeId>` for a mothership-mode node. Recorded when work is queued so the deployment's
+ * sweeper re-drives only `deployment` jobs; another host would answer with the wrong model
+ * credentials. A node recovers its own jobs from its local durable queue, never from this scan.
  */
 export type GuidedReviewDriver = string
 
@@ -103,6 +138,12 @@ export interface GuidedReviewRepository {
     workspaceId: string,
     filter: GuidedReviewSessionFilter,
   ): Promise<GuidedReviewSession[]>
+  /** One {@link GuidedReviewSessionPage} of the sessions matching `filter`. */
+  pageSessions(
+    workspaceId: string,
+    filter: Omit<GuidedReviewSessionFilter, 'limit'>,
+    page: GuidedReviewSessionPage,
+  ): Promise<GuidedReviewSession[]>
   /** Removes the session with its threads, messages and drafts. */
   deleteSession(workspaceId: string, id: string): Promise<void>
 
@@ -120,7 +161,7 @@ export interface GuidedReviewRepository {
   ): Promise<boolean>
   /**
    * Claim overview `generation` for a driver: `pending`, or `running` with a claim older than
-   * `leaseCutoff`, becomes `running`. False when the generation moved or another driver holds it.
+   * `leaseCutoff`, becomes `running`. Null when the generation moved or another driver holds it.
    */
   claimOverview(
     workspaceId: string,
@@ -128,14 +169,19 @@ export interface GuidedReviewRepository {
     generation: number,
     leaseCutoff: number,
     now: number,
-  ): Promise<boolean>
-  /** Land a claimed generation's outcome. False when it is no longer the running generation. */
+  ): Promise<GuidedReviewClaim | null>
+  /**
+   * Land a claimed generation's outcome. False when it is no longer the running generation or
+   * `claim` is no longer the claim holding it. Throws a `ValidationError`, writing nothing, when
+   * the outcome is outside the `@cat-factory/contracts` schema every read decodes against.
+   */
   settleOverview(
     workspaceId: string,
     id: string,
     generation: number,
     outcome: GuidedReviewOverviewOutcome,
     now: number,
+    claim: GuidedReviewClaim,
   ): Promise<boolean>
 
   createThread(workspaceId: string, thread: GuidedReviewThread): Promise<void>
@@ -162,32 +208,45 @@ export interface GuidedReviewRepository {
   /** The thread's messages in `seq` order. */
   listMessages(workspaceId: string, threadId: string): Promise<GuidedReviewMessage[]>
   /** As {@link claimOverview}, for one assistant message. */
-  claimMessage(workspaceId: string, id: string, leaseCutoff: number, now: number): Promise<boolean>
-  /** Land a claimed message's outcome. False when it is not `running`. */
+  claimMessage(
+    workspaceId: string,
+    id: string,
+    leaseCutoff: number,
+    now: number,
+  ): Promise<GuidedReviewClaim | null>
+  /**
+   * Land a claimed message's outcome. False when it is not `running` under `claim`. Throws as
+   * {@link settleOverview} does for an out-of-contract outcome.
+   */
   settleMessage(
     workspaceId: string,
     id: string,
     outcome: GuidedReviewMessageOutcome,
     now: number,
+    claim: GuidedReviewClaim,
   ): Promise<boolean>
 
   /**
    * Store the drafts a `comment-drafts` message produced and settle that message `complete`, in
-   * one atomic write. Each draft is stored under `messageId`. False (and nothing written) when
-   * the message is not a `running` `comment-drafts` message.
+   * one atomic write. Each draft lands `proposed` at rev 1 under `messageId` and that message's
+   * session and thread. False (and nothing written) when the message is not a `running`
+   * `comment-drafts` message under `claim`. Throws as {@link settleOverview} does when the outcome
+   * or a proposal is out of contract.
    */
   settleDrafts(
     workspaceId: string,
     messageId: string,
-    drafts: GuidedReviewCommentDraft[],
+    drafts: GuidedReviewDraftProposal[],
     outcome: Extract<GuidedReviewMessageOutcome, { status: 'complete' }>,
     now: number,
+    claim: GuidedReviewClaim,
   ): Promise<boolean>
   getDraft(workspaceId: string, id: string): Promise<GuidedReviewCommentDraft | null>
   listDrafts(workspaceId: string, sessionId: string): Promise<GuidedReviewCommentDraft[]>
   /**
    * Apply a human edit when the draft is still at `expectedRev` and editable (`proposed` or
    * `failed`). Returns the updated draft, or null when the rev moved or the draft is not editable.
+   * Throws a `ValidationError` when the edited draft would be out of contract.
    */
   editDraft(
     workspaceId: string,
@@ -209,12 +268,15 @@ export interface GuidedReviewRepository {
     leaseCutoff: number,
     now: number,
   ): Promise<GuidedReviewCommentDraft[]>
-  /** Record the host's answer for drafts this caller holds in `posting`. */
+  /**
+   * Record the host's answer for drafts this caller holds in `posting` at the outcome's `rev`.
+   * Returns the ids recorded; an outcome whose claim was taken over is left out.
+   */
   settleDraftPosts(
     workspaceId: string,
     outcomes: GuidedReviewDraftPostOutcome[],
     now: number,
-  ): Promise<void>
+  ): Promise<string[]>
 
   /** `driver`'s background work, across every workspace, not settled since `cutoff`, oldest first. */
   listStaleJobs(

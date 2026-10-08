@@ -1,16 +1,19 @@
 import { generateText, stepCountIs, type ToolSet } from 'ai'
-import type {
-  EditGuidedReviewDraftInput,
-  GuidedReviewChange,
-  GuidedReviewCommentDraft,
-  GuidedReviewPostResult,
-  GuidedReviewDepth,
-  GuidedReviewFailure,
-  GuidedReviewMessage,
-  GuidedReviewMessageKind,
-  GuidedReviewSession,
-  GuidedReviewThread,
-  GuidedReviewThreadSummary,
+import {
+  guidedReviewFailure,
+  type EditGuidedReviewDraftInput,
+  type GuidedReviewChange,
+  type GuidedReviewCommentDraft,
+  type GuidedReviewDepth,
+  type GuidedReviewFailure,
+  type GuidedReviewFailureReason,
+  type GuidedReviewMessage,
+  type GuidedReviewMessageKind,
+  type GuidedReviewOwnerKind,
+  type GuidedReviewPostResult,
+  type GuidedReviewSession,
+  type GuidedReviewThread,
+  type GuidedReviewThreadSummary,
 } from '@cat-factory/contracts'
 import {
   catFactoryObservability,
@@ -28,12 +31,15 @@ import type {
   Clock,
   ExecutionEventPublisher,
   GitHubChangedFile,
+  GuidedReviewClaim,
+  GuidedReviewDraftProposal,
   GuidedReviewDriver,
   GuidedReviewJob,
   GuidedReviewNewSession,
   GuidedReviewRepository,
   GuidedReviewRunner,
   GuidedReviewSessionFilter,
+  GuidedReviewSessionPage,
   IdGenerator,
   Logger,
   ModelProvider,
@@ -96,6 +102,12 @@ export interface GuidedReviewServiceDeps extends InlineBlockModelDeps {
   events?: Pick<ExecutionEventPublisher, 'guidedReviewChanged'>
 }
 
+/** Who opens a session: its owner, and whether that is a person or an unbound API key. */
+export interface GuidedReviewOwner {
+  id: string
+  kind: GuidedReviewOwnerKind
+}
+
 export interface OpenGuidedReviewInput {
   owner: string
   repo: string
@@ -128,11 +140,14 @@ interface BoundPr {
 
 /** A model failure the job settles onto its row, rather than a fault the driver should retry. */
 class JobFailure extends Error {
+  readonly failure: GuidedReviewFailure
+
   constructor(
-    readonly failure: GuidedReviewFailure,
+    failure: { reason: GuidedReviewFailureReason; detail: string | null },
     readonly model: string | null,
   ) {
     super(failure.detail ?? failure.reason)
+    this.failure = settledFailure(failure.reason, failure.detail)
   }
 }
 
@@ -156,7 +171,8 @@ export class GuidedReviewService {
       ownedSession: (workspaceId, userId, sessionId) =>
         this.ownedSession(workspaceId, userId, sessionId),
       repoOf: async (workspaceId, session) => (await this.repoFor(workspaceId, session)).repo,
-      asUser: (workspaceId, userId, fn) => this.asUser(workspaceId, userId, fn),
+      asOwner: (workspaceId, session, fn) =>
+        this.asUser(workspaceId, sessionCredentialUser(session), fn),
       notify: (workspaceId, change) => this.notify(workspaceId, change),
     })
   }
@@ -184,12 +200,18 @@ export class GuidedReviewService {
 
   async open(
     workspaceId: string,
-    userId: string,
+    owner: GuidedReviewOwner,
     input: OpenGuidedReviewInput,
   ): Promise<GuidedReviewSession> {
     const context = await this.repoFor(workspaceId, input)
     const provider = context.provider ?? input.provider ?? 'github'
-    const pr = await this.readPr(workspaceId, userId, context.repo, provider, input.prNumber)
+    const pr = await this.readPr(
+      workspaceId,
+      credentialUser(owner.id, owner.kind),
+      context.repo,
+      provider,
+      input.prNumber,
+    )
     const now = this.deps.clock.now()
     const candidate: GuidedReviewNewSession = {
       id: this.deps.idGenerator.next('grs'),
@@ -201,7 +223,8 @@ export class GuidedReviewService {
       prTitle: pr.title,
       reviewedHeadSha: pr.headSha,
       baseRef: pr.baseRef,
-      createdBy: userId,
+      createdBy: owner.id,
+      createdByKind: owner.kind,
       createdAt: now,
       updatedAt: now,
     }
@@ -223,7 +246,7 @@ export class GuidedReviewService {
     const context = await this.repoFor(workspaceId, session)
     const pr = await this.readPr(
       workspaceId,
-      userId,
+      sessionCredentialUser(session),
       context.repo,
       session.provider,
       session.prNumber,
@@ -249,6 +272,15 @@ export class GuidedReviewService {
     filter: GuidedReviewSessionFilter,
   ): Promise<GuidedReviewSession[]> {
     return this.deps.repository.listSessions(workspaceId, filter)
+  }
+
+  /** One keyset page of sessions, newest created first. */
+  pageSessions(
+    workspaceId: string,
+    filter: Omit<GuidedReviewSessionFilter, 'limit'>,
+    page: GuidedReviewSessionPage,
+  ): Promise<GuidedReviewSession[]> {
+    return this.deps.repository.pageSessions(workspaceId, filter, page)
   }
 
   async getSession(workspaceId: string, sessionId: string): Promise<GuidedReviewSessionView> {
@@ -344,7 +376,7 @@ export class GuidedReviewService {
     const now = this.deps.clock.now()
     // A cutoff in the future takes over whatever claim the failed attempts left behind.
     const takeover = now + 1
-    const failure: GuidedReviewFailure = { reason: 'generation_failed', detail }
+    const failure = settledFailure('generation_failed', detail)
     if (job.kind === 'overview') {
       const claimed = await this.deps.repository.claimOverview(
         workspaceId,
@@ -360,20 +392,26 @@ export class GuidedReviewService {
         job.generation,
         { status: 'failed', failure, model: null },
         now,
+        claimed,
       )
       if (landed) await this.notify(workspaceId, { sessionId: job.sessionId, scope: 'session' })
       return
     }
     const message = await this.deps.repository.getMessage(workspaceId, job.messageId)
     if (!message) return
-    if (!(await this.deps.repository.claimMessage(workspaceId, job.messageId, takeover, now))) {
-      return
-    }
+    const claimed = await this.deps.repository.claimMessage(
+      workspaceId,
+      job.messageId,
+      takeover,
+      now,
+    )
+    if (!claimed) return
     const landed = await this.deps.repository.settleMessage(
       workspaceId,
       job.messageId,
       { status: 'failed', failure, model: null },
       now,
+      claimed,
     )
     if (!landed) return
     await this.notify(workspaceId, {
@@ -453,7 +491,7 @@ export class GuidedReviewService {
     let outcome: Parameters<GuidedReviewRepository['settleOverview']>[3]
     try {
       const pr = await this.bindPr(workspaceId, session)
-      const body = await this.asUser(workspaceId, session.createdBy, () =>
+      const body = await this.asUser(workspaceId, sessionCredentialUser(session), () =>
         pr.repo.getPullRequestBody ? pr.repo.getPullRequestBody(session.prNumber) : null,
       )
       const { inline, omitted } = partitionPatches(pr.files, OVERVIEW_INLINE_PATCH_CHARS)
@@ -469,8 +507,7 @@ export class GuidedReviewService {
         tools: guidedReviewTools(new PrExplorer(pr.repo, this.target(session), pr.files)),
       })
       const content = coerceOverview(extractJson(text), () => this.deps.idGenerator.next('grq'))
-      if (!content)
-        throw new JobFailure({ reason: 'unreadable_reply', detail: failureDetail(text) }, model)
+      if (!content) throw new JobFailure({ reason: 'unreadable_reply', detail: text }, model)
       outcome = { status: 'complete', content, model }
     } catch (error) {
       outcome = { status: 'failed', ...this.failureOf(error, workspaceId, sessionId) }
@@ -481,6 +518,7 @@ export class GuidedReviewService {
       generation,
       outcome,
       this.deps.clock.now(),
+      claimed,
     )
     if (landed) await this.notify(workspaceId, { sessionId, scope: 'session' })
   }
@@ -521,23 +559,22 @@ export class GuidedReviewService {
           tools,
         })
         const answer = coerceAnswer(extractJson(text))
-        if (!answer)
-          throw new JobFailure({ reason: 'unreadable_reply', detail: failureDetail(text) }, model)
+        if (!answer) throw new JobFailure({ reason: 'unreadable_reply', detail: text }, model)
         landed = await this.deps.repository.settleMessage(
           workspaceId,
           messageId,
           { status: 'complete', ...answer, draftReport: null, model },
           settledAt(),
+          claimed,
         )
       } else {
-        draftsLanded = landed = await this.settleDraftJob(
-          workspaceId,
-          session,
-          message,
-          pr.files,
+        draftsLanded = landed = await this.settleDraftJob(workspaceId, session, {
+          messageId,
+          claimed,
+          files: pr.files,
           promptInput,
           tools,
-        )
+        })
       }
     } catch (error) {
       const { failure, model } = this.failureOf(error, workspaceId, session.id)
@@ -546,6 +583,7 @@ export class GuidedReviewService {
         messageId,
         { status: 'failed', failure, model },
         settledAt(),
+        claimed,
       )
     }
     if (landed) {
@@ -561,11 +599,15 @@ export class GuidedReviewService {
   private async settleDraftJob(
     workspaceId: string,
     session: GuidedReviewSession,
-    message: GuidedReviewMessage,
-    files: GitHubChangedFile[],
-    promptInput: Parameters<typeof renderGuidedReviewDraftsPrompt>[0],
-    tools: ToolSet,
+    job: {
+      messageId: string
+      claimed: GuidedReviewClaim
+      files: GitHubChangedFile[]
+      promptInput: Parameters<typeof renderGuidedReviewDraftsPrompt>[0]
+      tools: ToolSet
+    },
   ): Promise<boolean> {
+    const { messageId, claimed, files, promptInput, tools } = job
     const { text, model } = await this.generate(workspaceId, session, 'drafts', {
       system: GUIDED_REVIEW_DRAFTS_SYSTEM_PROMPT,
       prompt: renderGuidedReviewDraftsPrompt(promptInput),
@@ -573,30 +615,21 @@ export class GuidedReviewService {
     })
     const raw = extractJson(text)
     if (raw === null || typeof raw !== 'object') {
-      throw new JobFailure({ reason: 'unreadable_reply', detail: failureDetail(text) }, model)
+      throw new JobFailure({ reason: 'unreadable_reply', detail: text }, model)
     }
     const { proposals, incomplete } = coerceDraftProposals(raw)
     const { kept, report } = anchorDrafts(proposals, incomplete, files)
-    const at = this.deps.clock.now()
-    const drafts: GuidedReviewCommentDraft[] = kept.map((p) => ({
+    const drafts: GuidedReviewDraftProposal[] = kept.map((p) => ({
       id: this.deps.idGenerator.next('grd'),
-      sessionId: session.id,
-      threadId: message.threadId,
-      messageId: message.id,
       ...p,
-      status: 'proposed',
-      postError: null,
-      postedUrl: null,
-      rev: 1,
-      createdAt: at,
-      updatedAt: at,
     }))
     return this.deps.repository.settleDrafts(
       workspaceId,
-      message.id,
+      messageId,
       drafts,
       { status: 'complete', content: '', citations: [], draftReport: report, model },
-      at,
+      this.deps.clock.now(),
+      claimed,
     )
   }
 
@@ -610,12 +643,15 @@ export class GuidedReviewService {
     if (await this.deps.isOverBudget?.(workspaceId)) {
       throw new JobFailure({ reason: 'budget_exhausted', detail: null }, null)
     }
-    const { modelProvider, ref } = await this.resolveModel(workspaceId, session.createdBy)
+    const { modelProvider, ref } = await this.resolveModel(
+      workspaceId,
+      sessionCredentialUser(session),
+    )
     const model = `${ref.provider}:${ref.model}`
     const maxSteps = GUIDED_REVIEW_MAX_STEPS[phase]
     try {
       // The tools read the VCS, so the whole loop runs under the creator's credential scope.
-      const result = await this.asUser(workspaceId, session.createdBy, () =>
+      const result = await this.asUser(workspaceId, sessionCredentialUser(session), () =>
         generateText({
           model: modelProvider.resolve(ref),
           system: call.system,
@@ -639,18 +675,18 @@ export class GuidedReviewService {
       return { text, model }
     } catch (error) {
       if (error instanceof JobFailure) throw error
-      throw new JobFailure(
-        { reason: 'generation_failed', detail: failureDetail(getErrorMessage(error)) },
-        model,
-      )
+      throw new JobFailure({ reason: 'generation_failed', detail: getErrorMessage(error) }, model)
     }
   }
 
+  /** The model under `userId`'s scope, or the workspace's when the session has no person. */
   private async resolveModel(
     workspaceId: string,
-    userId: string,
+    userId: string | null,
   ): Promise<{ modelProvider: ModelProvider; ref: ModelRef }> {
-    const scope = await resolveInlineScope({ kind: 'user', workspaceId, userId })
+    const scope = await resolveInlineScope(
+      userId === null ? { kind: 'workspace', workspaceId } : { kind: 'user', workspaceId, userId },
+    )
     const modelProvider = await resolveScopedModelProvider(scope, this.deps)
     const ref = await resolveInlineBlockModelRef(
       this.deps,
@@ -670,10 +706,7 @@ export class GuidedReviewService {
     try {
       context = await this.repoFor(workspaceId, session)
     } catch (error) {
-      throw new JobFailure(
-        { reason: 'repo_unavailable', detail: failureDetail(getErrorMessage(error)) },
-        null,
-      )
+      throw new JobFailure({ reason: 'repo_unavailable', detail: getErrorMessage(error) }, null)
     }
     const listChangedFiles = context.repo.listChangedFiles?.bind(context.repo)
     const getPullRequest = context.repo.getPullRequest?.bind(context.repo)
@@ -686,18 +719,19 @@ export class GuidedReviewService {
     let files: GitHubChangedFile[]
     let currentHead: string
     try {
-      ;[files, currentHead] = await this.asUser(workspaceId, session.createdBy, async () => {
-        const listed = await listChangedFiles(session.prNumber)
-        // Read after the listing: a push between the two reads then shows up as a moved head.
-        const pr = await getPullRequest(session.prNumber)
-        if (!pr?.headSha) throw new Error(`Pull request #${session.prNumber} was not found`)
-        return [listed, pr.headSha] as const
-      })
-    } catch (error) {
-      throw new JobFailure(
-        { reason: 'repo_unavailable', detail: failureDetail(getErrorMessage(error)) },
-        null,
+      ;[files, currentHead] = await this.asUser(
+        workspaceId,
+        sessionCredentialUser(session),
+        async () => {
+          const listed = await listChangedFiles(session.prNumber)
+          // Read after the listing: a push between the two reads then shows up as a moved head.
+          const pr = await getPullRequest(session.prNumber)
+          if (!pr?.headSha) throw new Error(`Pull request #${session.prNumber} was not found`)
+          return [listed, pr.headSha] as const
+        },
       )
+    } catch (error) {
+      throw new JobFailure({ reason: 'repo_unavailable', detail: getErrorMessage(error) }, null)
     }
     // The host lists the files of the PR's CURRENT head. Past a push they no longer describe the
     // commit the session reviews, so answering or anchoring drafts against them would mix commits.
@@ -744,7 +778,7 @@ export class GuidedReviewService {
 
   private async readPr(
     workspaceId: string,
-    userId: string,
+    userId: string | null,
     repo: RepoFiles,
     provider: VcsProvider,
     prNumber: number,
@@ -760,8 +794,11 @@ export class GuidedReviewService {
     return { title: pr.title, headSha: pr.headSha, baseRef: pr.baseRef }
   }
 
-  /** Run a VCS call under `userId`'s credential scope (the initiator-PAT policy applies). */
-  private asUser<T>(workspaceId: string, userId: string, fn: () => T): T {
+  /**
+   * Run a VCS call under `userId`'s credential scope (the initiator-PAT policy applies), or
+   * attributed to nobody when the session has no person behind it.
+   */
+  private asUser<T>(workspaceId: string, userId: string | null, fn: () => T): T {
     const scope = this.deps.runInitiatorScope
     return scope ? scope({ workspaceId, initiatedBy: userId }, fn) : fn()
   }
@@ -783,7 +820,7 @@ export class GuidedReviewService {
       ...describeError(error),
     })
     return {
-      failure: { reason: 'generation_failed', detail: failureDetail(getErrorMessage(error)) },
+      failure: settledFailure('generation_failed', getErrorMessage(error)),
       model: null,
     }
   }
@@ -867,8 +904,28 @@ function questionText(kind: GuidedReviewMessageKind, content: string): string {
   return text
 }
 
-/** A failure detail as stored on a row: scrubbed of secrets and cut to a bounded excerpt. */
-function failureDetail(text: string): string | null {
-  const trimmed = (redactSecrets(text) ?? '').trim()
-  return trimmed ? trimmed.slice(0, 2000) : null
+/**
+ * A failure as stored on a row. The detail is raw model text or a provider error, so it is scrubbed
+ * of secrets and then cut to what the contract admits.
+ */
+function settledFailure(
+  reason: GuidedReviewFailureReason,
+  detail: string | null,
+): GuidedReviewFailure {
+  const scrubbed = detail === null ? '' : (redactSecrets(detail) ?? '').trim()
+  return guidedReviewFailure(reason, scrubbed || null)
+}
+
+/** The person whose credentials an owner's work runs under; null for an unbound API key. */
+function credentialUser(id: string, kind: GuidedReviewOwnerKind): string | null {
+  switch (kind) {
+    case 'user':
+      return id
+    case 'api-key':
+      return null
+  }
+}
+
+function sessionCredentialUser(session: GuidedReviewSession): string | null {
+  return credentialUser(session.createdBy, session.createdByKind)
 }
