@@ -103,6 +103,16 @@ export function defineGuidedReviewStoreConformance(harness: ConformanceHarness):
       return { repo, ws: workspace.id }
     }
 
+    // The store tests above go around the HTTP app, so they cannot see a facade that forgot to
+    // wire the module: every guided-review route would answer 503 there.
+    it('is wired on this facade: an empty workspace lists no sessions', async () => {
+      const app = harness.makeApp()
+      const { workspace } = await app.createWorkspace()
+      const res = await app.call<unknown[]>('GET', `/workspaces/${workspace.id}/guided-reviews`)
+      expect(res.status).toBe(200)
+      expect(res.body).toEqual([])
+    })
+
     it('converges two concurrent opens of the same PR on one session', async () => {
       const app = harness.makeApp()
       const repo = app.guidedReviewRepository()

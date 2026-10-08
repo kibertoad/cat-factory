@@ -16,6 +16,7 @@ import type { BrainstormSession } from '~/types/brainstorm'
 import type { ClarityReview } from '~/types/clarity'
 import type { ConsensusSession } from '~/types/consensus'
 import type { DocInterviewSession } from '~/types/doc-interview'
+import type { GuidedReviewChange } from '~/types/guided-review'
 import type { RequirementReview } from '~/types/requirements'
 
 /**
@@ -44,6 +45,8 @@ export interface WorkspaceEventTargets {
   upsertKaizen: (g: KaizenGrading) => void
   upsertInitiative: (i: Initiative) => void
   upsertDocInterview: (s: DocInterviewSession) => void
+  /** A guided review moved; the store refetches only what this client has loaded. */
+  guidedReviewChanged: (change: GuidedReviewChange) => void
   /** Debounced full `workspace.refresh()`: the fallback for a change no payload can state. */
   refreshBoard: () => void
 }
@@ -150,6 +153,9 @@ export function applyWorkspaceEvent(event: WorkspaceEvent, to: WorkspaceEventTar
       // The interactive document interview advanced (a fresh batch of questions, an answer, or
       // convergence): patch the cache so an open interview window reflects it live.
       to.upsertDocInterview(event.session)
+      return
+    case 'guidedReview':
+      to.guidedReviewChanged(event.change)
       return
     default:
       return dropUnknownEvent(event)

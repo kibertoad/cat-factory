@@ -483,6 +483,7 @@ export {
   type DocumentsModule,
   type TasksModule,
   type AssistantModule,
+  type GuidedReviewModule,
   type EnvironmentsModule,
   type RunnersModule,
   type ProvisioningLogsModule,

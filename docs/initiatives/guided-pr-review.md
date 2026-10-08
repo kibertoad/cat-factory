@@ -82,7 +82,7 @@ The schemas live in `@cat-factory/contracts` (`guided-review.ts`).
 | --- | ------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ----------------------------------------------------------- |
 | 1   | Contracts, kernel domain and repository port, D1 migration ⇄ Drizzle schema, both repositories, mothership buckets, conformance suite | in review   | [#2287](https://github.com/kibertoad/cat-factory/pull/2287) |
 | 2   | `GuidedReviewService`, overview generation, inline answering with VCS read tools, `GuidedReviewRunner` on all three runtimes, sweeper | in progress |                                                             |
-| 3   | Workspace routes for the SPA, `guidedReviewChanged` realtime delta, RBAC                                                              | not started |                                                             |
+| 3   | Workspace routes for the SPA, `guidedReviewChanged` realtime delta, RBAC                                                              | in progress |                                                             |
 | 4   | Public API, OpenAPI, `surface.mjs`, the four SDKs and MCP, SSE stream                                                                 | not started |                                                             |
 | 5   | SPA: guided review window, overview, tabbed threads, suggested questions, drafts panel, i18n in every locale                          | not started |                                                             |
 | 6   | Comment drafting and posting (anchor validation, stale-head refusal, per-draft outcomes)                                              | not started |                                                             |
@@ -117,5 +117,10 @@ The schemas live in `@cat-factory/contracts` (`guided-review.ts`).
 - The host lists the changed files of the PR's current head only. A job reads them, then the head,
   and fails `head_moved` when the head is no longer `reviewedHeadSha`, so an answer or a draft
   anchor never mixes the reviewed commit's files with a later push's diff. A refresh re-points it.
+- A password-gated personal subscription cannot serve a guided-review call: the work runs in a
+  background driver with no request to unlock the credential from, so such a preset settles the
+  job as `model_unavailable` or `generation_failed`. A preset on a deployment or account key works.
+- The `guidedReview` event carries ids only (`GuidedReviewChange`) and the SPA store refetches what
+  it has loaded, taking a ticket per fetch so a reply overtaken by a newer fetch never lands.
 - A per-thread answer budget (turns and tool steps) is recorded on the message when it cuts an answer
   short, never silently truncated.
