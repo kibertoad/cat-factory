@@ -509,15 +509,13 @@ export class GuidedReviewService {
           claimed,
         )
       } else {
-        draftsLanded = landed = await this.settleDraftJob(
-          workspaceId,
-          session,
+        draftsLanded = landed = await this.settleDraftJob(workspaceId, session, {
           messageId,
           claimed,
-          pr.files,
+          files: pr.files,
           promptInput,
           tools,
-        )
+        })
       }
     } catch (error) {
       const { failure, model } = this.failureOf(error, workspaceId, session.id)
@@ -542,12 +540,15 @@ export class GuidedReviewService {
   private async settleDraftJob(
     workspaceId: string,
     session: GuidedReviewSession,
-    messageId: string,
-    claimed: GuidedReviewClaim,
-    files: GitHubChangedFile[],
-    promptInput: Parameters<typeof renderGuidedReviewDraftsPrompt>[0],
-    tools: ToolSet,
+    job: {
+      messageId: string
+      claimed: GuidedReviewClaim
+      files: GitHubChangedFile[]
+      promptInput: Parameters<typeof renderGuidedReviewDraftsPrompt>[0]
+      tools: ToolSet
+    },
   ): Promise<boolean> {
+    const { messageId, claimed, files, promptInput, tools } = job
     const { text, model } = await this.generate(workspaceId, session, 'drafts', {
       system: GUIDED_REVIEW_DRAFTS_SYSTEM_PROMPT,
       prompt: renderGuidedReviewDraftsPrompt(promptInput),
