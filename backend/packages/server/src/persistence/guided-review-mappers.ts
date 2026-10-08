@@ -5,6 +5,7 @@ import type {
   GuidedReviewThread,
 } from '@cat-factory/contracts'
 import {
+  guidedReviewCommentDraftSchema,
   guidedReviewDepthSchema,
   guidedReviewDiffSideSchema,
   guidedReviewDraftReportSchema,
@@ -17,10 +18,20 @@ import {
   guidedReviewWorkStatusSchema,
   vcsProviderSchema,
 } from '@cat-factory/contracts'
+import type {
+  GuidedReviewDraftEdit,
+  GuidedReviewDraftProposal,
+  GuidedReviewMessageOutcome,
+  GuidedReviewOverviewOutcome,
+} from '@cat-factory/kernel'
+import { ValidationError } from '@cat-factory/kernel'
+import * as v from 'valibot'
 import { decodeEnum, decodeJson } from './decode.js'
 
-// Row mappers for the guided-review tables (D1 migrations 0104 and 0105 and their Drizzle mirror). Both
-// facades read the same snake_case columns, so the decode lives here once.
+// Row mappers for the guided-review tables (D1 migrations 0104 and 0105 and their Drizzle mirror).
+// Both facades read and write the same snake_case columns, so the decode and the encode live here
+// once. Every read decodes against the contracts schemas, so every write is checked against them
+// first: an out-of-contract value is refused at its writer instead of making the row unreadable.
 
 export interface GuidedReviewSessionRow {
   id: string
@@ -197,4 +208,89 @@ export function rowToGuidedReviewDraft(row: GuidedReviewDraftRow): GuidedReviewC
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
+}
+
+function check<T>(schema: v.GenericSchema<unknown, T>, value: unknown, what: string): T {
+  const result = v.safeParse(schema, value)
+  if (result.success) return result.output
+  const issues = result.issues.map((i) => `${v.getDotPath(i) ?? '(root)'}: ${i.message}`)
+  throw new ValidationError(`Guided review ${what} is out of contract: ${issues.join('; ')}`, {
+    issues,
+  })
+}
+
+const draftFieldsSchema = v.pick(guidedReviewCommentDraftSchema, [
+  'id',
+  'path',
+  'line',
+  'startLine',
+  'side',
+  'body',
+  'rationale',
+])
+const messageEntries = guidedReviewMessageSchema.entries
+
+/** The overview columns a settle writes, checked against the schema every read decodes with. */
+export function encodeGuidedReviewOverviewOutcome(outcome: GuidedReviewOverviewOutcome): {
+  content: string | null
+  failure: string | null
+} {
+  if (outcome.status === 'complete') {
+    const content = check(guidedReviewOverviewContentSchema, outcome.content, 'overview content')
+    return { content: JSON.stringify(content), failure: null }
+  }
+  const failure = check(guidedReviewFailureSchema, outcome.failure, 'overview failure')
+  return { content: null, failure: JSON.stringify(failure) }
+}
+
+/** The assistant-message columns a settle writes, checked like the overview's. */
+export function encodeGuidedReviewMessageOutcome(outcome: GuidedReviewMessageOutcome): {
+  content: string
+  citations: string
+  failure: string | null
+  draftReport: string | null
+} {
+  if (outcome.status === 'failed') {
+    const failure = check(guidedReviewFailureSchema, outcome.failure, 'message failure')
+    return { content: '', citations: '[]', failure: JSON.stringify(failure), draftReport: null }
+  }
+  const content = check(messageEntries.content, outcome.content, 'message content')
+  const citations = check(messageEntries.citations, outcome.citations, 'message citations')
+  const report =
+    outcome.draftReport === null
+      ? null
+      : check(guidedReviewDraftReportSchema, outcome.draftReport, 'draft report')
+  return {
+    content,
+    citations: JSON.stringify(citations),
+    failure: null,
+    draftReport: report === null ? null : JSON.stringify(report),
+  }
+}
+
+/** Refuse draft fields (a new proposal, or a draft with an edit applied) no read could decode. */
+export function checkGuidedReviewDraftFields(draft: GuidedReviewDraftProposal): void {
+  check(draftFieldsSchema, draft, `draft ${draft.id}`)
+}
+
+/**
+ * `current` with a human edit applied, refused when the result is out of contract. Both stores
+ * write exactly these fields under their rev guard.
+ */
+export function applyGuidedReviewDraftEdit(
+  current: GuidedReviewCommentDraft,
+  edit: GuidedReviewDraftEdit,
+): GuidedReviewCommentDraft {
+  const next: GuidedReviewCommentDraft = {
+    ...current,
+    path: edit.path ?? current.path,
+    line: edit.line ?? current.line,
+    startLine: edit.startLine === undefined ? current.startLine : edit.startLine,
+    side: edit.side ?? current.side,
+    body: edit.body ?? current.body,
+    status: edit.discard ? 'discarded' : current.status,
+    postError: edit.discard ? null : current.postError,
+  }
+  checkGuidedReviewDraftFields(next)
+  return next
 }

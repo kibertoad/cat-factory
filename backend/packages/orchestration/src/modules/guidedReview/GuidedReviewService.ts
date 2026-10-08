@@ -1,15 +1,17 @@
 import { generateText, stepCountIs, type ToolSet } from 'ai'
-import type {
-  GuidedReviewChange,
-  GuidedReviewCommentDraft,
-  GuidedReviewDepth,
-  GuidedReviewFailure,
-  GuidedReviewMessage,
-  GuidedReviewMessageKind,
-  GuidedReviewOwnerKind,
-  GuidedReviewSession,
-  GuidedReviewThread,
-  GuidedReviewThreadSummary,
+import {
+  guidedReviewFailure,
+  type GuidedReviewChange,
+  type GuidedReviewCommentDraft,
+  type GuidedReviewDepth,
+  type GuidedReviewFailure,
+  type GuidedReviewFailureReason,
+  type GuidedReviewMessage,
+  type GuidedReviewMessageKind,
+  type GuidedReviewOwnerKind,
+  type GuidedReviewSession,
+  type GuidedReviewThread,
+  type GuidedReviewThreadSummary,
 } from '@cat-factory/contracts'
 import {
   catFactoryObservability,
@@ -27,6 +29,8 @@ import type {
   Clock,
   ExecutionEventPublisher,
   GitHubChangedFile,
+  GuidedReviewClaim,
+  GuidedReviewDraftProposal,
   GuidedReviewDriver,
   GuidedReviewJob,
   GuidedReviewNewSession,
@@ -133,11 +137,14 @@ interface BoundPr {
 
 /** A model failure the job settles onto its row, rather than a fault the driver should retry. */
 class JobFailure extends Error {
+  readonly failure: GuidedReviewFailure
+
   constructor(
-    readonly failure: GuidedReviewFailure,
+    failure: { reason: GuidedReviewFailureReason; detail: string | null },
     readonly model: string | null,
   ) {
     super(failure.detail ?? failure.reason)
+    this.failure = settledFailure(failure.reason, failure.detail)
   }
 }
 
@@ -334,7 +341,7 @@ export class GuidedReviewService {
     const now = this.deps.clock.now()
     // A cutoff in the future takes over whatever claim the failed attempts left behind.
     const takeover = now + 1
-    const failure: GuidedReviewFailure = { reason: 'generation_failed', detail }
+    const failure = settledFailure('generation_failed', detail)
     if (job.kind === 'overview') {
       const claimed = await this.deps.repository.claimOverview(
         workspaceId,
@@ -350,20 +357,26 @@ export class GuidedReviewService {
         job.generation,
         { status: 'failed', failure, model: null },
         now,
+        claimed,
       )
       if (landed) await this.notify(workspaceId, { sessionId: job.sessionId, scope: 'session' })
       return
     }
     const message = await this.deps.repository.getMessage(workspaceId, job.messageId)
     if (!message) return
-    if (!(await this.deps.repository.claimMessage(workspaceId, job.messageId, takeover, now))) {
-      return
-    }
+    const claimed = await this.deps.repository.claimMessage(
+      workspaceId,
+      job.messageId,
+      takeover,
+      now,
+    )
+    if (!claimed) return
     const landed = await this.deps.repository.settleMessage(
       workspaceId,
       job.messageId,
       { status: 'failed', failure, model: null },
       now,
+      claimed,
     )
     if (!landed) return
     await this.notify(workspaceId, {
@@ -459,8 +472,7 @@ export class GuidedReviewService {
         tools: guidedReviewTools(new PrExplorer(pr.repo, this.target(session), pr.files)),
       })
       const content = coerceOverview(extractJson(text), () => this.deps.idGenerator.next('grq'))
-      if (!content)
-        throw new JobFailure({ reason: 'unreadable_reply', detail: failureDetail(text) }, model)
+      if (!content) throw new JobFailure({ reason: 'unreadable_reply', detail: text }, model)
       outcome = { status: 'complete', content, model }
     } catch (error) {
       outcome = { status: 'failed', ...this.failureOf(error, workspaceId, sessionId) }
@@ -471,6 +483,7 @@ export class GuidedReviewService {
       generation,
       outcome,
       this.deps.clock.now(),
+      claimed,
     )
     if (landed) await this.notify(workspaceId, { sessionId, scope: 'session' })
   }
@@ -511,23 +524,22 @@ export class GuidedReviewService {
           tools,
         })
         const answer = coerceAnswer(extractJson(text))
-        if (!answer)
-          throw new JobFailure({ reason: 'unreadable_reply', detail: failureDetail(text) }, model)
+        if (!answer) throw new JobFailure({ reason: 'unreadable_reply', detail: text }, model)
         landed = await this.deps.repository.settleMessage(
           workspaceId,
           messageId,
           { status: 'complete', ...answer, draftReport: null, model },
           settledAt(),
+          claimed,
         )
       } else {
-        draftsLanded = landed = await this.settleDraftJob(
-          workspaceId,
-          session,
-          message,
-          pr.files,
+        draftsLanded = landed = await this.settleDraftJob(workspaceId, session, {
+          messageId,
+          claimed,
+          files: pr.files,
           promptInput,
           tools,
-        )
+        })
       }
     } catch (error) {
       const { failure, model } = this.failureOf(error, workspaceId, session.id)
@@ -536,6 +548,7 @@ export class GuidedReviewService {
         messageId,
         { status: 'failed', failure, model },
         settledAt(),
+        claimed,
       )
     }
     if (landed) {
@@ -551,11 +564,15 @@ export class GuidedReviewService {
   private async settleDraftJob(
     workspaceId: string,
     session: GuidedReviewSession,
-    message: GuidedReviewMessage,
-    files: GitHubChangedFile[],
-    promptInput: Parameters<typeof renderGuidedReviewDraftsPrompt>[0],
-    tools: ToolSet,
+    job: {
+      messageId: string
+      claimed: GuidedReviewClaim
+      files: GitHubChangedFile[]
+      promptInput: Parameters<typeof renderGuidedReviewDraftsPrompt>[0]
+      tools: ToolSet
+    },
   ): Promise<boolean> {
+    const { messageId, claimed, files, promptInput, tools } = job
     const { text, model } = await this.generate(workspaceId, session, 'drafts', {
       system: GUIDED_REVIEW_DRAFTS_SYSTEM_PROMPT,
       prompt: renderGuidedReviewDraftsPrompt(promptInput),
@@ -563,30 +580,21 @@ export class GuidedReviewService {
     })
     const raw = extractJson(text)
     if (raw === null || typeof raw !== 'object') {
-      throw new JobFailure({ reason: 'unreadable_reply', detail: failureDetail(text) }, model)
+      throw new JobFailure({ reason: 'unreadable_reply', detail: text }, model)
     }
     const { proposals, incomplete } = coerceDraftProposals(raw)
     const { kept, report } = anchorDrafts(proposals, incomplete, files)
-    const at = this.deps.clock.now()
-    const drafts: GuidedReviewCommentDraft[] = kept.map((p) => ({
+    const drafts: GuidedReviewDraftProposal[] = kept.map((p) => ({
       id: this.deps.idGenerator.next('grd'),
-      sessionId: session.id,
-      threadId: message.threadId,
-      messageId: message.id,
       ...p,
-      status: 'proposed',
-      postError: null,
-      postedUrl: null,
-      rev: 1,
-      createdAt: at,
-      updatedAt: at,
     }))
     return this.deps.repository.settleDrafts(
       workspaceId,
-      message.id,
+      messageId,
       drafts,
       { status: 'complete', content: '', citations: [], draftReport: report, model },
-      at,
+      this.deps.clock.now(),
+      claimed,
     )
   }
 
@@ -632,10 +640,7 @@ export class GuidedReviewService {
       return { text, model }
     } catch (error) {
       if (error instanceof JobFailure) throw error
-      throw new JobFailure(
-        { reason: 'generation_failed', detail: failureDetail(getErrorMessage(error)) },
-        model,
-      )
+      throw new JobFailure({ reason: 'generation_failed', detail: getErrorMessage(error) }, model)
     }
   }
 
@@ -666,10 +671,7 @@ export class GuidedReviewService {
     try {
       context = await this.repoFor(workspaceId, session)
     } catch (error) {
-      throw new JobFailure(
-        { reason: 'repo_unavailable', detail: failureDetail(getErrorMessage(error)) },
-        null,
-      )
+      throw new JobFailure({ reason: 'repo_unavailable', detail: getErrorMessage(error) }, null)
     }
     const listChangedFiles = context.repo.listChangedFiles?.bind(context.repo)
     const getPullRequest = context.repo.getPullRequest?.bind(context.repo)
@@ -694,10 +696,7 @@ export class GuidedReviewService {
         },
       )
     } catch (error) {
-      throw new JobFailure(
-        { reason: 'repo_unavailable', detail: failureDetail(getErrorMessage(error)) },
-        null,
-      )
+      throw new JobFailure({ reason: 'repo_unavailable', detail: getErrorMessage(error) }, null)
     }
     // The host lists the files of the PR's CURRENT head. Past a push they no longer describe the
     // commit the session reviews, so answering or anchoring drafts against them would mix commits.
@@ -786,7 +785,7 @@ export class GuidedReviewService {
       ...describeError(error),
     })
     return {
-      failure: { reason: 'generation_failed', detail: failureDetail(getErrorMessage(error)) },
+      failure: settledFailure('generation_failed', getErrorMessage(error)),
       model: null,
     }
   }
@@ -870,10 +869,16 @@ function questionText(kind: GuidedReviewMessageKind, content: string): string {
   return text
 }
 
-/** A failure detail as stored on a row: scrubbed of secrets and cut to a bounded excerpt. */
-function failureDetail(text: string): string | null {
-  const trimmed = (redactSecrets(text) ?? '').trim()
-  return trimmed ? trimmed.slice(0, 2000) : null
+/**
+ * A failure as stored on a row. The detail is raw model text or a provider error, so it is scrubbed
+ * of secrets and then cut to what the contract admits.
+ */
+function settledFailure(
+  reason: GuidedReviewFailureReason,
+  detail: string | null,
+): GuidedReviewFailure {
+  const scrubbed = detail === null ? '' : (redactSecrets(detail) ?? '').trim()
+  return guidedReviewFailure(reason, scrubbed || null)
 }
 
 /** The person whose credentials an owner's work runs under; null for an unbound API key. */

@@ -80,10 +80,12 @@ export {
 export type { RequirementReviewRepository } from './requirement-review-repositories.js'
 export type { DocInterviewRepository } from './doc-interview-repositories.js'
 export type {
+  GuidedReviewClaim,
   GuidedReviewDraftEdit,
   GuidedReviewDriver,
   GuidedReviewExchange,
   GuidedReviewDraftPostOutcome,
+  GuidedReviewDraftProposal,
   GuidedReviewMessageOutcome,
   GuidedReviewNewSession,
   GuidedReviewOverviewOutcome,
