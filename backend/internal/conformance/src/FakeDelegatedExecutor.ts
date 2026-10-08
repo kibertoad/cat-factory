@@ -248,6 +248,10 @@ export function withDelegatedArm(
     // Answered explicitly, because the host requires an answer: this harness configures no
     // outbound widening, which is the strict public-https default every executor is held to.
     urlSafetyPolicy: undefined,
+    // Answered explicitly, because the host requires an answer: this arm is composed outside the
+    // facade's own wiring, so it holds no telemetry writer and a reported figure reaches the
+    // usage ledger alone.
+    recordHarnessCalls: undefined,
     logger: noopLogger,
     clock: { now: () => Date.now() },
   })

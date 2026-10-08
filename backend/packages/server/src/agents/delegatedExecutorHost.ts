@@ -21,6 +21,7 @@ import {
 } from '@cat-factory/integrations'
 import { DelegatedAgentExecutor } from './DelegatedAgentExecutor.js'
 import type { ResolveRepoOrigin, ResolveRepoTarget } from './repoTargeting.js'
+import type { RecordHarnessCalls } from './delegatedUsage.js'
 
 // ---------------------------------------------------------------------------
 // The ONE place a facade builds the delegated arm.
@@ -63,6 +64,15 @@ export interface DelegatedExecutorHostOptions {
   taskRepository?: TaskRepository
   resolveToolSecrets?: ToolSecretResolver
   agentContextObservability?: AgentContextRecorder
+  /**
+   * Where the usage an executor reports becomes the step's call metric: the recorder the container
+   * executor files a subscription harness's calls through.
+   *
+   * REQUIRED, though its value may be `undefined`, for the reason `urlSafetyPolicy` is: optional,
+   * one facade passing it and the other not would have the same executor's usage reported on one
+   * runtime and "not reported" on the other.
+   */
+  recordHarnessCalls: RecordHarnessCalls | undefined
   /**
    * The deployment's outbound-URL policy. The SAME one the notification-webhook sender is held to,
    * because an executor is an outbound HTTP surface the deployment configured and a second set of
@@ -121,6 +131,7 @@ export function buildDelegatedAgentExecutor(
     ...(options.agentContextObservability
       ? { agentContextObservability: options.agentContextObservability }
       : {}),
+    ...(options.recordHarnessCalls ? { recordHarnessCalls: options.recordHarnessCalls } : {}),
     executorDeps,
     logger: options.logger,
     clock: options.clock,

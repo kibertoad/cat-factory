@@ -32,6 +32,7 @@ import { composeDelegationBrief, briefRepoProvider } from './brief.js'
 import { ensureDelegatedWorkBranch } from './delegationWorkBranch.js'
 import { recordAgentContextSnapshot } from './agentContextRecord.js'
 import { resolveDelegationCredentials } from './delegationCredentials.js'
+import { type RecordHarnessCalls, recordDelegatedUsage } from './delegatedUsage.js'
 import type { ResolveRepoTarget, ResolveRepoOrigin } from './repoTargeting.js'
 
 // ---------------------------------------------------------------------------
@@ -83,6 +84,12 @@ export interface DelegatedAgentExecutorDependencies {
   resolveToolSecrets?: ToolSecretResolver
   /** Files the dispatch's agent-context snapshot; absent ⇒ nothing is recorded. */
   agentContextObservability?: AgentContextRecorder
+  /**
+   * Files the usage an executor REPORTS as the step's job-level call metric, through the same
+   * recorder a subscription harness's calls go through. Absent ⇒ a reported figure reaches the
+   * usage ledger alone, and the step card still says "usage not reported".
+   */
+  recordHarnessCalls?: RecordHarnessCalls
   /** The bound deps every registered executor is BUILT over. */
   executorDeps: DelegatedExecutorDeps
   /**
@@ -308,6 +315,14 @@ export class DelegatedAgentExecutor implements AsyncAgentExecutor {
       logger: jobLog,
     })
     const update = await executor.poll(target, credentials)
+    await recordDelegatedUsage({
+      record: this.deps.recordHarnessCalls,
+      update,
+      definition,
+      scope,
+      jobId: handle.jobId,
+      logger: jobLog,
+    })
     return toJobUpdate(update, definition, this.deps.clock.now())
   }
 

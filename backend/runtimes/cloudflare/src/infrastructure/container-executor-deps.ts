@@ -320,16 +320,7 @@ export function buildWorkerJobAccountingDeps(args: {
     registry: defaultSubscriptionQuotaRegistry,
   })
   return {
-    recordHarnessCalls: makeHarnessCallRecorder(
-      new LlmObservabilityService({
-        llmCallMetricRepository: new D1LlmCallMetricRepository({ db: requireTelemetryDb(env) }),
-        idGenerator: new CryptoIdGenerator(),
-        clock,
-        recordPrompts: config.observability.recordPrompts,
-        workspaceSettingsRepository: new D1WorkspaceSettingsRepository({ db }),
-        logger,
-      }),
-    ),
+    recordHarnessCalls: buildWorkerHarnessCallRecorder({ env, config, db, clock }),
     ...(subscriptions
       ? {
           recordSubscriptionUsage: (workspaceId, tokenId, usage) =>
@@ -338,6 +329,30 @@ export function buildWorkerJobAccountingDeps(args: {
       : {}),
     recordSubscriptionQuotaUsage: (target, usage) => quota.recordUsage(target, usage),
   }
+}
+
+/**
+ * The writer of `llm_call_metrics` for calls that bypass the LLM proxy: a subscription harness's
+ * per-call telemetry, and the usage a delegated executor reports. Its own builder so the delegated
+ * arm files through the same recorder as the container one rather than a second construction.
+ */
+export function buildWorkerHarnessCallRecorder(args: {
+  env: Env
+  config: AppConfig
+  db: D1Database
+  clock: Clock
+}): NonNullable<ContainerJobAccountingDeps['recordHarnessCalls']> {
+  const { env, config, db, clock } = args
+  return makeHarnessCallRecorder(
+    new LlmObservabilityService({
+      llmCallMetricRepository: new D1LlmCallMetricRepository({ db: requireTelemetryDb(env) }),
+      idGenerator: new CryptoIdGenerator(),
+      clock,
+      recordPrompts: config.observability.recordPrompts,
+      workspaceSettingsRepository: new D1WorkspaceSettingsRepository({ db }),
+      logger,
+    }),
+  )
 }
 
 /**

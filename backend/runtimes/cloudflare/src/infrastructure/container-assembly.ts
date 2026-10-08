@@ -150,6 +150,7 @@ import {
   selectWorkRunner,
 } from './container.js'
 import { selectDeployDeps } from './containers/deployJobDeps'
+import { buildWorkerHarnessCallRecorder } from './container-executor-deps.js'
 import { selectRecurringDeps } from './container-tracker-deps.js'
 import { selectDocumentsDeps } from './container-documents-deps'
 import { selectGitHubDeps } from './github-deps.js'
@@ -551,6 +552,10 @@ function selectWorkerAgentExecutor(
     ...(late.taskRepository ? { taskRepository: late.taskRepository } : {}),
     resolveToolSecrets: toolSecretChain.resolver,
     ...(agentContextObservability ? { agentContextObservability } : {}),
+    // The SAME writer the container executor files a subscription harness's calls through, so a
+    // delegated step's reported usage lands where the step's metrics are read. Symmetric with the
+    // Node facade.
+    recordHarnessCalls: buildWorkerHarnessCallRecorder({ env, config, db, clock }),
     logger,
     clock,
   })
