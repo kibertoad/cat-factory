@@ -32,6 +32,7 @@ import type {
   GuidedReviewInvestigator,
   GuidedReviewJob,
   GuidedReviewJobProgress,
+  GuidedReviewNewSession,
   GuidedReviewRepository,
   GuidedReviewRunner,
   GuidedReviewSessionFilter,
@@ -47,16 +48,19 @@ import type {
 } from '@cat-factory/kernel'
 import {
   ConflictError,
+  describeError,
   extractJson,
   ForbiddenError,
   getErrorMessage,
   NotFoundError,
   noopLogger,
+  redactSecrets,
   resolveInlineScope,
   resolveScopedModelProvider,
   runBestEffort,
   UnavailableError,
   ValidationError,
+  VcsCapabilityUnsupportedError,
 } from '@cat-factory/kernel'
 import { type InlineBlockModelDeps, resolveInlineBlockModelRef } from '../../inlineBlockModel.js'
 import {
@@ -64,6 +68,7 @@ import {
   coerceAnswer,
   coerceDraftProposals,
   coerceOverview,
+  GUIDED_REVIEW_GENERATION_TIMEOUT_MS,
   GUIDED_REVIEW_LEASE_MS,
   GUIDED_REVIEW_MAX_STEPS,
   OVERVIEW_INLINE_PATCH_CHARS,
@@ -202,11 +207,12 @@ export class GuidedReviewService {
     input: OpenGuidedReviewInput,
   ): Promise<GuidedReviewSession> {
     const context = await this.repoFor(workspaceId, input)
-    const pr = await this.readPr(workspaceId, userId, context.repo, input.prNumber)
+    const provider = context.provider ?? input.provider ?? 'github'
+    const pr = await this.readPr(workspaceId, userId, context.repo, provider, input.prNumber)
     const now = this.deps.clock.now()
-    const candidate: GuidedReviewSession = {
+    const candidate: GuidedReviewNewSession = {
       id: this.deps.idGenerator.next('grs'),
-      provider: context.provider ?? input.provider ?? 'github',
+      provider,
       repoId: context.repoId,
       owner: context.owner ?? input.owner,
       repo: context.name ?? input.repo,
@@ -215,7 +221,6 @@ export class GuidedReviewService {
       reviewedHeadSha: pr.headSha,
       baseRef: pr.baseRef,
       createdBy: userId,
-      overview: { status: 'pending', generation: 1, content: null, failure: null, model: null },
       createdAt: now,
       updatedAt: now,
     }
@@ -235,7 +240,13 @@ export class GuidedReviewService {
   ): Promise<GuidedReviewSession> {
     const session = await this.ownedSession(workspaceId, userId, sessionId)
     const context = await this.repoFor(workspaceId, session)
-    const pr = await this.readPr(workspaceId, userId, context.repo, session.prNumber)
+    const pr = await this.readPr(
+      workspaceId,
+      userId,
+      context.repo,
+      session.provider,
+      session.prNumber,
+    )
     const generation = session.overview.generation
     const moved = await this.deps.repository.restartOverview(
       workspaceId,
@@ -282,6 +293,8 @@ export class GuidedReviewService {
     input: { title?: string; question?: AskInput },
   ): Promise<GuidedReviewThreadView> {
     await this.ownedSession(workspaceId, userId, sessionId)
+    // Checked before the thread exists, so a refused question leaves no empty thread behind.
+    if (input.question) questionText('answer', input.question.content)
     const title =
       input.title?.trim() || (input.question ? threadTitleFrom(input.question.content) : '')
     const now = this.deps.clock.now()
@@ -324,13 +337,13 @@ export class GuidedReviewService {
     return this.exchange(workspaceId, thread, 'answer', input)
   }
 
-  /** Ask the model to turn the thread's conclusions into comment drafts. */
+  /** Turn the thread's conclusions into comment drafts; empty `instructions` asks for all. */
   async requestDrafts(
     workspaceId: string,
     userId: string,
     sessionId: string,
     threadId: string,
-    instructions: string,
+    instructions = '',
   ): Promise<{ question: GuidedReviewMessage; placeholder: GuidedReviewMessage }> {
     const thread = await this.ownedThread(workspaceId, userId, sessionId, threadId)
     return this.exchange(workspaceId, thread, 'comment-drafts', { content: instructions })
@@ -369,14 +382,14 @@ export class GuidedReviewService {
         now,
       )
       if (!claimed) return
-      await this.deps.repository.settleOverview(
+      const landed = await this.deps.repository.settleOverview(
         workspaceId,
         job.sessionId,
         job.generation,
         { status: 'failed', failure, model: null },
         now,
       )
-      await this.notify(workspaceId, { sessionId: job.sessionId, scope: 'session' })
+      if (landed) await this.notify(workspaceId, { sessionId: job.sessionId, scope: 'session' })
       return
     }
     const message = await this.deps.repository.getMessage(workspaceId, job.messageId)
@@ -385,12 +398,13 @@ export class GuidedReviewService {
       return
     }
     if (message.depth === 'deep') await this.investigations?.releaseFor(workspaceId, message)
-    await this.deps.repository.settleMessage(
+    const landed = await this.deps.repository.settleMessage(
       workspaceId,
       job.messageId,
       { status: 'failed', failure, model: null },
       now,
     )
+    if (!landed) return
     await this.notify(workspaceId, {
       sessionId: message.sessionId,
       scope: 'thread',
@@ -420,37 +434,25 @@ export class GuidedReviewService {
     kind: GuidedReviewMessageKind,
     input: AskInput,
   ): Promise<{ question: GuidedReviewMessage; placeholder: GuidedReviewMessage }> {
-    const content = input.content.trim()
-    if (kind === 'answer' && !content) {
-      throw new ValidationError('A question cannot be empty', { reason: 'empty_question' })
-    }
-    const now = this.deps.clock.now()
-    const depth = input.depth ?? 'inline'
-    const base = {
-      threadId: thread.id,
-      sessionId: thread.sessionId,
-      kind,
-      depth,
-      citations: [],
-      failure: null,
-      draftReport: null,
-      model: null,
-      createdAt: now,
-      updatedAt: now,
-    }
+    const content = questionText(kind, input.content)
     const result = await this.deps.repository.appendExchange(
       workspaceId,
-      { ...base, id: this.deps.idGenerator.next('grm'), role: 'user', content, status: 'complete' },
       {
-        ...base,
-        id: this.deps.idGenerator.next('grm'),
-        role: 'assistant',
-        content: '',
-        status: 'pending',
+        sessionId: thread.sessionId,
+        threadId: thread.id,
+        kind,
+        depth: input.depth ?? 'inline',
+        questionId: this.deps.idGenerator.next('grm'),
+        question: content,
+        placeholderId: this.deps.idGenerator.next('grm'),
+        at: this.deps.clock.now(),
       },
       this.deps.driver,
     )
     if (!result.ok) {
+      if (result.reason === 'thread_not_found') {
+        throw new NotFoundError('Guided review thread', thread.id)
+      }
       throw new ConflictError('This thread is still waiting for its previous answer', 'thread_busy')
     }
     await this.notify(workspaceId, {
@@ -497,7 +499,7 @@ export class GuidedReviewService {
       })
       const content = coerceOverview(extractJson(text), () => this.deps.idGenerator.next('grq'))
       if (!content)
-        throw new JobFailure({ reason: 'unreadable_reply', detail: excerpt(text) }, model)
+        throw new JobFailure({ reason: 'unreadable_reply', detail: failureDetail(text) }, model)
       outcome = { status: 'complete', content, model }
     } catch (error) {
       outcome = { status: 'failed', ...this.failureOf(error, workspaceId, sessionId) }
@@ -548,7 +550,7 @@ export class GuidedReviewService {
         })
         const answer = coerceAnswer(extractJson(text))
         if (!answer)
-          throw new JobFailure({ reason: 'unreadable_reply', detail: excerpt(text) }, model)
+          throw new JobFailure({ reason: 'unreadable_reply', detail: failureDetail(text) }, model)
         landed = await this.deps.repository.settleMessage(
           workspaceId,
           messageId,
@@ -577,11 +579,10 @@ export class GuidedReviewService {
     if (landed) {
       await this.notify(workspaceId, {
         sessionId: session.id,
-        scope: 'thread',
+        scope: draftsLanded ? 'drafts' : 'thread',
         threadId: message.threadId,
       })
     }
-    if (draftsLanded) await this.notify(workspaceId, { sessionId: session.id, scope: 'drafts' })
   }
 
   /** Produce a `comment-drafts` message's drafts and land them with it, atomically. */
@@ -600,7 +601,7 @@ export class GuidedReviewService {
     })
     const raw = extractJson(text)
     if (raw === null || typeof raw !== 'object') {
-      throw new JobFailure({ reason: 'unreadable_reply', detail: excerpt(text) }, model)
+      throw new JobFailure({ reason: 'unreadable_reply', detail: failureDetail(text) }, model)
     }
     const { proposals, incomplete } = coerceDraftProposals(raw)
     const { kept, report } = anchorDrafts(proposals, incomplete, files)
@@ -641,28 +642,35 @@ export class GuidedReviewService {
     const model = `${ref.provider}:${ref.model}`
     const maxSteps = GUIDED_REVIEW_MAX_STEPS[phase]
     try {
-      const result = await generateText({
-        model: modelProvider.resolve(ref),
-        system: call.system,
-        prompt: call.prompt,
-        tools: call.tools,
-        stopWhen: stepCountIs(maxSteps),
-        // The last step may not call a tool, so a loop that reaches the cap still ends on a reply.
-        prepareStep: ({ stepNumber }) =>
-          stepNumber >= maxSteps - 1 ? { toolChoice: 'none' as const } : {},
-        temperature: 0.2,
-        maxOutputTokens: 8_000,
-        providerOptions: catFactoryObservability({
-          agentKind: GUIDED_REVIEW_AGENT_KIND,
-          workspaceId,
+      // The tools read the VCS, so the whole loop runs under the creator's credential scope.
+      const result = await this.asUser(workspaceId, session.createdBy, () =>
+        generateText({
+          model: modelProvider.resolve(ref),
+          system: call.system,
+          prompt: call.prompt,
+          tools: call.tools,
+          stopWhen: stepCountIs(maxSteps),
+          // The last step may not call a tool, so a loop that reaches the cap still ends on a reply.
+          prepareStep: ({ stepNumber }) =>
+            stepNumber >= maxSteps - 1 ? { toolChoice: 'none' as const } : {},
+          temperature: 0.2,
+          maxOutputTokens: 8_000,
+          abortSignal: AbortSignal.timeout(GUIDED_REVIEW_GENERATION_TIMEOUT_MS),
+          providerOptions: catFactoryObservability({
+            agentKind: GUIDED_REVIEW_AGENT_KIND,
+            workspaceId,
+          }),
         }),
-      })
+      )
       const text = result.text.trim()
       if (!text) throw new JobFailure({ reason: 'unreadable_reply', detail: null }, model)
       return { text, model }
     } catch (error) {
       if (error instanceof JobFailure) throw error
-      throw new JobFailure({ reason: 'generation_failed', detail: getErrorMessage(error) }, model)
+      throw new JobFailure(
+        { reason: 'generation_failed', detail: failureDetail(getErrorMessage(error)) },
+        model,
+      )
     }
   }
 
@@ -690,22 +698,39 @@ export class GuidedReviewService {
     try {
       context = await this.repoFor(workspaceId, session)
     } catch (error) {
-      throw new JobFailure({ reason: 'repo_unavailable', detail: getErrorMessage(error) }, null)
+      throw new JobFailure(
+        { reason: 'repo_unavailable', detail: failureDetail(getErrorMessage(error)) },
+        null,
+      )
     }
     const listChangedFiles = context.repo.listChangedFiles?.bind(context.repo)
-    if (!listChangedFiles) {
+    const getPullRequest = context.repo.getPullRequest?.bind(context.repo)
+    if (!listChangedFiles || !getPullRequest) {
       throw new JobFailure(
-        { reason: 'repo_unavailable', detail: 'This VCS connection cannot list PR files' },
+        { reason: 'repo_unavailable', detail: 'This VCS connection cannot read pull requests' },
         null,
       )
     }
     let files: GitHubChangedFile[]
+    let currentHead: string
     try {
-      files = await this.asUser(workspaceId, session.createdBy, () =>
-        listChangedFiles(session.prNumber),
-      )
+      ;[files, currentHead] = await this.asUser(workspaceId, session.createdBy, async () => {
+        const listed = await listChangedFiles(session.prNumber)
+        // Read after the listing: a push between the two reads then shows up as a moved head.
+        const pr = await getPullRequest(session.prNumber)
+        if (!pr?.headSha) throw new Error(`Pull request #${session.prNumber} was not found`)
+        return [listed, pr.headSha] as const
+      })
     } catch (error) {
-      throw new JobFailure({ reason: 'repo_unavailable', detail: getErrorMessage(error) }, null)
+      throw new JobFailure(
+        { reason: 'repo_unavailable', detail: failureDetail(getErrorMessage(error)) },
+        null,
+      )
+    }
+    // The host lists the files of the PR's CURRENT head. Past a push they no longer describe the
+    // commit the session reviews, so answering or anchoring drafts against them would mix commits.
+    if (currentHead !== session.reviewedHeadSha) {
+      throw new JobFailure({ reason: 'head_moved', detail: currentHead }, null)
     }
     return {
       repo: context.repo,
@@ -745,13 +770,16 @@ export class GuidedReviewService {
     return context
   }
 
-  private async readPr(workspaceId: string, userId: string, repo: RepoFiles, prNumber: number) {
+  private async readPr(
+    workspaceId: string,
+    userId: string,
+    repo: RepoFiles,
+    provider: VcsProvider,
+    prNumber: number,
+  ) {
     const getPullRequest = repo.getPullRequest?.bind(repo)
     if (!getPullRequest || !repo.listChangedFiles) {
-      throw new UnavailableError(
-        'This source control connection cannot read pull requests',
-        'vcs_pull_requests_unsupported',
-      )
+      throw new VcsCapabilityUnsupportedError(provider, 'pull request reads')
     }
     const pr = await this.asUser(workspaceId, userId, () => getPullRequest(prNumber))
     if (!pr || !pr.headSha || !pr.baseRef) {
@@ -804,9 +832,12 @@ export class GuidedReviewService {
     this.logger.warn('guided review job failed unexpectedly', {
       workspaceId,
       sessionId,
-      err: getErrorMessage(error),
+      ...describeError(error),
     })
-    return { failure: { reason: 'generation_failed', detail: getErrorMessage(error) }, model: null }
+    return {
+      failure: { reason: 'generation_failed', detail: failureDetail(getErrorMessage(error)) },
+      model: null,
+    }
   }
 
   private async wake(workspaceId: string, job: GuidedReviewJob): Promise<void> {
@@ -879,7 +910,17 @@ export class GuidedReviewService {
   }
 }
 
-function excerpt(text: string): string | null {
-  const trimmed = text.trim()
+/** The text a question or drafting request carries; a question may not be empty. */
+function questionText(kind: GuidedReviewMessageKind, content: string): string {
+  const text = content.trim()
+  if (kind === 'answer' && !text) {
+    throw new ValidationError('A question cannot be empty', { reason: 'empty_question' })
+  }
+  return text
+}
+
+/** A failure detail as stored on a row: scrubbed of secrets and cut to a bounded excerpt. */
+function failureDetail(text: string): string | null {
+  const trimmed = (redactSecrets(text) ?? '').trim()
   return trimmed ? trimmed.slice(0, 2000) : null
 }

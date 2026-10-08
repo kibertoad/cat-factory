@@ -32,10 +32,10 @@ import { loadPublicJob, toPublicJob, toPublicRun } from './runProjection.js'
 // groups has anything to do with.
 
 /** How often a stream re-reads the run, and the hard cap on how long the connection stays open. */
-const SSE_POLL_MS = 1000
-const SSE_MAX_MS = 5 * 60 * 1000
+export const SSE_POLL_MS = 1000
+export const SSE_MAX_MS = 5 * 60 * 1000
 /** Re-verify the caller's key at most this often on a live stream, so a mid-stream revoke cuts it. */
-const SSE_REAUTH_MS = 5000
+export const SSE_REAUTH_MS = 5000
 
 /**
  * `GET /api/v1/runs/:runId/decision-events`: the run's whole `PublicDecisionList`, pushed as a

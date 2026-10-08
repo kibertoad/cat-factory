@@ -8,13 +8,13 @@ import type {
   EnvConfigRepairJob,
   EnvironmentTestRun,
   ExecutionInstance,
+  GuidedReviewChange,
   Initiative,
   KaizenGrading,
   LlmCallActivity,
   Notification,
   RequirementReview,
 } from '../domain/types.js'
-import type { GuidedReviewChange } from '@cat-factory/contracts'
 import type { InfraSetupTransition } from '../domain/infra-reachability.js'
 import type { BoardChange } from '../domain/board-events.js'
 

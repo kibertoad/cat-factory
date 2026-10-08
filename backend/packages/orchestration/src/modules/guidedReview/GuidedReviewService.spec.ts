@@ -11,15 +11,18 @@ import type {
   GuidedReviewInvestigationRecord,
   GuidedReviewInvestigationUpdate,
   GuidedReviewInvestigator,
+  GuidedReviewExchange,
   GuidedReviewJob,
   GuidedReviewMessageOutcome,
+  GuidedReviewNewSession,
   GuidedReviewOverviewOutcome,
   GuidedReviewRepository,
   ModelProvider,
   ModelRef,
   RepoFiles,
+  RunInitiatorScope,
 } from '@cat-factory/kernel'
-import { ConflictError, ForbiddenError } from '@cat-factory/kernel'
+import { ConflictError, ForbiddenError, ValidationError } from '@cat-factory/kernel'
 import { MockLanguageModelV3 } from 'ai/test'
 import { describe, expect, it } from 'vitest'
 import { GuidedReviewService } from './GuidedReviewService.js'
@@ -32,6 +35,16 @@ import { GuidedReviewService } from './GuidedReviewService.js'
 const WS = 'ws_1'
 const OWNER = 'usr_1'
 const HEAD = 'head123'
+
+/**
+ * The credential scopes open right now. Each stays open until its callback's promise settles, which
+ * is what the facades' AsyncLocalStorage-backed seam amounts to for these sequential tests.
+ */
+const openScopes: (string | null | undefined)[] = []
+const recordingScope = ((scope, fn) => {
+  openScopes.push(scope.initiatedBy)
+  return Promise.resolve(fn()).finally(() => openScopes.pop())
+}) as RunInitiatorScope
 
 type Step = { tool: string; input: Record<string, unknown> } | { text: string } | { throws: string }
 
@@ -106,13 +119,17 @@ class InMemoryGuidedReviewRepository implements GuidedReviewRepository {
     return true
   }
 
-  async openSession(_ws: string, s: GuidedReviewSession) {
+  async openSession(_ws: string, s: GuidedReviewNewSession) {
     const existing = [...this.sessions.values()].find(
       (x) => x.repoId === s.repoId && x.prNumber === s.prNumber && x.createdBy === s.createdBy,
     )
     if (existing) return existing
-    this.sessions.set(s.id, structuredClone(s))
-    return s
+    const session: GuidedReviewSession = {
+      ...s,
+      overview: { status: 'pending', generation: 1, content: null, failure: null, model: null },
+    }
+    this.sessions.set(s.id, structuredClone(session))
+    return session
   }
   async getSession(_ws: string, id: string) {
     return this.sessions.get(id) ?? null
@@ -186,15 +203,40 @@ class InMemoryGuidedReviewRepository implements GuidedReviewRepository {
         (m.status === 'pending' || m.status === 'running'),
     )
   }
-  async appendExchange(
-    _ws: string,
-    q: Omit<GuidedReviewMessage, 'seq'>,
-    p: Omit<GuidedReviewMessage, 'seq'>,
-  ) {
-    if (this.live(q.threadId)) return { ok: false as const, reason: 'thread_busy' as const }
-    const seq = [...this.messages.values()].filter((m) => m.threadId === q.threadId).length
-    const question = { ...q, seq: seq + 1 }
-    const placeholder = { ...p, seq: seq + 2 }
+  async appendExchange(_ws: string, e: GuidedReviewExchange) {
+    if (this.threads.get(e.threadId)?.sessionId !== e.sessionId) {
+      return { ok: false as const, reason: 'thread_not_found' as const }
+    }
+    if (this.live(e.threadId)) return { ok: false as const, reason: 'thread_busy' as const }
+    const seq = [...this.messages.values()].filter((m) => m.threadId === e.threadId).length
+    const base = {
+      threadId: e.threadId,
+      sessionId: e.sessionId,
+      kind: e.kind,
+      depth: e.depth,
+      citations: [],
+      failure: null,
+      draftReport: null,
+      model: null,
+      createdAt: e.at,
+      updatedAt: e.at,
+    }
+    const question: GuidedReviewMessage = {
+      ...base,
+      id: e.questionId,
+      seq: seq + 1,
+      role: 'user',
+      content: e.question,
+      status: 'complete',
+    }
+    const placeholder: GuidedReviewMessage = {
+      ...base,
+      id: e.placeholderId,
+      seq: seq + 2,
+      role: 'assistant',
+      content: '',
+      status: 'pending',
+    }
     this.messages.set(question.id, question)
     this.messages.set(placeholder.id, placeholder)
     return { ok: true as const, question, placeholder }
@@ -303,30 +345,30 @@ const FILES: GitHubChangedFile[] = [
 interface HostState {
   head: string
   posted: { path: string; line: number; body: string }[]
+  /** Summary comments the host published. */
+  summaries: string[]
   /** Comment indexes the host refuses. */
   refuse: Set<number>
 }
 
 function fakeRepo(reads: (string | undefined)[], host: HostState): RepoFiles {
   return {
-    async pullRequestHeadSha() {
-      return host.head
-    },
     async createReview(
       _n: number,
-      input: { comments: { path: string; line: number; body: string }[] },
+      input: { body?: string; comments: { path: string; line: number; body: string }[] },
     ) {
+      if (input.body) host.summaries.push(input.body)
       return {
         comments: input.comments.map((c, i) => {
           if (host.refuse.has(i)) return { posted: false, error: 'line is not part of the diff' }
           host.posted.push(c)
           return { posted: true }
         }),
-        bodyPosted: null,
+        bodyPosted: input.body ? true : null,
       }
     },
     async getPullRequest() {
-      return { title: 'Add retries', headSha: HEAD, baseRef: 'main' }
+      return { title: 'Add retries', headSha: host.head, baseRef: 'main' }
     },
     async listChangedFiles() {
       return FILES
@@ -335,7 +377,7 @@ function fakeRepo(reads: (string | undefined)[], host: HostState): RepoFiles {
       return 'Retries payment calls.'
     },
     async getFile(path: string, gitRef?: string) {
-      reads.push(`${path}@${gitRef}`)
+      reads.push(`${path}@${gitRef} as ${openScopes.at(-1) ?? 'nobody'}`)
       return { content: 'retry()\nretry()', sha: 's' }
     },
     async listDirectory() {
@@ -377,7 +419,7 @@ function setup(
   const woken: GuidedReviewJob[] = []
   const changes: GuidedReviewChange[] = []
   const reads: (string | undefined)[] = []
-  const host: HostState = { head: HEAD, posted: [], refuse: new Set() }
+  const host: HostState = { head: HEAD, posted: [], summaries: [], refuse: new Set() }
   const { provider, calls } = scriptedProvider(steps)
   let id = 0
   let now = 1_000
@@ -393,6 +435,7 @@ function setup(
       name: 'shop',
       provider: 'github',
     }),
+    runInitiatorScope: recordingScope,
     modelProvider: provider,
     modelRef: { provider: 'fake', model: 'fake' } as ModelRef,
     isOverBudget: async () => opts.overBudget ?? false,
@@ -410,6 +453,7 @@ function setup(
     changes,
     host,
     advance: (ms: number) => (now += ms),
+    push: (headSha: string) => (host.head = headSha),
   }
 }
 
@@ -443,8 +487,8 @@ describe('GuidedReviewService', () => {
     expect(stored.overview.content?.suggestedQuestions).toEqual([
       { id: expect.stringMatching(/^grq_/), question: 'Is the retry bounded?' },
     ])
-    // The tool read the PR at the commit under review, not a moving branch.
-    expect(reads).toEqual([`src/pay.ts@${HEAD}`])
+    // The tool read the PR at the commit under review, as the reviewer who opened the session.
+    expect(reads).toEqual([`src/pay.ts@${HEAD} as ${OWNER}`])
 
     // Reopening the same PR returns the same session and wakes nothing new.
     await service.open(WS, OWNER, { owner: 'acme', repo: 'shop', prNumber: 7 })
@@ -508,7 +552,7 @@ describe('GuidedReviewService', () => {
         { path: 'src/pay.ts', line: 90, side: 'RIGHT', body: 'Elsewhere.', rationale: 'r' },
       ],
     })
-    const { service, repository, woken } = setup([{ text: drafts }])
+    const { service, repository, woken, changes } = setup([{ text: drafts }])
     const session = await service.open(WS, OWNER, { owner: 'acme', repo: 'shop', prNumber: 7 })
     const { thread } = await service.openThread(WS, OWNER, session.id, {})
     const { placeholder } = await service.requestDrafts(
@@ -534,6 +578,7 @@ describe('GuidedReviewService', () => {
       proposed: 2,
       dropped: [{ path: 'src/pay.ts', line: 90, side: 'RIGHT', reason: 'outside_diff' }],
     })
+    expect(changes.at(-1)).toEqual({ sessionId: session.id, scope: 'drafts', threadId: thread.id })
   })
 
   it.each([
@@ -641,6 +686,10 @@ describe('GuidedReviewService', () => {
       await expect(
         service.editDraft(WS, OWNER, session.id, first!.id, { rev: 2, line: 90 }),
       ).rejects.toMatchObject({ details: { reason: 'draft_anchor_outside_diff' } })
+      // A discard is terminal, so it cannot carry an unchecked anchor along with it.
+      await expect(
+        service.editDraft(WS, OWNER, session.id, first!.id, { rev: 2, discard: true, line: 90 }),
+      ).rejects.toBeInstanceOf(ValidationError)
     })
 
     it('posts each draft once, through the host boundary, and records a partial post per draft', async () => {
@@ -653,12 +702,35 @@ describe('GuidedReviewService', () => {
       // A closing keyword in model text must not close an issue on the host.
       expect(host.posted).toHaveLength(1)
       expect(host.posted[0]!.body).not.toMatch(/Closes #12/)
-      expect(changes.at(-1)).toEqual({ sessionId: session.id, scope: 'drafts' })
+      expect(changes.at(-1)).toEqual({ sessionId: session.id, scope: 'session' })
 
       host.refuse.clear()
       const again = await service.postDrafts(WS, OWNER, session.id, { draftIds: ids })
       expect(again).toMatchObject({ posted: 1, failed: 0, skipped: [ids[0]] })
       expect(host.posted).toHaveLength(2)
+    })
+
+    it('publishes the summary once, so an identical retry after a complete post posts nothing', async () => {
+      const { service, session, drafts, host } = await drafted()
+      const input = { draftIds: drafts.map((d) => d.id), summary: 'Two notes on the retries.' }
+      const first = await service.postDrafts(WS, OWNER, session.id, input)
+      expect(first.summary).toEqual({ posted: true, error: null })
+      const again = await service.postDrafts(WS, OWNER, session.id, input)
+      expect(again).toMatchObject({ posted: 0, summary: { posted: null, error: null } })
+      expect(host.summaries).toHaveLength(1)
+      expect(host.posted).toHaveLength(2)
+    })
+
+    it('refuses to move a draft once the pull request has moved past the reviewed commit', async () => {
+      const { service, session, drafts, host } = await drafted()
+      host.head = 'newer'
+      await expect(
+        service.editDraft(WS, OWNER, session.id, drafts[0]!.id, { rev: 1, line: 2 }),
+      ).rejects.toMatchObject({ details: { reason: 'session_stale' } })
+      // A body edit does not depend on the diff, so it still lands.
+      await expect(
+        service.editDraft(WS, OWNER, session.id, drafts[0]!.id, { rev: 1, body: 'Reworded.' }),
+      ).resolves.toMatchObject({ rev: 2 })
     })
 
     it('refuses to post once the pull request has moved past the reviewed commit', async () => {
@@ -743,6 +815,33 @@ describe('GuidedReviewService', () => {
       expect(fake.stopped).toHaveLength(1)
       expect(await service.runJob(WS, job)).toEqual({ done: true })
     })
+  })
+
+  it('fails an answer as head_moved once the PR moves past the reviewed commit', async () => {
+    const { service, repository, woken, calls, push } = setup([{ text: '{"answer":"Fine."}' }])
+    const session = await service.open(WS, OWNER, { owner: 'acme', repo: 'shop', prNumber: 7 })
+    const { thread } = await service.openThread(WS, OWNER, session.id, {
+      question: { content: 'Why?' },
+    })
+    push('head456')
+    await service.runJob(
+      WS,
+      woken.find((j) => j.kind === 'message')!,
+    )
+    expect((await repository.listMessages(WS, thread.id))[1]?.failure).toEqual({
+      reason: 'head_moved',
+      detail: 'head456',
+    })
+    expect(calls()).toBe(0)
+  })
+
+  it('refuses an empty first question without leaving an empty thread behind', async () => {
+    const { service, repository } = setup([])
+    const session = await service.open(WS, OWNER, { owner: 'acme', repo: 'shop', prNumber: 7 })
+    await expect(
+      service.openThread(WS, OWNER, session.id, { question: { content: '   ' } }),
+    ).rejects.toBeInstanceOf(ValidationError)
+    expect(repository.threads.size).toBe(0)
   })
 
   it('lets only the session owner change it', async () => {

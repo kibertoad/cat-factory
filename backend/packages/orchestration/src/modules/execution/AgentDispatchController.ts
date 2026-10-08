@@ -13,8 +13,8 @@ import type {
   RunInitiatorScope,
 } from '@cat-factory/kernel'
 import { getErrorMessage, isAsyncAgentExecutor, parseLocalModelId } from '@cat-factory/kernel'
-import type { DispatchToolServers } from '@cat-factory/contracts'
-import { PR_REVIEWER_KIND, resolvePrNumber } from '@cat-factory/agents'
+import { resolvePrNumber, type DispatchToolServers } from '@cat-factory/contracts'
+import { PR_REVIEWER_KIND } from '@cat-factory/agents'
 import { liveJobId, recordInlineToolServers } from './step-fold.logic.js'
 import type { StartedStepDispatch, StartStepDispatch } from './delegation.logic.js'
 import { classifyDispatchFailure, type DispatchFailureClassification } from './job.logic.js'

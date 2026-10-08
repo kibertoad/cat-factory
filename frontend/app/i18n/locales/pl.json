@@ -5125,9 +5125,11 @@
     "title": "Przegląd z przewodnikiem",
     "titleFor": "{repo} #{number}: {title}",
     "loading": "Wczytywanie przeglądu…",
+    "outOfDate": "Aktualizacje na żywo nie powiodły się, więc ten widok może być nieaktualny.",
     "openFromTask": "Zbadaj w przeglądzie z przewodnikiem",
     "picker": {
       "intro": "Wybierz repozytorium i pull request. Dostaniesz przegląd zmiany i możesz zadawać pytania w osobnych wątkach.",
+      "loading": "Wczytywanie repozytoriów…",
       "noRepos": "Do tego obszaru roboczego nie podłączono jeszcze żadnych repozytoriów.",
       "repo": "Repozytorium",
       "openPulls": "Otwarte pull requesty",
@@ -5158,6 +5160,7 @@
       "generation_failed": "Wywołanie modelu nie powiodło się.",
       "unreadable_reply": "Model odpowiedział w formie, której nie da się odczytać.",
       "depth_unavailable": "Szczegółowe odpowiedzi z użyciem checkoutu nie są jeszcze dostępne.",
+      "head_moved": "Pull request wyszedł poza przeglądany commit. Odśwież, aby przejrzeć jego najnowszy commit.",
       "detail": "Szczegóły"
     },
     "dropped": {
@@ -5202,11 +5205,13 @@
       "sideLabel": "Strona",
       "postFailed": "Host odrzucił ten komentarz",
       "summaryPlaceholder": "Opcjonalny komentarz podsumowujący do pull requesta",
+      "summaryFailed": "Host odrzucił komentarz podsumowujący",
       "post": "Opublikuj {count} w pull requeście",
       "postResult": "Opublikowane: {posted}, nieopublikowane: {failed}, już obsłużone: {skipped}."
     },
     "errors": {
       "load": "Nie udało się wczytać przeglądu",
+      "repos": "Nie udało się wczytać podłączonych repozytoriów",
       "open": "Nie udało się otworzyć przeglądu",
       "ask": "Nie udało się zadać pytania",
       "drafts": "Nie udało się poprosić o szkice komentarzy",

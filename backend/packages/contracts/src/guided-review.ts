@@ -1,4 +1,6 @@
 import * as v from 'valibot'
+import { booleanQuerySchema, pageLimitSchema } from './public-paging.js'
+import { vcsProviderSchema } from './routes/auth.js'
 
 // Guided PR review: a standalone, per-user exploration session over one pull request. It holds an
 // overview of the PR, any number of question threads answered by a model with read access to the
@@ -97,6 +99,8 @@ export const GUIDED_REVIEW_FAILURE_REASONS = [
   'generation_failed',
   'unreadable_reply',
   'depth_unavailable',
+  /** The PR's head moved past the reviewed commit; a refresh re-points the session. */
+  'head_moved',
 ] as const
 export type GuidedReviewFailureReason = (typeof GUIDED_REVIEW_FAILURE_REASONS)[number]
 
@@ -118,7 +122,7 @@ export type GuidedReviewOverview = v.InferOutput<typeof guidedReviewOverviewSche
 
 export const guidedReviewSessionSchema = v.object({
   id: v.string(),
-  provider: v.picklist(['github', 'gitlab']),
+  provider: vcsProviderSchema,
   repoId: v.string(),
   owner: v.string(),
   repo: v.string(),
@@ -257,6 +261,25 @@ export const guidedReviewCommentDraftSchema = v.object({
 })
 export type GuidedReviewCommentDraft = v.InferOutput<typeof guidedReviewCommentDraftSchema>
 
+/**
+ * How long a post holds the drafts it claimed. A `posting` draft older than this lost its poster
+ * before the host's answer was recorded, so another post may claim it again.
+ */
+export const GUIDED_REVIEW_POST_LEASE_MS = 10 * 60_000
+
+/**
+ * Whether a post may claim `draft` at `now`: a `proposed` or `failed` draft, or a `posting` one
+ * whose claim has outlived {@link GUIDED_REVIEW_POST_LEASE_MS}. The server claims by this rule and
+ * the review window offers a draft for posting by it, so a stranded draft stays reachable.
+ */
+export function isPostableDraft(
+  draft: Pick<GuidedReviewCommentDraft, 'status' | 'updatedAt'>,
+  now: number,
+): boolean {
+  if (draft.status === 'proposed' || draft.status === 'failed') return true
+  return draft.status === 'posting' && draft.updatedAt < now - GUIDED_REVIEW_POST_LEASE_MS
+}
+
 /** Parse a model-shaped overview against the contract; null when it does not conform. */
 export function parseGuidedReviewOverviewContent(
   input: unknown,
@@ -304,7 +327,7 @@ export const openGuidedReviewSchema = v.object({
   owner: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200)),
   repo: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200)),
   prNumber: v.pipe(v.number(), v.integer(), v.minValue(1)),
-  provider: v.optional(v.picklist(['github', 'gitlab'])),
+  provider: v.optional(vcsProviderSchema),
 })
 export type OpenGuidedReviewInput = v.InferOutput<typeof openGuidedReviewSchema>
 
@@ -343,27 +366,24 @@ export const listGuidedReviewsQuerySchema = v.object({
  * session or thread it has open, so a workspace member who is not viewing it learns nothing more
  * than that it moved.
  */
-export interface GuidedReviewChange {
-  sessionId: string
-  /** `session`: the overview or the session itself; `thread`: a thread's messages; `drafts`. */
-  scope: 'session' | 'thread' | 'drafts' | 'deleted'
-  threadId?: string
-}
+export type GuidedReviewChange =
+  /**
+   * `session`: the overview, the session itself, or a draft a human edited or posted moved.
+   * `deleted`: the session is gone.
+   */
+  | { sessionId: string; scope: 'session' | 'deleted' }
+  /**
+   * `thread`: one thread's messages moved. `drafts`: a thread's message settled with comment
+   * drafts, so the session's drafts moved too.
+   */
+  | { sessionId: string; scope: 'thread' | 'drafts'; threadId: string }
 
 /** Query of the public session list: the most recently updated sessions first. */
 export const listPublicGuidedReviewsQuerySchema = v.object({
-  repoId: v.optional(v.pipe(v.string(), v.maxLength(200))),
-  prNumber: v.optional(v.pipe(v.string(), v.regex(/^\d+$/), v.transform(Number))),
+  ...listGuidedReviewsQuerySchema.entries,
   /** `true` lists only sessions the calling key's identity owns. */
-  mine: v.optional(
-    v.pipe(
-      v.picklist(['true', 'false']),
-      v.transform((s) => s === 'true'),
-    ),
-  ),
-  limit: v.optional(
-    v.pipe(v.string(), v.regex(/^\d+$/), v.transform(Number), v.minValue(1), v.maxValue(100)),
-  ),
+  mine: v.optional(booleanQuerySchema),
+  limit: v.optional(pageLimitSchema),
 })
 
 /** A page of sessions. `truncated` says more matched than `limit` returned. */
@@ -398,6 +418,7 @@ export const postGuidedReviewDraftsSchema = v.object({
     v.minLength(1),
     v.maxLength(LIST_MAX),
   ),
+  /** Posts only alongside a draft this call claims, so an identical retry publishes nothing. */
   summary: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(GUIDED_REVIEW_COMMENT_MAX))),
 })
 export type PostGuidedReviewDraftsInput = v.InferOutput<typeof postGuidedReviewDraftsSchema>

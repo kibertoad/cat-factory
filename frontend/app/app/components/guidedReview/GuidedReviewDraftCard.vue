@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // One comment draft: its anchor, body and rationale, with selection for posting and an inline
-// editor. Only a `proposed` or `failed` draft is editable; the server refuses a stale edit as
+// editor. Only a `proposed` or `failed` draft is editable, though a `posting` one whose poster died
+// can be selected for posting again; the server refuses a stale edit as
 // `draft_conflict` and a line outside the diff, both reported through the error funnel.
 import type { GuidedReviewCommentDraft } from '~/types/domain'
 import MarkdownProse from '~/components/common/MarkdownProse.vue'
@@ -14,6 +15,8 @@ const props = defineProps<{
   sessionId: string
   draft: GuidedReviewCommentDraft
   selected: boolean
+  /** Whether a post may claim this draft now, including a stranded `posting` one. */
+  postable: boolean
 }>()
 const emit = defineEmits<{ 'update:selected': [value: boolean] }>()
 const { t } = useI18n()
@@ -77,7 +80,7 @@ async function discard(): Promise<void> {
   >
     <div class="flex items-center gap-2">
       <UCheckbox
-        v-if="editable"
+        v-if="postable"
         :model-value="selected"
         :aria-label="t('guidedReview.drafts.select')"
         @update:model-value="emit('update:selected', $event === true)"

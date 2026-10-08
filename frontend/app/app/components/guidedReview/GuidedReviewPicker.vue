@@ -3,7 +3,7 @@
 // number typed in) to open a guided review on.
 import type { OpenGuidedReviewInput } from '~/types/domain'
 
-defineProps<{ opening: boolean }>()
+defineProps<{ opening: boolean; loading: boolean }>()
 const emit = defineEmits<{ open: [target: OpenGuidedReviewInput] }>()
 const { t } = useI18n()
 const github = useGitHubStore()
@@ -34,7 +34,11 @@ function submit(number = prNumber.value): void {
 <template>
   <div class="mx-auto max-w-xl space-y-4" data-testid="guided-review-picker">
     <p class="text-sm text-muted">{{ t('guidedReview.picker.intro') }}</p>
-    <p v-if="!github.repos.length" class="text-sm text-toned">
+    <p v-if="loading" class="flex items-center gap-2 text-sm text-muted">
+      <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
+      {{ t('guidedReview.picker.loading') }}
+    </p>
+    <p v-else-if="!github.repos.length" class="text-sm text-toned">
       {{ t('guidedReview.picker.noRepos') }}
     </p>
     <template v-else>
