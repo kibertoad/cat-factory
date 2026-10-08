@@ -82,9 +82,11 @@ export type { DocInterviewRepository } from './doc-interview-repositories.js'
 export type {
   GuidedReviewDraftEdit,
   GuidedReviewDriver,
+  GuidedReviewExchange,
   GuidedReviewInvestigationRecord,
   GuidedReviewDraftPostOutcome,
   GuidedReviewMessageOutcome,
+  GuidedReviewNewSession,
   GuidedReviewOverviewOutcome,
   GuidedReviewRefresh,
   GuidedReviewRepository,

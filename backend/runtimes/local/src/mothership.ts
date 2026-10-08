@@ -351,8 +351,9 @@ export function composeMothership(env: NodeJS.ProcessEnv): MothershipComposition
     localDbPath(env.LOCAL_MOTHERSHIP_SETTINGS_DB, 'local-settings.sqlite'),
   )
   const workQueue = createWorkQueue(localDbPath(env.LOCAL_MOTHERSHIP_WORK_DB, 'work-queue.sqlite'))
+  // A second table in the work-queue file, so the one override (`:memory:` in tests) covers both.
   const guidedReviewQueue = createGuidedReviewQueue(
-    localDbPath(undefined, 'guided-review-queue.sqlite'),
+    localDbPath(env.LOCAL_MOTHERSHIP_WORK_DB, 'work-queue.sqlite'),
   )
   return {
     repos,

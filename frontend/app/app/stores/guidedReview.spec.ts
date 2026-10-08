@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { ApiError } from '~/composables/api/errors'
 import { useGuidedReviewStore } from '~/stores/guidedReview'
 import { useWorkspaceStore } from '~/stores/workspace'
 
@@ -56,6 +57,79 @@ describe('guided review store', () => {
     slow.resolve(view('s1', 'stale'))
     await first
     expect(store.sessions.s1?.session.prTitle).toBe('newer')
+  })
+
+  it('lets a refresh win over a load that started before it', async () => {
+    const slow = deferred<never>()
+    vi.stubGlobal('useApi', () => ({
+      getGuidedReview: vi.fn(() => slow.promise),
+      refreshGuidedReview: vi.fn(async () => view('s1', 'refreshed')),
+    }))
+    useWorkspaceStore().workspaceId = 'ws_1'
+    const store = useGuidedReviewStore()
+
+    const load = store.loadSession('s1')
+    await store.refresh('s1')
+    slow.resolve(view('s1', 'stale'))
+    await load
+    expect(store.sessions.s1?.session.prTitle).toBe('refreshed')
+  })
+
+  it('does not bring back a deleted session through a load still in flight', async () => {
+    const slow = deferred<never>()
+    vi.stubGlobal('useApi', () => ({ getGuidedReview: vi.fn(() => slow.promise) }))
+    useWorkspaceStore().workspaceId = 'ws_1'
+    const store = useGuidedReviewStore()
+
+    const load = store.loadSession('s1')
+    await store.applyChange({ sessionId: 's1', scope: 'deleted' })
+    slow.resolve(view('s1', 'stale'))
+    await load
+    expect(store.sessions.s1).toBeUndefined()
+  })
+
+  it('refetches the thread a drafts change names', async () => {
+    const getGuidedReview = vi.fn(async (_ws: string, id: string) => view(id, 'x'))
+    const getGuidedReviewThread = vi.fn(async () => threadView('t1', 3))
+    vi.stubGlobal('useApi', () => ({ getGuidedReview, getGuidedReviewThread }))
+    useWorkspaceStore().workspaceId = 'ws_1'
+    const store = useGuidedReviewStore()
+    await store.loadSession('s1')
+    await store.loadThread('s1', 't1')
+    getGuidedReviewThread.mockClear()
+    await store.applyChange({ sessionId: 's1', scope: 'drafts', threadId: 't1' })
+    expect(getGuidedReviewThread).toHaveBeenCalledTimes(1)
+  })
+
+  it('records a failed background refetch and clears it when the session lands again', async () => {
+    const failure = new ApiError(503, { error: { code: 'unavailable' } })
+    const getGuidedReview = vi
+      .fn()
+      .mockResolvedValueOnce(view('s1', 'x'))
+      .mockRejectedValueOnce(failure)
+      .mockResolvedValueOnce(view('s1', 'y'))
+    vi.stubGlobal('useApi', () => ({ getGuidedReview }))
+    useWorkspaceStore().workspaceId = 'ws_1'
+    const store = useGuidedReviewStore()
+    await store.loadSession('s1')
+    await store.applyChange({ sessionId: 's1', scope: 'session' })
+    expect(store.sessions.s1?.session.prTitle).toBe('x')
+    expect(store.refetchFailures.s1).toBe(failure)
+    await store.applyChange({ sessionId: 's1', scope: 'session' })
+    expect(store.refetchFailures.s1).toBeUndefined()
+  })
+
+  it('forgets a session whose refetch answers 404', async () => {
+    const getGuidedReview = vi
+      .fn()
+      .mockResolvedValueOnce(view('s1', 'x'))
+      .mockRejectedValueOnce(new ApiError(404, { error: { code: 'not_found' } }))
+    vi.stubGlobal('useApi', () => ({ getGuidedReview }))
+    useWorkspaceStore().workspaceId = 'ws_1'
+    const store = useGuidedReviewStore()
+    await store.loadSession('s1')
+    await store.applyChange({ sessionId: 's1', scope: 'session' })
+    expect(store.sessions.s1).toBeUndefined()
   })
 
   it('forgets a deleted session and its threads', async () => {

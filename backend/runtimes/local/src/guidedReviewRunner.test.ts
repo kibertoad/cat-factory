@@ -103,4 +103,22 @@ describe('SqliteGuidedReviewRunner', () => {
     expect(abandoned).toEqual([job])
     runner.stop()
   })
+
+  it('keeps a given-up job queued while settling it as abandoned fails', async () => {
+    const queue = createGuidedReviewQueue(':memory:')
+    const runner = new SqliteGuidedReviewRunner(queue, OPTS, createRecordingLogger())
+    runner.bind({
+      runJob: async () => {
+        throw new Error('mothership unreachable')
+      },
+      abandonJob: async () => {
+        throw new Error('mothership unreachable')
+      },
+    })
+    await runner.start('ws', job)
+    for (let i = 0; i < 5; i++) await settle()
+    // Dropping it here would leave the mothership row live with nothing left to settle it.
+    expect(queue.size()).toBe(1)
+    runner.stop()
+  })
 })

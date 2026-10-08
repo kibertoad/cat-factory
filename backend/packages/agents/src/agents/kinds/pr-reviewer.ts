@@ -325,6 +325,5 @@ export {
   renderStandardContext,
   renderStandardsIndex,
   resolvePrHeadNumber,
-  resolvePrNumber,
   standardsContextFileName,
 } from './pr-review-context.js'

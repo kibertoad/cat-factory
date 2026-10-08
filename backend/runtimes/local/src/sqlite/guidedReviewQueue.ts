@@ -124,8 +124,12 @@ export class SqliteGuidedReviewQueue {
       .run(notBefore, key)
   }
 
-  /** Remove drivable jobs that failed `maxAttempts` times in a row, returning them. */
-  evictExhausted(now: number, maxAttempts: number): ClaimedGuidedReviewJob[] {
+  /**
+   * Take the drivable jobs that failed `maxAttempts` times in a row off the drive path until
+   * `holdUntil`, returning them. The row stays until {@link complete} confirms the job was settled
+   * as abandoned, so an abandonment that fails is offered again once the hold lapses.
+   */
+  holdExhausted(now: number, maxAttempts: number, holdUntil: number): ClaimedGuidedReviewJob[] {
     const rows = queryAll<QueueRow>(
       this.db,
       `SELECT job_key, workspace_id, job, attempts FROM guided_review_queue
@@ -134,7 +138,11 @@ export class SqliteGuidedReviewQueue {
       maxAttempts,
     )
     for (const row of rows) {
-      this.db.prepare('DELETE FROM guided_review_queue WHERE job_key = ?').run(row.job_key)
+      this.db
+        .prepare(
+          `UPDATE guided_review_queue SET state = 'active', lease_until = ? WHERE job_key = ?`,
+        )
+        .run(holdUntil, row.job_key)
     }
     return rows.map(toClaimed)
   }

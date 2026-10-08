@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // One exploration thread: its messages, the comment drafts it produced, and a composer. While its
 // own answer is pending the composer waits; other threads are unaffected.
+import { isPostableDraft } from '@cat-factory/contracts'
 import type { GuidedReviewCommentDraft, GuidedReviewThreadView } from '~/types/domain'
 import MarkdownProse from '~/components/common/MarkdownProse.vue'
 import GuidedReviewFailure from '~/components/guidedReview/GuidedReviewFailure.vue'
@@ -55,8 +56,16 @@ async function send(): Promise<void> {
 const selected = ref(new Set<string>())
 const summary = ref('')
 const posting = ref(false)
-const postResult = ref<{ posted: number; failed: number; skipped: number } | null>(null)
-const toPost = computed(() => postableSelection(props.drafts, selected.value))
+const postResult = ref<{
+  posted: number
+  failed: number
+  skipped: number
+  summaryError: string | null
+} | null>(null)
+// A `posting` draft becomes postable again once its claim outlives the lease, so the clock only
+// runs while one is on screen.
+const now = useNowTick(30_000, () => props.drafts.some((d) => d.status === 'posting'))
+const toPost = computed(() => postableSelection(props.drafts, selected.value, now.value))
 
 function setSelected(id: string, value: boolean): void {
   const next = new Set(selected.value)
@@ -70,13 +79,16 @@ async function post(): Promise<void> {
   posting.value = true
   try {
     const result = await store.postDrafts(props.sessionId, toPost.value, summary.value)
+    const summaryFailed = result.summary.posted === false
     postResult.value = {
       posted: result.posted,
       failed: result.failed,
       skipped: result.skipped.length,
+      summaryError: summaryFailed ? (result.summary.error ?? '') : null,
     }
     selected.value = new Set()
-    summary.value = ''
+    // A summary the host refused stays in the box, so the reviewer can post it with a retry.
+    if (!summaryFailed) summary.value = ''
   } catch (error) {
     present(error, 'guidedReview.errors.postDrafts')
   } finally {
@@ -171,6 +183,7 @@ async function draftComments(): Promise<void> {
           :session-id="sessionId"
           :draft="d"
           :selected="selected.has(d.id)"
+          :postable="isPostableDraft(d, now)"
           @update:selected="setSelected(d.id, $event)"
         />
         <div class="space-y-2 rounded-md bg-elevated p-2" data-testid="guided-review-post">
@@ -194,6 +207,13 @@ async function draftComments(): Promise<void> {
             </UButton>
             <p v-if="postResult" class="text-xs text-muted" data-testid="guided-review-post-result">
               {{ t('guidedReview.drafts.postResult', postResult) }}
+            </p>
+            <p
+              v-if="postResult && postResult.summaryError !== null"
+              class="text-xs text-error"
+              data-testid="guided-review-post-summary-error"
+            >
+              {{ t('guidedReview.drafts.summaryFailed') }}: {{ postResult.summaryError }}
             </p>
           </div>
         </div>

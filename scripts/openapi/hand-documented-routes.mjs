@@ -106,9 +106,6 @@ export function addHandDocumentedRoutes(paths, tags) {
     },
   }
 
-  // The artifact BYTES: not a route contract, because the response is an image rather than JSON.
-  // Documented by hand for the same reason the two SSE routes above are, and named in the SDK
-  // surface table so all four clients expose it (each transport reads the body as bytes).
   // The guided review stream: the session view pushed whenever it changes, keyed by session.
   tags.add('Guided review')
   paths[`${API_PREFIX}/guided-reviews/{sessionId}/events`] = {
@@ -137,6 +134,9 @@ export function addHandDocumentedRoutes(paths, tags) {
     },
   }
 
+  // The artifact BYTES: not a route contract, because the response is an image rather than JSON.
+  // Documented by hand for the same reason the SSE routes above are, and named in the SDK
+  // surface table so all four clients expose it (each transport reads the body as bytes).
   tags.add('Evidence')
   paths[`${API_PREFIX}/artifacts/{artifactId}/blob`] = {
     get: {

@@ -75,8 +75,9 @@ public final class GuidedReviewsClient {
      * The session with its overview, its threads (each naming the answer it is waiting on, if any)
      * and its comment drafts. The overview's `status` is `pending` or `running` while it is
      * generated; a `failed` one carries `failure.reason` (`budget_exhausted`, `model_unavailable`,
-     * `repo_unavailable`, `generation_failed`, `unreadable_reply`) and the raw cause in
-     * `failure.detail`.
+     * `repo_unavailable`, `generation_failed`, `unreadable_reply`, or `head_moved` when the author
+     * pushed before it finished, which `POST /api/v1/guided-reviews/{sessionId}/refresh` resolves)
+     * and the raw cause in `failure.detail`.
      * {@code GET /api/v1/guided-reviews/{sessionId}} (operation {@code getPublicGuidedReview}).
      */
     public GuidedReviewSessionView get(String sessionId) {
@@ -160,9 +161,10 @@ public final class GuidedReviewsClient {
      * result counts `posted` and `failed` drafts (a failed one carries `postError` and can be
      * posted again) and lists in `skipped` the named drafts this call did not claim because they
      * were already posted, discarded or being posted, so a retried call never posts a comment
-     * twice. Refused `409` with `details.reason: "session_stale"` when the pull request has
-     * commits past `reviewedHeadSha`: refresh the review and check the drafts first. Posting never
-     * approves or requests changes.
+     * twice. The summary posts only alongside a draft this call claimed, so an identical retry
+     * after a complete post publishes nothing. Refused `409` with `details.reason:
+     * "session_stale"` when the pull request has commits past `reviewedHeadSha`: refresh the
+     * review and check the drafts first. Posting never approves or requests changes.
      * {@code POST /api/v1/guided-reviews/{sessionId}/comment-drafts/post} (operation {@code
      * postPublicGuidedReviewDrafts}).
      */

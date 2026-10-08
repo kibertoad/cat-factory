@@ -2195,10 +2195,11 @@ const (
 	GuidedReviewFailureReasonGenerationFailed GuidedReviewFailureReason = "generation_failed"
 	GuidedReviewFailureReasonUnreadableReply  GuidedReviewFailureReason = "unreadable_reply"
 	GuidedReviewFailureReasonDepthUnavailable GuidedReviewFailureReason = "depth_unavailable"
+	GuidedReviewFailureReasonHeadMoved        GuidedReviewFailureReason = "head_moved"
 )
 
 // GuidedReviewFailureReasonValues lists every GuidedReviewFailureReason this SDK release knows.
-var GuidedReviewFailureReasonValues = []GuidedReviewFailureReason{GuidedReviewFailureReasonBudgetExhausted, GuidedReviewFailureReasonModelUnavailable, GuidedReviewFailureReasonRepoUnavailable, GuidedReviewFailureReasonGenerationFailed, GuidedReviewFailureReasonUnreadableReply, GuidedReviewFailureReasonDepthUnavailable}
+var GuidedReviewFailureReasonValues = []GuidedReviewFailureReason{GuidedReviewFailureReasonBudgetExhausted, GuidedReviewFailureReasonModelUnavailable, GuidedReviewFailureReasonRepoUnavailable, GuidedReviewFailureReasonGenerationFailed, GuidedReviewFailureReasonUnreadableReply, GuidedReviewFailureReasonDepthUnavailable, GuidedReviewFailureReasonHeadMoved}
 
 // GuidedReviewMessage is the `GuidedReviewMessage` wire model.
 type GuidedReviewMessage struct {

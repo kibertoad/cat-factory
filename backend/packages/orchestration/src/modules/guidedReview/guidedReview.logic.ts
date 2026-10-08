@@ -19,6 +19,9 @@ import { computeCommentableLines } from '../execution/prReview.logic.js'
 /** How long a claimed job may run before another driver may take it over. */
 export const GUIDED_REVIEW_LEASE_MS = 10 * 60_000
 
+/** One model loop ends inside the lease, so a sweeper never takes over a live generation. */
+export const GUIDED_REVIEW_GENERATION_TIMEOUT_MS = GUIDED_REVIEW_LEASE_MS - 2 * 60_000
+
 /** Prompt budgets: how much PR material and thread history one call is handed up front. */
 export const OVERVIEW_INLINE_PATCH_CHARS = 60_000
 export const THREAD_HISTORY_CHARS = 40_000
@@ -235,8 +238,9 @@ export function coerceDraftProposals(raw: unknown): {
 
 /**
  * Keep the proposals a host would accept: the path is a file the PR changes and the line sits
- * inside a hunk on that side. A multi-line span whose start falls outside the hunk is narrowed to
- * its last line rather than dropped. Everything refused is named in the report.
+ * inside a hunk on that side. A multi-line span that leaves its hunk is narrowed to its last line
+ * rather than dropped, since the host refuses a span crossing hunks. Everything refused is named
+ * in the report.
  */
 export function anchorDrafts(
   proposals: DraftProposal[],
@@ -261,11 +265,36 @@ export function anchorDrafts(
       dropped.push({ path: p.path, line: p.line, side: p.side, reason: 'outside_diff' })
       continue
     }
-    const startLine = p.startLine !== null && sideLines.has(p.startLine) ? p.startLine : null
+    const startLine =
+      p.startLine !== null && spanWithinHunk(sideLines, p.startLine, p.line) ? p.startLine : null
     kept.push({ ...p, startLine })
   }
   return {
     kept,
     report: { proposed: proposals.length + incomplete.length, dropped: dropped.slice(0, LIST_MAX) },
   }
+}
+
+/**
+ * Whether a host would accept a comment at `anchor`: its line is inside the diff on its side and a
+ * span starts before that line without leaving its hunk. The rule `anchorDrafts` keeps by, applied
+ * to an anchor a human chose, so an edit cannot place a draft the post would then fail on.
+ */
+export function isCommentableAnchor(
+  files: GitHubChangedFile[],
+  anchor: { path: string; line: number; startLine: number | null; side: GuidedReviewDiffSide },
+): boolean {
+  const lines = computeCommentableLines(files).get(anchor.path)
+  const sideLines = anchor.side === 'RIGHT' ? lines?.right : lines?.left
+  if (!sideLines?.has(anchor.line)) return false
+  if (anchor.startLine === null) return true
+  return anchor.startLine < anchor.line && spanWithinHunk(sideLines, anchor.startLine, anchor.line)
+}
+
+/** Whether every line of `start..end` is commentable on one side, which holds only inside a hunk. */
+function spanWithinHunk(sideLines: ReadonlySet<number>, start: number, end: number): boolean {
+  for (let line = start; line <= end; line++) {
+    if (!sideLines.has(line)) return false
+  }
+  return true
 }

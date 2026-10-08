@@ -4597,9 +4597,11 @@
     "title": "Revisione guidata",
     "titleFor": "{repo} #{number}: {title}",
     "loading": "Caricamento della revisione…",
+    "outOfDate": "Gli aggiornamenti in tempo reale non sono riusciti, quindi questa vista potrebbe non essere aggiornata.",
     "openFromTask": "Esplora con la revisione guidata",
     "picker": {
       "intro": "Scegli un repository e una pull request. Ottieni una panoramica della modifica e puoi fare domande in discussioni separate.",
+      "loading": "Caricamento dei repository…",
       "noRepos": "Nessun repository è ancora collegato a questo workspace.",
       "repo": "Repository",
       "openPulls": "Pull request aperte",
@@ -4630,6 +4632,7 @@
       "generation_failed": "La chiamata al modello non è riuscita.",
       "unreadable_reply": "Il modello ha risposto in una forma illeggibile.",
       "depth_unavailable": "Le risposte approfondite con un checkout non sono ancora disponibili.",
+      "head_moved": "La pull request è andata oltre il commit revisionato. Aggiorna per revisionare il suo ultimo commit.",
       "detail": "Dettagli"
     },
     "dropped": {
@@ -4674,11 +4677,13 @@
       "sideLabel": "Lato",
       "postFailed": "L'host ha rifiutato questo commento",
       "summaryPlaceholder": "Commento di riepilogo facoltativo per la pull request",
+      "summaryFailed": "L'host ha rifiutato il commento di riepilogo",
       "post": "Pubblica {count} nella pull request",
       "postResult": "{posted} pubblicati, {failed} non pubblicati, {skipped} già gestiti."
     },
     "errors": {
       "load": "Impossibile caricare la revisione",
+      "repos": "Impossibile caricare i repository collegati",
       "open": "Impossibile aprire la revisione",
       "ask": "Impossibile fare la domanda",
       "drafts": "Impossibile richiedere le bozze di commenti",

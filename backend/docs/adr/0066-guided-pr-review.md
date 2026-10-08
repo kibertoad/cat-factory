@@ -36,6 +36,11 @@ reviewed commit (`reviewedHeadSha`), the target branch (`baseRef`) and the overv
   targeted by the placeholder insert, refuses a second question as `409 thread_busy` and leaves other
   threads untouched. On Postgres the insert first locks the thread row; without it, two writers read
   the same `MAX(seq)` and the loser fails on the `seq` index before the live-answer conflict resolves.
+- A thread that is missing, or belongs to another session, is refused as `thread_not_found` by the
+  store on both runtimes, so the lock never silently locks nothing.
+- The store writes the queued states itself: opening queues overview generation 1 and an exchange
+  writes its placeholder `pending`. A claim requires `pending` or an expired claim, so a row created
+  any other way would never be driven.
 - Asking for comment drafts is a message `kind`, so the same index covers it, and the drafts land in
   one atomic write with the message that produced them.
 - Every state transition a driver or a second writer can race on is a conditional write that reports
@@ -73,6 +78,10 @@ both flows, and its spend is filed like a pipeline step's. It is driven as a sta
 message (claim, dispatch, record the dispatch, poll); each poll refreshes the claim, and a container
 still working after 45 minutes is stopped.
 
+The host lists a pull request's changed files at its current head only, so a job reads the files
+and then the head, and fails as `head_moved` when the head is no longer `reviewedHeadSha`: an answer
+or a draft anchor never mixes the reviewed commit with a later push. A refresh re-points the session.
+
 Every model call and VCS read runs as the session's creator: `resolveInlineScope` with a `user` subject,
 and `runInitiatorScope` around each read, so the initiator-PAT policy applies.
 
@@ -83,8 +92,9 @@ The model drafts; the human posts. A draft survives only on a line inside a diff
 the caller's credential scope, never an approval or a change request, with each body passed through
 `redactSecrets` and `hostMarkdown.prose`. Each draft is claimed before the host call and settled with
 the host's per-comment answer, so a retried post never publishes a comment twice and a partial post is
-reported per draft. A post after the pull request moved past `reviewedHeadSha` is refused as
-`409 session_stale`.
+reported per draft. The optional summary comment posts only alongside a claimed draft, so a retry
+never repeats it. A post, or a move of a draft, after the pull request moved past `reviewedHeadSha`
+is refused as `409 session_stale`.
 
 ### Surfaces
 
@@ -92,8 +102,9 @@ reported per draft. A post after the pull request moved past `reviewedHeadSha` i
   change it, any member may read it.
 - `/api/v1/guided-reviews` (`read` to follow, `write` to open, ask, draft and post), with an SSE stream
   of the session view, documented in `backend/docs/public-api.md` and generated into the four SDKs and
-  MCP. A key bound to a person acts as that person; an unbound key owns its own sessions on the
-  deployment's credentials.
+  MCP. The session list is a keyset page, newest created first. A session records whether a person
+  or an API key owns it (`createdByKind`): a key bound to a person acts as that person, and an
+  unbound key owns its own sessions and runs on the workspace's scope rather than any person's.
 - A `guidedReview` workspace event carrying ids only; the SPA store refetches what it has loaded.
 
 ## Rationale

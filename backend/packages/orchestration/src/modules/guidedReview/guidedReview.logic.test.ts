@@ -6,6 +6,7 @@ import {
   coerceAnswer,
   coerceDraftProposals,
   coerceOverview,
+  isCommentableAnchor,
   partitionPatches,
   threadHistory,
   threadTitleFrom,
@@ -138,6 +139,17 @@ describe('anchorDrafts', () => {
     expect(anchorDrafts(proposals, [], files).kept[0]).toMatchObject({ startLine: null, line: 12 })
   })
 
+  it('narrows a span whose ends sit in two different hunks, which the host refuses', () => {
+    const twoHunks = '@@ -1,2 +1,2 @@\n a\n b\n@@ -20,2 +20,2 @@\n c\n d'
+    const { proposals } = coerceDraftProposals({
+      comments: [{ path: 'src/two.ts', startLine: 2, line: 21, side: 'RIGHT', body: 'Span.' }],
+    })
+    expect(anchorDrafts(proposals, [], [file('src/two.ts', twoHunks)]).kept[0]).toMatchObject({
+      startLine: null,
+      line: 21,
+    })
+  })
+
   it('refuses any line of a file the host returned no patch for', () => {
     const { proposals } = coerceDraftProposals({
       comments: [{ path: 'src/blob.png', line: 1, side: 'RIGHT', body: 'Binary.' }],
@@ -185,5 +197,27 @@ describe('threadTitleFrom', () => {
   it('takes the first line and cuts it to the title limit', () => {
     expect(threadTitleFrom('  Why retries?\nmore detail')).toBe('Why retries?')
     expect(threadTitleFrom('q'.repeat(200))).toHaveLength(80)
+  })
+})
+
+describe('isCommentableAnchor', () => {
+  const twoHunks = file('src/two.ts', '@@ -1,2 +1,2 @@\n a\n b\n@@ -20,2 +20,2 @@\n c\n d')
+  const at = (line: number, startLine: number | null = null) => ({
+    path: 'src/two.ts',
+    line,
+    startLine,
+    side: 'RIGHT' as const,
+  })
+
+  it('accepts a line inside the diff and a span inside one hunk', () => {
+    expect(isCommentableAnchor([twoHunks], at(21))).toBe(true)
+    expect(isCommentableAnchor([twoHunks], at(21, 20))).toBe(true)
+  })
+
+  it('refuses a line outside the diff, a span across hunks and an inverted span', () => {
+    expect(isCommentableAnchor([twoHunks], at(10))).toBe(false)
+    expect(isCommentableAnchor([twoHunks], at(21, 2))).toBe(false)
+    expect(isCommentableAnchor([twoHunks], at(20, 21))).toBe(false)
+    expect(isCommentableAnchor([twoHunks], { ...at(21), path: 'src/other.ts' })).toBe(false)
   })
 })

@@ -1,7 +1,6 @@
-import type { ReviewTargetReason } from '@cat-factory/contracts'
+import { resolvePrNumber, type ReviewTargetReason } from '@cat-factory/contracts'
 import type { Block, Logger, ResolveRunRepoContext } from '@cat-factory/kernel'
 import { runBestEffort, ValidationError } from '@cat-factory/kernel'
-import { resolvePrNumber } from '@cat-factory/agents'
 
 // ---------------------------------------------------------------------------
 // The `review` task's TARGET: the existing pull request the read-only `pr-reviewer` is pointed

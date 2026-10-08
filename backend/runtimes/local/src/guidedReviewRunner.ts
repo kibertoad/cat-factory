@@ -4,7 +4,7 @@ import type {
   GuidedReviewRunner,
   Logger,
 } from '@cat-factory/kernel'
-import { getErrorMessage, runBestEffort } from '@cat-factory/kernel'
+import { describeError, runBestEffort } from '@cat-factory/kernel'
 import type { ClaimedGuidedReviewJob, SqliteGuidedReviewQueue } from './sqlite/guidedReviewQueue.js'
 
 export interface SqliteGuidedReviewRunnerOptions {
@@ -13,7 +13,7 @@ export interface SqliteGuidedReviewRunnerOptions {
   /** Pause before retrying a job whose drive threw. */
   errorBackoffMs: number
   sweepIntervalMs: number
-  /** Consecutive failed drives before a job is dropped. */
+  /** Consecutive failed drives before a job is given up on and settled as abandoned. */
   maxAttempts: number
   concurrency: number
 }
@@ -72,24 +72,18 @@ export class SqliteGuidedReviewRunner implements GuidedReviewRunner {
   private drain(): void {
     const driver = this.driver
     if (!driver || this.stopped) return
-    for (const dropped of this.queue.evictExhausted(this.now(), this.opts.maxAttempts)) {
-      this.log.error('guided-review job dropped after repeated failures', {
+    const now = this.now()
+    for (const dropped of this.queue.holdExhausted(
+      now,
+      this.opts.maxAttempts,
+      now + this.opts.leaseMs,
+    )) {
+      this.log.error('guided-review job given up on after repeated failures', {
         workspaceId: dropped.workspaceId,
         job: dropped.key,
         attempts: dropped.attempts,
       })
-      // Settle the row too, or the mothership keeps it live and its thread reads as busy forever.
-      void runBestEffort(
-        this.log,
-        'guidedReview.abandon',
-        () =>
-          driver.abandonJob(
-            dropped.workspaceId,
-            dropped.job,
-            `The local queue gave up after ${dropped.attempts} failed attempts`,
-          ),
-        { workspaceId: dropped.workspaceId, job: dropped.key },
-      )
+      void this.abandon(driver, dropped)
     }
     while (this.running.size < this.opts.concurrency) {
       const claimed = this.queue.claim(this.now(), this.opts.leaseMs, this.running)
@@ -118,7 +112,7 @@ export class SqliteGuidedReviewRunner implements GuidedReviewRunner {
       this.log.warn('guided-review job failed; retrying after backoff', {
         workspaceId: claimed.workspaceId,
         job: claimed.key,
-        err: getErrorMessage(error),
+        ...describeError(error),
       })
       this.queue.deferFailure(claimed.key, this.now() + this.opts.errorBackoffMs)
     } finally {
@@ -138,5 +132,29 @@ export class SqliteGuidedReviewRunner implements GuidedReviewRunner {
     if (this.wakeTimer) clearTimeout(this.wakeTimer)
     this.wakeTimer = setTimeout(() => this.drain(), Math.max(1, due - this.now() + 1))
     this.wakeTimer.unref?.()
+  }
+
+  /**
+   * Settle a given-up job's row as failed, or the mothership keeps it live and its thread reads as
+   * busy forever. The queue row goes only once that lands: the mothership being unreachable is the
+   * likeliest reason the drives failed, and nothing else on this node would retry it.
+   */
+  private async abandon(
+    driver: GuidedReviewJobDriver,
+    dropped: ClaimedGuidedReviewJob,
+  ): Promise<void> {
+    await runBestEffort(
+      this.log,
+      'guidedReview.abandon',
+      async () => {
+        await driver.abandonJob(
+          dropped.workspaceId,
+          dropped.job,
+          `The local queue gave up after ${dropped.attempts} failed attempts`,
+        )
+        this.queue.complete(dropped.key)
+      },
+      { workspaceId: dropped.workspaceId, job: dropped.key },
+    )
   }
 }
