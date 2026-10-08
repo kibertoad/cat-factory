@@ -16,7 +16,7 @@ export const guidedReviewSessions = pgTable(
     pr_number: integer('pr_number').notNull(),
     pr_title: text('pr_title').notNull(),
     reviewed_head_sha: text('reviewed_head_sha').notNull(),
-    base_sha: text('base_sha').notNull(),
+    base_ref: text('base_ref').notNull(),
     created_by: text('created_by').notNull(),
     overview_status: text('overview_status').notNull(),
     overview_generation: integer('overview_generation').notNull(),
@@ -24,6 +24,7 @@ export const guidedReviewSessions = pgTable(
     overview_error: text('overview_error'),
     overview_model: text('overview_model'),
     overview_claimed_at: bigint('overview_claimed_at', { mode: 'number' }),
+    overview_driver: text('overview_driver').notNull(),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
     updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
   },
@@ -35,7 +36,11 @@ export const guidedReviewSessions = pgTable(
       t.pr_number,
       t.created_by,
     ),
-    index('idx_guided_review_sessions_stale').on(t.overview_status, t.updated_at),
+    index('idx_guided_review_sessions_stale').on(
+      t.overview_driver,
+      t.overview_status,
+      t.updated_at,
+    ),
   ],
 )
 
@@ -73,6 +78,7 @@ export const guidedReviewMessages = pgTable(
     error: text('error'),
     model: text('model'),
     claimed_at: bigint('claimed_at', { mode: 'number' }),
+    driver: text('driver').notNull(),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
     updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
   },
@@ -83,7 +89,7 @@ export const guidedReviewMessages = pgTable(
     uniqueIndex('idx_guided_review_messages_live')
       .on(t.workspace_id, t.thread_id)
       .where(sql`${t.role} = 'assistant' AND ${t.status} IN ('pending', 'running')`),
-    index('idx_guided_review_messages_stale').on(t.status, t.updated_at),
+    index('idx_guided_review_messages_stale').on(t.driver, t.status, t.updated_at),
   ],
 )
 

@@ -1,7 +1,7 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "da96e51c-dcab-4959-ad36-81833bb88fcb",
+  "id": "06368b2b-a89f-4e5c-b48c-6e68fba55ee3",
   "prevIds": [
     "4539d749-10a8-47e5-aca7-9377b61ab6d1"
   ],
@@ -14386,6 +14386,19 @@
       "table": "guided_review_messages"
     },
     {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "driver",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "guided_review_messages"
+    },
+    {
       "type": "bigint",
       "typeSchema": null,
       "notNull": true,
@@ -14536,7 +14549,7 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "base_sha",
+      "name": "base_ref",
       "entityType": "columns",
       "schema": "public",
       "table": "guided_review_sessions"
@@ -14628,6 +14641,19 @@
       "generated": null,
       "identity": null,
       "name": "overview_claimed_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "guided_review_sessions"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "overview_driver",
       "entityType": "columns",
       "schema": "public",
       "table": "guided_review_sessions"
@@ -21546,6 +21572,13 @@
       "nameExplicit": true,
       "columns": [
         {
+          "value": "driver",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
           "value": "status",
           "isExpression": false,
           "asc": true,
@@ -21615,6 +21648,13 @@
     {
       "nameExplicit": true,
       "columns": [
+        {
+          "value": "overview_driver",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
         {
           "value": "overview_status",
           "isExpression": false,

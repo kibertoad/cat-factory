@@ -16,6 +16,7 @@ import type { ConformanceHarness } from '../harness.js'
 export function defineGuidedReviewStoreConformance(harness: ConformanceHarness): void {
   describe('guided PR review store', () => {
     const LEASE = 60_000
+    const HOST = 'deployment'
 
     function session(over: Partial<GuidedReviewSession> = {}): GuidedReviewSession {
       return {
@@ -27,7 +28,7 @@ export function defineGuidedReviewStoreConformance(harness: ConformanceHarness):
         prNumber: 7,
         prTitle: 'Add checkout',
         reviewedHeadSha: 'head1',
-        baseSha: 'base1',
+        baseRef: 'base1',
         createdBy: 'usr_1',
         overview: { status: 'pending', generation: 1, content: null, error: null, model: null },
         createdAt: 1,
@@ -92,7 +93,7 @@ export function defineGuidedReviewStoreConformance(harness: ConformanceHarness):
       const app = harness.makeApp()
       const repo = app.guidedReviewRepository()
       const { workspace } = await app.createWorkspace()
-      await repo.openSession(workspace.id, session())
+      await repo.openSession(workspace.id, session(), HOST)
       for (const id of ['grt_1', 'grt_2']) {
         await repo.createThread(workspace.id, {
           id,
@@ -111,8 +112,8 @@ export function defineGuidedReviewStoreConformance(harness: ConformanceHarness):
       const repo = app.guidedReviewRepository()
       const { workspace } = await app.createWorkspace()
       const [a, b] = await Promise.all([
-        repo.openSession(workspace.id, session({ id: 'grs_a' })),
-        repo.openSession(workspace.id, session({ id: 'grs_b' })),
+        repo.openSession(workspace.id, session({ id: 'grs_a' }), HOST),
+        repo.openSession(workspace.id, session({ id: 'grs_b' }), HOST),
       ])
       expect(a.id).toBe(b.id)
       expect(await repo.listSessions(workspace.id, { repoId: '42', prNumber: 7 })).toHaveLength(1)
@@ -120,6 +121,7 @@ export function defineGuidedReviewStoreConformance(harness: ConformanceHarness):
       const other = await repo.openSession(
         workspace.id,
         session({ id: 'grs_c', createdBy: 'usr_2' }),
+        HOST,
       )
       expect(other.id).toBe('grs_c')
     })
@@ -127,9 +129,9 @@ export function defineGuidedReviewStoreConformance(harness: ConformanceHarness):
     it('admits one live answer per thread and leaves other threads free', async () => {
       const { repo, ws } = await seeded()
       const [first, second, elsewhere] = await Promise.all([
-        repo.appendExchange(ws, message('q1', 'grt_1'), assistant('a1', 'grt_1')),
-        repo.appendExchange(ws, message('q2', 'grt_1'), assistant('a2', 'grt_1')),
-        repo.appendExchange(ws, message('q3', 'grt_2'), assistant('a3', 'grt_2')),
+        repo.appendExchange(ws, message('q1', 'grt_1'), assistant('a1', 'grt_1'), HOST),
+        repo.appendExchange(ws, message('q2', 'grt_1'), assistant('a2', 'grt_1'), HOST),
+        repo.appendExchange(ws, message('q3', 'grt_2'), assistant('a3', 'grt_2'), HOST),
       ])
       const outcomes = [first, second].map((r) => r.ok)
       expect(outcomes.sort()).toEqual([false, true])
@@ -149,7 +151,7 @@ export function defineGuidedReviewStoreConformance(harness: ConformanceHarness):
 
     it('claims an answer once, re-claims it past the lease, and frees the thread on settle', async () => {
       const { repo, ws } = await seeded()
-      await repo.appendExchange(ws, message('q1', 'grt_1'), assistant('a1', 'grt_1'))
+      await repo.appendExchange(ws, message('q1', 'grt_1'), assistant('a1', 'grt_1'), HOST)
 
       expect(await repo.claimMessage(ws, 'a1', 0, 100)).toBe(true)
       expect(await repo.claimMessage(ws, 'a1', 100, 150)).toBe(false)
@@ -169,7 +171,12 @@ export function defineGuidedReviewStoreConformance(harness: ConformanceHarness):
       expect(settled?.status).toBe('complete')
       expect(settled?.citations).toEqual(outcome.citations)
 
-      const next = await repo.appendExchange(ws, message('q2', 'grt_1'), assistant('a2', 'grt_1'))
+      const next = await repo.appendExchange(
+        ws,
+        message('q2', 'grt_1'),
+        assistant('a2', 'grt_1'),
+        HOST,
+      )
       expect(next.ok && [next.question.seq, next.placeholder.seq]).toEqual([3, 4])
       expect((await repo.listThreads(ws, 'grs_1'))[0]?.pendingMessageId).toBe('a2')
     })
@@ -177,9 +184,9 @@ export function defineGuidedReviewStoreConformance(harness: ConformanceHarness):
     it('never lets a superseded overview generation land', async () => {
       const { repo, ws } = await seeded()
       expect(await repo.claimOverview(ws, 'grs_1', 1, 0, 100)).toBe(true)
-      const refresh = { prTitle: 'Add checkout v2', reviewedHeadSha: 'head2', baseSha: 'base1' }
-      expect(await repo.restartOverview(ws, 'grs_1', 1, refresh, 110)).toBe(true)
-      expect(await repo.restartOverview(ws, 'grs_1', 1, refresh, 111)).toBe(false)
+      const refresh = { prTitle: 'Add checkout v2', reviewedHeadSha: 'head2', baseRef: 'base1' }
+      expect(await repo.restartOverview(ws, 'grs_1', 1, refresh, HOST, 110)).toBe(true)
+      expect(await repo.restartOverview(ws, 'grs_1', 1, refresh, HOST, 111)).toBe(false)
 
       const failed = { status: 'failed' as const, error: 'late', model: null }
       expect(await repo.settleOverview(ws, 'grs_1', 1, failed, 120)).toBe(false)
@@ -213,6 +220,7 @@ export function defineGuidedReviewStoreConformance(harness: ConformanceHarness):
         ws,
         message('q1', 'grt_1'),
         assistant('a1', 'grt_1', 'comment-drafts'),
+        HOST,
       )
       await repo.claimMessage(ws, 'a1', 0, 100)
       const outcome = {
@@ -270,11 +278,11 @@ export function defineGuidedReviewStoreConformance(harness: ConformanceHarness):
 
     it('lists unsettled work older than the cutoff, and deleting a session removes its rows', async () => {
       const { repo, ws } = await seeded()
-      await repo.appendExchange(ws, message('q1', 'grt_1'), assistant('a1', 'grt_1'))
+      await repo.appendExchange(ws, message('q1', 'grt_1'), assistant('a1', 'grt_1'), HOST)
       // The scan spans every workspace and the store is shared with the other tests, so assert
       // over this workspace's slice only, with a limit no sibling's rows can exhaust.
       const ours = async (cutoff: number) =>
-        (await repo.listStaleJobs(cutoff, 10_000)).filter((j) => j.workspaceId === ws)
+        (await repo.listStaleJobs(HOST, cutoff, 10_000)).filter((j) => j.workspaceId === ws)
       expect(await ours(50)).toEqual([
         { kind: 'overview', workspaceId: ws, sessionId: 'grs_1', generation: 1 },
         { kind: 'message', workspaceId: ws, messageId: 'a1' },
@@ -282,6 +290,9 @@ export function defineGuidedReviewStoreConformance(harness: ConformanceHarness):
       expect(await ours(5)).toEqual([
         { kind: 'overview', workspaceId: ws, sessionId: 'grs_1', generation: 1 },
       ])
+      // Another host never re-drives this one's work: it would answer with the wrong credentials.
+      const elsewhere = await repo.listStaleJobs('node:laptop', 50, 10_000)
+      expect(elsewhere.filter((j) => j.workspaceId === ws)).toEqual([])
 
       await repo.deleteSession(ws, 'grs_1')
       expect(await repo.getSession(ws, 'grs_1')).toBeNull()

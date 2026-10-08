@@ -18,7 +18,7 @@ export interface GuidedReviewSessionFilter {
 export interface GuidedReviewRefresh {
   prTitle: string
   reviewedHeadSha: string
-  baseSha: string
+  baseRef: string
 }
 
 /** How a terminal overview generation ended. */
@@ -46,6 +46,13 @@ export type GuidedReviewDraftPostOutcome =
   | { id: string; status: 'posted'; postedUrl: string | null }
   | { id: string; status: 'failed'; error: string }
 
+/**
+ * Which host drives a session's background work: `deployment` for the hosted engine, or
+ * `node:<nodeId>` for a mothership-mode node. Recorded when work is queued so each host's sweeper
+ * re-drives only its own jobs; another host would answer with the wrong model credentials.
+ */
+export type GuidedReviewDriver = string
+
 /** A unit of background work the sweeper may have to re-drive. */
 export type GuidedReviewStaleJob =
   | { kind: 'overview'; workspaceId: string; sessionId: string; generation: number }
@@ -63,7 +70,11 @@ export interface GuidedReviewRepository {
    * Insert `session` unless the creator already has one for the same PR; either way, return the
    * row that is stored. Uniqueness is a database index, so two concurrent opens converge.
    */
-  openSession(workspaceId: string, session: GuidedReviewSession): Promise<GuidedReviewSession>
+  openSession(
+    workspaceId: string,
+    session: GuidedReviewSession,
+    driver: GuidedReviewDriver,
+  ): Promise<GuidedReviewSession>
   getSession(workspaceId: string, id: string): Promise<GuidedReviewSession | null>
   listSessions(
     workspaceId: string,
@@ -81,6 +92,7 @@ export interface GuidedReviewRepository {
     id: string,
     expectedGeneration: number,
     refresh: GuidedReviewRefresh,
+    driver: GuidedReviewDriver,
     now: number,
   ): Promise<boolean>
   /**
@@ -118,6 +130,7 @@ export interface GuidedReviewRepository {
     workspaceId: string,
     question: Omit<GuidedReviewMessage, 'seq'>,
     placeholder: Omit<GuidedReviewMessage, 'seq'>,
+    driver: GuidedReviewDriver,
   ): Promise<
     | { ok: true; question: GuidedReviewMessage; placeholder: GuidedReviewMessage }
     | { ok: false; reason: 'thread_busy' }
@@ -176,6 +189,10 @@ export interface GuidedReviewRepository {
     now: number,
   ): Promise<void>
 
-  /** Background work across every workspace not settled since `cutoff`, oldest first. */
-  listStaleJobs(cutoff: number, limit: number): Promise<GuidedReviewStaleJob[]>
+  /** `driver`'s background work, across every workspace, not settled since `cutoff`, oldest first. */
+  listStaleJobs(
+    driver: GuidedReviewDriver,
+    cutoff: number,
+    limit: number,
+  ): Promise<GuidedReviewStaleJob[]>
 }

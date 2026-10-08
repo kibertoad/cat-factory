@@ -1,6 +1,7 @@
 import type {
   GuidedReviewCommentDraft,
   GuidedReviewDraftEdit,
+  GuidedReviewDriver,
   GuidedReviewDraftPostOutcome,
   GuidedReviewMessage,
   GuidedReviewMessageOutcome,
@@ -26,7 +27,7 @@ interface SessionRow {
   pr_number: number
   pr_title: string
   reviewed_head_sha: string
-  base_sha: string
+  base_ref: string
   created_by: string
   overview_status: string
   overview_generation: number
@@ -105,7 +106,7 @@ function rowToSession(row: SessionRow): GuidedReviewSession {
     prNumber: row.pr_number,
     prTitle: row.pr_title,
     reviewedHeadSha: row.reviewed_head_sha,
-    baseSha: row.base_sha,
+    baseRef: row.base_ref,
     createdBy: row.created_by,
     overview: {
       status: row.overview_status as GuidedReviewSession['overview']['status'],
@@ -183,14 +184,19 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
     this.db = db
   }
 
-  async openSession(workspaceId: string, s: GuidedReviewSession): Promise<GuidedReviewSession> {
+  async openSession(
+    workspaceId: string,
+    s: GuidedReviewSession,
+    driver: GuidedReviewDriver,
+  ): Promise<GuidedReviewSession> {
     await this.db
       .prepare(
         `INSERT INTO guided_review_sessions
            (workspace_id, id, provider, repo_id, owner, repo, pr_number, pr_title,
-            reviewed_head_sha, base_sha, created_by, overview_status, overview_generation,
-            overview_content, overview_error, overview_model, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            reviewed_head_sha, base_ref, created_by, overview_status, overview_generation,
+            overview_content, overview_error, overview_model, overview_driver, created_at,
+            updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (workspace_id, repo_id, pr_number, created_by) DO NOTHING`,
       )
       .bind(
@@ -203,13 +209,14 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
         s.prNumber,
         s.prTitle,
         s.reviewedHeadSha,
-        s.baseSha,
+        s.baseRef,
         s.createdBy,
         s.overview.status,
         s.overview.generation,
         s.overview.content ? JSON.stringify(s.overview.content) : null,
         s.overview.error,
         s.overview.model,
+        driver,
         s.createdAt,
         s.updatedAt,
       )
@@ -284,12 +291,13 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
     id: string,
     expectedGeneration: number,
     refresh: GuidedReviewRefresh,
+    driver: GuidedReviewDriver,
     now: number,
   ): Promise<boolean> {
     const result = await this.db
       .prepare(
         `UPDATE guided_review_sessions SET
-           pr_title = ?, reviewed_head_sha = ?, base_sha = ?,
+           pr_title = ?, reviewed_head_sha = ?, base_ref = ?, overview_driver = ?,
            overview_status = 'pending', overview_generation = overview_generation + 1,
            overview_content = NULL, overview_error = NULL, overview_model = NULL,
            overview_claimed_at = NULL, updated_at = ?
@@ -298,7 +306,8 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
       .bind(
         refresh.prTitle,
         refresh.reviewedHeadSha,
-        refresh.baseSha,
+        refresh.baseRef,
+        driver,
         now,
         workspaceId,
         id,
@@ -399,6 +408,7 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
     workspaceId: string,
     question: Omit<GuidedReviewMessage, 'seq'>,
     placeholder: Omit<GuidedReviewMessage, 'seq'>,
+    driver: GuidedReviewDriver,
   ): Promise<
     | { ok: true; question: GuidedReviewMessage; placeholder: GuidedReviewMessage }
     | { ok: false; reason: 'thread_busy' }
@@ -407,7 +417,7 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
     // SELECT needs its WHERE so SQLite does not read ON CONFLICT as a join constraint). The
     // question follows only if that placeholder row now exists. Both sit in one serialized batch.
     const columns = `(workspace_id, id, thread_id, session_id, seq, role, kind, depth, content,
-                      status, citations, error, model, created_at, updated_at)`
+                      status, citations, error, model, created_at, updated_at, driver)`
     const values = (m: Omit<GuidedReviewMessage, 'seq'>) => [
       workspaceId,
       m.id,
@@ -423,6 +433,7 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
       m.model,
       m.createdAt,
       m.updatedAt,
+      driver,
     ]
     const placePlaceholder = this.db
       .prepare(
@@ -430,7 +441,7 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
          SELECT ?1, ?2, ?3, ?4,
                 (SELECT COALESCE(MAX(seq), 0) + 2 FROM guided_review_messages
                   WHERE workspace_id = ?1 AND thread_id = ?3),
-                ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14
+                ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15
          WHERE true
          ON CONFLICT (workspace_id, thread_id)
            WHERE role = 'assistant' AND status IN ${LIVE} DO NOTHING`,
@@ -439,9 +450,9 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
     const placeQuestion = this.db
       .prepare(
         `INSERT INTO guided_review_messages ${columns}
-         SELECT ?1, ?2, ?3, ?4, p.seq - 1, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14
+         SELECT ?1, ?2, ?3, ?4, p.seq - 1, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15
            FROM guided_review_messages p
-          WHERE p.workspace_id = ?1 AND p.id = ?15`,
+          WHERE p.workspace_id = ?1 AND p.id = ?16`,
       )
       .bind(...values(question), placeholder.id)
     const [placed] = await this.db.batch([placePlaceholder, placeQuestion])
@@ -683,7 +694,11 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
     )
   }
 
-  async listStaleJobs(cutoff: number, limit: number): Promise<GuidedReviewStaleJob[]> {
+  async listStaleJobs(
+    driver: GuidedReviewDriver,
+    cutoff: number,
+    limit: number,
+  ): Promise<GuidedReviewStaleJob[]> {
     const [overviews, messages] = await this.db.batch<{
       workspace_id: string
       id: string
@@ -693,17 +708,17 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
       this.db
         .prepare(
           `SELECT workspace_id, id, overview_generation, updated_at FROM guided_review_sessions
-             WHERE overview_status IN ${LIVE} AND updated_at < ?
+             WHERE overview_driver = ? AND overview_status IN ${LIVE} AND updated_at < ?
              ORDER BY updated_at LIMIT ?`,
         )
-        .bind(cutoff, limit),
+        .bind(driver, cutoff, limit),
       this.db
         .prepare(
           `SELECT workspace_id, id, updated_at FROM guided_review_messages
-             WHERE role = 'assistant' AND status IN ${LIVE} AND updated_at < ?
+             WHERE driver = ? AND role = 'assistant' AND status IN ${LIVE} AND updated_at < ?
              ORDER BY updated_at LIMIT ?`,
         )
-        .bind(cutoff, limit),
+        .bind(driver, cutoff, limit),
     ])
     const jobs: { at: number; job: GuidedReviewStaleJob }[] = [
       ...(overviews?.results ?? []).map((r) => ({

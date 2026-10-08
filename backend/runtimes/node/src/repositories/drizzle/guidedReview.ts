@@ -1,6 +1,7 @@
 import type {
   GuidedReviewCommentDraft,
   GuidedReviewDraftEdit,
+  GuidedReviewDriver,
   GuidedReviewDraftPostOutcome,
   GuidedReviewMessage,
   GuidedReviewMessageOutcome,
@@ -49,7 +50,7 @@ function rowToSession(row: SessionRow): GuidedReviewSession {
     prNumber: row.pr_number,
     prTitle: row.pr_title,
     reviewedHeadSha: row.reviewed_head_sha,
-    baseSha: row.base_sha,
+    baseRef: row.base_ref,
     createdBy: row.created_by,
     overview: {
       status: row.overview_status as GuidedReviewSession['overview']['status'],
@@ -114,8 +115,13 @@ function rowToDraft(row: DraftRow): GuidedReviewCommentDraft {
   }
 }
 
-function messageValues(workspaceId: string, m: Omit<GuidedReviewMessage, 'seq'>) {
+function messageValues(
+  workspaceId: string,
+  m: Omit<GuidedReviewMessage, 'seq'>,
+  driver: GuidedReviewDriver,
+) {
   return {
+    driver,
     workspace_id: workspaceId,
     id: m.id,
     thread_id: m.threadId,
@@ -155,7 +161,11 @@ function settledMessageSet(outcome: GuidedReviewMessageOutcome, now: number) {
 export class DrizzleGuidedReviewRepository implements GuidedReviewRepository {
   constructor(private readonly db: DrizzleDb) {}
 
-  async openSession(workspaceId: string, s: GuidedReviewSession): Promise<GuidedReviewSession> {
+  async openSession(
+    workspaceId: string,
+    s: GuidedReviewSession,
+    driver: GuidedReviewDriver,
+  ): Promise<GuidedReviewSession> {
     await this.db
       .insert(sessions)
       .values({
@@ -168,13 +178,14 @@ export class DrizzleGuidedReviewRepository implements GuidedReviewRepository {
         pr_number: s.prNumber,
         pr_title: s.prTitle,
         reviewed_head_sha: s.reviewedHeadSha,
-        base_sha: s.baseSha,
+        base_ref: s.baseRef,
         created_by: s.createdBy,
         overview_status: s.overview.status,
         overview_generation: s.overview.generation,
         overview_content: s.overview.content ? JSON.stringify(s.overview.content) : null,
         overview_error: s.overview.error,
         overview_model: s.overview.model,
+        overview_driver: driver,
         created_at: s.createdAt,
         updated_at: s.updatedAt,
       })
@@ -245,14 +256,16 @@ export class DrizzleGuidedReviewRepository implements GuidedReviewRepository {
     id: string,
     expectedGeneration: number,
     refresh: GuidedReviewRefresh,
+    driver: GuidedReviewDriver,
     now: number,
   ): Promise<boolean> {
     const rows = await this.db
       .update(sessions)
       .set({
+        overview_driver: driver,
         pr_title: refresh.prTitle,
         reviewed_head_sha: refresh.reviewedHeadSha,
-        base_sha: refresh.baseSha,
+        base_ref: refresh.baseRef,
         overview_status: 'pending',
         overview_generation: sql`${sessions.overview_generation} + 1`,
         overview_content: null,
@@ -372,6 +385,7 @@ export class DrizzleGuidedReviewRepository implements GuidedReviewRepository {
     workspaceId: string,
     question: Omit<GuidedReviewMessage, 'seq'>,
     placeholder: Omit<GuidedReviewMessage, 'seq'>,
+    driver: GuidedReviewDriver,
   ): Promise<
     | { ok: true; question: GuidedReviewMessage; placeholder: GuidedReviewMessage }
     | { ok: false; reason: 'thread_busy' }
@@ -390,7 +404,7 @@ export class DrizzleGuidedReviewRepository implements GuidedReviewRepository {
           AND ${messages.thread_id} = ${placeholder.threadId})`
       const [placed] = await tx
         .insert(messages)
-        .values({ ...messageValues(workspaceId, placeholder), seq: nextSeq })
+        .values({ ...messageValues(workspaceId, placeholder, driver), seq: nextSeq })
         .onConflictDoNothing({
           target: [messages.workspace_id, messages.thread_id],
           // Must mirror idx_guided_review_messages_live exactly.
@@ -400,7 +414,7 @@ export class DrizzleGuidedReviewRepository implements GuidedReviewRepository {
       if (!placed) return { ok: false, reason: 'thread_busy' } as const
       const [asked] = await tx
         .insert(messages)
-        .values({ ...messageValues(workspaceId, question), seq: placed.seq - 1 })
+        .values({ ...messageValues(workspaceId, question, driver), seq: placed.seq - 1 })
         .returning()
       if (!asked) throw new Error(`guided review question ${question.id} was not stored`)
       return { ok: true, question: rowToMessage(asked), placeholder: rowToMessage(placed) } as const
@@ -618,7 +632,11 @@ export class DrizzleGuidedReviewRepository implements GuidedReviewRepository {
     })
   }
 
-  async listStaleJobs(cutoff: number, limit: number): Promise<GuidedReviewStaleJob[]> {
+  async listStaleJobs(
+    driver: GuidedReviewDriver,
+    cutoff: number,
+    limit: number,
+  ): Promise<GuidedReviewStaleJob[]> {
     const [overviews, answers] = await Promise.all([
       this.db
         .select({
@@ -628,7 +646,13 @@ export class DrizzleGuidedReviewRepository implements GuidedReviewRepository {
           at: sessions.updated_at,
         })
         .from(sessions)
-        .where(and(inArray(sessions.overview_status, [...LIVE]), lt(sessions.updated_at, cutoff)))
+        .where(
+          and(
+            eq(sessions.overview_driver, driver),
+            inArray(sessions.overview_status, [...LIVE]),
+            lt(sessions.updated_at, cutoff),
+          ),
+        )
         .orderBy(asc(sessions.updated_at))
         .limit(limit),
       this.db
@@ -636,6 +660,7 @@ export class DrizzleGuidedReviewRepository implements GuidedReviewRepository {
         .from(messages)
         .where(
           and(
+            eq(messages.driver, driver),
             eq(messages.role, 'assistant'),
             inArray(messages.status, [...LIVE]),
             lt(messages.updated_at, cutoff),

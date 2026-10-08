@@ -106,7 +106,7 @@ export const guidedReviewSessionSchema = v.object({
   prTitle: v.string(),
   /** The PR head the overview, every answer and every draft anchor were computed against. */
   reviewedHeadSha: v.string(),
-  baseSha: v.string(),
+  baseRef: v.string(),
   createdBy: v.string(),
   overview: guidedReviewOverviewSchema,
   createdAt: v.number(),

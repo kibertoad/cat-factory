@@ -10,7 +10,7 @@ CREATE TABLE guided_review_sessions (
   pr_number INTEGER NOT NULL,
   pr_title TEXT NOT NULL,
   reviewed_head_sha TEXT NOT NULL,
-  base_sha TEXT NOT NULL,
+  base_ref TEXT NOT NULL,
   created_by TEXT NOT NULL,
   overview_status TEXT NOT NULL,
   overview_generation INTEGER NOT NULL,
@@ -18,6 +18,7 @@ CREATE TABLE guided_review_sessions (
   overview_error TEXT,
   overview_model TEXT,
   overview_claimed_at INTEGER,
+  overview_driver TEXT NOT NULL,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
   PRIMARY KEY (workspace_id, id)
@@ -26,7 +27,7 @@ CREATE TABLE guided_review_sessions (
 CREATE UNIQUE INDEX idx_guided_review_sessions_pr
   ON guided_review_sessions (workspace_id, repo_id, pr_number, created_by);
 CREATE INDEX idx_guided_review_sessions_stale
-  ON guided_review_sessions (overview_status, updated_at);
+  ON guided_review_sessions (overview_driver, overview_status, updated_at);
 
 CREATE TABLE guided_review_threads (
   workspace_id TEXT NOT NULL,
@@ -56,6 +57,7 @@ CREATE TABLE guided_review_messages (
   error TEXT,
   model TEXT,
   claimed_at INTEGER,
+  driver TEXT NOT NULL,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
   PRIMARY KEY (workspace_id, id)
@@ -67,7 +69,7 @@ CREATE UNIQUE INDEX idx_guided_review_messages_live
   ON guided_review_messages (workspace_id, thread_id)
   WHERE role = 'assistant' AND status IN ('pending', 'running');
 CREATE INDEX idx_guided_review_messages_stale
-  ON guided_review_messages (status, updated_at);
+  ON guided_review_messages (driver, status, updated_at);
 
 CREATE TABLE guided_review_comment_drafts (
   workspace_id TEXT NOT NULL,

@@ -34,6 +34,7 @@ CREATE TABLE "guided_review_messages" (
 	"error" text,
 	"model" text,
 	"claimed_at" bigint,
+	"driver" text NOT NULL,
 	"created_at" bigint NOT NULL,
 	"updated_at" bigint NOT NULL,
 	CONSTRAINT "guided_review_messages_pkey" PRIMARY KEY("workspace_id","id")
@@ -49,7 +50,7 @@ CREATE TABLE "guided_review_sessions" (
 	"pr_number" integer NOT NULL,
 	"pr_title" text NOT NULL,
 	"reviewed_head_sha" text NOT NULL,
-	"base_sha" text NOT NULL,
+	"base_ref" text NOT NULL,
 	"created_by" text NOT NULL,
 	"overview_status" text NOT NULL,
 	"overview_generation" integer NOT NULL,
@@ -57,6 +58,7 @@ CREATE TABLE "guided_review_sessions" (
 	"overview_error" text,
 	"overview_model" text,
 	"overview_claimed_at" bigint,
+	"overview_driver" text NOT NULL,
 	"created_at" bigint NOT NULL,
 	"updated_at" bigint NOT NULL,
 	CONSTRAINT "guided_review_sessions_pkey" PRIMARY KEY("workspace_id","id")
@@ -76,7 +78,7 @@ CREATE TABLE "guided_review_threads" (
 CREATE INDEX "idx_guided_review_comment_drafts_session" ON "guided_review_comment_drafts" ("workspace_id","session_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "idx_guided_review_messages_seq" ON "guided_review_messages" ("workspace_id","thread_id","seq");--> statement-breakpoint
 CREATE UNIQUE INDEX "idx_guided_review_messages_live" ON "guided_review_messages" ("workspace_id","thread_id") WHERE "role" = 'assistant' AND "status" IN ('pending', 'running');--> statement-breakpoint
-CREATE INDEX "idx_guided_review_messages_stale" ON "guided_review_messages" ("status","updated_at");--> statement-breakpoint
+CREATE INDEX "idx_guided_review_messages_stale" ON "guided_review_messages" ("driver","status","updated_at");--> statement-breakpoint
 CREATE UNIQUE INDEX "idx_guided_review_sessions_pr" ON "guided_review_sessions" ("workspace_id","repo_id","pr_number","created_by");--> statement-breakpoint
-CREATE INDEX "idx_guided_review_sessions_stale" ON "guided_review_sessions" ("overview_status","updated_at");--> statement-breakpoint
+CREATE INDEX "idx_guided_review_sessions_stale" ON "guided_review_sessions" ("overview_driver","overview_status","updated_at");--> statement-breakpoint
 CREATE INDEX "idx_guided_review_threads_session" ON "guided_review_threads" ("workspace_id","session_id");
