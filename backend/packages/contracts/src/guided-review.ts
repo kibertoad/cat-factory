@@ -10,9 +10,13 @@ export const GUIDED_REVIEW_QUESTION_MAX = 4000
 export const GUIDED_REVIEW_ANSWER_MAX = 40_000
 export const GUIDED_REVIEW_COMMENT_MAX = 8000
 export const GUIDED_REVIEW_TITLE_MAX = 200
-const PROSE_MAX = 8000
+/** Cap on every free-text field other than an answer, a question, a comment and a title. */
+export const GUIDED_REVIEW_PROSE_MAX = 8000
+/** Cap on every list: overview sections, anchors, citations, dropped drafts. */
+export const GUIDED_REVIEW_LIST_MAX = 40
 const PATH_MAX = 1024
-const LIST_MAX = 40
+const PROSE_MAX = GUIDED_REVIEW_PROSE_MAX
+const LIST_MAX = GUIDED_REVIEW_LIST_MAX
 
 const title = v.pipe(v.string(), v.maxLength(GUIDED_REVIEW_TITLE_MAX))
 const prose = v.pipe(v.string(), v.maxLength(PROSE_MAX))
@@ -108,6 +112,21 @@ export const guidedReviewFailureSchema = v.object({
   detail: v.nullable(v.pipe(v.string(), v.maxLength(PROSE_MAX))),
 })
 export type GuidedReviewFailure = v.InferOutput<typeof guidedReviewFailureSchema>
+
+/**
+ * Build a failure whose `detail` fits the schema. A raw cause (a provider error, a stack) has no
+ * length bound, so a longer one is cut and says how much it lost.
+ */
+export function guidedReviewFailure(
+  reason: GuidedReviewFailureReason,
+  detail: string | null,
+): GuidedReviewFailure {
+  if (detail === null || detail.length <= PROSE_MAX) return { reason, detail }
+  const marker = (dropped: number) => `\n(${dropped} more characters cut)`
+  // Sized against the full length, whose digit count is never below the dropped count's.
+  const keep = PROSE_MAX - marker(detail.length).length
+  return { reason, detail: `${detail.slice(0, keep)}${marker(detail.length - keep)}` }
+}
 
 export const guidedReviewOverviewSchema = v.object({
   status: guidedReviewWorkStatusSchema,
