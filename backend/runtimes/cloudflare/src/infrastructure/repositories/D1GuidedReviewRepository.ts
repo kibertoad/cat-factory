@@ -1,6 +1,8 @@
 import type {
+  GuidedReviewClaim,
   GuidedReviewCommentDraft,
   GuidedReviewDraftEdit,
+  GuidedReviewDraftProposal,
   GuidedReviewDriver,
   GuidedReviewExchange,
   GuidedReviewDraftPostOutcome,
@@ -18,6 +20,10 @@ import type {
 } from '@cat-factory/kernel'
 import { GUIDED_REVIEW_LIVE_STATUSES } from '@cat-factory/contracts'
 import {
+  applyGuidedReviewDraftEdit,
+  checkGuidedReviewDraftFields,
+  encodeGuidedReviewMessageOutcome,
+  encodeGuidedReviewOverviewOutcome,
   rowToGuidedReviewDraft as rowToDraft,
   rowToGuidedReviewMessage as rowToMessage,
   rowToGuidedReviewSession as rowToSession,
@@ -181,7 +187,7 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
     generation: number,
     leaseCutoff: number,
     now: number,
-  ): Promise<boolean> {
+  ): Promise<GuidedReviewClaim | null> {
     const result = await this.db
       .prepare(
         `UPDATE guided_review_sessions SET
@@ -192,7 +198,7 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
       )
       .bind(now, now, workspaceId, id, generation, leaseCutoff)
       .run()
-    return result.meta.changes > 0
+    return result.meta.changes > 0 ? { claimedAt: now } : null
   }
 
   async settleOverview(
@@ -201,24 +207,27 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
     generation: number,
     outcome: GuidedReviewOverviewOutcome,
     now: number,
+    claim: GuidedReviewClaim,
   ): Promise<boolean> {
+    const encoded = encodeGuidedReviewOverviewOutcome(outcome)
     const result = await this.db
       .prepare(
         `UPDATE guided_review_sessions SET
            overview_status = ?, overview_content = ?, overview_failure = ?, overview_model = ?,
            overview_claimed_at = NULL, updated_at = ?
          WHERE workspace_id = ? AND id = ? AND overview_generation = ?
-           AND overview_status = 'running'`,
+           AND overview_status = 'running' AND overview_claimed_at = ?`,
       )
       .bind(
         outcome.status,
-        outcome.status === 'complete' ? JSON.stringify(outcome.content) : null,
-        outcome.status === 'failed' ? JSON.stringify(outcome.failure) : null,
+        encoded.content,
+        encoded.failure,
         outcome.model,
         now,
         workspaceId,
         id,
         generation,
+        claim.claimedAt,
       )
       .run()
     return result.meta.changes > 0
@@ -357,7 +366,7 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
     id: string,
     leaseCutoff: number,
     now: number,
-  ): Promise<boolean> {
+  ): Promise<GuidedReviewClaim | null> {
     const result = await this.db
       .prepare(
         `UPDATE guided_review_messages SET status = 'running', claimed_at = ?, updated_at = ?
@@ -366,7 +375,7 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
       )
       .bind(now, now, workspaceId, id, leaseCutoff)
       .run()
-    return result.meta.changes > 0
+    return result.meta.changes > 0 ? { claimedAt: now } : null
   }
 
   async settleMessage(
@@ -374,8 +383,9 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
     id: string,
     outcome: GuidedReviewMessageOutcome,
     now: number,
+    claim: GuidedReviewClaim,
   ): Promise<boolean> {
-    const result = await this.settleMessageStatement(workspaceId, id, outcome, now).run()
+    const result = await this.settleMessageStatement(workspaceId, id, outcome, now, claim).run()
     return result.meta.changes > 0
   }
 
@@ -384,27 +394,29 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
     id: string,
     outcome: GuidedReviewMessageOutcome,
     now: number,
+    claim: GuidedReviewClaim,
     kind?: GuidedReviewMessage['kind'],
   ): D1PreparedStatement {
-    const complete = outcome.status === 'complete'
+    const encoded = encodeGuidedReviewMessageOutcome(outcome)
     return this.db
       .prepare(
         `UPDATE guided_review_messages SET
            status = ?, content = ?, citations = ?, failure = ?, draft_report = ?, model = ?,
            claimed_at = NULL, updated_at = ?
-         WHERE workspace_id = ? AND id = ? AND status = 'running'
+         WHERE workspace_id = ? AND id = ? AND status = 'running' AND claimed_at = ?
            ${kind ? 'AND kind = ?' : ''}`,
       )
       .bind(
         outcome.status,
-        complete ? outcome.content : '',
-        JSON.stringify(complete ? outcome.citations : []),
-        complete ? null : JSON.stringify(outcome.failure),
-        complete && outcome.draftReport ? JSON.stringify(outcome.draftReport) : null,
+        encoded.content,
+        encoded.citations,
+        encoded.failure,
+        encoded.draftReport,
         outcome.model,
         now,
         workspaceId,
         id,
+        claim.claimedAt,
         ...(kind ? [kind] : []),
       )
   }
@@ -412,23 +424,25 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
   async settleDrafts(
     workspaceId: string,
     messageId: string,
-    drafts: GuidedReviewCommentDraft[],
+    drafts: GuidedReviewDraftProposal[],
     outcome: Extract<GuidedReviewMessageOutcome, { status: 'complete' }>,
     now: number,
+    claim: GuidedReviewClaim,
   ): Promise<boolean> {
-    // Each draft is inserted only while its message is still a `running` `comment-drafts`
-    // message, and takes its session and thread from that message. The message settles last, so
-    // either the whole set lands with it or none does.
+    for (const d of drafts) checkGuidedReviewDraftFields(d)
+    // Each draft is inserted only while its message is still the claimed `running`
+    // `comment-drafts` message, and takes its session and thread from that message. The message
+    // settles last, so either the whole set lands with it or none does.
     const inserts = drafts.map((d) =>
       this.db
         .prepare(
           `INSERT INTO guided_review_comment_drafts
              (workspace_id, id, session_id, thread_id, message_id, path, line, start_line, side,
               body, rationale, status, post_error, posted_url, rev, created_at, updated_at)
-           SELECT m.workspace_id, ?, m.session_id, m.thread_id, m.id, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                  ?, ?, ?
+           SELECT m.workspace_id, ?, m.session_id, m.thread_id, m.id, ?, ?, ?, ?, ?, ?,
+                  'proposed', NULL, NULL, 1, ?, ?
              FROM guided_review_messages m
-            WHERE m.workspace_id = ? AND m.id = ? AND m.status = 'running'
+            WHERE m.workspace_id = ? AND m.id = ? AND m.status = 'running' AND m.claimed_at = ?
               AND m.kind = 'comment-drafts'`,
         )
         .bind(
@@ -439,19 +453,16 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
           d.side,
           d.body,
           d.rationale,
-          d.status,
-          d.postError,
-          d.postedUrl,
-          d.rev,
-          d.createdAt,
-          d.updatedAt,
+          now,
+          now,
           workspaceId,
           messageId,
+          claim.claimedAt,
         ),
     )
     const results = await this.db.batch([
       ...inserts,
-      this.settleMessageStatement(workspaceId, messageId, outcome, now, 'comment-drafts'),
+      this.settleMessageStatement(workspaceId, messageId, outcome, now, claim, 'comment-drafts'),
     ])
     return (results.at(-1)?.meta.changes ?? 0) > 0
   }
@@ -484,6 +495,7 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
   ): Promise<GuidedReviewCommentDraft | null> {
     const current = await this.getDraft(workspaceId, id)
     if (!current || current.rev !== expectedRev) return null
+    const next = applyGuidedReviewDraftEdit(current, edit)
     const row = await this.db
       .prepare(
         `UPDATE guided_review_comment_drafts SET
@@ -493,13 +505,13 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
          RETURNING *`,
       )
       .bind(
-        edit.path ?? current.path,
-        edit.line ?? current.line,
-        edit.startLine === undefined ? current.startLine : edit.startLine,
-        edit.side ?? current.side,
-        edit.body ?? current.body,
-        edit.discard ? 'discarded' : current.status,
-        edit.discard ? null : current.postError,
+        next.path,
+        next.line,
+        next.startLine,
+        next.side,
+        next.body,
+        next.status,
+        next.postError,
         now,
         workspaceId,
         id,
@@ -538,15 +550,16 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
     workspaceId: string,
     outcomes: GuidedReviewDraftPostOutcome[],
     now: number,
-  ): Promise<void> {
-    if (outcomes.length === 0) return
-    await this.db.batch(
+  ): Promise<string[]> {
+    if (outcomes.length === 0) return []
+    const results = await this.db.batch<{ id: string }>(
       outcomes.map((o) =>
         this.db
           .prepare(
             `UPDATE guided_review_comment_drafts SET
                status = ?, posted_url = ?, post_error = ?, rev = rev + 1, updated_at = ?
-             WHERE workspace_id = ? AND id = ? AND status = 'posting'`,
+             WHERE workspace_id = ? AND id = ? AND rev = ? AND status = 'posting'
+             RETURNING id`,
           )
           .bind(
             o.status,
@@ -555,9 +568,11 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
             now,
             workspaceId,
             o.id,
+            o.rev,
           ),
       ),
     )
+    return results.flatMap((r) => r.results.map((row) => row.id))
   }
 
   async listStaleJobs(
