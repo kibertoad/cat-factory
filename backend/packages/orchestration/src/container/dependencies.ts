@@ -73,6 +73,7 @@ import type {
   GitHubInstallation,
   GitHubInstallationRepository,
   GitHubProvisioningClient,
+  GuidedReviewRepository,
   IdGenerator,
   IncidentEnrichmentConnectionRepository,
   InitiativePresetRegistry,
@@ -977,6 +978,12 @@ export interface CoreDependencies extends ContentLibraryDependencies {
    * the raw outline when no model is wired).
    */
   docInterviewRepository?: DocInterviewRepository
+  /**
+   * Persistence for guided PR review sessions (docs/initiatives/guided-pr-review.md). Both
+   * runtime facades wire it unconditionally, so the mothership persistence registry, which
+   * reflects these dependencies, serves it to a mothership-mode node.
+   */
+  guidedReviewRepository?: GuidedReviewRepository
   /**
    * Persistence for the Kaizen agent (post-run grading of agent steps + the verified-combo
    * library). Both runtime facades wire both repos unconditionally. The Kaizen module

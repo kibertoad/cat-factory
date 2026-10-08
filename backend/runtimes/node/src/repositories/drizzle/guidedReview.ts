@@ -2,9 +2,11 @@ import type {
   GuidedReviewCommentDraft,
   GuidedReviewDraftEdit,
   GuidedReviewDriver,
+  GuidedReviewExchange,
   GuidedReviewDraftPostOutcome,
   GuidedReviewMessage,
   GuidedReviewMessageOutcome,
+  GuidedReviewNewSession,
   GuidedReviewOverviewOutcome,
   GuidedReviewRefresh,
   GuidedReviewRepository,
@@ -32,31 +34,6 @@ import {
 const LIVE = ['pending', 'running'] as const
 const EDITABLE = ['proposed', 'failed'] as const
 
-function messageValues(
-  workspaceId: string,
-  m: Omit<GuidedReviewMessage, 'seq'>,
-  driver: GuidedReviewDriver,
-) {
-  return {
-    driver,
-    workspace_id: workspaceId,
-    id: m.id,
-    thread_id: m.threadId,
-    session_id: m.sessionId,
-    role: m.role,
-    kind: m.kind,
-    depth: m.depth,
-    content: m.content,
-    status: m.status,
-    citations: JSON.stringify(m.citations),
-    failure: m.failure ? JSON.stringify(m.failure) : null,
-    draft_report: m.draftReport ? JSON.stringify(m.draftReport) : null,
-    model: m.model,
-    created_at: m.createdAt,
-    updated_at: m.updatedAt,
-  }
-}
-
 function settledMessageSet(outcome: GuidedReviewMessageOutcome, now: number) {
   const complete = outcome.status === 'complete'
   return {
@@ -82,7 +59,7 @@ export class DrizzleGuidedReviewRepository implements GuidedReviewRepository {
 
   async openSession(
     workspaceId: string,
-    s: GuidedReviewSession,
+    s: GuidedReviewNewSession,
     driver: GuidedReviewDriver,
   ): Promise<GuidedReviewSession> {
     await this.db
@@ -99,11 +76,11 @@ export class DrizzleGuidedReviewRepository implements GuidedReviewRepository {
         reviewed_head_sha: s.reviewedHeadSha,
         base_ref: s.baseRef,
         created_by: s.createdBy,
-        overview_status: s.overview.status,
-        overview_generation: s.overview.generation,
-        overview_content: s.overview.content ? JSON.stringify(s.overview.content) : null,
-        overview_failure: s.overview.failure ? JSON.stringify(s.overview.failure) : null,
-        overview_model: s.overview.model,
+        overview_status: 'pending',
+        overview_generation: 1,
+        overview_content: null,
+        overview_failure: null,
+        overview_model: null,
         overview_driver: driver,
         created_at: s.createdAt,
         updated_at: s.updatedAt,
@@ -302,28 +279,55 @@ export class DrizzleGuidedReviewRepository implements GuidedReviewRepository {
 
   async appendExchange(
     workspaceId: string,
-    question: Omit<GuidedReviewMessage, 'seq'>,
-    placeholder: Omit<GuidedReviewMessage, 'seq'>,
+    x: GuidedReviewExchange,
     driver: GuidedReviewDriver,
   ): Promise<
     | { ok: true; question: GuidedReviewMessage; placeholder: GuidedReviewMessage }
-    | { ok: false; reason: 'thread_busy' }
+    | { ok: false; reason: 'thread_busy' | 'thread_not_found' }
   > {
     return this.db.transaction(async (tx) => {
       // Lock the thread first. Without it two writers read the same MAX(seq) and the loser trips
       // the seq index (not the conflict target) before the live-answer conflict can resolve.
-      await tx
+      const locked = await tx
         .select({ id: threads.id })
         .from(threads)
-        .where(and(eq(threads.workspace_id, workspaceId), eq(threads.id, placeholder.threadId)))
+        .where(
+          and(
+            eq(threads.workspace_id, workspaceId),
+            eq(threads.id, x.threadId),
+            eq(threads.session_id, x.sessionId),
+          ),
+        )
         .for('update')
+      if (locked.length === 0) return { ok: false, reason: 'thread_not_found' } as const
+      const shared = {
+        workspace_id: workspaceId,
+        thread_id: x.threadId,
+        session_id: x.sessionId,
+        kind: x.kind,
+        depth: x.depth,
+        citations: '[]',
+        failure: null,
+        draft_report: null,
+        model: null,
+        created_at: x.at,
+        updated_at: x.at,
+        driver,
+      }
       const nextSeq = sql<number>`(SELECT COALESCE(MAX(${messages.seq}), 0) + 2
         FROM ${messages}
         WHERE ${messages.workspace_id} = ${workspaceId}
-          AND ${messages.thread_id} = ${placeholder.threadId})`
+          AND ${messages.thread_id} = ${x.threadId})`
       const [placed] = await tx
         .insert(messages)
-        .values({ ...messageValues(workspaceId, placeholder, driver), seq: nextSeq })
+        .values({
+          ...shared,
+          id: x.placeholderId,
+          seq: nextSeq,
+          role: 'assistant',
+          content: '',
+          status: 'pending',
+        })
         .onConflictDoNothing({
           target: [messages.workspace_id, messages.thread_id],
           // Must mirror idx_guided_review_messages_live exactly.
@@ -333,9 +337,16 @@ export class DrizzleGuidedReviewRepository implements GuidedReviewRepository {
       if (!placed) return { ok: false, reason: 'thread_busy' } as const
       const [asked] = await tx
         .insert(messages)
-        .values({ ...messageValues(workspaceId, question, driver), seq: placed.seq - 1 })
+        .values({
+          ...shared,
+          id: x.questionId,
+          seq: placed.seq - 1,
+          role: 'user',
+          content: x.question,
+          status: 'complete',
+        })
         .returning()
-      if (!asked) throw new Error(`guided review question ${question.id} was not stored`)
+      if (!asked) throw new Error(`guided review question ${x.questionId} was not stored`)
       return { ok: true, question: rowToMessage(asked), placeholder: rowToMessage(placed) } as const
     })
   }
@@ -534,26 +545,20 @@ export class DrizzleGuidedReviewRepository implements GuidedReviewRepository {
     now: number,
   ): Promise<void> {
     if (outcomes.length === 0) return
-    await this.db.transaction(async (tx) => {
-      for (const o of outcomes) {
-        await tx
-          .update(drafts)
-          .set({
-            status: o.status,
-            posted_url: o.status === 'posted' ? o.postedUrl : null,
-            post_error: o.status === 'failed' ? o.error : null,
-            rev: sql`${drafts.rev} + 1`,
-            updated_at: now,
-          })
-          .where(
-            and(
-              eq(drafts.workspace_id, workspaceId),
-              eq(drafts.id, o.id),
-              eq(drafts.status, 'posting'),
-            ),
-          )
-      }
-    })
+    const rows = sql.join(
+      outcomes.map(
+        (o) =>
+          sql`(${o.id}::text, ${o.status}::text, ${o.status === 'posted' ? o.postedUrl : null}::text, ${o.status === 'failed' ? o.error : null}::text)`,
+      ),
+      sql`, `,
+    )
+    await this.db.execute(sql`
+      UPDATE ${drafts} SET
+        status = o.status, posted_url = o.posted_url, post_error = o.post_error,
+        rev = ${drafts.rev} + 1, updated_at = ${now}
+      FROM (VALUES ${rows}) AS o(id, status, posted_url, post_error)
+      WHERE ${drafts.workspace_id} = ${workspaceId} AND ${drafts.id} = o.id
+        AND ${drafts.status} = 'posting'`)
   }
 
   async listStaleJobs(

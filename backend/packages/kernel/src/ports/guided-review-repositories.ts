@@ -23,6 +23,25 @@ export interface GuidedReviewRefresh {
   baseRef: string
 }
 
+/** A session as its creator opens it; the store queues overview generation 1 itself. */
+export type GuidedReviewNewSession = Omit<GuidedReviewSession, 'overview'>
+
+/**
+ * One question and the assistant placeholder that will answer it. Both land on `threadId`; the
+ * store writes the question `complete` and the placeholder `pending`, so a caller cannot queue
+ * work no driver can claim.
+ */
+export interface GuidedReviewExchange {
+  sessionId: string
+  threadId: string
+  kind: GuidedReviewMessage['kind']
+  depth: GuidedReviewMessage['depth']
+  questionId: string
+  question: string
+  placeholderId: string
+  at: number
+}
+
 /** How a terminal overview generation ended. */
 export type GuidedReviewOverviewOutcome =
   | { status: 'complete'; content: GuidedReviewOverviewContent; model: string }
@@ -70,12 +89,13 @@ export type GuidedReviewStaleJob =
  */
 export interface GuidedReviewRepository {
   /**
-   * Insert `session` unless the creator already has one for the same PR; either way, return the
-   * row that is stored. Uniqueness is a database index, so two concurrent opens converge.
+   * Insert `session` with overview generation 1 `pending`, unless the creator already has one for
+   * the same PR; either way, return the row that is stored. Uniqueness is a database index, so two
+   * concurrent opens converge.
    */
   openSession(
     workspaceId: string,
-    session: GuidedReviewSession,
+    session: GuidedReviewNewSession,
     driver: GuidedReviewDriver,
   ): Promise<GuidedReviewSession>
   getSession(workspaceId: string, id: string): Promise<GuidedReviewSession | null>
@@ -124,19 +144,19 @@ export interface GuidedReviewRepository {
   listThreads(workspaceId: string, sessionId: string): Promise<GuidedReviewThreadSummary[]>
 
   /**
-   * Append a user message and the assistant placeholder that will answer it, atomically. A
-   * thread admits one live (pending or running) assistant message; when one exists nothing is
-   * written and the result is `thread_busy`. The store assigns both `seq` values inside the same
-   * write, so a caller never races another writer for a position.
+   * Append the exchange's question and placeholder atomically. A thread admits one live (pending
+   * or running) assistant message; when one exists nothing is written and the result is
+   * `thread_busy`. `thread_not_found` when the thread does not exist in `exchange.sessionId`. The
+   * store assigns both `seq` values inside the same write, so a caller never races another writer
+   * for a position.
    */
   appendExchange(
     workspaceId: string,
-    question: Omit<GuidedReviewMessage, 'seq'>,
-    placeholder: Omit<GuidedReviewMessage, 'seq'>,
+    exchange: GuidedReviewExchange,
     driver: GuidedReviewDriver,
   ): Promise<
     | { ok: true; question: GuidedReviewMessage; placeholder: GuidedReviewMessage }
-    | { ok: false; reason: 'thread_busy' }
+    | { ok: false; reason: 'thread_busy' | 'thread_not_found' }
   >
   getMessage(workspaceId: string, id: string): Promise<GuidedReviewMessage | null>
   /** The thread's messages in `seq` order. */

@@ -97,7 +97,12 @@ The schemas live in `@cat-factory/contracts` (`guided-review.ts`).
 - `appendExchange` on Postgres locks the thread row first. Without the lock two concurrent questions
   read the same `MAX(seq)`, and the loser trips the `seq` index before the live-answer conflict
   target can resolve, so it errors instead of returning `thread_busy`. SQLite serializes writers and
-  cannot show this; the store conformance suite's concurrent-question case does.
+  cannot show this; the store conformance suite's concurrent-question case does. A thread that is
+  missing, or belongs to another session, is `thread_not_found` on both runtimes, so the lock never
+  silently locks nothing.
+- The store, not the caller, writes the queued state: `openSession` queues overview generation 1 and
+  `appendExchange` writes the placeholder `pending`. A claim requires `pending` or an expired
+  `claimed_at`, so a row created `running` with no claim would never be driven.
 - A draft held in `posting` past its lease is re-claimable, so a poster that died between claim and
   settle cannot strand it. If that poster died after the host accepted the comment, a re-claim can
   post it twice; slice 6 checks the host for the comment before re-posting a re-claimed draft.

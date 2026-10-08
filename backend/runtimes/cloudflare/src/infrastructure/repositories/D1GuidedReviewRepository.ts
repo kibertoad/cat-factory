@@ -2,9 +2,11 @@ import type {
   GuidedReviewCommentDraft,
   GuidedReviewDraftEdit,
   GuidedReviewDriver,
+  GuidedReviewExchange,
   GuidedReviewDraftPostOutcome,
   GuidedReviewMessage,
   GuidedReviewMessageOutcome,
+  GuidedReviewNewSession,
   GuidedReviewOverviewOutcome,
   GuidedReviewRefresh,
   GuidedReviewRepository,
@@ -46,7 +48,7 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
 
   async openSession(
     workspaceId: string,
-    s: GuidedReviewSession,
+    s: GuidedReviewNewSession,
     driver: GuidedReviewDriver,
   ): Promise<GuidedReviewSession> {
     await this.db
@@ -56,7 +58,7 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
             reviewed_head_sha, base_ref, created_by, overview_status, overview_generation,
             overview_content, overview_failure, overview_model, overview_driver, created_at,
             updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 1, NULL, NULL, NULL, ?, ?, ?)
          ON CONFLICT (workspace_id, repo_id, pr_number, created_by) DO NOTHING`,
       )
       .bind(
@@ -71,11 +73,6 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
         s.reviewedHeadSha,
         s.baseRef,
         s.createdBy,
-        s.overview.status,
-        s.overview.generation,
-        s.overview.content ? JSON.stringify(s.overview.content) : null,
-        s.overview.failure ? JSON.stringify(s.overview.failure) : null,
-        s.overview.model,
         driver,
         s.createdAt,
         s.updatedAt,
@@ -266,70 +263,73 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
 
   async appendExchange(
     workspaceId: string,
-    question: Omit<GuidedReviewMessage, 'seq'>,
-    placeholder: Omit<GuidedReviewMessage, 'seq'>,
+    x: GuidedReviewExchange,
     driver: GuidedReviewDriver,
   ): Promise<
     | { ok: true; question: GuidedReviewMessage; placeholder: GuidedReviewMessage }
-    | { ok: false; reason: 'thread_busy' }
+    | { ok: false; reason: 'thread_busy' | 'thread_not_found' }
   > {
-    // The placeholder goes first, conflict-targeted at the one-live-answer index (an INSERT ...
-    // SELECT needs its WHERE so SQLite does not read ON CONFLICT as a join constraint). The
-    // question follows only if that placeholder row now exists. Both sit in one serialized batch.
+    // The placeholder goes first, conflict-targeted at the one-live-answer index and inserted
+    // only while the thread exists in the session. The question follows only if that placeholder
+    // row now exists. Both sit in one serialized batch.
     const columns = `(workspace_id, id, thread_id, session_id, seq, role, kind, depth, content,
                       status, citations, failure, draft_report, model, created_at, updated_at,
                       driver)`
-    const values = (m: Omit<GuidedReviewMessage, 'seq'>) => [
-      workspaceId,
-      m.id,
-      m.threadId,
-      m.sessionId,
-      m.role,
-      m.kind,
-      m.depth,
-      m.content,
-      m.status,
-      JSON.stringify(m.citations),
-      m.failure ? JSON.stringify(m.failure) : null,
-      m.draftReport ? JSON.stringify(m.draftReport) : null,
-      m.model,
-      m.createdAt,
-      m.updatedAt,
-      driver,
-    ]
     const placePlaceholder = this.db
       .prepare(
         `INSERT INTO guided_review_messages ${columns}
          SELECT ?1, ?2, ?3, ?4,
                 (SELECT COALESCE(MAX(seq), 0) + 2 FROM guided_review_messages
                   WHERE workspace_id = ?1 AND thread_id = ?3),
-                ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16
-         WHERE true
+                'assistant', ?5, ?6, '', 'pending', '[]', NULL, NULL, NULL, ?7, ?7, ?8
+         WHERE EXISTS (SELECT 1 FROM guided_review_threads
+                        WHERE workspace_id = ?1 AND id = ?3 AND session_id = ?4)
          ON CONFLICT (workspace_id, thread_id)
            WHERE role = 'assistant' AND status IN ${LIVE} DO NOTHING`,
       )
-      .bind(...values(placeholder))
+      .bind(workspaceId, x.placeholderId, x.threadId, x.sessionId, x.kind, x.depth, x.at, driver)
     const placeQuestion = this.db
       .prepare(
         `INSERT INTO guided_review_messages ${columns}
-         SELECT ?1, ?2, ?3, ?4, p.seq - 1, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16
+         SELECT ?1, ?2, ?3, ?4, p.seq - 1, 'user', ?5, ?6, ?7, 'complete', '[]', NULL, NULL,
+                NULL, ?8, ?8, ?9
            FROM guided_review_messages p
-          WHERE p.workspace_id = ?1 AND p.id = ?17`,
+          WHERE p.workspace_id = ?1 AND p.id = ?10`,
       )
-      .bind(...values(question), placeholder.id)
+      .bind(
+        workspaceId,
+        x.questionId,
+        x.threadId,
+        x.sessionId,
+        x.kind,
+        x.depth,
+        x.question,
+        x.at,
+        driver,
+        x.placeholderId,
+      )
     const [placed] = await this.db.batch([placePlaceholder, placeQuestion])
-    if (!placed || placed.meta.changes === 0) return { ok: false, reason: 'thread_busy' }
+    if (!placed || placed.meta.changes === 0) {
+      const thread = await this.db
+        .prepare(
+          `SELECT 1 AS found FROM guided_review_threads
+             WHERE workspace_id = ? AND id = ? AND session_id = ?`,
+        )
+        .bind(workspaceId, x.threadId, x.sessionId)
+        .first<{ found: number }>()
+      return { ok: false, reason: thread ? 'thread_busy' : 'thread_not_found' }
+    }
     const { results } = await this.db
       .prepare(`SELECT * FROM guided_review_messages WHERE workspace_id = ? AND id IN (?, ?)`)
-      .bind(workspaceId, question.id, placeholder.id)
+      .bind(workspaceId, x.questionId, x.placeholderId)
       .all<MessageRow>()
     const byId = new Map(results.map((r) => [r.id, rowToMessage(r)]))
-    const storedQuestion = byId.get(question.id)
-    const storedPlaceholder = byId.get(placeholder.id)
-    if (!storedQuestion || !storedPlaceholder) {
-      throw new Error(`guided review exchange ${placeholder.id} vanished after insert`)
+    const question = byId.get(x.questionId)
+    const placeholder = byId.get(x.placeholderId)
+    if (!question || !placeholder) {
+      throw new Error(`guided review exchange ${x.placeholderId} vanished after insert`)
     }
-    return { ok: true, question: storedQuestion, placeholder: storedPlaceholder }
+    return { ok: true, question, placeholder }
   }
 
   async getMessage(workspaceId: string, id: string): Promise<GuidedReviewMessage | null> {

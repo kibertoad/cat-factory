@@ -1,8 +1,9 @@
 import type {
   GuidedReviewCommentDraft,
+  GuidedReviewExchange,
   GuidedReviewMessage,
+  GuidedReviewNewSession,
   GuidedReviewRepository,
-  GuidedReviewSession,
 } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import type { ConformanceHarness } from '../harness.js'
@@ -18,7 +19,7 @@ export function defineGuidedReviewStoreConformance(harness: ConformanceHarness):
     const LEASE = 60_000
     const HOST = 'deployment'
 
-    function session(over: Partial<GuidedReviewSession> = {}): GuidedReviewSession {
+    function session(over: Partial<GuidedReviewNewSession> = {}): GuidedReviewNewSession {
       return {
         id: 'grs_1',
         provider: 'github',
@@ -30,39 +31,27 @@ export function defineGuidedReviewStoreConformance(harness: ConformanceHarness):
         reviewedHeadSha: 'head1',
         baseRef: 'base1',
         createdBy: 'usr_1',
-        overview: { status: 'pending', generation: 1, content: null, failure: null, model: null },
         createdAt: 1,
         updatedAt: 1,
         ...over,
       }
     }
 
-    function message(
-      id: string,
+    function exchange(
+      n: number,
       threadId: string,
-      over: Partial<GuidedReviewMessage> = {},
-    ): Omit<GuidedReviewMessage, 'seq'> {
+      kind: GuidedReviewMessage['kind'] = 'answer',
+    ): GuidedReviewExchange {
       return {
-        id,
-        threadId,
         sessionId: 'grs_1',
-        role: 'user',
-        kind: 'answer',
+        threadId,
+        kind,
         depth: 'inline',
-        content: 'Why?',
-        status: 'complete',
-        citations: [],
-        failure: null,
-        draftReport: null,
-        model: null,
-        createdAt: 10,
-        updatedAt: 10,
-        ...over,
+        questionId: `q${n}`,
+        question: 'Why?',
+        placeholderId: `a${n}`,
+        at: 10,
       }
-    }
-
-    function assistant(id: string, threadId: string, kind: GuidedReviewMessage['kind'] = 'answer') {
-      return message(id, threadId, { role: 'assistant', kind, content: '', status: 'pending' })
     }
 
     function draft(
@@ -117,6 +106,15 @@ export function defineGuidedReviewStoreConformance(harness: ConformanceHarness):
         repo.openSession(workspace.id, session({ id: 'grs_b' }), HOST),
       ])
       expect(a.id).toBe(b.id)
+      // The store queues generation 1 itself, so the opened overview is always claimable.
+      expect(a.overview).toEqual({
+        status: 'pending',
+        generation: 1,
+        content: null,
+        failure: null,
+        model: null,
+      })
+      expect(await repo.claimOverview(workspace.id, a.id, 1, 0, 100)).toBe(true)
       expect(await repo.listSessions(workspace.id, { repoId: '42', prNumber: 7 })).toHaveLength(1)
       // Another creator gets a session of their own.
       const other = await repo.openSession(
@@ -130,9 +128,9 @@ export function defineGuidedReviewStoreConformance(harness: ConformanceHarness):
     it('admits one live answer per thread and leaves other threads free', async () => {
       const { repo, ws } = await seeded()
       const [first, second, elsewhere] = await Promise.all([
-        repo.appendExchange(ws, message('q1', 'grt_1'), assistant('a1', 'grt_1'), HOST),
-        repo.appendExchange(ws, message('q2', 'grt_1'), assistant('a2', 'grt_1'), HOST),
-        repo.appendExchange(ws, message('q3', 'grt_2'), assistant('a3', 'grt_2'), HOST),
+        repo.appendExchange(ws, exchange(1, 'grt_1'), HOST),
+        repo.appendExchange(ws, exchange(2, 'grt_1'), HOST),
+        repo.appendExchange(ws, exchange(3, 'grt_2'), HOST),
       ])
       const outcomes = [first, second].map((r) => r.ok)
       expect(outcomes.sort()).toEqual([false, true])
@@ -150,9 +148,23 @@ export function defineGuidedReviewStoreConformance(harness: ConformanceHarness):
       expect(threads.every((t) => t.pendingMessageId !== null)).toBe(true)
     })
 
+    it('refuses an exchange on a thread that is missing or belongs to another session', async () => {
+      const { repo, ws } = await seeded()
+      await repo.openSession(ws, session({ id: 'grs_2', prNumber: 8 }), HOST)
+      expect(await repo.appendExchange(ws, exchange(1, 'grt_missing'), HOST)).toEqual({
+        ok: false,
+        reason: 'thread_not_found',
+      })
+      expect(
+        await repo.appendExchange(ws, { ...exchange(2, 'grt_1'), sessionId: 'grs_2' }, HOST),
+      ).toEqual({ ok: false, reason: 'thread_not_found' })
+      expect(await repo.listMessages(ws, 'grt_missing')).toEqual([])
+      expect(await repo.listMessages(ws, 'grt_1')).toEqual([])
+    })
+
     it('claims an answer once, re-claims it past the lease, and frees the thread on settle', async () => {
       const { repo, ws } = await seeded()
-      await repo.appendExchange(ws, message('q1', 'grt_1'), assistant('a1', 'grt_1'), HOST)
+      await repo.appendExchange(ws, exchange(1, 'grt_1'), HOST)
 
       expect(await repo.claimMessage(ws, 'a1', 0, 100)).toBe(true)
       expect(await repo.claimMessage(ws, 'a1', 100, 150)).toBe(false)
@@ -173,12 +185,7 @@ export function defineGuidedReviewStoreConformance(harness: ConformanceHarness):
       expect(settled?.status).toBe('complete')
       expect(settled?.citations).toEqual(outcome.citations)
 
-      const next = await repo.appendExchange(
-        ws,
-        message('q2', 'grt_1'),
-        assistant('a2', 'grt_1'),
-        HOST,
-      )
+      const next = await repo.appendExchange(ws, exchange(2, 'grt_1'), HOST)
       expect(next.ok && [next.question.seq, next.placeholder.seq]).toEqual([3, 4])
       expect((await repo.listThreads(ws, 'grs_1'))[0]?.pendingMessageId).toBe('a2')
     })
@@ -222,12 +229,7 @@ export function defineGuidedReviewStoreConformance(harness: ConformanceHarness):
 
     it('lands drafts with their message, guards edits by rev and claims each draft for one post', async () => {
       const { repo, ws } = await seeded()
-      await repo.appendExchange(
-        ws,
-        message('q1', 'grt_1'),
-        assistant('a1', 'grt_1', 'comment-drafts'),
-        HOST,
-      )
+      await repo.appendExchange(ws, exchange(1, 'grt_1', 'comment-drafts'), HOST)
       await repo.claimMessage(ws, 'a1', 0, 100)
       const outcome = {
         status: 'complete' as const,
@@ -243,7 +245,7 @@ export function defineGuidedReviewStoreConformance(harness: ConformanceHarness):
       }
       const proposed = [draft('d1'), draft('d2'), draft('d3')]
       // An answer message cannot carry drafts.
-      await repo.appendExchange(ws, message('q2', 'grt_2'), assistant('a2', 'grt_2'))
+      await repo.appendExchange(ws, exchange(2, 'grt_2'), HOST)
       await repo.claimMessage(ws, 'a2', 0, 100)
       expect(await repo.settleDrafts(ws, 'a2', [draft('d0')], outcome, 150)).toBe(false)
       expect(await repo.settleDrafts(ws, 'a1', proposed, outcome, 150)).toBe(true)
@@ -304,7 +306,7 @@ export function defineGuidedReviewStoreConformance(harness: ConformanceHarness):
 
     it('lists unsettled work older than the cutoff, and deleting a session removes its rows', async () => {
       const { repo, ws } = await seeded()
-      await repo.appendExchange(ws, message('q1', 'grt_1'), assistant('a1', 'grt_1'), HOST)
+      await repo.appendExchange(ws, exchange(1, 'grt_1'), HOST)
       // The scan spans every workspace and the store is shared with the other tests, so assert
       // over this workspace's slice only, with a limit no sibling's rows can exhaust.
       const ours = async (cutoff: number) =>
