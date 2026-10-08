@@ -37,6 +37,7 @@ import { D1InitiativeRepository } from '../../src/infrastructure/repositories/D1
 import { D1NotificationRepository } from '../../src/infrastructure/repositories/D1NotificationRepository'
 import { D1DocumentRepository } from '../../src/infrastructure/repositories/D1DocumentRepository'
 import { D1DocInterviewRepository } from '../../src/infrastructure/repositories/D1DocInterviewRepository'
+import { D1GuidedReviewRepository } from '../../src/infrastructure/repositories/D1GuidedReviewRepository'
 import { D1AccountSettingsRepository } from '../../src/infrastructure/repositories/D1AccountSettingsRepository'
 import { D1AccountRiskPolicyRepository } from '../../src/infrastructure/repositories/D1AccountRiskPolicyRepository'
 import { D1TaskRepository } from '../../src/infrastructure/repositories/D1TaskRepository'
@@ -339,6 +340,7 @@ const harness: ConformanceHarness = {
       documentRepository: () => new D1DocumentRepository({ db: env.DB }),
       taskRepository: () => new D1TaskRepository({ db: env.DB }),
       docInterviewRepository: () => new D1DocInterviewRepository({ db: env.DB }),
+      guidedReviewRepository: () => new D1GuidedReviewRepository({ db: env.DB }),
       accountSettingsRepository: () => new D1AccountSettingsRepository({ db: env.DB }),
       accountRiskPolicyRepository: () => new D1AccountRiskPolicyRepository({ db: env.DB }),
     }

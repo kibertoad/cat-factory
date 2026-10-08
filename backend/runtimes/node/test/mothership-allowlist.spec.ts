@@ -458,6 +458,9 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // rev-guarded compareAndSwap — which every review edit now rides — and the atomic
   // replaceForBlock that starts a fresh review run complete it).
   requirementReviewRepository: {},
+  // Guided PR review sessions are org state teammates read, so every method is remote except the
+  // stale-job sweeper's cross-workspace scan.
+  guidedReviewRepository: { listStaleJobs: 'sweeper' },
   // The Kaizen read surface is fully remote (the run-path grade, the screen's history, the
   // per-run status and the single-grade detail read); only the sweep's own claim pair stays
   // mothership-internal, since the sweep runs there.

@@ -56,6 +56,7 @@ a tracker document](../../AGENTS.md).
 - [Persist, version and reseed fragment definitions](./fragment-definitions-reseed.md)
 - [Pipeline catalog collapse (estimate-gated steps)](./pipeline-catalog-collapse.md)
 - [Pipeline per-step options: one `step_options` bag](./pipeline-step-options.md)
+- [Guided PR review (overview, question threads, drafted comments)](./guided-pr-review.md)
 - [PR verification report](./pr-verification-report.md)
 - [PR-review token-burn reduction](./pr-review-turn-reduction.md)
 - [Pre-PR validation checks](./pre-pr-validation.md)
