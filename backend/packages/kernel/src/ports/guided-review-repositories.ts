@@ -69,7 +69,7 @@ export type GuidedReviewStaleJob =
   | { kind: 'message'; workspaceId: string; messageId: string }
 
 /**
- * Persistence for guided PR review sessions (docs/initiatives/guided-pr-review.md). Four tables,
+ * Persistence for guided PR review sessions (backend/docs/adr/0066-guided-pr-review.md). Four tables,
  * one row per message and per draft, so concurrent threads never contend on one row.
  *
  * Every state transition a driver or a second writer can race on is a CONDITIONAL write returning

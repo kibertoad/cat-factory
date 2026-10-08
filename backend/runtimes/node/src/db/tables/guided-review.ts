@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm'
 import { bigint, index, integer, pgTable, primaryKey, text, uniqueIndex } from 'drizzle-orm/pg-core'
 
-// Guided PR review sessions (docs/initiatives/guided-pr-review.md), mirroring the Cloudflare D1
+// Guided PR review sessions (backend/docs/adr/0066-guided-pr-review.md), mirroring the Cloudflare D1
 // tables (migration 0104) column-for-column and index-for-index.
 
 export const guidedReviewSessions = pgTable(

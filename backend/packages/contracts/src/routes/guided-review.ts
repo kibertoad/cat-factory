@@ -23,7 +23,7 @@ import {
 import { errorResponses, singleStringParam } from './_shared.js'
 
 // Guided PR review routes for the SPA, mounted under `/workspaces/:workspaceId`. See
-// GuidedReviewController in @cat-factory/server and docs/initiatives/guided-pr-review.md. Writes
+// GuidedReviewController in @cat-factory/server and backend/docs/adr/0066-guided-pr-review.md. Writes
 // return at once; the overview and every answer arrive later through the `guidedReview` event.
 
 const sessionParams = singleStringParam('sessionId')

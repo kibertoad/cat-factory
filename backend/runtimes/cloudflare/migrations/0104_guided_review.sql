@@ -1,4 +1,4 @@
--- Guided PR review (docs/initiatives/guided-pr-review.md): a per-user exploration session over one
+-- Guided PR review (backend/docs/adr/0066-guided-pr-review.md): a per-user exploration session over one
 -- pull request. One row per thread, message and draft, so concurrent threads write disjoint rows.
 CREATE TABLE guided_review_sessions (
   workspace_id TEXT NOT NULL,

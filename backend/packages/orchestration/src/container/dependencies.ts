@@ -981,7 +981,7 @@ export interface CoreDependencies extends ContentLibraryDependencies {
    */
   docInterviewRepository?: DocInterviewRepository
   /**
-   * Guided PR review sessions (docs/initiatives/guided-pr-review.md). Absent ⇒ the guided review
+   * Guided PR review sessions (backend/docs/adr/0066-guided-pr-review.md). Absent ⇒ the guided review
    * module is not built and its routes report the capability as not configured.
    */
   guidedReviewRepository?: GuidedReviewRepository

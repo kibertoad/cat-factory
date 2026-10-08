@@ -937,7 +937,7 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     upsert: { scope: { kind: 'workspace', arg: 0 } },
     deleteByBlock: { scope: { kind: 'workspace', arg: 0 } },
   },
-  // Guided PR review sessions (docs/initiatives/guided-pr-review.md): per-user exploration state a
+  // Guided PR review sessions (backend/docs/adr/0066-guided-pr-review.md): per-user exploration state a
   // teammate can open, so org state. Every method takes the workspaceId as arg0. `listStaleJobs` is
   // the cross-workspace sweeper scan and stays mothership-internal.
   guidedReviewRepository: {
