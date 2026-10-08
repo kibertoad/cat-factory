@@ -39,14 +39,14 @@ patterns rather than invent new ones:
   trap, Escape-to-close (`components/layout/SideBar.vue:123-146`), driven by a
   `lg:hidden` hamburger in the shell (`pages/index.vue:338-347`).
 - **Inspector** is a bottom sheet on mobile (`fixed inset-x-0 bottom-0 … max-h-[80dvh]
-rounded-t-2xl`), a docked `lg:w-80` panel on desktop
+  rounded-t-2xl`), a docked `lg:w-80` panel on desktop
   (`components/panels/InspectorPanel.vue:264,272`). `AgentStepDetail.vue:560` follows the
   same bottom-sheet → `lg:w-96` pattern.
 - **Toolbar** caps to the viewport and scrolls (`components/layout/BoardToolbar.vue:132`
   `max-w-[calc(100vw-1rem)] overflow-x-auto`), labels collapse via `hidden sm:inline`.
 - **The ~13 hand-rolled result-view windows share one responsive idiom**: `Teleport` →
   `fixed inset-0 flex justify-center` → `w-full max-w-{3xl..5xl} flex-col overflow-hidden
-max-h-[90dvh]`, with two-column bodies stacking below `lg`
+  max-h-[90dvh]`, with two-column bodies stacking below `lg`
   (`flex-col lg:flex-row`, e.g. `requirements/RequirementsReviewWindow.vue:565,602`).
 - **Board input is touch-engineered on purpose**: one-finger pan via
   `boardPanMode(hasTouch)` (`utils/boardPanMode.ts`, unit-tested: the button-array form
@@ -60,7 +60,7 @@ max-h-[90dvh]`, with two-column bodies stacking below `lg`
 - **Notifications inbox** caps at `w-[min(24rem,92vw)]`
   (`layout/NotificationsInbox.vue:239`).
 - Global CSS is mobile-safe: no fixed body width, `dvh` used for heights, `body
-{ overflow: hidden }` makes the app a non-scrolling surface where every secondary
+  { overflow: hidden }` makes the app a non-scrolling surface where every secondary
   surface owns its scrolling.
 
 ## Target patterns (the design)

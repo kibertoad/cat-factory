@@ -378,7 +378,7 @@ per the AGENTS.md rule.
   treats `blocked` as live alongside `running`/`paused`. Pure orchestration (runtime-neutral by
   construction); table-tested over the three live states (skip) vs a terminal prior (fire).
 - **F7**: `ensureWaitingNotification`'s suppression predicate gained `&& n.executionId ===
-instance.id`. The whole point of the card is that it is a `blocked` run's ONLY recovery signal,
+  instance.id`. The whole point of the card is that it is a `blocked` run's ONLY recovery signal,
   and every richer card raised during a run carries this run's `executionId`, so scoping by it both
   preserves "richer card wins" and stops a stale prior-run card (or a block-less workspace card like
   the new `budget_paused`) from masking the park.

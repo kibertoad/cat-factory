@@ -102,7 +102,7 @@ Why it is the wrong design anyway:
   MATERIALISES and never decides. Worse, every change to that field is an image bump plus a pin
   update everywhere the tag appears, for a field only the Sandbox sends.
 - **A `git init` seed has no history**, so `git log`, `git diff base...head` and `git show
-origin/pr-head:<path>` (all of which the coder, merger and pr-reviewer prompts name explicitly)
+  origin/pr-head:<path>` (all of which the coder, merger and pr-reviewer prompts name explicitly)
   behave differently from a real checkout. A fixture that only works because the agent avoided
   those commands is measuring avoidance.
 - **The cost shape is wrong.** The cell cap is 100. A hundred containers per experiment is a fleet,

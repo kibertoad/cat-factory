@@ -86,7 +86,7 @@ Implemented on branch `claude/bug-triage-phase-2-5n1wu5`. Notes for later phases
   entity only, so it was dropped on save and the whole gate was inert after a DB round-trip.)
 
 - The launch gate is a single pure function, `assertPipelineLaunchable(agentKinds, availability,
-origin?)` in `orchestration/modules/pipelines/pipelineShape.ts`, NOT folded into the shared
+  origin?)` in `orchestration/modules/pipelines/pipelineShape.ts`, NOT folded into the shared
   `validatePipelineShape`/`assertRunnable` path. That path is re-run on retry/restart over stored
   steps (which carry no `availability` and no `origin`), so putting the `bug-intake`-requires-
   `recurring` check there would falsely fail a legitimate recurring retry. Instead the gate is
@@ -96,7 +96,7 @@ origin?)` in `orchestration/modules/pipelines/pipelineShape.ts`, NOT folded into
   `assertPipelineLaunchable(..., 'recurring', ...)` gate so there is one rule and one error type
   (`ValidationError`) across both boundaries.
 - The `bug-intake`-requires-`recurring` check is evaluated over the ENABLED subset (an `enabled?:
-boolean[]` arg), matching every other check in `pipelineShape.ts`: a disabled `bug-intake` step
+  boolean[]` arg), matching every other check in `pipelineShape.ts`: a disabled `bug-intake` step
   imposes no requirement.
 - Editing a pipeline to `'one-off'` while a schedule still references it is rejected up-front
   (`ConflictError`, via an optional `pipelineScheduleRepository` on `PipelineService`) instead of
@@ -365,9 +365,9 @@ the initiative is complete once it merges.
 Notes:
 
 - **The seed is the exact design §1 shape** (`bug-intake → bug-investigator → clarity-review →
-task-estimator → repro-test → coder → reviewer → tester-api → conflicts → ci → merger`), with
+  task-estimator → repro-test → coder → reviewer → tester-api → conflicts → ci → merger`), with
   only `clarity-review` a human gate (`gates[2]`), mirroring `pl_bugfix`. It is `availability:
-'recurring'`, so `assertPipelineLaunchable` refuses a one-off manual start and the SPA hides it
+  'recurring'`, so `assertPipelineLaunchable` refuses a one-off manual start and the SPA hides it
   from the add-task picker (`pipelineAllowedForManualStart`) while surfacing it in the recurring
   modal (`pipelineAllowedForSchedule`). A dedicated `pipelineShape.test.ts` case pins the shape +
   launch constraint + estimator-first placement; the pre-existing "every seed pipeline is valid"

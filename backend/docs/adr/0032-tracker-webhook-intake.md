@@ -270,7 +270,7 @@ What the modes do NOT share is the reason they stay exclusive rather than becomi
 - **A `bug-intake` step and per-ticket dispatch are two ways to pick work, and a pipeline may use
   only one.** The pushed ticket is already the work, so an intake step would search the board and
   adopt a DIFFERENT issue onto the block created for this one. Refused at save; and `origin:
-'manual'` at start makes `assertPipelineLaunchable` refuse it again at run time, because a
+  'manual'` at start makes `assertPipelineLaunchable` refuse it again at run time, because a
   per-ticket run IS a one-off task run.
 - **Idempotency is the issue's existing single `linkedBlockId`**, not a new claim table. A
   redelivery (or the `updated` event that follows a `created` one) finds the issue already linked
@@ -364,7 +364,7 @@ third mode cannot inherit a fail-open rule written for someone else's cost model
   comment is the ordinary mistake rather than an edge case. The resolution drives exactly one review
   (the first whose ids the comment names, in declaration order), and the other's ids are rejected
   with a reason that says so: `finding X belongs to the other review on this ticket, answer it in a
-separate comment`. The distinction is load-bearing in both directions, so the `ReplyTarget` carries
+  separate comment`. The distinction is load-bearing in both directions, so the `ReplyTarget` carries
   the OTHER candidates' ids for it. "No finding X" told a reporter an id printed on their own ticket
   was not real; the true reason has a remedy they can act on, and a typo must still read as a typo.
 

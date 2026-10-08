@@ -1600,7 +1600,7 @@ Five rules govern it:
 - **`appliesTo` is a hint, not a gate.** Nothing refuses a standard whose hint does not name the task
   it is pinned onto; the platform's own picker uses it to narrow what it OFFERS.
 - **An id the board does not resolve is refused**, `422` with `details.reason:
-'prompt_fragment_not_found'` and `details.fragmentIds` naming every one that missed. A run drops a
+  'prompt_fragment_not_found'` and `details.fragmentIds` naming every one that missed. A run drops a
   standard deleted after its task was filed rather than failing, on purpose, and that disposition is
   wrong at the door: a typo would answer `201` for a review that folded nothing, which reads
   afterwards exactly like a review nobody asked to be judged against anything. A deployment with no

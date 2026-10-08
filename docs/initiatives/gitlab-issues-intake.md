@@ -287,7 +287,7 @@ this before slice 6 (webhooks) or 7 (writeback).
 
 - **The writeback was not a GitLab gap, it was a SEAM gap, and fixing it as one was cheaper than
   fixing it as four.** `IssueWritebackService` dispatched on `source === 'github' | 'jira' |
-'linear'`, so "GitLab has no writeback" and "a deployment-registered tracker can never have one"
+  'linear'`, so "GitLab has no writeback" and "a deployment-registered tracker can never have one"
   were the same bug wearing two labels. It is now `TaskSourceProvider.writeback`, the outbound
   mirror of the `webhook` capability: the service keeps the shared half (settings gating, the
   linked-issue fan-out and its isolation, the per-source connection read, the parked-review
@@ -330,7 +330,7 @@ this before slice 6 (webhooks) or 7 (writeback).
   the rule is now uniform across every write on the client rather than fixed on the one that
   surfaced it.
 - **A capability declared as a METHOD on the port is called as one.** `(provider?.sameBoard ??
-fallback)(…)` reads fine and throws a `TypeError` for any deployment implementing `sameBoard` as
+  fallback)(…)` reads fine and throws a `TypeError` for any deployment implementing `sameBoard` as
   a class method that touches `this`; the built-in providers assign standalone functions, so no
   test would ever have shown it. Every capability lookup here calls bound (`repoScope.matches(…)`,
   `commentOnIssue.call(client, …)`).

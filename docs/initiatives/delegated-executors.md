@@ -70,7 +70,7 @@ registered by reference like every other deployment extension.
 - **Delegated kind**: an agent kind whose `agent.surface` is `'delegated'` and which names the
   executor it runs on. Registered on `AgentKindRegistry` exactly like a container kind.
 - **Brief**: the neutral `{ systemPrompt, userPrompt, contextFiles, repo, branches, task,
-correlationKey }` bundle the engine hands the executor at dispatch. It is what the container
+  correlationKey }` bundle the engine hands the executor at dispatch. It is what the container
   path already composes, extracted so it exists as a value outside a harness job body.
 - **Delegation record**: `step.delegated`, the persisted per-step state (executor id, external
   id, external URL, status, attempt log). The delegated sibling of `step.container`.

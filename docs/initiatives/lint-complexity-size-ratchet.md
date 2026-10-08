@@ -118,7 +118,7 @@ worst offender. These are the starting ceilings, not the goal.
 > `provision-detect.contract.ts` (the reader + read budget + convention extensions three sibling
 > detectors already imported from it), mirrored by the test split; `persistenceRpcSurfaces.spec.ts`
 > (1783) moved the surfaces bound by a TENANT identity (an accountId, a library `(ownerKind,
-ownerId)` pair, a spend-ledger row's rollup keys) to `persistenceRpcTenantSurfaces.spec.ts`,
+> ownerId)` pair, a spend-ledger row's rollup keys) to `persistenceRpcTenantSurfaces.spec.ts`,
 > because what those tables prove is a cross-ACCOUNT refusal rather than a cross-workspace one;
 > `provision-detect.logic.test.ts` (1652) followed its source, with the shared in-memory readers
 > lifted to `test-support/` (which `tsconfig.build.json` already excludes); and the Node

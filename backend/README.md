@@ -521,7 +521,7 @@ pnpm dev
 pnpm test
 ```
 
-Integration tests run via `@cloudflare/vitest-pool-workers` inside the same runtime Wrangler uses,
+Integration tests run via `@cloudflare/vitest-plugin` inside the same runtime Wrangler uses,
 against a real local D1 database with the real migrations applied. Only the LLM is faked
 (deterministically); the storage and HTTP stack are real.
 
@@ -724,7 +724,7 @@ WORKER_PUBLIC_URL = "https://cat-factory-backend.<account>.workers.dev"
 > **`WORKER_PUBLIC_URL` must be the `*.workers.dev` origin, _not_ an orange-clouded
 > custom domain.** A per-run Container egresses from inside Cloudflare's network, so
 > a zone's WAF / Bot-Fight rules block its POSTs to the LLM proxy with a `403 …
-blocked.` before the Worker even runs (browsers pass the bot checks, so the SPA is
+> blocked.` before the Worker even runs (browsers pass the bot checks, so the SPA is
 > unaffected). `workers.dev` isn't in that zone, so the container reaches the proxy
 > unblocked. The container image is pinned by the `[[containers]].image` GHCR tag:
 > use a version tag, not `latest`, for reproducible deploys.

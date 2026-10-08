@@ -52,9 +52,9 @@ export interface BandRates {
 /**
  * The dearer rates a request is billed at once its input reaches {@link minPromptTokens}.
  *
- * Three vendors bill this way today (OpenAI at 272K input tokens, Gemini 3.1 Pro and Grok 4.6 at
- * 200K): past the threshold the WHOLE request reprices, with no blending, so one model has two
- * prices. The threshold is the only band condition modelled here, because it is the only one a
+ * Four vendors bill this way today (OpenAI at 272K input tokens, Gemini 3.1 Pro and Grok 4.6 at
+ * 200K, Claude Haiku 5.5 at 100K): past the threshold the WHOLE request reprices, with no
+ * blending, so one model has two prices. The threshold is the only band condition modelled here, because it is the only one a
  * meter can evaluate: the prompt size is recorded on the usage it prices. DeepSeek's peak /
  * off-peak split is a band on the WALL CLOCK, which nothing hands {@link estimateCost}, so those
  * rows carry the peak rate in their base band and say so.
@@ -165,7 +165,7 @@ export function effectiveTierLimit(
 }
 
 /**
- * The input-token thresholds the three two-band vendors reprice a whole request at, one constant
+ * The input-token thresholds the four two-band vendors reprice a whole request at, one constant
  * per vendor: each moves on its own vendor's say-so, and two of them agree today by coincidence.
  *
  * Named rather than repeated on the rows that share one. The OpenAI threshold appears on
@@ -176,6 +176,7 @@ export function effectiveTierLimit(
 const OPENAI_LONG_CONTEXT_TOKENS = 272_000
 const GEMINI_LONG_CONTEXT_TOKENS = 200_000
 const GROK_LONG_CONTEXT_TOKENS = 200_000
+const ANTHROPIC_LONG_CONTEXT_TOKENS = 100_000
 
 /**
  * Built-in approximate EUR prices per 1M tokens. Keys are matched most-specific
@@ -208,10 +209,24 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   // (The Gemini 3.7 Flash discount below is still live, so that entry still holds.) The
   // derived cache tiers land on Anthropic's own published rates at this base.
   'anthropic:claude-sonnet-5': { inputPerMillion: 1.84, outputPerMillion: 9.2 },
-  // Claude Sonnet 5.5 (2026-09-28) keeps Sonnet 5's $2 in / $10 out per 1M, and the derived
-  // 0.1x read and 1.25x write land exactly on its published $0.20 / $2.50 cache rates.
+  // Claude Sonnet 5.5 (2026-09-28) keeps Sonnet 5's $2 in / $10 out per 1M. Its cache read is
+  // 0.05x ($0.10/M) and is left DERIVED, as Opus 5.5's is: the 0.1x floor over-states it, which is
+  // the safe side. The 1.25x write ($2.50) is exact.
   'anthropic:claude-sonnet-5-5': { inputPerMillion: 1.84, outputPerMillion: 9.2 },
   'anthropic:claude-sonnet-4-6': { inputPerMillion: 2.76, outputPerMillion: 13.8 },
+  // Claude Haiku 5.5 (2026-10-07) is the one two-band Claude model: $0.10 in / $0.50 out per 1M
+  // for a prompt up to 100,000 tokens, and five times that ($0.50 / $2.50) for the WHOLE request
+  // past it. Both cache tiers derive exactly in either band (0.1x read, 1.25x write). The catalog
+  // gives it a 1M window, so a container agent reaches the long band as ordinary behaviour.
+  'anthropic:claude-haiku-5-5': {
+    inputPerMillion: 0.092,
+    outputPerMillion: 0.46,
+    longBand: {
+      minPromptTokens: ANTHROPIC_LONG_CONTEXT_TOKENS,
+      inputPerMillion: 0.46,
+      outputPerMillion: 2.3,
+    },
+  },
   'anthropic:claude-haiku-4-5': { inputPerMillion: 0.92, outputPerMillion: 4.6 },
   anthropic: { inputPerMillion: 2.76, outputPerMillion: 13.8 },
   // OpenAI (approximate list prices, USD→EUR ~0.92).
@@ -574,6 +589,15 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
   'openrouter:anthropic/claude-opus-5.5': { inputPerMillion: 3.68, outputPerMillion: 18.4 },
   'openrouter:anthropic/claude-opus-4.8': { inputPerMillion: 4.6, outputPerMillion: 23 },
   'openrouter:anthropic/claude-sonnet-5.5': { inputPerMillion: 1.84, outputPerMillion: 9.2 },
+  'openrouter:anthropic/claude-haiku-5.5': {
+    inputPerMillion: 0.092,
+    outputPerMillion: 0.46,
+    longBand: {
+      minPromptTokens: ANTHROPIC_LONG_CONTEXT_TOKENS,
+      inputPerMillion: 0.46,
+      outputPerMillion: 2.3,
+    },
+  },
   // Gemini 3.1 Pro is the THIRD two-band route in this table, beside OpenAI below and xAI further
   // down, and the only Gemini entry that has one: Google bills a prompt over 200,000 tokens at
   // $4 in / $0.40 cached / $18 out per 1M against the $2 / $0.20 / $12 under it. The catalog gives
@@ -737,9 +761,12 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
     outputPerMillion: 1.1,
     cacheReadPerMillion: 0.006,
   },
+  // Read again 2026-10-09: the retired V4-Flash slug's blend now bills $0.0075 in / $0.0075
+  // cached / $1.28 out, so its output class sat at a seventh of the route and is re-pinned at
+  // 1.18. Input and the cache read stay, both still above the route.
   'openrouter:deepseek/deepseek-v4-flash': {
     inputPerMillion: 0.082,
-    outputPerMillion: 0.164,
+    outputPerMillion: 1.18,
     cacheReadPerMillion: 0.017,
   },
   'openrouter:deepseek/deepseek-v4-pro': {
@@ -748,9 +775,10 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
     cacheReadPerMillion: 0.125,
   },
   // K2.7 Code's cache-read rate ($0.19/M) is ~2.6x the 0.1x floor its input implies, so it is
-  // named; K3's ($0.30/M) IS the floor, so it derives. Named at 0.18 rather than the 0.1748 the
-  // conversion gives, because two decimals is the unit every other rate here is written in and
-  // 0.17 would sit under the live rate by more than the pin checker's rounding tolerance.
+  // named; K3's list ($0.30/M) IS the floor, though its gateway row below names the blend's dearer
+  // rate. Named at 0.18 rather than the 0.1748 the conversion gives, because two decimals is the
+  // unit every other rate here is written in and 0.17 would sit under the live rate by more than
+  // the pin checker's rounding tolerance.
   //
   // The fresh classes read $0.7062 in / $3.21 out on the gateway's blend today: input is where it
   // was at the last sweep, and output has come back DOWN from the $3.50 that moved this row, so
@@ -762,7 +790,13 @@ export const DEFAULT_MODEL_PRICES: Record<string, ModelPrice> = {
     outputPerMillion: 3.22,
     cacheReadPerMillion: 0.18,
   },
-  'openrouter:moonshotai/kimi-k3': { inputPerMillion: 2.76, outputPerMillion: 13.8 },
+  // K3's gateway blend bills a cache read at $0.55/M, above the $0.30 Moonshot lists and the 0.1x
+  // floor this row's input derives (0.276), so it is named at the route's rate, rounded up.
+  'openrouter:moonshotai/kimi-k3': {
+    inputPerMillion: 2.76,
+    outputPerMillion: 13.8,
+    cacheReadPerMillion: 0.51,
+  },
   // The convergence the previous note SAW COMING has completed: OpenRouter's GLM-5.2 route now
   // bills Z.ai's own $1.40 in / $0.14 cached / $4.40 out per 1M, and this row's $1.19 / $3.74
   // was the last of the cheap open-weight blend. `check-openrouter-pins.mjs` reported it as the

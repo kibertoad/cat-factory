@@ -4,7 +4,7 @@
 //
 // The invariant: ONE wrangler in the tree, and through it one workerd and one miniflare.
 //
-// Why it is worth a guard rather than a convention. `@cloudflare/vitest-pool-workers` pins
+// Why it is worth a guard rather than a convention. `@cloudflare/vitest-plugin` pins
 // `wrangler` EXACTLY, and wrangler in turn pins `workerd` and `miniflare` exactly. The Worker
 // suite runs inside the POOL's workerd while `wrangler deploy` ships WRANGLER's, so the moment
 // those two resolve differently the runtime the tests prove stops being the runtime that ships,
@@ -98,9 +98,9 @@ export function findPinViolations({ resolved, manifests }) {
         where: 'pnpm-lock.yaml',
         message:
           `${found.length} copies of "${name}" resolve (${found.join(', ')}). ` +
-          `The Worker suite runs inside @cloudflare/vitest-pool-workers' workerd and wrangler deploy ships wrangler's, ` +
+          `The Worker suite runs inside @cloudflare/vitest-plugin' workerd and wrangler deploy ships wrangler's, ` +
           `so two copies mean the tested runtime is not the shipped one. Move every declared "wrangler" to the exact ` +
-          `version @cloudflare/vitest-pool-workers pins.`,
+          `version @cloudflare/vitest-plugin pins.`,
       })
     }
   }
@@ -120,7 +120,7 @@ export function findPinViolations({ resolved, manifests }) {
             where: `${path} (${field})`,
             message:
               `"wrangler": "${wranglerRange}" is a range. It must be the exact version ` +
-              `@cloudflare/vitest-pool-workers pins${wrangler ? ` (currently ${wrangler})` : ''}, ` +
+              `@cloudflare/vitest-plugin pins${wrangler ? ` (currently ${wrangler})` : ''}, ` +
               `or an in-range refresh floats it ahead of the pool and splits the runtime.`,
           })
         } else if (wrangler && wranglerRange !== wrangler) {

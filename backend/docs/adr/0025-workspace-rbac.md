@@ -46,8 +46,8 @@ catalog and enforced in exactly three shared seams.
   role, no row ⇒ denied (404).
 
 - **Data model.** New `workspace_members` table `(workspace_id, user_id, role, created_at,
-added_by_user_id)`, PK `(workspace_id, user_id)`, `user`-indexed; `workspaces.access_mode TEXT NOT
-NULL DEFAULT 'account'` (the default = zero behaviour change, no data migration). Mirrored across
+  added_by_user_id)`, PK `(workspace_id, user_id)`, `user`-indexed; `workspaces.access_mode TEXT NOT
+  NULL DEFAULT 'account'` (the default = zero behaviour change, no data migration). Mirrored across
   both runtimes (D1 `0052_workspace_rbac.sql` ⇄ Drizzle) behind a batch-shaped
   `WorkspaceMemberRepository` (`get`, `listByWorkspace`, `listWorkspaceIdsForUser`, the chunked-`IN`
   `getRolesForUserInWorkspaces`, `upsert`, `remove`, `removeByAccountMembership`); never a
@@ -111,7 +111,7 @@ NULL DEFAULT 'account'` (the default = zero behaviour change, no data migration)
   (both runtimes; JS post-filtering is the banned N+1 class) and annotates each row with the caller's
   effective `viewerRole` via one `getRolesForUserInWorkspaces` batch. `WorkspaceMemberService`
   (`@cat-factory/workspaces`) + `WorkspaceMemberController` serve `GET/POST/PATCH/DELETE
-/workspaces/:ws/members` + `PUT /workspaces/:ws/access-mode` (`members.manage`; targets must be
+  /workspaces/:ws/members` + `PUT /workspaces/:ws/access-mode` (`members.manage`; targets must be
   account members; creator auto-enroll seeds an admin row). Side doors resolved explicitly:
   `/me/environment-handlers/:ws` calls `loadWorkspaceAccess` itself (mounted outside the gate) and
   requires `runs.execute`; the WS ticket gained an audit-only `userId`; `public_api_keys` gained

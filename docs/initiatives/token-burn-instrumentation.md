@@ -168,7 +168,7 @@ The rollup landed as ONE aggregate at the `(agentKind, phase)` grain, with kerne
   same question the moment one of them changes. The folds are over a handful of cells, not over
   the rows they were computed from, so the "push aggregates into SQL" rule still holds.
 - **Carry cost partitions by CONVERSATION, not by run.** `Σ (a call's total input) × (turns left
-after it)` is charged within `partition by agent_kind`, because that is what the prompt delta
+  after it)` is charged within `partition by agent_kind`, because that is what the prompt delta
   chain is keyed by: a merger step's turns never re-send a coder step's context, and a run-wide
   window would have charged the coder's first turn for every later step's turn. The conformance
   case pins exactly this discrimination (run-wide accounting gives 1000 where the correct answer

@@ -1318,7 +1318,7 @@ re-derive). It is a **local-facade-only differentiator**, no symmetry obligation
   (`providerApiKeyRepository`, and PR 3's `providerSubscriptionTokenRepository` /
   `personalSubscriptionRepository` / `subscriptionActivationRepository`). Each `buildNode*Service`
   takes a `repositoryOverride?` and builds even without a `db` (`override ?? (db ? new Drizzle… :
-undefined)`; off only when neither is present), so the feature turns ON in mothership mode. When
+  undefined)`; off only when neither is present), so the feature turns ON in mothership mode. When
   ONE repo has TWO consumers (e.g. `subscriptionActivationRepository` feeds both the
   personal-subscription service's mint AND the engine core's clear-on-completion), thread the ONE
   injected instance into both so they agree. `buildLocalContainer` reads the repos off
@@ -1327,7 +1327,7 @@ undefined)`; off only when neither is present), so the feature turns ON in mothe
   the Drizzle repo when `options.db` is present, else `mothership.localSettingsStore.localSettingsRepository`.
 - **composeMothership** opens each store, exposes it on `MothershipComposition`, and closes it in
   `close()` (called from `onShutdown`). Each store's file path is `localDbPath(env.LOCAL_MOTHERSHIP_*_DB,
-'<name>.sqlite')`: an env override (incl. `:memory:` for tests) else `~/.cat-factory/<name>.sqlite`.
+  '<name>.sqlite')`: an env override (incl. `:memory:` for tests) else `~/.cat-factory/<name>.sqlite`.
   **Tests that build a mothership container MUST set every `LOCAL_MOTHERSHIP_*_DB` to `:memory:`**
   (incl. `LOCAL_MOTHERSHIP_SETTINGS_DB` and `LOCAL_MOTHERSHIP_TELEMETRY_DB`) or they write real
   files under `~/.cat-factory`.

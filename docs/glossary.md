@@ -146,7 +146,7 @@ The step taxonomy is [`backend/docs/step-taxonomy.md`](../backend/docs/step-taxo
   `@cat-factory/gates` (`backend/packages/gates/src/gates.ts` + `providers.ts`), registered via
   the public `registerGate` seam.
 - Gate _consumption_ (the engine driving them): `backend/packages/orchestration/src/modules/
-execution/` (`GateStepController.evaluate` / `GateHelperDispatcher.dispatch` / `pollGate`).
+  execution/` (`GateStepController.evaluate` / `GateHelperDispatcher.dispatch` / `pollGate`).
 
 ### Judges
 

@@ -16,7 +16,7 @@ structurally cannot reach.
 **Why now.** Two independent problems compound:
 
 1. **Seven build presets are the same spine with at most two toggles.** `coder → [reviewer] →
-[blueprints] → [mocker] → deployer → tester-* → conflicts → ci → [human gate] → merger`
+   [blueprints] → [mocker] → deployer → tester-* → conflicts → ci → [human gate] → merger`
    describes `pl_quick`, `pl_simple`, `pl_dep_update`, `pl_pr_review`, `pl_human_review`,
    `pl_frontend` and `pl_visual`. `pl_quick` and `pl_simple` differ by **reviewer-vs-blueprints**:
    nobody picks a pipeline on that axis. `pl_fullstack` is the same spine with every optional step

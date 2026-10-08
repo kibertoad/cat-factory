@@ -116,7 +116,7 @@ dispatches ONE deploy job. With involved services:
   provider-before-consumer order** (reverse topological over the consumer→provider
   edges), parking `awaiting_job` between dispatches. `deployJobId` gains a frame
   discriminator; step state gains a per-frame map (`step.deployEnvs:
-Record<frameId, { jobId, status }>`). All `ready` → the step finishes; any failure →
+  Record<frameId, { jobId, status }>`). All `ready` → the step finishes; any failure →
   the step fails (already-ready peer envs are left to expiry).
 - **Cross-injection**: sequential provider-first ordering means each later provision can
   receive the already-ready peers. Extend `deployerProvisionArgs`, which already
@@ -126,7 +126,7 @@ Record<frameId, { jobId, status }>`). All `ready` → the step finishes; any fai
   reconfigure pass.
 - **Tester**: `testerInfraSpec` gains `peerEnvironments: Record<title, url>` beside
   `environmentUrl`, resolved by reusing `indexLiveServiceEnvUrls(handles,
-involvedFrameIds)` (`frontend-infra.logic.ts`) verbatim; it is already generic over
+  involvedFrameIds)` (`frontend-infra.logic.ts`) verbatim; it is already generic over
   frame-id sets.
 - **The one real storage gap**: `supersedePriorEnvironment` is keyed per task `blockId`,
   so N provisions for one task would supersede each other. It must become per
@@ -162,7 +162,7 @@ Rejected alternatives:
   singular resolver. An involved frame with no linked repo is skipped for coding: it can
   still provision an env (record this asymmetry).
 - **Job body**: `AgentJob` gains `peerRepos?: PeerRepoSpec[]` (`{ repo, ghToken?, branch,
-newBranch?, pr?, serviceDirectory? }`). A per-repo token is optional (defaults to the
+  newBranch?, pr?, serviceDirectory? }`). A per-repo token is optional (defaults to the
   job's token: a workspace has one GitHub installation today), but the wire shape is
   ready for GitLab parity / multi-installation.
 - **Workspace layout**: primary at `<workspaceRoot>/<primary.name>`, peers as siblings
