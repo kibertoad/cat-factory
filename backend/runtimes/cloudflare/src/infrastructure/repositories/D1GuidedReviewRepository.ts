@@ -12,6 +12,7 @@ import type {
   GuidedReviewRepository,
   GuidedReviewSession,
   GuidedReviewSessionFilter,
+  GuidedReviewSessionPage,
   GuidedReviewStaleJob,
   GuidedReviewThread,
   GuidedReviewThreadSummary,
@@ -55,10 +56,10 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
       .prepare(
         `INSERT INTO guided_review_sessions
            (workspace_id, id, provider, repo_id, owner, repo, pr_number, pr_title,
-            reviewed_head_sha, base_ref, created_by, overview_status, overview_generation,
-            overview_content, overview_failure, overview_model, overview_driver, created_at,
-            updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 1, NULL, NULL, NULL, ?, ?, ?)
+            reviewed_head_sha, base_ref, created_by, created_by_kind, overview_status,
+            overview_generation, overview_content, overview_failure, overview_model,
+            overview_driver, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 1, NULL, NULL, NULL, ?, ?, ?)
          ON CONFLICT (workspace_id, repo_id, pr_number, created_by) DO NOTHING`,
       )
       .bind(
@@ -73,6 +74,7 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
         s.reviewedHeadSha,
         s.baseRef,
         s.createdBy,
+        s.createdByKind,
         driver,
         s.createdAt,
         s.updatedAt,
@@ -101,26 +103,33 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
     workspaceId: string,
     filter: GuidedReviewSessionFilter,
   ): Promise<GuidedReviewSession[]> {
-    const where = ['workspace_id = ?']
-    const binds: unknown[] = [workspaceId]
-    if (filter.repoId !== undefined) {
-      where.push('repo_id = ?')
-      binds.push(filter.repoId)
-    }
-    if (filter.prNumber !== undefined) {
-      where.push('pr_number = ?')
-      binds.push(filter.prNumber)
-    }
-    if (filter.createdBy !== undefined) {
-      where.push('created_by = ?')
-      binds.push(filter.createdBy)
-    }
+    const { where, binds } = sessionFilter(workspaceId, filter)
     const { results } = await this.db
       .prepare(
         `SELECT * FROM guided_review_sessions WHERE ${where.join(' AND ')}
            ORDER BY updated_at DESC, id LIMIT ?`,
       )
       .bind(...binds, filter.limit ?? 50)
+      .all<SessionRow>()
+    return results.map(rowToSession)
+  }
+
+  async pageSessions(
+    workspaceId: string,
+    filter: Omit<GuidedReviewSessionFilter, 'limit'>,
+    page: GuidedReviewSessionPage,
+  ): Promise<GuidedReviewSession[]> {
+    const { where, binds } = sessionFilter(workspaceId, filter)
+    if (page.cursor) {
+      where.push('(created_at < ? OR (created_at = ? AND id < ?))')
+      binds.push(page.cursor.createdAt, page.cursor.createdAt, page.cursor.id)
+    }
+    const { results } = await this.db
+      .prepare(
+        `SELECT * FROM guided_review_sessions WHERE ${where.join(' AND ')}
+           ORDER BY created_at DESC, id DESC LIMIT ?`,
+      )
+      .bind(...binds, page.limit)
       .all<SessionRow>()
     return results.map(rowToSession)
   }
@@ -607,4 +616,26 @@ export class D1GuidedReviewRepository implements GuidedReviewRepository {
       .slice(0, limit)
       .map((j) => j.job)
   }
+}
+
+/** The WHERE clause both session lists share: the workspace plus each filter the caller set. */
+function sessionFilter(
+  workspaceId: string,
+  filter: Omit<GuidedReviewSessionFilter, 'limit'>,
+): { where: string[]; binds: unknown[] } {
+  const where = ['workspace_id = ?']
+  const binds: unknown[] = [workspaceId]
+  if (filter.repoId !== undefined) {
+    where.push('repo_id = ?')
+    binds.push(filter.repoId)
+  }
+  if (filter.prNumber !== undefined) {
+    where.push('pr_number = ?')
+    binds.push(filter.prNumber)
+  }
+  if (filter.createdBy !== undefined) {
+    where.push('created_by = ?')
+    binds.push(filter.createdBy)
+  }
+  return { where, binds }
 }

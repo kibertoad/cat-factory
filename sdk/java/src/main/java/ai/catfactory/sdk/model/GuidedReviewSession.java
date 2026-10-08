@@ -12,6 +12,7 @@ import org.jspecify.annotations.Nullable;
  * @param baseRef the {@code baseRef} field.
  * @param createdAt the {@code createdAt} field.
  * @param createdBy the {@code createdBy} field.
+ * @param createdByKind the {@code createdByKind} field.
  * @param id the {@code id} field.
  * @param overview the {@code overview} field.
  * @param owner the {@code owner} field.
@@ -30,6 +31,8 @@ public record GuidedReviewSession(
     @JsonProperty("createdAt") Double createdAt,
 
     @JsonProperty("createdBy") String createdBy,
+
+    @JsonProperty("createdByKind") GuidedReviewSessionCreatedByKind createdByKind,
 
     @JsonProperty("id") String id,
 
@@ -68,6 +71,7 @@ public record GuidedReviewSession(
         private @Nullable String baseRef;
         private @Nullable Double createdAt;
         private @Nullable String createdBy;
+        private @Nullable GuidedReviewSessionCreatedByKind createdByKind;
         private @Nullable String id;
         private @Nullable GuidedReviewOverview overview;
         private @Nullable String owner;
@@ -94,6 +98,12 @@ public record GuidedReviewSession(
         /** Set {@code createdBy}. */
         public Builder createdBy(@Nullable String createdBy) {
             this.createdBy = createdBy;
+            return this;
+        }
+
+        /** Set {@code createdByKind}. */
+        public Builder createdByKind(@Nullable GuidedReviewSessionCreatedByKind createdByKind) {
+            this.createdByKind = createdByKind;
             return this;
         }
 
@@ -159,7 +169,7 @@ public record GuidedReviewSession(
 
         /** Build the {@link GuidedReviewSession}. */
         public GuidedReviewSession build() {
-            return new GuidedReviewSession(baseRef, createdAt, createdBy, id, overview, owner, prNumber, prTitle, provider, repo, repoId, reviewedHeadSha, updatedAt);
+            return new GuidedReviewSession(baseRef, createdAt, createdBy, createdByKind, id, overview, owner, prNumber, prTitle, provider, repo, repoId, reviewedHeadSha, updatedAt);
         }
     }
 }

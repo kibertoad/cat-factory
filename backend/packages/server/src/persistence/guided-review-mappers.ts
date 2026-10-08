@@ -13,12 +13,13 @@ import {
   guidedReviewMessageKindSchema,
   guidedReviewMessageSchema,
   guidedReviewOverviewContentSchema,
+  guidedReviewOwnerKindSchema,
   guidedReviewWorkStatusSchema,
   vcsProviderSchema,
 } from '@cat-factory/contracts'
 import { decodeEnum, decodeJson } from './decode.js'
 
-// Row mappers for the guided-review tables (D1 migration 0104 and its Drizzle mirror). Both
+// Row mappers for the guided-review tables (D1 migrations 0104 and 0105 and their Drizzle mirror). Both
 // facades read the same snake_case columns, so the decode lives here once.
 
 export interface GuidedReviewSessionRow {
@@ -32,6 +33,7 @@ export interface GuidedReviewSessionRow {
   reviewed_head_sha: string
   base_ref: string
   created_by: string
+  created_by_kind: string
   overview_status: string
   overview_generation: number
   overview_content: string | null
@@ -100,6 +102,10 @@ export function rowToGuidedReviewSession(row: GuidedReviewSessionRow): GuidedRev
     reviewedHeadSha: row.reviewed_head_sha,
     baseRef: row.base_ref,
     createdBy: row.created_by,
+    createdByKind: decodeEnum(guidedReviewOwnerKindSchema, row.created_by_kind, {
+      ...ctx,
+      column: 'created_by_kind',
+    }),
     overview: {
       status: decodeEnum(guidedReviewWorkStatusSchema, row.overview_status, {
         ...ctx,

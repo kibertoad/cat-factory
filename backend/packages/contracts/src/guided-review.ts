@@ -1,5 +1,5 @@
 import * as v from 'valibot'
-import { booleanQuerySchema, pageLimitSchema } from './public-paging.js'
+import { booleanQuerySchema, cursorSchema, pageLimitSchema } from './public-paging.js'
 import { vcsProviderSchema } from './routes/auth.js'
 
 // Guided PR review: a standalone, per-user exploration session over one pull request. It holds an
@@ -120,6 +120,14 @@ export const guidedReviewOverviewSchema = v.object({
 })
 export type GuidedReviewOverview = v.InferOutput<typeof guidedReviewOverviewSchema>
 
+/**
+ * What kind of identity owns a session: a person, or a public-API key bound to nobody. A person's
+ * session reads the PR and calls the model under that person's credentials; a key's runs on the
+ * workspace's own, because a key id is not a user and has no personal credential to resolve.
+ */
+export const guidedReviewOwnerKindSchema = v.picklist(['user', 'api-key'])
+export type GuidedReviewOwnerKind = v.InferOutput<typeof guidedReviewOwnerKindSchema>
+
 export const guidedReviewSessionSchema = v.object({
   id: v.string(),
   provider: vcsProviderSchema,
@@ -131,7 +139,9 @@ export const guidedReviewSessionSchema = v.object({
   /** The PR head the overview, every answer and every draft anchor were computed against. */
   reviewedHeadSha: v.string(),
   baseRef: v.string(),
+  /** A `usr_*` id when `createdByKind` is `user`, the API key's id when it is `api-key`. */
   createdBy: v.string(),
+  createdByKind: guidedReviewOwnerKindSchema,
   overview: guidedReviewOverviewSchema,
   createdAt: v.number(),
   updatedAt: v.number(),
@@ -330,9 +340,19 @@ export const requestGuidedReviewDraftsSchema = v.object({
 })
 export type RequestGuidedReviewDraftsInput = v.InferOutput<typeof requestGuidedReviewDraftsSchema>
 
+/** A pull request number in a query string: digits only, so the published type is an integer. */
+const prNumberQuerySchema = v.pipe(
+  v.string(),
+  v.regex(/^\d+$/, 'Must be a whole number'),
+  v.transform(Number),
+  v.number(),
+  v.integer(),
+  v.minValue(1),
+)
+
 export const listGuidedReviewsQuerySchema = v.object({
   repoId: v.optional(v.pipe(v.string(), v.maxLength(200))),
-  prNumber: v.optional(v.pipe(v.string(), v.regex(/^\d+$/), v.transform(Number))),
+  prNumber: v.optional(prNumberQuerySchema),
   /** `true` lists only the caller's own sessions. */
   mine: v.optional(
     v.pipe(
@@ -356,17 +376,25 @@ export type GuidedReviewChange =
    */
   | { sessionId: string; scope: 'thread' | 'drafts'; threadId: string }
 
-/** Query of the public session list: the most recently updated sessions first. */
+/**
+ * Query of the public session list: one keyset page, newest session first. Ordered by creation
+ * rather than by last update, because an update would move an unseen session ahead of the cursor
+ * and a caller paging the workspace would never see it.
+ */
 export const listPublicGuidedReviewsQuerySchema = v.object({
   ...listGuidedReviewsQuerySchema.entries,
   /** `true` lists only sessions the calling key's identity owns. */
   mine: v.optional(booleanQuerySchema),
+  /** Rows per page (1..100); omitted means 50. */
   limit: v.optional(pageLimitSchema),
+  /** Opaque cursor from a previous page's `nextCursor`. */
+  cursor: v.optional(cursorSchema),
 })
 
-/** A page of sessions. `truncated` says more matched than `limit` returned. */
+/** A page of sessions, newest first. */
 export const publicGuidedReviewListSchema = v.object({
   sessions: v.array(guidedReviewSessionSchema),
-  truncated: v.boolean(),
+  /** Cursor for the next page, or null when this was the last page. */
+  nextCursor: v.nullable(v.string()),
 })
 export type PublicGuidedReviewList = v.InferOutput<typeof publicGuidedReviewListSchema>

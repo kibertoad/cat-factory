@@ -5099,6 +5099,7 @@ class GuidedReviewSession:
     base_ref: str
     created_at: float
     created_by: str
+    created_by_kind: GuidedReviewSessionCreatedByKind
     id: str
     overview: GuidedReviewOverview
     owner: str
@@ -5118,11 +5119,12 @@ class GuidedReviewSession:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "GuidedReviewSession":
         """Decode a `GuidedReviewSession` from its JSON object."""
-        known = {"baseRef", "createdAt", "createdBy", "id", "overview", "owner", "prNumber", "prTitle", "provider", "repo", "repoId", "reviewedHeadSha", "updatedAt"}
+        known = {"baseRef", "createdAt", "createdBy", "createdByKind", "id", "overview", "owner", "prNumber", "prTitle", "provider", "repo", "repoId", "reviewedHeadSha", "updatedAt"}
         return cls(
             base_ref=data.get("baseRef"),
             created_at=data.get("createdAt"),
             created_by=data.get("createdBy"),
+            created_by_kind=_enum(GuidedReviewSessionCreatedByKind, data.get("createdByKind")),
             id=data.get("id"),
             overview=GuidedReviewOverview.from_dict(data.get("overview")),
             owner=data.get("owner"),
@@ -5142,6 +5144,7 @@ class GuidedReviewSession:
         out["baseRef"] = self.base_ref
         out["createdAt"] = self.created_at
         out["createdBy"] = self.created_by
+        out["createdByKind"] = _encode(self.created_by_kind)
         out["id"] = self.id
         out["overview"] = _encode(self.overview)
         out["owner"] = self.owner
@@ -5153,6 +5156,20 @@ class GuidedReviewSession:
         out["reviewedHeadSha"] = self.reviewed_head_sha
         out["updatedAt"] = self.updated_at
         return out
+
+
+class GuidedReviewSessionCreatedByKind(StrEnum):
+    """The `GuidedReviewSessionCreatedByKind` vocabulary.
+    A `StrEnum`, so a member IS its wire string: it compares equal to it, formats as it in
+    an f-string, and serialises as it. A plain `(str, Enum)` would satisfy the first of
+    those and silently fail the other two — `str(TaskStatus.PLANNED)` is
+    "TaskStatus.PLANNED", which is the value that ends up in a log line or a report.
+    An UNKNOWN value decodes to the plain string rather than raising: this surface is
+    additive, and a client that refused a value the server legitimately added would break on
+    a release it was never told about.
+    """
+    USER = "user"
+    API_KEY = "api-key"
 
 
 @dataclass(frozen=True, slots=True)
@@ -11212,7 +11229,8 @@ class PublicGuidedReviewList:
     """`PublicGuidedReviewList`, as carried on the wire."""
 
     sessions: list[GuidedReviewSession]
-    truncated: bool
+    #: Always present; ``None`` when the server has no value for it.
+    next_cursor: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
     #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
@@ -11222,10 +11240,10 @@ class PublicGuidedReviewList:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicGuidedReviewList":
         """Decode a `PublicGuidedReviewList` from its JSON object."""
-        known = {"sessions", "truncated"}
+        known = {"sessions", "nextCursor"}
         return cls(
             sessions=[GuidedReviewSession.from_dict(item) for item in data.get("sessions") or []],
-            truncated=data.get("truncated"),
+            next_cursor=data.get("nextCursor"),
             extra={k: v for k, v in data.items() if k not in known},
         )
 
@@ -11233,7 +11251,7 @@ class PublicGuidedReviewList:
         """Encode back to the JSON object shape the API expects."""
         out: dict[str, Any] = dict(self.extra)
         out["sessions"] = [_encode(item) for item in self.sessions]
-        out["truncated"] = self.truncated
+        out["nextCursor"] = self.next_cursor
         return out
 
 

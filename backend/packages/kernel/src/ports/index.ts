@@ -90,6 +90,7 @@ export type {
   GuidedReviewRefresh,
   GuidedReviewRepository,
   GuidedReviewSessionFilter,
+  GuidedReviewSessionPage,
   GuidedReviewStaleJob,
 } from './guided-review-repositories.js'
 export {

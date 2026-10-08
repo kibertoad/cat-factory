@@ -31,6 +31,7 @@ export function defineGuidedReviewStoreConformance(harness: ConformanceHarness):
         reviewedHeadSha: 'head1',
         baseRef: 'base1',
         createdBy: 'usr_1',
+        createdByKind: 'user',
         createdAt: 1,
         updatedAt: 1,
         ...over,
@@ -133,6 +134,56 @@ export function defineGuidedReviewStoreConformance(harness: ConformanceHarness):
         HOST,
       )
       expect(other.id).toBe('grs_c')
+    })
+
+    it('keeps who owns a session, a person or an API key', async () => {
+      const app = harness.makeApp()
+      const repo = app.guidedReviewRepository()
+      const { workspace } = await app.createWorkspace()
+      await repo.openSession(workspace.id, session(), HOST)
+      await repo.openSession(
+        workspace.id,
+        session({ id: 'grs_k', createdBy: 'pak_1', createdByKind: 'api-key' }),
+        HOST,
+      )
+      expect(await repo.getSession(workspace.id, 'grs_1')).toMatchObject({
+        createdBy: 'usr_1',
+        createdByKind: 'user',
+      })
+      expect(await repo.getSession(workspace.id, 'grs_k')).toMatchObject({
+        createdBy: 'pak_1',
+        createdByKind: 'api-key',
+      })
+    })
+
+    it('pages sessions newest created first, ties broken by id, with no row twice or skipped', async () => {
+      const app = harness.makeApp()
+      const repo = app.guidedReviewRepository()
+      const { workspace } = await app.createWorkspace()
+      // Two share a millisecond, and the oldest was updated last: neither may move a page edge.
+      const seeds = [
+        session({ id: 'grs_a', prNumber: 1, createdAt: 10, updatedAt: 99 }),
+        session({ id: 'grs_b', prNumber: 2, createdAt: 20, updatedAt: 20 }),
+        session({ id: 'grs_c', prNumber: 3, createdAt: 20, updatedAt: 20 }),
+        session({ id: 'grs_d', prNumber: 4, createdAt: 30, updatedAt: 30 }),
+        session({ id: 'grs_e', prNumber: 5, createdAt: 40, updatedAt: 40, createdBy: 'usr_2' }),
+      ]
+      for (const s of seeds) await repo.openSession(workspace.id, s, HOST)
+
+      const seen: string[] = []
+      let cursor: { createdAt: number; id: string } | undefined
+      for (;;) {
+        const page = await repo.pageSessions(
+          workspace.id,
+          { createdBy: 'usr_1' },
+          { limit: 2, ...(cursor ? { cursor } : {}) },
+        )
+        seen.push(...page.map((s) => s.id))
+        const last = page.at(-1)
+        if (page.length < 2 || !last) break
+        cursor = { createdAt: last.createdAt, id: last.id }
+      }
+      expect(seen).toEqual(['grs_d', 'grs_c', 'grs_b', 'grs_a'])
     })
 
     it('admits one live answer per thread and leaves other threads free', async () => {

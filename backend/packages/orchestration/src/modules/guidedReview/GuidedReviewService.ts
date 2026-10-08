@@ -6,6 +6,7 @@ import type {
   GuidedReviewFailure,
   GuidedReviewMessage,
   GuidedReviewMessageKind,
+  GuidedReviewOwnerKind,
   GuidedReviewSession,
   GuidedReviewThread,
   GuidedReviewThreadSummary,
@@ -32,6 +33,7 @@ import type {
   GuidedReviewRepository,
   GuidedReviewRunner,
   GuidedReviewSessionFilter,
+  GuidedReviewSessionPage,
   IdGenerator,
   Logger,
   ModelProvider,
@@ -93,6 +95,12 @@ export interface GuidedReviewServiceDeps extends InlineBlockModelDeps {
   events?: Pick<ExecutionEventPublisher, 'guidedReviewChanged'>
 }
 
+/** Who opens a session: its owner, and whether that is a person or an unbound API key. */
+export interface GuidedReviewOwner {
+  id: string
+  kind: GuidedReviewOwnerKind
+}
+
 export interface OpenGuidedReviewInput {
   owner: string
   repo: string
@@ -150,12 +158,18 @@ export class GuidedReviewService {
 
   async open(
     workspaceId: string,
-    userId: string,
+    owner: GuidedReviewOwner,
     input: OpenGuidedReviewInput,
   ): Promise<GuidedReviewSession> {
     const context = await this.repoFor(workspaceId, input)
     const provider = context.provider ?? input.provider ?? 'github'
-    const pr = await this.readPr(workspaceId, userId, context.repo, provider, input.prNumber)
+    const pr = await this.readPr(
+      workspaceId,
+      credentialUser(owner.id, owner.kind),
+      context.repo,
+      provider,
+      input.prNumber,
+    )
     const now = this.deps.clock.now()
     const candidate: GuidedReviewNewSession = {
       id: this.deps.idGenerator.next('grs'),
@@ -167,7 +181,8 @@ export class GuidedReviewService {
       prTitle: pr.title,
       reviewedHeadSha: pr.headSha,
       baseRef: pr.baseRef,
-      createdBy: userId,
+      createdBy: owner.id,
+      createdByKind: owner.kind,
       createdAt: now,
       updatedAt: now,
     }
@@ -189,7 +204,7 @@ export class GuidedReviewService {
     const context = await this.repoFor(workspaceId, session)
     const pr = await this.readPr(
       workspaceId,
-      userId,
+      sessionCredentialUser(session),
       context.repo,
       session.provider,
       session.prNumber,
@@ -215,6 +230,15 @@ export class GuidedReviewService {
     filter: GuidedReviewSessionFilter,
   ): Promise<GuidedReviewSession[]> {
     return this.deps.repository.listSessions(workspaceId, filter)
+  }
+
+  /** One keyset page of sessions, newest created first. */
+  pageSessions(
+    workspaceId: string,
+    filter: Omit<GuidedReviewSessionFilter, 'limit'>,
+    page: GuidedReviewSessionPage,
+  ): Promise<GuidedReviewSession[]> {
+    return this.deps.repository.pageSessions(workspaceId, filter, page)
   }
 
   async getSession(workspaceId: string, sessionId: string): Promise<GuidedReviewSessionView> {
@@ -419,7 +443,7 @@ export class GuidedReviewService {
     let outcome: Parameters<GuidedReviewRepository['settleOverview']>[3]
     try {
       const pr = await this.bindPr(workspaceId, session)
-      const body = await this.asUser(workspaceId, session.createdBy, () =>
+      const body = await this.asUser(workspaceId, sessionCredentialUser(session), () =>
         pr.repo.getPullRequestBody ? pr.repo.getPullRequestBody(session.prNumber) : null,
       )
       const { inline, omitted } = partitionPatches(pr.files, OVERVIEW_INLINE_PATCH_CHARS)
@@ -576,12 +600,15 @@ export class GuidedReviewService {
     if (await this.deps.isOverBudget?.(workspaceId)) {
       throw new JobFailure({ reason: 'budget_exhausted', detail: null }, null)
     }
-    const { modelProvider, ref } = await this.resolveModel(workspaceId, session.createdBy)
+    const { modelProvider, ref } = await this.resolveModel(
+      workspaceId,
+      sessionCredentialUser(session),
+    )
     const model = `${ref.provider}:${ref.model}`
     const maxSteps = GUIDED_REVIEW_MAX_STEPS[phase]
     try {
       // The tools read the VCS, so the whole loop runs under the creator's credential scope.
-      const result = await this.asUser(workspaceId, session.createdBy, () =>
+      const result = await this.asUser(workspaceId, sessionCredentialUser(session), () =>
         generateText({
           model: modelProvider.resolve(ref),
           system: call.system,
@@ -612,11 +639,14 @@ export class GuidedReviewService {
     }
   }
 
+  /** The model under `userId`'s scope, or the workspace's when the session has no person. */
   private async resolveModel(
     workspaceId: string,
-    userId: string,
+    userId: string | null,
   ): Promise<{ modelProvider: ModelProvider; ref: ModelRef }> {
-    const scope = await resolveInlineScope({ kind: 'user', workspaceId, userId })
+    const scope = await resolveInlineScope(
+      userId === null ? { kind: 'workspace', workspaceId } : { kind: 'user', workspaceId, userId },
+    )
     const modelProvider = await resolveScopedModelProvider(scope, this.deps)
     const ref = await resolveInlineBlockModelRef(
       this.deps,
@@ -652,13 +682,17 @@ export class GuidedReviewService {
     let files: GitHubChangedFile[]
     let currentHead: string
     try {
-      ;[files, currentHead] = await this.asUser(workspaceId, session.createdBy, async () => {
-        const listed = await listChangedFiles(session.prNumber)
-        // Read after the listing: a push between the two reads then shows up as a moved head.
-        const pr = await getPullRequest(session.prNumber)
-        if (!pr?.headSha) throw new Error(`Pull request #${session.prNumber} was not found`)
-        return [listed, pr.headSha] as const
-      })
+      ;[files, currentHead] = await this.asUser(
+        workspaceId,
+        sessionCredentialUser(session),
+        async () => {
+          const listed = await listChangedFiles(session.prNumber)
+          // Read after the listing: a push between the two reads then shows up as a moved head.
+          const pr = await getPullRequest(session.prNumber)
+          if (!pr?.headSha) throw new Error(`Pull request #${session.prNumber} was not found`)
+          return [listed, pr.headSha] as const
+        },
+      )
     } catch (error) {
       throw new JobFailure(
         { reason: 'repo_unavailable', detail: failureDetail(getErrorMessage(error)) },
@@ -710,7 +744,7 @@ export class GuidedReviewService {
 
   private async readPr(
     workspaceId: string,
-    userId: string,
+    userId: string | null,
     repo: RepoFiles,
     provider: VcsProvider,
     prNumber: number,
@@ -726,8 +760,11 @@ export class GuidedReviewService {
     return { title: pr.title, headSha: pr.headSha, baseRef: pr.baseRef }
   }
 
-  /** Run a VCS call under `userId`'s credential scope (the initiator-PAT policy applies). */
-  private asUser<T>(workspaceId: string, userId: string, fn: () => T): T {
+  /**
+   * Run a VCS call under `userId`'s credential scope (the initiator-PAT policy applies), or
+   * attributed to nobody when the session has no person behind it.
+   */
+  private asUser<T>(workspaceId: string, userId: string | null, fn: () => T): T {
     const scope = this.deps.runInitiatorScope
     return scope ? scope({ workspaceId, initiatedBy: userId }, fn) : fn()
   }
@@ -837,4 +874,18 @@ function questionText(kind: GuidedReviewMessageKind, content: string): string {
 function failureDetail(text: string): string | null {
   const trimmed = (redactSecrets(text) ?? '').trim()
   return trimmed ? trimmed.slice(0, 2000) : null
+}
+
+/** The person whose credentials an owner's work runs under; null for an unbound API key. */
+function credentialUser(id: string, kind: GuidedReviewOwnerKind): string | null {
+  switch (kind) {
+    case 'user':
+      return id
+    case 'api-key':
+      return null
+  }
+}
+
+function sessionCredentialUser(session: GuidedReviewSession): string | null {
+  return credentialUser(session.createdBy, session.createdByKind)
 }
