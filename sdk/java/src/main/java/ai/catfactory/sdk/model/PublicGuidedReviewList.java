@@ -10,14 +10,15 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * The {@code PublicGuidedReviewList} wire model.
+ * @param nextCursor Always present; {@code null} when the server has no value for it.
  * @param sessions the {@code sessions} field.
- * @param truncated the {@code truncated} field.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record PublicGuidedReviewList(
-    @JsonProperty("sessions") List<GuidedReviewSession> sessions,
+    /** Always present; {@code null} when the server has no value for it. */
+    @JsonProperty("nextCursor") @Nullable String nextCursor,
 
-    @JsonProperty("truncated") Boolean truncated
+    @JsonProperty("sessions") List<GuidedReviewSession> sessions
 ) {
 
     /** A new builder for {@link PublicGuidedReviewList}. */
@@ -32,8 +33,14 @@ public record PublicGuidedReviewList(
      * shape that reads naturally from both languages.
      */
     public static final class Builder {
+        private @Nullable String nextCursor;
         private @Nullable List<GuidedReviewSession> sessions;
-        private @Nullable Boolean truncated;
+
+        /** Set {@code nextCursor}. */
+        public Builder nextCursor(@Nullable String nextCursor) {
+            this.nextCursor = nextCursor;
+            return this;
+        }
 
         /** Set {@code sessions}. */
         public Builder sessions(@Nullable List<GuidedReviewSession> sessions) {
@@ -41,15 +48,9 @@ public record PublicGuidedReviewList(
             return this;
         }
 
-        /** Set {@code truncated}. */
-        public Builder truncated(@Nullable Boolean truncated) {
-            this.truncated = truncated;
-            return this;
-        }
-
         /** Build the {@link PublicGuidedReviewList}. */
         public PublicGuidedReviewList build() {
-            return new PublicGuidedReviewList(sessions, truncated);
+            return new PublicGuidedReviewList(nextCursor, sessions);
         }
     }
 }

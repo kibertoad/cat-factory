@@ -351,11 +351,13 @@ type GuidedReviewsListQuery struct {
 	// RepoID zero value means "not sent".
 	RepoID *string
 	// PRNumber zero value means "not sent".
-	PRNumber *string
+	PRNumber *int
 	// Mine zero value means "not sent".
 	Mine *ListPublicGuidedReviewsMine
 	// Limit zero value means "not sent".
 	Limit *int
+	// Cursor zero value means "not sent".
+	Cursor *string
 }
 
 func (q *GuidedReviewsListQuery) values() map[string]string {
@@ -374,6 +376,9 @@ func (q *GuidedReviewsListQuery) values() map[string]string {
 	}
 	if q.Limit != nil {
 		out["limit"] = fmt.Sprintf("%v", *q.Limit)
+	}
+	if q.Cursor != nil {
+		out["cursor"] = fmt.Sprintf("%v", *q.Cursor)
 	}
 	return out
 }
@@ -535,6 +540,11 @@ type ListDebugSearchQueriesResponseItem = DebugSearchQuery
 // An alias rather than a second declaration, so the pager cannot drift from the list it pages
 // over.
 type ListDebugToolCallsResponseItem = ListDebugToolCallsResponseToolCall
+
+// PublicGuidedReviewListItem is the element type of PublicGuidedReviewList.Sessions.
+// An alias rather than a second declaration, so the pager cannot drift from the list it pages
+// over.
+type PublicGuidedReviewListItem = GuidedReviewSession
 
 // ListPublicJobsResponseItem is the element type of ListPublicJobsResponse.Jobs.
 // An alias rather than a second declaration, so the pager cannot drift from the list it pages
@@ -3634,10 +3644,11 @@ func (s *GuidedReviewsService) GetThread(ctx context.Context, sessionID string, 
 }
 
 // List list the workspace's guided reviews
-// Guided review sessions in the workspace, most recently updated first, optionally narrowed to
-// one repository (`repoId`), one pull request (`prNumber`) or the calling key's own
-// (`mine=true`). Returns at most `limit` (default 50, at most 100) and says in `truncated`
-// whether more matched.
+// Guided review sessions in the workspace, newest created first, optionally narrowed to one
+// repository (`repoId`), one pull request (`prNumber`) or the calling key's own (`mine=true`).
+// Keyset-paginated: up to `limit` rows (default 50, at most 100) per page, and `nextCursor` to
+// pass back as `cursor` for the next page, null on the last. A malformed cursor is `400` with
+// `code: "invalid_cursor"`.
 // GET /api/v1/guided-reviews (operation listPublicGuidedReviews).
 func (s *GuidedReviewsService) List(ctx context.Context, query *GuidedReviewsListQuery) (*PublicGuidedReviewList, error) {
 	req := requestSpec{
@@ -3652,6 +3663,41 @@ func (s *GuidedReviewsService) List(ctx context.Context, query *GuidedReviewsLis
 	return &out, nil
 }
 
+// ListAll iterates every sessions across every page of List.
+// Follows nextCursor until the server reports no further page. Yields (item, nil) per item and,
+// on a failure mid-iteration, one final (zero, err) — so a partial walk is never mistaken for a
+// complete one.
+func (s *GuidedReviewsService) ListAll(ctx context.Context, query *GuidedReviewsListQuery) iter.Seq2[PublicGuidedReviewListItem, error] {
+	return func(yield func(PublicGuidedReviewListItem, error) bool) {
+		var page GuidedReviewsListQuery
+		if query != nil {
+			page = *query
+		}
+		for {
+			result, err := s.List(ctx, &page)
+			if err != nil {
+				var zero PublicGuidedReviewListItem
+				yield(zero, err)
+				return
+			}
+			for _, item := range result.Sessions {
+				if !yield(item, nil) {
+					return
+				}
+			}
+			if result.NextCursor == nil || *result.NextCursor == "" {
+				return
+			}
+			if page.Cursor != nil && *page.Cursor == *result.NextCursor {
+				var zero PublicGuidedReviewListItem
+				yield(zero, ErrRepeatedCursor)
+				return
+			}
+			page.Cursor = result.NextCursor
+		}
+	}
+}
+
 // Open open a guided review of a pull request
 // Open a guided review of one pull request in a repository linked to the workspace, or return the
 // one the calling key's identity already has for it. A guided review explains the PR (what it
@@ -3659,9 +3705,10 @@ func (s *GuidedReviewsService) List(ctx context.Context, query *GuidedReviewsLis
 // holds question threads answered by a model that reads the PR at the commit under review.
 // Answers with the session at once; its overview is generated in the background, so follow `GET
 // /api/v1/guided-reviews/{sessionId}/events` or re-read it. A key bound to a person acts as that
-// person; an unbound key owns its own sessions and runs on the deployment's credentials. An
-// unlinked repository is `404` with `details.reason: "repo_not_linked"`, and a PR the host cannot
-// find is `404` with `details.reason: "pr_not_found"`.
+// person; an unbound key owns its own sessions and runs on the workspace's credentials, never a
+// person's; `createdByKind` says which of the two owns a session. An unlinked repository is `404`
+// with `details.reason: "repo_not_linked"`, and a PR the host cannot find is `404` with
+// `details.reason: "pr_not_found"`.
 // POST /api/v1/guided-reviews (operation openPublicGuidedReview).
 func (s *GuidedReviewsService) Open(ctx context.Context, body OpenGuidedReview) (*GuidedReviewSessionView, error) {
 	req := requestSpec{

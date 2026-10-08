@@ -2943,21 +2943,39 @@ class GuidedReviewsResource:
         )
         return GuidedReviewThreadView.from_dict(raw)
 
-    def list(self, *, repo_id: str | None = None, pr_number: str | None = None, mine: ListPublicGuidedReviewsMine | None = None, limit: int | None = None, timeout: float | None = None) -> PublicGuidedReviewList:
+    def list(self, *, repo_id: str | None = None, pr_number: int | None = None, mine: ListPublicGuidedReviewsMine | None = None, limit: int | None = None, cursor: str | None = None, timeout: float | None = None) -> PublicGuidedReviewList:
         """List the workspace's guided reviews
-        Guided review sessions in the workspace, most recently updated first, optionally
-        narrowed to one repository (`repoId`), one pull request (`prNumber`) or the calling
-        key's own (`mine=true`). Returns at most `limit` (default 50, at most 100) and says
-        in `truncated` whether more matched.
+        Guided review sessions in the workspace, newest created first, optionally narrowed
+        to one repository (`repoId`), one pull request (`prNumber`) or the calling key's own
+        (`mine=true`). Keyset-paginated: up to `limit` rows (default 50, at most 100) per
+        page, and `nextCursor` to pass back as `cursor` for the next page, null on the last.
+        A malformed cursor is `400` with `code: "invalid_cursor"`.
         `GET /api/v1/guided-reviews` (operation `listPublicGuidedReviews`).
         """
         raw = self._transport.request(
             "GET",
             f"/api/v1/guided-reviews",
-            query={"repoId": repo_id, "prNumber": pr_number, "mine": mine, "limit": limit},
+            query={"repoId": repo_id, "prNumber": pr_number, "mine": mine, "limit": limit, "cursor": cursor},
             timeout=timeout,
         )
         return PublicGuidedReviewList.from_dict(raw)
+
+    def list_all(self, *, repo_id: str | None = None, pr_number: int | None = None, mine: ListPublicGuidedReviewsMine | None = None, limit: int | None = None, cursor: str | None = None, timeout: float | None = None) -> Iterator[Any]:
+        """Every `sessions` across every page of `list()`, as they arrive.
+        Follows `next_cursor` until the server reports no further page. A page may
+        legitimately come back empty while `next_cursor` is still set, so this pages until
+        the cursor is None rather than stopping at the first empty page.
+        Yields items of `PublicGuidedReviewList.sessions`.
+        """
+        page_cursor = cursor
+        while True:
+            page = self.list(repo_id=repo_id, pr_number=pr_number, mine=mine, limit=limit, cursor=page_cursor, timeout=timeout)
+            yield from page.sessions
+            if not page.next_cursor:
+                return
+            if page.next_cursor == page_cursor:
+                raise _repeated_cursor()
+            page_cursor = page.next_cursor
 
     def open(self, body: OpenGuidedReview, *, timeout: float | None = None) -> GuidedReviewSessionView:
         """Open a guided review of a pull request
@@ -2969,7 +2987,8 @@ class GuidedReviewsResource:
         overview is generated in the background, so follow `GET
         /api/v1/guided-reviews/{sessionId}/events` or re-read it. A key bound to a person
         acts as that person; an unbound key owns its own sessions and runs on the
-        deployment's credentials. An unlinked repository is `404` with `details.reason:
+        workspace's credentials, never a person's; `createdByKind` says which of the two
+        owns a session. An unlinked repository is `404` with `details.reason:
         "repo_not_linked"`, and a PR the host cannot find is `404` with `details.reason:
         "pr_not_found"`.
         `POST /api/v1/guided-reviews` (operation `openPublicGuidedReview`).

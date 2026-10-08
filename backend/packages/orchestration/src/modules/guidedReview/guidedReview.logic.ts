@@ -1,6 +1,8 @@
 import {
   GUIDED_REVIEW_ANSWER_MAX,
   GUIDED_REVIEW_COMMENT_MAX,
+  GUIDED_REVIEW_LIST_MAX,
+  GUIDED_REVIEW_PROSE_MAX,
   GUIDED_REVIEW_TITLE_MAX,
   parseGuidedReviewAnchor,
   parseGuidedReviewOverviewContent,
@@ -29,8 +31,8 @@ export const THREAD_HISTORY_CHARS = 40_000
 /** Model-loop bounds per job kind. The final step forbids tools so the loop ends on a reply. */
 export const GUIDED_REVIEW_MAX_STEPS = { overview: 24, answer: 16, drafts: 16 } as const
 
-const LIST_MAX = 40
-const PROSE_MAX = 8000
+const LIST_MAX = GUIDED_REVIEW_LIST_MAX
+const PROSE_MAX = GUIDED_REVIEW_PROSE_MAX
 
 /** A proposal the drafting model returned, before anchoring. */
 export interface DraftProposal {

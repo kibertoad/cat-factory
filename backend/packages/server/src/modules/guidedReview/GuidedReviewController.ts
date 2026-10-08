@@ -38,7 +38,7 @@ export function guidedReviewController(): Hono<AppEnv> {
     const workspaceId = param(c, 'workspaceId')
     const session = await service.open(
       workspaceId,
-      requireUser(c, SIGNED_IN).id,
+      { id: requireUser(c, SIGNED_IN).id, kind: 'user' },
       c.req.valid('json'),
     )
     return c.json(await service.getSession(workspaceId, session.id), 200)

@@ -107,14 +107,38 @@ public final class GuidedReviewsClient {
 
     /**
      * List the workspace's guided reviews
-     * Guided review sessions in the workspace, most recently updated first, optionally narrowed to
-     * one repository (`repoId`), one pull request (`prNumber`) or the calling key's own
-     * (`mine=true`). Returns at most `limit` (default 50, at most 100) and says in `truncated`
-     * whether more matched.
+     * Guided review sessions in the workspace, newest created first, optionally narrowed to one
+     * repository (`repoId`), one pull request (`prNumber`) or the calling key's own (`mine=true`).
+     * Keyset-paginated: up to `limit` rows (default 50, at most 100) per page, and `nextCursor` to
+     * pass back as `cursor` for the next page, null on the last. A malformed cursor is `400` with
+     * `code: "invalid_cursor"`.
      * {@code GET /api/v1/guided-reviews} (operation {@code listPublicGuidedReviews}).
      */
     public PublicGuidedReviewList list(GuidedReviewsListQuery query) {
         return transport.request("GET", "/api/v1/guided-reviews", null, query.toQuery(), new TypeReference<PublicGuidedReviewList>() {});
+    }
+
+    /**
+     * Every {@code sessions} across every page of {@code list()}.
+     * Pages lazily, following {@code nextCursor} until the server reports no further page. A page
+     * may legitimately arrive empty while a cursor is still set, so iteration ends on the cursor,
+     * never on an empty page.
+     */
+    public Iterator<GuidedReviewSession> listAll(GuidedReviewsListQuery query) {
+        return new PageIterator<GuidedReviewSession>() {
+            @Override
+            protected Page<GuidedReviewSession> fetch(@Nullable String cursor) {
+                GuidedReviewsListQuery nextQuery = GuidedReviewsListQuery.builder()
+                        .repoId(query.repoId())
+                        .prNumber(query.prNumber())
+                        .mine(query.mine())
+                        .limit(query.limit())
+                        .cursor(cursor)
+                        .build();
+                PublicGuidedReviewList page = list(nextQuery);
+                return new Page<>(page.sessions(), page.nextCursor());
+            }
+        };
     }
 
     /**
@@ -125,10 +149,10 @@ public final class GuidedReviewsClient {
      * questions) and holds question threads answered by a model that reads the PR at the commit
      * under review. Answers with the session at once; its overview is generated in the background,
      * so follow `GET /api/v1/guided-reviews/{sessionId}/events` or re-read it. A key bound to a
-     * person acts as that person; an unbound key owns its own sessions and runs on the
-     * deployment's credentials. An unlinked repository is `404` with `details.reason:
-     * "repo_not_linked"`, and a PR the host cannot find is `404` with `details.reason:
-     * "pr_not_found"`.
+     * person acts as that person; an unbound key owns its own sessions and runs on the workspace's
+     * credentials, never a person's; `createdByKind` says which of the two owns a session. An
+     * unlinked repository is `404` with `details.reason: "repo_not_linked"`, and a PR the host
+     * cannot find is `404` with `details.reason: "pr_not_found"`.
      * {@code POST /api/v1/guided-reviews} (operation {@code openPublicGuidedReview}).
      */
     public GuidedReviewSessionView open(OpenGuidedReview body) {

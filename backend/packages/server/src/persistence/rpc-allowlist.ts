@@ -944,6 +944,7 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     openSession: { scope: { kind: 'workspace', arg: 0 } },
     getSession: { scope: { kind: 'workspace', arg: 0 } },
     listSessions: { scope: { kind: 'workspace', arg: 0 } },
+    pageSessions: { scope: { kind: 'workspace', arg: 0 } },
     deleteSession: { scope: { kind: 'workspace', arg: 0 } },
     restartOverview: { scope: { kind: 'workspace', arg: 0 } },
     claimOverview: { scope: { kind: 'workspace', arg: 0 } },
