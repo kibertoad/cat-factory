@@ -15,8 +15,9 @@ import type {
   ModelProvider,
   ModelRef,
   RepoFiles,
+  RunInitiatorScope,
 } from '@cat-factory/kernel'
-import { ConflictError, ForbiddenError } from '@cat-factory/kernel'
+import { ConflictError, ForbiddenError, ValidationError } from '@cat-factory/kernel'
 import { MockLanguageModelV3 } from 'ai/test'
 import { describe, expect, it } from 'vitest'
 import { GuidedReviewService } from './GuidedReviewService.js'
@@ -29,6 +30,16 @@ import { GuidedReviewService } from './GuidedReviewService.js'
 const WS = 'ws_1'
 const OWNER = 'usr_1'
 const HEAD = 'head123'
+
+/**
+ * The credential scopes open right now. Each stays open until its callback's promise settles, which
+ * is what the facades' AsyncLocalStorage-backed seam amounts to for these sequential tests.
+ */
+const openScopes: (string | null | undefined)[] = []
+const recordingScope = ((scope, fn) => {
+  openScopes.push(scope.initiatedBy)
+  return Promise.resolve(fn()).finally(() => openScopes.pop())
+}) as RunInitiatorScope
 
 type Step = { tool: string; input: Record<string, unknown> } | { text: string } | { throws: string }
 
@@ -277,10 +288,10 @@ const FILES: GitHubChangedFile[] = [
   },
 ]
 
-function fakeRepo(reads: (string | undefined)[]): RepoFiles {
+function fakeRepo(reads: (string | undefined)[], pr: { headSha: string }): RepoFiles {
   return {
     async getPullRequest() {
-      return { title: 'Add retries', headSha: HEAD, baseRef: 'main' }
+      return { title: 'Add retries', headSha: pr.headSha, baseRef: 'main' }
     },
     async listChangedFiles() {
       return FILES
@@ -289,7 +300,7 @@ function fakeRepo(reads: (string | undefined)[]): RepoFiles {
       return 'Retries payment calls.'
     },
     async getFile(path: string, gitRef?: string) {
-      reads.push(`${path}@${gitRef}`)
+      reads.push(`${path}@${gitRef} as ${openScopes.at(-1) ?? 'nobody'}`)
       return { content: 'retry()\nretry()', sha: 's' }
     },
     async listDirectory() {
@@ -302,6 +313,7 @@ function setup(steps: Step[], opts: { overBudget?: boolean } = {}) {
   const repository = new InMemoryGuidedReviewRepository()
   const woken: GuidedReviewJob[] = []
   const reads: (string | undefined)[] = []
+  const pr = { headSha: HEAD }
   const { provider, calls } = scriptedProvider(steps)
   let id = 0
   let now = 1_000
@@ -310,20 +322,29 @@ function setup(steps: Step[], opts: { overBudget?: boolean } = {}) {
     runner: { start: async (_ws, job) => void woken.push(job) },
     driver: 'deployment',
     resolveRepoFilesForCoords: async () => ({
-      repo: fakeRepo(reads),
+      repo: fakeRepo(reads, pr),
       baseBranch: 'main',
       repoId: '42',
       owner: 'acme',
       name: 'shop',
       provider: 'github',
     }),
+    runInitiatorScope: recordingScope,
     modelProvider: provider,
     modelRef: { provider: 'fake', model: 'fake' } as ModelRef,
     isOverBudget: async () => opts.overBudget ?? false,
     idGenerator: { next: (prefix: string) => `${prefix}_${++id}` },
     clock: { now: () => now },
   })
-  return { service, repository, woken, reads, calls, advance: (ms: number) => (now += ms) }
+  return {
+    service,
+    repository,
+    woken,
+    reads,
+    calls,
+    advance: (ms: number) => (now += ms),
+    push: (headSha: string) => (pr.headSha = headSha),
+  }
 }
 
 const OVERVIEW_JSON = JSON.stringify({
@@ -356,8 +377,8 @@ describe('GuidedReviewService', () => {
     expect(stored.overview.content?.suggestedQuestions).toEqual([
       { id: expect.stringMatching(/^grq_/), question: 'Is the retry bounded?' },
     ])
-    // The tool read the PR at the commit under review, not a moving branch.
-    expect(reads).toEqual([`src/pay.ts@${HEAD}`])
+    // The tool read the PR at the commit under review, as the reviewer who opened the session.
+    expect(reads).toEqual([`src/pay.ts@${HEAD} as ${OWNER}`])
 
     // Reopening the same PR returns the same session and wakes nothing new.
     await service.open(WS, OWNER, { owner: 'acme', repo: 'shop', prNumber: 7 })
@@ -477,6 +498,33 @@ describe('GuidedReviewService', () => {
       detail: null,
     })
     expect(calls()).toBe(0)
+  })
+
+  it('fails an answer as head_moved once the PR moves past the reviewed commit', async () => {
+    const { service, repository, woken, calls, push } = setup([{ text: '{"answer":"Fine."}' }])
+    const session = await service.open(WS, OWNER, { owner: 'acme', repo: 'shop', prNumber: 7 })
+    const { thread } = await service.openThread(WS, OWNER, session.id, {
+      question: { content: 'Why?' },
+    })
+    push('head456')
+    await service.runJob(
+      WS,
+      woken.find((j) => j.kind === 'message')!,
+    )
+    expect((await repository.listMessages(WS, thread.id))[1]?.failure).toEqual({
+      reason: 'head_moved',
+      detail: 'head456',
+    })
+    expect(calls()).toBe(0)
+  })
+
+  it('refuses an empty first question without leaving an empty thread behind', async () => {
+    const { service, repository } = setup([])
+    const session = await service.open(WS, OWNER, { owner: 'acme', repo: 'shop', prNumber: 7 })
+    await expect(
+      service.openThread(WS, OWNER, session.id, { question: { content: '   ' } }),
+    ).rejects.toBeInstanceOf(ValidationError)
+    expect(repository.threads.size).toBe(0)
   })
 
   it('lets only the session owner change it', async () => {
