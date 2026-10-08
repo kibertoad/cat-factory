@@ -524,11 +524,10 @@ export class GuidedReviewService {
     if (landed) {
       await this.notify(workspaceId, {
         sessionId: session.id,
-        scope: 'thread',
+        scope: draftsLanded ? 'drafts' : 'thread',
         threadId: message.threadId,
       })
     }
-    if (draftsLanded) await this.notify(workspaceId, { sessionId: session.id, scope: 'drafts' })
   }
 
   /** Produce a `comment-drafts` message's drafts and land them with it, atomically. */

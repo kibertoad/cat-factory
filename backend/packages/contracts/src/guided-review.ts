@@ -347,9 +347,11 @@ export const listGuidedReviewsQuerySchema = v.object({
  * session or thread it has open, so a workspace member who is not viewing it learns nothing more
  * than that it moved.
  */
-export interface GuidedReviewChange {
-  sessionId: string
-  /** `session`: the overview or the session itself; `thread`: a thread's messages; `drafts`. */
-  scope: 'session' | 'thread' | 'drafts' | 'deleted'
-  threadId?: string
-}
+export type GuidedReviewChange =
+  /** `session`: the overview or the session itself moved. `deleted`: the session is gone. */
+  | { sessionId: string; scope: 'session' | 'deleted' }
+  /**
+   * `thread`: one thread's messages moved. `drafts`: a thread's message settled with comment
+   * drafts, so the session's drafts moved too.
+   */
+  | { sessionId: string; scope: 'thread' | 'drafts'; threadId: string }

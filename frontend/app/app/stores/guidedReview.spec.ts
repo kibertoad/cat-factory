@@ -88,6 +88,37 @@ describe('guided review store', () => {
     expect(store.sessions.s1).toBeUndefined()
   })
 
+  it('refetches the thread a drafts change names', async () => {
+    const getGuidedReview = vi.fn(async (_ws: string, id: string) => view(id, 'x'))
+    const getGuidedReviewThread = vi.fn(async () => threadView('t1', 3))
+    vi.stubGlobal('useApi', () => ({ getGuidedReview, getGuidedReviewThread }))
+    useWorkspaceStore().workspaceId = 'ws_1'
+    const store = useGuidedReviewStore()
+    await store.loadSession('s1')
+    await store.loadThread('s1', 't1')
+    getGuidedReviewThread.mockClear()
+    await store.applyChange({ sessionId: 's1', scope: 'drafts', threadId: 't1' })
+    expect(getGuidedReviewThread).toHaveBeenCalledTimes(1)
+  })
+
+  it('records a failed background refetch and clears it when the session lands again', async () => {
+    const failure = new ApiError(503, { error: { code: 'unavailable' } })
+    const getGuidedReview = vi
+      .fn()
+      .mockResolvedValueOnce(view('s1', 'x'))
+      .mockRejectedValueOnce(failure)
+      .mockResolvedValueOnce(view('s1', 'y'))
+    vi.stubGlobal('useApi', () => ({ getGuidedReview }))
+    useWorkspaceStore().workspaceId = 'ws_1'
+    const store = useGuidedReviewStore()
+    await store.loadSession('s1')
+    await store.applyChange({ sessionId: 's1', scope: 'session' })
+    expect(store.sessions.s1?.session.prTitle).toBe('x')
+    expect(store.refetchFailures.s1).toBe(failure)
+    await store.applyChange({ sessionId: 's1', scope: 'session' })
+    expect(store.refetchFailures.s1).toBeUndefined()
+  })
+
   it('forgets a session whose refetch answers 404', async () => {
     const getGuidedReview = vi
       .fn()

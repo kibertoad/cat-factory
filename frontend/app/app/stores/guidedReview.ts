@@ -24,6 +24,11 @@ export const useGuidedReviewStore = defineStore('guidedReview', () => {
 
   const sessions = ref<Record<string, GuidedReviewSessionView>>({})
   const threads = ref<Record<string, GuidedReviewThreadView>>({})
+  /**
+   * The last error of a background refetch per session, cleared when that session or one of its
+   * threads lands again, so a window can say its view may be out of date.
+   */
+  const refetchFailures = ref<Record<string, unknown>>({})
   // One counter for every key and never reset, so a key dropped by `forget` or `reset` is never
   // landed on by a fetch that was in flight when it went.
   let issued = 0
@@ -47,10 +52,12 @@ export const useGuidedReviewStore = defineStore('guidedReview', () => {
 
   function putSession(view: GuidedReviewSessionView) {
     sessions.value[view.session.id] = view
+    delete refetchFailures.value[view.session.id]
   }
 
   function putThread(view: GuidedReviewThreadView) {
     threads.value[view.thread.id] = view
+    delete refetchFailures.value[view.thread.sessionId]
   }
 
   function loadSession(sessionId: string): Promise<void> {
@@ -107,6 +114,7 @@ export const useGuidedReviewStore = defineStore('guidedReview', () => {
 
   function forget(sessionId: string) {
     delete sessions.value[sessionId]
+    delete refetchFailures.value[sessionId]
     newest.delete(sessionKey(sessionId))
     const threadPrefix = threadKey(sessionId, '')
     for (const key of newest.keys()) {
@@ -121,12 +129,13 @@ export const useGuidedReviewStore = defineStore('guidedReview', () => {
   function reset() {
     sessions.value = {}
     threads.value = {}
+    refetchFailures.value = {}
     newest.clear()
   }
 
   /**
    * A refetch nobody awaits (a live event, a reconnect). A session that answers 404 is gone and
-   * is forgotten; any other failure keeps the last view and is reported to the console.
+   * is forgotten; any other failure keeps the last view and is recorded in `refetchFailures`.
    */
   async function follow(sessionId: string, load: () => Promise<void>): Promise<void> {
     try {
@@ -136,7 +145,7 @@ export const useGuidedReviewStore = defineStore('guidedReview', () => {
         forget(sessionId)
         return
       }
-      console.warn(`[cat-factory] guided review ${sessionId} refetch failed`, error)
+      if (sessions.value[sessionId]) refetchFailures.value[sessionId] = error
     }
   }
 
@@ -146,14 +155,17 @@ export const useGuidedReviewStore = defineStore('guidedReview', () => {
       forget(change.sessionId)
       return
     }
-    const { sessionId, threadId } = change
+    const { sessionId } = change
     const loads: Promise<void>[] = []
     // A thread change also moves the session's summary (its pending answer), so both refetch.
     if (sessions.value[sessionId]) {
       loads.push(follow(sessionId, () => loadSession(sessionId)))
     }
-    if (change.scope === 'thread' && threadId && threads.value[threadId]) {
-      loads.push(follow(sessionId, () => loadThread(sessionId, threadId)))
+    if (change.scope === 'thread' || change.scope === 'drafts') {
+      const { threadId } = change
+      if (threads.value[threadId]) {
+        loads.push(follow(sessionId, () => loadThread(sessionId, threadId)))
+      }
     }
     await Promise.all(loads)
   }
@@ -172,6 +184,7 @@ export const useGuidedReviewStore = defineStore('guidedReview', () => {
   return {
     sessions,
     threads,
+    refetchFailures,
     loadSession,
     loadThread,
     open,

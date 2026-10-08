@@ -393,7 +393,7 @@ describe('GuidedReviewService', () => {
         { path: 'src/pay.ts', line: 90, side: 'RIGHT', body: 'Elsewhere.', rationale: 'r' },
       ],
     })
-    const { service, repository, woken } = setup([{ text: drafts }])
+    const { service, repository, woken, changes } = setup([{ text: drafts }])
     const session = await service.open(WS, OWNER, { owner: 'acme', repo: 'shop', prNumber: 7 })
     const { thread } = await service.openThread(WS, OWNER, session.id, {})
     const { placeholder } = await service.requestDrafts(
@@ -419,6 +419,7 @@ describe('GuidedReviewService', () => {
       proposed: 2,
       dropped: [{ path: 'src/pay.ts', line: 90, side: 'RIGHT', reason: 'outside_diff' }],
     })
+    expect(changes.at(-1)).toEqual({ sessionId: session.id, scope: 'drafts', threadId: thread.id })
   })
 
   it.each([
