@@ -1,5 +1,21 @@
 # @cat-factory/orchestration
 
+## 0.317.1
+
+### Patch Changes
+
+- 8766c3f: `resolvePrNumber`, which reads the pull request a `review` task names from its `prNumber` or `prUrl`, moves to `@cat-factory/contracts` so the SPA's guided-review button and the dispatch read a task's target the same way. Breaking for internal consumers: `@cat-factory/agents` no longer exports it; import it from `@cat-factory/contracts`.
+- Updated dependencies [8766c3f]
+  - @cat-factory/contracts@0.360.0
+  - @cat-factory/agents@0.170.0
+  - @cat-factory/integrations@0.174.9
+  - @cat-factory/kernel@0.354.1
+  - @cat-factory/prompt-fragments@1.1.56
+  - @cat-factory/sandbox@0.12.69
+  - @cat-factory/spend@0.23.5
+  - @cat-factory/workspaces@0.29.17
+  - @cat-factory/caching@0.20.94
+
 ## 0.317.0
 
 ### Minor Changes
