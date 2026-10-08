@@ -725,7 +725,8 @@
         "no_host_frame": "Cette expédition n'est sous aucun service",
         "delegated_executor_unwired": "Exécuteur externe non enregistré",
         "delegated_step_async_only": "Cette étape est interrogée, pas attendue",
-        "delegated_claim_missing": "Cette étape n’a aucun travail externe à interroger"
+        "delegated_claim_missing": "Cette étape n’a aucun travail externe à interroger",
+        "thread_busy": "Ce fil répond encore"
       },
       "description": {
         "dependencies_unmet": "Cette tâche dépend d'autres qui ne sont pas encore terminées. Terminez-les ou débloquez-les, puis relancez-la.",
@@ -782,7 +783,8 @@
         "no_host_frame": "Une tâche de correction a besoin d'un service où vivre et d'un dépôt à corriger. Déplacez la tâche d'expédition sous un cadre de service et réessayez.",
         "delegated_executor_unwired": "Une étape de ce pipeline s’exécute sur un exécuteur externe que ce déploiement n’enregistre pas : le travail n’a donc nulle part où aller. Enregistrez l’exécuteur dans le code, ou remplacez l’étape par une qui s’exécute ici.",
         "delegated_step_async_only": "Cette étape s’exécute sur un exécuteur externe et peut durer des heures : elle est donc lancée puis interrogée, au lieu d’être exécutée dans une seule requête. Démarrez l’exécution depuis le tableau ; si vous arrivez ici depuis votre propre code, pilotez l’étape par la voie asynchrone.",
-        "delegated_claim_missing": "L’enregistrement de ce que l’exécution a envoyé à l’exécuteur externe est absent : il n’y a donc rien à interroger. L’exécuteur lui-même n’a aucun problème. Rechargez l’exécution et relancez l’étape si elle reste bloquée."
+        "delegated_claim_missing": "L’enregistrement de ce que l’exécution a envoyé à l’exécuteur externe est absent : il n’y a donc rien à interroger. L’exécuteur lui-même n’a aucun problème. Rechargez l’exécution et relancez l’étape si elle reste bloquée.",
+        "thread_busy": "La question précédente de ce fil n'a pas encore reçu de réponse. Attends cette réponse ou pose ta question dans un autre fil."
       },
       "action": {
         "connectGitHub": "Connecter GitHub",

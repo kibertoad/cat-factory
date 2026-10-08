@@ -1,6 +1,6 @@
 import type { AdoptionSurvey } from '@cat-factory/contracts'
 import type { MonorepoAdoptionSide } from '@cat-factory/kernel'
-import { FINAL_ANSWER_IN_REPLY } from './shared.js'
+import { FINAL_ANSWER_IN_REPLY, fenceVerbatim } from './shared.js'
 
 // ---------------------------------------------------------------------------
 // The MONOREPO ADOPTION prompt: the inline LLM call behind the human-reviewed step of a
@@ -131,11 +131,7 @@ export function monorepoAdoptionSystemPrompt(sides: readonly MonorepoAdoptionSid
  * rather than left to be reconstructed from a tool name and an argument.
  */
 export function renderSurveyFile(key: string, body: string): string {
-  // Fence longer than any backtick run in the body, so a file containing a fenced block cannot
-  // close this one early and spill the rest of the survey into what the model reads as prose.
-  const longest = Math.max(0, ...[...body.matchAll(/`+/g)].map((m) => m[0].length))
-  const fence = '`'.repeat(Math.max(3, longest + 1))
-  return `### ${key}\n${fence}\n${body}\n${fence}`
+  return `### ${key}\n${fenceVerbatim(body)}`
 }
 
 /**

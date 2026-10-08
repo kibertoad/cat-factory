@@ -725,7 +725,8 @@
         "no_host_frame": "Ta wyprawa nie znajduje się pod żadną usługą",
         "delegated_executor_unwired": "Zewnętrzny executor nie jest zarejestrowany",
         "delegated_step_async_only": "Ten krok jest odpytywany, a nie oczekiwany",
-        "delegated_claim_missing": "Ten krok nie ma zewnętrznej pracy do sprawdzenia"
+        "delegated_claim_missing": "Ten krok nie ma zewnętrznej pracy do sprawdzenia",
+        "thread_busy": "Ten wątek wciąż odpowiada"
       },
       "description": {
         "dependencies_unmet": "To zadanie zależy od innych, które nie zostały jeszcze ukończone. Ukończ je lub odblokuj, a następnie uruchom je ponownie.",
@@ -782,7 +783,8 @@
         "no_host_frame": "Zadanie naprawcze potrzebuje usługi, pod którą będzie żyć, i repozytorium do naprawy. Przenieś zadanie wyprawy pod ramkę usługi i spróbuj ponownie.",
         "delegated_executor_unwired": "Krok tego potoku działa na zewnętrznym executorze, którego ta instalacja nie rejestruje, więc pracy nie ma dokąd wysłać. Zarejestruj executor w kodzie albo zmień krok na taki, który działa tutaj.",
         "delegated_step_async_only": "Ten krok działa na zewnętrznym wykonawcy i może trwać godzinami, więc jest wysyłany, a następnie odpytywany, zamiast wykonywany w obrębie jednego żądania. Uruchom przebieg z tablicy; jeśli trafiłeś tu z własnego kodu, steruj krokiem ścieżką asynchroniczną.",
-        "delegated_claim_missing": "Brakuje zapisu tego, co przebieg wysłał do zewnętrznego wykonawcy, więc nie ma czego odpytywać. Z samym wykonawcą wszystko jest w porządku. Odśwież przebieg i uruchom krok ponownie, jeśli nadal stoi."
+        "delegated_claim_missing": "Brakuje zapisu tego, co przebieg wysłał do zewnętrznego wykonawcy, więc nie ma czego odpytywać. Z samym wykonawcą wszystko jest w porządku. Odśwież przebieg i uruchom krok ponownie, jeśli nadal stoi.",
+        "thread_busy": "Poprzednie pytanie w tym wątku nie ma jeszcze odpowiedzi. Poczekaj na nią albo zapytaj w innym wątku."
       },
       "action": {
         "connectGitHub": "Połącz GitHub",

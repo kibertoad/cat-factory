@@ -78,16 +78,16 @@ The schemas live in `@cat-factory/contracts` (`guided-review.ts`).
 
 ## Slices
 
-| #   | Slice                                                                                                                                 | Status      | PR  |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------- | ----------- | --- |
-| 1   | Contracts, kernel domain and repository port, D1 migration ⇄ Drizzle schema, both repositories, mothership buckets, conformance suite | in progress |     |
-| 2   | `GuidedReviewService`, overview generation, inline answering with VCS read tools, `GuidedReviewRunner` on all three runtimes, sweeper | not started |     |
-| 3   | Workspace routes for the SPA, `guidedReviewChanged` realtime delta, RBAC                                                              | not started |     |
-| 4   | Public API, OpenAPI, `surface.mjs`, the four SDKs and MCP, SSE stream                                                                 | not started |     |
-| 5   | SPA: guided review window, overview, tabbed threads, suggested questions, drafts panel, i18n in every locale                          | not started |     |
-| 6   | Comment drafting and posting (anchor validation, stale-head refusal, per-draft outcomes)                                              | not started |     |
-| 7   | Deep-dive escalation to a read-only container investigator                                                                            | not started |     |
-| 8   | Website page (opened and merged first), then this tracker becomes an ADR                                                              | not started |     |
+| #   | Slice                                                                                                                                 | Status      | PR                                                          |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ----------------------------------------------------------- |
+| 1   | Contracts, kernel domain and repository port, D1 migration ⇄ Drizzle schema, both repositories, mothership buckets, conformance suite | in review   | [#2287](https://github.com/kibertoad/cat-factory/pull/2287) |
+| 2   | `GuidedReviewService`, overview generation, inline answering with VCS read tools, `GuidedReviewRunner` on all three runtimes, sweeper | in progress |                                                             |
+| 3   | Workspace routes for the SPA, `guidedReviewChanged` realtime delta, RBAC                                                              | not started |                                                             |
+| 4   | Public API, OpenAPI, `surface.mjs`, the four SDKs and MCP, SSE stream                                                                 | not started |                                                             |
+| 5   | SPA: guided review window, overview, tabbed threads, suggested questions, drafts panel, i18n in every locale                          | not started |                                                             |
+| 6   | Comment drafting and posting (anchor validation, stale-head refusal, per-draft outcomes)                                              | not started |                                                             |
+| 7   | Deep-dive escalation to a read-only container investigator                                                                            | not started |                                                             |
+| 8   | Website page (opened and merged first), then this tracker becomes an ADR                                                              | not started |                                                             |
 
 ## Gotchas
 
@@ -107,5 +107,15 @@ The schemas live in `@cat-factory/contracts` (`guided-review.ts`).
 - A draft held in `posting` past its lease is re-claimable, so a poster that died between claim and
   settle cannot strand it. If that poster died after the host accepted the comment, a re-claim can
   post it twice; slice 6 checks the host for the comment before re-posting a re-claimed draft.
+- Comment drafting is a message `kind` on its thread, so the busy index covers it and the driver
+  has two job types (overview, message). The drafts and the message settle in one atomic write.
+- Every model call runs as the SESSION CREATOR (`resolveInlineScope` with a `user` subject, and
+  `runInitiatorScope` around each VCS read), because a background driver has no request user.
+  Only the creator may change a session; any workspace member may read it.
+- A model or VCS failure is settled onto the row with a `failure.reason`; only a repository fault
+  propagates, so the driver retries and the claim lease lets the retry take the job back over.
+- The host lists the changed files of the PR's current head only. A job reads them, then the head,
+  and fails `head_moved` when the head is no longer `reviewedHeadSha`, so an answer or a draft
+  anchor never mixes the reviewed commit's files with a later push's diff. A refresh re-points it.
 - A per-thread answer budget (turns and tool steps) is recorded on the message when it cuts an answer
   short, never silently truncated.

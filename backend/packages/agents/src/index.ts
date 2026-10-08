@@ -490,6 +490,25 @@ export {
 } from './agents/prompts/monorepo-adoption.js'
 export { monorepoExplorationTools } from './agents/runtime/monorepo-exploration-tools.js'
 export {
+  guidedReviewTools,
+  type GuidedReviewExplorer,
+  type GuidedReviewFileRequest,
+} from './agents/runtime/guided-review-tools.js'
+export {
+  GUIDED_REVIEW_AGENT_KIND,
+  GUIDED_REVIEW_ANSWER_SYSTEM_PROMPT,
+  GUIDED_REVIEW_DRAFTS_SYSTEM_PROMPT,
+  GUIDED_REVIEW_OVERVIEW_SYSTEM_PROMPT,
+  renderGuidedReviewAnswerPrompt,
+  renderGuidedReviewDraftsPrompt,
+  renderGuidedReviewOverviewPrompt,
+  type GuidedReviewChangedFileSummary,
+  type GuidedReviewOverviewPromptInput,
+  type GuidedReviewPrHeader,
+  type GuidedReviewThreadPromptInput,
+  type GuidedReviewTurn,
+} from './agents/prompts/guided-review.js'
+export {
   FRAGMENT_TITLE_AGENT_KIND,
   FRAGMENT_TITLE_SYSTEM_PROMPT,
   renderFragmentTitlePrompt,

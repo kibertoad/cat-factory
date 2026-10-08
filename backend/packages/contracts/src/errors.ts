@@ -312,6 +312,9 @@ export const CONFLICT_REASONS = [
   // as the pair above: the executor is registered and fine, and the thing that is wrong is this
   // run's own state, so "register the executor" is advice about the wrong system entirely.
   'delegated_claim_missing',
+  // A guided PR review thread admits one live answer; this question arrived while it waits on one.
+  // Other threads of the same review are unaffected, which is what the copy points at.
+  'thread_busy',
 ] as const
 
 export type ConflictReason = (typeof CONFLICT_REASONS)[number]
