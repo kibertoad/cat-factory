@@ -430,7 +430,6 @@ export {
   registerPrReviewerAgent,
   renderPriorReviewContext,
   resolvePrHeadNumber,
-  resolvePrNumber,
 } from './agents/kinds/pr-reviewer.js'
 export {
   CHALLENGE_INVESTIGATOR_KIND,
