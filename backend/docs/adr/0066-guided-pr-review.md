@@ -27,7 +27,7 @@ to the pull request, and **comment drafts** the human edits and posts.
 
 ### Persistence
 
-Four tables (migrations 0104 and 0105, mirrored in Drizzle): sessions, threads, messages, comment
+Four tables (migrations 0104 to 0106, mirrored in Drizzle): sessions, threads, messages, comment
 drafts, one row per message and per draft. The session row carries only the PR identity, the
 reviewed commit (`reviewedHeadSha`), the target branch (`baseRef`) and the overview.
 
@@ -75,8 +75,9 @@ A **deep** answer (`depth: "deep"`) runs a `guided-review-investigator` containe
 the target branch with the PR head fetched, told to check out the reviewed commit. It is dispatched
 standalone like the environment dry run's prober, through one dispatch builder per facade shared by
 both flows, and its spend is filed like a pipeline step's. It is driven as a state machine on its
-message (claim, dispatch, record the dispatch, poll); each poll refreshes the claim, and a container
-still working after 45 minutes is stopped.
+message (claim, dispatch, record the dispatch, poll). Each poll refreshes the claim and the answer
+settles under the refreshed one, so of two racing pollers only the latest lands; a container still
+working after 45 minutes is stopped.
 
 The host lists a pull request's changed files at its current head only, so a job reads the files
 and then the head, and fails as `head_moved` when the head is no longer `reviewedHeadSha`: an answer

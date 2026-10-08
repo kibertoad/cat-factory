@@ -1,5 +1,64 @@
 # @cat-factory/acceptance
 
+## 0.4.89
+
+### Patch Changes
+
+- Updated dependencies [a3a10b8]
+- Updated dependencies [0966666]
+  - @cat-factory/contracts@0.361.0
+  - @cat-factory/sdk@0.56.0
+  - @cat-factory/acceptance-kit@0.7.30
+  - @cat-factory/cli@0.14.4
+  - @cat-factory/kernel@0.354.2
+
+## 0.4.88
+
+### Patch Changes
+
+- Updated dependencies [8766c3f]
+  - @cat-factory/contracts@0.360.0
+  - @cat-factory/acceptance-kit@0.7.29
+  - @cat-factory/cli@0.14.4
+  - @cat-factory/kernel@0.354.1
+  - @cat-factory/sdk@0.55.0
+
+## 0.4.87
+
+### Patch Changes
+
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+  - @cat-factory/contracts@0.359.0
+  - @cat-factory/kernel@0.354.0
+  - @cat-factory/sdk@0.55.0
+  - @cat-factory/acceptance-kit@0.7.28
+  - @cat-factory/cli@0.14.4
+
+## 0.4.86
+
+### Patch Changes
+
+- Updated dependencies [075ff13]
+  - @cat-factory/contracts@0.358.0
+  - @cat-factory/kernel@0.353.0
+  - @cat-factory/acceptance-kit@0.7.27
+  - @cat-factory/cli@0.14.4
+  - @cat-factory/sdk@0.54.3
+
+## 0.4.85
+
+### Patch Changes
+
+- Updated dependencies [57d9db3]
+  - @cat-factory/kernel@0.352.0
+  - @cat-factory/contracts@0.357.0
+  - @cat-factory/acceptance-kit@0.7.26
+  - @cat-factory/cli@0.14.4
+  - @cat-factory/sdk@0.54.3
+
 ## 0.4.84
 
 ### Patch Changes

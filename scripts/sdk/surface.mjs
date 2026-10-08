@@ -216,7 +216,7 @@ const SURFACE = {
   acknowledgePublicKaizenEntry: { group: 'kaizen', method: 'acknowledgeEntry' },
   // ---- Guided PR review (`read` to follow a session, `write` to open, ask or draft) ---------
   openPublicGuidedReview: { group: 'guidedReviews', method: 'open' },
-  listPublicGuidedReviews: { group: 'guidedReviews', method: 'list' },
+  listPublicGuidedReviews: { group: 'guidedReviews', method: 'list', paginates: 'sessions' },
   getPublicGuidedReview: { group: 'guidedReviews', method: 'get' },
   deletePublicGuidedReview: { group: 'guidedReviews', method: 'delete' },
   refreshPublicGuidedReview: { group: 'guidedReviews', method: 'refresh' },

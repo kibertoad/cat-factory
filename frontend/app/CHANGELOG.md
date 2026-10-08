@@ -1,5 +1,65 @@
 # @cat-factory/app
 
+## 0.306.0
+
+### Minor Changes
+
+- 0966666: Guided PR review drafts can be edited and posted (surface version 1.77.0). An edit names the `rev` it was made against and is refused `409 draft_conflict` from a stale one; moving a draft is checked against the diff and refused `422 draft_anchor_outside_diff` outside it. Posting publishes the chosen drafts on the pull request as plain review comments under the caller's credential scope, with comment bodies scrubbed of secrets and passed through the host-markdown boundary. Each draft is claimed before the host call and settled with the host's own per-comment answer, so a retried post never publishes a comment twice and a partial post is reported per draft. A post after the pull request moved past the reviewed commit is refused `409 session_stale`.
+  
+  The optional summary comment posts only alongside a draft the call claimed, so an identical retry after a complete post publishes nothing. Contracts export `isPostableDraft` and `GUIDED_REVIEW_POST_LEASE_MS`, the rule the server claims by and the review window selects by, so a `posting` draft whose poster died is offered for posting again once its lease ends. `ConflictError` gains `draft_conflict` and `session_stale`, translated in every locale. The four SDKs and the MCP server gain `editDraft` and `postDrafts`.
+
+### Patch Changes
+
+- Updated dependencies [a3a10b8]
+- Updated dependencies [0966666]
+  - @cat-factory/contracts@0.361.0
+
+## 0.305.0
+
+### Minor Changes
+
+- 8766c3f: The SPA gains the guided PR review window. It opens from the sidebar and command palette ("Explore a pull request"), where a linked repository and one of its pull requests are picked, or from a `review` task's inspector on the PR that task targets. The window shows the PR's overview (summary, intent, meaningful changes, consequences, risks, areas worth reviewing) with suggested questions as chips, beside tabbed exploration threads. Each thread waits on its own answer only, so other tabs stay usable, and each can ask for review comment drafts, which are listed read-only with every refused proposal and its reason. A failed overview or answer shows its translated reason, with the raw cause behind a disclosure, and the overview flags a pull request that has moved past the reviewed commit. All copy is translated in every locale.
+
+### Patch Changes
+
+- Updated dependencies [8766c3f]
+  - @cat-factory/contracts@0.360.0
+
+## 0.304.0
+
+### Minor Changes
+
+- 0ea28b8: Guided PR review is reachable from the SPA. `/workspaces/:workspaceId/guided-reviews` opens, lists, reads, refreshes and deletes sessions, and its `threads` sub-routes open threads, ask questions and request comment drafts. Writes return at once; the overview and each answer arrive through a new `guidedReview` workspace event, which carries ids only so a member who is not viewing a review learns nothing more than that it moved. The routes are member tier and only a session's creator may change it.
+  
+  `ExecutionEventPublisher` gains `guidedReviewChanged`, implemented on the Durable Object, Node and fan-out publishers. Thread routes are addressed under their session, and a thread of another session is answered as absent. The SPA gains the API client and a `guidedReview` store that follows the event. A conformance assertion checks every facade wires the module.
+
+### Patch Changes
+
+- 0ea28b8: Guided PR review gets its engine. `GuidedReviewService` opens a session for a linked repository's pull request, generates a structured overview of it, answers questions in independent threads and turns a thread's conclusions into comment drafts. Each of those is background work: the request persists a pending row and returns, and a `GuidedReviewRunner` drives it (a Cloudflare Workflow, a pg-boss queue on Node and standard local, a `node:sqlite` queue on a mothership-mode node), with a sweeper re-waking work whose claim lapsed.
+  
+  Answers come from an inline model with read tools over the PR pinned to the reviewed commit (`list_changed_files`, `read_diff`, `read_file` on either side, `list_directory`), under a per-job read budget, with file contents scrubbed of secrets. Drafts are kept only where the host could place them (a line inside a diff hunk on that side), and every refused proposal is recorded in the message's `draftReport`. A failure is settled with a reason from a closed vocabulary, which gains `head_moved`: once the PR moves past the reviewed commit, its changed files no longer describe that commit, so the job fails until the session is refreshed.
+  
+  `ConflictError` gains the `thread_busy` reason, translated in every locale. `fenceVerbatim` is extracted into `@cat-factory/agents`' shared prompt helpers. No routes expose the service yet; they land in the next slice.
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+  - @cat-factory/contracts@0.359.0
+
+## 0.303.4
+
+### Patch Changes
+
+- Updated dependencies [075ff13]
+  - @cat-factory/contracts@0.358.0
+
+## 0.303.3
+
+### Patch Changes
+
+- Updated dependencies [57d9db3]
+  - @cat-factory/contracts@0.357.0
+
 ## 0.303.2
 
 ### Patch Changes

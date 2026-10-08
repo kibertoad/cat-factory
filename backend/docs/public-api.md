@@ -216,10 +216,11 @@ machine-readable; `message` is operator prose. Codes fall in two families:
 ### Pagination
 
 Bounded lists (`GET /jobs`, `GET /services/:id/tasks`, `GET /kaizen/entries`,
-`GET /prompt-fragments`, and everything under `/debug`) are **keyset**-paginated:
+`GET /prompt-fragments`, `GET /guided-reviews`, and everything under `/debug`) are
+**keyset**-paginated:
 
-- `?limit=`: 1..100, digits only (defaults: jobs 25, tasks 50, prompt fragments 100). Anything else
-  is a 400.
+- `?limit=`: 1..100, digits only (defaults: jobs 25, tasks 50, guided reviews 50, prompt fragments
+  100). Anything else is a 400.
 - `?cursor=`: opaque; echo a previous page's `nextCursor` back verbatim. A tampered or truncated
   cursor is `400 invalid_cursor`, never a silent reset to page one.
 - `nextCursor: null` means last page. Non-null means "there may be more": page until null; the next
@@ -230,7 +231,9 @@ Ordering caveats: the **jobs** list is newest-first and takes `?status=` (coarse
 `?since=` (epoch ms, created-at-or-after) filters; the **task** list is ordered by stable task id,
 deterministic and safe to page, but **not** chronological, and it has no `since` (see ADR 0030 for
 why). The **prompt-fragment** list is likewise ordered by stable `fragmentId`, which is the merge's
-own key, so the order does not move when a standard is edited.
+own key, so the order does not move when a standard is edited. The **guided-review** list is
+newest-created first: ordering by last update would let an update move an unseen session ahead of
+the cursor.
 
 ### Runs park indefinitely: plan the exits
 
@@ -2702,7 +2705,8 @@ Design record: [`backend/docs/adr/0066-guided-pr-review.md`](../../backend/docs/
 
 - **Identity.** A key bound to a person (`actsAsUserId`) acts as that person: their sessions,
   their initiator token for reading the PR, their model scope. An unbound key owns its own
-  sessions and runs on the deployment's credentials.
+  sessions and runs on the workspace's credentials, never a person's. `createdByKind` (`user` or
+  `api-key`) says which kind of identity `createdBy` names.
 - **Writes answer at once.** The overview and each answer are produced in the background. Follow
   the stream, or re-read: an assistant message is `pending`/`running` until it settles `complete`
   or `failed` with a `failure.reason`.

@@ -17,6 +17,7 @@ export {
 } from './validation/validateRegistrations.js'
 
 export { BoardService, type BoardServiceDependencies } from './modules/board/BoardService.js'
+export type { GuidedReviewOwner } from './modules/guidedReview/GuidedReviewService.js'
 export type {
   PublicRepoOption,
   RepoUse,

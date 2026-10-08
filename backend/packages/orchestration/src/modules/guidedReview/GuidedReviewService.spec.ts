@@ -7,6 +7,9 @@ import type {
 } from '@cat-factory/contracts'
 import type {
   GitHubChangedFile,
+  GuidedReviewClaim,
+  GuidedReviewDraftPostOutcome,
+  GuidedReviewDraftProposal,
   GuidedReviewInvestigationHandle,
   GuidedReviewInvestigationRecord,
   GuidedReviewInvestigationUpdate,
@@ -34,6 +37,7 @@ import { GuidedReviewService } from './GuidedReviewService.js'
 
 const WS = 'ws_1'
 const OWNER = 'usr_1'
+const PERSON = { id: OWNER, kind: 'user' } as const
 const HEAD = 'head123'
 
 /**
@@ -100,23 +104,24 @@ class InMemoryGuidedReviewRepository implements GuidedReviewRepository {
     id: string,
     record: GuidedReviewInvestigationRecord,
     now: number,
+    claim: GuidedReviewClaim,
   ) {
     const m = this.messages.get(id)
-    if (m?.status !== 'running') return false
+    if (m?.status !== 'running' || this.claims.get(`m:${id}`) !== claim.claimedAt) return null
     this.investigations.set(id, record)
     this.claims.set(`m:${id}`, now)
     m.updatedAt = now
-    return true
+    return { claimedAt: now }
   }
   async getInvestigation(_ws: string, id: string) {
     return this.investigations.get(id) ?? null
   }
   async heartbeatMessage(_ws: string, id: string, now: number) {
     const m = this.messages.get(id)
-    if (m?.status !== 'running') return false
+    if (m?.status !== 'running') return null
     this.claims.set(`m:${id}`, now)
     m.updatedAt = now
-    return true
+    return { claimedAt: now }
   }
 
   async openSession(_ws: string, s: GuidedReviewNewSession) {
@@ -135,6 +140,9 @@ class InMemoryGuidedReviewRepository implements GuidedReviewRepository {
     return this.sessions.get(id) ?? null
   }
   async listSessions() {
+    return [...this.sessions.values()]
+  }
+  async pageSessions() {
     return [...this.sessions.values()]
   }
   async deleteSession(_ws: string, id: string) {
@@ -161,23 +169,26 @@ class InMemoryGuidedReviewRepository implements GuidedReviewRepository {
   async claimOverview(_ws: string, id: string, generation: number, cutoff: number, now: number) {
     const s = this.sessions.get(id)
     const key = `o:${id}`
-    if (!s || s.overview.generation !== generation) return false
+    if (!s || s.overview.generation !== generation) return null
     const live =
       s.overview.status === 'pending' ||
       (s.overview.status === 'running' && (this.claims.get(key) ?? 0) < cutoff)
-    if (!live) return false
+    if (!live) return null
     s.overview.status = 'running'
     this.claims.set(key, now)
-    return true
+    return { claimedAt: now }
   }
   async settleOverview(
     _ws: string,
     id: string,
     generation: number,
     o: GuidedReviewOverviewOutcome,
+    _now: number,
+    claim: GuidedReviewClaim,
   ) {
     const s = this.sessions.get(id)
     if (!s || s.overview.generation !== generation || s.overview.status !== 'running') return false
+    if (this.claims.get(`o:${id}`) !== claim.claimedAt) return false
     s.overview =
       o.status === 'complete'
         ? { status: 'complete', generation, content: o.content, failure: null, model: o.model }
@@ -252,17 +263,25 @@ class InMemoryGuidedReviewRepository implements GuidedReviewRepository {
   async claimMessage(_ws: string, id: string, cutoff: number, now: number) {
     const m = this.messages.get(id)
     const key = `m:${id}`
-    if (!m) return false
+    if (!m) return null
     const live =
       m.status === 'pending' || (m.status === 'running' && (this.claims.get(key) ?? 0) < cutoff)
-    if (!live) return false
+    if (!live) return null
     m.status = 'running'
     this.claims.set(key, now)
-    return true
+    return { claimedAt: now }
   }
-  async settleMessage(_ws: string, id: string, o: GuidedReviewMessageOutcome) {
+  async settleMessage(
+    _ws: string,
+    id: string,
+    o: GuidedReviewMessageOutcome,
+    _now: number,
+    claim: GuidedReviewClaim,
+  ) {
     const m = this.messages.get(id)
-    if (!m || m.status !== 'running') return false
+    if (!m || m.status !== 'running' || this.claims.get(`m:${id}`) !== claim.claimedAt) {
+      return false
+    }
     if (o.status === 'complete') {
       Object.assign(m, {
         status: 'complete',
@@ -279,11 +298,27 @@ class InMemoryGuidedReviewRepository implements GuidedReviewRepository {
   async settleDrafts(
     ws: string,
     messageId: string,
-    drafts: GuidedReviewCommentDraft[],
+    proposals: GuidedReviewDraftProposal[],
     o: Extract<GuidedReviewMessageOutcome, { status: 'complete' }>,
+    now: number,
+    claim: GuidedReviewClaim,
   ) {
-    if (!(await this.settleMessage(ws, messageId, o))) return false
-    for (const d of drafts) this.drafts.set(d.id, d)
+    const message = this.messages.get(messageId)
+    if (!message || !(await this.settleMessage(ws, messageId, o, now, claim))) return false
+    for (const p of proposals) {
+      this.drafts.set(p.id, {
+        ...p,
+        sessionId: message.sessionId,
+        threadId: message.threadId,
+        messageId,
+        status: 'proposed',
+        postError: null,
+        postedUrl: null,
+        rev: 1,
+        createdAt: now,
+        updatedAt: now,
+      })
+    }
     return true
   }
   async getDraft(_ws: string, id: string) {
@@ -309,19 +344,19 @@ class InMemoryGuidedReviewRepository implements GuidedReviewRepository {
       .map((id) => this.drafts.get(id))
       .filter((d): d is GuidedReviewCommentDraft => !!d && d.sessionId === sessionId)
       .filter((d) => d.status === 'proposed' || d.status === 'failed')
-    for (const d of claimed) d.status = 'posting'
+    for (const d of claimed) Object.assign(d, { status: 'posting', rev: d.rev + 1 })
     return claimed.map((d) => ({ ...d }))
   }
-  async settleDraftPosts(
-    _ws: string,
-    outcomes: { id: string; status: 'posted' | 'failed'; error?: string }[],
-  ) {
+  async settleDraftPosts(_ws: string, outcomes: GuidedReviewDraftPostOutcome[]) {
+    const recorded: string[] = []
     for (const o of outcomes) {
       const d = this.drafts.get(o.id)
-      if (d?.status !== 'posting') continue
+      if (d?.status !== 'posting' || d.rev !== o.rev) continue
       d.status = o.status
-      d.postError = o.status === 'failed' ? (o.error ?? null) : null
+      d.postError = o.status === 'failed' ? o.error : null
+      recorded.push(o.id)
     }
+    return recorded
   }
   async listStaleJobs(_driver: string, cutoff: number) {
     return [...this.messages.values()]
@@ -473,7 +508,7 @@ describe('GuidedReviewService', () => {
       { tool: 'read_file', input: { path: 'src/pay.ts' } },
       { text: OVERVIEW_JSON },
     ])
-    const session = await service.open(WS, OWNER, { owner: 'acme', repo: 'shop', prNumber: 7 })
+    const session = await service.open(WS, PERSON, { owner: 'acme', repo: 'shop', prNumber: 7 })
     expect(session).toMatchObject({
       reviewedHeadSha: HEAD,
       baseRef: 'main',
@@ -491,7 +526,7 @@ describe('GuidedReviewService', () => {
     expect(reads).toEqual([`src/pay.ts@${HEAD} as ${OWNER}`])
 
     // Reopening the same PR returns the same session and wakes nothing new.
-    await service.open(WS, OWNER, { owner: 'acme', repo: 'shop', prNumber: 7 })
+    await service.open(WS, PERSON, { owner: 'acme', repo: 'shop', prNumber: 7 })
     expect(woken).toHaveLength(1)
   })
 
@@ -501,7 +536,7 @@ describe('GuidedReviewService', () => {
       citations: [{ path: 'src/pay.ts', startLine: 2, endLine: 3, side: 'RIGHT' }],
     })
     const { service, repository, woken, calls } = setup([{ text: answer }])
-    const session = await service.open(WS, OWNER, { owner: 'acme', repo: 'shop', prNumber: 7 })
+    const session = await service.open(WS, PERSON, { owner: 'acme', repo: 'shop', prNumber: 7 })
     const { thread } = await service.openThread(WS, OWNER, session.id, {
       question: { content: 'Is the retry bounded?' },
     })
@@ -523,7 +558,7 @@ describe('GuidedReviewService', () => {
 
   it('refuses a second question on a busy thread and leaves other threads free', async () => {
     const { service } = setup([])
-    const session = await service.open(WS, OWNER, { owner: 'acme', repo: 'shop', prNumber: 7 })
+    const session = await service.open(WS, PERSON, { owner: 'acme', repo: 'shop', prNumber: 7 })
     const busy = await service.openThread(WS, OWNER, session.id, {
       question: { content: 'First?' },
     })
@@ -553,7 +588,7 @@ describe('GuidedReviewService', () => {
       ],
     })
     const { service, repository, woken, changes } = setup([{ text: drafts }])
-    const session = await service.open(WS, OWNER, { owner: 'acme', repo: 'shop', prNumber: 7 })
+    const session = await service.open(WS, PERSON, { owner: 'acme', repo: 'shop', prNumber: 7 })
     const { thread } = await service.openThread(WS, OWNER, session.id, {})
     const { placeholder } = await service.requestDrafts(
       WS,
@@ -587,7 +622,7 @@ describe('GuidedReviewService', () => {
     ['generation_failed', [{ throws: 'provider 500' }], {}],
   ])('settles a failed answer with reason %s', async (reason, steps, opts) => {
     const { service, repository, woken } = setup(steps, opts)
-    const session = await service.open(WS, OWNER, { owner: 'acme', repo: 'shop', prNumber: 7 })
+    const session = await service.open(WS, PERSON, { owner: 'acme', repo: 'shop', prNumber: 7 })
     const { thread } = await service.openThread(WS, OWNER, session.id, {
       question: { content: 'Why?' },
     })
@@ -602,7 +637,7 @@ describe('GuidedReviewService', () => {
 
   it('reports a deep question as unavailable without calling the model', async () => {
     const { service, repository, woken, calls } = setup([])
-    const session = await service.open(WS, OWNER, { owner: 'acme', repo: 'shop', prNumber: 7 })
+    const session = await service.open(WS, PERSON, { owner: 'acme', repo: 'shop', prNumber: 7 })
     const { thread } = await service.openThread(WS, OWNER, session.id, {
       question: { content: 'Run the tests?', depth: 'deep' },
     })
@@ -620,7 +655,7 @@ describe('GuidedReviewService', () => {
   it('pushes a change after each write lands, naming the thread a client should refetch', async () => {
     const answer = JSON.stringify({ answer: 'Yes.', citations: [] })
     const { service, woken, changes } = setup([{ text: OVERVIEW_JSON }, { text: answer }])
-    const session = await service.open(WS, OWNER, { owner: 'acme', repo: 'shop', prNumber: 7 })
+    const session = await service.open(WS, PERSON, { owner: 'acme', repo: 'shop', prNumber: 7 })
     await service.runJob(WS, woken[0]!)
     const { thread } = await service.openThread(WS, OWNER, session.id, {
       question: { content: 'Ok?' },
@@ -636,8 +671,8 @@ describe('GuidedReviewService', () => {
 
   it('refuses a thread addressed through another session', async () => {
     const { service } = setup([])
-    const first = await service.open(WS, OWNER, { owner: 'acme', repo: 'shop', prNumber: 7 })
-    const second = await service.open(WS, OWNER, { owner: 'acme', repo: 'shop', prNumber: 8 })
+    const first = await service.open(WS, PERSON, { owner: 'acme', repo: 'shop', prNumber: 7 })
+    const second = await service.open(WS, PERSON, { owner: 'acme', repo: 'shop', prNumber: 8 })
     const { thread } = await service.openThread(WS, OWNER, first.id, {})
     await expect(service.getThread(WS, second.id, thread.id)).rejects.toMatchObject({
       code: 'not_found',
@@ -660,7 +695,7 @@ describe('GuidedReviewService', () => {
 
     async function drafted() {
       const ctx = setup([{ text: DRAFTS }])
-      const session = await ctx.service.open(WS, OWNER, {
+      const session = await ctx.service.open(WS, PERSON, {
         owner: 'acme',
         repo: 'shop',
         prNumber: 7,
@@ -745,7 +780,7 @@ describe('GuidedReviewService', () => {
 
   it('fails an answer as head_moved once the PR moves past the reviewed commit', async () => {
     const { service, repository, woken, calls, push } = setup([{ text: '{"answer":"Fine."}' }])
-    const session = await service.open(WS, OWNER, { owner: 'acme', repo: 'shop', prNumber: 7 })
+    const session = await service.open(WS, PERSON, { owner: 'acme', repo: 'shop', prNumber: 7 })
     const { thread } = await service.openThread(WS, OWNER, session.id, {
       question: { content: 'Why?' },
     })
@@ -763,7 +798,7 @@ describe('GuidedReviewService', () => {
 
   it('refuses an empty first question without leaving an empty thread behind', async () => {
     const { service, repository } = setup([])
-    const session = await service.open(WS, OWNER, { owner: 'acme', repo: 'shop', prNumber: 7 })
+    const session = await service.open(WS, PERSON, { owner: 'acme', repo: 'shop', prNumber: 7 })
     await expect(
       service.openThread(WS, OWNER, session.id, { question: { content: '   ' } }),
     ).rejects.toBeInstanceOf(ValidationError)
@@ -772,7 +807,7 @@ describe('GuidedReviewService', () => {
 
   it('lets only the session owner change it', async () => {
     const { service } = setup([])
-    const session = await service.open(WS, OWNER, { owner: 'acme', repo: 'shop', prNumber: 7 })
+    const session = await service.open(WS, PERSON, { owner: 'acme', repo: 'shop', prNumber: 7 })
     await expect(service.openThread(WS, 'usr_other', session.id, {})).rejects.toBeInstanceOf(
       ForbiddenError,
     )
@@ -780,7 +815,7 @@ describe('GuidedReviewService', () => {
 
   it('settles an abandoned job as failed so its thread is free again, and leaves a settled one alone', async () => {
     const { service, repository } = setup([])
-    const session = await service.open(WS, OWNER, { owner: 'acme', repo: 'shop', prNumber: 7 })
+    const session = await service.open(WS, PERSON, { owner: 'acme', repo: 'shop', prNumber: 7 })
     const { thread, messages } = await service.openThread(WS, OWNER, session.id, {
       question: { content: 'Stuck?' },
     })
@@ -799,9 +834,24 @@ describe('GuidedReviewService', () => {
     expect(thread.id).toBe(placeholder.threadId)
   })
 
+  it('runs an API-key-owned session on the workspace credentials, not a person', async () => {
+    const { service, repository, woken, reads } = setup([
+      { tool: 'read_file', input: { path: 'src/pay.ts' } },
+      { text: OVERVIEW_JSON },
+    ])
+    const key = { id: 'pak_1', kind: 'api-key' } as const
+    const session = await service.open(WS, key, { owner: 'acme', repo: 'shop', prNumber: 7 })
+    expect(session).toMatchObject({ createdBy: 'pak_1', createdByKind: 'api-key' })
+
+    await service.runJob(WS, woken[0]!)
+    expect(repository.sessions.get(session.id)!.overview.status).toBe('complete')
+    // A key id is not a user, so the tool read is attributed to nobody rather than to it.
+    expect(reads).toEqual([`src/pay.ts@${HEAD} as nobody`])
+  })
+
   it('re-wakes work no claim settled within the lease', async () => {
     const { service, woken, advance } = setup([])
-    const session = await service.open(WS, OWNER, { owner: 'acme', repo: 'shop', prNumber: 7 })
+    const session = await service.open(WS, PERSON, { owner: 'acme', repo: 'shop', prNumber: 7 })
     await service.openThread(WS, OWNER, session.id, { question: { content: 'Lost?' } })
     const before = woken.length
     expect(await service.redriveStale()).toBe(0)
@@ -816,7 +866,7 @@ describe('GuidedReviewService', () => {
 describe('deep answers', () => {
   async function askDeep(investigator: GuidedReviewInvestigator) {
     const ctx = setup([], { investigator })
-    const session = await ctx.service.open(WS, OWNER, {
+    const session = await ctx.service.open(WS, PERSON, {
       owner: 'acme',
       repo: 'shop',
       prNumber: 7,

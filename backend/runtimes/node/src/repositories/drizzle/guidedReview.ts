@@ -1,6 +1,8 @@
 import type {
+  GuidedReviewClaim,
   GuidedReviewCommentDraft,
   GuidedReviewDraftEdit,
+  GuidedReviewDraftProposal,
   GuidedReviewDriver,
   GuidedReviewInvestigationRecord,
   GuidedReviewExchange,
@@ -13,11 +15,17 @@ import type {
   GuidedReviewRepository,
   GuidedReviewSession,
   GuidedReviewSessionFilter,
+  GuidedReviewSessionPage,
   GuidedReviewStaleJob,
   GuidedReviewThread,
   GuidedReviewThreadSummary,
 } from '@cat-factory/kernel'
+import { GUIDED_REVIEW_LIVE_STATUSES } from '@cat-factory/contracts'
 import {
+  applyGuidedReviewDraftEdit,
+  checkGuidedReviewDraftFields,
+  encodeGuidedReviewMessageOutcome,
+  encodeGuidedReviewOverviewOutcome,
   decodeGuidedReviewInvestigation,
   rowToGuidedReviewDraft as rowToDraft,
   rowToGuidedReviewMessage as rowToMessage,
@@ -33,17 +41,17 @@ import {
   guidedReviewThreads as threads,
 } from '../../db/schema.js'
 
-const LIVE = ['pending', 'running'] as const
+const LIVE = GUIDED_REVIEW_LIVE_STATUSES
 const EDITABLE = ['proposed', 'failed'] as const
 
 function settledMessageSet(outcome: GuidedReviewMessageOutcome, now: number) {
-  const complete = outcome.status === 'complete'
+  const encoded = encodeGuidedReviewMessageOutcome(outcome)
   return {
     status: outcome.status,
-    content: complete ? outcome.content : '',
-    citations: JSON.stringify(complete ? outcome.citations : []),
-    failure: complete ? null : JSON.stringify(outcome.failure),
-    draft_report: complete && outcome.draftReport ? JSON.stringify(outcome.draftReport) : null,
+    content: encoded.content,
+    citations: encoded.citations,
+    failure: encoded.failure,
+    draft_report: encoded.draftReport,
     model: outcome.model,
     claimed_at: null,
     updated_at: now,
@@ -52,7 +60,7 @@ function settledMessageSet(outcome: GuidedReviewMessageOutcome, now: number) {
 
 /**
  * Guided PR review sessions over Postgres: the Drizzle mirror of `D1GuidedReviewRepository`
- * (migration 0104). Under READ COMMITTED the one-live-answer rule is the partial unique index
+ * (migrations 0104 and 0105). Under READ COMMITTED the one-live-answer rule is the partial unique index
  * `idx_guided_review_messages_live`, targeted by the placeholder insert, so two concurrent
  * questions on one thread resolve to one winner and one `thread_busy`.
  */
@@ -78,6 +86,7 @@ export class DrizzleGuidedReviewRepository implements GuidedReviewRepository {
         reviewed_head_sha: s.reviewedHeadSha,
         base_ref: s.baseRef,
         created_by: s.createdBy,
+        created_by_kind: s.createdByKind,
         overview_status: 'pending',
         overview_generation: 1,
         overview_content: null,
@@ -123,22 +132,43 @@ export class DrizzleGuidedReviewRepository implements GuidedReviewRepository {
     const rows = await this.db
       .select()
       .from(sessions)
-      .where(
-        and(
-          eq(sessions.workspace_id, workspaceId),
-          filter.repoId === undefined ? undefined : eq(sessions.repo_id, filter.repoId),
-          filter.prNumber === undefined ? undefined : eq(sessions.pr_number, filter.prNumber),
-          filter.createdBy === undefined ? undefined : eq(sessions.created_by, filter.createdBy),
-        ),
-      )
+      .where(sessionFilter(workspaceId, filter))
       .orderBy(desc(sessions.updated_at), asc(sessions.id))
       .limit(filter.limit ?? 50)
     return rows.map(rowToSession)
   }
 
+  async pageSessions(
+    workspaceId: string,
+    filter: Omit<GuidedReviewSessionFilter, 'limit'>,
+    page: GuidedReviewSessionPage,
+  ): Promise<GuidedReviewSession[]> {
+    const { cursor } = page
+    const rows = await this.db
+      .select()
+      .from(sessions)
+      .where(
+        and(
+          sessionFilter(workspaceId, filter),
+          cursor
+            ? or(
+                lt(sessions.created_at, cursor.createdAt),
+                and(eq(sessions.created_at, cursor.createdAt), lt(sessions.id, cursor.id)),
+              )
+            : undefined,
+        ),
+      )
+      .orderBy(desc(sessions.created_at), desc(sessions.id))
+      .limit(page.limit)
+    return rows.map(rowToSession)
+  }
+
   async deleteSession(workspaceId: string, id: string): Promise<void> {
+    // Parents before children: deleting the threads waits on an in-flight `appendExchange`'s row
+    // lock, and each later DELETE then sees the rows that writer committed instead of orphaning
+    // them (READ COMMITTED takes a fresh snapshot per statement). Likewise for `settleDrafts`.
     await this.db.transaction(async (tx) => {
-      for (const table of [drafts, messages, threads]) {
+      for (const table of [threads, messages, drafts]) {
         await tx
           .delete(table)
           .where(and(eq(table.workspace_id, workspaceId), eq(table.session_id, id)))
@@ -189,7 +219,7 @@ export class DrizzleGuidedReviewRepository implements GuidedReviewRepository {
     generation: number,
     leaseCutoff: number,
     now: number,
-  ): Promise<boolean> {
+  ): Promise<GuidedReviewClaim | null> {
     const rows = await this.db
       .update(sessions)
       .set({ overview_status: 'running', overview_claimed_at: now, updated_at: now })
@@ -208,7 +238,7 @@ export class DrizzleGuidedReviewRepository implements GuidedReviewRepository {
         ),
       )
       .returning({ id: sessions.id })
-    return rows.length > 0
+    return rows.length > 0 ? { claimedAt: now } : null
   }
 
   async settleOverview(
@@ -217,13 +247,15 @@ export class DrizzleGuidedReviewRepository implements GuidedReviewRepository {
     generation: number,
     outcome: GuidedReviewOverviewOutcome,
     now: number,
+    claim: GuidedReviewClaim,
   ): Promise<boolean> {
+    const encoded = encodeGuidedReviewOverviewOutcome(outcome)
     const rows = await this.db
       .update(sessions)
       .set({
         overview_status: outcome.status,
-        overview_content: outcome.status === 'complete' ? JSON.stringify(outcome.content) : null,
-        overview_failure: outcome.status === 'failed' ? JSON.stringify(outcome.failure) : null,
+        overview_content: encoded.content,
+        overview_failure: encoded.failure,
         overview_model: outcome.model,
         overview_claimed_at: null,
         updated_at: now,
@@ -234,6 +266,7 @@ export class DrizzleGuidedReviewRepository implements GuidedReviewRepository {
           eq(sessions.id, id),
           eq(sessions.overview_generation, generation),
           eq(sessions.overview_status, 'running'),
+          eq(sessions.overview_claimed_at, claim.claimedAt),
         ),
       )
       .returning({ id: sessions.id })
@@ -376,7 +409,7 @@ export class DrizzleGuidedReviewRepository implements GuidedReviewRepository {
     id: string,
     leaseCutoff: number,
     now: number,
-  ): Promise<boolean> {
+  ): Promise<GuidedReviewClaim | null> {
     const rows = await this.db
       .update(messages)
       .set({ status: 'running', claimed_at: now, updated_at: now })
@@ -392,7 +425,7 @@ export class DrizzleGuidedReviewRepository implements GuidedReviewRepository {
         ),
       )
       .returning({ id: messages.id })
-    return rows.length > 0
+    return rows.length > 0 ? { claimedAt: now } : null
   }
 
   async recordInvestigation(
@@ -400,7 +433,8 @@ export class DrizzleGuidedReviewRepository implements GuidedReviewRepository {
     id: string,
     investigation: GuidedReviewInvestigationRecord,
     now: number,
-  ): Promise<boolean> {
+    claim: GuidedReviewClaim,
+  ): Promise<GuidedReviewClaim | null> {
     const rows = await this.db
       .update(messages)
       .set({ investigation: JSON.stringify(investigation), claimed_at: now, updated_at: now })
@@ -409,10 +443,11 @@ export class DrizzleGuidedReviewRepository implements GuidedReviewRepository {
           eq(messages.workspace_id, workspaceId),
           eq(messages.id, id),
           eq(messages.status, 'running'),
+          eq(messages.claimed_at, claim.claimedAt),
         ),
       )
       .returning({ id: messages.id })
-    return rows.length > 0
+    return rows.length > 0 ? { claimedAt: now } : null
   }
 
   async getInvestigation(
@@ -427,7 +462,11 @@ export class DrizzleGuidedReviewRepository implements GuidedReviewRepository {
     return decodeGuidedReviewInvestigation(rows[0]?.investigation ?? null, id)
   }
 
-  async heartbeatMessage(workspaceId: string, id: string, now: number): Promise<boolean> {
+  async heartbeatMessage(
+    workspaceId: string,
+    id: string,
+    now: number,
+  ): Promise<GuidedReviewClaim | null> {
     const rows = await this.db
       .update(messages)
       .set({ claimed_at: now, updated_at: now })
@@ -439,7 +478,7 @@ export class DrizzleGuidedReviewRepository implements GuidedReviewRepository {
         ),
       )
       .returning({ id: messages.id })
-    return rows.length > 0
+    return rows.length > 0 ? { claimedAt: now } : null
   }
 
   async settleMessage(
@@ -447,6 +486,7 @@ export class DrizzleGuidedReviewRepository implements GuidedReviewRepository {
     id: string,
     outcome: GuidedReviewMessageOutcome,
     now: number,
+    claim: GuidedReviewClaim,
   ): Promise<boolean> {
     const rows = await this.db
       .update(messages)
@@ -456,6 +496,7 @@ export class DrizzleGuidedReviewRepository implements GuidedReviewRepository {
           eq(messages.workspace_id, workspaceId),
           eq(messages.id, id),
           eq(messages.status, 'running'),
+          eq(messages.claimed_at, claim.claimedAt),
         ),
       )
       .returning({ id: messages.id })
@@ -465,31 +506,36 @@ export class DrizzleGuidedReviewRepository implements GuidedReviewRepository {
   async settleDrafts(
     workspaceId: string,
     messageId: string,
-    proposed: GuidedReviewCommentDraft[],
+    proposed: GuidedReviewDraftProposal[],
     outcome: Extract<GuidedReviewMessageOutcome, { status: 'complete' }>,
     now: number,
+    claim: GuidedReviewClaim,
   ): Promise<boolean> {
+    for (const d of proposed) checkGuidedReviewDraftFields(d)
+    const settledSet = settledMessageSet(outcome, now)
     return this.db.transaction(async (tx) => {
       const settled = await tx
         .update(messages)
-        .set(settledMessageSet(outcome, now))
+        .set(settledSet)
         .where(
           and(
             eq(messages.workspace_id, workspaceId),
             eq(messages.id, messageId),
             eq(messages.status, 'running'),
+            eq(messages.claimed_at, claim.claimedAt),
             eq(messages.kind, 'comment-drafts'),
           ),
         )
-        .returning({ id: messages.id })
-      if (settled.length === 0) return false
+        .returning({ sessionId: messages.session_id, threadId: messages.thread_id })
+      const message = settled[0]
+      if (!message) return false
       if (proposed.length > 0) {
         await tx.insert(drafts).values(
           proposed.map((d) => ({
             workspace_id: workspaceId,
             id: d.id,
-            session_id: d.sessionId,
-            thread_id: d.threadId,
+            session_id: message.sessionId,
+            thread_id: message.threadId,
             message_id: messageId,
             path: d.path,
             line: d.line,
@@ -497,12 +543,12 @@ export class DrizzleGuidedReviewRepository implements GuidedReviewRepository {
             side: d.side,
             body: d.body,
             rationale: d.rationale,
-            status: d.status,
-            post_error: d.postError,
-            posted_url: d.postedUrl,
-            rev: d.rev,
-            created_at: d.createdAt,
-            updated_at: d.updatedAt,
+            status: 'proposed' as const,
+            post_error: null,
+            posted_url: null,
+            rev: 1,
+            created_at: now,
+            updated_at: now,
           })),
         )
       }
@@ -537,16 +583,17 @@ export class DrizzleGuidedReviewRepository implements GuidedReviewRepository {
   ): Promise<GuidedReviewCommentDraft | null> {
     const current = await this.getDraft(workspaceId, id)
     if (!current || current.rev !== expectedRev) return null
+    const next = applyGuidedReviewDraftEdit(current, edit)
     const rows = await this.db
       .update(drafts)
       .set({
-        path: edit.path ?? current.path,
-        line: edit.line ?? current.line,
-        start_line: edit.startLine === undefined ? current.startLine : edit.startLine,
-        side: edit.side ?? current.side,
-        body: edit.body ?? current.body,
-        status: edit.discard ? 'discarded' : current.status,
-        post_error: edit.discard ? null : current.postError,
+        path: next.path,
+        line: next.line,
+        start_line: next.startLine,
+        side: next.side,
+        body: next.body,
+        status: next.status,
+        post_error: next.postError,
         rev: sql`${drafts.rev} + 1`,
         updated_at: now,
       })
@@ -592,22 +639,24 @@ export class DrizzleGuidedReviewRepository implements GuidedReviewRepository {
     workspaceId: string,
     outcomes: GuidedReviewDraftPostOutcome[],
     now: number,
-  ): Promise<void> {
-    if (outcomes.length === 0) return
+  ): Promise<string[]> {
+    if (outcomes.length === 0) return []
     const rows = sql.join(
       outcomes.map(
         (o) =>
-          sql`(${o.id}::text, ${o.status}::text, ${o.status === 'posted' ? o.postedUrl : null}::text, ${o.status === 'failed' ? o.error : null}::text)`,
+          sql`(${o.id}::text, ${o.rev}::integer, ${o.status}::text, ${o.status === 'posted' ? o.postedUrl : null}::text, ${o.status === 'failed' ? o.error : null}::text)`,
       ),
       sql`, `,
     )
-    await this.db.execute(sql`
+    const recorded = await this.db.execute<{ id: string }>(sql`
       UPDATE ${drafts} SET
         status = o.status, posted_url = o.posted_url, post_error = o.post_error,
         rev = ${drafts.rev} + 1, updated_at = ${now}
-      FROM (VALUES ${rows}) AS o(id, status, posted_url, post_error)
+      FROM (VALUES ${rows}) AS o(id, rev, status, posted_url, post_error)
       WHERE ${drafts.workspace_id} = ${workspaceId} AND ${drafts.id} = o.id
-        AND ${drafts.status} = 'posting'`)
+        AND ${drafts.rev} = o.rev AND ${drafts.status} = 'posting'
+      RETURNING ${drafts.id}`)
+    return recorded.rows.map((r) => r.id)
   }
 
   async listStaleJobs(
@@ -667,4 +716,14 @@ export class DrizzleGuidedReviewRepository implements GuidedReviewRepository {
       .slice(0, limit)
       .map((j) => j.job)
   }
+}
+
+/** The WHERE clause both session lists share: the workspace plus each filter the caller set. */
+function sessionFilter(workspaceId: string, filter: Omit<GuidedReviewSessionFilter, 'limit'>) {
+  return and(
+    eq(sessions.workspace_id, workspaceId),
+    filter.repoId === undefined ? undefined : eq(sessions.repo_id, filter.repoId),
+    filter.prNumber === undefined ? undefined : eq(sessions.pr_number, filter.prNumber),
+    filter.createdBy === undefined ? undefined : eq(sessions.created_by, filter.createdBy),
+  )
 }
