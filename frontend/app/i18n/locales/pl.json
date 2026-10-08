@@ -5182,14 +5182,34 @@
       "side": {
         "RIGHT": "nowy kod",
         "LEFT": "stary kod"
-      }
+      },
+      "select": "Wybierz ten szkic do opublikowania",
+      "status": {
+        "proposed": "Szkic",
+        "posting": "Publikowanie",
+        "posted": "Opublikowany",
+        "failed": "Nieopublikowany",
+        "discarded": "Odrzucony"
+      },
+      "edit": "Edytuj",
+      "save": "Zapisz",
+      "cancel": "Anuluj",
+      "discard": "Odrzuć",
+      "line": "Linia",
+      "sideLabel": "Strona",
+      "postFailed": "Host odrzucił ten komentarz",
+      "summaryPlaceholder": "Opcjonalny komentarz podsumowujący do pull requesta",
+      "post": "Opublikuj {count} w pull requeście",
+      "postResult": "Opublikowane: {posted}, nieopublikowane: {failed}, już obsłużone: {skipped}."
     },
     "errors": {
       "load": "Nie udało się wczytać przeglądu",
       "open": "Nie udało się otworzyć przeglądu",
       "ask": "Nie udało się zadać pytania",
       "drafts": "Nie udało się poprosić o szkice komentarzy",
-      "refresh": "Nie udało się odświeżyć przeglądu"
+      "refresh": "Nie udało się odświeżyć przeglądu",
+      "editDraft": "Nie udało się zapisać szkicu",
+      "postDrafts": "Nie udało się opublikować szkiców"
     }
   },
   "pipeline": {

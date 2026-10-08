@@ -5182,14 +5182,34 @@
       "side": {
         "RIGHT": "código nuevo",
         "LEFT": "código anterior"
-      }
+      },
+      "select": "Seleccionar este borrador para publicarlo",
+      "status": {
+        "proposed": "Borrador",
+        "posting": "Publicando",
+        "posted": "Publicado",
+        "failed": "No publicado",
+        "discarded": "Descartado"
+      },
+      "edit": "Editar",
+      "save": "Guardar",
+      "cancel": "Cancelar",
+      "discard": "Descartar",
+      "line": "Línea",
+      "sideLabel": "Lado",
+      "postFailed": "El host rechazó este comentario",
+      "summaryPlaceholder": "Comentario de resumen opcional para la pull request",
+      "post": "Publicar {count} en la pull request",
+      "postResult": "{posted} publicados, {failed} sin publicar, {skipped} ya gestionados."
     },
     "errors": {
       "load": "No se pudo cargar la revisión",
       "open": "No se pudo abrir la revisión",
       "ask": "No se pudo hacer la pregunta",
       "drafts": "No se pudieron pedir borradores de comentarios",
-      "refresh": "No se pudo actualizar la revisión"
+      "refresh": "No se pudo actualizar la revisión",
+      "editDraft": "No se pudo guardar el borrador",
+      "postDrafts": "No se pudieron publicar los borradores"
     }
   },
   "pipeline": {

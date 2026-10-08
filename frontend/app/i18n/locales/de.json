@@ -4654,14 +4654,34 @@
       "side": {
         "RIGHT": "neuer Code",
         "LEFT": "alter Code"
-      }
+      },
+      "select": "Diesen Entwurf zum Posten auswählen",
+      "status": {
+        "proposed": "Entwurf",
+        "posting": "Wird gepostet",
+        "posted": "Gepostet",
+        "failed": "Nicht gepostet",
+        "discarded": "Verworfen"
+      },
+      "edit": "Bearbeiten",
+      "save": "Speichern",
+      "cancel": "Abbrechen",
+      "discard": "Verwerfen",
+      "line": "Zeile",
+      "sideLabel": "Seite",
+      "postFailed": "Der Host hat diesen Kommentar abgelehnt",
+      "summaryPlaceholder": "Optionaler Zusammenfassungskommentar für den Pull Request",
+      "post": "{count} im Pull Request posten",
+      "postResult": "{posted} gepostet, {failed} nicht gepostet, {skipped} bereits erledigt."
     },
     "errors": {
       "load": "Das Review konnte nicht geladen werden",
       "open": "Das Review konnte nicht geöffnet werden",
       "ask": "Die Frage konnte nicht gestellt werden",
       "drafts": "Kommentarentwürfe konnten nicht angefordert werden",
-      "refresh": "Das Review konnte nicht aktualisiert werden"
+      "refresh": "Das Review konnte nicht aktualisiert werden",
+      "editDraft": "Der Entwurf konnte nicht gespeichert werden",
+      "postDrafts": "Die Entwürfe konnten nicht gepostet werden"
     }
   },
   "pipeline": {

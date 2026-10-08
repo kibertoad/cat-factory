@@ -4,13 +4,14 @@
 import type { GuidedReviewCommentDraft, GuidedReviewThreadView } from '~/types/domain'
 import MarkdownProse from '~/components/common/MarkdownProse.vue'
 import GuidedReviewFailure from '~/components/guidedReview/GuidedReviewFailure.vue'
+import GuidedReviewDraftCard from '~/components/guidedReview/GuidedReviewDraftCard.vue'
 import {
   canAsk,
   citationLabel,
-  draftAnchor,
   droppedAnchor,
   isLive,
   keptDrafts,
+  postableSelection,
 } from '~/components/guidedReview/GuidedReview.logic'
 
 const props = defineProps<{
@@ -46,6 +47,38 @@ async function send(): Promise<void> {
     present(error, 'guidedReview.errors.ask')
   } finally {
     sending.value = false
+  }
+}
+
+const selected = ref(new Set<string>())
+const summary = ref('')
+const posting = ref(false)
+const postResult = ref<{ posted: number; failed: number; skipped: number } | null>(null)
+const toPost = computed(() => postableSelection(props.drafts, selected.value))
+
+function setSelected(id: string, value: boolean): void {
+  const next = new Set(selected.value)
+  if (value) next.add(id)
+  else next.delete(id)
+  selected.value = next
+}
+
+async function post(): Promise<void> {
+  if (!toPost.value.length) return
+  posting.value = true
+  try {
+    const result = await store.postDrafts(props.sessionId, toPost.value, summary.value)
+    postResult.value = {
+      posted: result.posted,
+      failed: result.failed,
+      skipped: result.skipped.length,
+    }
+    selected.value = new Set()
+    summary.value = ''
+  } catch (error) {
+    present(error, 'guidedReview.errors.postDrafts')
+  } finally {
+    posting.value = false
   }
 }
 
@@ -126,13 +159,37 @@ async function draftComments(): Promise<void> {
         <h4 class="text-xs font-semibold uppercase text-dimmed">
           {{ t('guidedReview.drafts.title') }}
         </h4>
-        <div v-for="d in drafts" :key="d.id" class="rounded-md border border-default p-2 text-sm">
-          <p class="text-xs text-dimmed">
-            {{ draftAnchor(d) }}
-            ({{ t(`guidedReview.drafts.side.${d.side}`) }})
-          </p>
-          <MarkdownProse :text="d.body" />
-          <p v-if="d.rationale" class="mt-1 text-xs text-muted">{{ d.rationale }}</p>
+        <GuidedReviewDraftCard
+          v-for="d in drafts"
+          :key="d.id"
+          :session-id="sessionId"
+          :draft="d"
+          :selected="selected.has(d.id)"
+          @update:selected="setSelected(d.id, $event)"
+        />
+        <div class="space-y-2 rounded-md bg-elevated p-2" data-testid="guided-review-post">
+          <UTextarea
+            v-model="summary"
+            :rows="2"
+            autoresize
+            class="w-full"
+            :placeholder="t('guidedReview.drafts.summaryPlaceholder')"
+          />
+          <div class="flex flex-wrap items-center gap-2">
+            <UButton
+              color="primary"
+              icon="i-lucide-upload"
+              :loading="posting"
+              :disabled="!toPost.length"
+              data-testid="guided-review-post-drafts"
+              @click="post"
+            >
+              {{ t('guidedReview.drafts.post', { count: toPost.length }) }}
+            </UButton>
+            <p v-if="postResult" class="text-xs text-muted" data-testid="guided-review-post-result">
+              {{ t('guidedReview.drafts.postResult', postResult) }}
+            </p>
+          </div>
         </div>
       </div>
     </div>

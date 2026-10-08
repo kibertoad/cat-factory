@@ -5182,14 +5182,34 @@
       "side": {
         "RIGHT": "nouveau code",
         "LEFT": "ancien code"
-      }
+      },
+      "select": "Sélectionner ce brouillon pour le publier",
+      "status": {
+        "proposed": "Brouillon",
+        "posting": "Publication",
+        "posted": "Publié",
+        "failed": "Non publié",
+        "discarded": "Abandonné"
+      },
+      "edit": "Modifier",
+      "save": "Enregistrer",
+      "cancel": "Annuler",
+      "discard": "Abandonner",
+      "line": "Ligne",
+      "sideLabel": "Côté",
+      "postFailed": "L'hôte a refusé ce commentaire",
+      "summaryPlaceholder": "Commentaire de synthèse facultatif pour la pull request",
+      "post": "Publier {count} sur la pull request",
+      "postResult": "{posted} publiés, {failed} non publiés, {skipped} déjà traités."
     },
     "errors": {
       "load": "Impossible de charger la revue",
       "open": "Impossible d'ouvrir la revue",
       "ask": "Impossible de poser la question",
       "drafts": "Impossible de demander des brouillons de commentaires",
-      "refresh": "Impossible d'actualiser la revue"
+      "refresh": "Impossible d'actualiser la revue",
+      "editDraft": "Impossible d'enregistrer le brouillon",
+      "postDrafts": "Impossible de publier les brouillons"
     }
   },
   "pipeline": {

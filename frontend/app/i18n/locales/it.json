@@ -4654,14 +4654,34 @@
       "side": {
         "RIGHT": "codice nuovo",
         "LEFT": "codice precedente"
-      }
+      },
+      "select": "Seleziona questa bozza per la pubblicazione",
+      "status": {
+        "proposed": "Bozza",
+        "posting": "In pubblicazione",
+        "posted": "Pubblicato",
+        "failed": "Non pubblicato",
+        "discarded": "Scartato"
+      },
+      "edit": "Modifica",
+      "save": "Salva",
+      "cancel": "Annulla",
+      "discard": "Scarta",
+      "line": "Riga",
+      "sideLabel": "Lato",
+      "postFailed": "L'host ha rifiutato questo commento",
+      "summaryPlaceholder": "Commento di riepilogo facoltativo per la pull request",
+      "post": "Pubblica {count} nella pull request",
+      "postResult": "{posted} pubblicati, {failed} non pubblicati, {skipped} già gestiti."
     },
     "errors": {
       "load": "Impossibile caricare la revisione",
       "open": "Impossibile aprire la revisione",
       "ask": "Impossibile fare la domanda",
       "drafts": "Impossibile richiedere le bozze di commenti",
-      "refresh": "Impossibile aggiornare la revisione"
+      "refresh": "Impossibile aggiornare la revisione",
+      "editDraft": "Impossibile salvare la bozza",
+      "postDrafts": "Impossibile pubblicare le bozze"
     }
   },
   "pipeline": {

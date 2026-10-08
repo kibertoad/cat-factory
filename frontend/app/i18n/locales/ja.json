@@ -5182,14 +5182,34 @@
       "side": {
         "RIGHT": "新しいコード",
         "LEFT": "古いコード"
-      }
+      },
+      "select": "この下書きを投稿対象に選択",
+      "status": {
+        "proposed": "下書き",
+        "posting": "投稿中",
+        "posted": "投稿済み",
+        "failed": "未投稿",
+        "discarded": "破棄済み"
+      },
+      "edit": "編集",
+      "save": "保存",
+      "cancel": "キャンセル",
+      "discard": "破棄",
+      "line": "行",
+      "sideLabel": "側",
+      "postFailed": "ホストがこのコメントを拒否しました",
+      "summaryPlaceholder": "プルリクエストへの任意のまとめコメント",
+      "post": "プルリクエストに {count} 件投稿",
+      "postResult": "投稿 {posted} 件、未投稿 {failed} 件、処理済み {skipped} 件。"
     },
     "errors": {
       "load": "レビューを読み込めませんでした",
       "open": "レビューを開けませんでした",
       "ask": "質問できませんでした",
       "drafts": "コメントの下書きを依頼できませんでした",
-      "refresh": "レビューを更新できませんでした"
+      "refresh": "レビューを更新できませんでした",
+      "editDraft": "下書きを保存できませんでした",
+      "postDrafts": "下書きを投稿できませんでした"
     }
   },
   "pipeline": {

@@ -1,4 +1,5 @@
 import type {
+  GuidedReviewCommentDraft,
   GuidedReviewMessage,
   GuidedReviewSessionView,
   OpenGuidedReviewInput,
@@ -107,4 +108,32 @@ export function isStale(
   latestHeadSha: string | null | undefined,
 ): boolean {
   return !!latestHeadSha && latestHeadSha !== reviewedHeadSha
+}
+
+/** A draft the reviewer may still edit, discard or post: `proposed`, or a `failed` post. */
+export function isEditableDraft(draft: Pick<GuidedReviewCommentDraft, 'status'>): boolean {
+  return draft.status === 'proposed' || draft.status === 'failed'
+}
+
+/** The selected drafts that can be posted now, in the order they are listed. */
+export function postableSelection(
+  drafts: Pick<GuidedReviewCommentDraft, 'id' | 'status'>[],
+  selected: ReadonlySet<string>,
+): string[] {
+  return drafts.filter((d) => selected.has(d.id) && isEditableDraft(d)).map((d) => d.id)
+}
+
+/**
+ * The fields an inline edit actually changed, against the draft as loaded. Empty when nothing
+ * moved, so the editor saves nothing rather than bumping the draft's revision for no change.
+ */
+export function draftEdit(
+  draft: Pick<GuidedReviewCommentDraft, 'body' | 'line' | 'side'>,
+  form: { body: string; line: number; side: 'LEFT' | 'RIGHT' },
+): { body?: string; line?: number; side?: 'LEFT' | 'RIGHT' } {
+  return {
+    ...(form.body.trim() !== draft.body ? { body: form.body.trim() } : {}),
+    ...(form.line !== draft.line ? { line: form.line } : {}),
+    ...(form.side !== draft.side ? { side: form.side } : {}),
+  }
 }

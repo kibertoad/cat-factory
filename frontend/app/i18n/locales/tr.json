@@ -5182,14 +5182,34 @@
       "side": {
         "RIGHT": "yeni kod",
         "LEFT": "eski kod"
-      }
+      },
+      "select": "Bu taslağı göndermek için seç",
+      "status": {
+        "proposed": "Taslak",
+        "posting": "Gönderiliyor",
+        "posted": "Gönderildi",
+        "failed": "Gönderilmedi",
+        "discarded": "Atıldı"
+      },
+      "edit": "Düzenle",
+      "save": "Kaydet",
+      "cancel": "İptal",
+      "discard": "At",
+      "line": "Satır",
+      "sideLabel": "Taraf",
+      "postFailed": "Sunucu bu yorumu reddetti",
+      "summaryPlaceholder": "Pull request için isteğe bağlı özet yorumu",
+      "post": "{count} tanesini pull request'e gönder",
+      "postResult": "{posted} gönderildi, {failed} gönderilmedi, {skipped} zaten işlendi."
     },
     "errors": {
       "load": "İnceleme yüklenemedi",
       "open": "İnceleme açılamadı",
       "ask": "Soru sorulamadı",
       "drafts": "Yorum taslakları istenemedi",
-      "refresh": "İnceleme yenilenemedi"
+      "refresh": "İnceleme yenilenemedi",
+      "editDraft": "Taslak kaydedilemedi",
+      "postDrafts": "Taslaklar gönderilemedi"
     }
   },
   "pipeline": {

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   NEW_THREAD_TAB,
+  draftEdit,
+  isEditableDraft,
+  postableSelection,
   canAsk,
   citationLabel,
   draftAnchor,
@@ -96,5 +99,33 @@ describe('isStale', () => {
     expect(isStale('a', 'b')).toBe(true)
     expect(isStale('a', 'a')).toBe(false)
     expect(isStale('a', null)).toBe(false)
+  })
+})
+
+describe('draft editing and posting', () => {
+  it('treats proposed and failed drafts as still editable', () => {
+    expect(
+      ['proposed', 'failed', 'posting', 'posted', 'discarded'].map((status) =>
+        isEditableDraft({ status: status as never }),
+      ),
+    ).toEqual([true, true, false, false, false])
+  })
+
+  it('posts only the selected drafts that are still postable, in list order', () => {
+    const drafts = [
+      { id: 'a', status: 'proposed' as const },
+      { id: 'b', status: 'posted' as const },
+      { id: 'c', status: 'failed' as const },
+    ]
+    expect(postableSelection(drafts, new Set(['c', 'b', 'a']))).toEqual(['a', 'c'])
+  })
+
+  it('sends only what an edit changed, and nothing for an untouched form', () => {
+    const draft = { body: 'Bound the retries.', line: 3, side: 'RIGHT' as const }
+    expect(draftEdit(draft, { body: ' Bound the retries. ', line: 3, side: 'RIGHT' })).toEqual({})
+    expect(draftEdit(draft, { body: 'Cap at three.', line: 4, side: 'RIGHT' })).toEqual({
+      body: 'Cap at three.',
+      line: 4,
+    })
   })
 })
