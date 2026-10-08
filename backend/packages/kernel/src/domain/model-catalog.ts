@@ -809,6 +809,45 @@ export const MODEL_CATALOG: SelectableModel[] = [
     },
   },
   {
+    id: 'claude-haiku-5-5',
+    family: 'claude',
+    label: 'Claude Haiku 5.5',
+    description:
+      "Anthropic's fastest and cheapest model, for lightweight, high-volume steps such as " +
+      'classification, extraction and triage, with a 1M-token context. Prompts over 100K ' +
+      'tokens bill at five times the short rate. Run via Claude Code on your Claude ' +
+      'subscription, on AWS Bedrock in your own account, or pay-as-you-go through OpenRouter ' +
+      '(billed at Anthropic rates).',
+    // Released 2026-10-07 and on Bedrock the same day: the model card names
+    // `anthropic.claude-haiku-5-5` with the 1M window and image input, so all three arms are
+    // declared against verified routes, as with Sonnet 5.5 above.
+    bedrock: {
+      baseModelId: 'anthropic.claude-haiku-5-5',
+      contextTokens: 1_000_000,
+      acceptsImages: true,
+    },
+    openrouter: {
+      ref: {
+        provider: 'openrouter',
+        model: 'anthropic/claude-haiku-5.5',
+        contextTokens: 1_000_000,
+        acceptsImages: true,
+      },
+      keyEnv: 'OPENROUTER_API_KEY',
+      providerLabel: 'OpenRouter',
+    },
+    subscription: {
+      ref: {
+        provider: 'anthropic',
+        model: 'claude-haiku-5-5',
+        harness: 'claude-code',
+        contextTokens: 1_000_000,
+        acceptsImages: true,
+      },
+      vendor: 'claude',
+    },
+  },
+  {
     id: 'claude-opus-4-8',
     family: 'claude',
     label: 'Claude Opus 4.8 (Bedrock)',
