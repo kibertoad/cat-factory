@@ -129,6 +129,7 @@
     "commandBar": "Buscar o ejecutar un comando…",
     "create": "Crear",
     "assistant": "Asistente",
+    "guidedReview": "Revisión guiada",
     "buildPipeline": "Crear una canalización",
     "repositories": "Repositorios",
     "addFromRepo": "Añadir desde un repositorio existente",
@@ -2605,6 +2606,7 @@
       "cmd": {
         "newPipeline": "Crear una canalización",
         "assistant": "Abrir el asistente",
+        "guidedReview": "Explorar una pull request",
         "addFromRepo": "Añadir servicio desde un repositorio existente",
         "bootstrapRepo": "Iniciar un repositorio nuevo",
         "githubManage": "Gestionar la conexión de GitHub",
@@ -2633,6 +2635,7 @@
       "keywords": {
         "newPipeline": "canalización agentes cadena pipeline",
         "assistant": "ia asistente preguntar indicación házlo por mí",
+        "guidedReview": "revisión guiada pull request pr explorar explicar preguntas",
         "addFromRepo": "github importar existente",
         "bootstrapRepo": "andamiaje crear arquitectura de referencia",
         "github": "git repositorios pull requests incidencias",
@@ -5112,6 +5115,77 @@
       "unknown_issue_source": "Ningún rastreador conectado reconoce ese enlace. Conecta primero el rastreador al que pertenece.",
       "ambiguous_issue_source": "Dos rastreadores conectados reconocen esa referencia. Pega la dirección web completa de la incidencia.",
       "unresolved_issue_service": "El asistente no ha podido saber en qué servicio crearla. Indica el servicio en tu petición."
+    }
+  },
+  "guidedReview": {
+    "title": "Revisión guiada",
+    "titleFor": "{repo} #{number}: {title}",
+    "loading": "Cargando la revisión…",
+    "openFromTask": "Explorar con revisión guiada",
+    "picker": {
+      "intro": "Elige un repositorio y una pull request. Obtendrás un resumen del cambio y podrás hacer preguntas sobre él en hilos separados.",
+      "noRepos": "Todavía no hay repositorios vinculados a este espacio de trabajo.",
+      "repo": "Repositorio",
+      "openPulls": "Pull requests abiertas",
+      "number": "Número de la pull request",
+      "open": "Abrir revisión"
+    },
+    "overview": {
+      "title": "Resumen",
+      "stale": "La pull request tiene commits nuevos",
+      "refresh": "Actualizar",
+      "working": "Preparando el resumen…",
+      "intent": "Intención",
+      "changes": "Cambios relevantes",
+      "consequences": "Consecuencias",
+      "risks": "Riesgos",
+      "focus": "Merece revisión",
+      "suggested": "Preguntas sugeridas"
+    },
+    "severity": {
+      "low": "Baja",
+      "medium": "Media",
+      "high": "Alta"
+    },
+    "failure": {
+      "budget_exhausted": "Este espacio de trabajo ha agotado su presupuesto de modelos.",
+      "model_unavailable": "No hay ningún modelo disponible para la revisión guiada.",
+      "repo_unavailable": "No se pudo leer la pull request del repositorio.",
+      "generation_failed": "La llamada al modelo falló.",
+      "unreadable_reply": "El modelo respondió de una forma que no se pudo leer.",
+      "depth_unavailable": "Las respuestas profundas con un checkout aún no están disponibles.",
+      "detail": "Detalles"
+    },
+    "dropped": {
+      "outside_diff": "la línea está fuera del diff",
+      "not_in_pr": "el archivo no forma parte de esta pull request",
+      "incomplete": "la propuesta estaba incompleta"
+    },
+    "thread": {
+      "new": "Nuevo hilo",
+      "untitled": "Hilo sin título",
+      "empty": "Pregunta lo que quieras sobre esta pull request.",
+      "waiting": "Preparando una respuesta…",
+      "placeholder": "Haz una pregunta sobre el cambio",
+      "busy": "Esperando la respuesta a la pregunta anterior",
+      "send": "Preguntar",
+      "draftRequest": "Se pidieron comentarios de revisión"
+    },
+    "drafts": {
+      "title": "Borradores de comentarios",
+      "request": "Redactar comentarios de revisión",
+      "summary": "Se conservaron {kept} de {proposed} comentarios propuestos como borradores.",
+      "side": {
+        "RIGHT": "código nuevo",
+        "LEFT": "código anterior"
+      }
+    },
+    "errors": {
+      "load": "No se pudo cargar la revisión",
+      "open": "No se pudo abrir la revisión",
+      "ask": "No se pudo hacer la pregunta",
+      "drafts": "No se pudieron pedir borradores de comentarios",
+      "refresh": "No se pudo actualizar la revisión"
     }
   },
   "pipeline": {

@@ -41,6 +41,7 @@ export function useNavContributions() {
   // Consumer items bypass this map entirely via their own `run` closure.
   const actions: Record<NavActionId, () => void> = {
     assistant: () => ui.openAssistant(),
+    guidedReview: () => ui.openGuidedReview(),
     buildPipeline: () => ui.openBuilder(),
     addFromRepo: () => ui.openAddService(),
     bootstrapRepo: () => ui.openBootstrap(),

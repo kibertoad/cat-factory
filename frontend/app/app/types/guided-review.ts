@@ -4,6 +4,8 @@ export type {
   AskGuidedReviewInput,
   GuidedReviewChange,
   GuidedReviewCommentDraft,
+  GuidedReviewDraftReport,
+  GuidedReviewFailure,
   GuidedReviewExchange,
   GuidedReviewMessage,
   GuidedReviewSession,

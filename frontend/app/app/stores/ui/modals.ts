@@ -1,5 +1,10 @@
 import { ref } from 'vue'
-import type { DocumentSourceKind, InfraSetupArea, TaskSourceKind } from '~/types/domain'
+import type {
+  DocumentSourceKind,
+  InfraSetupArea,
+  OpenGuidedReviewInput,
+  TaskSourceKind,
+} from '~/types/domain'
 import type {
   InfrastructureScrollTarget,
   InfrastructureTab,
@@ -190,6 +195,12 @@ function createMiscModals() {
  * add-recurring / create-initiative surfaces. The `open*` connect/import handlers reset the hub
  * came-from markers (they can be reached from the Integrations hub).
  */
+/** What the guided review window opens on: a session, a pull request, or neither (the picker). */
+export interface GuidedReviewOpen {
+  sessionId: string | null
+  target: OpenGuidedReviewInput | null
+}
+
 function createDocumentTaskModals(resetHubReturn: ResetHubReturn) {
   // Document-source integration modals, keyed by source. A spawn always creates new
   // top-level frames: the planner decomposes a document into services, so spawning
@@ -220,6 +231,9 @@ function createDocumentTaskModals(resetHubReturn: ResetHubReturn) {
   // subject (a turn resolves every name it needs from the board itself), so a plain flag says
   // everything the host needs to know.
   const assistantOpen = ref(false)
+  // Guided PR review: either an existing session to show, or a PR to open one for. Both null
+  // opens the PR picker.
+  const guidedReview = ref<GuidedReviewOpen | null>(null)
 
   // Bug hunt: pick a tracker + one of its boards, rank its open unassigned bugs, adopt one.
   // `containerId` (a service frame or module) preselects where an adopted bug lands; null →
@@ -305,6 +319,13 @@ function createDocumentTaskModals(resetHubReturn: ResetHubReturn) {
   function closeAssistant() {
     assistantOpen.value = false
   }
+  function openGuidedReview(open: GuidedReviewOpen = { sessionId: null, target: null }) {
+    resetHubReturn()
+    guidedReview.value = open
+  }
+  function closeGuidedReview() {
+    guidedReview.value = null
+  }
   function openBugHunt(source: TaskSourceKind | null = null, containerId: string | null = null) {
     resetHubReturn()
     bugHunt.value = { source, containerId }
@@ -354,6 +375,7 @@ function createDocumentTaskModals(resetHubReturn: ResetHubReturn) {
     taskConnect,
     taskImport,
     assistantOpen,
+    guidedReview,
     bugHunt,
     startFromDesign,
     addTaskContainerId,
@@ -375,6 +397,8 @@ function createDocumentTaskModals(resetHubReturn: ResetHubReturn) {
     closeTaskImport,
     openAssistant,
     closeAssistant,
+    openGuidedReview,
+    closeGuidedReview,
     openBugHunt,
     closeBugHunt,
     openStartFromDesign,
