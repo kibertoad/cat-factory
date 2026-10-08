@@ -5199,6 +5199,7 @@
       "sideLabel": "Côté",
       "postFailed": "L'hôte a refusé ce commentaire",
       "summaryPlaceholder": "Commentaire de synthèse facultatif pour la pull request",
+      "summaryFailed": "L'hôte a refusé le commentaire de synthèse",
       "post": "Publier {count} sur la pull request",
       "postResult": "{posted} publiés, {failed} non publiés, {skipped} déjà traités."
     },

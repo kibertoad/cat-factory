@@ -5199,6 +5199,7 @@
       "sideLabel": "Taraf",
       "postFailed": "Sunucu bu yorumu reddetti",
       "summaryPlaceholder": "Pull request için isteğe bağlı özet yorumu",
+      "summaryFailed": "Sunucu özet yorumunu reddetti",
       "post": "{count} tanesini pull request'e gönder",
       "postResult": "{posted} gönderildi, {failed} gönderilmedi, {skipped} zaten işlendi."
     },

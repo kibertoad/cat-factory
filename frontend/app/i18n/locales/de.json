@@ -4671,6 +4671,7 @@
       "sideLabel": "Seite",
       "postFailed": "Der Host hat diesen Kommentar abgelehnt",
       "summaryPlaceholder": "Optionaler Zusammenfassungskommentar für den Pull Request",
+      "summaryFailed": "Der Host hat den Zusammenfassungskommentar abgelehnt",
       "post": "{count} im Pull Request posten",
       "postResult": "{posted} gepostet, {failed} nicht gepostet, {skipped} bereits erledigt."
     },

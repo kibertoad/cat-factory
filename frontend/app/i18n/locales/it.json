@@ -4671,6 +4671,7 @@
       "sideLabel": "Lato",
       "postFailed": "L'host ha rifiutato questo commento",
       "summaryPlaceholder": "Commento di riepilogo facoltativo per la pull request",
+      "summaryFailed": "L'host ha rifiutato il commento di riepilogo",
       "post": "Pubblica {count} nella pull request",
       "postResult": "{posted} pubblicati, {failed} non pubblicati, {skipped} già gestiti."
     },

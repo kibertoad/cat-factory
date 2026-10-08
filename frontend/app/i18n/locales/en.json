@@ -5393,6 +5393,7 @@
       "sideLabel": "Side",
       "postFailed": "The host refused this comment",
       "summaryPlaceholder": "Optional summary comment for the pull request",
+      "summaryFailed": "The host refused the summary comment",
       "post": "Post {count} to the pull request",
       "postResult": "{posted} posted, {failed} not posted, {skipped} already handled."
     },

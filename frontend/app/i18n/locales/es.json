@@ -5199,6 +5199,7 @@
       "sideLabel": "Lado",
       "postFailed": "El host rechazó este comentario",
       "summaryPlaceholder": "Comentario de resumen opcional para la pull request",
+      "summaryFailed": "El host rechazó el comentario de resumen",
       "post": "Publicar {count} en la pull request",
       "postResult": "{posted} publicados, {failed} sin publicar, {skipped} ya gestionados."
     },

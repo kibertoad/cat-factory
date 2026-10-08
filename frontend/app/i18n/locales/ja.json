@@ -5199,6 +5199,7 @@
       "sideLabel": "側",
       "postFailed": "ホストがこのコメントを拒否しました",
       "summaryPlaceholder": "プルリクエストへの任意のまとめコメント",
+      "summaryFailed": "ホストが要約コメントを拒否しました",
       "post": "プルリクエストに {count} 件投稿",
       "postResult": "投稿 {posted} 件、未投稿 {failed} 件、処理済み {skipped} 件。"
     },

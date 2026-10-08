@@ -5199,6 +5199,7 @@
       "sideLabel": "Strona",
       "postFailed": "Host odrzucił ten komentarz",
       "summaryPlaceholder": "Opcjonalny komentarz podsumowujący do pull requesta",
+      "summaryFailed": "Host odrzucił komentarz podsumowujący",
       "post": "Opublikuj {count} w pull requeście",
       "postResult": "Opublikowane: {posted}, nieopublikowane: {failed}, już obsłużone: {skipped}."
     },

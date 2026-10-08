@@ -5199,6 +5199,7 @@
       "sideLabel": "צד",
       "postFailed": "השרת המארח דחה את התגובה הזו",
       "summaryPlaceholder": "תגובת סיכום אופציונלית לבקשת המיזוג",
+      "summaryFailed": "השרת המארח דחה את תגובת הסיכום",
       "post": "פרסום {count} בבקשת המיזוג",
       "postResult": "{posted} פורסמו, {failed} לא פורסמו, {skipped} כבר טופלו."
     },

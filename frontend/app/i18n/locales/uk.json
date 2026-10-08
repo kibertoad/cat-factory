@@ -5199,6 +5199,7 @@
       "sideLabel": "Бік",
       "postFailed": "Хост відхилив цей коментар",
       "summaryPlaceholder": "Необов’язковий підсумковий коментар до pull request",
+      "summaryFailed": "Хост відхилив коментар-підсумок",
       "post": "Опублікувати {count} у pull request",
       "postResult": "Опубліковано: {posted}, не опубліковано: {failed}, вже оброблено: {skipped}."
     },
