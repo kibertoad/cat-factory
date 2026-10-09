@@ -133,7 +133,7 @@ gatekeeper-worker into a shared `@cat-factory/webhooks` package both depend on.
 
 ## Checklist
 
-- [x] **Slice 1: change feed recording** (PR link added on merge). `directory_changes` table (D1
+- [x] **Slice 1: change feed recording** ([#2307](https://github.com/kibertoad/cat-factory/pull/2307)). `directory_changes` table (D1
       0107, Drizzle), the `DirectoryChangeRepository` read port, appends inside every user, account
       membership, workspace, workspace membership and repo projection writer on both runtimes (the
       local CLI `linkRepo` now writes through the repository), `defineDirectoryFeedSuite`.
