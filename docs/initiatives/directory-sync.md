@@ -139,7 +139,7 @@ gatekeeper-worker into a shared `@cat-factory/webhooks` package both depend on.
       local CLI `linkRepo` now writes through the repository), `defineDirectoryFeedSuite`.
       The read repository is not in `CoreRepositories` yet because nothing consumes it: slice 3
       adds it there with mothership bucket `remote`.
-- [x] **Slice 2: account-level API keys with a workspace subset** (PR link added when opened;
+- [x] **Slice 2: account-level API keys with a workspace subset** ([#2308](https://github.com/kibertoad/cat-factory/pull/2308);
       website: [cat-factory-website#100](https://github.com/kibertoad/cat-factory-website/pull/100)).
       `public_api_key_workspaces` grants plus `all_workspaces` (D1 0108, Drizzle), per-request
       workspace resolution in `authorize`, `workspaceIds` on the key and `/me`, the reach picker in
