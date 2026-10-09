@@ -108,4 +108,5 @@ and keep deletions as tombstones.
 - Delivered in [#2307](https://github.com/kibertoad/cat-factory/pull/2307) (feed),
   [#2308](https://github.com/kibertoad/cat-factory/pull/2308) (account keys),
   [#2309](https://github.com/kibertoad/cat-factory/pull/2309) (read API),
-  [#2310](https://github.com/kibertoad/cat-factory/pull/2310) (webhooks) and the packages PR.
+  [#2310](https://github.com/kibertoad/cat-factory/pull/2310) (webhooks) and
+  [#2311](https://github.com/kibertoad/cat-factory/pull/2311) (packages).
