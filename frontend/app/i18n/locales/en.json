@@ -256,7 +256,8 @@
         "recurring": "Recurring",
         "review": "Review",
         "ralph": "Ralph loop",
-        "bugFishing": "Bug fishing"
+        "bugFishing": "Bug fishing",
+        "resolveConflicts": "Resolve conflicts"
       },
       "recurringWithFrame": "A recurring task runs a pipeline on a cadence. Continue to set the schedule + prompt.",
       "recurringNoFrame": "A recurring task must live on a service. Add it from a service frame (or a module inside one).",
@@ -5490,7 +5491,8 @@
         "review": "Review",
         "research": "Research",
         "planning": "Planning",
-        "media": "Media"
+        "media": "Media",
+        "maintenance": "PR maintenance"
       },
       "strategyOption": {
         "specialist-panel": "Specialist panel",

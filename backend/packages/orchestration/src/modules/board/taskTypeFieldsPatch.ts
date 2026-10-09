@@ -3,6 +3,7 @@ import { ValidationError } from '@cat-factory/kernel'
 import type { UpdateBlockInput } from '@cat-factory/contracts'
 import type { ResolvedTaskType } from './taskTypeCreationDefaults.js'
 import { foldReviewDescriptionOnto, refoldReviewDescription } from './reviewTaskTarget.js'
+import type { AttachedPullRequest } from './attachedPullRequest.js'
 
 // Turning a per-type FIELDS patch into the `taskTypeFields` a block row stores: the one narrowing
 // that changes the patch's SHAPE (the request names two halves of a bag the row keeps whole), and
@@ -48,6 +49,17 @@ export interface TaskTypeFieldsPatchDeps {
     taskType: Block['taskType'],
     fields: Block['taskTypeFields'],
   ) => Promise<Block['taskTypeFields']>
+  /**
+   * Creation's own attached-PR resolution (`resolveAttachedPullRequest`), so retargeting a task
+   * that attaches a pull request re-attaches one creation would have accepted. `null` for every
+   * other type.
+   */
+  attachPullRequest: (
+    workspaceId: string,
+    blockId: string,
+    taskType: Block['taskType'],
+    fields: Block['taskTypeFields'],
+  ) => Promise<AttachedPullRequest | null>
 }
 
 /** The stored bag with its BUILT-IN half replaced, keeping the custom half untouched. */
@@ -109,6 +121,10 @@ export async function applyTaskTypeFieldsPatch(
   // here, in creation's order: canonicalise first, so what lands in the description is the
   // provider's own link rather than whatever was typed.
   const resolved = await deps.resolveReviewTarget(homeWorkspaceId, block.id, taskType, validated)
+  const attached = await deps.attachPullRequest(homeWorkspaceId, block.id, taskType, resolved)
+  if (attached) {
+    return { ...rest, taskTypeFields: attached.fields, pullRequest: attached.pullRequest }
+  }
   return { ...rest, taskTypeFields: resolved ?? null, ...refold(rest, block, taskType, resolved) }
 }
 

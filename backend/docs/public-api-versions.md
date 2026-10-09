@@ -436,3 +436,17 @@ the repository rather than refused. Its assistant message stays `running` for mi
 seconds while the container works, and a deployment with no runner still settles it as
 `failed` with `failure.reason: "depth_unavailable"`. No shape changes; the version records that a
 documented value started doing what it names.
+
+## 1.79.0
+
+The task-type vocabulary gains `resolve-conflicts`: a task that ATTACHES an existing open pull
+request (named by `fields.prNumber` or `fields.prUrl`, exactly as a `review` task names one) and
+runs the `conflicts` gate against it under the new built-in `pl_resolve_conflicts` pipeline. A
+pull request that already merges cleanly finishes `done` with nothing pushed; a conflicted one
+loops the conflict resolver onto its own head branch and fails the run once the attempt budget is
+spent, with a failure message saying the conflicts could not be resolved automatically.
+
+Additive: a new enum value and a new set of `details.reason` codes on the existing `422`
+(`attached_pr_unresolvable`, `attached_pr_not_found`, `attached_pr_repo_mismatch`,
+`attached_pr_not_open`, `attached_pr_from_fork`, `attached_pr_base_mismatch`). The pipeline parks
+nowhere, so a plain `write` key can start it with an empty body.

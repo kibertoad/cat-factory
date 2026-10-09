@@ -455,6 +455,35 @@ export const REVIEW_TARGET_REASONS = ['review_pr_not_found', 'review_pr_repo_mis
 export type ReviewTargetReason = (typeof REVIEW_TARGET_REASONS)[number]
 
 /**
+ * Machine-readable reasons a task that ATTACHES an existing pull request (`resolve-conflicts`)
+ * is refused at creation (`error.details.reason` on the 422). Stricter than the review target:
+ * the run pushes onto the attached pull request's head branch, so every reference it cannot
+ * positively confirm is refused rather than created unchecked.
+ *
+ *  - `attached_pr_unresolvable`  the pull request could not be read at all: the service is not
+ *                                linked to a repository, or the provider cannot read one.
+ *  - `attached_pr_not_found`     the provider positively reports no such pull request.
+ *  - `attached_pr_repo_mismatch` the URL names a different repository than the service's.
+ *                                `details.expected` carries `owner/repo`.
+ *  - `attached_pr_not_open`      the pull request is closed or merged. `details.state` says which.
+ *  - `attached_pr_from_fork`     its head branch lives in another repository, which the run's
+ *                                push cannot reach.
+ *  - `attached_pr_base_mismatch` it targets a branch other than the repository's base branch,
+ *                                which is the branch the resolver merges in.
+ *                                `details.expected` carries that branch.
+ */
+export const ATTACHED_PR_REASONS = [
+  'attached_pr_unresolvable',
+  'attached_pr_not_found',
+  'attached_pr_repo_mismatch',
+  'attached_pr_not_open',
+  'attached_pr_from_fork',
+  'attached_pr_base_mismatch',
+] as const
+
+export type AttachedPrReason = (typeof ATTACHED_PR_REASONS)[number]
+
+/**
  * Machine-readable reasons a bootstrap run is refused because of the REFERENCE ARCHITECTURE it
  * was asked to build from, carried on `error.details.reason` beside `referenceArchitectureId`
  * and `repo` (`owner/name`) so the launch dialog can offer to fix the entry rather than only

@@ -220,7 +220,8 @@
         "recurring": "Cykliczne",
         "review": "Przegląd",
         "ralph": "Pętla Ralph",
-        "bugFishing": "Polowanie na błędy"
+        "bugFishing": "Polowanie na błędy",
+        "resolveConflicts": "Rozwiąż konflikty"
       },
       "recurringWithFrame": "Zadanie cykliczne uruchamia pipeline w określonym rytmie. Kontynuuj, aby ustawić harmonogram i prompt.",
       "recurringNoFrame": "Zadanie cykliczne musi należeć do usługi. Dodaj je z ramki usługi (lub modułu w jej obrębie).",
@@ -5293,7 +5294,8 @@
         "review": "Przegląd",
         "research": "Badania",
         "planning": "Planowanie",
-        "media": "Multimedia"
+        "media": "Multimedia",
+        "maintenance": "Utrzymanie PR"
       },
       "strategyOption": {
         "specialist-panel": "Panel specjalistów",

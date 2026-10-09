@@ -1619,6 +1619,45 @@ nothing: the chosen `taskType`'s own defaults still apply on top, so a `document
 `"fragmentIds": []` comes back carrying the platform's writing standards. Read the response rather
 than assuming the request is the answer.
 
+#### Resolving a pull request's conflicts
+
+A `resolve-conflicts` task points the platform's conflict resolver at a pull request that already
+exists and that the platform did not open: the "Resolve conflicts" button an external review tool
+offers. Name the pull request the way a `review` task does, with `fields.prNumber` or
+`fields.prUrl` (one is required; the number wins when both are given), and start it with an empty
+body. The task is pinned to `pl_resolve_conflicts` at creation, and that pipeline parks nowhere, so
+a plain `write` key can drive it end to end.
+
+```bash
+curl -sX POST "$BASE/api/v1/services/$SERVICE/tasks" -H "Authorization: Bearer $KEY" \
+  -H 'content-type: application/json' \
+  -d '{"title":"Resolve conflicts on #4558","description":"Requested from the review tool.",
+       "taskType":"resolve-conflicts","fields":{"prNumber":4558}}'
+curl -sX POST "$BASE/api/v1/tasks/$TASK/start" -H "Authorization: Bearer $KEY" -d '{}'
+```
+
+The pipeline is the `conflicts` gate alone, run against the attached pull request. One that already
+merges cleanly passes straight through: the run ends `done` and nothing is pushed. A conflicted one
+dispatches the conflict resolver, which merges the repository's base branch into the pull request's
+own head branch, resolves the conflicts and pushes the merge commit there; the gate then re-probes.
+When its attempt budget runs out the run ends `failed`, and the run's `error.message` says the
+conflicts could not be resolved automatically, carrying the resolver's account of its last attempt
+(which files it left conflicting). Either way the pull request stays open: it belongs to whoever
+opened it, so the task finishes without asking anyone to merge it.
+
+The pull request is checked when the task is CREATED, and every reference the run could not push
+onto is refused there with a `422` and one of these `details.reason` codes:
+
+| `details.reason`            | Why                                                                                                                             |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `task_type_fields_invalid`  | Neither `prNumber` nor `prUrl` was given.                                                                                       |
+| `attached_pr_not_found`     | The provider reports no such pull request on the service's linked repository.                                                   |
+| `attached_pr_repo_mismatch` | `prUrl` names another repository than the service's; `details.expected` names the right one.                                    |
+| `attached_pr_not_open`      | The pull request is closed or merged; `details.state` says which.                                                               |
+| `attached_pr_from_fork`     | Its head branch lives in a fork, which the push to the service's repository cannot reach.                                       |
+| `attached_pr_base_mismatch` | It targets a branch other than the repository's base branch, which is what the resolver merges in; `details.expected` names it. |
+| `attached_pr_unresolvable`  | The service has no linked repository the platform can read pull requests from.                                                  |
+
 ### Task runs & streaming
 
 | Method / path                      | Scope  | Behaviour                                                                         |

@@ -3067,7 +3067,8 @@
         "recurring": "Wiederkehrend",
         "review": "Review",
         "ralph": "Ralph-Schleife",
-        "bugFishing": "Fehlersuche"
+        "bugFishing": "Fehlersuche",
+        "resolveConflicts": "Konflikte lösen"
       },
       "recurringWithFrame": "Eine wiederkehrende Aufgabe führt eine Pipeline in einem Takt aus. Fahren Sie fort, um Zeitplan + Prompt festzulegen.",
       "recurringNoFrame": "Eine wiederkehrende Aufgabe muss auf einem Service liegen. Fügen Sie sie aus einem Service-Frame (oder einem darin enthaltenen Modul) hinzu.",
@@ -4765,7 +4766,8 @@
         "review": "Review",
         "research": "Recherche",
         "planning": "Planung",
-        "media": "Medien"
+        "media": "Medien",
+        "maintenance": "PR-Pflege"
       },
       "strategyOption": {
         "specialist-panel": "Spezialisten-Panel",

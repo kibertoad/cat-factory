@@ -220,7 +220,8 @@
         "recurring": "Recurrente",
         "review": "Revisión",
         "ralph": "Bucle Ralph",
-        "bugFishing": "Pesca de errores"
+        "bugFishing": "Pesca de errores",
+        "resolveConflicts": "Resolver conflictos"
       },
       "recurringWithFrame": "Una tarea recurrente ejecuta una pipeline con cierta cadencia. Continúa para definir el horario y el prompt.",
       "recurringNoFrame": "Una tarea recurrente debe vivir en un servicio. Añádela desde un marco de servicio (o un módulo dentro de él).",
@@ -5293,7 +5294,8 @@
         "review": "Revisión",
         "research": "Investigación",
         "planning": "Planificación",
-        "media": "Medios"
+        "media": "Medios",
+        "maintenance": "Mantenimiento de PR"
       },
       "strategyOption": {
         "specialist-panel": "Panel de especialistas",

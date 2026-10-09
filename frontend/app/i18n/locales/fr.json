@@ -220,7 +220,8 @@
         "recurring": "Récurrent",
         "review": "Revue",
         "ralph": "Boucle Ralph",
-        "bugFishing": "Pêche aux bogues"
+        "bugFishing": "Pêche aux bogues",
+        "resolveConflicts": "Résoudre les conflits"
       },
       "recurringWithFrame": "Une tâche récurrente exécute une pipeline selon une cadence. Continuez pour définir le calendrier et le prompt.",
       "recurringNoFrame": "Une tâche récurrente doit appartenir à un service. Ajoutez-la depuis un cadre de service (ou un module à l’intérieur).",
@@ -5293,7 +5294,8 @@
         "review": "Revue",
         "research": "Recherche",
         "planning": "Planification",
-        "media": "Média"
+        "media": "Média",
+        "maintenance": "Maintenance de PR"
       },
       "strategyOption": {
         "specialist-panel": "Panel de spécialistes",

@@ -47,6 +47,7 @@ import {
   type GlMrDiffPayload,
   type GlProjectPayload,
   mergeabilityFromStatus,
+  mergeRequestIsCrossProject,
   toBranchProjection,
   toChangedFileProjection,
   toCheckRunProjection,
@@ -956,6 +957,7 @@ export class FetchGitLabClient implements VcsClient {
     return {
       ...toMergeRequestProjection(payload, numericRepoId(ref), this.deps.clock.now()),
       url: payload.web_url ?? '',
+      crossRepository: mergeRequestIsCrossProject(payload),
     }
   }
 

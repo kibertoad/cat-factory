@@ -207,11 +207,17 @@ export const conflictsGate = (ctx: GateContext): GateDefinition => ({
   onExhausted: async ({ step }) => {
     const target = step.gate?.conflictTarget
     const which = target?.repo ? `The pull request for ${target.repo}` : 'The pull request'
+    // The probe reports mergeability as one bit, so the resolver's own account of its last round
+    // (which files it left conflicting) is the only detail there is to hand on.
+    const lastAttempt = step.gate?.attemptLog?.at(-1)?.summary
     return {
-      error:
+      error: joinSentences(
         `${which} still conflicts with its base after ` +
-        `${step.gate?.attempts ?? 0} conflict-resolver attempt(s). Resolve the conflict ` +
-        `manually, then retry the run.`,
+          `${step.gate?.attempts ?? 0} conflict-resolver attempt(s): the conflicts could not be ` +
+          'resolved automatically.',
+        lastAttempt ? `Last attempt: ${lastAttempt}` : null,
+        'Resolve the conflict manually, then retry the run.',
+      ),
     }
   },
 })

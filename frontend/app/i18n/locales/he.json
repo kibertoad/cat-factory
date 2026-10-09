@@ -220,7 +220,8 @@
         "recurring": "מחזורי",
         "review": "סקירה",
         "ralph": "לולאת Ralph",
-        "bugFishing": "ציד באגים"
+        "bugFishing": "ציד באגים",
+        "resolveConflicts": "פתרון קונפליקטים"
       },
       "recurringWithFrame": "משימה מחזורית מריצה צינור במרווחים קבועים. המשך כדי להגדיר את התזמון והפרומפט.",
       "recurringNoFrame": "משימה מחזורית חייבת להתקיים על שירות. הוסף אותה ממסגרת שירות (או ממודול בתוכה).",
@@ -5293,7 +5294,8 @@
         "review": "סקירה",
         "research": "מחקר",
         "planning": "תכנון",
-        "media": "מדיה"
+        "media": "מדיה",
+        "maintenance": "תחזוקת PR"
       },
       "strategyOption": {
         "specialist-panel": "פאנל מומחים",
