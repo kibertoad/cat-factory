@@ -22,6 +22,7 @@ import type {
   ServiceProvisioning,
   TestCredentialBrief,
   TaskEstimate,
+  TaskType,
   TaskTypeFields,
 } from '../domain/types.js'
 import type { LocalModelDeclarations } from '../domain/local-model-declarations.js'
@@ -498,6 +499,11 @@ export interface AgentRunContext {
      * absent when no per-type fields were collected.
      */
     taskTypeFields?: TaskTypeFields
+    /**
+     * The task's type, so an executor can tell a pull request the task ATTACHED (one somebody
+     * else opened) from one its own run opened. Absent on a block that is not a typed task.
+     */
+    taskType?: TaskType
     /**
      * The raw Markdown of the workspace's linked TEMPLATE document for this task's `docKind`
      * (WS1 item 3), resolved by the engine when a `role: 'template'` document is linked for the

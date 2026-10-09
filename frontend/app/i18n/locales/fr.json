@@ -220,7 +220,8 @@
         "recurring": "Récurrent",
         "review": "Revue",
         "ralph": "Boucle Ralph",
-        "bugFishing": "Pêche aux bogues"
+        "bugFishing": "Pêche aux bogues",
+        "resolveConflicts": "Résoudre les conflits"
       },
       "recurringWithFrame": "Une tâche récurrente exécute une pipeline selon une cadence. Continuez pour définir le calendrier et le prompt.",
       "recurringNoFrame": "Une tâche récurrente doit appartenir à un service. Ajoutez-la depuis un cadre de service (ou un module à l’intérieur).",
@@ -639,7 +640,8 @@
         "assistant_generation_failed": "Le fournisseur de modèles de l'assistant n'a pas répondu. Il est correctement configuré et il n'y a rien à paramétrer ici : réessayez la demande dans un instant.",
         "assistant_reply_unreadable": "Le modèle de l'assistant a répondu quelque chose que cette plateforme ne peut pas exécuter comme décision. Reformuler aide rarement : choisissez un autre modèle pour l'assistant dans les paramètres de modèles.",
         "delegated_executor_failed": "L’exécuteur externe n’a pas pu démarrer cette étape. Le problème vient du système qui effectue le travail, pas de ce déploiement : consultez ses propres journaux, puis réessayez.",
-        "delegated_work_branch_unprepared": "La plateforme n'a pas pu préparer la branche de travail vers laquelle l'exécuteur de cette étape est envoyé, donc rien n'a démarré. Soit la connexion au dépôt ne peut pas y écrire, soit la tâche nomme une branche qui n'existe pas encore : les détails indiquent laquelle des deux."
+        "delegated_work_branch_unprepared": "La plateforme n'a pas pu préparer la branche de travail vers laquelle l'exécuteur de cette étape est envoyé, donc rien n'a démarré. Soit la connexion au dépôt ne peut pas y écrire, soit la tâche nomme une branche qui n'existe pas encore : les détails indiquent laquelle des deux.",
+        "attached_pr_provider_unreachable": "Le fournisseur du dépôt n'a pas répondu, la pull request n'a donc pas pu être vérifiée et aucune tâche n'a été créée. Il n'y a rien à configurer ici : réessayez dans un instant."
       }
     },
     "reason": {
@@ -5293,7 +5295,8 @@
         "review": "Revue",
         "research": "Recherche",
         "planning": "Planification",
-        "media": "Média"
+        "media": "Média",
+        "maintenance": "Maintenance de PR"
       },
       "strategyOption": {
         "specialist-panel": "Panel de spécialistes",

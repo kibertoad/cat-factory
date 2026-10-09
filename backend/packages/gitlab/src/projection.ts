@@ -46,6 +46,14 @@ export interface GlMergeRequestPayload {
   sha?: string | null
   author?: { username?: string } | null
   updated_at?: string | null
+  source_project_id?: number
+  target_project_id?: number
+}
+
+/** Whether an MR's source branch lives in another project than its target (a fork). */
+export function mergeRequestIsCrossProject(mr: GlMergeRequestPayload): boolean | undefined {
+  if (mr.source_project_id === undefined || mr.target_project_id === undefined) return undefined
+  return mr.source_project_id !== mr.target_project_id
 }
 
 export interface GlIssuePayload {

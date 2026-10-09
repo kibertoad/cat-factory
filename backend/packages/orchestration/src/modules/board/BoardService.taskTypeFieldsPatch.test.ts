@@ -284,3 +284,49 @@ describe('BoardService review-target patch', () => {
     expect(written).not.toHaveProperty('description')
   })
 })
+
+describe('BoardService attached pull request patch', () => {
+  const attachedPr = (number: number): OpenedPullRequest => ({
+    repoGithubId: 1,
+    number,
+    githubId: number * 100,
+    title: `PR ${number}`,
+    state: 'open',
+    headRef: `feature/pr-${number}`,
+    baseRef: 'main',
+    headSha: 'abc',
+    merged: false,
+    author: 'someone',
+    updatedAt: null,
+    syncedAt: 0,
+    url: `https://github.com/o/r/pull/${number}`,
+    crossRepository: false,
+  })
+  const working = (status: Block['status']) =>
+    task({
+      taskType: 'resolve-conflicts',
+      status,
+      taskTypeFields: { prNumber: 7 },
+      pullRequest: { url: 'https://github.com/o/r/pull/7', number: 7, branch: 'feature/pr-7' },
+    })
+  const serviceFor = (seed: Block) =>
+    build(seed, {
+      resolveRunRepoContext: async () => repoContext(async (n: number) => attachedPr(n)),
+    })
+
+  it('refuses to move the attachment under a working run', async () => {
+    await expect(
+      patchFields(serviceFor(working('in_progress')), { builtinTaskTypeFields: { prNumber: 9 } }),
+    ).rejects.toThrow(/working on its attached pull request/)
+    expect(written).toBeNull()
+  })
+
+  it('re-attaches a different pull request once the task is not running', async () => {
+    await patchFields(serviceFor(working('done')), { builtinTaskTypeFields: { prNumber: 9 } })
+    expect(written?.pullRequest).toEqual({
+      url: 'https://github.com/o/r/pull/9',
+      number: 9,
+      branch: 'feature/pr-9',
+    })
+  })
+})

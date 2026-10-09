@@ -326,6 +326,24 @@ describe('FetchGitLabClient — PR deep review (changed files, head refs, publis
     expect(await c.getPullRequestHeadSha(connection, ref, 3)).toBe('fresh')
   })
 
+  it('says whether an MR comes from a fork, and stays silent when GitLab does not say', async () => {
+    const mr = (body: Record<string, unknown>) =>
+      client({ 'GET /projects/7/merge_requests/3': { body: { iid: 3, ...body } } }).c
+    const fork = await mr({ source_project_id: 9, target_project_id: 7 }).getPullRequest(
+      connection,
+      ref,
+      3,
+    )
+    expect(fork?.crossRepository).toBe(true)
+    const same = await mr({ source_project_id: 7, target_project_id: 7 }).getPullRequest(
+      connection,
+      ref,
+      3,
+    )
+    expect(same?.crossRepository).toBe(false)
+    expect((await mr({}).getPullRequest(connection, ref, 3))?.crossRepository).toBeUndefined()
+  })
+
   it('degrades every single-MR accessor to null on a 404 but propagates other failures', async () => {
     const missing = client({ 'GET /projects/7/merge_requests/3': { status: 404 } })
     expect(await missing.c.getPullRequestBaseRef(connection, ref, 3)).toBeNull()
