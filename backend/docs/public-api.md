@@ -3187,6 +3187,10 @@ existing endpoint is admitted regardless, since those are the actions that resol
 
 ### Delivery contract
 
+Every body below is also published in the spec's OpenAPI 3.1 `webhooks` section
+(`NotificationWebhookDelivery`, `RunWebhookDelivery`, `PlatformAlertWebhookDelivery`), so each
+official client carries it as a generated type.
+
 Every delivery is a `POST` with `content-type: application/json` and `user-agent: cat-factory`. The
 three families share the endpoint and are told apart by shape: `notification`, `run` and `alert`
 respectively.

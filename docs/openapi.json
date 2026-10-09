@@ -2480,6 +2480,51 @@
         ],
         "type": "object"
       },
+      "NotificationWebhookDelivery": {
+        "properties": {
+          "deliveryId": {
+            "type": "string"
+          },
+          "notification": {
+            "$ref": "#/components/schemas/Notification"
+          },
+          "runId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sentAt": {
+            "type": "number"
+          },
+          "taskId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "workspaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "deliveryId",
+          "sentAt",
+          "workspaceId",
+          "runId",
+          "taskId",
+          "notification"
+        ],
+        "type": "object"
+      },
       "OpenGuidedReview": {
         "properties": {
           "owner": {
@@ -2522,6 +2567,124 @@
           }
         },
         "required": [],
+        "type": "object"
+      },
+      "PlatformAlertWebhookDelivery": {
+        "properties": {
+          "alert": {
+            "properties": {
+              "accountId": {
+                "type": "string"
+              },
+              "conditions": {
+                "items": {
+                  "properties": {
+                    "kind": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    },
+                    "threshold": {
+                      "type": "number"
+                    },
+                    "value": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "reason",
+                    "value",
+                    "threshold"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "failedTotal": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "failingRuns": {
+                "items": {
+                  "properties": {
+                    "blockId": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "createdAt": {
+                      "type": "number"
+                    },
+                    "executionId": {
+                      "type": "string"
+                    },
+                    "failureKind": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "executionId",
+                    "blockId",
+                    "failureKind",
+                    "createdAt"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "occurredAt": {
+                "type": "number"
+              },
+              "window": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "accountId",
+              "window",
+              "conditions",
+              "occurredAt",
+              "failingRuns",
+              "failedTotal"
+            ],
+            "type": "object"
+          },
+          "deliveryId": {
+            "type": "string"
+          },
+          "event": {
+            "enum": [
+              "platform_health.firing",
+              "platform_health.resolved"
+            ],
+            "type": "string"
+          },
+          "sentAt": {
+            "type": "number"
+          },
+          "workspaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "deliveryId",
+          "sentAt",
+          "workspaceId",
+          "event",
+          "alert"
+        ],
         "type": "object"
       },
       "PostGuidedReviewDrafts": {
@@ -8771,6 +8934,162 @@
           "statement",
           "kind",
           "priority"
+        ],
+        "type": "object"
+      },
+      "RunWebhookDelivery": {
+        "properties": {
+          "deliveryId": {
+            "type": "string"
+          },
+          "event": {
+            "enum": [
+              "run.started",
+              "run.completed",
+              "run.failed",
+              "run.step_completed"
+            ],
+            "type": "string"
+          },
+          "run": {
+            "properties": {
+              "failure": {
+                "anyOf": [
+                  {
+                    "properties": {
+                      "kind": {
+                        "type": "string"
+                      },
+                      "message": {
+                        "type": "string"
+                      },
+                      "reason": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "message",
+                      "reason"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "occurredAt": {
+                "type": "number"
+              },
+              "pipelineId": {
+                "type": "string"
+              },
+              "pipelineName": {
+                "type": "string"
+              },
+              "pullRequestUrl": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "runId": {
+                "type": "string"
+              },
+              "startedAt": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "step": {
+                "anyOf": [
+                  {
+                    "properties": {
+                      "agentKind": {
+                        "type": "string"
+                      },
+                      "attempt": {
+                        "type": "number"
+                      },
+                      "final": {
+                        "type": "boolean"
+                      },
+                      "index": {
+                        "type": "number"
+                      },
+                      "outcome": {
+                        "enum": [
+                          "completed",
+                          "skipped"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "index",
+                      "agentKind",
+                      "outcome",
+                      "attempt",
+                      "final"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "taskId": {
+                "type": "string"
+              },
+              "taskTitle": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "runId",
+              "taskId",
+              "taskTitle",
+              "pipelineId",
+              "pipelineName",
+              "startedAt",
+              "occurredAt",
+              "pullRequestUrl",
+              "failure",
+              "step"
+            ],
+            "type": "object"
+          },
+          "sentAt": {
+            "type": "number"
+          },
+          "workspaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "deliveryId",
+          "sentAt",
+          "workspaceId",
+          "event",
+          "run"
         ],
         "type": "object"
       },
@@ -26265,7 +26584,7 @@
   "webhooks": {
     "directoryDelivery": {
       "post": {
-        "description": "Sent to each registered directory webhook endpoint. Verify `x-cat-factory-signature` (`v1=<hex HMAC-SHA256(secret, \"<x-cat-factory-timestamp>.<raw body>\")>`) before parsing, and dedupe on `deliveryId`: a failed push is retried with the same id.",
+        "description": "Sent to each registered directory webhook endpoint: a page of directory changes, or word that the endpoint must resynchronize. Dedupe on `deliveryId`: a failed push is retried with the same id. Verify `x-cat-factory-signature` (`v1=<hex HMAC-SHA256(secret, \"<x-cat-factory-timestamp>.<raw body>\")>`) over the raw body before parsing, and refuse a timestamp outside your replay window.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -26282,6 +26601,69 @@
           }
         },
         "summary": "A directory webhook push"
+      }
+    },
+    "notificationDelivery": {
+      "post": {
+        "description": "Sent to each notification webhook endpoint subscribed to the notification’s type, on every state edge of the card (raised, acted, dismissed); key on `notification.status`. Dedupe on `deliveryId`. Verify `x-cat-factory-signature` (`v1=<hex HMAC-SHA256(secret, \"<x-cat-factory-timestamp>.<raw body>\")>`) over the raw body before parsing, and refuse a timestamp outside your replay window.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotificationWebhookDelivery"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Any 2xx acknowledges the push."
+          }
+        },
+        "summary": "A notification push"
+      }
+    },
+    "platformAlertDelivery": {
+      "post": {
+        "description": "Sent to each notification webhook endpoint subscribed to the event (`alertEvents`) when the account’s run health crosses, or clears, an operator threshold. Dedupe on `deliveryId`. Verify `x-cat-factory-signature` (`v1=<hex HMAC-SHA256(secret, \"<x-cat-factory-timestamp>.<raw body>\")>`) over the raw body before parsing, and refuse a timestamp outside your replay window.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlatformAlertWebhookDelivery"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Any 2xx acknowledges the push."
+          }
+        },
+        "summary": "A platform health push"
+      }
+    },
+    "runLifecycleDelivery": {
+      "post": {
+        "description": "Sent to each notification webhook endpoint subscribed to the event (`runEvents`). `run.started` is sent once; the terminal and step events are at-least-once, so dedupe on `deliveryId`, never on the body, whose timestamps are re-stamped on a replay. Verify `x-cat-factory-signature` (`v1=<hex HMAC-SHA256(secret, \"<x-cat-factory-timestamp>.<raw body>\")>`) over the raw body before parsing, and refuse a timestamp outside your replay window.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunWebhookDelivery"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Any 2xx acknowledges the push."
+          }
+        },
+        "summary": "A run lifecycle push"
       }
     }
   },

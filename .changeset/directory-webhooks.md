@@ -18,6 +18,8 @@ Each push is a `directory.changed` page of hydrated changes, or `directory.resyn
 endpoint that fell behind the feed's retention. Delivery is a sweep on both facades (the Worker's
 frequent cron, a Node timer) that claims each endpoint's position by compare-and-swap before a push
 and releases it after a failed one, so pushes are at-least-once and never doubled by concurrent
-sweepers. The spec gains an OpenAPI 3.1 `webhooks` section naming `DirectoryWebhookDelivery`.
+sweepers. The spec gains an OpenAPI 3.1 `webhooks` section naming every push body, so
+`DirectoryWebhookDelivery`, `NotificationWebhookDelivery`, `RunWebhookDelivery` and
+`PlatformAlertWebhookDelivery` become generated types in every client.
 OpenAPI 1.81.0. New migrations: D1 `0109_directory_webhooks.sql`, Drizzle
 `20261009151938_directory_webhooks`.

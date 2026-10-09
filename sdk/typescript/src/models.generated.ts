@@ -2179,6 +2179,17 @@ export type NotificationWebhookAlertEvent = 'platform_health.firing' | 'platform
 /** Every `NotificationWebhookAlertEvent` value, for exhaustive handling and runtime validation. */
 export const NOTIFICATION_WEBHOOK_ALERT_EVENT_VALUES = ['platform_health.firing', 'platform_health.resolved'] as const
 
+export interface NotificationWebhookDelivery {
+  deliveryId: string
+  notification: Notification
+  /** Always present; `null` when the server has no value for it. */
+  runId: string | null
+  sentAt: number
+  /** Always present; `null` when the server has no value for it. */
+  taskId: string | null
+  workspaceId: string
+}
+
 export type NotificationWebhookRunEvent = 'run.started' | 'run.completed' | 'run.failed' | 'run.step_completed'
 
 /** Every `NotificationWebhookRunEvent` value, for exhaustive handling and runtime validation. */
@@ -2198,6 +2209,31 @@ export interface OpenGuidedReviewThread {
   question?: AskGuidedReview
   /** Length 0..200. */
   title?: string
+}
+
+export interface PlatformAlertWebhookDelivery {
+  alert: PlatformAlertWebhookDeliveryAlert
+  deliveryId: string
+  event: NotificationWebhookAlertEvent
+  sentAt: number
+  workspaceId: string
+}
+
+export interface PlatformAlertWebhookDeliveryAlert {
+  accountId: string
+  conditions: PlatformAlertWebhookDeliveryAlertCondition[]
+  /** Always present; `null` when the server has no value for it. */
+  failedTotal: number | null
+  failingRuns: NotificationPayloadPlatformFailingRun[]
+  occurredAt: number
+  window: string
+}
+
+export interface PlatformAlertWebhookDeliveryAlertCondition {
+  kind?: string
+  reason: string
+  threshold: number
+  value: number
 }
 
 export interface PostGuidedReviewDrafts {
@@ -3926,6 +3962,51 @@ export interface RunSubtaskCounts {
   inProgress: number
   total: number
 }
+
+export interface RunWebhookDelivery {
+  deliveryId: string
+  event: NotificationWebhookRunEvent
+  run: RunWebhookDeliveryRun
+  sentAt: number
+  workspaceId: string
+}
+
+export interface RunWebhookDeliveryRun {
+  /** Always present; `null` when the server has no value for it. */
+  failure: RunWebhookDeliveryRunFailure | null
+  occurredAt: number
+  pipelineId: string
+  pipelineName: string
+  /** Always present; `null` when the server has no value for it. */
+  pullRequestUrl: string | null
+  runId: string
+  /** Always present; `null` when the server has no value for it. */
+  startedAt: number | null
+  /** Always present; `null` when the server has no value for it. */
+  step: RunWebhookDeliveryRunStep | null
+  taskId: string
+  taskTitle: string
+}
+
+export interface RunWebhookDeliveryRunFailure {
+  kind: string
+  message: string
+  /** Always present; `null` when the server has no value for it. */
+  reason: string | null
+}
+
+export interface RunWebhookDeliveryRunStep {
+  agentKind: string
+  attempt: number
+  final: boolean
+  index: number
+  outcome: RunWebhookDeliveryRunStepOutcome
+}
+
+export type RunWebhookDeliveryRunStepOutcome = 'completed' | 'skipped'
+
+/** Every `RunWebhookDeliveryRunStepOutcome` value, for exhaustive handling and runtime validation. */
+export const RUN_WEBHOOK_DELIVERY_RUN_STEP_OUTCOME_VALUES = ['completed', 'skipped'] as const
 
 export type Severity = 'low' | 'medium' | 'high' | 'critical'
 

@@ -16,7 +16,8 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { toJsonSchema, toJsonSchemaDefs } from '@valibot/to-json-schema'
 import { addHandDocumentedRoutes } from './openapi/hand-documented-routes.mjs'
-import { DIRECTORY_OPERATION_DOCS, DIRECTORY_WEBHOOKS } from './openapi/directory-docs.mjs'
+import { DIRECTORY_OPERATION_DOCS } from './openapi/directory-docs.mjs'
+import { WEBHOOKS } from './openapi/webhooks.mjs'
 import { API_PREFIX, STATUS_DESCRIPTIONS } from './openapi/spec-constants.mjs'
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -88,6 +89,9 @@ const COMPONENT_SCHEMAS = {
   DirectoryWebhookList: 'directoryWebhookListSchema',
   PutDirectoryWebhook: 'putDirectoryWebhookSchema',
   DirectoryWebhookDelivery: 'directoryWebhookDeliverySchema',
+  NotificationWebhookDelivery: 'notificationWebhookDeliverySchema',
+  RunWebhookDelivery: 'runWebhookDeliverySchema',
+  PlatformAlertWebhookDelivery: 'platformAlertWebhookDeliverySchema',
   PublicJob: 'publicJobSchema',
   PublicJobAccepted: 'publicJobAcceptedSchema',
   CreatePublicJob: 'createPublicJobSchema',
@@ -1402,7 +1406,7 @@ export async function buildOpenApiDoc() {
       ...(TAG_DESCRIPTIONS[name] ? { description: TAG_DESCRIPTIONS[name] } : {}),
     })),
     paths,
-    webhooks: DIRECTORY_WEBHOOKS,
+    webhooks: WEBHOOKS,
     components: {
       securitySchemes: {
         bearerAuth: {
