@@ -1,5 +1,5 @@
 import type { Block, BlockPatch, TaskTypeFields } from '@cat-factory/kernel'
-import { ValidationError } from '@cat-factory/kernel'
+import { ConflictError, ValidationError } from '@cat-factory/kernel'
 import type { UpdateBlockInput } from '@cat-factory/contracts'
 import type { ResolvedTaskType } from './taskTypeCreationDefaults.js'
 import { foldReviewDescriptionOnto, refoldReviewDescription } from './reviewTaskTarget.js'
@@ -60,6 +60,19 @@ export interface TaskTypeFieldsPatchDeps {
     taskType: Block['taskType'],
     fields: Block['taskTypeFields'],
   ) => Promise<AttachedPullRequest | null>
+}
+
+/**
+ * A working run pushes onto the pull request it started on, so moving the attachment under it
+ * would aim its next gate probe and resolver round at a different pull request.
+ */
+function assertNotRetargetedMidRun(block: Block, attached: AttachedPullRequest): void {
+  if (block.status !== 'in_progress') return
+  if (block.pullRequest?.number === attached.pullRequest.number) return
+  throw new ConflictError(
+    "This task's run is working on its attached pull request. Wait for the run to finish, or " +
+      'stop it, before pointing the task at another pull request.',
+  )
 }
 
 /** The stored bag with its BUILT-IN half replaced, keeping the custom half untouched. */
@@ -123,6 +136,7 @@ export async function applyTaskTypeFieldsPatch(
   const resolved = await deps.resolveReviewTarget(homeWorkspaceId, block.id, taskType, validated)
   const attached = await deps.attachPullRequest(homeWorkspaceId, block.id, taskType, resolved)
   if (attached) {
+    assertNotRetargetedMidRun(block, attached)
     return { ...rest, taskTypeFields: attached.fields, pullRequest: attached.pullRequest }
   }
   return { ...rest, taskTypeFields: resolved ?? null, ...refold(rest, block, taskType, resolved) }

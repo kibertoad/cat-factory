@@ -11,7 +11,7 @@ import type {
   RunRepoContext,
 } from '@cat-factory/kernel'
 import { ValidationError } from '@cat-factory/kernel'
-import { parsePrUrlRepo } from './reviewTaskTarget.js'
+import { parsePrUrlRepo, sameRepo } from './reviewTaskTarget.js'
 
 // The pull request a `resolve-conflicts` task ATTACHES at creation: an existing one somebody else
 // opened, recorded as the block's own `pullRequest` so the in-place coding kinds and the
@@ -47,10 +47,10 @@ function repoName(context: RunRepoContext): string | null {
 
 /** A URL naming a different repository than the service's would attach whatever PR shares its number. */
 function assertSameRepository(prUrl: string | undefined, context: RunRepoContext): void {
-  const expected = repoName(context)
+  const { owner, name } = context
   const target = prUrl ? parsePrUrlRepo(prUrl) : null
-  if (!expected || !target) return
-  if (`${target.owner}/${target.repo}`.toLowerCase() === expected.toLowerCase()) return
+  if (!owner || !name || !target || sameRepo(target, { owner, repo: name })) return
+  const expected = `${owner}/${name}`
   refuse(
     `That pull request belongs to ${target.owner}/${target.repo}, but this service is linked to ` +
       `${expected}. Create the task under the service linked to ${target.owner}/${target.repo}.`,
@@ -79,13 +79,13 @@ function assertPushable(pr: OpenedPullRequest, context: RunRepoContext): string 
       'attached_pr_from_fork',
     )
   }
-  if (pr.crossRepository === undefined || !pr.headRef) {
+  if (pr.crossRepository === undefined || !pr.headRef || !pr.baseRef) {
     refuse(
-      `${label} could not be attached: the provider did not report which repository and branch it comes from.`,
+      `${label} could not be attached: the provider did not report which repository and branches it connects.`,
       'attached_pr_unresolvable',
     )
   }
-  if (pr.baseRef && pr.baseRef !== context.baseBranch) {
+  if (pr.baseRef !== context.baseBranch) {
     refuse(
       `${label} targets ${pr.baseRef}, but conflicts are resolved against the repository's base ` +
         `branch ${context.baseBranch}.`,
@@ -94,6 +94,27 @@ function assertPushable(pr: OpenedPullRequest, context: RunRepoContext): string 
     )
   }
   return pr.headRef
+}
+
+const unreadable = (number: number): string =>
+  `Pull request #${number} cannot be attached: this service has no repository the platform can read pull requests from.`
+
+/**
+ * The service's repository context. The resolver throws a reason-less `ValidationError` for a task
+ * under no repo-linked service, which is this refusal's documented `attached_pr_unresolvable` case.
+ */
+async function readRepoContext(
+  deps: AttachedPullRequestDependencies,
+  workspaceId: string,
+  blockId: string,
+  number: number,
+): Promise<RunRepoContext | null> {
+  try {
+    return (await deps.resolveRunRepoContext?.(workspaceId, blockId)) ?? null
+  } catch (error) {
+    if (!(error instanceof ValidationError)) throw error
+    return refuse(unreadable(number), 'attached_pr_unresolvable', { cause: error.message })
+  }
 }
 
 /**
@@ -116,13 +137,10 @@ export async function resolveAttachedPullRequest(
     const problem = 'Name the pull request to resolve: supply fields.prNumber or fields.prUrl.'
     throw new ValidationError(problem, { reason: 'task_type_fields_invalid', problems: [problem] })
   }
-  const context = (await deps.resolveRunRepoContext?.(workspaceId, blockId)) ?? null
+  const context = await readRepoContext(deps, workspaceId, blockId, number)
   const getPullRequest = context?.repo.getPullRequest
   if (!context || !getPullRequest) {
-    return refuse(
-      `Pull request #${number} cannot be attached: this service has no repository the platform can read pull requests from.`,
-      'attached_pr_unresolvable',
-    )
+    return refuse(unreadable(number), 'attached_pr_unresolvable')
   }
   assertSameRepository(fields?.prUrl, context)
   const pr = await getPullRequest(number)

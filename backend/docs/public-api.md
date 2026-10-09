@@ -1643,20 +1643,21 @@ own head branch, resolves the conflicts and pushes the merge commit there; the g
 When its attempt budget runs out the run ends `failed`, and the run's `error.message` says the
 conflicts could not be resolved automatically, carrying the resolver's account of its last attempt
 (which files it left conflicting). Either way the pull request stays open: it belongs to whoever
-opened it, so the task finishes without asking anyone to merge it.
+opened it, so the task finishes without asking anyone to merge it, and a start naming a pipeline
+with a merge step is refused with a `409`.
 
 The pull request is checked when the task is CREATED, and every reference the run could not push
 onto is refused there with a `422` and one of these `details.reason` codes:
 
-| `details.reason`            | Why                                                                                                                             |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `task_type_fields_invalid`  | Neither `prNumber` nor `prUrl` was given.                                                                                       |
-| `attached_pr_not_found`     | The provider reports no such pull request on the service's linked repository.                                                   |
-| `attached_pr_repo_mismatch` | `prUrl` names another repository than the service's; `details.expected` names the right one.                                    |
-| `attached_pr_not_open`      | The pull request is closed or merged; `details.state` says which.                                                               |
-| `attached_pr_from_fork`     | Its head branch lives in a fork, which the push to the service's repository cannot reach.                                       |
-| `attached_pr_base_mismatch` | It targets a branch other than the repository's base branch, which is what the resolver merges in; `details.expected` names it. |
-| `attached_pr_unresolvable`  | The service has no linked repository the platform can read pull requests from.                                                  |
+| `details.reason`            | Why                                                                                                                                                |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `task_type_fields_invalid`  | Neither `prNumber` nor `prUrl` was given.                                                                                                          |
+| `attached_pr_not_found`     | The provider reports no such pull request on the service's linked repository.                                                                      |
+| `attached_pr_repo_mismatch` | `prUrl` names another repository than the service's; `details.expected` names the right one.                                                       |
+| `attached_pr_not_open`      | The pull request is closed or merged; `details.state` says which.                                                                                  |
+| `attached_pr_from_fork`     | Its head branch lives in a fork, which the push to the service's repository cannot reach.                                                          |
+| `attached_pr_base_mismatch` | It targets a branch other than the repository's base branch, which is what the resolver merges in; `details.expected` names it.                    |
+| `attached_pr_unresolvable`  | The service has no linked repository the platform can read pull requests from, or the provider did not say where the pull request's branches live. |
 
 ### Task runs & streaming
 

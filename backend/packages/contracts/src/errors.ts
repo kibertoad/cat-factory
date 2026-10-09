@@ -460,8 +460,9 @@ export type ReviewTargetReason = (typeof REVIEW_TARGET_REASONS)[number]
  * the run pushes onto the attached pull request's head branch, so every reference it cannot
  * positively confirm is refused rather than created unchecked.
  *
- *  - `attached_pr_unresolvable`  the pull request could not be read at all: the service is not
- *                                linked to a repository, or the provider cannot read one.
+ *  - `attached_pr_unresolvable`  the pull request could not be read at all (the service is not
+ *                                linked to a repository, or the provider cannot read one), or the
+ *                                provider did not report its head repository or its branches.
  *  - `attached_pr_not_found`     the provider positively reports no such pull request.
  *  - `attached_pr_repo_mismatch` the URL names a different repository than the service's.
  *                                `details.expected` carries `owner/repo`.

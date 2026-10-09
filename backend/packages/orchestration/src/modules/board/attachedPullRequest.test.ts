@@ -113,4 +113,17 @@ describe('resolveAttachedPullRequest', () => {
     const unwired = await refusalOf(attach({}))
     expect(unwired.details).toMatchObject({ reason: 'attached_pr_unresolvable' })
   })
+
+  it('names a service linked to no repository as unresolvable, rather than a reason-less 422', async () => {
+    const unlinked = async (): Promise<RunRepoContext | null> => {
+      throw new ValidationError('Block is not under a service linked to a repository')
+    }
+    const error = await refusalOf(attach({ resolveRunRepoContext: unlinked }))
+    expect(error.details).toMatchObject({ reason: 'attached_pr_unresolvable' })
+  })
+
+  it('refuses when the provider does not say which branch the PR targets', async () => {
+    const error = await refusalOf(attach(depsFor(openPr({ baseRef: null }))))
+    expect(error.details).toMatchObject({ reason: 'attached_pr_unresolvable' })
+  })
 })

@@ -767,6 +767,9 @@ function buildSpecialtyPipelines(): Pipeline[] {
       id: 'pl_resolve_conflicts',
       name: 'Resolve pull request conflicts',
       purpose: 'maintenance',
+      // A schedule fires on a fresh recurring block that has attached no pull request, so the gate
+      // would pass on "no open PR" every time.
+      availability: 'one-off',
       version: 1,
       description:
         'Bring an existing pull request back to mergeable by resolving its conflicts with the base branch on the pull request’s own branch. Opens no new pull request and merges nothing.',
