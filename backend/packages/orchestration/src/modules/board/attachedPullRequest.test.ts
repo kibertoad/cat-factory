@@ -1,5 +1,10 @@
 import type { OpenedPullRequest, RepoFiles, RunRepoContext } from '@cat-factory/kernel'
-import { ValidationError } from '@cat-factory/kernel'
+import {
+  createRecordingLogger,
+  RateLimitedError,
+  UnavailableError,
+  ValidationError,
+} from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import { resolveAttachedPullRequest } from './attachedPullRequest.js'
 
@@ -125,5 +130,65 @@ describe('resolveAttachedPullRequest', () => {
   it('refuses when the provider does not say which branch the PR targets', async () => {
     const error = await refusalOf(attach(depsFor(openPr({ baseRef: null }))))
     expect(error.details).toMatchObject({ reason: 'attached_pr_unresolvable' })
+  })
+
+  it('refuses a provider that fails to answer with a retryable 503, logging the cause', async () => {
+    const logger = createRecordingLogger()
+    const deps = depsFor(openPr())
+    const context = (await deps.resolveRunRepoContext())!
+    const failing: RunRepoContext = {
+      ...context,
+      repo: {
+        getPullRequest: async () => {
+          throw new Error('fetch failed')
+        },
+      } as unknown as RepoFiles,
+    }
+    const error = await attach({ resolveRunRepoContext: async () => failing, logger }).catch(
+      (e: unknown) => e,
+    )
+    expect(error).toBeInstanceOf(UnavailableError)
+    expect((error as UnavailableError).details).toMatchObject({
+      reason: 'attached_pr_provider_unreachable',
+    })
+    expect(logger.lines).toEqual([
+      expect.objectContaining({
+        level: 'warn',
+        msg: 'board.readAttachedPr',
+        fields: expect.objectContaining({
+          prNumber: 42,
+          err: expect.stringContaining('fetch failed'),
+        }),
+      }),
+    ])
+  })
+
+  it('treats a repository context that fails to resolve as the provider not answering', async () => {
+    const down = async (): Promise<RunRepoContext | null> => {
+      throw new Error('socket hang up')
+    }
+    const error = await attach({ resolveRunRepoContext: down }).catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(UnavailableError)
+    expect((error as UnavailableError).details).toMatchObject({
+      reason: 'attached_pr_provider_unreachable',
+    })
+  })
+
+  it('passes a typed provider refusal through unchanged', async () => {
+    const limited = new RateLimitedError('slow down')
+    const deps = depsFor(openPr())
+    const context = (await deps.resolveRunRepoContext())!
+    const throttled: RunRepoContext = {
+      ...context,
+      repo: {
+        getPullRequest: async () => {
+          throw limited
+        },
+      } as unknown as RepoFiles,
+    }
+    const error = await attach({ resolveRunRepoContext: async () => throttled }).catch(
+      (e: unknown) => e,
+    )
+    expect(error).toBe(limited)
   })
 })

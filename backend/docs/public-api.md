@@ -1659,6 +1659,10 @@ onto is refused there with a `422` and one of these `details.reason` codes:
 | `attached_pr_base_mismatch` | It targets a branch other than the repository's base branch, which is what the resolver merges in; `details.expected` names it.                    |
 | `attached_pr_unresolvable`  | The service has no linked repository the platform can read pull requests from, or the provider did not say where the pull request's branches live. |
 
+When the repository provider fails to answer (an outage, a rate limit, a revoked token), the pull
+request cannot be confirmed and creation is refused with a `503` and `details.reason`
+`attached_pr_provider_unreachable`. Nothing is created, and the same request can be retried.
+
 ### Task runs & streaming
 
 | Method / path                      | Scope  | Behaviour                                                                         |

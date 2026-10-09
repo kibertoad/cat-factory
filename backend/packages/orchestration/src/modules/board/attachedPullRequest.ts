@@ -6,11 +6,18 @@ import {
 } from '@cat-factory/contracts'
 import type {
   Block,
+  Logger,
   OpenedPullRequest,
   ResolveRunRepoContext,
   RunRepoContext,
 } from '@cat-factory/kernel'
-import { ValidationError } from '@cat-factory/kernel'
+import {
+  describeError,
+  DomainError,
+  noopLogger,
+  UnavailableError,
+  ValidationError,
+} from '@cat-factory/kernel'
 import { parsePrUrlRepo, sameRepo } from './reviewTaskTarget.js'
 
 // The pull request a `resolve-conflicts` task ATTACHES at creation: an existing one somebody else
@@ -25,6 +32,7 @@ import { parsePrUrlRepo, sameRepo } from './reviewTaskTarget.js'
 export interface AttachedPullRequestDependencies {
   /** The SAME seam the run itself reaches the repository through. Absent: refused as unresolvable. */
   resolveRunRepoContext?: ResolveRunRepoContext
+  logger?: Logger
 }
 
 /** The canonical per-type fields and the pull request to record on the block. */
@@ -100,6 +108,30 @@ const unreadable = (number: number): string =>
   `Pull request #${number} cannot be attached: this service has no repository the platform can read pull requests from.`
 
 /**
+ * A provider read that FAILED leaves the pull request unconfirmed, and this check refuses what it
+ * cannot confirm. A typed 503 lets the caller retry; the raw error would be a 500. A `DomainError`
+ * already carries its own classification and passes through unchanged.
+ */
+async function readFromProvider<T>(
+  deps: AttachedPullRequestDependencies,
+  operation: string,
+  number: number,
+  read: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await read()
+  } catch (error) {
+    if (error instanceof DomainError) throw error
+    const logger = deps.logger ?? noopLogger
+    logger.warn(operation, { prNumber: number, ...describeError(error) })
+    throw new UnavailableError(
+      `Pull request #${number} could not be checked: the repository provider did not answer. Try again in a moment.`,
+      'attached_pr_provider_unreachable',
+    )
+  }
+}
+
+/**
  * The service's repository context. The resolver throws a reason-less `ValidationError` for a task
  * under no repo-linked service, which is this refusal's documented `attached_pr_unresolvable` case.
  */
@@ -110,7 +142,12 @@ async function readRepoContext(
   number: number,
 ): Promise<RunRepoContext | null> {
   try {
-    return (await deps.resolveRunRepoContext?.(workspaceId, blockId)) ?? null
+    return await readFromProvider(
+      deps,
+      'board.resolveAttachedPrRepoContext',
+      number,
+      async () => (await deps.resolveRunRepoContext?.(workspaceId, blockId)) ?? null,
+    )
   } catch (error) {
     if (!(error instanceof ValidationError)) throw error
     return refuse(unreadable(number), 'attached_pr_unresolvable', { cause: error.message })
@@ -143,7 +180,9 @@ export async function resolveAttachedPullRequest(
     return refuse(unreadable(number), 'attached_pr_unresolvable')
   }
   assertSameRepository(fields?.prUrl, context)
-  const pr = await getPullRequest(number)
+  const pr = await readFromProvider(deps, 'board.readAttachedPr', number, () =>
+    getPullRequest(number),
+  )
   if (!pr) {
     const where = repoName(context)
     refuse(

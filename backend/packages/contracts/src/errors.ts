@@ -432,6 +432,10 @@ export const UNAVAILABLE_REASONS = [
   // deployment's own VCS provider. `details.branch` names the ref and `details.executor` the
   // dispatch it was for.
   'delegated_work_branch_unprepared',
+  // Creating a task that attaches an existing pull request could not confirm it, because the
+  // repository provider failed to answer (an outage, a rate limit, a revoked token). Its own
+  // reason because nothing is unconfigured: the same request succeeds once the provider answers.
+  'attached_pr_provider_unreachable',
 ] as const
 
 export type UnavailableReason = (typeof UNAVAILABLE_REASONS)[number]

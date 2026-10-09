@@ -187,6 +187,8 @@ export type CreateTaskType = v.InferOutput<typeof createTaskTypeSchema>
  * Whether a task of this type works on a pull request ATTACHED at creation (one somebody else
  * opened) rather than on one its own run opens. Such a task never owns that pull request's merge,
  * so its run finishes `done` without asking anyone to confirm and merge it.
+ *
+ * Built-in types only: a deployment-registered custom task type cannot opt in yet.
  */
 export function taskTypeAttachesPullRequest(taskType: string | null | undefined): boolean {
   return taskType === 'resolve-conflicts'

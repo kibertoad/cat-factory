@@ -477,6 +477,8 @@ const REASON_DESCRIPTION_KEYS: Record<UnavailableReason | BootstrapReferenceReas
   delegated_executor_failed: 'errors.unavailable.description.delegated_executor_failed',
   delegated_work_branch_unprepared:
     'errors.unavailable.description.delegated_work_branch_unprepared',
+  attached_pr_provider_unreachable:
+    'errors.unavailable.description.attached_pr_provider_unreachable',
 }
 
 /**

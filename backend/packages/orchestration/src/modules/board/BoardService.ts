@@ -432,7 +432,7 @@ export class BoardService {
         ),
       attachPullRequest: (workspaceId, blockId, taskType, fields) =>
         resolveAttachedPullRequest(
-          { resolveRunRepoContext: this.resolveRunRepoContext },
+          { resolveRunRepoContext: this.resolveRunRepoContext, logger: this.log },
           workspaceId,
           blockId,
           taskType,
@@ -920,7 +920,7 @@ export class BoardService {
     // A task that ATTACHES an existing pull request records it as its own, refusing one its run
     // could not push onto (closed, merged, from a fork, another repo).
     const attached = await resolveAttachedPullRequest(
-      { resolveRunRepoContext: this.resolveRunRepoContext },
+      { resolveRunRepoContext: this.resolveRunRepoContext, logger: this.log },
       homeWorkspaceId,
       containerId,
       taskType,
