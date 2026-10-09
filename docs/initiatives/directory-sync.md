@@ -156,7 +156,7 @@ gatekeeper-worker into a shared `@cat-factory/webhooks` package both depend on.
       mothership allow-list, `DirectoryService`, `/api/v1/directory/*`,
       `DIRECTORY_CHANGE_RETENTION_DAYS` on both sweeps, OpenAPI 1.80.0,
       `definePublicDirectorySuite`.
-- [x] **Slice 4: `directory.*` webhooks** (PR link added when opened). `directory_webhooks`
+- [x] **Slice 4: `directory.*` webhooks** ([#2310](https://github.com/kibertoad/cat-factory/pull/2310); website: [cat-factory-website#102](https://github.com/kibertoad/cat-factory-website/pull/102)). `directory_webhooks`
       (D1 0109, Drizzle), `DirectoryWebhookService` (management plus the claimed delivery sweep),
       `/api/v1/directory/webhooks`, the sweep on the Worker cron and a Node timer,
       `DirectoryWebhookDelivery` in the spec's `webhooks` section, `defineDirectoryWebhookSuite`.
