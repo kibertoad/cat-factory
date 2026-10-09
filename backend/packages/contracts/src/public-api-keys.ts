@@ -11,8 +11,9 @@ import * as v from 'valibot'
 // ENCRYPTION_KEY)`) — irrecoverable, DB-leak-resistant. The raw key is returned
 // exactly once, on create; thereafter only metadata is exposed.
 //
-// A key is scoped to one account + workspace: every `/api/v1` call it makes is
-// bound to that workspace.
+// A key belongs to one account and may be limited to a subset of its workspaces. Each
+// workspace-scoped `/api/v1` call acts on one workspace, named by the
+// `x-cat-factory-workspace` header or implied when the key reaches exactly one.
 // ---------------------------------------------------------------------------
 
 /**
@@ -114,12 +115,56 @@ export const publicApiExternalIdentitySchema = v.pipe(
 )
 export type PublicApiExternalIdentity = v.InferOutput<typeof publicApiExternalIdentitySchema>
 
+/** The request header naming the workspace a workspace-scoped `/api/v1` call acts on. */
+export const PUBLIC_API_WORKSPACE_HEADER = 'x-cat-factory-workspace'
+
+/**
+ * `details.reason` values for a request whose workspace cannot be resolved. `workspace_required`
+ * (400): the key reaches several workspaces and the request named none. `workspace_not_found`
+ * (404): the named workspace does not exist or is outside the key's reach; the two are not told
+ * apart, so a key cannot probe for workspaces it was not granted.
+ */
+export const PUBLIC_API_WORKSPACE_REFUSAL_REASONS = [
+  'workspace_required',
+  'workspace_not_found',
+] as const
+export type PublicApiWorkspaceRefusalReason = (typeof PUBLIC_API_WORKSPACE_REFUSAL_REASONS)[number]
+
+/**
+ * `details.reason` on the 403 refusing a key operation that would reach further than the caller
+ * may: minting a key for workspaces the minting key cannot act on, or revoking one that reaches
+ * them.
+ */
+export const PUBLIC_API_KEY_REACH_EXCEEDED_REASON = 'workspace_reach_exceeded'
+
+/** Upper bound on an explicit workspace list, so a grant stays one bounded write. */
+export const MAX_PUBLIC_API_KEY_WORKSPACES = 50
+
+/**
+ * The workspaces a key may act on: a non-empty list of workspace ids in the key's account, or
+ * `null` for every workspace in the account, including ones created later.
+ */
+export const publicApiKeyWorkspaceIdsSchema = v.nullable(
+  v.pipe(
+    v.array(v.pipe(v.string(), v.minLength(1))),
+    v.minLength(1),
+    v.maxLength(MAX_PUBLIC_API_KEY_WORKSPACES),
+  ),
+)
+export type PublicApiKeyWorkspaceIds = v.InferOutput<typeof publicApiKeyWorkspaceIdsSchema>
+
 /** One public-API key as exposed to clients — metadata only, never the secret. */
 export const publicApiKeySchema = v.object({
   /** `pak_*` — also the non-secret lookup id embedded in the raw key. */
   id: v.string(),
   accountId: v.string(),
+  /**
+   * The workspace the listing or mint was made for, which the key always reaches. Kept for
+   * clients built before keys could span workspaces; `workspaceIds` is the key's actual reach.
+   */
   workspaceId: v.string(),
+  /** Every workspace the key may act on, or `null` for all of the account's workspaces. */
+  workspaceIds: publicApiKeyWorkspaceIdsSchema,
   label: v.string(),
   /** What the key is allowed to do on `/api/v1` (read ⊂ write ⊂ admin). */
   scope: publicApiScopeSchema,
@@ -190,6 +235,11 @@ export const createPublicApiKeySchema = v.object({
    * like a system one at the moment a run needed the credential.
    */
   actsAsSelf: v.optional(v.boolean(), false),
+  /**
+   * The workspaces the key may act on; omitted means the workspace the key is minted from.
+   * Anything wider than that workspace requires an account admin.
+   */
+  workspaceIds: v.optional(publicApiKeyWorkspaceIdsSchema),
 })
 export type CreatePublicApiKeyInput = v.InferOutput<typeof createPublicApiKeySchema>
 
@@ -253,6 +303,12 @@ export const createHeadlessPublicApiKeySchema = v.object({
   label: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120)),
   scope: v.optional(v.picklist([...HEADLESS_MINTABLE_SCOPES])),
   externalIdentity: v.optional(publicApiExternalIdentitySchema),
+  /**
+   * The workspaces the minted key may act on; omitted means the workspace this request acts on.
+   * It never reaches further than the minting key: a list must be a subset of the minter's
+   * workspaces, and `null` (every workspace) needs a minter that is itself unrestricted.
+   */
+  workspaceIds: v.optional(publicApiKeyWorkspaceIdsSchema),
 })
 export type CreateHeadlessPublicApiKeyInput = v.InferOutput<typeof createHeadlessPublicApiKeySchema>
 

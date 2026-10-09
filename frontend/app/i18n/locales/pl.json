@@ -3572,7 +3572,9 @@
         "createdByKey": "klucz API {id}",
         "revoke": "Unieważnij token",
         "boundToYou": "Twoja subskrypcja",
-        "boundToOther": "Subskrypcja użytkownika {user}"
+        "boundToOther": "Subskrypcja użytkownika {user}",
+        "reachAll": "Wszystkie obszary robocze",
+        "reachCount": "Obszary robocze: {count}"
       },
       "add": {
         "heading": "Utwórz token",
@@ -3586,7 +3588,13 @@
         "identitySystem": "Ten obszar roboczy (token systemowy)",
         "identitySelf": "Ja (token osobisty)",
         "identitySystemHelp": "Uruchomienia rozpoczęte tym tokenem należą do obszaru roboczego i nie są przypisywane do żadnej osoby. Token nie może korzystać z niczyjej osobistej subskrypcji Claude / Codex / GLM, więc zadanie przypięte do takiego modelu zostanie odrzucone, zamiast obciążyć kogoś nieobecnego. Użyj go do CI i wspólnych integracji.",
-        "identitySelfHelp": "Uruchomienia rozpoczęte tym tokenem są przypisywane Tobie i mogą korzystać z Twojej osobistej subskrypcji Claude / Codex / GLM. Każde takie wywołanie musi dodatkowo przesłać Twoje hasło osobiste w nagłówku X-Personal-Password; nie jest ono nigdzie zapisywane. Użyj go do własnych uruchomień headless."
+        "identitySelfHelp": "Uruchomienia rozpoczęte tym tokenem są przypisywane Tobie i mogą korzystać z Twojej osobistej subskrypcji Claude / Codex / GLM. Każde takie wywołanie musi dodatkowo przesłać Twoje hasło osobiste w nagłówku X-Personal-Password; nie jest ono nigdzie zapisywane. Użyj go do własnych uruchomień headless.",
+        "reach": "Obszary robocze",
+        "reachHelp": "W których obszarach roboczych ten token może działać. Token obejmujący więcej niż jeden wskazuje obszar roboczy przy każdym wywołaniu w nagłówku x-cat-factory-workspace.",
+        "reachThis": "Tylko ten obszar roboczy",
+        "reachAll": "Wszystkie obszary robocze konta",
+        "reachSelected": "Wybrane obszary robocze",
+        "reachPick": "Wybierz obszary robocze"
       },
       "scopes": {
         "read": "Tylko odczyt",

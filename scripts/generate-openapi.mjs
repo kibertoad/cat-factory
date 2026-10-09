@@ -62,7 +62,7 @@ export const SERVED_OPENAPI_PATH = resolve(
 // it against `origin/main` after every merge rather than trusting a clean one, and write the new
 // entry in the history doc, which is what makes the next collision arrive as a conflict.
 
-const API_VERSION = '1.78.0'
+const API_VERSION = '1.79.0'
 
 /**
  * Named DTOs hoisted into `components.schemas` (so client codegen gets named types and
@@ -1078,19 +1078,19 @@ const OPERATION_DOCS = {
     tag: 'Keys',
     summary: "List the workspace's API keys",
     description:
-      'The live (non-revoked) keys for the calling key’s workspace, metadata only; a secret is never readable back. `createdByKeyId` names the key that provisioned a key headlessly; `createdByUserId` names the person who minted one in the app.',
+      'The account’s live (non-revoked) keys that reach the workspace this request acts on, account-wide ones included, metadata only; a secret is never readable back. `workspaceIds` is each key’s reach (`null` for every workspace). `createdByKeyId` names the key that provisioned a key headlessly; `createdByUserId` names the person who minted one in the app.',
   },
   createPublicKey: {
     tag: 'Keys',
     summary: 'Provision an API key',
     description:
-      'Mint a key for the calling key’s own workspace and return its raw secret EXACTLY ONCE, so store it now: it is not recoverable. Omitting `scope` mints a `write` key. `admin` cannot be minted here: a key provisioned over the API can never itself provision, which keeps the chain one link long. Requires an `admin`-scope key.',
+      'Mint a key in the calling key’s account and return its raw secret EXACTLY ONCE, so store it now: it is not recoverable. Omitting `workspaceIds` mints a key for the workspace this request acts on; a list or `null` (every workspace) can never reach further than the calling key, refused as `403` with `reason: "workspace_reach_exceeded"`. Omitting `scope` mints a `write` key. `admin` cannot be minted here: a key provisioned over the API can never itself provision, which keeps the chain one link long. Requires an `admin`-scope key.',
   },
   revokePublicKey: {
     tag: 'Keys',
     summary: 'Revoke an API key',
     description:
-      'Revoke a key AND every key it minted, so a leaked provisioning key cannot outlive its own revocation through the credentials it left behind. Idempotent, and it may name the calling key. Requires an `admin`-scope key.',
+      'Revoke a key AND every key it minted, so a leaked provisioning key cannot outlive its own revocation through the credentials it left behind. Idempotent, and it may name the calling key. A key reaching workspaces the calling key does not is refused with `reason: "workspace_reach_exceeded"`. Requires an `admin`-scope key.',
   },
   listDebugLogs: {
     tag: 'Debug',
@@ -1372,7 +1372,7 @@ export async function buildOpenApiDoc() {
       title: 'cat-factory Public API',
       version: API_VERSION,
       description:
-        'The external, key-authenticated API (`/api/v1`). Authenticate every request with a public-API key: `Authorization: Bearer cf_live_<keyId>.<secret>`. Every call is scoped to the key’s workspace.',
+        'The external, key-authenticated API (`/api/v1`). Authenticate every request with a public-API key: `Authorization: Bearer cf_live_<keyId>.<secret>`. A key belongs to an account and reaches all of its workspaces or a listed subset. A workspace-scoped call acts on the workspace named by the `x-cat-factory-workspace` header, which may be omitted when the key reaches exactly one workspace.',
       license: { name: 'MIT', identifier: 'MIT' },
     },
     servers: [{ url: '/', description: 'The deployment base URL' }],
@@ -1387,7 +1387,8 @@ export async function buildOpenApiDoc() {
         bearerAuth: {
           type: 'http',
           scheme: 'bearer',
-          description: 'A public-API key of the form `cf_live_<keyId>.<secret>`.',
+          description:
+            'A public-API key of the form `cf_live_<keyId>.<secret>`. A key reaching more than one workspace also sends `x-cat-factory-workspace: <workspaceId>` on every workspace-scoped call.',
         },
       },
       schemas: componentSchemas,

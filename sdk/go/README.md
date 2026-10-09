@@ -36,7 +36,7 @@ Every method takes a `context.Context` first and honours its cancellation.
 
 `Jobs`, `Services`, `Tasks`, `Pipelines`, `Notifications`, `Webhook`, `Usage`, `Decisions`,
 `Debug`:
-one per tag of the published OpenAPI surface. Every call is scoped to the key's workspace.
+one per tag of the published OpenAPI surface. A workspace-scoped call acts on the key's only workspace, or on `WorkspaceID` for a key that reaches several.
 
 ## Watching a run
 

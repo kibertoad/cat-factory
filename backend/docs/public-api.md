@@ -71,9 +71,17 @@ Over REST (session-authed, workspace-scoped; this is the one management surface 
 | `DELETE /workspaces/:ws/public-api-keys/:id` | `secrets.manage` (admin tier) | `204`; revoked keys never authenticate    |
 
 Create body: `{ "label": "CI pipeline", "scope": "read" }`. `label` is 1–120 chars; `scope` is
-optional and **defaults to `write`**. A workspace holds at most **50** keys (409 past that; revoke
-one first). Key metadata carries `createdByUserId`, `createdByKeyId`, `actsAsUserId`, `createdAt`,
-`lastUsedAt` (updated at most once a minute) and `revokedAt`.
+optional and **defaults to `write`**. An account holds at most **200** live keys (409 past that;
+revoke one first). Key metadata carries `workspaceIds`, `createdByUserId`, `createdByKeyId`,
+`actsAsUserId`, `createdAt`, `lastUsedAt` (updated at most once a minute) and `revokedAt`.
+
+The create body also takes `workspaceIds`, the key's **reach**: omitted, the key reaches only the
+workspace it is minted from; `null` reaches every workspace in the account, including ones created
+later; a list (1 to 50 ids) reaches exactly those. Anything other than the minting workspace alone
+requires an **account admin** (`403 account_admin_required` otherwise), because `secrets.manage` on
+one board says nothing about the others. The list route shows every live key that reaches the
+board, account-wide ones included; revoking one that reaches past the board needs an account admin
+too.
 
 The create body also takes `actsAsSelf` (optional, default `false`), which picks between the two
 IDENTITIES a key can have. This is a different question from `scope`: scope is what the key may DO,
@@ -112,9 +120,12 @@ An operator with no browser can do the same over `/api/v1` itself: see
 [Key provisioning](#key-provisioning-apiv1keys). The two surfaces share one store, so a key minted
 either way is listed and revoked by both.
 
-A key is bound to **one account + workspace**: every `/api/v1` call it makes acts within that
-workspace, and resources in any other workspace are a `404` indistinguishable from ones that never
-existed.
+A key belongs to **one account** and reaches the workspaces its `workspaceIds` names (or all of
+them). Each workspace-scoped `/api/v1` call acts within one workspace, named by the
+`x-cat-factory-workspace` request header. A key reaching exactly one workspace may omit the header
+(every key minted before keys could span workspaces is one). Resources in any other workspace are a
+`404` indistinguishable from ones that never existed, and so is a workspace outside the key's
+reach.
 
 ### 2. Pick the right scope
 
@@ -183,6 +194,8 @@ with as `NUXT_PUBLIC_API_BASE`), not the frontend's. The token format is
 | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | Missing / malformed / unknown / revoked key  | `401` `{ "error": { "code": "unauthorized", "message": "Invalid or missing API key" } }`                                                   |
 | Key scope below the route's minimum          | `403` `{ "error": { "code": "insufficient_scope", "message": "This action requires a '<need>'-scope key; this key is scoped '<have>'" } }` |
+| Key reaches several workspaces, none named   | `422` `{ "error": { "code": "validation", "details": { "reason": "workspace_required" }, … } }`                                            |
+| Named workspace absent or outside the reach  | `404` `{ "error": { "code": "not_found", "details": { "reason": "workspace_not_found" }, … } }`                                            |
 | Public API not configured on this deployment | `503` `{ "error": { "code": "unavailable", … } }`                                                                                          |
 
 ## Conventions
@@ -2901,15 +2914,18 @@ answers `503 spec_read_failed` here, as everywhere else on this surface.
 The external counterpart of the key panel, so a deployment whose operator is headless can mint the
 per-tenant or per-environment credentials it hands out.
 
-| Method / path                | Scope   | Behaviour                                                              |
-| ---------------------------- | ------- | ---------------------------------------------------------------------- |
-| `GET /api/v1/keys`           | `admin` | The workspace's live keys (metadata; a secret is never readable back). |
-| `POST /api/v1/keys`          | `admin` | Mint a key, returning its raw secret **exactly once**.                 |
-| `DELETE /api/v1/keys/:keyId` | `admin` | Revoke a key **and every key it minted**. Idempotent (always `204`).   |
+| Method / path                | Scope   | Behaviour                                                            |
+| ---------------------------- | ------- | -------------------------------------------------------------------- |
+| `GET /api/v1/keys`           | `admin` | The live keys reaching the request's workspace (metadata only).      |
+| `POST /api/v1/keys`          | `admin` | Mint a key, returning its raw secret **exactly once**.               |
+| `DELETE /api/v1/keys/:keyId` | `admin` | Revoke a key **and every key it minted**. Idempotent (always `204`). |
 
 Create body: `{ "label": "tenant-42 reader", "scope": "read" }`; omitting `scope` mints `write`, the
-same safe middle rung the app defaults to. Everything else comes from the calling key: the mint
-lands in **its** workspace, and this surface has no vocabulary for another one.
+same safe middle rung the app defaults to. The account comes from the calling key. `workspaceIds`
+is optional and defaults to the workspace the request acts on. A minted key never reaches further
+than the key minting it: a list must be a subset of the caller's workspaces, and `null` (every
+workspace) needs an unrestricted caller. Revoking a key that reaches past the caller is refused the
+same way. Both answer `403` with `details.reason: workspace_reach_exceeded`.
 
 #### Mapping a run back to a person (`externalIdentity`)
 

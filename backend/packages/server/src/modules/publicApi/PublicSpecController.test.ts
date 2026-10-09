@@ -93,7 +93,7 @@ function harness(opts: HarnessOptions = {}) {
     },
     publicApiKeys: {
       authenticate: async (secret?: string) =>
-        secret === 'good' ? { workspaceId: 'ws_1', scope: 'read', keyId: 'k1' } : null,
+        secret === 'good' ? { workspaceIds: ['ws_1'], scope: 'read', keyId: 'k1' } : null,
     },
     ...(opts.resolve ? { resolveRunRepoContext: opts.resolve } : {}),
   } as unknown as ServerContainer
@@ -304,7 +304,7 @@ function runHarness(opts: RunHarnessOptions) {
     },
     publicApiKeys: {
       authenticate: async (secret?: string) =>
-        secret === 'good' ? { workspaceId: 'ws_1', scope: 'read', keyId: 'k1' } : null,
+        secret === 'good' ? { workspaceIds: ['ws_1'], scope: 'read', keyId: 'k1' } : null,
     },
   } as unknown as ServerContainer
 

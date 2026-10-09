@@ -1,10 +1,11 @@
 <script setup lang="ts">
-// API access tokens — the workspace's inbound public-API keys external systems present to the
-// `/api/v1` surface (`Authorization: Bearer cf_live_…`). Keys are hashed one-way server-side,
-// so the raw secret is shown EXACTLY ONCE, on create; the list thereafter renders metadata
-// only (label + created / last-used). To rotate a token, revoke it and mint a new one.
-// Opened from the Integrations hub.
+// API access tokens: the account's inbound public-API keys that reach this workspace, which
+// external systems present to the `/api/v1` surface (`Authorization: Bearer cf_live_…`). Keys are
+// hashed one-way server-side, so the raw secret is shown EXACTLY ONCE, on create; the list thereafter
+// renders metadata only (label + created / last-used). To rotate a token, revoke it and mint a new
+// one. Opened from the Integrations hub.
 import { computed, ref, watch } from 'vue'
+import { showOverrideField } from '~/utils/uiMode'
 import type { PublicApiKey, PublicApiScope } from '~/types/publicApiKeys'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import CopyButton from '~/components/common/CopyButton.vue'
@@ -36,6 +37,47 @@ const scopeItems = computed(() => SCOPES.map((value) => ({ value, label: scopeLa
 const ui = useUiStore()
 const auth = useAuthStore()
 const store = usePublicApiKeysStore()
+const accounts = useAccountsStore()
+const workspace = useWorkspaceStore()
+const uiMode = useUiModeStore()
+
+// A key's reach. The default is this board alone, which is what every key was before keys could
+// span workspaces; the wider choices are an override only an account admin can make, so the field
+// is hidden for everyone else rather than offered and refused.
+type TokenReach = 'this' | 'all' | 'selected'
+const reach = ref<TokenReach>('this')
+const selectedWorkspaceIds = ref<string[]>([])
+const canWidenReach = computed(
+  () =>
+    accounts.activeAccount?.roles?.includes('admin') === true &&
+    showOverrideField(uiMode.isAdvanced),
+)
+const reachItems = computed(() => [
+  { value: 'this' as const, label: t('settings.apiTokens.add.reachThis') },
+  { value: 'all' as const, label: t('settings.apiTokens.add.reachAll') },
+  { value: 'selected' as const, label: t('settings.apiTokens.add.reachSelected') },
+])
+const workspaceItems = computed(() =>
+  workspace.accountWorkspaces.map((w) => ({ value: w.id, label: w.name })),
+)
+/** The `workspaceIds` to mint with: omitted for this board, `null` for all, or the picked list. */
+function requestedReach(): string[] | null | undefined {
+  if (!canWidenReach.value || reach.value === 'this') return undefined
+  if (reach.value === 'all') return null
+  return selectedWorkspaceIds.value
+}
+const reachIncomplete = computed(
+  () => reach.value === 'selected' && selectedWorkspaceIds.value.length === 0,
+)
+
+/** The reach badge for a listed key; none for a key reaching this one board. */
+function reachLabel(key: PublicApiKey): string | null {
+  if (key.workspaceIds === null) return t('settings.apiTokens.list.reachAll')
+  if (key.workspaceIds.length > 1) {
+    return t('settings.apiTokens.list.reachCount', { count: key.workspaceIds.length })
+  }
+  return null
+}
 
 /**
  * The minter to attribute a key to. When the minter is the signed-in user we show a localized
@@ -61,7 +103,7 @@ function minterLabel(key: PublicApiKey): string | null {
 /**
  * The badge for a key bound to a person's subscription, WHOSE person named.
  *
- * Keys are workspace-scoped and this list is shared, so a colleague's bound key is right here in
+ * This list shows every key reaching the board, so a colleague's bound key is right here in
  * everyone's panel: a fixed "your subscription" tells every other member that a token they never
  * minted reaches theirs, which is alarming and false. The same comparison {@link minterLabel} makes
  * is available (a binding is always to the minter), so the honest badge names the owner, and falls
@@ -147,11 +189,14 @@ async function createToken() {
       trimmed,
       scope.value,
       canBindSelf.value && identity.value === 'self',
+      requestedReach(),
     )
     newSecret.value = created.secret
     label.value = ''
     scope.value = 'write'
     identity.value = 'system'
+    reach.value = 'this'
+    selectedWorkspaceIds.value = []
     toast.add({
       title: t('settings.apiTokens.toast.created'),
       icon: 'i-lucide-check',
@@ -250,6 +295,15 @@ async function revokeToken(key: PublicApiKey) {
                      binding, and this is the only place its holder can see that a token they
                      are about to hand out reaches a personal subscription. -->
                 <UBadge
+                  v-if="reachLabel(key)"
+                  color="info"
+                  variant="subtle"
+                  size="sm"
+                  :data-testid="`api-token-reach-${key.id}`"
+                >
+                  {{ reachLabel(key) }}
+                </UBadge>
+                <UBadge
                   v-if="boundLabel(key)"
                   color="warning"
                   variant="subtle"
@@ -330,9 +384,31 @@ async function revokeToken(key: PublicApiKey) {
               data-testid="api-token-identity"
             />
           </UFormField>
+          <UFormField
+            v-if="canWidenReach"
+            :label="t('settings.apiTokens.add.reach')"
+            :help="t('settings.apiTokens.add.reachHelp')"
+          >
+            <USelect
+              v-model="reach"
+              :items="reachItems"
+              class="w-full"
+              data-testid="api-token-reach"
+            />
+            <USelectMenu
+              v-if="reach === 'selected'"
+              v-model="selectedWorkspaceIds"
+              :items="workspaceItems"
+              value-key="value"
+              multiple
+              :placeholder="t('settings.apiTokens.add.reachPick')"
+              class="mt-2 w-full"
+              data-testid="api-token-reach-workspaces"
+            />
+          </UFormField>
           <UButton
             :loading="busy"
-            :disabled="!label.trim()"
+            :disabled="!label.trim() || reachIncomplete"
             data-testid="api-token-create"
             @click="createToken"
           >

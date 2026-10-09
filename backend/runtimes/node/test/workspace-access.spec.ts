@@ -1,5 +1,6 @@
 import {
   type ConformanceHarness,
+  definePublicKeyReachSuite,
   defineWorkspaceAccessSuite,
   defineWorkspaceRbacSuite,
 } from '@cat-factory/conformance'
@@ -22,6 +23,7 @@ if (databaseUrl) {
   }
   defineWorkspaceAccessSuite(harness)
   defineWorkspaceRbacSuite(harness)
+  definePublicKeyReachSuite(harness)
 } else {
   describe.skip('[node] workspace access (set DATABASE_URL to run)', () => {
     it('requires Postgres', () => {})

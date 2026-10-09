@@ -1,11 +1,12 @@
 import type { PublicApiKeyRecord, PublicApiKeyRepository } from '@cat-factory/kernel'
 import type { PublicApiScope } from '@cat-factory/contracts'
 import type { D1Database } from '@cloudflare/workers-types'
+import { chunkForIn } from './chunk'
 
 interface PublicApiKeyRow {
   id: string
   account_id: string
-  workspace_id: string
+  all_workspaces: number
   label: string
   scope: string
   secret_hash: string
@@ -18,11 +19,11 @@ interface PublicApiKeyRow {
   revoked_at: number | null
 }
 
-function rowToRecord(row: PublicApiKeyRow): PublicApiKeyRecord {
+function rowToRecord(row: PublicApiKeyRow, grants: string[]): PublicApiKeyRecord {
   return {
     id: row.id,
     accountId: row.account_id,
-    workspaceId: row.workspace_id,
+    workspaceIds: row.all_workspaces === 1 ? null : [...grants].sort(),
     label: row.label,
     scope: row.scope as PublicApiScope,
     secretHash: row.secret_hash,
@@ -36,7 +37,11 @@ function rowToRecord(row: PublicApiKeyRow): PublicApiKeyRecord {
   }
 }
 
-/** D1-backed store of the inbound public-API keys (migrations 0034 + 0053 + 0054 + 0081 + 0086 + 0089). */
+/**
+ * D1-backed store of the inbound public-API keys and their workspace grants (migrations 0034,
+ * 0053, 0054, 0081, 0086, 0089, 0108). The secret is stored ONLY as a one-way peppered hash: this
+ * repo never sees the raw key.
+ */
 export class D1PublicApiKeyRepository implements PublicApiKeyRepository {
   private readonly db: D1Database
 
@@ -45,28 +50,35 @@ export class D1PublicApiKeyRepository implements PublicApiKeyRepository {
   }
 
   async add(record: PublicApiKeyRecord): Promise<void> {
-    await this.db
-      .prepare(
-        `INSERT INTO public_api_keys
-          (id, account_id, workspace_id, label, scope, secret_hash, created_by_user_id, created_by_key_id, external_identity, acts_as_user_id, created_at, last_used_at, revoked_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .bind(
-        record.id,
-        record.accountId,
-        record.workspaceId,
-        record.label,
-        record.scope,
-        record.secretHash,
-        record.createdByUserId,
-        record.createdByKeyId,
-        record.externalIdentity,
-        record.actsAsUserId,
-        record.createdAt,
-        record.lastUsedAt,
-        record.revokedAt,
-      )
-      .run()
+    const grants = (record.workspaceIds ?? []).map((workspaceId) =>
+      this.db
+        .prepare('INSERT INTO public_api_key_workspaces (key_id, workspace_id) VALUES (?, ?)')
+        .bind(record.id, workspaceId),
+    )
+    await this.db.batch([
+      this.db
+        .prepare(
+          `INSERT INTO public_api_keys
+            (id, account_id, all_workspaces, label, scope, secret_hash, created_by_user_id, created_by_key_id, external_identity, acts_as_user_id, created_at, last_used_at, revoked_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(
+          record.id,
+          record.accountId,
+          record.workspaceIds === null ? 1 : 0,
+          record.label,
+          record.scope,
+          record.secretHash,
+          record.createdByUserId,
+          record.createdByKeyId,
+          record.externalIdentity,
+          record.actsAsUserId,
+          record.createdAt,
+          record.lastUsedAt,
+          record.revokedAt,
+        ),
+      ...grants,
+    ])
   }
 
   async getById(id: string): Promise<PublicApiKeyRecord | null> {
@@ -74,19 +86,23 @@ export class D1PublicApiKeyRepository implements PublicApiKeyRepository {
       .prepare('SELECT * FROM public_api_keys WHERE id = ?')
       .bind(id)
       .first<PublicApiKeyRow>()
-    return row ? rowToRecord(row) : null
+    if (!row) return null
+    const grants = await this.grantsOf([row.id])
+    return rowToRecord(row, grants.get(row.id) ?? [])
   }
 
-  async listByWorkspace(workspaceId: string): Promise<PublicApiKeyRecord[]> {
+  async listByAccount(accountId: string): Promise<PublicApiKeyRecord[]> {
     const { results } = await this.db
       .prepare(
         `SELECT * FROM public_api_keys
-          WHERE workspace_id = ? AND revoked_at IS NULL
+          WHERE account_id = ? AND revoked_at IS NULL
           ORDER BY created_at DESC`,
       )
-      .bind(workspaceId)
+      .bind(accountId)
       .all<PublicApiKeyRow>()
-    return (results ?? []).map(rowToRecord)
+    const rows = results ?? []
+    const grants = await this.grantsOf(rows.map((r) => r.id))
+    return rows.map((row) => rowToRecord(row, grants.get(row.id) ?? []))
   }
 
   async markUsed(id: string, at: number): Promise<void> {
@@ -96,23 +112,41 @@ export class D1PublicApiKeyRepository implements PublicApiKeyRepository {
       .run()
   }
 
-  async revoke(workspaceId: string, id: string, at: number): Promise<void> {
+  async revoke(accountId: string, id: string, at: number): Promise<void> {
     await this.db
       .prepare(
-        'UPDATE public_api_keys SET revoked_at = ? WHERE id = ? AND workspace_id = ? AND revoked_at IS NULL',
+        'UPDATE public_api_keys SET revoked_at = ? WHERE id = ? AND account_id = ? AND revoked_at IS NULL',
       )
-      .bind(at, id, workspaceId)
+      .bind(at, id, accountId)
       .run()
   }
 
-  async revokeMintedBy(workspaceId: string, minterId: string, at: number): Promise<void> {
-    // One statement over the minter index, never a list-then-revoke: the set is small, but a
-    // read-then-write would let a key minted between the two reads survive the cascade.
+  async revokeMintedBy(accountId: string, minterId: string, at: number): Promise<void> {
     await this.db
       .prepare(
-        'UPDATE public_api_keys SET revoked_at = ? WHERE created_by_key_id = ? AND workspace_id = ? AND revoked_at IS NULL',
+        'UPDATE public_api_keys SET revoked_at = ? WHERE created_by_key_id = ? AND account_id = ? AND revoked_at IS NULL',
       )
-      .bind(at, minterId, workspaceId)
+      .bind(at, minterId, accountId)
       .run()
+  }
+
+  /** The workspace grants of each key, chunked under D1's bound-parameter ceiling. */
+  private async grantsOf(keyIds: string[]): Promise<Map<string, string[]>> {
+    const out = new Map<string, string[]>()
+    for (const chunk of chunkForIn(keyIds)) {
+      const placeholders = chunk.map(() => '?').join(', ')
+      const { results } = await this.db
+        .prepare(
+          `SELECT key_id, workspace_id FROM public_api_key_workspaces WHERE key_id IN (${placeholders})`,
+        )
+        .bind(...chunk)
+        .all<{ key_id: string; workspace_id: string }>()
+      for (const row of results ?? []) {
+        const list = out.get(row.key_id) ?? []
+        list.push(row.workspace_id)
+        out.set(row.key_id, list)
+      }
+    }
+    return out
   }
 }

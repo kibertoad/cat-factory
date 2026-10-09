@@ -138,6 +138,7 @@ export { defineTutorialProgressSuite } from './tutorial-progress-suite.js'
 export { defineWorkspaceSettingsSuite } from './workspace-settings-suite.js'
 export { defineWorkspaceAccessSuite } from './workspace-access-suite.js'
 export { defineWorkspaceRbacSuite } from './workspace-rbac-suite.js'
+export { definePublicKeyReachSuite } from './public-key-reach-suite.js'
 export { mintSession } from './session.js'
 export {
   seedFrameRepoLink,

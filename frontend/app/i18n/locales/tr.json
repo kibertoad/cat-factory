@@ -3714,7 +3714,9 @@
         "createdByKey": "{id} API anahtarı",
         "revoke": "Belirteci iptal et",
         "boundToYou": "Aboneliğiniz",
-        "boundToOther": "{user} kullanıcısının aboneliği"
+        "boundToOther": "{user} kullanıcısının aboneliği",
+        "reachAll": "Tüm çalışma alanları",
+        "reachCount": "{count} çalışma alanı"
       },
       "add": {
         "heading": "Belirteç oluştur",
@@ -3728,7 +3730,13 @@
         "identitySystem": "Bu çalışma alanı (sistem belirteci)",
         "identitySelf": "Ben (kişisel belirteç)",
         "identitySystemHelp": "Bu belirteçle başlatılan çalıştırmalar çalışma alanına aittir ve hiçbir kişiye atfedilmez. Kimsenin kişisel Claude / Codex / GLM aboneliğini kullanamaz; bu nedenle böyle bir modele sabitlenmiş görev, orada olmayan birine fatura edilmek yerine reddedilir. CI ve paylaşılan entegrasyonlar için bunu kullanın.",
-        "identitySelfHelp": "Bu belirteçle başlatılan çalıştırmalar size ait sayılır ve kişisel Claude / Codex / GLM aboneliğinizi kullanabilir. Bu tür her çağrının ayrıca kişisel parolanızı X-Personal-Password başlığında göndermesi gerekir; parola hiçbir zaman saklanmaz. Kendi headless çalıştırmalarınız için bunu kullanın."
+        "identitySelfHelp": "Bu belirteçle başlatılan çalıştırmalar size ait sayılır ve kişisel Claude / Codex / GLM aboneliğinizi kullanabilir. Bu tür her çağrının ayrıca kişisel parolanızı X-Personal-Password başlığında göndermesi gerekir; parola hiçbir zaman saklanmaz. Kendi headless çalıştırmalarınız için bunu kullanın.",
+        "reach": "Çalışma alanları",
+        "reachHelp": "Bu belirtecin hangi çalışma alanlarında işlem yapabileceği. Birden fazla çalışma alanına erişen bir belirteç, her çağrıda çalışma alanını x-cat-factory-workspace başlığında belirtir.",
+        "reachThis": "Yalnızca bu çalışma alanı",
+        "reachAll": "Hesaptaki tüm çalışma alanları",
+        "reachSelected": "Seçili çalışma alanları",
+        "reachPick": "Çalışma alanlarını seçin"
       },
       "scopes": {
         "read": "Yalnızca okuma",

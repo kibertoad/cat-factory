@@ -26,18 +26,18 @@ export class MemoryKeyRepository implements PublicApiKeyRepository {
   async getById(id: string) {
     return this.rows.get(id) ?? null
   }
-  async listByWorkspace(workspaceId: string) {
+  async listByAccount(accountId: string) {
     return [...this.rows.values()].filter(
-      (row) => row.workspaceId === workspaceId && row.revokedAt === null,
+      (row) => row.accountId === accountId && row.revokedAt === null,
     )
   }
   async markUsed(id: string, at: number) {
     const row = this.rows.get(id)
     if (row) this.rows.set(id, { ...row, lastUsedAt: at })
   }
-  async revoke(workspaceId: string, id: string, at: number) {
+  async revoke(accountId: string, id: string, at: number) {
     const row = this.rows.get(id)
-    if (row && row.workspaceId === workspaceId) this.rows.set(id, { ...row, revokedAt: at })
+    if (row && row.accountId === accountId) this.rows.set(id, { ...row, revokedAt: at })
   }
   async revokeMintedBy() {}
 }
