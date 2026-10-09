@@ -3801,6 +3801,18 @@ const (
 // NotificationWebhookAlertEventValues lists every NotificationWebhookAlertEvent this SDK release knows.
 var NotificationWebhookAlertEventValues = []NotificationWebhookAlertEvent{NotificationWebhookAlertEventPlatformHealthFiring, NotificationWebhookAlertEventPlatformHealthResolved}
 
+// NotificationWebhookDelivery is the `NotificationWebhookDelivery` wire model.
+type NotificationWebhookDelivery struct {
+	DeliveryID   string       `json:"deliveryId"`
+	Notification Notification `json:"notification"`
+	// RunID always present; nil when the server has no value for it.
+	RunID  *string `json:"runId"`
+	SentAt float64 `json:"sentAt"`
+	// TaskID always present; nil when the server has no value for it.
+	TaskID      *string `json:"taskId"`
+	WorkspaceID string  `json:"workspaceId"`
+}
+
 // NotificationWebhookRunEvent is the `NotificationWebhookRunEvent` vocabulary as carried on the wire.
 // A string type rather than an int enum: the wire form IS the string, and an unknown value must
 // round-trip rather than fail to decode — this surface is additive, so a client that refused a
@@ -3832,6 +3844,35 @@ type OpenGuidedReviewThread struct {
 	Question *AskGuidedReview `json:"question,omitempty"`
 	// Title may be absent entirely.
 	Title *string `json:"title,omitempty"`
+}
+
+// PlatformAlertWebhookDelivery is the `PlatformAlertWebhookDelivery` wire model.
+type PlatformAlertWebhookDelivery struct {
+	Alert       PlatformAlertWebhookDeliveryAlert `json:"alert"`
+	DeliveryID  string                            `json:"deliveryId"`
+	Event       NotificationWebhookAlertEvent     `json:"event"`
+	SentAt      float64                           `json:"sentAt"`
+	WorkspaceID string                            `json:"workspaceId"`
+}
+
+// PlatformAlertWebhookDeliveryAlert is the `PlatformAlertWebhookDeliveryAlert` wire model.
+type PlatformAlertWebhookDeliveryAlert struct {
+	AccountID  string                                       `json:"accountId"`
+	Conditions []PlatformAlertWebhookDeliveryAlertCondition `json:"conditions"`
+	// FailedTotal always present; nil when the server has no value for it.
+	FailedTotal *float64                                `json:"failedTotal"`
+	FailingRuns []NotificationPayloadPlatformFailingRun `json:"failingRuns"`
+	OccurredAt  float64                                 `json:"occurredAt"`
+	Window      string                                  `json:"window"`
+}
+
+// PlatformAlertWebhookDeliveryAlertCondition is the `PlatformAlertWebhookDeliveryAlertCondition` wire model.
+type PlatformAlertWebhookDeliveryAlertCondition struct {
+	// Kind may be absent entirely.
+	Kind      *string `json:"kind,omitempty"`
+	Reason    string  `json:"reason"`
+	Threshold float64 `json:"threshold"`
+	Value     float64 `json:"value"`
 }
 
 // PostGuidedReviewDrafts is the `PostGuidedReviewDrafts` wire model.
@@ -6918,6 +6959,64 @@ type RunSubtaskCounts struct {
 	InProgress float64 `json:"inProgress"`
 	Total      float64 `json:"total"`
 }
+
+// RunWebhookDelivery is the `RunWebhookDelivery` wire model.
+type RunWebhookDelivery struct {
+	DeliveryID  string                      `json:"deliveryId"`
+	Event       NotificationWebhookRunEvent `json:"event"`
+	Run         RunWebhookDeliveryRun       `json:"run"`
+	SentAt      float64                     `json:"sentAt"`
+	WorkspaceID string                      `json:"workspaceId"`
+}
+
+// RunWebhookDeliveryRun is the `RunWebhookDeliveryRun` wire model.
+type RunWebhookDeliveryRun struct {
+	// Failure always present; nil when the server has no value for it.
+	Failure      *RunWebhookDeliveryRunFailure `json:"failure"`
+	OccurredAt   float64                       `json:"occurredAt"`
+	PipelineID   string                        `json:"pipelineId"`
+	PipelineName string                        `json:"pipelineName"`
+	// PullRequestURL always present; nil when the server has no value for it.
+	PullRequestURL *string `json:"pullRequestUrl"`
+	RunID          string  `json:"runId"`
+	// StartedAt always present; nil when the server has no value for it.
+	StartedAt *float64 `json:"startedAt"`
+	// Step always present; nil when the server has no value for it.
+	Step      *RunWebhookDeliveryRunStep `json:"step"`
+	TaskID    string                     `json:"taskId"`
+	TaskTitle string                     `json:"taskTitle"`
+}
+
+// RunWebhookDeliveryRunFailure is the `RunWebhookDeliveryRunFailure` wire model.
+type RunWebhookDeliveryRunFailure struct {
+	Kind    string `json:"kind"`
+	Message string `json:"message"`
+	// Reason always present; nil when the server has no value for it.
+	Reason *string `json:"reason"`
+}
+
+// RunWebhookDeliveryRunStep is the `RunWebhookDeliveryRunStep` wire model.
+type RunWebhookDeliveryRunStep struct {
+	AgentKind string                           `json:"agentKind"`
+	Attempt   float64                          `json:"attempt"`
+	Final     bool                             `json:"final"`
+	Index     float64                          `json:"index"`
+	Outcome   RunWebhookDeliveryRunStepOutcome `json:"outcome"`
+}
+
+// RunWebhookDeliveryRunStepOutcome is the `RunWebhookDeliveryRunStepOutcome` vocabulary as carried on the wire.
+// A string type rather than an int enum: the wire form IS the string, and an unknown value must
+// round-trip rather than fail to decode — this surface is additive, so a client that refused a
+// value the server legitimately added would break on a release it was never told about.
+type RunWebhookDeliveryRunStepOutcome string
+
+const (
+	RunWebhookDeliveryRunStepOutcomeCompleted RunWebhookDeliveryRunStepOutcome = "completed"
+	RunWebhookDeliveryRunStepOutcomeSkipped   RunWebhookDeliveryRunStepOutcome = "skipped"
+)
+
+// RunWebhookDeliveryRunStepOutcomeValues lists every RunWebhookDeliveryRunStepOutcome this SDK release knows.
+var RunWebhookDeliveryRunStepOutcomeValues = []RunWebhookDeliveryRunStepOutcome{RunWebhookDeliveryRunStepOutcomeCompleted, RunWebhookDeliveryRunStepOutcomeSkipped}
 
 // Severity is the `Severity` vocabulary as carried on the wire.
 // A string type rather than an int enum: the wire form IS the string, and an unknown value must

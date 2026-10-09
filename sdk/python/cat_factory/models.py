@@ -8906,6 +8906,50 @@ class NotificationWebhookAlertEvent(StrEnum):
     PLATFORM_HEALTH_RESOLVED = "platform_health.resolved"
 
 
+@dataclass(frozen=True, slots=True)
+class NotificationWebhookDelivery:
+    """`NotificationWebhookDelivery`, as carried on the wire."""
+
+    delivery_id: str
+    notification: Notification
+    sent_at: float
+    workspace_id: str
+    #: Always present; ``None`` when the server has no value for it.
+    run_id: str | None = None
+    #: Always present; ``None`` when the server has no value for it.
+    task_id: str | None = None
+
+    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
+    #: still reach a newly added field instead of having to upgrade first.
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "NotificationWebhookDelivery":
+        """Decode a `NotificationWebhookDelivery` from its JSON object."""
+        known = {"deliveryId", "notification", "sentAt", "workspaceId", "runId", "taskId"}
+        return cls(
+            delivery_id=data.get("deliveryId"),
+            notification=Notification.from_dict(data.get("notification")),
+            sent_at=data.get("sentAt"),
+            workspace_id=data.get("workspaceId"),
+            run_id=data.get("runId"),
+            task_id=data.get("taskId"),
+            extra={k: v for k, v in data.items() if k not in known},
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Encode back to the JSON object shape the API expects."""
+        out: dict[str, Any] = dict(self.extra)
+        out["deliveryId"] = self.delivery_id
+        out["notification"] = _encode(self.notification)
+        out["sentAt"] = self.sent_at
+        out["workspaceId"] = self.workspace_id
+        out["runId"] = self.run_id
+        out["taskId"] = self.task_id
+        return out
+
+
 class NotificationWebhookRunEvent(StrEnum):
     """The `NotificationWebhookRunEvent` vocabulary.
     A `StrEnum`, so a member IS its wire string: it compares equal to it, formats as it in
@@ -8991,6 +9035,126 @@ class OpenGuidedReviewThread:
             out["question"] = _encode(self.question)
         if self.title is not None:
             out["title"] = self.title
+        return out
+
+
+@dataclass(frozen=True, slots=True)
+class PlatformAlertWebhookDelivery:
+    """`PlatformAlertWebhookDelivery`, as carried on the wire."""
+
+    alert: PlatformAlertWebhookDeliveryAlert
+    delivery_id: str
+    event: NotificationWebhookAlertEvent
+    sent_at: float
+    workspace_id: str
+
+    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
+    #: still reach a newly added field instead of having to upgrade first.
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "PlatformAlertWebhookDelivery":
+        """Decode a `PlatformAlertWebhookDelivery` from its JSON object."""
+        known = {"alert", "deliveryId", "event", "sentAt", "workspaceId"}
+        return cls(
+            alert=PlatformAlertWebhookDeliveryAlert.from_dict(data.get("alert")),
+            delivery_id=data.get("deliveryId"),
+            event=_enum(NotificationWebhookAlertEvent, data.get("event")),
+            sent_at=data.get("sentAt"),
+            workspace_id=data.get("workspaceId"),
+            extra={k: v for k, v in data.items() if k not in known},
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Encode back to the JSON object shape the API expects."""
+        out: dict[str, Any] = dict(self.extra)
+        out["alert"] = _encode(self.alert)
+        out["deliveryId"] = self.delivery_id
+        out["event"] = _encode(self.event)
+        out["sentAt"] = self.sent_at
+        out["workspaceId"] = self.workspace_id
+        return out
+
+
+@dataclass(frozen=True, slots=True)
+class PlatformAlertWebhookDeliveryAlert:
+    """`PlatformAlertWebhookDeliveryAlert`, as carried on the wire."""
+
+    account_id: str
+    conditions: list[PlatformAlertWebhookDeliveryAlertCondition]
+    failing_runs: list[NotificationPayloadPlatformFailingRun]
+    occurred_at: float
+    window: str
+    #: Always present; ``None`` when the server has no value for it.
+    failed_total: float | None = None
+
+    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
+    #: still reach a newly added field instead of having to upgrade first.
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "PlatformAlertWebhookDeliveryAlert":
+        """Decode a `PlatformAlertWebhookDeliveryAlert` from its JSON object."""
+        known = {"accountId", "conditions", "failingRuns", "occurredAt", "window", "failedTotal"}
+        return cls(
+            account_id=data.get("accountId"),
+            conditions=[PlatformAlertWebhookDeliveryAlertCondition.from_dict(item) for item in data.get("conditions") or []],
+            failing_runs=[NotificationPayloadPlatformFailingRun.from_dict(item) for item in data.get("failingRuns") or []],
+            occurred_at=data.get("occurredAt"),
+            window=data.get("window"),
+            failed_total=data.get("failedTotal"),
+            extra={k: v for k, v in data.items() if k not in known},
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Encode back to the JSON object shape the API expects."""
+        out: dict[str, Any] = dict(self.extra)
+        out["accountId"] = self.account_id
+        out["conditions"] = [_encode(item) for item in self.conditions]
+        out["failingRuns"] = [_encode(item) for item in self.failing_runs]
+        out["occurredAt"] = self.occurred_at
+        out["window"] = self.window
+        out["failedTotal"] = self.failed_total
+        return out
+
+
+@dataclass(frozen=True, slots=True)
+class PlatformAlertWebhookDeliveryAlertCondition:
+    """`PlatformAlertWebhookDeliveryAlertCondition`, as carried on the wire."""
+
+    reason: str
+    threshold: float
+    value: float
+    #: May be absent entirely.
+    kind: str | None = None
+
+    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
+    #: still reach a newly added field instead of having to upgrade first.
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "PlatformAlertWebhookDeliveryAlertCondition":
+        """Decode a `PlatformAlertWebhookDeliveryAlertCondition` from its JSON object."""
+        known = {"reason", "threshold", "value", "kind"}
+        return cls(
+            reason=data.get("reason"),
+            threshold=data.get("threshold"),
+            value=data.get("value"),
+            kind=data.get("kind"),
+            extra={k: v for k, v in data.items() if k not in known},
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Encode back to the JSON object shape the API expects."""
+        out: dict[str, Any] = dict(self.extra)
+        out["reason"] = self.reason
+        out["threshold"] = self.threshold
+        out["value"] = self.value
+        if self.kind is not None:
+            out["kind"] = self.kind
         return out
 
 
@@ -16158,6 +16322,190 @@ class RunSubtaskCounts:
         out["inProgress"] = self.in_progress
         out["total"] = self.total
         return out
+
+
+@dataclass(frozen=True, slots=True)
+class RunWebhookDelivery:
+    """`RunWebhookDelivery`, as carried on the wire."""
+
+    delivery_id: str
+    event: NotificationWebhookRunEvent
+    run: RunWebhookDeliveryRun
+    sent_at: float
+    workspace_id: str
+
+    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
+    #: still reach a newly added field instead of having to upgrade first.
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "RunWebhookDelivery":
+        """Decode a `RunWebhookDelivery` from its JSON object."""
+        known = {"deliveryId", "event", "run", "sentAt", "workspaceId"}
+        return cls(
+            delivery_id=data.get("deliveryId"),
+            event=_enum(NotificationWebhookRunEvent, data.get("event")),
+            run=RunWebhookDeliveryRun.from_dict(data.get("run")),
+            sent_at=data.get("sentAt"),
+            workspace_id=data.get("workspaceId"),
+            extra={k: v for k, v in data.items() if k not in known},
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Encode back to the JSON object shape the API expects."""
+        out: dict[str, Any] = dict(self.extra)
+        out["deliveryId"] = self.delivery_id
+        out["event"] = _encode(self.event)
+        out["run"] = _encode(self.run)
+        out["sentAt"] = self.sent_at
+        out["workspaceId"] = self.workspace_id
+        return out
+
+
+@dataclass(frozen=True, slots=True)
+class RunWebhookDeliveryRun:
+    """`RunWebhookDeliveryRun`, as carried on the wire."""
+
+    occurred_at: float
+    pipeline_id: str
+    pipeline_name: str
+    run_id: str
+    task_id: str
+    task_title: str
+    #: Always present; ``None`` when the server has no value for it.
+    failure: RunWebhookDeliveryRunFailure | None = None
+    #: Always present; ``None`` when the server has no value for it.
+    pull_request_url: str | None = None
+    #: Always present; ``None`` when the server has no value for it.
+    started_at: float | None = None
+    #: Always present; ``None`` when the server has no value for it.
+    step: RunWebhookDeliveryRunStep | None = None
+
+    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
+    #: still reach a newly added field instead of having to upgrade first.
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "RunWebhookDeliveryRun":
+        """Decode a `RunWebhookDeliveryRun` from its JSON object."""
+        known = {"occurredAt", "pipelineId", "pipelineName", "runId", "taskId", "taskTitle", "failure", "pullRequestUrl", "startedAt", "step"}
+        return cls(
+            occurred_at=data.get("occurredAt"),
+            pipeline_id=data.get("pipelineId"),
+            pipeline_name=data.get("pipelineName"),
+            run_id=data.get("runId"),
+            task_id=data.get("taskId"),
+            task_title=data.get("taskTitle"),
+            failure=None if data.get("failure") is None else RunWebhookDeliveryRunFailure.from_dict(data.get("failure")),
+            pull_request_url=data.get("pullRequestUrl"),
+            started_at=data.get("startedAt"),
+            step=None if data.get("step") is None else RunWebhookDeliveryRunStep.from_dict(data.get("step")),
+            extra={k: v for k, v in data.items() if k not in known},
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Encode back to the JSON object shape the API expects."""
+        out: dict[str, Any] = dict(self.extra)
+        out["occurredAt"] = self.occurred_at
+        out["pipelineId"] = self.pipeline_id
+        out["pipelineName"] = self.pipeline_name
+        out["runId"] = self.run_id
+        out["taskId"] = self.task_id
+        out["taskTitle"] = self.task_title
+        out["failure"] = _encode(self.failure)
+        out["pullRequestUrl"] = self.pull_request_url
+        out["startedAt"] = self.started_at
+        out["step"] = _encode(self.step)
+        return out
+
+
+@dataclass(frozen=True, slots=True)
+class RunWebhookDeliveryRunFailure:
+    """`RunWebhookDeliveryRunFailure`, as carried on the wire."""
+
+    kind: str
+    message: str
+    #: Always present; ``None`` when the server has no value for it.
+    reason: str | None = None
+
+    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
+    #: still reach a newly added field instead of having to upgrade first.
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "RunWebhookDeliveryRunFailure":
+        """Decode a `RunWebhookDeliveryRunFailure` from its JSON object."""
+        known = {"kind", "message", "reason"}
+        return cls(
+            kind=data.get("kind"),
+            message=data.get("message"),
+            reason=data.get("reason"),
+            extra={k: v for k, v in data.items() if k not in known},
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Encode back to the JSON object shape the API expects."""
+        out: dict[str, Any] = dict(self.extra)
+        out["kind"] = self.kind
+        out["message"] = self.message
+        out["reason"] = self.reason
+        return out
+
+
+@dataclass(frozen=True, slots=True)
+class RunWebhookDeliveryRunStep:
+    """`RunWebhookDeliveryRunStep`, as carried on the wire."""
+
+    agent_kind: str
+    attempt: float
+    final: bool
+    index: float
+    outcome: RunWebhookDeliveryRunStepOutcome
+
+    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
+    #: still reach a newly added field instead of having to upgrade first.
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "RunWebhookDeliveryRunStep":
+        """Decode a `RunWebhookDeliveryRunStep` from its JSON object."""
+        known = {"agentKind", "attempt", "final", "index", "outcome"}
+        return cls(
+            agent_kind=data.get("agentKind"),
+            attempt=data.get("attempt"),
+            final=data.get("final"),
+            index=data.get("index"),
+            outcome=_enum(RunWebhookDeliveryRunStepOutcome, data.get("outcome")),
+            extra={k: v for k, v in data.items() if k not in known},
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Encode back to the JSON object shape the API expects."""
+        out: dict[str, Any] = dict(self.extra)
+        out["agentKind"] = self.agent_kind
+        out["attempt"] = self.attempt
+        out["final"] = self.final
+        out["index"] = self.index
+        out["outcome"] = _encode(self.outcome)
+        return out
+
+
+class RunWebhookDeliveryRunStepOutcome(StrEnum):
+    """The `RunWebhookDeliveryRunStepOutcome` vocabulary.
+    A `StrEnum`, so a member IS its wire string: it compares equal to it, formats as it in
+    an f-string, and serialises as it. A plain `(str, Enum)` would satisfy the first of
+    those and silently fail the other two — `str(TaskStatus.PLANNED)` is
+    "TaskStatus.PLANNED", which is the value that ends up in a log line or a report.
+    An UNKNOWN value decodes to the plain string rather than raising: this surface is
+    additive, and a client that refused a value the server legitimately added would break on
+    a release it was never told about.
+    """
+    COMPLETED = "completed"
+    SKIPPED = "skipped"
 
 
 class Severity(StrEnum):

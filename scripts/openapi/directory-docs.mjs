@@ -58,24 +58,3 @@ export const DIRECTORY_OPERATION_DOCS = {
     description: 'Stop pushing to an endpoint. Idempotent.',
   },
 }
-
-/**
- * The pushes a directory webhook endpoint receives, so a receiver can generate the delivery type
- * from the same document its client comes from.
- */
-export const DIRECTORY_WEBHOOKS = {
-  directoryDelivery: {
-    post: {
-      summary: 'A directory webhook push',
-      description:
-        'Sent to each registered directory webhook endpoint. Verify `x-cat-factory-signature` (`v1=<hex HMAC-SHA256(secret, "<x-cat-factory-timestamp>.<raw body>")>`) before parsing, and dedupe on `deliveryId`: a failed push is retried with the same id.',
-      requestBody: {
-        required: true,
-        content: {
-          'application/json': { schema: { $ref: '#/components/schemas/DirectoryWebhookDelivery' } },
-        },
-      },
-      responses: { 200: { description: 'Any 2xx acknowledges the push.' } },
-    },
-  },
-}

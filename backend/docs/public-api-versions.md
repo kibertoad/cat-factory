@@ -468,7 +468,9 @@ reasons gain `cursor_expired`, for a feed cursor older than the feed's retention
 Directory webhooks: `GET /api/v1/directory/webhooks`, `PUT` and `DELETE
 /api/v1/directory/webhooks/{webhookId}` register account-level endpoints the directory change feed
 is pushed to, every couple of minutes, signed like the notification webhooks. The document gains an
-OpenAPI 3.1 `webhooks` section naming the push body, `DirectoryWebhookDelivery`.
+OpenAPI 3.1 `webhooks` section naming every push body: `DirectoryWebhookDelivery`, and the existing
+`NotificationWebhookDelivery`, `RunWebhookDelivery` and `PlatformAlertWebhookDelivery`, which become
+generated types in every client.
 
 Additive. The management operations need an `admin` key that reaches every workspace. Pushes are
 at-least-once; a receiver dedupes on `deliveryId`, and the change feed stays the guarantee of
