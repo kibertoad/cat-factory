@@ -144,7 +144,7 @@ gatekeeper-worker into a shared `@cat-factory/webhooks` package both depend on.
       `public_api_key_workspaces` grants plus `all_workspaces` (D1 0108, Drizzle), per-request
       workspace resolution in `authorize`, `workspaceIds` on the key and `/me`, the reach picker in
       the token panel, a workspace option on the four SDK clients, `definePublicKeyReachSuite`.
-- [x] **Slice 3: public directory read API** (PR link added when opened). `DirectoryRepository`
+- [x] **Slice 3: public directory read API** ([#2309](https://github.com/kibertoad/cat-factory/pull/2309); website: [cat-factory-website#101](https://github.com/kibertoad/cat-factory-website/pull/101)). `DirectoryRepository`
       (feed reads, keyset snapshots, batched hydration, prune) on both runtimes and in the
       mothership allow-list, `DirectoryService`, `/api/v1/directory/*`,
       `DIRECTORY_CHANGE_RETENTION_DAYS` on both sweeps, OpenAPI 1.80.0,
