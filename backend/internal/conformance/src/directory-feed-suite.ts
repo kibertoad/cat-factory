@@ -1,6 +1,6 @@
 import type {
   DirectoryChangeRecord,
-  DirectoryChangeRepository,
+  DirectoryRepository,
   GitHubRepo,
   MembershipRepository,
   RepoProjectionRepository,
@@ -23,14 +23,20 @@ export interface DirectoryFeedRepos {
   workspaces: WorkspaceRepository
   workspaceMembers: WorkspaceMemberRepository
   repos: RepoProjectionRepository
-  changes: DirectoryChangeRepository
+  changes: DirectoryRepository
 }
 
 type Entry = [DirectoryChangeRecord['entityType'], string | null, string]
 
 /** The entries recorded after `afterSeq`, in order, as `[type, workspaceId, entityId]`. */
 async function entries(r: DirectoryFeedRepos, accountId: string, afterSeq = 0): Promise<Entry[]> {
-  const rows = await r.changes.listAfter(accountId, afterSeq, 1_000)
+  const rows = await r.changes.listChanges(
+    accountId,
+    afterSeq,
+    Number.MAX_SAFE_INTEGER,
+    1_000,
+    null,
+  )
   return rows.map((c) => [c.entityType, c.workspaceId, c.entityId])
 }
 
@@ -72,7 +78,7 @@ export function defineDirectoryFeedSuite(name: string, makeRepos: () => Director
       const r = makeRepos()
       const { acc } = ids()
       expect(await r.changes.headSeq(acc)).toBe(0)
-      expect(await r.changes.listAfter(acc, 0, 10)).toEqual([])
+      expect(await r.changes.listChanges(acc, 0, Number.MAX_SAFE_INTEGER, 10, null)).toEqual([])
     })
 
     it('records an account membership with the user whose visibility it decides', async () => {
@@ -93,7 +99,7 @@ export function defineDirectoryFeedSuite(name: string, makeRepos: () => Director
         ['account_membership', null, usr],
         ['user', null, usr],
       ])
-      const rows = await r.changes.listAfter(acc, 0, 10)
+      const rows = await r.changes.listChanges(acc, 0, Number.MAX_SAFE_INTEGER, 10, null)
       expect(rows.map((c) => c.seq)).toEqual([1, 2, 3, 4])
       expect(await r.changes.headSeq(acc)).toBe(4)
     })
@@ -248,7 +254,7 @@ export function defineDirectoryFeedSuite(name: string, makeRepos: () => Director
         ),
       )
 
-      const rows = await r.changes.listAfter(acc, 0, 100)
+      const rows = await r.changes.listChanges(acc, 0, Number.MAX_SAFE_INTEGER, 100, null)
       expect(rows.map((c) => c.seq)).toEqual(Array.from({ length: 16 }, (_, i) => i + 1))
     })
 
@@ -258,11 +264,154 @@ export function defineDirectoryFeedSuite(name: string, makeRepos: () => Director
       await seedWorkspace(r, ws, acc)
       for (const name of ['a', 'b', 'c']) await r.workspaces.rename(ws, name)
 
-      const first = await r.changes.listAfter(acc, 0, 2)
-      const second = await r.changes.listAfter(acc, first.at(-1)?.seq ?? 0, 2)
+      const first = await r.changes.listChanges(acc, 0, Number.MAX_SAFE_INTEGER, 2, null)
+      const second = await r.changes.listChanges(
+        acc,
+        first.at(-1)?.seq ?? 0,
+        Number.MAX_SAFE_INTEGER,
+        2,
+        null,
+      )
       expect(first.map((c) => c.seq)).toEqual([1, 2])
       expect(second.map((c) => c.seq)).toEqual([3, 4])
       expect(second[0]).toMatchObject({ accountId: acc, entityType: 'workspace', workspaceId: ws })
+    })
+
+    it('serves keyset snapshot pages of every entity, bounded to the account and the reach', async () => {
+      const r = makeRepos()
+      const { acc, acc2, ws, usr } = ids()
+      const ws2 = `${ws}-b`
+      const foreign = `${ws}-foreign`
+      for (const id of [usr, `${usr}-2`]) {
+        await seedUser(r, id)
+        await r.memberships.upsert({
+          accountId: acc,
+          userId: id,
+          roles: ['developer'],
+          createdAt: 5,
+        })
+      }
+      await seedWorkspace(r, ws, acc)
+      await seedWorkspace(r, ws2, acc)
+      await seedWorkspace(r, foreign, acc2)
+      for (const workspaceId of [ws, ws2, foreign]) {
+        await r.workspaceMembers.upsert({
+          workspaceId,
+          userId: usr,
+          role: 'member',
+          createdAt: 6,
+          addedByUserId: null,
+        })
+        await r.repos.upsertMany(workspaceId, [repo(1), repo(2)])
+      }
+      await r.repos.tombstoneMissing(ws2, 77, [1], 9_000)
+
+      const all = await r.changes.listWorkspaces(acc, null, 10, null)
+      expect(all.map((w) => w.id)).toEqual([ws, ws2])
+      expect(all[0]).toEqual({ id: ws, name: 'Board', description: null, accessMode: 'account' })
+      const page1 = await r.changes.listWorkspaces(acc, null, 1, null)
+      const page2 = await r.changes.listWorkspaces(acc, page1[0]!.id, 1, null)
+      expect([...page1, ...page2].map((w) => w.id)).toEqual([ws, ws2])
+      expect((await r.changes.listWorkspaces(acc, null, 10, [ws2])).map((w) => w.id)).toEqual([ws2])
+
+      expect((await r.changes.listUsers(acc, null, 10)).map((u) => u.id)).toEqual(
+        [usr, `${usr}-2`].sort(),
+      )
+      expect(await r.changes.listAccountMemberships(acc, usr, 10)).toEqual([
+        { userId: `${usr}-2`, roles: ['developer'], createdAt: 5 },
+      ])
+
+      const members = await r.changes.listWorkspaceMemberships(acc, null, 10, null)
+      expect(members).toEqual([
+        { workspaceId: ws, userId: usr, role: 'member', createdAt: 6 },
+        { workspaceId: ws2, userId: usr, role: 'member', createdAt: 6 },
+      ])
+      expect(
+        await r.changes.listWorkspaceMemberships(acc, { workspaceId: ws, userId: usr }, 10, null),
+      ).toEqual([members[1]])
+
+      // The tombstoned repo is gone from the snapshot; the other account's are never there.
+      const repos = await r.changes.listRepos(acc, null, 10, null)
+      expect(repos.map((x) => [x.workspaceId, x.repoId])).toEqual([
+        [ws, 1],
+        [ws, 2],
+        [ws2, 1],
+      ])
+      expect(repos[0]).toEqual({
+        workspaceId: ws,
+        repoId: 1,
+        provider: 'github',
+        owner: 'acme',
+        name: 'repo-1',
+        defaultBranch: 'main',
+        private: true,
+        monorepo: false,
+      })
+      expect(
+        (await r.changes.listRepos(acc, { workspaceId: ws, repoId: 1 }, 10, [ws])).map(
+          (x) => x.repoId,
+        ),
+      ).toEqual([2])
+    })
+
+    it('hydrates by key, answering an absent entity and another account’s alike', async () => {
+      const r = makeRepos()
+      const { acc, acc2, ws, usr } = ids()
+      await seedUser(r, usr)
+      await r.memberships.upsert({ accountId: acc, userId: usr, roles: ['admin'], createdAt: 1 })
+      await seedWorkspace(r, ws, acc)
+      await r.workspaceMembers.upsert({
+        workspaceId: ws,
+        userId: usr,
+        role: 'admin',
+        createdAt: 2,
+        addedByUserId: null,
+      })
+      await r.repos.upsertMany(ws, [repo(4)])
+
+      expect((await r.changes.getWorkspaces(acc, [ws, 'ws_missing'])).map((w) => w.id)).toEqual([
+        ws,
+      ])
+      expect(await r.changes.getWorkspaces(acc2, [ws])).toEqual([])
+      expect((await r.changes.getUsers(acc, [usr])).map((u) => u.id)).toEqual([usr])
+      // A user is part of an account's directory only while they hold a membership in it.
+      expect(await r.changes.getUsers(acc2, [usr])).toEqual([])
+      expect(await r.changes.getAccountMemberships(acc, [usr])).toEqual([
+        { userId: usr, roles: ['admin'], createdAt: 1 },
+      ])
+      expect(
+        await r.changes.getWorkspaceMemberships(acc, [
+          { workspaceId: ws, userId: usr },
+          { workspaceId: ws, userId: 'usr_missing' },
+        ]),
+      ).toEqual([{ workspaceId: ws, userId: usr, role: 'admin', createdAt: 2 }])
+      expect(
+        (await r.changes.getRepos(acc, [{ workspaceId: ws, repoId: 4 }])).map((x) => x.repoId),
+      ).toEqual([4])
+      await r.repos.tombstoneMissing(ws, 77, [], 5_000)
+      expect(await r.changes.getRepos(acc, [{ workspaceId: ws, repoId: 4 }])).toEqual([])
+    })
+
+    it('filters the feed to a reach, and prunes old rows but never an account’s newest', async () => {
+      const r = makeRepos()
+      const { acc, ws, usr } = ids()
+      await seedUser(r, usr)
+      await r.memberships.upsert({ accountId: acc, userId: usr, roles: ['admin'], createdAt: 1 })
+      await seedWorkspace(r, ws, acc)
+      await seedWorkspace(r, `${ws}-b`, acc)
+
+      // A reach sees its workspaces' entities only, never users or account memberships.
+      const reached = await r.changes.listChanges(acc, 0, Number.MAX_SAFE_INTEGER, 100, [ws])
+      expect(reached.map((c) => [c.entityType, c.workspaceId])).toEqual([['workspace', ws]])
+      const head = await r.changes.headSeq(acc)
+      expect(await r.changes.listChanges(acc, 0, 2, 100, null)).toHaveLength(2)
+
+      // Every row is older than the cutoff; only the newest survives, so `seq` keeps counting.
+      await r.changes.pruneChanges(Number.MAX_SAFE_INTEGER)
+      expect(await r.changes.oldestSeq(acc)).toBe(head)
+      expect(await r.changes.headSeq(acc)).toBe(head)
+      await r.workspaces.rename(ws, 'after prune')
+      expect(await r.changes.headSeq(acc)).toBe(head + 1)
     })
   })
 }

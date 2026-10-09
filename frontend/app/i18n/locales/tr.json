@@ -729,7 +729,8 @@
         "delegated_claim_missing": "Bu adımın kontrol edilecek harici işi yok",
         "thread_busy": "Bu konu hâlâ yanıtlanıyor",
         "draft_conflict": "Bu taslak değişti",
-        "session_stale": "Pull request ilerledi"
+        "session_stale": "Pull request ilerledi",
+        "cursor_expired": "Değişiklik akışı bu imlecin ötesine geçti"
       },
       "description": {
         "dependencies_unmet": "Bu görev henüz tamamlanmamış başka görevlere bağlı. Onları tamamla veya engelini kaldır, ardından yeniden başlat.",
@@ -789,7 +790,8 @@
         "delegated_claim_missing": "Çalıştırmanın harici yürütücüye ne gönderdiğine dair kaydı eksik, dolayısıyla yoklanacak bir şey yok. Yürütücünün kendisinde bir sorun yok. Çalıştırmayı yeniden yükleyin ve adım hâlâ takılıysa yeniden çalıştırın.",
         "thread_busy": "Bu konudaki önceki soru henüz yanıtlanmadı. Yanıtı bekleyin ya da başka bir konuda sorun.",
         "draft_conflict": "Bu yorum taslağı siz yükledikten sonra düzenlendi, gönderildi ya da atıldı. Taslakları yeniden yükleyip değişikliğinizi tekrar yapın.",
-        "session_stale": "Bu inceleme hazırlandıktan sonra yeni commit'ler geldi, bu yüzden taslaklar yanlış satırları gösteriyor olabilir. İncelemeyi yenileyin, taslakları kontrol edin, sonra gönderin."
+        "session_stale": "Bu inceleme hazırlandıktan sonra yeni commit'ler geldi, bu yüzden taslaklar yanlış satırları gösteriyor olabilir. İncelemeyi yenileyin, taslakları kontrol edin, sonra gönderin.",
+        "cursor_expired": "Bu imleçten sonraki değişiklikler artık saklanmıyor. Dizinin yeni bir anlık görüntüsünü alın, ardından akışı bildirdiği konumdan izleyin."
       },
       "action": {
         "connectGitHub": "GitHub'ı bağla",

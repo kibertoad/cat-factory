@@ -807,7 +807,8 @@
         "delegated_claim_missing": "This step has no external work to check",
         "thread_busy": "This thread is still answering",
         "draft_conflict": "This draft changed",
-        "session_stale": "The pull request has moved on"
+        "session_stale": "The pull request has moved on",
+        "cursor_expired": "The change feed moved past this cursor"
       },
       "description": {
         "dependencies_unmet": "This task depends on others that aren't finished yet. Complete or unblock them, then start it again.",
@@ -870,7 +871,8 @@
         "delegated_claim_missing": "The run’s record of what it sent to the external executor is missing, so there is nothing to poll. Nothing is wrong with the executor itself. Reload the run, and re-run the step if it is still stuck.",
         "thread_busy": "The previous question in this thread has not been answered yet. Wait for that answer, or ask in another thread.",
         "draft_conflict": "Someone edited, posted or discarded this comment draft since you loaded it. Reload the drafts and make your change again.",
-        "session_stale": "New commits landed after this review was prepared, so its drafts may point at the wrong lines. Refresh the review, check the drafts, then post."
+        "session_stale": "New commits landed after this review was prepared, so its drafts may point at the wrong lines. Refresh the review, check the drafts, then post.",
+        "cursor_expired": "The changes after this cursor are no longer kept. Take a fresh snapshot of the directory, then follow the feed from the position it reports."
       },
       "action": {
         "connectGitHub": "Connect GitHub",

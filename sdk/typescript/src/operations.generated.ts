@@ -27,6 +27,12 @@ import type {
   DebugLlmCall,
   DebugRunOverview,
   DetachPublicTaskDocumentRequest,
+  DirectoryAccountMembershipPage,
+  DirectoryChangePage,
+  DirectoryRepoPage,
+  DirectoryUserPage,
+  DirectoryWorkspaceMembershipPage,
+  DirectoryWorkspacePage,
   EditGuidedReviewDraft,
   GetDebugLlmCallView,
   GetDebugLlmExportResponse,
@@ -213,6 +219,42 @@ export type DebugListToolCallsQuery = {
   jobId?: string
   order?: ListDebugToolCallsOrder
   outcome?: ListDebugToolCallsOutcome
+}
+
+/** Query parameters for `client.directory.listAccountMemberships()`. */
+export type DirectoryListAccountMembershipsQuery = {
+  cursor?: string
+  limit?: number
+}
+
+/** Query parameters for `client.directory.listChanges()`. */
+export type DirectoryListChangesQuery = {
+  after?: number
+  limit?: number
+}
+
+/** Query parameters for `client.directory.listRepos()`. */
+export type DirectoryListReposQuery = {
+  cursor?: string
+  limit?: number
+}
+
+/** Query parameters for `client.directory.listUsers()`. */
+export type DirectoryListUsersQuery = {
+  cursor?: string
+  limit?: number
+}
+
+/** Query parameters for `client.directory.listWorkspaceMemberships()`. */
+export type DirectoryListWorkspaceMembershipsQuery = {
+  cursor?: string
+  limit?: number
+}
+
+/** Query parameters for `client.directory.listWorkspaces()`. */
+export type DirectoryListWorkspacesQuery = {
+  cursor?: string
+  limit?: number
 }
 
 /** Query parameters for `client.repos.listAvailable()`. */
@@ -2283,6 +2325,179 @@ export class MergeRecordsResource {
   }
 }
 
+/** The account's directory, for keeping an external copy in sync: workspaces, users, account and workspace memberships, and linked repositories as keyset-paged snapshots, plus the ordered change feed that brings a copy up to date. Everything here takes a `read` key; users and account memberships need one that reaches every workspace. */
+export class DirectoryResource {
+  readonly #transport: Transport
+
+  constructor(transport: Transport) {
+    this.#transport = transport
+  }
+
+  /**
+   * List the account's memberships
+   * A keyset-paged snapshot of the account’s memberships, each with the member’s account roles. Account-wide, so a key limited to some workspaces is refused with `403` and `reason: "account_scope_required"`.
+   * `GET /api/v1/directory/account-memberships` — operation `listDirectoryAccountMemberships`.
+   */
+  listAccountMemberships(query: DirectoryListAccountMembershipsQuery = {}, options: RequestOptions = {}): Promise<DirectoryAccountMembershipPage> {
+    return this.#transport.request<DirectoryAccountMembershipPage>({
+      method: 'GET',
+      path: `/api/v1/directory/account-memberships`,
+      query,
+      options,
+    })
+  }
+
+  /**
+   * Every `items` across every page of `listAccountMemberships()`.
+   * Follows `nextCursor` until the server reports no further page. The cursor is opaque
+   * and carries a position, never authority — each page re-applies the key's full scope.
+   */
+  async *listAccountMembershipsAll(query: DirectoryListAccountMembershipsQuery = {}, options: RequestOptions = {}): AsyncGenerator<DirectoryAccountMembershipPage['items'][number]> {
+    let cursor: string | undefined = query.cursor
+    for (;;) {
+      const page = await this.listAccountMemberships({ ...query, cursor }, options)
+      for (const item of page.items) yield item
+      if (!page.nextCursor) return
+      if (page.nextCursor === cursor) throw repeatedCursorError()
+      cursor = page.nextCursor
+    }
+  }
+
+  /**
+   * List directory changes
+   * The account’s directory changes after `after`, in `seq` order, each carrying the CURRENT state of the entity it names, or `null` once that entity no longer exists or is outside the key’s reach. Store `nextAfter` and pass it back as `after`; it can move past the last change served, since changes the key cannot see are skipped. `nextAfter === headSeq` means caught up. A cursor whose following changes were pruned (see `DIRECTORY_CHANGE_RETENTION_DAYS`), or one ahead of the feed, is refused with `409` and `reason: "cursor_expired"`: reconcile from the snapshot endpoints and replay from their `asOfSeq`. Account-scoped: no `x-cat-factory-workspace` header is read. A key limited to some workspaces sees only workspace, workspace-membership and repository changes of those workspaces.
+   * `GET /api/v1/directory/changes` — operation `listDirectoryChanges`.
+   */
+  listChanges(query: DirectoryListChangesQuery = {}, options: RequestOptions = {}): Promise<DirectoryChangePage> {
+    return this.#transport.request<DirectoryChangePage>({
+      method: 'GET',
+      path: `/api/v1/directory/changes`,
+      query,
+      options,
+    })
+  }
+
+  /**
+   * List linked repositories
+   * A keyset-paged snapshot of the repositories linked to the account’s workspaces (the ones the key reaches). A repository is listed once per workspace that links it.
+   * `GET /api/v1/directory/repos` — operation `listDirectoryRepos`.
+   */
+  listRepos(query: DirectoryListReposQuery = {}, options: RequestOptions = {}): Promise<DirectoryRepoPage> {
+    return this.#transport.request<DirectoryRepoPage>({
+      method: 'GET',
+      path: `/api/v1/directory/repos`,
+      query,
+      options,
+    })
+  }
+
+  /**
+   * Every `items` across every page of `listRepos()`.
+   * Follows `nextCursor` until the server reports no further page. The cursor is opaque
+   * and carries a position, never authority — each page re-applies the key's full scope.
+   */
+  async *listReposAll(query: DirectoryListReposQuery = {}, options: RequestOptions = {}): AsyncGenerator<DirectoryRepoPage['items'][number]> {
+    let cursor: string | undefined = query.cursor
+    for (;;) {
+      const page = await this.listRepos({ ...query, cursor }, options)
+      for (const item of page.items) yield item
+      if (!page.nextCursor) return
+      if (page.nextCursor === cursor) throw repeatedCursorError()
+      cursor = page.nextCursor
+    }
+  }
+
+  /**
+   * List the account's users
+   * A keyset-paged snapshot of every user holding a membership in the account. Account-wide, so a key limited to some workspaces is refused with `403` and `reason: "account_scope_required"`.
+   * `GET /api/v1/directory/users` — operation `listDirectoryUsers`.
+   */
+  listUsers(query: DirectoryListUsersQuery = {}, options: RequestOptions = {}): Promise<DirectoryUserPage> {
+    return this.#transport.request<DirectoryUserPage>({
+      method: 'GET',
+      path: `/api/v1/directory/users`,
+      query,
+      options,
+    })
+  }
+
+  /**
+   * Every `items` across every page of `listUsers()`.
+   * Follows `nextCursor` until the server reports no further page. The cursor is opaque
+   * and carries a position, never authority — each page re-applies the key's full scope.
+   */
+  async *listUsersAll(query: DirectoryListUsersQuery = {}, options: RequestOptions = {}): AsyncGenerator<DirectoryUserPage['items'][number]> {
+    let cursor: string | undefined = query.cursor
+    for (;;) {
+      const page = await this.listUsers({ ...query, cursor }, options)
+      for (const item of page.items) yield item
+      if (!page.nextCursor) return
+      if (page.nextCursor === cursor) throw repeatedCursorError()
+      cursor = page.nextCursor
+    }
+  }
+
+  /**
+   * List workspace memberships
+   * A keyset-paged snapshot of the explicit workspace memberships in the account’s workspaces (the ones the key reaches), each with its workspace role.
+   * `GET /api/v1/directory/workspace-memberships` — operation `listDirectoryWorkspaceMemberships`.
+   */
+  listWorkspaceMemberships(query: DirectoryListWorkspaceMembershipsQuery = {}, options: RequestOptions = {}): Promise<DirectoryWorkspaceMembershipPage> {
+    return this.#transport.request<DirectoryWorkspaceMembershipPage>({
+      method: 'GET',
+      path: `/api/v1/directory/workspace-memberships`,
+      query,
+      options,
+    })
+  }
+
+  /**
+   * Every `items` across every page of `listWorkspaceMemberships()`.
+   * Follows `nextCursor` until the server reports no further page. The cursor is opaque
+   * and carries a position, never authority — each page re-applies the key's full scope.
+   */
+  async *listWorkspaceMembershipsAll(query: DirectoryListWorkspaceMembershipsQuery = {}, options: RequestOptions = {}): AsyncGenerator<DirectoryWorkspaceMembershipPage['items'][number]> {
+    let cursor: string | undefined = query.cursor
+    for (;;) {
+      const page = await this.listWorkspaceMemberships({ ...query, cursor }, options)
+      for (const item of page.items) yield item
+      if (!page.nextCursor) return
+      if (page.nextCursor === cursor) throw repeatedCursorError()
+      cursor = page.nextCursor
+    }
+  }
+
+  /**
+   * List the account's workspaces
+   * A keyset-paged snapshot of the account’s workspaces (the ones the key reaches). Every page of one walk reports the same `asOfSeq`; after the last page, replay the change feed from it to pick up anything that changed while paging.
+   * `GET /api/v1/directory/workspaces` — operation `listDirectoryWorkspaces`.
+   */
+  listWorkspaces(query: DirectoryListWorkspacesQuery = {}, options: RequestOptions = {}): Promise<DirectoryWorkspacePage> {
+    return this.#transport.request<DirectoryWorkspacePage>({
+      method: 'GET',
+      path: `/api/v1/directory/workspaces`,
+      query,
+      options,
+    })
+  }
+
+  /**
+   * Every `items` across every page of `listWorkspaces()`.
+   * Follows `nextCursor` until the server reports no further page. The cursor is opaque
+   * and carries a position, never authority — each page re-applies the key's full scope.
+   */
+  async *listWorkspacesAll(query: DirectoryListWorkspacesQuery = {}, options: RequestOptions = {}): AsyncGenerator<DirectoryWorkspacePage['items'][number]> {
+    let cursor: string | undefined = query.cursor
+    for (;;) {
+      const page = await this.listWorkspaces({ ...query, cursor }, options)
+      for (const item of page.items) yield item
+      if (!page.nextCursor) return
+      if (page.nextCursor === cursor) throw repeatedCursorError()
+      cursor = page.nextCursor
+    }
+  }
+}
+
 /** The platform's own improvement backlog: every post-run grading of an agent step, with the agent kind, model, prompt version and run it came from, what the grader recommended changing, and whether anybody has acted on it yet. Reading takes a `read` key and acknowledging one a `write` key: neither runs anything. */
 export class KaizenResource {
   readonly #transport: Transport
@@ -2641,6 +2856,8 @@ export abstract class CatFactoryResources {
   readonly evidence: EvidenceResource
   /** The evidence behind the auto-merge policy: what kind of change each merged run made, what the merger scored it, what happened to the pull request, and how much review a human actually spent, plus the per-class rollups that justify widening a rule. Reading takes a `read` key and recording an effort tag a `write` one: neither merges anything. */
   readonly mergeRecords: MergeRecordsResource
+  /** The account's directory, for keeping an external copy in sync: workspaces, users, account and workspace memberships, and linked repositories as keyset-paged snapshots, plus the ordered change feed that brings a copy up to date. Everything here takes a `read` key; users and account memberships need one that reaches every workspace. */
+  readonly directory: DirectoryResource
   /** The platform's own improvement backlog: every post-run grading of an agent step, with the agent kind, model, prompt version and run it came from, what the grader recommended changing, and whether anybody has acted on it yet. Reading takes a `read` key and acknowledging one a `write` key: neither runs anything. */
   readonly kaizen: KaizenResource
   /** Guided pull request review: a structured explanation of a PR (what it does, meaningful changes, consequences, risks, where to focus, suggested questions), independent question threads answered by a model that reads the PR at the reviewed commit, and comment drafts placed on the lines they are about. Following a review takes a `read` key; opening one, asking, drafting and posting drafts take a `write` key. Posting publishes plain comments on the pull request and never approves or requests changes. */
@@ -2672,6 +2889,7 @@ export abstract class CatFactoryResources {
     this.debug = new DebugResource(transport)
     this.evidence = new EvidenceResource(transport)
     this.mergeRecords = new MergeRecordsResource(transport)
+    this.directory = new DirectoryResource(transport)
     this.kaizen = new KaizenResource(transport)
     this.guidedReviews = new GuidedReviewsResource(transport)
     this.keys = new KeysResource(transport)

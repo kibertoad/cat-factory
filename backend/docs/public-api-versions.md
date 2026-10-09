@@ -451,3 +451,14 @@ listing, mint or request acted on. What a consumer notices only once it holds a 
 that names no workspace is refused with 422 `details.reason: workspace_required`, and a workspace
 outside the key's reach answers 404 `workspace_not_found`. A key can never mint or revoke a key
 reaching further than itself (403 `workspace_reach_exceeded`).
+
+## 1.80.0
+
+`/api/v1/directory/*` is new: an account's workspaces, users, account memberships, workspace
+memberships and linked repositories, as keyset-paged snapshots plus an ordered change feed
+(`GET /api/v1/directory/changes?after=<seq>`), for an integration keeping its own copy in sync.
+
+Additive: six `read` operations and the shapes they carry. The routes are account-scoped and read no
+`x-cat-factory-workspace` header; a key limited to some workspaces sees those workspaces' entities
+and is refused users and account memberships (`403 account_scope_required`). `ConflictError`
+reasons gain `cursor_expired`, for a feed cursor older than the feed's retention.

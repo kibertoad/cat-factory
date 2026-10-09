@@ -125,6 +125,7 @@ import { D1SpendRollupRepository } from './repositories/D1SpendRollupRepository'
 import { D1TokenUsageRepository } from './repositories/D1TokenUsageRepository'
 import { D1UserRepoAccessRepository } from './repositories/D1UserRepoAccessRepository'
 import { D1UserRepository } from './repositories/D1UserRepository'
+import { D1DirectoryRepository } from './repositories/D1DirectoryRepository'
 import { D1WorkspaceMemberRepository } from './repositories/D1WorkspaceMemberRepository'
 import { D1WorkspaceMountRepository } from './repositories/D1WorkspaceMountRepository'
 import { D1WorkspaceRepository } from './repositories/D1WorkspaceRepository'
@@ -458,6 +459,7 @@ function selectWorkerCorePersistence(
   | 'accountRepository'
   | 'membershipRepository'
   | 'userRepository'
+  | 'directoryRepository'
   | 'passwordHasher'
   | 'blockRepository'
   | 'pipelineRepository'
@@ -474,6 +476,7 @@ function selectWorkerCorePersistence(
     accountRepository: new D1AccountRepository({ db }),
     membershipRepository: new D1MembershipRepository({ db }),
     userRepository: new D1UserRepository({ db }),
+    directoryRepository: new D1DirectoryRepository({ db }),
     passwordHasher: new WebCryptoPasswordHasher(),
     blockRepository: new D1BlockRepository({ db }),
     pipelineRepository: new D1PipelineRepository({ db }),

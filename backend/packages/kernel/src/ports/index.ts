@@ -785,7 +785,12 @@ export type {
   AuditRecorder,
 } from './audit.js'
 export { noopAuditRecorder } from './audit.js'
-export type { DirectoryChangeRecord, DirectoryChangeRepository } from './directory-changes.js'
+export type {
+  DirectoryChangeRecord,
+  DirectoryRepoKey,
+  DirectoryRepository,
+  WorkspaceMembershipKey,
+} from './directory-changes.js'
 export type {
   UserSecretRecord,
   UserSecretRepository,

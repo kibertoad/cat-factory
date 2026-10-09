@@ -115,6 +115,29 @@ export async function authorize<E extends AppEnv>(
 }
 
 /**
+ * {@link authorize} for an ACCOUNT-scoped route (the directory surface): the key and its scope, with
+ * no workspace resolved and no `x-cat-factory-workspace` header read. The handler applies the key's
+ * workspace reach itself, because what a restricted key may see there is a filter, not a refusal.
+ */
+export async function authorizeAccount<E extends AppEnv>(
+  c: Context<E>,
+  need: PublicApiScope,
+): Promise<{ auth: PublicApiKeyIdentity } | { fail: KeyFailure }> {
+  const result = await resolveKey(c)
+  if ('fail' in result) return result
+  if (!scopeSatisfies(result.auth.scope, need)) {
+    return {
+      fail: {
+        status: 403,
+        code: 'insufficient_scope',
+        message: `This action requires a '${need}'-scope key; this key is scoped '${result.auth.scope}'`,
+      },
+    }
+  }
+  return result
+}
+
+/**
  * The workspace a request acts on: the one the {@link PUBLIC_API_WORKSPACE_HEADER} header names, or
  * the key's only workspace when it has exactly one (every key minted before keys could span
  * workspaces). A restricted key's grants were checked against its account at mint, and a board

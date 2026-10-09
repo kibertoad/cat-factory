@@ -28,7 +28,7 @@ public record ListPublicRiskPoliciesResponsePolicy(
 
     @JsonProperty("ciMaxAttempts") Double ciMaxAttempts,
 
-    @JsonProperty("dryRunRoles") List<ListPublicRiskPoliciesResponsePolicyDryRunRole> dryRunRoles,
+    @JsonProperty("dryRunRoles") List<DirectoryWorkspaceMembershipRole> dryRunRoles,
 
     @JsonProperty("isDefault") Boolean isDefault,
 
@@ -38,7 +38,7 @@ public record ListPublicRiskPoliciesResponsePolicy(
 
     @JsonProperty("policyId") String policyId,
 
-    @JsonProperty("submissionRestrictedRoles") List<ListPublicRiskPoliciesResponsePolicyDryRunRole> submissionRestrictedRoles
+    @JsonProperty("submissionRestrictedRoles") List<DirectoryWorkspaceMembershipRole> submissionRestrictedRoles
 ) {
 
     /** A new builder for {@link ListPublicRiskPoliciesResponsePolicy}. */
@@ -56,12 +56,12 @@ public record ListPublicRiskPoliciesResponsePolicy(
         private @Nullable Boolean autoMergeEnabled;
         private @Nullable ListPublicRiskPoliciesResponsePolicyAutonomy autonomy;
         private @Nullable Double ciMaxAttempts;
-        private @Nullable List<ListPublicRiskPoliciesResponsePolicyDryRunRole> dryRunRoles;
+        private @Nullable List<DirectoryWorkspaceMembershipRole> dryRunRoles;
         private @Nullable Boolean isDefault;
         private @Nullable Boolean isUnattendedDefault;
         private @Nullable String name;
         private @Nullable String policyId;
-        private @Nullable List<ListPublicRiskPoliciesResponsePolicyDryRunRole> submissionRestrictedRoles;
+        private @Nullable List<DirectoryWorkspaceMembershipRole> submissionRestrictedRoles;
 
         /** Set {@code autoMergeEnabled}. */
         public Builder autoMergeEnabled(@Nullable Boolean autoMergeEnabled) {
@@ -82,7 +82,7 @@ public record ListPublicRiskPoliciesResponsePolicy(
         }
 
         /** Set {@code dryRunRoles}. */
-        public Builder dryRunRoles(@Nullable List<ListPublicRiskPoliciesResponsePolicyDryRunRole> dryRunRoles) {
+        public Builder dryRunRoles(@Nullable List<DirectoryWorkspaceMembershipRole> dryRunRoles) {
             this.dryRunRoles = dryRunRoles;
             return this;
         }
@@ -112,7 +112,7 @@ public record ListPublicRiskPoliciesResponsePolicy(
         }
 
         /** Set {@code submissionRestrictedRoles}. */
-        public Builder submissionRestrictedRoles(@Nullable List<ListPublicRiskPoliciesResponsePolicyDryRunRole> submissionRestrictedRoles) {
+        public Builder submissionRestrictedRoles(@Nullable List<DirectoryWorkspaceMembershipRole> submissionRestrictedRoles) {
             this.submissionRestrictedRoles = submissionRestrictedRoles;
             return this;
         }

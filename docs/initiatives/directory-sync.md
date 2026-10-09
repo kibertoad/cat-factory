@@ -103,8 +103,8 @@ to their one workspace, so their behaviour is unchanged.
 ### Public read API
 
 - `GET /api/v1/directory/changes?after=<seq>&limit=` returns hydrated changes and `nextAfter`. A
-  cursor older than retention is refused with a 410-class error, `details.reason: cursor_expired`,
-  which tells the client to reconcile from a snapshot.
+  cursor older than retention, or ahead of the feed, is refused with `409`,
+  `details.reason: cursor_expired`, which tells the client to reconcile from a snapshot.
 - `GET /api/v1/directory/{workspaces,users,account-memberships,workspace-memberships,repos}`:
   keyset-paged snapshots. Every page carries the same `asOfSeq`, captured with the first page and
   echoed in the cursor; the client replays the feed from it after the last page.
@@ -144,8 +144,11 @@ gatekeeper-worker into a shared `@cat-factory/webhooks` package both depend on.
       `public_api_key_workspaces` grants plus `all_workspaces` (D1 0108, Drizzle), per-request
       workspace resolution in `authorize`, `workspaceIds` on the key and `/me`, the reach picker in
       the token panel, a workspace option on the four SDK clients, `definePublicKeyReachSuite`.
-- [ ] **Slice 3: public directory read API.** Hydration, snapshot and changes endpoints, retention
-      pruning on both schedulers, `cursor_expired`, OpenAPI plus SDK regeneration, website page.
+- [x] **Slice 3: public directory read API** (PR link added when opened). `DirectoryRepository`
+      (feed reads, keyset snapshots, batched hydration, prune) on both runtimes and in the
+      mothership allow-list, `DirectoryService`, `/api/v1/directory/*`,
+      `DIRECTORY_CHANGE_RETENTION_DAYS` on both sweeps, OpenAPI 1.80.0,
+      `definePublicDirectorySuite`.
 - [ ] **Slice 4: `directory.*` webhooks.** Account-level endpoints, post-commit fan-out, delivery
       envelopes in the OpenAPI `webhooks` section.
 - [ ] **Slice 5: `@cat-factory/webhooks` and `@cat-factory/directory-sync`.** Extract verification

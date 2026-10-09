@@ -2909,6 +2909,41 @@ The omission is `422`: a service with no linked repository cannot be reached dow
 a run resolved a repository to push to before it could exist. A repository that becomes unreadable
 answers `503 spec_read_failed` here, as everywhere else on this surface.
 
+### Directory (`/api/v1/directory/*`)
+
+An account's workspaces, users, account memberships, workspace memberships and linked
+repositories, for an integration that keeps its own copy in sync. All `read` scope, and
+account-scoped: no `x-cat-factory-workspace` header is read.
+
+| Method / path                                 | Behaviour                                                     |
+| --------------------------------------------- | ------------------------------------------------------------- |
+| `GET /api/v1/directory/workspaces`            | Snapshot page of the workspaces the key reaches.              |
+| `GET /api/v1/directory/users`                 | Snapshot page of users holding a membership in the account.   |
+| `GET /api/v1/directory/account-memberships`   | Snapshot page of account memberships with their roles.        |
+| `GET /api/v1/directory/workspace-memberships` | Snapshot page of workspace memberships with their roles.      |
+| `GET /api/v1/directory/repos`                 | Snapshot page of linked repositories, once per linking board. |
+| `GET /api/v1/directory/changes?after=<seq>`   | Changes after the cursor, in order, with each entity's state. |
+
+The snapshots are keyset-paged (`cursor`, `limit` up to 100) and every page of one walk reports the
+same `asOfSeq`: the feed position captured before the first page. After the last page, replay the
+change feed from `asOfSeq`, which picks up anything that changed while paging.
+
+The feed returns `{ changes, nextAfter, headSeq }`. Each change names an entity (`entityType`,
+`workspaceId`, `entityId`) and carries its **current** state in `entity`, or `null` once the
+entity no longer exists or is out of the key's reach, which is how a deletion arrives. Applying
+changes in order converges on the source even when one is read long after it happened. Store
+`nextAfter` and pass it back as `after`; `nextAfter === headSeq` means caught up. Changes the key
+cannot see are skipped, so `seq` values arrive with gaps.
+
+Changes are kept for `DIRECTORY_CHANGE_RETENTION_DAYS` (default 30). A cursor older than that, or
+ahead of the feed, is refused with `409` and `details.reason: cursor_expired`: take a fresh
+snapshot and follow the feed from its `asOfSeq`.
+
+A key limited to some workspaces sees workspace, workspace-membership and repository entities of
+those workspaces only, and is refused users and account memberships (`403`,
+`details.reason: account_scope_required`). Mint an account-wide key for a full directory mirror.
+Design: [`docs/initiatives/directory-sync.md`](../../docs/initiatives/directory-sync.md).
+
 ### Key provisioning (`/api/v1/keys`)
 
 The external counterpart of the key panel, so a deployment whose operator is headless can mint the

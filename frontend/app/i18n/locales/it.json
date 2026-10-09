@@ -6426,7 +6426,8 @@
         "delegated_claim_missing": "Questo passo non ha lavoro esterno da controllare",
         "thread_busy": "Questa discussione sta ancora rispondendo",
         "draft_conflict": "Questa bozza è cambiata",
-        "session_stale": "La pull request è andata avanti"
+        "session_stale": "La pull request è andata avanti",
+        "cursor_expired": "Il feed delle modifiche ha superato questo cursore"
       },
       "description": {
         "dependencies_unmet": "Questa attività dipende da altre non ancora completate. Completale o sbloccale, poi avviala di nuovo.",
@@ -6486,7 +6487,8 @@
         "delegated_claim_missing": "Manca la registrazione di ciò che l’esecuzione ha inviato all’esecutore esterno, quindi non c’è nulla da interrogare. L’esecutore in sé non ha alcun problema. Ricarica l’esecuzione e rilancia il passo se resta bloccato.",
         "thread_busy": "La domanda precedente in questa discussione non ha ancora una risposta. Attendi la risposta o chiedi in un'altra discussione.",
         "draft_conflict": "Questa bozza di commento è stata modificata, pubblicata o scartata da quando l'hai caricata. Ricarica le bozze e ripeti la modifica.",
-        "session_stale": "Sono arrivati nuovi commit dopo la preparazione di questa revisione, quindi le bozze potrebbero puntare alle righe sbagliate. Aggiorna la revisione, controlla le bozze e poi pubblica."
+        "session_stale": "Sono arrivati nuovi commit dopo la preparazione di questa revisione, quindi le bozze potrebbero puntare alle righe sbagliate. Aggiorna la revisione, controlla le bozze e poi pubblica.",
+        "cursor_expired": "Le modifiche successive a questo cursore non sono più conservate. Acquisisci una nuova istantanea della directory, poi segui il feed dalla posizione che riporta."
       },
       "action": {
         "connectGitHub": "Collega GitHub",

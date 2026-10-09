@@ -729,7 +729,8 @@
         "delegated_claim_missing": "Este paso no tiene trabajo externo que consultar",
         "thread_busy": "Este hilo todavía está respondiendo",
         "draft_conflict": "Este borrador ha cambiado",
-        "session_stale": "La pull request ha avanzado"
+        "session_stale": "La pull request ha avanzado",
+        "cursor_expired": "El registro de cambios ya superó este cursor"
       },
       "description": {
         "dependencies_unmet": "Esta tarea depende de otras que aún no están terminadas. Complétalas o desbloquéalas y vuelve a iniciarla.",
@@ -789,7 +790,8 @@
         "delegated_claim_missing": "Falta el registro de lo que la ejecución envió al ejecutor externo, así que no hay nada que consultar. El ejecutor en sí no tiene ningún problema. Recarga la ejecución y vuelve a lanzar el paso si sigue atascado.",
         "thread_busy": "La pregunta anterior de este hilo aún no tiene respuesta. Espera esa respuesta o pregunta en otro hilo.",
         "draft_conflict": "Este borrador de comentario se ha editado, publicado o descartado desde que lo cargaste. Vuelve a cargar los borradores y repite tu cambio.",
-        "session_stale": "Llegaron commits nuevos después de preparar esta revisión, así que sus borradores pueden apuntar a líneas equivocadas. Actualiza la revisión, revisa los borradores y luego publica."
+        "session_stale": "Llegaron commits nuevos después de preparar esta revisión, así que sus borradores pueden apuntar a líneas equivocadas. Actualiza la revisión, revisa los borradores y luego publica.",
+        "cursor_expired": "Los cambios posteriores a este cursor ya no se conservan. Toma una instantánea nueva del directorio y sigue el registro desde la posición que indique."
       },
       "action": {
         "connectGitHub": "Conectar GitHub",

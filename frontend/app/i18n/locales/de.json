@@ -6426,7 +6426,8 @@
         "delegated_claim_missing": "Für diesen Schritt gibt es keine externe Arbeit zu prüfen",
         "thread_busy": "Dieser Thread antwortet noch",
         "draft_conflict": "Dieser Entwurf hat sich geändert",
-        "session_stale": "Der Pull Request hat sich weiterentwickelt"
+        "session_stale": "Der Pull Request hat sich weiterentwickelt",
+        "cursor_expired": "Der Änderungsfeed ist über diesen Cursor hinaus"
       },
       "description": {
         "dependencies_unmet": "Diese Aufgabe hängt von anderen ab, die noch nicht abgeschlossen sind. Schließe sie ab oder gib sie frei und starte dann erneut.",
@@ -6486,7 +6487,8 @@
         "delegated_claim_missing": "Der Eintrag des Laufs darüber, was an den externen Executor geschickt wurde, fehlt, also gibt es nichts abzufragen. Am Executor selbst ist nichts falsch. Lade den Lauf neu und starte den Schritt erneut, falls er weiterhin hängt.",
         "thread_busy": "Die vorherige Frage in diesem Thread ist noch nicht beantwortet. Warte auf die Antwort oder frag in einem anderen Thread.",
         "draft_conflict": "Dieser Kommentarentwurf wurde seit dem Laden bearbeitet, gepostet oder verworfen. Lade die Entwürfe neu und nimm deine Änderung erneut vor.",
-        "session_stale": "Nach der Vorbereitung dieser Review kamen neue Commits hinzu, daher zeigen die Entwürfe möglicherweise auf falsche Zeilen. Aktualisiere die Review, prüfe die Entwürfe und poste dann."
+        "session_stale": "Nach der Vorbereitung dieser Review kamen neue Commits hinzu, daher zeigen die Entwürfe möglicherweise auf falsche Zeilen. Aktualisiere die Review, prüfe die Entwürfe und poste dann.",
+        "cursor_expired": "Die Änderungen nach diesem Cursor werden nicht mehr aufbewahrt. Erstelle einen neuen Snapshot des Verzeichnisses und folge dem Feed ab der Position, die er meldet."
       },
       "action": {
         "connectGitHub": "GitHub verbinden",

@@ -1,5 +1,6 @@
 import {
   type ConformanceHarness,
+  definePublicDirectorySuite,
   definePublicKeyReachSuite,
   defineWorkspaceAccessSuite,
   defineWorkspaceRbacSuite,
@@ -24,6 +25,7 @@ if (databaseUrl) {
   defineWorkspaceAccessSuite(harness)
   defineWorkspaceRbacSuite(harness)
   definePublicKeyReachSuite(harness)
+  definePublicDirectorySuite(harness)
 } else {
   describe.skip('[node] workspace access (set DATABASE_URL to run)', () => {
     it('requires Postgres', () => {})
