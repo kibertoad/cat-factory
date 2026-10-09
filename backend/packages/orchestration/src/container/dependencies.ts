@@ -213,7 +213,7 @@ export interface CoreDependencies extends ContentLibraryDependencies {
   /** Canonical user identity (`users` + `user_identities`); keyed off by everything. */
   userRepository: UserRepository
   /**
-   * The directory read side and change feed (docs/initiatives/directory-sync.md). Required: the
+   * The directory read side and change feed (backend/docs/adr/0067-directory-sync.md). Required: the
    * feed rows are written by the repositories above on every facade, and a facade that wired no
    * reader would publish an API that 503s over data it is recording anyway.
    */

@@ -21,7 +21,7 @@ import {
 import { fanOutSignedWebhook } from '../notificationWebhook/signedDelivery.js'
 import { assertSafeNotificationWebhookUrl } from '../notificationWebhook/webhookUrl.js'
 
-// Directory webhooks (docs/initiatives/directory-sync.md, slice 4): account-level endpoints that
+// Directory webhooks (backend/docs/adr/0067-directory-sync.md): account-level endpoints that
 // receive the directory change feed as signed pushes, so a mirror learns of a change within one
 // sweep interval instead of on its next poll.
 //

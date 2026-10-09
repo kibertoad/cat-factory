@@ -119,6 +119,8 @@ packages:
   # Not a projection like its two neighbours: the hand-written Gatekeeper Worker machinery a
   # deployment installs, beside the generated table it enforces policy with.
   - 'sdk/gatekeeper-worker'
+  - 'sdk/webhooks'
+  - 'sdk/directory-sync'
 allowBuilds:
   '@parcel/watcher': true
   esbuild: true

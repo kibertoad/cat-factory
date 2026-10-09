@@ -11,7 +11,7 @@ import type {
 // ---------------------------------------------------------------------------
 // The directory: an account's workspaces, users, memberships and linked repositories as an
 // external system mirrors them, plus the ordered change feed that keeps the mirror current.
-// Design: docs/initiatives/directory-sync.md.
+// Design: backend/docs/adr/0067-directory-sync.md.
 //
 // The feed records WHICH entity changed and never its state; a reader hydrates the current state
 // through the `get*` methods and serves an entity that no longer exists as a deletion. That is what

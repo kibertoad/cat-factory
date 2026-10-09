@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { ConformanceApp, ConformanceHarness } from './harness.js'
 
 // Cross-runtime conformance for the public DIRECTORY surface (`/api/v1/directory/*`, directory
-// sync slice 3), driven over HTTP with real keys so the controller, `DirectoryService` and each
+// sync, ADR 0067), driven over HTTP with real keys so the controller, `DirectoryService` and each
 // facade's `DirectoryRepository` are exercised together. The repository's own SQL is pinned by
 // `defineDirectoryFeedSuite`; what belongs here is what only the assembled surface can get wrong:
 // the snapshot watermark carried across pages, a feed that serves the CURRENT state (or `null`)

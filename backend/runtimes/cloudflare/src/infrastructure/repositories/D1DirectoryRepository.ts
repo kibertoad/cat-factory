@@ -16,7 +16,7 @@ import {
 import type { D1Database } from '@cloudflare/workers-types'
 import { chunkForIn } from './chunk'
 
-// The directory read side over D1 (docs/initiatives/directory-sync.md). Mirror of the Node
+// The directory read side over D1 (backend/docs/adr/0067-directory-sync.md). Mirror of the Node
 // facade's `DrizzleDirectoryRepository`; `defineDirectoryFeedSuite` and
 // `defineDirectoryReadSuite` hold the two to one behaviour. The feed rows themselves are appended
 // by the writing repositories through `directoryFeed.ts`.

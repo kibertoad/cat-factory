@@ -2954,7 +2954,7 @@ Pushes are at-least-once: dedupe on `deliveryId`, and keep polling the feed now 
 push the receiver never acknowledged is retried but one it lost after acknowledging is not.
 Directory webhooks are managed and delivered by the deployment itself, never by a mothership-mode
 node, which answers 503 for these three routes.
-Design: [`docs/initiatives/directory-sync.md`](../../docs/initiatives/directory-sync.md).
+Design: [ADR 0067](./adr/0067-directory-sync.md).
 
 ### Key provisioning (`/api/v1/keys`)
 

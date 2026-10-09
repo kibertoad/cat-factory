@@ -52,9 +52,11 @@ the backend's hosted `POST /api/v1/mcp`, mounted from this same package. `sdk/ga
 third projection from the same generator: a **policy-annotated operation table** (per-operation
 key-scope floors, mutation and transport metadata, invoke thunks over the TypeScript client) for
 credential-holding front-ends such as a Cloudflare OS Gatekeeper; see the
-[design record](../backend/docs/adr/0052-cloudflare-os-gatekeeper.md). `sdk/gatekeeper-worker` is
-the one member here that is hand-written rather than projected: the **Gatekeeper Worker
-machinery** a deployment installs (capabilities compiled from that table, the Cloudflare OS object
+[design record](../backend/docs/adr/0052-cloudflare-os-gatekeeper.md). Three members are
+hand-written rather than projected: `sdk/webhooks`, the **signed-delivery verifier** every receiver
+uses; `sdk/directory-sync`, which keeps an account's **directory in sync** over a storage adapter
+the integrator writes; and `sdk/gatekeeper-worker`, the **Gatekeeper Worker machinery** a
+deployment installs (capabilities compiled from that table, the Cloudflare OS object
 model and approval queue in front of them, per-actor key minting, the verified webhook receiver and
 the approval inbox), leaving `deploy/gatekeeper` as a template holding only the policy and the
 bindings. Design notes, the Java/Kotlin story and the
@@ -69,6 +71,8 @@ release process: [`sdk/README.md`](../sdk/README.md).
 | [`sdk/mcp`](../sdk/mcp)                             | `@cat-factory/mcp-server`                 | npm (versioned by changesets)               |
 | [`sdk/gatekeeper`](../sdk/gatekeeper)               | `@cat-factory/gatekeeper-bindings`        | npm (versioned by changesets)               |
 | [`sdk/gatekeeper-worker`](../sdk/gatekeeper-worker) | `@cat-factory/gatekeeper-worker`          | npm (versioned by changesets)               |
+| [`sdk/webhooks`](../sdk/webhooks)                   | `@cat-factory/webhooks`                   | npm (versioned by changesets)               |
+| [`sdk/directory-sync`](../sdk/directory-sync)       | `@cat-factory/directory-sync`             | npm (versioned by changesets)               |
 
 **AWS-stack packages** (opt-in): three independent, capability-scoped AWS integrations, each
 registering into its own seam and sharing no dependencies, so a deployment pulls in only what it

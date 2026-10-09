@@ -25,7 +25,7 @@ import {
   workspaces,
 } from '../db/schema.js'
 
-// The directory read side over Postgres (docs/initiatives/directory-sync.md). Mirror of the
+// The directory read side over Postgres (backend/docs/adr/0067-directory-sync.md). Mirror of the
 // Cloudflare facade's `D1DirectoryRepository`; `defineDirectoryFeedSuite` and
 // `defineDirectoryReadSuite` hold the two to one behaviour. The feed rows themselves are appended
 // by the writing repositories through `directoryFeed.ts`.

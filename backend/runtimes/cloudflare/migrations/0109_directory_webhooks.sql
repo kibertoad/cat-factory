@@ -1,5 +1,5 @@
 -- Account-level endpoints that receive the directory change feed as signed pushes
--- (docs/initiatives/directory-sync.md, slice 4). `delivered_seq` is the feed position pushed
+-- (backend/docs/adr/0067-directory-sync.md). `delivered_seq` is the feed position pushed
 -- through; the delivery sweep advances it with a compare-and-swap before each push and moves it
 -- back when the push fails, so a page is never sent twice concurrently and a failure is retried.
 CREATE TABLE directory_webhooks (

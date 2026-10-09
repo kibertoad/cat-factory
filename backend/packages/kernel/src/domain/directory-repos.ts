@@ -1,6 +1,6 @@
 import type { GitHubRepo } from '@cat-factory/contracts'
 
-// Which repo projection writes are directory changes (docs/initiatives/directory-sync.md). Repo
+// Which repo projection writes are directory changes (backend/docs/adr/0067-directory-sync.md). Repo
 // sync re-upserts every row on every pass and re-stamps `synced_at`, so recording each upsert would
 // flood the feed with changes nobody can observe. Both facades decide through this one rule.
 
