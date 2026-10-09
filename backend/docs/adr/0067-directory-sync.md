@@ -103,8 +103,8 @@ and keep deletions as tombstones.
   account-admin configuration the role-blind machine token may not reach, and delivery is the
   mothership's own sweep; the node answers 503 for those routes. The directory reads are on the
   persistence RPC allow-list, account-bound.
-- **The run and notification delivery envelopes are not in the spec's `webhooks` section** yet; only
-  `DirectoryWebhookDelivery` is.
+- **Every push body is in the spec's OpenAPI 3.1 `webhooks` section** (`scripts/openapi/webhooks.mjs`):
+  a new delivery family adds its entry there and its component, or no client can type it.
 - Delivered in [#2307](https://github.com/kibertoad/cat-factory/pull/2307) (feed),
   [#2308](https://github.com/kibertoad/cat-factory/pull/2308) (account keys),
   [#2309](https://github.com/kibertoad/cat-factory/pull/2309) (read API),
