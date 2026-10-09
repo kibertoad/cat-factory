@@ -1,5 +1,11 @@
 import { randomUUID } from 'node:crypto'
-import { type DrizzleDb, createDbClient, schema } from '@cat-factory/node-server'
+import {
+  type DrizzleDb,
+  DrizzleRepoProjectionRepository,
+  createDbClient,
+  schema,
+} from '@cat-factory/node-server'
+import type { RepoProjectionRepository } from '@cat-factory/kernel'
 import { and, eq, ne } from 'drizzle-orm'
 import { syntheticInstallationId } from './installations.js'
 
@@ -40,6 +46,8 @@ export interface LinkRepoOptions {
   env?: NodeJS.ProcessEnv
   /** Injectable fetch (tests). */
   fetchImpl?: typeof fetch
+  /** The repo projection the link is written through; defaults to the Drizzle one over `db`. */
+  repoProjection?: RepoProjectionRepository
 }
 
 export interface LinkedRepo {
@@ -132,31 +140,26 @@ export async function linkRepo(options: LinkRepoOptions): Promise<LinkedRepo> {
       set: installationValues,
     })
 
-    const repoValues = {
-      workspace_id: options.workspaceId,
-      github_id: meta.id,
-      installation_id: installationId,
-      owner,
-      name,
-      default_branch: defaultBranch,
-      private: meta.private ? 1 : 0,
-      is_monorepo: 0,
-      // Local mode's single `GITHUB_PAT` is the workspace-wide credential every member
-      // shares (its analogue of the shared App installation), so a linked repo is
-      // `'app'`-reachable, not a per-user `'user_pat'` repo.
-      linked_via: 'app',
-      provider: 'github',
-      etag: null,
-      synced_at: now,
-      deleted_at: null,
-    }
-    await db
-      .insert(schema.githubRepos)
-      .values(repoValues)
-      .onConflictDoUpdate({
-        target: [schema.githubRepos.workspace_id, schema.githubRepos.github_id],
-        set: repoValues,
-      })
+    // Through the repository rather than a direct insert, so the link is recorded on the
+    // directory change feed like every other projection write.
+    const repoProjection = options.repoProjection ?? new DrizzleRepoProjectionRepository(db)
+    await repoProjection.upsertMany(options.workspaceId, [
+      {
+        githubId: meta.id,
+        installationId,
+        owner,
+        name,
+        defaultBranch,
+        private: Boolean(meta.private),
+        isMonorepo: false,
+        // Local mode's single `GITHUB_PAT` is the workspace-wide credential every member
+        // shares (its analogue of the shared App installation), so a linked repo is
+        // `'app'`-reachable, not a per-user `'user_pat'` repo.
+        linkedVia: 'app',
+        provider: 'github',
+        syncedAt: now,
+      },
+    ])
 
     // Bind the frame's account-owned Service to the repo — the sole linkage
     // `resolveRepoTarget` reads. Update the service the board created for the frame; if

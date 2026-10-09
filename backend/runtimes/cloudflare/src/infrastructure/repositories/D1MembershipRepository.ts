@@ -1,5 +1,6 @@
 import type { AccountRole, Membership, MembershipRepository } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
+import { accountMembershipSource, appendDirectoryChanges } from './directoryFeed'
 
 interface MembershipRow {
   account_id: string
@@ -59,24 +60,32 @@ export class D1MembershipRepository implements MembershipRepository {
   }
 
   async upsert(membership: Membership): Promise<void> {
-    await this.db
-      .prepare(
-        `INSERT INTO memberships (account_id, user_id, roles, created_at) VALUES (?, ?, ?, ?)
-         ON CONFLICT (account_id, user_id) DO UPDATE SET roles = excluded.roles`,
-      )
-      .bind(
-        membership.accountId,
-        membership.userId,
-        membership.roles.join(','),
-        membership.createdAt,
-      )
-      .run()
+    await this.db.batch([
+      this.db
+        .prepare(
+          `INSERT INTO memberships (account_id, user_id, roles, created_at) VALUES (?, ?, ?, ?)
+           ON CONFLICT (account_id, user_id) DO UPDATE SET roles = excluded.roles`,
+        )
+        .bind(
+          membership.accountId,
+          membership.userId,
+          membership.roles.join(','),
+          membership.createdAt,
+        ),
+      appendDirectoryChanges(
+        this.db,
+        accountMembershipSource(membership.accountId, membership.userId),
+        Date.now(),
+      ),
+    ])
   }
 
   async remove(accountId: string, userId: string): Promise<void> {
-    await this.db
-      .prepare('DELETE FROM memberships WHERE account_id = ? AND user_id = ?')
-      .bind(accountId, userId)
-      .run()
+    await this.db.batch([
+      appendDirectoryChanges(this.db, accountMembershipSource(accountId, userId), Date.now()),
+      this.db
+        .prepare('DELETE FROM memberships WHERE account_id = ? AND user_id = ?')
+        .bind(accountId, userId),
+    ])
   }
 }

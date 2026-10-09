@@ -50,6 +50,7 @@ a tracker document](../../AGENTS.md).
 - [Configurable per-agent-kind output budgets](./configurable-agent-output-budgets.md)
 - [Custom initiative definitions (org-registered presets)](./custom-initiative-definitions.md)
 - [Delegated executors (embedding lower-level orchestration under cat-factory)](./delegated-executors.md)
+- [Directory sync for external systems (change feed, webhooks, reconciliation)](./directory-sync.md)
 - [Judge registry (the verdict-gate family)](./judge-registry.md)
 - [Library frame support](./library-frame-support.md)
 - [Monorepo service bootstrap (adoption review)](./monorepo-service-bootstrap.md)

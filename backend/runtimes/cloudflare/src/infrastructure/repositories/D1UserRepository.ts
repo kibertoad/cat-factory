@@ -5,6 +5,7 @@ import type {
   UserRepository,
 } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
+import { appendDirectoryChanges, userSource } from './directoryFeed'
 
 interface UserRow {
   id: string
@@ -83,10 +84,10 @@ export class D1UserRepository implements UserRepository {
       binds.push(patch.avatarUrl ?? null)
     }
     if (sets.length === 0) return
-    await this.db
-      .prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`)
-      .bind(...binds, id)
-      .run()
+    await this.db.batch([
+      this.db.prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`).bind(...binds, id),
+      appendDirectoryChanges(this.db, userSource(id), Date.now()),
+    ])
   }
 
   async findByIdentity(provider: IdentityProvider, subject: string): Promise<UserRecord | null> {

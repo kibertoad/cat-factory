@@ -35,6 +35,12 @@ import type {
   UserRepository,
 } from '@cat-factory/kernel'
 import {
+  accountMembershipSource,
+  appendDirectoryChanges,
+  lockDirectoryFeed,
+  userSource,
+} from '../directoryFeed.js'
+import {
   auditEventColumns,
   auditPageLimit,
   decodeAuditCursor,
@@ -208,24 +214,32 @@ export class DrizzleMembershipRepository implements MembershipRepository {
   }
 
   async upsert(membership: Membership): Promise<void> {
-    await this.db
-      .insert(memberships)
-      .values({
-        account_id: membership.accountId,
-        user_id: membership.userId,
-        roles: membership.roles.join(','),
-        created_at: membership.createdAt,
-      })
-      .onConflictDoUpdate({
-        target: [memberships.account_id, memberships.user_id],
-        set: { roles: membership.roles.join(',') },
-      })
+    await this.db.transaction(async (tx) => {
+      const source = accountMembershipSource(membership.accountId, membership.userId)
+      await lockDirectoryFeed(tx, source)
+      await tx
+        .insert(memberships)
+        .values({
+          account_id: membership.accountId,
+          user_id: membership.userId,
+          roles: membership.roles.join(','),
+          created_at: membership.createdAt,
+        })
+        .onConflictDoUpdate({
+          target: [memberships.account_id, memberships.user_id],
+          set: { roles: membership.roles.join(',') },
+        })
+      await appendDirectoryChanges(tx, source, Date.now())
+    })
   }
 
   async remove(accountId: string, userId: string): Promise<void> {
-    await this.db
-      .delete(memberships)
-      .where(and(eq(memberships.account_id, accountId), eq(memberships.user_id, userId)))
+    await this.db.transaction(async (tx) => {
+      await appendDirectoryChanges(tx, accountMembershipSource(accountId, userId), Date.now())
+      await tx
+        .delete(memberships)
+        .where(and(eq(memberships.account_id, accountId), eq(memberships.user_id, userId)))
+    })
   }
 }
 
@@ -277,7 +291,11 @@ export class DrizzleUserRepository implements UserRepository {
     if ('email' in patch) set.email = patch.email
     if ('avatarUrl' in patch) set.avatar_url = patch.avatarUrl
     if (Object.keys(set).length === 0) return
-    await this.db.update(users).set(set).where(eq(users.id, id))
+    await this.db.transaction(async (tx) => {
+      await lockDirectoryFeed(tx, userSource(id))
+      await tx.update(users).set(set).where(eq(users.id, id))
+      await appendDirectoryChanges(tx, userSource(id), Date.now())
+    })
   }
 
   async findByIdentity(provider: IdentityProvider, subject: string): Promise<UserRecord | null> {

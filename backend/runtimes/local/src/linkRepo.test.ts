@@ -1,3 +1,4 @@
+import type { GitHubRepo, RepoProjectionRepository } from '@cat-factory/kernel'
 import { describe, expect, it, vi } from 'vitest'
 import { linkRepo } from './linkRepo.js'
 
@@ -53,6 +54,12 @@ function fakeDb() {
 describe('linkRepo', () => {
   it('fetches repo metadata with the PAT and seeds installation + repo + service rows', async () => {
     const { db, writes, deletes } = fakeDb()
+    const upserted: { workspaceId: string; repos: GitHubRepo[] }[] = []
+    const repoProjection = {
+      upsertMany: async (workspaceId: string, repos: GitHubRepo[]) => {
+        upserted.push({ workspaceId, repos })
+      },
+    } as unknown as RepoProjectionRepository
     const fetchImpl = vi.fn(
       async (_input: string | URL | Request, _init?: RequestInit) =>
         new Response(
@@ -72,6 +79,7 @@ describe('linkRepo', () => {
       pat: 'pat_x',
       db: db as never,
       fetchImpl: fetchImpl as unknown as typeof fetch,
+      repoProjection,
     })
 
     // Any stale installation row for the workspace (different id) is cleared first.
@@ -90,14 +98,28 @@ describe('linkRepo', () => {
     expect(result.defaultBranch).toBe('trunk')
     expect(result.private).toBe(true)
 
-    // The repo row: no block_id link (removed), attributed as an `'app'`-reachable repo
-    // (local mode's shared PAT), keyed to the synthetic installation id.
-    const repoRow = writes.map((w) => w.values).find((v) => 'default_branch' in v && 'name' in v)!
-    expect('block_id' in repoRow).toBe(false)
-    expect(repoRow.linked_via).toBe('app')
-    expect(repoRow.github_id).toBe(555)
-    expect(repoRow.installation_id).toBe(result.installationId)
-    expect(repoRow.private).toBe(1)
+    // The repo goes through the projection repository (so the directory feed records it),
+    // attributed as an `'app'`-reachable repo (local mode's shared PAT), keyed to the synthetic
+    // installation id.
+    expect(upserted).toEqual([
+      {
+        workspaceId: 'ws_1',
+        repos: [
+          {
+            githubId: 555,
+            installationId: result.installationId,
+            owner: 'acme',
+            name: 'widgets',
+            defaultBranch: 'trunk',
+            private: true,
+            isMonorepo: false,
+            linkedVia: 'app',
+            provider: 'github',
+            syncedAt: expect.any(Number),
+          },
+        ],
+      },
+    ])
 
     // The frame's Service is bound to the repo — the sole repo↔frame linkage.
     const serviceRow = writes.map((w) => w.values).find((v) => 'frame_block_id' in v)!

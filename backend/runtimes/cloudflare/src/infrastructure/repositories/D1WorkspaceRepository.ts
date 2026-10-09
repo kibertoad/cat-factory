@@ -7,6 +7,7 @@ import type {
 import { WORKSPACE_SCOPED_TABLES } from '@cat-factory/kernel'
 import type { Workspace, WorkspaceAccessMode } from '@cat-factory/contracts'
 import type { D1Database } from '@cloudflare/workers-types'
+import { appendDirectoryChanges, workspaceSource, workspaceTreeSource } from './directoryFeed'
 import { type WorkspaceRow, rowToWorkspace } from './mappers'
 import { chunkForIn } from './chunk'
 
@@ -130,14 +131,21 @@ export class D1WorkspaceRepository implements WorkspaceRepository {
   }
 
   async setAccessMode(id: string, mode: WorkspaceAccessMode): Promise<void> {
-    await this.db.prepare('UPDATE workspaces SET access_mode = ? WHERE id = ?').bind(mode, id).run()
+    await this.db.batch([
+      this.db.prepare('UPDATE workspaces SET access_mode = ? WHERE id = ?').bind(mode, id),
+      appendDirectoryChanges(this.db, workspaceSource(id), Date.now()),
+    ])
   }
 
   async linkAccount(id: string, accountId: string): Promise<void> {
-    await this.db
-      .prepare('UPDATE workspaces SET account_id = ? WHERE id = ?')
-      .bind(accountId, id)
-      .run()
+    // The board, its members and its repos leave the old account (if it had one) and appear in
+    // the new one, so both feeds record the whole tree: before the move and after it.
+    const at = Date.now()
+    await this.db.batch([
+      appendDirectoryChanges(this.db, workspaceTreeSource(id), at),
+      this.db.prepare('UPDATE workspaces SET account_id = ? WHERE id = ?').bind(accountId, id),
+      appendDirectoryChanges(this.db, workspaceTreeSource(id), at),
+    ])
   }
 
   async create(
@@ -145,30 +153,35 @@ export class D1WorkspaceRepository implements WorkspaceRepository {
     ownerUserId: string | null,
     accountId: string | null,
   ): Promise<void> {
-    await this.db
-      .prepare(
-        'INSERT INTO workspaces (id, name, description, created_at, owner_user_id, account_id) VALUES (?, ?, ?, ?, ?, ?)',
-      )
-      .bind(
-        workspace.id,
-        workspace.name,
-        workspace.description ?? null,
-        workspace.createdAt,
-        ownerUserId,
-        accountId,
-      )
-      .run()
+    await this.db.batch([
+      this.db
+        .prepare(
+          'INSERT INTO workspaces (id, name, description, created_at, owner_user_id, account_id) VALUES (?, ?, ?, ?, ?, ?)',
+        )
+        .bind(
+          workspace.id,
+          workspace.name,
+          workspace.description ?? null,
+          workspace.createdAt,
+          ownerUserId,
+          accountId,
+        ),
+      appendDirectoryChanges(this.db, workspaceSource(workspace.id), Date.now()),
+    ])
   }
 
   async rename(id: string, name: string): Promise<void> {
-    await this.db.prepare('UPDATE workspaces SET name = ? WHERE id = ?').bind(name, id).run()
+    await this.db.batch([
+      this.db.prepare('UPDATE workspaces SET name = ? WHERE id = ?').bind(name, id),
+      appendDirectoryChanges(this.db, workspaceSource(id), Date.now()),
+    ])
   }
 
   async setDescription(id: string, description: string | null): Promise<void> {
-    await this.db
-      .prepare('UPDATE workspaces SET description = ? WHERE id = ?')
-      .bind(description, id)
-      .run()
+    await this.db.batch([
+      this.db.prepare('UPDATE workspaces SET description = ? WHERE id = ?').bind(description, id),
+      appendDirectoryChanges(this.db, workspaceSource(id), Date.now()),
+    ])
   }
 
   async delete(id: string, rehome: ServiceRehome[] = []): Promise<void> {
@@ -205,6 +218,9 @@ export class D1WorkspaceRepository implements WorkspaceRepository {
       (table) => this.db.prepare(`DELETE FROM ${table} WHERE workspace_id = ?`).bind(id),
     )
     await this.db.batch([
+      // The directory feed records the board and every member and repo row the cascade below
+      // removes, while they still exist to be selected. `directory_changes` itself is kept.
+      appendDirectoryChanges(this.db, workspaceTreeSource(id), Date.now()),
       ...rehomeStatements,
       // Every board's mount of a service this workspace HOMES (its frame block lives here).
       this.db
