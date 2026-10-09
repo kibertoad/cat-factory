@@ -240,6 +240,18 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // The directory change feed's prune is the mothership's retention sweep; every read is on the
   // allow-list, account-bound, so a node can serve `/api/v1/directory/*`.
   directoryRepository: { pruneChanges: 'sweeper' },
+  // Directory webhook endpoints are account-admin configuration (an endpoint receives every change
+  // in the account), and the machine token scopes ACCOUNTS not ROLES, so management stays on the
+  // mothership: an integration registers its endpoint against the deployment, never a node. The
+  // delivery reads and the compare-and-swap are the mothership's own sweep.
+  directoryWebhookRepository: {
+    list: 'admin',
+    get: 'admin',
+    put: 'admin',
+    delete: 'admin',
+    listEnabled: 'sweeper',
+    advance: 'sweeper',
+  },
   // The auth-attempt ledger (SEC-4) is the password throttle's own state. A node that could
   // reach it over the RPC could read attempt patterns or flood a victim's bucket; nothing on
   // a satellite ever needs it. Mothership-internal by construction, like the roster above.

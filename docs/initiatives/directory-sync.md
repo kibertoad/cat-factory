@@ -112,12 +112,19 @@ to their one workspace, so their behaviour is unchanged.
 
 ### Webhooks
 
-A `directory.*` event family (`directory.changed`, carrying `{ seq, entityType, key, entity |
-null }`) on account-level webhook endpoints, signed with the existing scheme
-(`x-cat-factory-timestamp`, `x-cat-factory-signature: v1=...`). The delivery envelopes are added to
-the OpenAPI `webhooks` section so every SDK gets typed payloads; the existing run and notification
-envelopes join them there. Emission is a best-effort post-commit fan-out from the same feed rows
-the writer appended.
+Account-level endpoints (`/api/v1/directory/webhooks`, `admin` and account-wide keys only, at most
+10 per account) receive the feed as signed pushes: `directory.changed` carrying a page of hydrated
+changes, or `directory.resync_required` when an endpoint fell behind retention. Signed with the
+notification webhooks' scheme. The delivery body is published in the spec's OpenAPI 3.1 `webhooks`
+section as `DirectoryWebhookDelivery`.
+
+Delivery is a sweep over the feed, every two minutes on both facades (the Worker's frequent cron
+and a Node timer), rather than an emission inside each writer: the feed already orders every write,
+so one reader replaces instrumenting every service that touches the directory. Each endpoint's
+`delivered_seq` is claimed by compare-and-swap before a push and moved back after a failed one, so
+two sweepers never push the same page and a failure is retried. Management stays on the deployment:
+a mothership-mode node wires none of it, because the role-blind machine token may not reach
+account-admin configuration.
 
 ### Node package `@cat-factory/directory-sync`
 
@@ -149,8 +156,10 @@ gatekeeper-worker into a shared `@cat-factory/webhooks` package both depend on.
       mothership allow-list, `DirectoryService`, `/api/v1/directory/*`,
       `DIRECTORY_CHANGE_RETENTION_DAYS` on both sweeps, OpenAPI 1.80.0,
       `definePublicDirectorySuite`.
-- [ ] **Slice 4: `directory.*` webhooks.** Account-level endpoints, post-commit fan-out, delivery
-      envelopes in the OpenAPI `webhooks` section.
+- [x] **Slice 4: `directory.*` webhooks** (PR link added when opened). `directory_webhooks`
+      (D1 0109, Drizzle), `DirectoryWebhookService` (management plus the claimed delivery sweep),
+      `/api/v1/directory/webhooks`, the sweep on the Worker cron and a Node timer,
+      `DirectoryWebhookDelivery` in the spec's `webhooks` section, `defineDirectoryWebhookSuite`.
 - [ ] **Slice 5: `@cat-factory/webhooks` and `@cat-factory/directory-sync`.** Extract verification
       from gatekeeper-worker, ship the syncer with an in-memory store example.
 - [ ] Convert this tracker to an ADR.

@@ -2942,6 +2942,18 @@ snapshot and follow the feed from its `asOfSeq`.
 A key limited to some workspaces sees workspace, workspace-membership and repository entities of
 those workspaces only, and is refused users and account memberships (`403`,
 `details.reason: account_scope_required`). Mint an account-wide key for a full directory mirror.
+
+**Directory webhooks** push the same pages instead of waiting for a poll. Register an endpoint with
+`PUT /api/v1/directory/webhooks/:webhookId` (`{ url, secret?, enabled? }`, `https` only, at most 10
+per account), list them with `GET /api/v1/directory/webhooks`, remove one with `DELETE`. All three
+need an `admin` key reaching every workspace. A new endpoint starts at the feed head. Every couple
+of minutes each endpoint is sent a signed `directory.changed` body (`deliveryId`, `accountId`,
+`changes`, `nextAfter`, `headSeq`), or `directory.resync_required` when it fell behind the feed's
+retention. Signing is the notification webhooks' scheme ([Verify signatures](#verify-signatures)).
+Pushes are at-least-once: dedupe on `deliveryId`, and keep polling the feed now and then, because a
+push the receiver never acknowledged is retried but one it lost after acknowledging is not.
+Directory webhooks are managed and delivered by the deployment itself, never by a mothership-mode
+node, which answers 503 for these three routes.
 Design: [`docs/initiatives/directory-sync.md`](../../docs/initiatives/directory-sync.md).
 
 ### Key provisioning (`/api/v1/keys`)

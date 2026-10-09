@@ -72,7 +72,7 @@ import { DirectoryService } from '@cat-factory/workspaces'
 import { UserService } from '@cat-factory/workspaces'
 import { InvitationService } from '@cat-factory/workspaces'
 import { PasswordResetService } from '@cat-factory/workspaces'
-import { EmailConnectionService } from '@cat-factory/integrations'
+import { DirectoryWebhookService, EmailConnectionService } from '@cat-factory/integrations'
 import type { SpendService } from '@cat-factory/spend'
 
 import { LlmObservabilityService } from './modules/observability/LlmObservabilityService.js'
@@ -523,6 +523,8 @@ export interface CoreSpine {
   auditLogReader?: AuditLogReader
   /** The public directory read side: snapshots and the change feed an external mirror follows. */
   directory: DirectoryService
+  /** Directory webhook management and delivery; absent when no key can seal signing secrets. */
+  directoryWebhooks?: DirectoryWebhookService
   /**
    * Counts in-app tutorial funnel events. On the SPINE rather than in the optional set, and
    * unconditional, for the same reason `operationalMetrics` is required: an un-wired counter
@@ -768,6 +770,15 @@ export function createCore(injected: CoreDependencies): Core {
   // browser-supplied tour id from minting an unbounded number of metric series, and a cap with a
   // request-scoped lifetime would bound nothing.
   const tutorialTelemetry = new TutorialTelemetryService({ metrics: operationalMetrics, logger })
+  const directory = new DirectoryService({ directoryRepository: dependencies.directoryRepository })
+  const directoryWebhooks = dependencies.directoryWebhooks
+    ? new DirectoryWebhookService({
+        ...dependencies.directoryWebhooks,
+        feed: directory,
+        clock: dependencies.clock,
+        logger,
+      })
+    : undefined
   // The optional-module registry: every feature that is wired only when its prerequisites are
   // configured is `build`-declared through this, instead of a scattered `const x = createX(...)`
   // + a matching `...(x ? { x } : {})` return spread. Registration order below IS dependency
@@ -928,7 +939,8 @@ export function createCore(injected: CoreDependencies): Core {
     // The audit log's READ seam, straight off the injected bag: the viewer's controller resolves
     // it here, while the WRITE seam goes only to the services that record through it.
     auditLogReader: dependencies.auditLogReader,
-    directory: new DirectoryService({ directoryRepository: dependencies.directoryRepository }),
+    directory,
+    ...(directoryWebhooks ? { directoryWebhooks } : {}),
     tutorialTelemetry,
     workspaceService,
     accountService,

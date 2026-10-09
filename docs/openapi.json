@@ -711,6 +711,120 @@
         ],
         "type": "object"
       },
+      "DirectoryWebhook": {
+        "properties": {
+          "deliveredSeq": {
+            "type": "number"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "hasSecret": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "number"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "url",
+          "enabled",
+          "hasSecret",
+          "deliveredSeq",
+          "updatedAt"
+        ],
+        "type": "object"
+      },
+      "DirectoryWebhookDelivery": {
+        "oneOf": [
+          {
+            "properties": {
+              "accountId": {
+                "type": "string"
+              },
+              "changes": {
+                "items": {
+                  "$ref": "#/components/schemas/DirectoryChange"
+                },
+                "type": "array"
+              },
+              "deliveryId": {
+                "type": "string"
+              },
+              "event": {
+                "const": "directory.changed"
+              },
+              "headSeq": {
+                "type": "number"
+              },
+              "nextAfter": {
+                "type": "number"
+              },
+              "sentAt": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "deliveryId",
+              "sentAt",
+              "accountId",
+              "event",
+              "changes",
+              "nextAfter",
+              "headSeq"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "accountId": {
+                "type": "string"
+              },
+              "deliveryId": {
+                "type": "string"
+              },
+              "event": {
+                "const": "directory.resync_required"
+              },
+              "headSeq": {
+                "type": "number"
+              },
+              "sentAt": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "deliveryId",
+              "sentAt",
+              "accountId",
+              "event",
+              "headSeq"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "DirectoryWebhookList": {
+        "properties": {
+          "webhooks": {
+            "items": {
+              "$ref": "#/components/schemas/DirectoryWebhook"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "webhooks"
+        ],
+        "type": "object"
+      },
       "DirectoryWorkspace": {
         "properties": {
           "accessMode": {
@@ -8452,6 +8566,26 @@
         ],
         "type": "object"
       },
+      "PutDirectoryWebhook": {
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "secret": {
+            "maxLength": 200,
+            "minLength": 16,
+            "type": "string"
+          },
+          "url": {
+            "format": "uri",
+            "maxLength": 2000,
+            "pattern": "^https://",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
       "PutNotificationWebhook": {
         "properties": {
           "alertEvents": {
@@ -8805,7 +8939,7 @@
       "name": "MIT"
     },
     "title": "cat-factory Public API",
-    "version": "1.80.0"
+    "version": "1.81.0"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -13565,6 +13699,156 @@
           "Directory"
         ],
         "x-min-scope": "read"
+      }
+    },
+    "/api/v1/directory/webhooks": {
+      "get": {
+        "description": "The endpoints the directory change feed is pushed to, each with the feed position delivered through. The signing secret is write-only: `hasSecret` says whether one is set. Requires an `admin` key that reaches every workspace (`403` with `reason: \"account_scope_required\"` otherwise), because an endpoint receives every change in the account.",
+        "operationId": "listDirectoryWebhooks",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectoryWebhookList"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "List the account's directory webhooks",
+        "tags": [
+          "Directory"
+        ],
+        "x-min-scope": "admin"
+      }
+    },
+    "/api/v1/directory/webhooks/{webhookId}": {
+      "delete": {
+        "description": "Stop pushing to an endpoint. Idempotent.",
+        "operationId": "deleteDirectoryWebhook",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "webhookId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Remove a directory webhook",
+        "tags": [
+          "Directory"
+        ],
+        "x-min-scope": "admin"
+      },
+      "put": {
+        "description": "Register an endpoint the directory change feed is pushed to, or edit one; an omitted field keeps its stored value, and `url` is required only when registering. A new endpoint starts at the feed head: it is pushed what changes from now on, and its receiver bootstraps the past from the snapshots. Pushes run every couple of minutes, signed like the notification webhooks, each a `DirectoryWebhookDelivery`. An account holds at most 10 (`409` with `reason: \"webhook_limit_reached\"`).",
+        "operationId": "putDirectoryWebhook",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "webhookId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PutDirectoryWebhook"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectoryWebhook"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Register or edit a directory webhook",
+        "tags": [
+          "Directory"
+        ],
+        "x-min-scope": "admin"
       }
     },
     "/api/v1/directory/workspace-memberships": {
@@ -25978,6 +26262,29 @@
       "name": "Webhook"
     }
   ],
+  "webhooks": {
+    "directoryDelivery": {
+      "post": {
+        "description": "Sent to each registered directory webhook endpoint. Verify `x-cat-factory-signature` (`v1=<hex HMAC-SHA256(secret, \"<x-cat-factory-timestamp>.<raw body>\")>`) before parsing, and dedupe on `deliveryId`: a failed push is retried with the same id.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DirectoryWebhookDelivery"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Any 2xx acknowledges the push."
+          }
+        },
+        "summary": "A directory webhook push"
+      }
+    }
+  },
   "x-public-api-scopes": [
     "read",
     "write",

@@ -462,3 +462,14 @@ Additive: six `read` operations and the shapes they carry. The routes are accoun
 `x-cat-factory-workspace` header; a key limited to some workspaces sees those workspaces' entities
 and is refused users and account memberships (`403 account_scope_required`). `ConflictError`
 reasons gain `cursor_expired`, for a feed cursor older than the feed's retention.
+
+## 1.81.0
+
+Directory webhooks: `GET /api/v1/directory/webhooks`, `PUT` and `DELETE
+/api/v1/directory/webhooks/{webhookId}` register account-level endpoints the directory change feed
+is pushed to, every couple of minutes, signed like the notification webhooks. The document gains an
+OpenAPI 3.1 `webhooks` section naming the push body, `DirectoryWebhookDelivery`.
+
+Additive. The management operations need an `admin` key that reaches every workspace. Pushes are
+at-least-once; a receiver dedupes on `deliveryId`, and the change feed stays the guarantee of
+completeness.

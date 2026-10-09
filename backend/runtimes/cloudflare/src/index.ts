@@ -60,6 +60,7 @@ import {
   sweepInfraReachability,
   sweepPlatformHealth,
   sweepSpendAlerts,
+  sweepDirectoryWebhooks,
   SPEND_ALERT_INTERVAL_MS,
   operationalMetrics,
 } from '@cat-factory/server'
@@ -1185,6 +1186,16 @@ function runPeriodicBackstops(
   // recoverable. The proactive half of the spend safeguard, whose only signal today is a run
   // pausing mid-pipeline. Not opt-in: a configured budget is the opt-in. It rides the stateless
   // window gate at the shared cadence, so the Worker and the Node timer sweep equally often.
+  // Push the directory change feed to registered webhook endpoints, on every frequent tick (the
+  // shared interval matches it). Built only when a key can seal endpoint secrets, since without one
+  // no endpoint can exist.
+  if (env.ENCRYPTION_KEY?.trim()) {
+    tick.run(
+      { name: 'directory-webhooks', failureMessage: 'directory webhook sweep failed' },
+      sweepDirectoryWebhooks(buildContainer(env), logger),
+    )
+  }
+
   if (shouldRunReachabilityPass(scheduledTime, FREQUENT_CRON_PERIOD_MS, SPEND_ALERT_INTERVAL_MS)) {
     tick.run(
       { name: 'spend-alerts', failureMessage: 'spend alert sweep failed' },

@@ -1,6 +1,7 @@
-import { defineDirectoryFeedSuite } from '@cat-factory/conformance'
+import { defineDirectoryFeedSuite, defineDirectoryWebhookSuite } from '@cat-factory/conformance'
 import { env } from 'cloudflare:test'
 import { D1DirectoryRepository } from '../../src/infrastructure/repositories/D1DirectoryRepository'
+import { D1DirectoryWebhookRepository } from '../../src/infrastructure/repositories/D1DirectoryWebhookRepository'
 import { D1MembershipRepository } from '../../src/infrastructure/repositories/D1MembershipRepository'
 import { D1RepoProjectionRepository } from '../../src/infrastructure/repositories/D1RepoProjectionRepository'
 import { D1UserRepository } from '../../src/infrastructure/repositories/D1UserRepository'
@@ -21,3 +22,5 @@ defineDirectoryFeedSuite('cloudflare', () => {
     changes: new D1DirectoryRepository({ db }),
   }
 })
+
+defineDirectoryWebhookSuite('cloudflare', () => new D1DirectoryWebhookRepository({ db: env.DB }))

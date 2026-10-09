@@ -187,3 +187,92 @@ export const DIRECTORY_REFUSAL_REASONS = [
   'invalid_cursor',
 ] as const
 export type DirectoryRefusalReason = (typeof DIRECTORY_REFUSAL_REASONS)[number]
+
+// ---------------------------------------------------------------------------
+// Directory webhooks (slice 4): account-level endpoints that receive the change feed as signed
+// pushes, so a mirror learns of a change within a couple of minutes instead of its next poll.
+// Delivery is at-least-once and best-effort: the feed stays the guarantee of completeness, and a
+// receiver that missed a push catches up by polling `GET /api/v1/directory/changes`.
+// Signed exactly like the notification webhooks (`x-cat-factory-timestamp`,
+// `x-cat-factory-signature: v1=<hex HMAC-SHA256(secret, "<timestamp>.<raw body>")>`).
+// ---------------------------------------------------------------------------
+
+export const MAX_DIRECTORY_WEBHOOKS_PER_ACCOUNT = 10
+
+export const directoryWebhookIdSchema = v.pipe(
+  v.string(),
+  v.regex(
+    /^[a-z0-9][a-z0-9_-]{0,62}$/u,
+    'A webhook id must be 1-63 characters of lowercase letters, digits, `-` or `_`, starting with a letter or digit',
+  ),
+)
+
+/** A registered endpoint. The signing secret is write-only: `hasSecret` says whether one is set. */
+export const directoryWebhookSchema = v.object({
+  id: v.string(),
+  url: v.string(),
+  enabled: v.boolean(),
+  hasSecret: v.boolean(),
+  /** The feed position delivered through; the next push starts after it. */
+  deliveredSeq: v.number(),
+  updatedAt: v.number(),
+})
+export type DirectoryWebhook = v.InferOutput<typeof directoryWebhookSchema>
+
+export const directoryWebhookListSchema = v.object({ webhooks: v.array(directoryWebhookSchema) })
+export type DirectoryWebhookList = v.InferOutput<typeof directoryWebhookListSchema>
+
+/**
+ * Register or edit an endpoint. Every field keeps its stored value when omitted; `url` is required
+ * only when registering. A new endpoint starts at the feed's current head: it receives what changes
+ * from now on, and a receiver bootstraps the past from the snapshots.
+ */
+export const putDirectoryWebhookSchema = v.object({
+  url: v.optional(
+    v.pipe(
+      v.string(),
+      v.trim(),
+      v.url(),
+      v.startsWith('https://', 'The webhook endpoint must be an https:// URL'),
+      v.maxLength(2000),
+    ),
+  ),
+  enabled: v.optional(v.boolean()),
+  /** Write-only; omit to keep the stored one, pass a new value to rotate it. */
+  secret: v.optional(v.pipe(v.string(), v.minLength(16), v.maxLength(200))),
+})
+export type PutDirectoryWebhookInput = v.InferOutput<typeof putDirectoryWebhookSchema>
+
+const deliveryBase = {
+  /**
+   * Stable across retries of the same push (`<webhookId>:<fromSeq>-<toSeq>`), so a receiver
+   * dedupes on it. The body's timestamps are re-stamped on a retry and must not be compared.
+   */
+  deliveryId: v.string(),
+  /** Epoch ms, equal to the signed `x-cat-factory-timestamp`. */
+  sentAt: v.number(),
+  accountId: v.string(),
+}
+
+/** What a directory webhook receives: a page of changes, or word that it must resynchronize. */
+export const directoryWebhookDeliverySchema = v.variant('event', [
+  v.object({
+    ...deliveryBase,
+    event: v.literal('directory.changed'),
+    /** In `seq` order, each carrying the entity's current state, as the feed serves them. */
+    changes: v.array(directoryChangeSchema),
+    /** The cursor after this page: polling `/changes?after=nextAfter` continues where it ends. */
+    nextAfter: v.number(),
+    headSeq: v.number(),
+  }),
+  v.object({
+    ...deliveryBase,
+    event: v.literal('directory.resync_required'),
+    /**
+     * The endpoint fell further behind than the feed keeps, so pushes resume from here. Changes
+     * before it were not delivered: reconcile from the snapshots.
+     */
+    headSeq: v.number(),
+  }),
+])
+export type DirectoryWebhookDelivery = v.InferOutput<typeof directoryWebhookDeliverySchema>

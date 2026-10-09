@@ -294,3 +294,19 @@ export const directoryChanges = pgTable(
     index('idx_directory_changes_at').on(t.at),
   ],
 )
+
+// Account-level endpoints that receive the directory change feed as signed pushes. The delivery
+// sweep owns `delivered_seq`, moving it with a compare-and-swap. Mirrors D1 0109.
+export const directoryWebhooks = pgTable(
+  'directory_webhooks',
+  {
+    account_id: text('account_id').notNull(),
+    id: text('id').notNull(),
+    url: text('url').notNull(),
+    enabled: integer('enabled').notNull().default(1),
+    secret_sealed: text('secret_sealed'),
+    delivered_seq: bigint('delivered_seq', { mode: 'number' }).notNull().default(0),
+    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.account_id, t.id] })],
+)

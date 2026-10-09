@@ -1,5 +1,6 @@
 import type {
   DirectoryAccountMembership,
+  DirectoryChangePage,
   DirectoryEntityType,
   DirectoryRepo,
   DirectoryUser,
@@ -116,4 +117,52 @@ export interface DirectoryRepository {
     keys: WorkspaceMembershipKey[],
   ): Promise<DirectoryWorkspaceMembership[]>
   getRepos(accountId: string, keys: DirectoryRepoKey[]): Promise<DirectoryRepo[]>
+}
+
+/**
+ * The read the directory webhook sweeper needs: the same pages `GET /api/v1/directory/changes`
+ * serves, so a push and a poll can never disagree about what a change carries.
+ */
+export interface DirectoryFeedReader {
+  headSeq(accountId: string): Promise<number>
+  /** Throws a `ConflictError` with reason `cursor_expired` when `after` is out of the feed. */
+  changes(
+    reader: { accountId: string; workspaceIds: string[] | null },
+    after: number,
+    limit?: number,
+  ): Promise<DirectoryChangePage>
+}
+
+/** A registered directory webhook endpoint. */
+export interface DirectoryWebhookRecord {
+  accountId: string
+  id: string
+  url: string
+  enabled: boolean
+  /** The signing secret sealed under the deployment key, or null for an unsigned endpoint. */
+  secretSealed: string | null
+  /** The feed position delivered through. Owned by the sweeper once the row exists. */
+  deliveredSeq: number
+  updatedAt: number
+}
+
+export interface DirectoryWebhookRepository {
+  /** The account's endpoints, ordered by id. */
+  list(accountId: string): Promise<DirectoryWebhookRecord[]>
+  get(accountId: string, id: string): Promise<DirectoryWebhookRecord | null>
+  /**
+   * Insert or update an endpoint. An update writes `url`, `enabled`, `secretSealed` and
+   * `updatedAt` and leaves `deliveredSeq` to the sweeper. A NEW endpoint is admitted only while the
+   * account holds fewer than `limit`, checked atomically with the insert in the store.
+   */
+  put(record: DirectoryWebhookRecord, limit: number): Promise<'stored' | 'limit_reached'>
+  delete(accountId: string, id: string): Promise<void>
+  /** Every enabled endpoint across accounts, for the delivery sweep. */
+  listEnabled(): Promise<DirectoryWebhookRecord[]>
+  /**
+   * Move `deliveredSeq` from `fromSeq` to `toSeq` only if it still holds `fromSeq`. True when this
+   * call moved it. The sweeper claims a page by advancing BEFORE sending and releases it by moving
+   * back on failure, so two sweepers never push the same page and a failed push is retried.
+   */
+  advance(accountId: string, id: string, fromSeq: number, toSeq: number): Promise<boolean>
 }

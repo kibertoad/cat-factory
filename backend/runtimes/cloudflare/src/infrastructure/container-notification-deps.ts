@@ -2,6 +2,7 @@ import type { Clock, ExecutionEventPublisher, NotificationChannel } from '@cat-f
 import { CompositeNotificationChannel, getErrorMessage } from '@cat-factory/kernel'
 import type { CoreDependencies } from '@cat-factory/orchestration'
 import {
+  DIRECTORY_WEBHOOK_CIPHER_INFO,
   EMAIL_CIPHER_INFO,
   EmailConnectionService,
   NOTIFICATION_WEBHOOK_CIPHER_INFO,
@@ -18,6 +19,7 @@ import {
 import type { AppConfig } from '@cat-factory/server'
 import { WebCryptoSecretCipher } from './environments/WebCryptoSecretCipher'
 import { D1BlockRepository } from './repositories/D1BlockRepository'
+import { D1DirectoryWebhookRepository } from './repositories/D1DirectoryWebhookRepository'
 import { D1WorkspaceRepository } from './repositories/D1WorkspaceRepository'
 import { D1EmailConnectionRepository } from './repositories/D1EmailConnectionRepository'
 import { D1MembershipRepository } from './repositories/D1MembershipRepository'
@@ -275,5 +277,30 @@ export function selectNotificationDeliveryDeps(input: {
       : channels.length > 1
         ? { notificationChannel: new CompositeNotificationChannel(channels) }
         : {}),
+  }
+}
+
+/**
+ * Directory webhook endpoints, wired only when `ENCRYPTION_KEY` can seal their signing secrets: the
+ * same condition the notification webhooks above are gated on, read the same way. Empty otherwise,
+ * so the management routes 503 and the delivery sweep is a no-op.
+ */
+export function buildDirectoryWebhooksForWorker(
+  env: Env,
+  config: AppConfig,
+  db: D1Database,
+): Pick<CoreDependencies, 'directoryWebhooks'> {
+  const encryptionKey = env.ENCRYPTION_KEY?.trim()
+  if (!encryptionKey) return {}
+  const urlSafetyPolicy = resolveUrlSafetyPolicy(config.notificationWebhooks)
+  return {
+    directoryWebhooks: {
+      repository: new D1DirectoryWebhookRepository({ db }),
+      secretCipher: new WebCryptoSecretCipher({
+        masterKeyBase64: encryptionKey,
+        info: DIRECTORY_WEBHOOK_CIPHER_INFO,
+      }),
+      ...(urlSafetyPolicy ? { urlSafetyPolicy } : {}),
+    },
   }
 }
