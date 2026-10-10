@@ -56,13 +56,31 @@ export const useAcceptanceCriteriaStore = defineStore('acceptanceCriteria', () =
    */
   const failed = ref(false)
   let inFlight: Promise<void> | null = null
+  /**
+   * Bumped by every local write. A list read that was issued BEFORE a write and answers AFTER it
+   * carries the pre-write row, so assigning it would revert the write on screen (a confirm click
+   * made while the panel's opening refresh is in flight would snap back to `proposed`).
+   */
+  let writeGeneration = 0
+  /** How many times a load re-reads because a write landed under it before it keeps local state. */
+  const MAX_STALE_RETRIES = 3
 
   /** Force a refresh of every service frame's criteria (used after a create/update/remove). */
   async function load() {
     const ws = useWorkspaceStore()
     loading.value = true
     try {
-      byFrame.value = await api.listServiceAcceptanceCriteria(ws.requireId())
+      for (let attempt = 0; attempt <= MAX_STALE_RETRIES; attempt++) {
+        const generation = writeGeneration
+        const fresh = await api.listServiceAcceptanceCriteria(ws.requireId())
+        // No write landed while the read was out: it is at least as new as local state.
+        if (generation === writeGeneration) {
+          byFrame.value = fresh
+          break
+        }
+        // Otherwise re-read: the write has already committed, so the next read includes it. If
+        // writes keep landing, the local state (every write already applied) is kept as is.
+      }
       available.value = true
       failed.value = false
     } catch (error) {
@@ -117,6 +135,7 @@ export const useAcceptanceCriteriaStore = defineStore('acceptanceCriteria', () =
       index === -1
         ? [...existing, criterion]
         : existing.map((c) => (c.id === criterion.id ? criterion : c))
+    writeGeneration += 1
     upsertLocal({ blockId, criteria })
   }
 
@@ -148,6 +167,7 @@ export const useAcceptanceCriteriaStore = defineStore('acceptanceCriteria', () =
     const ws = useWorkspaceStore()
     await api.deleteAcceptanceCriterion(ws.requireId(), criterionId)
     const criteria = forBlock(blockId).filter((c) => c.id !== criterionId)
+    writeGeneration += 1
     if (criteria.length === 0) dropLocal(blockId)
     else upsertLocal({ blockId, criteria })
   }

@@ -200,8 +200,11 @@ export function buildGateWindowControllers(deps: GateWindowControllerDeps) {
     requirementReviewService && recordDerivedAcceptanceCriteria
       ? async (ws: string, blockId: string, reviewId: string, doc: string): Promise<void> => {
           const frame = await contextBuilder.resolveServiceFrame(ws, blockId)
-          // A task with no owning service frame has nowhere service-scoped to accrete to.
-          if (!frame) return
+          // A task with no owning service frame has nowhere service-scoped to accrete to. The walk
+          // returns the TOPMOST ancestor when no frame encloses the block (an unparented task, or
+          // one under an epic), so the level check is what keeps criteria off a non-frame block:
+          // the inspector shows them only on a frame and dispatch resolves them only from one.
+          if (!frame || frame.level !== 'frame') return
           // REPLAY GUARD. This runs inside the durable driver, whose steps replay, and off HTTP
           // settlement routes a client may retry — so without it the same settled document is
           // re-extracted (a model call, and a user-visible wait) every single time. The marker is

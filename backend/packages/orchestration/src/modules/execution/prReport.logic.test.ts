@@ -203,6 +203,17 @@ describe('composePrVerificationReport', () => {
     expect(() => parsePrVerificationReport(unchecked)).not.toThrow()
   })
 
+  it('reports an unreadable criteria store as unreadable, never as "no criteria recorded"', () => {
+    const unreadable = composePrVerificationReport(instance([step({ agentKind: 'coder' })]), {
+      ...INPUTS,
+      acceptanceCriteria: null,
+    })
+    expect(unreadable.acceptanceCriteria.status).toBe('absent')
+    expect(unreadable.acceptanceCriteria.note).toContain('could not be read')
+    expect(unreadable.acceptanceCriteria.note).not.toContain('no confirmed acceptance criteria')
+    expect(() => parsePrVerificationReport(unreadable)).not.toThrow()
+  })
+
   it('caps the criteria table, records the omission, and still reads as unchecked when every verdict fell past the cap', () => {
     // A service near the store ceiling overflows the report's 50-row list cap. Two things must
     // hold: the omission is STATED (a silently truncated contract reads like a complete one), and

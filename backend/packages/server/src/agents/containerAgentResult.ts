@@ -307,6 +307,30 @@ function coerceOnCallAssessment(raw: unknown, summary: string | undefined): unkn
 
 const TEST_SEVERITIES = new Set(['low', 'medium', 'high', 'critical'])
 const TEST_STATUSES = new Set(['passed', 'failed', 'skipped'])
+const CRITERION_VERDICT_STATUSES = new Set(['met', 'not_met', 'not_covered'])
+
+/**
+ * Keep the well-formed per-criterion acceptance verdicts (a criterion id plus one of the three
+ * statuses). An entry with an unknown status is dropped rather than coerced: guessing `met` would
+ * invent evidence, and guessing `not_met` would invent a defect. The PR report then lists that
+ * criterion as "not reported", which is what the run actually established.
+ */
+function coerceCriteriaVerdicts(raw: unknown): Record<string, unknown>[] {
+  if (!Array.isArray(raw)) return []
+  return (raw as unknown[])
+    .filter((x): x is Record<string, unknown> => typeof x === 'object' && x !== null)
+    .filter(
+      (x) =>
+        typeof x.criterionId === 'string' &&
+        x.criterionId !== '' &&
+        CRITERION_VERDICT_STATUSES.has(x.status as string),
+    )
+    .map((x) => ({
+      criterionId: x.criterionId as string,
+      status: x.status as string,
+      ...(typeof x.evidence === 'string' && x.evidence ? { evidence: x.evidence } : {}),
+    }))
+}
 
 /**
  * Coerce a migrated `tester` agent's structured JSON into the engine's {@link TestReport} —
@@ -373,6 +397,7 @@ function coerceTestReport(raw: unknown, summary: string | undefined): unknown {
         : 'the Tester could not run a meaningful test'
       ).slice(0, 2000)
     : undefined
+  const criteriaVerdicts = coerceCriteriaVerdicts(o.criteriaVerdicts)
   return {
     greenlight: o.greenlight === true && !blocking && !abortReason,
     summary:
@@ -384,6 +409,7 @@ function coerceTestReport(raw: unknown, summary: string | undefined): unknown {
     concerns,
     ...(environment ? { environment } : {}),
     ...(screenshots.length ? { screenshots } : {}),
+    ...(criteriaVerdicts.length ? { criteriaVerdicts } : {}),
     ...(abortReason ? { abort: { reason: abortReason } } : {}),
   }
 }

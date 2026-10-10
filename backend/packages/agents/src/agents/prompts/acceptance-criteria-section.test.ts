@@ -91,7 +91,9 @@ describe('acceptanceCriteriaSection', () => {
       criterion(i, long),
     )
     const section = acceptanceCriteriaSection(ctx({ criteria }))
-    expect(section.length).toBeLessThan(ACCEPTANCE_CRITERIA_PROMPT_MAX_CHARS * 2)
+    // The budget bounds the entries; the slack covers only the fixed header and omission note,
+    // so a last entry that would overshoot by a whole criterion is left out instead.
+    expect(section.length).toBeLessThan(ACCEPTANCE_CRITERIA_PROMPT_MAX_CHARS + 1_000)
     expect(section).toContain('further confirmed criteria omitted for length')
   })
 })

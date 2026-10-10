@@ -96,4 +96,29 @@ describe('toRunResult', () => {
     expect(report.greenlight).toBe(false)
     expect(report.abort).toEqual({ reason: 'env never came up' })
   })
+
+  it('carries the tester acceptance-criteria verdicts through, dropping malformed entries', () => {
+    // The PR report's criterion -> evidence table reads these off the step's report, and this
+    // coercion is the only road from the container to the engine: a verdict dropped here reads
+    // as "no tester returned a verdict" however carefully the tester reported.
+    const r = toRunResult(
+      result({
+        custom: {
+          greenlight: true,
+          criteriaVerdicts: [
+            { criterionId: 'ac_1', status: 'met', evidence: 'auth.spec.ts' },
+            { criterionId: 'ac_2', status: 'not_covered' },
+            { criterionId: 'ac_3', status: 'partially_met' },
+            { status: 'met' },
+            'garbage',
+          ],
+        },
+      }),
+      TESTER_AGENT_KIND,
+    )
+    expect((r.testReport as { criteriaVerdicts?: unknown }).criteriaVerdicts).toEqual([
+      { criterionId: 'ac_1', status: 'met', evidence: 'auth.spec.ts' },
+      { criterionId: 'ac_2', status: 'not_covered' },
+    ])
+  })
 })

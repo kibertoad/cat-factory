@@ -133,6 +133,22 @@ describe('AcceptanceCriteriaService.recordDerived', () => {
     expect(added.map((c) => c.title)).toEqual(['Refresh tokens rotate'])
   })
 
+  it('keeps distinct non-Latin titles apart instead of dropping them all', async () => {
+    // An ASCII-only normaliser reduces every one of these to the empty key, and an empty key is
+    // dropped, so a requirements document written in Ukrainian or Japanese would accrete nothing.
+    const added = await makeService(fakeRepo()).recordDerived(WS, FRAME, 'rrv_1', [
+      draft('Прострочені сесії відхиляються'),
+      draft('Вихід завершує всі сесії'),
+      draft('期限切れのセッションは拒否される'),
+      draft('прострочені   СЕСІЇ відхиляються!'),
+    ])
+    expect(added.map((c) => c.title)).toEqual([
+      'Прострочені сесії відхиляються',
+      'Вихід завершує всі сесії',
+      '期限切れのセッションは拒否される',
+    ])
+  })
+
   it('drops a duplicate WITHIN one extraction batch', async () => {
     // The model does this whenever a document repeats a requirement in two sections.
     const added = await makeService(fakeRepo()).recordDerived(WS, FRAME, 'rrv_1', [
@@ -201,7 +217,7 @@ describe('AcceptanceCriteriaService resolution + cleanup', () => {
     // Resolution only ever walks UP to the service frame, so a criterion stored on a task would
     // look saved and then silently never reach a prompt.
     await expect(
-      service.create(WS, 'blk_task', { title: 'x', when: 'y', outcome: 'z' }),
+      service.create(WS, 'blk_task', { title: 'x', given: '', when: 'y', outcome: 'z' }),
     ).rejects.toThrow(/service frame/i)
   })
 })

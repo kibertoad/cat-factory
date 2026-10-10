@@ -202,10 +202,20 @@ export const acceptanceCriterionDraftSchema = v.object({
 })
 export type AcceptanceCriterionDraft = v.InferOutput<typeof acceptanceCriterionDraftSchema>
 
-/** Parse a batch of extracted drafts (lenient — malformed entries degrade, never throw). */
+/**
+ * Parse a batch of extracted drafts (lenient: malformed entries degrade, never throw). The field
+ * fallbacks only cover a malformed FIELD; an entry that is not an object at all (`null`, a bare
+ * string) fails the object schema itself, so it is dropped here rather than taking every sibling
+ * draft in the batch down with it.
+ */
 export function parseAcceptanceCriterionDrafts(value: unknown): AcceptanceCriterionDraft[] {
   if (!Array.isArray(value)) return []
-  return value.map((entry) => v.parse(acceptanceCriterionDraftSchema, entry))
+  const drafts: AcceptanceCriterionDraft[] = []
+  for (const entry of value) {
+    const parsed = v.safeParse(acceptanceCriterionDraftSchema, entry)
+    if (parsed.success) drafts.push(parsed.output)
+  }
+  return drafts
 }
 
 /**
@@ -215,10 +225,14 @@ export function parseAcceptanceCriterionDrafts(value: unknown): AcceptanceCriter
  * grows one duplicate per run and the human triage list becomes useless. Case/whitespace/
  * punctuation-insensitive is deliberately coarse: a false MERGE costs one criterion the human
  * edits, a false SPLIT costs a duplicate on every future run.
+ *
+ * Letters and digits are matched by Unicode class, not `a-z0-9`: an ASCII-only class reduces a
+ * title written in Cyrillic, Hebrew or Japanese to the empty string, and the accretion pass drops
+ * an empty key, so every criterion extracted from a non-Latin requirements document would vanish.
  */
 export function normalizeCriterionTitle(title: string): string {
   return title
     .toLowerCase()
-    .replaceAll(/[^a-z0-9]+/g, ' ')
+    .replaceAll(/[^\p{L}\p{N}]+/gu, ' ')
     .trim()
 }

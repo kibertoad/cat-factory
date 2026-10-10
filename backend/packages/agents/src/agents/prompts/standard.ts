@@ -486,7 +486,7 @@ export function acceptanceCriteriaSection(context: AgentRunContext): string {
   let budget = ACCEPTANCE_CRITERIA_PROMPT_MAX_CHARS
   let rendered = 0
   for (const criterion of criteria) {
-    if (rendered >= ACCEPTANCE_CRITERIA_PROMPT_MAX_ENTRIES || budget <= 0) break
+    if (rendered >= ACCEPTANCE_CRITERIA_PROMPT_MAX_ENTRIES) break
     const entry = [
       `- [${criterion.id}] ${criterion.title}`,
       ...(criterion.given.trim() ? [`  - Given: ${criterion.given}`] : []),
@@ -494,8 +494,13 @@ export function acceptanceCriteriaSection(context: AgentRunContext): string {
       `  - Then: ${criterion.outcome}`,
       ...(criterion.tags.length ? [`  - Tags: ${criterion.tags.join(', ')}`] : []),
     ]
+    // Measure BEFORE appending, so the last entry cannot overshoot the budget by a whole
+    // criterion's worth of text. The first entry always renders: its clauses are bounded by the
+    // contract's own limits, and an empty list with an omission note would carry nothing.
+    const size = entry.join('\n').length
+    if (rendered > 0 && size > budget) break
     lines.push(...entry)
-    budget -= entry.join('\n').length
+    budget -= size
     rendered += 1
   }
   const omitted = criteria.length - rendered

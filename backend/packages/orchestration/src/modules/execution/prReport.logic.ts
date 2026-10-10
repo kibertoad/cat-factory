@@ -78,9 +78,10 @@ export interface PrReportInputs {
    * The service's CONFIRMED acceptance criteria, resolved for the run's service frame. Passed in
    * rather than read here because this module is pure; `[]` when the service has none (or the
    * store isn't wired), which the composer reports as `absent` WITH a note rather than omitting
-   * the section — see {@link composeAcceptanceCriteria}.
+   * the section (see {@link composeAcceptanceCriteria}). `null` when the store could not be
+   * read, which gets its own note: an outage is not evidence that the service has no criteria.
    */
-  acceptanceCriteria: readonly ResolvedAcceptanceCriterion[]
+  acceptanceCriteria: readonly ResolvedAcceptanceCriterion[] | null
   /** Deep link into the run's observability panel; null when no public app URL is configured. */
   runUrl: string | null
   /** Epoch ms stamped as the report's `generatedAt`. */
@@ -222,10 +223,17 @@ function composeTests(
  */
 function composeAcceptanceCriteria(
   instance: ExecutionInstance,
-  criteria: readonly ResolvedAcceptanceCriterion[],
+  criteria: readonly ResolvedAcceptanceCriterion[] | null,
   truncations: string[],
 ): PrVerificationReport['acceptanceCriteria'] {
   const empty = { entries: [], met: 0, notMet: 0, unverified: 0 }
+  if (criteria === null) {
+    return {
+      status: 'absent',
+      note: "The service's acceptance criteria could not be read for this report, so this change was not checked against them here.",
+      ...empty,
+    }
+  }
   if (criteria.length === 0) {
     return {
       status: 'absent',

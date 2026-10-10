@@ -197,20 +197,26 @@ export class PrVerificationReportController {
   }
 
   /**
-   * The service's confirmed acceptance criteria for the run's block. Degrades to `[]` on any
-   * failure: the report is bookkeeping, and a criterion-store outage must cost the section its
-   * detail, never the whole report its publish.
+   * The service's confirmed acceptance criteria for the run's block, or `null` when the store
+   * could not be read. A criterion-store outage must cost the section its detail, never the whole
+   * report its publish, but it must not read as `[]` either: the composer renders `[]` as "this
+   * service has no confirmed acceptance criteria", which on an outage is a false statement about
+   * the service, posted on its pull request.
    */
   private async acceptanceCriteria(
     workspaceId: string,
     blockId: string,
-  ): Promise<ResolvedAcceptanceCriterion[]> {
+  ): Promise<ResolvedAcceptanceCriterion[] | null> {
     const resolve = this.deps.resolveAcceptanceCriteria
     if (!resolve) return []
     try {
       return (await resolve(workspaceId, blockId))?.criteria ?? []
-    } catch {
-      return []
+    } catch (error) {
+      this.deps.logger?.warn(
+        { err: error, blockId, workspaceId },
+        'Failed to read the acceptance criteria for the PR verification report',
+      )
+      return null
     }
   }
 
