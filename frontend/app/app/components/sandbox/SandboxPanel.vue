@@ -486,6 +486,7 @@ async function archive(prompt: SandboxPromptVersion) {
                   :columns="detailColumns"
                   :ui="{
                     base: 'text-xs',
+                    th: 'ps-0 pe-2 py-1',
                     td: 'ps-0 pe-2 py-1 text-xs whitespace-normal',
                     tbody: '[&>tr]:cursor-pointer',
                     empty: 'py-0',

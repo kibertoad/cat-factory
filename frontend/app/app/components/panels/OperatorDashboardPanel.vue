@@ -71,13 +71,15 @@ function barPct(count: number, max: number): number {
 // "no gates ran" is not "every gate needed a fixer".
 // Column definitions rather than hand-written `<th>`s: the header typography is the table
 // theme's, shared with every other table in the SPA.
+// The count columns are flush right, so their headers are too.
+const NUMERIC = { class: { th: 'text-end' } }
 const gateColumns = computed<TableColumn<NonNullable<typeof view.value>['gates'][number]>[]>(() => [
   { id: 'gate', header: t('platformObservability.gates.gate') },
-  { id: 'settled', header: t('platformObservability.gates.settled') },
-  { id: 'cleanPasses', header: t('platformObservability.gates.cleanPasses') },
-  { id: 'attempts', header: t('platformObservability.gates.attempts') },
-  { id: 'helperFailures', header: t('platformObservability.gates.helperFailures') },
-  { id: 'exhausted', header: t('platformObservability.gates.exhausted') },
+  { id: 'settled', header: t('platformObservability.gates.settled'), meta: NUMERIC },
+  { id: 'cleanPasses', header: t('platformObservability.gates.cleanPasses'), meta: NUMERIC },
+  { id: 'attempts', header: t('platformObservability.gates.attempts'), meta: NUMERIC },
+  { id: 'helperFailures', header: t('platformObservability.gates.helperFailures'), meta: NUMERIC },
+  { id: 'exhausted', header: t('platformObservability.gates.exhausted'), meta: NUMERIC },
 ])
 
 function cleanRate(stat: { gates: number; cleanPasses: number }): number | null {
@@ -349,6 +351,7 @@ watch(
                   :columns="gateColumns"
                   :ui="{
                     base: 'text-xs',
+                    th: 'ps-0 pe-3 py-2',
                     td: 'ps-0 pe-3 py-2 text-xs text-toned whitespace-normal',
                   }"
                   data-testid="operator-gates"

@@ -747,6 +747,7 @@ function exportJson() {
                   :sorting-options="PHASE_SORTING_OPTIONS"
                   :ui="{
                     base: 'min-w-[32rem] text-xs',
+                    th: 'px-3 py-1.5',
                     td: 'px-3 py-1.5 text-xs whitespace-normal',
                   }"
                 >

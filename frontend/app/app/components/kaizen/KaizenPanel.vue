@@ -172,6 +172,7 @@ const historyColumns = computed<TableColumn<KaizenGrading>[]>(() => [
               :ui="{
                 root: 'overflow-hidden rounded-lg border border-default',
                 base: 'text-xs',
+                th: 'px-3 py-2',
                 td: 'px-3 py-2 text-xs whitespace-normal',
                 tr: 'align-top',
               }"

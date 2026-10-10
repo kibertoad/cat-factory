@@ -511,6 +511,7 @@ const { requestClose } = useUnsavedGuard({
               :ui="{
                 root: 'overflow-x-auto rounded-lg border border-default',
                 base: 'text-xs',
+                th: 'px-3 py-2',
                 td: 'px-3 py-2 text-xs whitespace-normal',
                 empty: 'py-0',
                 tr: 'align-top',
