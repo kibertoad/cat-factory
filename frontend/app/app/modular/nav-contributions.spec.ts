@@ -224,6 +224,8 @@ describe('navSlotFilter', () => {
       tutorial: 'the walkthroughs - the surface with the fewest destinations needs them most',
       'keyboard-shortcuts': 'the cheatsheet covers the board and the palette, which every role has',
       'ui-role': 'the way BACK out of the narrowed role',
+      'home-preview':
+        'the queue-first preview is a whole-app layout trial, so every role must be able to switch it on and back off',
     }
     const intake = NAV_CONTRIBUTIONS.filter((i) => i.intake).map((i) => i.id)
     expect(intake.sort()).toEqual(Object.keys(REASON).sort())
@@ -520,6 +522,7 @@ describe('nav grouping helpers', () => {
       'keyboard-shortcuts',
       'ui-mode',
       'ui-role',
+      'home-preview',
       'tutorial',
       'foundational-services',
     ])

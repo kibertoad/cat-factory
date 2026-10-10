@@ -36,6 +36,7 @@ import FragmentSelector from '~/components/fragments/FragmentSelector.vue'
 import ReviewSkillQueue from '~/components/skills/ReviewSkillQueue.vue'
 import RiskPolicyPicker from '~/components/riskPolicy/RiskPolicyPicker.vue'
 import { parseConflict } from '~/composables/usePipelineErrorToast'
+import { isReviewDebtConflict, reviewFrictionContext } from '~/utils/reviewFriction'
 import { apiErrorEnvelope } from '~/composables/api/errors'
 import type { ReviewTargetReason } from '@cat-factory/contracts'
 import {
@@ -833,8 +834,14 @@ async function submitCreate(acknowledgeReviewDebt: boolean) {
     ui.closeAddTask()
   } catch (e) {
     const conflict = parseConflict(e)
-    if (conflict?.reason === 'review_debt_warn' || conflict?.reason === 'review_debt_blocked') {
-      openReviewFrictionDialog(conflict)
+    if (isReviewDebtConflict(conflict)) {
+      ui.openReviewFriction(
+        reviewFrictionContext(
+          conflict,
+          () => void submitCreate(true),
+          () => saving.value,
+        ),
+      )
       return
     }
     const refusal = createRefusalMessage(e)
@@ -889,32 +896,6 @@ function createRefusalMessage(error: unknown): string | null {
   if (typeof reason !== 'string') return null
   if (reason === 'task_type_fields_invalid') return t('board.addTask.customFieldsInvalid')
   return REVIEW_TARGET_MESSAGES[reason as ReviewTargetReason]?.(details) ?? null
-}
-
-/** Turn a parsed review-debt friction 409 into the dialog context (see ReviewFrictionDialog.vue). */
-function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseConflict>>) {
-  const details = conflict.details
-  const rawDebt = Array.isArray(details.debt) ? details.debt : []
-  const debt = rawDebt.map((d) => {
-    const row = (d ?? {}) as { blockId?: unknown; title?: unknown; waitingMinutes?: unknown }
-    return {
-      blockId: typeof row.blockId === 'string' ? row.blockId : '',
-      title: typeof row.title === 'string' ? row.title : null,
-      waitingMinutes: typeof row.waitingMinutes === 'number' ? row.waitingMinutes : 0,
-    }
-  })
-  const isWarn = conflict.reason === 'review_debt_warn'
-  ui.openReviewFriction({
-    kind: isWarn ? 'warn' : 'blocked',
-    reason:
-      details.friction === 'count' || details.friction === 'stuck' ? details.friction : undefined,
-    threshold: typeof details.threshold === 'number' ? details.threshold : null,
-    debt,
-    onConfirm: isWarn ? () => void submitCreate(true) : null,
-    // A getter, not a snapshot: the dialog reads it inside a computed so its button spins and
-    // locks for as long as the retry actually runs (UX-78).
-    pending: () => saving.value,
-  })
 }
 </script>
 

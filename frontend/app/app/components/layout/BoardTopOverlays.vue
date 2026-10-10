@@ -40,6 +40,7 @@ defineProps<{
 }>()
 
 const ui = useUiStore()
+const preview = useHomePreviewStore()
 </script>
 
 <template>
@@ -62,7 +63,9 @@ const ui = useUiStore()
 
     <!-- FIRST, and deliberately so: the toolbar is standing board chrome, and a tour step
          anchors it. Below the advisories it would move every time one appears or clears. -->
-    <BoardToolbar />
+    <!-- The toolbar is the CANVAS's chrome (zoom, fit, lane view). Over the preview's queue or
+         setup page it would control a board nobody is looking at. -->
+    <BoardToolbar v-if="preview.view === 'board'" />
 
     <!-- Then the advisories, most urgent first. Ordering is by what the user loses by not
          reading it now, not by how loud the card is.
@@ -86,11 +89,16 @@ const ui = useUiStore()
       :connection-failed="connectionFailed"
     />
     <SpendWarningBanner />
-    <GitHubPatBanner />
-    <GitHubPatPermissionsBanner />
-    <AiProvidersBanner />
-    <ProviderConfigBanner />
-    <InfraSetupBanner />
-    <DefaultTestEnvBanner />
+    <!-- The setup advisories. The queue-first preview replaces all six with its one setup page
+         and a single line in the queue, so they stand down while it is on. Connection and
+         spend stay: they are about the work on screen, not about setting the platform up. -->
+    <template v-if="!preview.enabled">
+      <GitHubPatBanner />
+      <GitHubPatPermissionsBanner />
+      <AiProvidersBanner />
+      <ProviderConfigBanner />
+      <InfraSetupBanner />
+      <DefaultTestEnvBanner />
+    </template>
   </div>
 </template>

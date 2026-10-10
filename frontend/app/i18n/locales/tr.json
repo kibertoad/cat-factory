@@ -2637,7 +2637,8 @@
         "toggleUiMode": "Arayüz modunu değiştir",
         "chooseRole": "Rolünüzü değiştirin",
         "foundationalServices": "Temel hizmetler",
-        "notificationSettings": "Bildirim yönlendirmesini yönet"
+        "notificationSettings": "Bildirim yönlendirmesini yönet",
+        "toggleHomePreview": "Önce kuyruk önizlemesi: aç veya kapat"
       },
       "keywords": {
         "newPipeline": "boru hattı ajanlar zincir",
@@ -2665,7 +2666,8 @@
         "chooseRole": "rol mühendis ürün yöneticisi tasarımcı persona daha yalın görünüm",
         "tutorial": "eğitim tur rehber yardım öğren tanıtım",
         "foundationalServices": "ortak yetenek platform hizmet api sözleşme openapi katalog",
-        "notificationSettings": "bildirimler e-posta yönlendirme kanallar gelen kutusu"
+        "notificationSettings": "bildirimler e-posta yönlendirme kanallar gelen kutusu",
+        "toggleHomePreview": "kuyruk ana sayfa önizleme düzen gelen kutusu kurulum queue home preview layout inbox setup"
       }
     },
     "integrationsHub": {
@@ -8736,6 +8738,161 @@
         "malformed": "Bu bağlantı okunabilir bir tema içermiyor. Düzenleyiciden yeniden kopyalayın.",
         "presetShorthand": "Bu bağlantı, bu uygulamanın tanımadığı bir Nuxt UI düzenleyici ön ayarını adlandırıyor. Bağlantının tüm temayı taşıması için düzenleyicide herhangi bir ayarı değiştirin ve yeniden kopyalayın.",
         "unsupportedVersion": "Bu tema, bu uygulamanın anladığından daha yeni bir düzenleyici biçimiyle oluşturulmuş."
+      }
+    }
+  },
+  "queue": {
+    "title": "Kuyruk",
+    "summary": "{needsYou} seni bekliyor · {ready} birleştirmeye hazır",
+    "filter": {
+      "allServices": "Tüm servisler",
+      "service": "Servise göre filtrele"
+    },
+    "describeWork": "Yeni iş tanımla",
+    "setupBlocking": "Bu çalışma alanı henüz görev çalıştıramıyor. Kurulum: {done} / {total} tamamlandı.",
+    "setupBlockingNoAccess": "Görevlerin çalışabilmesi için bir çalışma alanı yöneticisi kurulumu tamamlamalı.",
+    "openSetup": "Kurulumu aç",
+    "columns": {
+      "needsYou": {
+        "label": "Seni bekliyor",
+        "empty": "Seni bekleyen bir şey yok."
+      },
+      "inFlight": {
+        "label": "Sürüyor",
+        "empty": "Şu an çalışan bir ajan yok."
+      },
+      "readyToMerge": {
+        "label": "Birleştirmeye hazır",
+        "empty": "Birleştirilmeyi bekleyen pull request yok."
+      }
+    },
+    "waiting": {
+      "label": "Başlamadı ({count})",
+      "empty": "Başlamayı bekleyen bir şey yok."
+    },
+    "done": {
+      "count": "Son 7 günde birleştirilen: {count}",
+      "show": "Göster",
+      "hide": "Gizle",
+      "capped": "{total} içinden en yeni {shown} gösteriliyor.",
+      "undated": "Gösterilmeyen, tamamlanma tarihi olmayan: {count}"
+    },
+    "card": {
+      "waited": "{duration} bekledi",
+      "active": "{duration} önce etkindi",
+      "merged": "{duration} önce birleştirildi",
+      "step": "adım {current} / {total}",
+      "openTask": "Görevi aç",
+      "showOnBoard": "Panoda göster",
+      "retry": "Yeniden dene",
+      "answer": "Yanıtla",
+      "budgetPaused": "Harcama sınırı bu çalıştırmayı duraklattı. Sınır yükseltilince devam eder.",
+      "parked": "Çalıştırma bir kişiyi bekliyor. Neye ihtiyaç duyduğunu görmek için görevi aç.",
+      "waitingOn": "{deps} bekleniyor",
+      "pr": "Pull request #{number}"
+    }
+  },
+  "setup": {
+    "title": "Kurulum",
+    "progress": "{done} / {total} tamamlandı",
+    "intro": "Bu çalışma alanının bir görevi çalıştırıp birleştirebilmesi için gerekenler. Bu sayfayı yalnızca bu öğeleri değiştirebilen kişiler görür. Diğerleri kuyrukta tek bir satır görür.",
+    "noAccess": {
+      "title": "Kurulumu değiştiremezsin",
+      "body": "Kurulumu bir çalışma alanı yöneticisi tamamlayabilir. Görevler çalışamadığı sürece kuyruk bununla ilgili tek bir satır gösterir."
+    },
+    "required": "zorunlu",
+    "optional": "isteğe bağlı",
+    "action": {
+      "change": "Değiştir",
+      "connect": "Kur",
+      "fix": "Düzelt",
+      "review": "İncele"
+    },
+    "rows": {
+      "checking": "Denetleniyor…",
+      "notNeeded": "Bu dağıtım bunu kullanmıyor.",
+      "model": {
+        "title": "Model",
+        "done": "Bir model kullanılabilir ve varsayılan ön ayar onu kullanıyor.",
+        "missing": "Kullanılabilir model yok. Bir sağlayıcı bağlayana kadar hiçbir ajan çalışamaz.",
+        "attention": "Varsayılan model ön ayarı, kullanılamayan bir modeli gösteriyor."
+      },
+      "sourceControl": {
+        "title": "Kaynak denetimi",
+        "done": "Bağlı. Ajanlar dal gönderip pull request açabilir.",
+        "missing": "Bağlı değil. Ajanlar pull request açamaz.",
+        "attention": "Erişim belirteci dal gönderemiyor ve pull request açamıyor."
+      },
+      "agentExecutor": {
+        "title": "Ajanların çalıştığı yer",
+        "done": "Bir runner yapılandırıldı.",
+        "missing": "Yapılandırılmış runner yok. Bir tane bağlayana kadar hiçbir şey çalışamaz.",
+        "attention": "Runner'a ulaşılamıyor veya gerekli bir ayar eksik.",
+        "notNeeded": "Bu dağıtım ajanları runner olmadan çalıştırıyor."
+      },
+      "testEnvironments": {
+        "title": "Test ortamları",
+        "done": "Yapılandırıldı. Test ajanları canlı önizleme kullanabilir.",
+        "missing": "Kurulmadı. Canlı önizleme gerektiren test ajanları çalışmaz. Diğer tüm ajanlar çalışır.",
+        "attention": "Ortam sağlayıcısına ulaşılamıyor veya gerekli bir ayar eksik."
+      },
+      "contentStorage": {
+        "title": "Ekran görüntüsü depolama",
+        "done": "Yapılandırıldı. Görsel denetimler açık.",
+        "missing": "Kurulmadı. Görsel denetimler kapalı.",
+        "attention": "Depolamaya ulaşılamıyor."
+      }
+    },
+    "also": {
+      "title": "Burada ayrıca",
+      "pipelines": "Pipeline'lar: onarılacak {count}, yeni yerleşik {fresh}",
+      "riskPolicies": "Birleştirme ilkeleri: {count} eski, {fresh} yeni",
+      "modelPresets": "Model ön ayarları: {count} eski, {fresh} yeni",
+      "settings": "Ayarlar ve bağlantılar",
+      "workspaceSettings": "Çalışma alanı ayarları",
+      "integrations": "Entegrasyonlar"
+    }
+  },
+  "describeWork": {
+    "title": "Yeni iş tanımla",
+    "textLabel": "Ne yapılmalı",
+    "textHint": "Bir cümle yeterli. Elinde varsa daha fazla ayrıntı ekle.",
+    "textPlaceholder": "Oturum açma olayları için bir denetim günlüğü ekle. Her oturum açmayı zaman, kullanıcı ve sonuçla kaydet.",
+    "savedAs": "Görev başlığı: {title}",
+    "serviceLabel": "Servis",
+    "servicePlaceholder": "Bir servis seç",
+    "kindLabel": "Tür",
+    "kind": {
+      "feature": "Özellik",
+      "bug": "Hata"
+    },
+    "moreKinds": "Daha fazla tür…",
+    "changeHowItRuns": "Nasıl çalışacağını değiştir",
+    "workspaceDefault": "Çalışma alanı varsayılanı",
+    "attachContext": "Bağlam ekle (tam formu açar)",
+    "footerHint": "Görev başlamadı olarak eklenir. Başlat'a bastığında başlar.",
+    "add": "Kuyruğa ekle",
+    "addAndStart": "Ekle ve başlat",
+    "addedToast": "“{title}” kuyruğa eklendi"
+  },
+  "homePreview": {
+    "nav": {
+      "title": "İş",
+      "queue": "Kuyruk",
+      "board": "Pano (harita)",
+      "setup": "Kurulum",
+      "setupProgress": "{done} / {total}"
+    },
+    "leave": "Geçerli düzene dön",
+    "inbox": {
+      "verb": {
+        "review": "İncele",
+        "answer": "Yanıtla",
+        "test": "Test et",
+        "confirm": "Onayla",
+        "triage": "Önceliklendir",
+        "choose": "Seç",
+        "open": "Aç"
       }
     }
   }

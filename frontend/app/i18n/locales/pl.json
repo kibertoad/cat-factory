@@ -2637,7 +2637,8 @@
         "toggleUiMode": "Zmień tryb interfejsu",
         "chooseRole": "Zmień swoją rolę",
         "foundationalServices": "Usługi fundamentalne",
-        "notificationSettings": "Zarządzaj routingiem powiadomień"
+        "notificationSettings": "Zarządzaj routingiem powiadomień",
+        "toggleHomePreview": "Podgląd z kolejką na pierwszym planie: włącz lub wyłącz"
       },
       "keywords": {
         "newPipeline": "potok agenci łańcuch pipeline",
@@ -2665,7 +2666,8 @@
         "chooseRole": "rola inżynier menedżer produktu projektant persona prostszy widok",
         "tutorial": "samouczek przewodnik pomoc nauka wprowadzenie",
         "foundationalServices": "wspólna możliwość platforma usługa api kontrakt openapi katalog",
-        "notificationSettings": "powiadomienia e-mail routing kanały skrzynka"
+        "notificationSettings": "powiadomienia e-mail routing kanały skrzynka",
+        "toggleHomePreview": "kolejka strona główna podgląd układ skrzynka konfiguracja queue home preview layout inbox setup"
       }
     },
     "integrationsHub": {
@@ -8736,6 +8738,161 @@
         "malformed": "Ten link nie zawiera czytelnego motywu. Skopiuj go ponownie z edytora.",
         "presetShorthand": "Ten link wskazuje ustawienie wstępne edytora Nuxt UI, którego ta aplikacja nie zna. Zmień dowolny parametr w edytorze, aby link zawierał cały motyw, i skopiuj go ponownie.",
         "unsupportedVersion": "Ten motyw powstał w nowszym formacie edytora, niż rozumie ta aplikacja."
+      }
+    }
+  },
+  "queue": {
+    "title": "Kolejka",
+    "summary": "Czeka na ciebie: {needsYou} · gotowe do scalenia: {ready}",
+    "filter": {
+      "allServices": "Wszystkie serwisy",
+      "service": "Filtruj według serwisu"
+    },
+    "describeWork": "Opisz nową pracę",
+    "setupBlocking": "Ten workspace nie może jeszcze uruchamiać zadań. Konfiguracja: {done} z {total} gotowe.",
+    "setupBlockingNoAccess": "Administrator workspace'u musi dokończyć konfigurację, zanim zadania będą mogły działać.",
+    "openSetup": "Otwórz konfigurację",
+    "columns": {
+      "needsYou": {
+        "label": "Czeka na ciebie",
+        "empty": "Nic na ciebie nie czeka."
+      },
+      "inFlight": {
+        "label": "W toku",
+        "empty": "Żaden agent teraz nie pracuje."
+      },
+      "readyToMerge": {
+        "label": "Gotowe do scalenia",
+        "empty": "Żaden pull request nie czeka na scalenie."
+      }
+    },
+    "waiting": {
+      "label": "Nierozpoczęte ({count})",
+      "empty": "Nic nie czeka na start."
+    },
+    "done": {
+      "count": "Scalone w ostatnich 7 dniach: {count}",
+      "show": "Pokaż",
+      "hide": "Ukryj",
+      "capped": "Pokazuje najnowsze {shown} z {total}.",
+      "undated": "Niewyświetlone, bez daty ukończenia: {count}"
+    },
+    "card": {
+      "waited": "czekało {duration}",
+      "active": "aktywne {duration} temu",
+      "merged": "scalone {duration} temu",
+      "step": "krok {current} z {total}",
+      "openTask": "Otwórz zadanie",
+      "showOnBoard": "Pokaż na tablicy",
+      "retry": "Ponów",
+      "answer": "Odpowiedz",
+      "budgetPaused": "Limit wydatków wstrzymał to uruchomienie. Będzie kontynuowane po podniesieniu limitu.",
+      "parked": "Uruchomienie czeka na człowieka. Otwórz zadanie, aby zobaczyć, czego potrzebuje.",
+      "waitingOn": "Czeka na {deps}",
+      "pr": "Pull request #{number}"
+    }
+  },
+  "setup": {
+    "title": "Konfiguracja",
+    "progress": "{done} z {total} gotowe",
+    "intro": "Czego ten workspace potrzebuje, aby zadanie mogło działać i zostać scalone. Tę stronę widzą tylko osoby, które mogą zmieniać te elementy. Pozostali widzą jedną linię w kolejce.",
+    "noAccess": {
+      "title": "Nie możesz zmieniać konfiguracji",
+      "body": "Administrator workspace'u może dokończyć konfigurację. Dopóki zadania nie mogą działać, kolejka pokazuje o tym jedną linię."
+    },
+    "required": "wymagane",
+    "optional": "opcjonalne",
+    "action": {
+      "change": "Zmień",
+      "connect": "Skonfiguruj",
+      "fix": "Napraw",
+      "review": "Sprawdź"
+    },
+    "rows": {
+      "checking": "Sprawdzanie…",
+      "notNeeded": "To wdrożenie tego nie używa.",
+      "model": {
+        "title": "Model",
+        "done": "Model jest dostępny i domyślny preset go używa.",
+        "missing": "Brak dostępnego modelu. Żaden agent nie może działać, dopóki nie połączysz dostawcy.",
+        "attention": "Domyślny preset modelu wskazuje model, który nie jest dostępny."
+      },
+      "sourceControl": {
+        "title": "Kontrola wersji",
+        "done": "Połączono. Agenci mogą wypychać gałęzie i otwierać pull requesty.",
+        "missing": "Nie połączono. Agenci nie mogą otwierać pull requestów.",
+        "attention": "Token dostępu nie może wypychać zmian ani otwierać pull requestów."
+      },
+      "agentExecutor": {
+        "title": "Gdzie działają agenci",
+        "done": "Runner jest skonfigurowany.",
+        "missing": "Brak skonfigurowanego runnera. Nic nie może działać, dopóki go nie połączysz.",
+        "attention": "Runner jest nieosiągalny albo brakuje wymaganego ustawienia.",
+        "notNeeded": "To wdrożenie uruchamia agentów bez runnera."
+      },
+      "testEnvironments": {
+        "title": "Środowiska testowe",
+        "done": "Skonfigurowano. Testerzy mogą używać podglądu na żywo.",
+        "missing": "Nie skonfigurowano. Testerzy, którzy potrzebują podglądu na żywo, nie działają. Pozostali agenci działają.",
+        "attention": "Dostawca środowisk jest nieosiągalny albo brakuje wymaganego ustawienia."
+      },
+      "contentStorage": {
+        "title": "Magazyn zrzutów ekranu",
+        "done": "Skonfigurowano. Kontrole wizualne są włączone.",
+        "missing": "Nie skonfigurowano. Kontrole wizualne są wyłączone.",
+        "attention": "Magazyn jest nieosiągalny."
+      }
+    },
+    "also": {
+      "title": "Także tutaj",
+      "pipelines": "Pipeline'y: {count} do naprawy, {fresh} nowych wbudowanych",
+      "riskPolicies": "Zasady scalania: {count} nieaktualnych, {fresh} nowych",
+      "modelPresets": "Presety modeli: {count} nieaktualnych, {fresh} nowych",
+      "settings": "Ustawienia i połączenia",
+      "workspaceSettings": "Ustawienia workspace'u",
+      "integrations": "Integracje"
+    }
+  },
+  "describeWork": {
+    "title": "Opisz nową pracę",
+    "textLabel": "Co trzeba zrobić",
+    "textHint": "Wystarczy jedno zdanie. Dodaj więcej szczegółów, jeśli je masz.",
+    "textPlaceholder": "Dodaj dziennik audytu dla zdarzeń logowania. Zapisuj każde logowanie z czasem, użytkownikiem i wynikiem.",
+    "savedAs": "Tytuł zadania: {title}",
+    "serviceLabel": "Serwis",
+    "servicePlaceholder": "Wybierz serwis",
+    "kindLabel": "Rodzaj",
+    "kind": {
+      "feature": "Funkcja",
+      "bug": "Błąd"
+    },
+    "moreKinds": "Więcej rodzajów…",
+    "changeHowItRuns": "Zmień sposób uruchomienia",
+    "workspaceDefault": "Domyślne dla workspace'u",
+    "attachContext": "Dołącz kontekst (otwiera pełny formularz)",
+    "footerHint": "Zadanie zostanie dodane jako nierozpoczęte. Ruszy, gdy naciśniesz Start.",
+    "add": "Dodaj do kolejki",
+    "addAndStart": "Dodaj i uruchom",
+    "addedToast": "Dodano „{title}” do kolejki"
+  },
+  "homePreview": {
+    "nav": {
+      "title": "Praca",
+      "queue": "Kolejka",
+      "board": "Tablica (mapa)",
+      "setup": "Konfiguracja",
+      "setupProgress": "{done} z {total}"
+    },
+    "leave": "Wróć do bieżącego układu",
+    "inbox": {
+      "verb": {
+        "review": "Przejrzyj",
+        "answer": "Odpowiedz",
+        "test": "Przetestuj",
+        "confirm": "Potwierdź",
+        "triage": "Posortuj",
+        "choose": "Wybierz",
+        "open": "Otwórz"
       }
     }
   }
