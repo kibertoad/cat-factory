@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import IconButton from '~/components/common/IconButton.vue'
 
 // Shared "Restart pipeline from this step" control.
 //
@@ -57,13 +58,13 @@ async function restart() {
 
 <template>
   <template v-if="canRestart">
-    <UButton
+    <IconButton
       v-if="!armed"
       icon="i-lucide-rotate-ccw"
       color="neutral"
       variant="ghost"
       size="sm"
-      :title="t('panels.stepRestart.restartFromStep')"
+      :label="t('panels.stepRestart.restartFromStep')"
       @click="
         () => {
           armed = true

@@ -7,6 +7,7 @@ import {
 } from './StepDelegatedStatus.logic'
 import type { PipelineStep } from '~/types/execution'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import IconButton from '~/components/common/IconButton.vue'
 
 // The EXTERNAL work a delegated step dispatched: which registered executor is running it, what it
 // is doing, and the link to that system's own logs, which is the affordance everything else here
@@ -106,25 +107,25 @@ const { copy: copyText } = useCopyToClipboard()
              it is: refusing to follow it is right, and hiding it would report a run that named
              no link at all. -->
         <dd class="truncate font-mono text-2xs text-toned">
-          <a
+          <ULink
+            raw
             v-if="runHref"
-            :href="runHref"
+            :to="runHref"
             target="_blank"
             rel="noopener noreferrer"
             class="hover:underline"
           >
             {{ record.url }}
-          </a>
+          </ULink>
           <span v-else>{{ record.url }}</span>
         </dd>
-        <UButton
+        <IconButton
           icon="i-lucide-copy"
           color="neutral"
           variant="ghost"
           size="xs"
           class="ms-auto shrink-0"
-          :title="t('panels.stepMeta.delegated.copyUrl')"
-          :aria-label="t('panels.stepMeta.delegated.copyUrl')"
+          :label="t('panels.stepMeta.delegated.copyUrl')"
           @click="copyText(record.url)"
         />
       </div>
@@ -166,15 +167,16 @@ const { copy: copyText } = useCopyToClipboard()
           <span class="truncate">{{
             attempt.outcome || t('panels.stepMeta.delegated.noOutcome')
           }}</span>
-          <a
+          <ULink
+            raw
             v-if="externalRunHref(attempt.url)"
-            :href="externalRunHref(attempt.url)!"
+            :to="externalRunHref(attempt.url)!"
             target="_blank"
             rel="noopener noreferrer"
             class="ms-auto shrink-0 font-mono hover:underline"
           >
             {{ t('panels.stepMeta.delegated.openRun') }}
-          </a>
+          </ULink>
         </li>
       </ul>
     </div>

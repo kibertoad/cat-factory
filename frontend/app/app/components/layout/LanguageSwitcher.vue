@@ -40,8 +40,9 @@ const items = computed<DropdownMenuItem[][]>(() => [
 
 <template>
   <UDropdownMenu :items="items" :content="{ side: 'top', align: 'start' }">
-    <button
-      type="button"
+    <UButton
+      color="neutral"
+      variant="ghost"
       data-testid="language-switcher"
       :aria-label="t('language.switcher')"
       :title="collapsed ? `${t('language.switcher')}: ${current}` : undefined"
@@ -56,6 +57,6 @@ const items = computed<DropdownMenuItem[][]>(() => [
         <div class="truncate text-xs font-medium text-highlighted">{{ current }}</div>
       </div>
       <UIcon v-if="!collapsed" name="i-lucide-chevron-up" class="h-4 w-4 shrink-0 text-dimmed" />
-    </button>
+    </UButton>
   </UDropdownMenu>
 </template>

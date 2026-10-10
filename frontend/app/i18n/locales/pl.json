@@ -608,7 +608,8 @@
     "pastedLink": {
       "offer": "Ten opis zawiera odnośnik do strony {source}. Dołączyć ją jako kontekst?",
       "attach": "Dołącz"
-    }
+    },
+    "removePending": "Usuń {name}"
   },
   "errors": {
     "generic": {
@@ -5468,7 +5469,8 @@
         "releaseInteractive": "Przestań być domyślnym w aplikacji",
         "claimUnattended": "Ustaw jako domyślny bez nadzoru",
         "releaseUnattended": "Przestań być domyślnym bez nadzoru"
-      }
+      },
+      "removeLabel": "Usuń etykietę {label}"
     },
     "progress": {
       "status": {
@@ -6392,7 +6394,8 @@
       "heading": "Prześlij projekt referencyjny",
       "viewPlaceholder": "Nazwa widoku (np. login)",
       "tipReady": "Wskazówka: przeciągnij obraz bezpośrednio na parę powyżej, aby ustawić jej referencję.",
-      "tipNeedView": "Najpierw wpisz nazwę widoku, a potem wybierz plik. Albo przeciągnij obraz bezpośrednio na parę powyżej."
+      "tipNeedView": "Najpierw wpisz nazwę widoku, a potem wybierz plik. Albo przeciągnij obraz bezpośrednio na parę powyżej.",
+      "choose": "Wybierz plik"
     },
     "requestFix": {
       "heading": "Poproś o poprawkę",
@@ -8522,6 +8525,7 @@
     "title": "Wygenerowani kandydaci",
     "titleWithBlock": "Wygenerowani kandydaci: {title}",
     "subtitle": "Porównaj, co wytworzyła każda integracja, i zachowaj to, co chcesz",
+    "pickOne": "Wybierz jeden. Wybranie kandydata usuwa poprzedni wybór.",
     "automatic": "Wygenerowano tylko jednego kandydata, więc zachowano go automatycznie. Nikt go nie przejrzał.",
     "unlabelledSubject": "Nie zadeklarowano tematu",
     "noPreview": "Brak podglądu",

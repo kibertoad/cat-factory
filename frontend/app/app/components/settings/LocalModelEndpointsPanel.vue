@@ -18,6 +18,7 @@ import {
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import IconButton from '~/components/common/IconButton.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -331,13 +332,13 @@ async function remove(p: LocalRunner) {
             </div>
           </div>
           <div class="flex items-center gap-1">
-            <UButton
+            <IconButton
               icon="i-lucide-pencil"
               color="neutral"
               variant="ghost"
               size="xs"
               :disabled="busy"
-              :title="t('settings.localModelEndpoints.edit')"
+              :label="t('settings.localModelEndpoints.edit')"
               @click="selectRunner(e.provider)"
             />
             <UButton

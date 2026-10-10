@@ -3455,7 +3455,8 @@
     "pastedLink": {
       "offer": "Diese Beschreibung verlinkt eine {source}-Seite. Als Kontext anhängen?",
       "attach": "Anhängen"
-    }
+    },
+    "removePending": "{name} entfernen"
   },
   "providers": {
     "presetMismatch": {
@@ -4939,7 +4940,8 @@
         "releaseInteractive": "Nicht mehr Standard in der App",
         "claimUnattended": "Als Standard ohne Aufsicht festlegen",
         "releaseUnattended": "Nicht mehr Standard ohne Aufsicht"
-      }
+      },
+      "removeLabel": "Label {label} entfernen"
     },
     "progress": {
       "status": {
@@ -7122,7 +7124,8 @@
       "heading": "Ein Referenzdesign hochladen",
       "viewPlaceholder": "Ansichtsname (z. B. login)",
       "tipReady": "Tipp: Ziehe ein Bild direkt auf ein Paar oben, um dessen Referenz festzulegen.",
-      "tipNeedView": "Gib zuerst einen Ansichtsnamen ein und wähle dann eine Datei. Oder ziehe ein Bild direkt auf ein Paar oben."
+      "tipNeedView": "Gib zuerst einen Ansichtsnamen ein und wähle dann eine Datei. Oder ziehe ein Bild direkt auf ein Paar oben.",
+      "choose": "Datei auswählen"
     },
     "requestFix": {
       "heading": "Eine Korrektur anfordern",
@@ -8522,6 +8525,7 @@
     "title": "Erzeugte Kandidaten",
     "titleWithBlock": "Erzeugte Kandidaten: {title}",
     "subtitle": "Vergleiche, was jede Integration erzeugt hat, und behalte, was du willst",
+    "pickOne": "Wähle einen aus. Die Auswahl eines Kandidaten hebt die vorherige auf.",
     "automatic": "Es wurde nur ein Kandidat erzeugt, daher wurde er automatisch behalten. Niemand hat ihn geprüft.",
     "unlabelledSubject": "Kein Motiv angegeben",
     "noPreview": "Keine Vorschau verfügbar",

@@ -434,18 +434,22 @@ const technicalLabel = computed(() => {
               </i18n-t>
             </p>
             <div class="mt-1.5 flex flex-wrap gap-2">
-              <button
-                class="font-medium text-app-warning-100 underline-offset-2 hover:underline"
+              <UButton
+                color="neutral"
+                variant="link"
+                class="p-0 text-xs font-medium text-app-warning-100 underline-offset-2 hover:underline"
                 @click="ui.openModelConfig()"
               >
                 {{ t('inspector.runSettings.editPresets') }}
-              </button>
-              <button
-                class="font-medium text-app-warning-100 underline-offset-2 hover:underline"
+              </UButton>
+              <UButton
+                color="neutral"
+                variant="link"
+                class="p-0 text-xs font-medium text-app-warning-100 underline-offset-2 hover:underline"
                 @click="ui.openVendorCredentials()"
               >
                 {{ t('inspector.runSettings.configureVendors') }}
-              </button>
+              </UButton>
             </div>
           </div>
         </div>

@@ -19,6 +19,7 @@ import { showOverrideField } from '~/utils/uiMode'
 import GitHubRepoSearchSelect from '~/components/github/GitHubRepoSearchSelect.vue'
 import RepoTreeBrowser from '~/components/github/RepoTreeBrowser.vue'
 import GitHubDocUrlImport from '~/components/fragments/GitHubDocUrlImport.vue'
+import IconButton from '~/components/common/IconButton.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -750,12 +751,12 @@ async function unlinkSource(id: string) {
             <div class="ms-auto flex gap-1">
               <!-- Editing a repo-SOURCED fragment locally would be overwritten on the next sync,
                    so only hand-authored fragments are editable here. -->
-              <UButton
+              <IconButton
                 v-if="!f.source"
                 icon="i-lucide-pencil"
                 size="xs"
                 variant="ghost"
-                :title="t('common.edit')"
+                :label="t('common.edit')"
                 @click="startEdit(f)"
               />
               <UButton
@@ -866,12 +867,12 @@ async function unlinkSource(id: string) {
             </p>
           </div>
           <div class="ms-auto flex gap-1">
-            <UButton
+            <IconButton
               icon="i-lucide-refresh-cw"
               size="xs"
               variant="ghost"
               :loading="rowBusy(`refresh:${f.id}`)"
-              :title="t('fragments.documents.refreshTitle')"
+              :label="t('fragments.documents.refreshTitle')"
               @click="refreshFragment(f.id)"
             />
             <UButton

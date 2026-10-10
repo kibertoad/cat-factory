@@ -20,6 +20,7 @@ import {
 } from './ReportsPanel.logic'
 import ReportsSpendBreakdown from '~/components/panels/ReportsSpendBreakdown.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import IconButton from '~/components/common/IconButton.vue'
 
 // Reports: cross-cutting usage analytics for the active account — where the spend and the
 // work actually go. Spend per model and agent kind, spend + run activity per workspace /
@@ -137,6 +138,14 @@ const maxRuns = computed(() => maxOf(activityByDimension.value, (row) => row.run
 
 /** Boards the filter offers — the active account's, since the report is account-scoped. */
 const boards = computed(() => workspace.accountWorkspaces)
+// "Every board" is a NAMED sentinel, not an empty string: an empty string is what a Select
+// reserves for "nothing selected", and Reka throws on an item that carries one. The store holds
+// the same state as null, so the two are mapped at the boundary below.
+const ALL_BOARDS = 'all'
+const boardFilterItems = computed(() => [
+  { label: t('reports.filter.allBoards'), value: ALL_BOARDS },
+  ...boards.value.map((board) => ({ label: board.name, value: board.id })),
+])
 
 function trendTooltip(point: { start: number; meteredCost: number; subscriptionCost: number }) {
   return `${d(new Date(point.start), 'short')} · ${t('reports.legend.metered')} ${money(point.meteredCost)} · ${t('reports.legend.subscription')} ${money(point.subscriptionCost)}`
@@ -206,55 +215,52 @@ watch(
           </div>
           <!-- Filters in ONE row above the charts: window, then board scope. -->
           <div class="ms-auto flex flex-wrap items-center gap-1.5">
-            <select
-              class="rounded-lg border border-default bg-default px-2.5 py-1.5 text-xs text-default"
-              :value="reports.workspaceFilter ?? ''"
+            <USelect
+              :model-value="reports.workspaceFilter ?? ALL_BOARDS"
+              :items="boardFilterItems"
+              size="xs"
               :aria-label="t('reports.filter.board')"
               data-testid="reports-board-filter"
-              @change="
-                reports.setWorkspaceFilter(($event.target as HTMLSelectElement).value || null)
+              @update:model-value="
+                reports.setWorkspaceFilter($event === ALL_BOARDS ? null : String($event))
               "
+            />
+            <UTabs
+              :model-value="reports.window"
+              :items="WINDOWS"
+              :content="false"
+              size="xs"
+              class="me-1"
+              @update:model-value="reports.setWindow($event as ReportWindow)"
             >
-              <option value="">{{ t('reports.filter.allBoards') }}</option>
-              <option v-for="board in boards" :key="board.id" :value="board.id">
-                {{ board.name }}
-              </option>
-            </select>
-            <div class="me-1 flex rounded-lg border border-default p-0.5 text-xs">
-              <button
-                v-for="opt in WINDOWS"
-                :key="opt.value"
-                class="rounded-md px-2.5 py-1 transition"
-                :class="
-                  reports.window === opt.value
-                    ? 'bg-elevated text-app-100'
-                    : 'text-muted hover:text-default'
-                "
-                :data-testid="`reports-window-${opt.value}`"
-                @click="reports.setWindow(opt.value)"
-              >
-                {{ opt.label }}
-              </button>
-            </div>
-            <button
-              class="rounded-lg border border-default p-1.5 text-muted transition hover:text-default"
-              :aria-label="t('reports.refresh')"
-              :title="t('reports.refresh')"
+              <!-- UTabs renders its own triggers and forwards nothing from an item, so this
+                   slot is the one place a stable per-window selector can live. -->
+              <template #default="{ item }">
+                <span :data-testid="`reports-window-${item.value}`">{{ item.label }}</span>
+              </template>
+            </UTabs>
+            <IconButton
+              color="neutral"
+              variant="ghost"
+              icon="i-lucide-refresh-cw"
+              :label="t('reports.refresh')"
+              :ui="{
+                base: 'rounded-lg border border-default p-1.5 text-muted transition hover:text-default',
+                leadingIcon: loading ? 'h-4 w-4 animate-spin' : 'h-4 w-4',
+              }"
               @click="refresh"
-            >
-              <UIcon
-                name="i-lucide-refresh-cw"
-                class="h-4 w-4"
-                :class="{ 'animate-spin': loading }"
-              />
-            </button>
-            <button
-              class="rounded-lg border border-default p-1.5 text-muted transition hover:text-default"
-              :aria-label="t('common.close')"
+            />
+            <IconButton
+              color="neutral"
+              variant="ghost"
+              icon="i-lucide-x"
+              :label="t('common.close')"
+              :ui="{
+                base: 'rounded-lg border border-default p-1.5 text-muted transition hover:text-default',
+                leadingIcon: 'h-4 w-4',
+              }"
               @click="close"
-            >
-              <UIcon name="i-lucide-x" class="h-4 w-4" />
-            </button>
+            />
           </div>
         </header>
 
@@ -265,12 +271,14 @@ watch(
           >
             <p>{{ t('reports.error') }}</p>
             <p v-if="error" class="mt-1 text-xs text-app-error-300/80">{{ error }}</p>
-            <button
+            <UButton
+              color="neutral"
+              variant="ghost"
               class="mt-2 rounded-md border border-app-error-700 px-3 py-1 text-xs hover:bg-app-error-900/40"
               @click="refresh"
             >
               {{ t('reports.retry') }}
-            </button>
+            </UButton>
           </div>
 
           <div v-else-if="loading && !view" class="py-16 text-center text-sm text-muted">
@@ -466,22 +474,17 @@ watch(
                 <SectionLabel as="h2">
                   {{ t('reports.breakdown.title') }}
                 </SectionLabel>
-                <div class="flex rounded-lg border border-default p-0.5 text-xs">
-                  <button
-                    v-for="opt in DIMENSIONS"
-                    :key="opt.value"
-                    class="rounded-md px-2.5 py-1 transition"
-                    :class="
-                      dimension === opt.value
-                        ? 'bg-elevated text-app-100'
-                        : 'text-muted hover:text-default'
-                    "
-                    :data-testid="`reports-dimension-${opt.value}`"
-                    @click="dimension = opt.value"
-                  >
-                    {{ opt.label }}
-                  </button>
-                </div>
+                <UTabs
+                  :model-value="dimension"
+                  :items="DIMENSIONS"
+                  :content="false"
+                  size="xs"
+                  @update:model-value="dimension = $event as ReportActivityDimension"
+                >
+                  <template #default="{ item }">
+                    <span :data-testid="`reports-dimension-${item.value}`">{{ item.label }}</span>
+                  </template>
+                </UTabs>
               </div>
               <div class="grid gap-6 md:grid-cols-2">
                 <div>

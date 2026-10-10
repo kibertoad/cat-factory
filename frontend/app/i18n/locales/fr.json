@@ -608,7 +608,8 @@
     "pastedLink": {
       "offer": "Cette description renvoie à une page {source}. L’attacher comme contexte ?",
       "attach": "Attacher"
-    }
+    },
+    "removePending": "Retirer {name}"
   },
   "errors": {
     "generic": {
@@ -5468,7 +5469,8 @@
         "releaseInteractive": "Ne plus être le défaut dans l'application",
         "claimUnattended": "Définir comme défaut sans surveillance",
         "releaseUnattended": "Ne plus être le défaut sans surveillance"
-      }
+      },
+      "removeLabel": "Retirer le libellé {label}"
     },
     "progress": {
       "status": {
@@ -6392,7 +6394,8 @@
       "heading": "Importer une maquette de référence",
       "viewPlaceholder": "Nom de la vue (ex. login)",
       "tipReady": "Astuce : déposez une image directement sur une paire ci-dessus pour définir sa référence.",
-      "tipNeedView": "Saisissez d'abord un nom de vue, puis choisissez un fichier. Ou déposez une image directement sur une paire ci-dessus."
+      "tipNeedView": "Saisissez d'abord un nom de vue, puis choisissez un fichier. Ou déposez une image directement sur une paire ci-dessus.",
+      "choose": "Choisir un fichier"
     },
     "requestFix": {
       "heading": "Demander une correction",
@@ -8522,6 +8525,7 @@
     "title": "Candidats générés",
     "titleWithBlock": "Candidats générés : {title}",
     "subtitle": "Comparez ce que chaque intégration a produit et conservez ce que vous voulez",
+    "pickOne": "Choisissez-en un. Choisir un candidat retire le choix précédent.",
     "automatic": "Un seul candidat a été généré, il a donc été conservé automatiquement. Personne ne l’a examiné.",
     "unlabelledSubject": "Aucun sujet déclaré",
     "noPreview": "Aucun aperçu disponible",

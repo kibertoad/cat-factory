@@ -74,24 +74,28 @@ function toggle(id: string) {
     </div>
     <div class="space-y-2">
       <section v-for="g in groups" :key="g.id">
-        <SectionLabel
-          as="button"
-          type="button"
-          class="flex w-full items-center gap-1.5 rounded-sm px-1 py-1 text-start transition hover:text-default"
+        <UButton
+          color="neutral"
+          variant="link"
+          class="group w-full rounded-sm px-1 py-1"
+          :aria-expanded="!isCollapsed(g.id)"
           @click="toggle(g.id)"
         >
-          <UIcon
-            :name="isCollapsed(g.id) ? 'i-lucide-chevron-right' : 'i-lucide-chevron-down'"
-            class="h-3.5 w-3.5 shrink-0"
-          />
-          <span>{{ g.label }}</span>
-          <span class="ms-auto text-app-600">{{ g.agents.length }}</span>
-        </SectionLabel>
+          <SectionLabel as="span" class="flex w-full items-center gap-1.5 group-hover:text-default">
+            <UIcon
+              :name="isCollapsed(g.id) ? 'i-lucide-chevron-right' : 'i-lucide-chevron-down'"
+              class="h-3.5 w-3.5 shrink-0"
+            />
+            <span>{{ g.label }}</span>
+            <span class="ms-auto text-app-600">{{ g.agents.length }}</span>
+          </SectionLabel>
+        </UButton>
         <div v-if="!isCollapsed(g.id)" class="mt-1 space-y-1.5">
-          <button
+          <UButton
+            color="neutral"
+            variant="ghost"
             v-for="a in g.agents"
             :key="a.kind"
-            type="button"
             class="flex w-full items-center gap-2.5 rounded-lg border border-muted bg-elevated/60 p-2 text-start transition hover:border-app-500 hover:bg-elevated"
             :title="a.description"
             :data-testid="`palette-agent-${a.kind}`"
@@ -108,7 +112,7 @@ function toggle(id: string) {
               <div class="truncate text-3xs text-muted">{{ a.description }}</div>
             </div>
             <UIcon name="i-lucide-plus" class="ms-auto h-4 w-4 shrink-0 text-dimmed" />
-          </button>
+          </UButton>
         </div>
       </section>
     </div>

@@ -225,31 +225,40 @@ watch(open, (isOpen) => {
           <p v-if="recordsDropped > 0" class="text-app-warning-300/90">
             {{ t('bootstrap.adoption.survey.truncated', { count: recordsDropped }) }}
           </p>
-          <details>
-            <summary class="cursor-pointer text-dimmed hover:text-toned">
-              {{ t('bootstrap.adoption.survey.show') }}
-            </summary>
-            <ul class="mt-2 space-y-1">
-              <!-- Keyed by POSITION: the transcript is append-only and rendered in order, and
+          <UCollapsible>
+            <template #default="{ open }">
+              <UButton
+                variant="link"
+                color="neutral"
+                size="xs"
+                :icon="open ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
+                :label="t('bootstrap.adoption.survey.show')"
+                :ui="{ base: 'w-full justify-start gap-1 p-0 text-dimmed hover:text-toned' }"
+              />
+            </template>
+            <template #content>
+              <ul class="mt-2 space-y-1">
+                <!-- Keyed by POSITION: the transcript is append-only and rendered in order, and
                    the same path legitimately appears twice (a body refused by the seed and then
                    served to the model, a path the model retried). Keying on the path patched
                    those two rows against each other and rendered a note beside the wrong one. -->
-              <li
-                v-for="(entry, index) in surveyReads"
-                :key="index"
-                class="flex items-baseline gap-2"
-              >
-                <span
-                  class="shrink-0 font-mono text-3xs uppercase"
-                  :class="entry.outcome === 'read' ? 'text-dimmed' : 'text-app-warning-400/80'"
+                <li
+                  v-for="(entry, index) in surveyReads"
+                  :key="index"
+                  class="flex items-baseline gap-2"
                 >
-                  {{ t(`bootstrap.adoption.survey.outcome.${entry.outcome}`) }}
-                </span>
-                <span class="font-mono text-muted">{{ entry.path }}</span>
-                <span v-if="entry.note" class="text-app-600">{{ entry.note }}</span>
-              </li>
-            </ul>
-          </details>
+                  <span
+                    class="shrink-0 font-mono text-3xs uppercase"
+                    :class="entry.outcome === 'read' ? 'text-dimmed' : 'text-app-warning-400/80'"
+                  >
+                    {{ t(`bootstrap.adoption.survey.outcome.${entry.outcome}`) }}
+                  </span>
+                  <span class="font-mono text-muted">{{ entry.path }}</span>
+                  <span v-if="entry.note" class="text-app-600">{{ entry.note }}</span>
+                </li>
+              </ul>
+            </template>
+          </UCollapsible>
         </div>
 
         <!-- The reviewer's own instructions, on BOTH paths. With no suggestion to answer this is

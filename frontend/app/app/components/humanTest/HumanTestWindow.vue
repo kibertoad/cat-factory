@@ -183,16 +183,17 @@ const canDestroy = computed(
                 t(ENV_STATUS_LABEL[env.status])
               }}</span>
             </div>
-            <a
+            <ULink
+              raw
               v-if="env.url"
-              :href="env.url"
+              :to="env.url"
               target="_blank"
               rel="noopener"
               class="inline-flex items-center gap-1.5 break-all text-sm text-app-info-300 hover:underline"
             >
               <UIcon name="i-lucide-external-link" class="h-3.5 w-3.5 shrink-0" />
               {{ env.url }}
-            </a>
+            </ULink>
             <p v-else class="text-xs italic text-dimmed">
               {{ t('humanTest.environment.noUrl') }}
             </p>
@@ -262,19 +263,22 @@ const canDestroy = computed(
             <SectionLabel as="h3">
               {{ t('humanTest.fix.heading') }}
             </SectionLabel>
-            <button
-              class="text-xs text-muted hover:text-default"
+            <UButton
+              color="neutral"
+              variant="ghost"
+              class="p-0 text-xs text-muted hover:bg-transparent hover:text-default"
               @click="showFindings = !showFindings"
             >
               {{ showFindings ? t('humanTest.fix.cancel') : t('humanTest.fix.requestFix') }}
-            </button>
+            </UButton>
           </div>
           <div v-if="showFindings" class="mt-2 space-y-2">
-            <textarea
+            <UTextarea
               v-model="findings"
-              rows="4"
+              :rows="4"
               :placeholder="t('humanTest.fix.placeholder')"
-              class="w-full rounded-md border border-muted bg-app-950 px-3 py-2 text-sm text-default placeholder:text-app-600 focus:border-app-warning-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-app-warning-500/60"
+              size="sm"
+              class="w-full"
             />
             <UButton
               size="sm"

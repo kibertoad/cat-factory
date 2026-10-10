@@ -206,14 +206,15 @@ watch(
           :key="entry.path"
           class="flex items-center justify-between gap-2 px-3 py-1.5"
         >
-          <button
-            type="button"
-            class="flex items-center gap-2 truncate text-sm text-default hover:text-primary"
+          <UButton
+            color="primary"
+            variant="ghost"
+            class="flex items-center gap-2 truncate p-0 text-sm text-default hover:bg-transparent hover:text-primary"
             @click="browseTo(entry.path)"
           >
             <UIcon name="i-lucide-folder" class="h-4 w-4 shrink-0 text-app-warning-400" />
             <span class="truncate">{{ entry.name }}</span>
-          </button>
+          </UButton>
           <span
             v-if="clashes(entry)"
             class="flex shrink-0 items-center gap-1 text-xs text-app-warning-400"
@@ -256,9 +257,10 @@ watch(
               data-testid="repo-tree-select-all"
               @update:model-value="toggleAllFiles"
             />
-            <button
-              type="button"
-              class="text-xs text-muted hover:text-primary"
+            <UButton
+              color="primary"
+              variant="ghost"
+              class="p-0 text-xs text-muted hover:bg-transparent hover:text-primary"
               @click="toggleAllFiles"
             >
               {{
@@ -268,7 +270,7 @@ watch(
                   selectableFiles.length,
                 )
               }}
-            </button>
+            </UButton>
           </li>
           <li
             v-for="entry in fileEntries"
@@ -282,16 +284,17 @@ watch(
                 :aria-label="entry.name"
                 @update:model-value="pick(entry.path)"
               />
-              <button
-                type="button"
-                class="flex items-center gap-2 truncate text-sm hover:text-primary"
+              <UButton
+                color="primary"
+                variant="ghost"
+                class="flex items-center gap-2 truncate p-0 text-sm hover:bg-transparent hover:text-primary"
                 :class="isPicked(entry.path) ? 'text-primary' : 'text-toned'"
                 :disabled="isAdded(entry.path)"
                 @click="pick(entry.path)"
               >
                 <UIcon name="i-lucide-file" class="h-4 w-4 shrink-0 text-muted" />
                 <span class="truncate">{{ entry.name }}</span>
-              </button>
+              </UButton>
             </div>
             <span
               v-if="isAdded(entry.path)"

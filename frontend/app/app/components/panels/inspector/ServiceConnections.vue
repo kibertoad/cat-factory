@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import type { Block, ServiceConnection } from '~/types/domain'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
+import IconButton from '~/components/common/IconButton.vue'
 
 // Service-frame (`type: 'service'`) connections: the other services this one USES
 // (consumer→provider edges, stored on this frame — the consumer end). Each row picks a
@@ -124,12 +125,12 @@ const usedBy = computed(() =>
             (e: KeyboardEvent) => setDescription(i, (e.target as HTMLInputElement).value)
           "
         />
-        <UButton
+        <IconButton
           size="xs"
           variant="ghost"
           color="neutral"
           icon="i-lucide-x"
-          :title="t('inspector.serviceConnections.remove')"
+          :label="t('inspector.serviceConnections.remove')"
           data-testid="service-connection-remove"
           @click="removeConnection(i)"
         />

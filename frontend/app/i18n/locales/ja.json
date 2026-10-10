@@ -608,7 +608,8 @@
     "pastedLink": {
       "offer": "この説明は {source} のページにリンクしています。コンテキストとして添付しますか？",
       "attach": "添付"
-    }
+    },
+    "removePending": "{name} を削除"
   },
   "errors": {
     "generic": {
@@ -5468,7 +5469,8 @@
         "releaseInteractive": "アプリ内の既定を解除",
         "claimUnattended": "無人実行の既定にする",
         "releaseUnattended": "無人実行の既定を解除"
-      }
+      },
+      "removeLabel": "ラベル {label} を削除"
     },
     "progress": {
       "status": {
@@ -6392,7 +6394,8 @@
       "heading": "リファレンスデザインをアップロード",
       "viewPlaceholder": "ビュー名（例: login）",
       "tipReady": "ヒント: 上のペアに画像を直接ドロップするとリファレンスに設定できます。",
-      "tipNeedView": "まずビュー名を入力してからファイルを選択してください。または上のペアに画像を直接ドロップしてください。"
+      "tipNeedView": "まずビュー名を入力してからファイルを選択してください。または上のペアに画像を直接ドロップしてください。",
+      "choose": "ファイルを選択"
     },
     "requestFix": {
       "heading": "修正をリクエスト",
@@ -8522,6 +8525,7 @@
     "title": "生成された候補",
     "titleWithBlock": "生成された候補: {title}",
     "subtitle": "各連携が生成したものを比較し、残すものを選びます",
+    "pickOne": "1つ選びます。候補を選ぶと、前に選んだものは解除されます。",
     "automatic": "候補が1つしか生成されなかったため、自動的に採用されました。誰も確認していません。",
     "unlabelledSubject": "対象の申告なし",
     "noPreview": "プレビューはありません",
