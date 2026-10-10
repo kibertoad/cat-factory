@@ -1,4 +1,5 @@
 import {
+  definePublicDirectorySuite,
   definePublicKeyReachSuite,
   defineWorkspaceAccessSuite,
   defineWorkspaceRbacSuite,
@@ -14,3 +15,5 @@ defineWorkspaceRbacSuite(harness)
 // Directory-sync slice 2: account-level public-API keys, their workspace reach and the per-request
 // workspace resolution, over the real grant rows and the real auth gate.
 definePublicKeyReachSuite(harness)
+// Directory-sync slice 3: the public directory snapshots and change feed, over HTTP.
+definePublicDirectorySuite(harness)

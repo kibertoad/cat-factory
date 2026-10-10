@@ -252,6 +252,586 @@
         ],
         "type": "object"
       },
+      "DirectoryAccountMembership": {
+        "properties": {
+          "createdAt": {
+            "type": "number"
+          },
+          "roles": {
+            "items": {
+              "enum": [
+                "admin",
+                "developer",
+                "product"
+              ],
+              "type": "string"
+            },
+            "minItems": 1,
+            "type": "array"
+          },
+          "userId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "userId",
+          "roles",
+          "createdAt"
+        ],
+        "type": "object"
+      },
+      "DirectoryAccountMembershipPage": {
+        "properties": {
+          "asOfSeq": {
+            "type": "number"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DirectoryAccountMembership"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor",
+          "asOfSeq"
+        ],
+        "type": "object"
+      },
+      "DirectoryChange": {
+        "oneOf": [
+          {
+            "properties": {
+              "at": {
+                "type": "number"
+              },
+              "entity": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/DirectoryWorkspace"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "entityId": {
+                "type": "string"
+              },
+              "entityType": {
+                "const": "workspace"
+              },
+              "seq": {
+                "type": "number"
+              },
+              "workspaceId": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "seq",
+              "at",
+              "workspaceId",
+              "entityId",
+              "entityType",
+              "entity"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "at": {
+                "type": "number"
+              },
+              "entity": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/DirectoryUser"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "entityId": {
+                "type": "string"
+              },
+              "entityType": {
+                "const": "user"
+              },
+              "seq": {
+                "type": "number"
+              },
+              "workspaceId": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "seq",
+              "at",
+              "workspaceId",
+              "entityId",
+              "entityType",
+              "entity"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "at": {
+                "type": "number"
+              },
+              "entity": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/DirectoryAccountMembership"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "entityId": {
+                "type": "string"
+              },
+              "entityType": {
+                "const": "account_membership"
+              },
+              "seq": {
+                "type": "number"
+              },
+              "workspaceId": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "seq",
+              "at",
+              "workspaceId",
+              "entityId",
+              "entityType",
+              "entity"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "at": {
+                "type": "number"
+              },
+              "entity": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/DirectoryWorkspaceMembership"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "entityId": {
+                "type": "string"
+              },
+              "entityType": {
+                "const": "workspace_membership"
+              },
+              "seq": {
+                "type": "number"
+              },
+              "workspaceId": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "seq",
+              "at",
+              "workspaceId",
+              "entityId",
+              "entityType",
+              "entity"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "at": {
+                "type": "number"
+              },
+              "entity": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/DirectoryRepo"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "entityId": {
+                "type": "string"
+              },
+              "entityType": {
+                "const": "repo"
+              },
+              "seq": {
+                "type": "number"
+              },
+              "workspaceId": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "seq",
+              "at",
+              "workspaceId",
+              "entityId",
+              "entityType",
+              "entity"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "DirectoryChangePage": {
+        "properties": {
+          "changes": {
+            "items": {
+              "$ref": "#/components/schemas/DirectoryChange"
+            },
+            "type": "array"
+          },
+          "headSeq": {
+            "type": "number"
+          },
+          "nextAfter": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "changes",
+          "nextAfter",
+          "headSeq"
+        ],
+        "type": "object"
+      },
+      "DirectoryRepo": {
+        "properties": {
+          "defaultBranch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "monorepo": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "private": {
+            "type": "boolean"
+          },
+          "provider": {
+            "enum": [
+              "github",
+              "gitlab"
+            ],
+            "type": "string"
+          },
+          "repoId": {
+            "type": "number"
+          },
+          "workspaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspaceId",
+          "repoId",
+          "provider",
+          "owner",
+          "name",
+          "defaultBranch",
+          "private",
+          "monorepo"
+        ],
+        "type": "object"
+      },
+      "DirectoryRepoPage": {
+        "properties": {
+          "asOfSeq": {
+            "type": "number"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DirectoryRepo"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor",
+          "asOfSeq"
+        ],
+        "type": "object"
+      },
+      "DirectoryUser": {
+        "properties": {
+          "avatarUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "email",
+          "avatarUrl"
+        ],
+        "type": "object"
+      },
+      "DirectoryUserPage": {
+        "properties": {
+          "asOfSeq": {
+            "type": "number"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DirectoryUser"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor",
+          "asOfSeq"
+        ],
+        "type": "object"
+      },
+      "DirectoryWorkspace": {
+        "properties": {
+          "accessMode": {
+            "enum": [
+              "account",
+              "restricted"
+            ],
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "accessMode"
+        ],
+        "type": "object"
+      },
+      "DirectoryWorkspaceMembership": {
+        "properties": {
+          "createdAt": {
+            "type": "number"
+          },
+          "role": {
+            "enum": [
+              "admin",
+              "member",
+              "viewer"
+            ],
+            "type": "string"
+          },
+          "userId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspaceId",
+          "userId",
+          "role",
+          "createdAt"
+        ],
+        "type": "object"
+      },
+      "DirectoryWorkspaceMembershipPage": {
+        "properties": {
+          "asOfSeq": {
+            "type": "number"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DirectoryWorkspaceMembership"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor",
+          "asOfSeq"
+        ],
+        "type": "object"
+      },
+      "DirectoryWorkspacePage": {
+        "properties": {
+          "asOfSeq": {
+            "type": "number"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DirectoryWorkspace"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor",
+          "asOfSeq"
+        ],
+        "type": "object"
+      },
       "DocumentFreshness": {
         "oneOf": [
           {
@@ -8227,7 +8807,7 @@
       "name": "MIT"
     },
     "title": "cat-factory Public API",
-    "version": "1.80.0"
+    "version": "1.81.0"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -12721,6 +13301,402 @@
         "summary": "List a run's tool calls",
         "tags": [
           "Debug"
+        ],
+        "x-min-scope": "read"
+      }
+    },
+    "/api/v1/directory/account-memberships": {
+      "get": {
+        "description": "A keyset-paged snapshot of the account’s memberships, each with the member’s account roles. Account-wide, so a key limited to some workspaces is refused with `403` and `reason: \"account_scope_required\"`.",
+        "operationId": "listDirectoryAccountMemberships",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "maximum": 100,
+              "minimum": 1,
+              "pattern": "^\\d+$",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectoryAccountMembershipPage"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "List the account's memberships",
+        "tags": [
+          "Directory"
+        ],
+        "x-min-scope": "read"
+      }
+    },
+    "/api/v1/directory/changes": {
+      "get": {
+        "description": "The account’s directory changes after `after`, in `seq` order, each carrying the CURRENT state of the entity it names, or `null` once that entity no longer exists or is outside the key’s reach. Store `nextAfter` and pass it back as `after`; it can move past the last change served, since changes the key cannot see are skipped. `nextAfter === headSeq` means caught up. A cursor whose following changes were pruned (see `DIRECTORY_CHANGE_RETENTION_DAYS`), or one ahead of the feed, is refused with `409` and `reason: \"cursor_expired\"`: reconcile from the snapshot endpoints and replay from their `asOfSeq`. Account-scoped: no `x-cat-factory-workspace` header is read. A key limited to some workspaces sees only workspace, workspace-membership and repository changes of those workspaces, plus the `workspace` change (with `entity: null`) of every deleted workspace in the account, since deleting a board also drops the key’s grant on it. Treat that change as the removal of the workspace and of every membership and repository under it.",
+        "operationId": "listDirectoryChanges",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "minimum": 0,
+              "pattern": "^\\d+$",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "maximum": 100,
+              "minimum": 1,
+              "pattern": "^\\d+$",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectoryChangePage"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "List directory changes",
+        "tags": [
+          "Directory"
+        ],
+        "x-min-scope": "read"
+      }
+    },
+    "/api/v1/directory/repos": {
+      "get": {
+        "description": "A keyset-paged snapshot of the repositories linked to the account’s workspaces (the ones the key reaches). A repository is listed once per workspace that links it.",
+        "operationId": "listDirectoryRepos",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "maximum": 100,
+              "minimum": 1,
+              "pattern": "^\\d+$",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectoryRepoPage"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "List linked repositories",
+        "tags": [
+          "Directory"
+        ],
+        "x-min-scope": "read"
+      }
+    },
+    "/api/v1/directory/users": {
+      "get": {
+        "description": "A keyset-paged snapshot of every user holding a membership in the account. Account-wide, so a key limited to some workspaces is refused with `403` and `reason: \"account_scope_required\"`.",
+        "operationId": "listDirectoryUsers",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "maximum": 100,
+              "minimum": 1,
+              "pattern": "^\\d+$",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectoryUserPage"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "List the account's users",
+        "tags": [
+          "Directory"
+        ],
+        "x-min-scope": "read"
+      }
+    },
+    "/api/v1/directory/workspace-memberships": {
+      "get": {
+        "description": "A keyset-paged snapshot of the explicit workspace memberships in the account’s workspaces (the ones the key reaches), each with its workspace role.",
+        "operationId": "listDirectoryWorkspaceMemberships",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "maximum": 100,
+              "minimum": 1,
+              "pattern": "^\\d+$",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectoryWorkspaceMembershipPage"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "List workspace memberships",
+        "tags": [
+          "Directory"
+        ],
+        "x-min-scope": "read"
+      }
+    },
+    "/api/v1/directory/workspaces": {
+      "get": {
+        "description": "A keyset-paged snapshot of the account’s workspaces (the ones the key reaches). Every page of one walk reports the same `asOfSeq`; after the last page, replay the change feed from it to pick up anything that changed while paging.",
+        "operationId": "listDirectoryWorkspaces",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "maximum": 100,
+              "minimum": 1,
+              "pattern": "^\\d+$",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectoryWorkspacePage"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "List the account's workspaces",
+        "tags": [
+          "Directory"
         ],
         "x-min-scope": "read"
       }
@@ -24919,6 +25895,10 @@
     {
       "description": "A run’s human decisions, from requirement-review and clarity findings through approval gates, judge verdicts, interviews and follow-ups, so a headless caller can drive the clarification loop instead of the run hanging. Answering requires a `decide`-scope key.",
       "name": "Decisions"
+    },
+    {
+      "description": "The account’s workspaces, users, memberships and linked repositories, as keyset-paged snapshots and an ordered change feed for keeping a copy in sync.",
+      "name": "Directory"
     },
     {
       "name": "Environments"

@@ -329,6 +329,138 @@ func (q *DebugListToolCallsQuery) values() map[string]string {
 	return out
 }
 
+// DirectoryListAccountMembershipsQuery holds the query parameters for DirectoryService.ListAccountMemberships.
+type DirectoryListAccountMembershipsQuery struct {
+	// Cursor zero value means "not sent".
+	Cursor *string
+	// Limit zero value means "not sent".
+	Limit *int
+}
+
+func (q *DirectoryListAccountMembershipsQuery) values() map[string]string {
+	out := map[string]string{}
+	if q == nil {
+		return out
+	}
+	if q.Cursor != nil {
+		out["cursor"] = fmt.Sprintf("%v", *q.Cursor)
+	}
+	if q.Limit != nil {
+		out["limit"] = fmt.Sprintf("%v", *q.Limit)
+	}
+	return out
+}
+
+// DirectoryListChangesQuery holds the query parameters for DirectoryService.ListChanges.
+type DirectoryListChangesQuery struct {
+	// After zero value means "not sent".
+	After *int
+	// Limit zero value means "not sent".
+	Limit *int
+}
+
+func (q *DirectoryListChangesQuery) values() map[string]string {
+	out := map[string]string{}
+	if q == nil {
+		return out
+	}
+	if q.After != nil {
+		out["after"] = fmt.Sprintf("%v", *q.After)
+	}
+	if q.Limit != nil {
+		out["limit"] = fmt.Sprintf("%v", *q.Limit)
+	}
+	return out
+}
+
+// DirectoryListReposQuery holds the query parameters for DirectoryService.ListRepos.
+type DirectoryListReposQuery struct {
+	// Cursor zero value means "not sent".
+	Cursor *string
+	// Limit zero value means "not sent".
+	Limit *int
+}
+
+func (q *DirectoryListReposQuery) values() map[string]string {
+	out := map[string]string{}
+	if q == nil {
+		return out
+	}
+	if q.Cursor != nil {
+		out["cursor"] = fmt.Sprintf("%v", *q.Cursor)
+	}
+	if q.Limit != nil {
+		out["limit"] = fmt.Sprintf("%v", *q.Limit)
+	}
+	return out
+}
+
+// DirectoryListUsersQuery holds the query parameters for DirectoryService.ListUsers.
+type DirectoryListUsersQuery struct {
+	// Cursor zero value means "not sent".
+	Cursor *string
+	// Limit zero value means "not sent".
+	Limit *int
+}
+
+func (q *DirectoryListUsersQuery) values() map[string]string {
+	out := map[string]string{}
+	if q == nil {
+		return out
+	}
+	if q.Cursor != nil {
+		out["cursor"] = fmt.Sprintf("%v", *q.Cursor)
+	}
+	if q.Limit != nil {
+		out["limit"] = fmt.Sprintf("%v", *q.Limit)
+	}
+	return out
+}
+
+// DirectoryListWorkspaceMembershipsQuery holds the query parameters for DirectoryService.ListWorkspaceMemberships.
+type DirectoryListWorkspaceMembershipsQuery struct {
+	// Cursor zero value means "not sent".
+	Cursor *string
+	// Limit zero value means "not sent".
+	Limit *int
+}
+
+func (q *DirectoryListWorkspaceMembershipsQuery) values() map[string]string {
+	out := map[string]string{}
+	if q == nil {
+		return out
+	}
+	if q.Cursor != nil {
+		out["cursor"] = fmt.Sprintf("%v", *q.Cursor)
+	}
+	if q.Limit != nil {
+		out["limit"] = fmt.Sprintf("%v", *q.Limit)
+	}
+	return out
+}
+
+// DirectoryListWorkspacesQuery holds the query parameters for DirectoryService.ListWorkspaces.
+type DirectoryListWorkspacesQuery struct {
+	// Cursor zero value means "not sent".
+	Cursor *string
+	// Limit zero value means "not sent".
+	Limit *int
+}
+
+func (q *DirectoryListWorkspacesQuery) values() map[string]string {
+	out := map[string]string{}
+	if q == nil {
+		return out
+	}
+	if q.Cursor != nil {
+		out["cursor"] = fmt.Sprintf("%v", *q.Cursor)
+	}
+	if q.Limit != nil {
+		out["limit"] = fmt.Sprintf("%v", *q.Limit)
+	}
+	return out
+}
+
 // ReposListAvailableQuery holds the query parameters for ReposService.ListAvailable.
 type ReposListAvailableQuery struct {
 	// Q zero value means "not sent".
@@ -540,6 +672,31 @@ type ListDebugSearchQueriesResponseItem = DebugSearchQuery
 // An alias rather than a second declaration, so the pager cannot drift from the list it pages
 // over.
 type ListDebugToolCallsResponseItem = ListDebugToolCallsResponseToolCall
+
+// DirectoryAccountMembershipPageItem is the element type of DirectoryAccountMembershipPage.Items.
+// An alias rather than a second declaration, so the pager cannot drift from the list it pages
+// over.
+type DirectoryAccountMembershipPageItem = DirectoryAccountMembership
+
+// DirectoryRepoPageItem is the element type of DirectoryRepoPage.Items.
+// An alias rather than a second declaration, so the pager cannot drift from the list it pages
+// over.
+type DirectoryRepoPageItem = DirectoryRepo
+
+// DirectoryUserPageItem is the element type of DirectoryUserPage.Items.
+// An alias rather than a second declaration, so the pager cannot drift from the list it pages
+// over.
+type DirectoryUserPageItem = DirectoryUser
+
+// DirectoryWorkspaceMembershipPageItem is the element type of DirectoryWorkspaceMembershipPage.Items.
+// An alias rather than a second declaration, so the pager cannot drift from the list it pages
+// over.
+type DirectoryWorkspaceMembershipPageItem = DirectoryWorkspaceMembership
+
+// DirectoryWorkspacePageItem is the element type of DirectoryWorkspacePage.Items.
+// An alias rather than a second declaration, so the pager cannot drift from the list it pages
+// over.
+type DirectoryWorkspacePageItem = DirectoryWorkspace
 
 // PublicGuidedReviewListItem is the element type of PublicGuidedReviewList.Sessions.
 // An alias rather than a second declaration, so the pager cannot drift from the list it pages
@@ -3420,6 +3577,303 @@ func (s *MergeRecordsService) TagEffort(ctx context.Context, recordID string, bo
 		return nil, err
 	}
 	return &out, nil
+}
+
+// DirectoryService the account's directory, for keeping an external copy in sync: workspaces, users, account and
+// workspace memberships, and linked repositories as keyset-paged snapshots, plus the ordered
+// change feed that brings a copy up to date. Everything here takes a `read` key; users and
+// account memberships need one that reaches every workspace.
+type DirectoryService struct {
+	client *Client
+}
+
+// ListAccountMemberships list the account's memberships
+// A keyset-paged snapshot of the account’s memberships, each with the member’s account roles.
+// Account-wide, so a key limited to some workspaces is refused with `403` and `reason:
+// "account_scope_required"`.
+// GET /api/v1/directory/account-memberships (operation listDirectoryAccountMemberships).
+func (s *DirectoryService) ListAccountMemberships(ctx context.Context, query *DirectoryListAccountMembershipsQuery) (*DirectoryAccountMembershipPage, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   "/api/v1/directory/account-memberships",
+		Query:  query.values(),
+	}
+	var out DirectoryAccountMembershipPage
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ListAccountMembershipsAll iterates every items across every page of ListAccountMemberships.
+// Follows nextCursor until the server reports no further page. Yields (item, nil) per item and,
+// on a failure mid-iteration, one final (zero, err) — so a partial walk is never mistaken for a
+// complete one.
+func (s *DirectoryService) ListAccountMembershipsAll(ctx context.Context, query *DirectoryListAccountMembershipsQuery) iter.Seq2[DirectoryAccountMembershipPageItem, error] {
+	return func(yield func(DirectoryAccountMembershipPageItem, error) bool) {
+		var page DirectoryListAccountMembershipsQuery
+		if query != nil {
+			page = *query
+		}
+		for {
+			result, err := s.ListAccountMemberships(ctx, &page)
+			if err != nil {
+				var zero DirectoryAccountMembershipPageItem
+				yield(zero, err)
+				return
+			}
+			for _, item := range result.Items {
+				if !yield(item, nil) {
+					return
+				}
+			}
+			if result.NextCursor == nil || *result.NextCursor == "" {
+				return
+			}
+			if page.Cursor != nil && *page.Cursor == *result.NextCursor {
+				var zero DirectoryAccountMembershipPageItem
+				yield(zero, ErrRepeatedCursor)
+				return
+			}
+			page.Cursor = result.NextCursor
+		}
+	}
+}
+
+// ListChanges list directory changes
+// The account’s directory changes after `after`, in `seq` order, each carrying the CURRENT state
+// of the entity it names, or `null` once that entity no longer exists or is outside the key’s
+// reach. Store `nextAfter` and pass it back as `after`; it can move past the last change served,
+// since changes the key cannot see are skipped. `nextAfter === headSeq` means caught up. A cursor
+// whose following changes were pruned (see `DIRECTORY_CHANGE_RETENTION_DAYS`), or one ahead of
+// the feed, is refused with `409` and `reason: "cursor_expired"`: reconcile from the snapshot
+// endpoints and replay from their `asOfSeq`. Account-scoped: no `x-cat-factory-workspace` header
+// is read. A key limited to some workspaces sees only workspace, workspace-membership and
+// repository changes of those workspaces, plus the `workspace` change (with `entity: null`) of
+// every deleted workspace in the account, since deleting a board also drops the key’s grant on
+// it. Treat that change as the removal of the workspace and of every membership and repository
+// under it.
+// GET /api/v1/directory/changes (operation listDirectoryChanges).
+func (s *DirectoryService) ListChanges(ctx context.Context, query *DirectoryListChangesQuery) (*DirectoryChangePage, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   "/api/v1/directory/changes",
+		Query:  query.values(),
+	}
+	var out DirectoryChangePage
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ListRepos list linked repositories
+// A keyset-paged snapshot of the repositories linked to the account’s workspaces (the ones the
+// key reaches). A repository is listed once per workspace that links it.
+// GET /api/v1/directory/repos (operation listDirectoryRepos).
+func (s *DirectoryService) ListRepos(ctx context.Context, query *DirectoryListReposQuery) (*DirectoryRepoPage, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   "/api/v1/directory/repos",
+		Query:  query.values(),
+	}
+	var out DirectoryRepoPage
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ListReposAll iterates every items across every page of ListRepos.
+// Follows nextCursor until the server reports no further page. Yields (item, nil) per item and,
+// on a failure mid-iteration, one final (zero, err) — so a partial walk is never mistaken for a
+// complete one.
+func (s *DirectoryService) ListReposAll(ctx context.Context, query *DirectoryListReposQuery) iter.Seq2[DirectoryRepoPageItem, error] {
+	return func(yield func(DirectoryRepoPageItem, error) bool) {
+		var page DirectoryListReposQuery
+		if query != nil {
+			page = *query
+		}
+		for {
+			result, err := s.ListRepos(ctx, &page)
+			if err != nil {
+				var zero DirectoryRepoPageItem
+				yield(zero, err)
+				return
+			}
+			for _, item := range result.Items {
+				if !yield(item, nil) {
+					return
+				}
+			}
+			if result.NextCursor == nil || *result.NextCursor == "" {
+				return
+			}
+			if page.Cursor != nil && *page.Cursor == *result.NextCursor {
+				var zero DirectoryRepoPageItem
+				yield(zero, ErrRepeatedCursor)
+				return
+			}
+			page.Cursor = result.NextCursor
+		}
+	}
+}
+
+// ListUsers list the account's users
+// A keyset-paged snapshot of every user holding a membership in the account. Account-wide, so a
+// key limited to some workspaces is refused with `403` and `reason: "account_scope_required"`.
+// GET /api/v1/directory/users (operation listDirectoryUsers).
+func (s *DirectoryService) ListUsers(ctx context.Context, query *DirectoryListUsersQuery) (*DirectoryUserPage, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   "/api/v1/directory/users",
+		Query:  query.values(),
+	}
+	var out DirectoryUserPage
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ListUsersAll iterates every items across every page of ListUsers.
+// Follows nextCursor until the server reports no further page. Yields (item, nil) per item and,
+// on a failure mid-iteration, one final (zero, err) — so a partial walk is never mistaken for a
+// complete one.
+func (s *DirectoryService) ListUsersAll(ctx context.Context, query *DirectoryListUsersQuery) iter.Seq2[DirectoryUserPageItem, error] {
+	return func(yield func(DirectoryUserPageItem, error) bool) {
+		var page DirectoryListUsersQuery
+		if query != nil {
+			page = *query
+		}
+		for {
+			result, err := s.ListUsers(ctx, &page)
+			if err != nil {
+				var zero DirectoryUserPageItem
+				yield(zero, err)
+				return
+			}
+			for _, item := range result.Items {
+				if !yield(item, nil) {
+					return
+				}
+			}
+			if result.NextCursor == nil || *result.NextCursor == "" {
+				return
+			}
+			if page.Cursor != nil && *page.Cursor == *result.NextCursor {
+				var zero DirectoryUserPageItem
+				yield(zero, ErrRepeatedCursor)
+				return
+			}
+			page.Cursor = result.NextCursor
+		}
+	}
+}
+
+// ListWorkspaceMemberships list workspace memberships
+// A keyset-paged snapshot of the explicit workspace memberships in the account’s workspaces (the
+// ones the key reaches), each with its workspace role.
+// GET /api/v1/directory/workspace-memberships (operation listDirectoryWorkspaceMemberships).
+func (s *DirectoryService) ListWorkspaceMemberships(ctx context.Context, query *DirectoryListWorkspaceMembershipsQuery) (*DirectoryWorkspaceMembershipPage, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   "/api/v1/directory/workspace-memberships",
+		Query:  query.values(),
+	}
+	var out DirectoryWorkspaceMembershipPage
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ListWorkspaceMembershipsAll iterates every items across every page of ListWorkspaceMemberships.
+// Follows nextCursor until the server reports no further page. Yields (item, nil) per item and,
+// on a failure mid-iteration, one final (zero, err) — so a partial walk is never mistaken for a
+// complete one.
+func (s *DirectoryService) ListWorkspaceMembershipsAll(ctx context.Context, query *DirectoryListWorkspaceMembershipsQuery) iter.Seq2[DirectoryWorkspaceMembershipPageItem, error] {
+	return func(yield func(DirectoryWorkspaceMembershipPageItem, error) bool) {
+		var page DirectoryListWorkspaceMembershipsQuery
+		if query != nil {
+			page = *query
+		}
+		for {
+			result, err := s.ListWorkspaceMemberships(ctx, &page)
+			if err != nil {
+				var zero DirectoryWorkspaceMembershipPageItem
+				yield(zero, err)
+				return
+			}
+			for _, item := range result.Items {
+				if !yield(item, nil) {
+					return
+				}
+			}
+			if result.NextCursor == nil || *result.NextCursor == "" {
+				return
+			}
+			if page.Cursor != nil && *page.Cursor == *result.NextCursor {
+				var zero DirectoryWorkspaceMembershipPageItem
+				yield(zero, ErrRepeatedCursor)
+				return
+			}
+			page.Cursor = result.NextCursor
+		}
+	}
+}
+
+// ListWorkspaces list the account's workspaces
+// A keyset-paged snapshot of the account’s workspaces (the ones the key reaches). Every page of
+// one walk reports the same `asOfSeq`; after the last page, replay the change feed from it to
+// pick up anything that changed while paging.
+// GET /api/v1/directory/workspaces (operation listDirectoryWorkspaces).
+func (s *DirectoryService) ListWorkspaces(ctx context.Context, query *DirectoryListWorkspacesQuery) (*DirectoryWorkspacePage, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   "/api/v1/directory/workspaces",
+		Query:  query.values(),
+	}
+	var out DirectoryWorkspacePage
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ListWorkspacesAll iterates every items across every page of ListWorkspaces.
+// Follows nextCursor until the server reports no further page. Yields (item, nil) per item and,
+// on a failure mid-iteration, one final (zero, err) — so a partial walk is never mistaken for a
+// complete one.
+func (s *DirectoryService) ListWorkspacesAll(ctx context.Context, query *DirectoryListWorkspacesQuery) iter.Seq2[DirectoryWorkspacePageItem, error] {
+	return func(yield func(DirectoryWorkspacePageItem, error) bool) {
+		var page DirectoryListWorkspacesQuery
+		if query != nil {
+			page = *query
+		}
+		for {
+			result, err := s.ListWorkspaces(ctx, &page)
+			if err != nil {
+				var zero DirectoryWorkspacePageItem
+				yield(zero, err)
+				return
+			}
+			for _, item := range result.Items {
+				if !yield(item, nil) {
+					return
+				}
+			}
+			if result.NextCursor == nil || *result.NextCursor == "" {
+				return
+			}
+			if page.Cursor != nil && *page.Cursor == *result.NextCursor {
+				var zero DirectoryWorkspacePageItem
+				yield(zero, ErrRepeatedCursor)
+				return
+			}
+			page.Cursor = result.NextCursor
+		}
+	}
 }
 
 // KaizenService the platform's own improvement backlog: every post-run grading of an agent step, with the agent

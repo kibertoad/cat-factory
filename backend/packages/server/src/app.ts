@@ -133,6 +133,7 @@ import { publicFragmentController } from './modules/publicApi/PublicFragmentCont
 import { publicUseCaseController } from './modules/publicApi/PublicUseCaseController.js'
 import { publicSpendController } from './modules/publicApi/PublicSpendController.js'
 import { publicKeyController } from './modules/publicApi/PublicKeyController.js'
+import { publicDirectoryController } from './modules/publicApi/PublicDirectoryController.js'
 import { publicMcpController } from './modules/publicApi/PublicMcpController.js'
 import { publicNotificationWebhookController } from './modules/publicApi/PublicNotificationWebhookController.js'
 import { notificationWebhookController } from './modules/notificationWebhook/NotificationWebhookController.js'
@@ -218,6 +219,7 @@ function registerPublicApiControllers<E extends AppEnv>(app: Hono<E>): void {
   // key panel, `admin` scope, bounded so a minted key can never mint another and revoking a key
   // revokes what it minted.
   app.route('/', publicKeyController())
+  app.route('/', publicDirectoryController())
   // The public OUTBOUND-WEBHOOK management surface (`/api/v1/notification-webhook`): the enrolment
   // half of the push channel, so a deployment with no browser session can register the receiver
   // its notifications, run-lifecycle edges and health alerts are delivered to. `admin` scope; same

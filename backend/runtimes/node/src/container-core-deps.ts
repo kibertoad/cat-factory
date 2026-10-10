@@ -405,6 +405,7 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
     accountRepository: repos.accountRepository,
     membershipRepository: repos.membershipRepository,
     userRepository: repos.userRepository,
+    directoryRepository: repos.directoryRepository,
     passwordHasher: new WebCryptoPasswordHasher(),
     blockRepository: repos.blockRepository,
     pipelineRepository: repos.pipelineRepository,

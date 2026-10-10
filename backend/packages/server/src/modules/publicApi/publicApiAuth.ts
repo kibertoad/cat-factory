@@ -98,6 +98,22 @@ export async function authorize<E extends AppEnv>(
   c: Context<E>,
   need: PublicApiScope,
 ): Promise<KeyResult> {
+  const result = await authorizeAccount(c, need)
+  if ('fail' in result) return result
+  const workspace = await resolveWorkspace(c, result.auth)
+  if ('fail' in workspace) return workspace
+  return { auth: { ...result.auth, workspaceId: workspace.workspaceId } }
+}
+
+/**
+ * {@link authorize} for an ACCOUNT-scoped route (the directory surface): the key and its scope, with
+ * no workspace resolved and no `x-cat-factory-workspace` header read. The handler applies the key's
+ * workspace reach itself, because what a restricted key may see there is a filter, not a refusal.
+ */
+export async function authorizeAccount<E extends AppEnv>(
+  c: Context<E>,
+  need: PublicApiScope,
+): Promise<{ auth: PublicApiKeyIdentity } | { fail: KeyFailure }> {
   const result = await resolveKey(c)
   if ('fail' in result) return result
   if (!scopeSatisfies(result.auth.scope, need)) {
@@ -109,9 +125,7 @@ export async function authorize<E extends AppEnv>(
       },
     }
   }
-  const workspace = await resolveWorkspace(c, result.auth)
-  if ('fail' in workspace) return workspace
-  return { auth: { ...result.auth, workspaceId: workspace.workspaceId } }
+  return result
 }
 
 /**

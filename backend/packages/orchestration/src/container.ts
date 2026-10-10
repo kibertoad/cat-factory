@@ -68,6 +68,7 @@ import type { AssistantModule } from './container/assistant-module.js'
 import type { GuidedReviewModule } from './container/guided-review-module.js'
 import { WorkspaceMemberService } from '@cat-factory/workspaces'
 import { AccountService } from '@cat-factory/workspaces'
+import { DirectoryService } from '@cat-factory/workspaces'
 import { UserService } from '@cat-factory/workspaces'
 import { InvitationService } from '@cat-factory/workspaces'
 import { PasswordResetService } from '@cat-factory/workspaces'
@@ -520,6 +521,8 @@ export interface CoreSpine {
    * naming the missing capability rather than as an empty log.
    */
   auditLogReader?: AuditLogReader
+  /** The public directory read side: snapshots and the change feed an external mirror follows. */
+  directory: DirectoryService
   /**
    * Counts in-app tutorial funnel events. On the SPINE rather than in the optional set, and
    * unconditional, for the same reason `operationalMetrics` is required: an un-wired counter
@@ -925,6 +928,7 @@ export function createCore(injected: CoreDependencies): Core {
     // The audit log's READ seam, straight off the injected bag: the viewer's controller resolves
     // it here, while the WRITE seam goes only to the services that record through it.
     auditLogReader: dependencies.auditLogReader,
+    directory: new DirectoryService({ directoryRepository: dependencies.directoryRepository }),
     tutorialTelemetry,
     workspaceService,
     accountService,

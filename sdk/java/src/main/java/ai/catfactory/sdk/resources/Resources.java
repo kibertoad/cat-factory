@@ -37,6 +37,7 @@ public abstract class Resources {
     private final DebugClient debug;
     private final EvidenceClient evidence;
     private final MergeRecordsClient mergeRecords;
+    private final DirectoryClient directory;
     private final KaizenClient kaizen;
     private final GuidedReviewsClient guidedReviews;
     private final KeysClient keys;
@@ -65,6 +66,7 @@ public abstract class Resources {
         this.debug = new DebugClient(transport);
         this.evidence = new EvidenceClient(transport);
         this.mergeRecords = new MergeRecordsClient(transport);
+        this.directory = new DirectoryClient(transport);
         this.kaizen = new KaizenClient(transport);
         this.guidedReviews = new GuidedReviewsClient(transport);
         this.keys = new KeysClient(transport);
@@ -183,6 +185,11 @@ public abstract class Resources {
     /** The evidence behind the auto-merge policy: what kind of change each merged run made, what the merger scored it, what happened to the pull request, and how much review a human actually spent, plus the per-class rollups that justify widening a rule. Reading takes a `read` key and recording an effort tag a `write` one: neither merges anything. */
     public MergeRecordsClient mergeRecords() {
         return mergeRecords;
+    }
+
+    /** The account's directory, for keeping an external copy in sync: workspaces, users, account and workspace memberships, and linked repositories as keyset-paged snapshots, plus the ordered change feed that brings a copy up to date. Everything here takes a `read` key; users and account memberships need one that reaches every workspace. */
+    public DirectoryClient directory() {
+        return directory;
     }
 
     /** The platform's own improvement backlog: every post-run grading of an agent step, with the agent kind, model, prompt version and run it came from, what the grader recommended changing, and whether anybody has acted on it yet. Reading takes a `read` key and acknowledging one a `write` key: neither runs anything. */

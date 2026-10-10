@@ -732,7 +732,8 @@
         "delegated_claim_missing": "Ten krok nie ma zewnętrznej pracy do sprawdzenia",
         "thread_busy": "Ten wątek wciąż odpowiada",
         "draft_conflict": "Ten szkic się zmienił",
-        "session_stale": "Pull request poszedł dalej"
+        "session_stale": "Pull request poszedł dalej",
+        "cursor_expired": "Kanał zmian wyszedł poza ten kursor"
       },
       "description": {
         "dependencies_unmet": "To zadanie zależy od innych, które nie zostały jeszcze ukończone. Ukończ je lub odblokuj, a następnie uruchom je ponownie.",
@@ -792,7 +793,8 @@
         "delegated_claim_missing": "Brakuje zapisu tego, co przebieg wysłał do zewnętrznego wykonawcy, więc nie ma czego odpytywać. Z samym wykonawcą wszystko jest w porządku. Odśwież przebieg i uruchom krok ponownie, jeśli nadal stoi.",
         "thread_busy": "Poprzednie pytanie w tym wątku nie ma jeszcze odpowiedzi. Poczekaj na nią albo zapytaj w innym wątku.",
         "draft_conflict": "Od wczytania ten szkic komentarza został edytowany, opublikowany lub odrzucony. Wczytaj szkice ponownie i wprowadź zmianę jeszcze raz.",
-        "session_stale": "Po przygotowaniu tej recenzji pojawiły się nowe commity, więc szkice mogą wskazywać złe linie. Odśwież recenzję, sprawdź szkice i dopiero wtedy opublikuj."
+        "session_stale": "Po przygotowaniu tej recenzji pojawiły się nowe commity, więc szkice mogą wskazywać złe linie. Odśwież recenzję, sprawdź szkice i dopiero wtedy opublikuj.",
+        "cursor_expired": "Zmiany po tym kursorze nie są już przechowywane. Pobierz nowy zrzut katalogu, a potem śledź kanał od pozycji, którą zwróci."
       },
       "action": {
         "connectGitHub": "Połącz GitHub",

@@ -35,6 +35,12 @@ from .models import (
     DebugLlmCall,
     DebugRunOverview,
     DetachPublicTaskDocumentRequest,
+    DirectoryAccountMembershipPage,
+    DirectoryChangePage,
+    DirectoryRepoPage,
+    DirectoryUserPage,
+    DirectoryWorkspaceMembershipPage,
+    DirectoryWorkspacePage,
     EditGuidedReviewDraft,
     GetDebugLlmCallView,
     GetDebugLlmExportResponse,
@@ -2746,6 +2752,202 @@ class MergeRecordsResource:
         return GetPublicMergeRecordResponse.from_dict(raw)
 
 
+class DirectoryResource:
+    """The account's directory, for keeping an external copy in sync: workspaces, users,
+    account and workspace memberships, and linked repositories as keyset-paged snapshots,
+    plus the ordered change feed that brings a copy up to date. Everything here takes a
+    `read` key; users and account memberships need one that reaches every workspace.
+    """
+
+    def __init__(self, transport: Transport) -> None:
+        self._transport = transport
+
+    def list_account_memberships(self, *, cursor: str | None = None, limit: int | None = None, timeout: float | None = None) -> DirectoryAccountMembershipPage:
+        """List the account's memberships
+        A keyset-paged snapshot of the account’s memberships, each with the member’s account
+        roles. Account-wide, so a key limited to some workspaces is refused with `403` and
+        `reason: "account_scope_required"`.
+        `GET /api/v1/directory/account-memberships` (operation
+        `listDirectoryAccountMemberships`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/directory/account-memberships",
+            query={"cursor": cursor, "limit": limit},
+            timeout=timeout,
+        )
+        return DirectoryAccountMembershipPage.from_dict(raw)
+
+    def list_account_memberships_all(self, *, cursor: str | None = None, limit: int | None = None, timeout: float | None = None) -> Iterator[Any]:
+        """Every `items` across every page of `list_account_memberships()`, as they arrive.
+        Follows `next_cursor` until the server reports no further page. A page may
+        legitimately come back empty while `next_cursor` is still set, so this pages until
+        the cursor is None rather than stopping at the first empty page.
+        Yields items of `DirectoryAccountMembershipPage.items`.
+        """
+        page_cursor = cursor
+        while True:
+            page = self.list_account_memberships(limit=limit, cursor=page_cursor, timeout=timeout)
+            yield from page.items
+            if not page.next_cursor:
+                return
+            if page.next_cursor == page_cursor:
+                raise _repeated_cursor()
+            page_cursor = page.next_cursor
+
+    def list_changes(self, *, after: int | None = None, limit: int | None = None, timeout: float | None = None) -> DirectoryChangePage:
+        """List directory changes
+        The account’s directory changes after `after`, in `seq` order, each carrying the
+        CURRENT state of the entity it names, or `null` once that entity no longer exists or
+        is outside the key’s reach. Store `nextAfter` and pass it back as `after`; it can
+        move past the last change served, since changes the key cannot see are skipped.
+        `nextAfter === headSeq` means caught up. A cursor whose following changes were
+        pruned (see `DIRECTORY_CHANGE_RETENTION_DAYS`), or one ahead of the feed, is refused
+        with `409` and `reason: "cursor_expired"`: reconcile from the snapshot endpoints and
+        replay from their `asOfSeq`. Account-scoped: no `x-cat-factory-workspace` header is
+        read. A key limited to some workspaces sees only workspace, workspace-membership and
+        repository changes of those workspaces, plus the `workspace` change (with `entity:
+        null`) of every deleted workspace in the account, since deleting a board also drops
+        the key’s grant on it. Treat that change as the removal of the workspace and of
+        every membership and repository under it.
+        `GET /api/v1/directory/changes` (operation `listDirectoryChanges`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/directory/changes",
+            query={"after": after, "limit": limit},
+            timeout=timeout,
+        )
+        return DirectoryChangePage.from_dict(raw)
+
+    def list_repos(self, *, cursor: str | None = None, limit: int | None = None, timeout: float | None = None) -> DirectoryRepoPage:
+        """List linked repositories
+        A keyset-paged snapshot of the repositories linked to the account’s workspaces (the
+        ones the key reaches). A repository is listed once per workspace that links it.
+        `GET /api/v1/directory/repos` (operation `listDirectoryRepos`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/directory/repos",
+            query={"cursor": cursor, "limit": limit},
+            timeout=timeout,
+        )
+        return DirectoryRepoPage.from_dict(raw)
+
+    def list_repos_all(self, *, cursor: str | None = None, limit: int | None = None, timeout: float | None = None) -> Iterator[Any]:
+        """Every `items` across every page of `list_repos()`, as they arrive.
+        Follows `next_cursor` until the server reports no further page. A page may
+        legitimately come back empty while `next_cursor` is still set, so this pages until
+        the cursor is None rather than stopping at the first empty page.
+        Yields items of `DirectoryRepoPage.items`.
+        """
+        page_cursor = cursor
+        while True:
+            page = self.list_repos(limit=limit, cursor=page_cursor, timeout=timeout)
+            yield from page.items
+            if not page.next_cursor:
+                return
+            if page.next_cursor == page_cursor:
+                raise _repeated_cursor()
+            page_cursor = page.next_cursor
+
+    def list_users(self, *, cursor: str | None = None, limit: int | None = None, timeout: float | None = None) -> DirectoryUserPage:
+        """List the account's users
+        A keyset-paged snapshot of every user holding a membership in the account.
+        Account-wide, so a key limited to some workspaces is refused with `403` and `reason:
+        "account_scope_required"`.
+        `GET /api/v1/directory/users` (operation `listDirectoryUsers`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/directory/users",
+            query={"cursor": cursor, "limit": limit},
+            timeout=timeout,
+        )
+        return DirectoryUserPage.from_dict(raw)
+
+    def list_users_all(self, *, cursor: str | None = None, limit: int | None = None, timeout: float | None = None) -> Iterator[Any]:
+        """Every `items` across every page of `list_users()`, as they arrive.
+        Follows `next_cursor` until the server reports no further page. A page may
+        legitimately come back empty while `next_cursor` is still set, so this pages until
+        the cursor is None rather than stopping at the first empty page.
+        Yields items of `DirectoryUserPage.items`.
+        """
+        page_cursor = cursor
+        while True:
+            page = self.list_users(limit=limit, cursor=page_cursor, timeout=timeout)
+            yield from page.items
+            if not page.next_cursor:
+                return
+            if page.next_cursor == page_cursor:
+                raise _repeated_cursor()
+            page_cursor = page.next_cursor
+
+    def list_workspace_memberships(self, *, cursor: str | None = None, limit: int | None = None, timeout: float | None = None) -> DirectoryWorkspaceMembershipPage:
+        """List workspace memberships
+        A keyset-paged snapshot of the explicit workspace memberships in the account’s
+        workspaces (the ones the key reaches), each with its workspace role.
+        `GET /api/v1/directory/workspace-memberships` (operation
+        `listDirectoryWorkspaceMemberships`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/directory/workspace-memberships",
+            query={"cursor": cursor, "limit": limit},
+            timeout=timeout,
+        )
+        return DirectoryWorkspaceMembershipPage.from_dict(raw)
+
+    def list_workspace_memberships_all(self, *, cursor: str | None = None, limit: int | None = None, timeout: float | None = None) -> Iterator[Any]:
+        """Every `items` across every page of `list_workspace_memberships()`, as they arrive.
+        Follows `next_cursor` until the server reports no further page. A page may
+        legitimately come back empty while `next_cursor` is still set, so this pages until
+        the cursor is None rather than stopping at the first empty page.
+        Yields items of `DirectoryWorkspaceMembershipPage.items`.
+        """
+        page_cursor = cursor
+        while True:
+            page = self.list_workspace_memberships(limit=limit, cursor=page_cursor, timeout=timeout)
+            yield from page.items
+            if not page.next_cursor:
+                return
+            if page.next_cursor == page_cursor:
+                raise _repeated_cursor()
+            page_cursor = page.next_cursor
+
+    def list_workspaces(self, *, cursor: str | None = None, limit: int | None = None, timeout: float | None = None) -> DirectoryWorkspacePage:
+        """List the account's workspaces
+        A keyset-paged snapshot of the account’s workspaces (the ones the key reaches).
+        Every page of one walk reports the same `asOfSeq`; after the last page, replay the
+        change feed from it to pick up anything that changed while paging.
+        `GET /api/v1/directory/workspaces` (operation `listDirectoryWorkspaces`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/directory/workspaces",
+            query={"cursor": cursor, "limit": limit},
+            timeout=timeout,
+        )
+        return DirectoryWorkspacePage.from_dict(raw)
+
+    def list_workspaces_all(self, *, cursor: str | None = None, limit: int | None = None, timeout: float | None = None) -> Iterator[Any]:
+        """Every `items` across every page of `list_workspaces()`, as they arrive.
+        Follows `next_cursor` until the server reports no further page. A page may
+        legitimately come back empty while `next_cursor` is still set, so this pages until
+        the cursor is None rather than stopping at the first empty page.
+        Yields items of `DirectoryWorkspacePage.items`.
+        """
+        page_cursor = cursor
+        while True:
+            page = self.list_workspaces(limit=limit, cursor=page_cursor, timeout=timeout)
+            yield from page.items
+            if not page.next_cursor:
+                return
+            if page.next_cursor == page_cursor:
+                raise _repeated_cursor()
+            page_cursor = page.next_cursor
+
+
 class KaizenResource:
     """The platform's own improvement backlog: every post-run grading of an agent step, with
     the agent kind, model, prompt version and run it came from, what the grader recommended
@@ -3190,6 +3392,7 @@ def build_resources(transport: Transport) -> dict[str, Any]:
         "debug": DebugResource(transport),
         "evidence": EvidenceResource(transport),
         "merge_records": MergeRecordsResource(transport),
+        "directory": DirectoryResource(transport),
         "kaizen": KaizenResource(transport),
         "guided_reviews": GuidedReviewsResource(transport),
         "keys": KeysResource(transport),

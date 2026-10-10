@@ -440,6 +440,12 @@ export interface RetentionConfig {
    * else, because no other table lives behind this name.
    */
   auditEventsMs: number
+  /**
+   * The directory change feed (`directory_changes`). A mirror whose cursor falls further behind
+   * than this reconciles from a snapshot instead of replaying, so the window bounds how long a
+   * consumer may be offline and still catch up cheaply. 0 disables the prune.
+   */
+  directoryChangesMs: number
 }
 
 export interface FragmentLibraryConfig {

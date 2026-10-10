@@ -182,6 +182,7 @@ import type {
   WorkspaceRepository,
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
+import type { DirectoryRepository } from '@cat-factory/kernel'
 import type { SpendPricing } from '@cat-factory/spend'
 import type { TesterQualityReviewer } from '../modules/execution/TesterQualityReviewService.js'
 import type { AgentContextObservabilityService } from '../modules/observability/AgentContextObservabilityService.js'
@@ -211,6 +212,12 @@ export interface CoreDependencies extends ContentLibraryDependencies {
   membershipRepository: MembershipRepository
   /** Canonical user identity (`users` + `user_identities`); keyed off by everything. */
   userRepository: UserRepository
+  /**
+   * The directory read side and change feed (docs/initiatives/directory-sync.md). Required: the
+   * feed rows are written by the repositories above on every facade, and a facade that wired no
+   * reader would publish an API that 503s over data it is recording anyway.
+   */
+  directoryRepository: DirectoryRepository
   /** Hashes/verifies email-password credentials (WebCrypto PBKDF2). */
   passwordHasher: PasswordHasher
   /** Account invitations (email-based org onboarding). Optional: opt-in feature. */
