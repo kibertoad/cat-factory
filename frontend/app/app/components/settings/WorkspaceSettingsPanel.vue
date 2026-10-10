@@ -370,11 +370,12 @@ async function save() {
                   </template>
                 </i18n-t>
               </p>
-              <label class="block w-48">
+              <label class="block">
                 <SectionLabel as="span" class="mb-1 block">
                   {{ t('settings.workspaceSettings.waiting.escalateAfter') }}
                 </SectionLabel>
                 <UInput
+                  class="w-48"
                   v-model.number="draft.waitingEscalationMinutes"
                   type="number"
                   :min="1"
@@ -391,7 +392,7 @@ async function save() {
               <p class="text-2xs text-muted">
                 {{ t('settings.workspaceSettings.taskLimit.body') }}
               </p>
-              <label class="block w-64">
+              <label class="block">
                 <SectionLabel as="span" class="mb-1 block">{{
                   t('settings.workspaceSettings.taskLimit.mode')
                 }}</SectionLabel>
@@ -400,15 +401,21 @@ async function save() {
                   :items="MODES"
                   value-key="value"
                   size="sm"
-                  class="w-full"
+                  class="w-64"
                 />
               </label>
 
-              <label v-if="draft.taskLimitMode === 'shared'" class="block w-48">
+              <label v-if="draft.taskLimitMode === 'shared'" class="block">
                 <SectionLabel as="span" class="mb-1 block">
                   {{ t('settings.workspaceSettings.taskLimit.maxRunning') }}
                 </SectionLabel>
-                <UInput v-model.number="draft.taskLimitShared" type="number" :min="1" size="sm" />
+                <UInput
+                  class="w-48"
+                  v-model.number="draft.taskLimitShared"
+                  type="number"
+                  :min="1"
+                  size="sm"
+                />
               </label>
 
               <div v-else-if="draft.taskLimitMode === 'per_type'" class="grid grid-cols-2 gap-3">
@@ -435,7 +442,7 @@ async function save() {
               <p class="text-2xs text-muted">
                 {{ t('settings.workspaceSettings.inputGate.body') }}
               </p>
-              <label class="block w-64">
+              <label class="block">
                 <SectionLabel as="span" class="mb-1 block">{{
                   t('settings.workspaceSettings.inputGate.mode')
                 }}</SectionLabel>
@@ -444,7 +451,7 @@ async function save() {
                   :items="INPUT_GATE_MODES"
                   value-key="value"
                   size="sm"
-                  class="w-full"
+                  class="w-64"
                   data-testid="input-gate-mode"
                 />
               </label>
@@ -458,7 +465,7 @@ async function save() {
               <p class="text-2xs text-muted">
                 {{ t('settings.workspaceSettings.reviewFriction.body') }}
               </p>
-              <label class="block w-64">
+              <label class="block">
                 <SectionLabel as="span" class="mb-1 block">{{
                   t('settings.workspaceSettings.reviewFriction.mode')
                 }}</SectionLabel>
@@ -467,15 +474,16 @@ async function save() {
                   :items="REVIEW_FRICTION_MODES"
                   value-key="value"
                   size="sm"
-                  class="w-full"
+                  class="w-64"
                 />
               </label>
 
-              <label v-if="draft.reviewFrictionMode !== 'off'" class="block w-48">
+              <label v-if="draft.reviewFrictionMode !== 'off'" class="block">
                 <SectionLabel as="span" class="mb-1 block">
                   {{ t('settings.workspaceSettings.reviewFriction.warnCount') }}
                 </SectionLabel>
                 <UInput
+                  class="w-48"
                   v-model.number="draft.reviewFrictionWarnCount"
                   type="number"
                   :min="1"
@@ -493,11 +501,12 @@ async function save() {
                     t('settings.workspaceSettings.reviewFriction.blockCountToggle')
                   }}</span>
                 </label>
-                <label v-if="draft.reviewFrictionBlockCountEnabled" class="block w-48">
+                <label v-if="draft.reviewFrictionBlockCountEnabled" class="block">
                   <SectionLabel as="span" class="mb-1 block">
                     {{ t('settings.workspaceSettings.reviewFriction.blockCount') }}
                   </SectionLabel>
                   <UInput
+                    class="w-48"
                     v-model.number="draft.reviewFrictionBlockCount"
                     type="number"
                     :min="1"
@@ -510,11 +519,12 @@ async function save() {
                     t('settings.workspaceSettings.reviewFriction.blockStuckToggle')
                   }}</span>
                 </label>
-                <label v-if="draft.reviewFrictionBlockStuckEnabled" class="block w-48">
+                <label v-if="draft.reviewFrictionBlockStuckEnabled" class="block">
                   <SectionLabel as="span" class="mb-1 block">
                     {{ t('settings.workspaceSettings.reviewFriction.blockStuckMinutes') }}
                   </SectionLabel>
                   <UInput
+                    class="w-48"
                     v-model.number="draft.reviewFrictionBlockStuckMinutes"
                     type="number"
                     :min="1"
@@ -564,11 +574,12 @@ async function save() {
               <p class="text-2xs text-muted">
                 {{ t('settings.workspaceSettings.retention.body') }}
               </p>
-              <label class="block w-48">
+              <label class="block">
                 <SectionLabel as="span" class="mb-1 block">
                   {{ t('settings.workspaceSettings.retention.days') }}
                 </SectionLabel>
                 <UInput
+                  class="w-48"
                   v-model.number="draft.artifactRetentionDays"
                   type="number"
                   :min="1"
@@ -586,11 +597,12 @@ async function save() {
               <p class="text-2xs text-muted">
                 {{ t('settings.workspaceSettings.doneLane.body') }}
               </p>
-              <label class="block w-48">
+              <label class="block">
                 <SectionLabel as="span" class="mb-1 block">
                   {{ t('settings.workspaceSettings.doneLane.maxItems') }}
                 </SectionLabel>
                 <UInput
+                  class="w-48"
                   v-model.number="draft.doneLaneMaxItems"
                   type="number"
                   :min="0"
@@ -608,11 +620,12 @@ async function save() {
                   t('settings.workspaceSettings.doneLane.ageToggle')
                 }}</span>
               </label>
-              <label v-if="draft.doneLaneRetentionEnabled" class="block w-48">
+              <label v-if="draft.doneLaneRetentionEnabled" class="block">
                 <SectionLabel as="span" class="mb-1 block">
                   {{ t('settings.workspaceSettings.doneLane.days') }}
                 </SectionLabel>
                 <UInput
+                  class="w-48"
                   v-model.number="draft.doneLaneRetentionDays"
                   type="number"
                   :min="1"
