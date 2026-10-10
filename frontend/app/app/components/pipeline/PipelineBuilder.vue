@@ -1340,7 +1340,7 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                   <IconButton
                     v-if="!p.builtin"
                     icon="i-lucide-trash-2"
-                    color="neutral"
+                    color="error"
                     variant="ghost"
                     size="xs"
                     :label="t('pipeline.builder.delete')"

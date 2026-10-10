@@ -223,9 +223,9 @@ const canDestroy = computed(
               {{ t('humanTest.actions.recreate') }}
             </UButton>
             <UButton
-              size="xs"
+              color="error"
               variant="soft"
-              color="neutral"
+              size="xs"
               icon="i-lucide-trash-2"
               :disabled="busy || !canDestroy || !access.canExecuteRuns.value"
               :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"

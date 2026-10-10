@@ -163,65 +163,83 @@ export function findDefaultProps(tag, own, inSizeGroup = false) {
   return found
 }
 
-/**
- * Every offender in the template half of one `.vue` source, as `{ line, matches }`. `tagKeys`
- * maps each component name this guard reads (the Nuxt UI pair plus the derived wrappers) to its
- * config key.
- */
-export function findInTemplate(source, defaults, tagKeys = BASE_CONFIG_KEYS) {
-  const raw = source.split('\n')
-  const out = []
-  walkTemplate(source, {
-    open(node, ancestors) {
-      const key = tagKeys[node.name]
-      if (!key || isWaivedAbove(raw[node.line - 2] ?? '', DEFAULT_OK)) return
-      const inSizeGroup = ancestors.some((a) => SIZE_GROUPS.has(a.name))
-      const matches = findDefaultProps(node.tag, defaults[key], inSizeGroup)
-      if (matches.length) out.push({ line: node.line, matches: [`<${node.name}>`, ...matches] })
-    },
-  })
-  return out
-}
-
 const CONDITIONAL_ELSE = /\sv-else(?:-if)?(?=[\s=/>])/
+const DYNAMIC_VARIANT = /\s(?::|v-bind:)variant=/
+const OBJECT_VARIANT_KEY = /(?:^|[{,\s])variant\s*:/
+const NON_OBJECT_SPREAD = /\sv-bind=(?:"(?!\s*\{)|'(?!\s*\{))/
+// Components that render no element of their own around their default slot, so the buttons in
+// that slot are DOM siblings of whatever sits beside the component. A slot `<template #name>` is
+// the exception: it is its own region (a popover's content, a dropdown's items).
+const RENDERLESS = new Set([
+  'template',
+  'UTooltip',
+  'UPopover',
+  'UDropdownMenu',
+  'UContextMenu',
+  'ClientOnly',
+  'Transition',
+  'KeepAlive',
+  'Suspense',
+])
 
-/** Whether an opening tag renders a solid button, given the button default. */
-function isSolidButton(tag, defaults) {
-  if (/\s(?::|v-bind:)variant=/.test(tag)) return false // decided at runtime
-  const value = statedValue(tag, 'variant')
-  return (value ?? defaults.button.variant) === 'solid'
+/**
+ * Whether an opening tag renders a solid button: `'solid'`, `'other'`, or `'unknown'` when the
+ * variant is decided at runtime (a computed `:variant`, a non-constant `variant` key in a
+ * `v-bind="{ … }"` object, or a `v-bind="props"` spread that may carry one).
+ */
+function variantOf(tag, defaults) {
+  const stated = statedValue(tag, 'variant')
+  if (stated !== undefined) return stated === 'solid' ? 'solid' : 'other'
+  const spread = OBJECT_SPREAD.exec(tag)
+  const dynamicKey = spread && OBJECT_VARIANT_KEY.test(spread[1] ?? spread[2])
+  if (DYNAMIC_VARIANT.test(tag) || dynamicKey || NON_OBJECT_SPREAD.test(tag)) return 'unknown'
+  return defaults.button.variant === 'solid' ? 'solid' : 'other'
 }
 
 /**
- * Every element in the template half of one `.vue` source that holds TWO OR MORE solid buttons as
- * direct children, as `{ line, matches }` naming the solid buttons' lines. This is the checkable
- * half of "one solid primary per view": two solid buttons side by side compete for the same
- * attention, while two forms in one file that each end in a Save are two views.
+ * Both rules over one `.vue` source in ONE walk of its template, as `{ restated, solids }`, each a
+ * list of `{ line, matches }`. `tagKeys` maps each component name this guard reads (the Nuxt UI
+ * pair plus the derived wrappers) to its config key.
  *
- * What counts as a sibling follows the DOM, not the markup:
- * - a plain `<template>` (`v-if` / `v-for` wrapper) adds no element, so what it renders joins the
- *   place it took in the enclosing element; a slot `<template #name>` is its own region;
+ * `restated`: a prop equal to its component's default (see the file header).
+ *
+ * `solids`: an element holding TWO OR MORE solid buttons as direct children, reported at the
+ * SECOND button, where its `solid-ok:` waiver goes. This is the checkable half of "one solid
+ * primary per view": two solid buttons side by side compete for the same attention, while two
+ * forms in one file that each end in a Save are two views. What counts as a sibling follows the
+ * DOM, not the markup:
+ * - a plain `<template>` and the renderless components in `RENDERLESS` (`UTooltip`, `UPopover`,
+ *   `ClientOnly`, …) add no element, so what they render joins the place they took in the
+ *   enclosing element; a slot `<template #name>` is its own region;
  * - a `v-if` / `v-else-if` / `v-else` chain renders one branch, so it counts as its largest branch;
  * - a `v-for` button counts once: it renders a list of equal alternatives, not a competing action.
- * A button with a bound `:variant` is not counted. `tagKeys` is the same component map
- * {@link findInTemplate} takes, so a derived wrapper of `UButton` counts as a button.
+ * A button whose variant is decided at runtime is not counted.
  */
-export function findSolidSiblings(source, defaults, tagKeys = BASE_CONFIG_KEYS) {
+export function scanTemplate(source, defaults, tagKeys = BASE_CONFIG_KEYS) {
   const raw = source.split('\n')
-  const out = []
-  const root = { name: '#root', tag: '', line: 0, data: { groups: [] } }
+  const restated = []
+  const solids = []
+  const root = { data: { groups: [] } }
   // The solid buttons a frame renders side by side: per group of siblings, its largest branch.
   const rendered = (node) =>
     node.data.groups.flatMap((group) =>
       group.alternatives.reduce((best, alt) => (alt.length > best.length ? alt : best), []),
     )
   const report = (lines) => {
-    if (lines.length >= 2) out.push({ line: lines[0], matches: lines.map((l) => `solid@${l}`) })
+    if (lines.length >= 2) solids.push({ line: lines[1], matches: lines.map((l) => `solid@${l}`) })
   }
   walkTemplate(source, {
     open(node, ancestors) {
-      const parent = ancestors[ancestors.length - 1] ?? root
-      const groups = parent.data.groups
+      const key = tagKeys[node.name]
+      // The defaults rule.
+      if (key && !isWaivedAbove(raw, node.line, DEFAULT_OK)) {
+        const inSizeGroup = ancestors.some((a) => SIZE_GROUPS.has(a.name))
+        const matches = findDefaultProps(node.tag, defaults[key], inSizeGroup)
+        if (matches.length)
+          restated.push({ line: node.line, matches: [`<${node.name}>`, ...matches] })
+      }
+      // The sibling rule: find the place this element takes among its parent's children.
+      const groups = (ancestors[ancestors.length - 1] ?? root).data.groups
       if (CONDITIONAL_ELSE.test(node.tag) && groups.length) {
         groups[groups.length - 1].alternatives.push([])
       } else {
@@ -230,20 +248,30 @@ export function findSolidSiblings(source, defaults, tagKeys = BASE_CONFIG_KEYS) 
       const group = groups[groups.length - 1]
       node.data.place = group.alternatives[group.alternatives.length - 1]
       node.data.groups = []
-      node.data.wrapper = node.name === 'template' && !/\s(?:#|v-slot)/.test(node.tag)
-      const isButton = tagKeys[node.name] === 'button'
-      if (isButton && isSolidButton(node.tag, defaults)) {
-        if (!isWaivedAbove(raw[node.line - 2] ?? '', SOLID_OK)) node.data.place.push(node.line)
+      node.data.renderless = RENDERLESS.has(node.name) && !/\s(?:#|v-slot)/.test(node.tag)
+      if (key === 'button' && variantOf(node.tag, defaults) === 'solid') {
+        if (!isWaivedAbove(raw, node.line, SOLID_OK)) node.data.place.push(node.line)
       }
     },
     close(node) {
       const lines = rendered(node)
-      if (node.data.wrapper) node.data.place.push(...lines)
+      if (node.data.renderless) node.data.place.push(...lines)
       else report(lines)
     },
   })
   report(rendered(root))
-  return out.sort((a, b) => a.line - b.line)
+  solids.sort((a, b) => a.line - b.line)
+  return { restated, solids }
+}
+
+/** The defaults rule alone: every restated default in one `.vue` source. */
+export function findInTemplate(source, defaults, tagKeys = BASE_CONFIG_KEYS) {
+  return scanTemplate(source, defaults, tagKeys).restated
+}
+
+/** The sibling rule alone: every element with competing solid buttons in one `.vue` source. */
+export function findSolidSiblings(source, defaults, tagKeys = BASE_CONFIG_KEYS) {
+  return scanTemplate(source, defaults, tagKeys).solids
 }
 
 function main() {
@@ -255,12 +283,13 @@ function main() {
     ...BASE_CONFIG_KEYS,
     ...deriveWrappers(files.map((f) => ({ name: basename(f.rel, '.vue'), source: f.source }))),
   }
-  const offenders = files.flatMap((file) =>
-    findInTemplate(file.source, defaults, tagKeys).map((hit) => ({ file: file.rel, ...hit })),
-  )
-  const solids = files.flatMap((file) =>
-    findSolidSiblings(file.source, defaults, tagKeys).map((hit) => ({ file: file.rel, ...hit })),
-  )
+  const offenders = []
+  const solids = []
+  for (const file of files) {
+    const { restated, solids: competing } = scanTemplate(file.source, defaults, tagKeys)
+    for (const hit of restated) offenders.push({ file: file.rel, ...hit })
+    for (const hit of competing) solids.push({ file: file.rel, ...hit })
+  }
 
   if (offenders.length) {
     const describe = (key) => PROPS.map((prop) => `${prop}="${defaults[key][prop]}"`).join(' ')
@@ -281,7 +310,9 @@ function main() {
     console.error(
       'A view has ONE solid primary action; a second action beside it takes a lighter variant\n' +
         '(`soft` for a send-back or destructive action, `outline` for a real secondary action, `ghost`\n' +
-        'for a dismissal). See frontend/app/README.md, "Buttons and badges follow one variant policy".\n',
+        'for a dismissal). The location is the SECOND solid button: if the pair is genuinely needed,\n' +
+        'say why in a `<!-- solid-ok: … -->` comment directly above it.\n' +
+        'See frontend/app/README.md, "Buttons and badges follow one variant policy".\n',
     )
     for (const o of solids) console.error(`  ${o.file}:${o.line}  ${o.matches.join(' ')}`)
     console.error(`\n${solids.length} element(s) with competing solid buttons.`)

@@ -36,6 +36,7 @@ const SEVERITY_COLOR = { high: 'error', medium: 'warning', low: 'neutral' } as c
       </UBadge>
       <span class="flex-1" />
       <UButton
+        color="neutral"
         size="xs"
         variant="ghost"
         icon="i-lucide-refresh-cw"

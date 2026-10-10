@@ -483,9 +483,9 @@ async function clearWeb() {
           {{ t('common.save') }}
         </UButton>
         <UButton
+          color="error"
+          variant="soft"
           v-if="summary?.slackOAuthConfigured"
-          color="neutral"
-          variant="ghost"
           size="xs"
           :loading="savingSlack"
           @click="clearSlack"
@@ -538,9 +538,9 @@ async function clearWeb() {
           {{ t('common.save') }}
         </UButton>
         <UButton
+          color="error"
+          variant="soft"
           v-if="summary?.linearOAuthConfigured"
-          color="neutral"
-          variant="ghost"
           size="xs"
           :loading="savingLinear"
           @click="clearLinear"
@@ -593,9 +593,9 @@ async function clearWeb() {
           {{ t('common.save') }}
         </UButton>
         <UButton
+          color="error"
+          variant="soft"
           v-if="summary?.figmaOAuthConfigured"
-          color="neutral"
-          variant="ghost"
           size="xs"
           :loading="savingFigma"
           @click="clearFigma"
@@ -644,9 +644,9 @@ async function clearWeb() {
           {{ t('common.save') }}
         </UButton>
         <UButton
+          color="error"
+          variant="soft"
           v-if="summary?.webSearch"
-          color="neutral"
-          variant="ghost"
           size="xs"
           :loading="savingWeb"
           @click="clearWeb"

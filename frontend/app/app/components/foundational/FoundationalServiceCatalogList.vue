@@ -105,6 +105,7 @@ async function suppress(serviceId: string) {
 
           <div class="mt-2 flex items-center gap-2">
             <UButton
+              color="neutral"
               v-if="s.contracts.length"
               size="xs"
               variant="ghost"
@@ -141,6 +142,7 @@ async function suppress(serviceId: string) {
                deployment registered in code; the board's own row is managed in the registry tab,
                where deleting it is the honest action. -->
           <IconButton
+            color="neutral"
             v-if="s.tier !== 'workspace'"
             icon="i-lucide-eye-off"
             size="xs"

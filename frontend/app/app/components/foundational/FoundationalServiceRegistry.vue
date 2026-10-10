@@ -205,6 +205,7 @@ async function remove(service: FoundationalService) {
         </div>
         <div class="flex shrink-0 gap-1">
           <IconButton
+            color="neutral"
             v-if="!s.sourceId"
             icon="i-lucide-pencil"
             size="xs"
@@ -310,7 +311,13 @@ async function remove(service: FoundationalService) {
               :placeholder="t('foundational.registry.contractBodyPlaceholder')"
             />
           </div>
-          <UButton icon="i-lucide-plus" size="xs" variant="ghost" @click="addContract">
+          <UButton
+            color="neutral"
+            icon="i-lucide-plus"
+            size="xs"
+            variant="ghost"
+            @click="addContract"
+          >
             {{ t('foundational.registry.addContract') }}
           </UButton>
         </div>

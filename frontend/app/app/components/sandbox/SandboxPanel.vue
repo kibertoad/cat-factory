@@ -629,6 +629,7 @@ async function archive(prompt: SandboxPromptVersion) {
                      Offered on a graded candidate and on an older workspace revision (rolling
                      back), but not on the one already live, where it would be a no-op. -->
                 <IconButton
+                  color="neutral"
                   v-if="canPromote(p)"
                   icon="i-lucide-rocket"
                   variant="ghost"

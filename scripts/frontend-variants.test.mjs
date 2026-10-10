@@ -279,6 +279,56 @@ describe('findSolidSiblings', () => {
     )
   })
 
+  it('looks through a renderless component such as UTooltip, but not its slot templates', () => {
+    assert.deepEqual(
+      solids(
+        '<div>\n  <UTooltip text="x"><UButton>Approve</UButton></UTooltip>\n  <UButton>Bounce</UButton>\n</div>',
+      ),
+      ['solid@3 solid@4'],
+    )
+    assert.deepEqual(
+      solids(
+        '<div>\n  <UPopover>\n    <UButton>Open</UButton>\n    <template #content><UButton>Go</UButton></template>\n  </UPopover>\n</div>',
+      ),
+      [],
+    )
+  })
+
+  it('counts a constant bound variant and skips any runtime one', () => {
+    assert.deepEqual(
+      solids(`<div>\n  <UButton>A</UButton>\n  <UButton :variant="'solid'">B</UButton>\n</div>`),
+      ['solid@3 solid@4'],
+    )
+    assert.deepEqual(
+      solids(
+        '<div>\n  <UButton>A</UButton>\n  <UButton v-bind="{ variant: kind }">B</UButton>\n</div>',
+      ),
+      [],
+    )
+    assert.deepEqual(
+      solids('<div>\n  <UButton>A</UButton>\n  <UButton v-bind="props">B</UButton>\n</div>'),
+      [],
+    )
+  })
+
+  it('reports the second button, where the waiver goes', () => {
+    const hits = findSolidSiblings(
+      sfc('<div>\n  <UButton>A</UButton>\n  <UButton>B</UButton>\n</div>'),
+      nuxt,
+      TAG_KEYS,
+    )
+    assert.equal(hits[0].line, 4)
+  })
+
+  it('reads a waiver comment that wraps onto two lines', () => {
+    assert.deepEqual(
+      solids(
+        '<div>\n  <UButton>A</UButton>\n  <!-- solid-ok: the banner CTA and\n       the confirm are separate steps -->\n  <UButton>B</UButton>\n</div>',
+      ),
+      [],
+    )
+  })
+
   it('honours the waiver on the second button', () => {
     assert.deepEqual(
       solids(
