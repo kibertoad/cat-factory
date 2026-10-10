@@ -1,7 +1,7 @@
 import {
   type CatFactoryClient,
-  CatFactoryApiError,
   type DirectoryAccountMembership,
+  type DirectoryChange,
   type DirectoryRepo,
   type DirectoryUser,
   type DirectoryWebhookDelivery,
@@ -17,8 +17,11 @@ import {
   recordOf,
 } from './store.ts'
 
-/** The part of a client the syncer calls. A `CatFactoryClient` built with your key satisfies it. */
-export type DirectoryClient = Pick<CatFactoryClient, 'directory'>
+/**
+ * The part of a client the syncer calls. A `CatFactoryClient` built with your key satisfies it.
+ * `me` is read to learn the key's workspace reach, which filters what a push may write.
+ */
+export type DirectoryClient = Pick<CatFactoryClient, 'directory' | 'me'>
 
 export interface DirectorySyncerOptions {
   client: DirectoryClient
@@ -41,7 +44,9 @@ export interface SyncResult {
 }
 
 export type DeliveryResult =
-  | { ok: true; event: DirectoryWebhookDelivery['event']; sync: SyncResult }
+  // `string & {}`: the delivery contract is additive, so a newer deployment may send an event this
+  // version does not know. It is answered with a catch-up rather than refused.
+  | { ok: true; event: DirectoryWebhookDelivery['event'] | (string & {}); sync: SyncResult }
   | { ok: false; reason: string }
 
 const SNAPSHOTS: readonly {
@@ -110,14 +115,21 @@ export class DirectorySyncer {
         return { ok: true, event: delivery.event, sync: await this.#reconcile() }
       }
       let applied = 0
-      for (const change of delivery.changes) {
-        await this.#store.apply(recordOf(change))
-        applied += 1
+      // Only `directory.changed` carries changes. An event this version does not know falls
+      // through to the catch-up below, which is the feed's own answer to whatever it announced.
+      if (delivery.event === 'directory.changed' && delivery.changes.length > 0) {
+        // The endpoint is account-level, so its pushes carry the whole account. A key limited to
+        // some workspaces keeps only what it can read back, or the store would hold users and
+        // boards that no reconciliation under this key ever revisits.
+        const reach = (await this.#client.me.get()).workspaceIds
+        for (const change of delivery.changes) {
+          if (withinReach(change, reach)) applied += await this.#apply(recordOf(change))
+        }
       }
       // The push is the fast path; the feed is the guarantee. Catching up from the stored cursor
       // advances it past what the push carried and fills whatever an earlier lost push skipped.
       const sync = await this.#catchUp(applied, false)
-      return { ok: true, event: delivery.event, sync }
+      return { ok: true, event: (delivery as { event: string }).event, sync }
     })
   }
 
@@ -143,10 +155,7 @@ export class DirectorySyncer {
         if (isCursorExpired(error) && !reconciled) return this.#reconcile(applied)
         throw error
       }
-      for (const change of page.changes) {
-        await this.#store.apply(recordOf(change))
-        applied += 1
-      }
+      for (const change of page.changes) applied += await this.#apply(recordOf(change))
       cursor = page.nextAfter
       await this.#store.setCursor(cursor)
       if (cursor >= page.headSeq || page.changes.length === 0) {
@@ -164,14 +173,12 @@ export class DirectorySyncer {
         walk = await this.#walk(entityType)
       } catch (error) {
         // A key limited to some workspaces cannot read the account-wide entities: it mirrors
-        // what it can reach, and that is not an error.
+        // what it can reach, and that is not an error. The refusal comes on the first page,
+        // before anything of this type is written.
         if (accountWide && isReason(error, 'account_scope_required')) continue
         throw error
       }
-      for (const record of walk.records) {
-        await this.#store.apply(record)
-        applied += 1
-      }
+      applied += walk.applied
       for (const key of await this.#store.listKeys(entityType)) {
         if (walk.keys.has(key)) continue
         await this.#store.apply(tombstone(entityType, key, walk.asOfSeq))
@@ -186,10 +193,13 @@ export class DirectorySyncer {
     return this.#catchUp(applied, true)
   }
 
-  /** Every page of one snapshot, with the watermark its first page reported. */
+  /**
+   * Every page of one snapshot, written page by page so a large account is never held in memory
+   * whole. Returns the keys seen, for the deletion pass, and the watermark its first page reported.
+   */
   async #walk(entityType: DirectoryEntityType) {
-    const records: DirectoryRecord[] = []
     const keys = new Set<string>()
+    let applied = 0
     let asOfSeq = 0
     let cursor: string | undefined
     for (let first = true; ; first = false) {
@@ -197,13 +207,34 @@ export class DirectorySyncer {
       if (first) asOfSeq = page.asOfSeq
       for (const item of page.items) {
         const record = snapshotRecord(entityType, item, asOfSeq)
-        records.push(record)
         keys.add(record.key)
+        applied += await this.#apply(record)
       }
       if (page.nextCursor === null) break
       cursor = page.nextCursor
     }
-    return { records, keys, asOfSeq }
+    return { keys, applied, asOfSeq }
+  }
+
+  /**
+   * Write one feed or push record, returning how many records were written. A workspace deletion
+   * also removes the memberships and repositories held under it: a key limited to some workspaces
+   * is told the workspace is gone but never sees those rows' own deletions (each names a user or a
+   * repository of a board it no longer reaches), so the cascade is the client's to apply.
+   */
+  async #apply(record: DirectoryRecord): Promise<number> {
+    await this.#store.apply(record)
+    if (record.entityType !== 'workspace' || record.entity !== null) return 1
+    let applied = 1
+    const prefix = `${record.key}/`
+    for (const entityType of ['workspace_membership', 'repo'] as const) {
+      for (const key of await this.#store.listKeys(entityType)) {
+        if (!key.startsWith(prefix)) continue
+        await this.#store.apply(tombstone(entityType, key, record.seq))
+        applied += 1
+      }
+    }
+    return applied
   }
 
   #page(entityType: DirectoryEntityType, cursor: string | undefined) {
@@ -270,15 +301,44 @@ function snapshotRecord(
   }
 }
 
+/**
+ * Whether a key with this reach (`null` for every workspace) reads this change from the feed: the
+ * same filter the feed applies server-side. A restricted key sees no users or account
+ * memberships, and the memberships and repositories of its own workspaces only, but it is told of
+ * every workspace deletion, since the deletion drops the grant that would otherwise name it.
+ */
+function withinReach(change: DirectoryChange, reach: readonly string[] | null): boolean {
+  if (reach === null) return true
+  switch (change.entityType) {
+    case 'user':
+    case 'account_membership':
+      return false
+    case 'workspace':
+      return change.entity === null || reach.includes(change.entityId)
+    case 'workspace_membership':
+    case 'repo':
+      return change.workspaceId !== null && reach.includes(change.workspaceId)
+  }
+}
+
 /** The deletion a reconciliation writes for an entity the source no longer has. */
 function tombstone(entityType: DirectoryEntityType, key: string, seq: number): DirectoryRecord {
   return { entityType, key, seq, entity: null } as DirectoryRecord
 }
 
+/**
+ * Whether an API refusal carries this `details.reason`. Read structurally rather than through
+ * `instanceof CatFactoryApiError`: the client is built by the integrator from THEIR copy of
+ * `@cat-factory/sdk`, which is a different class whenever their version differs from the one this
+ * package was published against.
+ */
 function isReason(error: unknown, reason: string): boolean {
+  if (typeof error !== 'object' || error === null || !('details' in error)) return false
+  const details = (error as { details: unknown }).details
   return (
-    error instanceof CatFactoryApiError &&
-    (error.details as { reason?: unknown } | undefined)?.reason === reason
+    typeof details === 'object' &&
+    details !== null &&
+    (details as { reason?: unknown }).reason === reason
   )
 }
 

@@ -27,7 +27,7 @@ const workspace = (id: string, name = id): DirectoryWorkspace => ({
 })
 const user = (id: string): DirectoryUser => ({ id, name: id, email: null, avatarUrl: null })
 
-function fakeDirectory(options: { restricted?: boolean } = {}) {
+function fakeDirectory(options: { restricted?: boolean; reach?: string[] } = {}) {
   const state = {
     workspaces: new Map<string, DirectoryWorkspace>(),
     users: new Map<string, DirectoryUser>(),
@@ -46,6 +46,9 @@ function fakeDirectory(options: { restricted?: boolean } = {}) {
       body: null,
     })
   const client = {
+    me: {
+      get: async () => ({ workspaceIds: options.restricted ? (options.reach ?? []) : null }),
+    },
     directory: {
       listChanges: async ({ after = 0, limit = 100 }: { after?: number; limit?: number }) => {
         if (after < state.oldest - 1 || after > head()) {
@@ -214,6 +217,129 @@ describe('DirectorySyncer', () => {
     expect(accepted).toMatchObject({ ok: true, event: 'directory.changed' })
     expect(store.entities('workspace').get('ws_a')?.name).toBe('Alpha')
     expect(await store.getCursor()).toBe(1)
+  })
+
+  it('keeps only what a restricted key can reach from an account-wide push', async () => {
+    const dir = fakeDirectory({ restricted: true, reach: ['ws_a'] })
+    const store = new MemoryDirectoryStore()
+    const syncer = new DirectorySyncer({
+      client: dir.client,
+      store,
+      webhookSecret: SECRET,
+      now: () => NOW,
+    })
+    await syncer.catchUp()
+    await store.apply({
+      entityType: 'workspace',
+      key: 'ws_gone',
+      seq: 0,
+      entity: workspace('ws_gone'),
+    })
+    const change = (seq: number, entityType: string, entityId: string, entity: unknown) => ({
+      seq,
+      at: 1,
+      workspaceId: entityType === 'user' ? null : entityId,
+      entityId,
+      entityType,
+      entity,
+    })
+    // The changes ride the push alone, so the catch-up after it has nothing to add.
+    const body = JSON.stringify({
+      deliveryId: 'mirror:0-4',
+      sentAt: NOW,
+      accountId: 'acc',
+      event: 'directory.changed',
+      changes: [
+        change(1, 'workspace', 'ws_a', workspace('ws_a')),
+        change(2, 'workspace', 'ws_b', workspace('ws_b')),
+        change(3, 'user', 'usr_1', user('usr_1')),
+        change(4, 'workspace', 'ws_gone', null),
+      ],
+      nextAfter: 4,
+      headSeq: 4,
+    })
+
+    expect(await syncer.handleDelivery(await sign(body), body)).toMatchObject({ ok: true })
+    expect([...store.entities('workspace').keys()]).toEqual(['ws_a'])
+    expect(store.entities('user').size).toBe(0)
+  })
+
+  it('removes the memberships and repositories of a deleted workspace from the feed alone', async () => {
+    const dir = fakeDirectory({ restricted: true })
+    dir.putWorkspace('ws_a', 'Alpha')
+    dir.putWorkspace('ws_b', 'Beta')
+    const store = new MemoryDirectoryStore()
+    const syncer = new DirectorySyncer({ client: dir.client, store })
+    await syncer.catchUp()
+    const membership = (workspaceId: string) => ({
+      workspaceId,
+      userId: 'usr_1',
+      role: 'member' as const,
+      createdAt: 1,
+    })
+    await store.apply({
+      entityType: 'workspace_membership',
+      key: 'ws_a/usr_1',
+      seq: 1,
+      entity: membership('ws_a'),
+    })
+    await store.apply({
+      entityType: 'workspace_membership',
+      key: 'ws_b/usr_1',
+      seq: 2,
+      entity: membership('ws_b'),
+    })
+
+    // A restricted key sees only the workspace deletion, never the rows under it.
+    dir.deleteWorkspace('ws_a')
+    await syncer.catchUp()
+    expect([...store.entities('workspace_membership').keys()]).toEqual(['ws_b/usr_1'])
+  })
+
+  it('reads an API refusal by its reason, whichever copy of the SDK threw it', async () => {
+    const dir = fakeDirectory()
+    dir.putWorkspace('ws_a', 'Alpha')
+    const store = new MemoryDirectoryStore()
+    await store.setCursor(0)
+    // What the integrator's own copy of `@cat-factory/sdk` throws: the same shape, another class.
+    const listChanges = dir.client.directory.listChanges.bind(dir.client.directory)
+    let refused = false
+    dir.client.directory.listChanges = (async (query) => {
+      if (!refused) {
+        refused = true
+        throw Object.assign(new Error('409 conflict'), {
+          status: 409,
+          details: { reason: 'cursor_expired' },
+        })
+      }
+      return listChanges(query)
+    }) as typeof listChanges
+
+    const result = await new DirectorySyncer({ client: dir.client, store }).catchUp()
+    expect(result.reconciled).toBe(true)
+    expect(store.entities('workspace').has('ws_a')).toBe(true)
+  })
+
+  it('answers a push of an event it does not know with a catch-up', async () => {
+    const dir = fakeDirectory()
+    const store = new MemoryDirectoryStore()
+    const syncer = new DirectorySyncer({
+      client: dir.client,
+      store,
+      webhookSecret: SECRET,
+      now: () => NOW,
+    })
+    await syncer.catchUp()
+    dir.putWorkspace('ws_a', 'Alpha')
+    const body = JSON.stringify({
+      deliveryId: 'mirror:future',
+      sentAt: NOW,
+      accountId: 'acc',
+      event: 'directory.some_future_event',
+    })
+    const result = await syncer.handleDelivery(await sign(body), body)
+    expect(result).toMatchObject({ ok: true, event: 'directory.some_future_event' })
+    expect(store.entities('workspace').has('ws_a')).toBe(true)
   })
 
   it('answers a push request with 204, and 401 for a bad signature', async () => {

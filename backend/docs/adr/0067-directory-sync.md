@@ -51,9 +51,10 @@ read before its first page (`asOfSeq`), so replaying from it after the last page
 changed mid-walk. The feed is pruned after `DIRECTORY_CHANGE_RETENTION_DAYS` (default 30), always
 keeping each account's newest row; a cursor older than that, or ahead of the feed, is
 `409 cursor_expired`. A snapshot cursor names the listing that issued it, so a cursor passed to
-another listing is `400 invalid_cursor` rather than a key bound that silently skips rows. A key
-limited to some workspaces sees their workspaces, memberships and repositories only and is refused
-users and account memberships (`403 account_scope_required`); its feed omits those rows. That feed
+another listing is `422` with `details.reason: invalid_cursor` rather than a key bound that
+silently skips rows. A key limited to some workspaces sees their workspaces, memberships and
+repositories only and is refused users and account memberships (`403 account_scope_required`); its
+feed omits those rows. That feed
 also carries the `workspace` deletion of every workspace that no longer exists, because the
 board's deletion drops the key's grant and filtering by current grants alone would never tell the
 key that a board it mirrored is gone. The membership and repo deletions of that board stay hidden
@@ -73,7 +74,10 @@ the lease expires. A failed push is counted on `notification.delivery_failed` wi
 delivery (Web Crypto only; `gatekeeper-worker` re-exports it). `@cat-factory/directory-sync`
 drives bootstrap, catch-up, push handling and reconciliation over a `DirectoryStore` the integrator
 implements, whose one rule is: skip a record only when a strictly newer `seq` is held for its key,
-and keep deletions as tombstones.
+and keep deletions as tombstones. The syncer applies a workspace deletion's cascade to the
+memberships and repositories under it itself, and filters an account-level push down to its own
+key's reach (read from `/api/v1/me`), so a restricted key's store matches what its feed and
+snapshots would build.
 
 ## Rationale
 

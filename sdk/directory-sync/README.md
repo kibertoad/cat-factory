@@ -17,8 +17,10 @@ const syncer = new DirectorySyncer({
 })
 
 await syncer.catchUp() // on startup: bootstraps from the snapshots the first time
-setInterval(() => syncer.catchUp(), 5 * 60_000) // the backstop that guarantees completeness
-setInterval(() => syncer.reconcile(), 24 * 60 * 60_000) // a daily drift check
+// Both reject on a network or API failure. Catch it: an unhandled rejection ends a Node process,
+// and the next tick resumes from the stored cursor anyway.
+setInterval(() => syncer.catchUp().catch(reportError), 5 * 60_000) // the completeness backstop
+setInterval(() => syncer.reconcile().catch(reportError), 24 * 60 * 60_000) // a daily drift check
 
 // Optional: a directory webhook for changes within a couple of minutes.
 app.post('/cat-factory/directory', (request) => syncer.handleRequest(request))
@@ -61,4 +63,9 @@ ON CONFLICT (entity_type, key) DO UPDATE
   changed during the walk is picked up.
 - `handleDelivery()` verifies the push signature before parsing, applies the page, then catches up
   from your cursor, so a lost or reordered push costs only latency.
+- A workspace deletion also deletes the memberships and repositories held under it. A key limited
+  to some workspaces is told the workspace is gone but never sees those rows' own deletions.
+- A webhook endpoint is account-level, so its pushes carry the whole account. Before applying a
+  push the syncer reads its key's reach (`GET /api/v1/me`) and keeps only what that key could read
+  from the feed itself, so a restricted key's store never holds users or boards it cannot see.
 - Calls on one syncer never interleave. Run one syncer per store.
