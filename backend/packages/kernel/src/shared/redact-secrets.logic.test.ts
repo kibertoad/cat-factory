@@ -202,6 +202,8 @@ describe('redactSecrets', () => {
       baseline,
       'prose baseline must be measurable at millisecond granularity',
     ).toBeGreaterThan(0)
+    // An untimed baseline stays Infinity, which would turn every ratio below into 0 and pass.
+    expect(Number.isFinite(baseline), 'prose baseline must have been timed').toBe(true)
     for (const [offset, name] of Object.keys(shapes).entries()) {
       // A shape with no sample is Infinity, so it fails rather than passing at 0x.
       const ratio = (fastest[offset + 1] ?? Number.POSITIVE_INFINITY) / baseline
