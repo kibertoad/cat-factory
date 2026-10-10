@@ -15,6 +15,8 @@ import { useForkDecisionStore } from '~/stores/forkDecision'
 import type { ForkChatMessage, ForkDecisionStepState, ForkOption } from '~/types/execution'
 import { FORK_DECISION_META } from '~/utils/catalog'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
+import Spinner from '~/components/common/Spinner.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const execution = useExecutionStore()
 const board = useBoardStore()
@@ -170,7 +172,7 @@ const { requestClose } = useUnsavedGuard({
         v-if="status === 'proposing'"
         class="flex h-full flex-col items-center justify-center gap-2 py-10 text-center text-muted"
       >
-        <UIcon name="i-lucide-loader-circle" class="h-8 w-8 animate-spin opacity-60" />
+        <Spinner class="h-8 w-8 opacity-60" />
         <p class="text-sm">{{ t('forkDecision.proposing.title') }}</p>
         <p class="max-w-sm text-2xs text-dimmed">
           {{ t('forkDecision.proposing.hint') }}
@@ -322,7 +324,7 @@ const { requestClose } = useUnsavedGuard({
               <p
                 class="flex items-center gap-1.5 rounded-lg bg-elevated/70 px-3 py-1.5 text-xs text-muted"
               >
-                <UIcon name="i-lucide-loader-circle" class="h-3.5 w-3.5 animate-spin" />
+                <Spinner class="h-3.5 w-3.5" />
                 {{ t('forkDecision.chat.thinking') }}
               </p>
             </div>
@@ -364,13 +366,12 @@ const { requestClose } = useUnsavedGuard({
       </div>
 
       <!-- Skipped / no state: nothing to decide. -->
-      <div
+      <EmptyState
         v-else
-        class="flex h-full flex-col items-center justify-center gap-2 py-10 text-center text-muted"
-      >
-        <UIcon :name="FORK_DECISION_META.icon" class="h-8 w-8 opacity-40" />
-        <p class="text-sm">{{ t('forkDecision.empty.title') }}</p>
-      </div>
+        class="h-full"
+        :icon="FORK_DECISION_META.icon"
+        :title="t('forkDecision.empty.title')"
+      />
     </div>
 
     <footer

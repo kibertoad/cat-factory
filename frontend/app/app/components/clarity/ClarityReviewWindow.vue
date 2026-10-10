@@ -20,11 +20,13 @@ import type {
   ReviewItemStatus,
 } from '~/types/clarity'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import Spinner from '~/components/common/Spinner.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const board = useBoardStore()
 const clarity = useClarityStore()
 const models = useModelsStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 const access = useWorkspaceAccess()
@@ -233,10 +235,8 @@ async function incorporate(feedback?: string) {
   showRedo.value = false
   // The fold + re-review now run in the durable driver. Hand the user back to the board;
   // a notification calls them back only if the re-review needs more input.
-  toast.add({
-    title: t('clarity.toast.clarifyingTitle'),
+  actionToast.info('clarity.toast.clarifyingTitle', {
     description: t('clarity.toast.clarifyingDescription'),
-    icon: 'i-lucide-wand-sparkles',
   })
   close()
 }
@@ -246,15 +246,16 @@ async function reReview() {
   try {
     const updated = await clarity.reReview(blockId.value)
     const newFindings = clarity.openCount(updated)
-    toast.add({
-      title:
-        updated.status === 'incorporated'
-          ? t('clarity.toast.reReviewSatisfied')
-          : updated.status === 'exceeded'
-            ? t('clarity.toast.reReviewExceeded')
-            : t('clarity.toast.reReviewNewFindings', { count: newFindings }, newFindings),
-      icon: 'i-lucide-sparkles',
-    })
+    if (updated.status === 'incorporated') {
+      actionToast.success('clarity.toast.reReviewSatisfied')
+    } else if (updated.status === 'exceeded') {
+      actionToast.warning('clarity.toast.reReviewExceeded')
+    } else {
+      actionToast.info('clarity.toast.reReviewNewFindings', {
+        params: { count: newFindings },
+        plural: newFindings,
+      })
+    }
   } catch (e) {
     present(e, 'clarity.error.reReview')
   }
@@ -266,7 +267,7 @@ async function proceed() {
   try {
     await flushDrafts()
     await clarity.proceed(blockId.value)
-    toast.add({ title: t('clarity.toast.proceeding'), icon: 'i-lucide-arrow-right' })
+    actionToast.info('clarity.toast.proceeding')
   } catch (e) {
     present(e, 'clarity.error.proceed')
   } finally {
@@ -280,12 +281,12 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
   try {
     await clarity.resolveExceeded(blockId.value, choice)
     if (choice === 'stop-reset') {
-      toast.add({ title: t('clarity.toast.taskReset'), icon: 'i-lucide-undo' })
+      actionToast.info('clarity.toast.taskReset')
       close()
     } else if (choice === 'proceed') {
-      toast.add({ title: t('clarity.toast.proceeding'), icon: 'i-lucide-arrow-right' })
+      actionToast.info('clarity.toast.proceeding')
     } else {
-      toast.add({ title: t('clarity.toast.extraRoundGranted'), icon: 'i-lucide-rotate-cw' })
+      actionToast.info('clarity.toast.extraRoundGranted')
     }
   } catch (e) {
     present(e, 'clarity.error.resolve')
@@ -329,20 +330,24 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
 
         <!-- empty state — the reviewer runs automatically as the first pipeline
                  gate step, so there's nothing to do here until then -->
-        <div
+        <EmptyState
           v-if="!review && !busy && !loading"
-          class="rounded-lg border border-dashed border-muted p-8 text-center text-sm text-dimmed"
-        >
-          {{ t('clarity.empty') }}
+          icon="i-lucide-list-checks"
+          :title="t('clarity.empty')"
+        />
+
+        <!-- initial fetch on open -->
+        <div v-else-if="loading && !busy && !review" class="flex flex-col gap-3">
+          <USkeleton v-for="n in 3" :key="n" class="h-20 w-full rounded-lg" />
         </div>
 
-        <!-- working state (initial fetch on open, or a reviewer pass running) -->
+        <!-- a reviewer pass running -->
         <div
-          v-else-if="(busy || loading) && !review"
+          v-else-if="busy && !review"
           class="flex items-center justify-center gap-2 p-8 text-sm text-muted"
         >
-          <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
-          {{ loading && !busy ? t('clarity.loadingReview') : t('clarity.triaging') }}
+          <Spinner class="h-4 w-4" />
+          {{ t('clarity.triaging') }}
         </div>
 
         <template v-else-if="review">
@@ -371,7 +376,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
             v-else-if="working"
             class="mb-4 flex items-center gap-2 rounded-lg border border-primary/60 bg-primary/10 p-4 text-sm text-primary"
           >
-            <UIcon name="i-lucide-loader-circle" class="h-5 w-5 shrink-0 animate-spin" />
+            <Spinner class="h-5 w-5 shrink-0" />
             <span v-if="incorporating">
               {{ t('clarity.incorporatingStage') }}
             </span>

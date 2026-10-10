@@ -16,7 +16,7 @@ import type {
 const props = defineProps<{ accountId: string }>()
 
 const store = useAccountSettingsStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 
@@ -132,11 +132,7 @@ async function save() {
   try {
     // `config` fully replaces the stored non-secret config, so carry the rest forward.
     await store.save(props.accountId, { config: { ...store.view?.config, modelPolicy: policy } })
-    toast.add({
-      title: t('settings.modelPolicy.saved'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('settings.modelPolicy.saved')
   } catch (e) {
     present(e, 'settings.modelPolicy.saveFailed')
   } finally {

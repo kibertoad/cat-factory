@@ -35,7 +35,7 @@ function blockAsPatchable(block: Block): PatchSnapshot {
  * in-closure functions, and the split is purely to keep every function within the size budget.
  */
 export function createBoardPlacement(ctx: BoardWriteContext) {
-  const { blocks, getBlock, upsert, api, toast, tr, present } = ctx
+  const { blocks, getBlock, upsert, api, actionToast, tr, present } = ctx
 
   /**
    * Move a block into a new container at a new local position. Drag-reparent commits
@@ -78,19 +78,12 @@ export function createBoardPlacement(ctx: BoardWriteContext) {
       // Offer an undo back to the previous container (a drag overshoot is easy). The undo
       // move is itself non-undoable so the toast doesn't ping-pong.
       if (opts.undoable && prevParentId) {
-        toast.add({
-          title: tr('board.toast.moved', { name }),
-          icon: 'i-lucide-move',
-          color: 'neutral',
-          duration: UNDO_WINDOW_MS,
-          actions: [
-            {
-              label: tr('common.undo'),
-              icon: 'i-lucide-undo-2',
-              onClick: () =>
-                void reparentBlock(id, prevParentId, prevPosition, { undoable: false }),
-            },
-          ],
+        actionToast.success('board.toast.moved', {
+          params: { name },
+          undo: {
+            run: () => void reparentBlock(id, prevParentId, prevPosition, { undoable: false }),
+            windowMs: UNDO_WINDOW_MS,
+          },
         })
       }
     } catch (e) {
@@ -102,12 +95,7 @@ export function createBoardPlacement(ctx: BoardWriteContext) {
       // translated prose, so map it here; anything else keeps the raw message as the last resort.
       const refusal = moveRefusalKey(e)
       if (refusal) {
-        toast.add({
-          title: tr('board.toast.moveFailed'),
-          description: tr(refusal),
-          icon: 'i-lucide-triangle-alert',
-          color: 'error',
-        })
+        actionToast.error('board.toast.moveFailed', { description: tr(refusal) })
       } else present(e, 'board.toast.moveFailed')
     }
   }

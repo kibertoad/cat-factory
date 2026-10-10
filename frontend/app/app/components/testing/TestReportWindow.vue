@@ -789,15 +789,12 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                       class="h-full w-full object-cover object-top"
                     />
                     <span
-                      v-else
+                      v-else-if="blobs.statusFor(s.artifactId) === 'error'"
                       class="flex h-full w-full items-center justify-center text-3xs text-app-600"
                     >
-                      {{
-                        blobs.statusFor(s.artifactId) === 'error'
-                          ? t('testing.shot.failed')
-                          : t('testing.shot.loading')
-                      }}
+                      {{ t('testing.shot.failed') }}
                     </span>
+                    <USkeleton v-else class="h-full w-full rounded-none" />
                     <span
                       class="absolute inset-x-0 bottom-0 truncate bg-app-950/80 px-1 py-0.5 text-3xs text-toned"
                       >{{ s.view }}</span
@@ -830,15 +827,12 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                   class="h-full w-full object-cover object-top"
                 />
                 <span
-                  v-else
+                  v-else-if="blobs.statusFor(s.artifactId) === 'error'"
                   class="flex h-full w-full items-center justify-center text-2xs text-app-600"
                 >
-                  {{
-                    blobs.statusFor(s.artifactId) === 'error'
-                      ? t('testing.shot.failedToLoad')
-                      : t('testing.shot.loading')
-                  }}
+                  {{ t('testing.shot.failedToLoad') }}
                 </span>
+                <USkeleton v-else class="h-full w-full rounded-none" />
                 <span
                   class="absolute inset-x-0 bottom-0 truncate bg-app-950/80 px-1.5 py-0.5 text-3xs text-toned"
                   >{{ s.view }}</span

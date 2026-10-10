@@ -105,9 +105,7 @@ const filename = computed(() => {
         {{ t('binaryOutput.asset.retry') }}
       </UButton>
     </p>
-    <p v-else class="text-2xs text-dimmed" data-testid="stored-asset-loading">
-      {{ t('binaryOutput.asset.loading') }}
-    </p>
+    <USkeleton v-else class="h-16 w-full rounded-sm" data-testid="stored-asset-loading" />
 
     <!-- The two things a person does with a delivered asset. Both hang off the object URL, so
          they appear only once the bytes are in hand. -->

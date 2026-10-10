@@ -321,8 +321,8 @@ onMounted(() => {
 
     <UInput
       v-model="query"
-      :icon="searching ? 'i-lucide-loader-circle' : 'i-lucide-search'"
-      :ui="{ leadingIcon: searching ? 'animate-spin' : '' }"
+      icon="i-lucide-search"
+      :loading="searching"
       size="sm"
       class="w-full"
       :placeholder="

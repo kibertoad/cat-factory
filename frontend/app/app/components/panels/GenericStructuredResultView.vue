@@ -12,6 +12,7 @@ import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import MarkdownProse from '~/components/common/MarkdownProse.vue'
 import CopyButton from '~/components/common/CopyButton.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const board = useBoardStore()
 const execution = useExecutionStore()
@@ -87,16 +88,12 @@ const customJson = computed<string | null>(() => {
           ><code>{{ customJson }}</code></pre>
         </template>
 
-        <div
+        <EmptyState
           v-else-if="!step?.output"
-          class="flex h-full flex-col items-center justify-center gap-2 text-center text-muted"
-        >
-          <UIcon name="i-lucide-braces" class="h-8 w-8 opacity-40" />
-          <p class="text-sm">{{ t('panels.structuredResult.noResult') }}</p>
-          <p class="max-w-sm text-2xs text-dimmed">
-            {{ t('panels.structuredResult.noResultHint') }}
-          </p>
-        </div>
+          icon="i-lucide-braces"
+          :title="t('panels.structuredResult.noResult')"
+          :description="t('panels.structuredResult.noResultHint')"
+        />
       </div>
 
       <!-- Sidebar: shared run metadata + observability rollup -->

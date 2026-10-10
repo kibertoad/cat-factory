@@ -18,6 +18,7 @@ import { computed, ref } from 'vue'
 import { MAX_REVIEW_SKILLS } from '@cat-factory/contracts'
 import { useSkillsStore } from '~/stores/skills'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const props = defineProps<{
   /** The queued skill ids, in the order the reviewer applies them (`v-model`). */
@@ -109,9 +110,12 @@ function toggle(id: string) {
                   </span>
                 </UButton>
               </template>
-              <p v-else class="px-2 py-3 text-xs text-dimmed">
-                {{ t('skills.reviewQueue.pickerEmpty') }}
-              </p>
+              <EmptyState
+                v-else
+                compact
+                icon="i-lucide-book-open-check"
+                :title="t('skills.reviewQueue.pickerEmpty')"
+              />
             </div>
 
             <p

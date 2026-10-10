@@ -30,7 +30,7 @@ import SectionLabel from '~/components/common/SectionLabel.vue'
 const ui = useUiStore()
 const notifications = useNotificationsStore()
 const slack = useSlackStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 
@@ -119,11 +119,7 @@ async function save() {
   busy.value = true
   try {
     await notifications.updateSettings(matrix)
-    toast.add({
-      title: t('notificationSettings.toast.saved'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('notificationSettings.toast.saved')
   } catch (e) {
     present(e, 'notificationSettings.error.save')
   } finally {
@@ -167,11 +163,8 @@ function resetToDefaults() {
           </UButton>
         </div>
 
-        <div
-          v-else-if="!editable"
-          class="rounded-lg border border-muted bg-elevated/40 p-3 text-xs text-muted"
-        >
-          {{ t('common.loading') }}
+        <div v-else-if="!editable" class="space-y-1">
+          <USkeleton v-for="n in 4" :key="n" class="h-10 w-full" />
         </div>
 
         <template v-else>

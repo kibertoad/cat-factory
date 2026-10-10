@@ -36,7 +36,7 @@ const { t } = useI18n()
 const infra = useInfraConfigStore()
 const auth = useAuthStore()
 const ui = useUiStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { confirmAction } = useConfirmAction()
 
@@ -403,20 +403,16 @@ async function removeCustom() {
 }
 
 function toastSaved() {
-  toast.add({
-    title: t('settings.infrastructure.handler.saved'),
-    icon: 'i-lucide-check',
-    color: 'success',
-  })
+  actionToast.success('settings.infrastructure.handler.saved')
 }
 function toastRemoved() {
-  toast.add({ title: t('settings.infrastructure.handler.removed'), icon: 'i-lucide-check' })
+  actionToast.success('settings.infrastructure.handler.removed')
 }
 </script>
 
 <template>
   <!-- Only render the configurator once the handler bundle has actually resolved (available
-       === true). While it's still being probed (null) show a loading line instead of flashing
+       === true). While it's still being probed (null) show skeleton sections instead of flashing
        the full form, and render nothing when the integration is off (false). -->
   <div v-if="infra.available === true" class="space-y-5">
     <p class="text-xs text-muted">{{ t('settings.infrastructure.handler.intro') }}</p>
@@ -629,7 +625,8 @@ function toastRemoved() {
       </div>
     </section>
   </div>
-  <p v-else-if="infra.available === null" class="text-xs text-dimmed">
-    {{ t('settings.infrastructure.handler.loading') }}
-  </p>
+  <div v-else-if="infra.available === null" class="space-y-5">
+    <USkeleton class="h-4 w-2/3" />
+    <USkeleton v-for="n in 3" :key="n" class="h-24 w-full rounded-lg" />
+  </div>
 </template>

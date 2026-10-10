@@ -21,7 +21,7 @@ const props = defineProps<{ block: Block }>()
 
 const board = useBoardStore()
 const uiMode = useUiModeStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { t } = useI18n()
 
 const busy = ref(false)
@@ -64,11 +64,7 @@ async function save() {
     // needs saying here; announcing it unconditionally would claim a save the rollback undid.
     const persisted = await board.updateBlock(props.block.id, { testingContext: outgoing.value })
     if (persisted) {
-      toast.add({
-        title: t('inspector.testingContext.savedToast'),
-        icon: 'i-lucide-check',
-        color: 'success',
-      })
+      actionToast.success('inspector.testingContext.savedToast')
     }
   } finally {
     busy.value = false

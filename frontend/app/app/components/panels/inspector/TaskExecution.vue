@@ -23,6 +23,7 @@ import InputGateNotice from '~/components/inputGate/InputGateNotice.vue'
 import { inputGateNoticeFor } from '~/utils/inputGate'
 import { composeRunOutcome, hasOutcomeToShow } from '~/utils/runOutcome'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import Spinner from '~/components/common/Spinner.vue'
 
 const props = defineProps<{ block: Block }>()
 
@@ -471,7 +472,7 @@ async function mergePr() {
               v-else-if="reviews.isBackground(s.agentKind, block.id) && reviewStage"
               class="inline-flex shrink-0 items-center gap-1 text-3xs text-primary"
             >
-              <UIcon name="i-lucide-loader-circle" class="h-3 w-3 animate-spin" />
+              <Spinner class="h-3 w-3" />
               {{ reviewStageLabel }}
             </span>
             <!-- A companion that spent its rework budget parks on the iteration-cap
@@ -591,13 +592,11 @@ async function mergePr() {
             v-if="gateCompanionFor(s, runFailed)"
             class="mt-0.5 flex items-center gap-1.5 ps-6 text-3xs"
           >
-            <UIcon
+            <Spinner
               :name="agentKindMeta(gateCompanionFor(s, runFailed)!.kind).icon"
+              :spinning="gateCompanionFor(s, runFailed)!.state === 'running'"
               class="h-3 w-3 shrink-0"
-              :class="[
-                COMPANION_STATE_META[gateCompanionFor(s, runFailed)!.state].text,
-                gateCompanionFor(s, runFailed)!.state === 'running' ? 'animate-spin' : '',
-              ]"
+              :class="COMPANION_STATE_META[gateCompanionFor(s, runFailed)!.state].text"
             />
             <span class="text-muted">
               {{

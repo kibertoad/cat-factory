@@ -20,10 +20,12 @@ import type {
   ReviewItemStatus,
 } from '~/types/brainstorm'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import Spinner from '~/components/common/Spinner.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const board = useBoardStore()
 const brainstorm = useBrainstormStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 const access = useWorkspaceAccess()
@@ -194,10 +196,9 @@ async function incorporate(feedback?: string) {
   }
   redoComment.value = ''
   showRedo.value = false
-  toast.add({
-    title: t('brainstorm.toast.draftingTitle', { doc: docNoun.value }),
+  actionToast.info('brainstorm.toast.draftingTitle', {
+    params: { doc: docNoun.value },
     description: t('brainstorm.toast.draftingDescription'),
-    icon: 'i-lucide-wand-sparkles',
   })
   close()
 }
@@ -207,15 +208,16 @@ async function reReview() {
   try {
     const updated = await brainstorm.reReview(blockId.value, activeStage.value)
     const newCount = brainstorm.openCount(updated)
-    toast.add({
-      title:
-        updated.status === 'incorporated'
-          ? t('brainstorm.toast.reReviewSettled')
-          : updated.status === 'exceeded'
-            ? t('brainstorm.toast.reReviewExceeded')
-            : t('brainstorm.toast.reReviewNewOptions', { count: newCount }, newCount),
-      icon: 'i-lucide-sparkles',
-    })
+    if (updated.status === 'incorporated') {
+      actionToast.success('brainstorm.toast.reReviewSettled')
+    } else if (updated.status === 'exceeded') {
+      actionToast.warning('brainstorm.toast.reReviewExceeded')
+    } else {
+      actionToast.info('brainstorm.toast.reReviewNewOptions', {
+        params: { count: newCount },
+        plural: newCount,
+      })
+    }
   } catch (e) {
     present(e, 'brainstorm.toast.reReviewError')
   }
@@ -226,7 +228,7 @@ async function proceed() {
   acting.value = true
   try {
     await brainstorm.proceed(blockId.value, activeStage.value)
-    toast.add({ title: t('brainstorm.toast.proceeding'), icon: 'i-lucide-arrow-right' })
+    actionToast.info('brainstorm.toast.proceeding')
   } catch (e) {
     present(e, 'brainstorm.toast.proceedError')
   } finally {
@@ -240,12 +242,12 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
   try {
     await brainstorm.resolveExceeded(blockId.value, activeStage.value, choice)
     if (choice === 'stop-reset') {
-      toast.add({ title: t('brainstorm.toast.taskReset'), icon: 'i-lucide-undo' })
+      actionToast.info('brainstorm.toast.taskReset')
       close()
     } else if (choice === 'proceed') {
-      toast.add({ title: t('brainstorm.toast.proceeding'), icon: 'i-lucide-arrow-right' })
+      actionToast.info('brainstorm.toast.proceeding')
     } else {
-      toast.add({ title: t('brainstorm.toast.extraRoundGranted'), icon: 'i-lucide-rotate-cw' })
+      actionToast.info('brainstorm.toast.extraRoundGranted')
     }
   } catch (e) {
     present(e, 'brainstorm.toast.resolveError')
@@ -291,20 +293,24 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
         </p>
 
         <!-- empty state -->
-        <div
+        <EmptyState
           v-if="!session && !busy && !loading"
-          class="rounded-lg border border-dashed border-muted p-8 text-center text-sm text-dimmed"
-        >
-          {{ t('brainstorm.empty') }}
+          icon="i-lucide-lightbulb"
+          :title="t('brainstorm.empty')"
+        />
+
+        <!-- initial fetch on open -->
+        <div v-else-if="loading && !busy && !session" class="flex flex-col gap-3">
+          <USkeleton v-for="n in 3" :key="n" class="h-20 w-full rounded-lg" />
         </div>
 
-        <!-- working state (initial fetch on open, or an agent pass running) -->
+        <!-- an agent pass running -->
         <div
-          v-else-if="(busy || loading) && !session"
+          v-else-if="busy && !session"
           class="flex items-center justify-center gap-2 p-8 text-sm text-muted"
         >
-          <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
-          {{ loading && !busy ? t('brainstorm.loading') : t('brainstorm.generating') }}
+          <Spinner class="h-4 w-4" />
+          {{ t('brainstorm.generating') }}
         </div>
 
         <template v-else-if="session">
@@ -332,7 +338,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
             v-else-if="working"
             class="mb-4 flex items-center gap-2 rounded-lg border border-app-warning-900/60 bg-app-warning-950/30 p-4 text-sm text-app-warning-200"
           >
-            <UIcon name="i-lucide-loader-circle" class="h-5 w-5 shrink-0 animate-spin" />
+            <Spinner class="h-5 w-5 shrink-0" />
             <span v-if="incorporating">
               {{ t('brainstorm.working.incorporating', { doc: docNoun }) }}
             </span>

@@ -41,7 +41,7 @@ const ui = useUiStore()
 const github = useGitHubStore()
 const board = useBoardStore()
 const services = useServicesStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { freeFramePosition, focusFrame } = useFramePlacement()
 
@@ -349,11 +349,8 @@ async function add() {
     // Centre the camera on the newly imported service.
     await focusFrame(block.id)
     configuredBlockId.value = block.id
-    toast.add({
-      title: t('github.addService.toast.addedTitle'),
+    actionToast.success('github.addService.toast.addedTitle', {
       description: t('github.addService.toast.addedDescription', { title: block.title }),
-      icon: 'i-lucide-check',
-      color: 'success',
     })
   } catch (e) {
     present(e, 'github.addService.toast.addFailedTitle')
@@ -417,16 +414,14 @@ async function addServices() {
     const lastBlockId = created.at(-1)?.blockId
     if (lastBlockId) await focusFrame(lastBlockId)
     selectedDirectories.value = []
-    toast.add({
-      title: t('github.addService.toast.servicesAddedTitle'),
+    const show = wiringLanded ? actionToast.success : actionToast.warning
+    show('github.addService.toast.servicesAddedTitle', {
       description: [
         t('github.addService.toast.servicesAddedDescription', { count: dirs.length }, dirs.length),
         frontendNote(designatedDirectory, wiringLanded),
       ]
         .filter(Boolean)
         .join(' '),
-      icon: wiringLanded ? 'i-lucide-check' : 'i-lucide-triangle-alert',
-      color: wiringLanded ? 'success' : 'warning',
     })
   } catch (e) {
     present(e, 'github.addService.toast.addFailedTitle')

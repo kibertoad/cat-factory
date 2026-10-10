@@ -12,7 +12,7 @@ import SecretInput from '~/components/common/SecretInput.vue'
 const { t } = useI18n()
 const ui = useUiStore()
 const store = useReleaseHealthStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { confirmAction, toastDone } = useConfirmAction()
 
@@ -66,21 +66,14 @@ async function saveIncident() {
     }
     if (incidentIo.apiKey.trim()) input.incidentIo = { apiKey: incidentIo.apiKey.trim() }
     if (!input.pagerDuty && !input.incidentIo) {
-      toast.add({
-        title: t('settings.observabilityConnection.toast.incidentCredsRequired'),
-        color: 'error',
-      })
+      actionToast.error('settings.observabilityConnection.toast.incidentCredsRequired')
       return
     }
     await store.saveIncident(input)
     pagerDuty.apiToken = ''
     pagerDuty.fromEmail = ''
     incidentIo.apiKey = ''
-    toast.add({
-      title: t('settings.observabilityConnection.toast.incidentSaved'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('settings.observabilityConnection.toast.incidentSaved')
   } catch (e) {
     present(e, 'settings.observabilityConnection.toast.incidentSaveFailed')
   } finally {
@@ -111,11 +104,7 @@ async function saveConnection() {
     })
     datadog.apiKey = ''
     datadog.appKey = ''
-    toast.add({
-      title: t('settings.observabilityConnection.toast.connected'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('settings.observabilityConnection.toast.connected')
   } catch (e) {
     present(e, 'settings.observabilityConnection.toast.connectFailed')
   } finally {

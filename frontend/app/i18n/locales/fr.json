@@ -52,7 +52,6 @@
     }
   },
   "common": {
-    "loading": "Chargement…",
     "save": "Enregistrer",
     "cancel": "Annuler",
     "retry": "Réessayer",
@@ -1848,8 +1847,6 @@
     "exportJson": "Exporter en JSON",
     "exportHint": "Télécharger un export JSON de cette exécution adapté aux LLM",
     "closeEsc": "Fermer (Esc)",
-    "loadingActivity": "Chargement de l'activité du modèle…",
-    "loadingContext": "Chargement du contexte fourni…",
     "noCalls": "Aucun appel de modèle enregistré pour cette exécution.",
     "noContext": "Aucun contexte d'agent stocké pour cette exécution. Il est capturé à chaque dispatch lorsque l'espace de travail a activé 'Stocker le contexte complet de l'agent'.",
     "contextError": "Impossible de charger le contexte fourni.",
@@ -1941,7 +1938,6 @@
       "details": "Détails"
     },
     "webSearch": "Recherche web",
-    "loadingSearch": "Chargement des recherches web…",
     "noSearch": "Aucune recherche web enregistrée pour cette exécution. Les requêtes sont capturées lorsque la recherche web s'exécute et que l'espace de travail a activé « Stocker le contexte complet de l'agent ».",
     "search": {
       "available": "Disponible",
@@ -1980,7 +1976,6 @@
     "toolCalls": {
       "title": "Appels d'outils",
       "subtitle": "ce que les agents ont fait, dans l'ordre où ils l'ont fait",
-      "loading": "Chargement des appels d'outils…",
       "error": "Impossible de charger les appels d'outils.",
       "none": "Aucun appel d'outil enregistré pour cette exécution.",
       "noneMatching": "Aucun appel d'outil ne correspond à ce filtre.",
@@ -2001,7 +1996,6 @@
     "title": "Observabilité de la plateforme",
     "refresh": "Actualiser",
     "close": "Fermer",
-    "loading": "Chargement de l'état de la plateforme…",
     "retry": "Réessayer",
     "window": {
       "oneHour": "Dernière heure",
@@ -2082,7 +2076,6 @@
   "reports": {
     "title": "Rapports",
     "refresh": "Actualiser",
-    "loading": "Chargement des rapports…",
     "retry": "Réessayer",
     "error": "Impossible de charger les rapports.",
     "period": "Du {from} au {to}",
@@ -2923,7 +2916,6 @@
         "intro": "Chaque préréglage définit un {baseModel} pour chaque agent, avec des remplacements facultatifs par agent. Un modèle épinglé sur une tâche individuelle prévaut tout de même sur le préréglage.",
         "introBaseModel": "modèle de base",
         "newPreset": "Nouveau préréglage",
-        "loadingCatalog": "Chargement du catalogue de modèles…",
         "default": "Par défaut",
         "setDefaultTitle": "Définir comme préréglage par défaut de l'espace de travail",
         "editTitle": "Modifier le préréglage",
@@ -3148,7 +3140,6 @@
     },
     "taskTypeSuppressions": {
       "intro": "Choisissez les opérations réutilisables de ce déploiement proposées sur ce tableau. En masquer une la retire du sélecteur de création de tâche ici et refuse la création de travail associée ; les autres tableaux ne sont pas affectés.",
-      "loading": "Chargement des opérations…",
       "empty": "Ce déploiement n'enregistre aucune opération réutilisable.",
       "offer": "Proposer sur ce tableau",
       "saveFailed": "Impossible de modifier les opérations proposées sur ce tableau"
@@ -4083,7 +4074,6 @@
         "overrideActive": "Active",
         "personalOverrideHint": "Surchargez le gestionnaire de l'espace de travail pour ce type de provisionnement sur votre propre machine. Stocké par utilisateur.",
         "removeOverride": "Supprimer la surcharge",
-        "loading": "Chargement de la configuration de l'infrastructure…",
         "kubeNoun": "le gestionnaire Kubernetes",
         "kubeOverrideNoun": "le remplacement Kubernetes",
         "customNoun": "ce gestionnaire",
@@ -4496,7 +4486,6 @@
     "connect": {
       "yourInstallations": "Vos installations",
       "refresh": "Actualiser",
-      "lookingForInstallations": "Recherche d'installations…",
       "noInstallations": "Aucune installation trouvée pour l'App pour le moment. Installez-la ci-dessous, ou connectez-la par ID.",
       "installationMeta": "{targetType} · installation {id}",
       "linked": "liée",
@@ -4523,14 +4512,12 @@
       "resync": "Resynchroniser",
       "backfill": "Reremplir",
       "disconnect": "Déconnecter",
-      "loading": "Chargement…",
       "tabs": {
         "repos": "Dépôts",
         "issues": "Tickets"
       },
       "linkedToBoard": "Lié à ce tableau",
       "manageRepos": "Gérer les dépôts",
-      "loadingRepos": "Chargement des dépôts…",
       "private": "privé",
       "saveSelection": "Enregistrer la sélection",
       "noLinkedRepos": "Aucun dépôt lié pour le moment. Utilisez Gérer les dépôts pour choisir les dépôts que ce tableau suit.",
@@ -4613,7 +4600,6 @@
     },
     "repoTree": {
       "root": "racine",
-      "loading": "Chargement…",
       "noSubdirectories": "Aucun sous-répertoire ici.",
       "empty": "Rien ici.",
       "select": "Sélectionner",
@@ -5127,12 +5113,10 @@
   "guidedReview": {
     "title": "Revue guidée",
     "titleFor": "{repo} #{number} : {title}",
-    "loading": "Chargement de la revue…",
     "outOfDate": "Les mises à jour en direct ont échoué, cette vue n'est peut-être plus à jour.",
     "openFromTask": "Explorer avec la revue guidée",
     "picker": {
       "intro": "Choisis un dépôt et une pull request. Tu obtiens une vue d'ensemble du changement et peux poser des questions dans des fils séparés.",
-      "loading": "Chargement des dépôts…",
       "noRepos": "Aucun dépôt n'est encore lié à cet espace de travail.",
       "repo": "Dépôt",
       "openPulls": "Pull requests ouvertes",
@@ -5800,7 +5784,6 @@
     "answerVerb": "Répondez à",
     "dismissVerb": "écartez",
     "empty": "Pas encore de revue. Le relecteur s'exécute automatiquement comme première étape au démarrage du pipeline de cette tâche.",
-    "loadingReview": "Chargement de la revue…",
     "reviewing": "Revue des exigences…",
     "settled": "Les exigences sont arrêtées. Le document ci-dessous est celui qu'utilise chaque étape d'agent en aval.",
     "exceeded": {
@@ -5940,7 +5923,6 @@
     "introAnswer": "Répondez à",
     "introDismiss": "écartez",
     "empty": "Pas encore de relecture. Le relecteur s'exécute automatiquement comme première étape au démarrage du pipeline de cette tâche.",
-    "loadingReview": "Chargement de la relecture…",
     "triaging": "Tri du rapport de bogue…",
     "converged": "Le rapport de bogue est clarifié. Le rapport ci-dessous est ce qu'utilise chaque étape d'agent en aval.",
     "capHeading": "Limite de {max} itérations atteinte avec des constats encore ouverts.",
@@ -6014,7 +5996,6 @@
   "consensus": {
     "titlePrefix": "Consensus",
     "participantCount": "aucun participant | un participant | {count} participants",
-    "loading": "Chargement de la session de consensus…",
     "empty": "Aucune session de consensus n'a encore été exécutée pour cette étape.",
     "failed": "Échec du consensus : {error}",
     "unknownError": "erreur inconnue",
@@ -6062,7 +6043,6 @@
     "introChoose": "Choisissez",
     "introDismiss": "écartez",
     "empty": "Pas encore de brainstorming. Il s'exécute automatiquement lorsque le pipeline de cette tâche atteint l'étape de brainstorming.",
-    "loading": "Chargement du brainstorming…",
     "generating": "Génération des options…",
     "settledBanner": "L'{doc} est arrêtée. Le document ci-dessous est ce qu'utilise l'étape suivante.",
     "exceeded": {
@@ -6140,7 +6120,6 @@
   },
   "spec": {
     "title": "Exigences",
-    "loading": "Chargement de la spécification…",
     "error": "Impossible de charger la spécification. Essayez de rouvrir cette fenêtre.",
     "overview": "Aperçu",
     "noFeatureGroups": "Aucun groupe de fonctionnalités",
@@ -6330,8 +6309,7 @@
     },
     "shot": {
       "failed": "Échec",
-      "failedToLoad": "Échec du chargement",
-      "loading": "Chargement…"
+      "failedToLoad": "Échec du chargement"
     },
     "screenshotAlt": "{view} (capture d'écran)",
     "screenshots": "Captures d'écran",
@@ -7043,7 +7021,6 @@
       "awaiting": "{total} candidats ont été générés et attendent d’être comparés."
     },
     "asset": {
-      "loading": "Chargement du fichier…",
       "loadFailed": "Le fichier stocké n’a pas pu être chargé.",
       "retry": "Réessayer",
       "open": "Ouvrir",

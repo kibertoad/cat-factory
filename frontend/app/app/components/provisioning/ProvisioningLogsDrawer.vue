@@ -23,6 +23,7 @@ import type {
   ProvisioningSubsystem,
 } from '~/types/provisioningLogs'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const props = defineProps<{
   subsystem?: ProvisioningSubsystem
@@ -132,12 +133,15 @@ function when(epochMs: number): string {
     </div>
 
     <p v-if="state.error" class="px-3 py-2 text-xs text-app-error-300">{{ state.error }}</p>
-    <p
-      v-else-if="!state.loading && state.entries.length === 0"
-      class="px-3 py-3 text-xs text-dimmed"
-    >
-      {{ t('provisioning.empty') }}
-    </p>
+    <div v-else-if="state.loading && state.entries.length === 0" class="space-y-2 px-3 py-2">
+      <USkeleton v-for="n in 3" :key="n" class="h-8 w-full" />
+    </div>
+    <EmptyState
+      v-else-if="state.entries.length === 0"
+      compact
+      icon="i-lucide-scroll-text"
+      :title="t('provisioning.empty')"
+    />
 
     <ul v-else class="max-h-80 divide-y divide-default overflow-auto">
       <li v-for="entry in state.entries" :key="entry.id" class="px-3 py-2">

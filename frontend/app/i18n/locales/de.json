@@ -53,7 +53,6 @@
         "intro": "Jedes Preset legt für jeden Agenten ein {baseModel} fest, mit optionalen Overrides je Agent. Ein an einer einzelnen Aufgabe angeheftetes Modell überschreibt weiterhin das Preset.",
         "introBaseModel": "Basismodell",
         "newPreset": "Neues Preset",
-        "loadingCatalog": "Modellkatalog wird geladen…",
         "default": "Standard",
         "setDefaultTitle": "Als Workspace-Standard festlegen",
         "editTitle": "Preset bearbeiten",
@@ -237,7 +236,6 @@
         "overrideActive": "Aktiv",
         "personalOverrideHint": "Überschreibe den Workspace-Handler für diesen Provisioning-Typ auf deiner eigenen Maschine. Pro Benutzer gespeichert.",
         "removeOverride": "Override entfernen",
-        "loading": "Infrastruktureinstellungen werden geladen…",
         "kubeNoun": "der Kubernetes-Handler",
         "kubeOverrideNoun": "der Kubernetes-Override",
         "customNoun": "dieser Handler",
@@ -416,7 +414,6 @@
     },
     "taskTypeSuppressions": {
       "intro": "Wählen Sie aus, welche wiederverwendbaren Operationen dieses Deployments auf diesem Board angeboten werden. Wird eine ausgeblendet, verschwindet sie hier aus der Aufgabenauswahl und das Anlegen von Arbeit darunter wird abgelehnt; andere Boards bleiben unberührt.",
-      "loading": "Operationen werden geladen…",
       "empty": "Dieses Deployment registriert keine wiederverwendbaren Operationen.",
       "offer": "Auf diesem Board anbieten",
       "saveFailed": "Die angebotenen Operationen konnten nicht geändert werden"
@@ -3663,7 +3660,6 @@
     "connect": {
       "yourInstallations": "Ihre Installationen",
       "refresh": "Aktualisieren",
-      "lookingForInstallations": "Suche nach Installationen…",
       "noInstallations": "Noch keine Installationen für die App gefunden. Installieren Sie sie unten oder verbinden Sie per ID.",
       "installationMeta": "{targetType} · Installation {id}",
       "linked": "verknüpft",
@@ -3690,14 +3686,12 @@
       "resync": "Neu synchronisieren",
       "backfill": "Backfill",
       "disconnect": "Trennen",
-      "loading": "Wird geladen…",
       "tabs": {
         "repos": "Repositorys",
         "issues": "Issues"
       },
       "linkedToBoard": "Mit diesem Board verknüpft",
       "manageRepos": "Repos verwalten",
-      "loadingRepos": "Repositorys werden geladen…",
       "private": "privat",
       "saveSelection": "Auswahl speichern",
       "noLinkedRepos": "Noch keine Repositorys verknüpft. Verwenden Sie \"Repos verwalten\", um auszuwählen, welche Repositorys dieses Board verfolgt.",
@@ -3780,7 +3774,6 @@
     },
     "repoTree": {
       "root": "root",
-      "loading": "Wird geladen…",
       "noSubdirectories": "Keine Unterverzeichnisse hier.",
       "empty": "Nichts hier.",
       "select": "Auswählen",
@@ -3863,8 +3856,6 @@
     "exportJson": "JSON exportieren",
     "exportHint": "Einen LLM-freundlichen JSON-Export dieses Laufs herunterladen",
     "closeEsc": "Schließen (Esc)",
-    "loadingActivity": "Modellaktivität wird geladen…",
-    "loadingContext": "Bereitgestellter Kontext wird geladen…",
     "noCalls": "Für diesen Lauf wurden keine Modellaufrufe aufgezeichnet.",
     "noContext": "Für diesen Lauf ist kein Agent-Kontext gespeichert. Er wird pro Dispatch erfasst, wenn im Workspace 'Vollständigen Agent-Kontext speichern' aktiviert ist.",
     "contextError": "Der bereitgestellte Kontext konnte nicht geladen werden.",
@@ -3956,7 +3947,6 @@
       "details": "Details"
     },
     "webSearch": "Websuche",
-    "loadingSearch": "Websuchen werden geladen…",
     "noSearch": "Für diesen Lauf wurden keine Websuchen aufgezeichnet. Anfragen werden erfasst, wenn die Websuche läuft und im Workspace 'Vollständigen Agent-Kontext speichern' aktiviert ist.",
     "search": {
       "available": "Verfügbar",
@@ -3995,7 +3985,6 @@
     "toolCalls": {
       "title": "Werkzeugaufrufe",
       "subtitle": "was die Agenten getan haben, in der Reihenfolge, in der sie es taten",
-      "loading": "Werkzeugaufrufe werden geladen…",
       "error": "Die Werkzeugaufrufe konnten nicht geladen werden.",
       "none": "Für diesen Lauf wurden keine Werkzeugaufrufe aufgezeichnet.",
       "noneMatching": "Keine Werkzeugaufrufe entsprechen diesem Filter.",
@@ -4016,7 +4005,6 @@
     "title": "Plattform-Observability",
     "refresh": "Aktualisieren",
     "close": "Schließen",
-    "loading": "Plattformzustand wird geladen…",
     "retry": "Erneut versuchen",
     "window": {
       "oneHour": "Letzte Stunde",
@@ -4097,7 +4085,6 @@
   "reports": {
     "title": "Berichte",
     "refresh": "Aktualisieren",
-    "loading": "Berichte werden geladen…",
     "retry": "Erneut versuchen",
     "error": "Berichte konnten nicht geladen werden.",
     "period": "{from} bis {to}",
@@ -4598,12 +4585,10 @@
   "guidedReview": {
     "title": "Geführtes Review",
     "titleFor": "{repo} #{number}: {title}",
-    "loading": "Review wird geladen…",
     "outOfDate": "Live-Updates sind fehlgeschlagen, daher ist diese Ansicht möglicherweise veraltet.",
     "openFromTask": "Mit geführtem Review erkunden",
     "picker": {
       "intro": "Wähle ein Repository und einen Pull Request. Du erhältst einen Überblick über die Änderung und kannst in separaten Threads Fragen dazu stellen.",
-      "loading": "Repositories werden geladen…",
       "noRepos": "Mit diesem Workspace sind noch keine Repositories verknüpft.",
       "repo": "Repository",
       "openPulls": "Offene Pull Requests",
@@ -5108,7 +5093,6 @@
     "answerVerb": "Beantworten",
     "dismissVerb": "verwerfen",
     "empty": "Noch keine Prüfung. Der Prüfer läuft automatisch als erster Schritt, wenn die Pipeline dieser Aufgabe startet.",
-    "loadingReview": "Prüfung wird geladen…",
     "reviewing": "Anforderungen werden geprüft…",
     "settled": "Die Anforderungen sind festgelegt. Das folgende Dokument verwendet jeder nachgelagerte Agentenschritt.",
     "exceeded": {
@@ -5824,7 +5808,6 @@
       "awaiting": "{total} Kandidaten wurden erzeugt und warten auf den Vergleich."
     },
     "asset": {
-      "loading": "Datei wird geladen …",
       "loadFailed": "Die gespeicherte Datei konnte nicht geladen werden.",
       "retry": "Erneut versuchen",
       "open": "Öffnen",
@@ -5850,7 +5833,6 @@
     "introChoose": "Wählen",
     "introDismiss": "verwerfen",
     "empty": "Noch kein Brainstorm. Es läuft automatisch, wenn die Pipeline dieser Aufgabe den Brainstorm-Schritt erreicht.",
-    "loading": "Brainstorm wird geladen…",
     "generating": "Optionen werden generiert…",
     "settledBanner": "Der {doc} ist festgelegt. Das folgende Dokument verwendet die nächste Phase.",
     "exceeded": {
@@ -5934,7 +5916,6 @@
     "introAnswer": "Beantworten",
     "introDismiss": "verwerfen",
     "empty": "Noch keine Prüfung. Der Prüfer läuft automatisch als erster Schritt, wenn die Pipeline dieser Aufgabe startet.",
-    "loadingReview": "Prüfung wird geladen…",
     "triaging": "Bug-Report wird triagiert…",
     "converged": "Der Bug-Report ist geklärt. Der folgende Bericht verwendet jeder nachgelagerte Agentenschritt.",
     "capHeading": "Das {max}-Iterationen-Limit wurde mit noch offenen Befunden erreicht.",
@@ -6201,7 +6182,6 @@
     }
   },
   "common": {
-    "loading": "Wird geladen…",
     "save": "Speichern",
     "cancel": "Abbrechen",
     "retry": "Erneut versuchen",
@@ -6838,7 +6818,6 @@
   "consensus": {
     "titlePrefix": "Konsens",
     "participantCount": "keine Teilnehmer | ein Teilnehmer | {count} Teilnehmer",
-    "loading": "Konsens-Sitzung wird geladen…",
     "empty": "Für diesen Schritt wurde noch keine Konsens-Sitzung ausgeführt.",
     "failed": "Konsens fehlgeschlagen: {error}",
     "unknownError": "unbekannter Fehler",
@@ -6870,7 +6849,6 @@
   },
   "spec": {
     "title": "Anforderungen",
-    "loading": "Spezifikation wird geladen…",
     "error": "Die Spezifikation konnte nicht geladen werden. Versuche, dieses Fenster erneut zu öffnen.",
     "overview": "Übersicht",
     "noFeatureGroups": "Keine Feature-Gruppen",
@@ -7060,8 +7038,7 @@
     },
     "shot": {
       "failed": "Fehlgeschlagen",
-      "failedToLoad": "Laden fehlgeschlagen",
-      "loading": "Wird geladen…"
+      "failedToLoad": "Laden fehlgeschlagen"
     },
     "screenshotAlt": "{view} (Screenshot)",
     "screenshots": "Screenshots",

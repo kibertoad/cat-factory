@@ -13,6 +13,7 @@ import MarkdownProse from '~/components/common/MarkdownProse.vue'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import { agentKindMeta } from '~/utils/catalog'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const { t, n } = useI18n()
 
@@ -145,12 +146,11 @@ function topScore(c: ConsensusContribution): { label: string; value: number } | 
     </template>
 
     <div class="flex-1 overflow-y-auto px-6 py-5">
-      <div v-if="loading && !session" class="py-16 text-center text-sm text-dimmed">
-        {{ t('consensus.loading') }}
+      <div v-if="loading && !session" class="space-y-4">
+        <USkeleton class="h-32 w-full rounded-lg" />
+        <USkeleton v-for="n in 3" :key="n" class="h-16 w-full rounded-lg" />
       </div>
-      <div v-else-if="!session" class="py-16 text-center text-sm text-dimmed">
-        {{ t('consensus.empty') }}
-      </div>
+      <EmptyState v-else-if="!session" icon="i-lucide-users" :title="t('consensus.empty')" />
       <template v-else>
         <!-- failure -->
         <div

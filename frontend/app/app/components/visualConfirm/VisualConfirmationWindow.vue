@@ -15,6 +15,8 @@ import ArtifactLightbox from '~/components/media/ArtifactLightbox.vue'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import Spinner from '~/components/common/Spinner.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const board = useBoardStore()
 const execution = useExecutionStore()
@@ -283,7 +285,7 @@ watch(pendingUpload, async (file) => {
           v-if="working"
           class="flex items-center gap-2 rounded-lg border border-default bg-app-950/40 px-3 py-2 text-xs text-toned"
         >
-          <UIcon name="i-lucide-loader" class="h-3.5 w-3.5 animate-spin text-app-warning-300" />
+          <Spinner class="h-3.5 w-3.5 text-app-warning-300" />
           {{ phase ? PHASE_LABEL[phase] : '' }}
         </p>
 
@@ -331,9 +333,12 @@ watch(pendingUpload, async (file) => {
             </div>
           </div>
         </section>
-        <p v-else class="text-xs italic text-dimmed">
-          {{ t('visualConfirm.noScreenshots') }}
-        </p>
+        <EmptyState
+          v-else
+          compact
+          icon="i-lucide-image-off"
+          :title="t('visualConfirm.noScreenshots')"
+        />
 
         <!-- Upload a reference for any view -->
         <section class="rounded-lg border border-default bg-default/60 p-3">

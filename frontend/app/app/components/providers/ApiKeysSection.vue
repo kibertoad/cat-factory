@@ -30,7 +30,7 @@ const workspace = useWorkspaceStore()
 const keys = useApiKeysStore()
 const models = useModelsStore()
 const auth = useAuthStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { confirmAction, toastDone } = useConfirmAction()
 
@@ -222,11 +222,7 @@ async function add() {
     label.value = ''
     // The picker's selectability depends on configured keys — refresh it.
     if (workspace.workspaceId) await models.refresh(workspace.workspaceId)
-    toast.add({
-      title: t('providers.apiKeys.toast.connected'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('providers.apiKeys.toast.connected')
   } catch (e) {
     present(e, 'providers.apiKeys.toast.connectFailed')
   } finally {

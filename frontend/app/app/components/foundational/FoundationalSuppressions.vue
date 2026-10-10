@@ -23,7 +23,7 @@ const catalog =
   props.kind === 'workspace'
     ? useFoundationalServicesStore()
     : useFoundationalServices(props.kind, props.ownerId)
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 
@@ -47,7 +47,7 @@ async function restore(serviceId: string) {
   busyRows.add(serviceId)
   try {
     await catalog.restore(serviceId)
-    toast.add({ title: t('foundational.toast.restored'), icon: 'i-lucide-eye' })
+    actionToast.success('foundational.toast.restored')
   } catch (e) {
     present(e, 'foundational.toast.restoreFailed')
   } finally {

@@ -11,6 +11,7 @@ import BootstrapRunSteps from '~/components/bootstrap/BootstrapRunSteps.vue'
 import { BLUEPRINT_AGENT_KIND } from '@cat-factory/contracts'
 import { VCS_PROVIDER_ICONS } from '~/utils/vcs'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import Spinner from '~/components/common/Spinner.vue'
 
 const board = useBoardStore()
 const pipelines = usePipelinesStore()
@@ -499,7 +500,7 @@ const showOriginalDescription = ref(false)
       >
         <div class="flex items-center justify-between gap-2">
           <span class="flex items-center gap-1.5 text-xs text-app-warning-300">
-            <UIcon name="i-lucide-loader-circle" class="h-3.5 w-3.5 animate-spin" />
+            <Spinner class="h-3.5 w-3.5" />
             {{ t('panels.inspector.bootstrapping') }}
           </span>
           <div class="flex items-center gap-1.5">

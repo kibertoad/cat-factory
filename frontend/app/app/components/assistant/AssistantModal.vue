@@ -23,6 +23,7 @@
 import type { AssistantActionId, AssistantOutcome } from '~/types/domain'
 import { answerFor, assistantSurface, revealTarget, submitGate } from './AssistantModal.logic'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import Spinner from '~/components/common/Spinner.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -243,11 +244,7 @@ function reveal(blockId: string): void {
               :class="submitReason ? 'text-app-warning-400' : 'text-dimmed'"
               data-testid="assistant-submit-status"
             >
-              <UIcon
-                v-if="gate.state === 'checking'"
-                name="i-lucide-loader-circle"
-                class="h-3 w-3 shrink-0 animate-spin"
-              />
+              <Spinner v-if="gate.state === 'checking'" class="h-3 w-3 shrink-0" />
               {{ submitReason ?? t('assistant.submitHint') }}
             </span>
           </div>

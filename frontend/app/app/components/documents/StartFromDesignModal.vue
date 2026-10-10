@@ -20,6 +20,7 @@
 //    render identically. For a designer that widening IS the defect, not a detail.
 import { refRowFor, classifyRefFailure, type RefState } from './ContextDocumentPicker.logic'
 import type { DocumentSourceKind, ResolvedDocumentRef } from '~/types/domain'
+import Spinner from '~/components/common/Spinner.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -178,7 +179,7 @@ function stage() {
             v-if="state.status === 'checking'"
             class="flex items-center gap-2 text-sm text-muted"
           >
-            <UIcon name="i-lucide-loader" class="h-4 w-4 animate-spin" />
+            <Spinner class="h-4 w-4" />
             {{ t('documents.startFromDesign.checking') }}
           </div>
 

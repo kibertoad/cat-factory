@@ -12,6 +12,7 @@ import {
   INITIATIVE_STATUS_LABEL_KEYS,
   initiativeProgress,
 } from '~/utils/initiative'
+import Spinner from '~/components/common/Spinner.vue'
 
 const props = defineProps<{ block: Block }>()
 
@@ -93,10 +94,12 @@ function control(action: 'pause' | 'resume' | 'cancel') {
         color="neutral"
         variant="soft"
         size="sm"
-        icon="i-lucide-loader-circle"
-        :ui="{ leadingIcon: 'animate-spin' }"
         @click="openPlanning"
       >
+        <!-- Not `:loading`: that disables the button, and this one has to stay clickable. -->
+        <template #leading>
+          <Spinner class="size-4" />
+        </template>
         {{ t('initiative.inspector.planningInProgress') }}
       </UButton>
       <UButton

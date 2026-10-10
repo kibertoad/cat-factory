@@ -19,7 +19,7 @@ const { t } = useI18n()
 const accounts = useAccountsStore()
 const workspace = useWorkspaceStore()
 const ui = useUiStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const access = useWorkspaceAccess()
 const { confirm } = useConfirm()
@@ -172,7 +172,7 @@ async function removeBoard() {
   busy.value = true
   try {
     await workspace.remove(id)
-    toast.add({ title: t('layout.boardSwitcher.toast.boardDeleted'), icon: 'i-lucide-check' })
+    actionToast.success('layout.boardSwitcher.toast.boardDeleted')
   } catch (e) {
     present(e, 'layout.boardSwitcher.toast.deleteBoardFailed')
   } finally {

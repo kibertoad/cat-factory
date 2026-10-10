@@ -539,6 +539,13 @@ jobs:
       - name: Guard SPA variant defaults
         run: node scripts/check-frontend-variants.mjs
 
+      # Bans `toast.add(` outside the two toast funnels (`usePipelineErrorToast` for a failed call,
+      # `useActionToast` for everything else) and `animate-spin` outside `common/Spinner.vue`, so a
+      # toast of one tone and a loading glyph render the same everywhere (#2252). Its fixtures run
+      # in the `node --test` step below. Pure node; no install.
+      - name: Guard SPA feedback states
+        run: node scripts/check-frontend-feedback.mjs
+
       # The bundled Nuxt UI skill (`backend/packages/agents/.../nuxt-ui/skill.generated.ts`) is
       # inlined from the vendored `.claude/skills/nuxt-ui/` tree so the platform's own coder agents
       # apply the same text a local Claude Code session does. This fails if the two have drifted, so

@@ -15,7 +15,7 @@ const { t, n } = useI18n()
 const ui = useUiStore()
 const workspace = useWorkspaceStore()
 const creds = useVendorCredentialsStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { confirm } = useConfirm()
 
@@ -127,11 +127,7 @@ async function add() {
     })
     token.value = ''
     label.value = ''
-    toast.add({
-      title: t('providers.vendorCredentials.toast.connected'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('providers.vendorCredentials.toast.connected')
   } catch (e) {
     present(e, 'providers.vendorCredentials.toast.connectFailed')
   } finally {

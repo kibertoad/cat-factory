@@ -19,7 +19,7 @@ const workspace = useWorkspaceStore()
 const store = useOpenRouterStore()
 const apiKeys = useApiKeysStore()
 const models = useModelsStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 
 const open = computed({
@@ -155,21 +155,14 @@ async function connectKey() {
         if (scope === 'workspace') await apiKeys.removeWorkspaceKey(created.id).catch(() => {})
         else await apiKeys.removeUserKey(created.id).catch(() => {})
       }
-      toast.add({
-        title: t('settings.openRouterCatalog.toast.connectFailed'),
+      actionToast.error('settings.openRouterCatalog.toast.connectFailed', {
         description: store.refreshError ?? t('settings.openRouterCatalog.toast.rejected'),
-        icon: 'i-lucide-triangle-alert',
-        color: 'error',
       })
       return
     }
     keyValue.value = ''
     keyLabel.value = ''
-    toast.add({
-      title: t('settings.openRouterCatalog.toast.connected'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('settings.openRouterCatalog.toast.connected')
   } catch (e) {
     present(e, 'settings.openRouterCatalog.toast.connectFailed')
   } finally {
@@ -181,11 +174,8 @@ async function refresh() {
   if (!workspace.workspaceId) return
   const result = await store.refresh(workspace.workspaceId)
   if (!result.reachable) {
-    toast.add({
-      title: t('settings.openRouterCatalog.toast.unreachable'),
+    actionToast.error('settings.openRouterCatalog.toast.unreachable', {
       description: store.refreshError ?? t('settings.openRouterCatalog.toast.connectFirst'),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
     })
   }
 }
@@ -202,11 +192,7 @@ async function save() {
     await store.save(workspace.workspaceId, models2)
     // Reflect newly-enabled models in the picker immediately.
     await models.refresh(workspace.workspaceId)
-    toast.add({
-      title: t('settings.openRouterCatalog.toast.saved'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
+    actionToast.success('settings.openRouterCatalog.toast.saved')
   } catch (e) {
     present(e, 'settings.openRouterCatalog.toast.saveFailed')
   } finally {

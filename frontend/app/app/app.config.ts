@@ -23,6 +23,13 @@ export default defineAppConfig({
     badge: {
       defaultVariants: { color: 'primary', variant: 'solid', size: 'md' },
     },
+    // A skeleton is one step darker than Nuxt UI's `bg-elevated`. In light mode the overlay surface
+    // below (`app-950`) and `bg-elevated` are the same neutral-100, so the default skeleton was
+    // invisible inside every modal and slideover. `bg-accented` reads on that surface, on
+    // `bg-default` cards, and in dark mode.
+    skeleton: {
+      base: 'animate-pulse rounded-md bg-accented',
+    },
     // Give every overlay the same layered surface the agent-run-details reader uses: the deep
     // `app-950` surface (below `bg-default`) so the `bg-default` panels/cards inside pop, with
     // `border-default` chrome. All tokens are theme role tokens (`app-950` is the hand-defined

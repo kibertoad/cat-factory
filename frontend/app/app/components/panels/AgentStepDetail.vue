@@ -31,6 +31,7 @@ import InputGateNotice from '~/components/inputGate/InputGateNotice.vue'
 import RunDetailLoadState from '~/components/panels/RunDetailLoadState.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 // Detail overlay for a single pipeline step. Opened by clicking an agent in the
 // inspector list (TaskExecution) or the focus-view pipeline (PipelineProgress) via
@@ -820,12 +821,11 @@ async function copyOutput() {
             </section>
           </template>
 
-          <p
+          <EmptyState
             v-else
-            class="rounded-lg border border-dashed border-default py-6 text-center text-sm text-dimmed"
-          >
-            {{ t('panels.stepDetail.noProseOutput') }}
-          </p>
+            icon="i-lucide-file-text"
+            :title="t('panels.stepDetail.noProseOutput')"
+          />
         </div>
       </div>
     </div>

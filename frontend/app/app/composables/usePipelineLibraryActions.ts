@@ -2,6 +2,7 @@ import type { RunDefaultScope } from '@cat-factory/contracts'
 import type { Pipeline } from '~/types/domain'
 import { usePipelinesStore } from '~/stores/pipelines'
 import { usePipelineErrorToast } from '~/composables/usePipelineErrorToast'
+import { useActionToast } from '~/composables/useActionToast'
 
 /**
  * The actions a row of the saved-pipeline LIBRARY offers: archive, promote to a scope default,
@@ -14,7 +15,7 @@ import { usePipelineErrorToast } from '~/composables/usePipelineErrorToast'
  */
 export function usePipelineLibraryActions() {
   const pipelines = usePipelinesStore()
-  const toast = useToast()
+  const actionToast = useActionToast()
   const { t } = useI18n()
   const { present } = usePipelineErrorToast()
   const { confirm } = useConfirm()
@@ -24,8 +25,8 @@ export function usePipelineLibraryActions() {
     try {
       if (p.archived) await pipelines.unarchive(p.id)
       else await pipelines.archive(p.id)
-    } catch {
-      toast.add({ title: t('pipeline.builder.toast.updateFailed'), color: 'error' })
+    } catch (error) {
+      present(error, 'pipeline.builder.toast.updateFailed')
     }
   }
 
@@ -68,13 +69,11 @@ export function usePipelineLibraryActions() {
   async function clone(p: Pipeline) {
     try {
       const copy = await pipelines.clonePipeline(p.id)
-      toast.add({
-        title: t('pipeline.builder.toast.cloned', { name: p.name, copy: copy.name }),
-        color: 'success',
-        icon: 'i-lucide-copy',
+      actionToast.success('pipeline.builder.toast.cloned', {
+        params: { name: p.name, copy: copy.name },
       })
-    } catch {
-      toast.add({ title: t('pipeline.builder.toast.cloneFailed'), color: 'error' })
+    } catch (error) {
+      present(error, 'pipeline.builder.toast.cloneFailed')
     }
   }
 

@@ -14,6 +14,7 @@ import FrontendBindingsResolved from '~/components/panels/inspector/FrontendBind
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
 import IconButton from '~/components/common/IconButton.vue'
 import { apiErrorEnvelope } from '~/composables/api/errors'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 // Frontend-frame (`type: 'frontend'`) configuration: how to build, serve, and mock this
 // frontend for a self-contained UI test (+ an optional browsable preview on local/node),
@@ -565,9 +566,12 @@ onUnmounted(() => preview.stopPolling(props.block.id))
             />
           </div>
         </div>
-        <div v-else class="text-2xs text-dimmed">
-          {{ t('inspector.frontendConfig.bindings.empty') }}
-        </div>
+        <EmptyState
+          v-else
+          compact
+          icon="i-lucide-link"
+          :title="t('inspector.frontendConfig.bindings.empty')"
+        />
 
         <!-- How the bindings resolve RIGHT NOW: each env var → a bound service's live ephemeral
              URL, or WireMock — plus the duplicate-env-var warning. The same view a UI-test run

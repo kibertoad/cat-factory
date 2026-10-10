@@ -24,6 +24,7 @@ import ProviderPreferenceEditor from '~/components/settings/ProviderPreferenceEd
 import { showOverrideField } from '~/utils/uiMode'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 import IconButton from '~/components/common/IconButton.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -35,7 +36,7 @@ const agentTier = useAgentTierStore()
 const creds = useVendorCredentialsStore()
 const workspace = useWorkspaceStore()
 const { present } = usePipelineErrorToast()
-const toast = useToast()
+const actionToast = useActionToast()
 const { confirm } = useConfirm()
 
 const open = computed({
@@ -257,11 +258,8 @@ async function save() {
     // NOT through `present`: that funnel classifies a BACKEND failure, and a synthesized local
     // `Error` carries no envelope and no status, so it lands on the network-fault description and
     // tells the user the server could not be reached about a check that never left the browser.
-    toast.add({
-      title: t('settings.modelConfiguration.toast.nameRequiredTitle'),
+    actionToast.error('settings.modelConfiguration.toast.nameRequiredTitle', {
       description: t('settings.modelConfiguration.toast.nameRequiredBody'),
-      color: 'warning',
-      icon: 'i-lucide-triangle-alert',
     })
     return
   }
@@ -370,9 +368,9 @@ async function save() {
                 </UButton>
               </div>
 
-              <p v-if="models.models.length === 0" class="py-4 text-center text-sm text-dimmed">
-                {{ t('settings.modelConfiguration.list.loadingCatalog') }}
-              </p>
+              <div v-if="models.models.length === 0" class="space-y-3">
+                <USkeleton v-for="n in 3" :key="n" class="h-20 w-full rounded-lg" />
+              </div>
 
               <div v-else class="space-y-3">
                 <div
@@ -441,9 +439,11 @@ async function save() {
                     </span>
                   </div>
                 </div>
-                <p v-if="sortedPresets.length === 0" class="py-6 text-center text-sm text-dimmed">
-                  {{ t('settings.modelConfiguration.list.empty') }}
-                </p>
+                <EmptyState
+                  v-if="sortedPresets.length === 0"
+                  icon="i-lucide-sliders-horizontal"
+                  :title="t('settings.modelConfiguration.list.empty')"
+                />
               </div>
 
               <!-- The consensus-GROUP library: which model PANELS review the workspace's heavier
@@ -547,12 +547,12 @@ async function save() {
                       </UButton>
                     </UDropdownMenu>
                   </div>
-                  <p
+                  <EmptyState
                     v-if="filteredKinds.length === 0"
-                    class="px-4 py-6 text-center text-sm text-dimmed"
-                  >
-                    {{ t('settings.modelConfiguration.editor.noAgentsMatch', { filter }) }}
-                  </p>
+                    compact
+                    icon="i-lucide-search-x"
+                    :title="t('settings.modelConfiguration.editor.noAgentsMatch', { filter })"
+                  />
                 </div>
               </div>
 

@@ -17,7 +17,7 @@ import SecretInput from '~/components/common/SecretInput.vue'
 const { t } = useI18n()
 const ui = useUiStore()
 const documents = useDocumentsStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { confirmAction } = useConfirmAction()
 
@@ -82,10 +82,8 @@ async function submit() {
   saving.value = true
   try {
     await documents.connect(source.value, credentials)
-    toast.add({
-      title: t('documents.connect.connected', { source: descriptor.value!.label }),
-      icon: 'i-lucide-check',
-      color: 'success',
+    actionToast.success('documents.connect.connected', {
+      params: { source: descriptor.value!.label },
     })
     ui.closeDocumentConnect()
   } catch (e) {
@@ -100,10 +98,7 @@ async function disconnect() {
   const label = descriptor.value?.label ?? t('documents.connect.sourceFallback')
   if (!(await confirmAction('disconnect', label))) return
   await documents.disconnect(source.value)
-  toast.add({
-    title: t('documents.connect.disconnected', { source: label }),
-    icon: 'i-lucide-unplug',
-  })
+  actionToast.success('documents.connect.disconnected', { params: { source: label } })
   ui.closeDocumentConnect()
 }
 </script>

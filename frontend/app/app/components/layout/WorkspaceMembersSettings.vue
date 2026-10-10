@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import type { WorkspaceAccessMode, WorkspaceRole } from '~/types/domain'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 // Workspace-membership management (workspace-rbac initiative, slice 9). The tier BELOW
 // account tenancy: an account admin restricts a board to an explicit member list (with
@@ -16,7 +17,7 @@ const workspace = useWorkspaceStore()
 const members = useWorkspaceMembersStore()
 const accounts = useAccountsStore()
 const auth = useAuthStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 const { confirmAction, toastDone } = useConfirmAction()
@@ -108,7 +109,7 @@ async function addMember() {
     await members.add(props.workspaceId, userId, addRole.value)
     addUserId.value = undefined
     addRole.value = 'member'
-    toast.add({ title: t('layout.workspaceMembers.add.added'), icon: 'i-lucide-user-plus' })
+    actionToast.success('layout.workspaceMembers.add.added')
   } catch (e) {
     present(e, 'layout.workspaceMembers.errors.add')
   } finally {
@@ -173,7 +174,9 @@ function memberLabel(userId: string, name?: string | null, email?: string | null
       <h3 class="mb-2 font-semibold text-highlighted">
         {{ t('layout.workspaceMembers.roster.title') }}
       </h3>
-      <p v-if="!rosterReady" class="text-dimmed">{{ t('common.loading') }}</p>
+      <div v-if="!rosterReady" class="space-y-1">
+        <USkeleton v-for="i in 3" :key="i" class="h-8 w-full" />
+      </div>
       <ul v-else class="space-y-1" data-testid="workspace-members-roster">
         <li
           v-for="m in members.members"
@@ -206,8 +209,12 @@ function memberLabel(userId: string, name?: string | null, email?: string | null
             />
           </span>
         </li>
-        <li v-if="members.members.length === 0" class="text-dimmed">
-          {{ t('layout.workspaceMembers.roster.empty') }}
+        <li v-if="members.members.length === 0">
+          <EmptyState
+            compact
+            icon="i-lucide-users"
+            :title="t('layout.workspaceMembers.roster.empty')"
+          />
         </li>
       </ul>
     </section>

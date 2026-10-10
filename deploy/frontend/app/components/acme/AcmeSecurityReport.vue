@@ -40,6 +40,7 @@ import {
   PanelsStepRunMeta as StepRunMeta,
   CommonMarkdownProse as MarkdownProse,
   CommonSectionLabel as SectionLabel,
+  CommonEmptyState as EmptyState,
 } from '#components'
 
 /** The structured assessment the backend `security-auditor` kind returns as `result.custom`
@@ -168,13 +169,11 @@ const headerTitle = computed(() =>
           </ul>
         </template>
 
-        <div
+        <EmptyState
           v-else-if="!assessment?.summary && !step?.output"
-          class="flex h-full flex-col items-center justify-center gap-2 text-center text-muted"
-        >
-          <UIcon name="i-lucide-shield-check" class="h-8 w-8 opacity-40" />
-          <p class="text-sm">{{ t('acme.securityReport.empty') }}</p>
-        </div>
+          icon="i-lucide-shield-check"
+          :title="t('acme.securityReport.empty')"
+        />
       </div>
 
       <!-- Sidebar: the SHARED run-metadata block — reused verbatim, never reinvented. -->

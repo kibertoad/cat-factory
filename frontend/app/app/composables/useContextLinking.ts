@@ -1,5 +1,6 @@
 import type { DocumentSourceKind, TaskSourceKind } from '~/types/domain'
 import { apiErrorEnvelope, apiErrorStatus } from './api/errors'
+import { useActionToast } from '~/composables/useActionToast'
 
 // Shared model + orchestration for attaching external context (imported docs and
 // tracker issues) to a board block. A "pending" item is something the user has
@@ -121,7 +122,7 @@ export function useContextLinking() {
   const documents = useDocumentsStore()
   const tasks = useTasksStore()
   const workspace = useWorkspaceStore()
-  const toast = useToast()
+  const actionToast = useActionToast()
   const { t } = useI18n()
   const { copyAction } = useCopyToClipboard()
 
@@ -240,14 +241,11 @@ export function useContextLinking() {
   /**
    * Surface link failures as a single actionable toast: the specific per-item
    * reasons as the body, and a "Copy details" action that puts the full diagnostic
-   * report ({@link buildLinkFailureReport}) on the clipboard. Sticky (`duration: 0`)
-   * so the cause stays readable long enough to act on. No-op when nothing failed.
+   * report ({@link buildLinkFailureReport}) on the clipboard. A warning, so it stays until
+   * closed and the cause stays readable long enough to act on. No-op when nothing failed.
    *
-   * `opts.title` names what WAS created, which differs per host ("Task added, but …" vs
-   * "Initiative created, but …"). It is a resolver over the count rather than a message key, so
-   * each caller keeps a literal key at its own translation call site — passing the key through
-   * would make it a variable, which defeats both the typed-message-key check and the extractor's
-   * static scan — and the plural choice has to be made against the same count.
+   * `opts.titleKey` names what WAS created, which differs per host ("Task added, but …" vs
+   * "Initiative created, but …"). It is a plural key, resolved against the failure count.
    */
   /**
    * A failure's line in the toast: TRANSLATED copy where the backend named a reason we have a
@@ -269,7 +267,7 @@ export function useContextLinking() {
   function presentLinkFailures(
     failures: LinkFailure[],
     blockId?: string,
-    opts: { title?: (count: number) => string } = {},
+    opts: { titleKey?: string } = {},
   ): void {
     if (failures.length === 0) return
     const description = failures.map((f) => `${f.item.title}: ${describeFailure(f)}`).join('\n')
@@ -278,14 +276,10 @@ export function useContextLinking() {
       blockId,
       when: new Date().toISOString(),
     })
-    toast.add({
-      title:
-        opts.title?.(failures.length) ??
-        t('board.addTask.linkFailed', { count: failures.length }, failures.length),
+    actionToast.warning(opts.titleKey ?? 'board.addTask.linkFailed', {
+      params: { count: failures.length },
+      plural: failures.length,
       description,
-      icon: 'i-lucide-triangle-alert',
-      color: 'warning',
-      duration: 0,
       actions: [copyAction(report)],
     })
   }

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import Spinner from '~/components/common/Spinner.vue'
 
 // A slim top strip shown when the real-time WebSocket isn't delivering events, so a
 // silently-frozen board (events stop arriving, nothing updates) is no longer indistinguishable
@@ -70,7 +71,7 @@ onBeforeUnmount(clearTimer)
         aria-live="polite"
         data-testid="stream-reconnecting"
       >
-        <UIcon name="i-lucide-loader" class="h-3.5 w-3.5 animate-spin" />
+        <Spinner class="h-3.5 w-3.5" />
         <span>{{ t('app.reconnecting') }}</span>
       </div>
       <div

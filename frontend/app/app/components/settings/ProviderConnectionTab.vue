@@ -36,7 +36,7 @@ const emit = defineEmits<{ connected: [] }>()
 
 const { t } = useI18n()
 const store = useProviderConnectionsStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { confirmAction } = useConfirmAction()
 
@@ -208,11 +208,7 @@ function buildFlatPayload() {
 }
 
 function toastSaved() {
-  toast.add({
-    title: t('settings.providerConnection.toast.saved', { title: title.value }),
-    icon: 'i-lucide-check',
-    color: 'success',
-  })
+  actionToast.success('settings.providerConnection.toast.saved', { params: { title: title.value } })
 }
 
 // --- Native flat-form actions (both manifest-overlay and config-overlay flavours) ---
@@ -330,7 +326,7 @@ async function remove() {
   try {
     await store.remove(props.kind)
     resetDraft()
-    toast.add({ title: t('settings.providerConnection.toast.removed'), icon: 'i-lucide-check' })
+    actionToast.success('settings.providerConnection.toast.removed')
   } catch (e) {
     present(e, 'settings.providerConnection.toast.removeFailed')
   } finally {

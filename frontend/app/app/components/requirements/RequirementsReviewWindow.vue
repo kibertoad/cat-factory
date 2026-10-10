@@ -29,11 +29,13 @@ import type {
   ReviewItemStatus,
 } from '~/types/requirements'
 import SectionLabel from '~/components/common/SectionLabel.vue'
+import Spinner from '~/components/common/Spinner.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const board = useBoardStore()
 const requirements = useRequirementsStore()
 const models = useModelsStore()
-const toast = useToast()
+const actionToast = useActionToast()
 const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 const access = useWorkspaceAccess()
@@ -574,18 +576,18 @@ async function requestRecommendations() {
     // ran inline and the recommendations are already settled. Tell the human which actually
     // happened rather than always promising a background callback.
     const stillGenerating = (updated?.recommendations ?? []).some((r) => r.status === 'pending')
-    toast.add(
-      stillGenerating
-        ? {
-            title: t('requirements.toast.preparingRecommendations', { count: n }, n),
-            description: t('requirements.toast.preparingRecommendationsDescription'),
-            icon: 'i-lucide-sparkles',
-          }
-        : {
-            title: t('requirements.toast.recommendationsReady', { count: n }, n),
-            icon: 'i-lucide-sparkles',
-          },
-    )
+    if (stillGenerating) {
+      actionToast.info('requirements.toast.preparingRecommendations', {
+        params: { count: n },
+        plural: n,
+        description: t('requirements.toast.preparingRecommendationsDescription'),
+      })
+    } else {
+      actionToast.success('requirements.toast.recommendationsReady', {
+        params: { count: n },
+        plural: n,
+      })
+    }
   } catch (e) {
     present(e, 'requirements.errors.requestRecommendations')
   }
@@ -634,10 +636,8 @@ async function incorporate(feedback?: string) {
   showRedo.value = false
   // The fold + re-review now run in the durable driver. Hand the user back to the board;
   // a notification calls them back only if the re-review needs more input.
-  toast.add({
-    title: t('requirements.toast.incorporating'),
+  actionToast.info('requirements.toast.incorporating', {
     description: t('requirements.toast.incorporatingDescription'),
-    icon: 'i-lucide-wand-sparkles',
   })
   close()
 }
@@ -647,15 +647,16 @@ async function reReview() {
   try {
     const updated = await requirements.reReview(blockId.value)
     const newFindings = requirements.openCount(updated)
-    toast.add({
-      title:
-        updated.status === 'incorporated'
-          ? t('requirements.toast.reviewerSatisfied')
-          : updated.status === 'exceeded'
-            ? t('requirements.toast.iterationLimitReached')
-            : t('requirements.toast.newFindings', { count: newFindings }, newFindings),
-      icon: 'i-lucide-sparkles',
-    })
+    if (updated.status === 'incorporated') {
+      actionToast.success('requirements.toast.reviewerSatisfied')
+    } else if (updated.status === 'exceeded') {
+      actionToast.warning('requirements.toast.iterationLimitReached')
+    } else {
+      actionToast.info('requirements.toast.newFindings', {
+        params: { count: newFindings },
+        plural: newFindings,
+      })
+    }
   } catch (e) {
     present(e, 'requirements.errors.reReview')
   }
@@ -667,7 +668,7 @@ async function proceed() {
   try {
     await flushDrafts()
     await requirements.proceed(blockId.value)
-    toast.add({ title: t('requirements.toast.proceeding'), icon: 'i-lucide-arrow-right' })
+    actionToast.info('requirements.toast.proceeding')
   } catch (e) {
     present(e, 'requirements.errors.proceed')
   } finally {
@@ -681,12 +682,12 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
   try {
     await requirements.resolveExceeded(blockId.value, choice)
     if (choice === 'stop-reset') {
-      toast.add({ title: t('requirements.toast.taskReset'), icon: 'i-lucide-undo' })
+      actionToast.info('requirements.toast.taskReset')
       close()
     } else if (choice === 'proceed') {
-      toast.add({ title: t('requirements.toast.proceeding'), icon: 'i-lucide-arrow-right' })
+      actionToast.info('requirements.toast.proceeding')
     } else {
-      toast.add({ title: t('requirements.toast.extraRoundGranted'), icon: 'i-lucide-rotate-cw' })
+      actionToast.info('requirements.toast.extraRoundGranted')
     }
   } catch (e) {
     present(e, 'requirements.errors.resolveReview')
@@ -734,20 +735,24 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
 
         <!-- empty state — the reviewer runs automatically as the first pipeline
                  gate step, so there's nothing to do here until then -->
-        <div
+        <EmptyState
           v-if="!review && !busy && !loading"
-          class="rounded-lg border border-dashed border-muted p-8 text-center text-sm text-dimmed"
-        >
-          {{ t('requirements.empty') }}
+          icon="i-lucide-list-checks"
+          :title="t('requirements.empty')"
+        />
+
+        <!-- initial fetch on open -->
+        <div v-else-if="loading && !busy && !review" class="flex flex-col gap-3">
+          <USkeleton v-for="n in 3" :key="n" class="h-20 w-full rounded-lg" />
         </div>
 
-        <!-- working state (initial fetch on open, or a reviewer pass running) -->
+        <!-- a reviewer pass running -->
         <div
-          v-else-if="(busy || loading) && !review"
+          v-else-if="busy && !review"
           class="flex items-center justify-center gap-2 p-8 text-sm text-muted"
         >
-          <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
-          {{ loading && !busy ? t('requirements.loadingReview') : t('requirements.reviewing') }}
+          <Spinner class="h-4 w-4" />
+          {{ t('requirements.reviewing') }}
         </div>
 
         <template v-else-if="review">
@@ -777,7 +782,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
             v-else-if="working"
             class="mb-4 flex items-center gap-2 rounded-lg border border-primary/60 bg-primary/10 p-4 text-sm text-primary"
           >
-            <UIcon name="i-lucide-loader-circle" class="h-5 w-5 shrink-0 animate-spin" />
+            <Spinner class="h-5 w-5 shrink-0" />
             <span v-if="incorporating">
               {{ t('requirements.working.incorporating') }}
             </span>
@@ -978,7 +983,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                           v-if="pendingRecFor(item)"
                           class="mt-2 flex items-center gap-1.5 text-xs text-primary"
                         >
-                          <UIcon name="i-lucide-loader-circle" class="h-3.5 w-3.5 animate-spin" />
+                          <Spinner class="h-3.5 w-3.5" />
                           {{ t('requirements.generatingSuggestion') }}
                         </div>
                         <template v-else-if="readyRecFor(item)">
