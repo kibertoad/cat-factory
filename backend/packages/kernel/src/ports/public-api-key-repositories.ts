@@ -101,6 +101,13 @@ export interface PublicApiKeyRepository {
    * must free a slot.
    */
   listByAccount(accountId: string): Promise<PublicApiKeyRecord[]>
+  /**
+   * How many live keys of an account still reach a workspace, counted in SQL: the figure
+   * `PublicApiKeyService.issue` holds the per-account cap against. A restricted key whose every
+   * workspace was deleted is left out, since it no longer authenticates and no panel lists it, so
+   * nobody could revoke it to free the slot.
+   */
+  countLiveByAccount(accountId: string): Promise<number>
   /** Stamp `lastUsedAt` on a key after it authenticates a call. Keyed by id alone. */
   markUsed(id: string, at: number): Promise<void>
   /** Revoke a key (stamp `revokedAt`), scoped to its account. */

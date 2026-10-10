@@ -33,6 +33,7 @@ import { D1PipelineRepository } from '../../src/infrastructure/repositories/D1Pi
 import { D1BlockRepository } from '../../src/infrastructure/repositories/D1BlockRepository'
 import { D1WorkspaceRepository } from '../../src/infrastructure/repositories/D1WorkspaceRepository'
 import { D1WorkspaceMemberRepository } from '../../src/infrastructure/repositories/D1WorkspaceMemberRepository'
+import { D1PublicApiKeyRepository } from '../../src/infrastructure/repositories/D1PublicApiKeyRepository'
 import { D1InitiativeRepository } from '../../src/infrastructure/repositories/D1InitiativeRepository'
 import { D1NotificationRepository } from '../../src/infrastructure/repositories/D1NotificationRepository'
 import { D1DocumentRepository } from '../../src/infrastructure/repositories/D1DocumentRepository'
@@ -335,6 +336,7 @@ const harness: ConformanceHarness = {
       blockRepository: () => new D1BlockRepository({ db: env.DB }),
       workspaceRepository: () => new D1WorkspaceRepository({ db: env.DB }),
       workspaceMemberRepository: () => new D1WorkspaceMemberRepository({ db: env.DB }),
+      publicApiKeyRepository: () => new D1PublicApiKeyRepository({ db: env.DB }),
       initiativeRepository: () => new D1InitiativeRepository({ db: env.DB }),
       notificationRepository: () => new D1NotificationRepository({ db: env.DB }),
       documentRepository: () => new D1DocumentRepository({ db: env.DB }),

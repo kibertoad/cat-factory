@@ -120,7 +120,7 @@ export const PUBLIC_API_WORKSPACE_HEADER = 'x-cat-factory-workspace'
 
 /**
  * `details.reason` values for a request whose workspace cannot be resolved. `workspace_required`
- * (400): the key reaches several workspaces and the request named none. `workspace_not_found`
+ * (422): the key reaches several workspaces and the request named none. `workspace_not_found`
  * (404): the named workspace does not exist or is outside the key's reach; the two are not told
  * apart, so a key cannot probe for workspaces it was not granted.
  */
@@ -159,8 +159,9 @@ export const publicApiKeySchema = v.object({
   id: v.string(),
   accountId: v.string(),
   /**
-   * The workspace the listing or mint was made for, which the key always reaches. Kept for
-   * clients built before keys could span workspaces; `workspaceIds` is the key's actual reach.
+   * The workspace the listing or mint was made for. A listed key always reaches it; a minted key
+   * whose `workspaceIds` leaves it out does not. Kept for clients built before keys could span
+   * workspaces; `workspaceIds` is the key's actual reach.
    */
   workspaceId: v.string(),
   /** Every workspace the key may act on, or `null` for all of the account's workspaces. */

@@ -34,6 +34,9 @@ class MemoryKeyRepository implements PublicApiKeyRepository {
   async listByAccount(accountId: string) {
     return [...this.rows.values()].filter((row) => row.accountId === accountId)
   }
+  async countLiveByAccount(accountId: string) {
+    return (await this.listByAccount(accountId)).length
+  }
   async markUsed() {}
   async revoke() {}
   async revokeMintedBy() {}
