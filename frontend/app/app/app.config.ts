@@ -28,15 +28,25 @@ export default defineAppConfig({
     // `border-default` chrome. All tokens are theme role tokens (`app-950` is the hand-defined
     // flipping token for the deep shade), so overlays track dark/light. Applies to all
     // UModal/USlideover instances so they stay consistent without per-instance `:ui` overrides.
+    // The overlay is a black scrim, not Nuxt UI's `bg-elevated/75`: in light mode `bg-elevated` and
+    // `app-950` are both neutral-100, so the panel had the same colour as the blanket behind it.
     modal: {
       slots: {
         content: 'bg-app-950 ring-default divide-default',
         header: 'border-b border-default',
         title: 'text-highlighted',
       },
+      // The modal paints its overlay colour in the `overlay: true` variant, which is applied after
+      // the slot, so the scrim must replace it there. The slideover paints it in the slot.
+      variants: {
+        // fixed-colour-ok: a scrim darkens the page in both modes
+        overlay: { true: { overlay: 'bg-black/50' } },
+      },
     },
     slideover: {
       slots: {
+        // fixed-colour-ok: a scrim darkens the page in both modes
+        overlay: 'bg-black/50',
         content: 'bg-app-950 ring-default divide-default',
         header: 'border-b border-default',
         title: 'text-highlighted',
