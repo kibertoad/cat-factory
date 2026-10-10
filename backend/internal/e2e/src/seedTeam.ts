@@ -69,6 +69,13 @@ export interface TeamScenarioRequest {
    * whose subject is the onboarding gate itself, and what each role is told on it.
    */
   githubConnected?: boolean
+  /**
+   * Load the sample architecture onto the primary board (default: true). `false` gives the empty
+   * board a real first run lands on, for a spec or a recording that shows what a new board looks
+   * like. The board-opening helpers wait for the sample `task_login`, so such a board needs its
+   * own wait.
+   */
+  seed?: boolean
 }
 
 export interface TeamScenario {
@@ -152,14 +159,16 @@ export async function seedTeamScenario(
     principals: specs = [],
     spareBoard = false,
     githubConnected = true,
+    seed = true,
   } = request
   const probe = makeOnboardingProbe(container)
   const { accountId, ownerUserId } = await probe.makeOrgOwner(`team-${tag}`)
 
   // Seed the sample architecture (so the board carries the runnable `task_login` every board-opening
-  // helper asserts on) and connect the faked GitHub App, or the SPA sits on the onboarding gate.
+  // helper asserts on) unless the request asks for the empty board, and connect the faked GitHub
+  // App unless it asks for none, or the SPA sits on the onboarding gate.
   const snapshot = await container.workspaceService.create(
-    { name: `Team board ${tag}`, seed: true },
+    { name: `Team board ${tag}`, seed },
     null,
     accountId,
   )
