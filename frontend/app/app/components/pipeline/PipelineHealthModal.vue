@@ -218,7 +218,7 @@ const reseedableCount = computed(
                   v-else
                   size="xs"
                   color="error"
-                  variant="subtle"
+                  variant="soft"
                   icon="i-lucide-trash-2"
                   :loading="isBusy(h.pipeline.id)"
                   :disabled="locked"
@@ -259,7 +259,7 @@ const reseedableCount = computed(
               <UButton
                 size="xs"
                 color="error"
-                variant="subtle"
+                variant="soft"
                 icon="i-lucide-trash-2"
                 :loading="isBusy(r.pipeline.id)"
                 :disabled="locked"

@@ -193,7 +193,7 @@ async function toggleEnabled(enabled: boolean) {
           <UButton
             v-if="connected"
             color="error"
-            variant="ghost"
+            variant="soft"
             icon="i-lucide-unplug"
             @click="disconnect"
           >

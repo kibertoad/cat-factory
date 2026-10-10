@@ -257,7 +257,7 @@ async function saveMapping() {
             </span>
             <UButton
               color="error"
-              variant="ghost"
+              variant="soft"
               size="xs"
               icon="i-lucide-unplug"
               @click="disconnect"

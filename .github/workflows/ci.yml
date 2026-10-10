@@ -532,8 +532,9 @@ jobs:
         run: node scripts/check-frontend-primitives.mjs
 
       # Bans a `UButton` / `IconButton` / `UBadge` prop that restates the app default from
-      # `app.config.ts`: a restated default is noise, and it pins the value against a theme that
-      # changes it (#2250). Its fixtures run in the `node --test` step below. Pure node; no install.
+      # `app.config.ts` (noise that also pins the value against a theme that changes it), and two
+      # solid buttons under one parent element (one solid primary per view) (#2250). Its fixtures
+      # run in the `node --test` step below. Pure node; no install.
       - name: Guard SPA variant defaults
         run: node scripts/check-frontend-variants.mjs
 

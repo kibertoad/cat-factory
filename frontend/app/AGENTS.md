@@ -45,8 +45,8 @@ agent loads as instructions when it reads a file here.
   owns the tooltip. [Rule](./README.md#a-control-is-its-nuxt-ui-component), guarded by
   `scripts/check-frontend-primitives.mjs`.
 - **Buttons and badges state only what differs from Nuxt UI's default** (`primary solid md`,
-  stated in `app.config.ts`): a primary action carries no props, one per view, and quiet chrome
-  says `color="neutral" variant="ghost" size="xs"`.
+  stated in `app.config.ts`): a primary action carries no props, ONE solid per view (no two
+  solid siblings), and quiet chrome says `color="neutral" variant="ghost" size="xs"`.
   [Rule](./README.md#buttons-and-badges-follow-one-variant-policy), guarded by
   `scripts/check-frontend-variants.mjs`.
 

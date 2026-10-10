@@ -406,6 +406,7 @@ watch(pendingUpload, async (file) => {
               {{ t('visualConfirm.requestFix.foldedHint') }}
             </span>
             <UButton
+              variant="soft"
               size="sm"
               color="warning"
               icon="i-lucide-wrench"

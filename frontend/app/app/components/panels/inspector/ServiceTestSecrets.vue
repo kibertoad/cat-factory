@@ -152,7 +152,7 @@ async function clearAll() {
       <UButton
         v-if="configured.length"
         color="error"
-        variant="ghost"
+        variant="soft"
         size="xs"
         icon="i-lucide-trash-2"
         :loading="busy"

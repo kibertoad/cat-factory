@@ -281,6 +281,7 @@ const canDestroy = computed(
               class="w-full"
             />
             <UButton
+              variant="soft"
               size="sm"
               color="warning"
               icon="i-lucide-wrench"

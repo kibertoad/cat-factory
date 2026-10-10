@@ -328,7 +328,7 @@ async function disconnectEmail() {
             </template>
             <template #from>{{ accounts.emailConnection.fromAddress }}</template>
           </i18n-t>
-          <UButton size="xs" color="error" variant="ghost" :loading="busy" @click="disconnectEmail">
+          <UButton size="xs" color="error" variant="soft" :loading="busy" @click="disconnectEmail">
             {{ t('layout.accountTeam.email.disconnect') }}
           </UButton>
         </div>

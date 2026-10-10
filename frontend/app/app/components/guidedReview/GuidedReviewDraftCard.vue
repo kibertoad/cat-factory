@@ -114,7 +114,13 @@ async function discard(): Promise<void> {
         <UButton size="sm" :loading="saving" @click="save">
           {{ t('guidedReview.drafts.save') }}
         </UButton>
-        <UButton size="sm" variant="ghost" :disabled="saving" @click="editing = false">
+        <UButton
+          color="neutral"
+          size="sm"
+          variant="ghost"
+          :disabled="saving"
+          @click="editing = false"
+        >
           {{ t('guidedReview.drafts.cancel') }}
         </UButton>
       </div>

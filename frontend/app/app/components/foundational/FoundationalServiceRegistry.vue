@@ -325,7 +325,7 @@ async function remove(service: FoundationalService) {
           >
             {{ t('foundational.registry.save') }}
           </UButton>
-          <UButton size="sm" variant="ghost" @click="editing = null">
+          <UButton color="neutral" size="sm" variant="ghost" @click="editing = null">
             {{ t('foundational.registry.cancel') }}
           </UButton>
         </div>

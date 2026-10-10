@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// Bans a button or badge prop that restates the app's default (issue #2250).
+// Bans a button or badge prop that restates the app's default, and two solid buttons side by side
+// (issue #2250).
 //
 // `frontend/app/app/app.config.ts` states the app's default `color`, `variant` and `size` for
 // `UButton` and `UBadge` (`ui.<component>.defaultVariants`, Nuxt UI's own `primary solid md`). A
@@ -21,9 +22,15 @@
 // The defaults are READ from `app.config.ts`, not restated here, so the guard and the app cannot
 // disagree. A config the parser cannot read fails the guard loudly rather than passing everything.
 //
+// SECOND RULE: no element holds two solid buttons as direct children (`findSolidSiblings` says how
+// `<template>` wrappers, `v-if` chains and `v-for` count). It is the checkable half of "one solid
+// primary per view": a file holding several forms that each end in a Save is several views, and a
+// guard that counted per file would need a waiver on most of them.
+//
 // Policy: ZERO offenders. A site that must keep the literal (for example, to hold its size when a
 // theme changes the default) says why with a `variant-default-ok:` comment on its own line,
-// directly above the tag. It waives that tag only.
+// directly above the tag, and a second solid button with a `solid-ok:` comment the same way. Each
+// waives that tag only.
 //
 // Usage:  node scripts/check-frontend-variants.mjs
 // Exit 0 = clean; exit 1 = an offender was found.
@@ -40,6 +47,7 @@ import {
 
 const APP_CONFIG = join(repoRoot, 'frontend', 'app', 'app', 'app.config.ts')
 const DEFAULT_OK = 'variant-default-ok:'
+const SOLID_OK = 'solid-ok:'
 const PROPS = ['color', 'variant', 'size']
 
 /** The Nuxt UI components this guard reads, each with the `ui.<key>` whose defaults govern it. */
@@ -175,6 +183,69 @@ export function findInTemplate(source, defaults, tagKeys = BASE_CONFIG_KEYS) {
   return out
 }
 
+const CONDITIONAL_ELSE = /\sv-else(?:-if)?(?=[\s=/>])/
+
+/** Whether an opening tag renders a solid button, given the button default. */
+function isSolidButton(tag, defaults) {
+  if (/\s(?::|v-bind:)variant=/.test(tag)) return false // decided at runtime
+  const value = statedValue(tag, 'variant')
+  return (value ?? defaults.button.variant) === 'solid'
+}
+
+/**
+ * Every element in the template half of one `.vue` source that holds TWO OR MORE solid buttons as
+ * direct children, as `{ line, matches }` naming the solid buttons' lines. This is the checkable
+ * half of "one solid primary per view": two solid buttons side by side compete for the same
+ * attention, while two forms in one file that each end in a Save are two views.
+ *
+ * What counts as a sibling follows the DOM, not the markup:
+ * - a plain `<template>` (`v-if` / `v-for` wrapper) adds no element, so what it renders joins the
+ *   place it took in the enclosing element; a slot `<template #name>` is its own region;
+ * - a `v-if` / `v-else-if` / `v-else` chain renders one branch, so it counts as its largest branch;
+ * - a `v-for` button counts once: it renders a list of equal alternatives, not a competing action.
+ * A button with a bound `:variant` is not counted. `tagKeys` is the same component map
+ * {@link findInTemplate} takes, so a derived wrapper of `UButton` counts as a button.
+ */
+export function findSolidSiblings(source, defaults, tagKeys = BASE_CONFIG_KEYS) {
+  const raw = source.split('\n')
+  const out = []
+  const root = { name: '#root', tag: '', line: 0, data: { groups: [] } }
+  // The solid buttons a frame renders side by side: per group of siblings, its largest branch.
+  const rendered = (node) =>
+    node.data.groups.flatMap((group) =>
+      group.alternatives.reduce((best, alt) => (alt.length > best.length ? alt : best), []),
+    )
+  const report = (lines) => {
+    if (lines.length >= 2) out.push({ line: lines[0], matches: lines.map((l) => `solid@${l}`) })
+  }
+  walkTemplate(source, {
+    open(node, ancestors) {
+      const parent = ancestors[ancestors.length - 1] ?? root
+      const groups = parent.data.groups
+      if (CONDITIONAL_ELSE.test(node.tag) && groups.length) {
+        groups[groups.length - 1].alternatives.push([])
+      } else {
+        groups.push({ alternatives: [[]] })
+      }
+      const group = groups[groups.length - 1]
+      node.data.place = group.alternatives[group.alternatives.length - 1]
+      node.data.groups = []
+      node.data.wrapper = node.name === 'template' && !/\s(?:#|v-slot)/.test(node.tag)
+      const isButton = tagKeys[node.name] === 'button'
+      if (isButton && isSolidButton(node.tag, defaults)) {
+        if (!isWaivedAbove(raw[node.line - 2] ?? '', SOLID_OK)) node.data.place.push(node.line)
+      }
+    },
+    close(node) {
+      const lines = rendered(node)
+      if (node.data.wrapper) node.data.place.push(...lines)
+      else report(lines)
+    },
+  })
+  report(rendered(root))
+  return out.sort((a, b) => a.line - b.line)
+}
+
 function main() {
   const defaults = readDefaults(readFileSync(APP_CONFIG, 'utf8'))
   const files = [...spaSourceFiles()]
@@ -186,6 +257,9 @@ function main() {
   }
   const offenders = files.flatMap((file) =>
     findInTemplate(file.source, defaults, tagKeys).map((hit) => ({ file: file.rel, ...hit })),
+  )
+  const solids = files.flatMap((file) =>
+    findSolidSiblings(file.source, defaults, tagKeys).map((hit) => ({ file: file.rel, ...hit })),
   )
 
   if (offenders.length) {
@@ -200,11 +274,23 @@ function main() {
         'Delete the prop. See frontend/app/README.md, "Buttons and badges follow one variant policy".\n',
     )
     for (const o of offenders) console.error(`  ${o.file}:${o.line}  ${o.matches.join(' ')}`)
-    console.error(`\n${offenders.length} tag(s) restating a default.`)
-    process.exit(1)
+    console.error(`\n${offenders.length} tag(s) restating a default.\n`)
   }
+  if (solids.length) {
+    console.error('Two solid buttons share one parent element (issue #2250).')
+    console.error(
+      'A view has ONE solid primary action; a second action beside it takes a lighter variant\n' +
+        '(`soft` for a send-back or destructive action, `outline` for a real secondary action, `ghost`\n' +
+        'for a dismissal). See frontend/app/README.md, "Buttons and badges follow one variant policy".\n',
+    )
+    for (const o of solids) console.error(`  ${o.file}:${o.line}  ${o.matches.join(' ')}`)
+    console.error(`\n${solids.length} element(s) with competing solid buttons.`)
+  }
+  if (offenders.length || solids.length) process.exit(1)
 
-  console.log('check-frontend-variants: no button or badge restates the app default.')
+  console.log(
+    'check-frontend-variants: no button or badge restates the app default, and no two solid buttons are siblings.',
+  )
 }
 
 // Run the filesystem scan only as a CLI; importing for tests must have no side effects.
