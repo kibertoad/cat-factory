@@ -430,6 +430,66 @@ in `tests/`). It rides the ordinary `Test units (no DB)` job, so a seam whose br
 would only ever show up as an e2e flake (`FakeProfileRegistry` re-arming a workspace's
 fakes is the motivating case) gets pinned deterministically instead.
 
+### Running the SPA against the e2e backend (UI development)
+
+The same backend is the quickest way to work on the SPA with data: it needs only a Postgres (no
+Docker runner, no model key, no GitHub App), boots in a few seconds, and the fakes above can drive a
+board into the states the specs reach. The documented `dev:node` path needs real credentials before
+an agent can run, so prefer this one for UI work. After `pnpm build`, from the repo root:
+
+```bash
+# 1. Backend. PORT and E2E_FRONTEND_PORT move the whole port set and the CORS origin together (src/ports.ts).
+DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/cat_factory_ui \
+  PORT=8797 E2E_FRONTEND_PORT=3020 pnpm --filter @cat-factory/e2e serve
+
+# 2. SPA, pointed at it (the Vite dev server, so edits hot-reload).
+NUXT_PUBLIC_API_BASE=http://localhost:8797 \
+  pnpm --filter @cat-factory/deploy-frontend exec nuxt dev --port 3020
+```
+
+The database must exist (`createdb`, or `CREATE DATABASE`); the backend runs its migrations on
+boot. Rows persist across restarts, so boards you seed stay there.
+
+**Seed a board the way the specs do**, not with bare REST calls. `createSeededWorkspace` in
+[`tests/helpers.ts`](./tests/helpers.ts) creates the sample architecture AND connects the faked
+GitHub App (`/github-seed` on the control port). A board without that connection opens on the
+GitHub onboarding screen, not the canvas. From a shell, the same three calls are:
+
+```bash
+WS=$(curl -s -X POST localhost:8797/workspaces -H 'content-type: application/json' \
+  -d '{"seed":true,"name":"My board"}' | jq -r .workspace.id)
+curl -s -X POST localhost:8798/github-seed -H 'content-type: application/json' -d "{\"workspaceId\":\"$WS\"}"
+curl -s -X PUT localhost:8797/workspaces/$WS/settings -H 'content-type: application/json' \
+  -d '{"defaultProvisionType":"infraless"}'
+```
+
+The same file holds the helpers that drive a board into a state: pipelines, runs, gates, and
+`setFakeProfile` for what the fake agent does next. The [spec list](#specs) names which spec drives
+which flow. You can also run a spec against your
+servers: Playwright reuses servers that are already listening (outside CI), and the spec's board
+stays in the database in the state the spec ENDS in (often past the gate it tests, not parked at
+it). The auth-enabled stack the suite also starts serves the SPA's production build, so build it
+once first:
+
+```bash
+pnpm --filter @cat-factory/deploy-frontend run build
+PORT=8797 E2E_FRONTEND_PORT=3020 \
+  pnpm --filter @cat-factory/e2e exec playwright test tests/approval-gate.spec.ts
+```
+
+Things that bite:
+
+- **Every SPA origin must be in `CORS_ALLOWED_ORIGINS`.** It defaults to the one origin derived
+  from `E2E_FRONTEND_PORT`. A second SPA on another port against the same backend needs the
+  variable set to the full list, or every REST call fails its preflight.
+- **Cookies ignore the port.** The active board, the UI mode and the session are cookie-backed
+  (see [test isolation](#test-isolation)), so two SPAs on `localhost:3020` and `localhost:3030`
+  in one browser share them, and switching the board in one switches it in the other. Give each
+  SPA its own host name (`a.localhost`, `b.localhost`, which resolve to loopback) or its own
+  browser profile, and list those origins in `CORS_ALLOWED_ORIGINS`.
+- **Two branches in parallel need two databases**, one per backend, when the branches change
+  migrations. When only the SPA differs, point both SPAs at one backend.
+
 ### Test isolation
 
 Specs share one Postgres datastore (`workers: 1`, `fullyParallel: false`), but each spec
