@@ -375,6 +375,40 @@ describe('conflicts gate', () => {
     expect(untargeted.error).toContain('The pull request still conflicts')
     expect(untargeted.error).toContain('0 conflict-resolver attempt(s)')
   })
+
+  it('says the conflicts could not be resolved automatically and carries the last attempt', async () => {
+    const gate = conflictsGate(stubGateContext({}, providerRegistry))
+    const result = await gate.onExhausted({
+      workspaceId: 'ws',
+      instance,
+      block: block(),
+      step: step({
+        attempts: 2,
+        attemptLog: [
+          { attempt: 1, at: 1, outcome: 'completed', summary: 'Left src/a.ts conflicting.' },
+          { attempt: 2, at: 2, outcome: 'completed', summary: 'Left src/b.ts conflicting.' },
+        ],
+      }),
+    })
+    expect(result.error).toContain('could not be resolved automatically')
+    expect(result.error).toContain('Last attempt: Left src/b.ts conflicting.')
+    expect(result.error).not.toContain('src/a.ts')
+  })
+
+  it('passes a single PR that already merges cleanly, with nothing to escalate', async () => {
+    wireMergeabilityProvider(
+      providerRegistry,
+      mergeability([{ repo: 'o/r', headSha: 'a', verdict: 'mergeable' }]) as never,
+    )
+    const probe = await conflictsGate(stubGateContext({}, providerRegistry)).probe(
+      'ws',
+      'b',
+      gateState(),
+    )
+    expect(probe.status).toBe('pass')
+    expect(probe.headSha).toBe('a')
+    expect(probe.passOutput).toBe('Conflict gate passed: the PR merges cleanly with its base.')
+  })
 })
 
 describe('doc-quality gate', () => {

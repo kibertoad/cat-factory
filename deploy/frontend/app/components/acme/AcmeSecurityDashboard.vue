@@ -37,14 +37,14 @@ const { t } = useI18n()
     @close="emit('close')"
   >
     <div class="px-5 py-6" data-testid="acme-security-dashboard-body">
-      <p class="text-[13px] leading-relaxed text-toned">
+      <p class="text-sm leading-relaxed text-toned">
         {{ t('acme.securityDashboard.body') }}
       </p>
       <ul class="mt-4 flex flex-col gap-2">
         <li
           v-for="item in [1, 2, 3]"
           :key="item"
-          class="flex items-center gap-2 rounded-lg border border-default bg-app-950/40 px-3 py-2 text-[12px] text-muted"
+          class="flex items-center gap-2 rounded-lg border border-default bg-app-950/40 px-3 py-2 text-xs text-muted"
         >
           <UIcon name="i-lucide-shield-check" class="h-4 w-4 shrink-0 text-app-error-300/70" />
           {{ t('acme.securityDashboard.placeholderRow', { n: item }) }}

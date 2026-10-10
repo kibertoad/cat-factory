@@ -60,7 +60,7 @@ const items = computed(() => [
         </span>
       </UButton>
     </UDropdownMenu>
-    <p v-if="props.hiddenCount" class="px-1 text-[10px] text-dimmed">
+    <p v-if="props.hiddenCount" class="px-1 text-3xs text-dimmed">
       {{ t('agentTier.hidden', { count: props.hiddenCount }, props.hiddenCount) }}
     </p>
   </div>

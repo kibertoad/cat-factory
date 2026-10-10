@@ -44,18 +44,7 @@
 // Usage:  node scripts/check-frontend-palette.mjs
 // Exit 0 = clean; exit 1 = an offender was found.
 
-import { readdirSync, readFileSync, statSync } from 'node:fs'
-import { dirname, join, relative, resolve } from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
-
-const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-// The layer AND the deployment template: `deploy/frontend` is what a consumer copies, and its
-// `acme/*` worked example mounts inside the layer's own chrome, so a fixed palette there ships as
-// the pattern to copy.
-const SCAN_ROOTS = [
-  join(repoRoot, 'frontend', 'app', 'app'),
-  join(repoRoot, 'deploy', 'frontend', 'app'),
-]
+import { isCliEntry, readCodeLines, spaSourceFiles } from './lib/frontend-scan.mjs'
 
 /** Every Tailwind hue: a status hue rides an alias, a category hue rides `app-hue-<h>`, so no raw
  * numbered hue utility has a place left. */
@@ -132,11 +121,6 @@ const OPACITY = '(?:\\/(?:\\d{1,3}|\\[[^\\]]+\\]))?'
 // `-white` / `-black`, then an optional opacity. `bg-white/[0.02]` and `ring-white/10` included.
 const FIXED_BW = new RegExp(`(?<![\\w-])${PREFIX}-(?:white|black)(?![\\w-])${OPACITY}`, 'g')
 const FIXED_BW_OK = 'fixed-colour-ok:'
-// Comment lines may name a colour when explaining one; the guard reads code, not prose. `#` is NOT
-// a comment marker here: in the scanned `.css` and `.vue` files a line starting with `#` is an ID
-// selector, and `#app { color: #ff0000 }` must not slip past.
-const COMMENT_LINE = /^\s*(?:\/\/|\/?\*|<!--)/
-
 /** Every offending utility on a line (deduplicated), or [] for a clean line. Pure, so the
  * companion test can drive it with fixture strings. */
 export function findRawPalette(line) {
@@ -149,55 +133,40 @@ export function findRawPalette(line) {
   ]
 }
 
-/** Every colour literal or hex-alpha concatenation on a CODE line, or [] for a clean line. */
-export function findColourLiterals(line) {
-  if (COMMENT_LINE.test(line) || line.includes(LITERAL_OK)) return []
-  return [...new Set([...(line.match(COLOUR_LITERAL) ?? []), ...(line.match(ALPHA_CONCAT) ?? [])])]
+/** Every colour literal or hex-alpha concatenation on one line from `codeLines`, or [] for a clean
+ * or exempted line. The match reads `code`, the line with its comments blanked (`lib/frontend-scan`),
+ * so a comment may name a colour when explaining one; the waiver is read from the raw line. */
+export function findColourLiterals({ raw, code }) {
+  if (raw.includes(LITERAL_OK)) return []
+  return [...new Set([...(code.match(COLOUR_LITERAL) ?? []), ...(code.match(ALPHA_CONCAT) ?? [])])]
 }
 
-/** Every fixed white/black utility on a CODE line (rule 4), or [] for a clean or exempted line. The
- * `fixed-colour-ok:` waiver is honoured on the line itself OR on the line before it (`prevLine`, the
- * `eslint-disable-next-line` shape), so a waiver never forces the class off its own line. A trailing
- * HTML comment is stripped first, so `<!-- was bg-white -->` beside real markup is prose, not an
- * offender. */
-export function findFixedBlackWhite(line, prevLine = '') {
-  if (COMMENT_LINE.test(line)) return []
-  if (line.includes(FIXED_BW_OK) || prevLine.includes(FIXED_BW_OK)) return []
-  return [...new Set(line.replace(/<!--.*?-->/g, ' ').match(FIXED_BW) ?? [])]
-}
-
-function* sourceFiles(dirAbs) {
-  for (const entry of readdirSync(dirAbs)) {
-    if (entry === 'node_modules' || entry === '.nuxt' || entry === 'dist') continue
-    const abs = join(dirAbs, entry)
-    if (statSync(abs).isDirectory()) {
-      yield* sourceFiles(abs)
-    } else if (abs.endsWith('.vue') || abs.endsWith('.ts') || abs.endsWith('.css')) {
-      // `.css` too: a `<style>` block or an `@apply` line can name a utility class.
-      yield abs
-    }
-  }
+/** Every fixed white/black utility on one line from `codeLines` (rule 4), or [] for a clean or
+ * exempted line. The match reads `code`, so `<!-- was bg-white -->` beside real markup is prose.
+ * The `fixed-colour-ok:` waiver is read from the raw line OR the raw line before it (the
+ * `eslint-disable-next-line` shape), so a waiver never forces the class off its own line. */
+export function findFixedBlackWhite({ raw, code, prev }) {
+  if (raw.includes(FIXED_BW_OK) || prev.includes(FIXED_BW_OK)) return []
+  return [...new Set(code.match(FIXED_BW) ?? [])]
 }
 
 function main() {
   const offenders = []
-  for (const file of SCAN_ROOTS.flatMap((root) => [...sourceFiles(root)])) {
-    const lines = readFileSync(file, 'utf8').split('\n')
+  for (const file of spaSourceFiles()) {
     // The literal rule (rule 3) reads production code only; the utility rules (raw palette, fixed
     // numbered alias, fixed white/black) apply everywhere, a fixed class being wrong even in a
     // fixture. `presets.ts` is the exception: a verbatim Nuxt UI decode table (oklch strings and the
     // editor's own component classes) stored only to rebuild an editor share link and NEVER rendered
     // by the SPA, so no palette rule applies to it.
-    const rel = relative(repoRoot, file).replaceAll('\\', '/')
-    if (rel.endsWith('frontend/app/app/utils/theme/presets.ts')) continue
-    const literalExempt = file.endsWith('.spec.ts')
-    lines.forEach((line, i) => {
+    if (file.rel.endsWith('frontend/app/app/utils/theme/presets.ts')) continue
+    const literalExempt = file.rel.endsWith('.spec.ts')
+    readCodeLines(file).forEach((line, i) => {
       const matches = [
-        ...findRawPalette(line),
-        ...findFixedBlackWhite(line, lines[i - 1] ?? ''),
+        ...findRawPalette(line.raw),
+        ...findFixedBlackWhite(line),
         ...(literalExempt ? [] : findColourLiterals(line)),
       ]
-      if (matches.length) offenders.push({ file: relative(repoRoot, file), line: i + 1, matches })
+      if (matches.length) offenders.push({ file: file.rel, line: i + 1, matches })
     })
   }
 
@@ -222,4 +191,4 @@ function main() {
 }
 
 // Run the filesystem scan only as a CLI; importing for tests must have no side effects.
-if (import.meta.url === pathToFileURL(process.argv[1]).href) main()
+if (isCliEntry(import.meta.url)) main()

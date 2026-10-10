@@ -11,6 +11,7 @@ import type { ChangeClass, MergeAxis, MergeDecision, WorkspaceRole } from '@cat-
 import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import MarkdownProse from '~/components/common/MarkdownProse.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const board = useBoardStore()
 const execution = useExecutionStore()
@@ -217,15 +218,15 @@ const reasonText = computed(() => {
                   {{ changeClassLabel }}
                 </UBadge>
               </div>
-              <p class="mt-0.5 text-[13px] leading-relaxed text-toned">{{ reasonText }}</p>
+              <p class="mt-0.5 text-sm leading-relaxed text-toned">{{ reasonText }}</p>
             </div>
           </div>
 
           <!-- Scores vs the resolved preset's ceilings. -->
           <template v-if="axes.length">
-            <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-dimmed">
+            <SectionLabel as="h3" class="mb-2">
               {{ t('panels.mergerResult.scores') }}
-            </h3>
+            </SectionLabel>
             <div class="space-y-2 rounded-lg border border-default bg-app-950/40 p-3">
               <div v-for="axis in axes" :key="axis.key" class="flex items-center gap-2">
                 <span class="w-20 shrink-0 text-xs text-muted">{{ axis.label }}</span>
@@ -242,7 +243,7 @@ const reasonText = computed(() => {
                 >
                   {{ n(axis.score, { key: 'percent' }) }}
                 </span>
-                <span class="w-24 shrink-0 text-end text-[10px] tabular-nums text-dimmed">
+                <span class="w-24 shrink-0 text-end text-3xs tabular-nums text-dimmed">
                   {{
                     t('panels.mergerResult.ceiling', {
                       value: n(axis.ceiling, { key: 'percent' }),
@@ -255,15 +256,15 @@ const reasonText = computed(() => {
 
           <!-- The agent's prose justification. -->
           <template v-if="decision.assessment?.rationale">
-            <h3 class="mb-2 mt-4 text-[11px] font-semibold uppercase tracking-wide text-dimmed">
+            <SectionLabel as="h3" class="mb-2 mt-4">
               {{ t('panels.mergerResult.rationale') }}
-            </h3>
+            </SectionLabel>
             <MarkdownProse
               :text="decision.assessment.rationale"
-              class="text-[13px] leading-relaxed text-toned"
+              class="text-sm leading-relaxed text-toned"
             />
           </template>
-          <p v-else class="text-[13px] italic leading-relaxed text-dimmed">
+          <p v-else class="text-sm italic leading-relaxed text-dimmed">
             {{ t('panels.mergerResult.noAssessment') }}
           </p>
         </template>
@@ -272,7 +273,7 @@ const reasonText = computed(() => {
         <MarkdownProse
           v-else-if="step?.output"
           :text="step.output"
-          class="text-[13px] leading-relaxed text-toned"
+          class="text-sm leading-relaxed text-toned"
         />
         <div
           v-else

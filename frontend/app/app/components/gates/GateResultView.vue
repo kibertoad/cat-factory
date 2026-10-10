@@ -13,6 +13,7 @@ import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 import AttemptEntryHeader from '~/components/panels/AttemptEntryHeader.vue'
 import GateFailingCheckList from '~/components/gates/GateFailingCheckList.vue'
 import CopyButton from '~/components/common/CopyButton.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const board = useBoardStore()
 const execution = useExecutionStore()
@@ -218,7 +219,7 @@ const conflictVerdict = computed(() => {
         >
           <UIcon :name="meta.icon" class="h-8 w-8 opacity-40" />
           <p class="text-sm">{{ t('gates.noActivity') }}</p>
-          <p class="max-w-sm text-[11px] text-dimmed">
+          <p class="max-w-sm text-2xs text-dimmed">
             {{ t('gates.noActivityHint') }}
           </p>
         </div>
@@ -233,7 +234,7 @@ const conflictVerdict = computed(() => {
               name="i-lucide-circle-check"
               class="mt-0.5 h-4 w-4 shrink-0 text-app-success-400"
             />
-            <p class="text-[13px] leading-relaxed text-app-success-200">
+            <p class="text-sm leading-relaxed text-app-success-200">
               {{ step?.output || (isCi ? t('gates.passedCi') : t('gates.passedConflicts')) }}
             </p>
           </div>
@@ -244,7 +245,7 @@ const conflictVerdict = computed(() => {
               class="flex items-center gap-2 rounded-md border border-default bg-app-950/40 px-3 py-2"
             >
               <UIcon name="i-lucide-users" class="h-4 w-4 shrink-0 text-app-secondary-300" />
-              <span class="text-[13px] text-default">
+              <span class="text-sm text-default">
                 {{
                   t(
                     'gates.humanReview.approvals',
@@ -266,35 +267,38 @@ const conflictVerdict = computed(() => {
               class="relative mt-2 rounded-md border border-default bg-app-950/40 px-3 py-2"
             >
               <CopyButton :text="gate.lastFailureSummary" class="absolute end-1 top-1" />
-              <p class="whitespace-pre-wrap pe-8 text-[12px] leading-relaxed text-toned">
+              <p class="whitespace-pre-wrap pe-8 text-xs leading-relaxed text-toned">
                 {{ gate.lastFailureSummary }}
               </p>
             </div>
-            <a
+            <ULink
+              raw
               v-if="prUrl"
-              :href="prUrl"
+              :to="prUrl"
               target="_blank"
               rel="noopener"
-              class="mt-2 inline-flex items-center gap-1 text-[12px] text-app-info-300 hover:text-app-info-200 hover:underline"
+              class="mt-2 inline-flex items-center gap-1 text-xs text-app-info-300 hover:text-app-info-200 hover:underline"
             >
               {{ t('gates.humanReview.reviewPr') }}
               <UIcon name="i-lucide-external-link" class="h-3 w-3" />
-            </a>
+            </ULink>
 
             <!-- Freeform fix request: dispatch the fixer now with these instructions. -->
             <section v-if="status !== 'gave-up'" class="mt-4">
-              <h3 class="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-dimmed">
+              <SectionLabel as="h3" class="mb-1.5">
                 {{ t('gates.humanReview.requestFixHeading') }}
-              </h3>
-              <p class="mb-2 text-[11px] leading-relaxed text-dimmed">
+              </SectionLabel>
+              <p class="mb-2 text-2xs leading-relaxed text-dimmed">
                 {{ t('gates.humanReview.requestFixDescription') }}
               </p>
-              <textarea
+              <UTextarea
                 v-model="fixInstructions"
-                rows="3"
+                :rows="3"
                 :disabled="fixBusy"
                 :placeholder="t('gates.humanReview.requestFixPlaceholder')"
-                class="w-full resize-y rounded-md border border-default bg-app-950/60 px-3 py-2 text-[13px] text-default placeholder:text-app-600 focus:border-app-secondary-500/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-app-secondary-500/60"
+                size="sm"
+                class="w-full"
+                :ui="{ base: 'resize-y' }"
               />
               <div class="mt-2 flex justify-end">
                 <UButton
@@ -316,49 +320,50 @@ const conflictVerdict = computed(() => {
 
           <!-- CI: failing checks -->
           <template v-else-if="isCi">
-            <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-dimmed">
+            <SectionLabel as="h3" class="mb-2">
               {{ t('gates.ci.failingChecks') }}
-            </h3>
+            </SectionLabel>
             <GateFailingCheckList v-if="failingChecks.length" :checks="failingChecks" />
-            <p v-else class="text-[13px] leading-relaxed text-toned">
+            <p v-else class="text-sm leading-relaxed text-toned">
               {{ gate.lastFailureSummary || t('gates.ci.failureFallback') }}
             </p>
           </template>
 
           <!-- Doc quality: the deterministic structural findings the gate raised -->
           <template v-else-if="isDocQuality">
-            <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-dimmed">
+            <SectionLabel as="h3" class="mb-2">
               {{ t('gates.docQuality.findings') }}
-            </h3>
+            </SectionLabel>
             <div
               v-if="gate.lastFailureSummary"
               class="relative rounded-md border border-default bg-app-950/40 px-3 py-2"
             >
               <CopyButton :text="gate.lastFailureSummary" class="absolute end-1 top-1" />
-              <p class="whitespace-pre-wrap pe-8 text-[12px] leading-relaxed text-toned">
+              <p class="whitespace-pre-wrap pe-8 text-xs leading-relaxed text-toned">
                 {{ gate.lastFailureSummary }}
               </p>
             </div>
-            <p v-else class="text-[13px] leading-relaxed text-toned">
+            <p v-else class="text-sm leading-relaxed text-toned">
               {{ t('gates.docQuality.findingsFallback') }}
             </p>
-            <a
+            <ULink
+              raw
               v-if="prUrl"
-              :href="prUrl"
+              :to="prUrl"
               target="_blank"
               rel="noopener"
-              class="mt-2 inline-flex items-center gap-1 text-[12px] text-app-info-300 hover:text-app-info-200 hover:underline"
+              class="mt-2 inline-flex items-center gap-1 text-xs text-app-info-300 hover:text-app-info-200 hover:underline"
             >
               {{ t('gates.docQuality.viewPr') }}
               <UIcon name="i-lucide-external-link" class="h-3 w-3" />
-            </a>
+            </ULink>
           </template>
 
           <!-- Conflicts: verdict + the resolver's account of what it left -->
           <template v-else>
-            <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-dimmed">
+            <SectionLabel as="h3" class="mb-2">
               {{ t('gates.conflicts.mergeability') }}
-            </h3>
+            </SectionLabel>
             <div
               class="flex items-center gap-2 rounded-md border border-default bg-app-950/40 px-3 py-2"
             >
@@ -367,7 +372,7 @@ const conflictVerdict = computed(() => {
                 class="h-4 w-4 shrink-0"
                 :class="STATUS_META[status].text"
               />
-              <span class="text-[13px] text-default">{{ conflictVerdict }}</span>
+              <span class="text-sm text-default">{{ conflictVerdict }}</span>
             </div>
             <!-- GitHub's API reports mergeability as a single bit (no file list), but the
                      conflict resolver discovers the conflicting files in the container and
@@ -377,27 +382,28 @@ const conflictVerdict = computed(() => {
               class="relative mt-2 rounded-md border border-default bg-app-950/40 px-3 py-2"
             >
               <CopyButton :text="gate.lastFailureSummary" class="absolute end-1 top-1" />
-              <p class="whitespace-pre-wrap pe-8 text-[12px] leading-relaxed text-toned">
+              <p class="whitespace-pre-wrap pe-8 text-xs leading-relaxed text-toned">
                 {{ gate.lastFailureSummary }}
               </p>
             </div>
-            <a
+            <ULink
+              raw
               v-if="prUrl"
-              :href="prUrl"
+              :to="prUrl"
               target="_blank"
               rel="noopener"
-              class="mt-2 inline-flex items-center gap-1 text-[12px] text-app-info-300 hover:text-app-info-200 hover:underline"
+              class="mt-2 inline-flex items-center gap-1 text-xs text-app-info-300 hover:text-app-info-200 hover:underline"
             >
               {{ t('gates.conflicts.viewPr') }}
               <UIcon name="i-lucide-external-link" class="h-3 w-3" />
-            </a>
+            </ULink>
           </template>
 
           <!-- Attempt history (both gates): what each helper run did and how it ended. -->
           <section v-if="attempts.length" class="mt-5">
-            <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-dimmed">
+            <SectionLabel as="h3" class="mb-2">
               {{ t('gates.attemptsHeading', { helper: helperMeta.label }) }}
-            </h3>
+            </SectionLabel>
             <ol class="space-y-2">
               <li
                 v-for="a in attempts"
@@ -418,7 +424,7 @@ const conflictVerdict = computed(() => {
                   v-if="a.instructions || (a.failingChecks && a.failingChecks.length)"
                   class="mt-1.5"
                 >
-                  <p class="text-[11px] text-dimmed">
+                  <p class="text-2xs text-dimmed">
                     {{ t('gates.attemptInstructions', { helper: helperMeta.label }) }}
                   </p>
                   <GateFailingCheckList
@@ -429,17 +435,17 @@ const conflictVerdict = computed(() => {
                   />
                   <p
                     v-else-if="a.instructions"
-                    class="mt-1 whitespace-pre-wrap text-[12px] leading-relaxed text-toned"
+                    class="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-toned"
                   >
                     {{ a.instructions }}
                   </p>
                 </div>
                 <!-- The helper's own report of what it did / what remains. -->
                 <template v-if="a.summary">
-                  <p class="mt-1.5 text-[11px] text-dimmed">
+                  <p class="mt-1.5 text-2xs text-dimmed">
                     {{ t('gates.attemptReport', { helper: helperMeta.label }) }}
                   </p>
-                  <p class="mt-1 whitespace-pre-wrap text-[12px] leading-relaxed text-muted">
+                  <p class="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-muted">
                     {{ a.summary }}
                   </p>
                 </template>
@@ -454,10 +460,10 @@ const conflictVerdict = computed(() => {
         class="hidden w-60 shrink-0 flex-col gap-4 border-s border-default bg-default/50 px-4 py-4 lg:flex"
       >
         <div v-if="gate">
-          <h4 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-dimmed">
+          <SectionLabel as="h4" class="mb-2">
             {{ t('gates.sidebar.state') }}
-          </h4>
-          <div class="flex items-center gap-2 text-[13px]">
+          </SectionLabel>
+          <div class="flex items-center gap-2 text-sm">
             <UIcon
               :name="STATUS_META[status].icon"
               class="h-4 w-4"
@@ -468,10 +474,10 @@ const conflictVerdict = computed(() => {
         </div>
 
         <div v-if="gate">
-          <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-dimmed">
+          <SectionLabel as="h4" class="mb-1">
             {{ helperMeta.label }}
-          </h4>
-          <p class="text-[12px] text-toned">
+          </SectionLabel>
+          <p class="text-xs text-toned">
             <!-- The human-review gate's budget is effectively unbounded (it waits for a human
                      indefinitely), so render a plain round count rather than "0/9007199254740991". -->
             <template v-if="isHumanReview">
@@ -496,10 +502,10 @@ const conflictVerdict = computed(() => {
         </div>
 
         <div v-if="shortSha">
-          <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-dimmed">
+          <SectionLabel as="h4" class="mb-1">
             {{ t('gates.sidebar.gatedCommit') }}
-          </h4>
-          <p class="font-mono text-[12px] text-toned">{{ shortSha }}</p>
+          </SectionLabel>
+          <p class="font-mono text-xs text-toned">{{ shortSha }}</p>
         </div>
 
         <!-- Shared run metadata + embedded observability (model, run id, timing,
@@ -514,7 +520,7 @@ const conflictVerdict = computed(() => {
           :failure-at="instance?.failure?.occurredAt"
         />
 
-        <p class="mt-auto text-[10px] leading-relaxed text-app-600">
+        <p class="mt-auto text-3xs leading-relaxed text-app-600">
           {{ t('gates.sidebar.footer', { helper: helperMeta.label }) }}
         </p>
       </aside>

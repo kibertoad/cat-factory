@@ -22,6 +22,7 @@ import type { ProviderConnectionKind } from '~/types/providerConnections'
 import ConnectionWarnings from '~/components/settings/ConnectionWarnings.vue'
 import ConnectionTestVerdict from '~/components/settings/ConnectionTestVerdict.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const props = defineProps<{
   kind: ProviderConnectionKind
@@ -197,9 +198,9 @@ function onSave() {
 
 <template>
   <div class="space-y-3 rounded-lg border border-dashed border-muted p-3">
-    <p class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+    <SectionLabel as="p">
       {{ t('settings.providerConnection.manifestEditor.title') }}
-    </p>
+    </SectionLabel>
 
     <UFormField
       :label="t('settings.providerConnection.manifestEditor.jsonLabel')"
@@ -214,7 +215,7 @@ function onSave() {
       />
     </UFormField>
 
-    <p v-if="!savedManifest && !jsonError && !schemaError" class="text-[11px] text-dimmed">
+    <p v-if="!savedManifest && !jsonError && !schemaError" class="text-2xs text-dimmed">
       {{ t('settings.providerConnection.manifestEditor.starterHint') }}
     </p>
 
@@ -236,16 +237,16 @@ function onSave() {
 
     <!-- Secret sub-form: one write-only input per secret key the manifest references. -->
     <div class="space-y-2">
-      <p class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+      <SectionLabel as="p">
         {{ t('settings.providerConnection.manifestEditor.secretsLabel') }}
-      </p>
-      <p v-if="!secretKeys.length" class="text-[11px] text-dimmed">
+      </SectionLabel>
+      <p v-if="!secretKeys.length" class="text-2xs text-dimmed">
         {{ t('settings.providerConnection.manifestEditor.noSecrets') }}
       </p>
       <template v-else-if="connected">
         <p
           v-if="storedSecretKeys && storedSecretKeys.length"
-          class="text-[11px] text-muted"
+          class="text-2xs text-muted"
           data-testid="manifest-editor-stored"
         >
           {{
@@ -254,7 +255,7 @@ function onSave() {
             })
           }}
         </p>
-        <p class="text-[11px] text-app-warning-300/80">
+        <p class="text-2xs text-app-warning-300/80">
           {{ t('settings.providerConnection.manifestEditor.reenterSecrets') }}
         </p>
       </template>

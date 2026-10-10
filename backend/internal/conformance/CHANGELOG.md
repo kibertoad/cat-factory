@@ -1,5 +1,41 @@
 # @cat-factory/conformance
 
+## 0.64.1
+
+### Patch Changes
+
+- Updated dependencies [1a42f34]
+- Updated dependencies [3c04dfa]
+  - @cat-factory/kernel@0.357.1
+  - @cat-factory/server@0.332.1
+  - @cat-factory/agents@0.171.3
+  - @cat-factory/gates@0.12.1
+  - @cat-factory/integrations@0.175.1
+  - @cat-factory/orchestration@0.320.1
+  - @cat-factory/prompt-fragments@1.1.61
+
+## 0.64.0
+
+### Minor Changes
+
+- e3c4b3c: A new built-in `resolve-conflicts` task type points the conflict resolver at an existing open pull request the platform did not open (surface version 1.79.0). The task names it with `fields.prNumber` or `fields.prUrl`, and creation records it as the block's own `pullRequest`, refusing one the run could not push onto with a `422` and an `attached_pr_*` reason: not found, another repository, closed or merged, from a fork, targeting a branch other than the repository's base, or unreadable. When the repository provider fails to answer, creation is refused with a retryable `503` and reason `attached_pr_provider_unreachable` instead of a `500`.
+  
+  The task is pinned to the new `pl_resolve_conflicts` pipeline, the `conflicts` gate alone, under a new `maintenance` pipeline purpose that only this task type is offered. It parks nowhere, so a `write` key starts it with an empty body. A clean pull request finishes `done` with nothing pushed; one the resolver cannot clear fails the run with a message saying the conflicts could not be resolved automatically and carrying the resolver's last account. A run of a task that attached its pull request finishes `done` without a confirm-and-merge card, and the pre-dispatch input gate does not judge its description. Run admission refuses a pipeline with a merge step for such a task, and a fields patch cannot move its attachment to another pull request while its run is working.
+  
+  `OpenedPullRequest` gains an optional `crossRepository`, filled by the GitHub and GitLab clients, and `AgentRunContext.block` gains `taskType`, which the container executor reads to skip creating the per-task work branch for an attached pull request. The conflicts gate's give-up message now includes the last resolver attempt's summary.
+
+### Patch Changes
+
+- Updated dependencies [e3c4b3c]
+  - @cat-factory/contracts@0.363.0
+  - @cat-factory/kernel@0.357.0
+  - @cat-factory/gates@0.12.0
+  - @cat-factory/orchestration@0.320.0
+  - @cat-factory/integrations@0.175.0
+  - @cat-factory/server@0.332.0
+  - @cat-factory/agents@0.171.2
+  - @cat-factory/prompt-fragments@1.1.60
+
 ## 0.63.1
 
 ### Patch Changes

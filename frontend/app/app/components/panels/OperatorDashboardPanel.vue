@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { computed, watch } from 'vue'
 import { onKeyStroke } from '@vueuse/core'
+import type { TableColumn } from '@nuxt/ui'
 import type { PlatformObservabilityWindow } from '~/types/execution'
 import { formatMs } from '~/utils/observability'
 import { FAILURE_KIND_KEYS, isAgentFailureKind } from '~/utils/failureKinds'
+import SectionLabel from '~/components/common/SectionLabel.vue'
+import IconButton from '~/components/common/IconButton.vue'
 
 // Deployment-level (platform-operator) observability dashboard: the aggregate health of the
 // active account's runs — outcome totals + success rate, a time-bucketed outcome trend, the
@@ -67,6 +70,19 @@ function barPct(count: number, max: number): number {
 // Share of a gate kind's runs the precheck satisfied outright, 0..1: the number the
 // precheck-before-escalate design exists to move. Null (not 0) when nothing settled, because
 // "no gates ran" is not "every gate needed a fixer".
+// Column definitions rather than hand-written `<th>`s: the header typography is the table
+// theme's, shared with every other table in the SPA.
+// The count columns are flush right, so their headers are too.
+const NUMERIC = { class: { th: 'text-end' } }
+const gateColumns = computed<TableColumn<NonNullable<typeof view.value>['gates'][number]>[]>(() => [
+  { id: 'gate', header: t('platformObservability.gates.gate') },
+  { id: 'settled', header: t('platformObservability.gates.settled'), meta: NUMERIC },
+  { id: 'cleanPasses', header: t('platformObservability.gates.cleanPasses'), meta: NUMERIC },
+  { id: 'attempts', header: t('platformObservability.gates.attempts'), meta: NUMERIC },
+  { id: 'helperFailures', header: t('platformObservability.gates.helperFailures'), meta: NUMERIC },
+  { id: 'exhausted', header: t('platformObservability.gates.exhausted'), meta: NUMERIC },
+])
+
 function cleanRate(stat: { gates: number; cleanPasses: number }): number | null {
   return stat.gates > 0 ? stat.cleanPasses / stat.gates : null
 }
@@ -124,44 +140,44 @@ watch(
             <p v-if="accountName" class="truncate text-xs text-dimmed">{{ accountName }}</p>
           </div>
           <div class="ms-auto flex items-center gap-1.5">
-            <div class="me-1 flex rounded-lg border border-default p-0.5 text-[12px]">
-              <button
-                v-for="opt in WINDOWS"
-                :key="opt.value"
-                class="rounded-md px-2.5 py-1 transition"
-                :class="
-                  platform.window === opt.value
-                    ? 'bg-elevated text-app-100'
-                    : 'text-muted hover:text-default'
-                "
-                :data-testid="`operator-window-${opt.value}`"
-                @click="setWindow(opt.value)"
-              >
-                {{ opt.label }}
-              </button>
-            </div>
-            <button
-              class="rounded-lg border border-default p-1.5 text-muted transition hover:text-default"
-              :title="t('platformObservability.refresh')"
-              :aria-label="t('platformObservability.refresh')"
+            <UTabs
+              :model-value="platform.window"
+              :items="WINDOWS"
+              :content="false"
+              size="xs"
+              class="me-1"
+              @update:model-value="setWindow($event as PlatformObservabilityWindow)"
+            >
+              <!-- UTabs renders its own triggers and forwards nothing from an item, so this
+                   slot is the one place a stable per-window selector can live. -->
+              <template #default="{ item }">
+                <span :data-testid="`operator-window-${item.value}`">{{ item.label }}</span>
+              </template>
+            </UTabs>
+            <IconButton
+              color="neutral"
+              variant="ghost"
+              icon="i-lucide-refresh-cw"
+              :label="t('platformObservability.refresh')"
+              :ui="{
+                base: 'rounded-lg border border-default p-1.5 text-muted transition hover:text-default',
+                leadingIcon: loading ? 'h-4 w-4 animate-spin' : 'h-4 w-4',
+              }"
               data-testid="operator-refresh"
               @click="refresh"
-            >
-              <UIcon
-                name="i-lucide-refresh-cw"
-                class="h-4 w-4"
-                :class="{ 'animate-spin': loading }"
-              />
-            </button>
-            <button
-              class="rounded-lg border border-default p-1.5 text-muted transition hover:text-default"
-              :title="t('platformObservability.close')"
-              :aria-label="t('platformObservability.close')"
+            />
+            <IconButton
+              color="neutral"
+              variant="ghost"
+              icon="i-lucide-x"
+              :label="t('platformObservability.close')"
+              :ui="{
+                base: 'rounded-lg border border-default p-1.5 text-muted transition hover:text-default',
+                leadingIcon: 'h-4 w-4',
+              }"
               data-testid="operator-close"
               @click="close"
-            >
-              <UIcon name="i-lucide-x" class="h-4 w-4" />
-            </button>
+            />
           </div>
         </header>
 
@@ -171,12 +187,14 @@ watch(
             class="mx-auto max-w-2xl rounded-lg border border-app-error-800/60 bg-app-error-950/40 p-4 text-sm text-app-error-200"
           >
             <p>{{ error }}</p>
-            <button
+            <UButton
+              color="neutral"
+              variant="ghost"
               class="mt-2 rounded-md border border-app-error-700 px-3 py-1 text-xs hover:bg-app-error-900/40"
               @click="refresh"
             >
               {{ t('platformObservability.retry') }}
-            </button>
+            </UButton>
           </div>
 
           <div v-else-if="loading && !view" class="py-16 text-center text-sm text-muted">
@@ -221,9 +239,9 @@ watch(
 
             <!-- Outcome summary tiles -->
             <section>
-              <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-dimmed">
+              <SectionLabel as="h2" class="mb-2">
                 {{ t('platformObservability.outcomes.title') }}
-              </h2>
+              </SectionLabel>
               <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <div class="rounded-lg border border-default bg-default/40 p-3">
                   <p class="text-2xl font-semibold text-highlighted">
@@ -269,9 +287,9 @@ watch(
 
             <!-- Outcome trend sparkline -->
             <section>
-              <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-dimmed">
+              <SectionLabel as="h2" class="mb-2">
                 {{ t('platformObservability.trend.title') }}
-              </h2>
+              </SectionLabel>
               <div class="rounded-lg border border-default bg-default/40 p-4">
                 <div v-if="view.outcomes.total === 0" class="py-6 text-center text-xs text-dimmed">
                   {{ t('platformObservability.trend.empty') }}
@@ -297,7 +315,7 @@ watch(
                     />
                   </div>
                 </div>
-                <div class="mt-2 flex items-center gap-4 text-[11px] text-dimmed">
+                <div class="mt-2 flex items-center gap-4 text-2xs text-dimmed">
                   <span class="flex items-center gap-1"
                     ><span class="h-2 w-2 rounded-sm bg-app-success-500/80" />{{
                       t('platformObservability.trend.done')
@@ -319,70 +337,61 @@ watch(
 
             <!-- Gate / CI-fixer attempt statistics -->
             <section>
-              <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-dimmed">
+              <SectionLabel as="h2" class="mb-2">
                 {{ t('platformObservability.gates.title') }}
-              </h2>
+              </SectionLabel>
               <div class="overflow-x-auto rounded-lg border border-default bg-default/40 p-4">
                 <p v-if="!view.gates.length" class="py-4 text-center text-xs text-dimmed">
                   {{ t('platformObservability.gates.empty') }}
                 </p>
-                <table v-else class="w-full text-left text-xs" data-testid="operator-gates">
-                  <thead class="text-[11px] uppercase tracking-wide text-dimmed">
-                    <tr>
-                      <th class="pb-2 pe-3 font-medium">
-                        {{ t('platformObservability.gates.gate') }}
-                      </th>
-                      <th class="pb-2 pe-3 text-end font-medium">
-                        {{ t('platformObservability.gates.settled') }}
-                      </th>
-                      <th class="pb-2 pe-3 text-end font-medium">
-                        {{ t('platformObservability.gates.cleanPasses') }}
-                      </th>
-                      <th class="pb-2 pe-3 text-end font-medium">
-                        {{ t('platformObservability.gates.attempts') }}
-                      </th>
-                      <th class="pb-2 pe-3 text-end font-medium">
-                        {{ t('platformObservability.gates.helperFailures') }}
-                      </th>
-                      <th class="pb-2 text-end font-medium">
-                        {{ t('platformObservability.gates.exhausted') }}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody class="text-toned">
-                    <tr
-                      v-for="g in view.gates"
-                      :key="g.gateKind"
-                      class="border-t border-default/70"
+                <UTable
+                  v-else
+                  :data="view.gates"
+                  :columns="gateColumns"
+                  :ui="{
+                    base: 'text-xs',
+                    th: 'ps-0 pe-3 py-2',
+                    td: 'ps-0 pe-3 py-2 text-xs text-toned whitespace-normal',
+                  }"
+                  data-testid="operator-gates"
+                >
+                  <template #gate-cell="{ row }">
+                    <span class="font-medium text-default">{{ row.original.gateKind }}</span>
+                    <span v-if="row.original.helperKind" class="ms-1.5 text-dimmed"
+                      >&rarr; {{ row.original.helperKind }}</span
                     >
-                      <td class="py-2 pe-3">
-                        <span class="font-medium text-default">{{ g.gateKind }}</span>
-                        <span v-if="g.helperKind" class="ms-1.5 text-dimmed"
-                          >&rarr; {{ g.helperKind }}</span
-                        >
-                      </td>
-                      <td class="py-2 pe-3 text-end tabular-nums">{{ g.gates }}</td>
-                      <td class="py-2 pe-3 text-end tabular-nums">
-                        <span class="text-app-success-400">{{ g.cleanPasses }}</span>
-                        <span v-if="cleanRate(g) !== null" class="ms-1 text-dimmed"
-                          >({{ n(cleanRate(g) ?? 0, 'percent') }})</span
-                        >
-                      </td>
-                      <td class="py-2 pe-3 text-end tabular-nums">{{ g.attempts }}</td>
-                      <td class="py-2 pe-3 text-end tabular-nums">
-                        <span :class="g.helperFailures > 0 ? 'text-app-warning-400' : ''">{{
-                          g.helperFailures
-                        }}</span>
-                      </td>
-                      <td class="py-2 text-end tabular-nums">
-                        <span :class="g.exhausted > 0 ? 'text-app-error-400' : ''">{{
-                          g.exhausted
-                        }}</span>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-                <p class="mt-3 text-[11px] leading-relaxed text-dimmed">
+                  </template>
+                  <template #settled-cell="{ row }">
+                    <span class="block text-end tabular-nums">{{ row.original.gates }}</span>
+                  </template>
+                  <template #cleanPasses-cell="{ row }">
+                    <span class="block text-end tabular-nums">
+                      <span class="text-app-success-400">{{ row.original.cleanPasses }}</span>
+                      <span v-if="cleanRate(row.original) !== null" class="ms-1 text-dimmed"
+                        >({{ n(cleanRate(row.original) ?? 0, 'percent') }})</span
+                      >
+                    </span>
+                  </template>
+                  <template #attempts-cell="{ row }">
+                    <span class="block text-end tabular-nums">{{ row.original.attempts }}</span>
+                  </template>
+                  <template #helperFailures-cell="{ row }">
+                    <span class="block text-end tabular-nums">
+                      <span
+                        :class="row.original.helperFailures > 0 ? 'text-app-warning-400' : ''"
+                        >{{ row.original.helperFailures }}</span
+                      >
+                    </span>
+                  </template>
+                  <template #exhausted-cell="{ row }">
+                    <span class="block text-end tabular-nums">
+                      <span :class="row.original.exhausted > 0 ? 'text-app-error-400' : ''">{{
+                        row.original.exhausted
+                      }}</span>
+                    </span>
+                  </template>
+                </UTable>
+                <p class="mt-3 text-2xs leading-relaxed text-dimmed">
                   {{ t('platformObservability.gates.hint') }}
                 </p>
               </div>
@@ -391,9 +400,9 @@ watch(
             <div class="grid gap-6 md:grid-cols-2">
               <!-- Failure taxonomy -->
               <section>
-                <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-dimmed">
+                <SectionLabel as="h2" class="mb-2">
                   {{ t('platformObservability.failures.title') }}
-                </h2>
+                </SectionLabel>
                 <div class="rounded-lg border border-default bg-default/40 p-4">
                   <div v-if="!view.failures.length" class="py-4 text-center text-xs text-dimmed">
                     {{ t('platformObservability.failures.empty') }}
@@ -418,16 +427,16 @@ watch(
               <!-- Live depth + durations -->
               <section class="flex flex-col gap-4">
                 <div>
-                  <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-dimmed">
+                  <SectionLabel as="h2" class="mb-2">
                     {{ t('platformObservability.live.title') }}
-                  </h2>
+                  </SectionLabel>
                   <div
                     class="grid grid-cols-4 gap-2 rounded-lg border border-default bg-default/40 p-3 text-center"
                     data-testid="operator-live"
                   >
                     <div>
                       <p class="text-lg font-semibold text-app-info-400">{{ view.live.running }}</p>
-                      <p class="text-[11px] text-dimmed">
+                      <p class="text-2xs text-dimmed">
                         {{ t('platformObservability.outcomes.running') }}
                       </p>
                     </div>
@@ -435,28 +444,28 @@ watch(
                       <p class="text-lg font-semibold text-app-warning-400">
                         {{ view.live.blocked }}
                       </p>
-                      <p class="text-[11px] text-dimmed">
+                      <p class="text-2xs text-dimmed">
                         {{ t('platformObservability.outcomes.blocked') }}
                       </p>
                     </div>
                     <div>
                       <p class="text-lg font-semibold text-toned">{{ view.live.paused }}</p>
-                      <p class="text-[11px] text-dimmed">
+                      <p class="text-2xs text-dimmed">
                         {{ t('platformObservability.outcomes.paused') }}
                       </p>
                     </div>
                     <div>
                       <p class="text-lg font-semibold text-toned">{{ view.live.pending }}</p>
-                      <p class="text-[11px] text-dimmed">
+                      <p class="text-2xs text-dimmed">
                         {{ t('platformObservability.outcomes.pending') }}
                       </p>
                     </div>
                   </div>
                 </div>
                 <div>
-                  <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-dimmed">
+                  <SectionLabel as="h2" class="mb-2">
                     {{ t('platformObservability.durations.title') }}
-                  </h2>
+                  </SectionLabel>
                   <div class="rounded-lg border border-default bg-default/40 p-3 text-sm">
                     <div
                       v-if="view.durations.count === 0"
@@ -470,7 +479,7 @@ watch(
                       data-testid="operator-durations"
                     >
                       <div>
-                        <dt class="text-[11px] text-dimmed">
+                        <dt class="text-2xs text-dimmed">
                           {{ t('platformObservability.durations.avg') }}
                         </dt>
                         <dd class="font-semibold text-highlighted">
@@ -478,7 +487,7 @@ watch(
                         </dd>
                       </div>
                       <div>
-                        <dt class="text-[11px] text-dimmed">
+                        <dt class="text-2xs text-dimmed">
                           {{ t('platformObservability.durations.min') }}
                         </dt>
                         <dd class="font-semibold text-toned">
@@ -486,7 +495,7 @@ watch(
                         </dd>
                       </div>
                       <div>
-                        <dt class="text-[11px] text-dimmed">
+                        <dt class="text-2xs text-dimmed">
                           {{ t('platformObservability.durations.max') }}
                         </dt>
                         <dd class="font-semibold text-toned">
@@ -494,7 +503,7 @@ watch(
                         </dd>
                       </div>
                       <div>
-                        <dt class="text-[11px] text-dimmed">
+                        <dt class="text-2xs text-dimmed">
                           {{ t('platformObservability.durations.p50') }}
                         </dt>
                         <dd class="font-semibold text-toned" data-testid="operator-duration-p50">
@@ -502,7 +511,7 @@ watch(
                         </dd>
                       </div>
                       <div>
-                        <dt class="text-[11px] text-dimmed">
+                        <dt class="text-2xs text-dimmed">
                           {{ t('platformObservability.durations.p90') }}
                         </dt>
                         <dd class="font-semibold text-toned" data-testid="operator-duration-p90">
@@ -510,7 +519,7 @@ watch(
                         </dd>
                       </div>
                       <div>
-                        <dt class="text-[11px] text-dimmed">
+                        <dt class="text-2xs text-dimmed">
                           {{ t('platformObservability.durations.p99') }}
                         </dt>
                         <dd class="font-semibold text-toned" data-testid="operator-duration-p99">

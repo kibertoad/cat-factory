@@ -85,7 +85,7 @@ const show = computed(() => showSetup.value || showPreset.value)
                 @click="ui.dismissAiPresetMismatch()"
               />
             </div>
-            <p class="mt-1 text-[13px] text-app-warning-200/90">
+            <p class="mt-1 text-sm text-app-warning-200/90">
               {{ t('layout.aiProvidersBanner.preset.body') }}
             </p>
             <div class="mt-3">

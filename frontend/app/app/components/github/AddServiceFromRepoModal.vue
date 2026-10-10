@@ -27,6 +27,8 @@ import VcsConnectSurfaces from '~/components/vcs/VcsConnectSurfaces.vue'
 import ServiceTestConfig from '~/components/panels/inspector/ServiceTestConfig.vue'
 import ServiceFragments from '~/components/panels/inspector/ServiceFragments.vue'
 import { appInstallationManageUrl, VCS_PROVIDER_LABELS } from '~/utils/vcs'
+import SectionLabel from '~/components/common/SectionLabel.vue'
+import IconButton from '~/components/common/IconButton.vue'
 
 const { t } = useI18n()
 
@@ -548,24 +550,27 @@ function done() {
               <!-- the selection cart + the add action sit right beside the tree, so the
                    picked services and the button that adds them are never scrolled apart -->
               <div class="space-y-2 rounded-md border border-default bg-app-950/40 p-2.5">
-                <p class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+                <SectionLabel as="p">
                   {{ t('github.addService.selectedServices') }}
-                </p>
+                </SectionLabel>
                 <div v-if="selectedDirectories.length" class="flex flex-wrap gap-1.5">
                   <span
                     v-for="dir in selectedDirectories"
                     :key="dir"
-                    class="inline-flex items-center gap-1 rounded bg-elevated px-2 py-0.5 text-xs text-default"
+                    class="inline-flex items-center gap-1 rounded-sm bg-elevated px-2 py-0.5 text-xs text-default"
                   >
                     <code class="text-default">{{ dir }}</code>
-                    <button
-                      type="button"
-                      class="text-muted hover:text-app-100"
-                      :aria-label="t('github.addService.removeService', { directory: dir })"
+                    <IconButton
+                      color="neutral"
+                      variant="ghost"
+                      icon="i-lucide-x"
+                      :label="t('github.addService.removeService', { directory: dir })"
+                      :ui="{
+                        base: 'p-0 text-muted hover:bg-transparent hover:text-app-100',
+                        leadingIcon: 'h-3 w-3',
+                      }"
                       @click="removeSelected(dir)"
-                    >
-                      <UIcon name="i-lucide-x" class="h-3 w-3" />
-                    </button>
+                    />
                   </span>
                 </div>
                 <p v-else class="text-xs text-dimmed">
@@ -620,7 +625,7 @@ function done() {
             class="space-y-4 rounded-md border border-app-success-900/50 bg-app-success-950/20 p-3"
           >
             <div
-              class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-app-success-400"
+              class="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wide text-app-success-400"
             >
               <UIcon name="i-lucide-check" class="h-3.5 w-3.5" />
               {{ t('github.addService.addedConfigure', { title: configuredBlock.title }) }}

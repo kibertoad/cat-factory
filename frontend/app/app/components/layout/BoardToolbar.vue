@@ -151,19 +151,24 @@ const decisionItems = computed(() =>
     />
     <!-- Click the readout to snap back to 100%. Always visible (only the LOD sub-label
          drops on narrow viewports) so the zoom level is never a mystery. -->
-    <button
-      type="button"
-      class="w-16 rounded text-center text-xs tabular-nums text-toned hover:bg-elevated focus-visible:ring-2 focus-visible:ring-app-400/60 sm:w-20"
+    <UButton
+      color="neutral"
+      variant="ghost"
+      class="flex w-16 flex-col items-center gap-0 rounded-sm p-0 text-center text-xs tabular-nums text-toned hover:bg-elevated sm:w-20"
       :title="t('board.toolbar.resetZoom')"
       :aria-label="t('board.toolbar.resetZoom')"
       data-testid="board-zoom-reset"
       @click="resetZoom()"
     >
       {{ zoomPct }}%
-      <span class="hidden text-[9px] uppercase tracking-wide text-dimmed sm:block">{{
+      <!-- The zoom band this readout is currently in, under the percentage: a second VALUE
+           annotating the first, not a heading over what follows, so it is not a
+           `common/SectionLabel.vue`. It stays a step smaller and unweighted so it does not compete
+           with the percentage inside a `w-20` button. -->
+      <span class="hidden text-3xs uppercase tracking-wide text-dimmed sm:block">{{
         lodLabel
       }}</span>
-    </button>
+    </UButton>
     <IconButton
       :label="t('board.toolbar.zoomIn')"
       icon="i-lucide-zoom-in"

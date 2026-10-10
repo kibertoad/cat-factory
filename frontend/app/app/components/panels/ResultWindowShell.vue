@@ -22,6 +22,7 @@
 // self-assessment (see the footer block below), so a window never renders it itself.
 import { computed, ref, watch } from 'vue'
 import { useModalBehavior } from '@modular-vue/core'
+import IconButton from '~/components/common/IconButton.vue'
 import StepRestartControl from '~/components/panels/StepRestartControl.vue'
 import RunDetailLoadState from '~/components/panels/RunDetailLoadState.vue'
 import StepEffortReport from '~/components/panels/StepEffortReport.vue'
@@ -39,6 +40,7 @@ import {
   RESULT_WINDOW_WIDTH_CLASS,
   type ResultWindowWidth,
 } from '~/components/panels/ResultWindowShell.logic'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 /** A pipeline step reference — passed by step-result windows to surface the shared
  *  "restart from here" control. `StepRestartControl` self-hides for an off-path open
@@ -68,8 +70,8 @@ const props = withDefaults(
      * worse, not better.
      *
      * The obligation that comes with it: CONTINUOUS PROSE inside a `full` window carries its
-     * own reading measure (`PROSE_MEASURE_CLASS`, the step reader's own, over the same 13px
-     * `.reader-prose`), or the width lands as 200-character lines.
+     * own reading measure (`PROSE_MEASURE_CLASS`, the step reader's own, over the same
+     * `text-sm` `.reader-prose`), or the width lands as 200-character lines.
      *
      * The unit that obligation attaches to is the PARAGRAPH, not the section — which is the
      * distinction to get right, because "a findings list reads better at the full span" is
@@ -289,7 +291,7 @@ const panelClass = computed(() => [
           </span>
           <div class="min-w-0 flex-1">
             <h2 class="truncate text-sm font-semibold text-app-100">{{ title }}</h2>
-            <p v-if="subtitle" class="truncate text-[11px] text-muted">{{ subtitle }}</p>
+            <p v-if="subtitle" class="truncate text-2xs text-muted">{{ subtitle }}</p>
           </div>
           <!-- Window-specific header content (status badges, counts). -->
           <slot name="header-extras" />
@@ -299,14 +301,15 @@ const panelClass = computed(() => [
             :step-index="stepRef.stepIndex"
             @restarted="requestClose"
           />
-          <button
-            class="rounded-md p-1.5 text-muted hover:bg-elevated hover:text-default"
+          <IconButton
+            icon="i-lucide-x"
+            color="neutral"
+            variant="ghost"
+            size="sm"
             data-testid="result-window-close"
-            :aria-label="t('common.close')"
+            :label="t('common.close')"
             @click="requestClose"
-          >
-            <UIcon name="i-lucide-x" class="h-4 w-4" />
-          </button>
+          />
         </header>
         <!-- Whether the whole-run fetch behind this window's prose has landed. -->
         <RunDetailLoadState :instance-id="activeInstanceId" />
@@ -321,34 +324,37 @@ const panelClass = computed(() => [
           class="shrink-0 border-t border-default bg-default/60"
           data-testid="result-window-effort"
         >
-          <button
-            type="button"
-            class="flex w-full items-center gap-2 px-5 py-2 text-start hover:bg-elevated/40"
-            :aria-expanded="effortOpen"
-            data-testid="result-window-effort-toggle"
-            @click="effortOpen = !effortOpen"
-          >
-            <UIcon name="i-lucide-gauge" class="h-3.5 w-3.5 shrink-0 text-muted" />
-            <span class="text-[11px] font-semibold uppercase tracking-wide text-muted">
-              {{ t('panels.stepDetail.effort.heading') }}
-            </span>
-            <span
-              class="shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium tabular-nums"
-              :class="chipClass"
+          <UCollapsible v-model:open="effortOpen">
+            <UButton
+              color="neutral"
+              variant="ghost"
+              class="flex w-full items-center gap-2 px-5 py-2 text-start hover:bg-elevated/40"
+              data-testid="result-window-effort-toggle"
             >
-              {{ t('panels.stepDetail.effort.outOfTen', { value: effortReport.difficulty }) }}
-            </span>
-            <span v-if="hint" class="min-w-0 flex-1 truncate text-[12px] text-muted">
-              {{ hint }}
-            </span>
-            <UIcon
-              :name="effortOpen ? 'i-lucide-chevron-down' : 'i-lucide-chevron-up'"
-              class="ms-auto h-3.5 w-3.5 shrink-0 text-dimmed"
-            />
-          </button>
-          <div v-if="effortOpen" class="max-h-56 overflow-y-auto px-5 pb-3">
-            <StepEffortReport :report="effortReport" variant="flat" />
-          </div>
+              <UIcon name="i-lucide-gauge" class="h-3.5 w-3.5 shrink-0 text-muted" />
+              <SectionLabel as="span">
+                {{ t('panels.stepDetail.effort.heading') }}
+              </SectionLabel>
+              <span
+                class="shrink-0 rounded-sm px-1.5 py-0.5 text-2xs font-medium tabular-nums"
+                :class="chipClass"
+              >
+                {{ t('panels.stepDetail.effort.outOfTen', { value: effortReport.difficulty }) }}
+              </span>
+              <span v-if="hint" class="min-w-0 flex-1 truncate text-xs text-muted">
+                {{ hint }}
+              </span>
+              <UIcon
+                :name="effortOpen ? 'i-lucide-chevron-down' : 'i-lucide-chevron-up'"
+                class="ms-auto h-3.5 w-3.5 shrink-0 text-dimmed"
+              />
+            </UButton>
+            <template #content>
+              <div class="max-h-56 overflow-y-auto px-5 pb-3">
+                <StepEffortReport :report="effortReport" variant="flat" />
+              </div>
+            </template>
+          </UCollapsible>
         </section>
 
         <!-- Shared trailing section: the pre-PR validation report (the service's check commands
@@ -359,51 +365,54 @@ const panelClass = computed(() => [
           class="shrink-0 border-t border-default bg-default/60"
           data-testid="result-window-validation"
         >
-          <button
-            type="button"
-            class="flex w-full items-center gap-2 px-5 py-2 text-start hover:bg-elevated/40"
-            :aria-expanded="validationOpen"
-            data-testid="result-window-validation-toggle"
-            @click="validationOpen = !validationOpen"
-          >
-            <UIcon
-              :name="validationReport.passed ? 'i-lucide-shield-check' : 'i-lucide-shield-alert'"
-              class="h-3.5 w-3.5 shrink-0"
-              :class="validationReport.passed ? 'text-app-success-400' : 'text-app-error-400'"
-            />
-            <span class="text-[11px] font-semibold uppercase tracking-wide text-muted">
-              {{ t('panels.stepDetail.validation.heading') }}
-            </span>
-            <span
-              class="shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium tabular-nums"
-              :class="
-                validationReport.passed
-                  ? 'bg-app-success-500/15 text-app-success-300'
-                  : 'bg-app-error-500/15 text-app-error-300'
-              "
+          <UCollapsible v-model:open="validationOpen">
+            <UButton
+              color="neutral"
+              variant="ghost"
+              class="flex w-full items-center gap-2 px-5 py-2 text-start hover:bg-elevated/40"
+              data-testid="result-window-validation-toggle"
             >
-              {{
-                validationReport.passed
-                  ? t('panels.stepDetail.validation.passed')
-                  : t('panels.stepDetail.validation.failed')
-              }}
-            </span>
-            <span class="min-w-0 flex-1 truncate text-[12px] text-muted">
-              {{
-                t('panels.stepDetail.validation.attempts', {
-                  attempts: validationReport.attempts,
-                  maxAttempts: validationReport.maxAttempts,
-                })
-              }}
-            </span>
-            <UIcon
-              :name="validationOpen ? 'i-lucide-chevron-down' : 'i-lucide-chevron-up'"
-              class="ms-auto h-3.5 w-3.5 shrink-0 text-dimmed"
-            />
-          </button>
-          <div v-if="validationOpen" class="max-h-72 overflow-y-auto px-5 pb-3">
-            <StepValidationReport :report="validationReport" />
-          </div>
+              <UIcon
+                :name="validationReport.passed ? 'i-lucide-shield-check' : 'i-lucide-shield-alert'"
+                class="h-3.5 w-3.5 shrink-0"
+                :class="validationReport.passed ? 'text-app-success-400' : 'text-app-error-400'"
+              />
+              <SectionLabel as="span">
+                {{ t('panels.stepDetail.validation.heading') }}
+              </SectionLabel>
+              <span
+                class="shrink-0 rounded-sm px-1.5 py-0.5 text-2xs font-medium tabular-nums"
+                :class="
+                  validationReport.passed
+                    ? 'bg-app-success-500/15 text-app-success-300'
+                    : 'bg-app-error-500/15 text-app-error-300'
+                "
+              >
+                {{
+                  validationReport.passed
+                    ? t('panels.stepDetail.validation.passed')
+                    : t('panels.stepDetail.validation.failed')
+                }}
+              </span>
+              <span class="min-w-0 flex-1 truncate text-xs text-muted">
+                {{
+                  t('panels.stepDetail.validation.attempts', {
+                    attempts: validationReport.attempts,
+                    maxAttempts: validationReport.maxAttempts,
+                  })
+                }}
+              </span>
+              <UIcon
+                :name="validationOpen ? 'i-lucide-chevron-down' : 'i-lucide-chevron-up'"
+                class="ms-auto h-3.5 w-3.5 shrink-0 text-dimmed"
+              />
+            </UButton>
+            <template #content>
+              <div class="max-h-72 overflow-y-auto px-5 pb-3">
+                <StepValidationReport :report="validationReport" />
+              </div>
+            </template>
+          </UCollapsible>
         </section>
 
         <!-- Shared trailing section: the bugfix reproduction proof (the declared check run against
@@ -415,42 +424,45 @@ const panelClass = computed(() => [
           class="shrink-0 border-t border-default bg-default/60"
           data-testid="result-window-reproduction"
         >
-          <button
-            type="button"
-            class="flex w-full items-center gap-2 px-5 py-2 text-start hover:bg-elevated/40"
-            :aria-expanded="reproductionOpen"
-            data-testid="result-window-reproduction-toggle"
-            @click="reproductionOpen = !reproductionOpen"
-          >
-            <UIcon
-              :name="reproductionKeys!.icon"
-              class="h-3.5 w-3.5 shrink-0"
-              :class="reproductionKeys!.proven ? 'text-app-success-400' : 'text-app-warning-400'"
-            />
-            <span class="text-[11px] font-semibold uppercase tracking-wide text-muted">
-              {{ t('panels.stepDetail.reproduction.heading') }}
-            </span>
-            <span
-              class="shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium"
-              :class="
-                reproductionKeys!.proven
-                  ? 'bg-app-success-500/15 text-app-success-300'
-                  : 'bg-app-warning-500/15 text-app-warning-300'
-              "
+          <UCollapsible v-model:open="reproductionOpen">
+            <UButton
+              color="neutral"
+              variant="ghost"
+              class="flex w-full items-center gap-2 px-5 py-2 text-start hover:bg-elevated/40"
+              data-testid="result-window-reproduction-toggle"
             >
-              {{ t(reproductionKeys!.chip) }}
-            </span>
-            <span class="min-w-0 flex-1 truncate text-[12px] text-muted">
-              {{ t(reproductionKeys!.verdict) }}
-            </span>
-            <UIcon
-              :name="reproductionOpen ? 'i-lucide-chevron-down' : 'i-lucide-chevron-up'"
-              class="ms-auto h-3.5 w-3.5 shrink-0 text-dimmed"
-            />
-          </button>
-          <div v-if="reproductionOpen" class="max-h-72 overflow-y-auto px-5 pb-3">
-            <StepReproductionReport :report="reproductionReport" />
-          </div>
+              <UIcon
+                :name="reproductionKeys!.icon"
+                class="h-3.5 w-3.5 shrink-0"
+                :class="reproductionKeys!.proven ? 'text-app-success-400' : 'text-app-warning-400'"
+              />
+              <SectionLabel as="span">
+                {{ t('panels.stepDetail.reproduction.heading') }}
+              </SectionLabel>
+              <span
+                class="shrink-0 rounded-sm px-1.5 py-0.5 text-2xs font-medium"
+                :class="
+                  reproductionKeys!.proven
+                    ? 'bg-app-success-500/15 text-app-success-300'
+                    : 'bg-app-warning-500/15 text-app-warning-300'
+                "
+              >
+                {{ t(reproductionKeys!.chip) }}
+              </span>
+              <span class="min-w-0 flex-1 truncate text-xs text-muted">
+                {{ t(reproductionKeys!.verdict) }}
+              </span>
+              <UIcon
+                :name="reproductionOpen ? 'i-lucide-chevron-down' : 'i-lucide-chevron-up'"
+                class="ms-auto h-3.5 w-3.5 shrink-0 text-dimmed"
+              />
+            </UButton>
+            <template #content>
+              <div class="max-h-72 overflow-y-auto px-5 pb-3">
+                <StepReproductionReport :report="reproductionReport" />
+              </div>
+            </template>
+          </UCollapsible>
         </section>
 
         <!-- Shared trailing section: what this step's agent declared it stored through a
@@ -463,28 +475,31 @@ const panelClass = computed(() => [
           class="shrink-0 border-t border-default bg-default/60"
           data-testid="result-window-binary-outputs"
         >
-          <button
-            type="button"
-            class="flex w-full items-center gap-2 px-5 py-2 text-start hover:bg-elevated/40"
-            :aria-expanded="binaryOutputsOpen"
-            data-testid="result-window-binary-outputs-toggle"
-            @click="binaryOutputsOpen = !binaryOutputsOpen"
-          >
-            <UIcon name="i-lucide-image" class="h-3.5 w-3.5 shrink-0 text-muted" />
-            <span class="text-[11px] font-semibold uppercase tracking-wide text-muted">
-              {{ t('binaryOutput.heading') }}
-            </span>
-            <span class="min-w-0 flex-1 truncate text-[12px] text-muted">
-              {{ binaryOutputSummary }}
-            </span>
-            <UIcon
-              :name="binaryOutputsOpen ? 'i-lucide-chevron-down' : 'i-lucide-chevron-up'"
-              class="ms-auto h-3.5 w-3.5 shrink-0 text-dimmed"
-            />
-          </button>
-          <div v-if="binaryOutputsOpen && activeStep" class="max-h-72 overflow-y-auto px-5 pb-3">
-            <BinaryOutputReport :step="activeStep" />
-          </div>
+          <UCollapsible v-model:open="binaryOutputsOpen">
+            <UButton
+              color="neutral"
+              variant="ghost"
+              class="flex w-full items-center gap-2 px-5 py-2 text-start hover:bg-elevated/40"
+              data-testid="result-window-binary-outputs-toggle"
+            >
+              <UIcon name="i-lucide-image" class="h-3.5 w-3.5 shrink-0 text-muted" />
+              <SectionLabel as="span">
+                {{ t('binaryOutput.heading') }}
+              </SectionLabel>
+              <span class="min-w-0 flex-1 truncate text-xs text-muted">
+                {{ binaryOutputSummary }}
+              </span>
+              <UIcon
+                :name="binaryOutputsOpen ? 'i-lucide-chevron-down' : 'i-lucide-chevron-up'"
+                class="ms-auto h-3.5 w-3.5 shrink-0 text-dimmed"
+              />
+            </UButton>
+            <template #content>
+              <div v-if="activeStep" class="max-h-72 overflow-y-auto px-5 pb-3">
+                <BinaryOutputReport :step="activeStep" />
+              </div>
+            </template>
+          </UCollapsible>
         </section>
       </div>
     </div>

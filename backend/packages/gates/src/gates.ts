@@ -29,6 +29,7 @@ import {
   listFailingChecksAcrossRepos,
   ON_CALL_AGENT_KIND,
   POST_RELEASE_HEALTH_AGENT_KIND,
+  redactSecrets,
   renderReleaseEvidence,
   runBestEffort,
 } from '@cat-factory/kernel'
@@ -207,11 +208,18 @@ export const conflictsGate = (ctx: GateContext): GateDefinition => ({
   onExhausted: async ({ step }) => {
     const target = step.gate?.conflictTarget
     const which = target?.repo ? `The pull request for ${target.repo}` : 'The pull request'
+    // The probe reports mergeability as one bit, so the resolver's own account of its last round
+    // (which files it left conflicting) is the only detail there is to hand on. It is agent output
+    // reaching the run's public `error.message`, so it is scrubbed first.
+    const lastAttempt = redactSecrets(step.gate?.attemptLog?.at(-1)?.summary ?? null)
     return {
-      error:
+      error: joinSentences(
         `${which} still conflicts with its base after ` +
-        `${step.gate?.attempts ?? 0} conflict-resolver attempt(s). Resolve the conflict ` +
-        `manually, then retry the run.`,
+          `${step.gate?.attempts ?? 0} conflict-resolver attempt(s): the conflicts could not be ` +
+          'resolved automatically.',
+        lastAttempt ? `Last attempt: ${lastAttempt}` : null,
+        'Resolve the conflict manually, then retry the run.',
+      ),
     }
   },
 })

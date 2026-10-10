@@ -12,6 +12,8 @@
 // `ui.openFromModelProviders(...)`, so opening one closes this hub and gives that panel a
 // "Back to Model providers" control (IntegrationBackTitle). Layout mirrors the Integrations
 // hub row-for-row so the two read as siblings.
+import SectionLabel from '~/components/common/SectionLabel.vue'
+
 const { t } = useI18n()
 const ui = useUiStore()
 const apiKeys = useApiKeysStore()
@@ -200,14 +202,15 @@ const filteredGroups = computed<ProviderGroup[]>(() => {
         </p>
 
         <section v-for="group in filteredGroups" :key="group.title">
-          <h3 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-muted">
+          <SectionLabel as="h3" class="mb-2 px-1">
             {{ group.title }}
-          </h3>
+          </SectionLabel>
           <div class="space-y-1.5">
-            <button
+            <UButton
+              color="neutral"
+              variant="ghost"
               v-for="item in group.items"
               :key="item.key"
-              type="button"
               class="flex w-full items-center gap-3 rounded-lg border border-default bg-default/50 px-3 py-2.5 text-start transition hover:border-muted hover:bg-default"
               :data-testid="`model-provider-${item.key}`"
               @click="item.onClick()"
@@ -219,7 +222,7 @@ const filteredGroups = computed<ProviderGroup[]>(() => {
                   <UBadge v-if="item.connected" color="success" variant="subtle" size="sm">
                     {{ item.status || t('layout.modelProvidersHub.status.connected') }}
                   </UBadge>
-                  <span v-else class="text-[11px] text-dimmed">{{
+                  <span v-else class="text-2xs text-dimmed">{{
                     t('layout.modelProvidersHub.status.notConnected')
                   }}</span>
                   <UBadge
@@ -237,9 +240,9 @@ const filteredGroups = computed<ProviderGroup[]>(() => {
                 name="i-lucide-chevron-right"
                 class="h-4 w-4 shrink-0 text-dimmed rtl:-scale-x-100"
               />
-            </button>
+            </UButton>
           </div>
-          <p v-if="group.note" class="mt-1.5 px-1 text-[11px] text-dimmed">{{ group.note }}</p>
+          <p v-if="group.note" class="mt-1.5 px-1 text-2xs text-dimmed">{{ group.note }}</p>
         </section>
       </div>
     </template>

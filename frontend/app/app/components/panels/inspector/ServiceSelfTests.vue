@@ -188,17 +188,17 @@ async function stop(mode: EnvironmentTestMode) {
   <div class="mt-3 space-y-3 border-t border-default pt-3" data-testid="env-test-section">
     <!-- The precondition both self-tests share, stated once at the top: with no provision type
          there is no environment to stand up and therefore nothing for an agent to drive either. -->
-    <p v-if="!canTest" class="text-[11px] text-dimmed">
+    <p v-if="!canTest" class="text-2xs text-dimmed">
       {{ t('inspector.testConfig.envTest.infraless') }}
     </p>
 
     <!-- 1. The provisioning self-test: the whole lifecycle against a throwaway branch. -->
     <div class="flex items-center justify-between gap-2">
       <div class="min-w-0">
-        <p class="text-[11px] font-medium text-toned">
+        <p class="text-2xs font-medium text-toned">
           {{ t('inspector.testConfig.envTest.title') }}
         </p>
-        <p class="text-[11px] text-muted">{{ t('inspector.testConfig.envTest.hint') }}</p>
+        <p class="text-2xs text-muted">{{ t('inspector.testConfig.envTest.hint') }}</p>
       </div>
       <UButton
         v-if="!isRunning('provision')"
@@ -228,7 +228,7 @@ async function stop(mode: EnvironmentTestMode) {
 
     <p
       v-if="provisionRun"
-      class="text-[11px]"
+      class="text-2xs"
       :class="{
         'text-app-info-300/80': provisionRun.status === 'running',
         'text-app-success-300/80': provisionRun.status === 'succeeded',
@@ -253,11 +253,7 @@ async function stop(mode: EnvironmentTestMode) {
       </template>
     </p>
 
-    <div
-      v-if="errors.provision"
-      class="text-[11px] text-app-error-400"
-      data-testid="env-test-error"
-    >
+    <div v-if="errors.provision" class="text-2xs text-app-error-400" data-testid="env-test-error">
       <p>{{ errors.provision.text }}</p>
       <!-- Only the not-provisionable handler case is one-click fixable: jump to Infrastructure →
            Test environments, where the workspace's per-type environment handler is registered. -->
@@ -279,10 +275,10 @@ async function stop(mode: EnvironmentTestMode) {
          and could not do with the environment it was handed. -->
     <div class="flex items-center justify-between gap-2 border-t border-default pt-3">
       <div class="min-w-0">
-        <p class="text-[11px] font-medium text-toned">
+        <p class="text-2xs font-medium text-toned">
           {{ t('inspector.testConfig.envProbe.title') }}
         </p>
-        <p class="text-[11px] text-muted">
+        <p class="text-2xs text-muted">
           {{ t('inspector.testConfig.envProbe.hint') }}
           {{
             probeSurface === 'ui'
@@ -319,7 +315,7 @@ async function stop(mode: EnvironmentTestMode) {
 
     <p
       v-if="probeRun"
-      class="text-[11px]"
+      class="text-2xs"
       :class="{
         'text-app-info-300/80': probeRun.status === 'running',
         'text-app-success-300/80': probeRun.status === 'succeeded',
@@ -355,7 +351,7 @@ async function stop(mode: EnvironmentTestMode) {
 
     <div
       v-if="errors['agent-probe']"
-      class="text-[11px] text-app-error-400"
+      class="text-2xs text-app-error-400"
       data-testid="env-probe-error"
     >
       <p>{{ errors['agent-probe']!.text }}</p>

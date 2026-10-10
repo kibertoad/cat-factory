@@ -80,7 +80,7 @@ const filename = computed(() => {
       v-if="isImage && url"
       :src="url"
       :alt="label ?? assetId"
-      class="w-full rounded object-contain"
+      class="w-full rounded-sm object-contain"
       :class="previewClass"
       data-testid="stored-asset-preview"
     />
@@ -89,7 +89,7 @@ const filename = computed(() => {
          frame. -->
     <p
       v-else-if="!isImage && url"
-      class="flex items-center gap-1.5 rounded bg-elevated/60 px-2 py-1.5 text-[11px] text-toned"
+      class="flex items-center gap-1.5 rounded-sm bg-elevated/60 px-2 py-1.5 text-2xs text-toned"
       data-testid="stored-asset-file"
     >
       <UIcon name="i-lucide-file" class="h-3.5 w-3.5 shrink-0" />
@@ -97,7 +97,7 @@ const filename = computed(() => {
     </p>
     <p
       v-else-if="status === 'error'"
-      class="flex items-center gap-1.5 text-[11px] text-app-warning-300"
+      class="flex items-center gap-1.5 text-2xs text-app-warning-300"
       data-testid="stored-asset-error"
     >
       <span>{{ t('binaryOutput.asset.loadFailed') }}</span>
@@ -105,29 +105,31 @@ const filename = computed(() => {
         {{ t('binaryOutput.asset.retry') }}
       </UButton>
     </p>
-    <p v-else class="text-[11px] text-dimmed" data-testid="stored-asset-loading">
+    <p v-else class="text-2xs text-dimmed" data-testid="stored-asset-loading">
       {{ t('binaryOutput.asset.loading') }}
     </p>
 
     <!-- The two things a person does with a delivered asset. Both hang off the object URL, so
          they appear only once the bytes are in hand. -->
-    <div v-if="url" class="flex items-center gap-3 text-[11px]">
-      <a
-        :href="url"
+    <div v-if="url" class="flex items-center gap-3 text-2xs">
+      <ULink
+        raw
+        :to="url"
         target="_blank"
         rel="noopener"
         class="text-app-info-300 hover:underline"
         data-testid="stored-asset-open"
         @click.stop
-        >{{ t('binaryOutput.asset.open') }}</a
+        >{{ t('binaryOutput.asset.open') }}</ULink
       >
-      <a
-        :href="url"
+      <ULink
+        raw
+        :to="url"
         :download="filename"
         class="text-app-info-300 hover:underline"
         data-testid="stored-asset-download"
         @click.stop
-        >{{ t('binaryOutput.asset.download') }}</a
+        >{{ t('binaryOutput.asset.download') }}</ULink
       >
     </div>
   </div>

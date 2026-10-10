@@ -24,7 +24,7 @@ import {
   type WebSearchAvailability,
 } from '@cat-factory/kernel'
 import { ConflictError, VCS_DOC_URLS, noopLogger } from '@cat-factory/kernel'
-import { resolveAprioriWorkingBranch } from '@cat-factory/contracts'
+import { resolveAprioriWorkingBranch, taskTypeAttachesPullRequest } from '@cat-factory/contracts'
 import {
   type AgentKindRegistry,
   type AgentRouting,
@@ -632,6 +632,9 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     if (context.block.pullRequest?.branch === workBranch) {
       return true
     }
+    // An attached pull request is worked on its own branch alone, so creating the per-task work
+    // branch would leave a stray ref in a repository whose pull request belongs to someone else.
+    if (taskTypeAttachesPullRequest(context.block.taskType)) return false
     if (aprioriWork) {
       // Apriori working branch: probe only (create: false). It must pre-exist — a missing
       // branch is a loud dispatch failure, never a silent create off base (which would look
