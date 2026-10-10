@@ -9,6 +9,7 @@ import { linkRepo } from './linkRepo.js'
 // the account lookup falls back to null — the paths a fresh CLI link exercises.
 function fakeDb() {
   const writes: { values: Record<string, unknown> }[] = []
+  const updates: Record<string, unknown>[] = []
   let deletes = 0
   const insert = (_table: unknown) => ({
     values(values: Record<string, unknown>) {
@@ -37,7 +38,12 @@ function fakeDb() {
       }
     },
     update(_table: unknown) {
-      return { set: (_v: unknown) => ({ where: (_p: unknown) => Promise.resolve() }) }
+      return {
+        set: (values: Record<string, unknown>) => {
+          updates.push(values)
+          return { where: (_p: unknown) => Promise.resolve() }
+        },
+      }
     },
     delete(_table: unknown) {
       return {
@@ -48,12 +54,12 @@ function fakeDb() {
       }
     },
   }
-  return { db, writes, deletes: () => deletes }
+  return { db, writes, updates, deletes: () => deletes }
 }
 
 describe('linkRepo', () => {
   it('fetches repo metadata with the PAT and seeds installation + repo + service rows', async () => {
-    const { db, writes, deletes } = fakeDb()
+    const { db, writes, updates, deletes } = fakeDb()
     const upserted: { workspaceId: string; repos: GitHubRepo[] }[] = []
     const repoProjection = {
       upsertMany: async (workspaceId: string, repos: GitHubRepo[]) => {
@@ -132,6 +138,9 @@ describe('linkRepo', () => {
     expect(installRow.workspace_id).toBe('ws_1')
     expect(installRow.account_login).toBe('acme')
     expect(installRow.target_type).toBe('Organization')
+
+    // A re-link takes over `linked_via`, which `upsertMany` leaves alone on an existing row.
+    expect(updates).toContainEqual({ linked_via: 'app', etag: null })
   })
 
   it('rejects a malformed repo and a missing PAT', async () => {

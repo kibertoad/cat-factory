@@ -220,7 +220,8 @@
         "recurring": "Cykliczne",
         "review": "Przegląd",
         "ralph": "Pętla Ralph",
-        "bugFishing": "Polowanie na błędy"
+        "bugFishing": "Polowanie na błędy",
+        "resolveConflicts": "Rozwiąż konflikty"
       },
       "recurringWithFrame": "Zadanie cykliczne uruchamia pipeline w określonym rytmie. Kontynuuj, aby ustawić harmonogram i prompt.",
       "recurringNoFrame": "Zadanie cykliczne musi należeć do usługi. Dodaj je z ramki usługi (lub modułu w jej obrębie).",
@@ -607,7 +608,8 @@
     "pastedLink": {
       "offer": "Ten opis zawiera odnośnik do strony {source}. Dołączyć ją jako kontekst?",
       "attach": "Dołącz"
-    }
+    },
+    "removePending": "Usuń {name}"
   },
   "errors": {
     "generic": {
@@ -639,7 +641,8 @@
         "assistant_generation_failed": "Dostawca modelu asystenta nie odpowiedział. Jest poprawnie skonfigurowany i nie ma tu nic do ustawienia: spróbuj ponowić żądanie za chwilę.",
         "assistant_reply_unreadable": "Model asystenta odpowiedział czymś, czego ta platforma nie może wykonać jako decyzji. Przeformułowanie rzadko pomaga: wybierz inny model dla asystenta w ustawieniach modeli.",
         "delegated_executor_failed": "Zewnętrzny executor nie zdołał uruchomić tego kroku. Problem leży w systemie wykonującym pracę, a nie w tej instalacji: sprawdź jego własne logi i spróbuj ponownie.",
-        "delegated_work_branch_unprepared": "Platforma nie mogła przygotować gałęzi roboczej, na którą wysyłany jest executor tego kroku, więc nic nie zostało uruchomione. Albo połączenie z repozytorium nie ma prawa zapisu, albo zadanie wskazuje gałąź, która jeszcze nie istnieje: szczegóły mówią, co z tego."
+        "delegated_work_branch_unprepared": "Platforma nie mogła przygotować gałęzi roboczej, na którą wysyłany jest executor tego kroku, więc nic nie zostało uruchomione. Albo połączenie z repozytorium nie ma prawa zapisu, albo zadanie wskazuje gałąź, która jeszcze nie istnieje: szczegóły mówią, co z tego.",
+        "attached_pr_provider_unreachable": "Dostawca repozytorium nie odpowiedział, więc nie udało się sprawdzić pull requesta i nie utworzono zadania. Nie trzeba tu niczego konfigurować: spróbuj ponownie za chwilę."
       }
     },
     "reason": {
@@ -5303,7 +5306,8 @@
         "review": "Przegląd",
         "research": "Badania",
         "planning": "Planowanie",
-        "media": "Multimedia"
+        "media": "Multimedia",
+        "maintenance": "Utrzymanie PR"
       },
       "strategyOption": {
         "specialist-panel": "Panel specjalistów",
@@ -5475,7 +5479,8 @@
         "releaseInteractive": "Przestań być domyślnym w aplikacji",
         "claimUnattended": "Ustaw jako domyślny bez nadzoru",
         "releaseUnattended": "Przestań być domyślnym bez nadzoru"
-      }
+      },
+      "removeLabel": "Usuń etykietę {label}"
     },
     "progress": {
       "status": {
@@ -6399,7 +6404,8 @@
       "heading": "Prześlij projekt referencyjny",
       "viewPlaceholder": "Nazwa widoku (np. login)",
       "tipReady": "Wskazówka: przeciągnij obraz bezpośrednio na parę powyżej, aby ustawić jej referencję.",
-      "tipNeedView": "Najpierw wpisz nazwę widoku, a potem wybierz plik. Albo przeciągnij obraz bezpośrednio na parę powyżej."
+      "tipNeedView": "Najpierw wpisz nazwę widoku, a potem wybierz plik. Albo przeciągnij obraz bezpośrednio na parę powyżej.",
+      "choose": "Wybierz plik"
     },
     "requestFix": {
       "heading": "Poproś o poprawkę",
@@ -8529,6 +8535,7 @@
     "title": "Wygenerowani kandydaci",
     "titleWithBlock": "Wygenerowani kandydaci: {title}",
     "subtitle": "Porównaj, co wytworzyła każda integracja, i zachowaj to, co chcesz",
+    "pickOne": "Wybierz jeden. Wybranie kandydata usuwa poprzedni wybór.",
     "automatic": "Wygenerowano tylko jednego kandydata, więc zachowano go automatycznie. Nikt go nie przejrzał.",
     "unlabelledSubject": "Nie zadeklarowano tematu",
     "noPreview": "Brak podglądu",

@@ -16,8 +16,9 @@ const displayLabel = computed(() => props.label ?? t('board.decisionBadge.decisi
 </script>
 
 <template>
-  <button
-    type="button"
+  <UButton
+    color="neutral"
+    variant="ghost"
     class="board-pulse flex items-center gap-1 rounded-full bg-app-warning-500 px-2 py-0.5 text-xs font-semibold text-app-warning-50 dark:text-app-warning-950 shadow-lg transition hover:bg-app-warning-400"
     @click.stop="$emit('open')"
   >
@@ -26,5 +27,5 @@ const displayLabel = computed(() => props.label ?? t('board.decisionBadge.decisi
     <span v-if="count && count > 1" class="rounded-full bg-app-warning-950/30 px-1">
       {{ count }}
     </span>
-  </button>
+  </UButton>
 </template>

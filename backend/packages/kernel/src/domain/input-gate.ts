@@ -15,7 +15,10 @@
 //     never guesses at intent. That is exactly the judgement the reviewer is for, and a cheap
 //     imitation of it would park real work.
 
-import { unfilledRequiredDescriptorFields } from '@cat-factory/contracts'
+import {
+  taskTypeAttachesPullRequest,
+  unfilledRequiredDescriptorFields,
+} from '@cat-factory/contracts'
 import type {
   BlockLevel,
   DescriptorField,
@@ -247,7 +250,9 @@ const CODEBASE_INPUT_TASK_TYPES = new Set(['bug-fishing'])
  *    (an initiative's planning pipeline is the everyday case) reads the entity rather than the
  *    caption. Judging it would park exactly the runs with no task to go and fix.
  *  - **The task type is platform-authored** ({@link PLATFORM_AUTHORED_TASK_TYPES}), or its input
- *    is the CODEBASE rather than a brief ({@link CODEBASE_INPUT_TASK_TYPES}).
+ *    is the CODEBASE rather than a brief ({@link CODEBASE_INPUT_TASK_TYPES}), or it is a pull
+ *    request ATTACHED at creation (`taskTypeAttachesPullRequest`), which creation has already
+ *    confirmed is open and pushable.
  *
  * Deliberately NOT here: a task the platform CREATED but whose description is still a real
  * statement of work (an initiative-spawned item, a task imported from a tracker ticket). Those
@@ -261,7 +266,8 @@ function describesAuthoredTaskInput(input: InputGateInput): boolean {
   if (!input.taskType) return true
   return !(
     PLATFORM_AUTHORED_TASK_TYPES.has(input.taskType) ||
-    CODEBASE_INPUT_TASK_TYPES.has(input.taskType)
+    CODEBASE_INPUT_TASK_TYPES.has(input.taskType) ||
+    taskTypeAttachesPullRequest(input.taskType)
   )
 }
 

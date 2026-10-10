@@ -30,6 +30,7 @@ import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 import StepFragmentAdherence from '~/components/panels/StepFragmentAdherence.vue'
 import MarkdownProse from '~/components/common/MarkdownProse.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const execution = useExecutionStore()
 const board = useBoardStore()
@@ -291,14 +292,15 @@ const { requestClose } = useUnsavedGuard({
     @close="requestClose"
   >
     <template v-if="state?.prUrl" #header-extras>
-      <a
-        :href="state.prUrl"
+      <ULink
+        raw
+        :to="state.prUrl"
         target="_blank"
         rel="noopener"
-        class="rounded-md px-2 py-1 text-[11px] text-primary hover:bg-elevated"
+        class="rounded-md px-2 py-1 text-2xs text-primary hover:bg-elevated"
       >
         {{ t('prReview.openPr') }}
-      </a>
+      </ULink>
     </template>
 
     <div class="flex min-h-0 flex-1">
@@ -320,7 +322,7 @@ const { requestClose } = useUnsavedGuard({
           >
             <UIcon name="i-lucide-loader-circle" class="h-8 w-8 animate-spin opacity-60" />
             <p class="text-sm text-default">{{ t('prReview.reviewing.planning.title') }}</p>
-            <p class="max-w-sm text-[11px] text-dimmed">
+            <p class="max-w-sm text-2xs text-dimmed">
               {{ t('prReview.reviewing.planning.hint') }}
             </p>
           </div>
@@ -334,11 +336,11 @@ const { requestClose } = useUnsavedGuard({
               />
               <span>{{ t('prReview.reviewing.reviewingChunks.title') }}</span>
             </div>
-            <p class="mb-3 text-[11px] text-dimmed">
+            <p class="mb-3 text-2xs text-dimmed">
               {{ t('prReview.reviewing.reviewingChunks.hint') }}
             </p>
 
-            <div class="flex items-center justify-between text-[11px] text-muted">
+            <div class="flex items-center justify-between text-2xs text-muted">
               <span data-testid="pr-review-chunk-count">
                 {{
                   t('prReview.reviewing.chunks', {
@@ -372,7 +374,7 @@ const { requestClose } = useUnsavedGuard({
               "
             >
               <p
-                class="mb-1 text-[10px] font-semibold uppercase tracking-wide"
+                class="mb-1 text-3xs font-semibold uppercase tracking-wide"
                 :class="activeChunks.length ? 'text-primary' : 'text-dimmed'"
               >
                 {{ t('prReview.reviewing.activeHeading') }}
@@ -381,7 +383,7 @@ const { requestClose } = useUnsavedGuard({
                 <li
                   v-for="(label, i) in activeChunks"
                   :key="i"
-                  class="flex items-start gap-1.5 text-[12px] text-app-100"
+                  class="flex items-start gap-1.5 text-xs text-app-100"
                 >
                   <UIcon
                     name="i-lucide-loader-circle"
@@ -390,22 +392,22 @@ const { requestClose } = useUnsavedGuard({
                   <span class="min-w-0">{{ label }}</span>
                 </li>
               </ul>
-              <p v-else data-testid="pr-review-active-idle" class="text-[12px] text-muted">
+              <p v-else data-testid="pr-review-active-idle" class="text-xs text-muted">
                 {{ t('prReview.reviewing.activeIdle') }}
               </p>
             </div>
 
             <!-- Every chunk with its explicit status (Reviewed / Reviewing… / Queued). -->
             <template v-if="subtasks!.items?.length">
-              <p class="mb-1.5 mt-3 text-[10px] font-semibold uppercase tracking-wide text-muted">
+              <SectionLabel as="p" class="mb-1.5 mt-3">
                 {{ t('prReview.reviewing.chunksHeading') }}
-              </p>
+              </SectionLabel>
               <ul class="space-y-1.5" data-testid="pr-review-chunks">
                 <li
                   v-for="(item, i) in subtasks!.items"
                   :key="i"
                   data-testid="pr-review-chunk"
-                  class="flex items-center gap-1.5 text-[12px]"
+                  class="flex items-center gap-1.5 text-xs"
                   :class="
                     item.status === 'completed'
                       ? 'text-dimmed'
@@ -427,7 +429,7 @@ const { requestClose } = useUnsavedGuard({
                   </span>
                   <span
                     data-testid="pr-review-chunk-status"
-                    class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium uppercase"
+                    class="shrink-0 rounded-sm px-1.5 py-0.5 text-3xs font-medium uppercase"
                     :class="CHUNK_STATUS_CLASS[item.status]"
                   >
                     {{ chunkStatusLabel(item.status) }}
@@ -446,12 +448,12 @@ const { requestClose } = useUnsavedGuard({
             <p
               v-if="prReview.error"
               data-testid="pr-review-resume-error"
-              class="mb-2 rounded-md bg-app-error-500/10 px-3 py-2 text-[12px] text-app-error-300"
+              class="mb-2 rounded-md bg-app-error-500/10 px-3 py-2 text-xs text-app-error-300"
             >
               {{ prReview.error }}
             </p>
             <div class="flex items-start justify-between gap-3">
-              <p class="min-w-0 text-[11px] text-dimmed">{{ t('prReview.resume.hint') }}</p>
+              <p class="min-w-0 text-2xs text-dimmed">{{ t('prReview.resume.hint') }}</p>
               <UButton
                 data-testid="pr-review-resume"
                 size="xs"
@@ -479,7 +481,7 @@ const { requestClose } = useUnsavedGuard({
           <p class="text-sm">
             {{ status === 'fixing' ? t('prReview.fixing.title') : t('prReview.posting.title') }}
           </p>
-          <p class="max-w-sm text-[11px] text-dimmed">
+          <p class="max-w-sm text-2xs text-dimmed">
             {{ status === 'fixing' ? t('prReview.fixing.hint') : t('prReview.posting.hint') }}
           </p>
         </div>
@@ -487,7 +489,7 @@ const { requestClose } = useUnsavedGuard({
         <template v-else>
           <p
             v-if="prReview.error"
-            class="mb-3 rounded-md bg-app-error-500/10 px-3 py-2 text-[12px] text-app-error-300"
+            class="mb-3 rounded-md bg-app-error-500/10 px-3 py-2 text-xs text-app-error-300"
           >
             {{ prReview.error }}
           </p>
@@ -498,7 +500,7 @@ const { requestClose } = useUnsavedGuard({
           <div
             v-if="postReport"
             data-testid="pr-review-post-report"
-            class="mb-3 rounded-lg border px-3 py-2 text-[12px]"
+            class="mb-3 rounded-lg border px-3 py-2 text-xs"
             :class="
               postReport.failures.length > 0 || postReport.bodyPosted === false
                 ? 'border-app-warning-500/40 bg-app-warning-500/10 text-app-warning-200'
@@ -547,7 +549,7 @@ const { requestClose } = useUnsavedGuard({
                shell's `width` prop) — this window is `full`-width. -->
           <div
             v-if="state?.summary"
-            class="mb-3 max-w-3xl rounded-md bg-elevated/50 px-3 py-2 text-[12px] text-toned"
+            class="mb-3 max-w-3xl rounded-md bg-elevated/50 px-3 py-2 text-xs text-toned"
           >
             <span class="mb-1 block text-dimmed">{{ t('prReview.summaryLabel') }}</span>
             <MarkdownProse :text="state.summary" />
@@ -564,7 +566,7 @@ const { requestClose } = useUnsavedGuard({
           <!-- A clean PR / resolved review with no findings. -->
           <div
             v-if="findings.length === 0"
-            class="rounded-xl border border-default bg-default/60 px-4 py-6 text-center text-[13px] text-toned"
+            class="rounded-xl border border-default bg-default/60 px-4 py-6 text-center text-sm text-toned"
           >
             {{ t('prReview.noFindings') }}
           </div>
@@ -574,31 +576,41 @@ const { requestClose } = useUnsavedGuard({
             <div
               v-if="challenging"
               data-testid="pr-review-challenging"
-              class="mb-3 flex items-center gap-2 rounded-md border border-primary/40 bg-primary/10 px-3 py-2 text-[12px] text-primary"
+              class="mb-3 flex items-center gap-2 rounded-md border border-primary/40 bg-primary/10 px-3 py-2 text-xs text-primary"
             >
               <UIcon name="i-lucide-loader-circle" class="h-4 w-4 shrink-0 animate-spin" />
               <span>{{ t('prReview.challenge.investigatingBanner') }}</span>
             </div>
 
             <!-- Selection toolbar -->
-            <div v-if="awaiting" class="mb-2 flex items-center gap-3 text-[11px] text-muted">
+            <div v-if="awaiting" class="mb-2 flex items-center gap-3 text-2xs text-muted">
               <span data-testid="pr-review-selected-count">
                 {{ t('prReview.selectedCount', { count: activeSelectedIds.length }) }}
               </span>
-              <button class="text-primary hover:underline" @click="selectAll">
+              <UButton
+                color="primary"
+                variant="link"
+                class="p-0 text-2xs text-primary hover:underline"
+                @click="selectAll"
+              >
                 {{ t('prReview.selectAll') }}
-              </button>
-              <button class="text-primary hover:underline" @click="clearAll">
+              </UButton>
+              <UButton
+                color="primary"
+                variant="link"
+                class="p-0 text-2xs text-primary hover:underline"
+                @click="clearAll"
+              >
                 {{ t('prReview.clear') }}
-              </button>
+              </UButton>
             </div>
 
             <!-- Findings grouped by slice -->
             <section v-for="g in groups" :key="g.id" class="mb-4">
-              <h3 class="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted">
+              <SectionLabel as="h3" class="mb-1.5">
                 {{ g.title }}
-              </h3>
-              <p v-if="g.rationale" class="mb-1.5 max-w-3xl text-[11px] text-dimmed">
+              </SectionLabel>
+              <p v-if="g.rationale" class="mb-1.5 max-w-3xl text-2xs text-dimmed">
                 {{ g.rationale }}
               </p>
               <article
@@ -614,30 +626,30 @@ const { requestClose } = useUnsavedGuard({
                 ]"
               >
                 <div class="flex items-start gap-2">
-                  <input
+                  <UCheckbox
                     v-if="awaiting || challenging"
-                    type="checkbox"
-                    class="mt-1 accent-primary"
+                    size="xs"
+                    class="mt-1"
                     data-testid="pr-review-finding-toggle"
-                    :checked="selected.has(f.id) && !isRetracted(f)"
+                    :model-value="selected.has(f.id) && !isRetracted(f)"
                     :disabled="!awaiting || isRetracted(f)"
-                    @change="toggle(f.id)"
+                    @update:model-value="toggle(f.id)"
                   />
                   <div class="min-w-0 flex-1">
                     <div class="flex flex-wrap items-center gap-1.5">
                       <span
-                        class="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ring-1"
+                        class="rounded-sm px-1.5 py-0.5 text-3xs font-semibold uppercase ring-1"
                         :class="SEVERITY_CLASS[f.severity]"
                       >
                         {{ t(`prReview.severity.${f.severity}`) }}
                       </span>
-                      <span class="rounded bg-elevated px-1.5 py-0.5 text-[10px] text-toned">
+                      <span class="rounded-sm bg-elevated px-1.5 py-0.5 text-3xs text-toned">
                         {{ t(`prReview.category.${f.category}`) }}
                       </span>
                       <span
                         v-if="postedIds.has(f.id)"
                         data-testid="pr-review-finding-posted"
-                        class="rounded bg-app-success-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-app-success-300 ring-1 ring-app-success-500/30"
+                        class="rounded-sm bg-app-success-500/15 px-1.5 py-0.5 text-3xs font-semibold uppercase text-app-success-300 ring-1 ring-app-success-500/30"
                       >
                         {{ t('prReview.postReport.postedBadge') }}
                       </span>
@@ -645,47 +657,47 @@ const { requestClose } = useUnsavedGuard({
                       <span
                         v-if="isRetracted(f)"
                         data-testid="pr-review-finding-retracted"
-                        class="rounded bg-app-error-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-app-error-300 ring-1 ring-app-error-500/30"
+                        class="rounded-sm bg-app-error-500/15 px-1.5 py-0.5 text-3xs font-semibold uppercase text-app-error-300 ring-1 ring-app-error-500/30"
                       >
                         {{ t('prReview.challenge.retractedBadge') }}
                       </span>
                       <span
                         v-else-if="isAmended(f)"
                         data-testid="pr-review-finding-amended"
-                        class="rounded bg-app-info-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-app-info-300 ring-1 ring-app-info-500/30"
+                        class="rounded-sm bg-app-info-500/15 px-1.5 py-0.5 text-3xs font-semibold uppercase text-app-info-300 ring-1 ring-app-info-500/30"
                       >
                         {{ t('prReview.challenge.strengthenedBadge') }}
                       </span>
                       <span
                         v-else-if="isUpheld(f)"
                         data-testid="pr-review-finding-upheld"
-                        class="rounded bg-app-success-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-app-success-300 ring-1 ring-app-success-500/30"
+                        class="rounded-sm bg-app-success-500/15 px-1.5 py-0.5 text-3xs font-semibold uppercase text-app-success-300 ring-1 ring-app-success-500/30"
                       >
                         {{ t('prReview.challenge.upheldBadge') }}
                       </span>
                       <span
                         v-else-if="isChallengeFailed(f)"
                         data-testid="pr-review-finding-challenge-failed"
-                        class="rounded bg-app-warning-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-app-warning-300 ring-1 ring-app-warning-500/30"
+                        class="rounded-sm bg-app-warning-500/15 px-1.5 py-0.5 text-3xs font-semibold uppercase text-app-warning-300 ring-1 ring-app-warning-500/30"
                       >
                         {{ t('prReview.challenge.failedBadge') }}
                       </span>
                       <span
                         v-else-if="isInvestigating(f)"
                         data-testid="pr-review-finding-investigating"
-                        class="flex items-center gap-1 rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-primary ring-1 ring-primary/30"
+                        class="flex items-center gap-1 rounded-sm bg-primary/15 px-1.5 py-0.5 text-3xs font-semibold uppercase text-primary ring-1 ring-primary/30"
                       >
                         <UIcon name="i-lucide-loader-circle" class="h-3 w-3 animate-spin" />
                         {{ t('prReview.challenge.investigatingBadge') }}
                       </span>
                       <h4
-                        class="min-w-0 flex-1 text-[13px] font-medium text-app-100"
+                        class="min-w-0 flex-1 text-sm font-medium text-app-100"
                         :class="isRetracted(f) ? 'line-through' : ''"
                       >
                         {{ f.title }}
                       </h4>
                     </div>
-                    <p class="mt-0.5 text-[11px] text-dimmed">
+                    <p class="mt-0.5 text-2xs text-dimmed">
                       {{ f.path
                       }}<template v-if="f.line != null">
                         · {{ t('prReview.line', { line: f.line }) }}</template
@@ -701,7 +713,7 @@ const { requestClose } = useUnsavedGuard({
                     <MarkdownProse
                       v-if="f.detail"
                       :text="f.detail"
-                      class="mt-1 max-w-3xl text-[12px] text-toned"
+                      class="mt-1 max-w-3xl text-xs text-toned"
                       :class="isRetracted(f) ? 'line-through' : ''"
                     />
                     <!-- The suggested fix is a VALUE a human copies (a patch line, a command, a
@@ -711,7 +723,7 @@ const { requestClose } = useUnsavedGuard({
                          failure summary is left alone. -->
                     <p
                       v-if="f.suggestedFix"
-                      class="mt-1 max-w-3xl whitespace-pre-wrap rounded-md bg-elevated/50 px-2 py-1 text-[11px] text-toned"
+                      class="mt-1 max-w-3xl whitespace-pre-wrap rounded-md bg-elevated/50 px-2 py-1 text-2xs text-toned"
                     >
                       <span class="text-dimmed">{{ t('prReview.suggestedFix') }}</span>
                       {{ f.suggestedFix }}
@@ -722,7 +734,7 @@ const { requestClose } = useUnsavedGuard({
                     <div
                       v-if="f.challenge?.justification"
                       data-testid="pr-review-finding-justification"
-                      class="mt-1.5 max-w-3xl rounded-md px-2 py-1 text-[11px]"
+                      class="mt-1.5 max-w-3xl rounded-md px-2 py-1 text-2xs"
                       :class="
                         isRetracted(f)
                           ? 'bg-app-error-500/10 text-app-error-200'
@@ -745,12 +757,14 @@ const { requestClose } = useUnsavedGuard({
                     <!-- Per-finding actions: Challenge + Dismiss (only while awaiting a selection). -->
                     <div
                       v-if="awaiting && !isInvestigating(f)"
-                      class="mt-1.5 flex items-center gap-3 text-[11px]"
+                      class="mt-1.5 flex items-center gap-3 text-2xs"
                     >
-                      <button
+                      <UButton
+                        color="primary"
+                        variant="link"
                         v-if="!isRetracted(f)"
                         data-testid="pr-review-finding-challenge"
-                        class="flex items-center gap-1 text-primary hover:underline disabled:opacity-50"
+                        class="p-0 text-2xs flex items-center gap-1 text-primary hover:underline disabled:opacity-50"
                         :disabled="!canResolve || !access.canExecuteRuns.value"
                         @click="openChallenge(f.id)"
                       >
@@ -760,16 +774,18 @@ const { requestClose } = useUnsavedGuard({
                             ? t('prReview.challenge.reChallenge')
                             : t('prReview.challenge.action')
                         }}
-                      </button>
-                      <button
+                      </UButton>
+                      <UButton
+                        color="neutral"
+                        variant="link"
                         data-testid="pr-review-finding-dismiss"
-                        class="flex items-center gap-1 text-muted hover:text-app-error-300 hover:underline disabled:opacity-50"
+                        class="p-0 text-xs flex items-center gap-1 text-muted hover:text-app-error-300 hover:underline disabled:opacity-50"
                         :disabled="!canResolve || !access.canExecuteRuns.value"
                         @click="onDismiss(f.id)"
                       >
                         <UIcon name="i-lucide-trash-2" class="h-3.5 w-3.5" />
                         {{ t('prReview.challenge.dismiss') }}
-                      </button>
+                      </UButton>
                     </div>
 
                     <!-- The inline challenge box: an OPTIONAL specific concern for the investigator. -->
@@ -778,31 +794,37 @@ const { requestClose } = useUnsavedGuard({
                       data-testid="pr-review-challenge-box"
                       class="mt-2 rounded-md border border-primary/40 bg-default/80 p-2"
                     >
-                      <textarea
+                      <UTextarea
                         v-model="challengeText"
                         data-testid="pr-review-challenge-input"
-                        rows="2"
+                        :rows="2"
                         :placeholder="t('prReview.challenge.placeholder')"
-                        class="w-full resize-y rounded border border-muted bg-app-950/60 px-2 py-1 text-[12px] text-default outline-none focus:border-primary"
+                        size="xs"
+                        class="w-full"
+                        :ui="{ base: 'resize-y' }"
                       />
-                      <p class="mt-1 text-[10px] text-dimmed">
+                      <p class="mt-1 text-3xs text-dimmed">
                         {{ t('prReview.challenge.hint') }}
                       </p>
                       <div class="mt-1.5 flex justify-end gap-2">
-                        <button
-                          class="rounded px-2 py-1 text-[11px] text-muted hover:text-default"
+                        <UButton
+                          color="neutral"
+                          variant="ghost"
+                          class="rounded-sm px-2 py-1 text-2xs text-muted hover:text-default"
                           @click="cancelChallenge"
                         >
                           {{ t('common.cancel') }}
-                        </button>
-                        <button
+                        </UButton>
+                        <UButton
+                          color="neutral"
+                          variant="ghost"
                           data-testid="pr-review-challenge-submit"
-                          class="rounded bg-primary/80 px-2 py-1 text-[11px] font-medium text-inverted hover:bg-primary/90 disabled:opacity-50"
+                          class="rounded-sm bg-primary/80 px-2 py-1 text-2xs font-medium text-inverted hover:bg-primary/90 disabled:opacity-50"
                           :disabled="!canResolve"
                           @click="submitChallenge(f.id)"
                         >
                           {{ t('prReview.challenge.submit') }}
-                        </button>
+                        </UButton>
                       </div>
                     </div>
                   </div>

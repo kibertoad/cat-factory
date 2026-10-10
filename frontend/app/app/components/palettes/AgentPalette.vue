@@ -6,6 +6,7 @@ import AgentTierSelect from '~/components/palettes/AgentTierSelect.vue'
 import PipelinePurposeSelect from '~/components/palettes/PipelinePurposeSelect.vue'
 import { groupAgentPalette, narrowAgentPalette } from '~/utils/agentPalette'
 import { AGENT_CATEGORIES, OBSERVABILITY_GATE_ARCHETYPE } from '~/utils/catalog'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const { t } = useI18n()
 const agents = useAgentsStore()
@@ -57,7 +58,7 @@ function toggle(id: string) {
 
 <template>
   <div class="space-y-2">
-    <p class="px-1 text-[11px] text-dimmed">{{ t('palette.hint') }}</p>
+    <p class="px-1 text-2xs text-dimmed">{{ t('palette.hint') }}</p>
     <!-- The two catalog dials, one above the other: what this pipeline is for, and how deep into
          the agent catalog to look. Both narrow the sections below, and each states its own count.
          Stacked rather than side by side because the palette column is a third of the slideover:
@@ -73,23 +74,28 @@ function toggle(id: string) {
     </div>
     <div class="space-y-2">
       <section v-for="g in groups" :key="g.id">
-        <button
-          type="button"
-          class="flex w-full items-center gap-1.5 rounded px-1 py-1 text-start text-[11px] font-semibold uppercase tracking-wide text-muted transition hover:text-default"
+        <UButton
+          color="neutral"
+          variant="link"
+          class="group w-full rounded-sm px-1 py-1"
+          :aria-expanded="!isCollapsed(g.id)"
           @click="toggle(g.id)"
         >
-          <UIcon
-            :name="isCollapsed(g.id) ? 'i-lucide-chevron-right' : 'i-lucide-chevron-down'"
-            class="h-3.5 w-3.5 shrink-0"
-          />
-          <span>{{ g.label }}</span>
-          <span class="ms-auto text-app-600">{{ g.agents.length }}</span>
-        </button>
+          <SectionLabel as="span" class="flex w-full items-center gap-1.5 group-hover:text-default">
+            <UIcon
+              :name="isCollapsed(g.id) ? 'i-lucide-chevron-right' : 'i-lucide-chevron-down'"
+              class="h-3.5 w-3.5 shrink-0"
+            />
+            <span>{{ g.label }}</span>
+            <span class="ms-auto text-app-600">{{ g.agents.length }}</span>
+          </SectionLabel>
+        </UButton>
         <div v-if="!isCollapsed(g.id)" class="mt-1 space-y-1.5">
-          <button
+          <UButton
+            color="neutral"
+            variant="ghost"
             v-for="a in g.agents"
             :key="a.kind"
-            type="button"
             class="flex w-full items-center gap-2.5 rounded-lg border border-muted bg-elevated/60 p-2 text-start transition hover:border-app-500 hover:bg-elevated"
             :title="a.description"
             :data-testid="`palette-agent-${a.kind}`"
@@ -103,10 +109,10 @@ function toggle(id: string) {
             </div>
             <div class="min-w-0">
               <div class="text-xs font-semibold text-app-100">{{ a.label }}</div>
-              <div class="truncate text-[10px] text-muted">{{ a.description }}</div>
+              <div class="truncate text-3xs text-muted">{{ a.description }}</div>
             </div>
             <UIcon name="i-lucide-plus" class="ms-auto h-4 w-4 shrink-0 text-dimmed" />
-          </button>
+          </UButton>
         </div>
       </section>
     </div>

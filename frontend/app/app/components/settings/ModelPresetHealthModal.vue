@@ -73,7 +73,7 @@ const reseedableCount = computed(
               {{ t('modelPreset.health.newHeading') }}
             </h3>
           </div>
-          <p class="text-[11px] text-dimmed">{{ t('modelPreset.health.newDescription') }}</p>
+          <p class="text-2xs text-dimmed">{{ t('modelPreset.health.newDescription') }}</p>
           <ul class="space-y-2">
             <li
               v-for="i in newPresets"
@@ -108,7 +108,7 @@ const reseedableCount = computed(
               {{ t('modelPreset.health.updatesHeading') }}
             </h3>
           </div>
-          <p class="text-[11px] text-dimmed">
+          <p class="text-2xs text-dimmed">
             {{ t('modelPreset.health.updatesDescription') }}
           </p>
           <ul class="space-y-2">
@@ -119,7 +119,7 @@ const reseedableCount = computed(
             >
               <div class="min-w-0">
                 <span class="truncate text-sm font-medium text-app-100">{{ i.name }}</span>
-                <p class="text-[11px] text-app-warning-400/80">
+                <p class="text-2xs text-app-warning-400/80">
                   {{
                     t('modelPreset.health.versionAvailable', {
                       from: i.fromVersion ?? 0,

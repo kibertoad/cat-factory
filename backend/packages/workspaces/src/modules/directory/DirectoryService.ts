@@ -81,21 +81,18 @@ export class DirectoryService {
     cursor: string | undefined,
     limit = DEFAULT_PAGE_SIZE,
   ): Promise<SnapshotPage<DirectoryWorkspace>> {
-    return this.snapshot(
-      'workspaces',
-      reader,
-      cursor,
-      limit,
-      isString,
-      (w) => w.id,
-      (after) =>
+    return this.snapshot(reader, cursor, limit, {
+      listing: 'workspaces',
+      isKey: isString,
+      keyOf: (w) => w.id,
+      list: (after) =>
         this.deps.directoryRepository.listWorkspaces(
           reader.accountId,
           after,
           limit,
           reader.workspaceIds,
         ),
-    )
+    })
   }
 
   users(
@@ -104,15 +101,12 @@ export class DirectoryService {
     limit = DEFAULT_PAGE_SIZE,
   ): Promise<SnapshotPage<DirectoryUser>> {
     requireAccountWide(reader)
-    return this.snapshot(
-      'users',
-      reader,
-      cursor,
-      limit,
-      isString,
-      (u) => u.id,
-      (after) => this.deps.directoryRepository.listUsers(reader.accountId, after, limit),
-    )
+    return this.snapshot(reader, cursor, limit, {
+      listing: 'users',
+      isKey: isString,
+      keyOf: (u) => u.id,
+      list: (after) => this.deps.directoryRepository.listUsers(reader.accountId, after, limit),
+    })
   }
 
   accountMemberships(
@@ -121,16 +115,13 @@ export class DirectoryService {
     limit = DEFAULT_PAGE_SIZE,
   ): Promise<SnapshotPage<DirectoryAccountMembership>> {
     requireAccountWide(reader)
-    return this.snapshot(
-      'account_memberships',
-      reader,
-      cursor,
-      limit,
-      isString,
-      (m) => m.userId,
-      (after) =>
+    return this.snapshot(reader, cursor, limit, {
+      listing: 'account_memberships',
+      isKey: isString,
+      keyOf: (m) => m.userId,
+      list: (after) =>
         this.deps.directoryRepository.listAccountMemberships(reader.accountId, after, limit),
-    )
+    })
   }
 
   workspaceMemberships(
@@ -138,21 +129,18 @@ export class DirectoryService {
     cursor: string | undefined,
     limit = DEFAULT_PAGE_SIZE,
   ): Promise<SnapshotPage<DirectoryWorkspaceMembership>> {
-    return this.snapshot(
-      'workspace_memberships',
-      reader,
-      cursor,
-      limit,
-      isMembershipKey,
-      (m): WorkspaceMembershipKey => ({ workspaceId: m.workspaceId, userId: m.userId }),
-      (after) =>
+    return this.snapshot(reader, cursor, limit, {
+      listing: 'workspace_memberships',
+      isKey: isMembershipKey,
+      keyOf: (m): WorkspaceMembershipKey => ({ workspaceId: m.workspaceId, userId: m.userId }),
+      list: (after) =>
         this.deps.directoryRepository.listWorkspaceMemberships(
           reader.accountId,
           after,
           limit,
           reader.workspaceIds,
         ),
-    )
+    })
   }
 
   repos(
@@ -160,21 +148,18 @@ export class DirectoryService {
     cursor: string | undefined,
     limit = DEFAULT_PAGE_SIZE,
   ): Promise<SnapshotPage<DirectoryRepo>> {
-    return this.snapshot(
-      'repos',
-      reader,
-      cursor,
-      limit,
-      isRepoKey,
-      (r): DirectoryRepoKey => ({ workspaceId: r.workspaceId, repoId: r.repoId }),
-      (after) =>
+    return this.snapshot(reader, cursor, limit, {
+      listing: 'repos',
+      isKey: isRepoKey,
+      keyOf: (r): DirectoryRepoKey => ({ workspaceId: r.workspaceId, repoId: r.repoId }),
+      list: (after) =>
         this.deps.directoryRepository.listRepos(
           reader.accountId,
           after,
           limit,
           reader.workspaceIds,
         ),
-    )
+    })
   }
 
   /**
@@ -183,13 +168,10 @@ export class DirectoryService {
    * covers anything that changed while the walk was in progress.
    */
   private async snapshot<T, K>(
-    listing: SnapshotListing,
     reader: DirectoryReader,
     cursor: string | undefined,
     limit: number,
-    isKey: (value: unknown) => value is K,
-    keyOf: (item: T) => K,
-    list: (after: K | null) => Promise<T[]>,
+    { listing, isKey, keyOf, list }: SnapshotSource<T, K>,
   ): Promise<SnapshotPage<T>> {
     const position =
       cursor === undefined
@@ -308,6 +290,14 @@ function isMembershipKey(value: unknown): value is WorkspaceMembershipKey {
 function isRepoKey(value: unknown): value is DirectoryRepoKey {
   const key = value as DirectoryRepoKey | null
   return typeof key?.workspaceId === 'string' && Number.isSafeInteger(key.repoId)
+}
+
+/** What one snapshot listing supplies: its name, its key's shape and how to read a page. */
+interface SnapshotSource<T, K> {
+  listing: SnapshotListing
+  isKey: (value: unknown) => value is K
+  keyOf: (item: T) => K
+  list: (after: K | null) => Promise<T[]>
 }
 
 /** The snapshot listings. A cursor names the one that issued it, so another listing refuses it. */

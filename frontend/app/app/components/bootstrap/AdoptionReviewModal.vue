@@ -9,6 +9,7 @@
 // is no suggestion at all as its own state, because "the two repositories agreed on everything"
 // and "the analysis never ran" would otherwise look identical and lead to opposite conclusions.
 import type { AdoptionSource, BootstrapJob } from '~/types/domain'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const props = defineProps<{ job: BootstrapJob }>()
 const emit = defineEmits<{ close: [] }>()
@@ -224,31 +225,40 @@ watch(open, (isOpen) => {
           <p v-if="recordsDropped > 0" class="text-app-warning-300/90">
             {{ t('bootstrap.adoption.survey.truncated', { count: recordsDropped }) }}
           </p>
-          <details>
-            <summary class="cursor-pointer text-dimmed hover:text-toned">
-              {{ t('bootstrap.adoption.survey.show') }}
-            </summary>
-            <ul class="mt-2 space-y-1">
-              <!-- Keyed by POSITION: the transcript is append-only and rendered in order, and
+          <UCollapsible>
+            <template #default="{ open }">
+              <UButton
+                variant="link"
+                color="neutral"
+                size="xs"
+                :icon="open ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
+                :label="t('bootstrap.adoption.survey.show')"
+                :ui="{ base: 'w-full justify-start gap-1 p-0 text-dimmed hover:text-toned' }"
+              />
+            </template>
+            <template #content>
+              <ul class="mt-2 space-y-1">
+                <!-- Keyed by POSITION: the transcript is append-only and rendered in order, and
                    the same path legitimately appears twice (a body refused by the seed and then
                    served to the model, a path the model retried). Keying on the path patched
                    those two rows against each other and rendered a note beside the wrong one. -->
-              <li
-                v-for="(entry, index) in surveyReads"
-                :key="index"
-                class="flex items-baseline gap-2"
-              >
-                <span
-                  class="shrink-0 font-mono text-[10px] uppercase"
-                  :class="entry.outcome === 'read' ? 'text-dimmed' : 'text-app-warning-400/80'"
+                <li
+                  v-for="(entry, index) in surveyReads"
+                  :key="index"
+                  class="flex items-baseline gap-2"
                 >
-                  {{ t(`bootstrap.adoption.survey.outcome.${entry.outcome}`) }}
-                </span>
-                <span class="font-mono text-muted">{{ entry.path }}</span>
-                <span v-if="entry.note" class="text-app-600">{{ entry.note }}</span>
-              </li>
-            </ul>
-          </details>
+                  <span
+                    class="shrink-0 font-mono text-3xs uppercase"
+                    :class="entry.outcome === 'read' ? 'text-dimmed' : 'text-app-warning-400/80'"
+                  >
+                    {{ t(`bootstrap.adoption.survey.outcome.${entry.outcome}`) }}
+                  </span>
+                  <span class="font-mono text-muted">{{ entry.path }}</span>
+                  <span v-if="entry.note" class="text-app-600">{{ entry.note }}</span>
+                </li>
+              </ul>
+            </template>
+          </UCollapsible>
         </div>
 
         <!-- The reviewer's own instructions, on BOTH paths. With no suggestion to answer this is
@@ -289,9 +299,9 @@ watch(open, (isOpen) => {
               <div class="flex items-start justify-between gap-3">
                 <div>
                   <p class="text-sm font-medium text-app-100">{{ decision.title }}</p>
-                  <p class="text-[11px] uppercase tracking-wide text-dimmed">
+                  <SectionLabel as="p">
                     {{ t(`bootstrap.adoption.area.${decision.area}`) }}
-                  </p>
+                  </SectionLabel>
                 </div>
                 <UBadge v-if="!touched.has(decision.id)" color="warning" variant="subtle" size="sm">
                   {{ t('bootstrap.adoption.needsYou') }}
@@ -299,7 +309,7 @@ watch(open, (isOpen) => {
               </div>
 
               <div class="grid gap-2 text-xs sm:grid-cols-2">
-                <div class="rounded bg-default/60 p-2">
+                <div class="rounded-sm bg-default/60 p-2">
                   <p class="mb-1 font-semibold text-toned">
                     {{ t('bootstrap.adoption.side.monorepo') }}
                   </p>
@@ -307,7 +317,7 @@ watch(open, (isOpen) => {
                     {{ decision.monorepoPractice ?? t('bootstrap.adoption.side.nothing') }}
                   </p>
                 </div>
-                <div class="rounded bg-default/60 p-2">
+                <div class="rounded-sm bg-default/60 p-2">
                   <p class="mb-1 font-semibold text-toned">
                     {{ t('bootstrap.adoption.side.template') }}
                   </p>
@@ -321,7 +331,7 @@ watch(open, (isOpen) => {
 
               <!-- The evidence is what makes the suggestion checkable rather than an assertion,
                    so it is shown, not tucked away. -->
-              <p v-if="decision.evidence.length" class="text-[11px] text-dimmed">
+              <p v-if="decision.evidence.length" class="text-2xs text-dimmed">
                 {{ t('bootstrap.adoption.evidence') }}
                 <span class="font-mono">{{ decision.evidence.join(', ') }}</span>
               </p>

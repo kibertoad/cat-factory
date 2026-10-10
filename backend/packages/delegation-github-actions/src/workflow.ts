@@ -37,7 +37,9 @@ export interface GitHubActionsWorkflowLocation {
  * Every field is GUARANTEED, not best-effort: the engine refuses a poll whose handle is short of
  * the workspace, the block, the run or the agent kind (`requireHandleScope`) rather than filling
  * one in, precisely so a resolver keyed on `agentKind` cannot dispatch `implement.yml` and then
- * poll `''`. The narrowing is only half the property; the refusal is the other half.
+ * poll `''`. A handle short of the work repository or its base branch is refused here, in
+ * {@link workflowAddressing}, before a resolver is asked. The narrowing is only half the property;
+ * the refusal is the other half.
  */
 export interface GitHubActionsWorkflowScope {
   /**
@@ -45,6 +47,12 @@ export interface GitHubActionsWorkflowScope {
    * present: a call that could not name it is refused before a resolver is asked.
    */
   repo: { owner: string; name: string }
+  /**
+   * The work repository's base branch, as the brief's `branches.base` names it. It is what a
+   * caller shim committed to each repository is dispatched on (`ref`), since that is the branch
+   * holding the reviewed definition. Always present, like `repo`.
+   */
+  baseBranch: string
   workspaceId: string
   runId: string
   agentKind: string
@@ -79,26 +87,25 @@ export function workflowAddressing(target: GitHubActionsWorkflowTarget): Workflo
     forBrief: (brief) =>
       target({
         repo: { owner: brief.repo.owner, name: brief.repo.name },
+        baseBranch: brief.branches.base,
         workspaceId: brief.workspaceId,
         runId: brief.runId,
         agentKind: brief.agentKind,
         correlationKey: brief.correlationKey,
       }),
     forHandle: (handle) => {
+      // Both are REFUSED rather than defaulted, for the reason the result reader refuses a handle
+      // carrying no branches: a rule that picks a repository without being told one can pick
+      // somebody else's, and defaulting the base to `main` would address a definition nobody chose.
+      // Reachable for a record written before the pair was persisted, and on cancel for a claim
+      // still `starting`, whose dispatch was never attributed.
       const repo = handle.repo
-      if (!repo) {
-        // REFUSED rather than defaulted to the description's own repository, for the reason the
-        // result reader refuses a handle carrying no branches: every rule that picks a repository
-        // without being told one can pick somebody else's, and this poll would then settle the
-        // step on a run it never dispatched. Reachable only for a record written before the work
-        // repo was persisted.
-        throw new Error(
-          'This executor resolves its workflow per dispatch, and this delegation record carries ' +
-            'no work repository to resolve one from. Re-run the step: a dispatch persists it.',
-        )
-      }
+      if (!repo) throw unaddressable('work repository')
+      const baseBranch = handle.branches?.base
+      if (!baseBranch) throw unaddressable('base branch')
       return target({
         repo,
+        baseBranch,
         workspaceId: handle.workspaceId,
         runId: handle.runId,
         agentKind: handle.agentKind,
@@ -106,4 +113,16 @@ export function workflowAddressing(target: GitHubActionsWorkflowTarget): Workflo
       })
     },
   }
+}
+
+/**
+ * The refusal for a handle short of a scope field. Worded for both callers: on a poll the step can
+ * be re-run, and on a cancel the external run is out of reach and may still be going.
+ */
+function unaddressable(missing: string): Error {
+  return new Error(
+    `This executor resolves its workflow per dispatch, and this delegation record carries no ${missing} ` +
+      'to resolve one from, so its workflow run cannot be addressed and may still be running. ' +
+      'A fresh dispatch of the step records it.',
+  )
 }

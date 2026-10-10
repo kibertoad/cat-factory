@@ -40,8 +40,9 @@ const items = computed<DropdownMenuItem[][]>(() => [
 
 <template>
   <UDropdownMenu :items="items" :content="{ side: 'top', align: 'start' }">
-    <button
-      type="button"
+    <UButton
+      color="neutral"
+      variant="ghost"
       data-testid="language-switcher"
       :aria-label="t('language.switcher')"
       :title="collapsed ? `${t('language.switcher')}: ${current}` : undefined"
@@ -50,12 +51,12 @@ const items = computed<DropdownMenuItem[][]>(() => [
     >
       <UIcon name="i-lucide-languages" class="h-4 w-4 shrink-0 text-muted" />
       <div v-if="!collapsed" class="min-w-0 flex-1">
-        <div class="truncate text-[10px] uppercase tracking-wide text-dimmed">
+        <div class="truncate text-2xs uppercase tracking-wide text-muted">
           {{ t('language.switcher') }}
         </div>
         <div class="truncate text-xs font-medium text-highlighted">{{ current }}</div>
       </div>
       <UIcon v-if="!collapsed" name="i-lucide-chevron-up" class="h-4 w-4 shrink-0 text-dimmed" />
-    </button>
+    </UButton>
   </UDropdownMenu>
 </template>

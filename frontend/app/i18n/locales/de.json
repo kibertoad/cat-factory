@@ -3075,7 +3075,8 @@
         "recurring": "Wiederkehrend",
         "review": "Review",
         "ralph": "Ralph-Schleife",
-        "bugFishing": "Fehlersuche"
+        "bugFishing": "Fehlersuche",
+        "resolveConflicts": "Konflikte lösen"
       },
       "recurringWithFrame": "Eine wiederkehrende Aufgabe führt eine Pipeline in einem Takt aus. Fahren Sie fort, um Zeitplan + Prompt festzulegen.",
       "recurringNoFrame": "Eine wiederkehrende Aufgabe muss auf einem Service liegen. Fügen Sie sie aus einem Service-Frame (oder einem darin enthaltenen Modul) hinzu.",
@@ -3462,7 +3463,8 @@
     "pastedLink": {
       "offer": "Diese Beschreibung verlinkt eine {source}-Seite. Als Kontext anhängen?",
       "attach": "Anhängen"
-    }
+    },
+    "removePending": "{name} entfernen"
   },
   "providers": {
     "presetMismatch": {
@@ -4773,7 +4775,8 @@
         "review": "Review",
         "research": "Recherche",
         "planning": "Planung",
-        "media": "Medien"
+        "media": "Medien",
+        "maintenance": "PR-Pflege"
       },
       "strategyOption": {
         "specialist-panel": "Spezialisten-Panel",
@@ -4945,7 +4948,8 @@
         "releaseInteractive": "Nicht mehr Standard in der App",
         "claimUnattended": "Als Standard ohne Aufsicht festlegen",
         "releaseUnattended": "Nicht mehr Standard ohne Aufsicht"
-      }
+      },
+      "removeLabel": "Label {label} entfernen"
     },
     "progress": {
       "status": {
@@ -6336,7 +6340,8 @@
         "assistant_generation_failed": "Der Modellanbieter des Assistenten hat nicht geantwortet. Er ist korrekt konfiguriert und hier muss nichts eingerichtet werden: Versuchen Sie die Anfrage gleich noch einmal.",
         "assistant_reply_unreadable": "Das Modell des Assistenten hat etwas geantwortet, das diese Plattform nicht als Entscheidung ausführen kann. Eine Umformulierung hilft selten: Wählen Sie in den Modelleinstellungen ein anderes Modell für den Assistenten.",
         "delegated_executor_failed": "Der externe Executor konnte diesen Schritt nicht starten. Das Problem liegt im System, das die Arbeit ausführt, nicht in dieser Installation: prüfe dessen Logs und versuche es erneut.",
-        "delegated_work_branch_unprepared": "Die Plattform konnte den Arbeitsbranch nicht bereitstellen, auf den der Executor dieses Schritts geschickt wird, daher wurde nichts gestartet. Entweder darf die Repository-Verbindung nicht darauf schreiben, oder die Aufgabe nennt einen Branch, den es noch nicht gibt: die Details sagen, was davon."
+        "delegated_work_branch_unprepared": "Die Plattform konnte den Arbeitsbranch nicht bereitstellen, auf den der Executor dieses Schritts geschickt wird, daher wurde nichts gestartet. Entweder darf die Repository-Verbindung nicht darauf schreiben, oder die Aufgabe nennt einen Branch, den es noch nicht gibt: die Details sagen, was davon.",
+        "attached_pr_provider_unreachable": "Der Repository-Anbieter hat nicht geantwortet, daher konnte der Pull Request nicht geprüft werden und es wurde keine Aufgabe angelegt. Hier muss nichts eingerichtet werden: versuche es gleich noch einmal."
       }
     },
     "reason": {
@@ -7129,7 +7134,8 @@
       "heading": "Ein Referenzdesign hochladen",
       "viewPlaceholder": "Ansichtsname (z. B. login)",
       "tipReady": "Tipp: Ziehe ein Bild direkt auf ein Paar oben, um dessen Referenz festzulegen.",
-      "tipNeedView": "Gib zuerst einen Ansichtsnamen ein und wähle dann eine Datei. Oder ziehe ein Bild direkt auf ein Paar oben."
+      "tipNeedView": "Gib zuerst einen Ansichtsnamen ein und wähle dann eine Datei. Oder ziehe ein Bild direkt auf ein Paar oben.",
+      "choose": "Datei auswählen"
     },
     "requestFix": {
       "heading": "Eine Korrektur anfordern",
@@ -8529,6 +8535,7 @@
     "title": "Erzeugte Kandidaten",
     "titleWithBlock": "Erzeugte Kandidaten: {title}",
     "subtitle": "Vergleiche, was jede Integration erzeugt hat, und behalte, was du willst",
+    "pickOne": "Wähle einen aus. Die Auswahl eines Kandidaten hebt die vorherige auf.",
     "automatic": "Es wurde nur ein Kandidat erzeugt, daher wurde er automatisch behalten. Niemand hat ihn geprüft.",
     "unlabelledSubject": "Kein Motiv angegeben",
     "noPreview": "Keine Vorschau verfügbar",

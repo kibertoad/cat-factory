@@ -40,6 +40,31 @@ async function entries(r: DirectoryFeedRepos, accountId: string, afterSeq = 0): 
   return rows.map((c) => [c.entityType, c.workspaceId, c.entityId])
 }
 
+async function seedUser(r: DirectoryFeedRepos, id: string): Promise<void> {
+  // Null email: `users.email` is uniquely indexed where non-null, and the database is shared.
+  await r.users.create({ id, name: 'Ada', email: null, avatarUrl: null, createdAt: 1_000 })
+}
+
+async function seedWorkspace(r: DirectoryFeedRepos, id: string, accountId: string) {
+  await r.workspaces.create(
+    { id, name: 'Board', description: null, createdAt: 1_000, accountId },
+    null,
+    accountId,
+  )
+}
+
+const repo = (githubId: number, overrides: Partial<GitHubRepo> = {}): GitHubRepo => ({
+  githubId,
+  installationId: 77,
+  owner: 'acme',
+  name: `repo-${githubId}`,
+  defaultBranch: 'main',
+  private: true,
+  provider: 'github',
+  syncedAt: 1_000,
+  ...overrides,
+})
+
 export function defineDirectoryFeedSuite(name: string, makeRepos: () => DirectoryFeedRepos): void {
   describe(`[${name}] directory change feed parity`, () => {
     let n = 0
@@ -48,31 +73,6 @@ export function defineDirectoryFeedSuite(name: string, makeRepos: () => Director
       const tag = `${name}-dir-${n}-${Math.floor(Math.random() * 1e9)}`
       return { acc: `acc-${tag}`, acc2: `acc2-${tag}`, ws: `ws-${tag}`, usr: `usr-${tag}` }
     }
-
-    async function seedUser(r: DirectoryFeedRepos, id: string): Promise<void> {
-      // Null email: `users.email` is uniquely indexed where non-null, and the database is shared.
-      await r.users.create({ id, name: 'Ada', email: null, avatarUrl: null, createdAt: 1_000 })
-    }
-
-    async function seedWorkspace(r: DirectoryFeedRepos, id: string, accountId: string) {
-      await r.workspaces.create(
-        { id, name: 'Board', description: null, createdAt: 1_000, accountId },
-        null,
-        accountId,
-      )
-    }
-
-    const repo = (githubId: number, overrides: Partial<GitHubRepo> = {}): GitHubRepo => ({
-      githubId,
-      installationId: 77,
-      owner: 'acme',
-      name: `repo-${githubId}`,
-      defaultBranch: 'main',
-      private: true,
-      provider: 'github',
-      syncedAt: 1_000,
-      ...overrides,
-    })
 
     it('answers head 0 and an empty page for an account with no changes', async () => {
       const r = makeRepos()

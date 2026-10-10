@@ -520,7 +520,7 @@ per-file patches:
   since the last green probe (`tested` is only reset by `seedDraft`);
   `SlackPanel.vue:327-339` member ids are hand-typed with placeholders only;
   `AiProviderOnboardingModal.vue:121-123` still buries the operator note at
-  `text-[11px]` and offers no explicit skip.
+  `text-2xs` and offers no explicit skip.
 
 ## E. Async state, realtime & error surfacing
 

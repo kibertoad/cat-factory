@@ -1,6 +1,6 @@
 import type { PublicApiKeyRecord, PublicApiKeyRepository } from '@cat-factory/kernel'
 import type { PublicApiScope } from '@cat-factory/contracts'
-import { and, desc, eq, inArray, isNull } from 'drizzle-orm'
+import { and, count, desc, eq, exists, inArray, isNull, or, sql } from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
 import { publicApiKeyWorkspaces, publicApiKeys } from '../db/schema.js'
 
@@ -60,6 +60,8 @@ export class DrizzlePublicApiKeyRepository implements PublicApiKeyRepository {
     const rows = await this.db.select().from(publicApiKeys).where(eq(publicApiKeys.id, id)).limit(1)
     const row = rows[0]
     if (!row) return null
+    // An unrestricted key has no grant rows, so the authentication hot path skips the second read.
+    if (row.all_workspaces === 1) return rowToRecord(row, [])
     const grants = await this.grantsOf([row.id])
     return rowToRecord(row, grants.get(row.id) ?? [])
   }
@@ -70,8 +72,30 @@ export class DrizzlePublicApiKeyRepository implements PublicApiKeyRepository {
       .from(publicApiKeys)
       .where(and(eq(publicApiKeys.account_id, accountId), isNull(publicApiKeys.revoked_at)))
       .orderBy(desc(publicApiKeys.created_at))
-    const grants = await this.grantsOf(rows.map((r) => r.id))
+    const grants = await this.grantsOf(rows.filter((r) => r.all_workspaces !== 1).map((r) => r.id))
     return rows.map((row) => rowToRecord(row, grants.get(row.id) ?? []))
+  }
+
+  async countLiveByAccount(accountId: string): Promise<number> {
+    const [row] = await this.db
+      .select({ n: count() })
+      .from(publicApiKeys)
+      .where(
+        and(
+          eq(publicApiKeys.account_id, accountId),
+          isNull(publicApiKeys.revoked_at),
+          or(
+            eq(publicApiKeys.all_workspaces, 1),
+            exists(
+              this.db
+                .select({ one: sql`1` })
+                .from(publicApiKeyWorkspaces)
+                .where(eq(publicApiKeyWorkspaces.key_id, publicApiKeys.id)),
+            ),
+          ),
+        ),
+      )
+    return row?.n ?? 0
   }
 
   async markUsed(id: string, at: number): Promise<void> {

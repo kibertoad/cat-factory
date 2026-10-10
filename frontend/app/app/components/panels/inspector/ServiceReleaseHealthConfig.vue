@@ -114,7 +114,7 @@ async function clear() {
     <!-- Disabled affordance until an observability integration is connected. -->
     <div
       v-if="!connected"
-      class="flex items-center justify-between gap-2 rounded-md border border-default bg-default/60 px-2 py-1.5 text-[11px] text-muted"
+      class="flex items-center justify-between gap-2 rounded-md border border-default bg-default/60 px-2 py-1.5 text-2xs text-muted"
     >
       <span>{{ t('inspector.releaseHealth.connectPrompt') }}</span>
       <UButton
@@ -130,7 +130,7 @@ async function clear() {
     </div>
 
     <div v-else class="space-y-2">
-      <p class="text-[11px] text-dimmed">
+      <p class="text-2xs text-dimmed">
         {{ t('inspector.releaseHealth.hint') }}
       </p>
       <div class="grid grid-cols-2 gap-2">

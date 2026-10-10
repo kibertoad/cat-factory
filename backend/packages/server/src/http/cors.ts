@@ -47,6 +47,8 @@ export function corsReflectsWhenUnset(environment: string | undefined): boolean 
  *   already listed above and succeeds, then every real call is dropped by the browser.
  *   The session header has no entry on purpose — that endpoint is stateless and mints no
  *   session id, so a client never has one to send back.
+ * - `X-Cat-Factory-Workspace`: the workspace a `/api/v1` call acts on, which a key reaching
+ *   several workspaces must send on every workspace-scoped call (`PUBLIC_API_WORKSPACE_HEADER`).
  */
 export const CORS_ALLOWED_HEADERS = [
   'Content-Type',
@@ -55,6 +57,7 @@ export const CORS_ALLOWED_HEADERS = [
   'X-Connection-Id',
   'X-Request-Id',
   'Mcp-Protocol-Version',
+  'X-Cat-Factory-Workspace',
 ]
 
 /**

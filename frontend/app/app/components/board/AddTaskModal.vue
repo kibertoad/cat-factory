@@ -46,6 +46,7 @@ import {
 import { descriptorFieldDefaults } from '@cat-factory/contracts'
 import { pipelineAllowedForManualStart } from '~/utils/pipeline'
 import { buildTaskTypePickerRows } from '~/utils/taskTypePicker'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const ui = useUiStore()
 // Interface tier. In BASIC mode this form asks for the task itself (type, title,
@@ -141,6 +142,11 @@ const timeboxHours = ref<number | undefined>(undefined)
 // default — an expedition exists to cover ground nobody thought to look at, so narrowing it is
 // the deliberate act) plus an optional focus folded into every angle's prompt.
 const fishingPhaseIds = ref<string[]>([])
+function toggleFishingPhase(id: string, checked: boolean) {
+  fishingPhaseIds.value = checked
+    ? [...fishingPhaseIds.value, id]
+    : fishingPhaseIds.value.filter((x) => x !== id)
+}
 const fishingFocus = ref('')
 /** Held as a string because the input is a text field; parsed at submit, blank ⇒ the default. */
 const fishingMaxPasses = ref('')
@@ -938,13 +944,14 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
               data-testid="task-type-row"
               :data-task-type-row="row.id"
             >
-              <p
+              <SectionLabel
                 v-if="row.caption"
-                class="mb-1 px-1 text-[11px] font-semibold uppercase tracking-wide text-dimmed"
+                as="p"
+                class="mb-1 px-1"
                 data-testid="task-type-category"
               >
                 {{ row.caption }}
-              </p>
+              </SectionLabel>
               <div class="flex flex-wrap gap-1">
                 <UButton
                   v-for="ty in row.choices"
@@ -981,7 +988,7 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
         </UFormField>
 
         <!-- Recurring tasks are configured as a schedule on the service frame. -->
-        <div v-if="isRecurring" class="rounded-lg border border-default p-3 text-[11px] text-muted">
+        <div v-if="isRecurring" class="rounded-lg border border-default p-3 text-2xs text-muted">
           <template v-if="recurringFrameId">
             {{ t('board.addTask.recurringWithFrame') }}
           </template>
@@ -1023,7 +1030,7 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
                 :ui="{ base: 'cursor-default text-toned' }"
               />
             </UFormField>
-            <p v-if="resolvingIssueBodies" class="text-[11px] text-dimmed">
+            <p v-if="resolvingIssueBodies" class="text-2xs text-dimmed">
               {{ t('board.addTask.loadingIssue') }}
             </p>
 
@@ -1054,7 +1061,7 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
               <span class="text-sm text-default">{{ t('board.addTask.technical') }}</span>
             </template>
             <template #description>
-              <span class="text-[11px] text-dimmed">
+              <span class="text-2xs text-dimmed">
                 {{ t('board.addTask.technicalHint') }}
               </span>
             </template>
@@ -1103,25 +1110,21 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
               :description="t('board.addTask.bugFishingFields.angles.hint')"
             >
               <div class="grid gap-1.5 sm:grid-cols-2">
-                <label
+                <!-- Each angle keeps its own test hook, so the boolean is derived from the id
+                     list rather than bound through a checkbox group. -->
+                <UCheckbox
                   v-for="phase in BUG_FISHING_PHASES"
                   :key="phase.id"
-                  class="flex items-start gap-2 rounded-md px-1.5 py-1 text-[12px] hover:bg-elevated/40"
-                >
-                  <input
-                    v-model="fishingPhaseIds"
-                    type="checkbox"
-                    :value="phase.id"
-                    class="mt-0.5 accent-app-info-500"
-                    :data-testid="`add-task-fishing-angle-${phase.id}`"
-                  />
-                  <span class="min-w-0">
-                    <span class="block text-default">{{ phase.title }}</span>
-                    <span class="block text-[11px] text-dimmed">{{ phase.goal }}</span>
-                  </span>
-                </label>
+                  size="xs"
+                  :model-value="fishingPhaseIds.includes(phase.id)"
+                  :label="phase.title"
+                  :description="phase.goal"
+                  class="rounded-md px-1.5 py-1 hover:bg-elevated/40"
+                  :data-testid="`add-task-fishing-angle-${phase.id}`"
+                  @update:model-value="toggleFishingPhase(phase.id, $event === true)"
+                />
               </div>
-              <p v-if="fishingPhaseIds.length === 0" class="mt-1.5 text-[11px] text-dimmed">
+              <p v-if="fishingPhaseIds.length === 0" class="mt-1.5 text-2xs text-dimmed">
                 {{ t('board.addTask.bugFishingFields.angles.allSelected') }}
               </p>
             </UFormField>
@@ -1385,11 +1388,11 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
           </div>
 
           <div v-if="configDescriptors.length" class="space-y-3">
-            <span class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+            <SectionLabel as="span">
               {{ t('board.addTask.agentConfiguration') }}
-            </span>
+            </SectionLabel>
             <div v-for="d in configDescriptors" :key="d.id" class="space-y-1">
-              <div class="text-[11px] text-muted">{{ d.label }}</div>
+              <div class="text-2xs text-muted">{{ d.label }}</div>
               <div v-if="d.type === 'select'" class="flex flex-wrap gap-1">
                 <UButton
                   v-for="opt in d.options"
@@ -1411,7 +1414,7 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
                 :data-testid="`agent-config-${d.id}`"
                 @update:model-value="(v: string | number) => setConfig(d.id, String(v))"
               />
-              <p class="text-[11px] leading-snug text-dimmed">{{ d.description }}</p>
+              <p class="text-2xs leading-snug text-dimmed">{{ d.description }}</p>
             </div>
           </div>
 
@@ -1440,7 +1443,7 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
             :issues-hint="t('board.addTask.noIssuesHint')"
           />
 
-          <p class="text-[11px] text-dimmed">
+          <p class="text-2xs text-dimmed">
             {{ t('board.addTask.plannedHint') }}
           </p>
         </template>

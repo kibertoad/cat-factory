@@ -2806,7 +2806,10 @@ class DirectoryResource:
         with `409` and `reason: "cursor_expired"`: reconcile from the snapshot endpoints and
         replay from their `asOfSeq`. Account-scoped: no `x-cat-factory-workspace` header is
         read. A key limited to some workspaces sees only workspace, workspace-membership and
-        repository changes of those workspaces.
+        repository changes of those workspaces, plus the `workspace` change (with `entity:
+        null`) of every deleted workspace in the account, since deleting a board also drops
+        the key’s grant on it. Treat that change as the removal of the workspace and of
+        every membership and repository under it.
         `GET /api/v1/directory/changes` (operation `listDirectoryChanges`).
         """
         raw = self._transport.request(

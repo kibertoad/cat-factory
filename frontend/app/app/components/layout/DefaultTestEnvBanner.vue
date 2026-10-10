@@ -74,7 +74,7 @@ function openConfig(event: MouseEvent) {
               @click="ui.dismissDefaultProvision()"
             />
           </div>
-          <p class="mt-1 text-[13px] text-app-info-200/90">
+          <p class="mt-1 text-sm text-app-info-200/90">
             {{ t('layout.defaultTestEnvBanner.body') }}
           </p>
           <div class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
@@ -90,14 +90,15 @@ function openConfig(event: MouseEvent) {
               {{ t('layout.defaultTestEnvBanner.action') }}
             </UButton>
             <!-- The URL itself, shown so it can be read and copied, not just clicked. -->
-            <a
-              :href="configUrl"
-              class="min-w-0 truncate font-mono text-[11px] text-app-info-300/80 underline decoration-dotted underline-offset-2 hover:text-app-info-200"
+            <ULink
+              raw
+              :to="configUrl"
+              class="min-w-0 truncate font-mono text-2xs text-app-info-300/80 underline decoration-dotted underline-offset-2 hover:text-app-info-200"
               data-testid="default-test-env-url"
               @click="openConfig"
             >
               {{ configUrl }}
-            </a>
+            </ULink>
           </div>
         </div>
       </div>

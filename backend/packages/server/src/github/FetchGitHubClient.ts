@@ -959,10 +959,10 @@ export class FetchGitHubClient implements GitHubClient {
     const p = json as gp.GhPullPayload
     // The projection drops `html_url` (not a sync field); the create/list response carries it, so
     // surface it as the `OpenedPullRequest.url` a post-op records on the block.
-    const url = (json as { html_url?: string }).html_url ?? ''
     return {
       ...gp.toPullRequestProjection(p, gp.pullRepoGithubId(p) ?? 0, this.deps.clock.now()),
-      url,
+      url: (json as { html_url?: string }).html_url ?? '',
+      crossRepository: gp.pullIsCrossRepository(p),
     }
   }
 

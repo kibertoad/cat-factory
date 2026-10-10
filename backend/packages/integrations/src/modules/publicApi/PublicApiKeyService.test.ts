@@ -23,6 +23,10 @@ class FakeRepo implements PublicApiKeyRepository {
       [...this.rows.values()].filter((r) => r.accountId === accountId && r.revokedAt === null),
     )
   }
+  async countLiveByAccount(accountId: string) {
+    const live = await this.listByAccount(accountId)
+    return live.filter((r) => r.workspaceIds === null || r.workspaceIds.length > 0).length
+  }
   markUsedCalls = 0
   markUsed(id: string, at: number) {
     this.markUsedCalls++

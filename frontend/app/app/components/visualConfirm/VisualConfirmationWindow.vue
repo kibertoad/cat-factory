@@ -14,6 +14,7 @@ import ImageCompare from '~/components/media/ImageCompare.vue'
 import ArtifactLightbox from '~/components/media/ArtifactLightbox.vue'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import StepRunMeta from '~/components/panels/StepRunMeta.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const board = useBoardStore()
 const execution = useExecutionStore()
@@ -203,21 +204,23 @@ async function uploadFor(view: string, file: File) {
   await visualConfirm.uploadReference(blockId.value, file, view)
 }
 const uploadView = ref('')
-const fileInput = ref<HTMLInputElement | null>(null)
-async function onFilePicked(e: Event) {
-  const input = e.target as HTMLInputElement
-  const file = input.files?.[0]
+// The views this run already captured, offered as suggestions on the combobox.
+const viewSuggestions = computed(() => pairs.value.map((p) => p.view))
+const pendingUpload = ref<File | null>(null)
+watch(pendingUpload, async (file) => {
   const view = uploadView.value.trim()
   // Require a view name: a reference with no view can't pair with any captured screenshot,
-  // so it would be silently orphaned. The input is also disabled until a view is entered.
+  // so it would be silently orphaned. The control is also disabled until a view is entered.
   if (!file || !blockId.value || !view) {
-    if (fileInput.value) fileInput.value.value = ''
+    pendingUpload.value = null
     return
   }
   await visualConfirm.uploadReference(blockId.value, file, view)
   uploadView.value = ''
-  if (fileInput.value) fileInput.value.value = ''
-}
+  // Cleared so a fresh pick is a fresh file. `UFileUpload` carries `reset` for the other half of
+  // this: without it the native input keeps its value and the SAME file fires no change event.
+  pendingUpload.value = null
+})
 </script>
 
 <template>
@@ -242,7 +245,7 @@ async function onFilePicked(e: Event) {
       <template v-else>
         <p
           v-if="vc.degradedReason"
-          class="rounded-lg border border-app-warning-700/40 bg-app-warning-500/5 px-3 py-2 text-[12px] text-app-warning-300/90"
+          class="rounded-lg border border-app-warning-700/40 bg-app-warning-500/5 px-3 py-2 text-xs text-app-warning-300/90"
         >
           {{ vc.degradedReason }}
         </p>
@@ -251,7 +254,7 @@ async function onFilePicked(e: Event) {
              reference the reviewer is judging against is never anonymous. -->
         <section
           v-if="design"
-          class="rounded-lg border border-default bg-default/60 px-3 py-2 text-[12px] text-toned"
+          class="rounded-lg border border-default bg-default/60 px-3 py-2 text-xs text-toned"
         >
           <p class="flex items-center gap-1.5">
             <UIcon name="i-lucide-figma" class="h-3.5 w-3.5 shrink-0 text-app-warning-300" />
@@ -265,10 +268,7 @@ async function onFilePicked(e: Event) {
           <!-- One line per short design, carrying both ways it can fall short: what its source
                kept, and what this gallery's shared ceiling cut from it. A design the ceiling shut
                out entirely reads as one with no frames unless it is named here. -->
-          <ul
-            v-if="design.gaps?.length"
-            class="mt-1.5 space-y-1 text-[11px] text-app-warning-300/90"
-          >
+          <ul v-if="design.gaps?.length" class="mt-1.5 space-y-1 text-2xs text-app-warning-300/90">
             <li v-for="gap in design.gaps" :key="`${gap.title}-${gap.reason ?? 'capped'}`">
               {{ t('visualConfirm.design.gapLine', { title: gap.title }) }}
               <template v-if="gap.reason">{{ DESIGN_GAP_LABELS[gap.reason] }}</template>
@@ -281,7 +281,7 @@ async function onFilePicked(e: Event) {
 
         <p
           v-if="working"
-          class="flex items-center gap-2 rounded-lg border border-default bg-app-950/40 px-3 py-2 text-[12px] text-toned"
+          class="flex items-center gap-2 rounded-lg border border-default bg-app-950/40 px-3 py-2 text-xs text-toned"
         >
           <UIcon name="i-lucide-loader" class="h-3.5 w-3.5 animate-spin text-app-warning-300" />
           {{ phase ? PHASE_LABEL[phase] : '' }}
@@ -303,8 +303,10 @@ async function onFilePicked(e: Event) {
             />
             <!-- Per-view note (folded into the fixer findings) -->
             <div v-if="awaitingHuman" class="px-1">
-              <button
-                class="flex items-center gap-1.5 text-[11px] text-muted hover:text-default"
+              <UButton
+                color="neutral"
+                variant="ghost"
+                class="flex items-center gap-1.5 p-0 text-2xs text-muted hover:bg-transparent hover:text-default"
                 @click="noteOpen[p.view] = !noteOpen[p.view]"
               >
                 <UIcon
@@ -314,49 +316,71 @@ async function onFilePicked(e: Event) {
                 {{ t('visualConfirm.noteIssue', { view: p.view }) }}
                 <span
                   v-if="perViewNotes[p.view]?.trim()"
-                  class="rounded-full bg-app-warning-500/15 px-1.5 text-[9px] text-app-warning-300"
+                  class="rounded-full bg-app-warning-500/15 px-1.5 text-3xs text-app-warning-300"
                   >{{ t('visualConfirm.noted') }}</span
                 >
-              </button>
-              <textarea
+              </UButton>
+              <UTextarea
                 v-if="noteOpen[p.view]"
                 v-model="perViewNotes[p.view]"
-                rows="2"
+                :rows="2"
                 :placeholder="t('visualConfirm.notePlaceholder', { view: p.view })"
-                class="mt-1 w-full rounded-md border border-muted bg-app-950 px-2 py-1.5 text-[12px] text-default placeholder:text-app-600 focus:border-app-warning-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-app-warning-500/60"
+                size="xs"
+                class="mt-1 w-full"
               />
             </div>
           </div>
         </section>
-        <p v-else class="text-[12px] italic text-dimmed">
+        <p v-else class="text-xs italic text-dimmed">
           {{ t('visualConfirm.noScreenshots') }}
         </p>
 
         <!-- Upload a reference for any view -->
         <section class="rounded-lg border border-default bg-default/60 p-3">
-          <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-dimmed">
+          <SectionLabel as="h3" class="mb-2">
             {{ t('visualConfirm.upload.heading') }}
-          </h3>
+          </SectionLabel>
           <div class="flex flex-wrap items-center gap-2">
-            <input
+            <!-- The known views are suggestions, not a closed list: a reference can be uploaded
+                 for a view the run has not produced yet, which is the case this field exists for.
+                 `mode="autocomplete"` is what makes that work: the DEFAULT combobox mode writes
+                 its model only when something is SELECTED, so typing a new view name would leave
+                 `uploadView` empty and the picker beside it disabled. -->
+            <UInputMenu
               v-model="uploadView"
-              list="vc-views"
+              mode="autocomplete"
+              :items="viewSuggestions"
+              size="xs"
               :placeholder="t('visualConfirm.upload.viewPlaceholder')"
-              class="rounded-md border border-muted bg-app-950 px-2 py-1 text-[12px] text-default placeholder:text-app-600"
             />
-            <datalist id="vc-views">
-              <option v-for="p in pairs" :key="p.view" :value="p.view" />
-            </datalist>
-            <input
-              ref="fileInput"
-              type="file"
+            <!-- `reset` so the native input is cleared on every open: re-picking the SAME file
+                 after a rejected or completed upload otherwise fires no change event at all. -->
+            <!-- The trigger is our OWN button in the default slot, not `variant="button"`:
+                 that variant renders the icon alone and drops `label` on the floor, so the
+                 control reached a screen reader with no name at all. -->
+            <UFileUpload
+              v-model="pendingUpload"
+              size="xs"
+              reset
               accept="image/png,image/jpeg"
+              :preview="false"
               :disabled="busy || !uploadView.trim()"
-              class="text-[12px] text-toned file:me-2 file:rounded file:border-0 file:bg-elevated file:px-2 file:py-1 file:text-default disabled:opacity-40"
-              @change="onFilePicked"
-            />
+              class="w-fit"
+            >
+              <template #default="{ open }">
+                <UButton
+                  color="neutral"
+                  variant="soft"
+                  size="xs"
+                  icon="i-lucide-upload"
+                  :disabled="busy || !uploadView.trim()"
+                  :label="t('visualConfirm.upload.choose')"
+                  @click="open()"
+                />
+              </template>
+            </UFileUpload>
           </div>
-          <p class="mt-1.5 text-[10px] text-app-600">
+          <p class="mt-1.5 text-3xs text-app-600">
             {{
               uploadView.trim()
                 ? t('visualConfirm.upload.tipReady')
@@ -367,17 +391,18 @@ async function onFilePicked(e: Event) {
 
         <!-- Request fix -->
         <section v-if="awaitingHuman" class="rounded-lg border border-default bg-default/60 p-3">
-          <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-dimmed">
+          <SectionLabel as="h3" class="mb-2">
             {{ t('visualConfirm.requestFix.heading') }}
-          </h3>
-          <textarea
+          </SectionLabel>
+          <UTextarea
             v-model="globalFindings"
-            rows="3"
+            :rows="3"
             :placeholder="t('visualConfirm.requestFix.placeholder')"
-            class="w-full rounded-md border border-muted bg-app-950 px-3 py-2 text-[13px] text-default placeholder:text-app-600 focus:border-app-warning-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-app-warning-500/60"
+            size="sm"
+            class="w-full"
           />
           <div class="mt-2 flex items-center justify-between">
-            <span class="text-[11px] text-dimmed">
+            <span class="text-2xs text-dimmed">
               {{ t('visualConfirm.requestFix.foldedHint') }}
             </span>
             <UButton
@@ -399,16 +424,16 @@ async function onFilePicked(e: Event) {
           v-if="vc.rounds && vc.rounds.length"
           class="rounded-lg border border-default bg-default/60 p-3"
         >
-          <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-dimmed">
+          <SectionLabel as="h3" class="mb-2">
             {{ t('visualConfirm.history.heading', { count: vc.attempts }, vc.attempts) }}
-          </h3>
+          </SectionLabel>
           <ol class="space-y-2">
-            <li v-for="(r, i) in vc.rounds" :key="i" class="flex items-start gap-2 text-[12px]">
+            <li v-for="(r, i) in vc.rounds" :key="i" class="flex items-start gap-2 text-xs">
               <UIcon name="i-lucide-wrench" class="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted" />
               <div class="min-w-0 flex-1">
                 <span class="text-default">{{ t('visualConfirm.history.fixRequested') }}</span>
                 <span
-                  class="ms-1.5 rounded px-1 text-[10px] uppercase"
+                  class="ms-1.5 rounded-sm px-1 text-3xs uppercase"
                   :class="
                     r.outcome === 'completed'
                       ? 'bg-app-success-500/15 text-app-success-300'
@@ -445,13 +470,13 @@ async function onFilePicked(e: Event) {
         :failure-at="instance?.failure?.occurredAt"
       />
       <div class="flex items-center gap-2">
-        <label
+        <UCheckbox
           v-if="awaitingHuman && needsAck"
-          class="flex items-center gap-1.5 text-[11px] text-app-warning-300/90"
-        >
-          <input v-model="ackDegraded" type="checkbox" class="accent-app-warning-500" />
-          {{ t('visualConfirm.reviewedManually') }}
-        </label>
+          v-model="ackDegraded"
+          size="xs"
+          color="warning"
+          :label="t('visualConfirm.reviewedManually')"
+        />
         <UButton
           size="sm"
           variant="soft"
