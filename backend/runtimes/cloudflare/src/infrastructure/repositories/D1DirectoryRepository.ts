@@ -1,34 +1,27 @@
-import type {
-  DirectoryChangeRecord,
-  DirectoryRepoKey,
-  DirectoryRepository,
-  WorkspaceMembershipKey,
+import {
+  type DirectoryChangeRecord,
+  type DirectoryRepoKey,
+  type DirectoryRepository,
+  directoryChangeFromRow,
+  type StoredDirectoryChange,
+  WORKSPACE_DIRECTORY_ENTITY_TYPES,
+  type WorkspaceMembershipKey,
 } from '@cat-factory/kernel'
 import {
-  type AccountRole,
   type DirectoryAccountMembership,
   type DirectoryRepo,
   type DirectoryUser,
   type DirectoryWorkspace,
   type DirectoryWorkspaceMembership,
-  isDirectoryEntityType,
 } from '@cat-factory/contracts'
 import type { D1Database } from '@cloudflare/workers-types'
 import { chunkForIn } from './chunk'
+import { parseRoles } from './D1MembershipRepository'
 
 // The directory read side over D1 (docs/initiatives/directory-sync.md). Mirror of the Node
 // facade's `DrizzleDirectoryRepository`; `defineDirectoryFeedSuite` and
 // `defineDirectoryReadSuite` hold the two to one behaviour. The feed rows themselves are appended
 // by the writing repositories through `directoryFeed.ts`.
-
-interface ChangeRow {
-  account_id: string
-  seq: number
-  entity_type: string
-  workspace_id: string | null
-  entity_id: string
-  at: number
-}
 
 interface WorkspaceRow {
   id: string
@@ -68,25 +61,6 @@ interface RepoRow {
   is_monorepo: number
 }
 
-/** The entity types a key limited to some workspaces may read. */
-const WORKSPACE_ENTITY_TYPES = ['workspace', 'workspace_membership', 'repo']
-
-function rowToChange(row: ChangeRow): DirectoryChangeRecord {
-  // The vocabulary is append-only, so an unknown value is a row this build cannot interpret, not
-  // one to skip: a reader that dropped it would advance its cursor past a change it never served.
-  if (!isDirectoryEntityType(row.entity_type)) {
-    throw new Error(`Unknown directory entity type '${row.entity_type}' at seq ${row.seq}`)
-  }
-  return {
-    accountId: row.account_id,
-    seq: row.seq,
-    entityType: row.entity_type,
-    workspaceId: row.workspace_id,
-    entityId: row.entity_id,
-    at: row.at,
-  }
-}
-
 const toWorkspace = (row: WorkspaceRow): DirectoryWorkspace => ({
   id: row.id,
   name: row.name,
@@ -100,14 +74,6 @@ const toUser = (row: UserRow): DirectoryUser => ({
   email: row.email,
   avatarUrl: row.avatar_url,
 })
-
-function parseRoles(csv: string | null): AccountRole[] {
-  const roles = (csv ?? '')
-    .split(',')
-    .map((r) => r.trim())
-    .filter((r): r is AccountRole => r === 'admin' || r === 'developer' || r === 'product')
-  return roles.length > 0 ? [...new Set(roles)] : ['developer']
-}
 
 const toAccountMembership = (row: AccountMembershipRow): DirectoryAccountMembership => ({
   userId: row.user_id,
@@ -160,27 +126,28 @@ export class D1DirectoryRepository implements DirectoryRepository {
     limit: number,
     workspaceIds: string[] | null,
   ): Promise<DirectoryChangeRecord[]> {
+    // A restricted key reads its workspaces' changes plus the deletion of ANY workspace that no
+    // longer exists: deleting a board also drops the key's grant on it, so without the second arm
+    // the key would never learn that a board it mirrored is gone.
     const reach = reachClause('workspace_id', workspaceIds)
-    const types =
+    const restricted =
       workspaceIds === null
-        ? ''
-        : ` AND entity_type IN (${WORKSPACE_ENTITY_TYPES.map(() => '?').join(', ')})`
+        ? { sql: '', binds: [] as string[] }
+        : {
+            sql: ` AND ((entity_type IN (${WORKSPACE_DIRECTORY_ENTITY_TYPES.map(() => '?').join(', ')})${reach.sql})
+                    OR (entity_type = 'workspace'
+                        AND NOT EXISTS (SELECT 1 FROM workspaces w WHERE w.id = directory_changes.entity_id)))`,
+            binds: [...WORKSPACE_DIRECTORY_ENTITY_TYPES, ...reach.binds],
+          }
     const { results } = await this.db
       .prepare(
         `SELECT * FROM directory_changes
-          WHERE account_id = ? AND seq > ? AND seq <= ?${types}${reach.sql}
+          WHERE account_id = ? AND seq > ? AND seq <= ?${restricted.sql}
           ORDER BY seq ASC LIMIT ?`,
       )
-      .bind(
-        accountId,
-        afterSeq,
-        upToSeq,
-        ...(workspaceIds === null ? [] : WORKSPACE_ENTITY_TYPES),
-        ...reach.binds,
-        limit,
-      )
-      .all<ChangeRow>()
-    return results.map(rowToChange)
+      .bind(accountId, afterSeq, upToSeq, ...restricted.binds, limit)
+      .all<StoredDirectoryChange>()
+    return results.map(directoryChangeFromRow)
   }
 
   async headSeq(accountId: string): Promise<number> {
@@ -200,10 +167,17 @@ export class D1DirectoryRepository implements DirectoryRepository {
   }
 
   async pruneChanges(before: number): Promise<number> {
+    // A `seq` PREFIX per account, up to its newest row older than the cutoff. `at` is not monotonic
+    // in `seq` (a writer stamps it before waiting on the feed's ordering), so deleting by `at` alone
+    // could remove a row while keeping an older-`seq` one, leaving a hole behind the oldest row that
+    // the reader's expiry check cannot see.
     const result = await this.db
       .prepare(
-        `DELETE FROM directory_changes
-          WHERE at < ?
+        `WITH cut AS (SELECT account_id, MAX(seq) AS upto FROM directory_changes
+                       WHERE at < ? GROUP BY account_id)
+         DELETE FROM directory_changes
+          WHERE account_id IN (SELECT account_id FROM cut)
+            AND seq <= (SELECT upto FROM cut WHERE cut.account_id = directory_changes.account_id)
             AND seq < (SELECT MAX(d.seq) FROM directory_changes d
                         WHERE d.account_id = directory_changes.account_id)`,
       )

@@ -1134,6 +1134,11 @@ export {
   type WorkspaceScopedTable,
 } from './domain/workspace-cascade.js'
 export { changedDirectoryRepoIds, type StoredDirectoryRepo } from './domain/directory-repos.js'
+export {
+  directoryChangeFromRow,
+  type StoredDirectoryChange,
+  WORKSPACE_DIRECTORY_ENTITY_TYPES,
+} from './domain/directory-changes.js'
 
 // The account ⊕ workspace risk-policy merge (ADR 0055): the ONE precedence the editor, every
 // picker and the engine's own resolution all read. See `domain/risk-policy-tiers.ts`.

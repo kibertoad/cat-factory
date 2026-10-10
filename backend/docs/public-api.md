@@ -2941,7 +2941,10 @@ snapshot and follow the feed from its `asOfSeq`.
 
 A key limited to some workspaces sees workspace, workspace-membership and repository entities of
 those workspaces only, and is refused users and account memberships (`403`,
-`details.reason: account_scope_required`). Mint an account-wide key for a full directory mirror.
+`details.reason: account_scope_required`). Its feed also carries the `workspace` change, with
+`entity: null`, of every deleted workspace in the account: deleting a board drops the key's grant on
+it, so this is how the key learns the board is gone. Treat it as the removal of that workspace and
+of every membership and repository under it, since those rows are not served. Mint an account-wide key for a full directory mirror.
 Design: [`docs/initiatives/directory-sync.md`](../../docs/initiatives/directory-sync.md).
 
 ### Key provisioning (`/api/v1/keys`)

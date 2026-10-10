@@ -221,6 +221,38 @@ export function defineDirectoryFeedSuite(name: string, makeRepos: () => Director
       expect(await r.changes.headSeq(acc)).toBe(head + 3)
     })
 
+    it('serves a reach the deletion of a board its grant went with, and nothing else of it', async () => {
+      const r = makeRepos()
+      const { acc, ws, usr } = ids()
+      const kept = `${ws}-kept`
+      await seedUser(r, usr)
+      await seedWorkspace(r, ws, acc)
+      await seedWorkspace(r, kept, acc)
+      await r.workspaceMembers.upsert({
+        workspaceId: ws,
+        userId: usr,
+        role: 'admin',
+        createdAt: 1,
+        addedByUserId: null,
+      })
+      const head = await r.changes.headSeq(acc)
+
+      await r.workspaces.delete(ws)
+
+      // Deleting the board drops a key's grant on it, so the reach no longer names it. The
+      // workspace deletion still reaches the key; the membership row, which names a user, does not.
+      for (const reach of [[kept], []]) {
+        const rows = await r.changes.listChanges(acc, head, Number.MAX_SAFE_INTEGER, 100, reach)
+        expect(rows.map((c) => [c.entityType, c.workspaceId, c.entityId])).toEqual([
+          ['workspace', ws, ws],
+        ])
+      }
+      // A board that still exists outside the reach stays invisible.
+      expect(
+        await r.changes.listChanges(acc, 0, Number.MAX_SAFE_INTEGER, 100, [ws]),
+      ).not.toContainEqual(expect.objectContaining({ entityId: kept }))
+    })
+
     it('records the board tree in both accounts when it moves between them', async () => {
       const r = makeRepos()
       const { acc, acc2, ws } = ids()

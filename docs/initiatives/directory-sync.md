@@ -95,8 +95,13 @@ to their one workspace, so their behaviour is unchanged.
 - `PublicApiKeyAuth.workspaceId` keeps meaning "the workspace this request acts on", resolved
   inside `authorize`, so the workspace-scoped controllers need no change.
 - Directory routes are account-scoped and need no header. A restricted key sees `workspace`,
-  `workspace_membership` and `repo` entities of its workspaces only, plus the `user` entities those
-  memberships reference; `account_membership` requires an unrestricted key.
+  `workspace_membership` and `repo` entities of its workspaces only. `user` and `account_membership`
+  are account-wide facts, so a restricted key is refused their snapshots
+  (`403 account_scope_required`) and its feed omits them. Its feed also carries the `workspace`
+  deletion of every workspace that no longer exists: the board's deletion drops the key's grant, so
+  filtering by current grants alone would never tell the key that a board it mirrored is gone. The
+  membership and repo deletions of that board stay hidden (a membership names a user), so the
+  client cascades the workspace deletion itself.
 - This is additive under [ADR 0034](../../backend/docs/adr/0034-public-api-stability.md): no existing
   key or call changes meaning, and the header is optional for every key minted today.
 
