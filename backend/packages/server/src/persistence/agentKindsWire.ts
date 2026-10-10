@@ -8,6 +8,7 @@ import {
   type McpOAuthConfig,
   type McpSecretRef,
   type McpServerDefinition,
+  type HarnessKind,
   type McpStdioTransport,
   isHarnessKind,
 } from '@cat-factory/kernel'
@@ -170,27 +171,64 @@ function isInlineShapeView(entry: unknown): boolean {
 
 // ---------------------------------------------------------------------------
 // Definition checks. Each is a table with ONE guard per field of the type it checks, optional fields
-// included, and each guard is typed for that field's own type. So a field ADDED to the type, a field
-// whose type CHANGES, and a field that becomes required or optional each fail to compile here until
-// the check is updated. That is what keeps "every field the harness reads is checked" true as the
-// types grow.
+// included, and each guard is typed EXACTLY for that field's own type. So a field that is added,
+// removed, narrowed, widened (a new union member) or moved between required and optional fails to
+// compile here until the check is updated. That is what keeps "every field the harness reads is
+// checked" true as the types grow.
 // ---------------------------------------------------------------------------
 
-type Guard<V> = (value: unknown) => value is V
+/**
+ * A type guard that is INVARIANT in `V`. A bare `(value: unknown) => value is V` is covariant, so
+ * a guard for `'a' | 'b'` would type-check where `'a' | 'b' | 'c'` is required and then refuse
+ * every legal `'c'`. The optional `exact` member uses `V` as a parameter too, which makes `V`
+ * invariant. Every guard below is DECLARED with this type for the same reason: a plain function
+ * would carry no `exact` member and pass the check as covariant again.
+ */
+type Guard<V> = ((value: unknown) => value is V) & { readonly exact?: (value: V) => V }
+
 /** One guard per field. `keyof Required<T>` lists optional fields too, and `T[K]` keeps their `undefined`. */
 type FieldChecks<T> = { [K in keyof Required<T>]: Guard<T[K]> }
 
-function matches<T>(value: unknown, checks: FieldChecks<T>): value is T {
-  return (
-    isRecord(value) &&
-    Object.entries<Guard<unknown>>(checks).every(([field, check]) => check(value[field]))
-  )
+const isString: Guard<string> = (value): value is string => typeof value === 'string'
+
+const isBoolean: Guard<boolean> = (value): value is boolean => typeof value === 'boolean'
+
+const isHarness: Guard<HarnessKind> = (value): value is HarnessKind => isHarnessKind(value)
+
+const isStringMap: Guard<Record<string, string>> = (value): value is Record<string, string> =>
+  isRecord(value) && Object.values(value).every(isString)
+
+const isIndexList: Guard<number[]> = (value): value is number[] =>
+  Array.isArray(value) && value.every(Number.isInteger)
+
+/** An optional field: absent, or present and valid. */
+function absentOr<V>(check: Guard<V>): Guard<V | undefined> {
+  return (value): value is V | undefined => value === undefined || check(value)
+}
+
+function listOf<V>(check: Guard<V>): Guard<V[]> {
+  return (value): value is V[] => Array.isArray(value) && value.every(check)
+}
+
+function either<A, B>(first: Guard<A>, second: Guard<B>): Guard<A | B> {
+  return (value): value is A | B => first(value) || second(value)
+}
+
+function oneOf<V extends string>(...allowed: V[]): Guard<V> {
+  return (value): value is V => allowed.includes(value as V)
 }
 
 /** A guard for a value built from field guards, for use as a field guard itself. */
 function shape<T>(checks: FieldChecks<T>): Guard<T> {
-  return (value): value is T => matches(value, checks)
+  return (value): value is T =>
+    isRecord(value) &&
+    // Read as plain predicates: an invariant guard does not widen to `Guard<unknown>`.
+    Object.entries(checks as Record<string, (value: unknown) => boolean>).every(([field, check]) =>
+      check(value[field]),
+    )
 }
+
+const isStringList = listOf(isString)
 
 const isCatalogRef = shape<NormalizedSkillRefs['catalog'][number]>({
   skillId: isString,
@@ -207,14 +245,14 @@ const isBundledSkill = shape<BundledSkillDefinition>({
 })
 
 const isStdioTransport = shape<McpStdioTransport>({
-  kind: literal('stdio'),
+  kind: oneOf('stdio'),
   command: isString,
-  args: absentOr(listOf(isString)),
+  args: absentOr(isStringList),
   env: absentOr(isStringMap),
 })
 
 const isHttpTransport = shape<McpHttpTransport>({
-  kind: literal('http'),
+  kind: oneOf('http'),
   url: isString,
   headers: absentOr(isStringMap),
 })
@@ -234,7 +272,7 @@ const isOAuthConfig = shape<McpOAuthConfig>({
   clientSecretKey: absentOr(isString),
   authorizationUrl: absentOr(isString),
   tokenUrl: absentOr(isString),
-  scopes: absentOr(listOf(isString)),
+  scopes: absentOr(isStringList),
   resource: absentOr(isString),
   header: absentOr(isString),
   headerTemplate: absentOr(isString),
@@ -246,47 +284,8 @@ const isToolServer = shape<McpServerDefinition>({
   label: absentOr(isString),
   guidance: absentOr(isString),
   transport: either(isStdioTransport, isHttpTransport),
-  allowedTools: absentOr(listOf(isString)),
-  harnesses: absentOr(listOf(isHarnessKind)),
+  allowedTools: absentOr(isStringList),
+  harnesses: absentOr(listOf(isHarness)),
   secretKeys: absentOr(listOf(isSecretRef)),
   oauth: absentOr(isOAuthConfig),
 })
-
-/** An optional field: absent, or present and valid. */
-function absentOr<V>(check: Guard<V>): Guard<V | undefined> {
-  return (value): value is V | undefined => value === undefined || check(value)
-}
-
-function listOf<V>(check: Guard<V>): Guard<V[]> {
-  return (value): value is V[] => Array.isArray(value) && value.every(check)
-}
-
-function either<A, B>(first: Guard<A>, second: Guard<B>): Guard<A | B> {
-  return (value): value is A | B => first(value) || second(value)
-}
-
-function literal<V extends string>(expected: V): Guard<V> {
-  return (value): value is V => value === expected
-}
-
-function oneOf<V extends string>(...allowed: V[]): Guard<V> {
-  return (value): value is V => allowed.includes(value as V)
-}
-
-function isString(value: unknown): value is string {
-  return typeof value === 'string'
-}
-
-function isBoolean(value: unknown): value is boolean {
-  return typeof value === 'boolean'
-}
-
-function isStringMap(value: unknown): value is Record<string, string> {
-  return isRecord(value) && Object.values(value).every(isString)
-}
-
-function isIndexList(value: unknown): value is number[] {
-  return Array.isArray(value) && value.every(Number.isInteger)
-}
-
-const isStringList = listOf(isString)

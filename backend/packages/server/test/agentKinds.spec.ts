@@ -1,8 +1,9 @@
 import {
   defaultAgentKindRegistry,
   mergeKindCapabilities,
-  NUXT_UI_SKILL_ID,
-  NUXT_UI_TOOL_SERVER_ID,
+  NUXT_UI_CAPABILITY_KINDS,
+  nuxtUiSkill,
+  nuxtUiToolServer,
   registerNuxtUiCapability,
 } from '@cat-factory/agents'
 import type { AgentKindCapabilityView } from '@cat-factory/agents'
@@ -205,12 +206,14 @@ describe('mothership-mode agent-kind capability layer', () => {
   })
 
   it('carries the shipped Nuxt UI capability, the case #2269 was opened for', async () => {
+    // Derived from the capability's own kind list, so a wire that drops a kind fails here rather
+    // than leaving that kind to dispatch without its playbook.
     const source = await node(mothership(registerNuxtUiCapability))
     const views = await source.capabilities()
-    expect(views.length).toBeGreaterThan(0)
+    expect(views.map((view) => view.kind).sort()).toEqual([...NUXT_UI_CAPABILITY_KINDS].sort())
     for (const view of views) {
-      expect(view.skills.bundled.map((skill) => skill.id)).toEqual([NUXT_UI_SKILL_ID])
-      expect(view.toolServers.servers.map((server) => server.id)).toEqual([NUXT_UI_TOOL_SERVER_ID])
+      expect(view.skills.bundled).toEqual([nuxtUiSkill])
+      expect(view.toolServers.servers).toEqual([nuxtUiToolServer])
     }
   })
 
