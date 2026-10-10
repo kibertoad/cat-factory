@@ -44,11 +44,27 @@ class MemoryRepo implements DirectoryWebhookRepository {
   async listEnabled() {
     return [...this.rows.values()].filter((r) => r.enabled)
   }
-  async advance(accountId: string, id: string, fromSeq: number, toSeq: number) {
-    const row = this.rows.get(this.key(accountId, id))
-    if (!row || row.deliveredSeq !== fromSeq) return false
+  /** Lease state per endpoint, beside the record the port exposes. */
+  leases = new Map<string, { token: string; until: number }>()
+  async claim(accountId: string, id: string, token: string, now: number, leaseUntil: number) {
+    const key = this.key(accountId, id)
+    const row = this.rows.get(key)
+    const lease = this.leases.get(key)
+    if (!row || !row.enabled || (lease && lease.until > now)) return null
+    this.leases.set(key, { token, until: leaseUntil })
+    return row.deliveredSeq
+  }
+  async complete(accountId: string, id: string, token: string, toSeq: number) {
+    const key = this.key(accountId, id)
+    const row = this.rows.get(key)
+    if (!row || this.leases.get(key)?.token !== token) return false
     row.deliveredSeq = toSeq
+    this.leases.delete(key)
     return true
+  }
+  async release(accountId: string, id: string, token: string) {
+    const key = this.key(accountId, id)
+    if (this.leases.get(key)?.token === token) this.leases.delete(key)
   }
 }
 
@@ -66,6 +82,7 @@ function change(seq: number): DirectoryChange {
 function feed(head: number, options: { expired?: boolean } = {}): DirectoryFeedReader {
   return {
     headSeq: async () => head,
+    headSeqs: async (accountIds) => new Map(accountIds.map((id) => [id, head])),
     changes: async (_reader, after): Promise<DirectoryChangePage> => {
       if (options.expired) throw new ConflictError('gone', 'cursor_expired')
       const changes = Array.from({ length: head - after }, (_, i) => change(after + i + 1))
@@ -77,11 +94,15 @@ function feed(head: number, options: { expired?: boolean } = {}): DirectoryFeedR
 function build(head: number, status = 200, options: { expired?: boolean } = {}) {
   const repo = new MemoryRepo()
   const sent: { url: string; body: unknown; signature: string | null }[] = []
+  const counted: { counter: string; dimensions: unknown }[] = []
   const service = new DirectoryWebhookService({
     repository: repo,
     feed: feed(head, options),
     secretCipher: cipher,
     clock,
+    operationalMetrics: {
+      increment: (counter, dimensions) => counted.push({ counter, dimensions }),
+    },
     fetchImpl: (async (url: string, init: RequestInit) => {
       const headers = new Headers(init.headers)
       sent.push({
@@ -92,7 +113,7 @@ function build(head: number, status = 200, options: { expired?: boolean } = {}) 
       return new Response(null, { status })
     }) as unknown as typeof fetch,
   })
-  return { repo, sent, service }
+  return { repo, sent, counted, service }
 }
 
 describe('DirectoryWebhookService', () => {
@@ -112,11 +133,29 @@ describe('DirectoryWebhookService', () => {
     await expect(service.put('acc', 'x', {})).rejects.toMatchObject({
       details: { reason: 'webhook_url_required' },
     })
+    await expect(
+      service.put('acc', 'Not A Slug', { url: 'https://h.example.com/' }),
+    ).rejects.toMatchObject({ code: 'validation', details: { reason: 'invalid_webhook_id' } })
     for (let i = 0; i < 10; i++)
       await service.put('acc', `h${i}`, { url: 'https://h.example.com/' })
     await expect(
       service.put('acc', 'h10', { url: 'https://h.example.com/' }),
     ).rejects.toMatchObject({ details: { reason: 'webhook_limit_reached' } })
+  })
+
+  it('guards only a supplied url, so an endpoint the policy now forbids can still be disabled', async () => {
+    const { repo, service } = build(0)
+    repo.rows.set('acc/m', {
+      accountId: 'acc',
+      id: 'm',
+      url: 'https://127.0.0.1/hook',
+      enabled: true,
+      secretSealed: null,
+      deliveredSeq: 0,
+      updatedAt: 1,
+    })
+    expect(await service.put('acc', 'm', { enabled: false })).toMatchObject({ enabled: false })
+    await expect(service.put('acc', 'm', { url: 'https://127.0.0.1/other' })).rejects.toThrow()
   })
 
   it('pushes the pending changes signed, and advances past them', async () => {
@@ -148,8 +187,8 @@ describe('DirectoryWebhookService', () => {
     expect(await service.deliverPending()).toEqual({ pushed: 0, failed: 0 })
   })
 
-  it('releases the claim when the push fails, so the same page is offered again', async () => {
-    const { repo, sent, service } = build(3, 500)
+  it('drops the lease when the push fails, so the same page is offered again', async () => {
+    const { repo, sent, counted, service } = build(3, 500)
     repo.rows.set('acc/m', {
       accountId: 'acc',
       id: 'm',
@@ -163,6 +202,32 @@ describe('DirectoryWebhookService', () => {
     expect(result.failed).toBe(1)
     expect(sent.length).toBeGreaterThan(0)
     expect(repo.rows.get('acc/m')?.deliveredSeq).toBe(1)
+    expect(repo.leases.size).toBe(0)
+    expect(counted).toEqual([
+      { counter: 'notification.delivery_failed', dimensions: { channel: 'directory_webhook' } },
+    ])
+  })
+
+  it('sends nothing while another sweeper holds a live lease, and resends once it expires', async () => {
+    const { repo, sent, service } = build(3)
+    repo.rows.set('acc/m', {
+      accountId: 'acc',
+      id: 'm',
+      url: 'https://h.example.com/',
+      enabled: true,
+      secretSealed: null,
+      deliveredSeq: 1,
+      updatedAt: 1,
+    })
+    // A sweeper took the lease and died before completing: the position never moved.
+    repo.leases.set('acc/m', { token: 'dead', until: clock.now() + 1 })
+    expect(await service.deliverPending()).toEqual({ pushed: 0, failed: 0 })
+    expect(sent).toHaveLength(0)
+
+    repo.leases.set('acc/m', { token: 'dead', until: clock.now() })
+    expect(await service.deliverPending()).toEqual({ pushed: 1, failed: 0 })
+    expect(sent[0]!.body).toMatchObject({ deliveryId: 'm:1-3' })
+    expect(repo.rows.get('acc/m')?.deliveredSeq).toBe(3)
   })
 
   it('never sends a page another sweeper already claimed', async () => {

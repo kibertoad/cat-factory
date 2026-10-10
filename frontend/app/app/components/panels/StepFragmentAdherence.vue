@@ -7,6 +7,7 @@
 // summary instead (so there is nothing to show here).
 import type { FragmentAdherence } from '~/types/execution'
 import MarkdownProse from '~/components/common/MarkdownProse.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const props = defineProps<{ items: FragmentAdherence }>()
 const { t } = useI18n()
@@ -34,14 +35,12 @@ function label(item: FragmentAdherence[number]): string {
     data-testid="step-fragment-adherence"
     class="scroll-mt-4 rounded-xl border border-default bg-default/50 p-4"
   >
-    <div
-      class="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted"
-    >
+    <SectionLabel class="mb-2 flex items-center gap-1.5">
       <UIcon name="i-lucide-clipboard-check" class="h-3.5 w-3.5" />
       <span :title="t('panels.stepDetail.adherence.headingHint')">
         {{ t('panels.stepDetail.adherence.heading') }}
       </span>
-    </div>
+    </SectionLabel>
 
     <div class="space-y-2.5">
       <article
@@ -51,7 +50,7 @@ function label(item: FragmentAdherence[number]): string {
         class="rounded-lg border border-default bg-default/60 px-3 py-2"
       >
         <div class="flex items-center gap-2">
-          <span class="min-w-0 flex-1 truncate text-[13px] font-medium text-app-100">{{
+          <span class="min-w-0 flex-1 truncate text-sm font-medium text-app-100">{{
             label(item)
           }}</span>
           <div class="h-1.5 w-16 shrink-0 overflow-hidden rounded-full bg-accented/60">
@@ -62,7 +61,7 @@ function label(item: FragmentAdherence[number]): string {
             />
           </div>
           <span
-            class="shrink-0 text-[12px] font-medium text-default"
+            class="shrink-0 text-xs font-medium text-default"
             :title="t('panels.stepDetail.adherence.ratingHint')"
           >
             {{ t('panels.stepDetail.adherence.outOfTen', { value: item.rating }) }}
@@ -71,17 +70,17 @@ function label(item: FragmentAdherence[number]): string {
         <MarkdownProse
           v-if="item.assessment"
           :text="item.assessment"
-          class="mt-1 text-[12px] leading-relaxed text-toned"
+          class="mt-1 text-xs leading-relaxed text-toned"
         />
         <div v-if="item.relatedFindings.length" class="mt-1.5">
-          <p class="text-[10px] font-semibold uppercase tracking-wide text-dimmed">
+          <SectionLabel as="p">
             {{ t('panels.stepDetail.adherence.relatedFindings') }}
-          </p>
+          </SectionLabel>
           <ul class="mt-0.5 space-y-0.5">
             <li
               v-for="(finding, fi) in item.relatedFindings"
               :key="fi"
-              class="flex items-start gap-1.5 text-[11px] text-muted"
+              class="flex items-start gap-1.5 text-2xs text-muted"
             >
               <UIcon name="i-lucide-dot" class="mt-0.5 h-3.5 w-3.5 shrink-0" />
               <span>{{ finding }}</span>

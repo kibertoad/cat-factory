@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { showOverrideField } from '~/utils/uiMode'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 // The Integrations hub: a single modal that lists the OPTIONAL external systems the WORKSPACE
 // can enable or link in — the ones that feed a run its context (source control, documents,
@@ -422,14 +423,15 @@ const filteredGroups = computed<IntegrationGroup[]>(() => {
         </p>
 
         <section v-for="group in filteredGroups" :key="group.title">
-          <h3 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-muted">
+          <SectionLabel as="h3" class="mb-2 px-1">
             {{ group.title }}
-          </h3>
+          </SectionLabel>
           <div class="space-y-1.5">
-            <button
+            <UButton
+              color="neutral"
+              variant="ghost"
               v-for="item in group.items"
               :key="item.key"
-              type="button"
               class="flex w-full items-center gap-3 rounded-lg border border-default bg-default/50 px-3 py-2.5 text-start transition hover:border-muted hover:bg-default"
               @click="item.onClick()"
             >
@@ -443,7 +445,7 @@ const filteredGroups = computed<IntegrationGroup[]>(() => {
                   <UBadge v-else-if="item.attention" color="warning" variant="subtle" size="sm">
                     {{ item.attentionLabel || t('layout.integrationsHub.status.needsAttention') }}
                   </UBadge>
-                  <span v-else class="text-[11px] text-dimmed">{{
+                  <span v-else class="text-2xs text-dimmed">{{
                     t('layout.integrationsHub.status.notConnected')
                   }}</span>
                   <UBadge
@@ -461,13 +463,14 @@ const filteredGroups = computed<IntegrationGroup[]>(() => {
                 name="i-lucide-chevron-right"
                 class="h-4 w-4 shrink-0 text-dimmed rtl:-scale-x-100"
               />
-            </button>
+            </UButton>
           </div>
 
           <!-- De-emphasised workspace-config link (e.g. issue tracker settings). -->
-          <button
+          <UButton
+            color="neutral"
+            variant="ghost"
             v-if="group.footerLink"
-            type="button"
             class="mt-1.5 flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-start text-xs text-muted transition hover:bg-default/60 hover:text-default"
             @click="group.footerLink.onClick()"
           >
@@ -480,7 +483,7 @@ const filteredGroups = computed<IntegrationGroup[]>(() => {
               name="i-lucide-chevron-right"
               class="h-3.5 w-3.5 shrink-0 text-app-600 rtl:-scale-x-100"
             />
-          </button>
+          </UButton>
         </section>
       </div>
     </template>

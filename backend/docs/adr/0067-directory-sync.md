@@ -50,14 +50,24 @@ key's reach; hydration is one batched read per entity type. A snapshot walk carr
 read before its first page (`asOfSeq`), so replaying from it after the last page covers whatever
 changed mid-walk. The feed is pruned after `DIRECTORY_CHANGE_RETENTION_DAYS` (default 30), always
 keeping each account's newest row; a cursor older than that, or ahead of the feed, is
-`409 cursor_expired`. A key limited to some workspaces sees their workspaces, memberships and
-repositories only and is refused users and account memberships (`403 account_scope_required`).
+`409 cursor_expired`. A snapshot cursor names the listing that issued it, so a cursor passed to
+another listing is `400 invalid_cursor` rather than a key bound that silently skips rows. A key
+limited to some workspaces sees their workspaces, memberships and repositories only and is refused
+users and account memberships (`403 account_scope_required`); its feed omits those rows. That feed
+also carries the `workspace` deletion of every workspace that no longer exists, because the
+board's deletion drops the key's grant and filtering by current grants alone would never tell the
+key that a board it mirrored is gone. The membership and repo deletions of that board stay hidden
+(a membership names a user), so the client cascades the workspace deletion itself.
 
 **4. Directory webhooks push the feed.** Account-level endpoints (`/api/v1/directory/webhooks`,
 `admin` and account-wide keys only, at most 10) receive `directory.changed` pages or
 `directory.resync_required`, signed with the notification webhooks' scheme, from a sweep that runs
-every two minutes on both facades (the Worker's frequent cron, a Node timer). Each endpoint's
-`delivered_seq` is claimed by compare-and-swap before a push and moved back after a failed one.
+every two minutes on both facades (the Worker's frequent cron, a Node timer). A sweeper takes a
+per-endpoint lease (`lease_token`, held until `lease_until`, 60 seconds) before a push and moves
+`delivered_seq` only after the push succeeds, so two sweepers never push overlapping pages, pages
+arrive in feed order, a failed push is retried, and a page whose sweeper died is sent again once
+the lease expires. A failed push is counted on `notification.delivery_failed` with
+`channel: directory_webhook`. A malformed endpoint id is `400 invalid_webhook_id`.
 
 **5. Two hand-written packages make a receiver cheap.** `@cat-factory/webhooks` verifies any signed
 delivery (Web Crypto only; `gatekeeper-worker` re-exports it). `@cat-factory/directory-sync`

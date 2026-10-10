@@ -107,7 +107,14 @@ export type GitHubPullRequest = v.InferOutput<typeof githubPullRequestSchema>
  * block — gets a real link without reconstructing a provider-specific URL. Each VCS provider
  * fills `url` from its own field, keeping the shared layer provider-agnostic.
  */
-export type OpenedPullRequest = GitHubPullRequest & { url: string }
+export type OpenedPullRequest = GitHubPullRequest & {
+  url: string
+  /**
+   * True when the head branch lives in a different repository than the base (a fork), false when
+   * both are the same repository. Absent when the provider did not say.
+   */
+  crossRepository?: boolean
+}
 
 export const githubIssueStateSchema = v.picklist(['open', 'closed'])
 export type GitHubIssueState = v.InferOutput<typeof githubIssueStateSchema>

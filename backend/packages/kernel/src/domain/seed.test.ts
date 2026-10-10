@@ -20,6 +20,7 @@ import {
   defaultPipelineIdForTaskType,
   retiredPipelines,
   REVIEW_PIPELINE_ID,
+  RESOLVE_CONFLICTS_PIPELINE_ID,
   seedBlocks,
   seedPipelines,
 } from './seed.js'
@@ -537,6 +538,23 @@ describe('seedPipelines — purpose classification is total and matches the engi
     expect(offered('review')).toEqual(['pl_review'])
   })
 
+  it('offers a resolve-conflicts task only the conflict-resolution preset, and nobody else it', () => {
+    const offeredTo = (taskType: (typeof BUILTIN_TASK_TYPES)[number] | 'acme:incident') =>
+      seedPipelines()
+        .filter((p) => pipelineAllowedForTaskType(p, taskType))
+        .map((p) => p.id)
+    expect(offeredTo('resolve-conflicts')).toEqual([RESOLVE_CONFLICTS_PIPELINE_ID])
+    const resolver = byId().get(RESOLVE_CONFLICTS_PIPELINE_ID)!
+    expect(resolver.agentKinds).toEqual(['conflicts'])
+    expect(resolver.purpose).toBe('maintenance')
+    for (const other of [...BUILTIN_TASK_TYPES, 'acme:incident' as const]) {
+      if (other === 'resolve-conflicts') continue
+      expect(offeredTo(other), `${other}`).not.toContain(RESOLVE_CONFLICTS_PIPELINE_ID)
+    }
+    // An untyped context (no task in hand) still lists the whole catalog.
+    expect(pipelineAllowedForTaskType(resolver, undefined)).toBe(true)
+  })
+
   it('offers an initiative block only the planning presets, and vice versa', () => {
     const onInitiative = seedPipelines()
       .filter((p) => pipelineAllowedForBlockLevel(p, 'initiative'))
@@ -565,6 +583,7 @@ describe('defaultPipelineIdForTaskType', () => {
     expect(defaultPipelineIdForTaskType('ralph')).toBe(RALPH_PIPELINE_ID)
     expect(defaultPipelineIdForTaskType('media')).toBe(MEDIA_PIPELINE_ID)
     expect(defaultPipelineIdForTaskType('bug-fishing')).toBe(BUG_FISHING_PIPELINE_ID)
+    expect(defaultPipelineIdForTaskType('resolve-conflicts')).toBe(RESOLVE_CONFLICTS_PIPELINE_ID)
   })
 
   it('resolves every pinned default to a pipeline the catalog actually ships', () => {
@@ -577,7 +596,15 @@ describe('defaultPipelineIdForTaskType', () => {
   })
 
   it('leaves every other built-in type to the workspace positional default', () => {
-    const pinned = new Set(['document', 'spike', 'review', 'ralph', 'media', 'bug-fishing'])
+    const pinned = new Set([
+      'document',
+      'spike',
+      'review',
+      'ralph',
+      'media',
+      'bug-fishing',
+      'resolve-conflicts',
+    ])
     for (const taskType of BUILTIN_TASK_TYPES) {
       if (pinned.has(taskType)) continue
       expect(defaultPipelineIdForTaskType(taskType), `${taskType}`).toBeUndefined()

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { onKeyStroke } from '@vueuse/core'
+import type { TableColumn } from '@nuxt/ui'
 import { isLlmWarningFinishReason } from '@cat-factory/contracts'
 import type {
   AgentContextSnapshot,
@@ -29,6 +30,8 @@ import {
 import OutcomeFilterChips from '~/components/observability/OutcomeFilterChips.vue'
 import RunFailureSummary from '~/components/observability/RunFailureSummary.vue'
 import ToolCallList from '~/components/observability/ToolCallList.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
+import IconButton from '~/components/common/IconButton.vue'
 
 /** No run selected: the same empty, NOT-truncated trajectory the store answers with. */
 const EMPTY_TRAJECTORY: RunToolCallTrajectory = Object.freeze({
@@ -163,6 +166,22 @@ function retryFailureEvidence() {
 function openToolsView() {
   view.value = 'tools'
   ensureTrajectoryLoaded()
+}
+
+const viewTabs = computed(() => [
+  { value: 'calls', label: t('observability.modelActivity') },
+  { value: 'tools', label: t('observability.toolCalls.title') },
+  { value: 'context', label: t('observability.providedContext') },
+  { value: 'search', label: t('observability.webSearch') },
+])
+
+/** The tools view has a side effect (lazy trajectory load), so selection routes through here. */
+function selectView(next: string) {
+  if (next === 'tools') {
+    openToolsView()
+    return
+  }
+  view.value = next as typeof view.value
 }
 
 /**
@@ -410,6 +429,23 @@ const costCurrency = computed(
 const showCost = computed(
   () => !!costCurrency.value && phaseRows.value.some((p) => p.costEstimate != null),
 )
+// Column definitions rather than hand-written `<th>`s. The cost column stays conditional on the
+// same signal: a deployment with no rate table must not be shown a column of em dashes.
+const phaseColumns = computed<TableColumn<(typeof phaseRows.value)[number]>[]>(() => [
+  { id: 'phase' },
+  { id: 'turns' },
+  { id: 'tokens' },
+  ...(showCost.value ? [{ id: 'cost' } as TableColumn<(typeof phaseRows.value)[number]>] : []),
+  // `aria-sort` needs BOTH halves: UTable asks `enableSorting && column.getCanSort()`, and
+  // `getCanSort()` is false on a column with no accessor, so `enableSorting` alone emitted
+  // nothing and the header silently stopped stating the order. The rows arrive in this order
+  // from the rollup, so `manualSorting` below keeps TanStack from re-deriving it: the
+  // declaration MARKS the order, it does not produce it, and nothing here offers a sort control.
+  { id: 'carryCost', accessorKey: 'carryCostTokens', enableSorting: true },
+])
+/** The order the rollup already returns, stated so the header can say which column it is. */
+const PHASE_SORTING = [{ id: 'carryCost', desc: true }]
+const PHASE_SORTING_OPTIONS = { manualSorting: true }
 /**
  * The run's estimated cost, folded from the same SQL rollup the phase table shows — NOT from
  * the capped call list the token totals beside it use, which would silently under-report a run
@@ -520,44 +556,17 @@ function exportJson() {
             </p>
           </div>
           <div class="ms-auto flex items-center gap-1.5">
-            <div class="me-1 flex rounded-lg border border-default p-0.5 text-[12px]">
-              <button
-                class="rounded-md px-2.5 py-1 transition"
-                :class="
-                  view === 'calls' ? 'bg-elevated text-app-100' : 'text-muted hover:text-default'
-                "
-                @click="view = 'calls'"
-              >
-                {{ t('observability.modelActivity') }}
-              </button>
-              <button
-                class="rounded-md px-2.5 py-1 transition"
-                :class="
-                  view === 'tools' ? 'bg-elevated text-app-100' : 'text-muted hover:text-default'
-                "
-                @click="openToolsView()"
-              >
-                {{ t('observability.toolCalls.title') }}
-              </button>
-              <button
-                class="rounded-md px-2.5 py-1 transition"
-                :class="
-                  view === 'context' ? 'bg-elevated text-app-100' : 'text-muted hover:text-default'
-                "
-                @click="view = 'context'"
-              >
-                {{ t('observability.providedContext') }}
-              </button>
-              <button
-                class="rounded-md px-2.5 py-1 transition"
-                :class="
-                  view === 'search' ? 'bg-elevated text-app-100' : 'text-muted hover:text-default'
-                "
-                @click="view = 'search'"
-              >
-                {{ t('observability.webSearch') }}
-              </button>
-            </div>
+            <!-- Four VIEWS of the same run, which is what tabs mean. The trajectory is loaded
+                 lazily the first time the tools view is opened, so the change is watched rather
+                 than bound straight to `view`. -->
+            <UTabs
+              :model-value="view"
+              :items="viewTabs"
+              :content="false"
+              size="xs"
+              class="me-1"
+              @update:model-value="selectView(String($event))"
+            />
             <UButton
               v-if="view === 'calls'"
               icon="i-lucide-download"
@@ -571,12 +580,12 @@ function exportJson() {
             >
               {{ t('observability.exportJson') }}
             </UButton>
-            <UButton
+            <IconButton
               icon="i-lucide-x"
               color="neutral"
               variant="ghost"
               size="sm"
-              :title="t('observability.closeEsc')"
+              :label="t('observability.closeEsc')"
               @click="close"
             />
           </div>
@@ -597,28 +606,28 @@ function exportJson() {
 
             <!-- run-level summary -->
             <section class="rounded-xl border border-default bg-default/50 p-4">
-              <dl class="grid grid-cols-2 gap-x-6 gap-y-3 text-[13px] sm:grid-cols-4">
+              <dl class="grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-4">
                 <div>
-                  <dt class="text-[11px] uppercase tracking-wide text-dimmed">
+                  <SectionLabel as="dt">
                     {{ t('observability.summary.calls') }}
-                  </dt>
+                  </SectionLabel>
                   <dd class="mt-0.5 tabular-nums text-default">{{ totals.calls }}</dd>
                 </div>
                 <div v-if="showCost || !phaseRollup.available">
-                  <dt class="text-[11px] uppercase tracking-wide text-dimmed">
+                  <SectionLabel as="dt">
                     {{ t('observability.summary.cost') }}
-                  </dt>
+                  </SectionLabel>
                   <dd class="mt-0.5 tabular-nums text-default">
                     {{ runCost ?? '—' }}
-                    <span class="mt-0.5 block text-[11px] text-dimmed">
+                    <span class="mt-0.5 block text-2xs text-dimmed">
                       {{ t(costNoteKey) }}
                     </span>
                   </dd>
                 </div>
                 <div>
-                  <dt class="text-[11px] uppercase tracking-wide text-dimmed">
+                  <SectionLabel as="dt">
                     {{ t('observability.summary.tokensInOut') }}
-                  </dt>
+                  </SectionLabel>
                   <dd class="mt-0.5 tabular-nums text-default">
                     <span :title="t('observability.summary.inputTokensHint')">
                       {{ formatTokens(totals.inputTokens) }} /
@@ -626,7 +635,7 @@ function exportJson() {
                     </span>
                     <span
                       v-if="totals.cacheReadTokens > 0 || totals.cacheWriteTokens > 0"
-                      class="mt-0.5 block text-[11px]"
+                      class="mt-0.5 block text-2xs"
                     >
                       <span class="text-muted" :title="t('observability.summary.freshHint')">
                         {{
@@ -665,9 +674,9 @@ function exportJson() {
                   </dd>
                 </div>
                 <div>
-                  <dt class="text-[11px] uppercase tracking-wide text-dimmed">
+                  <SectionLabel as="dt">
                     {{ t('observability.summary.transportOverhead') }}
-                  </dt>
+                  </SectionLabel>
                   <dd class="mt-0.5 tabular-nums text-default">
                     <span v-if="totals.transportPct !== null">
                       {{ totals.transportPct }}% · {{ formatMs(totals.overheadMs) }}
@@ -676,9 +685,9 @@ function exportJson() {
                   </dd>
                 </div>
                 <div>
-                  <dt class="text-[11px] uppercase tracking-wide text-dimmed">
+                  <SectionLabel as="dt">
                     {{ t('observability.summary.modelExecution') }}
-                  </dt>
+                  </SectionLabel>
                   <dd class="mt-0.5 tabular-nums text-default">
                     {{ formatMs(totals.upstreamMs) }}
                   </dd>
@@ -718,89 +727,112 @@ function exportJson() {
               class="rounded-xl border border-default bg-default/50 p-4"
             >
               <div class="flex items-baseline gap-2">
-                <h2 class="text-[11px] uppercase tracking-wide text-dimmed">
+                <SectionLabel as="h2">
                   {{ t('observability.phase.title') }}
-                </h2>
-                <span v-if="phaseRollup.available" class="text-[11px] text-app-600">
+                </SectionLabel>
+                <span v-if="phaseRollup.available" class="text-2xs text-app-600">
                   {{ t('observability.phase.subtitle') }}
                 </span>
               </div>
               <!-- No rollup to fold: said in words, because an absent table and a run that spent
                    nothing look identical, and the calls listed above prove it spent something. -->
-              <p v-if="!phaseRollup.available" class="mt-2 text-[12px] text-muted">
+              <p v-if="!phaseRollup.available" class="mt-2 text-xs text-muted">
                 {{ t('observability.phase.noRollup') }}
               </p>
               <div v-else class="mt-3 overflow-x-auto">
-                <table class="w-full min-w-[32rem] text-[12px]">
-                  <thead>
-                    <tr class="text-[11px] uppercase tracking-wide text-dimmed">
-                      <th class="py-1 pe-3 text-start font-normal">
-                        {{ t('observability.phase.columns.phase') }}
-                      </th>
-                      <th class="py-1 px-3 text-end font-normal">
-                        {{ t('observability.phase.columns.turns') }}
-                      </th>
-                      <th class="py-1 px-3 text-end font-normal">
-                        {{ t('observability.phase.columns.tokensInOut') }}
-                      </th>
-                      <th v-if="showCost" class="py-1 px-3 text-end font-normal">
-                        <span :title="t('observability.phase.costHint')">
-                          {{ t('observability.phase.columns.cost') }}
-                        </span>
-                      </th>
-                      <!-- The sort key, MARKED as one. Rows lead with carry cost rather than
-                           with tokens, and the two orders genuinely differ: a phase that runs
-                           late carries almost nothing however much it spent (nothing after it
-                           re-sends its context). Leaving that implicit invites reading row 1
-                           as "the phase that burned the most", which is the neighbouring
-                           column. -->
-                      <th aria-sort="descending" class="py-1 ps-3 text-end font-normal">
-                        <span :title="t('observability.phase.carryCostHint')">
-                          {{ t('observability.phase.columns.carryCost') }} ↓
-                        </span>
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="p in phaseRows" :key="p.phase" class="border-t border-default/70">
-                      <td class="py-1.5 pe-3 text-default">
-                        <span :class="p.phase ? '' : 'text-muted italic'">
-                          {{ phaseLabel(p.phase) }}
-                        </span>
-                        <span v-if="!p.phase" class="ms-1.5 text-[11px] text-app-600">
-                          {{ t('observability.phase.unattributedHint') }}
-                        </span>
-                        <UBadge
-                          v-if="p.errors"
-                          color="error"
-                          variant="subtle"
-                          size="sm"
-                          class="ms-2"
-                        >
-                          {{ t('observability.metricsBar.errors', { count: p.errors }, p.errors) }}
-                        </UBadge>
-                      </td>
-                      <td class="py-1.5 px-3 text-end tabular-nums text-toned">
-                        {{ p.calls }}
-                      </td>
-                      <td class="py-1.5 px-3 text-end tabular-nums text-toned">
-                        {{ formatTokens(totalInputTokens(p)) }}↑
-                        {{ formatTokens(p.completionTokens) }}↓
-                      </td>
-                      <td v-if="showCost" class="py-1.5 px-3 text-end tabular-nums text-toned">
-                        <!-- An em dash, not 0: this phase's model had no rate, and a zero here
-                             would read as a phase that cost nothing. -->
-                        {{ formatCost(p.costEstimate, costCurrency) ?? '—' }}
-                      </td>
-                      <td class="py-1.5 ps-3 text-end tabular-nums text-toned">
-                        {{ formatTokens(p.carryCostTokens) }}
-                        <span v-if="carryShare(p.carryCostTokens) !== null" class="text-app-600">
-                          · {{ carryShare(p.carryCostTokens) }}%
-                        </span>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
+                <UTable
+                  :data="phaseRows"
+                  :columns="phaseColumns"
+                  :sorting="PHASE_SORTING"
+                  :sorting-options="PHASE_SORTING_OPTIONS"
+                  :ui="{
+                    base: 'min-w-[32rem] text-xs',
+                    th: 'px-3 py-1.5',
+                    td: 'px-3 py-1.5 text-xs whitespace-normal',
+                  }"
+                >
+                  <template #phase-header>
+                    {{ t('observability.phase.columns.phase') }}
+                  </template>
+                  <template #turns-header>
+                    <span class="block text-end">
+                      {{ t('observability.phase.columns.turns') }}
+                    </span>
+                  </template>
+                  <template #tokens-header>
+                    <span class="block text-end">
+                      {{ t('observability.phase.columns.tokensInOut') }}
+                    </span>
+                  </template>
+                  <template #cost-header>
+                    <span class="block text-end" :title="t('observability.phase.costHint')">
+                      {{ t('observability.phase.columns.cost') }}
+                    </span>
+                  </template>
+                  <!-- The sort key, MARKED as one. Rows lead with carry cost rather than
+                       with tokens, and the two orders genuinely differ: a phase that runs
+                       late carries almost nothing however much it spent (nothing after it
+                       re-sends its context). Leaving that implicit invites reading row 1
+                       as "the phase that burned the most", which is the neighbouring
+                       column. -->
+                  <template #carryCost-header>
+                    <span class="block text-end" :title="t('observability.phase.carryCostHint')">
+                      {{ t('observability.phase.columns.carryCost') }} &darr;
+                    </span>
+                  </template>
+                  <template #phase-cell="{ row }">
+                    <span :class="row.original.phase ? '' : 'text-muted italic'">
+                      {{ phaseLabel(row.original.phase) }}
+                    </span>
+                    <span v-if="!row.original.phase" class="ms-1.5 text-2xs text-app-600">
+                      {{ t('observability.phase.unattributedHint') }}
+                    </span>
+                    <UBadge
+                      v-if="row.original.errors"
+                      color="error"
+                      variant="subtle"
+                      size="sm"
+                      class="ms-2"
+                    >
+                      {{
+                        t(
+                          'observability.metricsBar.errors',
+                          { count: row.original.errors },
+                          row.original.errors,
+                        )
+                      }}
+                    </UBadge>
+                  </template>
+                  <template #turns-cell="{ row }">
+                    <span class="block text-end tabular-nums text-toned">{{
+                      row.original.calls
+                    }}</span>
+                  </template>
+                  <template #tokens-cell="{ row }">
+                    <span class="block text-end tabular-nums text-toned">
+                      {{ formatTokens(totalInputTokens(row.original)) }}&uarr;
+                      {{ formatTokens(row.original.completionTokens) }}&darr;
+                    </span>
+                  </template>
+                  <!-- An em dash, not 0: this phase's model had no rate, and a zero here
+                       would read as a phase that cost nothing. -->
+                  <template #cost-cell="{ row }">
+                    <span class="block text-end tabular-nums text-toned">
+                      {{ formatCost(row.original.costEstimate, costCurrency) ?? '—' }}
+                    </span>
+                  </template>
+                  <template #carryCost-cell="{ row }">
+                    <span class="block text-end tabular-nums text-toned">
+                      {{ formatTokens(row.original.carryCostTokens) }}
+                      <span
+                        v-if="carryShare(row.original.carryCostTokens) !== null"
+                        class="text-app-600"
+                      >
+                        · {{ carryShare(row.original.carryCostTokens) }}%
+                      </span>
+                    </span>
+                  </template>
+                </UTable>
               </div>
             </section>
 
@@ -838,9 +870,9 @@ function exportJson() {
             <!-- per-call list, narrowable by outcome -->
             <template v-else>
               <div class="flex flex-wrap items-center justify-between gap-2">
-                <h2 class="text-[11px] uppercase tracking-wide text-dimmed">
+                <SectionLabel as="h2">
                   {{ t('observability.callsTitle') }}
-                </h2>
+                </SectionLabel>
                 <OutcomeFilterChips v-model="callFilter" :options="callFilterOptions" />
               </div>
 
@@ -862,7 +894,9 @@ function exportJson() {
                   class="overflow-hidden rounded-xl border border-default bg-default/40"
                   :class="!c.ok ? 'border-app-error-900/60' : ''"
                 >
-                  <button
+                  <UButton
+                    color="neutral"
+                    variant="ghost"
                     class="flex w-full items-center gap-3 px-4 py-2.5 text-start transition hover:bg-default/70"
                     @click="toggle(c)"
                   >
@@ -876,11 +910,8 @@ function exportJson() {
                       class="h-4 w-4 shrink-0"
                       :style="{ color: agentMeta(c.agentKind).color }"
                     />
-                    <span class="text-[13px] text-default">{{ agentMeta(c.agentKind).label }}</span>
-                    <span
-                      class="hidden truncate text-[11px] text-dimmed sm:inline"
-                      :title="c.model"
-                    >
+                    <span class="text-sm text-default">{{ agentMeta(c.agentKind).label }}</span>
+                    <span class="hidden truncate text-2xs text-dimmed sm:inline" :title="c.model">
                       {{ c.provider }}:{{ c.model }}
                       <!-- Which upstream a GATEWAY routed to. Without it every `openrouter` row
                            reads alike, and an upstream having a bad day cannot be told from the
@@ -890,9 +921,7 @@ function exportJson() {
                         {{ t('observability.call.viaUpstream', { upstream: c.upstreamProvider }) }}
                       </span>
                     </span>
-                    <div
-                      class="ms-auto flex items-center gap-2.5 text-[11px] tabular-nums text-muted"
-                    >
+                    <div class="ms-auto flex items-center gap-2.5 text-2xs tabular-nums text-muted">
                       <span
                         :title="
                           t('observability.call.tokensTitle', {
@@ -939,13 +968,13 @@ function exportJson() {
                       }}</span>
                       <span class="hidden text-app-600 md:inline">{{ clock(c.createdAt) }}</span>
                     </div>
-                  </button>
+                  </UButton>
 
                   <div v-if="expanded[c.id]" class="border-t border-default px-4 py-3 space-y-3">
-                    <p v-if="c.errorMessage" class="text-[12px] text-app-error-400">
+                    <p v-if="c.errorMessage" class="text-xs text-app-error-400">
                       {{ c.errorMessage }}
                     </p>
-                    <div class="flex flex-wrap gap-x-5 gap-y-1 text-[11px] text-dimmed">
+                    <div class="flex flex-wrap gap-x-5 gap-y-1 text-2xs text-dimmed">
                       <span>{{ t('observability.call.messages', { count: c.messageCount }) }}</span>
                       <span>{{ t('observability.call.tools', { count: c.toolCount }) }}</span>
                       <span>{{
@@ -982,9 +1011,7 @@ function exportJson() {
                       </span>
                     </div>
                     <div>
-                      <div
-                        class="mb-1 flex items-center gap-2 text-[11px] uppercase tracking-wide text-dimmed"
-                      >
+                      <SectionLabel class="mb-1 flex items-center gap-2">
                         <span>{{ t('observability.call.prompt') }}</span>
                         <span
                           v-if="c.promptPrefixCount > 0"
@@ -996,25 +1023,25 @@ function exportJson() {
                             })
                           }}
                         </span>
-                      </div>
+                      </SectionLabel>
                       <pre
-                        class="max-h-72 overflow-auto rounded-lg bg-app-950/70 p-3 text-[11px] leading-relaxed text-toned"
+                        class="max-h-72 overflow-auto rounded-lg bg-app-950/70 p-3 text-2xs leading-relaxed text-toned"
                         >{{ prettyPrompt(c.promptText) }}</pre>
                     </div>
                     <div>
-                      <div class="mb-1 text-[11px] uppercase tracking-wide text-dimmed">
+                      <SectionLabel class="mb-1">
                         {{ t('observability.call.response') }}
-                      </div>
+                      </SectionLabel>
                       <pre
-                        class="max-h-72 overflow-auto rounded-lg bg-app-950/70 p-3 text-[11px] leading-relaxed text-toned"
+                        class="max-h-72 overflow-auto rounded-lg bg-app-950/70 p-3 text-2xs leading-relaxed text-toned"
                         >{{ c.responseText || '—' }}</pre>
                     </div>
                     <div v-if="c.reasoningText">
-                      <div class="mb-1 text-[11px] uppercase tracking-wide text-dimmed">
+                      <SectionLabel class="mb-1">
                         {{ t('observability.call.reasoning') }}
-                      </div>
+                      </SectionLabel>
                       <pre
-                        class="max-h-72 overflow-auto rounded-lg bg-app-950/70 p-3 text-[11px] leading-relaxed text-muted"
+                        class="max-h-72 overflow-auto rounded-lg bg-app-950/70 p-3 text-2xs leading-relaxed text-muted"
                         >{{ c.reasoningText }}</pre>
                     </div>
                   </div>
@@ -1039,7 +1066,7 @@ function exportJson() {
                  so the survey's absence would otherwise read as a phase that used no tools. -->
             <p
               v-if="bootstrap?.monorepo"
-              class="rounded-lg border border-dashed border-default px-3 py-2 text-[12px] text-muted"
+              class="rounded-lg border border-dashed border-default px-3 py-2 text-xs text-muted"
             >
               {{ t('observability.toolCalls.surveyReadsElsewhere') }}
             </p>
@@ -1094,7 +1121,9 @@ function exportJson() {
                 :key="s.id"
                 class="overflow-hidden rounded-xl border border-default bg-default/40"
               >
-                <button
+                <UButton
+                  color="neutral"
+                  variant="ghost"
                   class="flex w-full items-center gap-3 px-4 py-2.5 text-start transition hover:bg-default/70"
                   @click="toggleCtx(s)"
                 >
@@ -1108,13 +1137,11 @@ function exportJson() {
                     class="h-4 w-4 shrink-0"
                     :style="{ color: agentMeta(s.agentKind).color }"
                   />
-                  <span class="text-[13px] text-default">{{ agentMeta(s.agentKind).label }}</span>
-                  <span v-if="s.model" class="hidden truncate text-[11px] text-dimmed sm:inline">
+                  <span class="text-sm text-default">{{ agentMeta(s.agentKind).label }}</span>
+                  <span v-if="s.model" class="hidden truncate text-2xs text-dimmed sm:inline">
                     {{ s.model }}
                   </span>
-                  <div
-                    class="ms-auto flex items-center gap-2.5 text-[11px] tabular-nums text-muted"
-                  >
+                  <div class="ms-auto flex items-center gap-2.5 text-2xs tabular-nums text-muted">
                     <span :title="t('observability.context.injectedFiles')">{{
                       t('observability.context.filesCount', { count: s.contextFiles.length })
                     }}</span>
@@ -1123,64 +1150,64 @@ function exportJson() {
                     }}</span>
                     <span class="hidden text-app-600 md:inline">{{ clock(s.createdAt) }}</span>
                   </div>
-                </button>
+                </UButton>
 
                 <div v-if="expandedCtx[s.id]" class="border-t border-default px-4 py-3 space-y-3">
                   <div>
-                    <div class="mb-1 text-[11px] uppercase tracking-wide text-dimmed">
+                    <SectionLabel class="mb-1">
                       {{ t('observability.context.systemPrompt') }}
-                    </div>
+                    </SectionLabel>
                     <pre
-                      class="max-h-72 overflow-auto rounded-lg bg-app-950/70 p-3 text-[11px] leading-relaxed text-toned"
+                      class="max-h-72 overflow-auto rounded-lg bg-app-950/70 p-3 text-2xs leading-relaxed text-toned"
                       >{{ s.systemPrompt || '—' }}</pre>
                   </div>
                   <div>
-                    <div class="mb-1 text-[11px] uppercase tracking-wide text-dimmed">
+                    <SectionLabel class="mb-1">
                       {{ t('observability.context.userPrompt') }}
-                    </div>
+                    </SectionLabel>
                     <pre
-                      class="max-h-72 overflow-auto rounded-lg bg-app-950/70 p-3 text-[11px] leading-relaxed text-toned"
+                      class="max-h-72 overflow-auto rounded-lg bg-app-950/70 p-3 text-2xs leading-relaxed text-toned"
                       >{{ s.userPrompt || '—' }}</pre>
                   </div>
                   <div v-if="s.fragments.length">
-                    <div class="mb-1 text-[11px] uppercase tracking-wide text-dimmed">
+                    <SectionLabel class="mb-1">
                       {{ t('observability.context.bestPracticeFragments') }}
-                    </div>
+                    </SectionLabel>
                     <div
                       v-for="f in s.fragments"
                       :key="f.id"
                       class="mb-2 rounded-lg bg-app-950/70 p-3"
                     >
-                      <div class="mb-1 text-[11px] text-muted">{{ f.id }}</div>
-                      <pre class="max-h-48 overflow-auto text-[11px] leading-relaxed text-toned">{{
+                      <div class="mb-1 text-2xs text-muted">{{ f.id }}</div>
+                      <pre class="max-h-48 overflow-auto text-2xs leading-relaxed text-toned">{{
                         f.body
                       }}</pre>
                     </div>
                   </div>
                   <div v-if="s.contextFiles.length">
-                    <div class="mb-1 text-[11px] uppercase tracking-wide text-dimmed">
+                    <SectionLabel class="mb-1">
                       {{ t('observability.context.injectedFiles') }}
-                    </div>
+                    </SectionLabel>
                     <div
                       v-for="file in s.contextFiles"
                       :key="file.path"
                       class="mb-2 rounded-lg bg-app-950/70 p-3"
                     >
-                      <div class="mb-1 text-[11px] text-muted">
+                      <div class="mb-1 text-2xs text-muted">
                         {{ file.title }}
                         <span class="text-app-600">· {{ file.path }}</span>
                       </div>
-                      <pre class="max-h-72 overflow-auto text-[11px] leading-relaxed text-toned">{{
+                      <pre class="max-h-72 overflow-auto text-2xs leading-relaxed text-toned">{{
                         file.content
                       }}</pre>
                     </div>
                   </div>
                   <div>
-                    <div class="mb-1 text-[11px] uppercase tracking-wide text-dimmed">
+                    <SectionLabel class="mb-1">
                       {{ t('observability.context.details') }}
-                    </div>
+                    </SectionLabel>
                     <pre
-                      class="max-h-48 overflow-auto rounded-lg bg-app-950/70 p-3 text-[11px] leading-relaxed text-muted"
+                      class="max-h-48 overflow-auto rounded-lg bg-app-950/70 p-3 text-2xs leading-relaxed text-muted"
                       >{{ prettyExtras(s.extras) }}</pre>
                   </div>
                 </div>
@@ -1192,11 +1219,11 @@ function exportJson() {
             <!-- Availability header: a static per-run fact (not telemetry-gated). -->
             <section
               v-if="searchAvailability"
-              class="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-default bg-default/50 px-4 py-3 text-[13px]"
+              class="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-default bg-default/50 px-4 py-3 text-sm"
             >
-              <span class="text-[11px] uppercase tracking-wide text-dimmed">
+              <SectionLabel as="span">
                 {{ t('observability.webSearch') }}
-              </span>
+              </SectionLabel>
               <span
                 class="inline-flex items-center gap-1.5"
                 :class="searchAvailability.available ? 'text-app-success-300' : 'text-muted'"
@@ -1232,9 +1259,9 @@ function exportJson() {
             </p>
 
             <div v-else>
-              <div class="mb-2 text-[11px] uppercase tracking-wide text-dimmed">
+              <SectionLabel class="mb-2">
                 {{ t('observability.search.queriesTitle') }}
-              </div>
+              </SectionLabel>
               <ul class="space-y-2">
                 <li
                   v-for="q in searchQueries"
@@ -1247,12 +1274,10 @@ function exportJson() {
                     :style="{ color: agentMeta(q.agentKind).color }"
                     :title="agentMeta(q.agentKind).label"
                   />
-                  <span class="min-w-0 flex-1 truncate text-[13px] text-default" :title="q.query">
+                  <span class="min-w-0 flex-1 truncate text-sm text-default" :title="q.query">
                     {{ q.query }}
                   </span>
-                  <div
-                    class="flex shrink-0 items-center gap-2.5 text-[11px] tabular-nums text-muted"
-                  >
+                  <div class="flex shrink-0 items-center gap-2.5 text-2xs tabular-nums text-muted">
                     <span v-if="q.provider" class="hidden sm:inline">{{
                       providerLabel(q.provider)
                     }}</span>

@@ -82,17 +82,17 @@ function select() {
           {{ statusLabel }}
         </UBadge>
       </div>
-      <div class="mt-1 text-[10px] uppercase tracking-wide text-primary/70">
+      <div class="mt-1 text-3xs uppercase tracking-wide text-primary/70">
         {{ t('initiative.card.kind') }}
       </div>
       <div v-if="progress" class="mt-2 space-y-1">
-        <div class="h-1.5 overflow-hidden rounded bg-elevated">
+        <div class="h-1.5 overflow-hidden rounded-sm bg-elevated">
           <div
-            class="h-full rounded bg-primary"
+            class="h-full rounded-sm bg-primary"
             :style="{ width: `${Math.round((progress.settled / progress.total) * 100)}%` }"
           />
         </div>
-        <div class="text-[10px] text-muted">
+        <div class="text-3xs text-muted">
           {{ t('initiative.card.progress', { done: progress.settled, total: progress.total }) }}
         </div>
       </div>

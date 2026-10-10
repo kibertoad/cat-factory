@@ -18,6 +18,7 @@ import {
   pipelineGateCount,
 } from '~/utils/pipeline'
 import AgentKindIcon from '~/components/pipeline/AgentKindIcon.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const props = defineProps<{ pipeline: Pipeline }>()
 const { t } = useI18n()
@@ -37,15 +38,13 @@ function stepDescription(kind: string): string {
     <div class="text-sm font-semibold text-app-100">{{ pipeline.name }}</div>
     <p
       v-if="pipeline.description"
-      class="text-[12px] leading-snug text-muted"
+      class="text-xs leading-snug text-muted"
       data-testid="pipeline-preview-description"
     >
       {{ pipeline.description }}
     </p>
 
-    <div
-      class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] uppercase tracking-wide text-dimmed"
-    >
+    <SectionLabel class="flex flex-wrap items-center gap-x-3 gap-y-1">
       <span class="inline-flex items-center gap-1">
         <UIcon name="i-lucide-workflow" class="h-3 w-3" />
         {{ t('pipeline.preview.stepCount', { count: steps.length }, steps.length) }}
@@ -62,7 +61,7 @@ function stepDescription(kind: string): string {
         <UIcon name="i-lucide-git-branch" class="h-3 w-3" />
         {{ t('pipeline.preview.conditionalCount', { count: conditionalCount }, conditionalCount) }}
       </span>
-    </div>
+    </SectionLabel>
 
     <!-- The ordered steps. The number column doubles as the flow connector (a rule drawn between
          consecutive numbers), so the list reads as a sequence rather than an unordered set. -->
@@ -76,7 +75,7 @@ function stepDescription(kind: string): string {
       >
         <div class="flex flex-col items-center">
           <span
-            class="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-elevated font-mono text-[9px] tabular-nums text-muted"
+            class="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-elevated font-mono text-3xs tabular-nums text-muted"
           >
             {{ i + 1 }}
           </span>
@@ -101,7 +100,7 @@ function stepDescription(kind: string): string {
           </div>
           <!-- Clamped: the catalog prose runs long for some kinds, and <AgentKindIcon> already
                carries the full text in its hover tooltip. -->
-          <p class="line-clamp-2 text-[11px] leading-snug text-dimmed">
+          <p class="line-clamp-2 text-2xs leading-snug text-dimmed">
             {{ stepDescription(s.kind) }}
           </p>
         </div>

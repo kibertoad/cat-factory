@@ -1,5 +1,120 @@
 # @cat-factory/app
 
+## 0.310.0
+
+### Minor Changes
+
+- 5dbc11b: Render every SPA control as its Nuxt UI component instead of a raw HTML element.
+  
+  Every raw `<button>`, `<input>`, `<select>`, `<textarea>`, hand-built `<table>`, `<details>`,
+  `<form>`, `<a href>` and `<datalist>` in the layer, each with its own border, background, hover and
+  focus recipe, moves onto `UButton`, `UInput` /
+  `UInputNumber` / `UCheckbox` / `URadioGroup` / `USlider` / `UFileUpload`, `USelect`, `UTextarea`,
+  `UTable`, `UCollapsible`, `UForm`, `ULink` and `UInputMenu`, so each now follows the theme, the
+  focus ring, the disabled state and the size scale.
+  
+  Four changes go beyond a swap and are visible:
+  
+  The four hand-built segmented switchers (the observability views, the reports window and
+  dimension rows, the operator window row) become `UTabs`, which adds arrow-key navigation and the
+  tab ARIA they had none of.
+  
+  The fork-decision cards were one choice rendered as N independent radios; they become a single
+  `URadioGroup variant="card"`, the custom-approach entry included, so the single-selection rule and
+  keyboard navigation come from the primitive.
+  
+  `ImageCompare` hand-rolled a drop zone, a hidden shared file input and its own drag state.
+  `UFileUpload` owns all three. The PNG/JPEG guard stays in the component, because `accept` filters
+  the picker and a dropped file arrives regardless.
+  
+  `IconButton` and `CopyButton` wrap their button in a `UTooltip` and keep `aria-label` on the
+  button. A `title` never fires on touch, is unstyled and waits about a second, so every icon-only
+  button's hint now appears as a themed tooltip, and every icon-only button has an accessible name.
+  The tooltip trigger is a wrapper around the button, so it still opens on a disabled one, and
+  `class` on `IconButton` lands on that wrapper, the box its parent lays out. A labelled button
+  keeps a `title` as a hover hint beside its own name.
+  
+  A Nuxt UI slot often sets more than the property a site overrides: `UButton`'s padding, text size
+  and hover background, `UTable`'s cell padding, colour and `whitespace-nowrap`, `ULink`'s colour.
+  Each converted site states the whole box it had, so where the old markup inherited a value the new
+  one restates it.
+  
+  `scripts/check-frontend-primitives.mjs` holds the count at zero, including a raw element rendered
+  through `as="button"`, an `:is` binding or `h()`, and an icon-only `UButton` named only by
+  `title`. It has no allow-list: the two cases expected to need one (a Vue Flow gesture handle, a
+  full-bleed media tile) both converted.
+
+## 0.309.0
+
+### Minor Changes
+
+- 084fb66: Size SPA text through named type steps instead of pixel literals.
+  
+  The app declares two steps below Tailwind's `text-xs` in `app/assets/css/type.css`, `text-2xs`
+  (0.6875rem) and `text-3xs` (0.625rem), and every `text-[Npx]` literal in the layer moves onto a named
+  step. All steps are rem, so a theme document's `fontSize` now scales the app's own text the way it
+  already scaled Nuxt UI's components. The 11px and 10px sites are exact on the two new steps and
+  render unchanged. The four sizes with no step of their own move by a pixel (9px up to 10px, 12px and
+  12.5px to 12px, 13px up to 14px). Those four also take the LINE HEIGHT that `text-xs` and `text-sm`
+  pair with their size, where the literal paired none, so a 12px block with no `leading-*` tightens
+  from 18px lines to 16px.
+  
+  `common/SectionLabel.vue` becomes the one section eyebrow, replacing six hand-written recipes. The
+  recipe is visible wherever a label was not already on it: labels at 9px or 10px grow to 11px, labels
+  at `text-xs` or `text-sm` shrink to 11px, labels with no weight gain `font-semibold`, and labels on
+  `text-dimmed` render one step darker on `text-muted`.
+  
+  The colour is a deliberate departure from the most common value. At 11px `text-dimmed` measures
+  2.63:1 against a light surface, under WCAG AA's 4.5:1 and under the 3:1 large-text floor;
+  `text-muted` is 4.76:1. The SPA's wider use of `text-dimmed` outside this component is unchanged.
+  
+  `scripts/check-frontend-type-scale.mjs` keeps font-size literals from returning: utilities, CSS
+  declarations including the `font:` shorthand, and JS style properties.
+
+### Patch Changes
+
+- 084fb66: Make every corner radius in the SPA follow the theme.
+  
+  Nuxt UI rebuilds seven of Tailwind's radius steps on top of `--ui-radius`, so `rounded-xs` through
+  `rounded-3xl` already tracked a theme document's `radius`. Two spellings sat outside that scale:
+  bare `rounded` (and its side and corner forms), which resolves through Tailwind's `--radius`, and
+  `rounded-4xl`, which keeps Tailwind's own 2rem. `main.css` now binds both onto `--ui-radius`, so
+  every `rounded-*` utility in the SPA follows the theme with no per-site change. Both are declared
+  `@theme default` upstream, so the app's own `@theme inline` block wins, and `inline` is what makes
+  the utility compile to `var(--ui-radius)` rather than to a value frozen at build time.
+  
+  Nothing moves on the default `Cat Factory` theme: `--ui-radius` is the same 0.25rem the bare alias
+  was inlined as, and 8x it is the 2rem `--radius-4xl` already held. On a theme with a different
+  radius the boxes now move with the buttons and cards around them. On the built-in `Mono`
+  (`radius: 0.5`) the affected boxes go from 4px to 8px, where before the theme rounded the Nuxt UI
+  components and left the app's own boxes behind. Every preset the Nuxt UI theme editor ships carries
+  a non-default radius, from 0 to 0.75rem, so an imported theme hit this too.
+  
+  The raw `border-radius` declarations in the reader-prose styles move onto `var(--ui-radius)`, which
+  the `--radius-*` scale cannot be used for: Tailwind emits those variables only where the compiled
+  stylesheet graph references them, so one is correct until the last other reference is deleted.
+  
+  `radius` is now stated on the `Cat Factory` document. It equals the default and writes no CSS,
+  which is the point: the number has one visible home.
+  
+  `scripts/check-frontend-radius.mjs` keeps out what the rebind cannot reach: an arbitrary value
+  (`rounded-[10px]`, `rounded-(--x)`) and a raw `border-radius` literal.
+
+## 0.308.0
+
+### Minor Changes
+
+- e3c4b3c: A new built-in `resolve-conflicts` task type points the conflict resolver at an existing open pull request the platform did not open (surface version 1.79.0). The task names it with `fields.prNumber` or `fields.prUrl`, and creation records it as the block's own `pullRequest`, refusing one the run could not push onto with a `422` and an `attached_pr_*` reason: not found, another repository, closed or merged, from a fork, targeting a branch other than the repository's base, or unreadable. When the repository provider fails to answer, creation is refused with a retryable `503` and reason `attached_pr_provider_unreachable` instead of a `500`.
+  
+  The task is pinned to the new `pl_resolve_conflicts` pipeline, the `conflicts` gate alone, under a new `maintenance` pipeline purpose that only this task type is offered. It parks nowhere, so a `write` key starts it with an empty body. A clean pull request finishes `done` with nothing pushed; one the resolver cannot clear fails the run with a message saying the conflicts could not be resolved automatically and carrying the resolver's last account. A run of a task that attached its pull request finishes `done` without a confirm-and-merge card, and the pre-dispatch input gate does not judge its description. Run admission refuses a pipeline with a merge step for such a task, and a fields patch cannot move its attachment to another pull request while its run is working.
+  
+  `OpenedPullRequest` gains an optional `crossRepository`, filled by the GitHub and GitLab clients, and `AgentRunContext.block` gains `taskType`, which the container executor reads to skip creating the per-task work branch for an attached pull request. The conflicts gate's give-up message now includes the last resolver attempt's summary.
+
+### Patch Changes
+
+- Updated dependencies [e3c4b3c]
+  - @cat-factory/contracts@0.363.0
+
 ## 0.307.1
 
 ### Patch Changes

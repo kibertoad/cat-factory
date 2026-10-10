@@ -35,8 +35,10 @@ async function requireAccountOf<E extends AppEnv>(c: Context<E>, workspaceId: st
 /** A key reaching past this board is an account-level credential, so only an account admin manages it. */
 async function requireAccountAdmin<E extends AppEnv>(c: Context<E>, accountId: string) {
   const user = requireUser(c, 'Managing a multi-workspace key requires a signed-in user')
-  const membership = await c.get('container').accountService.requireMember(accountId, user.id)
-  if (!membership.roles.includes('admin')) {
+  // `rolesFor` rather than `requireMember`: a board admin who is not an account member must get
+  // this 403, not a 404 naming the account.
+  const roles = await c.get('container').accountService.rolesFor(accountId, user.id)
+  if (!roles.includes('admin')) {
     throw new ForbiddenError(
       'Only an account admin can manage a key that reaches other workspaces',
       {
@@ -74,6 +76,9 @@ export function publicApiKeyController(): Hono<AppEnv> {
     const accountId = await requireAccountOf(c, workspaceId)
     const { label, scope, actsAsSelf, workspaceIds } = c.req.valid('json')
     const createdByUserId = c.get('user')?.id ?? null
+    // The binding reads the id off the SESSION, never off the body, so one person cannot mint a key
+    // onto another's personal subscription. A dev-open mint has no session to bind to, so refuse
+    // rather than silently drop the flag.
     if (actsAsSelf && !createdByUserId) {
       throw new ValidationError(
         'A key can only be bound to the person minting it, and this request has no signed-in ' +
@@ -84,8 +89,10 @@ export function publicApiKeyController(): Hono<AppEnv> {
     // Omitted means this board alone, which `secrets.manage` on it is enough for. Any other reach
     // spans boards this permission says nothing about, so it takes an account admin.
     const reach = workspaceIds === undefined ? [workspaceId] : workspaceIds
-    if (!isOnly(reach, workspaceId)) await requireAccountAdmin(c, accountId)
-    await assertWorkspacesInAccount(container.workspaceService, accountId, reach)
+    if (!isOnly(reach, workspaceId)) {
+      await requireAccountAdmin(c, accountId)
+      await assertWorkspacesInAccount(container.workspaceService, accountId, reach)
+    }
     const { record, secret } = await publicApiKeys.issue(
       {
         accountId,

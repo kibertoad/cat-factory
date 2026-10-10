@@ -1,7 +1,7 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "13cd2020-27ea-4717-8f3c-4f35311b8c2f",
+  "id": "61735eee-23ad-48eb-af93-28de014c3861",
   "prevIds": [
     "da66a338-e69e-4f45-8abb-aeb056fa0be1"
   ],
@@ -9888,6 +9888,32 @@
       "generated": null,
       "identity": null,
       "name": "delivered_seq",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "directory_webhooks"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "lease_token",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "directory_webhooks"
+    },
+    {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "lease_until",
       "entityType": "columns",
       "schema": "public",
       "table": "directory_webhooks"

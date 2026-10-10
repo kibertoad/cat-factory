@@ -236,7 +236,7 @@ const connectedLabel = computed(() => {
               }}
             </UBadge>
           </div>
-          <p class="text-[11px] text-muted">
+          <p class="text-2xs text-muted">
             {{ t('settings.observabilityConnection.incident.description') }}
           </p>
 

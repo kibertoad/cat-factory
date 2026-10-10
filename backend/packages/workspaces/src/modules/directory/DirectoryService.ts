@@ -2,6 +2,7 @@ import type {
   DirectoryAccountMembership,
   DirectoryChange,
   DirectoryChangePage,
+  DirectoryRefusalReason,
   DirectoryRepo,
   DirectoryUser,
   DirectoryWorkspace,
@@ -51,6 +52,11 @@ export class DirectoryService implements DirectoryFeedReader {
     return this.deps.directoryRepository.headSeq(accountId)
   }
 
+  /** Each account's newest feed position, in one read. */
+  headSeqs(accountIds: string[]): Promise<Map<string, number>> {
+    return this.deps.directoryRepository.headSeqs(accountIds)
+  }
+
   /**
    * Changes after `after`, each carrying its entity's current state (or `null` once it is gone or
    * outside the reader's reach). Refuses a cursor whose following changes were pruned, and one
@@ -67,11 +73,15 @@ export class DirectoryService implements DirectoryFeedReader {
     // a short page can safely advance the cursor to the head without skipping a late commit.
     const head = await repo.headSeq(reader.accountId)
     if (after > head) throw expired()
+    const rows = await repo.listChanges(reader.accountId, after, head, limit, reader.workspaceIds)
+    // The expiry check reads the oldest row AFTER the page. The prune removes a per-account `seq`
+    // prefix, so a prune that ran before or during the read has raised the oldest row past
+    // `after + 1` by the time it is read here; checked first, it could pass and the page would
+    // then silently skip the rows pruned in between.
     if (after < head) {
       const oldest = await repo.oldestSeq(reader.accountId)
       if (oldest !== null && after < oldest - 1) throw expired()
     }
-    const rows = await repo.listChanges(reader.accountId, after, head, limit, reader.workspaceIds)
     const changes = await this.hydrate(reader.accountId, rows)
     const nextAfter = rows.length === limit ? rows[rows.length - 1]!.seq : head
     return { changes, nextAfter, headSeq: head }
@@ -82,20 +92,18 @@ export class DirectoryService implements DirectoryFeedReader {
     cursor: string | undefined,
     limit = DEFAULT_PAGE_SIZE,
   ): Promise<SnapshotPage<DirectoryWorkspace>> {
-    return this.snapshot(
-      reader,
-      cursor,
-      limit,
-      isString,
-      (w) => w.id,
-      (after) =>
+    return this.snapshot(reader, cursor, limit, {
+      listing: 'workspaces',
+      isKey: isString,
+      keyOf: (w) => w.id,
+      list: (after) =>
         this.deps.directoryRepository.listWorkspaces(
           reader.accountId,
           after,
           limit,
           reader.workspaceIds,
         ),
-    )
+    })
   }
 
   users(
@@ -104,14 +112,12 @@ export class DirectoryService implements DirectoryFeedReader {
     limit = DEFAULT_PAGE_SIZE,
   ): Promise<SnapshotPage<DirectoryUser>> {
     requireAccountWide(reader)
-    return this.snapshot(
-      reader,
-      cursor,
-      limit,
-      isString,
-      (u) => u.id,
-      (after) => this.deps.directoryRepository.listUsers(reader.accountId, after, limit),
-    )
+    return this.snapshot(reader, cursor, limit, {
+      listing: 'users',
+      isKey: isString,
+      keyOf: (u) => u.id,
+      list: (after) => this.deps.directoryRepository.listUsers(reader.accountId, after, limit),
+    })
   }
 
   accountMemberships(
@@ -120,15 +126,13 @@ export class DirectoryService implements DirectoryFeedReader {
     limit = DEFAULT_PAGE_SIZE,
   ): Promise<SnapshotPage<DirectoryAccountMembership>> {
     requireAccountWide(reader)
-    return this.snapshot(
-      reader,
-      cursor,
-      limit,
-      isString,
-      (m) => m.userId,
-      (after) =>
+    return this.snapshot(reader, cursor, limit, {
+      listing: 'account_memberships',
+      isKey: isString,
+      keyOf: (m) => m.userId,
+      list: (after) =>
         this.deps.directoryRepository.listAccountMemberships(reader.accountId, after, limit),
-    )
+    })
   }
 
   workspaceMemberships(
@@ -136,20 +140,18 @@ export class DirectoryService implements DirectoryFeedReader {
     cursor: string | undefined,
     limit = DEFAULT_PAGE_SIZE,
   ): Promise<SnapshotPage<DirectoryWorkspaceMembership>> {
-    return this.snapshot(
-      reader,
-      cursor,
-      limit,
-      isMembershipKey,
-      (m): WorkspaceMembershipKey => ({ workspaceId: m.workspaceId, userId: m.userId }),
-      (after) =>
+    return this.snapshot(reader, cursor, limit, {
+      listing: 'workspace_memberships',
+      isKey: isMembershipKey,
+      keyOf: (m): WorkspaceMembershipKey => ({ workspaceId: m.workspaceId, userId: m.userId }),
+      list: (after) =>
         this.deps.directoryRepository.listWorkspaceMemberships(
           reader.accountId,
           after,
           limit,
           reader.workspaceIds,
         ),
-    )
+    })
   }
 
   repos(
@@ -157,20 +159,18 @@ export class DirectoryService implements DirectoryFeedReader {
     cursor: string | undefined,
     limit = DEFAULT_PAGE_SIZE,
   ): Promise<SnapshotPage<DirectoryRepo>> {
-    return this.snapshot(
-      reader,
-      cursor,
-      limit,
-      isRepoKey,
-      (r): DirectoryRepoKey => ({ workspaceId: r.workspaceId, repoId: r.repoId }),
-      (after) =>
+    return this.snapshot(reader, cursor, limit, {
+      listing: 'repos',
+      isKey: isRepoKey,
+      keyOf: (r): DirectoryRepoKey => ({ workspaceId: r.workspaceId, repoId: r.repoId }),
+      list: (after) =>
         this.deps.directoryRepository.listRepos(
           reader.accountId,
           after,
           limit,
           reader.workspaceIds,
         ),
-    )
+    })
   }
 
   /**
@@ -182,19 +182,17 @@ export class DirectoryService implements DirectoryFeedReader {
     reader: DirectoryReader,
     cursor: string | undefined,
     limit: number,
-    isKey: (value: unknown) => value is K,
-    keyOf: (item: T) => K,
-    list: (after: K | null) => Promise<T[]>,
+    { listing, isKey, keyOf, list }: SnapshotSource<T, K>,
   ): Promise<SnapshotPage<T>> {
     const position =
       cursor === undefined
         ? { asOf: await this.deps.directoryRepository.headSeq(reader.accountId), after: null }
-        : decodeSnapshotCursor(cursor, isKey)
+        : decodeSnapshotCursor(listing, cursor, isKey)
     const items = await list(position.after)
     const last = items[items.length - 1]
     const nextCursor =
       items.length === limit && last !== undefined
-        ? encodeSnapshotCursor(position.asOf, keyOf(last))
+        ? encodeSnapshotCursor(listing, position.asOf, keyOf(last))
         : null
     return { items, nextCursor, asOfSeq: position.asOf }
   }
@@ -276,7 +274,7 @@ export class DirectoryService implements DirectoryFeedReader {
 function expired(): ConflictError {
   return new ConflictError(
     'The directory changes after this cursor are no longer kept; reconcile from a snapshot',
-    'cursor_expired',
+    'cursor_expired' satisfies DirectoryRefusalReason,
   )
 }
 
@@ -284,7 +282,7 @@ function requireAccountWide(reader: DirectoryReader): void {
   if (reader.workspaceIds !== null) {
     throw new ForbiddenError(
       'Users and account memberships are account-wide; this key is limited to some workspaces',
-      { reason: 'account_scope_required' },
+      { reason: 'account_scope_required' satisfies DirectoryRefusalReason },
     )
   }
 }
@@ -305,33 +303,57 @@ function isRepoKey(value: unknown): value is DirectoryRepoKey {
   return typeof key?.workspaceId === 'string' && Number.isSafeInteger(key.repoId)
 }
 
-/** A snapshot cursor: base64url JSON of the walk's watermark and the last key served. */
-function encodeSnapshotCursor(asOf: number, key: unknown): string {
-  const bytes = new TextEncoder().encode(JSON.stringify({ a: asOf, k: key }))
+/** What one snapshot listing supplies: its name, its key's shape and how to read a page. */
+interface SnapshotSource<T, K> {
+  listing: SnapshotListing
+  isKey: (value: unknown) => value is K
+  keyOf: (item: T) => K
+  list: (after: K | null) => Promise<T[]>
+}
+
+/** The snapshot listings. A cursor names the one that issued it, so another listing refuses it. */
+type SnapshotListing =
+  | 'workspaces'
+  | 'users'
+  | 'account_memberships'
+  | 'workspace_memberships'
+  | 'repos'
+
+/**
+ * A snapshot cursor: base64url JSON of the issuing listing, the walk's watermark and the last key
+ * served. The listing tag matters because two listings share a key shape: a workspaces cursor
+ * passed to the users listing would otherwise read as a user-id lower bound and skip users.
+ */
+function encodeSnapshotCursor(listing: SnapshotListing, asOf: number, key: unknown): string {
+  const bytes = new TextEncoder().encode(JSON.stringify({ l: listing, a: asOf, k: key }))
   let binary = ''
   for (const byte of bytes) binary += String.fromCharCode(byte)
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }
 
 function decodeSnapshotCursor<K>(
+  listing: SnapshotListing,
   cursor: string,
   isKey: (value: unknown) => value is K,
 ): { asOf: number; after: K } {
-  let parsed: { a?: unknown; k?: unknown }
+  let parsed: unknown
   try {
     const binary = atob(cursor.replace(/-/g, '+').replace(/_/g, '/'))
     parsed = JSON.parse(new TextDecoder().decode(Uint8Array.from(binary, (ch) => ch.charCodeAt(0))))
   } catch {
     throw invalidCursor()
   }
-  if (typeof parsed.a !== 'number' || !Number.isSafeInteger(parsed.a) || !isKey(parsed.k)) {
+  // `JSON.parse` answers `null` or a primitive for a well-formed cursor of the wrong shape.
+  if (typeof parsed !== 'object' || parsed === null) throw invalidCursor()
+  const { l, a, k } = parsed as { l?: unknown; a?: unknown; k?: unknown }
+  if (l !== listing || typeof a !== 'number' || !Number.isSafeInteger(a) || !isKey(k)) {
     throw invalidCursor()
   }
-  return { asOf: parsed.a, after: parsed.k }
+  return { asOf: a, after: k }
 }
 
 function invalidCursor(): ValidationError {
   return new ValidationError('This cursor was not issued by this listing', {
-    reason: 'invalid_cursor',
+    reason: 'invalid_cursor' satisfies DirectoryRefusalReason,
   })
 }

@@ -1,5 +1,5 @@
 import type { DirectoryWebhookRecord, DirectoryWebhookRepository } from '@cat-factory/kernel'
-import { and, asc, count, eq, sql } from 'drizzle-orm'
+import { and, asc, count, eq, isNull, lte, or, sql } from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
 import { directoryWebhooks } from '../db/schema.js'
 
@@ -104,18 +104,49 @@ export class DrizzleDirectoryWebhookRepository implements DirectoryWebhookReposi
     return rows.map(toRecord)
   }
 
-  async advance(accountId: string, id: string, fromSeq: number, toSeq: number): Promise<boolean> {
-    const moved = await this.db
+  async claim(
+    accountId: string,
+    id: string,
+    token: string,
+    now: number,
+    leaseUntil: number,
+  ): Promise<number | null> {
+    const [row] = await this.db
       .update(directoryWebhooks)
-      .set({ delivered_seq: toSeq })
+      .set({ lease_token: token, lease_until: leaseUntil })
       .where(
         and(
           eq(directoryWebhooks.account_id, accountId),
           eq(directoryWebhooks.id, id),
-          eq(directoryWebhooks.delivered_seq, fromSeq),
+          eq(directoryWebhooks.enabled, 1),
+          or(isNull(directoryWebhooks.lease_until), lte(directoryWebhooks.lease_until, now)),
         ),
       )
+      .returning({ deliveredSeq: directoryWebhooks.delivered_seq })
+    return row ? row.deliveredSeq : null
+  }
+
+  async complete(accountId: string, id: string, token: string, toSeq: number): Promise<boolean> {
+    const moved = await this.db
+      .update(directoryWebhooks)
+      .set({ delivered_seq: toSeq, lease_token: null, lease_until: null })
+      .where(this.heldBy(accountId, id, token))
       .returning({ id: directoryWebhooks.id })
     return moved.length > 0
+  }
+
+  async release(accountId: string, id: string, token: string): Promise<void> {
+    await this.db
+      .update(directoryWebhooks)
+      .set({ lease_token: null, lease_until: null })
+      .where(this.heldBy(accountId, id, token))
+  }
+
+  private heldBy(accountId: string, id: string, token: string) {
+    return and(
+      eq(directoryWebhooks.account_id, accountId),
+      eq(directoryWebhooks.id, id),
+      eq(directoryWebhooks.lease_token, token),
+    )
   }
 }

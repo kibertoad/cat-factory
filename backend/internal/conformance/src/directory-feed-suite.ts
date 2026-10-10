@@ -40,6 +40,31 @@ async function entries(r: DirectoryFeedRepos, accountId: string, afterSeq = 0): 
   return rows.map((c) => [c.entityType, c.workspaceId, c.entityId])
 }
 
+async function seedUser(r: DirectoryFeedRepos, id: string): Promise<void> {
+  // Null email: `users.email` is uniquely indexed where non-null, and the database is shared.
+  await r.users.create({ id, name: 'Ada', email: null, avatarUrl: null, createdAt: 1_000 })
+}
+
+async function seedWorkspace(r: DirectoryFeedRepos, id: string, accountId: string) {
+  await r.workspaces.create(
+    { id, name: 'Board', description: null, createdAt: 1_000, accountId },
+    null,
+    accountId,
+  )
+}
+
+const repo = (githubId: number, overrides: Partial<GitHubRepo> = {}): GitHubRepo => ({
+  githubId,
+  installationId: 77,
+  owner: 'acme',
+  name: `repo-${githubId}`,
+  defaultBranch: 'main',
+  private: true,
+  provider: 'github',
+  syncedAt: 1_000,
+  ...overrides,
+})
+
 export function defineDirectoryFeedSuite(name: string, makeRepos: () => DirectoryFeedRepos): void {
   describe(`[${name}] directory change feed parity`, () => {
     let n = 0
@@ -48,31 +73,6 @@ export function defineDirectoryFeedSuite(name: string, makeRepos: () => Director
       const tag = `${name}-dir-${n}-${Math.floor(Math.random() * 1e9)}`
       return { acc: `acc-${tag}`, acc2: `acc2-${tag}`, ws: `ws-${tag}`, usr: `usr-${tag}` }
     }
-
-    async function seedUser(r: DirectoryFeedRepos, id: string): Promise<void> {
-      // Null email: `users.email` is uniquely indexed where non-null, and the database is shared.
-      await r.users.create({ id, name: 'Ada', email: null, avatarUrl: null, createdAt: 1_000 })
-    }
-
-    async function seedWorkspace(r: DirectoryFeedRepos, id: string, accountId: string) {
-      await r.workspaces.create(
-        { id, name: 'Board', description: null, createdAt: 1_000, accountId },
-        null,
-        accountId,
-      )
-    }
-
-    const repo = (githubId: number, overrides: Partial<GitHubRepo> = {}): GitHubRepo => ({
-      githubId,
-      installationId: 77,
-      owner: 'acme',
-      name: `repo-${githubId}`,
-      defaultBranch: 'main',
-      private: true,
-      provider: 'github',
-      syncedAt: 1_000,
-      ...overrides,
-    })
 
     it('answers head 0 and an empty page for an account with no changes', async () => {
       const r = makeRepos()
@@ -117,6 +117,16 @@ export function defineDirectoryFeedSuite(name: string, makeRepos: () => Director
 
       expect(await entries(r, acc, head)).toEqual([['user', null, usr]])
       expect(await entries(r, acc2, head2)).toEqual([['user', null, usr]])
+
+      // The batched head read agrees with the per-account one, and answers 0 for an empty account.
+      const empty = `${acc}-none`
+      expect(await r.changes.headSeqs([acc, acc2, empty])).toEqual(
+        new Map([
+          [acc, await r.changes.headSeq(acc)],
+          [acc2, await r.changes.headSeq(acc2)],
+          [empty, 0],
+        ]),
+      )
     })
 
     it('records workspace and workspace-membership writes against the owning account', async () => {
@@ -219,6 +229,38 @@ export function defineDirectoryFeedSuite(name: string, makeRepos: () => Director
         ['workspace_membership', ws, usr],
       ])
       expect(await r.changes.headSeq(acc)).toBe(head + 3)
+    })
+
+    it('serves a reach the deletion of a board its grant went with, and nothing else of it', async () => {
+      const r = makeRepos()
+      const { acc, ws, usr } = ids()
+      const kept = `${ws}-kept`
+      await seedUser(r, usr)
+      await seedWorkspace(r, ws, acc)
+      await seedWorkspace(r, kept, acc)
+      await r.workspaceMembers.upsert({
+        workspaceId: ws,
+        userId: usr,
+        role: 'admin',
+        createdAt: 1,
+        addedByUserId: null,
+      })
+      const head = await r.changes.headSeq(acc)
+
+      await r.workspaces.delete(ws)
+
+      // Deleting the board drops a key's grant on it, so the reach no longer names it. The
+      // workspace deletion still reaches the key; the membership row, which names a user, does not.
+      for (const reach of [[kept], []]) {
+        const rows = await r.changes.listChanges(acc, head, Number.MAX_SAFE_INTEGER, 100, reach)
+        expect(rows.map((c) => [c.entityType, c.workspaceId, c.entityId])).toEqual([
+          ['workspace', ws, ws],
+        ])
+      }
+      // A board that still exists outside the reach stays invisible.
+      expect(
+        await r.changes.listChanges(acc, 0, Number.MAX_SAFE_INTEGER, 100, [ws]),
+      ).not.toContainEqual(expect.objectContaining({ entityId: kept }))
     })
 
     it('records the board tree in both accounts when it moves between them', async () => {

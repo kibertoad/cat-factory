@@ -58,7 +58,7 @@ function setValue(id: string, value: string) {
   >
     <div v-for="d in descriptors" :key="d.id" class="space-y-1">
       <div class="flex items-center justify-between">
-        <span class="text-[11px] text-muted">{{ d.label }}</span>
+        <span class="text-2xs text-muted">{{ d.label }}</span>
         <div class="flex items-center gap-1.5">
           <UIcon
             v-if="isFrozen(d.agentKind)"
@@ -81,7 +81,7 @@ function setValue(id: string, value: string) {
           {{ opt.label }}
         </UButton>
       </div>
-      <p class="text-[11px] leading-snug text-dimmed">{{ d.description }}</p>
+      <p class="text-2xs leading-snug text-dimmed">{{ d.description }}</p>
     </div>
   </InspectorSection>
 </template>

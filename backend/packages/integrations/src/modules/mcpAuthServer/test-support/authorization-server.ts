@@ -31,6 +31,9 @@ export class MemoryKeyRepository implements PublicApiKeyRepository {
       (row) => row.accountId === accountId && row.revokedAt === null,
     )
   }
+  async countLiveByAccount(accountId: string) {
+    return (await this.listByAccount(accountId)).length
+  }
   async markUsed(id: string, at: number) {
     const row = this.rows.get(id)
     if (row) this.rows.set(id, { ...row, lastUsedAt: at })

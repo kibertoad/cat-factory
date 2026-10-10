@@ -9,11 +9,11 @@ import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
 import AgentStopButton from '~/components/board/AgentStopButton.vue'
 import AdoptionReviewModal from '~/components/bootstrap/AdoptionReviewModal.vue'
 import BootstrapRunSteps from '~/components/bootstrap/BootstrapRunSteps.vue'
+import IconButton from '~/components/common/IconButton.vue'
 import { useBlockDrag } from '~/composables/useBlockDrag'
 import { useFrameStacking } from '~/composables/useFrameStacking'
 import { useViewport } from '~/composables/useViewport'
 import { laneBodyHeightIn } from '~/utils/laneGeometry'
-
 // Vue Flow passes the node's `id` and `data` as props to custom node components.
 // Only frames are rendered as board nodes; their tasks live inside the card.
 const props = defineProps<{ id: string }>()
@@ -249,10 +249,10 @@ const ITEM_ICON: Record<string, string> = {
       }}</span>
     </div>
     <div class="px-3 py-3">
-      <p class="text-[11px] leading-snug text-muted">
+      <p class="text-2xs leading-snug text-muted">
         {{ t('board.frame.accessDenied.hint') }}
       </p>
-      <code class="mt-2 block truncate font-mono text-[11px] text-dimmed">{{ block.id }}</code>
+      <code class="mt-2 block truncate font-mono text-2xs text-dimmed">{{ block.id }}</code>
     </div>
   </div>
 
@@ -316,9 +316,9 @@ const ITEM_ICON: Record<string, string> = {
             }}
           </span>
         </div>
-        <div class="mt-1.5 h-1 w-full overflow-hidden rounded bg-app-warning-900/40">
+        <div class="mt-1.5 h-1 w-full overflow-hidden rounded-sm bg-app-warning-900/40">
           <div
-            class="h-full rounded bg-app-warning-400 transition-all"
+            class="h-full rounded-sm bg-app-warning-400 transition-all"
             :style="{ width: bootstrapPct + '%' }"
           />
         </div>
@@ -327,7 +327,7 @@ const ITEM_ICON: Record<string, string> = {
           <li
             v-for="(item, i) in bootstrapItems"
             :key="i"
-            class="flex items-start gap-1.5 text-[11px]"
+            class="flex items-start gap-1.5 text-2xs"
             :class="
               item.status === 'completed'
                 ? 'text-app-warning-200/60 line-through'
@@ -430,7 +430,7 @@ const ITEM_ICON: Record<string, string> = {
                     {{ t('board.frame.shared') }}
                   </UBadge>
                 </div>
-                <div class="text-[11px] text-muted">{{ typeMeta!.label }}</div>
+                <div class="text-2xs text-muted">{{ typeMeta!.label }}</div>
               </div>
             </div>
             <div class="flex items-center gap-1">
@@ -441,27 +441,27 @@ const ITEM_ICON: Record<string, string> = {
                    are `board.write`, hidden for a read-only viewer, who keeps the status badge
                    (the one view-only affordance here). -->
               <template v-if="access.canWriteBoard.value">
-                <UButton
+                <IconButton
                   class="nodrag"
                   data-testid="frame-add-task"
                   :size="isTouch ? 'sm' : 'xs'"
                   variant="ghost"
                   color="neutral"
                   icon="i-lucide-plus"
-                  :title="t('board.frame.addTaskTitle')"
+                  :label="t('board.frame.addTaskTitle')"
                   @click.stop="addTask"
                 />
-                <UButton
+                <IconButton
                   v-if="tasks.anyOffered"
                   class="nodrag"
                   :size="isTouch ? 'sm' : 'xs'"
                   variant="ghost"
                   color="neutral"
                   icon="i-lucide-ticket"
-                  :title="t('board.frame.createTaskFromIssueTitle')"
+                  :label="t('board.frame.createTaskFromIssueTitle')"
                   @click.stop="createTaskFromIssue"
                 />
-                <UButton
+                <IconButton
                   v-if="documents.connectedDesignSources.length > 0"
                   class="nodrag"
                   data-testid="frame-start-from-design"
@@ -469,7 +469,7 @@ const ITEM_ICON: Record<string, string> = {
                   variant="ghost"
                   color="neutral"
                   icon="i-lucide-frame"
-                  :title="t('board.frame.startFromDesignTitle')"
+                  :label="t('board.frame.startFromDesignTitle')"
                   @click.stop="startFromDesign"
                 />
                 <!-- Recurring pipelines + initiatives are ADVANCED-tier authoring: both plan
@@ -480,7 +480,7 @@ const ITEM_ICON: Record<string, string> = {
                      badges its task card and opens its inspector panel, and an initiative is
                      still a block on the board with its own inspector — so what a basic-mode
                      user loses is the ability to author a new one, not sight of one. -->
-                <UButton
+                <IconButton
                   v-if="uiMode.isAdvanced"
                   class="nodrag"
                   data-testid="frame-add-recurring"
@@ -488,10 +488,10 @@ const ITEM_ICON: Record<string, string> = {
                   variant="ghost"
                   color="neutral"
                   icon="i-lucide-repeat"
-                  :title="t('board.frame.addRecurringTitle')"
+                  :label="t('board.frame.addRecurringTitle')"
                   @click.stop="addRecurring"
                 />
-                <UButton
+                <IconButton
                   v-if="uiMode.isAdvanced"
                   class="nodrag"
                   data-testid="frame-add-initiative"
@@ -499,7 +499,7 @@ const ITEM_ICON: Record<string, string> = {
                   variant="ghost"
                   color="neutral"
                   icon="i-lucide-milestone"
-                  :title="t('board.frame.createInitiativeTitle')"
+                  :label="t('board.frame.createInitiativeTitle')"
                   @click.stop="createInitiative"
                 />
                 <!-- Hunting a tracker board for a bug worth adopting is TRIAGE, not intake: it
@@ -507,7 +507,7 @@ const ITEM_ICON: Record<string, string> = {
                      engineer/PM judgement call. So it is dropped for a narrowed role, whose three
                      routes in (a new task, a task from a named ticket, a task from a design) all
                      start from work somebody has already decided to do. -->
-                <UButton
+                <IconButton
                   v-if="tasks.anyOffered && uiRole.fullSurface"
                   class="nodrag"
                   data-testid="frame-hunt-bugs"
@@ -515,7 +515,7 @@ const ITEM_ICON: Record<string, string> = {
                   variant="ghost"
                   color="neutral"
                   icon="i-lucide-radar"
-                  :title="t('board.frame.huntBugsTitle')"
+                  :label="t('board.frame.huntBugsTitle')"
                   @click.stop="huntBugs"
                 />
               </template>
@@ -530,7 +530,7 @@ const ITEM_ICON: Record<string, string> = {
                stays is what the canvas can't show at a glance. -->
           <div
             v-if="modules.length || prTasks"
-            class="flex items-center gap-2 text-[10px] uppercase tracking-wide text-dimmed"
+            class="flex items-center gap-2 text-3xs uppercase tracking-wide text-dimmed"
           >
             <span v-if="modules.length">{{
               t('board.frame.moduleCount', { count: modules.length }, modules.length)
@@ -560,15 +560,16 @@ const ITEM_ICON: Record<string, string> = {
 
           <FrameSwimlanes v-if="hasTasks" :frame-id="block.id" :lane-body-height="laneBodyHeight" />
 
-          <button
+          <UButton
+            color="neutral"
+            variant="ghost"
             v-if="!hasTasks && access.canWriteBoard.value"
-            type="button"
             data-testid="frame-add-task-empty"
-            class="absolute inset-4 flex items-center justify-center gap-1 rounded-lg border border-dashed border-muted text-[11px] text-dimmed hover:border-app-500 hover:text-toned"
+            class="absolute inset-4 flex items-center justify-center gap-1 rounded-lg border border-dashed border-muted text-2xs text-dimmed hover:border-app-500 hover:text-toned"
             @click.stop="addTask"
           >
             <UIcon name="i-lucide-plus" class="h-3.5 w-3.5" /> {{ t('board.frame.addFirstTask') }}
-          </button>
+          </UButton>
         </div>
       </div>
 

@@ -410,6 +410,7 @@ export {
   DOCUMENT_PIPELINE_ID,
   DOCUMENT_QUICK_PIPELINE_ID,
   REVIEW_PIPELINE_ID,
+  RESOLVE_CONFLICTS_PIPELINE_ID,
   SPIKE_PIPELINE_ID,
   RALPH_PIPELINE_ID,
   BUG_FISHING_PIPELINE_ID,
@@ -1182,10 +1183,6 @@ function runPeriodicBackstops(
     )
   }
 
-  // Raise a `budget_threshold` card while a workspace's (or its account's) spend is still
-  // recoverable. The proactive half of the spend safeguard, whose only signal today is a run
-  // pausing mid-pipeline. Not opt-in: a configured budget is the opt-in. It rides the stateless
-  // window gate at the shared cadence, so the Worker and the Node timer sweep equally often.
   // Push the directory change feed to registered webhook endpoints, on every frequent tick (the
   // shared interval matches it). Built only when a key can seal endpoint secrets, since without one
   // no endpoint can exist.
@@ -1196,6 +1193,10 @@ function runPeriodicBackstops(
     )
   }
 
+  // Raise a `budget_threshold` card while a workspace's (or its account's) spend is still
+  // recoverable. The proactive half of the spend safeguard, whose only signal today is a run
+  // pausing mid-pipeline. Not opt-in: a configured budget is the opt-in. It rides the stateless
+  // window gate at the shared cadence, so the Worker and the Node timer sweep equally often.
   if (shouldRunReachabilityPass(scheduledTime, FREQUENT_CRON_PERIOD_MS, SPEND_ALERT_INTERVAL_MS)) {
     tick.run(
       { name: 'spend-alerts', failureMessage: 'spend alert sweep failed' },

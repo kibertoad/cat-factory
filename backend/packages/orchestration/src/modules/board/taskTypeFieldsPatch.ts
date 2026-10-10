@@ -1,8 +1,9 @@
 import type { Block, BlockPatch, TaskTypeFields } from '@cat-factory/kernel'
-import { ValidationError } from '@cat-factory/kernel'
+import { ConflictError, ValidationError } from '@cat-factory/kernel'
 import type { UpdateBlockInput } from '@cat-factory/contracts'
 import type { ResolvedTaskType } from './taskTypeCreationDefaults.js'
 import { foldReviewDescriptionOnto, refoldReviewDescription } from './reviewTaskTarget.js'
+import type { AttachedPullRequest } from './attachedPullRequest.js'
 
 // Turning a per-type FIELDS patch into the `taskTypeFields` a block row stores: the one narrowing
 // that changes the patch's SHAPE (the request names two halves of a bag the row keeps whole), and
@@ -48,6 +49,30 @@ export interface TaskTypeFieldsPatchDeps {
     taskType: Block['taskType'],
     fields: Block['taskTypeFields'],
   ) => Promise<Block['taskTypeFields']>
+  /**
+   * Creation's own attached-PR resolution (`resolveAttachedPullRequest`), so retargeting a task
+   * that attaches a pull request re-attaches one creation would have accepted. `null` for every
+   * other type.
+   */
+  attachPullRequest: (
+    workspaceId: string,
+    blockId: string,
+    taskType: Block['taskType'],
+    fields: Block['taskTypeFields'],
+  ) => Promise<AttachedPullRequest | null>
+}
+
+/**
+ * A working run pushes onto the pull request it started on, so moving the attachment under it
+ * would aim its next gate probe and resolver round at a different pull request.
+ */
+function assertNotRetargetedMidRun(block: Block, attached: AttachedPullRequest): void {
+  if (block.status !== 'in_progress') return
+  if (block.pullRequest?.number === attached.pullRequest.number) return
+  throw new ConflictError(
+    "This task's run is working on its attached pull request. Wait for the run to finish, or " +
+      'stop it, before pointing the task at another pull request.',
+  )
 }
 
 /** The stored bag with its BUILT-IN half replaced, keeping the custom half untouched. */
@@ -109,6 +134,11 @@ export async function applyTaskTypeFieldsPatch(
   // here, in creation's order: canonicalise first, so what lands in the description is the
   // provider's own link rather than whatever was typed.
   const resolved = await deps.resolveReviewTarget(homeWorkspaceId, block.id, taskType, validated)
+  const attached = await deps.attachPullRequest(homeWorkspaceId, block.id, taskType, resolved)
+  if (attached) {
+    assertNotRetargetedMidRun(block, attached)
+    return { ...rest, taskTypeFields: attached.fields, pullRequest: attached.pullRequest }
+  }
   return { ...rest, taskTypeFields: resolved ?? null, ...refold(rest, block, taskType, resolved) }
 }
 

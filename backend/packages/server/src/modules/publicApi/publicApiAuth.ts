@@ -98,17 +98,8 @@ export async function authorize<E extends AppEnv>(
   c: Context<E>,
   need: PublicApiScope,
 ): Promise<KeyResult> {
-  const result = await resolveKey(c)
+  const result = await authorizeAccount(c, need)
   if ('fail' in result) return result
-  if (!scopeSatisfies(result.auth.scope, need)) {
-    return {
-      fail: {
-        status: 403,
-        code: 'insufficient_scope',
-        message: `This action requires a '${need}'-scope key; this key is scoped '${result.auth.scope}'`,
-      },
-    }
-  }
   const workspace = await resolveWorkspace(c, result.auth)
   if ('fail' in workspace) return workspace
   return { auth: { ...result.auth, workspaceId: workspace.workspaceId } }

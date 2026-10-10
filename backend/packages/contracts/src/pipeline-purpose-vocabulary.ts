@@ -23,6 +23,11 @@ import * as v from 'valibot'
  *                  flavour of `build` because none of the code-shipping machinery applies: it
  *                  opens no pull request, has nothing to test and nothing to merge, and the
  *                  palette it wants is the one nothing else asks for.
+ *   - `maintenance` keeps an EXISTING pull request mergeable in place (resolving its conflicts
+ *                  with its base) and opens none; a `resolve-conflicts` task offers ONLY these,
+ *                  and no other task type is offered one. It writes code as `build` does, onto
+ *                  the attached pull request's own branch, and is its own member because that
+ *                  pull request was attached at creation: a run under it opens and merges none.
  *
  * The gating predicates that read it live in `pipeline-purpose.ts`, which re-exports this
  * module. The vocabulary sits apart from them because `agent-presentation.ts` has to name a
@@ -39,6 +44,7 @@ export const PIPELINE_PURPOSES = [
   'research',
   'planning',
   'media',
+  'maintenance',
 ] as const
 export const pipelinePurposeSchema = v.picklist(PIPELINE_PURPOSES)
 export type PipelinePurpose = v.InferOutput<typeof pipelinePurposeSchema>

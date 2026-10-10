@@ -93,7 +93,7 @@ async function save() {
         <i18n-t
           keypath="settings.localMode.pool.description"
           tag="p"
-          class="text-[11px] text-muted"
+          class="text-2xs text-muted"
           scope="global"
         >
           <template #appleContainer>
@@ -141,7 +141,7 @@ async function save() {
         <h4 class="text-sm font-semibold text-default">
           {{ t('settings.localMode.checkout.heading') }}
         </h4>
-        <p class="text-[11px] text-muted">
+        <p class="text-2xs text-muted">
           {{ t('settings.localMode.checkout.description') }}
         </p>
       </div>

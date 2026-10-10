@@ -220,7 +220,8 @@
         "recurring": "Recurrente",
         "review": "Revisión",
         "ralph": "Bucle Ralph",
-        "bugFishing": "Pesca de errores"
+        "bugFishing": "Pesca de errores",
+        "resolveConflicts": "Resolver conflictos"
       },
       "recurringWithFrame": "Una tarea recurrente ejecuta una pipeline con cierta cadencia. Continúa para definir el horario y el prompt.",
       "recurringNoFrame": "Una tarea recurrente debe vivir en un servicio. Añádela desde un marco de servicio (o un módulo dentro de él).",
@@ -607,7 +608,8 @@
     "pastedLink": {
       "offer": "Esta descripción enlaza una página de {source}. ¿Adjuntarla como contexto?",
       "attach": "Adjuntar"
-    }
+    },
+    "removePending": "Quitar {name}"
   },
   "errors": {
     "generic": {
@@ -639,7 +641,8 @@
         "assistant_generation_failed": "El proveedor de modelos del asistente no respondió. Está configurado correctamente y aquí no hay nada que configurar: vuelve a intentar la solicitud en un momento.",
         "assistant_reply_unreadable": "El modelo del asistente respondió con algo que esta plataforma no puede ejecutar como decisión. Reformular rara vez ayuda: elige otro modelo para el asistente en la configuración de modelos.",
         "delegated_executor_failed": "El ejecutor externo no pudo iniciar este paso. El problema está en el sistema que realiza el trabajo, no en esta instalación: revisa sus propios registros e inténtalo de nuevo.",
-        "delegated_work_branch_unprepared": "La plataforma no pudo preparar la rama de trabajo a la que se envía el ejecutor de este paso, así que no se inició nada. O la conexión al repositorio no puede escribir en ella, o la tarea indica una rama que aún no existe: los detalles dicen cuál de las dos."
+        "delegated_work_branch_unprepared": "La plataforma no pudo preparar la rama de trabajo a la que se envía el ejecutor de este paso, así que no se inició nada. O la conexión al repositorio no puede escribir en ella, o la tarea indica una rama que aún no existe: los detalles dicen cuál de las dos.",
+        "attached_pr_provider_unreachable": "El proveedor del repositorio no respondió, así que no se pudo comprobar la pull request y no se creó ninguna tarea. No hay nada que configurar aquí: vuelve a intentarlo en un momento."
       }
     },
     "reason": {
@@ -5303,7 +5306,8 @@
         "review": "Revisión",
         "research": "Investigación",
         "planning": "Planificación",
-        "media": "Medios"
+        "media": "Medios",
+        "maintenance": "Mantenimiento de PR"
       },
       "strategyOption": {
         "specialist-panel": "Panel de especialistas",
@@ -5475,7 +5479,8 @@
         "releaseInteractive": "Dejar de ser la predeterminada en la app",
         "claimUnattended": "Hacer predeterminada sin supervisión",
         "releaseUnattended": "Dejar de ser la predeterminada sin supervisión"
-      }
+      },
+      "removeLabel": "Quitar la etiqueta {label}"
     },
     "progress": {
       "status": {
@@ -6399,7 +6404,8 @@
       "heading": "Subir un diseño de referencia",
       "viewPlaceholder": "Nombre de la vista (p. ej. login)",
       "tipReady": "Consejo: arrastra una imagen directamente sobre un par de arriba para establecer su referencia.",
-      "tipNeedView": "Introduce primero un nombre de vista y luego elige un archivo. O arrastra una imagen directamente sobre un par de arriba."
+      "tipNeedView": "Introduce primero un nombre de vista y luego elige un archivo. O arrastra una imagen directamente sobre un par de arriba.",
+      "choose": "Elegir un archivo"
     },
     "requestFix": {
       "heading": "Solicitar una corrección",
@@ -8529,6 +8535,7 @@
     "title": "Candidatos generados",
     "titleWithBlock": "Candidatos generados: {title}",
     "subtitle": "Compara lo que produjo cada integración y conserva lo que quieras",
+    "pickOne": "Elige uno. Al elegir un candidato se quita el que elegiste antes.",
     "automatic": "Solo se generó un candidato, así que se conservó automáticamente. Nadie lo revisó.",
     "unlabelledSubject": "Sin sujeto declarado",
     "noPreview": "Sin vista previa disponible",

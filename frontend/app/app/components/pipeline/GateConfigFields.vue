@@ -119,24 +119,20 @@ const gateFieldValues = computed<DescriptorFieldValues>({
       v-if="gated"
       class="space-y-2 rounded-md border border-app-warning-800/40 bg-app-warning-950/10 p-2"
     >
-      <div class="flex flex-wrap items-center gap-2 text-[10px]">
+      <div class="flex flex-wrap items-center gap-2 text-3xs">
         <span class="text-dimmed">{{ t('pipeline.gateConfig.approversLabel') }}</span>
-        <label
+        <UCheckbox
           v-for="role in APPROVER_ROLES"
           :key="role"
-          class="flex items-center gap-1 text-muted"
-        >
-          <input
-            type="checkbox"
-            :checked="config.approvers?.roles?.includes(role) ?? false"
-            :data-testid="`gate-approver-role-${role}`"
-            @change="toggleRole(role, ($event.target as HTMLInputElement).checked)"
-          />
-          {{ t(ROLE_LABEL_KEYS[role as 'admin' | 'member']) }}
-        </label>
+          size="xs"
+          :model-value="config.approvers?.roles?.includes(role) ?? false"
+          :label="t(ROLE_LABEL_KEYS[role as 'admin' | 'member'])"
+          :data-testid="`gate-approver-role-${role}`"
+          @update:model-value="toggleRole(role, $event === true)"
+        />
       </div>
 
-      <div class="flex flex-wrap items-center gap-2 text-[10px]">
+      <div class="flex flex-wrap items-center gap-2 text-3xs">
         <span class="text-dimmed">{{ t('pipeline.gateConfig.namedApproversLabel') }}</span>
         <USelectMenu
           class="w-64"
@@ -151,24 +147,24 @@ const gateFieldValues = computed<DescriptorFieldValues>({
         />
       </div>
 
-      <div class="flex flex-wrap items-center gap-2 text-[10px]">
+      <div class="flex flex-wrap items-center gap-2 text-3xs">
         <label class="text-dimmed" :title="t('pipeline.gateConfig.requiredApprovalsHint')">
           {{ t('pipeline.gateConfig.requiredApprovalsLabel') }}
         </label>
-        <input
-          :value="requiredApprovals"
-          type="number"
-          min="1"
+        <UInputNumber
+          :model-value="Number(requiredApprovals)"
+          :min="1"
           :max="MAX_GATE_APPROVALS"
-          step="1"
-          class="w-14 rounded border border-muted bg-default px-1.5 py-0.5 text-app-100"
+          :step="1"
+          size="xs"
+          class="w-24"
           data-testid="gate-required-approvals"
-          @change="setRequiredApprovals(($event.target as HTMLInputElement).value)"
+          @update:model-value="setRequiredApprovals(String($event ?? ''))"
         />
         <span class="text-dimmed">{{ t('pipeline.gateConfig.requiredApprovalsHint') }}</span>
       </div>
 
-      <p v-if="!config.approvers" class="text-[10px] text-dimmed">
+      <p v-if="!config.approvers" class="text-3xs text-dimmed">
         {{ t('pipeline.gateConfig.anyoneHint') }}
       </p>
     </div>
@@ -179,7 +175,7 @@ const gateFieldValues = computed<DescriptorFieldValues>({
       v-if="gateFields?.length"
       class="space-y-2 rounded-md border border-default bg-default/40 p-2"
     >
-      <p class="text-[10px] text-dimmed">{{ t('pipeline.gateConfig.gateParametersLabel') }}</p>
+      <p class="text-3xs text-dimmed">{{ t('pipeline.gateConfig.gateParametersLabel') }}</p>
       <DescriptorFields
         v-model="gateFieldValues"
         :fields="gateFields"

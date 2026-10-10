@@ -1,5 +1,6 @@
 import * as v from 'valibot'
 import { accountRolesSchema } from './accounts.js'
+import { notificationWebhookIdSchema } from './notification-webhooks.js'
 import { cursorSchema, pageLimitSchema } from './public-paging.js'
 import { vcsProviderSchema } from './routes/auth.js'
 import { workspaceAccessModeSchema, workspaceRoleSchema } from './workspace-members.js'
@@ -199,13 +200,8 @@ export type DirectoryRefusalReason = (typeof DIRECTORY_REFUSAL_REASONS)[number]
 
 export const MAX_DIRECTORY_WEBHOOKS_PER_ACCOUNT = 10
 
-export const directoryWebhookIdSchema = v.pipe(
-  v.string(),
-  v.regex(
-    /^[a-z0-9][a-z0-9_-]{0,62}$/u,
-    'A webhook id must be 1-63 characters of lowercase letters, digits, `-` or `_`, starting with a letter or digit',
-  ),
-)
+/** The same caller-chosen slug the notification webhooks are addressed by. */
+export const directoryWebhookIdSchema = notificationWebhookIdSchema
 
 /** A registered endpoint. The signing secret is write-only: `hasSecret` says whether one is set. */
 export const directoryWebhookSchema = v.object({

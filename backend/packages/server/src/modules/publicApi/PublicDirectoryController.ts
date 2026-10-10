@@ -1,6 +1,5 @@
 import {
   deleteDirectoryWebhookContract,
-  directoryWebhookIdSchema,
   listDirectoryAccountMembershipsContract,
   listDirectoryChangesContract,
   listDirectoryReposContract,
@@ -14,7 +13,6 @@ import { ForbiddenError } from '@cat-factory/kernel'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
-import * as v from 'valibot'
 import type { AppEnv } from '../../http/env.js'
 import { requireCapability } from '../../http/guards.js'
 import { authorizeAccount, refuse } from './publicApiAuth.js'
@@ -96,8 +94,7 @@ export function publicDirectoryController(): Hono<AppEnv> {
     if ('fail' in gate) return refuse(c, gate.fail)
     const accountId = requireAccountWide(gate.auth)
     const { webhookId } = c.req.valid('param')
-    const id = v.parse(directoryWebhookIdSchema, webhookId)
-    return c.json(await webhooks(c).put(accountId, id, c.req.valid('json')), 200)
+    return c.json(await webhooks(c).put(accountId, webhookId, c.req.valid('json')), 200)
   })
 
   buildHonoRoute(app, deleteDirectoryWebhookContract, async (c) => {
@@ -114,7 +111,7 @@ export function publicDirectoryController(): Hono<AppEnv> {
 function webhooks<E extends AppEnv>(c: Context<E>) {
   return requireCapability(
     c.get('container').directoryWebhooks,
-    'Directory webhooks are not configured (they need ENCRYPTION_KEY to seal signing secrets)',
+    'Directory webhooks are not served here: they need ENCRYPTION_KEY to seal signing secrets, and a mothership-mode node leaves them to the mothership',
   )
 }
 

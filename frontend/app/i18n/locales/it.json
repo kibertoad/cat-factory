@@ -3075,7 +3075,8 @@
         "recurring": "Ricorrente",
         "review": "Revisione",
         "ralph": "Ciclo Ralph",
-        "bugFishing": "Pesca di bug"
+        "bugFishing": "Pesca di bug",
+        "resolveConflicts": "Risolvi conflitti"
       },
       "recurringWithFrame": "Un'attività ricorrente esegue una pipeline a cadenza regolare. Continua per impostare la pianificazione e il prompt.",
       "recurringNoFrame": "Un'attività ricorrente deve risiedere su un servizio. Aggiungila da un frame di servizio (o da un modulo al suo interno).",
@@ -3462,7 +3463,8 @@
     "pastedLink": {
       "offer": "Questa descrizione rimanda a una pagina {source}. Allegarla come contesto?",
       "attach": "Allega"
-    }
+    },
+    "removePending": "Rimuovi {name}"
   },
   "providers": {
     "presetMismatch": {
@@ -4773,7 +4775,8 @@
         "review": "Revisione",
         "research": "Ricerca",
         "planning": "Pianificazione",
-        "media": "Media"
+        "media": "Media",
+        "maintenance": "Manutenzione PR"
       },
       "strategyOption": {
         "specialist-panel": "Panel di specialisti",
@@ -4945,7 +4948,8 @@
         "releaseInteractive": "Non più predefinita nell'app",
         "claimUnattended": "Rendi predefinita non presidiata",
         "releaseUnattended": "Non più predefinita non presidiata"
-      }
+      },
+      "removeLabel": "Rimuovi l'etichetta {label}"
     },
     "progress": {
       "status": {
@@ -6336,7 +6340,8 @@
         "assistant_generation_failed": "Il fornitore di modelli dell'assistente non ha risposto. È configurato correttamente e qui non c'è nulla da impostare: riprova la richiesta tra un momento.",
         "assistant_reply_unreadable": "Il modello dell'assistente ha risposto con qualcosa che questa piattaforma non può eseguire come decisione. Riformulare aiuta di rado: scegli un altro modello per l'assistente nelle impostazioni dei modelli.",
         "delegated_executor_failed": "L’esecutore esterno non è riuscito ad avviare questo passaggio. Il problema è nel sistema che svolge il lavoro, non in questa installazione: controlla i suoi log e riprova.",
-        "delegated_work_branch_unprepared": "La piattaforma non è riuscita a preparare il branch di lavoro su cui viene inviato l'executor di questo passo, quindi non è stato avviato nulla. O la connessione al repository non può scriverci, oppure l'attività indica un branch che non esiste ancora: i dettagli dicono quale dei due."
+        "delegated_work_branch_unprepared": "La piattaforma non è riuscita a preparare il branch di lavoro su cui viene inviato l'executor di questo passo, quindi non è stato avviato nulla. O la connessione al repository non può scriverci, oppure l'attività indica un branch che non esiste ancora: i dettagli dicono quale dei due.",
+        "attached_pr_provider_unreachable": "Il provider del repository non ha risposto, quindi non è stato possibile verificare la pull request e non è stata creata alcuna attività. Non c'è nulla da configurare qui: riprova tra un momento."
       }
     },
     "reason": {
@@ -7129,7 +7134,8 @@
       "heading": "Carica un design di riferimento",
       "viewPlaceholder": "Nome della vista (es. login)",
       "tipReady": "Suggerimento: trascina un'immagine direttamente su una coppia sopra per impostarne il riferimento.",
-      "tipNeedView": "Inserisci prima un nome per la vista, poi scegli un file. Oppure trascina un'immagine direttamente su una coppia sopra."
+      "tipNeedView": "Inserisci prima un nome per la vista, poi scegli un file. Oppure trascina un'immagine direttamente su una coppia sopra.",
+      "choose": "Scegli un file"
     },
     "requestFix": {
       "heading": "Richiedi una correzione",
@@ -8529,6 +8535,7 @@
     "title": "Candidati generati",
     "titleWithBlock": "Candidati generati: {title}",
     "subtitle": "Confronta ciò che ogni integrazione ha prodotto e tieni quello che vuoi",
+    "pickOne": "Scegline uno. Scegliere un candidato annulla la scelta precedente.",
     "automatic": "È stato generato un solo candidato, quindi è stato tenuto automaticamente. Nessuno lo ha esaminato.",
     "unlabelledSubject": "Nessun soggetto dichiarato",
     "noPreview": "Nessuna anteprima disponibile",

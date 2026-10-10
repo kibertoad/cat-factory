@@ -153,19 +153,19 @@ async function save() {
   >
     <div>
       <h4 class="text-sm font-semibold text-default">{{ t('settings.modelPolicy.title') }}</h4>
-      <p class="text-[11px] text-muted">{{ t('settings.modelPolicy.description') }}</p>
+      <p class="text-2xs text-muted">{{ t('settings.modelPolicy.description') }}</p>
     </div>
 
     <!-- Region + apply-preset templates -->
     <div class="space-y-2">
-      <label class="text-[11px] font-medium text-toned">
+      <label class="text-2xs font-medium text-toned">
         {{ t('settings.modelPolicy.regionLabel') }}
       </label>
       <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <USelect v-model="region" :items="regionItems" value-key="value" size="sm" />
       </div>
       <div v-if="regionPresets.length" class="flex flex-wrap items-center gap-2">
-        <span class="text-[11px] text-muted">{{ t('settings.modelPolicy.applyPreset') }}</span>
+        <span class="text-2xs text-muted">{{ t('settings.modelPolicy.applyPreset') }}</span>
         <UButton
           v-for="preset in regionPresets"
           :key="preset.id"
@@ -183,7 +183,7 @@ async function save() {
 
     <!-- Mode -->
     <div class="space-y-2">
-      <label class="text-[11px] font-medium text-toned">
+      <label class="text-2xs font-medium text-toned">
         {{ t('settings.modelPolicy.modeLabel') }}
       </label>
       <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -193,7 +193,7 @@ async function save() {
 
     <!-- Families -->
     <div v-if="mode !== 'off'" class="space-y-2">
-      <label class="text-[11px] font-medium text-toned">
+      <label class="text-2xs font-medium text-toned">
         {{
           mode === 'blocklist'
             ? t('settings.modelPolicy.familiesBlockLabel')
@@ -214,10 +214,10 @@ async function save() {
 
     <!-- Trusted (residency-guaranteed) routes -->
     <div v-if="mode !== 'off'" class="space-y-2">
-      <label class="text-[11px] font-medium text-toned">
+      <label class="text-2xs font-medium text-toned">
         {{ t('settings.modelPolicy.trustedLabel') }}
       </label>
-      <p class="text-[11px] text-muted">{{ t('settings.modelPolicy.trustedHint') }}</p>
+      <p class="text-2xs text-muted">{{ t('settings.modelPolicy.trustedHint') }}</p>
       <div class="grid grid-cols-2 gap-1 sm:grid-cols-4">
         <UCheckbox
           v-for="provider in TRUSTED_PROVIDERS"

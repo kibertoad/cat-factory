@@ -38,12 +38,15 @@ export async function lockDirectoryFeed(tx: Executor, source: SQL): Promise<void
  */
 export async function appendDirectoryChanges(tx: Executor, source: SQL, at: number): Promise<void> {
   await lockDirectoryFeed(tx, source)
+  // `COLLATE "C"` orders by bytes, as SQLite does on D1, so one write numbers its rows the same
+  // way on both runtimes whatever the database's default collation is.
   await tx.execute(sql`
     INSERT INTO directory_changes (account_id, seq, entity_type, workspace_id, entity_id, at)
     SELECT src.account_id,
            COALESCE((SELECT MAX(d.seq) FROM directory_changes d WHERE d.account_id = src.account_id), 0)
              + ROW_NUMBER() OVER (PARTITION BY src.account_id
-                                  ORDER BY src.entity_type, src.workspace_id, src.entity_id),
+                                  ORDER BY src.entity_type COLLATE "C", src.workspace_id COLLATE "C",
+                                           src.entity_id COLLATE "C"),
            src.entity_type, src.workspace_id, src.entity_id, ${at}
       FROM (${source}) AS src
      WHERE src.account_id IS NOT NULL`)
@@ -54,6 +57,17 @@ const text = (value: string) => sql`CAST(${value} AS TEXT)`
 /** One account by id, for locking ahead of a write whose rows do not exist yet. */
 export function accountSource(accountId: string | null): SQL {
   return sql`SELECT ${accountId === null ? sql`CAST(NULL AS TEXT)` : text(accountId)} AS account_id`
+}
+
+/**
+ * The account a workspace belongs to now and the one it is moving to, so a move locks both in ONE
+ * id-ordered statement. Locking them one after the other would take them in move direction, which
+ * deadlocks against an opposite move or a multi-account writer such as a profile update.
+ */
+export function workspaceMoveSource(workspaceId: string, toAccountId: string): SQL {
+  return sql`SELECT account_id FROM workspaces WHERE id = ${text(workspaceId)}
+             UNION ALL
+             ${accountSource(toAccountId)}`
 }
 
 /** A user's profile, once per account they belong to. */
@@ -94,7 +108,7 @@ export function workspaceSource(workspaceId: string): SQL {
 
 /**
  * The workspace and everything in it that the directory publishes: its members and live repos.
- * Used where the whole board appears in or leaves an account (create into, move, delete).
+ * Used where the whole board appears in or leaves an account (move, delete).
  */
 export function workspaceTreeSource(workspaceId: string): SQL {
   return sql`${workspaceSource(workspaceId)}

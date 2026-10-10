@@ -16,8 +16,8 @@ agent loads as instructions when it reads a file here.
   `common`, and one folder per surface). Read [`README.md` → Key UI surfaces](./README.md#key-ui-surfaces).
 - `app/stores/`: Pinia stores, one per feature domain. `app/composables/`: `useApi`,
   `useWorkspaceStream` (WebSocket sync) and the rest. `app/utils/`: pure helpers.
-- `app/assets/css/tokens.css`: the app's own theme tokens. `app/docs/architecture.md`: how the
-  store sync works.
+- `app/assets/css/tokens.css`: the app's own colour tokens; `type.css`: its two type steps below
+  `text-xs`. `app/docs/architecture.md`: how the store sync works.
 - `i18n/`: the locale catalogs. `scripts/`: the package's own i18n guards.
 
 **Traps (all silent, all in [`README.md`](./README.md)):**
@@ -32,6 +32,18 @@ agent loads as instructions when it reads a file here.
 - **Colour through theme tokens**, never a raw Tailwind hue or a fixed numbered alias.
   [Rule](./README.md#colour-through-theme-tokens-never-a-fixed-palette-shade), guarded by
   `scripts/check-frontend-palette.mjs`.
+- **Type through named steps** (`text-2xs` / `text-3xs` below `text-xs`), never a `text-[11px]`
+  literal, which does not scale with a theme's `fontSize`; a section eyebrow is
+  `common/SectionLabel.vue`. [Rule](./README.md#type-through-named-steps-never-a-pixel-literal),
+  guarded by `scripts/check-frontend-type-scale.mjs`.
+- **Radius through any `rounded-*` step** (`main.css` binds the whole scale onto `--ui-radius`),
+  never an arbitrary value; in CSS, `var(--ui-radius)` or a `calc()` of it, never a `--radius-*`
+  variable or a literal. [Rule](./README.md#radius-through-the-theme-scale), guarded by
+  `scripts/check-frontend-radius.mjs`.
+- **A control is its Nuxt UI component** (`UButton`, `UInput`, `USelect`, `UTable`, `UCollapsible`,
+  `UForm`, `ULink`), never the raw element; an icon-only button is `common/IconButton.vue`, which
+  owns the tooltip. [Rule](./README.md#a-control-is-its-nuxt-ui-component), guarded by
+  `scripts/check-frontend-primitives.mjs`.
 
 **Nuxt UI guidance:** the vendored [`nuxt-ui` skill](../../.claude/skills/nuxt-ui/SKILL.md) teaches
 WHEN to use which component and HOW to build well; the [`nuxt-ui` MCP server](../../.mcp.json)
@@ -53,7 +65,9 @@ is whole-tree from the root (AGENTS.md). Run these where stated:
 - `pnpm lint` from the repo root (oxlint + oxfmt over the whole tree, once).
 - `pnpm --filter @cat-factory/app i18n:check` and `i18n:parity` when you touch copy or the catalog.
 - `node scripts/check-component-imports.mjs`, `node scripts/check-frontend-palette.mjs`,
-  `node scripts/check-file-size.mjs` from the repo root (install-free guards CI runs).
+  `node scripts/check-frontend-type-scale.mjs`, `node scripts/check-frontend-radius.mjs`,
+  `node scripts/check-frontend-primitives.mjs`, `node scripts/check-file-size.mjs` from the repo
+  root (install-free guards CI runs).
 
 **See also:** [`README.md`](./README.md), [`app/docs/architecture.md`](./app/docs/architecture.md),
 [`@cat-factory/contracts`](../../backend/packages/contracts/AGENTS.md) (the shared wire types).
