@@ -235,7 +235,9 @@ credential name, as for every other capability credential (ADR 0041).
 
 ### D5. Correlation is the executor's problem, and the brief makes it solvable
 
-Many external systems return no id at start (`workflow_dispatch` returns 204 and no run id). The
+Many external systems return no id at start (`workflow_dispatch` returned 204 and no run id until
+github.com began answering `200` with `workflow_run_id`, and older Enterprise servers still do), and
+a replay has only the brief even where the first attempt was answered with one. The
 platform does not paper over this: `start()` must return an `externalId`, and it is the
 executor's job to recover one, but the brief gives it the one stable handle it needs,
 `correlationKey`, the cat-factory job id. The documented pattern for a GitHub Actions executor:
@@ -632,7 +634,8 @@ re-investigate them.
   `delegatedStepsWithoutUsage` in the rollup, and reported the outcome as "honest but real" rather
   than as a defect. Nothing to change: the gap is in what Ratchet publishes, and the platform
   already says it does not know.
-- **`correlationKey` plus a caller-rendered `run-name` is the only handle Actions offers**, checked
+- **`correlationKey` plus a caller-rendered `run-name` is the only handle a REPLAY has** (the dispatch
+  answer's `workflow_run_id` dies with the attempt that received it), checked
   again against the alternatives the consumer also ruled out (inputs are not queryable, `created`
   has one-second granularity, a called workflow cannot set its caller's run name).
 - **`poll` reporting the workflow STEP as its phase is the finest progress the API exposes** for a
