@@ -2989,6 +2989,18 @@ those workspaces only, and is refused users and account memberships (`403`,
 `entity: null`, of every deleted workspace in the account: deleting a board drops the key's grant on
 it, so this is how the key learns the board is gone. Treat it as the removal of that workspace and
 of every membership and repository under it, since those rows are not served. Mint an account-wide key for a full directory mirror.
+
+**Directory webhooks** push the same pages instead of waiting for a poll. Register an endpoint with
+`PUT /api/v1/directory/webhooks/:webhookId` (`{ url, secret?, enabled? }`, `https` only, at most 10
+per account), list them with `GET /api/v1/directory/webhooks`, remove one with `DELETE`. All three
+need an `admin` key reaching every workspace. A new endpoint starts at the feed head. Every couple
+of minutes each endpoint is sent a signed `directory.changed` body (`deliveryId`, `accountId`,
+`changes`, `nextAfter`, `headSeq`), or `directory.resync_required` when it fell behind the feed's
+retention. Signing is the notification webhooks' scheme ([Verify signatures](#verify-signatures)).
+Pushes are at-least-once: dedupe on `deliveryId`, and keep polling the feed now and then, because a
+push the receiver never acknowledged is retried but one it lost after acknowledging is not.
+Directory webhooks are managed and delivered by the deployment itself, never by a mothership-mode
+node, which answers 503 for these three routes.
 Design: [`docs/initiatives/directory-sync.md`](../../docs/initiatives/directory-sync.md).
 
 ### Key provisioning (`/api/v1/keys`)
@@ -3221,6 +3233,10 @@ Registering an 11th endpoint is refused with `409` and
 existing endpoint is admitted regardless, since those are the actions that resolve it.
 
 ### Delivery contract
+
+Every body below is also published in the spec's OpenAPI 3.1 `webhooks` section
+(`NotificationWebhookDelivery`, `RunWebhookDelivery`, `PlatformAlertWebhookDelivery`), so each
+official client carries it as a generated type.
 
 Every delivery is a `POST` with `content-type: application/json` and `user-agent: cat-factory`. The
 three families share the endpoint and are told apart by shape: `notification`, `run` and `alert`

@@ -31,6 +31,9 @@ import type {
   DirectoryChangePage,
   DirectoryRepoPage,
   DirectoryUserPage,
+  DirectoryWebhook,
+  DirectoryWebhookDelivery,
+  DirectoryWebhookList,
   DirectoryWorkspaceMembershipPage,
   DirectoryWorkspacePage,
   EditGuidedReviewDraft,
@@ -125,6 +128,7 @@ import type {
   PublicTask,
   PublicTaskList,
   PublicUsage,
+  PutDirectoryWebhook,
   PutNotificationWebhook,
   RequestGuidedReviewDrafts,
   RunStatus,
@@ -2334,6 +2338,19 @@ export class DirectoryResource {
   }
 
   /**
+   * Remove a directory webhook
+   * Stop pushing to an endpoint. Idempotent.
+   * `DELETE /api/v1/directory/webhooks/{webhookId}` — operation `deleteDirectoryWebhook`.
+   */
+  deleteWebhook(webhookId: string, options: RequestOptions = {}): Promise<void> {
+    return this.#transport.requestNoContent({
+      method: 'DELETE',
+      path: `/api/v1/directory/webhooks/${encodePathSegment(webhookId)}`,
+      options,
+    })
+  }
+
+  /**
    * List the account's memberships
    * A keyset-paged snapshot of the account’s memberships, each with the member’s account roles. Account-wide, so a key limited to some workspaces is refused with `403` and `reason: "account_scope_required"`.
    * `GET /api/v1/directory/account-memberships` — operation `listDirectoryAccountMemberships`.
@@ -2438,6 +2455,19 @@ export class DirectoryResource {
   }
 
   /**
+   * List the account's directory webhooks
+   * The endpoints the directory change feed is pushed to, each with the feed position delivered through. The signing secret is write-only: `hasSecret` says whether one is set. Requires an `admin` key that reaches every workspace (`403` with `reason: "account_scope_required"` otherwise), because an endpoint receives every change in the account.
+   * `GET /api/v1/directory/webhooks` — operation `listDirectoryWebhooks`.
+   */
+  listWebhooks(options: RequestOptions = {}): Promise<DirectoryWebhookList> {
+    return this.#transport.request<DirectoryWebhookList>({
+      method: 'GET',
+      path: `/api/v1/directory/webhooks`,
+      options,
+    })
+  }
+
+  /**
    * List workspace memberships
    * A keyset-paged snapshot of the explicit workspace memberships in the account’s workspaces (the ones the key reaches), each with its workspace role.
    * `GET /api/v1/directory/workspace-memberships` — operation `listDirectoryWorkspaceMemberships`.
@@ -2495,6 +2525,20 @@ export class DirectoryResource {
       if (page.nextCursor === cursor) throw repeatedCursorError()
       cursor = page.nextCursor
     }
+  }
+
+  /**
+   * Register or edit a directory webhook
+   * Register an endpoint the directory change feed is pushed to, or edit one; an omitted field keeps its stored value, and `url` is required only when registering. A new endpoint starts at the feed head: it is pushed what changes from now on, and its receiver bootstraps the past from the snapshots. Pushes run every couple of minutes, signed like the notification webhooks, each a `DirectoryWebhookDelivery`. An account holds at most 10 (`409` with `reason: "webhook_limit_reached"`).
+   * `PUT /api/v1/directory/webhooks/{webhookId}` — operation `putDirectoryWebhook`.
+   */
+  putWebhook(webhookId: string, body: PutDirectoryWebhook = {}, options: RequestOptions = {}): Promise<DirectoryWebhook> {
+    return this.#transport.request<DirectoryWebhook>({
+      method: 'PUT',
+      path: `/api/v1/directory/webhooks/${encodePathSegment(webhookId)}`,
+      body,
+      options,
+    })
   }
 }
 

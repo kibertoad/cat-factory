@@ -1,14 +1,20 @@
 import {
+  deleteDirectoryWebhookContract,
   listDirectoryAccountMembershipsContract,
   listDirectoryChangesContract,
   listDirectoryReposContract,
   listDirectoryUsersContract,
   listDirectoryWorkspaceMembershipsContract,
+  listDirectoryWebhooksContract,
   listDirectoryWorkspacesContract,
+  putDirectoryWebhookContract,
 } from '@cat-factory/contracts'
+import { ForbiddenError } from '@cat-factory/kernel'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
+import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
+import { requireCapability } from '../../http/guards.js'
 import { authorizeAccount, refuse } from './publicApiAuth.js'
 
 // The public DIRECTORY surface (`/api/v1/directory/*`): an account's workspaces, users,
@@ -72,7 +78,51 @@ export function publicDirectoryController(): Hono<AppEnv> {
     return c.json(await c.get('container').directory.repos(reader(gate.auth), cursor, limit), 200)
   })
 
+  // ---- Directory webhooks: account-level push endpoints --------------------------------------
+  // `admin` and account-wide only: an endpoint receives every directory change in the account, so
+  // a key limited to some workspaces could otherwise read the rest through a push it registered.
+
+  buildHonoRoute(app, listDirectoryWebhooksContract, async (c) => {
+    const gate = await authorizeAccount(c, listDirectoryWebhooksContract.minScope)
+    if ('fail' in gate) return refuse(c, gate.fail)
+    const accountId = requireAccountWide(gate.auth)
+    return c.json({ webhooks: await webhooks(c).list(accountId) }, 200)
+  })
+
+  buildHonoRoute(app, putDirectoryWebhookContract, async (c) => {
+    const gate = await authorizeAccount(c, putDirectoryWebhookContract.minScope)
+    if ('fail' in gate) return refuse(c, gate.fail)
+    const accountId = requireAccountWide(gate.auth)
+    const { webhookId } = c.req.valid('param')
+    return c.json(await webhooks(c).put(accountId, webhookId, c.req.valid('json')), 200)
+  })
+
+  buildHonoRoute(app, deleteDirectoryWebhookContract, async (c) => {
+    const gate = await authorizeAccount(c, deleteDirectoryWebhookContract.minScope)
+    if ('fail' in gate) return refuse(c, gate.fail)
+    const accountId = requireAccountWide(gate.auth)
+    await webhooks(c).delete(accountId, c.req.valid('param').webhookId)
+    return c.body(null, 204)
+  })
+
   return app
+}
+
+function webhooks<E extends AppEnv>(c: Context<E>) {
+  return requireCapability(
+    c.get('container').directoryWebhooks,
+    'Directory webhooks are not served here: they need ENCRYPTION_KEY to seal signing secrets, and a mothership-mode node leaves them to the mothership',
+  )
+}
+
+/** The key's account, refusing a key limited to some workspaces. */
+function requireAccountWide(auth: { accountId: string; workspaceIds: string[] | null }): string {
+  if (auth.workspaceIds !== null) {
+    throw new ForbiddenError('Directory webhooks need a key that reaches every workspace', {
+      reason: 'account_scope_required',
+    })
+  }
+  return auth.accountId
 }
 
 /** The directory reader a key is: its account, and its workspace reach as the filter. */

@@ -712,6 +712,120 @@
         ],
         "type": "object"
       },
+      "DirectoryWebhook": {
+        "properties": {
+          "deliveredSeq": {
+            "type": "number"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "hasSecret": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "number"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "url",
+          "enabled",
+          "hasSecret",
+          "deliveredSeq",
+          "updatedAt"
+        ],
+        "type": "object"
+      },
+      "DirectoryWebhookDelivery": {
+        "oneOf": [
+          {
+            "properties": {
+              "accountId": {
+                "type": "string"
+              },
+              "changes": {
+                "items": {
+                  "$ref": "#/components/schemas/DirectoryChange"
+                },
+                "type": "array"
+              },
+              "deliveryId": {
+                "type": "string"
+              },
+              "event": {
+                "const": "directory.changed"
+              },
+              "headSeq": {
+                "type": "number"
+              },
+              "nextAfter": {
+                "type": "number"
+              },
+              "sentAt": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "deliveryId",
+              "sentAt",
+              "accountId",
+              "event",
+              "changes",
+              "nextAfter",
+              "headSeq"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "accountId": {
+                "type": "string"
+              },
+              "deliveryId": {
+                "type": "string"
+              },
+              "event": {
+                "const": "directory.resync_required"
+              },
+              "headSeq": {
+                "type": "number"
+              },
+              "sentAt": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "deliveryId",
+              "sentAt",
+              "accountId",
+              "event",
+              "headSeq"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "DirectoryWebhookList": {
+        "properties": {
+          "webhooks": {
+            "items": {
+              "$ref": "#/components/schemas/DirectoryWebhook"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "webhooks"
+        ],
+        "type": "object"
+      },
       "DirectoryWorkspace": {
         "properties": {
           "accessMode": {
@@ -2367,6 +2481,51 @@
         ],
         "type": "object"
       },
+      "NotificationWebhookDelivery": {
+        "properties": {
+          "deliveryId": {
+            "type": "string"
+          },
+          "notification": {
+            "$ref": "#/components/schemas/Notification"
+          },
+          "runId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sentAt": {
+            "type": "number"
+          },
+          "taskId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "workspaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "deliveryId",
+          "sentAt",
+          "workspaceId",
+          "runId",
+          "taskId",
+          "notification"
+        ],
+        "type": "object"
+      },
       "OpenGuidedReview": {
         "properties": {
           "owner": {
@@ -2409,6 +2568,124 @@
           }
         },
         "required": [],
+        "type": "object"
+      },
+      "PlatformAlertWebhookDelivery": {
+        "properties": {
+          "alert": {
+            "properties": {
+              "accountId": {
+                "type": "string"
+              },
+              "conditions": {
+                "items": {
+                  "properties": {
+                    "kind": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    },
+                    "threshold": {
+                      "type": "number"
+                    },
+                    "value": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "reason",
+                    "value",
+                    "threshold"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "failedTotal": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "failingRuns": {
+                "items": {
+                  "properties": {
+                    "blockId": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "createdAt": {
+                      "type": "number"
+                    },
+                    "executionId": {
+                      "type": "string"
+                    },
+                    "failureKind": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "executionId",
+                    "blockId",
+                    "failureKind",
+                    "createdAt"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "occurredAt": {
+                "type": "number"
+              },
+              "window": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "accountId",
+              "window",
+              "conditions",
+              "occurredAt",
+              "failingRuns",
+              "failedTotal"
+            ],
+            "type": "object"
+          },
+          "deliveryId": {
+            "type": "string"
+          },
+          "event": {
+            "enum": [
+              "platform_health.firing",
+              "platform_health.resolved"
+            ],
+            "type": "string"
+          },
+          "sentAt": {
+            "type": "number"
+          },
+          "workspaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "deliveryId",
+          "sentAt",
+          "workspaceId",
+          "event",
+          "alert"
+        ],
         "type": "object"
       },
       "PostGuidedReviewDrafts": {
@@ -8454,6 +8731,26 @@
         ],
         "type": "object"
       },
+      "PutDirectoryWebhook": {
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "secret": {
+            "maxLength": 200,
+            "minLength": 16,
+            "type": "string"
+          },
+          "url": {
+            "format": "uri",
+            "maxLength": 2000,
+            "pattern": "^https://",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
       "PutNotificationWebhook": {
         "properties": {
           "alertEvents": {
@@ -8642,6 +8939,162 @@
         ],
         "type": "object"
       },
+      "RunWebhookDelivery": {
+        "properties": {
+          "deliveryId": {
+            "type": "string"
+          },
+          "event": {
+            "enum": [
+              "run.started",
+              "run.completed",
+              "run.failed",
+              "run.step_completed"
+            ],
+            "type": "string"
+          },
+          "run": {
+            "properties": {
+              "failure": {
+                "anyOf": [
+                  {
+                    "properties": {
+                      "kind": {
+                        "type": "string"
+                      },
+                      "message": {
+                        "type": "string"
+                      },
+                      "reason": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "message",
+                      "reason"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "occurredAt": {
+                "type": "number"
+              },
+              "pipelineId": {
+                "type": "string"
+              },
+              "pipelineName": {
+                "type": "string"
+              },
+              "pullRequestUrl": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "runId": {
+                "type": "string"
+              },
+              "startedAt": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "step": {
+                "anyOf": [
+                  {
+                    "properties": {
+                      "agentKind": {
+                        "type": "string"
+                      },
+                      "attempt": {
+                        "type": "number"
+                      },
+                      "final": {
+                        "type": "boolean"
+                      },
+                      "index": {
+                        "type": "number"
+                      },
+                      "outcome": {
+                        "enum": [
+                          "completed",
+                          "skipped"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "index",
+                      "agentKind",
+                      "outcome",
+                      "attempt",
+                      "final"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "taskId": {
+                "type": "string"
+              },
+              "taskTitle": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "runId",
+              "taskId",
+              "taskTitle",
+              "pipelineId",
+              "pipelineName",
+              "startedAt",
+              "occurredAt",
+              "pullRequestUrl",
+              "failure",
+              "step"
+            ],
+            "type": "object"
+          },
+          "sentAt": {
+            "type": "number"
+          },
+          "workspaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "deliveryId",
+          "sentAt",
+          "workspaceId",
+          "event",
+          "run"
+        ],
+        "type": "object"
+      },
       "SpecDoc": {
         "properties": {
           "modules": {
@@ -8807,7 +9260,7 @@
       "name": "MIT"
     },
     "title": "cat-factory Public API",
-    "version": "1.81.0"
+    "version": "1.82.0"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -13567,6 +14020,156 @@
           "Directory"
         ],
         "x-min-scope": "read"
+      }
+    },
+    "/api/v1/directory/webhooks": {
+      "get": {
+        "description": "The endpoints the directory change feed is pushed to, each with the feed position delivered through. The signing secret is write-only: `hasSecret` says whether one is set. Requires an `admin` key that reaches every workspace (`403` with `reason: \"account_scope_required\"` otherwise), because an endpoint receives every change in the account.",
+        "operationId": "listDirectoryWebhooks",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectoryWebhookList"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "List the account's directory webhooks",
+        "tags": [
+          "Directory"
+        ],
+        "x-min-scope": "admin"
+      }
+    },
+    "/api/v1/directory/webhooks/{webhookId}": {
+      "delete": {
+        "description": "Stop pushing to an endpoint. Idempotent.",
+        "operationId": "deleteDirectoryWebhook",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "webhookId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Remove a directory webhook",
+        "tags": [
+          "Directory"
+        ],
+        "x-min-scope": "admin"
+      },
+      "put": {
+        "description": "Register an endpoint the directory change feed is pushed to, or edit one; an omitted field keeps its stored value, and `url` is required only when registering. A new endpoint starts at the feed head: it is pushed what changes from now on, and its receiver bootstraps the past from the snapshots. Pushes run every couple of minutes, signed like the notification webhooks, each a `DirectoryWebhookDelivery`. An account holds at most 10 (`409` with `reason: \"webhook_limit_reached\"`).",
+        "operationId": "putDirectoryWebhook",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "webhookId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PutDirectoryWebhook"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectoryWebhook"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Register or edit a directory webhook",
+        "tags": [
+          "Directory"
+        ],
+        "x-min-scope": "admin"
       }
     },
     "/api/v1/directory/workspace-memberships": {
@@ -25980,6 +26583,92 @@
       "name": "Webhook"
     }
   ],
+  "webhooks": {
+    "directoryDelivery": {
+      "post": {
+        "description": "Sent to each registered directory webhook endpoint: a page of directory changes, or word that the endpoint must resynchronize. Dedupe on `deliveryId`: a failed push is retried with the same id. Verify `x-cat-factory-signature` (`v1=<hex HMAC-SHA256(secret, \"<x-cat-factory-timestamp>.<raw body>\")>`) over the raw body before parsing, and refuse a timestamp outside your replay window.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DirectoryWebhookDelivery"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Any 2xx acknowledges the push."
+          }
+        },
+        "summary": "A directory webhook push"
+      }
+    },
+    "notificationDelivery": {
+      "post": {
+        "description": "Sent to each notification webhook endpoint subscribed to the notification’s type, on every state edge of the card (raised, acted, dismissed); key on `notification.status`. Dedupe on `deliveryId`. Verify `x-cat-factory-signature` (`v1=<hex HMAC-SHA256(secret, \"<x-cat-factory-timestamp>.<raw body>\")>`) over the raw body before parsing, and refuse a timestamp outside your replay window.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotificationWebhookDelivery"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Any 2xx acknowledges the push."
+          }
+        },
+        "summary": "A notification push"
+      }
+    },
+    "platformAlertDelivery": {
+      "post": {
+        "description": "Sent to each notification webhook endpoint subscribed to the event (`alertEvents`) when the account’s run health crosses, or clears, an operator threshold. Dedupe on `deliveryId`. Verify `x-cat-factory-signature` (`v1=<hex HMAC-SHA256(secret, \"<x-cat-factory-timestamp>.<raw body>\")>`) over the raw body before parsing, and refuse a timestamp outside your replay window.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlatformAlertWebhookDelivery"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Any 2xx acknowledges the push."
+          }
+        },
+        "summary": "A platform health push"
+      }
+    },
+    "runLifecycleDelivery": {
+      "post": {
+        "description": "Sent to each notification webhook endpoint subscribed to the event (`runEvents`). `run.started` is sent once; the terminal and step events are at-least-once, so dedupe on `deliveryId`, never on the body, whose timestamps are re-stamped on a replay. Verify `x-cat-factory-signature` (`v1=<hex HMAC-SHA256(secret, \"<x-cat-factory-timestamp>.<raw body>\")>`) over the raw body before parsing, and refuse a timestamp outside your replay window.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunWebhookDelivery"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Any 2xx acknowledges the push."
+          }
+        },
+        "summary": "A run lifecycle push"
+      }
+    }
+  },
   "x-public-api-scopes": [
     "read",
     "write",

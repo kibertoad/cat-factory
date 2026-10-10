@@ -60,6 +60,7 @@ import {
   sweepInfraReachability,
   sweepPlatformHealth,
   sweepSpendAlerts,
+  sweepDirectoryWebhooks,
   SPEND_ALERT_INTERVAL_MS,
   operationalMetrics,
 } from '@cat-factory/server'
@@ -1179,6 +1180,16 @@ function runPeriodicBackstops(
         if (raised > 0 || cleared > 0)
           logger.info('platform health sweep', { cron: 'platform-health', raised, cleared })
       }),
+    )
+  }
+
+  // Push the directory change feed to registered webhook endpoints, on every frequent tick (the
+  // shared interval matches it). Built only when a key can seal endpoint secrets, since without one
+  // no endpoint can exist.
+  if (env.ENCRYPTION_KEY?.trim()) {
+    tick.run(
+      { name: 'directory-webhooks', failureMessage: 'directory webhook sweep failed' },
+      sweepDirectoryWebhooks(buildContainer(env), logger),
     )
   }
 

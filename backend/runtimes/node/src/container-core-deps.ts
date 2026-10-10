@@ -3,6 +3,7 @@
 // backend these extend). They are pass-throughs until a workspace actually connects an `eks`
 // backend, and carry NO runtime AWS SDK dependency (the token is minted with WebCrypto), so this
 // adds no cost to a deployment that never uses EKS.
+import { DIRECTORY_WEBHOOK_CIPHER_INFO } from '@cat-factory/integrations'
 import {
   ConfluenceProvider,
   resolveDeploymentDocumentResolver,
@@ -56,6 +57,7 @@ import { PgBossWorkRunner } from './execution/pgBossRunner.js'
 import { createNodeGateways } from './gateways.js'
 import { baseUrlForNode } from './providerEndpoints.js'
 import { DrizzleSubscriptionActivationRepository } from './repositories/personalSubscription.js'
+import { DrizzleDirectoryWebhookRepository } from './repositories/directoryWebhookRepository.js'
 import { createDrizzleRepositories, createDrizzleSandboxDeps } from './repositories/drizzle.js'
 import { DrizzleReferenceArchitectureRepository } from './repositories/bootstrap.js'
 import { DrizzleEnvConfigRepairJobRepository } from './repositories/envConfigRepair.js'
@@ -406,6 +408,7 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
     membershipRepository: repos.membershipRepository,
     userRepository: repos.userRepository,
     directoryRepository: repos.directoryRepository,
+    ...selectNodeDirectoryWebhooks(bundle),
     passwordHasher: new WebCryptoPasswordHasher(),
     blockRepository: repos.blockRepository,
     pipelineRepository: repos.pipelineRepository,
@@ -1008,5 +1011,33 @@ function pgBossRunners(
     envConfigRepairRunner: new PgBossEnvConfigRepairRunner(boss, queue),
     environmentTestRunner: new PgBossEnvironmentTestRunner(boss, queue),
     guidedReviewRunner: new PgBossGuidedReviewRunner(boss, queue),
+  }
+}
+
+/**
+ * Directory webhook endpoints, wired only when `ENCRYPTION_KEY` can seal their signing secrets.
+ * Read straight off the env, as the notification webhooks are, so the two facades gate the
+ * feature on the same condition.
+ *
+ * Never on a mothership-mode node (no `options.db`): endpoint management is account-admin
+ * configuration the role-blind machine token may not reach, and delivery is the mothership's own
+ * sweep. Unwired, the routes answer a 503 naming the missing capability rather than a refusal from
+ * the persistence RPC; an integration registers its endpoint against the deployment itself.
+ */
+function selectNodeDirectoryWebhooks(
+  bundle: NodeCoreDepsBundle,
+): Pick<CoreDependencies, 'directoryWebhooks'> {
+  const encryptionKey = bundle.env.ENCRYPTION_KEY?.trim()
+  if (!encryptionKey || !bundle.options.db) return {}
+  const urlSafetyPolicy = resolveUrlSafetyPolicy(bundle.config.notificationWebhooks)
+  return {
+    directoryWebhooks: {
+      repository: new DrizzleDirectoryWebhookRepository(bundle.options.db),
+      secretCipher: new WebCryptoSecretCipher({
+        masterKeyBase64: encryptionKey,
+        info: DIRECTORY_WEBHOOK_CIPHER_INFO,
+      }),
+      ...(urlSafetyPolicy ? { urlSafetyPolicy } : {}),
+    },
   }
 }

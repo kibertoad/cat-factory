@@ -3587,6 +3587,17 @@ type DirectoryService struct {
 	client *Client
 }
 
+// DeleteWebhook remove a directory webhook
+// Stop pushing to an endpoint. Idempotent.
+// DELETE /api/v1/directory/webhooks/{webhookId} (operation deleteDirectoryWebhook).
+func (s *DirectoryService) DeleteWebhook(ctx context.Context, webhookID string) error {
+	req := requestSpec{
+		Method: "DELETE",
+		Path:   fmt.Sprintf("/api/v1/directory/webhooks/%s", pathEscape(webhookID)),
+	}
+	return s.client.requestNoContent(ctx, req)
+}
+
 // ListAccountMemberships list the account's memberships
 // A keyset-paged snapshot of the account’s memberships, each with the member’s account roles.
 // Account-wide, so a key limited to some workspaces is refused with `403` and `reason:
@@ -3771,6 +3782,24 @@ func (s *DirectoryService) ListUsersAll(ctx context.Context, query *DirectoryLis
 	}
 }
 
+// ListWebhooks list the account's directory webhooks
+// The endpoints the directory change feed is pushed to, each with the feed position delivered
+// through. The signing secret is write-only: `hasSecret` says whether one is set. Requires an
+// `admin` key that reaches every workspace (`403` with `reason: "account_scope_required"`
+// otherwise), because an endpoint receives every change in the account.
+// GET /api/v1/directory/webhooks (operation listDirectoryWebhooks).
+func (s *DirectoryService) ListWebhooks(ctx context.Context) (*DirectoryWebhookList, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   "/api/v1/directory/webhooks",
+	}
+	var out DirectoryWebhookList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // ListWorkspaceMemberships list workspace memberships
 // A keyset-paged snapshot of the explicit workspace memberships in the account’s workspaces (the
 // ones the key reaches), each with its workspace role.
@@ -3874,6 +3903,30 @@ func (s *DirectoryService) ListWorkspacesAll(ctx context.Context, query *Directo
 			page.Cursor = result.NextCursor
 		}
 	}
+}
+
+// PutWebhook register or edit a directory webhook
+// Register an endpoint the directory change feed is pushed to, or edit one; an omitted field
+// keeps its stored value, and `url` is required only when registering. A new endpoint starts at
+// the feed head: it is pushed what changes from now on, and its receiver bootstraps the past from
+// the snapshots. Pushes run every couple of minutes, signed like the notification webhooks, each
+// a `DirectoryWebhookDelivery`. An account holds at most 10 (`409` with `reason:
+// "webhook_limit_reached"`).
+// PUT /api/v1/directory/webhooks/{webhookId} (operation putDirectoryWebhook).
+func (s *DirectoryService) PutWebhook(ctx context.Context, webhookID string, body *PutDirectoryWebhook) (*DirectoryWebhook, error) {
+	if body == nil {
+		body = &PutDirectoryWebhook{}
+	}
+	req := requestSpec{
+		Method: "PUT",
+		Path:   fmt.Sprintf("/api/v1/directory/webhooks/%s", pathEscape(webhookID)),
+		Body:   body,
+	}
+	var out DirectoryWebhook
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
 }
 
 // KaizenService the platform's own improvement backlog: every post-run grading of an agent step, with the agent

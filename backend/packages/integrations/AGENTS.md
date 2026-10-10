@@ -114,6 +114,11 @@ prerequisites are configured.
   independently settable; see `AGENTS.md` → "Dependency prepopulation"),
   plus `detectValidationChecksFromRepo` (the repo-root read behind the inspector's "Detect"
   button: one listing, then only the manifests it proved exist; the rules are pure kernel).
+- `directoryWebhook/`: the account-level directory webhooks, a SWEEP over the directory change feed
+  rather than an emission per write. Each endpoint's delivery position is claimed by
+  compare-and-swap before a push and released after a failed one; it reuses
+  `notificationWebhook/`'s signing and SSRF-guarded delivery. Design:
+  [`directory-sync.md`](../../../docs/initiatives/directory-sync.md).
 - `slack/`, `email/`, `notificationWebhook/`: notification channels (`email/` carries both the
   per-account sender connection and the `EmailNotificationChannel` over it; the last one is the
   outbound HMAC-signed HTTP channel a headless integration registers to be pushed parked decisions).

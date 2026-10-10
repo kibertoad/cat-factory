@@ -158,6 +158,21 @@ export class D1DirectoryRepository implements DirectoryRepository {
     return row?.head ?? 0
   }
 
+  async headSeqs(accountIds: string[]): Promise<Map<string, number>> {
+    const heads = new Map(accountIds.map((id) => [id, 0]))
+    for (const chunk of chunkForIn(accountIds)) {
+      const { results } = await this.db
+        .prepare(
+          `SELECT account_id, MAX(seq) AS head FROM directory_changes
+            WHERE account_id IN (${chunk.map(() => '?').join(', ')}) GROUP BY account_id`,
+        )
+        .bind(...chunk)
+        .all<{ account_id: string; head: number }>()
+      for (const row of results ?? []) heads.set(row.account_id, row.head)
+    }
+    return heads
+  }
+
   async oldestSeq(accountId: string): Promise<number | null> {
     const row = await this.db
       .prepare('SELECT MIN(seq) AS oldest FROM directory_changes WHERE account_id = ?')

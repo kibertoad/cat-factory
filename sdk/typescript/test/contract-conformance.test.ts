@@ -602,6 +602,36 @@ expectMutuallyAssignable<
   v.InferOutput<typeof contracts.directoryRepoPageSchema>
 >()
 
+expectMutuallyAssignable<
+  sdk.DirectoryWebhook,
+  v.InferOutput<typeof contracts.directoryWebhookSchema>
+>()
+expectMutuallyAssignable<
+  sdk.DirectoryWebhookList,
+  v.InferOutput<typeof contracts.directoryWebhookListSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PutDirectoryWebhook,
+  v.InferOutput<typeof contracts.putDirectoryWebhookSchema>
+>()
+expectMutuallyAssignable<
+  sdk.DirectoryWebhookDelivery,
+  v.InferOutput<typeof contracts.directoryWebhookDeliverySchema>
+>()
+
+expectMutuallyAssignable<
+  sdk.NotificationWebhookDelivery,
+  v.InferOutput<typeof contracts.notificationWebhookDeliverySchema>
+>()
+expectMutuallyAssignable<
+  sdk.RunWebhookDelivery,
+  v.InferOutput<typeof contracts.runWebhookDeliverySchema>
+>()
+expectMutuallyAssignable<
+  sdk.PlatformAlertWebhookDelivery,
+  v.InferOutput<typeof contracts.platformAlertWebhookDeliverySchema>
+>()
+
 // What the platform TRIED about a frame whose provision failed. Inlined under
 // `PrReportEnvironments` rather than hoisted, so the coverage guard cannot see it, and the
 // generated names are path-derived (`PrReportEnvironmentsEntryRemediationDeployFix`) where the
@@ -623,6 +653,13 @@ expectMutuallyAssignable<
 /** Every DTO asserted above. Compared against the spec so the list cannot fall behind. */
 const ASSERTED_COMPONENTS = [
   'ErrorResponse',
+  'NotificationWebhookDelivery',
+  'RunWebhookDelivery',
+  'PlatformAlertWebhookDelivery',
+  'DirectoryWebhook',
+  'DirectoryWebhookList',
+  'PutDirectoryWebhook',
+  'DirectoryWebhookDelivery',
   'DirectoryWorkspace',
   'DirectoryUser',
   'DirectoryAccountMembership',

@@ -16,6 +16,8 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { toJsonSchema, toJsonSchemaDefs } from '@valibot/to-json-schema'
 import { addHandDocumentedRoutes } from './openapi/hand-documented-routes.mjs'
+import { DIRECTORY_OPERATION_DOCS } from './openapi/directory-docs.mjs'
+import { WEBHOOKS } from './openapi/webhooks.mjs'
 import { API_PREFIX, STATUS_DESCRIPTIONS } from './openapi/spec-constants.mjs'
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -62,7 +64,7 @@ export const SERVED_OPENAPI_PATH = resolve(
 // it against `origin/main` after every merge rather than trusting a clean one, and write the new
 // entry in the history doc, which is what makes the next collision arrive as a conflict.
 
-const API_VERSION = '1.81.0'
+const API_VERSION = '1.82.0'
 
 /**
  * Named DTOs hoisted into `components.schemas` (so client codegen gets named types and
@@ -83,6 +85,13 @@ const COMPONENT_SCHEMAS = {
   DirectoryAccountMembershipPage: 'directoryAccountMembershipPageSchema',
   DirectoryWorkspaceMembershipPage: 'directoryWorkspaceMembershipPageSchema',
   DirectoryRepoPage: 'directoryRepoPageSchema',
+  DirectoryWebhook: 'directoryWebhookSchema',
+  DirectoryWebhookList: 'directoryWebhookListSchema',
+  PutDirectoryWebhook: 'putDirectoryWebhookSchema',
+  DirectoryWebhookDelivery: 'directoryWebhookDeliverySchema',
+  NotificationWebhookDelivery: 'notificationWebhookDeliverySchema',
+  RunWebhookDelivery: 'runWebhookDeliverySchema',
+  PlatformAlertWebhookDelivery: 'platformAlertWebhookDeliverySchema',
   PublicJob: 'publicJobSchema',
   PublicJobAccepted: 'publicJobAcceptedSchema',
   CreatePublicJob: 'createPublicJobSchema',
@@ -1086,42 +1095,7 @@ const OPERATION_DOCS = {
     description:
       'The same in-repo specification the service read serves, read at the branch THIS RUN pushed its work to rather than at the repository default. That is the tree a run’s verdicts were made against: while its pull request is open, every requirement the run itself ADDED is absent from the default branch, so joining `requirements` rows from `GET /api/v1/runs/{runId}/report` or `…/outcome` against the service read leaves exactly those rows without a criterion. `provenance` names the branch and the commit, so a caller can see which tree it got. `anchor` carries one value the service read cannot answer, `not_read`: nothing was read, because the run’s spec read is gated on a tester having reported so that the tree served is the one the verdicts were made against, and `provenance` is null there and only there. The refusals are the service read’s: a `503` with `reason: "spec_read_failed"` for a repository that could not be read, `"spec_ref_unresolved"` for a branch that would not resolve, `"vcs_not_configured"` for a deployment or workspace that wired no version control. An outage never reaches a `200`.',
   },
-  listDirectoryChanges: {
-    tag: 'Directory',
-    summary: 'List directory changes',
-    description:
-      'The account’s directory changes after `after`, in `seq` order, each carrying the CURRENT state of the entity it names, or `null` once that entity no longer exists or is outside the key’s reach. Store `nextAfter` and pass it back as `after`; it can move past the last change served, since changes the key cannot see are skipped. `nextAfter === headSeq` means caught up. A cursor whose following changes were pruned (see `DIRECTORY_CHANGE_RETENTION_DAYS`), or one ahead of the feed, is refused with `409` and `reason: "cursor_expired"`: reconcile from the snapshot endpoints and replay from their `asOfSeq`. Account-scoped: no `x-cat-factory-workspace` header is read. A key limited to some workspaces sees only workspace, workspace-membership and repository changes of those workspaces, plus the `workspace` change (with `entity: null`) of every deleted workspace in the account, since deleting a board also drops the key’s grant on it. Treat that change as the removal of the workspace and of every membership and repository under it.',
-  },
-  listDirectoryWorkspaces: {
-    tag: 'Directory',
-    summary: "List the account's workspaces",
-    description:
-      'A keyset-paged snapshot of the account’s workspaces (the ones the key reaches). Every page of one walk reports the same `asOfSeq`; after the last page, replay the change feed from it to pick up anything that changed while paging.',
-  },
-  listDirectoryUsers: {
-    tag: 'Directory',
-    summary: "List the account's users",
-    description:
-      'A keyset-paged snapshot of every user holding a membership in the account. Account-wide, so a key limited to some workspaces is refused with `403` and `reason: "account_scope_required"`.',
-  },
-  listDirectoryAccountMemberships: {
-    tag: 'Directory',
-    summary: "List the account's memberships",
-    description:
-      'A keyset-paged snapshot of the account’s memberships, each with the member’s account roles. Account-wide, so a key limited to some workspaces is refused with `403` and `reason: "account_scope_required"`.',
-  },
-  listDirectoryWorkspaceMemberships: {
-    tag: 'Directory',
-    summary: 'List workspace memberships',
-    description:
-      'A keyset-paged snapshot of the explicit workspace memberships in the account’s workspaces (the ones the key reaches), each with its workspace role.',
-  },
-  listDirectoryRepos: {
-    tag: 'Directory',
-    summary: 'List linked repositories',
-    description:
-      'A keyset-paged snapshot of the repositories linked to the account’s workspaces (the ones the key reaches). A repository is listed once per workspace that links it.',
-  },
+  ...DIRECTORY_OPERATION_DOCS,
   listPublicKeys: {
     tag: 'Keys',
     summary: "List the workspace's API keys",
@@ -1432,6 +1406,7 @@ export async function buildOpenApiDoc() {
       ...(TAG_DESCRIPTIONS[name] ? { description: TAG_DESCRIPTIONS[name] } : {}),
     })),
     paths,
+    webhooks: WEBHOOKS,
     components: {
       securitySchemes: {
         bearerAuth: {
