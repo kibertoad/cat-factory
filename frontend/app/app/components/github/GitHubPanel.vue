@@ -615,7 +615,7 @@ async function merge(pr: GitHubPullRequest) {
               <UFormField :label="t('github.panel.prTitle')">
                 <UInput v-model="prForm.title" class="w-full" />
               </UFormField>
-              <div class="grid grid-cols-2 gap-2">
+              <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <UFormField :label="t('github.panel.headBranch')">
                   <UInput v-model="prForm.head" placeholder="feature/x" class="w-full" />
                 </UFormField>

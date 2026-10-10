@@ -86,6 +86,9 @@ const incorporating = computed(() => status.value === 'incorporating')
 const reReviewing = computed(() => status.value === 'reviewing')
 const working = computed(() => incorporating.value || reReviewing.value)
 const frozen = computed(() => incorporated.value || working.value)
+// The rail statuses that render an action block (or the incorporated footer). Below `lg` the
+// stats are hidden, so with none of these the bottom bar would be an empty bordered strip.
+const hasRailAction = computed(() => status.value === 'ready' || merged.value || incorporated.value)
 const canIncorporate = computed(() => !!session.value && brainstorm.canIncorporate(session.value))
 const canProceed = computed(() => !!session.value && brainstorm.canProceed(session.value))
 const iteration = computed(() => session.value?.iteration ?? 1)
@@ -274,9 +277,9 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
       </UBadge>
     </template>
 
-    <div class="flex min-h-0 flex-1">
+    <div class="flex min-h-0 flex-1 flex-col lg:flex-row">
       <!-- main column -->
-      <div class="min-w-0 flex-1 overflow-y-auto px-6 py-5">
+      <div class="min-h-0 min-w-0 flex-1 overflow-y-auto px-6 py-5">
         <p class="mb-4 text-sm text-muted">
           <i18n-t keypath="brainstorm.intro" tag="span" scope="global">
             <template #subject>{{ subjectNoun }}</template>
@@ -493,10 +496,17 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
         </template>
       </div>
 
-      <!-- right action rail -->
-      <aside class="hidden w-72 shrink-0 flex-col border-s border-default lg:flex">
+      <!-- action rail: a right-hand column on wide screens, a bottom action bar below `lg`.
+           The informational stats collapse away below `lg`, but the actions must stay
+           reachable on a phone. The bar is capped and scrolls on its own so an expanded redo
+           form cannot squeeze the main column away or clip its own buttons, and it hides
+           below `lg` while the session's status offers no action. -->
+      <aside
+        class="max-h-[50dvh] w-full shrink-0 flex-col overflow-y-auto border-t border-default lg:flex lg:max-h-none lg:w-72 lg:border-s lg:border-t-0"
+        :class="hasRailAction ? 'flex' : 'hidden'"
+      >
         <div class="flex flex-col gap-4 px-4 py-5">
-          <div v-if="session" class="space-y-2 text-xs text-muted">
+          <div v-if="session" class="hidden space-y-2 text-xs text-muted lg:block">
             <div class="flex items-center justify-between">
               <span>{{ t('brainstorm.rail.options') }}</span>
               <span class="text-toned">{{ session.items.length }}</span>
@@ -516,7 +526,10 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
           </div>
 
           <!-- action: ready (choose → incorporate / proceed) -->
-          <div v-if="session && status === 'ready'" class="space-y-2 border-t border-default pt-4">
+          <div
+            v-if="session && status === 'ready'"
+            class="space-y-2 border-default lg:border-t lg:pt-4"
+          >
             <UButton
               v-if="canProceed"
               color="primary"
@@ -556,7 +569,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
           </div>
 
           <!-- action: merged (inspect → re-run / redo) -->
-          <div v-if="session && merged" class="space-y-2 border-t border-default pt-4">
+          <div v-if="session && merged" class="space-y-2 border-default lg:border-t lg:pt-4">
             <UButton
               color="primary"
               size="sm"
@@ -613,7 +626,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
 
           <div
             v-if="session && incorporated"
-            class="border-t border-default pt-4 text-2xs leading-relaxed text-dimmed"
+            class="border-default text-2xs leading-relaxed text-dimmed lg:border-t lg:pt-4"
           >
             {{ t('brainstorm.incorporatedFooter') }}
           </div>

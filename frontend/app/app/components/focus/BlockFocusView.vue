@@ -103,7 +103,7 @@ function openApprovalFor(approvalId: string) {
     :data-focus-block="block.id"
   >
     <!-- header / breadcrumb -->
-    <header class="flex items-center gap-3 border-b border-default px-6 py-4">
+    <header class="flex flex-wrap items-center gap-3 border-b border-default px-6 py-4">
       <UButton
         icon="i-lucide-arrow-left"
         :ui="{ leadingIcon: 'rtl:-scale-x-100', trailingIcon: 'rtl:-scale-x-100' }"
@@ -121,7 +121,7 @@ function openApprovalFor(approvalId: string) {
       >
         <UIcon :name="typeMeta.icon" class="h-5 w-5" :style="{ color: typeMeta.accent }" />
       </div>
-      <div>
+      <div class="min-w-0">
         <h1 class="text-lg font-semibold text-highlighted">{{ block.title }}</h1>
         <div class="text-xs text-dimmed">
           {{ t('focus.typeSubtitle', { type: typeMeta.label }) }}
@@ -197,10 +197,12 @@ function openApprovalFor(approvalId: string) {
       </div>
     </header>
 
-    <div class="grid flex-1 grid-cols-[1fr_300px] gap-6 overflow-hidden p-6">
+    <div
+      class="grid flex-1 grid-cols-1 gap-6 overflow-y-auto p-6 lg:grid-cols-[1fr_300px] lg:overflow-hidden"
+    >
       <!-- main: pipeline flow -->
       <section
-        class="flex flex-col overflow-auto rounded-2xl border border-default bg-default/60 p-6"
+        class="flex flex-col rounded-2xl border border-default bg-default/60 p-6 lg:overflow-auto"
       >
         <div class="mb-4 flex items-center gap-2">
           <UIcon name="i-lucide-workflow" class="h-4 w-4 text-dimmed" />
@@ -225,7 +227,7 @@ function openApprovalFor(approvalId: string) {
       </section>
 
       <!-- side: details -->
-      <aside class="space-y-4 overflow-auto rounded-2xl border border-default bg-default/60 p-5">
+      <aside class="space-y-4 rounded-2xl border border-default bg-default/60 p-5 lg:overflow-auto">
         <div>
           <SectionLabel class="mb-1">
             {{ t('focus.description') }}

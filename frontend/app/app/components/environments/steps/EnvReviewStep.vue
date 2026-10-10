@@ -231,7 +231,7 @@ const canLeaveReview = computed(
       </div>
 
       <!-- exposed compose service + port -->
-      <div class="grid grid-cols-2 gap-3">
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <UFormField :label="t('environmentWizard.review.service')" required>
           <USelect
             v-if="composeServiceOptions.length"
