@@ -137,7 +137,7 @@ const reseedableCount = computed(
               {{ t('pipeline.health.newHeading') }}
             </h3>
           </div>
-          <p class="text-[11px] text-dimmed">{{ t('pipeline.health.newDescription') }}</p>
+          <p class="text-2xs text-dimmed">{{ t('pipeline.health.newDescription') }}</p>
           <ul class="space-y-2">
             <li
               v-for="p in newPipelines"
@@ -172,7 +172,7 @@ const reseedableCount = computed(
               {{ t('pipeline.health.invalidHeading') }}
             </h3>
           </div>
-          <p class="text-[11px] text-dimmed">
+          <p class="text-2xs text-dimmed">
             {{ t('pipeline.health.invalidDescription') }}
           </p>
           <ul class="space-y-2">
@@ -195,7 +195,7 @@ const reseedableCount = computed(
                     <li
                       v-for="(p, i) in h.problems"
                       :key="i"
-                      class="text-[11px]"
+                      class="text-2xs"
                       :class="
                         p.type === 'outdated' ? 'text-app-warning-400/80' : 'text-app-error-400/90'
                       "
@@ -241,7 +241,7 @@ const reseedableCount = computed(
               {{ t('pipeline.health.retiredHeading') }}
             </h3>
           </div>
-          <p class="text-[11px] text-dimmed">{{ t('pipeline.health.retiredDescription') }}</p>
+          <p class="text-2xs text-dimmed">{{ t('pipeline.health.retiredDescription') }}</p>
           <ul class="space-y-2">
             <li
               v-for="r in retired"
@@ -250,7 +250,7 @@ const reseedableCount = computed(
             >
               <div class="min-w-0">
                 <span class="truncate text-sm font-medium text-app-100">{{ r.pipeline.name }}</span>
-                <p class="text-[11px] text-muted/80">
+                <p class="text-2xs text-muted/80">
                   {{
                     r.replacement
                       ? t('pipeline.health.retiredReplacedBy', { name: r.replacement.name })
@@ -281,7 +281,7 @@ const reseedableCount = computed(
               {{ t('pipeline.health.updatesHeading') }}
             </h3>
           </div>
-          <p class="text-[11px] text-dimmed">
+          <p class="text-2xs text-dimmed">
             {{ t('pipeline.health.updatesDescription') }}
           </p>
           <ul class="space-y-2">
@@ -292,7 +292,7 @@ const reseedableCount = computed(
             >
               <div class="min-w-0">
                 <span class="truncate text-sm font-medium text-app-100">{{ h.pipeline.name }}</span>
-                <p class="text-[11px] text-app-warning-400/80">{{ h.problems[0]?.message }}</p>
+                <p class="text-2xs text-app-warning-400/80">{{ h.problems[0]?.message }}</p>
               </div>
               <UButton
                 size="xs"

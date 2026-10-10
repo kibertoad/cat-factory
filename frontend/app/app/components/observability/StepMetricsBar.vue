@@ -11,6 +11,7 @@ import {
   totalInputTokens,
   transportRatio,
 } from '~/utils/observability'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 // Compact, at-a-glance LLM rollup for one pipeline step: token usage, an
 // output-limit headroom bar (how close the step ran to truncation), a
@@ -57,7 +58,7 @@ const headroomTone = computed(() => headroomColor(headroom.value, m.value.trunca
 <template>
   <div
     v-if="m.calls > 0"
-    class="rounded-lg border border-default bg-default/40 p-2.5 text-[12px]"
+    class="rounded-lg border border-default bg-default/40 p-2.5 text-xs"
     :class="clickable ? 'cursor-pointer transition hover:border-muted hover:bg-default/70' : ''"
     :role="clickable ? 'button' : undefined"
     @click="clickable ? $emit('inspect') : undefined"
@@ -88,13 +89,13 @@ const headroomTone = computed(() => headroomColor(headroom.value, m.value.trunca
         >
           {{ onSubscription ? `~${cost}` : cost }}
         </span>
-        <span
+        <SectionLabel
           v-if="onSubscription"
-          class="text-[10px] uppercase tracking-wide text-dimmed"
+          as="span"
           :title="t('observability.metricsBar.subscriptionCostHint')"
         >
           {{ t('observability.metricsBar.subscription') }}
-        </span>
+        </SectionLabel>
       </template>
       <div class="ms-auto flex items-center gap-1">
         <UBadge v-if="m.errors > 0" color="error" variant="subtle" size="sm">
@@ -112,7 +113,7 @@ const headroomTone = computed(() => headroomColor(headroom.value, m.value.trunca
     </div>
 
     <!-- input breakdown: the headline's three classes, priced an order of magnitude apart -->
-    <div v-if="hasCache" class="mt-1.5 flex items-center gap-1.5 text-[11px] tabular-nums">
+    <div v-if="hasCache" class="mt-1.5 flex items-center gap-1.5 text-2xs tabular-nums">
       <span class="text-muted" :title="t('observability.metricsBar.freshHint')">
         {{ t('observability.metricsBar.fresh', { tokens: formatTokens(m.promptTokens) }) }}
       </span>
@@ -136,7 +137,7 @@ const headroomTone = computed(() => headroomColor(headroom.value, m.value.trunca
 
     <!-- output-limit headroom -->
     <div v-if="headroom !== null" class="mt-2">
-      <div class="flex items-center justify-between text-[11px]">
+      <div class="flex items-center justify-between text-2xs">
         <span class="text-dimmed">{{ t('observability.metricsBar.outputLimit') }}</span>
         <span class="tabular-nums" :class="headroomTone">
           {{ formatTokens(m.peakCompletionTokens) }} /
@@ -156,7 +157,7 @@ const headroomTone = computed(() => headroomColor(headroom.value, m.value.trunca
           :style="{ width: `${Math.max(2, pct(headroom))}%` }"
         />
       </div>
-      <p v-if="m.truncatedCalls > 0" class="mt-1 text-[11px] text-app-error-400">
+      <p v-if="m.truncatedCalls > 0" class="mt-1 text-2xs text-app-error-400">
         {{
           t(
             'observability.metricsBar.truncatedCalls',
@@ -169,7 +170,7 @@ const headroomTone = computed(() => headroomColor(headroom.value, m.value.trunca
 
     <!-- transport overhead vs model execution -->
     <div v-if="transport !== null" class="mt-2">
-      <div class="flex items-center justify-between text-[11px]">
+      <div class="flex items-center justify-between text-2xs">
         <span class="text-dimmed">{{ t('observability.metricsBar.transportVsExecution') }}</span>
         <span class="tabular-nums text-muted">
           {{ formatMs(m.overheadMs) }} / {{ formatMs(m.upstreamMs) }}

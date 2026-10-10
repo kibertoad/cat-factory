@@ -20,6 +20,7 @@ import UiRoleSwitcher from '~/components/layout/UiRoleSwitcher.vue'
 import UserMenu from '~/components/auth/UserMenu.vue'
 import { useViewport } from '~/composables/useViewport'
 import type { NavContribution } from '~/modular/nav-contributions'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const { t } = useI18n()
 
@@ -225,8 +226,9 @@ watch(
     <div class="contents" @click="onNavAction">
       <!-- Command bar launcher (⌘K) — the primary way to create blocks / pipelines
          and reach every action below. -->
-      <button
-        type="button"
+      <UButton
+        color="neutral"
+        variant="ghost"
         class="flex items-center gap-2 rounded-lg border border-muted bg-elevated/60 py-2 text-start text-sm text-muted transition hover:border-app-500 hover:bg-elevated"
         :class="railed ? 'justify-center px-0' : 'px-2.5'"
         :aria-label="t('nav.commandBar')"
@@ -237,7 +239,7 @@ watch(
         <UIcon name="i-lucide-search" class="h-4 w-4 shrink-0" />
         <span v-if="!railed" class="flex-1 truncate">{{ t('nav.commandBar') }}</span>
         <UKbd v-if="!railed" value="⌘K" />
-      </button>
+      </UButton>
 
       <!-- Sections + items come from the shared nav manifest, already gated by the
          reactive slotFilter (backend/docs/adr/0049-modular-vue-adoption.md, slice 1) — which
@@ -248,12 +250,9 @@ watch(
       <template v-for="section in sidebarGroups" :key="section.group">
         <USeparator />
         <section>
-          <h2
-            v-if="!railed"
-            class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-muted"
-          >
+          <SectionLabel v-if="!railed" as="h2" class="mb-2 px-1">
             {{ t(section.labelKey) }}
-          </h2>
+          </SectionLabel>
           <div class="space-y-1.5">
             <UButton
               v-for="item in section.items"

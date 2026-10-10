@@ -256,7 +256,8 @@
         "recurring": "Recurring",
         "review": "Review",
         "ralph": "Ralph loop",
-        "bugFishing": "Bug fishing"
+        "bugFishing": "Bug fishing",
+        "resolveConflicts": "Resolve conflicts"
       },
       "recurringWithFrame": "A recurring task runs a pipeline on a cadence. Continue to set the schedule + prompt.",
       "recurringNoFrame": "A recurring task must live on a service. Add it from a service frame (or a module inside one).",
@@ -670,7 +671,8 @@
     "pastedLink": {
       "offer": "This description links a {source} page. Attach it as context?",
       "attach": "Attach"
-    }
+    },
+    "removePending": "Remove {name}"
   },
   "errors": {
     "generic": {
@@ -711,7 +713,8 @@
         "assistant_generation_failed": "The assistant's model provider did not answer. It is configured correctly and nothing here needs setting up: try the request again in a moment.",
         "assistant_reply_unreadable": "The assistant's model answered with something that is not a decision this platform can act on. Rephrasing rarely helps: pick a different model for the assistant in the model settings.",
         "delegated_executor_failed": "The external executor could not start this step. The problem is in the system that runs the work, not in this deployment: check its own logs and try again.",
-        "delegated_work_branch_unprepared": "The platform could not prepare the work branch this step's executor is dispatched onto, so nothing was started. Either the repository connection cannot write to it, or the task names a branch that does not exist yet: the details say which."
+        "delegated_work_branch_unprepared": "The platform could not prepare the work branch this step's executor is dispatched onto, so nothing was started. Either the repository connection cannot write to it, or the task names a branch that does not exist yet: the details say which.",
+        "attached_pr_provider_unreachable": "The repository provider did not answer, so the pull request could not be checked and no task was created. Nothing needs setting up here: try again in a moment."
       }
     },
     "reason": {
@@ -5500,7 +5503,8 @@
         "review": "Review",
         "research": "Research",
         "planning": "Planning",
-        "media": "Media"
+        "media": "Media",
+        "maintenance": "PR maintenance"
       },
       "strategyOption": {
         "specialist-panel": "Specialist panel",
@@ -5678,7 +5682,8 @@
         "releaseInteractive": "Stop being the in-app default",
         "claimUnattended": "Make the unattended default",
         "releaseUnattended": "Stop being the unattended default"
-      }
+      },
+      "removeLabel": "Remove the {label} label"
     },
     "progress": {
       "status": {
@@ -6730,7 +6735,8 @@
       "heading": "Upload a reference design",
       "viewPlaceholder": "View name (e.g. login)",
       "tipReady": "Tip: drop an image straight onto a pair above to set its reference.",
-      "tipNeedView": "Enter a view name first, then choose a file. Or drop an image straight onto a pair above."
+      "tipNeedView": "Enter a view name first, then choose a file. Or drop an image straight onto a pair above.",
+      "choose": "Choose a file"
     },
     "requestFix": {
       "heading": "Request a fix",
@@ -8851,6 +8857,7 @@
     "title": "Generated candidates",
     "titleWithBlock": "Generated candidates: {title}",
     "subtitle": "Compare what each integration produced, and keep what you want",
+    "pickOne": "Pick one. Choosing a candidate clears the one picked before.",
     "automatic": "Only one candidate was generated, so it was kept automatically. Nobody reviewed it.",
     "unlabelledSubject": "No subject declared",
     "noPreview": "No preview available",

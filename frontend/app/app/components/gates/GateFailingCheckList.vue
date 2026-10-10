@@ -31,13 +31,14 @@ const { t } = useI18n()
         class="shrink-0 text-app-error-400"
         :class="dense ? 'h-3 w-3' : 'h-3.5 w-3.5'"
       />
-      <a
+      <ULink
+        raw
         v-if="c.url"
-        :href="c.url"
+        :to="c.url"
         target="_blank"
         rel="noopener"
         class="group min-w-0 flex-1 truncate text-app-info-300 hover:text-app-info-200 hover:underline"
-        :class="dense ? 'text-[12px]' : 'text-[13px]'"
+        :class="dense ? 'text-xs' : 'text-sm'"
         :title="t('gates.ci.openOnGithub', { name: c.name })"
       >
         {{ c.name }}
@@ -45,16 +46,16 @@ const { t } = useI18n()
           name="i-lucide-external-link"
           class="ms-0.5 inline h-3 w-3 opacity-60 group-hover:opacity-100"
         />
-      </a>
+      </ULink>
       <span
         v-else
         class="min-w-0 flex-1 truncate"
-        :class="dense ? 'text-[12px] text-toned' : 'text-[13px] text-default'"
+        :class="dense ? 'text-xs text-toned' : 'text-sm text-default'"
         >{{ c.name }}</span
       >
       <span
         class="shrink-0 uppercase text-app-error-300"
-        :class="dense ? 'text-[10px]' : 'text-[11px]'"
+        :class="dense ? 'text-3xs' : 'text-2xs'"
         >{{ c.conclusion ?? t('gates.ci.conclusionFallback') }}</span
       >
     </li>

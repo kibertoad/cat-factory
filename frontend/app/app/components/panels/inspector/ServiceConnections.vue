@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import type { Block, ServiceConnection } from '~/types/domain'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
+import IconButton from '~/components/common/IconButton.vue'
 
 // Service-frame (`type: 'service'`) connections: the other services this one USES
 // (consumer→provider edges, stored on this frame — the consumer end). Each row picks a
@@ -124,23 +125,23 @@ const usedBy = computed(() =>
             (e: KeyboardEvent) => setDescription(i, (e.target as HTMLInputElement).value)
           "
         />
-        <UButton
+        <IconButton
           size="xs"
           variant="ghost"
           color="neutral"
           icon="i-lucide-x"
-          :title="t('inspector.serviceConnections.remove')"
+          :label="t('inspector.serviceConnections.remove')"
           data-testid="service-connection-remove"
           @click="removeConnection(i)"
         />
       </div>
     </div>
-    <div v-else class="text-[11px] text-dimmed">
+    <div v-else class="text-2xs text-dimmed">
       {{ t('inspector.serviceConnections.empty') }}
     </div>
 
     <div v-if="usedBy.length" class="space-y-1" data-testid="service-connections-used-by">
-      <span class="text-[11px] text-muted">{{ t('inspector.serviceConnections.usedBy') }}</span>
+      <span class="text-2xs text-muted">{{ t('inspector.serviceConnections.usedBy') }}</span>
       <div class="flex flex-wrap gap-1">
         <UBadge v-for="f in usedBy" :key="f.id" size="sm" variant="soft" color="neutral">
           {{ f.title || f.id }}

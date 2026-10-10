@@ -19,6 +19,7 @@ import { useBusyRows } from '~/composables/useBusyRows'
 import type { ApiContractFormat, FoundationalServiceTier } from '~/types/domain'
 import { useFoundationalServicesStore } from '~/stores/foundationalServices'
 import FoundationalContractSummary from '~/components/foundational/FoundationalContractSummary.vue'
+import IconButton from '~/components/common/IconButton.vue'
 
 const catalog = useFoundationalServicesStore()
 const toast = useToast()
@@ -92,7 +93,7 @@ async function suppress(serviceId: string) {
         <div class="min-w-0 flex-1">
           <p class="truncate text-sm font-medium text-app-100">
             {{ s.name }}
-            <code class="ms-1 text-[11px] text-dimmed">{{ s.id }}</code>
+            <code class="ms-1 text-2xs text-dimmed">{{ s.id }}</code>
           </p>
           <p class="text-xs text-muted">{{ s.summary }}</p>
           <div v-if="s.capabilities.length" class="mt-1 flex flex-wrap gap-1">
@@ -124,11 +125,11 @@ async function suppress(serviceId: string) {
               :key="doc.contractId"
               class="rounded-md border border-default bg-app-950/60 p-2"
             >
-              <p class="mb-1 text-[11px] text-muted">
+              <p class="mb-1 text-2xs text-muted">
                 {{ doc.title }}
                 <span v-if="doc.path" class="ms-1 font-mono text-app-600">{{ doc.path }}</span>
               </p>
-              <pre class="max-h-64 overflow-auto text-[11px] text-toned">{{ doc.body }}</pre>
+              <pre class="max-h-64 overflow-auto text-2xs text-toned">{{ doc.body }}</pre>
             </div>
           </div>
         </div>
@@ -139,13 +140,13 @@ async function suppress(serviceId: string) {
           <!-- Only an INHERITED entry can be suppressed — an account service or one the
                deployment registered in code; the board's own row is managed in the registry tab,
                where deleting it is the honest action. -->
-          <UButton
+          <IconButton
             v-if="s.tier !== 'workspace'"
             icon="i-lucide-eye-off"
             size="xs"
             variant="ghost"
             :loading="rowBusy(`suppress:${s.id}`)"
-            :title="t('foundational.catalog.suppress')"
+            :label="t('foundational.catalog.suppress')"
             :data-testid="`foundational-suppress-${s.id}`"
             @click="suppress(s.id)"
           />

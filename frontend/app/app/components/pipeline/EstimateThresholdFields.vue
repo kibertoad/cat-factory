@@ -47,27 +47,30 @@ const fields = computed(() =>
   })),
 )
 
-function commit(axis: EstimateAxis, raw: string) {
-  emit('update', axis, parseAxisThreshold(raw))
+// The control hands back a number (or nothing when cleared); the shared parser still owns the
+// clamping, so the value that leaves here is the same one the text input used to produce.
+function commit(axis: EstimateAxis, raw: number | undefined) {
+  emit('update', axis, raw == null ? undefined : parseAxisThreshold(String(raw)))
 }
 </script>
 
 <template>
   <div class="flex flex-wrap items-center gap-2 border-t border-default pt-2">
-    <span class="text-[10px] text-dimmed" :title="t(OUTCOME_HINT_KEYS[outcome])">
+    <span class="text-3xs text-dimmed" :title="t(OUTCOME_HINT_KEYS[outcome])">
       {{ t('pipeline.builder.runWhenAny') }}
     </span>
     <template v-for="f in fields" :key="f.axis">
       <label class="text-muted" :title="f.hint">{{ f.label }}</label>
-      <input
-        :value="f.value"
+      <UInputNumber
+        :model-value="f.value"
         :title="f.hint"
-        type="number"
-        min="0"
-        max="1"
-        step="0.1"
-        class="w-14 rounded border border-muted bg-default px-1.5 py-0.5 text-app-100"
-        @change="commit(f.axis, ($event.target as HTMLInputElement).value)"
+        :min="0"
+        :max="1"
+        :step="0.1"
+        :step-snapping="false"
+        size="xs"
+        class="w-28"
+        @update:model-value="commit(f.axis, $event ?? undefined)"
       />
     </template>
   </div>

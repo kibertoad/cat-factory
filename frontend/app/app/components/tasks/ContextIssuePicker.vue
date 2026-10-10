@@ -28,6 +28,7 @@ import {
   reconcileSource,
   sourceMenuItems,
 } from '~/utils/sourcePicker'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const props = defineProps<{
   /** contextKeys already staged by the caller, so they're filtered out / not re-offered. */
@@ -291,12 +292,9 @@ onMounted(() => {
          promises a choice that isn't there. `id` labels the trigger, whose own content is the
          tracker name rather than what that name means. -->
     <div class="flex items-center gap-1.5">
-      <span
-        :id="sourceLabelId"
-        class="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-dimmed"
-      >
+      <SectionLabel as="span" :id="sourceLabelId" class="shrink-0">
         {{ t('tasks.picker.sourceLabel') }}
-      </span>
+      </SectionLabel>
       <UDropdownMenu
         v-if="sourcePickable"
         :items="sourceMenu"
@@ -335,16 +333,17 @@ onMounted(() => {
       @keydown.enter="refRow && pickRef(refRow)"
     />
 
-    <p v-if="searchError" class="px-1 text-[11px] text-app-warning-400">
+    <p v-if="searchError" class="px-1 text-2xs text-app-warning-400">
       {{ searchError }}
     </p>
 
     <div class="max-h-56 space-y-0.5 overflow-y-auto">
       <!-- Already-imported issues (linked directly, no re-fetch). -->
-      <button
+      <UButton
+        color="neutral"
+        variant="ghost"
         v-for="row in importedRows"
         :key="`imp:${row.externalId}`"
-        type="button"
         class="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-start text-xs text-toned hover:bg-elevated/70"
         @click="pickImported(row)"
       >
@@ -353,13 +352,14 @@ onMounted(() => {
         <UBadge color="neutral" variant="soft" size="xs" class="ms-auto shrink-0">{{
           t('tasks.picker.imported')
         }}</UBadge>
-      </button>
+      </UButton>
 
       <!-- Tracker search hits (imported on add). -->
-      <button
+      <UButton
+        color="neutral"
+        variant="ghost"
         v-for="r in searchRows"
         :key="`hit:${r.externalId}`"
-        type="button"
         class="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-start text-xs text-toned hover:bg-elevated/70"
         @click="pickSearch(r)"
       >
@@ -368,12 +368,13 @@ onMounted(() => {
         <UBadge v-if="r.status" color="neutral" variant="soft" size="xs" class="ms-auto shrink-0">
           {{ r.status }}
         </UBadge>
-      </button>
+      </UButton>
 
       <!-- Explicit URL/key reference (imported on add). -->
-      <button
+      <UButton
+        color="neutral"
+        variant="ghost"
         v-if="refRow"
-        type="button"
         class="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-start text-xs text-toned hover:bg-elevated/70"
         @click="pickRef(refRow)"
       >
@@ -385,7 +386,7 @@ onMounted(() => {
             </template>
           </i18n-t>
         </span>
-      </button>
+      </UButton>
 
       <EmptyState
         v-if="empty"

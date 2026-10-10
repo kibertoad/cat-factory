@@ -5,7 +5,12 @@ import { ForbiddenError, NotFoundError, type PublicApiKeyRecord } from '@cat-fac
 // Shared by the session-authed key panel and the headless `/api/v1/keys` surface, so the two
 // project a key and judge a requested reach identically.
 
-/** A key on the wire. `workspaceId` is the workspace the listing or mint was made for. */
+/**
+ * A key on the wire. `workspaceId` is the workspace the listing or mint was made for.
+ *
+ * `secretHash` is the field this exists to leave behind, so it is an explicit projection and never
+ * a spread of the row: a future column must not arrive on the wire by default.
+ */
 export function publicApiKeyToWire(record: PublicApiKeyRecord, workspaceId: string): PublicApiKey {
   return {
     id: record.id,

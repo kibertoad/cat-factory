@@ -22,6 +22,8 @@ import { cachingLabel, contextLabel, costLabel, displayFlavor, isSelectable } fr
 import ConsensusGroupsSection from '~/components/settings/ConsensusGroupsSection.vue'
 import ProviderPreferenceEditor from '~/components/settings/ProviderPreferenceEditor.vue'
 import { showOverrideField } from '~/utils/uiMode'
+import SectionLabel from '~/components/common/SectionLabel.vue'
+import IconButton from '~/components/common/IconButton.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -330,13 +332,13 @@ async function save() {
           >
             {{ t('settings.modelConfiguration.back') }}
           </UButton>
-          <UButton
+          <IconButton
             icon="i-lucide-x"
             color="neutral"
             variant="ghost"
             size="sm"
             :class="editor ? '' : 'ms-auto'"
-            :title="t('settings.modelConfiguration.closeEsc')"
+            :label="t('settings.modelConfiguration.closeEsc')"
             @click="
               () => {
                 open = false
@@ -390,32 +392,32 @@ async function save() {
                       {{ t('settings.modelConfiguration.list.default') }}
                     </UBadge>
                     <div class="ms-auto flex items-center gap-1">
-                      <UButton
+                      <IconButton
                         v-if="!p.isDefault"
                         size="xs"
                         variant="ghost"
                         color="neutral"
                         icon="i-lucide-star"
                         :loading="busy"
-                        :title="t('settings.modelConfiguration.list.setDefaultTitle')"
+                        :label="t('settings.modelConfiguration.list.setDefaultTitle')"
                         @click="setDefault(p)"
                       />
-                      <UButton
+                      <IconButton
                         size="xs"
                         variant="ghost"
                         color="neutral"
                         icon="i-lucide-pencil"
-                        :title="t('settings.modelConfiguration.list.editTitle')"
+                        :label="t('settings.modelConfiguration.list.editTitle')"
                         @click="startEdit(p)"
                       />
-                      <UButton
+                      <IconButton
                         size="xs"
                         variant="ghost"
                         color="error"
                         icon="i-lucide-trash-2"
                         :disabled="p.isDefault"
                         :loading="busy"
-                        :title="
+                        :label="
                           p.isDefault
                             ? t('settings.modelConfiguration.list.deleteDisabledTitle')
                             : t('settings.modelConfiguration.list.deleteTitle')
@@ -424,7 +426,7 @@ async function save() {
                       />
                     </div>
                   </div>
-                  <div class="mt-1.5 text-[11px] text-muted">
+                  <div class="mt-1.5 text-2xs text-muted">
                     {{ t('settings.modelConfiguration.list.basePrefix') }}
                     <span class="text-toned">{{ modelLabel(p.baseModelId) }}</span>
                     <span v-if="Object.keys(p.overrides).length">
@@ -460,11 +462,9 @@ async function save() {
             <template v-else>
               <div class="space-y-4 rounded-xl border border-default bg-default/50 p-4">
                 <div>
-                  <label
-                    class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted"
-                  >
+                  <SectionLabel as="label" class="mb-1 block">
                     {{ t('settings.modelConfiguration.editor.nameLabel') }}
-                  </label>
+                  </SectionLabel>
                   <UInput
                     v-model="editor.name"
                     :placeholder="t('settings.modelConfiguration.editor.namePlaceholder')"
@@ -474,11 +474,9 @@ async function save() {
                 </div>
 
                 <div>
-                  <label
-                    class="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted"
-                  >
+                  <SectionLabel as="label" class="mb-1 block">
                     {{ t('settings.modelConfiguration.editor.baseModelLabel') }}
-                  </label>
+                  </SectionLabel>
                   <UDropdownMenu
                     :items="baseMenu"
                     :ui="{ content: 'max-h-80 overflow-y-auto z-[60]' }"
@@ -514,9 +512,9 @@ async function save() {
 
               <div>
                 <div class="mb-1 flex items-start justify-between gap-3">
-                  <span class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+                  <SectionLabel as="span">
                     {{ t('settings.modelConfiguration.editor.perAgentOverrides') }}
-                  </span>
+                  </SectionLabel>
                   <AgentTierSelect class="w-56 shrink-0" :hidden-count="hiddenByTier" />
                 </div>
                 <UInput

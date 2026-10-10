@@ -21,6 +21,8 @@ import { claimCandidates, firstLinkCandidate } from '~/components/context/pasted
 import { connectableSources } from '~/utils/sourcePicker'
 import ContextDocumentPicker from '~/components/documents/ContextDocumentPicker.vue'
 import ContextIssuePicker from '~/components/tasks/ContextIssuePicker.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
+import IconButton from '~/components/common/IconButton.vue'
 
 const props = defineProps<{
   /** The staged attachments; the host owns the array and commits it after creating the block. */
@@ -188,9 +190,9 @@ function removePending(item: PendingContext) {
     <!-- Context documents (ungated; Attach disabled until a source is connected). -->
     <div class="space-y-2">
       <div class="flex items-center justify-between">
-        <span class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+        <SectionLabel as="span">
           {{ t('contextAttachments.documents') }}
-        </span>
+        </SectionLabel>
         <UButton
           v-if="docsConnected"
           color="neutral"
@@ -288,24 +290,29 @@ function removePending(item: PendingContext) {
             >
               {{ t('contextAttachments.importsOnAdd') }}
             </UBadge>
-            <button
-              type="button"
-              class="ms-auto shrink-0 text-muted hover:text-default"
+            <IconButton
+              color="neutral"
+              variant="ghost"
+              icon="i-lucide-x"
+              class="ms-auto shrink-0"
+              :label="t('contextAttachments.removePending', { name: item.title })"
+              :ui="{
+                base: 'p-0 text-muted hover:bg-transparent hover:text-default',
+                leadingIcon: 'h-3.5 w-3.5',
+              }"
               @click="removePending(item)"
-            >
-              <UIcon name="i-lucide-x" class="h-3.5 w-3.5" />
-            </button>
+            />
           </div>
           <p
             v-if="item.unreadable"
-            class="px-2 pb-1.5 text-[11px] text-app-warning-400"
+            class="px-2 pb-1.5 text-2xs text-app-warning-400"
             data-testid="context-item-unreadable"
           >
             {{ t('contextAttachments.unreadable', { error: item.unreadable }) }}
           </p>
         </div>
       </div>
-      <p v-else class="text-[11px] text-dimmed">
+      <p v-else class="text-2xs text-dimmed">
         {{ docsHint }}
       </p>
     </div>
@@ -313,9 +320,9 @@ function removePending(item: PendingContext) {
     <!-- Context issues (ungated; Attach disabled until a tracker is connected). -->
     <div class="space-y-2">
       <div class="flex items-center justify-between">
-        <span class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+        <SectionLabel as="span">
           {{ t('contextAttachments.issues') }}
-        </span>
+        </SectionLabel>
         <UButton
           v-if="issuesConnected"
           color="neutral"
@@ -396,27 +403,32 @@ function removePending(item: PendingContext) {
             >
               {{ t('contextAttachments.importsOnAdd') }}
             </UBadge>
-            <button
-              type="button"
-              class="ms-auto shrink-0 text-muted hover:text-default"
+            <IconButton
+              color="neutral"
+              variant="ghost"
+              icon="i-lucide-x"
+              class="ms-auto shrink-0"
+              :label="t('contextAttachments.removePending', { name: item.title })"
+              :ui="{
+                base: 'p-0 text-muted hover:bg-transparent hover:text-default',
+                leadingIcon: 'h-3.5 w-3.5',
+              }"
               @click="removePending(item)"
-            >
-              <UIcon name="i-lucide-x" class="h-3.5 w-3.5" />
-            </button>
+            />
           </div>
           <!-- An issue reference gets no pre-flight of its own (there is no `parseRef` to ask a
                tracker), so this line IS its warning: the fetch is attempted when the form opens and
                again on submit, and a failure now blocks the create. -->
           <p
             v-if="item.unreadable"
-            class="px-2 pb-1.5 text-[11px] text-app-warning-400"
+            class="px-2 pb-1.5 text-2xs text-app-warning-400"
             data-testid="context-item-unreadable"
           >
             {{ t('contextAttachments.unreadable', { error: item.unreadable }) }}
           </p>
         </div>
       </div>
-      <p v-else class="text-[11px] text-dimmed">
+      <p v-else class="text-2xs text-dimmed">
         {{ issuesHint }}
       </p>
     </div>

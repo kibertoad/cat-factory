@@ -22,7 +22,7 @@ const viaWorkspaceId = computed(() => {
 <template>
   <div class="space-y-6 text-sm">
     <section>
-      <p class="mb-3 text-[11px] text-muted">
+      <p class="mb-3 text-2xs text-muted">
         {{ t('layout.accountFragments.intro') }}
       </p>
       <FragmentLibraryManager

@@ -28,6 +28,7 @@ import {
   pipelineHasVisualStep,
   stepConditionSatisfied,
   storesThroughPlatformAssets,
+  taskTypeAttachesPullRequest,
 } from '@cat-factory/contracts'
 import {
   BINARY_OUTPUT_TRAIT,
@@ -50,7 +51,7 @@ import type { SpendService } from '@cat-factory/spend'
 import { validatePipelineShape, type PipelineShape } from '../pipelines/pipelineShape.js'
 import { runnableShapeOf } from './retry.logic.js'
 import { assertInitiativeShapeAllowed } from '../initiative/initiative.logic.js'
-import { isTesterKind } from './ci.logic.js'
+import { isTesterKind, MERGER_AGENT_KIND } from './ci.logic.js'
 import { chainHasConditionalStep, resolveScopeForRun } from './runServiceScope.js'
 import {
   CONSUMER_ENVIRONMENT_FAULT_MESSAGES,
@@ -116,6 +117,23 @@ export interface RunAdmissionDeps {
     modelPresetId?: string,
   ) => Promise<string | undefined>
   assertAgentBackendConfigured?: (workspaceId: string) => Promise<void>
+}
+
+/**
+ * Refuse a chain that would MERGE a pull request the task attached at creation. That pull request
+ * belongs to whoever opened it, and the pickers' purpose gate is not a server-side check, so a
+ * caller naming any pipeline with a `merger` step at start would otherwise merge it.
+ */
+export function assertAttachedPullRequestNotMerged(
+  block: Pick<Block, 'taskType'>,
+  activeKinds: readonly string[],
+): void {
+  if (!taskTypeAttachesPullRequest(block.taskType)) return
+  if (!activeKinds.includes(MERGER_AGENT_KIND)) return
+  throw new ConflictError(
+    'This task works on a pull request somebody else opened, so it cannot run a pipeline that ' +
+      'merges it. Start it with a pipeline that has no merge step, such as pl_resolve_conflicts.',
+  )
 }
 
 /**
@@ -220,6 +238,8 @@ export class RunAdmission {
     // refused on every backend service — the `tester-ui` step it is never going to dispatch would
     // demand a frontend to drive and an artifact store to upload screenshots to.
     const { activeKinds, enabled } = await this.applyRunConditions(workspaceId, block, shape)
+
+    assertAttachedPullRequestNotMerged(block, activeKinds)
 
     // A chain with visual steps (`tester-ui` / `visual-confirmation`) needs a UI to exercise:
     // it can only run on a `frontend` frame or a frame a frontend links to — else a `tester-ui`

@@ -2,6 +2,8 @@
 import { computed } from 'vue'
 import type { PipelineStep, RunContainerStatus } from '~/types/execution'
 import { containerPhaseLabel } from '~/utils/pipelineRender'
+import SectionLabel from '~/components/common/SectionLabel.vue'
+import IconButton from '~/components/common/IconButton.vue'
 
 // The per-run container lifecycle for a container-backed step: its status (spinning up /
 // running / errored / reclaimed), the live phase (preparing the checkout vs the agent
@@ -94,7 +96,7 @@ const { copy: copyText } = useCopyToClipboard()
          live phase (preparing the checkout vs the agent making calls), and the
          container's id + reachable URL once up. -->
     <div
-      class="rounded-lg border px-3 py-2 text-[12px]"
+      class="rounded-lg border px-3 py-2 text-xs"
       :class="CONTAINER_STATUS_META[containerStatus].cls"
     >
       <div class="flex items-center gap-2">
@@ -111,45 +113,44 @@ const { copy: copyText } = useCopyToClipboard()
       </div>
       <dl v-if="step.container?.id || step.container?.url" class="mt-2 space-y-1">
         <div v-if="step.container?.id" class="flex items-center gap-2">
-          <dt class="shrink-0 text-[11px] uppercase tracking-wide text-dimmed">
+          <SectionLabel as="dt" class="shrink-0">
             {{ t('panels.stepMeta.container.id') }}
-          </dt>
-          <dd class="truncate font-mono text-[11px] text-toned" :title="step.container.id">
+          </SectionLabel>
+          <dd class="truncate font-mono text-2xs text-toned" :title="step.container.id">
             {{ step.container.id }}
           </dd>
-          <UButton
+          <IconButton
             icon="i-lucide-copy"
             color="neutral"
             variant="ghost"
             size="xs"
             class="ms-auto shrink-0"
-            :title="t('panels.stepMeta.container.copyId')"
-            :aria-label="t('panels.stepMeta.container.copyId')"
+            :label="t('panels.stepMeta.container.copyId')"
             @click="copyText(step.container.id)"
           />
         </div>
         <div v-if="step.container?.url" class="flex items-center gap-2">
-          <dt class="shrink-0 text-[11px] uppercase tracking-wide text-dimmed">
+          <SectionLabel as="dt" class="shrink-0">
             {{ t('panels.stepMeta.container.url') }}
-          </dt>
-          <dd class="truncate font-mono text-[11px] text-toned">
-            <a
-              :href="step.container.url"
+          </SectionLabel>
+          <dd class="truncate font-mono text-2xs text-toned">
+            <ULink
+              raw
+              :to="step.container.url"
               target="_blank"
               rel="noopener noreferrer"
               class="hover:underline"
             >
               {{ step.container.url }}
-            </a>
+            </ULink>
           </dd>
-          <UButton
+          <IconButton
             icon="i-lucide-copy"
             color="neutral"
             variant="ghost"
             size="xs"
             class="ms-auto shrink-0"
-            :title="t('panels.stepMeta.container.copyUrl')"
-            :aria-label="t('panels.stepMeta.container.copyUrl')"
+            :label="t('panels.stepMeta.container.copyUrl')"
             @click="copyText(step.container.url)"
           />
         </div>

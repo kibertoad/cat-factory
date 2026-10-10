@@ -34,6 +34,7 @@ import {
   toggleSubmissionClass,
   type RoleRuleSelection,
 } from '~/components/settings/MergeRolePolicyEditor.logic'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const props = defineProps<{
   /** The preset's per-role narrowing map; a role with no entry is exactly the base rules. */
@@ -162,10 +163,10 @@ function setSubmissionClass(
 <template>
   <div data-testid="merge-role-policy" class="space-y-2">
     <div>
-      <span class="block text-[10px] uppercase tracking-wide text-dimmed">
+      <SectionLabel as="span" class="block">
         {{ t('settings.riskPolicy.roleRules.heading') }}
-      </span>
-      <p class="mt-0.5 text-[11px] leading-snug text-dimmed">
+      </SectionLabel>
+      <p class="mt-0.5 text-2xs leading-snug text-dimmed">
         {{ t('settings.riskPolicy.roleRules.help') }}
       </p>
       <!-- Auto-merge off already sends every pull request to a human, so the per-class narrowing
@@ -173,7 +174,7 @@ function setSubmissionClass(
            MANUAL merge as well, which is the one thing the master switch leaves open. -->
       <p
         v-if="!autoMergeEnabled"
-        class="mt-1 text-[11px] leading-snug text-app-warning-400/90"
+        class="mt-1 text-2xs leading-snug text-app-warning-400/90"
         data-testid="merge-role-auto-merge-off"
       >
         {{ t('settings.riskPolicy.roleRules.autoMergeOffWarning') }}
@@ -218,7 +219,7 @@ function setSubmissionClass(
              only, and a role can land nothing at all while showing "No class limits". -->
         <span
           v-if="group.submissionScoped"
-          class="text-[11px] text-app-warning-400/90"
+          class="text-2xs text-app-warning-400/90"
           :data-testid="`merge-role-submission-badge-${group.role}`"
         >
           {{ t('settings.riskPolicy.roleRules.submissionBadge') }}
@@ -230,7 +231,7 @@ function setSubmissionClass(
            row says which of the three is actually governing. -->
       <p
         v-if="group.sandboxed"
-        class="mt-1 text-[11px] leading-snug text-app-warning-400/90"
+        class="mt-1 text-2xs leading-snug text-app-warning-400/90"
         :data-testid="`merge-role-sandbox-note-${group.role}`"
       >
         {{ t('settings.riskPolicy.roleRules.sandboxNote') }}
@@ -249,7 +250,7 @@ function setSubmissionClass(
             :data-testid="`merge-role-submission-${group.role}`"
             @update:model-value="setSubmissionScoped(group.role, $event)"
           />
-          <p class="text-[11px] leading-snug text-dimmed">
+          <p class="text-2xs leading-snug text-dimmed">
             {{ t('settings.riskPolicy.roleRules.submissionHelp') }}
           </p>
           <div v-if="group.submissionScoped" class="flex flex-wrap gap-x-4 gap-y-1">
@@ -268,7 +269,7 @@ function setSubmissionClass(
                does rather than reading as a switch somebody forgot to fill in. -->
           <p
             v-if="group.submissionScoped && !group.submissionRows.some((r) => r.allowed)"
-            class="text-[11px] leading-snug text-app-warning-400/90"
+            class="text-2xs leading-snug text-app-warning-400/90"
             :data-testid="`merge-role-submission-none-${group.role}`"
           >
             {{ t('settings.riskPolicy.roleRules.submissionNone') }}
@@ -276,10 +277,10 @@ function setSubmissionClass(
         </div>
 
         <div class="space-y-1.5 border-t border-default/70 pt-2">
-          <p class="text-[11px] leading-snug text-dimmed">
+          <p class="text-2xs leading-snug text-dimmed">
             {{ t('settings.riskPolicy.roleRules.classHeading') }}
           </p>
-          <p v-if="!anyBaseRule" class="text-[11px] leading-snug text-dimmed">
+          <p v-if="!anyBaseRule" class="text-2xs leading-snug text-dimmed">
             {{ t('settings.riskPolicy.roleRules.baseHint') }}
           </p>
           <div
@@ -302,12 +303,12 @@ function setSubmissionClass(
               "
             />
             <!-- Nothing left to narrow: the base rule already routes this class to a human. -->
-            <span v-if="row.items.length === 1" class="text-[11px] text-dimmed">
+            <span v-if="row.items.length === 1" class="text-2xs text-dimmed">
               {{ t('settings.riskPolicy.roleRules.alreadyStrictest') }}
             </span>
             <span
               v-else-if="row.redundant"
-              class="text-[11px] text-app-warning-400/90"
+              class="text-2xs text-app-warning-400/90"
               :data-testid="`merge-role-redundant-${group.role}-${row.changeClass}`"
             >
               {{ t('settings.riskPolicy.roleRules.redundant') }}

@@ -12,6 +12,7 @@ import { useSkillLibrary } from '~/stores/skillLibrary'
 import { SKILL_GROUP_LABEL_KEYS } from '~/utils/skills'
 import GitHubRepoSearchSelect from '~/components/github/GitHubRepoSearchSelect.vue'
 import RepoTreeBrowser from '~/components/github/RepoTreeBrowser.vue'
+import IconButton from '~/components/common/IconButton.vue'
 
 const props = defineProps<{ accountId: string }>()
 
@@ -181,10 +182,10 @@ async function unlinkSource(id: string) {
             <!-- The manifest declared a group this build does not know (a typo, or a member
                  retired since the sync). It is filed under Other, and saying which value was
                  declared is what lets the author fix their frontmatter. -->
-            <p v-if="s.declaredGroup" class="mt-1 text-[11px] text-app-warning-400">
+            <p v-if="s.declaredGroup" class="mt-1 text-2xs text-app-warning-400">
               {{ t('skills.catalog.groupUnknown', { group: s.declaredGroup }) }}
             </p>
-            <p class="mt-1 flex flex-wrap gap-x-3 text-[11px] text-dimmed">
+            <p class="mt-1 flex flex-wrap gap-x-3 text-2xs text-dimmed">
               <span v-if="s.resources.length">
                 {{ t('skills.catalog.resources', { count: s.resources.length }) }}
               </span>
@@ -234,29 +235,29 @@ async function unlinkSource(id: string) {
             {{ t('skills.sources.changes') }}
           </UBadge>
           <div class="ms-auto flex gap-1">
-            <UButton
+            <IconButton
               icon="i-lucide-search-check"
               size="xs"
               variant="ghost"
               :loading="rowBusy(`check:${s.id}`)"
-              :title="t('skills.sources.check')"
+              :label="t('skills.sources.check')"
               @click="checkSource(s.id)"
             />
-            <UButton
+            <IconButton
               icon="i-lucide-refresh-cw"
               size="xs"
               variant="ghost"
               :loading="rowBusy(`sync:${s.id}`)"
-              :title="t('skills.sources.sync')"
+              :label="t('skills.sources.sync')"
               @click="syncSource(s.id)"
             />
-            <UButton
+            <IconButton
               icon="i-lucide-unplug"
               size="xs"
               color="error"
               variant="ghost"
               :loading="rowBusy(`unlink:${s.id}`)"
-              :title="t('skills.sources.unlink')"
+              :label="t('skills.sources.unlink')"
               @click="unlinkSource(s.id)"
             />
           </div>

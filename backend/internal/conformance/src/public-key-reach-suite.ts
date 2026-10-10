@@ -174,9 +174,12 @@ export function definePublicKeyReachSuite(harness: ConformanceHarness): void {
 
     it('lists every key that reaches a board, and drops a deleted board from a key', async () => {
       const app = harness.makeApp()
-      const { w1, w2, adminAuth } = await scenario(app)
+      const { accountId, w1, w2, adminAuth } = await scenario(app)
+      const repository = app.publicApiKeyRepository?.()
+      if (!repository) throw new Error(`${harness.name} runs this suite without a key repository`)
       const wide = await mint(app, w1, adminAuth, { scope: 'read', workspaceIds: null })
       const onlyW2 = await mint(app, w1, adminAuth, { scope: 'read', workspaceIds: [w2] })
+      expect(await repository.countLiveByAccount(accountId)).toBe(2)
 
       const listed = await app.call<{ keys: { id: string; workspaceId: string }[] }>(
         'GET',
@@ -195,6 +198,8 @@ export function definePublicKeyReachSuite(harness: ConformanceHarness): void {
       // Its only board is gone, so the restricted key reaches nothing and stops authenticating.
       const orphan = await app.call('GET', '/api/v1/me', undefined, bearer(onlyW2.body.secret))
       expect(orphan.status).toBe(401)
+      // Nobody can list or revoke the orphan any more, so it no longer holds a slot under the cap.
+      expect(await repository.countLiveByAccount(accountId)).toBe(1)
       const survivor = await app.call('GET', '/api/v1/me', undefined, {
         ...bearer(wide.body.secret),
         [WORKSPACE_HEADER]: w1,

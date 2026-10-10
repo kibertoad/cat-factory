@@ -12,6 +12,7 @@ import type {
 } from '~/types/domain'
 import FrontendBindingsResolved from '~/components/panels/inspector/FrontendBindingsResolved.vue'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
+import IconButton from '~/components/common/IconButton.vue'
 import { apiErrorEnvelope } from '~/composables/api/errors'
 
 // Frontend-frame (`type: 'frontend'`) configuration: how to build, serve, and mock this
@@ -229,11 +230,11 @@ onUnmounted(() => preview.stopPolling(props.block.id))
          persisted until Apply. Only shown when the frame is linked to a repo. -->
     <div
       v-if="repoLink"
-      class="space-y-2 rounded border border-default bg-default/40 p-2"
+      class="space-y-2 rounded-sm border border-default bg-default/40 p-2"
       data-testid="frontend-detect"
     >
       <div class="flex items-center justify-between gap-2">
-        <span class="text-[11px] text-muted">{{ t('inspector.frontendConfig.detect.title') }}</span>
+        <span class="text-2xs text-muted">{{ t('inspector.frontendConfig.detect.title') }}</span>
         <UButton
           size="xs"
           variant="soft"
@@ -246,16 +247,16 @@ onUnmounted(() => preview.stopPolling(props.block.id))
           {{ t('inspector.frontendConfig.detect.button') }}
         </UButton>
       </div>
-      <p class="text-[11px] leading-snug text-dimmed">
+      <p class="text-2xs leading-snug text-dimmed">
         {{ t('inspector.frontendConfig.detect.hint') }}
       </p>
 
-      <p v-if="detectError" class="text-[11px] text-app-error-300/80">
+      <p v-if="detectError" class="text-2xs text-app-error-300/80">
         {{ detectError }}
       </p>
 
       <template v-if="detectResult && !detecting">
-        <p v-if="!detectResult.detected" class="text-[11px] text-app-warning-300/80">
+        <p v-if="!detectResult.detected" class="text-2xs text-app-warning-300/80">
           {{ t('inspector.frontendConfig.detect.none') }}
         </p>
 
@@ -263,7 +264,7 @@ onUnmounted(() => preview.stopPolling(props.block.id))
           <li
             v-for="(n, i) in detectResult.notes"
             :key="i"
-            class="flex items-start gap-1.5 text-[11px] leading-snug text-dimmed"
+            class="flex items-start gap-1.5 text-2xs leading-snug text-dimmed"
           >
             <span
               :class="
@@ -310,9 +311,7 @@ onUnmounted(() => preview.stopPolling(props.block.id))
     <!-- Build: package manager + frontend directory + install command + build script + output dir -->
     <InspectorSection v-model:open="showBuild" :title="t('inspector.frontendConfig.groups.build')">
       <div class="space-y-1">
-        <span class="text-[11px] text-muted">{{
-          t('inspector.frontendConfig.packageManager')
-        }}</span>
+        <span class="text-2xs text-muted">{{ t('inspector.frontendConfig.packageManager') }}</span>
         <div class="flex flex-wrap gap-1">
           <UButton
             v-for="pm in PACKAGE_MANAGERS"
@@ -328,7 +327,7 @@ onUnmounted(() => preview.stopPolling(props.block.id))
       </div>
 
       <div class="space-y-1">
-        <label class="text-[11px] text-muted">{{ t('inspector.frontendConfig.directory') }}</label>
+        <label class="text-2xs text-muted">{{ t('inspector.frontendConfig.directory') }}</label>
         <UInput
           :model-value="config.directory ?? ''"
           size="xs"
@@ -340,13 +339,13 @@ onUnmounted(() => preview.stopPolling(props.block.id))
             (e: KeyboardEvent) => saveText('directory', (e.target as HTMLInputElement).value)
           "
         />
-        <p class="text-[11px] leading-snug text-dimmed">
+        <p class="text-2xs leading-snug text-dimmed">
           {{ t('inspector.frontendConfig.directoryHint') }}
         </p>
       </div>
 
       <div class="space-y-1">
-        <label class="text-[11px] text-muted">{{
+        <label class="text-2xs text-muted">{{
           t('inspector.frontendConfig.installCommand')
         }}</label>
         <UInput
@@ -366,9 +365,7 @@ onUnmounted(() => preview.stopPolling(props.block.id))
 
       <div class="grid grid-cols-2 gap-2">
         <div class="space-y-1">
-          <label class="text-[11px] text-muted">{{
-            t('inspector.frontendConfig.buildScript')
-          }}</label>
+          <label class="text-2xs text-muted">{{ t('inspector.frontendConfig.buildScript') }}</label>
           <UInput
             :model-value="config.buildScript ?? ''"
             size="xs"
@@ -382,9 +379,7 @@ onUnmounted(() => preview.stopPolling(props.block.id))
           />
         </div>
         <div class="space-y-1">
-          <label class="text-[11px] text-muted">{{
-            t('inspector.frontendConfig.outputDir')
-          }}</label>
+          <label class="text-2xs text-muted">{{ t('inspector.frontendConfig.outputDir') }}</label>
           <UInput
             :model-value="config.outputDir ?? ''"
             size="xs"
@@ -403,7 +398,7 @@ onUnmounted(() => preview.stopPolling(props.block.id))
     <!-- Serve: mode (static vs command) + serve script (command mode) + port -->
     <InspectorSection v-model:open="showServe" :title="t('inspector.frontendConfig.groups.serve')">
       <div class="space-y-1">
-        <span class="text-[11px] text-muted">{{ t('inspector.frontendConfig.serveMode') }}</span>
+        <span class="text-2xs text-muted">{{ t('inspector.frontendConfig.serveMode') }}</span>
         <div class="flex flex-wrap gap-1">
           <UButton
             :color="serveMode === 'static' ? 'primary' : 'neutral'"
@@ -423,23 +418,21 @@ onUnmounted(() => preview.stopPolling(props.block.id))
           </UButton>
         </div>
         <!-- Explain each mode, and disambiguate from the separate envInjection axis. -->
-        <p class="text-[11px] leading-snug text-dimmed">
+        <p class="text-2xs leading-snug text-dimmed">
           <span class="text-muted">{{ t('inspector.frontendConfig.serveStatic') }}:</span>
           {{ t('inspector.frontendConfig.serveStaticDesc') }}
         </p>
-        <p class="text-[11px] leading-snug text-dimmed">
+        <p class="text-2xs leading-snug text-dimmed">
           <span class="text-muted">{{ t('inspector.frontendConfig.serveCommand') }}:</span>
           {{ t('inspector.frontendConfig.serveCommandDesc') }}
         </p>
-        <p class="text-[11px] leading-snug text-dimmed/80">
+        <p class="text-2xs leading-snug text-dimmed/80">
           {{ t('inspector.frontendConfig.serveEnvAxisNote') }}
         </p>
       </div>
 
       <div v-if="serveMode === 'command'" class="space-y-1">
-        <label class="text-[11px] text-muted">{{
-          t('inspector.frontendConfig.serveScript')
-        }}</label>
+        <label class="text-2xs text-muted">{{ t('inspector.frontendConfig.serveScript') }}</label>
         <UInput
           :model-value="config.serveScript ?? ''"
           size="xs"
@@ -454,7 +447,7 @@ onUnmounted(() => preview.stopPolling(props.block.id))
       </div>
 
       <div class="space-y-1">
-        <label class="text-[11px] text-muted">{{ t('inspector.frontendConfig.servePort') }}</label>
+        <label class="text-2xs text-muted">{{ t('inspector.frontendConfig.servePort') }}</label>
         <UInput
           :model-value="config.servePort != null ? String(config.servePort) : ''"
           type="number"
@@ -475,7 +468,7 @@ onUnmounted(() => preview.stopPolling(props.block.id))
       :title="t('inspector.frontendConfig.groups.mocking')"
     >
       <div class="space-y-1">
-        <label class="text-[11px] text-muted">{{
+        <label class="text-2xs text-muted">{{
           t('inspector.frontendConfig.mockMappingsPath')
         }}</label>
         <UInput
@@ -491,7 +484,7 @@ onUnmounted(() => preview.stopPolling(props.block.id))
             (e: KeyboardEvent) => saveText('mockMappingsPath', (e.target as HTMLInputElement).value)
           "
         />
-        <p class="text-[11px] leading-snug text-dimmed">
+        <p class="text-2xs leading-snug text-dimmed">
           {{ t('inspector.frontendConfig.mockMappingsHint') }}
         </p>
       </div>
@@ -521,7 +514,7 @@ onUnmounted(() => preview.stopPolling(props.block.id))
             {{ t('inspector.frontendConfig.envRuntime') }}
           </UButton>
         </div>
-        <p class="text-[11px] leading-snug text-dimmed">
+        <p class="text-2xs leading-snug text-dimmed">
           {{ t('inspector.frontendConfig.envInjectionHint') }}
         </p>
       </div>
@@ -564,17 +557,17 @@ onUnmounted(() => preview.stopPolling(props.block.id))
               class="flex-1"
               @update:model-value="(v: string) => setBindingSource(i, v)"
             />
-            <UButton
+            <IconButton
               size="xs"
               variant="ghost"
               color="neutral"
               icon="i-lucide-x"
-              :title="t('inspector.frontendConfig.bindings.remove')"
+              :label="t('inspector.frontendConfig.bindings.remove')"
               @click="removeBinding(i)"
             />
           </div>
         </div>
-        <div v-else class="text-[11px] text-dimmed">
+        <div v-else class="text-2xs text-dimmed">
           {{ t('inspector.frontendConfig.bindings.empty') }}
         </div>
 
@@ -603,7 +596,7 @@ onUnmounted(() => preview.stopPolling(props.block.id))
               save({ previewEnabled: v === true ? true : undefined })
           "
         />
-        <p class="mt-1 text-[11px] leading-snug text-dimmed">
+        <p class="mt-1 text-2xs leading-snug text-dimmed">
           {{
             previewSupported
               ? t('inspector.frontendConfig.previewHint')
@@ -615,7 +608,7 @@ onUnmounted(() => preview.stopPolling(props.block.id))
         <div v-if="previewActive" class="mt-2 space-y-1.5" data-testid="preview-panel">
           <div class="flex items-center gap-2">
             <span
-              class="text-[11px] font-medium"
+              class="text-2xs font-medium"
               :class="{
                 'text-app-success-400': previewStatus === 'ready',
                 'text-app-warning-400': previewStatus === 'starting',
@@ -671,7 +664,7 @@ onUnmounted(() => preview.stopPolling(props.block.id))
 
           <p
             v-if="previewStatus === 'failed' && previewState?.error"
-            class="text-[11px] leading-snug text-app-error-400"
+            class="text-2xs leading-snug text-app-error-400"
             data-testid="preview-error"
           >
             {{ previewState.error }}
@@ -679,7 +672,7 @@ onUnmounted(() => preview.stopPolling(props.block.id))
 
           <p
             v-if="previewRequestError"
-            class="text-[11px] leading-snug text-app-error-400"
+            class="text-2xs leading-snug text-app-error-400"
             data-testid="preview-request-error"
           >
             {{ previewRequestError }}

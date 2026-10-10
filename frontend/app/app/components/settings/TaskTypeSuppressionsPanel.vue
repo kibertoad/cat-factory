@@ -65,17 +65,17 @@ async function toggle(row: TaskTypeSuppression, offered: boolean) {
       {{ t('settings.taskTypeSuppressions.intro') }}
     </p>
 
-    <p v-if="loading" class="text-[11px] text-dimmed">
+    <p v-if="loading" class="text-2xs text-dimmed">
       {{ t('settings.taskTypeSuppressions.loading') }}
     </p>
-    <p v-else-if="!rows.length" class="text-[11px] text-dimmed">
+    <p v-else-if="!rows.length" class="text-2xs text-dimmed">
       {{ t('settings.taskTypeSuppressions.empty') }}
     </p>
     <ul v-else class="space-y-2" data-testid="task-type-suppressions">
       <li
         v-for="row in rows"
         :key="row.taskType.taskType"
-        class="flex items-start justify-between gap-3 rounded border border-default px-3 py-2"
+        class="flex items-start justify-between gap-3 rounded-sm border border-default px-3 py-2"
         data-testid="task-type-suppression"
         :data-task-type="row.taskType.taskType"
       >
@@ -94,7 +94,7 @@ async function toggle(row: TaskTypeSuppression, offered: boolean) {
               {{ row.taskType.presentation.category }}
             </UBadge>
           </div>
-          <p class="mt-0.5 text-[11px] text-dimmed">
+          <p class="mt-0.5 text-2xs text-dimmed">
             {{ row.taskType.presentation.description }}
           </p>
         </div>

@@ -73,9 +73,10 @@ export interface DirectoryRepository {
   /** The account's lowest retained `seq`, or null when it has no rows. */
   oldestSeq(accountId: string): Promise<number | null>
   /**
-   * Delete feed rows recorded before `before` (epoch ms), keeping each account's newest row: that
-   * row is what the next `seq` continues from, so pruning it would reissue sequence numbers.
-   * Returns the number of rows deleted.
+   * Delete each account's feed rows up to its newest row recorded before `before` (epoch ms), so
+   * what remains is always a contiguous `seq` suffix and the reader's oldest-row check sees every
+   * gap. Keeps each account's newest row: that row is what the next `seq` continues from, so
+   * pruning it would reissue sequence numbers. Returns the number of rows deleted.
    */
   pruneChanges(before: number): Promise<number>
 

@@ -51,6 +51,7 @@ import type {
   InlineUseCaseRegistry,
   InlineUseCaseGenerator,
   WorkspaceMemberRepository,
+  PublicApiKeyRepository,
   WorkspaceRepository,
   WorkspaceSnapshot,
 } from '@cat-factory/kernel'
@@ -325,6 +326,13 @@ export interface ConformanceApp {
    * `removeByAccountMembership` cascade identically on D1 and Postgres.
    */
   workspaceMemberRepository(): WorkspaceMemberRepository
+  /**
+   * The facade's public-API key repository over its real store, so the key-reach suite can assert
+   * the per-account cap count (a key left with no workspace holds no slot) on D1 and Postgres. No
+   * HTTP route reads the count, and reaching the cap through one would take 200 mints. Supplied
+   * by the facades that run that suite; the local facades serve no `/api/v1` keys of their own.
+   */
+  publicApiKeyRepository?(): PublicApiKeyRepository
   /**
    * The facade's initiative repository over its real store. Lets the suite seed an initiative
    * entity (with a registered preset) directly, so it can assert the engine folds that preset's

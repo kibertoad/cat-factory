@@ -69,15 +69,20 @@ export const usePublicApiKeysStore = defineStore('publicApiKeys', () => {
     workspaceIds?: string[] | null,
   ): Promise<CreatedPublicApiKey> {
     const ws = useWorkspaceStore()
-    const created = await api.createPublicApiKey(ws.requireId(), {
+    const workspaceId = ws.requireId()
+    const created = await api.createPublicApiKey(workspaceId, {
       label,
       scope,
       actsAsSelf,
       ...(workspaceIds === undefined ? {} : { workspaceIds }),
     })
     // Prepend: the backend lists newest-first, so the freshly minted key belongs at the
-    // top — matching the order a subsequent `load()` would produce.
-    keys.value = [created.key, ...keys.value]
+    // top — matching the order a subsequent `load()` would produce. A key picked to reach only
+    // other workspaces is not in this board's list, and revoking it from here would be refused as
+    // a no-op, so it is not shown.
+    const reaches =
+      created.key.workspaceIds === null || created.key.workspaceIds.includes(workspaceId)
+    if (reaches) keys.value = [created.key, ...keys.value]
     available.value = true
     return created
   }

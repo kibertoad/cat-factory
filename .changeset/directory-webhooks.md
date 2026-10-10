@@ -21,5 +21,5 @@ position only after the push succeeds, so pushes are at-least-once, arrive in fe
 never doubled by concurrent sweepers; a lease whose sweeper died expires and the page is sent again. The spec gains an OpenAPI 3.1 `webhooks` section naming every push body, so
 `DirectoryWebhookDelivery`, `NotificationWebhookDelivery`, `RunWebhookDelivery` and
 `PlatformAlertWebhookDelivery` become generated types in every client.
-OpenAPI 1.81.0. New migrations: D1 `0109_directory_webhooks.sql`, Drizzle
+OpenAPI 1.82.0. New migrations: D1 `0109_directory_webhooks.sql`, Drizzle
 `20261010113115_directory_webhooks`.

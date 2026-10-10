@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Notification } from '~/types/domain'
 import type { ReviewEffort } from '~/types/merge'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 // The board's notification inbox: a bell with an open-count badge that opens a
 // panel of human-actionable items (a PR awaiting a merge decision, a completed
@@ -406,9 +407,9 @@ function revealDecision(n: Notification) {
 
     <template #content>
       <div class="max-h-[28rem] w-[min(24rem,92vw)] overflow-y-auto p-2">
-        <div class="px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted">
+        <SectionLabel class="px-2 py-1">
           {{ t('layout.notifications.heading') }}
-        </div>
+        </SectionLabel>
         <div
           v-for="n in notifications.open"
           :key="n.id"
@@ -428,31 +429,34 @@ function revealDecision(n: Notification) {
             />
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-1.5">
-                <button
-                  class="block min-w-0 flex-1 truncate text-start text-sm font-medium text-default hover:underline"
+                <UButton
+                  color="neutral"
+                  variant="link"
+                  class="block min-w-0 flex-1 truncate p-0 text-start text-sm font-medium text-default hover:underline"
                   :title="n.title"
                   @click="reveal(n)"
                 >
                   {{ n.title }}
-                </button>
+                </UButton>
                 <span
                   v-if="isUrgent(n)"
-                  class="shrink-0 rounded bg-app-error-500/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-app-error-400"
+                  class="shrink-0 rounded-sm bg-app-error-500/20 px-1.5 py-0.5 text-3xs font-semibold uppercase tracking-wide text-app-error-400"
                 >
                   {{ t('layout.notifications.overdue') }}
                 </span>
               </div>
-              <p class="mt-0.5 text-[11px] leading-snug text-muted">{{ n.body }}</p>
-              <a
+              <p class="mt-0.5 text-2xs leading-snug text-muted">{{ n.body }}</p>
+              <ULink
+                raw
                 v-if="n.payload?.prUrl"
-                :href="n.payload.prUrl"
+                :to="n.payload.prUrl"
                 target="_blank"
                 rel="noopener"
-                class="mt-1 inline-flex items-center gap-1 text-[11px] text-app-info-400 hover:underline"
+                class="mt-1 inline-flex items-center gap-1 text-2xs text-app-info-400 hover:underline"
               >
                 <UIcon name="i-lucide-external-link" class="h-3 w-3" />
                 {{ t('layout.notifications.openPr') }}
-              </a>
+              </ULink>
               <!--
                 A platform-health card deep-links to the runs it aggregated, so the operator
                 lands on the evidence rather than only on the dashboard.
@@ -462,31 +466,38 @@ function revealDecision(n: Notification) {
                 class="mt-1.5 flex flex-col gap-0.5"
                 data-testid="notification-failing-runs"
               >
-                <component
-                  :is="canOpenFailingRun(run) ? 'button' : 'span'"
-                  v-for="run in failingRuns(n)"
-                  :key="run.executionId"
-                  :type="canOpenFailingRun(run) ? 'button' : undefined"
-                  class="flex items-center gap-1 text-start text-[11px]"
-                  :class="
-                    canOpenFailingRun(run)
-                      ? 'text-app-info-400 hover:underline'
-                      : 'cursor-default text-dimmed'
-                  "
-                  :title="
-                    canOpenFailingRun(run) ? undefined : t('layout.notifications.failingRunGone')
-                  "
-                  @click="canOpenFailingRun(run) && revealFailingRun(run)"
-                >
-                  <UIcon name="i-lucide-circle-alert" class="h-3 w-3 shrink-0" />
-                  <span class="truncate">{{
-                    t('layout.notifications.failingRun', {
-                      kind: run.failureKind,
-                      at: d(new Date(run.createdAt), 'short'),
-                    })
-                  }}</span>
-                </component>
-                <span v-if="failingRunsOmitted(n) > 0" class="text-[11px] text-dimmed">
+                <template v-for="run in failingRuns(n)" :key="run.executionId">
+                  <UButton
+                    v-if="canOpenFailingRun(run)"
+                    color="neutral"
+                    variant="link"
+                    size="xs"
+                    class="gap-1 p-0 text-start text-2xs text-app-info-400 hover:text-app-info-400 hover:underline"
+                    @click="revealFailingRun(run)"
+                  >
+                    <UIcon name="i-lucide-circle-alert" class="h-3 w-3 shrink-0" />
+                    <span class="truncate">{{
+                      t('layout.notifications.failingRun', {
+                        kind: run.failureKind,
+                        at: d(new Date(run.createdAt), 'short'),
+                      })
+                    }}</span>
+                  </UButton>
+                  <span
+                    v-else
+                    class="flex cursor-default items-center gap-1 text-start text-2xs text-dimmed"
+                    :title="t('layout.notifications.failingRunGone')"
+                  >
+                    <UIcon name="i-lucide-circle-alert" class="h-3 w-3 shrink-0" />
+                    <span class="truncate">{{
+                      t('layout.notifications.failingRun', {
+                        kind: run.failureKind,
+                        at: d(new Date(run.createdAt), 'short'),
+                      })
+                    }}</span>
+                  </span>
+                </template>
+                <span v-if="failingRunsOmitted(n) > 0" class="text-2xs text-dimmed">
                   {{ t('layout.notifications.failingRunsMore', { count: failingRunsOmitted(n) }) }}
                 </span>
               </div>

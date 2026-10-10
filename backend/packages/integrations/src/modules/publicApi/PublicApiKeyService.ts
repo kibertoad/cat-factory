@@ -103,11 +103,6 @@ const SCOPE_RANK: Record<PublicApiScope, number> = Object.fromEntries(
   PUBLIC_API_SCOPES.map((scope, rank) => [scope, rank]),
 ) as Record<PublicApiScope, number>
 
-/**
- * Whether a key that HOLDS `have` satisfies an endpoint that NEEDS `need`. The ladder is
- * inclusive — an `admin` key satisfies a `decide`, `write` or `read` requirement — so this is
- * a simple rank comparison, the single source of truth for every `/api/v1` scope gate.
- */
 /** Whether a key with this reach may act on `workspaceId`. */
 export function keyReaches(workspaceIds: string[] | null, workspaceId: string): boolean {
   return workspaceIds === null || workspaceIds.includes(workspaceId)
@@ -123,6 +118,11 @@ export function reachCovers(outer: string[] | null, inner: string[] | null): boo
   return inner.every((id) => outer.includes(id))
 }
 
+/**
+ * Whether a key that HOLDS `have` satisfies an endpoint that NEEDS `need`. The ladder is
+ * inclusive — an `admin` key satisfies a `decide`, `write` or `read` requirement — so this is
+ * a simple rank comparison, the single source of truth for every `/api/v1` scope gate.
+ */
 export function scopeSatisfies(have: PublicApiScope, need: PublicApiScope): boolean {
   return SCOPE_RANK[have] >= SCOPE_RANK[need]
 }
@@ -156,8 +156,10 @@ export class PublicApiKeyService {
     label: string,
     scope: PublicApiScope = 'write',
   ): Promise<IssuedPublicApiKey> {
-    const live = await this.deps.repository.listByAccount(owner.accountId)
-    if (live.length >= MAX_PUBLIC_API_KEYS_PER_ACCOUNT) {
+    // The count leaves out a restricted key whose every workspace was deleted: it no longer
+    // authenticates, no panel lists it, and none can revoke it, so it must not hold a slot.
+    const live = await this.deps.repository.countLiveByAccount(owner.accountId)
+    if (live >= MAX_PUBLIC_API_KEYS_PER_ACCOUNT) {
       throw new ConflictError(
         `This account already has the maximum of ${MAX_PUBLIC_API_KEYS_PER_ACCOUNT} public-API keys; ` +
           'revoke one before creating another',
@@ -207,6 +209,9 @@ export class PublicApiKeyService {
   /**
    * Revoke a key and, in the same call, every key it minted. The only revocation entry point, so
    * the cascade cannot be forgotten.
+   *
+   * Ordered minter-first: the two writes are not one transaction, so a failure between them must
+   * leave the credential someone came here to kill already dead.
    */
   async revoke(accountId: string, id: string): Promise<void> {
     const at = this.deps.clock.now()

@@ -76,7 +76,7 @@ function goToLogin() {
         </UButton>
       </template>
 
-      <form v-else class="space-y-3" @submit.prevent="submit">
+      <UForm v-else class="space-y-3" @submit="submit">
         <SecretInput
           v-model="password"
           required
@@ -98,11 +98,16 @@ function goToLogin() {
           {{ t('auth.resetPassword.submit') }}
         </UButton>
         <p class="text-center text-xs text-muted">
-          <button type="button" class="text-primary hover:underline" @click="goToLogin">
+          <UButton
+            color="primary"
+            variant="link"
+            class="p-0 text-xs text-primary hover:underline"
+            @click="goToLogin"
+          >
             {{ t('auth.resetPassword.backToSignIn') }}
-          </button>
+          </UButton>
         </p>
-      </form>
+      </UForm>
     </div>
   </div>
 </template>

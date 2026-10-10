@@ -473,7 +473,7 @@ const declaredFormats = computed(() => {
 <template>
   <div class="ms-6 flex flex-col gap-1.5" data-testid="binary-output-picker">
     <div class="flex items-center gap-2">
-      <span class="text-[10px] text-dimmed">{{ t('pipeline.builder.binaryOutputStorage') }}</span>
+      <span class="text-3xs text-dimmed">{{ t('pipeline.builder.binaryOutputStorage') }}</span>
       <USelect
         class="w-56"
         :model-value="config?.storageServiceId ?? ''"
@@ -488,7 +488,7 @@ const declaredFormats = computed(() => {
     </div>
 
     <div v-if="config?.storageServiceId" class="flex items-center gap-2">
-      <span class="text-[10px] text-dimmed">{{ t('pipeline.builder.binaryOutputContext') }}</span>
+      <span class="text-3xs text-dimmed">{{ t('pipeline.builder.binaryOutputContext') }}</span>
       <USelectMenu
         class="w-56"
         multiple
@@ -503,9 +503,7 @@ const declaredFormats = computed(() => {
     </div>
 
     <div v-if="config?.storageServiceId" class="flex items-center gap-2">
-      <span class="text-[10px] text-dimmed">{{
-        t('pipeline.builder.binaryOutputGenerators')
-      }}</span>
+      <span class="text-3xs text-dimmed">{{ t('pipeline.builder.binaryOutputGenerators') }}</span>
       <USelectMenu
         class="w-56"
         multiple
@@ -521,9 +519,7 @@ const declaredFormats = computed(() => {
     </div>
 
     <div v-if="config?.storageServiceId" class="flex items-center gap-2">
-      <span class="text-[10px] text-dimmed">{{
-        t('pipeline.builder.binaryOutputModalities')
-      }}</span>
+      <span class="text-3xs text-dimmed">{{ t('pipeline.builder.binaryOutputModalities') }}</span>
       <USelectMenu
         class="w-56"
         multiple
@@ -541,9 +537,7 @@ const declaredFormats = computed(() => {
          under them. Both tiers: like the rest of this picker it is not an override of a default —
          a format nobody stated is a format the run does not check. -->
     <div v-if="config?.storageServiceId" class="flex items-center gap-2">
-      <span class="text-[10px] text-dimmed">{{
-        t('pipeline.builder.binaryOutputMediaTypes')
-      }}</span>
+      <span class="text-3xs text-dimmed">{{ t('pipeline.builder.binaryOutputMediaTypes') }}</span>
       <UInput
         class="w-56"
         :model-value="mediaTypeText"
@@ -556,7 +550,7 @@ const declaredFormats = computed(() => {
     </div>
     <p
       v-if="config?.storageServiceId && declaredFormats.length"
-      class="ms-1 text-[10px] text-dimmed"
+      class="ms-1 text-3xs text-dimmed"
       data-testid="binary-output-declared-formats"
     >
       {{
@@ -572,7 +566,7 @@ const declaredFormats = computed(() => {
          option nobody stated is an option the run does not apply. -->
     <template v-if="config?.storageServiceId">
       <div v-if="offers('reference-image')" class="flex items-start gap-2">
-        <span class="mt-1 text-[10px] text-dimmed">{{
+        <span class="mt-1 text-3xs text-dimmed">{{
           t('pipeline.builder.binaryReferenceImages')
         }}</span>
         <UTextarea
@@ -588,7 +582,7 @@ const declaredFormats = computed(() => {
       </div>
       <p
         v-if="unusableReferences.length"
-        class="ms-1 text-[10px] text-app-warning-400"
+        class="ms-1 text-3xs text-app-warning-400"
         data-testid="binary-output-reference-unusable"
       >
         {{
@@ -599,7 +593,7 @@ const declaredFormats = computed(() => {
       </p>
 
       <div v-if="offers('instruction-edit') || offers('mask-edit')" class="flex items-center gap-2">
-        <span class="text-[10px] text-dimmed">{{ t('pipeline.builder.binaryEditMode') }}</span>
+        <span class="text-3xs text-dimmed">{{ t('pipeline.builder.binaryEditMode') }}</span>
         <USelect
           class="w-56"
           size="xs"
@@ -618,9 +612,7 @@ const declaredFormats = computed(() => {
         />
       </div>
       <div v-if="generation.edit" class="flex items-center gap-2">
-        <span class="text-[10px] text-dimmed">{{
-          t('pipeline.builder.binaryEditInstruction')
-        }}</span>
+        <span class="text-3xs text-dimmed">{{ t('pipeline.builder.binaryEditInstruction') }}</span>
         <UInput
           class="w-56"
           size="xs"
@@ -636,9 +628,7 @@ const declaredFormats = computed(() => {
       </div>
 
       <div v-if="offers('negative-prompt')" class="flex items-center gap-2">
-        <span class="text-[10px] text-dimmed">{{
-          t('pipeline.builder.binaryNegativePrompt')
-        }}</span>
+        <span class="text-3xs text-dimmed">{{ t('pipeline.builder.binaryNegativePrompt') }}</span>
         <UInput
           class="w-56"
           size="xs"
@@ -652,7 +642,7 @@ const declaredFormats = computed(() => {
       </div>
 
       <div v-if="offers('aspect-ratio')" class="flex items-center gap-2">
-        <span class="text-[10px] text-dimmed">{{ t('pipeline.builder.binaryAspectRatio') }}</span>
+        <span class="text-3xs text-dimmed">{{ t('pipeline.builder.binaryAspectRatio') }}</span>
         <UInput
           class="w-56"
           size="xs"
@@ -670,7 +660,7 @@ const declaredFormats = computed(() => {
            exists to remove. -->
       <div v-if="offers('exact-size')" class="flex flex-col gap-1">
         <div class="flex items-center gap-2">
-          <span class="text-[10px] text-dimmed">{{ t('pipeline.builder.binaryOutputSize') }}</span>
+          <span class="text-3xs text-dimmed">{{ t('pipeline.builder.binaryOutputSize') }}</span>
           <UInput
             class="w-24"
             type="number"
@@ -680,7 +670,7 @@ const declaredFormats = computed(() => {
             data-testid="binary-output-size-width"
             @change="setOutputSize('width', ($event.target as HTMLInputElement).value)"
           />
-          <span class="text-[10px] text-dimmed">×</span>
+          <span class="text-3xs text-dimmed">×</span>
           <UInput
             class="w-24"
             type="number"
@@ -696,7 +686,7 @@ const declaredFormats = computed(() => {
              that does not carry the requirement. -->
         <p
           v-if="outputSizeIncomplete"
-          class="text-[10px] text-app-warning-400"
+          class="text-3xs text-app-warning-400"
           data-testid="binary-output-size-incomplete"
         >
           {{ t('pipeline.builder.binaryOutputSizeIncomplete') }}
@@ -704,7 +694,7 @@ const declaredFormats = computed(() => {
       </div>
 
       <div v-if="offers('seed')" class="flex items-center gap-2">
-        <span class="text-[10px] text-dimmed">{{ t('pipeline.builder.binarySeed') }}</span>
+        <span class="text-3xs text-dimmed">{{ t('pipeline.builder.binarySeed') }}</span>
         <UInput
           class="w-56"
           type="number"
@@ -731,7 +721,7 @@ const declaredFormats = computed(() => {
               setGeneration({ transparentBackground: $event ? true : undefined })
             "
           />
-          <span class="text-[10px] text-dimmed">{{ t('pipeline.builder.binaryTransparent') }}</span>
+          <span class="text-3xs text-dimmed">{{ t('pipeline.builder.binaryTransparent') }}</span>
         </label>
         <label v-if="offers('tileable')" class="flex items-center gap-1.5">
           <UCheckbox
@@ -739,7 +729,7 @@ const declaredFormats = computed(() => {
             data-testid="binary-output-tileable"
             @update:model-value="setGeneration({ tileable: $event ? true : undefined })"
           />
-          <span class="text-[10px] text-dimmed">{{ t('pipeline.builder.binaryTileable') }}</span>
+          <span class="text-3xs text-dimmed">{{ t('pipeline.builder.binaryTileable') }}</span>
         </label>
         <label v-if="offers('upscale')" class="flex items-center gap-1.5">
           <UCheckbox
@@ -747,7 +737,7 @@ const declaredFormats = computed(() => {
             data-testid="binary-output-upscale"
             @update:model-value="setGeneration({ upscale: $event ? 2 : undefined })"
           />
-          <span class="text-[10px] text-dimmed">{{ t('pipeline.builder.binaryUpscale') }}</span>
+          <span class="text-3xs text-dimmed">{{ t('pipeline.builder.binaryUpscale') }}</span>
         </label>
       </div>
 
@@ -759,10 +749,10 @@ const declaredFormats = computed(() => {
           data-testid="binary-output-comparison"
           @update:model-value="setComparison($event === true)"
         />
-        <span class="text-[10px] text-dimmed">{{ t('pipeline.builder.binaryComparison') }}</span>
+        <span class="text-3xs text-dimmed">{{ t('pipeline.builder.binaryComparison') }}</span>
       </label>
       <div v-if="config.comparison" class="ms-6 flex flex-wrap items-center gap-3">
-        <span class="text-[10px] text-dimmed">{{ t('pipeline.builder.binaryPerGenerator') }}</span>
+        <span class="text-3xs text-dimmed">{{ t('pipeline.builder.binaryPerGenerator') }}</span>
         <USelect
           class="w-20"
           size="xs"
@@ -777,12 +767,12 @@ const declaredFormats = computed(() => {
             data-testid="binary-output-multi-select"
             @update:model-value="setMultiSelect($event === true)"
           />
-          <span class="text-[10px] text-dimmed">{{ t('pipeline.builder.binaryMultiSelect') }}</span>
+          <span class="text-3xs text-dimmed">{{ t('pipeline.builder.binaryMultiSelect') }}</span>
         </label>
       </div>
       <p
         v-if="comparisonUnreachable"
-        class="text-[10px] text-app-warning-400"
+        class="text-3xs text-app-warning-400"
         data-testid="binary-output-comparison-unreachable"
       >
         {{ t('pipeline.builder.binaryComparisonUnreachable') }}
@@ -794,25 +784,25 @@ const declaredFormats = computed(() => {
          an untagged one, and a lost CONTEXT service is not a lost storage target. -->
     <p
       v-if="has('catalog_unavailable')"
-      class="text-[10px] text-app-warning-400"
+      class="text-3xs text-app-warning-400"
       data-testid="binary-output-unavailable"
     >
       {{ t('pipeline.builder.binaryOutputUnavailable') }}
     </p>
     <p
       v-else-if="has('no_storage_service')"
-      class="text-[10px] text-app-warning-400"
+      class="text-3xs text-app-warning-400"
       data-testid="binary-output-no-storage"
     >
       {{ t('pipeline.builder.binaryOutputNoStorage', { capability: ASSET_STORAGE_CAPABILITY }) }}
     </p>
-    <p v-if="has('unknown_service')" class="text-[10px] text-app-warning-400">
+    <p v-if="has('unknown_service')" class="text-3xs text-app-warning-400">
       {{ t('pipeline.builder.binaryOutputMissing') }}
     </p>
-    <p v-if="has('not_storage_capable')" class="text-[10px] text-app-warning-400">
+    <p v-if="has('not_storage_capable')" class="text-3xs text-app-warning-400">
       {{ t('pipeline.builder.binaryOutputNotStorage', { capability: ASSET_STORAGE_CAPABILITY }) }}
     </p>
-    <p v-if="has('unknown_context_service')" class="text-[10px] text-app-warning-400">
+    <p v-if="has('unknown_context_service')" class="text-3xs text-app-warning-400">
       {{
         t('pipeline.builder.binaryOutputContextMissing', {
           ids: pick.unknownContextIds.join(', '),
@@ -826,14 +816,14 @@ const declaredFormats = computed(() => {
          it says so and stops, exactly as run admission does. -->
     <p
       v-if="has('generators_unavailable')"
-      class="text-[10px] text-app-warning-400"
+      class="text-3xs text-app-warning-400"
       data-testid="binary-output-generators-unavailable"
     >
       {{ t('pipeline.builder.binaryOutputGeneratorsUnavailable') }}
     </p>
     <p
       v-if="has('unknown_generator')"
-      class="text-[10px] text-app-warning-400"
+      class="text-3xs text-app-warning-400"
       data-testid="binary-output-unknown-generator"
     >
       {{
@@ -844,7 +834,7 @@ const declaredFormats = computed(() => {
     </p>
     <p
       v-if="has('modality_uncovered')"
-      class="text-[10px] text-app-warning-400"
+      class="text-3xs text-app-warning-400"
       data-testid="binary-output-modality-uncovered"
     >
       {{
@@ -855,7 +845,7 @@ const declaredFormats = computed(() => {
     </p>
     <p
       v-if="has('media_type_uncovered')"
-      class="text-[10px] text-app-warning-400"
+      class="text-3xs text-app-warning-400"
       data-testid="binary-output-media-type-uncovered"
     >
       {{
@@ -870,7 +860,7 @@ const declaredFormats = computed(() => {
          would send someone editing a selection that is fine. -->
     <p
       v-if="has('media_type_unverifiable')"
-      class="text-[10px] text-dimmed"
+      class="text-3xs text-dimmed"
       data-testid="binary-output-media-type-unverifiable"
     >
       {{
@@ -886,7 +876,7 @@ const declaredFormats = computed(() => {
          mismatch. Silence here is what turned it into a surprise at the door. -->
     <p
       v-if="has('generator_harness_required')"
-      class="text-[10px] text-dimmed"
+      class="text-3xs text-dimmed"
       data-testid="binary-output-generator-harness"
     >
       {{ t('pipeline.builder.binaryOutputGeneratorHarness', { generators: harnessServedSummary }) }}
@@ -897,14 +887,14 @@ const declaredFormats = computed(() => {
          line carries is the step's own prompt, which is the field right beside it. -->
     <p
       v-if="has('generator_overlap')"
-      class="text-[10px] text-dimmed"
+      class="text-3xs text-dimmed"
       data-testid="binary-output-generator-overlap"
     >
       {{ t('pipeline.builder.binaryOutputGeneratorOverlap', { overlaps: overlapSummary }) }}
     </p>
     <p
       v-if="has('capability_unsupported')"
-      class="text-[10px] text-app-warning-400"
+      class="text-3xs text-app-warning-400"
       data-testid="binary-output-capability-unsupported"
     >
       {{
@@ -919,7 +909,7 @@ const declaredFormats = computed(() => {
     <p
       v-for="value in pick.unacceptedValues"
       :key="value.option"
-      class="text-[10px] text-app-warning-400"
+      class="text-3xs text-app-warning-400"
       data-testid="binary-output-value-unaccepted"
     >
       {{
@@ -935,7 +925,7 @@ const declaredFormats = computed(() => {
          two values on this form. -->
     <p
       v-if="has('output_size_ambiguous')"
-      class="text-[10px] text-app-warning-400"
+      class="text-3xs text-app-warning-400"
       data-testid="binary-output-size-ambiguous"
     >
       {{
@@ -950,7 +940,7 @@ const declaredFormats = computed(() => {
          selections in the product. -->
     <p
       v-if="has('capability_unverifiable')"
-      class="text-[10px] text-dimmed"
+      class="text-3xs text-dimmed"
       data-testid="binary-output-capability-unverifiable"
     >
       {{
@@ -965,7 +955,7 @@ const declaredFormats = computed(() => {
     <p
       v-for="value in pick.partiallyAcceptedValues"
       :key="value.option"
-      class="text-[10px] text-dimmed"
+      class="text-3xs text-dimmed"
       data-testid="binary-output-value-partial"
     >
       {{
@@ -980,7 +970,7 @@ const declaredFormats = computed(() => {
          another has not said what it takes, so the step starts and is served by the second. -->
     <p
       v-if="has('option_value_unverifiable')"
-      class="text-[10px] text-dimmed"
+      class="text-3xs text-dimmed"
       data-testid="binary-output-value-unverifiable"
     >
       {{
@@ -991,7 +981,7 @@ const declaredFormats = computed(() => {
     </p>
     <p
       v-if="unusableMediaTypes.length"
-      class="text-[10px] text-app-warning-400"
+      class="text-3xs text-app-warning-400"
       data-testid="binary-output-media-type-unusable"
     >
       {{

@@ -31,6 +31,7 @@ const PURPOSE_LABELS = computed<Record<PipelinePurpose, string>>(() => ({
   research: t('pipeline.builder.purposeOption.research'),
   planning: t('pipeline.builder.purposeOption.planning'),
   media: t('pipeline.builder.purposeOption.media'),
+  maintenance: t('pipeline.builder.purposeOption.maintenance'),
 }))
 
 // The button text. A stored purpose this build has no label for is NAMED as unrecognised and
@@ -71,7 +72,7 @@ const items = computed(() => [
         <span class="truncate"> {{ t('pipeline.builder.purposeLabel') }}: {{ current }} </span>
       </UButton>
     </UDropdownMenu>
-    <p v-if="props.hiddenCount" class="px-1 text-[10px] text-dimmed">
+    <p v-if="props.hiddenCount" class="px-1 text-3xs text-dimmed">
       {{ t('palette.purposeHidden', { count: props.hiddenCount }, props.hiddenCount) }}
     </p>
   </div>

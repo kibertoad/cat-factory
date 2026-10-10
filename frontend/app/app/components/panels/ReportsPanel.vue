@@ -19,6 +19,8 @@ import {
   trendMagnitude,
 } from './ReportsPanel.logic'
 import ReportsSpendBreakdown from '~/components/panels/ReportsSpendBreakdown.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
+import IconButton from '~/components/common/IconButton.vue'
 
 // Reports: cross-cutting usage analytics for the active account — where the spend and the
 // work actually go. Spend per model and agent kind, spend + run activity per workspace /
@@ -136,6 +138,14 @@ const maxRuns = computed(() => maxOf(activityByDimension.value, (row) => row.run
 
 /** Boards the filter offers — the active account's, since the report is account-scoped. */
 const boards = computed(() => workspace.accountWorkspaces)
+// "Every board" is a NAMED sentinel, not an empty string: an empty string is what a Select
+// reserves for "nothing selected", and Reka throws on an item that carries one. The store holds
+// the same state as null, so the two are mapped at the boundary below.
+const ALL_BOARDS = 'all'
+const boardFilterItems = computed(() => [
+  { label: t('reports.filter.allBoards'), value: ALL_BOARDS },
+  ...boards.value.map((board) => ({ label: board.name, value: board.id })),
+])
 
 function trendTooltip(point: { start: number; meteredCost: number; subscriptionCost: number }) {
   return `${d(new Date(point.start), 'short')} · ${t('reports.legend.metered')} ${money(point.meteredCost)} · ${t('reports.legend.subscription')} ${money(point.subscriptionCost)}`
@@ -205,55 +215,52 @@ watch(
           </div>
           <!-- Filters in ONE row above the charts: window, then board scope. -->
           <div class="ms-auto flex flex-wrap items-center gap-1.5">
-            <select
-              class="rounded-lg border border-default bg-default px-2.5 py-1.5 text-[12px] text-default"
-              :value="reports.workspaceFilter ?? ''"
+            <USelect
+              :model-value="reports.workspaceFilter ?? ALL_BOARDS"
+              :items="boardFilterItems"
+              size="xs"
               :aria-label="t('reports.filter.board')"
               data-testid="reports-board-filter"
-              @change="
-                reports.setWorkspaceFilter(($event.target as HTMLSelectElement).value || null)
+              @update:model-value="
+                reports.setWorkspaceFilter($event === ALL_BOARDS ? null : String($event))
               "
+            />
+            <UTabs
+              :model-value="reports.window"
+              :items="WINDOWS"
+              :content="false"
+              size="xs"
+              class="me-1"
+              @update:model-value="reports.setWindow($event as ReportWindow)"
             >
-              <option value="">{{ t('reports.filter.allBoards') }}</option>
-              <option v-for="board in boards" :key="board.id" :value="board.id">
-                {{ board.name }}
-              </option>
-            </select>
-            <div class="me-1 flex rounded-lg border border-default p-0.5 text-[12px]">
-              <button
-                v-for="opt in WINDOWS"
-                :key="opt.value"
-                class="rounded-md px-2.5 py-1 transition"
-                :class="
-                  reports.window === opt.value
-                    ? 'bg-elevated text-app-100'
-                    : 'text-muted hover:text-default'
-                "
-                :data-testid="`reports-window-${opt.value}`"
-                @click="reports.setWindow(opt.value)"
-              >
-                {{ opt.label }}
-              </button>
-            </div>
-            <button
-              class="rounded-lg border border-default p-1.5 text-muted transition hover:text-default"
-              :aria-label="t('reports.refresh')"
-              :title="t('reports.refresh')"
+              <!-- UTabs renders its own triggers and forwards nothing from an item, so this
+                   slot is the one place a stable per-window selector can live. -->
+              <template #default="{ item }">
+                <span :data-testid="`reports-window-${item.value}`">{{ item.label }}</span>
+              </template>
+            </UTabs>
+            <IconButton
+              color="neutral"
+              variant="ghost"
+              icon="i-lucide-refresh-cw"
+              :label="t('reports.refresh')"
+              :ui="{
+                base: 'rounded-lg border border-default p-1.5 text-muted transition hover:text-default',
+                leadingIcon: loading ? 'h-4 w-4 animate-spin' : 'h-4 w-4',
+              }"
               @click="refresh"
-            >
-              <UIcon
-                name="i-lucide-refresh-cw"
-                class="h-4 w-4"
-                :class="{ 'animate-spin': loading }"
-              />
-            </button>
-            <button
-              class="rounded-lg border border-default p-1.5 text-muted transition hover:text-default"
-              :aria-label="t('common.close')"
+            />
+            <IconButton
+              color="neutral"
+              variant="ghost"
+              icon="i-lucide-x"
+              :label="t('common.close')"
+              :ui="{
+                base: 'rounded-lg border border-default p-1.5 text-muted transition hover:text-default',
+                leadingIcon: 'h-4 w-4',
+              }"
               @click="close"
-            >
-              <UIcon name="i-lucide-x" class="h-4 w-4" />
-            </button>
+            />
           </div>
         </header>
 
@@ -264,12 +271,14 @@ watch(
           >
             <p>{{ t('reports.error') }}</p>
             <p v-if="error" class="mt-1 text-xs text-app-error-300/80">{{ error }}</p>
-            <button
+            <UButton
+              color="neutral"
+              variant="ghost"
               class="mt-2 rounded-md border border-app-error-700 px-3 py-1 text-xs hover:bg-app-error-900/40"
               @click="refresh"
             >
               {{ t('reports.retry') }}
-            </button>
+            </UButton>
           </div>
 
           <div v-else-if="loading && !view" class="py-16 text-center text-sm text-muted">
@@ -277,7 +286,7 @@ watch(
           </div>
 
           <div v-else-if="view" class="mx-auto flex max-w-5xl flex-col gap-6">
-            <p class="text-[11px] text-dimmed">
+            <p class="text-2xs text-dimmed">
               {{
                 t('reports.period', {
                   from: d(new Date(view.since), 'short'),
@@ -308,7 +317,7 @@ watch(
             </p>
             <p
               v-else-if="rollupState === 'current'"
-              class="text-[11px] text-dimmed"
+              class="text-2xs text-dimmed"
               data-testid="reports-rollup-current"
             >
               {{
@@ -320,9 +329,9 @@ watch(
 
             <!-- Headline totals. A stat tile, not a chart: these are single numbers. -->
             <section>
-              <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-dimmed">
+              <SectionLabel as="h2" class="mb-2">
                 {{ t('reports.totals.title') }}
-              </h2>
+              </SectionLabel>
               <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <div class="rounded-lg border border-default bg-default/40 p-3">
                   <p
@@ -352,16 +361,16 @@ watch(
                   <p class="text-xs text-dimmed">{{ t('reports.totals.tokens') }}</p>
                 </div>
               </div>
-              <p class="mt-1.5 text-[10px] text-dimmed">
+              <p class="mt-1.5 text-3xs text-dimmed">
                 {{ t('reports.totals.illustrative') }}
               </p>
             </section>
 
             <!-- Spend over time. One axis, two stacked series, legend always present. -->
             <section>
-              <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-dimmed">
+              <SectionLabel as="h2" class="mb-2">
                 {{ t('reports.trend.title') }}
-              </h2>
+              </SectionLabel>
               <div class="rounded-lg border border-default bg-default/40 p-4">
                 <div v-if="!hasSpend" class="py-6 text-center text-xs text-dimmed">
                   {{ t('reports.trend.empty') }}
@@ -383,7 +392,7 @@ watch(
                     />
                   </div>
                 </div>
-                <div class="mt-2 flex items-center gap-4 text-[11px] text-dimmed">
+                <div class="mt-2 flex items-center gap-4 text-2xs text-dimmed">
                   <span class="flex items-center gap-1" :title="t('reports.legend.meteredHint')">
                     <span class="h-2 w-2 rounded-sm bg-app-secondary-500" />{{
                       t('reports.legend.metered')
@@ -404,9 +413,9 @@ watch(
             <!-- Spend by model + by agent kind: the two axes a run has no single value for. -->
             <div class="grid gap-6 md:grid-cols-2">
               <section>
-                <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-dimmed">
+                <SectionLabel as="h2" class="mb-2">
                   {{ t('reports.spend.byModel') }}
-                </h2>
+                </SectionLabel>
                 <ReportsSpendBreakdown
                   :rows="view.spend.byModel"
                   :currency="currency"
@@ -415,9 +424,9 @@ watch(
                 />
               </section>
               <section>
-                <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-dimmed">
+                <SectionLabel as="h2" class="mb-2">
                   {{ t('reports.spend.byAgentKind') }}
-                </h2>
+                </SectionLabel>
                 <ReportsSpendBreakdown
                   :rows="view.spend.byAgentKind"
                   :currency="currency"
@@ -434,9 +443,9 @@ watch(
                  breakdowns the projection caps, and each says so under its own card. -->
             <div class="grid gap-6 md:grid-cols-2">
               <section>
-                <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-dimmed">
+                <SectionLabel as="h2" class="mb-2">
                   {{ t('reports.spend.byTicket') }}
-                </h2>
+                </SectionLabel>
                 <ReportsSpendBreakdown
                   :rows="view.spend.byTicket"
                   :currency="currency"
@@ -446,9 +455,9 @@ watch(
                 />
               </section>
               <section>
-                <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-dimmed">
+                <SectionLabel as="h2" class="mb-2">
                   {{ t('reports.spend.byRun') }}
-                </h2>
+                </SectionLabel>
                 <ReportsSpendBreakdown
                   :rows="view.spend.byRun"
                   :currency="currency"
@@ -462,29 +471,24 @@ watch(
             <!-- The shared axis: spend AND activity for the same grouping, side by side. -->
             <section class="flex flex-col gap-3">
               <div class="flex flex-wrap items-center gap-2">
-                <h2 class="text-xs font-semibold uppercase tracking-wide text-dimmed">
+                <SectionLabel as="h2">
                   {{ t('reports.breakdown.title') }}
-                </h2>
-                <div class="flex rounded-lg border border-default p-0.5 text-[12px]">
-                  <button
-                    v-for="opt in DIMENSIONS"
-                    :key="opt.value"
-                    class="rounded-md px-2.5 py-1 transition"
-                    :class="
-                      dimension === opt.value
-                        ? 'bg-elevated text-app-100'
-                        : 'text-muted hover:text-default'
-                    "
-                    :data-testid="`reports-dimension-${opt.value}`"
-                    @click="dimension = opt.value"
-                  >
-                    {{ opt.label }}
-                  </button>
-                </div>
+                </SectionLabel>
+                <UTabs
+                  :model-value="dimension"
+                  :items="DIMENSIONS"
+                  :content="false"
+                  size="xs"
+                  @update:model-value="dimension = $event as ReportActivityDimension"
+                >
+                  <template #default="{ item }">
+                    <span :data-testid="`reports-dimension-${item.value}`">{{ item.label }}</span>
+                  </template>
+                </UTabs>
               </div>
               <div class="grid gap-6 md:grid-cols-2">
                 <div>
-                  <h3 class="mb-2 text-[11px] text-dimmed">
+                  <h3 class="mb-2 text-2xs text-dimmed">
                     {{ t('reports.spend.heading') }}
                   </h3>
                   <ReportsSpendBreakdown
@@ -495,7 +499,7 @@ watch(
                   />
                 </div>
                 <div>
-                  <h3 class="mb-2 text-[11px] text-dimmed">
+                  <h3 class="mb-2 text-2xs text-dimmed">
                     {{ t('reports.activity.heading') }}
                   </h3>
                   <div class="rounded-lg border border-default bg-default/40 p-4">
@@ -532,7 +536,7 @@ watch(
                           </div>
                           <!-- The status counts in text: the reserved status hues are
                                red-green adjacent, so identity is never colour alone. -->
-                          <p class="mt-1 flex flex-wrap gap-x-2 text-[10px] text-dimmed">
+                          <p class="mt-1 flex flex-wrap gap-x-2 text-3xs text-dimmed">
                             <span v-for="segment in activitySegments(row)" :key="segment.status">
                               {{ n(segment.count, 'decimal') }} {{ statusLabel(segment.status) }}
                             </span>
@@ -545,7 +549,7 @@ watch(
                           </p>
                         </li>
                       </ul>
-                      <div class="mt-3 flex flex-wrap items-center gap-3 text-[11px] text-dimmed">
+                      <div class="mt-3 flex flex-wrap items-center gap-3 text-2xs text-dimmed">
                         <span
                           v-for="status in ['done', 'failed', 'running', 'other'] as const"
                           :key="status"

@@ -10,7 +10,7 @@ interface MembershipRow {
 }
 
 /** Parse the CSV `roles` column into a non-empty role set (defaults to developer). */
-function parseRoles(csv: string | null): AccountRole[] {
+export function parseRoles(csv: string | null): AccountRole[] {
   const roles = (csv ?? '')
     .split(',')
     .map((r) => r.trim())

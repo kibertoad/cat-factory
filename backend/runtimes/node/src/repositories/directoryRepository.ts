@@ -1,17 +1,17 @@
 import {
-  type AccountRole,
   type DirectoryAccountMembership,
   type DirectoryRepo,
   type DirectoryUser,
   type DirectoryWorkspace,
   type DirectoryWorkspaceMembership,
-  isDirectoryEntityType,
 } from '@cat-factory/contracts'
-import type {
-  DirectoryChangeRecord,
-  DirectoryRepoKey,
-  DirectoryRepository,
-  WorkspaceMembershipKey,
+import {
+  type DirectoryChangeRecord,
+  type DirectoryRepoKey,
+  type DirectoryRepository,
+  directoryChangeFromRow,
+  WORKSPACE_DIRECTORY_ENTITY_TYPES,
+  type WorkspaceMembershipKey,
 } from '@cat-factory/kernel'
 import { type SQL, and, asc, eq, gt, inArray, isNull, lte, max, min, or, sql } from 'drizzle-orm'
 import type { AnyPgColumn } from 'drizzle-orm/pg-core'
@@ -24,30 +24,12 @@ import {
   workspaceMembers,
   workspaces,
 } from '../db/schema.js'
+import { parseRoles } from './drizzle/accounts.js'
 
 // The directory read side over Postgres (docs/initiatives/directory-sync.md). Mirror of the
 // Cloudflare facade's `D1DirectoryRepository`; `defineDirectoryFeedSuite` and
 // `defineDirectoryReadSuite` hold the two to one behaviour. The feed rows themselves are appended
 // by the writing repositories through `directoryFeed.ts`.
-
-/** The entity types a key limited to some workspaces may read. */
-const WORKSPACE_ENTITY_TYPES = ['workspace', 'workspace_membership', 'repo']
-
-function rowToChange(row: typeof directoryChanges.$inferSelect): DirectoryChangeRecord {
-  // The vocabulary is append-only, so an unknown value is a row this build cannot interpret, not
-  // one to skip: a reader that dropped it would advance its cursor past a change it never served.
-  if (!isDirectoryEntityType(row.entity_type)) {
-    throw new Error(`Unknown directory entity type '${row.entity_type}' at seq ${row.seq}`)
-  }
-  return {
-    accountId: row.account_id,
-    seq: row.seq,
-    entityType: row.entity_type,
-    workspaceId: row.workspace_id,
-    entityId: row.entity_id,
-    at: row.at,
-  }
-}
 
 const workspaceColumns = {
   id: workspaces.id,
@@ -75,14 +57,6 @@ const userColumns = {
   name: users.name,
   email: users.email,
   avatarUrl: users.avatar_url,
-}
-
-function parseRoles(csv: string | null): AccountRole[] {
-  const roles = (csv ?? '')
-    .split(',')
-    .map((r) => r.trim())
-    .filter((r): r is AccountRole => r === 'admin' || r === 'developer' || r === 'product')
-  return roles.length > 0 ? [...new Set(roles)] : ['developer']
 }
 
 const accountMembershipColumns = {
@@ -178,15 +152,26 @@ export class DrizzleDirectoryRepository implements DirectoryRepository {
           eq(directoryChanges.account_id, accountId),
           gt(directoryChanges.seq, afterSeq),
           lte(directoryChanges.seq, upToSeq),
+          // A restricted key reads its workspaces' changes plus the deletion of ANY workspace that
+          // no longer exists: deleting a board also drops the key's grant on it, so without the
+          // second arm the key would never learn that a board it mirrored is gone.
           workspaceIds === null
             ? undefined
-            : inArray(directoryChanges.entity_type, WORKSPACE_ENTITY_TYPES),
-          reach(directoryChanges.workspace_id, workspaceIds),
+            : or(
+                and(
+                  inArray(directoryChanges.entity_type, [...WORKSPACE_DIRECTORY_ENTITY_TYPES]),
+                  reach(directoryChanges.workspace_id, workspaceIds),
+                ),
+                and(
+                  eq(directoryChanges.entity_type, 'workspace'),
+                  sql`NOT EXISTS (SELECT 1 FROM ${workspaces} WHERE ${workspaces.id} = ${directoryChanges.entity_id})`,
+                ),
+              ),
         ),
       )
       .orderBy(asc(directoryChanges.seq))
       .limit(limit)
-    return rows.map(rowToChange)
+    return rows.map(directoryChangeFromRow)
   }
 
   async headSeq(accountId: string): Promise<number> {
@@ -218,11 +203,18 @@ export class DrizzleDirectoryRepository implements DirectoryRepository {
   }
 
   async pruneChanges(before: number): Promise<number> {
+    // A `seq` PREFIX per account, up to its newest row older than the cutoff. `at` is not monotonic
+    // in `seq` (a writer stamps it before taking the feed's advisory lock), so deleting by `at`
+    // alone could remove a row while keeping an older-`seq` one, leaving a hole behind the oldest
+    // row that the reader's expiry check cannot see.
     const result = await this.db.execute(sql`
-      DELETE FROM directory_changes
-       WHERE at < ${before}
-         AND seq < (SELECT MAX(d.seq) FROM directory_changes d
-                     WHERE d.account_id = directory_changes.account_id)`)
+      WITH cut AS (SELECT account_id, MAX(seq) AS upto FROM directory_changes
+                    WHERE at < ${before} GROUP BY account_id)
+      DELETE FROM directory_changes c USING cut
+       WHERE c.account_id = cut.account_id
+         AND c.seq <= cut.upto
+         AND c.seq < (SELECT MAX(d.seq) FROM directory_changes d
+                       WHERE d.account_id = c.account_id)`)
     return result.rowCount ?? 0
   }
 

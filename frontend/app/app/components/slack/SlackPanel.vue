@@ -16,6 +16,7 @@ import {
 } from '~/utils/slackMemberMapping'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
+import SectionLabel from '~/components/common/SectionLabel.vue'
 
 const ui = useUiStore()
 const slack = useSlackStore()
@@ -55,6 +56,8 @@ const ROLE_OPTIONS = computed<{ label: string; value: SlackMemberRole }[]>(() =>
 ])
 
 // Local editable copies, synced from the store on load.
+const channelSuggestions = computed(() => slack.channels.map((ch) => `#${ch.name}`))
+
 const routes = reactive<Record<NotificationType, SlackRoute>>({
   merge_review: { enabled: false, channel: '' },
   pipeline_complete: { enabled: false, channel: '' },
@@ -224,9 +227,9 @@ async function saveMapping() {
             {{ t('slack.connect.addToSlack') }}
           </UButton>
           <div class="space-y-1">
-            <span class="block text-[10px] uppercase tracking-wide text-dimmed">
+            <SectionLabel as="span" class="block">
               {{ t('slack.connect.orPasteToken') }}
-            </span>
+            </SectionLabel>
             <div class="flex gap-2">
               <SecretInput v-model="tokenInput" size="sm" class="flex-1" placeholder="xoxb-…" />
               <UButton
@@ -267,9 +270,9 @@ async function saveMapping() {
 
           <!-- routing -->
           <div class="space-y-3">
-            <p class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+            <SectionLabel as="p">
               {{ t('slack.routing.heading') }}
-            </p>
+            </SectionLabel>
             <div
               v-for="row in ROUTABLE"
               :key="row.type"
@@ -277,18 +280,20 @@ async function saveMapping() {
             >
               <USwitch v-model="routes[row.type]!.enabled" size="sm" />
               <span class="w-32 text-sm text-toned">{{ row.label }}</span>
-              <UInput
+              <!-- The workspace's channels are suggestions, not a closed list: a route may name
+                   a channel the bot cannot enumerate yet. `mode="autocomplete"` is what makes the
+                   typed name the value: the DEFAULT combobox mode writes its model only when
+                   something is SELECTED, so a channel typed and then saved would be dropped. -->
+              <UInputMenu
                 v-model="routes[row.type]!.channel"
+                mode="autocomplete"
+                :items="channelSuggestions"
                 size="sm"
                 class="flex-1"
                 :placeholder="t('slack.routing.channelPlaceholder')"
                 :disabled="!routes[row.type]!.enabled"
-                list="slack-channels"
               />
             </div>
-            <datalist id="slack-channels">
-              <option v-for="ch in slack.channels" :key="ch.id" :value="`#${ch.name}`" />
-            </datalist>
 
             <label class="flex items-center gap-2">
               <USwitch v-model="mentionsEnabled" size="sm" />
@@ -311,10 +316,10 @@ async function saveMapping() {
 
           <!-- member mapping -->
           <div v-if="mentionsEnabled" class="space-y-2">
-            <p class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+            <SectionLabel as="p">
               {{ t('slack.members.heading') }}
-            </p>
-            <p class="text-[11px] leading-snug text-dimmed">
+            </SectionLabel>
+            <p class="text-2xs leading-snug text-dimmed">
               <i18n-t keypath="slack.members.hint" tag="span">
                 <template #product>
                   <span class="font-medium text-muted">{{ t('slack.members.productLabel') }}</span>

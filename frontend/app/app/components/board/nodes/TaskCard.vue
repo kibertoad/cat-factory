@@ -5,6 +5,7 @@ import { STATUS_META, MODULE_META, taskTypeMeta } from '~/utils/catalog'
 import { composeRunOutcome, hasOutcomeToShow } from '~/utils/runOutcome'
 import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
 import TaskPipelineMini from './TaskPipelineMini.vue'
+import IconButton from '~/components/common/IconButton.vue'
 
 const props = defineProps<{ taskId: string }>()
 
@@ -327,7 +328,7 @@ function selectTask() {
            hover. Renders a built-in OR a deployment-registered custom type via `taskTypeMeta`. -->
       <span
         v-if="typeBadge"
-        class="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded"
+        class="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm"
         :style="{ color: typeBadge.color, backgroundColor: tint(typeBadge.color) }"
         :title="typeBadge.label"
         :data-task-type-badge="task.taskType"
@@ -346,7 +347,7 @@ function selectTask() {
         "
       />
       <span
-        class="ms-auto truncate text-[9px] uppercase tracking-wide"
+        class="ms-auto truncate text-3xs uppercase tracking-wide"
         :class="
           runFailed
             ? 'text-app-error-400'
@@ -360,15 +361,19 @@ function selectTask() {
         {{ statusText }}
       </span>
       <!-- drag-to-connect handle: drag onto another task to make it depend on this one -->
-      <button
-        type="button"
-        class="nodrag shrink-0 cursor-crosshair touch-none rounded-full p-0.5 text-dimmed hover:bg-elevated hover:text-app-warning-400 pointer-coarse:p-2.5"
-        :title="t('board.task.dragToConnect')"
+      <IconButton
+        color="neutral"
+        variant="ghost"
+        icon="i-lucide-spline"
+        class="nodrag shrink-0"
+        :label="t('board.task.dragToConnect')"
+        :ui="{
+          base: 'cursor-crosshair touch-none rounded-full p-0.5 text-dimmed hover:bg-elevated hover:text-app-warning-400 pointer-coarse:p-2.5',
+          leadingIcon: 'h-3 w-3 pointer-coarse:h-5 pointer-coarse:w-5',
+        }"
         @pointerdown.stop="startConnect(task.id, $event)"
         @click.stop
-      >
-        <UIcon name="i-lucide-spline" class="h-3 w-3 pointer-coarse:h-5 pointer-coarse:w-5" />
-      </button>
+      />
     </div>
 
     <!-- title gets a full-width row so long titles wrap to two lines rather than
@@ -379,7 +384,7 @@ function selectTask() {
          title is the one always-rendered part of the body that no control can occupy. -->
     <div
       data-testid="task-title"
-      class="mt-1 line-clamp-2 break-words text-[11px] font-semibold leading-snug text-app-100"
+      class="mt-1 line-clamp-2 break-words text-2xs font-semibold leading-snug text-app-100"
       :title="task.title"
     >
       {{ task.title }}
@@ -415,7 +420,7 @@ function selectTask() {
       <span
         v-for="d in deps"
         :key="d.id"
-        class="inline-flex items-center gap-0.5 rounded bg-elevated/80 px-1 py-0.5 text-[9px]"
+        class="inline-flex items-center gap-0.5 rounded-sm bg-elevated/80 px-1 py-0.5 text-3xs"
         :class="d.status === 'done' ? 'text-muted' : 'text-app-warning-300'"
         :title="depLabel(d)"
       >
@@ -431,7 +436,7 @@ function selectTask() {
     <div class="nodrag mt-2 flex flex-wrap items-center gap-1">
       <!-- a reviewer gate folding/re-reviewing in the background: a working indicator,
            NOT a gate — the human is back on the board and summoned only if input is needed -->
-      <span v-if="reviewStage" class="inline-flex items-center gap-1 text-[9px] text-primary">
+      <span v-if="reviewStage" class="inline-flex items-center gap-1 text-3xs text-primary">
         <UIcon name="i-lucide-loader-circle" class="h-3 w-3 animate-spin" />
         {{ reviewStageLabel }}
       </span>
@@ -481,7 +486,7 @@ function selectTask() {
         </UButton>
         <span
           v-if="runnable && defaultPipeline"
-          class="inline-flex items-center gap-0.5 text-[9px] text-dimmed"
+          class="inline-flex items-center gap-0.5 text-3xs text-dimmed"
         >
           <UIcon name="i-lucide-workflow" class="h-2.5 w-2.5" />{{ defaultPipeline.name }}
         </span>
@@ -539,7 +544,7 @@ function selectTask() {
       <!-- A merged task is the one people come back to READ, so its result stays openable
            rather than collapsing to a tick the moment it lands. -->
       <template v-else-if="task.status === 'done'">
-        <span class="inline-flex items-center gap-1 text-[9px] text-app-success-400">
+        <span class="inline-flex items-center gap-1 text-3xs text-app-success-400">
           <UIcon name="i-lucide-check-check" class="h-3 w-3" /> {{ t('board.task.implemented') }}
         </span>
         <UButton
@@ -565,7 +570,7 @@ function selectTask() {
       class="mt-2 flex flex-wrap items-center gap-1 border-t border-default pt-2"
     >
       <span
-        class="inline-flex items-center gap-1 rounded bg-app-secondary-500/15 px-1.5 py-0.5 text-[9px] text-app-secondary-200"
+        class="inline-flex items-center gap-1 rounded-sm bg-app-secondary-500/15 px-1.5 py-0.5 text-3xs text-app-secondary-200"
         :title="t('board.task.module', { name: task.moduleName })"
       >
         <UIcon :name="MODULE_META.icon" class="h-3 w-3" :style="{ color: MODULE_META.color }" />

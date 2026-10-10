@@ -221,7 +221,7 @@ async function onDiscard() {
         </div>
 
         <template v-else>
-          <p class="mb-4 text-[13px] leading-relaxed text-toned">
+          <p class="mb-4 text-sm leading-relaxed text-toned">
             {{ t('initiative.planning.intro') }}
           </p>
 
@@ -259,7 +259,7 @@ async function onDiscard() {
                converged, which means the planner already has what it needs). -->
           <div
             v-else-if="phase === 'idle' && questions.length === 0"
-            class="rounded-lg border border-default bg-app-950/40 p-4 text-center text-[13px] text-muted"
+            class="rounded-lg border border-default bg-app-950/40 p-4 text-center text-sm text-muted"
             data-testid="initiative-planning-idle"
           >
             {{ t('initiative.planning.idle') }}
@@ -268,7 +268,7 @@ async function onDiscard() {
           <!-- Converged / no pending questions -->
           <div
             v-else-if="phase === 'converged' || questions.length === 0"
-            class="rounded-lg border border-default bg-app-950/40 p-4 text-center text-[13px] text-muted"
+            class="rounded-lg border border-default bg-app-950/40 p-4 text-center text-sm text-muted"
             data-testid="initiative-planning-converged"
           >
             {{ t('initiative.planning.converged') }}
@@ -301,7 +301,7 @@ async function onDiscard() {
                    flush could only drop. -->
               <p
                 v-if="!addressable(q)"
-                class="mt-1 text-[11px] text-app-warning-300"
+                class="mt-1 text-2xs text-app-warning-300"
                 data-testid="initiative-planning-unanswerable"
               >
                 {{ t('initiative.planning.unanswerable') }}
@@ -360,7 +360,7 @@ async function onDiscard() {
         v-if="phase === 'awaiting' && questions.length > 0"
         class="ms-auto flex items-center gap-2"
       >
-        <p class="text-[11px] text-dimmed">
+        <p class="text-2xs text-dimmed">
           <span
             v-if="unanswered > 0"
             class="text-app-warning-400/90"

@@ -220,7 +220,8 @@
         "recurring": "Yinelenen",
         "review": "İnceleme",
         "ralph": "Ralph döngüsü",
-        "bugFishing": "Hata avı"
+        "bugFishing": "Hata avı",
+        "resolveConflicts": "Çakışmaları çöz"
       },
       "recurringWithFrame": "Yinelenen bir görev, bir işlem hattını belirli bir aralıkta çalıştırır. Programı ve istemi ayarlamak için devam edin.",
       "recurringNoFrame": "Yinelenen bir görev bir serviste bulunmalıdır. Bir servis çerçevesinden (veya içindeki bir modülden) ekleyin.",
@@ -607,7 +608,8 @@
     "pastedLink": {
       "offer": "Bu açıklama bir {source} sayfasına bağlantı veriyor. Bağlam olarak eklensin mi?",
       "attach": "Ekle"
-    }
+    },
+    "removePending": "{name} öğesini kaldır"
   },
   "errors": {
     "generic": {
@@ -639,7 +641,8 @@
         "assistant_generation_failed": "Asistanın model sağlayıcısı yanıt vermedi. Doğru yapılandırılmış durumda ve burada kurulacak bir şey yok: isteği birazdan yeniden deneyin.",
         "assistant_reply_unreadable": "Asistanın modeli, bu platformun karar olarak uygulayamayacağı bir yanıt verdi. Yeniden ifade etmek nadiren işe yarar: model ayarlarından asistan için başka bir model seçin.",
         "delegated_executor_failed": "Dış yürütücü bu adımı başlatamadı. Sorun bu kurulumda değil, işi yapan sistemde: onun kendi günlüklerine bakıp yeniden deneyin.",
-        "delegated_work_branch_unprepared": "Platform, bu adımın yürütücüsünün gönderildiği çalışma dalını hazırlayamadı, bu yüzden hiçbir şey başlatılmadı. Ya depo bağlantısının bu dala yazma izni yok ya da görev henüz var olmayan bir dalı belirtiyor: ayrıntılar hangisi olduğunu söylüyor."
+        "delegated_work_branch_unprepared": "Platform, bu adımın yürütücüsünün gönderildiği çalışma dalını hazırlayamadı, bu yüzden hiçbir şey başlatılmadı. Ya depo bağlantısının bu dala yazma izni yok ya da görev henüz var olmayan bir dalı belirtiyor: ayrıntılar hangisi olduğunu söylüyor.",
+        "attached_pr_provider_unreachable": "Depo sağlayıcısı yanıt vermedi, bu yüzden pull request denetlenemedi ve görev oluşturulmadı. Burada ayarlanacak bir şey yok: birazdan yeniden deneyin."
       }
     },
     "reason": {
@@ -5303,7 +5306,8 @@
         "review": "İnceleme",
         "research": "Araştırma",
         "planning": "Planlama",
-        "media": "Medya"
+        "media": "Medya",
+        "maintenance": "PR bakımı"
       },
       "strategyOption": {
         "specialist-panel": "Uzman paneli",
@@ -5475,7 +5479,8 @@
         "releaseInteractive": "Uygulama içi varsayılan olmaktan çıkar",
         "claimUnattended": "Gözetimsiz varsayılan yap",
         "releaseUnattended": "Gözetimsiz varsayılan olmaktan çıkar"
-      }
+      },
+      "removeLabel": "{label} etiketini kaldır"
     },
     "progress": {
       "status": {
@@ -6399,7 +6404,8 @@
       "heading": "Referans tasarım yükle",
       "viewPlaceholder": "Görünüm adı (örn. login)",
       "tipReady": "İpucu: referansını ayarlamak için bir görseli doğrudan yukarıdaki bir çiftin üzerine bırakın.",
-      "tipNeedView": "Önce bir görünüm adı girin, ardından bir dosya seçin. Veya bir görseli doğrudan yukarıdaki bir çiftin üzerine bırakın."
+      "tipNeedView": "Önce bir görünüm adı girin, ardından bir dosya seçin. Veya bir görseli doğrudan yukarıdaki bir çiftin üzerine bırakın.",
+      "choose": "Dosya seç"
     },
     "requestFix": {
       "heading": "Düzeltme iste",
@@ -8529,6 +8535,7 @@
     "title": "Üretilen adaylar",
     "titleWithBlock": "Üretilen adaylar: {title}",
     "subtitle": "Her entegrasyonun ürettiğini karşılaştırın ve istediğinizi tutun",
+    "pickOne": "Birini seçin. Bir aday seçmek önceki seçimi kaldırır.",
     "automatic": "Yalnızca bir aday üretildi, bu yüzden otomatik olarak tutuldu. Kimse incelemedi.",
     "unlabelledSubject": "Konu bildirilmedi",
     "noPreview": "Önizleme yok",

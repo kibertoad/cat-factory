@@ -73,10 +73,10 @@ async function restore(serviceId: string) {
       <div class="min-w-0 flex-1">
         <p class="truncate text-sm text-toned">
           {{ s.name || s.id }}
-          <code v-if="s.name" class="ms-1 text-[11px] text-dimmed">{{ s.id }}</code>
+          <code v-if="s.name" class="ms-1 text-2xs text-dimmed">{{ s.id }}</code>
         </p>
         <p v-if="s.summary" class="text-xs text-dimmed">{{ s.summary }}</p>
-        <p v-if="!s.inherited" class="text-[11px] text-dimmed">
+        <p v-if="!s.inherited" class="text-2xs text-dimmed">
           {{ t('foundational.suppressions.shadowsNothing') }}
         </p>
       </div>

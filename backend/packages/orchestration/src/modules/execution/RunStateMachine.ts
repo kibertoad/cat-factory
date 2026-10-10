@@ -36,7 +36,7 @@ import {
   RunContendedError,
   runBestEffort,
 } from '@cat-factory/kernel'
-import { allPullRequests } from '@cat-factory/contracts'
+import { allPullRequests, taskTypeAttachesPullRequest } from '@cat-factory/contracts'
 import { MERGER_AGENT_KIND } from './ci.logic.js'
 import { type InitiativeRunHarvest, extractRunHarvest } from '../initiative/initiative.logic.js'
 import type { MergeTrackRecordService } from '../merge/MergeTrackRecordService.js'
@@ -923,8 +923,9 @@ export class RunStateMachine {
     // `pipeline_complete` card would strand it in a confirm-and-merge flow that has no PR to act
     // on. This is the no-PR terminal path the review/spike pipelines rely on to finish cleanly.
     // (`allPullRequests` already counts `block.pullRequest`, so a zero result means there is no
-    // primary PR nor any peer PR.)
-    if (allPullRequests(block).length === 0) {
+    // primary PR nor any peer PR.) A pull request the task ATTACHED belongs to whoever opened it,
+    // so it is not this run's to confirm or merge either.
+    if (allPullRequests(block).length === 0 || taskTypeAttachesPullRequest(block.taskType)) {
       await this.blockRepository.update(workspaceId, block.id, { status: 'done', progress: 1 })
       return
     }

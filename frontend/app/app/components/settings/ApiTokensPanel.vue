@@ -66,8 +66,11 @@ function requestedReach(): string[] | null | undefined {
   if (reach.value === 'all') return null
   return selectedWorkspaceIds.value
 }
+// Gated on `canWidenReach` like `requestedReach`: a hidden picker left on 'selected' must not
+// disable the create button.
 const reachIncomplete = computed(
-  () => reach.value === 'selected' && selectedWorkspaceIds.value.length === 0,
+  () =>
+    canWidenReach.value && reach.value === 'selected' && selectedWorkspaceIds.value.length === 0,
 )
 
 /** The reach badge for a listed key; none for a key reaching this one board. */
@@ -313,7 +316,7 @@ async function revokeToken(key: PublicApiKey) {
                   {{ boundLabel(key) }}
                 </UBadge>
               </div>
-              <div class="text-[11px] text-dimmed">
+              <div class="text-2xs text-dimmed">
                 {{
                   t('settings.apiTokens.list.created', {
                     date: d(new Date(key.createdAt), 'short'),

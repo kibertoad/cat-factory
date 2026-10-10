@@ -51,16 +51,16 @@ const draft = computed({
 <template>
   <div class="rounded-lg border border-default bg-app-950/40 p-3" data-testid="clarification-item">
     <div class="flex items-start justify-between gap-2">
-      <p class="text-[13px] font-medium text-default">{{ prompt }}</p>
+      <p class="text-sm font-medium text-default">{{ prompt }}</p>
       <slot name="badges" />
     </div>
-    <p v-if="detail" class="mt-1 whitespace-pre-wrap text-[12px] leading-relaxed text-muted">
+    <p v-if="detail" class="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-muted">
       {{ detail }}
     </p>
 
     <!-- dismissed: a "not relevant" chip + reopen -->
     <div v-if="dismissed" class="mt-2 flex items-center justify-between gap-2">
-      <span class="inline-flex items-center gap-1 text-[11px] text-dimmed">
+      <span class="inline-flex items-center gap-1 text-2xs text-dimmed">
         <UIcon name="i-lucide-x" class="h-3.5 w-3.5" />{{ t('clarification.dismissed') }}
       </span>
       <UButton
@@ -79,7 +79,7 @@ const draft = computed({
     <!-- a recommendation is being requested/generated: a working chip, no answer box -->
     <div
       v-else-if="requested"
-      class="mt-2 inline-flex items-center gap-1 text-[11px] text-primary"
+      class="mt-2 inline-flex items-center gap-1 text-2xs text-primary"
       data-testid="clarification-requested"
     >
       <UIcon name="i-lucide-loader-circle" class="h-3.5 w-3.5 animate-spin" />
@@ -131,10 +131,10 @@ const draft = computed({
         class="mt-2 rounded-md border border-primary/50 bg-primary/10 p-2"
         data-testid="clarification-recommendation"
       >
-        <div class="mb-1 flex items-center gap-1 text-[10px] uppercase tracking-wide text-primary">
+        <div class="mb-1 flex items-center gap-1 text-3xs uppercase tracking-wide text-primary">
           <UIcon name="i-lucide-wand-2" class="h-3 w-3" />{{ t('clarification.suggestion') }}
         </div>
-        <p class="whitespace-pre-wrap text-[12px] text-default">{{ recommendation }}</p>
+        <p class="whitespace-pre-wrap text-xs text-default">{{ recommendation }}</p>
         <UButton
           class="mt-1.5"
           size="xs"

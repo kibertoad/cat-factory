@@ -87,6 +87,8 @@ export class D1PublicApiKeyRepository implements PublicApiKeyRepository {
       .bind(id)
       .first<PublicApiKeyRow>()
     if (!row) return null
+    // An unrestricted key has no grant rows, so the authentication hot path skips the second read.
+    if (row.all_workspaces === 1) return rowToRecord(row, [])
     const grants = await this.grantsOf([row.id])
     return rowToRecord(row, grants.get(row.id) ?? [])
   }
@@ -101,8 +103,21 @@ export class D1PublicApiKeyRepository implements PublicApiKeyRepository {
       .bind(accountId)
       .all<PublicApiKeyRow>()
     const rows = results ?? []
-    const grants = await this.grantsOf(rows.map((r) => r.id))
+    const grants = await this.grantsOf(rows.filter((r) => r.all_workspaces !== 1).map((r) => r.id))
     return rows.map((row) => rowToRecord(row, grants.get(row.id) ?? []))
+  }
+
+  async countLiveByAccount(accountId: string): Promise<number> {
+    const row = await this.db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM public_api_keys k
+          WHERE k.account_id = ? AND k.revoked_at IS NULL
+            AND (k.all_workspaces = 1
+              OR EXISTS (SELECT 1 FROM public_api_key_workspaces g WHERE g.key_id = k.id))`,
+      )
+      .bind(accountId)
+      .first<{ n: number }>()
+    return row?.n ?? 0
   }
 
   async markUsed(id: string, at: number): Promise<void> {
