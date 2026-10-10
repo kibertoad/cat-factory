@@ -2632,7 +2632,7 @@
     },
     "kaizenModelBanner": {
       "title": "Kaizen can't grade with its current model",
-      "body": "The Kaizen agent is on, but the model it would grade with can't run the inline grader (a subscription-only model with no inline harness, or one that isn't configured). Grading is skipped until you point Kaizen at a compatible provider-backed model.",
+      "body": "The Kaizen agent is on, but its model runs only on a subscription this deployment can't use for inline calls, so it can't run the grader. Grading is skipped until you point Kaizen at a provider-backed model.",
       "action": "Set Kaizen model"
     },
     "githubPatBanner": {

@@ -2495,7 +2495,7 @@
     },
     "kaizenModelBanner": {
       "title": "Kaizen nie może oceniać przy obecnym modelu",
-      "body": "Agent Kaizen jest włączony, ale model, którym miałby oceniać, nie może uruchomić oceniającego w trybie inline (model dostępny tylko w subskrypcji bez uprzęży inline lub model nieskonfigurowany). Ocenianie jest pomijane, dopóki nie wskażesz dla Kaizen zgodnego modelu obsługiwanego przez dostawcę.",
+      "body": "Agent Kaizen jest włączony, ale jego model działa tylko w ramach subskrypcji, której to wdrożenie nie może użyć do wywołań inline, więc nie może uruchomić oceny. Ocena jest pomijana, dopóki nie przypiszesz Kaizenowi modelu obsługiwanego przez dostawcę.",
       "action": "Ustaw model Kaizen"
     },
     "githubPatBanner": {

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { createRecordingLogger } from '@cat-factory/kernel'
 import type {
   Block,
   ExecutionInstance,
@@ -191,6 +192,63 @@ describe('KaizenService.scheduleForRun model-fitness skip', () => {
     )
     await service.scheduleForRun('ws', instance)
     expect(kaizenGradingRepository.upsert).not.toHaveBeenCalled()
+  })
+
+  it('counts and logs a skip, checking capabilities on the workspace scope with no initiator', async () => {
+    // The grader runs with no signed-in person, so the check must not see the initiator's
+    // personal credentials: it would schedule rows `runGrading` can only fail.
+    const logger = createRecordingLogger()
+    const metrics = { increment: vi.fn() }
+    const resolveProviderCapabilities = vi.fn().mockResolvedValue(CAPS)
+    const { service } = makeSchedulerService({
+      resolvePresetRouting: routingTo('claude-sonnet'),
+      resolveProviderCapabilities,
+      logger,
+      metrics,
+    })
+    await service.scheduleForRun('ws', instance)
+    expect(resolveProviderCapabilities).toHaveBeenCalledWith('ws', undefined, undefined)
+    expect(metrics.increment).toHaveBeenCalledWith('kaizen.grading_skipped')
+    expect(logger.lines).toContainEqual(
+      expect.objectContaining({
+        level: 'info',
+        fields: expect.objectContaining({ executionId: 'exe_1' }),
+      }),
+    )
+  })
+
+  it('schedules as before when no preset routing is wired and the block pins nothing', async () => {
+    // Nothing names a Kaizen model, so the grader runs on the routing default as it always did.
+    const { service, kaizenGradingRepository } = makeSchedulerService({
+      resolvePresetRouting: undefined,
+    })
+    await service.scheduleForRun('ws', instance)
+    expect(kaizenGradingRepository.upsert).toHaveBeenCalledTimes(1)
+  })
+
+  it('resolves no capabilities when no step is left to schedule', async () => {
+    const resolveProviderCapabilities = vi.fn().mockResolvedValue(CAPS)
+    const { service, kaizenGradingRepository } = makeSchedulerService({
+      resolveProviderCapabilities,
+      resolvePresetRouting: routingTo('claude-sonnet'),
+    })
+    kaizenGradingRepository.getByStep.mockResolvedValue({ id: 'kzn_existing' })
+    await service.scheduleForRun('ws', instance)
+    expect(resolveProviderCapabilities).not.toHaveBeenCalled()
+    expect(kaizenGradingRepository.upsert).not.toHaveBeenCalled()
+  })
+
+  it('settles the row failed when the capability resolution throws during grading', async () => {
+    const { service, kaizenGradingRepository } = makeSchedulerService({
+      resolveProviderCapabilities: vi.fn().mockRejectedValue(new Error('keys store down')),
+      resolvePresetRouting: routingTo('cloudflare-llama'),
+    })
+    const grading = { id: 'kzn_1', blockId: 'task_login', status: 'scheduled' }
+    await service.runGrading('ws', grading as never)
+    expect(kaizenGradingRepository.upsert).toHaveBeenLastCalledWith(
+      'ws',
+      expect.objectContaining({ status: 'failed', error: 'keys store down' }),
+    )
   })
 
   it('schedules as before when no capability resolver is wired', async () => {

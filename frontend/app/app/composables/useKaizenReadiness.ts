@@ -2,15 +2,16 @@
  * Kaizen-grader readiness for the active workspace. Kaizen grades each agent step after a run
  * through an INLINE LLM call, so, like the requirements reviewer, its model must be
  * inline-runnable. A workspace whose Kaizen model resolves to a subscription-only model this
- * deployment can't run inline (or to nothing usable) can't grade at all: the backend skips those
+ * deployment can't run inline can't grade at all: the backend skips those
  * runs instead of failing on the degraded routing default, and this composable drives the banner
  * that steers the user to a compatible model.
  *
  *  - `enabled`: is the Kaizen agent turned on for this workspace?
- *  - `modelUnfit`: Kaizen is on, the workspace HAS usable AI, but the model it would grade with
- *    can't drive the inline grader (the banner). Gated on `hasUsableModel` so the broader "no AI
- *    configured at all" prompt (`AiProvidersBanner`) owns that case on its own, and on the default
- *    preset having loaded so the banner does not flash while the presets are still in flight.
+ *  - `modelUnfit`: Kaizen is on and the model it would grade with is usable, but can't drive the
+ *    inline grader (the banner). `AiProvidersBanner` owns both "no AI configured at all" and "the
+ *    default preset names an unusable model", so this one fires only for the subscription-only
+ *    case. Gated on the default preset having loaded so it does not flash while the presets are
+ *    still in flight.
  *
  * Read-only over the existing stores (settings, presets and the per-workspace model catalog, whose
  * `inlineUsable` flag the backend computes with the deployment's inline-harness seam). It reads
@@ -21,15 +22,8 @@ export function useKaizenReadiness() {
   const models = useModelsStore()
   const modelPresets = useModelPresetsStore()
   const settings = useWorkspaceSettingsStore()
-  const workspace = useWorkspaceStore()
-
   /** The per-workspace catalog has loaded for the workspace currently open. */
-  const ready = computed(
-    () =>
-      models.loaded &&
-      workspace.workspaceId != null &&
-      models.loadedWorkspaceId === workspace.workspaceId,
-  )
+  const { ready } = useAiReadiness()
 
   const enabled = computed(() => settings.settings.kaizenEnabled)
 
@@ -38,14 +32,19 @@ export function useKaizenReadiness() {
 
   const model = computed(() => models.getModel(modelId.value))
 
-  /** Kaizen is on and there IS usable AI, but its model can't run the inline grader. */
+  /**
+   * Kaizen is on and its model is usable, but it can't run the inline grader. An UNUSABLE model
+   * is left to `AiProvidersBanner`'s preset-mismatch prompt, which already names it, so the two
+   * banners never stack over one cause.
+   */
   const modelUnfit = computed(
     () =>
       ready.value &&
       enabled.value &&
       models.hasUsableModel &&
       modelPresets.defaultPreset != null &&
-      model.value?.inlineUsable !== true,
+      model.value?.available === true &&
+      model.value.inlineUsable === false,
   )
 
   return { ready, enabled, modelId, model, modelUnfit }

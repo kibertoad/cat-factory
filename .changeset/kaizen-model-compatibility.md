@@ -1,5 +1,7 @@
 ---
 '@cat-factory/contracts': minor
+'@cat-factory/kernel': minor
+'@cat-factory/observability-otel': patch
 '@cat-factory/orchestration': patch
 '@cat-factory/server': patch
 '@cat-factory/app': patch
@@ -15,3 +17,8 @@ Kaizen model runs only on a subscription the deployment can't use inline. The pe
 model catalog (`GET /workspaces/:ws/models`, not the public `/api/v1/models`) now carries an
 `inlineUsable` flag, computed with the deployment's inline-harness seam, that drives both
 surfaces. Kaizen can still be turned off with the existing workspace setting.
+
+Each skipped run is logged and counted under the new `kaizen.grading_skipped` operational
+counter (exported as `cat_factory.platform.kaizen_gradings_skipped`), since the banner reads only
+the workspace default preset and a task under another preset or with its own pin is skipped with
+nothing in the SPA to say so.

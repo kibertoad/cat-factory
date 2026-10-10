@@ -2495,7 +2495,7 @@
     },
     "kaizenModelBanner": {
       "title": "Kaizen ne peut pas évaluer avec son modèle actuel",
-      "body": "L'agent Kaizen est activé, mais le modèle avec lequel il évaluerait ne peut pas exécuter l'évaluateur en ligne (un modèle uniquement sur abonnement sans harnais en ligne, ou un modèle non configuré). L'évaluation est ignorée jusqu'à ce que vous attribuiez à Kaizen un modèle compatible fourni par un fournisseur.",
+      "body": "L'agent Kaizen est activé, mais son modèle ne fonctionne qu'avec un abonnement que ce déploiement ne peut pas utiliser pour les appels en ligne, il ne peut donc pas exécuter l'évaluateur. L'évaluation est ignorée tant que vous n'attribuez pas à Kaizen un modèle adossé à un fournisseur.",
       "action": "Définir le modèle de Kaizen"
     },
     "githubPatBanner": {

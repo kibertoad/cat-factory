@@ -2495,7 +2495,7 @@
     },
     "kaizenModelBanner": {
       "title": "Kaizen mevcut modeliyle değerlendirme yapamıyor",
-      "body": "Kaizen aracısı açık, ancak değerlendirme yapacağı model satır içi değerlendiriciyi çalıştıramıyor (satır içi donanımı olmayan yalnızca abonelikle kullanılabilen bir model ya da yapılandırılmamış bir model). Kaizen'i uyumlu, sağlayıcı destekli bir modele yönlendirene kadar değerlendirme atlanır.",
+      "body": "Kaizen ajanı açık, ancak modeli yalnızca bu dağıtımın satır içi çağrılar için kullanamadığı bir abonelikle çalıştığından değerlendiriciyi çalıştıramıyor. Kaizen'e sağlayıcı destekli bir model atayana kadar değerlendirme atlanır.",
       "action": "Kaizen modelini ayarla"
     },
     "githubPatBanner": {

@@ -2495,7 +2495,7 @@
     },
     "kaizenModelBanner": {
       "title": "Kaizen no puede evaluar con su modelo actual",
-      "body": "El agente Kaizen está activado, pero el modelo con el que evaluaría no puede ejecutar el evaluador en línea (un modelo solo de suscripción sin arnés en línea, o uno que no está configurado). La evaluación se omite hasta que asignes a Kaizen un modelo compatible respaldado por un proveedor.",
+      "body": "El agente Kaizen está activado, pero su modelo solo funciona con una suscripción que este despliegue no puede usar para llamadas en línea, así que no puede ejecutar el evaluador. La evaluación se omite hasta que asignes a Kaizen un modelo respaldado por un proveedor.",
       "action": "Configurar modelo de Kaizen"
     },
     "githubPatBanner": {
