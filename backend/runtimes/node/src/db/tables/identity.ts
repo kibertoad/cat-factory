@@ -272,3 +272,25 @@ export const machineNodes = pgTable(
     index('idx_machine_nodes_expiry').on(t.expires_at),
   ],
 )
+
+// The directory change feed (docs/initiatives/directory-sync.md): which directory entity changed,
+// ordered per account. Rows are appended by the repositories that write users, memberships,
+// workspaces and the repo projection, inside the same transaction and after a per-account advisory
+// lock, so commit order equals `seq` order. No foreign keys: a row must outlive the entity it
+// names. Mirrors the D1 table (0107_directory_changes.sql).
+export const directoryChanges = pgTable(
+  'directory_changes',
+  {
+    account_id: text('account_id').notNull(),
+    seq: bigint('seq', { mode: 'number' }).notNull(),
+    entity_type: text('entity_type').notNull(),
+    workspace_id: text('workspace_id'),
+    entity_id: text('entity_id').notNull(),
+    at: bigint('at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.account_id, t.seq] }),
+    // The retention sweep prunes on `at < ?`; same TTL-index convention as the tables above.
+    index('idx_directory_changes_at').on(t.at),
+  ],
+)

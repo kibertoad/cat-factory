@@ -1,0 +1,160 @@
+# Initiative: directory sync for external systems
+
+**Status:** in progress: slice 1 (change feed recording) · **Owner:** core · **Started:** 2026-10-09
+
+> This is the durable source of truth for a multi-PR initiative. Read it first before picking up
+> the next slice; update the checklist at the end of each PR.
+
+## Goal and rationale
+
+External systems want to treat cat-factory as the system of record for an account's people and
+repositories: who is in the account, which workspaces they can reach and with what role, and which
+repositories each workspace has linked. Polling the session-authed SPA routes is neither possible
+(no public endpoint lists users or members) nor fast (a full roster read per check).
+
+The target: an integration keeps a local copy of the account's directory that is
+
+- **fresh**: a change reaches it within seconds, through a signed webhook carrying the entity;
+- **complete**: a missed or dropped webhook is recovered by pulling an ordered change feed from
+  the integration's own cursor, never by guessing;
+- **verifiable**: a periodic full reconciliation (snapshot plus feed replay) repairs any drift, and
+  is the recovery path once a cursor falls out of the feed's retention.
+
+And it is cheap to build: a hand-written Node package does the verification, deduplication, catch-up
+and reconciliation, so the integrator writes only a storage adapter.
+
+## Consumption model
+
+The three channels have distinct jobs, and the design depends on keeping them distinct.
+
+| Channel                          | Carries                                      | Guarantee                  | Job                     |
+| -------------------------------- | -------------------------------------------- | -------------------------- | ----------------------- |
+| Webhook (`directory.*`)          | the entity's current state plus its `seq`    | best-effort, at-least-once | latency                 |
+| `GET /api/v1/directory/changes`  | ordered changes after a cursor               | complete within retention  | completeness            |
+| `GET /api/v1/directory/{entity}` | a paged snapshot plus an `asOfSeq` watermark | point-in-time              | drift repair, bootstrap |
+
+Webhook delivery stays inline and best-effort, exactly as [ADR 0030](../../backend/docs/adr/0030-public-api-surface.md)
+designed it: no outbox, no delivery queue. Completeness comes from the feed, so a dropped delivery
+costs latency until the next feed pull, never correctness. A receiver applies a delivery only when
+its `seq` is newer than the `seq` it holds for that entity, which makes out-of-order and duplicate
+deliveries harmless without contiguous-sequence gap detection. Contiguity cannot be promised anyway,
+because a key restricted to some workspaces sees a filtered feed.
+
+## Entities
+
+Each change names one entity. The feed records WHICH entity changed; a reader hydrates its CURRENT
+state at read time, and an entity that no longer exists (or is no longer visible to the reader) is
+served as a deletion. State-based hydration is what makes duplicate change rows harmless and lets
+hard-deleted rows (users, memberships) be represented without soft-delete columns.
+
+| Entity                 | Key                    | Visible in account A when                                                        |
+| ---------------------- | ---------------------- | -------------------------------------------------------------------------------- |
+| `workspace`            | workspace id           | the workspace belongs to A                                                       |
+| `user`                 | user id                | the user holds a membership in A                                                 |
+| `account_membership`   | user id                | the membership row exists                                                        |
+| `workspace_membership` | workspace id + user id | the row exists and its workspace belongs to A                                    |
+| `repo`                 | workspace id + repo id | the `github_repos` row exists, is not tombstoned, and its workspace belongs to A |
+
+A user is a global identity, so a profile change appends one change per account the user belongs
+to. Adding or removing an account membership also appends a `user` change for that account, since
+the user's visibility in it changed.
+
+## Target design
+
+### Change feed (`directory_changes`)
+
+Append-only rows `(account_id, seq, entity_type, workspace_id, entity_id, at)`, primary key
+`(account_id, seq)`. `seq` is per account, strictly increasing, and assigned so that COMMIT order
+equals `seq` order. Without that a reader at cursor 9 could observe 11, advance past it, and never
+see 10 when it commits a moment later.
+
+- **Postgres**: every append runs inside the writing transaction, after
+  `pg_advisory_xact_lock(<feed class>, hashtext(account_id))`. The lock serializes appenders per
+  account until commit, so `MAX(seq) + ROW_NUMBER()` is safe and commit order matches.
+- **D1**: the append is a statement in the same `db.batch` as the write. SQLite serializes writers
+  and a batch is one transaction, so the same `MAX(seq) + ROW_NUMBER()` expression is safe.
+- The append happens INSIDE the repository method that performs the write, never in the service
+  calling it, so no writer can bypass the feed. A cascaded delete (workspace deletion) appends the
+  rows it is about to remove in the same batch, before removing them.
+- Repo sync re-stamps `synced_at` on every pass, so the repo writers append only for rows whose
+  synced fields actually changed.
+- **Retention**: rows older than the retention window are pruned, except the newest row per
+  account, which must survive or `MAX(seq)` would restart and reissue sequence numbers.
+
+### Account-level API keys with an optional workspace subset
+
+A key belongs to an account. It may be limited to a subset of the account's workspaces; `null`
+means every workspace, including ones created later. Existing keys become account keys restricted
+to their one workspace, so their behaviour is unchanged.
+
+- Workspace-scoped `/api/v1` routes resolve their workspace per request: from the
+  `x-cat-factory-workspace` header when present, otherwise implicitly when the key is restricted
+  to exactly one workspace. A key that could reach several workspaces and sends no header is
+  refused with `details.reason: workspace_required`; a workspace outside the key's subset is a 404,
+  matching how RBAC hides boards.
+- `PublicApiKeyAuth.workspaceId` keeps meaning "the workspace this request acts on", resolved
+  inside `authorize`, so the workspace-scoped controllers need no change.
+- Directory routes are account-scoped and need no header. A restricted key sees `workspace`,
+  `workspace_membership` and `repo` entities of its workspaces only, plus the `user` entities those
+  memberships reference; `account_membership` requires an unrestricted key.
+- This is additive under [ADR 0034](../../backend/docs/adr/0034-public-api-stability.md): no existing
+  key or call changes meaning, and the header is optional for every key minted today.
+
+### Public read API
+
+- `GET /api/v1/directory/changes?after=<seq>&limit=` returns hydrated changes and `nextAfter`. A
+  cursor older than retention is refused with a 410-class error, `details.reason: cursor_expired`,
+  which tells the client to reconcile from a snapshot.
+- `GET /api/v1/directory/{workspaces,users,account-memberships,workspace-memberships,repos}`:
+  keyset-paged snapshots. Every page carries the same `asOfSeq`, captured with the first page and
+  echoed in the cursor; the client replays the feed from it after the last page.
+- All `read` scope. New operations join `scripts/sdk/surface.mjs` under a `directory` group.
+
+### Webhooks
+
+A `directory.*` event family (`directory.changed`, carrying `{ seq, entityType, key, entity |
+null }`) on account-level webhook endpoints, signed with the existing scheme
+(`x-cat-factory-timestamp`, `x-cat-factory-signature: v1=...`). The delivery envelopes are added to
+the OpenAPI `webhooks` section so every SDK gets typed payloads; the existing run and notification
+envelopes join them there. Emission is a best-effort post-commit fan-out from the same feed rows
+the writer appended.
+
+### Node package `@cat-factory/directory-sync`
+
+Hand-written, modelled on `sdk/gatekeeper-worker`. Signature verification moves out of
+gatekeeper-worker into a shared `@cat-factory/webhooks` package both depend on.
+
+- `verifyDelivery(headers, rawBody, secret)`: constant-time, Web Crypto, workerd-safe.
+- `DirectorySyncer` over a `DirectoryStore` adapter the integrator implements (get and save the
+  cursor, upsert or delete an entity with its `seq`, list local keys for reconciliation).
+- `handleDelivery(headers, rawBody)`, `catchUp()` (feed pull from the stored cursor) and
+  `reconcile()` (snapshot, diff, delete what is absent, replay from `asOfSeq`). `catchUp()` falls
+  back to `reconcile()` on `cursor_expired`.
+
+## Checklist
+
+- [x] **Slice 1: change feed recording** ([#2307](https://github.com/kibertoad/cat-factory/pull/2307)). `directory_changes` table (D1
+      0107, Drizzle), the `DirectoryChangeRepository` read port, appends inside every user, account
+      membership, workspace, workspace membership and repo projection writer on both runtimes (the
+      local CLI `linkRepo` now writes through the repository), `defineDirectoryFeedSuite`.
+      The read repository is not in `CoreRepositories` yet because nothing consumes it: slice 3
+      adds it there with mothership bucket `remote`.
+- [ ] **Slice 2: account-level API keys with a workspace subset.** Key storage and mint contract,
+      per-request workspace resolution in `authorize`, `/me` reports the subset, SPA key panel.
+- [ ] **Slice 3: public directory read API.** Hydration, snapshot and changes endpoints, retention
+      pruning on both schedulers, `cursor_expired`, OpenAPI plus SDK regeneration, website page.
+- [ ] **Slice 4: `directory.*` webhooks.** Account-level endpoints, post-commit fan-out, delivery
+      envelopes in the OpenAPI `webhooks` section.
+- [ ] **Slice 5: `@cat-factory/webhooks` and `@cat-factory/directory-sync`.** Extract verification
+      from gatekeeper-worker, ship the syncer with an in-memory store example.
+- [ ] Convert this tracker to an ADR.
+
+## Gotchas
+
+- **Commit order must equal `seq` order.** A global sequence or a `MAX(seq) + 1` without the
+  per-account lock hands out numbers in one order and commits them in another, and a reader skips
+  the late one forever. Any new appender takes the lock (Postgres) or rides the writer's batch (D1).
+- **Never prune an account's newest change row.** It is what `MAX(seq)` continues from.
+- **A cascade deletes rows no repository method sees.** Workspace deletion removes members and
+  repos through `WORKSPACE_SCOPED_TABLES`; its batch appends their changes before the deletes.
+  A new cascade path touching these tables needs the same treatment.

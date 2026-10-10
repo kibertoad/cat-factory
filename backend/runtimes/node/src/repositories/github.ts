@@ -15,8 +15,15 @@ import type {
   SyncCursor,
   SyncCursorKind,
 } from '@cat-factory/kernel'
+import { changedDirectoryRepoIds } from '@cat-factory/kernel'
 import { and, desc, eq, inArray, isNull, lt, notInArray, sql } from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
+import {
+  appendDirectoryChanges,
+  lockDirectoryFeed,
+  reposSource,
+  workspaceSource,
+} from './directoryFeed.js'
 import {
   githubBranches,
   githubCheckRuns,
@@ -84,42 +91,70 @@ export class DrizzleRepoProjectionRepository implements RepoProjectionRepository
   async upsertMany(workspaceId: string, repos: GitHubRepo[]): Promise<void> {
     if (repos.length === 0) return
     // `is_monorepo` and `linked_via` are link-owned (set via setMonorepo / at link time),
-    // not sync — the update set deliberately omits them so sync never clobbers them.
+    // not sync: the update set deliberately omits them so sync never clobbers them. Each chunk is
+    // its own transaction, so a large sync holds the account's feed lock for one chunk at a time.
+    const at = Date.now()
     for (const batch of chunks(
       dedupeByKey(repos, (r) => String(r.githubId)),
       UPSERT_CHUNK,
     )) {
-      await this.db
-        .insert(githubRepos)
-        .values(
-          batch.map((repo) => ({
-            workspace_id: workspaceId,
-            github_id: repo.githubId,
-            installation_id: repo.installationId,
-            owner: repo.owner,
-            name: repo.name,
-            default_branch: repo.defaultBranch,
-            private: intBool(repo.private),
-            is_monorepo: intBool(repo.isMonorepo ?? false),
-            linked_via: repo.linkedVia ?? 'app',
-            provider: repo.provider ?? 'github',
-            synced_at: repo.syncedAt,
-            deleted_at: null,
+      await this.db.transaction(async (tx) => {
+        await lockDirectoryFeed(tx, workspaceSource(workspaceId))
+        const stored = await tx
+          .select()
+          .from(githubRepos)
+          .where(
+            and(
+              eq(githubRepos.workspace_id, workspaceId),
+              inArray(
+                githubRepos.github_id,
+                batch.map((r) => r.githubId),
+              ),
+            ),
+          )
+        const changed = changedDirectoryRepoIds(
+          stored.map((row) => ({
+            ...rowToRepo(row),
+            provider: row.provider === 'gitlab' ? 'gitlab' : 'github',
+            tombstoned: row.deleted_at !== null,
           })),
+          batch,
         )
-        .onConflictDoUpdate({
-          target: [githubRepos.workspace_id, githubRepos.github_id],
-          set: {
-            installation_id: excluded(githubRepos.installation_id),
-            owner: excluded(githubRepos.owner),
-            name: excluded(githubRepos.name),
-            default_branch: excluded(githubRepos.default_branch),
-            private: excluded(githubRepos.private),
-            provider: excluded(githubRepos.provider),
-            synced_at: excluded(githubRepos.synced_at),
-            deleted_at: null,
-          },
-        })
+        await tx
+          .insert(githubRepos)
+          .values(
+            batch.map((repo) => ({
+              workspace_id: workspaceId,
+              github_id: repo.githubId,
+              installation_id: repo.installationId,
+              owner: repo.owner,
+              name: repo.name,
+              default_branch: repo.defaultBranch,
+              private: intBool(repo.private),
+              is_monorepo: intBool(repo.isMonorepo ?? false),
+              linked_via: repo.linkedVia ?? 'app',
+              provider: repo.provider ?? 'github',
+              synced_at: repo.syncedAt,
+              deleted_at: null,
+            })),
+          )
+          .onConflictDoUpdate({
+            target: [githubRepos.workspace_id, githubRepos.github_id],
+            set: {
+              installation_id: excluded(githubRepos.installation_id),
+              owner: excluded(githubRepos.owner),
+              name: excluded(githubRepos.name),
+              default_branch: excluded(githubRepos.default_branch),
+              private: excluded(githubRepos.private),
+              provider: excluded(githubRepos.provider),
+              synced_at: excluded(githubRepos.synced_at),
+              deleted_at: null,
+            },
+          })
+        if (changed.length > 0) {
+          await appendDirectoryChanges(tx, reposSource(workspaceId, changed), at)
+        }
+      })
     }
   }
 
@@ -182,21 +217,39 @@ export class DrizzleRepoProjectionRepository implements RepoProjectionRepository
       eq(githubRepos.installation_id, installationId),
       isNull(githubRepos.deleted_at),
     )
-    await this.db
-      .update(githubRepos)
-      .set({ deleted_at: at })
-      .where(
-        seenGithubIds.length === 0
-          ? base
-          : and(base, notInArray(githubRepos.github_id, seenGithubIds)),
-      )
+    await this.db.transaction(async (tx) => {
+      await lockDirectoryFeed(tx, workspaceSource(workspaceId))
+      const tombstoned = await tx
+        .update(githubRepos)
+        .set({ deleted_at: at })
+        .where(
+          seenGithubIds.length === 0
+            ? base
+            : and(base, notInArray(githubRepos.github_id, seenGithubIds)),
+        )
+        .returning({ githubId: githubRepos.github_id })
+      if (tombstoned.length > 0) {
+        await appendDirectoryChanges(
+          tx,
+          reposSource(
+            workspaceId,
+            tombstoned.map((r) => r.githubId),
+          ),
+          at,
+        )
+      }
+    })
   }
 
   async setMonorepo(workspaceId: string, githubId: number, isMonorepo: boolean): Promise<void> {
-    await this.db
-      .update(githubRepos)
-      .set({ is_monorepo: intBool(isMonorepo) })
-      .where(and(eq(githubRepos.workspace_id, workspaceId), eq(githubRepos.github_id, githubId)))
+    await this.db.transaction(async (tx) => {
+      await lockDirectoryFeed(tx, workspaceSource(workspaceId))
+      await tx
+        .update(githubRepos)
+        .set({ is_monorepo: intBool(isMonorepo) })
+        .where(and(eq(githubRepos.workspace_id, workspaceId), eq(githubRepos.github_id, githubId)))
+      await appendDirectoryChanges(tx, reposSource(workspaceId, [githubId]), Date.now())
+    })
   }
 
   async listStale(olderThanEpochMs: number): Promise<StaleRepoRef[]> {

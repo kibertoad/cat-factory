@@ -151,9 +151,15 @@ export type WorkspaceScopedTable = (typeof WORKSPACE_SCOPED_TABLES)[number]
  * therefore not simply cascaded here: `WorkspaceService.delete` runs one final per-workspace
  * fold (`SpendRollupRepository.rollupWorkspaceSpendDays`) BEFORE this cascade runs, so what the
  * table keeps of a deleted board ends where the board did.
+ *
+ * `directory_changes` is KEPT too, and for a stricter reason: the board's deletion is itself a
+ * change the feed must publish. The delete appends the board's own change and one per member and
+ * repo row it is about to remove, so an external mirror learns they are gone; reclaiming those rows
+ * in the same batch would erase the only record of it. The feed's retention prunes them.
  */
 export const WORKSPACE_CASCADE_SPECIAL_TABLES = [
   'workspace_services',
   'binary_artifacts',
   'spend_days',
+  'directory_changes',
 ] as const
