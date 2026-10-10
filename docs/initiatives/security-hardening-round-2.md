@@ -60,7 +60,7 @@ Non-blocking notes (no code fix scoped) are listed under "Notes & accepted risks
 
 **SEC-8 and SEC-11 are deferred to a dedicated harness PR**: both touch
 `backend/internal/executor-harness/src/**`, which mandates a runner-image tag bump (see
-CLAUDE.md "Releases & changesets"). They are the two lowest-severity items (Low + Very-Low, both
+AGENTS.md "Releases & changesets"). They are the two lowest-severity items (Low + Very-Low, both
 "not currently exploitable"), so they are batched into that separate image-bumping change rather
 than entangling this shared-package PR with an image republish.
 
@@ -395,7 +395,7 @@ own `exp`.
 **Why it is not fixed in the round-2 P1 PR.** Severing it needs a revocation signal that reaches
 whichever Node replica (or `WorkspaceEventsHub` Durable Object) holds that socket: a cross-runtime
 fan-out, not a local check. Building it on Node alone would be a facade-parity gap, which
-CLAUDE.md treats as a showstopper rather than a follow-up, so the honest disposition is to name
+AGENTS.md treats as a showstopper rather than a follow-up, so the honest disposition is to name
 the residual and do it properly. A cheaper interim, re-checking the tombstone on the existing
 heartbeat, has the same parity requirement.
 

@@ -397,7 +397,7 @@ endpoints remain on it for now.
 
 ## Persistence & runtime parity
 
-Every table/column mirrors D1 ⇄ Drizzle with a cross-runtime conformance assertion (CLAUDE.md
+Every table/column mirrors D1 ⇄ Drizzle with a cross-runtime conformance assertion (AGENTS.md
 "Keep the runtimes symmetric"):
 
 - `environment_connections`: rekeyed to `(workspace_id, provision_type, manifest_id)`; columns

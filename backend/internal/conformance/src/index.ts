@@ -26,6 +26,7 @@ export {
   fakeDelegatedRegistry,
   fakeDelegationRepoFiles,
   withDelegatedArm,
+  lateHarnessCallRecorder,
   type FakeDelegatedExecutorOptions,
   type FakeDelegationCalls,
   type FakeDelegationRepo,

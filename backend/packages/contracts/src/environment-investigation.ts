@@ -13,7 +13,7 @@ import * as v from 'valibot'
 // to look. What actually follows is that a DIFFERENT investigator is needed, one whose evidence is
 // the provider rather than the repository.
 //
-// The division of labour is the one CLAUDE.md states for every model-in-the-loop decision: the
+// The division of labour is the one AGENTS.md states for every model-in-the-loop decision: the
 // model JUDGES (which layer is at fault, on which evidence) and the platform COMPUTES (which
 // action it is allowed to take, whether it takes it, and, always, whether the environment came
 // up afterwards). The verdict is never the proof. The re-probe is.
@@ -113,7 +113,7 @@ export function remediationNeedsProviderSupport(action: EnvironmentRemediationAc
  * needs no second edit here. Used wherever a PERSISTED action is read back: the vocabulary is
  * closed and stored on a run's step, so a member retired later is still in the database, and a
  * reader that assumed the type was total would splice `undefined` into the very message whose job
- * is to name what a human must re-pick (CLAUDE.md's closed-vocabulary rule).
+ * is to name what a human must re-pick (AGENTS.md's closed-vocabulary rule).
  */
 export function isEnvironmentRemediationAction(
   value: string | null | undefined,

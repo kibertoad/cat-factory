@@ -1,5 +1,82 @@
 # @cat-factory/example-delegated-executor
 
+## 0.1.11
+
+### Patch Changes
+
+- Updated dependencies [e3c4b3c]
+  - @cat-factory/kernel@0.357.0
+  - @cat-factory/agents@0.171.2
+
+## 0.1.10
+
+### Patch Changes
+
+- Updated dependencies [ffe4356]
+- Updated dependencies [ffe4356]
+  - @cat-factory/kernel@0.356.0
+  - @cat-factory/agents@0.171.1
+
+## 0.1.9
+
+### Patch Changes
+
+- Updated dependencies [97175f8]
+  - @cat-factory/kernel@0.355.0
+  - @cat-factory/agents@0.171.0
+
+## 0.1.8
+
+### Patch Changes
+
+- @cat-factory/agents@0.170.1
+  - @cat-factory/kernel@0.354.2
+
+## 0.1.7
+
+### Patch Changes
+
+- Updated dependencies [8766c3f]
+  - @cat-factory/agents@0.170.0
+  - @cat-factory/kernel@0.354.1
+
+## 0.1.6
+
+### Patch Changes
+
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+  - @cat-factory/kernel@0.354.0
+  - @cat-factory/agents@0.169.0
+
+## 0.1.5
+
+### Patch Changes
+
+- Updated dependencies [075ff13]
+  - @cat-factory/kernel@0.353.0
+  - @cat-factory/agents@0.168.4
+
+## 0.1.4
+
+### Patch Changes
+
+- Updated dependencies [57d9db3]
+  - @cat-factory/kernel@0.352.0
+  - @cat-factory/agents@0.168.3
+
+## 0.1.3
+
+### Patch Changes
+
+- Updated dependencies [e84b0d5]
+- Updated dependencies [e84b0d5]
+- Updated dependencies [e84b0d5]
+  - @cat-factory/agents@0.168.2
+  - @cat-factory/kernel@0.351.0
+
 ## 0.1.2
 
 ### Patch Changes

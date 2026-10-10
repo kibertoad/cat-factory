@@ -14,7 +14,7 @@
 // pulls that pinned tag at boot (see server.ts `preflightHarnessImage`) so it can't go stale.
 //
 // RELEASE RULE: bump `RECOMMENDED_HARNESS_IMAGE` in lockstep with the harness image — see
-// CLAUDE.md "Any change that affects the runner image MUST bump the image tag". The image and
+// AGENTS.md "Any change that affects the runner image MUST bump the image tag". The image and
 // the backend are a matched set and must be released together.
 
 import { isImageVariantName, isPlatformImageVariant } from '@cat-factory/kernel'
@@ -25,7 +25,7 @@ import { isOffValue } from './envFlags.js'
  * `@cat-factory/executor-harness`'s version (the value CI tags the published image with, and
  * the same tag `deploy/backend` pins). Bump it whenever the harness image bumps.
  */
-export const RECOMMENDED_HARNESS_IMAGE = 'ghcr.io/kibertoad/cat-factory-executor:1.161.6'
+export const RECOMMENDED_HARNESS_IMAGE = 'ghcr.io/kibertoad/cat-factory-executor:1.163.4'
 
 /**
  * The UI-TESTER image this backend release is matched to: the same harness plus Playwright +
@@ -35,7 +35,7 @@ export const RECOMMENDED_HARNESS_IMAGE = 'ghcr.io/kibertoad/cat-factory-executor
  * A step declaring `image: 'ui'` (the browser-driven `tester-ui` kind) dispatches to its own
  * container on this image, alongside the run's ordinary one.
  */
-export const RECOMMENDED_UI_HARNESS_IMAGE = 'ghcr.io/kibertoad/cat-factory-executor-ui:1.161.6'
+export const RECOMMENDED_UI_HARNESS_IMAGE = 'ghcr.io/kibertoad/cat-factory-executor-ui:1.163.4'
 
 /**
  * The effective harness image ref: an explicit `LOCAL_HARNESS_IMAGE` wins (a custom build, a

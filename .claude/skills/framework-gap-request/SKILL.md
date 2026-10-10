@@ -83,7 +83,7 @@ Land each on one of these:
 - **Refused by design.** State the constraint, never the taste.
 - **Unverifiable.** Provenance never arrived, or the evidence lives in a tree you cannot read. Say
   which, and say what would settle it. Never fold one of these into "Not a gap": an unchecked claim
-  and a checked-and-correct behaviour are the pair CLAUDE.md's degrade-loudly rule is about, and
+  and a checked-and-correct behaviour are the pair AGENTS.md's degrade-loudly rule is about, and
   the next round pays for collapsing them.
 
 Whatever turns out fine goes into a **Checked and genuinely fine** record so nobody re-investigates
@@ -95,7 +95,7 @@ description.
 
 ## 3. Revise it critically
 
-The bar is [`CLAUDE.md`](../../../CLAUDE.md)'s governing principle: the well-factored design, not
+The bar is [`AGENTS.md`](../../../AGENTS.md)'s governing principle: the well-factored design, not
 the fastest thing that unblocks the requester. Dispose of the DEFECT and the REMEDY separately,
 because "accept the bug, reject the remedy" and "accept, widen the fix" are ordinary outcomes.
 
@@ -201,7 +201,7 @@ call).
 
 **Run the documentation-staleness sweep BEFORE opening it**, sized to what the accepted findings
 changed: the touched package's `README.md` and `AGENTS.md`, the root README's layout and
-feature-guide rows, and [`CLAUDE.md`](../../../CLAUDE.md) only for a new cross-cutting convention.
+feature-guide rows, and [`AGENTS.md`](../../../AGENTS.md) only for a new cross-cutting convention.
 
 **A gap slice usually changes something a catfactory.ai page describes**, since a new env var,
 endpoint, capability, failure mode or operator step all meet that test (ADR 0045 added the

@@ -34,7 +34,7 @@ import { createRepoIssueWriteback } from './writeback/repo-issue.writeback.js'
 //
 // Runtime-neutral: it depends only on the kernel ports (GitHubClient,
 // GitHubInstallationRepository) and the shared pure logic, so both the Cloudflare
-// and the Node facade wire the SAME class (see CLAUDE.md "Keep the runtimes
+// and the Node facade wire the SAME class (see AGENTS.md "Keep the runtimes
 // symmetric").
 
 export interface GitHubIssuesProviderDependencies {

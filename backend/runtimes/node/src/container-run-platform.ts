@@ -248,6 +248,10 @@ function selectNodeAgentExecutor(input: {
     ...(input.tasks.deps.taskRepository ? { taskRepository: input.tasks.deps.taskRepository } : {}),
     resolveToolSecrets: input.toolSecretChain.resolver,
     agentContextObservability: input.runServices.agentContextObservability,
+    // The SAME recorder the container executor files a subscription harness's calls through, so
+    // a delegated step's reported usage lands where the step's metrics are read. Symmetric with
+    // the Worker facade.
+    recordHarnessCalls: input.runServices.executorTelemetry.recordHarnessCalls,
     logger,
     clock: input.clock,
   })

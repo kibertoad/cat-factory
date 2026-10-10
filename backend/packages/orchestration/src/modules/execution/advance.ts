@@ -1,4 +1,4 @@
-import type { AgentFailureKind } from '@cat-factory/kernel'
+import { type AgentFailureKind, RunContendedError } from '@cat-factory/kernel'
 
 // The outcome of advancing a single run by one step. A durable driver (the
 // Cloudflare Workflows instance) inspects this to decide what to do next: loop
@@ -105,4 +105,26 @@ export interface AdvanceOptions {
    * leave it false to preserve the "never wedge" behaviour.
    */
   rethrowAgentErrors?: boolean
+}
+
+/**
+ * Run a durable-driver entry point, turning a lost optimistic-concurrency race into a
+ * re-drive. A driver write ({@link RunStateMachine.casPersist}) throws {@link RunContendedError}
+ * when a concurrent human action moved the row or a `cancel`/`stopRun` removed/terminated it;
+ * we swallow that and return `{ kind: 'continue' }` so the durable loop re-enters
+ * `advanceInstance`, reloads FRESH state, and either re-applies the mechanical step on the
+ * winning snapshot or no-ops on a gone/terminal run. It never clobbers the winner or
+ * resurrects a cancelled run (race-audit 2.2 driver-half / 2.3). This MUST run inside each
+ * entry point (ahead of the drivers' generic `catch`→`failRun` and Cloudflare's `step.do`
+ * retry); every other error propagates so real failures still fail the run.
+ */
+export async function redriveOnContention(
+  run: () => Promise<AdvanceResult>,
+): Promise<AdvanceResult> {
+  try {
+    return await run()
+  } catch (error) {
+    if (error instanceof RunContendedError) return { kind: 'continue' }
+    throw error
+  }
 }

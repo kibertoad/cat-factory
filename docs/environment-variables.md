@@ -3,7 +3,7 @@
 This is the reference for every environment variable the cat-factory backends read,
 grouped by purpose and annotated with the deployment modes each applies to. For the
 narrative on how config is loaded per runtime, see the facade sections in
-[`CLAUDE.md`](../CLAUDE.md) and the example `.env` files under `deploy/*`.
+[`AGENTS.md`](../AGENTS.md) and the example `.env` files under `deploy/*`.
 
 **This file is the canonical list, and it stays in this repo** even though its audience is
 operators: `scripts/check-reserved-env-keys.mjs` reads it, and that guard is only useful when it

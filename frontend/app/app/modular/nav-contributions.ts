@@ -197,6 +197,7 @@ export interface NavCommandSpec {
  */
 export const NAV_ACTIONS = [
   'assistant',
+  'guidedReview',
   'buildPipeline',
   'addFromRepo',
   'bootstrapRepo',
@@ -393,6 +394,25 @@ export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
       order: 10,
       labelKey: 'layout.commandBar.cmd.addFromRepo',
       keywordsKey: 'layout.commandBar.keywords.addFromRepo',
+    },
+  },
+  {
+    // Guided PR review. Basic tier, because reviewing pull requests is part of the everyday
+    // delivery loop; not `intake`, because the intake role brings work in rather than reviewing
+    // the code that delivers it.
+    id: 'guided-review',
+    labelKey: 'nav.guidedReview',
+    icon: 'i-lucide-scan-search',
+    surfaces: S('sidebar', 'command'),
+    gate: (g) => g.githubAvailable && g.canWriteBoard,
+    action: 'guidedReview',
+    testId: 'nav-guided-review',
+    sidebar: { group: 'repositories', order: 15 },
+    command: {
+      group: 'repositories',
+      order: 15,
+      labelKey: 'layout.commandBar.cmd.guidedReview',
+      keywordsKey: 'layout.commandBar.keywords.guidedReview',
     },
   },
   {

@@ -70,7 +70,7 @@ registered by reference like every other deployment extension.
 - **Delegated kind**: an agent kind whose `agent.surface` is `'delegated'` and which names the
   executor it runs on. Registered on `AgentKindRegistry` exactly like a container kind.
 - **Brief**: the neutral `{ systemPrompt, userPrompt, contextFiles, repo, branches, task,
-correlationKey }` bundle the engine hands the executor at dispatch. It is what the container
+  correlationKey }` bundle the engine hands the executor at dispatch. It is what the container
   path already composes, extracted so it exists as a value outside a harness job body.
 - **Delegation record**: `step.delegated`, the persisted per-step state (executor id, external
   id, external URL, status, attempt log). The delegated sibling of `step.container`.
@@ -503,10 +503,11 @@ accelerator therefore needs the `awaiting_job` loop to become an event-wait WITH
 drivers, which is a change to the park machinery that every container job also rides. Shipping the
 route without it would be a surface an executor calls and nothing happens sooner.
 
-**Per-call telemetry ingest has no consumer yet.** `DelegationResult.usage` is landed and is what
-makes `telemetry: 'self-reported'` real today: it meters through `recordJobFacts` as
+**Per-call telemetry ingest has no consumer yet.** `DelegationResult.usage` (and `usage` on a
+`failed` update) is landed and is what makes `telemetry: 'self-reported'` real today: it meters as
 `usageBilling: 'subscription'` (recorded, excluded from the budget gate, because the tokens were
-spent on the executor's account), and the run views stop saying the data is missing. Individual
+spent on the executor's account) and is filed as one unpriced job-level row in `llm_call_metrics`,
+so the run views stop saying the data is missing. Individual
 prompts and tool trajectories would need an authenticated ingest route, and no shipped executor
 reports them, and an authenticated write surface nothing calls is a surface to secure for nothing.
 

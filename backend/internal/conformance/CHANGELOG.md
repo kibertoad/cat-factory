@@ -1,5 +1,177 @@
 # @cat-factory/conformance
 
+## 0.64.0
+
+### Minor Changes
+
+- e3c4b3c: A new built-in `resolve-conflicts` task type points the conflict resolver at an existing open pull request the platform did not open (surface version 1.79.0). The task names it with `fields.prNumber` or `fields.prUrl`, and creation records it as the block's own `pullRequest`, refusing one the run could not push onto with a `422` and an `attached_pr_*` reason: not found, another repository, closed or merged, from a fork, targeting a branch other than the repository's base, or unreadable. When the repository provider fails to answer, creation is refused with a retryable `503` and reason `attached_pr_provider_unreachable` instead of a `500`.
+  
+  The task is pinned to the new `pl_resolve_conflicts` pipeline, the `conflicts` gate alone, under a new `maintenance` pipeline purpose that only this task type is offered. It parks nowhere, so a `write` key starts it with an empty body. A clean pull request finishes `done` with nothing pushed; one the resolver cannot clear fails the run with a message saying the conflicts could not be resolved automatically and carrying the resolver's last account. A run of a task that attached its pull request finishes `done` without a confirm-and-merge card, and the pre-dispatch input gate does not judge its description. Run admission refuses a pipeline with a merge step for such a task, and a fields patch cannot move its attachment to another pull request while its run is working.
+  
+  `OpenedPullRequest` gains an optional `crossRepository`, filled by the GitHub and GitLab clients, and `AgentRunContext.block` gains `taskType`, which the container executor reads to skip creating the per-task work branch for an attached pull request. The conflicts gate's give-up message now includes the last resolver attempt's summary.
+
+### Patch Changes
+
+- Updated dependencies [e3c4b3c]
+  - @cat-factory/contracts@0.363.0
+  - @cat-factory/kernel@0.357.0
+  - @cat-factory/gates@0.12.0
+  - @cat-factory/orchestration@0.320.0
+  - @cat-factory/integrations@0.175.0
+  - @cat-factory/server@0.332.0
+  - @cat-factory/agents@0.171.2
+  - @cat-factory/prompt-fragments@1.1.60
+
+## 0.63.1
+
+### Patch Changes
+
+- Updated dependencies [ffe4356]
+- Updated dependencies [ffe4356]
+  - @cat-factory/kernel@0.356.0
+  - @cat-factory/agents@0.171.1
+  - @cat-factory/integrations@0.174.12
+  - @cat-factory/orchestration@0.319.1
+  - @cat-factory/server@0.331.1
+  - @cat-factory/gates@0.11.63
+  - @cat-factory/prompt-fragments@1.1.59
+
+## 0.63.0
+
+### Minor Changes
+
+- 97175f8: Guided review questions asked with `depth: "deep"` are answered from a read-only checkout of the repository (surface version 1.78.0). A new `guided-review-investigator` container-explore kind runs per question, with its own preset model; `ContainerGuidedReviewInvestigator` dispatches it standalone, the way the environment dry run's prober is dispatched, and files its spend through the same accounting a pipeline step uses. The job clones the target branch with full history, fetches the PR head and checks out the reviewed commit.
+  
+  A deep answer is driven as a state machine on its message: claim, dispatch, record the dispatch, poll. `GuidedReviewService.runJob` now returns `GuidedReviewJobProgress`, and the Workflow, pg-boss and local `node:sqlite` drivers loop on it within `GUIDED_REVIEW_MAX_PASSES`. Each poll refreshes the claim, so the stale scan never mistakes a live investigation for a dead one; a container still working after 45 minutes is stopped and its question reported failed. `GuidedReviewRepository` gains `recordInvestigation`, `getInvestigation` and `heartbeatMessage` (migration 0106 and its Drizzle mirror).
+  
+  The two standalone container flows now share one dispatch builder per facade. The single-kind model resolver accepts a job with no board frame, which resolves on the workspace's default preset. The local guided-review queue now wakes at its earliest due job, so a re-queued job can no longer wait for the periodic sweep when a timer fires early. The review window gains a "Deep dive" switch.
+
+### Patch Changes
+
+- Updated dependencies [97175f8]
+  - @cat-factory/contracts@0.362.0
+  - @cat-factory/kernel@0.355.0
+  - @cat-factory/agents@0.171.0
+  - @cat-factory/orchestration@0.319.0
+  - @cat-factory/server@0.331.0
+  - @cat-factory/gates@0.11.62
+  - @cat-factory/integrations@0.174.11
+  - @cat-factory/prompt-fragments@1.1.58
+
+## 0.62.2
+
+### Patch Changes
+
+- Updated dependencies [a3a10b8]
+- Updated dependencies [0966666]
+  - @cat-factory/contracts@0.361.0
+  - @cat-factory/orchestration@0.318.0
+  - @cat-factory/server@0.330.0
+  - @cat-factory/agents@0.170.1
+  - @cat-factory/gates@0.11.61
+  - @cat-factory/integrations@0.174.10
+  - @cat-factory/kernel@0.354.2
+  - @cat-factory/prompt-fragments@1.1.57
+
+## 0.62.1
+
+### Patch Changes
+
+- Updated dependencies [8766c3f]
+  - @cat-factory/contracts@0.360.0
+  - @cat-factory/agents@0.170.0
+  - @cat-factory/orchestration@0.317.1
+  - @cat-factory/gates@0.11.60
+  - @cat-factory/integrations@0.174.9
+  - @cat-factory/kernel@0.354.1
+  - @cat-factory/prompt-fragments@1.1.56
+  - @cat-factory/server@0.329.1
+
+## 0.62.0
+
+### Minor Changes
+
+- 0ea28b8: Guided PR review is reachable from the SPA. `/workspaces/:workspaceId/guided-reviews` opens, lists, reads, refreshes and deletes sessions, and its `threads` sub-routes open threads, ask questions and request comment drafts. Writes return at once; the overview and each answer arrive through a new `guidedReview` workspace event, which carries ids only so a member who is not viewing a review learns nothing more than that it moved. The routes are member tier and only a session's creator may change it.
+  
+  `ExecutionEventPublisher` gains `guidedReviewChanged`, implemented on the Durable Object, Node and fan-out publishers. Thread routes are addressed under their session, and a thread of another session is answered as absent. The SPA gains the API client and a `guidedReview` store that follows the event. A conformance assertion checks every facade wires the module.
+- 0ea28b8: The guided review store binds every settle to the claim that won it. `claimOverview` and `claimMessage` return a `GuidedReviewClaim` (or null), and `settleOverview`, `settleMessage` and `settleDrafts` require it, so a driver whose lease lapsed cannot land over the driver that took the work over. Every write is checked against the contracts schema the reads decode with, so an oversized outcome is refused at its writer instead of making the thread unreadable; `guidedReviewFailure` builds a failure whose raw detail fits. `settleDrafts` takes `GuidedReviewDraftProposal` and the store fills in the ids it owns. Deleting a session removes threads before messages and drafts on both runtimes, and a node recovers its own jobs from its local durable queue.
+
+### Patch Changes
+
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+  - @cat-factory/contracts@0.359.0
+  - @cat-factory/kernel@0.354.0
+  - @cat-factory/agents@0.169.0
+  - @cat-factory/orchestration@0.317.0
+  - @cat-factory/server@0.329.0
+  - @cat-factory/gates@0.11.59
+  - @cat-factory/integrations@0.174.8
+  - @cat-factory/prompt-fragments@1.1.55
+
+## 0.61.0
+
+### Minor Changes
+
+- 075ff13: Guided PR review gets its persistence foundation: the session, thread, message and comment-draft contracts, kernel's `GuidedReviewRepository` port, D1 migration 0104 and its Drizzle mirror, and both repositories, wired as `CoreDependencies.guidedReviewRepository` on every facade so a mothership serves it to its nodes. No service reads or writes the tables yet; the service, the durable answering driver and the routes land in later slices (`docs/initiatives/guided-pr-review.md`).
+  
+  Concurrent threads write disjoint rows. A thread admits one live answer through a partial unique index, so a second question while one is pending returns `thread_busy` without writing, and a question on a thread that is missing or belongs to another session returns `thread_not_found`. The store writes the queued state itself (a pending overview on open, a pending placeholder per question), so a caller cannot create work no driver can claim. Driver claims, overview generations and draft posts are conditional writes that report whether they won. Every repository method is `remote` in mothership mode except the cross-workspace stale-job scan, which is a sweeper read. Queued work records which host drives it (`deployment` or `node:<nodeId>`), and the stale scan lists only one driver's jobs, so a hosted sweeper never answers a laptop's question with the deployment's credentials.
+
+### Patch Changes
+
+- Updated dependencies [075ff13]
+  - @cat-factory/contracts@0.358.0
+  - @cat-factory/kernel@0.353.0
+  - @cat-factory/orchestration@0.316.0
+  - @cat-factory/server@0.328.0
+  - @cat-factory/agents@0.168.4
+  - @cat-factory/gates@0.11.58
+  - @cat-factory/integrations@0.174.7
+  - @cat-factory/prompt-fragments@1.1.54
+
+## 0.60.0
+
+### Minor Changes
+
+- 57d9db3: A delegated executor's reported usage now reaches the step it belongs to. The step's metrics, the run totals and the "usage not reported by <executor>" gap all read `llm_call_metrics`, while a result's `usage` was written only to the usage ledger, so a `self-reported` executor's step still read as unreported. The delegated arm now files the figure as one job-level call metric through the same recorder a subscription harness uses (`standsForJob`, counted as the job's call), keyed on the dispatch's job id so a replayed poll records nothing twice.
+  
+  That row is filed under kernel's new `DELEGATED_USAGE_PROVIDER` and is never priced: `LlmObservabilityService` answers no rate for it, so the step and the run totals show the tokens with an unknown cost instead of the deployment's fallback rate.
+  
+  `DelegationUpdate`'s `failed` arm gains `usage`, with the meaning it has on a result. A run that fails late has usually spent most of its tokens, and it previously had no way to say so. `AgentJobUpdate`'s `failed` arm gains `usage` and `usageBilling` to carry it, and the failed-poll path meters it into the usage ledger and stamps the step's `usageBilling`, as the completion path does for a result.
+  
+  Each settled delegation attempt records `usageReported`, and `delegatedSpendUnreported` reports a gap when the FINAL attempt reported nothing, even if an earlier attempt's row put calls in the step's metrics.
+  
+  `RecordHarnessCalls` is exported from `@cat-factory/orchestration` as the one recorder type. `buildDelegatedAgentExecutor` takes a required `recordHarnessCalls` (its value may be `undefined`), so a facade cannot wire it on one runtime and forget it on the other. The Worker builds one recorder and hands it to both the container and the delegated arm; `buildWorkerJobAccountingDeps` now takes that recorder instead of building its own. Conformance's `withDelegatedArm` takes the facade's recorder, and a new conformance assertion checks on every runtime that a self-reported usage lands on the step unpriced.
+
+### Patch Changes
+
+- Updated dependencies [57d9db3]
+  - @cat-factory/kernel@0.352.0
+  - @cat-factory/contracts@0.357.0
+  - @cat-factory/orchestration@0.315.0
+  - @cat-factory/server@0.327.0
+  - @cat-factory/agents@0.168.3
+  - @cat-factory/gates@0.11.57
+  - @cat-factory/integrations@0.174.6
+  - @cat-factory/prompt-fragments@1.1.53
+
+## 0.59.3
+
+### Patch Changes
+
+- Updated dependencies [e84b0d5]
+- Updated dependencies [e84b0d5]
+- Updated dependencies [e84b0d5]
+  - @cat-factory/agents@0.168.2
+  - @cat-factory/integrations@0.174.5
+  - @cat-factory/kernel@0.351.0
+  - @cat-factory/orchestration@0.314.3
+  - @cat-factory/server@0.326.3
+  - @cat-factory/gates@0.11.56
+  - @cat-factory/prompt-fragments@1.1.52
+
 ## 0.59.2
 
 ### Patch Changes

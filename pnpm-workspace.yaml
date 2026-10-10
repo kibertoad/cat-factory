@@ -16,12 +16,12 @@
 # satisfying the modular-vue adoption (backend/docs/adr/0049-modular-vue-adoption.md).
 # vue-router is likewise pinned to one version, for the same singleton reason: two copies
 # mean two route-matcher instances and a `useRoute()` that resolves against the wrong one.
-# Today Nuxt 4.5.2 and `@nuxtjs/i18n` 10.6.0 both want `vue-router@^5.2.0` and the
-# `@modular-vue/*` packages peer-require `^5.0.0`, so 5.3.1 satisfies every consumer. Keep
+# Today Nuxt 4.6.0 wants `vue-router@^5.3.1`, `@nuxtjs/i18n` wants `^5.2.0`, and the
+# `@modular-vue/*` packages peer-require `^5.0.0`, so 5.4.0 satisfies every consumer. Keep
 # it in lockstep with whatever `vue-router` Nuxt pulls on the next Nuxt bump.
 overrides:
   vue: 3.5.43
-  vue-router: 5.3.1
+  vue-router: 5.4.0
   # Single neutral engine: the @modular-vue/* bindings and @modular-frontend/journeys-engine
   # each depend on @modular-frontend/core across overlapping-but-not-identical ranges, so
   # without a pin pnpm can resolve more than one core copy into the tree (distinct type
@@ -32,7 +32,7 @@ overrides:
   # Prune once every consumer's core range is bumped to include ^0.6.0 upstream.
   '@modular-frontend/core': 0.6.0
   # `esbuild` is an OPTIONAL PEER of vite (`^0.27.0 || ^0.28.0`) and a loose dep of tsx
-  # (`~0.28.0`) and nitropack (`^0.28.0`), while wrangler and @cloudflare/vitest-pool-workers
+  # (`~0.28.0`) and nitropack (`^0.28.0`), while wrangler and @cloudflare/vitest-plugin
   # both pin it EXACTLY at 0.28.1. Left to float, a re-resolve gives the peer slot the newer
   # 0.28.2 and the tree gains a SECOND esbuild beside the exact-pinned one. That copy is not
   # merely redundant: pnpm resolves an auto-installed peer without its own optionalDependencies,
@@ -56,19 +56,19 @@ overrides:
   # 5.20260815.1, eight days of API ahead of the workerd that runs.
   #
   # Top-level here, unlike wrangler below, and the difference is who the authority is. Wrangler's
-  # correct version belongs to `@cloudflare/vitest-pool-workers` and must be TRACKED, which an
+  # correct version belongs to `@cloudflare/vitest-plugin` and must be TRACKED, which an
   # override cannot do. The types' correct version is DERIVED from the workerd we already resolve,
   # and wrangler states it outright: its own peer range on this package is `^5.20260815.1`. So the
   # override asserts a fact we own rather than freezing someone else's decision, and
   # `scripts/check-cloudflare-runtime-pins.mjs` re-derives it from the lockfile every CI run.
   # Move it with workerd, never on its own.
-  '@cloudflare/workers-types': 5.20260815.1
+  '@cloudflare/workers-types': 5.20261006.1
   # NO `wrangler` override here, deliberately. The invariant is ONE wrangler (and through it one
   # workerd + one miniflare) across the stack, because the Worker suite runs inside the pool's
   # workerd and `wrangler deploy` ships wrangler's: two copies mean the runtime the tests prove is
   # a different build from the runtime that ships, on top of ~100MB of duplicated platform binary
   # per arch. A top-level override is the wrong tool for it: it OVERRIDES
-  # `@cloudflare/vitest-pool-workers`'s exact pin instead of TRACKING it, so the next pool bump is
+  # `@cloudflare/vitest-plugin`'s exact pin instead of TRACKING it, so the next pool bump is
   # silently forced back to our number and the pool runs against a wrangler it never pinned. What
   # holds the invariant instead is an exact `wrangler` version in each package that declares it,
   # plus `scripts/check-cloudflare-runtime-pins.mjs`, which fails CI the moment the lockfile holds

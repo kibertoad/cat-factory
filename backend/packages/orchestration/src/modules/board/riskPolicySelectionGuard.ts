@@ -120,7 +120,7 @@ const REFUSAL_MESSAGE: Record<RiskPolicySelectionRefusal, string> = {
  * looking for a picker they never touched.
  *
  * Both maps are the UNTRANSLATED last resort behind `details.reason`, which is what the SPA maps
- * to its own copy (CLAUDE.md: the backend does not localize prose).
+ * to its own copy (AGENTS.md: the backend does not localize prose).
  */
 const MOVE_REFUSAL_MESSAGE: Record<RiskPolicySelectionRefusal, string> = {
   relaxes_run_oversight:

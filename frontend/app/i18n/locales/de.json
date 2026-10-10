@@ -2213,7 +2213,7 @@
         "allTools": "Alle Tools, die dieser Server bereitstellt.",
         "narrowed": "Eingeschränkt auf: {tools}",
         "reason": {
-          "harnessUnsupported": "war nicht verfügbar: die Agenten-CLI dieses Schritts hat keinen MCP-Client.",
+          "harnessUnsupported": "war nicht verfügbar: die Agenten-CLI dieses Schritts konnte ihn nicht bereitstellen.",
           "transportUnsupported": "war nicht verfügbar: die Agenten-CLI dieses Schritts erreicht Server dieser Art nicht.",
           "missingSecret": "war nicht verfügbar: eine benötigte Zugangsinformation ist für dieses Board nicht hinterlegt.",
           "reservedSecret": "war nicht verfügbar: er verlangt eine Variable, die zur Konfiguration der Plattform gehört; die Deklaration muss geändert werden.",
@@ -2225,7 +2225,7 @@
           "unknown": "war nicht verfügbar ({reason})."
         },
         "remedy": {
-          "harnessUnsupported": "Führen Sie den Schritt auf einer Agenten-CLI mit MCP aus, oder erweitern Sie die Harness-Liste des Servers. Ein Codex-Lauf mit Ihrer eigenen CLI-Anmeldung hat keinen laufspezifischen Ablageort für den Server; verwenden Sie stattdessen Zugangsdaten der Plattform.",
+          "harnessUnsupported": "Erweitern Sie die Harness-Liste des Servers um die Agenten-CLI dieses Schritts, oder führen Sie den Schritt auf einer CLI aus, die dort aufgeführt ist. Ein Pi-Schritt, der aufgezeichnet wurde, bevor Pi Tool-Server bedienen konnte, muss nur auf einem aktuellen Runner-Image erneut ausgeführt werden. Ein Codex-Lauf mit Ihrer eigenen CLI-Anmeldung hat keinen laufspezifischen Ablageort für den Server; verwenden Sie stattdessen Zugangsdaten der Plattform.",
           "transportUnsupported": "Deklarieren Sie dafür einen stdio-Server, oder führen Sie den Schritt auf einer Agenten-CLI aus, die HTTP-Server erreicht.",
           "missingSecret": "Hinterlegen Sie die genannte Zugangsinformation entweder als Umgebungsvariable des Deployments oder im Infrastruktur-Fenster unter den Capability-Zugangsdaten.",
           "reservedSecret": "Ändern Sie die Deklaration auf einen anderen Schlüssel; das Setzen dieser Variablen hilft gerade nicht.",
@@ -2740,6 +2740,7 @@
       "cmd": {
         "newPipeline": "Eine Pipeline bauen",
         "assistant": "Assistenten öffnen",
+        "guidedReview": "Einen Pull Request erkunden",
         "addFromRepo": "Service aus vorhandenem Repo hinzufügen",
         "bootstrapRepo": "Ein neues Repo bootstrappen",
         "githubManage": "GitHub-Verbindung verwalten",
@@ -2768,6 +2769,7 @@
       "keywords": {
         "newPipeline": "pipeline agents chain",
         "assistant": "ki assistent fragen eingabe für mich erledigen",
+        "guidedReview": "geführtes review pull request pr erkunden erklären fragen",
         "addFromRepo": "github import existing",
         "bootstrapRepo": "scaffold create reference architecture",
         "github": "git repos pull requests issues",
@@ -3065,7 +3067,8 @@
         "recurring": "Wiederkehrend",
         "review": "Review",
         "ralph": "Ralph-Schleife",
-        "bugFishing": "Fehlersuche"
+        "bugFishing": "Fehlersuche",
+        "resolveConflicts": "Konflikte lösen"
       },
       "recurringWithFrame": "Eine wiederkehrende Aufgabe führt eine Pipeline in einem Takt aus. Fahren Sie fort, um Zeitplan + Prompt festzulegen.",
       "recurringNoFrame": "Eine wiederkehrende Aufgabe muss auf einem Service liegen. Fügen Sie sie aus einem Service-Frame (oder einem darin enthaltenen Modul) hinzu.",
@@ -4591,6 +4594,105 @@
       "unresolved_issue_service": "Der Assistent konnte nicht erkennen, unter welchem Service das angelegt werden soll. Nennen Sie den Service in Ihrer Anfrage."
     }
   },
+  "guidedReview": {
+    "title": "Geführtes Review",
+    "titleFor": "{repo} #{number}: {title}",
+    "loading": "Review wird geladen…",
+    "outOfDate": "Live-Updates sind fehlgeschlagen, daher ist diese Ansicht möglicherweise veraltet.",
+    "openFromTask": "Mit geführtem Review erkunden",
+    "picker": {
+      "intro": "Wähle ein Repository und einen Pull Request. Du erhältst einen Überblick über die Änderung und kannst in separaten Threads Fragen dazu stellen.",
+      "loading": "Repositories werden geladen…",
+      "noRepos": "Mit diesem Workspace sind noch keine Repositories verknüpft.",
+      "repo": "Repository",
+      "openPulls": "Offene Pull Requests",
+      "number": "Nummer des Pull Requests",
+      "open": "Review öffnen"
+    },
+    "overview": {
+      "title": "Überblick",
+      "stale": "Der Pull Request hat neue Commits",
+      "refresh": "Aktualisieren",
+      "working": "Überblick wird erstellt…",
+      "intent": "Absicht",
+      "changes": "Wesentliche Änderungen",
+      "consequences": "Folgen",
+      "risks": "Risiken",
+      "focus": "Lohnt einen Blick",
+      "suggested": "Vorgeschlagene Fragen"
+    },
+    "severity": {
+      "low": "Niedrig",
+      "medium": "Mittel",
+      "high": "Hoch"
+    },
+    "failure": {
+      "budget_exhausted": "Dieser Workspace hat sein Modellbudget aufgebraucht.",
+      "model_unavailable": "Für das geführte Review ist kein Modell verfügbar.",
+      "repo_unavailable": "Der Pull Request konnte nicht aus dem Repository gelesen werden.",
+      "generation_failed": "Der Modellaufruf ist fehlgeschlagen.",
+      "unreadable_reply": "Das Modell hat in einer nicht lesbaren Form geantwortet.",
+      "depth_unavailable": "Tiefe Antworten mit einem Checkout sind noch nicht verfügbar.",
+      "head_moved": "Der Pull Request ist über den geprüften Commit hinaus. Aktualisiere, um den neuesten Commit zu prüfen.",
+      "detail": "Details"
+    },
+    "dropped": {
+      "outside_diff": "die Zeile liegt außerhalb des Diffs",
+      "not_in_pr": "die Datei gehört nicht zu diesem Pull Request",
+      "incomplete": "der Vorschlag war unvollständig"
+    },
+    "thread": {
+      "new": "Neuer Thread",
+      "untitled": "Thread ohne Titel",
+      "empty": "Frag alles zu diesem Pull Request.",
+      "waiting": "Antwort wird erstellt…",
+      "placeholder": "Stell eine Frage zur Änderung",
+      "busy": "Warte auf die Antwort auf die vorherige Frage",
+      "send": "Fragen",
+      "draftRequest": "Review-Kommentare angefordert",
+      "deep": "Tiefenanalyse",
+      "deepHint": "Antwort aus einem Checkout des Repositorys: langsamer, kann aber den ganzen Baum durchsuchen.",
+      "investigating": "Untersuchung in einem Checkout des Repositorys. Das kann einige Minuten dauern."
+    },
+    "drafts": {
+      "title": "Kommentarentwürfe",
+      "request": "Review-Kommentare entwerfen",
+      "summary": "{kept} von {proposed} vorgeschlagenen Kommentaren als Entwurf behalten.",
+      "side": {
+        "RIGHT": "neuer Code",
+        "LEFT": "alter Code"
+      },
+      "select": "Diesen Entwurf zum Posten auswählen",
+      "status": {
+        "proposed": "Entwurf",
+        "posting": "Wird gepostet",
+        "posted": "Gepostet",
+        "failed": "Nicht gepostet",
+        "discarded": "Verworfen"
+      },
+      "edit": "Bearbeiten",
+      "save": "Speichern",
+      "cancel": "Abbrechen",
+      "discard": "Verwerfen",
+      "line": "Zeile",
+      "sideLabel": "Seite",
+      "postFailed": "Der Host hat diesen Kommentar abgelehnt",
+      "summaryPlaceholder": "Optionaler Zusammenfassungskommentar für den Pull Request",
+      "summaryFailed": "Der Host hat den Zusammenfassungskommentar abgelehnt",
+      "post": "{count} im Pull Request posten",
+      "postResult": "{posted} gepostet, {failed} nicht gepostet, {skipped} bereits erledigt."
+    },
+    "errors": {
+      "load": "Das Review konnte nicht geladen werden",
+      "repos": "Die verknüpften Repositories konnten nicht geladen werden",
+      "open": "Das Review konnte nicht geöffnet werden",
+      "ask": "Die Frage konnte nicht gestellt werden",
+      "drafts": "Kommentarentwürfe konnten nicht angefordert werden",
+      "refresh": "Das Review konnte nicht aktualisiert werden",
+      "editDraft": "Der Entwurf konnte nicht gespeichert werden",
+      "postDrafts": "Die Entwürfe konnten nicht gepostet werden"
+    }
+  },
   "pipeline": {
     "iterationCap": {
       "extraRound": "Noch eine Runde",
@@ -4664,7 +4766,8 @@
         "review": "Review",
         "research": "Recherche",
         "planning": "Planung",
-        "media": "Medien"
+        "media": "Medien",
+        "maintenance": "PR-Pflege"
       },
       "strategyOption": {
         "specialist-panel": "Spezialisten-Panel",
@@ -6173,6 +6276,7 @@
     "commandBar": "Suchen oder einen Befehl ausführen…",
     "create": "Erstellen",
     "assistant": "Assistent",
+    "guidedReview": "Geführtes Review",
     "buildPipeline": "Eine Pipeline erstellen",
     "repositories": "Repositories",
     "addFromRepo": "Aus vorhandenem Repo hinzufügen",
@@ -6226,7 +6330,8 @@
         "assistant_generation_failed": "Der Modellanbieter des Assistenten hat nicht geantwortet. Er ist korrekt konfiguriert und hier muss nichts eingerichtet werden: Versuchen Sie die Anfrage gleich noch einmal.",
         "assistant_reply_unreadable": "Das Modell des Assistenten hat etwas geantwortet, das diese Plattform nicht als Entscheidung ausführen kann. Eine Umformulierung hilft selten: Wählen Sie in den Modelleinstellungen ein anderes Modell für den Assistenten.",
         "delegated_executor_failed": "Der externe Executor konnte diesen Schritt nicht starten. Das Problem liegt im System, das die Arbeit ausführt, nicht in dieser Installation: prüfe dessen Logs und versuche es erneut.",
-        "delegated_work_branch_unprepared": "Die Plattform konnte den Arbeitsbranch nicht bereitstellen, auf den der Executor dieses Schritts geschickt wird, daher wurde nichts gestartet. Entweder darf die Repository-Verbindung nicht darauf schreiben, oder die Aufgabe nennt einen Branch, den es noch nicht gibt: die Details sagen, was davon."
+        "delegated_work_branch_unprepared": "Die Plattform konnte den Arbeitsbranch nicht bereitstellen, auf den der Executor dieses Schritts geschickt wird, daher wurde nichts gestartet. Entweder darf die Repository-Verbindung nicht darauf schreiben, oder die Aufgabe nennt einen Branch, den es noch nicht gibt: die Details sagen, was davon.",
+        "attached_pr_provider_unreachable": "Der Repository-Anbieter hat nicht geantwortet, daher konnte der Pull Request nicht geprüft werden und es wurde keine Aufgabe angelegt. Hier muss nichts eingerichtet werden: versuche es gleich noch einmal."
       }
     },
     "reason": {
@@ -6313,7 +6418,10 @@
         "no_host_frame": "Diese Expedition liegt unter keinem Service",
         "delegated_executor_unwired": "Externer Executor nicht registriert",
         "delegated_step_async_only": "Dieser Schritt wird abgefragt, nicht abgewartet",
-        "delegated_claim_missing": "Für diesen Schritt gibt es keine externe Arbeit zu prüfen"
+        "delegated_claim_missing": "Für diesen Schritt gibt es keine externe Arbeit zu prüfen",
+        "thread_busy": "Dieser Thread antwortet noch",
+        "draft_conflict": "Dieser Entwurf hat sich geändert",
+        "session_stale": "Der Pull Request hat sich weiterentwickelt"
       },
       "description": {
         "dependencies_unmet": "Diese Aufgabe hängt von anderen ab, die noch nicht abgeschlossen sind. Schließe sie ab oder gib sie frei und starte dann erneut.",
@@ -6370,7 +6478,10 @@
         "no_host_frame": "Eine Behebungsaufgabe braucht einen Service als Zuhause und ein Repository zum Beheben. Verschieben Sie die Expeditionsaufgabe unter einen Service-Rahmen und versuchen Sie es erneut.",
         "delegated_executor_unwired": "Ein Schritt dieser Pipeline läuft auf einem externen Executor, den diese Installation nicht registriert; es gibt also kein Ziel für die Arbeit. Registriere den Executor im Code oder wähle für den Schritt einen, der hier läuft.",
         "delegated_step_async_only": "Dieser Schritt läuft auf einem externen Executor und kann Stunden dauern. Er wird deshalb angestoßen und danach abgefragt, statt innerhalb einer Anfrage ausgeführt zu werden. Starte den Lauf über das Board; wenn du aus eigenem Code hierherkommst, steuere den Schritt über den asynchronen Pfad.",
-        "delegated_claim_missing": "Der Eintrag des Laufs darüber, was an den externen Executor geschickt wurde, fehlt, also gibt es nichts abzufragen. Am Executor selbst ist nichts falsch. Lade den Lauf neu und starte den Schritt erneut, falls er weiterhin hängt."
+        "delegated_claim_missing": "Der Eintrag des Laufs darüber, was an den externen Executor geschickt wurde, fehlt, also gibt es nichts abzufragen. Am Executor selbst ist nichts falsch. Lade den Lauf neu und starte den Schritt erneut, falls er weiterhin hängt.",
+        "thread_busy": "Die vorherige Frage in diesem Thread ist noch nicht beantwortet. Warte auf die Antwort oder frag in einem anderen Thread.",
+        "draft_conflict": "Dieser Kommentarentwurf wurde seit dem Laden bearbeitet, gepostet oder verworfen. Lade die Entwürfe neu und nimm deine Änderung erneut vor.",
+        "session_stale": "Nach der Vorbereitung dieser Review kamen neue Commits hinzu, daher zeigen die Entwürfe möglicherweise auf falsche Zeilen. Aktualisiere die Review, prüfe die Entwürfe und poste dann."
       },
       "action": {
         "connectGitHub": "GitHub verbinden",

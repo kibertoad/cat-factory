@@ -16,7 +16,7 @@ import { UnavailableError, describeError, noopLogger } from '@cat-factory/kernel
 //  - The document changes rarely, and reading it twice per sign-in (authorize, then verify)
 //    would put two IdP round-trips in front of every login. So it is cached through the app
 //    cache seam (`AppCaches.ssoDiscovery`), never a module-level Map — a scaled Node deployment
-//    has to be able to evict it (CLAUDE.md's caching rule).
+//    has to be able to evict it (AGENTS.md's caching rule).
 //  - Providers rotate their signing keys with NO notice and no version to probe. So an ID token
 //    whose `kid` is absent from the cached key set is not a failure: it is the signal to refetch
 //    ONCE. {@link OidcProviderDirectory.refreshForUnknownKey} is that path, rate-limited by the
@@ -48,7 +48,7 @@ export interface OidcProviderDirectoryDependencies {
  * A failure here is an `UnavailableError`, not a validation error: the deployment is configured
  * correctly and the IdP (or the network to it) is not answering, which is an outage an operator
  * fixes rather than an input a user can correct. The `details.reason` distinguishes the causes
- * that need different fixes, per CLAUDE.md's degrade-loudly rule.
+ * that need different fixes, per AGENTS.md's degrade-loudly rule.
  */
 export class OidcProviderDirectory {
   private readonly log: Logger

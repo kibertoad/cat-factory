@@ -34,7 +34,7 @@ is left**.
 - **Three CI gates, and none is a full key-parity check.** `i18n:check`
   (vue-i18n-extract) hard-fails on a key used in code but absent from a catalog, and it
   only sees keys written as static `t('literal')` calls. `i18n-locale-parity.mjs --since
-origin/<base>` requires a PR that adds, changes or removes an `en.json` key to make the
+  origin/<base>` requires a PR that adds, changes or removes an `en.json` key to make the
   same change in the other nine catalogs. Pre-existing lag on keys a PR does not touch
   passes both, deliberately: it keeps the gates from fighting the incremental policy.
   Standing lag is therefore tracked by hand, under **Remaining** below. The third,
@@ -205,7 +205,7 @@ All ten catalogs are otherwise at full key parity with `en`.
 
 ## Per-phase checklist
 
-For each phase (see `CLAUDE.md` → Internationalization for the full rules):
+For each phase (see `AGENTS.md` → Internationalization for the full rules):
 
 1. Replace every user-facing string (visible text, `placeholder`, `title`/tooltip,
    `aria-label`, button labels, toast `title`/`description`, script-built labels)

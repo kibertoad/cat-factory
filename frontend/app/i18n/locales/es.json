@@ -129,6 +129,7 @@
     "commandBar": "Buscar o ejecutar un comando…",
     "create": "Crear",
     "assistant": "Asistente",
+    "guidedReview": "Revisión guiada",
     "buildPipeline": "Crear una canalización",
     "repositories": "Repositorios",
     "addFromRepo": "Añadir desde un repositorio existente",
@@ -219,7 +220,8 @@
         "recurring": "Recurrente",
         "review": "Revisión",
         "ralph": "Bucle Ralph",
-        "bugFishing": "Pesca de errores"
+        "bugFishing": "Pesca de errores",
+        "resolveConflicts": "Resolver conflictos"
       },
       "recurringWithFrame": "Una tarea recurrente ejecuta una pipeline con cierta cadencia. Continúa para definir el horario y el prompt.",
       "recurringNoFrame": "Una tarea recurrente debe vivir en un servicio. Añádela desde un marco de servicio (o un módulo dentro de él).",
@@ -638,7 +640,8 @@
         "assistant_generation_failed": "El proveedor de modelos del asistente no respondió. Está configurado correctamente y aquí no hay nada que configurar: vuelve a intentar la solicitud en un momento.",
         "assistant_reply_unreadable": "El modelo del asistente respondió con algo que esta plataforma no puede ejecutar como decisión. Reformular rara vez ayuda: elige otro modelo para el asistente en la configuración de modelos.",
         "delegated_executor_failed": "El ejecutor externo no pudo iniciar este paso. El problema está en el sistema que realiza el trabajo, no en esta instalación: revisa sus propios registros e inténtalo de nuevo.",
-        "delegated_work_branch_unprepared": "La plataforma no pudo preparar la rama de trabajo a la que se envía el ejecutor de este paso, así que no se inició nada. O la conexión al repositorio no puede escribir en ella, o la tarea indica una rama que aún no existe: los detalles dicen cuál de las dos."
+        "delegated_work_branch_unprepared": "La plataforma no pudo preparar la rama de trabajo a la que se envía el ejecutor de este paso, así que no se inició nada. O la conexión al repositorio no puede escribir en ella, o la tarea indica una rama que aún no existe: los detalles dicen cuál de las dos.",
+        "attached_pr_provider_unreachable": "El proveedor del repositorio no respondió, así que no se pudo comprobar la pull request y no se creó ninguna tarea. No hay nada que configurar aquí: vuelve a intentarlo en un momento."
       }
     },
     "reason": {
@@ -725,7 +728,10 @@
         "no_host_frame": "Esta expedición no está bajo un servicio",
         "delegated_executor_unwired": "Ejecutor externo no registrado",
         "delegated_step_async_only": "Este paso se consulta, no se espera",
-        "delegated_claim_missing": "Este paso no tiene trabajo externo que consultar"
+        "delegated_claim_missing": "Este paso no tiene trabajo externo que consultar",
+        "thread_busy": "Este hilo todavía está respondiendo",
+        "draft_conflict": "Este borrador ha cambiado",
+        "session_stale": "La pull request ha avanzado"
       },
       "description": {
         "dependencies_unmet": "Esta tarea depende de otras que aún no están terminadas. Complétalas o desbloquéalas y vuelve a iniciarla.",
@@ -782,7 +788,10 @@
         "no_host_frame": "Una tarea de corrección necesita un servicio donde vivir y un repositorio que arreglar. Mueva la tarea de la expedición bajo un marco de servicio e inténtelo de nuevo.",
         "delegated_executor_unwired": "Un paso de esta canalización se ejecuta en un ejecutor externo que esta instalación no registra, así que no hay dónde enviar el trabajo. Registra el ejecutor en el código o cambia el paso por uno que se ejecute aquí.",
         "delegated_step_async_only": "Este paso se ejecuta en un ejecutor externo y puede tardar horas, así que se lanza y luego se consulta en lugar de ejecutarse dentro de una sola petición. Inicia la ejecución desde el tablero; si has llegado aquí desde tu propio código, conduce el paso por la vía asíncrona.",
-        "delegated_claim_missing": "Falta el registro de lo que la ejecución envió al ejecutor externo, así que no hay nada que consultar. El ejecutor en sí no tiene ningún problema. Recarga la ejecución y vuelve a lanzar el paso si sigue atascado."
+        "delegated_claim_missing": "Falta el registro de lo que la ejecución envió al ejecutor externo, así que no hay nada que consultar. El ejecutor en sí no tiene ningún problema. Recarga la ejecución y vuelve a lanzar el paso si sigue atascado.",
+        "thread_busy": "La pregunta anterior de este hilo aún no tiene respuesta. Espera esa respuesta o pregunta en otro hilo.",
+        "draft_conflict": "Este borrador de comentario se ha editado, publicado o descartado desde que lo cargaste. Vuelve a cargar los borradores y repite tu cambio.",
+        "session_stale": "Llegaron commits nuevos después de preparar esta revisión, así que sus borradores pueden apuntar a líneas equivocadas. Actualiza la revisión, revisa los borradores y luego publica."
       },
       "action": {
         "connectGitHub": "Conectar GitHub",
@@ -1678,7 +1687,7 @@
         "allTools": "Todas las herramientas que expone este servidor.",
         "narrowed": "Limitado a: {tools}",
         "reason": {
-          "harnessUnsupported": "no estuvo disponible: la CLI del agente de este paso no tiene cliente MCP.",
+          "harnessUnsupported": "no estuvo disponible: la CLI del agente de este paso no pudo ofrecerlo.",
           "transportUnsupported": "no estuvo disponible: la CLI del agente de este paso no puede alcanzar este tipo de servidor.",
           "missingSecret": "no estuvo disponible: falta en este tablero una credencial que necesita.",
           "reservedSecret": "no estuvo disponible: pide una variable que pertenece a la configuración de la plataforma, así que hay que cambiar la declaración.",
@@ -1690,7 +1699,7 @@
           "unknown": "no estuvo disponible ({reason})."
         },
         "remedy": {
-          "harnessUnsupported": "Ejecuta el paso en una CLI de agente que hable MCP, o amplía la lista de harnesses del servidor. Una ejecución de Codex con tu propia sesión de la CLI no tiene dónde guardar el servidor durante esa ejecución, así que usa una credencial de la plataforma.",
+          "harnessUnsupported": "Amplía la lista de harnesses del servidor para incluir la CLI del agente de este paso, o ejecuta el paso en una que figure en ella. A un paso de Pi registrado antes de que Pi pudiera servir servidores de herramientas le basta con volver a ejecutarse en una imagen de runner actual. Una ejecución de Codex con tu propia sesión de la CLI no tiene dónde guardar el servidor durante esa ejecución, así que usa una credencial de la plataforma.",
           "transportUnsupported": "Declara un servidor stdio para él, o ejecuta el paso en una CLI de agente que alcance servidores HTTP.",
           "missingSecret": "Configura la credencial que nombra, ya sea como variable de entorno del despliegue o en las credenciales de capacidades, en la ventana de Infraestructura.",
           "reservedSecret": "Cambia la declaración para que pida otra clave; definir esa variable es justo lo que no ayudará.",
@@ -2603,6 +2612,7 @@
       "cmd": {
         "newPipeline": "Crear una canalización",
         "assistant": "Abrir el asistente",
+        "guidedReview": "Explorar una pull request",
         "addFromRepo": "Añadir servicio desde un repositorio existente",
         "bootstrapRepo": "Iniciar un repositorio nuevo",
         "githubManage": "Gestionar la conexión de GitHub",
@@ -2631,6 +2641,7 @@
       "keywords": {
         "newPipeline": "canalización agentes cadena pipeline",
         "assistant": "ia asistente preguntar indicación házlo por mí",
+        "guidedReview": "revisión guiada pull request pr explorar explicar preguntas",
         "addFromRepo": "github importar existente",
         "bootstrapRepo": "andamiaje crear arquitectura de referencia",
         "github": "git repositorios pull requests incidencias",
@@ -5112,6 +5123,105 @@
       "unresolved_issue_service": "El asistente no ha podido saber en qué servicio crearla. Indica el servicio en tu petición."
     }
   },
+  "guidedReview": {
+    "title": "Revisión guiada",
+    "titleFor": "{repo} #{number}: {title}",
+    "loading": "Cargando la revisión…",
+    "outOfDate": "Las actualizaciones en vivo fallaron, así que esta vista puede estar desactualizada.",
+    "openFromTask": "Explorar con revisión guiada",
+    "picker": {
+      "intro": "Elige un repositorio y una pull request. Obtendrás un resumen del cambio y podrás hacer preguntas sobre él en hilos separados.",
+      "loading": "Cargando repositorios…",
+      "noRepos": "Todavía no hay repositorios vinculados a este espacio de trabajo.",
+      "repo": "Repositorio",
+      "openPulls": "Pull requests abiertas",
+      "number": "Número de la pull request",
+      "open": "Abrir revisión"
+    },
+    "overview": {
+      "title": "Resumen",
+      "stale": "La pull request tiene commits nuevos",
+      "refresh": "Actualizar",
+      "working": "Preparando el resumen…",
+      "intent": "Intención",
+      "changes": "Cambios relevantes",
+      "consequences": "Consecuencias",
+      "risks": "Riesgos",
+      "focus": "Merece revisión",
+      "suggested": "Preguntas sugeridas"
+    },
+    "severity": {
+      "low": "Baja",
+      "medium": "Media",
+      "high": "Alta"
+    },
+    "failure": {
+      "budget_exhausted": "Este espacio de trabajo ha agotado su presupuesto de modelos.",
+      "model_unavailable": "No hay ningún modelo disponible para la revisión guiada.",
+      "repo_unavailable": "No se pudo leer la pull request del repositorio.",
+      "generation_failed": "La llamada al modelo falló.",
+      "unreadable_reply": "El modelo respondió de una forma que no se pudo leer.",
+      "depth_unavailable": "Las respuestas profundas con un checkout aún no están disponibles.",
+      "head_moved": "La pull request avanzó más allá del commit revisado. Actualiza para revisar su último commit.",
+      "detail": "Detalles"
+    },
+    "dropped": {
+      "outside_diff": "la línea está fuera del diff",
+      "not_in_pr": "el archivo no forma parte de esta pull request",
+      "incomplete": "la propuesta estaba incompleta"
+    },
+    "thread": {
+      "new": "Nuevo hilo",
+      "untitled": "Hilo sin título",
+      "empty": "Pregunta lo que quieras sobre esta pull request.",
+      "waiting": "Preparando una respuesta…",
+      "placeholder": "Haz una pregunta sobre el cambio",
+      "busy": "Esperando la respuesta a la pregunta anterior",
+      "send": "Preguntar",
+      "draftRequest": "Se pidieron comentarios de revisión",
+      "deep": "Análisis a fondo",
+      "deepHint": "Responde desde una copia del repositorio: más lento, pero puede buscar en todo el árbol.",
+      "investigating": "Investigando en una copia del repositorio. Puede tardar varios minutos."
+    },
+    "drafts": {
+      "title": "Borradores de comentarios",
+      "request": "Redactar comentarios de revisión",
+      "summary": "Se conservaron {kept} de {proposed} comentarios propuestos como borradores.",
+      "side": {
+        "RIGHT": "código nuevo",
+        "LEFT": "código anterior"
+      },
+      "select": "Seleccionar este borrador para publicarlo",
+      "status": {
+        "proposed": "Borrador",
+        "posting": "Publicando",
+        "posted": "Publicado",
+        "failed": "No publicado",
+        "discarded": "Descartado"
+      },
+      "edit": "Editar",
+      "save": "Guardar",
+      "cancel": "Cancelar",
+      "discard": "Descartar",
+      "line": "Línea",
+      "sideLabel": "Lado",
+      "postFailed": "El host rechazó este comentario",
+      "summaryPlaceholder": "Comentario de resumen opcional para la pull request",
+      "summaryFailed": "El host rechazó el comentario de resumen",
+      "post": "Publicar {count} en la pull request",
+      "postResult": "{posted} publicados, {failed} sin publicar, {skipped} ya gestionados."
+    },
+    "errors": {
+      "load": "No se pudo cargar la revisión",
+      "repos": "No se pudieron cargar los repositorios vinculados",
+      "open": "No se pudo abrir la revisión",
+      "ask": "No se pudo hacer la pregunta",
+      "drafts": "No se pudieron pedir borradores de comentarios",
+      "refresh": "No se pudo actualizar la revisión",
+      "editDraft": "No se pudo guardar el borrador",
+      "postDrafts": "No se pudieron publicar los borradores"
+    }
+  },
   "pipeline": {
     "iterationCap": {
       "extraRound": "Una ronda más",
@@ -5185,7 +5295,8 @@
         "review": "Revisión",
         "research": "Investigación",
         "planning": "Planificación",
-        "media": "Medios"
+        "media": "Medios",
+        "maintenance": "Mantenimiento de PR"
       },
       "strategyOption": {
         "specialist-panel": "Panel de especialistas",

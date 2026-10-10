@@ -121,10 +121,18 @@ RUN echo 'harness:100000:65536' > /etc/subuid \
 #
 # The Codex pin also carries a FLOOR the catalog depends on: `gpt-6-astra` resolves only from
 # Codex 0.153.0 onward, and an older CLI answers `Unknown model` rather than falling back, so
-# moving this pin below that version silently breaks that catalog entry at dispatch.
-ARG PI_VERSION=0.87.1
-ARG CLAUDE_CODE_VERSION=2.1.281
-ARG CODEX_VERSION=0.156.1
+# moving this pin below that version silently breaks that catalog entry at dispatch. The GPT-6
+# tiers carry the same trap at higher floors: `gpt-6-sol` / `gpt-6-luna` from 0.156.1 and
+# `gpt-6.1-sol` from 0.159.0.
+#
+# The Pi pin carries a floor too: built-in MCP support (the `mcp.json` the harness writes for a
+# run's tool servers) arrived in 0.99.0. A build below it still boots, but the harness asks the
+# installed binary for its version at startup and then stops reporting `piMcpServers`, so every
+# Pi dispatch carrying tool servers is refused rather than run blind
+# (`src/capability-report.ts`).
+ARG PI_VERSION=1.1.0
+ARG CLAUDE_CODE_VERSION=2.1.295
+ARG CODEX_VERSION=0.162.0
 RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
     sh -eu -c 'apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl procps psmisc python3 jq ripgrep && rm -rf /var/lib/apt/lists/*; \
     if [ -s /tmp/extra_ca.crt ]; then export NODE_EXTRA_CA_CERTS=/tmp/extra_ca.crt; fi; \
@@ -233,8 +241,8 @@ USER harness
 # auto-detects it, writes the config and nudges the agent to use the tools
 # (WEB_SEARCH_PROVIDER pins the active provider). No key is baked into the image.
 # Both pinned for the same reproducibility reason as Pi itself.
-ARG PI_TODO_EXTENSION_VERSION=2.10.1
-ARG PI_WEB_TOOLS_EXTENSION_VERSION=2.10.1
+ARG PI_TODO_EXTENSION_VERSION=2.12.0
+ARG PI_WEB_TOOLS_EXTENSION_VERSION=2.12.0
 RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
     sh -eu -c 'if [ -s /tmp/extra_ca.crt ]; then export NODE_EXTRA_CA_CERTS=/tmp/extra_ca.crt; fi; \
     pi install "npm:@juicesharp/rpiv-todo@${PI_TODO_EXTENSION_VERSION}"; \

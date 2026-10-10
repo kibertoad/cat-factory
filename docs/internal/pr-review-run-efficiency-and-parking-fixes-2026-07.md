@@ -235,7 +235,7 @@ the existing `rm` still removes the credential.
      overridable via env for operators. Best-effort throughout: a retention failure must never fail
      an otherwise-successful run.
 2. **Call it from both `finally` blocks** before the `rm`: `retainSessionTranscripts(configHome,
-['projects'], ...)` in `runClaudeCode`, `retainSessionTranscripts(codexHome, ['sessions'], ...)`
+   ['projects'], ...)` in `runClaudeCode`, `retainSessionTranscripts(codexHome, ['sessions'], ...)`
    in `runCodex`, then the existing `rm(home)`.
 3. **Thread the per-job logger** so the retained path is logged with `jobId`: add `log?: Logger` to
    `SubscriptionRunOptions` and forward `opts.log` from `runAgentInWorkspace` (`pi-workspace.ts`).

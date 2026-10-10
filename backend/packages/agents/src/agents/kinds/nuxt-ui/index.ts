@@ -51,8 +51,9 @@ export const nuxtUiSkill: BundledSkillDefinition = {
 /**
  * The Nuxt UI MCP tool server: a public, credential-free HTTPS endpoint that serves component
  * props, slots, events and examples. No `harnesses` allow-list: which transports a CLI can reach is
- * a fact kernel holds centrally (`MCP_HARNESS_TRANSPORTS`), and it already reads `codex: ['stdio']`
- * / `pi: []`, so this HTTP server drops on both as `transport_unsupported` with no declaration here.
+ * a fact kernel holds centrally (`MCP_HARNESS_TRANSPORTS`), and it already reads `codex: ['stdio']`,
+ * so this HTTP server drops there as `transport_unsupported` and is wired on claude-code and Pi with
+ * no declaration here.
  * Pinning `harnesses` would restate that fact, mislabel the drop as `harness_unsupported`, and go
  * stale the day a CLI's client gains HTTP.
  */

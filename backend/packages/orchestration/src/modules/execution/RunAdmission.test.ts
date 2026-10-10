@@ -11,7 +11,11 @@ import {
 } from '@cat-factory/kernel'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { FoundationalServiceResolver } from './run-foundational-services.js'
-import { RunAdmission, type RunAdmissionDeps } from './RunAdmission.js'
+import {
+  assertAttachedPullRequestNotMerged,
+  RunAdmission,
+  type RunAdmissionDeps,
+} from './RunAdmission.js'
 
 // Focused coverage of the BINARY-OUTPUT admission guard (the rest of the `assert*` family is
 // exercised through the engine's integration suites). The stubs satisfy exactly the reads a
@@ -731,5 +735,25 @@ describe('RunAdmission — the binary-storage precondition', () => {
       },
       null,
     )
+  })
+})
+
+describe('assertAttachedPullRequestNotMerged', () => {
+  it('refuses a merge step on a task that attached somebody else’s pull request', () => {
+    expect(() =>
+      assertAttachedPullRequestNotMerged({ taskType: 'resolve-conflicts' }, [
+        'conflicts',
+        'merger',
+      ]),
+    ).toThrow(ConflictError)
+  })
+
+  it('admits the attached task without a merge step, and a merge step on any other task', () => {
+    expect(() =>
+      assertAttachedPullRequestNotMerged({ taskType: 'resolve-conflicts' }, ['conflicts']),
+    ).not.toThrow()
+    expect(() =>
+      assertAttachedPullRequestNotMerged({ taskType: 'feature' }, ['coder', 'merger']),
+    ).not.toThrow()
   })
 })

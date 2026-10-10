@@ -1,5 +1,101 @@
 # @cat-factory/spend
 
+## 0.23.9
+
+### Patch Changes
+
+- Updated dependencies [e3c4b3c]
+  - @cat-factory/contracts@0.363.0
+  - @cat-factory/kernel@0.357.0
+
+## 0.23.8
+
+### Patch Changes
+
+- ffe4356: Add Claude Haiku 5.5 to the model catalog and the price table, and correct the two gateway price rows that had fallen below their route.
+  
+  New catalog entry, declared only on routes verified to serve that exact model:
+  
+  - `claude-haiku-5-5` (Claude Haiku 5.5, 2026-10-07): Claude Code subscription, AWS Bedrock (`anthropic.claude-haiku-5-5`) and OpenRouter (`anthropic/claude-haiku-5.5`). It is the one two-band Claude model: $0.10 / $0.50 per 1M for a prompt up to 100,000 tokens and $0.50 / $2.50 for the whole request past it, so both its direct and its gateway row carry a long band at that threshold.
+  
+  Price corrections, both in the safe direction: `openrouter:deepseek/deepseek-v4-flash` output moves to 1.18 EUR/1M (the retired slug's blend now bills $1.28 out), and `openrouter:moonshotai/kimi-k3` names its cache read at 0.51 EUR/1M, the gateway's $0.55 blend, which sat above the derived 0.1x floor. The `anthropic:claude-sonnet-5-5` note now states its real 0.05x cache read; the row was already on the safe side.
+- Updated dependencies [ffe4356]
+- Updated dependencies [ffe4356]
+  - @cat-factory/kernel@0.356.0
+
+## 0.23.7
+
+### Patch Changes
+
+- Updated dependencies [97175f8]
+  - @cat-factory/contracts@0.362.0
+  - @cat-factory/kernel@0.355.0
+
+## 0.23.6
+
+### Patch Changes
+
+- Updated dependencies [a3a10b8]
+- Updated dependencies [0966666]
+  - @cat-factory/contracts@0.361.0
+  - @cat-factory/kernel@0.354.2
+
+## 0.23.5
+
+### Patch Changes
+
+- Updated dependencies [8766c3f]
+  - @cat-factory/contracts@0.360.0
+  - @cat-factory/kernel@0.354.1
+
+## 0.23.4
+
+### Patch Changes
+
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+- Updated dependencies [0ea28b8]
+  - @cat-factory/contracts@0.359.0
+  - @cat-factory/kernel@0.354.0
+
+## 0.23.3
+
+### Patch Changes
+
+- Updated dependencies [075ff13]
+  - @cat-factory/contracts@0.358.0
+  - @cat-factory/kernel@0.353.0
+
+## 0.23.2
+
+### Patch Changes
+
+- Updated dependencies [57d9db3]
+  - @cat-factory/kernel@0.352.0
+  - @cat-factory/contracts@0.357.0
+
+## 0.23.1
+
+### Patch Changes
+
+- e84b0d5: Add GPT-6.1 Sol and Claude Sonnet 5.5 to the model catalog and the price table, and name the GLM-5.2 gateway cache rate that had fallen below its route.
+  
+  New catalog entries, each declared only on routes verified to serve that exact model:
+  
+  - `gpt-6.1-sol` (GPT-6.1 Sol, 2026-09-29): Codex subscription and OpenRouter (`openai/gpt-6.1-sol`), two-band like every OpenAI row at $2 / $10 short and $4 / $15 long per 1M. Codex resolves the slug only from 0.159.0 onward. OpenRouter's `-pro` slug gets no entry: same model, same price, only a reasoning mode.
+  - `claude-sonnet-5-5` (Claude Sonnet 5.5, 2026-09-28): Claude Code subscription, AWS Bedrock (`anthropic.claude-sonnet-5-5`) and OpenRouter (`anthropic/claude-sonnet-5.5`), $2 / $10 per 1M like Sonnet 5.
+  
+  The existing `gpt-6-sol` and `claude-sonnet` entries keep their ids and models, so a block pinned to GPT-6 Sol or Sonnet 5 runs what it ran before.
+  
+  Price correction, in the safe direction: `openrouter:z-ai/glm-5.2` names its cache read again (0.21 EUR/1M), because the gateway's cached rate moved back above the 0.1x floor its input rate derives.
+  
+  The SPA's "Enable recommended" OpenRouter set gains GPT-6.1 Sol and Sonnet 5.5.
+- Updated dependencies [e84b0d5]
+- Updated dependencies [e84b0d5]
+- Updated dependencies [e84b0d5]
+  - @cat-factory/kernel@0.351.0
+
 ## 0.23.0
 
 ### Minor Changes

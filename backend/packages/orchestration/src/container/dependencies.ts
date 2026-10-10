@@ -49,6 +49,7 @@ import type {
   CustomManifestTypeRepository,
   DeployCloneTarget,
   DocInterviewRepository,
+  GuidedReviewInvestigator,
   DocumentConnectionRepository,
   DocumentConnectionStore,
   DocumentRepository,
@@ -73,6 +74,8 @@ import type {
   GitHubInstallation,
   GitHubInstallationRepository,
   GitHubProvisioningClient,
+  GuidedReviewRepository,
+  GuidedReviewRunner,
   IdGenerator,
   IncidentEnrichmentConnectionRepository,
   InitiativePresetRegistry,
@@ -977,6 +980,28 @@ export interface CoreDependencies extends ContentLibraryDependencies {
    * the raw outline when no model is wired).
    */
   docInterviewRepository?: DocInterviewRepository
+  /**
+   * Persistence for guided PR review sessions (backend/docs/adr/0066-guided-pr-review.md). Both
+   * runtime facades wire it unconditionally, so the mothership persistence registry, which
+   * reflects these dependencies, serves it to a mothership-mode node.
+   */
+  guidedReviewRepository?: GuidedReviewRepository
+  /**
+   * Durably drives guided-review jobs (the Worker's `GuidedReviewWorkflow`, Node's pg-boss queue,
+   * a mothership-mode node's `node:sqlite` queue). Absent ⇒ queued work waits for a test or a
+   * sweeper to call `GuidedReviewService.runJob` directly.
+   */
+  guidedReviewRunner?: GuidedReviewRunner
+  /**
+   * Runs DEEP guided-review answers in a read-only container (the server's
+   * `ContainerGuidedReviewInvestigator`). Absent ⇒ a deep question settles as `depth_unavailable`.
+   */
+  guidedReviewInvestigator?: GuidedReviewInvestigator
+  /**
+   * Which host this engine drives guided-review work as: `deployment`, or `node:<nodeId>` on a
+   * mothership-mode node. Absent ⇒ `deployment`.
+   */
+  guidedReviewDriver?: string
   /**
    * Persistence for the Kaizen agent (post-run grading of agent steps + the verified-combo
    * library). Both runtime facades wire both repos unconditionally. The Kaizen module

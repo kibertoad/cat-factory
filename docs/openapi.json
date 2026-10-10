@@ -49,6 +49,26 @@
         "required": [],
         "type": "object"
       },
+      "AskGuidedReview": {
+        "properties": {
+          "content": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "type": "string"
+          },
+          "depth": {
+            "enum": [
+              "inline",
+              "deep"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "type": "object"
+      },
       "CreateHeadlessPublicApiKey": {
         "properties": {
           "externalIdentity": {
@@ -175,6 +195,7 @@
                   "document",
                   "spike",
                   "review",
+                  "resolve-conflicts",
                   "ralph",
                   "media"
                 ],
@@ -308,6 +329,53 @@
         ],
         "type": "object"
       },
+      "EditGuidedReviewDraft": {
+        "properties": {
+          "body": {
+            "maxLength": 8000,
+            "minLength": 1,
+            "type": "string"
+          },
+          "discard": {
+            "type": "boolean"
+          },
+          "line": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "path": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "type": "string"
+          },
+          "rev": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "side": {
+            "enum": [
+              "LEFT",
+              "RIGHT"
+            ],
+            "type": "string"
+          },
+          "startLine": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "rev"
+        ],
+        "type": "object"
+      },
       "ErrorResponse": {
         "properties": {
           "error": {
@@ -346,6 +414,831 @@
         },
         "required": [
           "error"
+        ],
+        "type": "object"
+      },
+      "GuidedReviewAnchor": {
+        "properties": {
+          "endLine": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "path": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "type": "string"
+          },
+          "side": {
+            "enum": [
+              "LEFT",
+              "RIGHT"
+            ],
+            "type": "string"
+          },
+          "startLine": {
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      },
+      "GuidedReviewCommentDraft": {
+        "properties": {
+          "body": {
+            "maxLength": 8000,
+            "minLength": 1,
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "number"
+          },
+          "id": {
+            "type": "string"
+          },
+          "line": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "messageId": {
+            "type": "string"
+          },
+          "path": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "type": "string"
+          },
+          "postError": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "postedUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rationale": {
+            "maxLength": 8000,
+            "type": "string"
+          },
+          "rev": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "side": {
+            "enum": [
+              "LEFT",
+              "RIGHT"
+            ],
+            "type": "string"
+          },
+          "startLine": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "proposed",
+              "posting",
+              "posted",
+              "failed",
+              "discarded"
+            ],
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "sessionId",
+          "threadId",
+          "messageId",
+          "path",
+          "line",
+          "startLine",
+          "side",
+          "body",
+          "rationale",
+          "status",
+          "postError",
+          "postedUrl",
+          "rev",
+          "createdAt",
+          "updatedAt"
+        ],
+        "type": "object"
+      },
+      "GuidedReviewDraftReport": {
+        "properties": {
+          "dropped": {
+            "items": {
+              "properties": {
+                "line": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "path": {
+                  "type": "string"
+                },
+                "reason": {
+                  "enum": [
+                    "outside_diff",
+                    "not_in_pr",
+                    "incomplete"
+                  ],
+                  "type": "string"
+                },
+                "side": {
+                  "enum": [
+                    "LEFT",
+                    "RIGHT"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path",
+                "line",
+                "side",
+                "reason"
+              ],
+              "type": "object"
+            },
+            "maxItems": 40,
+            "type": "array"
+          },
+          "proposed": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "proposed",
+          "dropped"
+        ],
+        "type": "object"
+      },
+      "GuidedReviewExchange": {
+        "properties": {
+          "placeholder": {
+            "$ref": "#/components/schemas/GuidedReviewMessage"
+          },
+          "question": {
+            "$ref": "#/components/schemas/GuidedReviewMessage"
+          }
+        },
+        "required": [
+          "question",
+          "placeholder"
+        ],
+        "type": "object"
+      },
+      "GuidedReviewFailure": {
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {
+                "maxLength": 8000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "enum": [
+              "budget_exhausted",
+              "model_unavailable",
+              "repo_unavailable",
+              "generation_failed",
+              "unreadable_reply",
+              "depth_unavailable",
+              "head_moved"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason",
+          "detail"
+        ],
+        "type": "object"
+      },
+      "GuidedReviewMessage": {
+        "properties": {
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/GuidedReviewAnchor"
+            },
+            "maxItems": 40,
+            "type": "array"
+          },
+          "content": {
+            "maxLength": 40000,
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "number"
+          },
+          "depth": {
+            "enum": [
+              "inline",
+              "deep"
+            ],
+            "type": "string"
+          },
+          "draftReport": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GuidedReviewDraftReport"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "failure": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GuidedReviewFailure"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "answer",
+              "comment-drafts"
+            ],
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "role": {
+            "enum": [
+              "user",
+              "assistant"
+            ],
+            "type": "string"
+          },
+          "seq": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "running",
+              "complete",
+              "failed"
+            ],
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "threadId",
+          "sessionId",
+          "seq",
+          "role",
+          "kind",
+          "depth",
+          "content",
+          "status",
+          "citations",
+          "failure",
+          "draftReport",
+          "model",
+          "createdAt",
+          "updatedAt"
+        ],
+        "type": "object"
+      },
+      "GuidedReviewOverview": {
+        "properties": {
+          "content": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GuidedReviewOverviewContent"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "failure": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GuidedReviewFailure"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "generation": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "running",
+              "complete",
+              "failed"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "generation",
+          "content",
+          "failure",
+          "model"
+        ],
+        "type": "object"
+      },
+      "GuidedReviewOverviewContent": {
+        "properties": {
+          "consequences": {
+            "items": {
+              "properties": {
+                "detail": {
+                  "maxLength": 8000,
+                  "type": "string"
+                },
+                "title": {
+                  "maxLength": 200,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "title",
+                "detail"
+              ],
+              "type": "object"
+            },
+            "maxItems": 40,
+            "type": "array"
+          },
+          "focusAreas": {
+            "items": {
+              "properties": {
+                "anchors": {
+                  "items": {
+                    "$ref": "#/components/schemas/GuidedReviewAnchor"
+                  },
+                  "maxItems": 40,
+                  "type": "array"
+                },
+                "title": {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                "why": {
+                  "maxLength": 8000,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "title",
+                "why",
+                "anchors"
+              ],
+              "type": "object"
+            },
+            "maxItems": 40,
+            "type": "array"
+          },
+          "intent": {
+            "maxLength": 8000,
+            "type": "string"
+          },
+          "meaningfulChanges": {
+            "items": {
+              "properties": {
+                "detail": {
+                  "maxLength": 8000,
+                  "type": "string"
+                },
+                "paths": {
+                  "items": {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "maxItems": 40,
+                  "type": "array"
+                },
+                "title": {
+                  "maxLength": 200,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "title",
+                "detail",
+                "paths"
+              ],
+              "type": "object"
+            },
+            "maxItems": 40,
+            "type": "array"
+          },
+          "risks": {
+            "items": {
+              "properties": {
+                "detail": {
+                  "maxLength": 8000,
+                  "type": "string"
+                },
+                "paths": {
+                  "items": {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "maxItems": 40,
+                  "type": "array"
+                },
+                "severity": {
+                  "enum": [
+                    "low",
+                    "medium",
+                    "high"
+                  ],
+                  "type": "string"
+                },
+                "title": {
+                  "maxLength": 200,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "title",
+                "detail",
+                "severity",
+                "paths"
+              ],
+              "type": "object"
+            },
+            "maxItems": 40,
+            "type": "array"
+          },
+          "suggestedQuestions": {
+            "items": {
+              "properties": {
+                "id": {
+                  "maxLength": 80,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "question": {
+                  "maxLength": 4000,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "question"
+              ],
+              "type": "object"
+            },
+            "maxItems": 40,
+            "type": "array"
+          },
+          "summary": {
+            "maxLength": 8000,
+            "type": "string"
+          }
+        },
+        "required": [
+          "summary",
+          "intent",
+          "meaningfulChanges",
+          "consequences",
+          "risks",
+          "focusAreas",
+          "suggestedQuestions"
+        ],
+        "type": "object"
+      },
+      "GuidedReviewPostResult": {
+        "properties": {
+          "drafts": {
+            "items": {
+              "$ref": "#/components/schemas/GuidedReviewCommentDraft"
+            },
+            "type": "array"
+          },
+          "failed": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "posted": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "skipped": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "summary": {
+            "properties": {
+              "error": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "posted": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "posted",
+              "error"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "drafts",
+          "posted",
+          "failed",
+          "skipped",
+          "summary"
+        ],
+        "type": "object"
+      },
+      "GuidedReviewSession": {
+        "properties": {
+          "baseRef": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "number"
+          },
+          "createdBy": {
+            "type": "string"
+          },
+          "createdByKind": {
+            "enum": [
+              "user",
+              "api-key"
+            ],
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "overview": {
+            "$ref": "#/components/schemas/GuidedReviewOverview"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "prNumber": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "prTitle": {
+            "type": "string"
+          },
+          "provider": {
+            "enum": [
+              "github",
+              "gitlab"
+            ],
+            "type": "string"
+          },
+          "repo": {
+            "type": "string"
+          },
+          "repoId": {
+            "type": "string"
+          },
+          "reviewedHeadSha": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "provider",
+          "repoId",
+          "owner",
+          "repo",
+          "prNumber",
+          "prTitle",
+          "reviewedHeadSha",
+          "baseRef",
+          "createdBy",
+          "createdByKind",
+          "overview",
+          "createdAt",
+          "updatedAt"
+        ],
+        "type": "object"
+      },
+      "GuidedReviewSessionView": {
+        "properties": {
+          "drafts": {
+            "items": {
+              "$ref": "#/components/schemas/GuidedReviewCommentDraft"
+            },
+            "type": "array"
+          },
+          "session": {
+            "$ref": "#/components/schemas/GuidedReviewSession"
+          },
+          "threads": {
+            "items": {
+              "$ref": "#/components/schemas/GuidedReviewThreadSummary"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "session",
+          "threads",
+          "drafts"
+        ],
+        "type": "object"
+      },
+      "GuidedReviewThread": {
+        "properties": {
+          "createdAt": {
+            "type": "number"
+          },
+          "createdBy": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 200,
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "sessionId",
+          "title",
+          "createdBy",
+          "createdAt",
+          "updatedAt"
+        ],
+        "type": "object"
+      },
+      "GuidedReviewThreadSummary": {
+        "properties": {
+          "createdAt": {
+            "type": "number"
+          },
+          "createdBy": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "pendingMessageId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 200,
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "sessionId",
+          "title",
+          "createdBy",
+          "createdAt",
+          "updatedAt",
+          "pendingMessageId"
+        ],
+        "type": "object"
+      },
+      "GuidedReviewThreadView": {
+        "properties": {
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/GuidedReviewMessage"
+            },
+            "type": "array"
+          },
+          "thread": {
+            "$ref": "#/components/schemas/GuidedReviewThread"
+          }
+        },
+        "required": [
+          "thread",
+          "messages"
         ],
         "type": "object"
       },
@@ -875,6 +1768,71 @@
           "enabled",
           "hasSecret",
           "updatedAt"
+        ],
+        "type": "object"
+      },
+      "OpenGuidedReview": {
+        "properties": {
+          "owner": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "prNumber": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "provider": {
+            "enum": [
+              "github",
+              "gitlab"
+            ],
+            "type": "string"
+          },
+          "repo": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "owner",
+          "repo",
+          "prNumber"
+        ],
+        "type": "object"
+      },
+      "OpenGuidedReviewThread": {
+        "properties": {
+          "question": {
+            "$ref": "#/components/schemas/AskGuidedReview"
+          },
+          "title": {
+            "maxLength": 200,
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "PostGuidedReviewDrafts": {
+        "properties": {
+          "draftIds": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 40,
+            "minItems": 1,
+            "type": "array"
+          },
+          "summary": {
+            "maxLength": 8000,
+            "type": "string"
+          }
+        },
+        "required": [
+          "draftIds"
         ],
         "type": "object"
       },
@@ -4099,6 +5057,31 @@
         ],
         "type": "object"
       },
+      "PublicGuidedReviewList": {
+        "properties": {
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sessions": {
+            "items": {
+              "$ref": "#/components/schemas/GuidedReviewSession"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "sessions",
+          "nextCursor"
+        ],
+        "type": "object"
+      },
       "PublicHumanTestDecision": {
         "properties": {
           "attempts": {
@@ -6480,6 +7463,7 @@
                   "document",
                   "spike",
                   "review",
+                  "resolve-conflicts",
                   "ralph",
                   "media",
                   "recurring"
@@ -6919,6 +7903,16 @@
         "required": [],
         "type": "object"
       },
+      "RequestGuidedReviewDrafts": {
+        "properties": {
+          "instructions": {
+            "maxLength": 4000,
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
       "RequirementGroup": {
         "properties": {
           "name": {
@@ -7183,7 +8177,7 @@
       "name": "MIT"
     },
     "title": "cat-factory Public API",
-    "version": "1.75.0"
+    "version": "1.79.0"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -12454,6 +13448,747 @@
           "Environments"
         ],
         "x-min-scope": "admin"
+      }
+    },
+    "/api/v1/guided-reviews": {
+      "get": {
+        "description": "Guided review sessions in the workspace, newest created first, optionally narrowed to one repository (`repoId`), one pull request (`prNumber`) or the calling key's own (`mine=true`). Keyset-paginated: up to `limit` rows (default 50, at most 100) per page, and `nextCursor` to pass back as `cursor` for the next page, null on the last. A malformed cursor is `400` with `code: \"invalid_cursor\"`.",
+        "operationId": "listPublicGuidedReviews",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "repoId",
+            "required": false,
+            "schema": {
+              "maxLength": 200,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "prNumber",
+            "required": false,
+            "schema": {
+              "minimum": 1,
+              "pattern": "^\\d+$",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "mine",
+            "required": false,
+            "schema": {
+              "enum": [
+                "true",
+                "false"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "maximum": 100,
+              "minimum": 1,
+              "pattern": "^\\d+$",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicGuidedReviewList"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "List the workspace's guided reviews",
+        "tags": [
+          "Guided review"
+        ],
+        "x-min-scope": "read"
+      },
+      "post": {
+        "description": "Open a guided review of one pull request in a repository linked to the workspace, or return the one the calling key's identity already has for it. A guided review explains the PR (what it does, its meaningful changes, consequences, risks, where to focus, and suggested questions) and holds question threads answered by a model that reads the PR at the commit under review. Answers with the session at once; its overview is generated in the background, so follow `GET /api/v1/guided-reviews/{sessionId}/events` or re-read it. A key bound to a person acts as that person; an unbound key owns its own sessions and runs on the workspace's credentials, never a person's; `createdByKind` says which of the two owns a session. An unlinked repository is `404` with `details.reason: \"repo_not_linked\"`, and a PR the host cannot find is `404` with `details.reason: \"pr_not_found\"`.",
+        "operationId": "openPublicGuidedReview",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenGuidedReview"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuidedReviewSessionView"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Open a guided review of a pull request",
+        "tags": [
+          "Guided review"
+        ],
+        "x-min-scope": "write"
+      }
+    },
+    "/api/v1/guided-reviews/{sessionId}": {
+      "delete": {
+        "description": "Delete the session with its threads, messages and drafts. Only the identity that opened it may; anyone else is `403` with `details.reason: \"not_session_owner\"`. Nothing on the pull request is touched.",
+        "operationId": "deletePublicGuidedReview",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sessionId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Delete a guided review",
+        "tags": [
+          "Guided review"
+        ],
+        "x-min-scope": "write"
+      },
+      "get": {
+        "description": "The session with its overview, its threads (each naming the answer it is waiting on, if any) and its comment drafts. The overview's `status` is `pending` or `running` while it is generated; a `failed` one carries `failure.reason` (`budget_exhausted`, `model_unavailable`, `repo_unavailable`, `generation_failed`, `unreadable_reply`, or `head_moved` when the author pushed before it finished, which `POST /api/v1/guided-reviews/{sessionId}/refresh` resolves) and the raw cause in `failure.detail`.",
+        "operationId": "getPublicGuidedReview",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sessionId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuidedReviewSessionView"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Get a guided review",
+        "tags": [
+          "Guided review"
+        ],
+        "x-min-scope": "read"
+      }
+    },
+    "/api/v1/guided-reviews/{sessionId}/comment-drafts/post": {
+      "post": {
+        "description": "Publish the named drafts as review comments on the pull request, as the key's identity, with an optional summary comment. Each comment posts on its own, so a partial post is normal: the result counts `posted` and `failed` drafts (a failed one carries `postError` and can be posted again) and lists in `skipped` the named drafts this call did not claim because they were already posted, discarded or being posted, so a retried call never posts a comment twice. The summary posts only alongside a draft this call claimed, so an identical retry after a complete post publishes nothing. Refused `409` with `details.reason: \"session_stale\"` when the pull request has commits past `reviewedHeadSha`: refresh the review and check the drafts first. Posting never approves or requests changes.",
+        "operationId": "postPublicGuidedReviewDrafts",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sessionId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PostGuidedReviewDrafts"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuidedReviewPostResult"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Post comment drafts to the pull request",
+        "tags": [
+          "Guided review"
+        ],
+        "x-min-scope": "write"
+      }
+    },
+    "/api/v1/guided-reviews/{sessionId}/comment-drafts/{draftId}": {
+      "patch": {
+        "description": "Change a draft's body or the line it sits on, or discard it with `discard: true`. Send the `rev` you loaded: a draft edited, posted or discarded since is refused `409` with `details.reason: \"draft_conflict\"`, so reload and decide again. A new anchor must be a line inside the diff on its side, or the edit is `422` with `details.reason: \"draft_anchor_outside_diff\"`. Only the session's owner may edit.",
+        "operationId": "editPublicGuidedReviewDraft",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sessionId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "draftId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditGuidedReviewDraft"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuidedReviewCommentDraft"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Edit, re-anchor or discard a comment draft",
+        "tags": [
+          "Guided review"
+        ],
+        "x-min-scope": "write"
+      }
+    },
+    "/api/v1/guided-reviews/{sessionId}/events": {
+      "get": {
+        "description": "Server-sent events for one guided review: a `state` frame carrying the session view (the same body `GET /api/v1/guided-reviews/{sessionId}` returns) whenever it changes, `deleted` when the session is removed, and `timeout` when the connection cap is reached (reconnect to continue). A thread whose `pendingMessageId` clears has an answer to fetch with `GET /api/v1/guided-reviews/{sessionId}/threads/{threadId}`. Authenticated by the API key header.",
+        "operationId": "streamPublicGuidedReview",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sessionId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "An event stream of session updates"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          }
+        },
+        "summary": "Stream a guided review (SSE)",
+        "tags": [
+          "Guided review"
+        ],
+        "x-min-scope": "read"
+      }
+    },
+    "/api/v1/guided-reviews/{sessionId}/refresh": {
+      "post": {
+        "description": "Re-read the pull request and regenerate the overview at its current head commit, keeping every thread. Use it after the author pushes: the overview, answers and draft anchors are computed against the commit recorded as `reviewedHeadSha`.",
+        "operationId": "refreshPublicGuidedReview",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sessionId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuidedReviewSessionView"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Point a guided review at the PR's current head",
+        "tags": [
+          "Guided review"
+        ],
+        "x-min-scope": "write"
+      }
+    },
+    "/api/v1/guided-reviews/{sessionId}/threads": {
+      "post": {
+        "description": "Open a thread in the session, optionally asking its first question in the same call. A thread is an independent line of questioning: waiting on an answer in one never blocks another. Pass a suggested question from the overview verbatim to ask it.",
+        "operationId": "openPublicGuidedReviewThread",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sessionId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenGuidedReviewThread"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuidedReviewThreadView"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Open an exploration thread",
+        "tags": [
+          "Guided review"
+        ],
+        "x-min-scope": "write"
+      }
+    },
+    "/api/v1/guided-reviews/{sessionId}/threads/{threadId}": {
+      "get": {
+        "description": "The thread and its messages in order. An assistant message is `pending` or `running` until answered, then `complete` with markdown `content` and the `citations` (file spans) it rests on, or `failed` with a `failure`. A `comment-drafts` message's drafts are on the session; its `draftReport` names every proposed comment that was refused (`outside_diff`, `not_in_pr`, `incomplete`).",
+        "operationId": "getPublicGuidedReviewThread",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sessionId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "threadId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuidedReviewThreadView"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Get a thread with its messages",
+        "tags": [
+          "Guided review"
+        ],
+        "x-min-scope": "read"
+      }
+    },
+    "/api/v1/guided-reviews/{sessionId}/threads/{threadId}/comment-drafts": {
+      "post": {
+        "description": "Ask the model to turn what the thread concluded into review comments, each placed on the line it is about. Optional `instructions` narrow which ones. Drafts are kept only on lines inside the PR's diff; posting them is a separate, explicit call. Busy like a question: `409` with `details.reason: \"thread_busy\"` while the thread is waiting on an answer.",
+        "operationId": "requestPublicGuidedReviewDrafts",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sessionId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "threadId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestGuidedReviewDrafts"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuidedReviewExchange"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Draft review comments from a thread's conclusions",
+        "tags": [
+          "Guided review"
+        ],
+        "x-min-scope": "write"
+      }
+    },
+    "/api/v1/guided-reviews/{sessionId}/threads/{threadId}/messages": {
+      "post": {
+        "description": "Append a question and the placeholder that will answer it, and answer with both at once; the answer is produced in the background. A thread holds one unanswered question at a time: asking again before it is answered is `409` with `details.reason: \"thread_busy\"`, and other threads are unaffected. `depth: \"deep\"` answers from a read-only checkout of the repository instead, so it can search the whole tree and run read-only commands; it takes minutes rather than seconds and stays `running` meanwhile, and a deployment with no runner settles it as `depth_unavailable`.",
+        "operationId": "askPublicGuidedReview",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sessionId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "threadId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AskGuidedReview"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuidedReviewExchange"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Ask a question in a thread",
+        "tags": [
+          "Guided review"
+        ],
+        "x-min-scope": "write"
       }
     },
     "/api/v1/jobs": {
@@ -23141,6 +24876,9 @@
     {
       "description": "What a run PROVED: the engine’s own verification report (the same bundle it writes onto the pull request) and the binary artifacts the run captured, bytes included. The surface for a consumer that has to judge a run (accept the change, score the fleet) rather than debug one. Read-only (`read` scope).",
       "name": "Evidence"
+    },
+    {
+      "name": "Guided review"
     },
     {
       "description": "What the calling key is and what it may do — the self-check an integration runs at startup, so “can I do this?” does not have to be answered by attempting it and reading the 403. `read` scope.",

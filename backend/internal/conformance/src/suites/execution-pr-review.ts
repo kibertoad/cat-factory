@@ -13,7 +13,7 @@ import { mintPublicApiKey } from './shared.js'
 
 // PR deep-review park → select → resolve (finish / fix / post), asserted identically against every
 // facade. Extracted from `core.ts` as a cohesive sub-suite so that giant function stays within its
-// line budget (see CLAUDE.md — split, don't raise the budget). Registers under the same parent
+// line budget (see AGENTS.md — split, don't raise the budget). Registers under the same parent
 // `[name] conformance` describe because it's called from within `defineCoreConformance`'s body.
 // The reviewer + effort-report fixtures every case in this file drives the fake agent with.
 const reviewerOutput = {

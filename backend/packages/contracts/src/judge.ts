@@ -1,7 +1,7 @@
 import * as v from 'valibot'
 
 // ---------------------------------------------------------------------------
-// Judge wire contracts — the FOURTH step-taxonomy bucket (see `CLAUDE.md`: agents /
+// Judge wire contracts — the FOURTH step-taxonomy bucket (see `AGENTS.md`: agents /
 // polling gates / one-shot engine steps / judges).
 //
 // A judge step runs an LLM assessment of the run's work against a RUBRIC, producing a

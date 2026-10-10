@@ -337,7 +337,7 @@ function section(title: string, lines: string[]): string[] {
 }
 
 /**
- * Deterministically render the human-readable `tracker.md` — the CLAUDE.md
+ * Deterministically render the human-readable `tracker.md` — the AGENTS.md
  * tracker-document convention: status header, goal & rationale, the per-item
  * checklist tables (one per phase, with status + PR links), the execution
  * policy, and the decisions / deviations / follow-ups / caveats logs.

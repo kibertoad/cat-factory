@@ -14,6 +14,8 @@
 import {
   ContainerEnvConfigRepairer,
   ContainerEnvironmentProbeAgent,
+  type ContainerEnvironmentProbeAgentDependencies,
+  ContainerGuidedReviewInvestigator,
   ContainerJobAuthResolver,
   ContainerRepoBootstrapper,
   ContainerSessionService,
@@ -33,7 +35,11 @@ import type {
   PersonalSubscriptionService,
   ProviderSubscriptionService,
 } from '@cat-factory/integrations'
-import { isProxyableProvider, resolveAgentConfig } from '@cat-factory/agents'
+import {
+  type AgentKindRegistry,
+  isProxyableProvider,
+  resolveAgentConfig,
+} from '@cat-factory/agents'
 import type { Env } from './env'
 import { buildAppRegistry, buildResolvePackageRegistries } from './container'
 import {
@@ -43,6 +49,7 @@ import {
 import { workerDispatchTokenMint } from './dispatchTokenMint'
 import {
   buildToolTrajectorySinks,
+  buildWorkerHarnessCallRecorder,
   buildWorkerJobAccountingDeps,
   buildWorkerJobAuthDeps,
 } from './container-executor-deps'
@@ -212,7 +219,44 @@ export function selectEnvConfigRepairer(deps: {
  * below are the same ones the step executor uses, which is what makes a subscription harness
  * runnable here at all. Mirror of the Node family's `selectNodeEnvironmentProbeAgent`.
  */
-export function selectEnvironmentProbeAgent(deps: {
+export function selectEnvironmentProbeAgent(
+  deps: SingleJobDispatchInput,
+): ContainerEnvironmentProbeAgent | undefined {
+  const shared = buildWorkerSingleJobDispatch(deps)
+  if (!shared) return undefined
+  // The frame's sealed test credentials, resolved through the same service the tester dispatch
+  // uses. Absent (no ENCRYPTION_KEY) ⇒ the prober is told there are none, which is what puts the
+  // gap in its report rather than in its guesswork.
+  const testSecrets = buildTestSecretsService(deps.env, deps.db, deps.clock)
+  return new ContainerEnvironmentProbeAgent({
+    ...shared,
+    ...(testSecrets
+      ? {
+          resolveTestSecrets: (workspaceId: string, blockId: string) =>
+            testSecrets.resolveValuesForBlock(workspaceId, blockId),
+        }
+      : {}),
+  })
+}
+
+/**
+ * Build the container behind a DEEP guided-review answer, on the same prerequisites and the same
+ * per-dispatch model and credential resolution as the prober. Absent ⇒ a deep question settles as
+ * `depth_unavailable`. Mirror of the Node family's `selectNodeGuidedReviewInvestigator`.
+ */
+export function selectGuidedReviewInvestigator(
+  deps: SingleJobDispatchInput & { agentKindRegistry: AgentKindRegistry },
+): ContainerGuidedReviewInvestigator | undefined {
+  const shared = buildWorkerSingleJobDispatch(deps)
+  if (!shared) return undefined
+  return new ContainerGuidedReviewInvestigator({
+    ...shared,
+    agentKindRegistry: deps.agentKindRegistry,
+  })
+}
+
+/** What a standalone (non-pipeline) container dispatch is built from. */
+export interface SingleJobDispatchInput {
   env: Env
   config: AppConfig
   db: D1Database
@@ -221,7 +265,17 @@ export function selectEnvironmentProbeAgent(deps: {
   resolveTransport: ResolveRunnerTransport | null
   subscriptions?: ProviderSubscriptionService
   personalSubscriptions?: PersonalSubscriptionService
-}): ContainerEnvironmentProbeAgent | undefined {
+}
+
+/** The dispatch half every standalone container flow shares: transport, model, credential, spend. */
+export type SingleJobDispatchDeps = Omit<
+  ContainerEnvironmentProbeAgentDependencies,
+  'resolveTestSecrets'
+>
+
+export function buildWorkerSingleJobDispatch(
+  deps: SingleJobDispatchInput,
+): SingleJobDispatchDeps | undefined {
   const { env, config, db, clock, resolveTransport } = deps
   if (
     !resolveTransport ||
@@ -233,10 +287,6 @@ export function selectEnvironmentProbeAgent(deps: {
     return undefined
   }
   const registry = buildAppRegistry(env, config, db, clock)
-  // The frame's sealed test credentials, resolved through the same service the tester dispatch
-  // uses. Absent (no ENCRYPTION_KEY) ⇒ the prober is told there are none, which is what puts the
-  // gap in its report rather than in its guesswork.
-  const testSecrets = buildTestSecretsService(env, db, clock)
   // Every credential channel a container dispatch can carry: the model-locked proxy session token
   // for a Pi model, the pooled lease for Claude Code / Codex, the initiator's own personal lease
   // for an individual-usage vendor, and the ACCOUNT scope the spend gate reads. The SAME
@@ -250,7 +300,7 @@ export function selectEnvironmentProbeAgent(deps: {
     ...(deps.subscriptions ? { subscriptions: deps.subscriptions } : {}),
     ...(deps.personalSubscriptions ? { personalSubscriptions: deps.personalSubscriptions } : {}),
   })
-  return new ContainerEnvironmentProbeAgent({
+  return {
     resolveTransport,
     installationRepository: new D1GitHubInstallationRepository({ db }),
     repoRepository: new D1RepoProjectionRepository({ db }),
@@ -262,7 +312,7 @@ export function selectEnvironmentProbeAgent(deps: {
       resolveWorkspaceModelDefault: buildResolveWorkspaceModelDefault(db, deps.caches),
       resolvePresetProviderPreference: buildResolvePresetProviderPreference(db, deps.caches),
       // The initiator's local runners, read through the shared cached projection the engine uses,
-      // so ONE resolution serves a dry run and a pipeline step on the same frame.
+      // so ONE resolution serves a standalone job and a pipeline step on the same frame.
       resolveLocalModelDeclarations: (userId: string) =>
         readCachedLocalModelDeclarations(
           deps.caches?.localModelDeclarations,
@@ -277,25 +327,18 @@ export function selectEnvironmentProbeAgent(deps: {
         : {}),
     }),
     auth: new ContainerJobAuthResolver(authDeps),
-    // What a SETTLED dry run's tokens are recorded against, from the same shared composition the
-    // step executor files through. A subscription-routed prober talks to the vendor direct, so the
-    // LLM proxy meters none of it and this is the only path its burn reaches the ledger.
+    // What a SETTLED job's tokens are recorded against, from the same shared composition the step
+    // executor files through. A subscription-routed job talks to the vendor direct, so the LLM
+    // proxy meters none of it and this is the only path its burn reaches the ledger.
     accounting: buildWorkerJobAccountingDeps({
-      env,
-      config,
       db,
       clock,
+      recordHarnessCalls: buildWorkerHarnessCallRecorder({ env, config, db, clock }),
       ...(deps.subscriptions ? { subscriptions: deps.subscriptions } : {}),
     }),
-    // Provider-aware, so a GitLab deployment's prober clones its own instance rather than a
-    // same-named project on github.com.
+    // Provider-aware, so a GitLab deployment clones its own instance rather than a same-named
+    // project on github.com.
     resolveRepoOrigin: deploymentRepoOrigin(config),
-    ...(testSecrets
-      ? {
-          resolveTestSecrets: (workspaceId: string, blockId: string) =>
-            testSecrets.resolveValuesForBlock(workspaceId, blockId),
-        }
-      : {}),
     githubApiBase: config.github.apiBase,
-  })
+  }
 }

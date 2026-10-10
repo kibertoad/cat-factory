@@ -317,6 +317,18 @@ describe('settleDelegatedJob', () => {
     expect(s.delegated?.attempts.at(-1)?.outcome).toBe('The workflow run finished as "failure".')
   })
 
+  it('records on the attempt whether the settled update reported usage', () => {
+    const reported = claimed()
+    settleDelegatedJob(reported, {
+      state: 'done',
+      result: { usage: { inputTokens: 10, outputTokens: 1 } },
+    })
+    expect(reported.delegated?.attempts.at(-1)?.usageReported).toBe(true)
+    const silent = claimed()
+    settleDelegatedJob(silent, { state: 'failed', error: 'boom' })
+    expect(silent.delegated?.attempts.at(-1)?.usageReported).toBe(false)
+  })
+
   it('leaves a settled record alone when a CONTAINER job later runs on the same step', () => {
     // The record outlives the work it describes, and overwriting it with a container's outcome
     // destroys the entire account of work that happened somewhere else.

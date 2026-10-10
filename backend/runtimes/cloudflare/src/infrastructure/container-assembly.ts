@@ -62,6 +62,7 @@ import type { AppConfig } from './config'
 import {
   selectEnvConfigRepairer,
   selectEnvironmentProbeAgent,
+  selectGuidedReviewInvestigator,
   selectRepoBootstrapper,
 } from './container-dispatchers'
 import type { Env } from './env'
@@ -83,6 +84,7 @@ import { DurableObjectMachineEventRelay } from './events/DurableObjectMachineEve
 import { WorkflowsBootstrapRunner } from './workflows/WorkflowsBootstrapRunner'
 import { WorkflowsEnvConfigRepairRunner } from './workflows/WorkflowsEnvConfigRepairRunner'
 import { WorkflowsEnvironmentTestRunner } from './workflows/WorkflowsEnvironmentTestRunner'
+import { WorkflowsGuidedReviewRunner } from './workflows/WorkflowsGuidedReviewRunner'
 import { D1AccountRepository } from './repositories/D1AccountRepository'
 import { D1AgentRunRepository } from './repositories/D1AgentRunRepository'
 import { D1BinaryArtifactMetadataStore } from './repositories/D1BinaryArtifactMetadataStore'
@@ -150,6 +152,7 @@ import {
   selectWorkRunner,
 } from './container.js'
 import { selectDeployDeps } from './containers/deployJobDeps'
+import { buildWorkerHarnessCallRecorder } from './container-executor-deps.js'
 import { selectRecurringDeps } from './container-tracker-deps.js'
 import { selectDocumentsDeps } from './container-documents-deps'
 import { selectGitHubDeps } from './github-deps.js'
@@ -303,6 +306,10 @@ function selectWorkerDurableJobDeps(
     environmentTestRunner: env.ENV_TEST_WORKFLOW
       ? new WorkflowsEnvironmentTestRunner(env.ENV_TEST_WORKFLOW)
       : undefined,
+    guidedReviewRunner: env.GUIDED_REVIEW_WORKFLOW
+      ? new WorkflowsGuidedReviewRunner(env.GUIDED_REVIEW_WORKFLOW)
+      : undefined,
+    guidedReviewDriver: 'deployment',
   }
 }
 
@@ -529,6 +536,9 @@ function selectWorkerAgentExecutor(
   // db and no policy-checked fetch wrapper, none of which anything then reads.
   if (overrides.agentExecutor) return { agentExecutor: overrides.agentExecutor }
   const delegatedUrlSafetyPolicy = resolveUrlSafetyPolicy(config.notificationWebhooks)
+  // ONE writer for both arms below: the container executor's subscription-harness calls and the
+  // usage a delegated executor reports land in the same `llm_call_metrics` the step reads.
+  const recordHarnessCalls = buildWorkerHarnessCallRecorder({ env, config, db, clock })
   // The THIRD executor arm: a step whose work runs in a system the deployment already operates.
   // Built unconditionally and symmetrically with the Node facade (see `buildDelegatedAgentExecutor`
   // for why an empty registry is not a reason to skip it).
@@ -551,6 +561,8 @@ function selectWorkerAgentExecutor(
     ...(late.taskRepository ? { taskRepository: late.taskRepository } : {}),
     resolveToolSecrets: toolSecretChain.resolver,
     ...(agentContextObservability ? { agentContextObservability } : {}),
+    // Symmetric with the Node facade.
+    recordHarnessCalls,
     logger,
     clock,
   })
@@ -569,6 +581,7 @@ function selectWorkerAgentExecutor(
         subscriptions,
         personalSubscriptions,
         agentContextObservability,
+        recordHarnessCalls,
         resolvePackageRegistries: executorPackageRegistries,
         resolveBinaryArtifactStore,
         webSearchAccountSettings,
@@ -1059,6 +1072,23 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
   })
   if (environmentProbeAgent && !dependencies.environmentProbeAgent) {
     dependencies.environmentProbeAgent = environmentProbeAgent
+  }
+
+  // The container behind a deep guided-review answer, on the prober's prerequisites. A fake
+  // injected by a test harness wins, as above.
+  const guidedReviewInvestigator = selectGuidedReviewInvestigator({
+    env,
+    config,
+    db,
+    clock,
+    caches: input.caches,
+    resolveTransport,
+    agentKindRegistry: registries.agentKindRegistry,
+    ...(subscriptions ? { subscriptions } : {}),
+    ...(personalSubscriptions ? { personalSubscriptions } : {}),
+  })
+  if (guidedReviewInvestigator && !dependencies.guidedReviewInvestigator) {
+    dependencies.guidedReviewInvestigator = guidedReviewInvestigator
   }
 
   // Apply any test-injected gate providers LAST, so they override the config wiring done by the

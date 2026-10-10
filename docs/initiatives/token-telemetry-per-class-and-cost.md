@@ -163,7 +163,7 @@ runtimes symmetric"):
   of "cache breakdown unknown". Strictness belongs on the fields whose absence makes a row
   meaningless, not on an additive one whose absence IS the older image's honest answer.
 - **The AI SDK v3 usage shape already carries the split** (`inputTokens: { total, noCache, cacheRead,
-cacheWrite }`), so the inline path reads it straight off rather than re-deriving; `noCache` is
+  cacheWrite }`), so the inline path reads it straight off rather than re-deriving; `noCache` is
   preferred over `total − read − write` because it is what the provider itself reported.
 - **The frontend now derives nothing except the TOTAL.** `freshPromptTokens` (the SPA heuristic) is
   deleted, not reimplemented: the whole point of the slice is that the split arrives correct from

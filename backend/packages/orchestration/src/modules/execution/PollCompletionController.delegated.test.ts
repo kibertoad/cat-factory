@@ -46,10 +46,15 @@ function failure(
 }
 
 function controller() {
-  const calls = { persists: 0, containerErrored: 0 }
+  const calls = { persists: 0, containerErrored: 0, metered: [] as unknown[] }
   const deps = {
     blockRepository: { get: async () => ({ id: 'blk-1' }) as Block },
     clock: { now: () => 1_000 },
+    spend: {
+      record: async (row: unknown) => {
+        calls.metered.push(row)
+      },
+    },
     runStateMachine: {
       casPersist: async () => undefined,
       persistAndEmit: async () => {
@@ -111,6 +116,31 @@ describe('PollCompletionController: a delegated failure', () => {
     expect(result).toMatchObject({ kind: 'job_failed', failureKind: 'delegated_failed' })
     expect(s.delegatedRetries).toBeUndefined()
     expect(s.jobId).toBe('exec-1-acme:impl')
+  })
+
+  it('meters what a failed run reported, as the executor’s own spend', async () => {
+    // A run that fails late has spent most of its tokens; the completion path that meters a
+    // result is never reached, so without this the ledger and the step card both lose them.
+    const s = delegatedStep()
+    const { controller: c, calls } = controller()
+    const usage = { inputTokens: 1_000, outputTokens: 200 }
+    await c.handleFailedPoll('ws-1', instance(s), s, {
+      ...failure('terminal'),
+      usage,
+      usageBilling: 'subscription',
+    })
+    expect(calls.metered).toEqual([
+      expect.objectContaining({ executionId: 'exec-1', usage, billing: 'subscription' }),
+    ])
+    expect(s.usageBilling).toBe('subscription')
+  })
+
+  it('meters nothing for a failure that reported no usage', async () => {
+    const s = delegatedStep()
+    const { controller: c, calls } = controller()
+    await c.handleFailedPoll('ws-1', instance(s), s, failure('terminal'))
+    expect(calls.metered).toEqual([])
+    expect(s.usageBilling).toBeUndefined()
   })
 
   it('leaves a CONTAINER job dispatched later on the same step out of the budget', async () => {

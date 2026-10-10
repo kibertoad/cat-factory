@@ -19,7 +19,7 @@ import * as v from 'valibot'
 // fields (see {@link AUDIT_ACTION_DETAIL_KEYS}), and the ones that are secret never get
 // recorded at all (see `AuditEvent` in kernel).
 //
-// NOTHING here records human-readable PROSE. The backend does not localize (see CLAUDE.md →
+// NOTHING here records human-readable PROSE. The backend does not localize (see AGENTS.md →
 // "Internationalization"), and an audit row is the sharpest case for that rule rather than an
 // exception to it: the row is PERSISTED, so an English sentence written today can never be
 // re-rendered for a reader in another locale. `action` + `details` is what lets slice 4's viewer
@@ -167,7 +167,7 @@ export type AuditEventDetails = Readonly<Record<string, AuditDetailValue>>
  * A persisted vocabulary member this build no longer declares.
  *
  * `action` and `targetType` are CLOSED vocabularies that are also PERSISTED, and those two facts
- * together are what makes this shape necessary (CLAUDE.md → "But a break must ARRIVE as one"):
+ * together are what makes this shape necessary (AGENTS.md → "But a break must ARRIVE as one"):
  * retiring a member removes it from the type and NOT from the rows already written, so every
  * exhaustive `Record`/`switch` over it is total against the TYPE and partial against the DATA.
  * A reader that ignores the gap either renders `undefined` at an operator or throws in the

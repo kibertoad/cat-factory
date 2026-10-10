@@ -145,11 +145,11 @@ the `:514-520` disclaimer:
 
 - `stores/providerConnections.ts`, `composables/api/providerConnections.ts`,
   `types/providerConnections.ts`: `register`/`test` already carry a raw `{ manifest,
-secrets }`. (Types may gain a small `starterManifest` helper; see O1.)
+  secrets }`. (Types may gain a small `starterManifest` helper; see O1.)
 - **Backend**: `register`/`test`/`describeProvider` already accept/return everything the
   editor needs (`savedManifest`, `kind`, `secretKeys`). The editor is a pure consumer.
 
-## i18n (drift guards apply; see CLAUDE.md → Frontend → "Internationalization (i18n)")
+## i18n (drift guards apply; see AGENTS.md → Frontend → "Internationalization (i18n)")
 
 - **Remove:** `settings.providerConnection.manifestEditorUnavailable` (the disclaimer) and
   `settings.providerConnection.runnerPoolLocalHint` / `…ephemeralEnvironments` cross-link

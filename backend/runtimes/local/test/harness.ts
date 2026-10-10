@@ -1,6 +1,7 @@
 import {
   AsyncFakeAgentExecutor,
   withDelegatedArm,
+  lateHarnessCallRecorder,
   type ConformanceApp,
   FakeAgentExecutor,
   type FakeAgentOptions,
@@ -27,6 +28,7 @@ import {
   type DrizzleDb,
   DrizzleAccountRiskPolicyRepository,
   DrizzleDocInterviewRepository,
+  DrizzleGuidedReviewRepository,
   DrizzleAccountSettingsRepository,
   DrizzleDocumentRepository,
   DrizzleNotificationRepository,
@@ -62,7 +64,7 @@ import type {
   UpsertLocalModelEndpointInput,
   UserSecretKind,
 } from '@cat-factory/contracts'
-import type { CoreDependencies } from '@cat-factory/orchestration'
+import type { CoreDependencies, RecordHarnessCalls } from '@cat-factory/orchestration'
 import { buildLocalContainer } from '../src/container.js'
 
 const BASE = 'https://cat-factory.test'
@@ -231,6 +233,7 @@ function buildConformanceOverrides(
   recorder: RecordingEventPublisher,
   agentOptions: FakeAgentOptions | undefined,
   opts: ConformanceAppOpts | undefined,
+  recordHarnessCalls: RecordHarnessCalls,
 ): Partial<CoreDependencies> {
   const o = opts ?? {}
   // The custom-kind suite injects a pre-loaded registry: thread it into BOTH the fake executor
@@ -249,6 +252,7 @@ function buildConformanceOverrides(
         ? new AsyncFakeAgentExecutor(agentExecutorOptions)
         : new FakeAgentExecutor(agentExecutorOptions),
       o,
+      recordHarnessCalls,
     ),
     workRunner: new NoopWorkRunner(),
     bootstrapRunner: new NoopBootstrapRunner(),
@@ -381,7 +385,10 @@ export function makeConformanceApp(
   opts?: ConformanceAppOpts,
 ): ConformanceApp {
   const recorder = new RecordingEventPublisher()
-  const overrides = buildConformanceOverrides(recorder, agentOptions, opts)
+  // The arm files a delegated step's reported usage through the container's OWN observability
+  // service, which exists only once the container is built.
+  const harnessCalls = lateHarnessCallRecorder()
+  const overrides = buildConformanceOverrides(recorder, agentOptions, opts, harnessCalls.record)
   const env: NodeJS.ProcessEnv = { ...TEST_ENV, ...opts?.env }
   const container = buildLocalContainer({
     db,
@@ -404,6 +411,7 @@ export function makeConformanceApp(
     // matching suites) so buildLocalContainer forwards each into buildNodeContainer by reference.
     ...buildContainerRegistryOptions(opts),
   })
+  harnessCalls.bind(container.llmObservability)
   const app = createApp(container, env)
 
   async function call<T>(
@@ -590,6 +598,7 @@ export function makeConformanceApp(
     documentRepository: () => new DrizzleDocumentRepository(db),
     taskRepository: () => new DrizzleTaskRepository(db),
     docInterviewRepository: () => new DrizzleDocInterviewRepository(db),
+    guidedReviewRepository: () => new DrizzleGuidedReviewRepository(db),
     accountSettingsRepository: () => new DrizzleAccountSettingsRepository(db),
     accountRiskPolicyRepository: () => new DrizzleAccountRiskPolicyRepository(db),
     seedService,

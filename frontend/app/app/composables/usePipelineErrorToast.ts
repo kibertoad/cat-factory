@@ -5,7 +5,7 @@
  * instead of dumping the raw message — and, for `providers_unconfigured`, surface the
  * SAME guidance + "Configure AI" jump as the no-AI-provider startup banner.
  *
- * i18n boundary (see CLAUDE.md / the i18n plan): user-facing title AND description are both
+ * i18n boundary (see AGENTS.md / the i18n plan): user-facing title AND description are both
  * resolved from `errors.conflict.*` message keys by the machine-readable `reason` (G1). The raw
  * backend `message` is shown only as the last-resort description fallback (an unmapped reason, or a
  * locale missing the key) and stays untranslated — the contract is "if a server message must be
@@ -170,6 +170,18 @@ const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason>, Conf
   delegated_claim_missing: {
     titleKey: 'errors.conflict.title.delegated_claim_missing',
     descriptionKey: 'errors.conflict.description.delegated_claim_missing',
+  },
+  thread_busy: {
+    titleKey: 'errors.conflict.title.thread_busy',
+    descriptionKey: 'errors.conflict.description.thread_busy',
+  },
+  draft_conflict: {
+    titleKey: 'errors.conflict.title.draft_conflict',
+    descriptionKey: 'errors.conflict.description.draft_conflict',
+  },
+  session_stale: {
+    titleKey: 'errors.conflict.title.session_stale',
+    descriptionKey: 'errors.conflict.description.session_stale',
   },
   task_limit_reached: {
     titleKey: 'errors.conflict.title.task_limit_reached',
@@ -465,6 +477,8 @@ const REASON_DESCRIPTION_KEYS: Record<UnavailableReason | BootstrapReferenceReas
   delegated_executor_failed: 'errors.unavailable.description.delegated_executor_failed',
   delegated_work_branch_unprepared:
     'errors.unavailable.description.delegated_work_branch_unprepared',
+  attached_pr_provider_unreachable:
+    'errors.unavailable.description.attached_pr_provider_unreachable',
 }
 
 /**

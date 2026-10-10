@@ -14,6 +14,7 @@ import {
   MAX_DELEGATED_RETRIES,
 } from './job.logic.js'
 import { PR_REVIEWER_KIND } from '@cat-factory/agents'
+import type { SpendService } from '@cat-factory/spend'
 import { HUMAN_TEST_AGENT_KIND, isTesterKind, VISUAL_CONFIRM_AGENT_KIND } from './ci.logic.js'
 import type { AdvanceResult } from './advance.js'
 import type { RunStateMachine } from './RunStateMachine.js'
@@ -28,6 +29,7 @@ import {
   validationFailureDetail,
 } from './validation.logic.js'
 import { applyReproductionReport } from './reproductionProof.logic.js'
+import { meterJobUsage } from './job-facts.js'
 import { inFlightDelegation, settleDelegation } from './step-fold.logic.js'
 
 /** A settled (non-`running`) agent poll — the only states {@link PollCompletionController} acts on. */
@@ -42,6 +44,7 @@ type SettledUpdate = Extract<AgentJobUpdate, { state: 'done' } | { state: 'faile
 export interface PollCompletionControllerDeps {
   blockRepository: BlockRepository
   clock: Clock
+  spend: SpendService
   runStateMachine: RunStateMachine
   testerController: TesterController
   humanTestController: HumanTestController
@@ -73,6 +76,7 @@ export interface PollCompletionControllerDeps {
 export class PollCompletionController {
   private readonly blockRepository: BlockRepository
   private readonly clock: Clock
+  private readonly spend: SpendService
   private readonly runStateMachine: RunStateMachine
   private readonly testerController: TesterController
   private readonly humanTestController: HumanTestController
@@ -86,6 +90,7 @@ export class PollCompletionController {
   constructor(deps: PollCompletionControllerDeps) {
     this.blockRepository = deps.blockRepository
     this.clock = deps.clock
+    this.spend = deps.spend
     this.runStateMachine = deps.runStateMachine
     this.testerController = deps.testerController
     this.humanTestController = deps.humanTestController
@@ -189,6 +194,9 @@ export class PollCompletionController {
     // report simply replaces this one; persisted by whichever path upserts below.
     const validationDetail = this.applyValidationFailure(step, update.validationReport)
     applyReproductionReport(step, update.reproductionReport)
+    // The usage the failed job reported, metered here for the same reason: every recovery below
+    // re-dispatches or fails the run without reaching the completion path that meters a result.
+    await meterJobUsage(this.spend, workspaceId, instance, step, update)
     // A container eviction (the per-run container vanished, its in-memory job is gone) is
     // usually transient. The shared recovery drops the dead handle and returns `continue` so
     // the driver re-dispatches the SAME step to a fresh container, within the per-flavour

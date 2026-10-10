@@ -177,9 +177,9 @@ abstraction. Three shapes were assessed:
   verify a batch `insert` behaves identically (per-row conflict no-op, not whole-batch
   failure) before converting any loop. **V1 settled this (both statically and executably):**
   pg-boss's `insert()` compiles to a single `INSERT … SELECT FROM json_to_recordset(…) ON
-CONFLICT DO NOTHING` (`plans.js insertJobs`) whose conflict is arbitrated by the exclusive
+  CONFLICT DO NOTHING` (`plans.js insertJobs`) whose conflict is arbitrated by the exclusive
   `job_i6` unique index on `(name, COALESCE(singleton_key,'')) WHERE state <= active AND
-policy = 'exclusive'`, so it dedupes PER ROW, never failing the batch, and `JobInsert`
+  policy = 'exclusive'`, so it dedupes PER ROW, never failing the batch, and `JobInsert`
   carries every field `sendOptions()` sets. `insert()` returns `null` unless `returnId: true`
   is passed (the sweeper ignores the return, which is fine). The real-Postgres test
   `stale-run-sweeper.spec.ts` ("batch insert preserves the exclusive per-row dedup") pins

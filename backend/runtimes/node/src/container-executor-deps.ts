@@ -49,7 +49,7 @@ import type {
 import {
   AgentContextObservabilityService,
   type CoreDependencies,
-  type HarnessCallsRecordInput,
+  type RecordHarnessCalls,
   type ToolCallsRecordInput,
 } from '@cat-factory/orchestration'
 import { createLangfuseSink } from '@cat-factory/observability-langfuse'
@@ -66,6 +66,8 @@ import {
   ContainerAgentExecutor,
   ContainerEnvConfigRepairer,
   ContainerEnvironmentProbeAgent,
+  type ContainerEnvironmentProbeAgentDependencies,
+  ContainerGuidedReviewInvestigator,
   ContainerJobAuthResolver,
   type ContainerJobAccountingDeps,
   type ContainerJobAuthDependencies,
@@ -302,7 +304,7 @@ export interface NodeContainerExecutorDeps {
    * which is what makes it safe to be optional.
    */
   resolveToolServerOAuth?: McpOAuthTokenSource
-  recordHarnessCalls?: (input: HarnessCallsRecordInput) => Promise<void>
+  recordHarnessCalls?: RecordHarnessCalls
   /** The tool-call trajectory drain's two halves; see `@cat-factory/server`'s `toolTrajectory.ts`. */
   recordToolCalls?: (input: ToolCallsRecordInput) => Promise<void>
   toolBodyGate?: StoreAgentContextGate
@@ -782,7 +784,41 @@ export function buildNodeJobAuthDeps(deps: {
  * therefore supported here rather than refused at wiring, and the auth deps below are the same
  * ones the step executor uses. Mirror of the Worker's `selectEnvironmentProbeAgent`.
  */
-export function selectNodeEnvironmentProbeAgent(deps: {
+export function selectNodeEnvironmentProbeAgent(
+  deps: NodeSingleJobDispatchInput & {
+    /**
+     * The frame's sealed test credentials. Absent (no ENCRYPTION_KEY) ⇒ the prober is told there
+     * are none, which is what puts the gap in its report rather than in its guesswork.
+     */
+    resolveTestSecrets?: (workspaceId: string, blockId: string) => Promise<TestSecretEntry[]>
+  },
+): ContainerEnvironmentProbeAgent | undefined {
+  const shared = buildNodeSingleJobDispatch(deps)
+  if (!shared) return undefined
+  return new ContainerEnvironmentProbeAgent({
+    ...shared,
+    ...(deps.resolveTestSecrets ? { resolveTestSecrets: deps.resolveTestSecrets } : {}),
+  })
+}
+
+/**
+ * Build the container behind a DEEP guided-review answer, on the prober's prerequisites and the
+ * same per-dispatch model and credential resolution. Absent ⇒ a deep question settles as
+ * `depth_unavailable`. Mirror of the Worker's `selectGuidedReviewInvestigator`.
+ */
+export function selectNodeGuidedReviewInvestigator(
+  deps: NodeSingleJobDispatchInput & { agentKindRegistry: AgentKindRegistry },
+): ContainerGuidedReviewInvestigator | undefined {
+  const shared = buildNodeSingleJobDispatch(deps)
+  if (!shared) return undefined
+  return new ContainerGuidedReviewInvestigator({
+    ...shared,
+    agentKindRegistry: deps.agentKindRegistry,
+  })
+}
+
+/** What a standalone (non-pipeline) container dispatch is built from on the Node family. */
+export interface NodeSingleJobDispatchInput {
   env: NodeJS.ProcessEnv
   config: AppConfig
   resolveTransport: ResolveRunnerTransport | null
@@ -827,12 +863,12 @@ export function selectNodeEnvironmentProbeAgent(deps: {
   accounting?: ContainerJobAccountingDeps
   /** Where the container clones from, so a GitLab deployment probes its own instance. */
   resolveRepoOrigin: ResolveRepoOrigin
-  /**
-   * The frame's sealed test credentials. Absent (no ENCRYPTION_KEY) ⇒ the prober is told there
-   * are none, which is what puts the gap in its report rather than in its guesswork.
-   */
-  resolveTestSecrets?: (workspaceId: string, blockId: string) => Promise<TestSecretEntry[]>
-}): ContainerEnvironmentProbeAgent | undefined {
+}
+
+/** The dispatch half every standalone container flow shares: transport, model, credential, spend. */
+export function buildNodeSingleJobDispatch(
+  deps: NodeSingleJobDispatchInput,
+): Omit<ContainerEnvironmentProbeAgentDependencies, 'resolveTestSecrets'> | undefined {
   const publicUrl = deps.env.PUBLIC_URL?.trim()
   const sessionSecret = deps.config.auth.sessionSecret
   if (!deps.resolveTransport || !publicUrl || !sessionSecret || !deps.mintInstallationToken) {
@@ -846,14 +882,14 @@ export function selectNodeEnvironmentProbeAgent(deps: {
     ...(deps.personalSubscriptions ? { personalSubscriptions: deps.personalSubscriptions } : {}),
     ...(deps.resolveAccountId ? { resolveAccountId: deps.resolveAccountId } : {}),
   })
-  return new ContainerEnvironmentProbeAgent({
+  return {
     resolveTransport: deps.resolveTransport,
     installationRepository: deps.installationRepository,
     repoRepository: deps.repoRepository,
     mintInstallationToken: deps.mintInstallationToken,
-    // The step precedence, asked under the prober's own kind. The two `has*` predicates come off
-    // the SAME auth composition the lease below uses, so routing and leasing cannot disagree
-    // about which vendor this dispatch is on.
+    // The step precedence, asked under the dispatching flow's own kind. The two `has*` predicates
+    // come off the SAME auth composition the lease below uses, so routing and leasing cannot
+    // disagree about which vendor this dispatch is on.
     resolveModel: buildSingleKindModelResolver({
       agentRouting: deps.config.agents.routing,
       resolveBlockModel: deps.config.agents.resolveBlockModel,
@@ -877,7 +913,6 @@ export function selectNodeEnvironmentProbeAgent(deps: {
     auth: new ContainerJobAuthResolver(authDeps),
     ...(deps.accounting ? { accounting: deps.accounting } : {}),
     resolveRepoOrigin: deps.resolveRepoOrigin,
-    ...(deps.resolveTestSecrets ? { resolveTestSecrets: deps.resolveTestSecrets } : {}),
     ...(deps.config.github.apiBase ? { githubApiBase: deps.config.github.apiBase } : {}),
-  })
+  }
 }

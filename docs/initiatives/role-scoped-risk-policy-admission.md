@@ -44,7 +44,7 @@ cannot be answered for the caller most likely to be automating merges.
 
 - **Narrowing is a public-API break.** Once `riskPolicyId` admits a policy, refusing that same
   policy later takes a migration path and a version step, not a bug-fix release
-  ([ADR 0034](../../backend/docs/adr/0034-public-api-stability.md), CLAUDE.md "Narrowing what a
+  ([ADR 0034](../../backend/docs/adr/0034-public-api-stability.md), AGENTS.md "Narrowing what a
   scope or key may do is a break too"). So the first shipped rule should be permissive by default
   and tightened per deployment, never the reverse.
 - **A deployment that configures nothing keeps today's behaviour**, byte for byte. This is a

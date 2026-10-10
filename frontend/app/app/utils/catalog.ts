@@ -1048,6 +1048,14 @@ export const TASK_TYPE_META: Record<string, TaskTypeMeta> = {
     color: 'var(--app-hue-emerald)',
     labelKey: 'board.addTask.types.review',
   },
+  // Filed by an integration against a pull request it already has open; the create form does not
+  // offer it, but the card still needs a badge.
+  'resolve-conflicts': {
+    taskType: 'resolve-conflicts',
+    icon: 'i-lucide-git-merge',
+    color: 'var(--app-hue-emerald)',
+    labelKey: 'board.addTask.types.resolveConflicts',
+  },
   ralph: {
     taskType: 'ralph',
     icon: 'i-lucide-infinity',

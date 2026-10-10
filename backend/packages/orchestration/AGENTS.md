@@ -146,19 +146,19 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   `MergeTrackRecordService`
   (deterministic change classification + the persisted record of every merge decision, the
   reviewer-effort tag, and the per-class SQL rollups) and `externalMergeObserver` (attributing a
-  PR merged directly on the provider). See CLAUDE.md → "Merge track record".
+  PR merged directly on the provider). See AGENTS.md → "Merge track record".
 - `observability/`: the read side of telemetry: `LlmObservabilityService` (per-call metrics),
   `ToolCallObservabilityService` (the tool-call TRAJECTORY: what an agent DID, one row per
   invocation; it honours the `bodies` state it is handed and never upgrades it, because the gate
   is applied at the drain that also feeds the trace sinks),
   `PlatformObservabilityService` (deployment health) and `ReportsService` + `reports.logic.ts`
   (**Reports**; cross-cutting usage analytics: spend by model/agent kind and spend + run activity
-  by workspace/service/task type, over the `ReportsRepository` port; see CLAUDE.md → "Reports" and
+  by workspace/service/task type, over the `ReportsRepository` port; see AGENTS.md → "Reports" and
   `backend/docs/reports.md`). `ReportsService` lives in its own `reports/` dir beside them.
   `GateOutcomeRecorder` is the one WRITER here: the gate machine hands it each polling gate that
   reaches a terminal verdict, and it projects the flat row the dashboard's attempt statistics
   aggregate. Its row id is DERIVED from the run (`<runId>:<stepIndex>:<outcome>`), not minted,
-  because the durable drivers replay. See CLAUDE.md → "Telemetry & agent-context observability".
+  because the durable drivers replay. See AGENTS.md → "Telemetry & agent-context observability".
 - `debug/`: the read service behind the PUBLIC remote **run debugging** surface (`/api/v1/debug/*`):
   `RunDebugService` issues the bounded reads (a keyset-paged run index plus the four telemetry
   sinks, each independently optional; the body search and slice windows ride to the stores in
@@ -273,7 +273,7 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   owns the two things every inline reviewer shares: `product-context.ts` (which system the work
   belongs to, STATING an unresolved one) and `IterativeReviewService.systemPromptFor`, which composes
   each kind's `{ role, directives }` pair so a per-workspace prompt override replaces the role only.
-  See CLAUDE.md → "Requirements review".
+  See AGENTS.md → "Requirements review".
 - `validation/`: request validation, plus `validateRegistrations.ts`, the BOOT check over a
   deployment's registered extensions (kinds, gates, pipelines, task types, generators). Its
   severities are the design: an unresolvable pipeline id is an `error` because the created task

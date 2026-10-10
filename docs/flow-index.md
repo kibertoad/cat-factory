@@ -4,7 +4,7 @@ An INDEX of the runtime flows: what each flow is, plus the trap a change would h
 is the authority, and new flow detail belongs THERE, not here; an entry stays a handful of lines.
 
 The cross-cutting rules these flows established (concurrency and idempotency, untrusted text,
-degrade loudly, the harness rules) are stated once in the root [`CLAUDE.md`](../CLAUDE.md), which
+degrade loudly, the harness rules) are stated once in the root [`AGENTS.md`](../AGENTS.md), which
 is where a rule binding more than one flow goes. The step vocabulary an entry assumes (agents,
 gates, one-shot engine steps, judges, companions) is
 [`step-taxonomy.md`](../backend/docs/step-taxonomy.md).
@@ -157,3 +157,11 @@ port is vendor-neutral (per-vendor adapters, today only Datadog); credentials li
 `observability_connections`, never in containers. `on-call` is resolved by `resolveOnCallStep`: raise
 `release_regression`, best-effort enrich any open incident (the `IncidentEnrichmentProvider` port
 annotates, never re-alerts), finish the gate.
+
+**Guided PR review**: a standalone per-user session over one pull request (overview, independent
+question threads, comment drafts the human posts), every model call queued as background work a
+`GuidedReviewRunner` drives and `runJob` claims before spending anything; a deep answer polls a
+read-only container as a state machine on its message. Traps: queued work records its `driver`, so a
+hosted sweeper never answers a mothership node's job with the deployment's credentials; and on
+Postgres a question locks its thread row, or two writers race on `seq` past the one-live-answer index.
+Doc: [ADR 0066](../backend/docs/adr/0066-guided-pr-review.md).

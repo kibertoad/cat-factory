@@ -23,9 +23,9 @@
   },
   "devDependencies": {
     "@cat-factory/orchestration": "workspace:*",
-    "@playwright/test": "^1.63.0",
-    "@types/node": "^26.6.2",
-    "ai": "^7.0.111",
+    "@playwright/test": "^1.64.0",
+    "@types/node": "^26.6.4",
+    "ai": "^7.0.131",
     "typescript": "7.0.2",
     "vitest": "^4.1.11"
   }

@@ -68,6 +68,19 @@ describe('llmReportingGaps', () => {
     })
   })
 
+  it('counts a re-run whose FINAL attempt reported nothing, though an earlier one filed calls', () => {
+    // A step's metrics fold every attempt under one agent kind, so the first attempt's row would
+    // otherwise hide that the attempt which produced the step's result reported nothing.
+    const retried = delegated('acme:executor', {
+      metrics: { calls: 1 } as PipelineStep['metrics'],
+    })
+    retried.delegated!.attempts = [
+      { startedAt: 0, usageReported: true },
+      { startedAt: 1, usageReported: false },
+    ]
+    expect(llmReportingGaps(run([retried])).delegatedStepsWithoutUsage).toBe(1)
+  })
+
   it('treats a metrics block with no calls in it as nothing reported', () => {
     const empty = delegated('acme:executor', { metrics: { calls: 0 } as PipelineStep['metrics'] })
     expect(llmReportingGaps(run([empty])).delegatedStepsWithoutUsage).toBe(1)

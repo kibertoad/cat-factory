@@ -129,6 +129,7 @@
     "commandBar": "Rechercher ou exécuter une commande…",
     "create": "Créer",
     "assistant": "Assistant",
+    "guidedReview": "Revue guidée",
     "buildPipeline": "Créer un pipeline",
     "repositories": "Dépôts",
     "addFromRepo": "Ajouter depuis un dépôt existant",
@@ -219,7 +220,8 @@
         "recurring": "Récurrent",
         "review": "Revue",
         "ralph": "Boucle Ralph",
-        "bugFishing": "Pêche aux bogues"
+        "bugFishing": "Pêche aux bogues",
+        "resolveConflicts": "Résoudre les conflits"
       },
       "recurringWithFrame": "Une tâche récurrente exécute une pipeline selon une cadence. Continuez pour définir le calendrier et le prompt.",
       "recurringNoFrame": "Une tâche récurrente doit appartenir à un service. Ajoutez-la depuis un cadre de service (ou un module à l’intérieur).",
@@ -638,7 +640,8 @@
         "assistant_generation_failed": "Le fournisseur de modèles de l'assistant n'a pas répondu. Il est correctement configuré et il n'y a rien à paramétrer ici : réessayez la demande dans un instant.",
         "assistant_reply_unreadable": "Le modèle de l'assistant a répondu quelque chose que cette plateforme ne peut pas exécuter comme décision. Reformuler aide rarement : choisissez un autre modèle pour l'assistant dans les paramètres de modèles.",
         "delegated_executor_failed": "L’exécuteur externe n’a pas pu démarrer cette étape. Le problème vient du système qui effectue le travail, pas de ce déploiement : consultez ses propres journaux, puis réessayez.",
-        "delegated_work_branch_unprepared": "La plateforme n'a pas pu préparer la branche de travail vers laquelle l'exécuteur de cette étape est envoyé, donc rien n'a démarré. Soit la connexion au dépôt ne peut pas y écrire, soit la tâche nomme une branche qui n'existe pas encore : les détails indiquent laquelle des deux."
+        "delegated_work_branch_unprepared": "La plateforme n'a pas pu préparer la branche de travail vers laquelle l'exécuteur de cette étape est envoyé, donc rien n'a démarré. Soit la connexion au dépôt ne peut pas y écrire, soit la tâche nomme une branche qui n'existe pas encore : les détails indiquent laquelle des deux.",
+        "attached_pr_provider_unreachable": "Le fournisseur du dépôt n'a pas répondu, la pull request n'a donc pas pu être vérifiée et aucune tâche n'a été créée. Il n'y a rien à configurer ici : réessayez dans un instant."
       }
     },
     "reason": {
@@ -725,7 +728,10 @@
         "no_host_frame": "Cette expédition n'est sous aucun service",
         "delegated_executor_unwired": "Exécuteur externe non enregistré",
         "delegated_step_async_only": "Cette étape est interrogée, pas attendue",
-        "delegated_claim_missing": "Cette étape n’a aucun travail externe à interroger"
+        "delegated_claim_missing": "Cette étape n’a aucun travail externe à interroger",
+        "thread_busy": "Ce fil répond encore",
+        "draft_conflict": "Ce brouillon a changé",
+        "session_stale": "La pull request a évolué"
       },
       "description": {
         "dependencies_unmet": "Cette tâche dépend d'autres qui ne sont pas encore terminées. Terminez-les ou débloquez-les, puis relancez-la.",
@@ -782,7 +788,10 @@
         "no_host_frame": "Une tâche de correction a besoin d'un service où vivre et d'un dépôt à corriger. Déplacez la tâche d'expédition sous un cadre de service et réessayez.",
         "delegated_executor_unwired": "Une étape de ce pipeline s’exécute sur un exécuteur externe que ce déploiement n’enregistre pas : le travail n’a donc nulle part où aller. Enregistrez l’exécuteur dans le code, ou remplacez l’étape par une qui s’exécute ici.",
         "delegated_step_async_only": "Cette étape s’exécute sur un exécuteur externe et peut durer des heures : elle est donc lancée puis interrogée, au lieu d’être exécutée dans une seule requête. Démarrez l’exécution depuis le tableau ; si vous arrivez ici depuis votre propre code, pilotez l’étape par la voie asynchrone.",
-        "delegated_claim_missing": "L’enregistrement de ce que l’exécution a envoyé à l’exécuteur externe est absent : il n’y a donc rien à interroger. L’exécuteur lui-même n’a aucun problème. Rechargez l’exécution et relancez l’étape si elle reste bloquée."
+        "delegated_claim_missing": "L’enregistrement de ce que l’exécution a envoyé à l’exécuteur externe est absent : il n’y a donc rien à interroger. L’exécuteur lui-même n’a aucun problème. Rechargez l’exécution et relancez l’étape si elle reste bloquée.",
+        "thread_busy": "La question précédente de ce fil n'a pas encore reçu de réponse. Attends cette réponse ou pose ta question dans un autre fil.",
+        "draft_conflict": "Ce brouillon de commentaire a été modifié, publié ou abandonné depuis que tu l'as chargé. Recharge les brouillons et refais ta modification.",
+        "session_stale": "De nouveaux commits sont arrivés après la préparation de cette revue, donc ses brouillons peuvent viser les mauvaises lignes. Actualise la revue, vérifie les brouillons, puis publie."
       },
       "action": {
         "connectGitHub": "Connecter GitHub",
@@ -1678,7 +1687,7 @@
         "allTools": "Tous les outils exposés par ce serveur.",
         "narrowed": "Limité à : {tools}",
         "reason": {
-          "harnessUnsupported": "n'était pas disponible : la CLI d'agent de cette étape n'a pas de client MCP.",
+          "harnessUnsupported": "n'était pas disponible : la CLI d'agent de cette étape ne pouvait pas le fournir.",
           "transportUnsupported": "n'était pas disponible : la CLI d'agent de cette étape ne peut pas atteindre ce type de serveur.",
           "missingSecret": "n'était pas disponible : un identifiant dont il a besoin n'est pas renseigné pour ce tableau.",
           "reservedSecret": "n'était pas disponible : il demande une variable qui appartient à la configuration de la plateforme, la déclaration doit donc changer.",
@@ -1690,7 +1699,7 @@
           "unknown": "n'était pas disponible ({reason})."
         },
         "remedy": {
-          "harnessUnsupported": "Exécutez l’étape sur une CLI d’agent qui parle MCP, ou élargissez la liste de harnesses du serveur. Une exécution Codex connectée avec votre propre session CLI n’a nulle part où conserver le serveur le temps de l’exécution : utilisez plutôt un identifiant de la plateforme.",
+          "harnessUnsupported": "Élargissez la liste de harnesses du serveur pour y inclure la CLI d’agent de cette étape, ou exécutez l’étape sur une CLI qui y figure. Une étape Pi enregistrée avant que Pi puisse servir des serveurs d’outils doit seulement être relancée sur une image de runner à jour. Une exécution Codex connectée avec votre propre session CLI n’a nulle part où conserver le serveur le temps de l’exécution : utilisez plutôt un identifiant de la plateforme.",
           "transportUnsupported": "Déclarez un serveur stdio à sa place, ou exécutez l’étape sur une CLI d’agent qui atteint les serveurs HTTP.",
           "missingSecret": "Renseignez l’identifiant qu’il nomme, soit comme variable d’environnement du déploiement, soit dans les identifiants de capacités, depuis la fenêtre Infrastructure.",
           "reservedSecret": "Modifiez la déclaration pour demander une autre clé ; définir cette variable est précisément ce qui n’aidera pas.",
@@ -2603,6 +2612,7 @@
       "cmd": {
         "newPipeline": "Créer un pipeline",
         "assistant": "Ouvrir l'assistant",
+        "guidedReview": "Explorer une pull request",
         "addFromRepo": "Ajouter un service depuis un dépôt existant",
         "bootstrapRepo": "Initialiser un nouveau dépôt",
         "githubManage": "Gérer la connexion GitHub",
@@ -2631,6 +2641,7 @@
       "keywords": {
         "newPipeline": "pipeline agents chaîne",
         "assistant": "ia assistant demander invite fais-le pour moi",
+        "guidedReview": "revue guidée pull request pr explorer expliquer questions",
         "addFromRepo": "github importer existant",
         "bootstrapRepo": "échafaudage créer architecture de référence",
         "github": "git dépôts pull requests tickets",
@@ -5112,6 +5123,105 @@
       "unresolved_issue_service": "L'assistant n'a pas pu déterminer dans quel service créer la tâche. Nommez le service dans votre demande."
     }
   },
+  "guidedReview": {
+    "title": "Revue guidée",
+    "titleFor": "{repo} #{number} : {title}",
+    "loading": "Chargement de la revue…",
+    "outOfDate": "Les mises à jour en direct ont échoué, cette vue n'est peut-être plus à jour.",
+    "openFromTask": "Explorer avec la revue guidée",
+    "picker": {
+      "intro": "Choisis un dépôt et une pull request. Tu obtiens une vue d'ensemble du changement et peux poser des questions dans des fils séparés.",
+      "loading": "Chargement des dépôts…",
+      "noRepos": "Aucun dépôt n'est encore lié à cet espace de travail.",
+      "repo": "Dépôt",
+      "openPulls": "Pull requests ouvertes",
+      "number": "Numéro de la pull request",
+      "open": "Ouvrir la revue"
+    },
+    "overview": {
+      "title": "Vue d'ensemble",
+      "stale": "La pull request a de nouveaux commits",
+      "refresh": "Actualiser",
+      "working": "Préparation de la vue d'ensemble…",
+      "intent": "Intention",
+      "changes": "Changements importants",
+      "consequences": "Conséquences",
+      "risks": "Risques",
+      "focus": "À examiner",
+      "suggested": "Questions suggérées"
+    },
+    "severity": {
+      "low": "Faible",
+      "medium": "Moyen",
+      "high": "Élevé"
+    },
+    "failure": {
+      "budget_exhausted": "Cet espace de travail a épuisé son budget de modèles.",
+      "model_unavailable": "Aucun modèle n'est disponible pour la revue guidée.",
+      "repo_unavailable": "La pull request n'a pas pu être lue depuis le dépôt.",
+      "generation_failed": "L'appel au modèle a échoué.",
+      "unreadable_reply": "Le modèle a répondu sous une forme illisible.",
+      "depth_unavailable": "Les réponses approfondies avec un checkout ne sont pas encore disponibles.",
+      "head_moved": "La pull request a avancé au-delà du commit revu. Actualise pour revoir son dernier commit.",
+      "detail": "Détails"
+    },
+    "dropped": {
+      "outside_diff": "la ligne est en dehors du diff",
+      "not_in_pr": "le fichier ne fait pas partie de cette pull request",
+      "incomplete": "la proposition était incomplète"
+    },
+    "thread": {
+      "new": "Nouveau fil",
+      "untitled": "Fil sans titre",
+      "empty": "Pose toutes tes questions sur cette pull request.",
+      "waiting": "Réponse en préparation…",
+      "placeholder": "Pose une question sur le changement",
+      "busy": "En attente de la réponse à la question précédente",
+      "send": "Demander",
+      "draftRequest": "Commentaires de revue demandés",
+      "deep": "Analyse approfondie",
+      "deepHint": "Répond depuis un checkout du dépôt : plus lent, mais peut chercher dans toute l'arborescence.",
+      "investigating": "Analyse dans un checkout du dépôt. Cela peut prendre plusieurs minutes."
+    },
+    "drafts": {
+      "title": "Brouillons de commentaires",
+      "request": "Rédiger des commentaires de revue",
+      "summary": "{kept} commentaires proposés sur {proposed} conservés comme brouillons.",
+      "side": {
+        "RIGHT": "nouveau code",
+        "LEFT": "ancien code"
+      },
+      "select": "Sélectionner ce brouillon pour le publier",
+      "status": {
+        "proposed": "Brouillon",
+        "posting": "Publication",
+        "posted": "Publié",
+        "failed": "Non publié",
+        "discarded": "Abandonné"
+      },
+      "edit": "Modifier",
+      "save": "Enregistrer",
+      "cancel": "Annuler",
+      "discard": "Abandonner",
+      "line": "Ligne",
+      "sideLabel": "Côté",
+      "postFailed": "L'hôte a refusé ce commentaire",
+      "summaryPlaceholder": "Commentaire de synthèse facultatif pour la pull request",
+      "summaryFailed": "L'hôte a refusé le commentaire de synthèse",
+      "post": "Publier {count} sur la pull request",
+      "postResult": "{posted} publiés, {failed} non publiés, {skipped} déjà traités."
+    },
+    "errors": {
+      "load": "Impossible de charger la revue",
+      "repos": "Impossible de charger les dépôts liés",
+      "open": "Impossible d'ouvrir la revue",
+      "ask": "Impossible de poser la question",
+      "drafts": "Impossible de demander des brouillons de commentaires",
+      "refresh": "Impossible d'actualiser la revue",
+      "editDraft": "Impossible d'enregistrer le brouillon",
+      "postDrafts": "Impossible de publier les brouillons"
+    }
+  },
   "pipeline": {
     "iterationCap": {
       "extraRound": "Un tour de plus",
@@ -5185,7 +5295,8 @@
         "review": "Revue",
         "research": "Recherche",
         "planning": "Planification",
-        "media": "Média"
+        "media": "Média",
+        "maintenance": "Maintenance de PR"
       },
       "strategyOption": {
         "specialist-panel": "Panel de spécialistes",

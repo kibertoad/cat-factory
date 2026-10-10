@@ -116,7 +116,7 @@ dispatches ONE deploy job. With involved services:
   provider-before-consumer order** (reverse topological over the consumer→provider
   edges), parking `awaiting_job` between dispatches. `deployJobId` gains a frame
   discriminator; step state gains a per-frame map (`step.deployEnvs:
-Record<frameId, { jobId, status }>`). All `ready` → the step finishes; any failure →
+  Record<frameId, { jobId, status }>`). All `ready` → the step finishes; any failure →
   the step fails (already-ready peer envs are left to expiry).
 - **Cross-injection**: sequential provider-first ordering means each later provision can
   receive the already-ready peers. Extend `deployerProvisionArgs`, which already
@@ -126,7 +126,7 @@ Record<frameId, { jobId, status }>`). All `ready` → the step finishes; any fai
   reconfigure pass.
 - **Tester**: `testerInfraSpec` gains `peerEnvironments: Record<title, url>` beside
   `environmentUrl`, resolved by reusing `indexLiveServiceEnvUrls(handles,
-involvedFrameIds)` (`frontend-infra.logic.ts`) verbatim; it is already generic over
+  involvedFrameIds)` (`frontend-infra.logic.ts`) verbatim; it is already generic over
   frame-id sets.
 - **The one real storage gap**: `supersedePriorEnvironment` is keyed per task `blockId`,
   so N provisions for one task would supersede each other. It must become per
@@ -162,14 +162,14 @@ Rejected alternatives:
   singular resolver. An involved frame with no linked repo is skipped for coding: it can
   still provision an env (record this asymmetry).
 - **Job body**: `AgentJob` gains `peerRepos?: PeerRepoSpec[]` (`{ repo, ghToken?, branch,
-newBranch?, pr?, serviceDirectory? }`). A per-repo token is optional (defaults to the
+  newBranch?, pr?, serviceDirectory? }`). A per-repo token is optional (defaults to the
   job's token: a workspace has one GitHub installation today), but the wire shape is
   ready for GitLab parity / multi-installation.
 - **Workspace layout**: primary at `<workspaceRoot>/<primary.name>`, peers as siblings
   (owner-prefixed on a name collision); the agent's cwd is the workspace root. The
   layout is told to the agent twice: a generated "Multi-repo workspace" prompt section
   (which repo is primary; each peer's role from its connection `description`) and the
-  global `~/.pi/agent/AGENTS.md` written outside the checkouts.
+  `AGENTS.md` of Pi's per-pass config directory, written outside the checkouts.
 - **Push/PR fan-out**: the SAME branch name `cat-factory/<blockId>` in every repo;
   commit/push/PR only for DIRTY repos; `noChangesIsError` applies to the union. The
   `git.ts` helpers gain an explicit `dir` parameter.
@@ -200,7 +200,7 @@ newBranch?, pr?, serviceDirectory? }`). A per-repo token is optional (defaults t
   prompt, to the operator in a log) rather than dropped, since the repo on a recorded
   peer PR is harness-reported and writing off an unconfirmed identity is worse.
 - **Image**: any harness `src/**` change bumps `@cat-factory/executor-harness` + the
-  three pinned tags per the CLAUDE.md image rules.
+  three pinned tags per the AGENTS.md image rules.
 
 ## Phase 4: gates + merger generalization (designed, not yet implemented)
 

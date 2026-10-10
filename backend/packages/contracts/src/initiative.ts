@@ -546,7 +546,7 @@ export function initiativeDocDir(slug: string): string {
 export function initiativeJsonPath(slug: string): string {
   return `${initiativeDocDir(slug)}/initiative.json`
 }
-/** Human-readable tracker rendering (the CLAUDE.md tracker-document convention). */
+/** Human-readable tracker rendering (the AGENTS.md tracker-document convention). */
 export function initiativeTrackerPath(slug: string): string {
   return `${initiativeDocDir(slug)}/tracker.md`
 }

@@ -11,7 +11,7 @@
 //
 // This guard exists because that set is the one part of the design that can rot: prefix families
 // cover most future variables automatically, but a new one outside them (`SOMETHING_URL`) would
-// be resolvable the day it is added, silently, with nothing failing. The doc is where CLAUDE.md's
+// be resolvable the day it is added, silently, with nothing failing. The doc is where AGENTS.md's
 // documentation sweep already requires a new variable to be written down, so checking against it
 // fails in the same PR — the only moment the reserved set can be updated without archaeology.
 //

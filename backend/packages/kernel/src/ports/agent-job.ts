@@ -1,7 +1,12 @@
 import type { StepSubtasks, StreamedFollowUp, WebSearchAvailability } from '../domain/types.js'
 import type { SubscriptionVendor, DispatchToolServers } from '@cat-factory/contracts'
 import type { HarnessFailureCause } from '../domain/harness-failure.js'
-import type { AgentExecutor, AgentRunContext, AgentRunResult } from './agent-executor.js'
+import type {
+  AgentExecutor,
+  AgentRunContext,
+  AgentRunResult,
+  AgentTokenUsage,
+} from './agent-executor.js'
 import type { ContainerEvictionKind } from './runner-transport.js'
 import type { DelegationHandle } from './delegated-executor.js'
 
@@ -311,6 +316,14 @@ export type AgentJobUpdate =
        * written at all.
        */
       delegated?: { url?: string; disposition: 'terminal' | 'retryable' }
+      /**
+       * What the failed job spent, when its producer knows it. Metered exactly as a result's
+       * {@link AgentRunResult.usage} is, so a run that fails late still lands its tokens in the
+       * usage ledger and on the step.
+       */
+      usage?: AgentTokenUsage
+      /** How {@link usage} is metered, with the meaning {@link AgentRunResult.usageBilling} has. */
+      usageBilling?: AgentRunResult['usageBilling']
     }
 
 /**

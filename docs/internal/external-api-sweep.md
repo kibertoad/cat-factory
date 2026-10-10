@@ -65,7 +65,7 @@ Excluded deliberately, so "excluded" and "overlooked" cannot read the same:
   boundary worth naming for the dependency sweep rather than this one: the Vercel AI SDK family is
   held to the major that pairs with `workers-ai-provider` (`ai@^7` + `@ai-sdk/*@^4`).
 - **Our own surfaces**: `/api/v1`, `/internal/*`, the runner and container HTTP, the persistence
-  RPC. Governed by the public-API stability rules in CLAUDE.md.
+  RPC. Governed by the public-API stability rules in AGENTS.md.
 - **Build-time supply chain**: the `download.docker.com` apt repo, `repo1.maven.org`,
   `https://get.k3s.io`, and the registries a job's own `npm install` hits (the harness only writes
   the npmrc that routes them). They break a build rather than a run and move on the image's
@@ -226,7 +226,7 @@ create operation for incident updates at **any** version: no `incident-updates-v
 **Why nobody noticed.** `gates.ts:342-349` wraps the call in a bare `try/catch {}` whose comment
 says a failing enrichment must not block the run. That disposition is right; the empty catch is
 not. It binds no cause, so a capability that has never worked reads exactly like a deployment with
-no incident tool configured. CLAUDE.md's rule covers this: a best-effort path swallows, and it
+no incident tool configured. AGENTS.md's rule covers this: a best-effort path swallows, and it
 still names the operation with the cause attached.
 
 **The open question this sweep could not answer**: what replaces it. There is no public endpoint
@@ -424,7 +424,7 @@ are all current, and inside `group_by` the `limit` **defaults to 10**, so our to
 setting it. Scopes: `monitors_read` and `slos_read`; logs aggregate declares
 `x-permission: logs_read_data` but no operation-level AuthZ scope.
 
-Per CLAUDE.md's degrade-loudly rule this is the wrong failure shape twice over: a field that cannot
+Per AGENTS.md's degrade-loudly rule this is the wrong failure shape twice over: a field that cannot
 resolve renders identically to a monitor that has never changed state. The fix is to pass
 `group_states=all` and fold `state.groups[*].last_triggered_ts`, or to stop reporting a state-change
 time rather than reporting a permanently absent one.
@@ -708,14 +708,14 @@ removal targeted only at that non-existent v5. Read 2026-08-18:
 falls back to `/changes` on a 404, for instances predating GitLab 15.7. `/changes` is deprecated with
 removal targeted at v5 and "no date is set", so the fallback is still live and still needed.
 
-**One thing to fix, and it is a CLAUDE.md pattern.** `merge_status` was deprecated in 15.6 in favour
+**One thing to fix, and it is a AGENTS.md pattern.** `merge_status` was deprecated in 15.6 in favour
 of `detailed_merge_status`, removal targeted at v5 only, and the value set has **grown** since:
 beyond `mergeable`, `conflict`, `ci_still_running`, `discussions_not_resolved` and `draft_status` it
 now includes `security_policy_pipeline_check`, `security_policy_violations`, `approvals_syncing`,
 `merge_time`, `jira_association_missing`, `not_open`, `commits_status` and `merge_request_blocked`.
 This is **not a closed vocabulary**, so an exhaustive `Record` or `switch` over it will meet an
 unmapped value: branch on the members we act on and render an unknown one honestly, which is exactly
-the retired-enum rule in CLAUDE.md.
+the retired-enum rule in AGENTS.md.
 ([merge requests](https://docs.gitlab.com/api/merge_requests/))
 
 **New limits worth classifying.** GitLab 18.6.2 / 18.5.4 / 18.4.6 added size and rate limits to the
@@ -1055,7 +1055,7 @@ Each is tied to a consumer and the file that would change. Ordered by what they 
 
 - **Jira `POST /rest/api/3/issue/bulkfetch`** collapses the per-issue
   `GET /rest/api/3/issue/{key}` reads behind `JiraProvider.ts:116` into one call: up to 100 ids per
-  call, or 1,000 when `fields` names at least one field. The no-N+1 rule in CLAUDE.md already asks
+  call, or 1,000 when `fields` names at least one field. The no-N+1 rule in AGENTS.md already asks
   for this against our own store; against a vendor it also costs rate limit.
 - **Notion `GET /v1/pages/{page_id}/markdown`** returns a whole page as enhanced Markdown in one
   call, replacing the page-read-then-bounded-block-walk in `NotionProvider.ts:245-258` entirely, and

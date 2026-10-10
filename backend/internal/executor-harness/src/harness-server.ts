@@ -1,6 +1,6 @@
 import { timingSafeEqual } from 'node:crypto'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
-import { HARNESS_BODY_CAPABILITIES } from './agent-capabilities.js'
+import { reportedBodyCapabilities } from './capability-report.js'
 import { parseAgentJob, parseInlineJob } from './job.js'
 import { handleAgent } from './agent.js'
 import { handleInline } from './inline.js'
@@ -150,7 +150,7 @@ const server = createServer((req, res) => {
       return send(res, 200, {
         status: 'ok',
         ...(HARNESS_VERSION ? { version: HARNESS_VERSION } : {}),
-        capabilities: HARNESS_BODY_CAPABILITIES,
+        capabilities: await reportedBodyCapabilities(),
         docker: { ...(await readDockerStatus()), workload: reportedDockerWorkload() },
       })
     }
@@ -214,7 +214,7 @@ const server = createServer((req, res) => {
         return send(res, 202, {
           jobId: view.id,
           state: view.state,
-          capabilities: HARNESS_BODY_CAPABILITIES,
+          capabilities: await reportedBodyCapabilities(),
         })
       } catch (error) {
         // Parse failures (incl. host-allowlist rejection) are client errors → 400.
@@ -248,6 +248,9 @@ export const PROCESS_TITLE = 'cat-factory-harness'
 if (process.env.NODE_ENV !== 'test') {
   // Before `listen`, so no job can be accepted while this process still answers to `node`.
   process.title = PROCESS_TITLE
+  // Warm the capability report (it asks the installed Pi for its version once), so the first
+  // `/health` or acceptance does not wait on the probe.
+  void reportedBodyCapabilities()
   server.listen(PORT, BIND_HOST, () => {
     console.log(`executor-harness listening on ${BIND_HOST ?? ''}:${PORT}`)
   })

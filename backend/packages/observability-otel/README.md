@@ -180,7 +180,7 @@ load-bearing here:
 | **Deliberately NOT emitted**, each for a reason rather than an oversight: |
 
 - **COST, in any form.** A span or a counter carrying money would be DERIVED data (`tokens x
-rates`) in a store that cannot reprice it: a corrected rate table leaves the history
+  rates`) in a store that cannot reprice it: a corrected rate table leaves the history
   permanently wrong with nothing marking it, and the figure would sit beside the platform's own
   spend ledger (`SpendService` / `priceRollupCells`) as a second, un-reconcilable answer, at a
   grain that deliberately drops `workspace_id`, so it could never be checked against what anyone

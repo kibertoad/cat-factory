@@ -149,13 +149,13 @@ Only **open** issues, oldest-first (deterministic pickup order). Vendor mapping,
 into the vendor query wherever expressible (never fetch-all-then-filter):
 
 - **Jira** (`jira.logic.ts`): JQL `project = <key> AND statusCategory != Done AND
-issuetype = "<type>" AND labels = "<label>" AND summary ~ "<fragment>" ORDER BY created ASC`.
+  issuetype = "<type>" AND labels = "<label>" AND summary ~ "<fragment>" ORDER BY created ASC`.
 - **GitHub Issues** (`github-issues.logic.ts`): search qualifiers
   `repo:<owner/name> is:issue is:open label:"<label>" in:title <fragment>
-sort:created-asc`; `issueType` maps to the org issue-type filter where available, else
+  sort:created-asc`; `issueType` maps to the org issue-type filter where available, else
   to a `type:<x>`/label convention (documented in the provider).
 - **Linear** (`linear.logic.ts`): GraphQL `issues(filter: { team, state.type != completed/
-canceled, labels, title contains })`, oldest-first.
+  canceled, labels, title contains })`, oldest-first.
 
 ### Selection: exactly one, deduped
 
@@ -256,7 +256,7 @@ extensions:
   `clarity === 'clear'`: the requirements-review auto-pass pattern.
 - **Tracker echo**: on parking, best-effort post the open questions as a comment on the
   linked tracker issue via a new `IssueWritebackProvider.postQuestions(workspaceId,
-blockId, questions)`, so the reporter sees the ask where they filed the bug. Answers
+  blockId, questions)`, so the reporter sees the ask where they filed the bug. Answers
   still arrive **in-app** (the existing clarity window; the incorporated brief substitutes
   the block description downstream): the CLARITY gate's questions carry no stable ids, so a
   ticket comment cannot address one. (The REQUIREMENTS review's findings do, and are answerable

@@ -33,7 +33,7 @@ email once wired); the Usage surface renders the projection.
    month-to-date spend, elapsed/remaining fraction of the period, and a recent-window
    burn-rate (e.g. trailing 7 days, from ONE aggregate query: a `spendSince(scope, since)`
    port read pushed into SQL, mirrored D1 ⇄ Drizzle). Output: `{ projectedTotal,
-burnRatePerDay, thresholdCrossed }`. Deterministic and unit-tested: no LLM, no new
+   burnRatePerDay, thresholdCrossed }`. Deterministic and unit-tested: no LLM, no new
    state machine.
 2. **Evaluation points**: piggyback where spend already flows. The existing budget check
    path recomputes cheap projections per evaluation, and a periodic sweep (the retention

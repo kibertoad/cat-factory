@@ -1,6 +1,7 @@
 import {
   AsyncFakeAgentExecutor,
   withDelegatedArm,
+  lateHarnessCallRecorder,
   type ConformanceApp,
   FakeAgentExecutor,
   type FakeAgentOptions,
@@ -33,7 +34,7 @@ import type {
   UpsertLocalModelEndpointInput,
   UserSecretKind,
 } from '@cat-factory/contracts'
-import type { CoreDependencies } from '@cat-factory/orchestration'
+import type { CoreDependencies, RecordHarnessCalls } from '@cat-factory/orchestration'
 import type { ServerContainer } from '@cat-factory/server'
 import { buildNodeContainer } from '../src/container.js'
 import { type DrizzleDb, createDbClient } from '../src/db/client.js'
@@ -42,6 +43,7 @@ import {
   DrizzleAccountRiskPolicyRepository,
   DrizzleClarityReviewRepository,
   DrizzleDocInterviewRepository,
+  DrizzleGuidedReviewRepository,
   DrizzleAccountSettingsRepository,
   DrizzleRequirementReviewRepository,
   DrizzleServiceRepository,
@@ -213,6 +215,7 @@ function buildConformanceOverrides(
   recorder: RecordingEventPublisher,
   agentOptions: FakeAgentOptions | undefined,
   opts: ConformanceAppOpts | undefined,
+  recordHarnessCalls: RecordHarnessCalls,
 ): Partial<CoreDependencies> {
   const o = opts ?? {}
   // The custom-kind suite injects a pre-loaded registry: thread it into BOTH the fake executor
@@ -231,6 +234,7 @@ function buildConformanceOverrides(
         ? new AsyncFakeAgentExecutor(agentExecutorOptions)
         : new FakeAgentExecutor(agentExecutorOptions),
       o,
+      recordHarnessCalls,
     ),
     workRunner: new NoopWorkRunner(),
     bootstrapRunner: new NoopBootstrapRunner(),
@@ -354,7 +358,10 @@ export function makeConformanceApp(
   // Record emitted run snapshots so the suite can assert intermediate transitions
   // (e.g. the model present on the first "spinning up container" emit).
   const recorder = new RecordingEventPublisher()
-  const overrides = buildConformanceOverrides(recorder, agentOptions, opts)
+  // The arm files a delegated step's reported usage through the container's OWN observability
+  // service, which exists only once the container is built.
+  const harnessCalls = lateHarnessCallRecorder()
+  const overrides = buildConformanceOverrides(recorder, agentOptions, opts, harnessCalls.record)
   const container = buildNodeContainer({
     db,
     env: TEST_ENV,
@@ -371,6 +378,7 @@ export function makeConformanceApp(
     // matching suites) so each is resolved by reference — the SAME instance the fake executor got.
     ...buildContainerRegistryOptions(opts),
   })
+  harnessCalls.bind(container.llmObservability)
   const app = createApp(container, TEST_ENV)
 
   async function call<T>(
@@ -554,6 +562,7 @@ export function makeConformanceApp(
     documentRepository: () => new DrizzleDocumentRepository(db),
     taskRepository: () => new DrizzleTaskRepository(db),
     docInterviewRepository: () => new DrizzleDocInterviewRepository(db),
+    guidedReviewRepository: () => new DrizzleGuidedReviewRepository(db),
     accountSettingsRepository: () => new DrizzleAccountSettingsRepository(db),
     accountRiskPolicyRepository: () => new DrizzleAccountRiskPolicyRepository(db),
     seedService,

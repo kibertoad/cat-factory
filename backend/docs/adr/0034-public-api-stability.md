@@ -56,7 +56,7 @@ same PR, replaces the compatibility posture:
   cannot answer at all. Under the commitment adopted below, adding it afterwards would itself have
   been a capability-narrowing break needing a migration path.
 
-**From this change on, the public API is stable.** The commitment, stated in CLAUDE.md and binding
+**From this change on, the public API is stable.** The commitment, stated in AGENTS.md and binding
 on every future change to `/api/v1`, the SDKs, or the webhook delivery contract:
 
 - Additive changes are the normal mode and need only an OpenAPI `info.version` minor bump. The
@@ -88,7 +88,7 @@ on every future change to `/api/v1`, the SDKs, or the webhook delivery contract:
 
 ## Consequences
 
-- **CLAUDE.md's "Backwards compatibility is NOT a goal" section is now scoped to internals**, with
+- **AGENTS.md's "Backwards compatibility is NOT a goal" section is now scoped to internals**, with
   the public surface carved out as stable. ADR 0030's "additive forever, flag breaks prominently"
   consequence is superseded by this ADR.
 - **Existing consumers of the three renamed shapes must update** (this is the last time that

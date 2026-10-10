@@ -527,7 +527,7 @@ function readRoute(record: EnvironmentRecord | null, caps: string[]): Environmen
  * which is the boundary `prepareDiagnosis` and `prepareFields` already guard; this section shipped
  * past it unredacted and uncapped while its own neighbour in the timeline was scrubbed.
  *
- * Scrub BEFORE the cap, per CLAUDE.md's compose-time rule. `state`, `reason` and `checkedAt` are
+ * Scrub BEFORE the cap, per AGENTS.md's compose-time rule. `state`, `reason` and `checkedAt` are
  * left alone: two are closed vocabularies and the third is a number.
  */
 function prepareRoute(
@@ -686,7 +686,7 @@ export type EnvironmentDiagnostics = ReturnType<typeof createEnvironmentDiagnost
  * failed `Authorization` echo shows up. This is the boundary onto a model prompt and the telemetry
  * store, so it applies the shape-based net over whatever the provider already did.
  *
- * Scrub BEFORE the cap, per CLAUDE.md's compose-time rule: capping first can leave the tail of a
+ * Scrub BEFORE the cap, per AGENTS.md's compose-time rule: capping first can leave the tail of a
  * credential behind as the head of the kept slice.
  */
 function prepareDiagnosis(diagnosis: EnvironmentDiagnosis, caps: string[]): EnvironmentDiagnosis {

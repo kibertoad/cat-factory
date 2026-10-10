@@ -42,7 +42,7 @@ import { mergeDeclaredToolServers } from '@cat-factory/agents'
 //     the tester's `testSecrets` uses, for the same reason.
 //
 // The filtering lives HERE, in the container executor's layer, rather than in the engine: whether
-// a tool server can run at all depends on the resolved HARNESS (Pi has no MCP client) and on the
+// a tool server can run at all depends on the resolved HARNESS (Codex reaches stdio only) and on the
 // facade-wired secret resolver, neither of which the runtime-neutral engine knows. A tool server
 // is also inherently a CONTAINER capability, so there is nothing for an inline dispatch to do.
 // ---------------------------------------------------------------------------

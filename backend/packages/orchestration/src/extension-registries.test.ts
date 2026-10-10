@@ -743,17 +743,17 @@ describe('agent-capability validation: reach and scoping', () => {
       expect(warning?.message).toContain('stdio-only')
     })
 
-    it('warns about anything narrowed to pi, which has no MCP client at all', () => {
+    it('stays silent for a server narrowed to pi, whose client reaches both transports', () => {
       const problems = assign({
         id: 'issues',
         harnesses: ['pi'],
-        transport: { kind: 'stdio', command: 'x' },
+        transport: { kind: 'http', url: 'https://mcp.example.com/mcp' },
       })
-      expect(problems.some((p) => p.code === 'tool_server_unservable')).toBe(true)
+      expect(problems.some((p) => p.code === 'tool_server_unservable')).toBe(false)
     })
 
     it('stays silent for a combination SOME harness serves', () => {
-      // An http server on the default (unnarrowed) list is claude-code-only and perfectly fine:
+      // An http server on the default (unnarrowed) list skips codex and is perfectly fine:
       // a Codex run states it as unavailable, which is a run-time report, not a registration fault.
       const problems = assign({
         id: 'docs',

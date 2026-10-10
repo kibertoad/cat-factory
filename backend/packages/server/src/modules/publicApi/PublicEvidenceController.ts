@@ -61,7 +61,7 @@ import { authorize, authorizeOrThrow, refuse } from './publicApiAuth.js'
 //     carry `details.reason` (the code a caller branches on), never reaches `handleError`, and so
 //     never picks up the `requestId` an operator greps by nor sets the `errorCode` the request
 //     metrics count. The one exception is the AUTH gate, which stays `refuse(c, gate.fail)`: that
-//     failure is shared DATA produced by `publicApiAuth`, and CLAUDE.md names it as such.
+//     failure is shared DATA produced by `publicApiAuth`, and AGENTS.md names it as such.
 
 /** Project a stored artifact row onto the wire, dropping the storage vocabulary. */
 function artifactToWire(

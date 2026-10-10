@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { ExecutionInstance, GateProbe, GateRegistry, Pipeline } from '@cat-factory/kernel'
 import { gateRegistryWithBuiltins } from '@cat-factory/gates'
+import { delegatedSpendUnreported } from '@cat-factory/contracts'
+import { DELEGATED_USAGE_PROVIDER } from '@cat-factory/kernel'
 import type { ConformanceHarness } from '../harness.js'
 import {
   CONFORMANCE_DELEGATED_EXECUTOR_ID,
@@ -158,6 +160,54 @@ export function defineDelegatedConformance(harness: ConformanceHarness): void {
       const exec = (await app.drive(workspaceId)).find((e) => e.blockId === 'task_login')!
       expect(exec.status).toBe('failed')
       expect(calls.starts).toEqual([])
+    })
+
+    it('files a self-reported usage on the step through this runtime’s telemetry store', async () => {
+      // The step's metrics and the run's reporting gap are read from `llm_call_metrics`, so a
+      // facade whose delegated arm holds no writer (or whose store maps the row differently)
+      // leaves the card saying "usage not reported" beside a figure the executor did report.
+      const { app } = makeApp(harness, {
+        telemetry: 'self-reported',
+        updates: [
+          {
+            state: 'done',
+            result: {
+              summary: 'Implemented the change on the work branch.',
+              usage: {
+                inputTokens: 1_000,
+                outputTokens: 200,
+                inputClasses: { promptTokens: 300, cacheReadTokens: 600, cacheWriteTokens: 100 },
+              },
+            },
+          },
+        ],
+      })
+      const { workspaceId } = await runDelegated(app)
+      const exec = (await app.drive(workspaceId)).find((e) => e.blockId === 'task_login')!
+      expect(exec.status).toBe('done')
+      const calls = await app.call<{ calls: { provider: string; promptTokens: number }[] }>(
+        'GET',
+        `/workspaces/${workspaceId}/executions/${exec.id}/llm-metrics`,
+      )
+      expect(calls.body.calls).toEqual([
+        expect.objectContaining({ provider: DELEGATED_USAGE_PROVIDER, promptTokens: 300 }),
+      ])
+      // The rollup is folded onto the step when the settlement is EMITTED, not persisted, so the
+      // terminal emit is where the step card reads it.
+      const step = delegatedStep(app.executionEmits('task_login').at(-1)!)
+      expect(step.metrics).toMatchObject({
+        calls: 1,
+        promptTokens: 300,
+        cacheReadTokens: 600,
+        cacheWriteTokens: 100,
+        completionTokens: 200,
+      })
+      // Unpriced: the executor's model and rate are unknown here, and the tokens were billed to
+      // its own account.
+      expect(step.metrics?.costEstimate ?? null).toBeNull()
+      expect(step.usageBilling).toBe('subscription')
+      expect(step.delegated?.attempts.at(-1)?.usageReported).toBe(true)
+      expect(delegatedSpendUnreported(step)).toBe(false)
     })
 
     it('fails the run with the executor’s own reason when the external work fails', async () => {

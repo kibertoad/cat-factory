@@ -85,7 +85,7 @@ export class ModelPresetService {
   /**
    * Drop the workspace's cached preset library after a write commits. Coarse (one group == one
    * workspace) because a write can flip which preset is the default, so a single edit's blast
-   * radius is the whole library — over-invalidation is always safe (CLAUDE.md caching rule).
+   * radius is the whole library — over-invalidation is always safe (AGENTS.md caching rule).
    */
   private async invalidate(workspaceId: string): Promise<void> {
     await this.cache?.invalidateGroup(workspaceId)

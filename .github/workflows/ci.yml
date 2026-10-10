@@ -496,6 +496,12 @@ jobs:
       - name: Guard file-size budgets
         run: node scripts/check-file-size.mjs
 
+      # Bans a tracked AGENTS.md anywhere: Claude Code reads a directory's AGENTS.md INSTEAD of its
+      # AGENTS.md, so one committed file silently switches off the per-package guidance at and
+      # below it (#2257). Pure node; no install.
+      - name: Guard against a re-added AGENTS.md
+        run: node scripts/check-no-claude-md.mjs
+
       # Bans raw Tailwind palette utilities (`bg-slate-900`, `text-indigo-400`) in the SPA: the
       # theme migration (#2239) moved them onto the `app.config.ts` aliases (`neutral`/`primary`)
       # so the config actually recolors the app, and a reintroduced raw class silently opts back
@@ -604,7 +610,7 @@ jobs:
       # Requires every RELATIVE link in a repo markdown file to resolve to a path and, where it
       # deep-links one, a heading. The two guards above sound like they cover this and neither does:
       # the shipped-doc one walks published package directories only, and the anchor one resolves
-      # only URLs that CODE builds. So `git rm`ing a doc was green, which matters because CLAUDE.md
+      # only URLs that CODE builds. So `git rm`ing a doc was green, which matters because AGENTS.md
       # REQUIRES that when a completed initiative tracker converts to an ADR. Twelve links were
       # dangling when this landed, three of them at trackers deleted exactly that way. Generated
       # CHANGELOGs are out of scope: frozen history correctly naming what was true when written. Its
@@ -655,7 +661,7 @@ jobs:
         run: node scripts/check-runner-image-paths.mjs
 
       # Guard the Cloudflare runtime pins: ONE wrangler, and through it one workerd and one
-      # miniflare. `@cloudflare/vitest-pool-workers` pins wrangler exactly and the Worker suite
+      # miniflare. `@cloudflare/vitest-plugin` pins wrangler exactly and the Worker suite
       # runs inside the pool's workerd, while `wrangler deploy` ships wrangler's, so a second copy
       # means the runtime the tests prove is not the runtime that ships. Both halves stay green
       # while that is true, which is why it needs an assertion rather than a convention. Also
@@ -818,7 +824,7 @@ jobs:
       # i18n drift guard (tier 3): fail if a `t('…')` references a key absent from the
       # catalog. Complements the typed-message-keys typecheck above (tier 1), which can't
       # see a runtime-built key. Unused keys are reported but non-blocking — see the
-      # script header and CLAUDE.md → Internationalization.
+      # script header and AGENTS.md → Internationalization.
       - name: Check i18n keys
         run: pnpm --filter @cat-factory/app run i18n:check
 
@@ -902,7 +908,7 @@ jobs:
           echo "All build lanes passed or were skipped with no relevant changes."
 
   # The Cloudflare worker suite (58 files) is the dominant test cost, and its
-  # per-file overhead is intrinsic pool-workers isolate setup — embarrassingly
+  # per-file overhead is intrinsic vitest-plugin isolate setup: embarrassingly
   # parallel across jobs but not within one. Split it into 3 shards via vitest
   # --shard (deterministic file partition); each shard runs in its own miniflare
   # local D1, so there is no cross-shard contention. No Postgres here — the

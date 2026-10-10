@@ -68,6 +68,8 @@ import { createDrizzleRepositories } from './repositories/drizzle.js'
 import {
   selectNodeEnvConfigRepairer,
   selectNodeEnvironmentProbeAgent,
+  selectNodeGuidedReviewInvestigator,
+  type NodeSingleJobDispatchInput,
 } from './container-executor-deps.js'
 
 import { assembleNodeCoreDependencies } from './container-core-deps.js'
@@ -391,6 +393,8 @@ interface PostAssemblyContext extends PreviewModuleContext {
   bootstrapMintInstallationToken: NodeBootstrapperResult['bootstrapMintInstallationToken']
   environmentBackendRegistry: NodeAppRegistriesResult['environmentBackendRegistry']
   resolveTestSecrets: NodeRunServicesResult['resolveTestSecrets']
+  /** Composes the guided review investigator's system prompt with its surface directives. */
+  agentKindRegistry: NodeAppRegistriesResult['agentKindRegistry']
   remoteRepos: Record<string, unknown> | undefined
 }
 
@@ -444,7 +448,9 @@ function applyNodePostAssemblyWiring(
   // conformance harness wins, so the suite drives the `probing` stage with no container. Local
   // inherits this through `buildNodeContainer` with no extra wiring, which is what keeps the two
   // Node-family facades symmetric here.
-  const environmentProbeAgent = selectNodeEnvironmentProbeAgent({
+  // What every standalone container dispatch is built from (the dry run's prober, the guided
+  // review investigator): the same model, credential and spend wiring a pipeline step gets.
+  const singleJobDispatch: NodeSingleJobDispatchInput = {
     env,
     config,
     resolveTransport: ctx.resolveTransport,
@@ -487,10 +493,22 @@ function applyNodePostAssemblyWiring(
         ctx.subscriptionQuotaProvider.recordUsage(target, usage),
     },
     resolveRepoOrigin: options.resolveRepoOrigin ?? deploymentRepoOrigin(config),
+  }
+  const environmentProbeAgent = selectNodeEnvironmentProbeAgent({
+    ...singleJobDispatch,
     ...(ctx.resolveTestSecrets ? { resolveTestSecrets: ctx.resolveTestSecrets } : {}),
   })
   if (environmentProbeAgent && !dependencies.environmentProbeAgent) {
     dependencies.environmentProbeAgent = environmentProbeAgent
+  }
+
+  // The container behind a deep guided-review answer. A fake injected by a test harness wins.
+  const guidedReviewInvestigator = selectNodeGuidedReviewInvestigator({
+    ...singleJobDispatch,
+    agentKindRegistry: ctx.agentKindRegistry,
+  })
+  if (guidedReviewInvestigator && !dependencies.guidedReviewInvestigator) {
+    dependencies.guidedReviewInvestigator = guidedReviewInvestigator
   }
 
   // Mothership mode (`db` undefined): re-source the run-path org/durable repos the sub-helpers

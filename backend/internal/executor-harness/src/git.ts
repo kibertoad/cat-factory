@@ -908,7 +908,7 @@ export function changedPathsFromPorcelain(status: string): string[] {
  * Whether the agent changed anything in a cloned checkout. Stages the working
  * tree and inspects the porcelain status: an empty result means the bootstrapper
  * made no adaptation — a no-op we must not pass off as a successful push. (The
- * harness writes its prompt context to Pi's global `~/.pi/agent/AGENTS.md`, never
+ * harness writes its prompt context to the AGENTS.md of Pi's per-pass config dir, never
  * into the checkout, so every change reported here is a genuine agent edit.)
  */
 export async function hasAgentChanges(dir: string, signal?: AbortSignal): Promise<boolean> {
