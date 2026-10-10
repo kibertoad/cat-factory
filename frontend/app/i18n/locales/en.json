@@ -8847,6 +8847,7 @@
     "title": "Generated candidates",
     "titleWithBlock": "Generated candidates: {title}",
     "subtitle": "Compare what each integration produced, and keep what you want",
+    "pickOne": "Pick one. Choosing a candidate clears the one picked before.",
     "automatic": "Only one candidate was generated, so it was kept automatically. Nobody reviewed it.",
     "unlabelledSubject": "No subject declared",
     "noPreview": "No preview available",

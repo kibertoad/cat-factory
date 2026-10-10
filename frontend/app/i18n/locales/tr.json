@@ -8525,6 +8525,7 @@
     "title": "Üretilen adaylar",
     "titleWithBlock": "Üretilen adaylar: {title}",
     "subtitle": "Her entegrasyonun ürettiğini karşılaştırın ve istediğinizi tutun",
+    "pickOne": "Birini seçin. Bir aday seçmek önceki seçimi kaldırır.",
     "automatic": "Yalnızca bir aday üretildi, bu yüzden otomatik olarak tutuldu. Kimse incelemedi.",
     "unlabelledSubject": "Konu bildirilmedi",
     "noPreview": "Önizleme yok",

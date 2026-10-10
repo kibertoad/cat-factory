@@ -8525,6 +8525,7 @@
     "title": "Erzeugte Kandidaten",
     "titleWithBlock": "Erzeugte Kandidaten: {title}",
     "subtitle": "Vergleiche, was jede Integration erzeugt hat, und behalte, was du willst",
+    "pickOne": "Wähle einen aus. Die Auswahl eines Kandidaten hebt die vorherige auf.",
     "automatic": "Es wurde nur ein Kandidat erzeugt, daher wurde er automatisch behalten. Niemand hat ihn geprüft.",
     "unlabelledSubject": "Kein Motiv angegeben",
     "noPreview": "Keine Vorschau verfügbar",

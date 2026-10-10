@@ -8525,6 +8525,7 @@
     "title": "Candidatos generados",
     "titleWithBlock": "Candidatos generados: {title}",
     "subtitle": "Compara lo que produjo cada integración y conserva lo que quieras",
+    "pickOne": "Elige uno. Al elegir un candidato se quita el que elegiste antes.",
     "automatic": "Solo se generó un candidato, así que se conservó automáticamente. Nadie lo revisó.",
     "unlabelledSubject": "Sin sujeto declarado",
     "noPreview": "Sin vista previa disponible",

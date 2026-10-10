@@ -235,6 +235,16 @@ const { requestClose } = useUnsavedGuard({
         >
       </p>
 
+      <!-- Single-select renders a checkbox per card, not one radio group, so this line is what
+           tells everyone (a screen reader through each box's description) that ticking one clears
+           the other. -->
+      <p
+        v-if="view.awaiting && !view.multiSelect"
+        id="binary-candidates-pick-one"
+        class="mb-3 text-xs text-muted"
+      >
+        {{ t('binaryCandidates.pickOne') }}
+      </p>
       <div v-for="group in view.groups" :key="group.subject ?? '·'" class="mb-6">
         <h3 class="mb-2 text-xs font-medium text-muted">
           {{ group.subject ?? t('binaryCandidates.unlabelledSubject') }}
@@ -255,9 +265,8 @@ const { requestClose } = useUnsavedGuard({
           >
             <!-- The REAL control, not the card's click handler: ticking a candidate is the only
                  way to keep an asset, so without a focusable input the gate could not be completed
-                 by keyboard at all (UX-80). The whole window is ONE radio group in single-select
-                 mode, because `toggle` replaces the selection across every subject rather than per
-                 group.
+                 by keyboard at all (UX-80). In single-select mode `toggle` replaces the selection
+                 across every subject rather than per group.
 
                  `@click.stop` belongs on the WRAPPER, which is what the card's own toggle has to
                  be shielded from, and NOT on the control: activating a label forwards a synthetic
@@ -268,15 +277,18 @@ const { requestClose } = useUnsavedGuard({
                  longer selected. UCheckbox is not the place for it either: Nuxt UI forwards
                  `$attrs` onto the inner checkbox button rather than onto its root, so a listener
                  put there is the same "on the control alone" mistake spelled differently. -->
-            <!-- One control either way. Single-select is still a checkbox rather than a radio
-                 group, because the rows are rendered per candidate and `toggle` already enforces
-                 the single-selection rule; a radio group would need the whole set in one place. -->
+            <!-- One control either way. Single-select is a checkbox rather than a radio group,
+                 because the rows render per candidate across several subjects and a radio group
+                 needs the whole set in one place. So the box announces as a checkbox, and the
+                 "pick one" line above is its description: that is the cue that ticking it clears
+                 the previous pick. -->
             <div v-if="view.awaiting" class="mb-1.5" @click.stop>
               <UCheckbox
                 size="xs"
                 :model-value="selected.includes(row.id)"
                 :label="candidateLabel(row)"
                 :aria-label="candidateLabel(row)"
+                :aria-describedby="view.multiSelect ? undefined : 'binary-candidates-pick-one'"
                 data-testid="binary-candidate-select"
                 @update:model-value="toggle(row.id)"
               />

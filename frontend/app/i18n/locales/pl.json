@@ -8525,6 +8525,7 @@
     "title": "Wygenerowani kandydaci",
     "titleWithBlock": "Wygenerowani kandydaci: {title}",
     "subtitle": "Porównaj, co wytworzyła każda integracja, i zachowaj to, co chcesz",
+    "pickOne": "Wybierz jeden. Wybranie kandydata usuwa poprzedni wybór.",
     "automatic": "Wygenerowano tylko jednego kandydata, więc zachowano go automatycznie. Nikt go nie przejrzał.",
     "unlabelledSubject": "Nie zadeklarowano tematu",
     "noPreview": "Brak podglądu",
