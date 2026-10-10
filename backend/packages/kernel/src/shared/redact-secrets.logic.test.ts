@@ -174,21 +174,25 @@ describe('redactSecrets', () => {
       // Single-character filler: the body the agent-context size-budget test scrubs.
       filler: fill('x'),
     }
-    // Best-of-N: a scheduler stall inflates a single sample, and this suite shares a machine
-    // with the rest of the monorepo's tests. Every body is measured the same way in the same
-    // process, so contention that survives the minimum hits both sides of the ratio.
+    // Best-of-N over INTERLEAVED rounds: each round times prose and then every shape once, and
+    // each body keeps its fastest sample. This suite shares a CI runner with several other
+    // packages' suites, and a contention burst there lasts long enough to cover consecutive
+    // samples. When each body's samples ran back to back, one burst covered all three filler
+    // samples and no prose sample, and failed the run at 4.2x although filler is the cheapest
+    // shape (~0.85x prose). Interleaved, a burst must cover the same body in EVERY round to
+    // survive the minimum, so a sustained slowdown hits both sides of the ratio.
     // `Date.now` rather than `performance`: kernel compiles against the ES2022 lib alone, and
     // a millisecond's granularity is noise against samples an order of magnitude larger.
-    const fastest = (body: string): number => {
-      let best = Number.POSITIVE_INFINITY
-      for (let i = 0; i < 3; i++) {
+    const bodies: Record<string, string> = { prose, ...shapes }
+    const fastest: Record<string, number> = {}
+    for (let round = 0; round < 7; round++) {
+      for (const [name, body] of Object.entries(bodies)) {
         const started = Date.now()
         redactSecrets(body)
-        best = Math.min(best, Date.now() - started)
+        fastest[name] = Math.min(fastest[name] ?? Number.POSITIVE_INFINITY, Date.now() - started)
       }
-      return best
     }
-    const baseline = fastest(prose)
+    const baseline = fastest.prose ?? 0
     // A zero baseline would turn every ratio below into Infinity/NaN and fail the comparison
     // with no hint of why, so it is asserted as its own condition. 2MB of prose is ~17ms, so
     // this only trips if the body stopped being scrubbed at all.
@@ -196,8 +200,8 @@ describe('redactSecrets', () => {
       baseline,
       'prose baseline must be measurable at millisecond granularity',
     ).toBeGreaterThan(0)
-    for (const [name, body] of Object.entries(shapes)) {
-      const ratio = fastest(body) / baseline
+    for (const name of Object.keys(shapes)) {
+      const ratio = (fastest[name] ?? 0) / baseline
       // Parity is ~1x once no rule rescans per offset or per marker; both regressions above
       // are an order of magnitude away, so 4x separates them without riding on absolute
       // timings. Measured worst case under 2x CPU oversubscription is 1.5x.
